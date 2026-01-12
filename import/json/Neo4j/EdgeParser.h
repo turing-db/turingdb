@@ -101,10 +101,8 @@ public:
             if (!_parsedTargetID) {
                 _targetID = val;
                 _parsedTargetID = true;
-                auto tmpSrcIdentifier = _nodeIDMapper->getID(_sourceID);
-                auto tmpTgtIdentifier = _nodeIDMapper->getID(_targetID);
-                const NodeID srcID = _reader.getFinalNodeID(tmpSrcIdentifier.partIndex, tmpSrcIdentifier.nodeID);
-                const NodeID tgtID = _reader.getFinalNodeID(tmpTgtIdentifier.partIndex, tmpTgtIdentifier.nodeID);
+                const NodeID srcID = _nodeIDMapper->getID(_sourceID);
+                const NodeID tgtID = _nodeIDMapper->getID(_targetID);
 
                 _currentEdge = &_buf->addEdge(_edgeTypeID, srcID, tgtID);
                 return true;

@@ -84,19 +84,22 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
         return false;
     }
 
+    std::unordered_map<NodeID, NodeID> tmpToFinalNodeIDs;
+    std::unordered_map<EdgeID, EdgeID> tmpToFinalEdgeIDs;
+
     // nodeID Mapping
     for (const auto& [i, tmpID] : tmpNodeIDs | rv::enumerate) {
         const NodeID id {_firstNodeID + i};
-        _tmpToFinalNodeIDs[tmpID] = id;
+        tmpToFinalNodeIDs[tmpID] = id;
     }
 
     // Converting temp to final source/target IDs
     for (auto& out : outEdges) {
         if (out._nodeID >= firstTmpNodeID) {
-            out._nodeID = _tmpToFinalNodeIDs.at(out._nodeID);
+            out._nodeID = tmpToFinalNodeIDs.at(out._nodeID);
         }
         if (out._otherID >= firstTmpNodeID) {
-            out._otherID = _tmpToFinalNodeIDs.at(out._otherID);
+            out._otherID = tmpToFinalNodeIDs.at(out._otherID);
         }
     }
 
@@ -114,14 +117,14 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
 
     // Build indexes for noted node properties.
     // TODO: Async with jobs
-    _nodeStrPropIdx->buildIndex(nodesToIndex, _tmpToFinalNodeIDs); 
+    _nodeStrPropIdx->buildIndex(nodesToIndex, tmpToFinalNodeIDs); 
     _nodeStrPropIdx->setInitialised();
 
     for (const auto& [ptID, props] : *_nodeProperties) {
         jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
             for (auto& id : props->ids()) {
                 if (id >= firstTmpNodeID.getValue()) {
-                    id = _tmpToFinalNodeIDs.at(id.getValue()).getValue();
+                    id = tmpToFinalNodeIDs.at(id.getValue()).getValue();
                 }
             }
 
@@ -156,7 +159,8 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     // EdgeContainer
     _edges = EdgeContainer::create(_firstNodeID,
                                    _firstEdgeID,
-                                   std::move(outEdges));
+                                   std::move(outEdges),
+                                   tmpToFinalEdgeIDs);
 
     // Edge properties: Add index*ers* and note properties to *index*
     _edgeProperties = std::move(edgeProperties);
@@ -169,8 +173,6 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
             edgesToIndex.emplace_back(ptID, props.get());
         }
     }
-
-    const auto& tmpToFinalEdgeIDs = _edges->getTmpToFinalEdgeIDs();
 
     // Build indexes for noted edge properties.
     // TODO: Async with jobs

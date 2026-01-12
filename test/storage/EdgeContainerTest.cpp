@@ -27,9 +27,11 @@ TEST_F(EdgeContainerTest, General) {
         {4, 6, 7, 0},
     };
 
+    std::unordered_map<EdgeID, EdgeID> tmpToFinalEdgeIDs;
     auto edges = EdgeContainer::create(firstNodeID,
                                        firstEdgeID,
-                                       std::move(outEdges));
+                                       std::move(outEdges),
+                                       tmpToFinalEdgeIDs);
 
     {
         std::vector<EdgeRecord> compareSet = {
@@ -82,9 +84,11 @@ TEST_F(EdgeContainerTest, IDShift) {
         {4, 6, 7, 0},
     };
 
+    std::unordered_map<EdgeID, EdgeID> tmpToFinalEdgeIDs;
     auto edges = EdgeContainer::create(firstNodeID,
                                        firstEdgeID,
-                                       std::move(outEdges));
+                                       std::move(outEdges),
+                                       tmpToFinalEdgeIDs);
 
     {
         std::vector<EdgeRecord> compareSet = {

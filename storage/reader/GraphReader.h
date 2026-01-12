@@ -71,7 +71,6 @@ public:
     [[nodiscard]] size_t getNodePropertyCount(size_t datapartIndex, PropertyTypeID ptID) const;
     [[nodiscard]] size_t getEdgePropertyCount(PropertyTypeID ptID) const;
     [[nodiscard]] size_t getEdgePropertyCount(size_t datapartIndex, PropertyTypeID ptID) const;
-    [[nodiscard]] NodeID getFinalNodeID(size_t partIndex, NodeID tmpID) const;
     [[nodiscard]] NodeView getNodeView(NodeID id) const;
     [[nodiscard]] EdgeView getEdgeView(EdgeID id) const;
     [[nodiscard]] EdgeTypeID getEdgeTypeID(EdgeID edgeID) const;

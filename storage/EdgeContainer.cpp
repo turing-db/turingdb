@@ -18,9 +18,8 @@ EdgeContainer::~EdgeContainer() = default;
 
 std::unique_ptr<EdgeContainer> EdgeContainer::create(NodeID firstNodeID,
                                                      EdgeID firstEdgeID,
-                                                     std::vector<EdgeRecord>&& outs) {
-    std::unordered_map<EdgeID, EdgeID> tmpToFinalEdgeIDs;
-
+                                                     std::vector<EdgeRecord>&& outs,
+                                                     std::unordered_map<EdgeID, EdgeID>& tmpToFinalEdgeIDs) {
     Profile profile {"EdgeContainer::create"};
 
     // Sort out edges based on the source node
@@ -57,7 +56,6 @@ std::unique_ptr<EdgeContainer> EdgeContainer::create(NodeID firstNodeID,
                                   std::move(outs),
                                   std::move(ins));
     auto edges = std::unique_ptr<EdgeContainer>(ptr);
-    edges->_tmpToFinalEdgeIDs = std::move(tmpToFinalEdgeIDs);
 
     return edges;
 }

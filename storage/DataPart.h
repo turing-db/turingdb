@@ -80,9 +80,6 @@ private:
     NodeID _firstNodeID {0};
     EdgeID _firstEdgeID {0};
 
-    // TODO Remove for the new Unique ID system
-    std::unordered_map<NodeID , NodeID> _tmpToFinalNodeIDs;
-
     std::unique_ptr<NodeContainer> _nodes;
     std::unique_ptr<EdgeContainer> _edges;
     std::unique_ptr<PropertyManager> _nodeProperties;
