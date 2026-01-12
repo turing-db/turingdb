@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <concepts>
 #include <functional>
+#include <iostream>
 #include <optional>
 #include <type_traits>
 
@@ -16,6 +17,7 @@
 #include "metadata/PropertyNull.h"
 
 #include "BioAssert.h"
+#include "spdlog/spdlog.h"
 
 namespace db {
 
@@ -379,14 +381,25 @@ public:
     static void copyTransformedChunk(const ColumnVector<size_t>* transform,
                                      const ColumnVector<T>* src,
                                      ColumnVector<T>* dst) {
-        const auto* srcd = src->data();
-        const auto* transformd = transform->data();
+        const auto& srcd = src->getRaw();
+        const auto& transformd = transform->getRaw();
         const size_t count = transform->size();
         dst->resize(count);
 
-        auto* dstd = dst->data();
+        spdlog::info("\ntransform: @ {}", fmt::ptr(static_cast<const Column*>(transform)));
+        transform->dump(std::cout);
+        spdlog::info("src: @ {}",  fmt::ptr(static_cast<const Column*>(src)));
+        src->dump(std::cout);
+        spdlog::info("dst: @ {}", fmt::ptr(static_cast<const Column*>(dst)));
+        dst->dump(std::cout);
+
+        auto& dstd = dst->getRaw();
         for (size_t i = 0; i < count; i++) {
+#ifdef NDEBUG
             dstd[i] = srcd[transformd[i]];
+#else
+            dstd.at(i) = srcd.at(transformd.at(i));
+#endif
         }
     }
 
