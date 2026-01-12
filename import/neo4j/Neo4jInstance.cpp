@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <spdlog/spdlog.h>
+#include <sys/wait.h>
 #include <thread>
 
 #include "FileUtils.h"
@@ -54,7 +55,11 @@ bool Neo4jInstance::setup() {
                                " -C " + _neo4jDir.string() + " --strip-components=1";
     const int tarRes = std::system(tarCmd.c_str());
 
-    if (tarRes != 0) {
+    if (tarRes == -1) {
+        spdlog::error("Failed to execute tar command");
+        return false;
+    }
+    if (!WIFEXITED(tarRes) || WEXITSTATUS(tarRes) != 0) {
         spdlog::error("Failed to decompress Neo4j archive '{}'", neo4jArchive.c_str());
         return false;
     }
@@ -67,7 +72,12 @@ bool Neo4jInstance::stop() {
     if (FileUtils::exists(_neo4jDir)) {
         const std::string stopCmd = _neo4jBinary.string() + " stop";
         const int stopRes = std::system(stopCmd.c_str());
-        if (stopRes != 0) {
+        if (stopRes == -1) {
+            spdlog::error("Failed to execute neo4j stop command. Killing java process");
+            killJava();
+            return false;
+        }
+        if (!WIFEXITED(stopRes) || WEXITSTATUS(stopRes) != 0) {
             spdlog::error("Failed to stop Neo4j. Killing java process");
             killJava();
             return false;
@@ -90,14 +100,22 @@ void Neo4jInstance::destroy() {
 }
 
 bool Neo4jInstance::isRunning() {
-    const bool res =
-        !std::system("curl --request GET --url 127.0.0.1:7474 -s > /dev/null");
-
-    return res;
+    const int res = std::system("curl --request GET --url 127.0.0.1:7474 -s > /dev/null");
+    if (res == -1) {
+        spdlog::error("Failed to execute curl command to check Neo4j status");
+        return false;
+    }
+    return WIFEXITED(res) && WEXITSTATUS(res) == 0;
 }
 
 void Neo4jInstance::killJava() {
-    std::system("pkill java");
+    const int res = std::system("pkill java");
+    if (res == -1) {
+        spdlog::error("Failed to execute pkill command");
+    } else if (!WIFEXITED(res)) {
+        spdlog::error("pkill command terminated abnormally");
+    }
+    // Note: pkill returns non-zero if no processes matched, which is not an error here
 }
 
 bool Neo4jInstance::start() {
@@ -109,7 +127,15 @@ bool Neo4jInstance::start() {
     // Setting initial password. This is required by Neo4j
     const std::string setPasswordCmd =
         _neo4jAdminBinary.string() + " set-initial-password turing";
-    std::system(setPasswordCmd.c_str());
+    const int pwdRes = std::system(setPasswordCmd.c_str());
+    if (pwdRes == -1) {
+        spdlog::error("Failed to execute set-initial-password command");
+        return false;
+    }
+    if (!WIFEXITED(pwdRes) || WEXITSTATUS(pwdRes) != 0) {
+        spdlog::error("Failed to set initial Neo4j password");
+        return false;
+    }
 
     // Start daemon
     spdlog::info("Starting Neo4j from binary {}", _neo4jBinary.c_str());
@@ -121,7 +147,11 @@ bool Neo4jInstance::start() {
 
     const std::string startCmd = _neo4jBinary.string() + " start";
     const int startRes = std::system(startCmd.c_str());
-    if (startRes != 0) {
+    if (startRes == -1) {
+        spdlog::error("Failed to execute neo4j start command");
+        return false;
+    }
+    if (!WIFEXITED(startRes) || WEXITSTATUS(startRes) != 0) {
         spdlog::error("Failed to start Neo4j");
         return false;
     }
@@ -148,7 +178,15 @@ bool Neo4jInstance::importDumpedDB(
     const std::string loadCmd = _neo4jAdminBinary.string() + " load" +
                                 " --database=neo4j --from=" + dbFilePath.string() +
                                 " --force";
-    std::system(loadCmd.c_str());
+    const int loadRes = std::system(loadCmd.c_str());
+    if (loadRes == -1) {
+        spdlog::error("Failed to execute neo4j-admin load command");
+        return false;
+    }
+    if (!WIFEXITED(loadRes) || WEXITSTATUS(loadRes) != 0) {
+        spdlog::error("Failed to load Neo4j database from '{}'", dbFilePath.string());
+        return false;
+    }
 
     return true;
 }
