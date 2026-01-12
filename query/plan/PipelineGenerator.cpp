@@ -565,11 +565,9 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
     ExprProgram* exprProg = ExprProgram::create(_pipeline);
     ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
 
-    if (!predicates.empty()) {
-        // Compile predicate expressions into an expression program
-        for (const Predicate* pred : predicates) {
-            exprGen.generatePredicate(pred);
-        }
+    // Compile predicate expressions into an expression program
+    for (const Predicate* pred : predicates) {
+        exprGen.generatePredicate(pred);
     }
 
     if (!labelConstrs.empty()) {
@@ -593,7 +591,7 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
 
 PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node) {
     if (!_builder.isSingleMaterializeStep()) {
-            _builder.addMaterialize();
+        _builder.addMaterialize();
     }
 
     if (node->isEmpty()) {

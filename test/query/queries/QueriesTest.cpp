@@ -2448,6 +2448,17 @@ TEST_F(QueriesTest, isNullFilter) {
     }
 }
 
+TEST_F(QueriesTest, indirectLabelFilter) {
+    std::string_view matchQuery = "MATCH (pf:Person)-->(i:Interest)<--(npf:Person) WHERE NOT "
+                             "npf.isFrench AND pf.isFrench RETURN i.name";
+
+    auto res = query(matchQuery, [](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        auto* is = findColumn(df, "i.name");
+        ASSERT_NE("Remy", *is->as<ColumnOptVector<types::String::Primitive>>()->front());
+    });
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
