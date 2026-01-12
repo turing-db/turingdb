@@ -1,11 +1,12 @@
 #include "Neo4jInstance.h"
 
 #include <chrono>
-#include <cstdlib>
 #include <filesystem>
-#include <spdlog/spdlog.h>
+#include <stdlib.h>
 #include <sys/wait.h>
 #include <thread>
+
+#include <spdlog/spdlog.h>
 
 #include "FileUtils.h"
 #include "LogUtils.h"
