@@ -94,6 +94,14 @@ if [[ "$(uname)" == "Darwin" ]]; then
     else
         echo "openblas is already installed"
     fi
+
+    # Install libomp for OpenMP support (needed by FAISS)
+    if ! brew list libomp &> /dev/null; then
+        echo "Installing libomp via Homebrew..."
+        brew install libomp
+    else
+        echo "libomp is already installed"
+    fi
 else
     # Linux - use apt
     if command -v apt-get &> /dev/null; then
@@ -115,15 +123,29 @@ cmake --install $BUILD_DIR/aws-sdk-cpp
 # Build faiss
 mkdir -p $BUILD_DIR/faiss
 cd $BUILD_DIR/faiss
-cmake -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR \
-      -DBUILD_TESTING=OFF \
-      -DBUILD_SHARED_LIBS=OFF \
-      -DFAISS_ENABLE_GPU=OFF \
-      -DFAISS_ENABLE_CUVS=OFF \
-      -DFAISS_ENABLE_MKL=OFF \
-      -DFAISS_ENABLE_PYTHON=OFF \
-      -DFAISS_ENABLE_EXTRAS=OFF \
-      $SOURCE_DIR/external/faiss-1.13.1
+
+FAISS_CMAKE_ARGS=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
+    -DBUILD_TESTING=OFF
+    -DBUILD_SHARED_LIBS=OFF
+    -DFAISS_ENABLE_GPU=OFF
+    -DFAISS_ENABLE_CUVS=OFF
+    -DFAISS_ENABLE_MKL=OFF
+    -DFAISS_ENABLE_PYTHON=OFF
+    -DFAISS_ENABLE_EXTRAS=OFF
+)
+
+# On macOS, we need to explicitly tell CMake where to find OpenMP from Homebrew's libomp
+if [[ "$(uname)" == "Darwin" ]]; then
+    LIBOMP_PREFIX=$(brew --prefix libomp)
+    FAISS_CMAKE_ARGS+=(
+        "-DOpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include"
+        -DOpenMP_CXX_LIB_NAMES=omp
+        "-DOpenMP_omp_LIBRARY=${LIBOMP_PREFIX}/lib/libomp.dylib"
+    )
+fi
+
+cmake "${FAISS_CMAKE_ARGS[@]}" $SOURCE_DIR/external/faiss-1.13.1
 cmake --build $BUILD_DIR/faiss -j $NUM_JOBS
 cmake --install $BUILD_DIR/faiss
