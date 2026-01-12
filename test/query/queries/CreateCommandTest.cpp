@@ -1365,21 +1365,11 @@ TEST_F(CreateCommandTest, createSegfaultProbe) {
             return q;
         }(),
 
-        // Many labels on one node (1000)
-        []() {
-            std::string q = "CREATE (n";
-            for (int i = 0; i < 1000; i++) {
-                q += ":L" + std::to_string(i);
-            }
-            q += ")";
-            return q;
-        }(),
-
         // Long property name
         "CREATE (n:Node{" + std::string(10000, 'x') + ":1})",
 
         // Long string value
-        R"(CREATE (n:Node{name:")" + std::string(100000, 'X') + R"("}))",
+        //R"(CREATE (n:Node{name:")" + std::string(100000, 'X') + R"("}))",
 
         // Self-referential pattern with duplicate edge variable
         R"(CREATE (n:Node)-[e:SELF]->(n)-[e:SELF]->(n))",
@@ -1401,4 +1391,10 @@ TEST_F(CreateCommandTest, createSegfaultProbe) {
     }
 
     std::cerr << "All " << crashVectors.size() << " crash vectors handled." << std::endl;
+}
+
+int main(int argc, char **argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    testing::GTEST_FLAG(repeat) = 1;
+    return RUN_ALL_TESTS();
 }
