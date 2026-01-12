@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="https://github.com/turing-db/turingdb/blob/update-readme/img/logo_spiral.png" width="350" alt="TuringDB logo">
+  <img src="https://github.com/turing-db/turingdb/blob/finalreadmefixes/img/logo_spiral.png" width="350" alt="TuringDB logo">
 </p>
 
 ## A Blazingly Fast Column-Oriented Graph Database Engine
@@ -25,7 +25,7 @@ TuringDB delivers **millisecond query latency** on graphs with millions of nodes
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=Cpz-I6aR_cw&list=RDCpz-I6aR_cw&start_radio=1">
-    <img src="https://github.com/turing-db/turingdb/blob/update-readme/img/newyoutubeimage.png" width="650" />
+    <img src="https://github.com/turing-db/turingdb/blob/finalreadmefixes/img/newyoutubeimage.png" width="650" />
   </a>
 </p>
 
