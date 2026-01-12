@@ -1184,7 +1184,7 @@ TEST_F(WriteQueriesTest, exceedChunk) {
                     return;
                 }
                 ASSERT_EQ(1, es->size());
-                ASSERT_EQ(e, es->front());
+                ASSERT_EQ(e, es->front().getValue());
             });
             if (!res) {
                 spdlog::error(res.getError());
