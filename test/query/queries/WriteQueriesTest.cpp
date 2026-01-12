@@ -1230,7 +1230,7 @@ TEST_F(WriteQueriesTest, exceedChunk) {
             EXPECT_EQ(edgeCount, es->size());
 
             for (auto [exp, act] : rv::enumerate(*es)) {
-                EXPECT_EQ(exp, act);
+                EXPECT_EQ(exp, act.getValue());
             }
         });
         ASSERT_TRUE(res);
