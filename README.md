@@ -12,7 +12,7 @@
 [![Docs](https://img.shields.io/badge/Docs-docs.turingdb.ai-brightgreen?style=for-the-badge)](https://docs.turingdb.ai)
 
 <p align="center">
-  <img src="https://github.com/turing-db/turingdb/blob/update-readme/smallerspinnning.gif"/>
+  <img src="https://github.com/turing-db/turingdb/blob/update-readme/img/smallerspinnning.gif"/>
 </p>
 
 ## What is TuringDB?
@@ -25,7 +25,7 @@ TuringDB delivers **millisecond query latency** on graphs with millions of nodes
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=Cpz-I6aR_cw&list=RDCpz-I6aR_cw&start_radio=1">
-    <img src="https://github.com/turing-db/turingdb/blob/update-readme/newyoutubeimage.png" width="650" />
+    <img src="https://github.com/turing-db/turingdb/blob/update-readme/img/newyoutubeimage.png" width="650" />
   </a>
 </p>
 
