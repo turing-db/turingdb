@@ -66,6 +66,31 @@ TuringDB was created to solve real-world performance challenges in critical indu
 - OpenCypher query language
 - Python SDK with comprehensive API
 
+## Benchmarks
+
+TuringDB delivers exceptional performance on standard graph workloads 200X faster than Neo4j:
+
+###  Multi-hop Queries From a Set of Seed Nodes
+
+```
+MATCH (n{displayName: ‘APOE-4’}) RETURN count(n)
+```
+
+**Query for 1-hop**: ``` MATCH (n{displayName: ‘APOE-4’})-->(m) RETURN count(n) ```
+
+| Query Depth | Neo4j Mean | TuringDB Mean | Speedup |
+|------------|-----------|---------------|---------|
+| 1-hop      | 1390 ms   | 12 ms         | 115×    |
+| 2-hop      | 1420 ms   | 11 ms         | 129×    |
+| 4-hop      | 1568 ms   | 14 ms         | 112×    |
+| 7-hop      | 51,264 ms | 172 ms        | 298×    |
+| 8-hop      | 98,183 ms | 476 ms        | 206×    |
+
+**Details:** `MATCH` query returning node IDs from a set of 15 seed nodes with an increasing number of hops through outgoing edges.
+
+
+
+See our [detailed benchmarks](https://docs.turingdb.ai/query/benchmarks) for more performance data.
 
 
 ## Quickstart
@@ -260,31 +285,6 @@ We welcome contributions! Contact our team to contribute to TuringDB: team@turin
 
 
 
-## Benchmarks
-
-TuringDB delivers exceptional performance on standard graph workloads 200X faster than Neo4j:
-
-###  Multi-hop Queries From a Set of Seed Nodes
-
-```
-MATCH (n{displayName: ‘APOE-4’}) RETURN count(n)
-```
-
-**Query for 1-hop**: ``` MATCH (n{displayName: ‘APOE-4’})-->(m) RETURN count(n) ```
-
-| Query Depth | Neo4j Mean | TuringDB Mean | Speedup |
-|------------|-----------|---------------|---------|
-| 1-hop      | 1390 ms   | 12 ms         | 115×    |
-| 2-hop      | 1420 ms   | 11 ms         | 129×    |
-| 4-hop      | 1568 ms   | 14 ms         | 112×    |
-| 7-hop      | 51,264 ms | 172 ms        | 298×    |
-| 8-hop      | 98,183 ms | 476 ms        | 206×    |
-
-**Details:** `MATCH` query returning node IDs from a set of 15 seed nodes with an increasing number of hops through outgoing edges.
-
-
-
-See our [detailed benchmarks](https://docs.turingdb.ai/query/benchmarks) for more performance data.
 
 
 
