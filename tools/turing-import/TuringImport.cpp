@@ -209,7 +209,7 @@ int main(int argc, const char** argv) {
                 logt::FileNotFound(value);
                 exit(EXIT_FAILURE);
             }
-            folderPath = value + "/bindump";
+            folderPath = value;
         });
 
     argParser.add_argument("-cmp")
