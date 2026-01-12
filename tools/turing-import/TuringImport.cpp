@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
 
@@ -227,12 +228,11 @@ int main(int argc, const char** argv) {
 
     if (!cmpEnabled) {
         const fs::Path binDumpPath {folderPath};
-        if (binDumpPath.exists()) {
-            FileUtils::removeDirectory(binDumpPath.get());
-        }
-        if (auto res = binDumpPath.mkdir(); !res) {
-            spdlog::error("Failed To create bindump directory err: {}", res.error().fmtMessage());
-            return EXIT_FAILURE;
+        if (!binDumpPath.exists()) {
+            if (auto res = binDumpPath.mkdir(); !res) {
+                spdlog::error("Failed To create bindump directory err: {}", res.error().fmtMessage());
+                return EXIT_FAILURE;
+            }
         }
     }
 
@@ -251,9 +251,26 @@ int main(int argc, const char** argv) {
 
     size_t i = 0;
     for (auto& graph : graphs) {
+        // Compute graph name and output path from input path
+        const size_t pos = dataIt->path.find_last_of('/');
+        std::string graphName;
+        std::string filePath;
+
+        if (pos == std::string::npos) {
+            graphName = dataIt->path;
+        } else {
+            graphName = dataIt->path.substr(pos + 1);
+        }
+
+        // Sanitize graph name: replace hyphens with underscores for valid identifiers
+        std::replace(graphName.begin(), graphName.end(), '-', '_');
+
+        // Compute output path using sanitized graph name
+        filePath = folderPath + "/" + graphName;
+
         switch (dataIt->type) {
             case ImportType::BIN: {
-                graph = Graph::create();
+                graph = Graph::create(graphName, fs::Path(filePath));
                 if (auto res = GraphLoader::load(graph.get(), fs::Path(dataIt->path)); !res) {
                     spdlog::error("Failed To Load Graph: {}", res.error().fmtMessage());
                     jobSystem->terminate();
@@ -263,7 +280,7 @@ int main(int argc, const char** argv) {
             }
             case ImportType::GML: {
                 GMLImporter parser;
-                graph = Graph::create();
+                graph = Graph::create(graphName, fs::Path(filePath));
                 if (!parser.importFile(*jobSystem, graph.get(), FileUtils::Path(dataIt->path))) {
                     jobSystem->terminate();
                     return EXIT_FAILURE;
@@ -277,7 +294,7 @@ int main(int argc, const char** argv) {
                     args._workDir = toolInit.getOutputsDir();
                     args._dumpFilePath = dataIt->path;
 
-                    graph = Graph::create();
+                    graph = Graph::create(graphName, fs::Path(filePath));
                     if (!neo4JImporter.fromDumpFileToJsonDir(*jobSystem,
                                                              graph.get(),
                                                              db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
@@ -293,7 +310,7 @@ int main(int argc, const char** argv) {
                     Neo4jImporter::ImportJsonDirArgs args;
                     args._jsonDir = toolInit.getOutputsDir() + "/json";
                     args._workDir = toolInit.getOutputsDir();
-                    graph = Graph::create();
+                    graph = Graph::create(graphName, fs::Path(filePath));
                     if (!neo4JImporter.importJsonDir(*jobSystem,
                                                      graph.get(),
                                                      db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
@@ -311,7 +328,7 @@ int main(int argc, const char** argv) {
                 args._workDir = toolInit.getOutputsDir();
                 args._dumpFilePath = dataIt->path;
 
-                graph = Graph::create();
+                graph = Graph::create(graphName, fs::Path(filePath));
                 if (!neo4JImporter.fromDumpFileToJsonDir(*jobSystem,
                                                          graph.get(),
                                                          db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
@@ -333,7 +350,7 @@ int main(int argc, const char** argv) {
                     args._port = dataIt->port;
                     args._workDir = toolInit.getOutputsDir();
 
-                    graph = Graph::create();
+                    graph = Graph::create(graphName, fs::Path(filePath));
                     if (!neo4JImporter.fromUrlToJsonDir(*jobSystem,
                                                         graph.get(),
                                                         db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
@@ -349,7 +366,7 @@ int main(int argc, const char** argv) {
                         Neo4jImporter::ImportJsonDirArgs args;
                         args._jsonDir = toolInit.getOutputsDir() + "/json";
                         args._workDir = toolInit.getOutputsDir();
-                        graph = Graph::create();
+                        graph = Graph::create(graphName, fs::Path(filePath));
                         if (!neo4JImporter.importJsonDir(*jobSystem,
                                                          graph.get(),
                                                          db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
@@ -368,7 +385,7 @@ int main(int argc, const char** argv) {
                 args._jsonDir = dataIt->path;
                 args._workDir = toolInit.getOutputsDir();
 
-                graph = Graph::create();
+                graph = Graph::create(graphName, fs::Path(filePath));
                 if (!neo4JImporter.importJsonDir(*jobSystem,
                                                  graph.get(),
                                                  db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
@@ -381,18 +398,11 @@ int main(int argc, const char** argv) {
             }
         }
 
-        // Get The path we will dump our turingDB binaries to
-        const size_t pos = dataIt->path.find_last_of('/');
-        std::string filePath;
-
-        if (pos == std::string::npos) {
-            filePath = {folderPath + dataIt->path};
-        } else {
-            filePath = {folderPath + dataIt->path.substr(pos)};
-        }
-
         if (!cmpEnabled) {
             const fs::Path path {filePath};
+            if (path.exists()) {
+                FileUtils::removeDirectory(filePath);
+            }
             spdlog::info("Dumping graph at {}", filePath);
             if (auto res = GraphDumper::dump(*graph, path); !res) {
                 spdlog::error("Failed To Dump Graph at {} err: {}", filePath, res.error().fmtMessage());

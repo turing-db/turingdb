@@ -1,6 +1,6 @@
 import turingdb
 
-GRAPH_NAME = "cyber_security"
+GRAPH_NAME = "cyber_security_db"
 EXPECTED_NODE_COUNT = 953
 EXPECTED_EDGE_COUNT = 4698
 
