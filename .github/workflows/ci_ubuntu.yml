@@ -39,7 +39,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -qqy curl libcurl4-openssl-dev zlib1g-dev libssl-dev
         sudo apt-get install -qqy bison flex libfl-dev
-        sudo apt-get install -qqy libboost1.83-all-dev || sudo apt-get install -qqy libboost1.74-all-dev
         sudo apt-get install -qqy libopenblas-dev
     - name: Configure cmake
       shell: bash
