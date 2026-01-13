@@ -75,16 +75,20 @@ void FilePageWriter::sync() {
 }
 
 void FilePageWriter::finish() {
-    if (_buffer.size() == 0) {
+    if (_fd < 0) {
         return;
     }
 
-    if (_buffer.size() != _buffer.capacity()) {
-        std::memset(_buffer.data() + _buffer.size(), 0, _buffer.avail());
+    if (_buffer.size() > 0) {
+        if (_buffer.size() != _buffer.capacity()) {
+            std::memset(_buffer.data() + _buffer.size(), 0, _buffer.avail());
+        }
+        flush();
+        sync();
     }
 
-    flush();
-    sync();
+    ::close(_fd);
+    _fd = -1;
 }
 
 void FilePageWriter::nextPage() {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <unistd.h>
 
 #include "AlignedBuffer.h"
 #include "Path.h"
@@ -18,11 +19,34 @@ public:
     }
 
     FilePageReader(const FilePageReader&) = delete;
-    FilePageReader(FilePageReader&&) noexcept = default;
+    FilePageReader(FilePageReader&& other) noexcept
+        : _buffer(std::move(other._buffer)),
+          _error(std::move(other._error)),
+          _fd(other._fd),
+          _reachedEnd(other._reachedEnd)
+    {
+        other._fd = -1;
+    }
     FilePageReader& operator=(const FilePageReader&) = delete;
-    FilePageReader& operator=(FilePageReader&&) noexcept = default;
+    FilePageReader& operator=(FilePageReader&& other) noexcept {
+        if (this != &other) {
+            if (_fd >= 0) {
+                ::close(_fd);
+            }
+            _buffer = std::move(other._buffer);
+            _error = std::move(other._error);
+            _fd = other._fd;
+            _reachedEnd = other._reachedEnd;
+            other._fd = -1;
+        }
+        return *this;
+    }
 
-    ~FilePageReader() = default;
+    ~FilePageReader() {
+        if (_fd >= 0) {
+            ::close(_fd);
+        }
+    }
 
     [[nodiscard]] static Result<FilePageReader> open(const Path& path,
                                                      size_t pageSize = DEFAULT_PAGE_SIZE);
