@@ -465,8 +465,7 @@ TEST_F(JoinFeatureTest, tripleHopJoin) {
 // =============================================================================
 
 // Test 12: Explicit edge types - known to crash in MaterializeProcessor
-// DISABLED: Crashes in MaterializeProcessor::execute()
-TEST_F(JoinFeatureTest, DISABLED_explicitEdgeTypeCrash) {
+TEST_F(JoinFeatureTest, explicitEdgeTypeCrash) {
     constexpr std::string_view QUERY = R"(
         MATCH (a:Person)-[e1:INTERESTED_IN]->(b:Interest)<-[e2:INTERESTED_IN]-(c:Person)
         WHERE a.name <> c.name
@@ -480,8 +479,7 @@ TEST_F(JoinFeatureTest, DISABLED_explicitEdgeTypeCrash) {
 }
 
 // Test 13: Mixed edge types in a path
-// DISABLED: May crash in MaterializeProcessor::execute()
-TEST_F(JoinFeatureTest, DISABLED_mixedEdgeTypesInPath) {
+TEST_F(JoinFeatureTest, mixedEdgeTypesInPath) {
     constexpr std::string_view QUERY = R"(
         MATCH (a:Person)-[:KNOWS]->(b:Person)-[:INTERESTED_IN]->(c:Interest)
         RETURN a.name, b.name, c.name
@@ -538,8 +536,7 @@ TEST_F(JoinFeatureTest, selfJoinWithEquality) {
 }
 
 // Test 16: Cyclic pattern A->B->C->A
-// DISABLED: May crash with explicit edge types
-TEST_F(JoinFeatureTest, DISABLED_cyclicPatternJoin) {
+TEST_F(JoinFeatureTest, cyclicPatternJoin) {
     constexpr std::string_view QUERY = R"(
         MATCH (a:Person)-[:KNOWS]->(b:Person)-[:KNOWS]->(c:Person)-[:KNOWS]->(a)
         RETURN a.name, b.name, c.name
@@ -571,8 +568,7 @@ TEST_F(JoinFeatureTest, DISABLED_cyclicPatternJoin) {
 }
 
 // Test 17: Symmetric relationship (A knows B AND B knows A)
-// DISABLED: May crash with explicit edge types
-TEST_F(JoinFeatureTest, DISABLED_symmetricRelationshipJoin) {
+TEST_F(JoinFeatureTest, symmetricRelationshipJoin) {
     constexpr std::string_view QUERY = R"(
         MATCH (a:Person)-[:KNOWS]->(b:Person)-[:KNOWS]->(a)
         RETURN a.name, b.name
@@ -752,8 +748,7 @@ TEST_F(JoinFeatureTest, emptyAfterChunkProcessing) {
 // =============================================================================
 
 // Test 24: Very deep path (4 hops)
-// DISABLED: Crashes with explicit edge types in MaterializeProcessor
-TEST_F(JoinFeatureTest, DISABLED_fourHopPath) {
+TEST_F(JoinFeatureTest, fourHopPath) {
     constexpr std::string_view QUERY = R"(
         MATCH (a:Person)-[:KNOWS]->(b:Person)-[:KNOWS]->(c:Person)-[:KNOWS]->(d:Person)
         RETURN a.name, b.name, c.name, d.name
