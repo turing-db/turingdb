@@ -120,8 +120,6 @@ struct PropertyTypeDispatcher {
 
 }
 
-namespace db {
-
 ColumnTag PipelineGenerator::getCol(const VarDecl* var) {
     if (!var) {
         throw FatalException("Attempted to get column for null variable");
@@ -133,8 +131,6 @@ ColumnTag PipelineGenerator::getCol(const VarDecl* var) {
     }
     const ColumnTag tag = it->second;
     return tag;
-}
-
 }
 
 void PipelineGenerator::generate() {
@@ -565,11 +561,9 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
     ExprProgram* exprProg = ExprProgram::create(_pipeline);
     ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
 
-    if (!predicates.empty()) {
-        // Compile predicate expressions into an expression program
-        for (const Predicate* pred : predicates) {
-            exprGen.generatePredicate(pred);
-        }
+    // Compile predicate expressions into an expression program
+    for (const Predicate* pred : predicates) {
+        exprGen.generatePredicate(pred);
     }
 
     if (!labelConstrs.empty()) {
@@ -587,13 +581,21 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
     }
 
     // Then add a filter processor, taking the built expression program to execute
-    _builder.addFilter(exprProg);
+    const auto& output = _builder.addFilter(exprProg);
+
+    // Explictly create a new @ref MaterializeProcessor which uses the output columns of
+    // this filter as its base. This then overrides the behaviour in @ref
+    // PipelineGenerator::generate which would otherwise create a MatProc pointing to the
+    // input of this filter processor.
+    _builder.setMaterializeProc(
+        MaterializeProcessor::createFromDf(_pipeline, _mem, output.getDataframe()));
+
     return _builder.getPendingOutputInterface();
 }
 
 PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNode* node) {
     if (!_builder.isSingleMaterializeStep()) {
-            _builder.addMaterialize();
+        _builder.addMaterialize();
     }
 
     if (node->isEmpty()) {
@@ -633,7 +635,15 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
         exprGen.addEdgeTypeConstraint(edgeTypecol->getColumn(), edgeTypeConstr);
     }
 
-    _builder.addFilter(exprProg);
+    const auto& output = _builder.addFilter(exprProg);
+
+    // Explictly create a new @ref MaterializeProcessor which uses the output columns of
+    // this filter as its base. This then overrides the behaviour in @ref
+    // PipelineGenerator::generate which would otherwise create a MatProc pointing to the
+    // input of this filter processor.
+    _builder.setMaterializeProc(
+        MaterializeProcessor::createFromDf(_pipeline, _mem, output.getDataframe()));
+
     return _builder.getPendingOutputInterface();
 }
 

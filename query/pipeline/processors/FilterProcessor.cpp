@@ -18,7 +18,6 @@
 #include "processors/ExprProgram.h"
 
 #include "FatalException.h"
-#include "processors/ExprProgram.h"
 
 using namespace db;
 
@@ -173,6 +172,14 @@ void FilterProcessor::execute() {
     }
 
     _input.getPort()->consume();
-    _output.getPort()->writeData();
+
+    // Only ever emit an empty chunk if our input is closed, to allow the next processor
+    // to proceed.
+    const bool haveOutput = destDF->getRowCount() != 0;
+    const bool inputClosed = _input.getPort()->isClosed();
+    if (haveOutput || inputClosed) {
+        _output.getPort()->writeData();
+    }
+
     finish();
 }

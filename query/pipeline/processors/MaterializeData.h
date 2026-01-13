@@ -26,10 +26,15 @@ public:
                       DataframeManager* dfMan,
                       const MaterializeData& prevData);
 
-    void initFromDf(LocalMemory* mem,
-                    DataframeManager* dfMan,
-                    const Dataframe* df);
+    /*
+    Needed when a processor takes a materialised input and produces the new set
+    of columns to be propogated in a separate dataframe.
+    */
+    void initFromDf(LocalMemory* mem, DataframeManager* dfMan, const Dataframe* df);
 
+    /*
+    Needed in the fork where we want to copy the mat proc across multiple instances
+    */
     void cloneFromPrev(LocalMemory* mem,
                        DataframeManager* dfMan,
                        const MaterializeData& prevData);

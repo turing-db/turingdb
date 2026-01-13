@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <optional>
 
+#include <range/v3/view/enumerate.hpp>
+
 #include "EdgeRecord.h"
 #include "TuringDB.h"
 #include "Graph.h"
@@ -18,6 +20,9 @@
 #include "TuringTest.h"
 
 using namespace turing::test;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 class WriteQueriesTest : public TuringTest {
     void initialize() override {
@@ -61,6 +66,15 @@ protected:
         _graphName = name;
         _graph = _env->getSystemManager().getGraph(std::string {name});
         ASSERT_TRUE(_graph);
+    }
+
+    static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {
+        for (auto* col : df->cols()) {
+            if (col->getName() == name) {
+                return col;
+            }
+        }
+        return nullptr;
     }
 };
 
@@ -1108,4 +1122,127 @@ TEST_F(WriteQueriesTest, multipleCreates) {
     }
 
     ASSERT_TRUE(expected.equals(actual));
+}
+
+TEST_F(WriteQueriesTest, exceedChunk) {
+    setWorkingGraph("default");
+
+    // Create over 1 chunk of nodes
+    const size_t chunkSize = 65'536;
+    const size_t nodeCount = chunkSize + 1; // TODO: Find a way to access ChunkConfig
+    const size_t edgeCount = 100;
+
+    newChange();
+    {
+        auto createNodePattern = [](const NodeID id) {
+            auto idstr = std::to_string(id.getValue());
+            return "(n" + idstr + ":Node {id: " + idstr + "})";
+        };
+
+        std::string createQuery = "CREATE ";
+        createQuery += createNodePattern(0);
+
+        for (NodeID n {1}; n < nodeCount; n++) {
+            createQuery += ", ";
+            createQuery += createNodePattern(n);
+        }
+
+        auto res = query(createQuery, [](const Dataframe*) {});
+        ASSERT_TRUE(res);
+
+        ASSERT_TRUE(query("COMMIT", [](const Dataframe*) {}));
+    }
+
+    {
+        std::string_view matchQuery = "MATCH (n) RETURN COUNT(n) as COUNT";
+
+        auto res = query(matchQuery, [nodeCount](const Dataframe* df) {
+            const auto* count = findColumn(df, "COUNT")->as<ColumnConst<size_t>>();
+            ASSERT_TRUE(count);
+
+            ASSERT_EQ(nodeCount, count->getRaw());
+        });
+        ASSERT_TRUE(res);
+    }
+
+    // Now match against those nodes (more than 1 chunk) and create edges between them
+
+    {
+        for (size_t e {0}; e < edgeCount; e++) {
+            size_t chunks {0};
+            size_t emptyChunks {0};
+            std::string query_str = fmt::format(
+                R"(MATCH (n:Node), (m:Node) WHERE n.id = {} AND m.id = {} CREATE (n)-[e:Edge]->(m) RETURN e)",
+                e, e + 1);
+            auto res = query(query_str, [&](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                chunks++;
+                const auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+                ASSERT_TRUE(es);
+                if (es->empty()) {
+                    emptyChunks++;
+                    return;
+                }
+                ASSERT_EQ(1, es->size());
+                ASSERT_EQ(e, es->front().getValue());
+            });
+            if (!res) {
+                spdlog::error(res.getError());
+            }
+            ASSERT_TRUE(res);
+            ASSERT_EQ(2, chunks);
+            // We should only ever get 1 empty chunk: the final filter result on the last
+            // row of CartesianProduct (we do not create an edge between those nodes)
+            ASSERT_EQ(1, emptyChunks);
+        }
+
+    }
+    submitCurrentChange();
+
+    { // Verify correct number of edges
+        std::string_view matchQuery = "MATCH (n)-[e]->(m) RETURN COUNT(e) as COUNT";
+
+        auto res = query(matchQuery, [edgeCount](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            const auto* count = findColumn(df, "COUNT")->as<ColumnConst<size_t>>();
+            ASSERT_TRUE(count);
+
+            ASSERT_EQ(edgeCount, count->getRaw());
+        });
+        ASSERT_TRUE(res);
+    }
+
+    { // Verify edges have correct IDs
+        std::string_view matchQuery = "MATCH (n)-[e]->(m) RETURN e";
+
+        size_t chunks {0};
+        size_t emptyChunks {0};
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            chunks++;
+            ASSERT_TRUE(df);
+            if (df->getRowCount() == 0) {
+                emptyChunks++;
+                return;
+            }
+            const auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+            ASSERT_TRUE(es);
+
+            EXPECT_EQ(edgeCount, es->size());
+
+            for (auto [exp, act] : rv::enumerate(*es)) {
+                EXPECT_EQ(exp, act.getValue());
+            }
+        });
+        ASSERT_TRUE(res);
+        ASSERT_EQ(2, chunks);
+        // We should only ever get 1 empty chunk: the result of GetOutEdges on the second
+        // chunk of ScanNodes, which contains only 1 node with no edges
+        ASSERT_EQ(1, emptyChunks);
+    }
+}
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 3;
+    });
 }

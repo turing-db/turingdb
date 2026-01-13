@@ -379,12 +379,12 @@ public:
     static void copyTransformedChunk(const ColumnVector<size_t>* transform,
                                      const ColumnVector<T>* src,
                                      ColumnVector<T>* dst) {
-        const auto* srcd = src->data();
-        const auto* transformd = transform->data();
+        const auto& srcd = src->getRaw();
+        const auto& transformd = transform->getRaw();
         const size_t count = transform->size();
         dst->resize(count);
 
-        auto* dstd = dst->data();
+        auto& dstd = dst->getRaw();
         for (size_t i = 0; i < count; i++) {
             dstd[i] = srcd[transformd[i]];
         }
