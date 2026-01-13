@@ -401,7 +401,7 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
     {
         ChangeAccessor accessor = change->access();
 
-        if (auto res = change->submit(jobSystem); !res) {
+        if (auto res = accessor.submit(jobSystem); !res) {
             spdlog::error("Could not submit change: {}", res.error().fmtMessage());
             return false;
         }
