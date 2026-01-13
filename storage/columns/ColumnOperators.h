@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <concepts>
 #include <functional>
-#include <iostream>
 #include <optional>
 #include <type_traits>
 
@@ -17,7 +16,6 @@
 #include "metadata/PropertyNull.h"
 
 #include "BioAssert.h"
-#include "spdlog/spdlog.h"
 
 namespace db {
 
@@ -386,20 +384,9 @@ public:
         const size_t count = transform->size();
         dst->resize(count);
 
-        spdlog::info("\ntransform: @ {}", fmt::ptr(static_cast<const Column*>(transform)));
-        transform->dump(std::cout);
-        spdlog::info("src: @ {}",  fmt::ptr(static_cast<const Column*>(src)));
-        src->dump(std::cout);
-        spdlog::info("dst: @ {}", fmt::ptr(static_cast<const Column*>(dst)));
-        dst->dump(std::cout);
-
         auto& dstd = dst->getRaw();
         for (size_t i = 0; i < count; i++) {
-#ifdef NDEBUG
             dstd[i] = srcd[transformd[i]];
-#else
-            dstd.at(i) = srcd.at(transformd.at(i));
-#endif
         }
     }
 

@@ -190,10 +190,6 @@ void MaterializeProcessor::execute() {
 
     for (size_t currentStep = lastStep; currentStep >= 0; --currentStep) {
         const MaterializeData::Columns& cols = columnsPerStep[currentStep];
-        fmt::print("\n");
-        for (const auto* c : cols) {
-            fmt::print("{} ", fmt::ptr(c));
-        } fmt::print("\n");
 
         // If last step, don't use the transform, just copy columns
         if (currentStep == lastStep) {
@@ -210,7 +206,6 @@ void MaterializeProcessor::execute() {
         // Else use transform on all columns of the current step
         for (const auto* colPtr : std::ranges::reverse_view(cols)) {
             NamedColumn* destCol = output[currentColIndex];
-            spdlog::info("Destination has tag {}", destCol->getTag().getValue());
             copyTransformedChunk(&_transform, colPtr, destCol->getColumn());
             --currentColIndex;
         }

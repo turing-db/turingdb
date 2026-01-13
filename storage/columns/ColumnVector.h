@@ -6,7 +6,6 @@
 #include "DebugDump.h"
 
 #include "BioAssert.h"
-#include "spdlog/fmt/bundled/format.h"
 
 namespace db {
 

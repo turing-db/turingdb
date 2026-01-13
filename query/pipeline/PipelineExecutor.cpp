@@ -3,9 +3,6 @@
 #include "Processor.h"
 #include "PipelineV2.h"
 #include "PipelineBuffer.h"
-#include "dataframe/Dataframe.h"
-#include "spdlog/spdlog.h"
-#include <iostream>
 
 using namespace db;
 
@@ -72,17 +69,7 @@ void PipelineExecutor::executeCycle() {
             currentProc->reset();
         }
 
-        fmt::println("\n\n\n");
-        spdlog::info("EXECUTING {} with input:", currentProc->describe());
-        if (!currentProc->inputs().empty()) currentProc->inputs().front()->getBuffer()->getDataframe()->dump(std::cout);
-        else spdlog::warn("none");
-
         currentProc->execute();
-        spdlog::info("now {} has output:", currentProc->describe());
-        if (!currentProc->outputs().empty()) currentProc->outputs().front()->getBuffer()->getDataframe()->dump(std::cout);
-        else spdlog::warn("none");
-        
-        fmt::println("\n\n\n");
 
         // If the processor is not finished in one step, add to the active queue
         if (!currentProc->isFinished()) {
