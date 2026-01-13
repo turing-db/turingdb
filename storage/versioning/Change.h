@@ -43,8 +43,6 @@ public:
     [[nodiscard]] CommitHash baseHash() const;
     [[nodiscard]] ChangeID id() const { return _id; }
 
-    [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem);
-
 private:
     mutable std::mutex _mutex;
     friend ChangeManager;
@@ -67,6 +65,7 @@ private:
 
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> rebase(JobSystem& jobsystem);
+    [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem);
 
     [[nodiscard]] GraphView viewGraph(CommitHash commitHash) const;
 };
