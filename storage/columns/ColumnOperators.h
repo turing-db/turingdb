@@ -226,7 +226,7 @@ public:
         requires std::same_as<Res, std::remove_cvref_t<decltype(std::plus<> {}(
                                        std::declval<unwrap_optional_t<T>>(),
                                        std::declval<unwrap_optional_t<U>>()))>>
-    static void add(ColumnOptVector<Res>* res,
+    static void add(ColumnConst<Res>* res,
                     const ColumnConst<T>* lhs,
                     const ColumnConst<U>* rhs) {
         auto& resd = res->getRaw();
@@ -607,7 +607,7 @@ private:
 
     template <typename T, typename U>
         requires OptionallyInvokable<std::plus<>, T, U>
-    inline static std::optional<bool> optionalAdd(const T& a, const U& b) {
+    inline static auto optionalAdd(const T& a, const U& b) {
         return optionalGeneric<std::plus<>, T, U>(a, b);
     }
 };

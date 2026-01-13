@@ -172,12 +172,24 @@ Column* ExprProgramGenerator::generateUnaryExpr(const UnaryExpr* unExpr) {
 }
 
 Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
-    Column* lhs = generateExpr(binExpr->getLHS());
-    Column* rhs = generateExpr(binExpr->getRHS());
-    const ColumnOperator op = binaryOperatorToColumnOperator(binExpr->getOperator());
-    Column* resCol = allocResultColumn(binExpr);
+    const Expr* lhs = binExpr->getLHS();
+    const Expr* rhs = binExpr->getRHS();
 
-    _exprProg->addInstr(op, resCol, lhs, rhs);
+    Column* lhsCol = generateExpr(lhs);
+    Column* rhsCol = generateExpr(rhs);
+    const ColumnOperator op = binaryOperatorToColumnOperator(binExpr->getOperator());
+
+    const bool lhsLiteral = lhs->getKind() == Expr::Kind::LITERAL;
+    const bool rhsLiteral = rhs->getKind() == Expr::Kind::LITERAL;
+
+    Column* resCol {nullptr};
+    if (lhsLiteral && rhsLiteral) {
+        resCol = allocResultConstColumn(binExpr);
+    } else {
+        resCol = allocResultColumn(binExpr);
+    }
+
+    _exprProg->addInstr(op, resCol, lhsCol, rhsCol);
 
     return resCol;
 }
@@ -239,6 +251,33 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
     case EvalType:                                                                       \
         return _gen->memory().alloc<ColumnOptVector<Type::Primitive>>();                 \
     break;
+
+#define ALLOC_EVALTYPE_CONST_COL(EvalType, Type)                                         \
+    case EvalType:                                                                       \
+        return _gen->memory().alloc<ColumnConst<Type::Primitive>>();                     \
+        break;
+
+Column* ExprProgramGenerator::allocResultConstColumn(const Expr* expr) {
+    const EvaluatedType exprType = expr->getType();
+
+    switch (exprType) {
+        ALLOC_EVALTYPE_CONST_COL(EvaluatedType::Integer, types::Int64)
+        ALLOC_EVALTYPE_CONST_COL(EvaluatedType::Double, types::Double)
+        ALLOC_EVALTYPE_CONST_COL(EvaluatedType::String, types::String)
+        ALLOC_EVALTYPE_CONST_COL(EvaluatedType::Bool, types::Bool)
+
+        case EvaluatedType::Invalid:
+            throw PlannerException(
+                "ExprProgramGenerator: encountered expression of invalid type");
+        break;
+
+        default:
+            throw PlannerException(fmt::format(
+                "Expression of type {} not supported",
+                (size_t)exprType));
+        break;
+    }
+}
 
 Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
     const EvaluatedType exprType = expr->getType();
