@@ -34,7 +34,7 @@ def run(client : TuringDB) -> None:
 
   # Subtle write-write conflict: Change1 deleting node 9 also deletes edge 1
   client.set_change(change=change_thd_deletor)
-  client.query("MATCH (n) WHERE n.id = 1 DELETE n")
+  client.query("MATCH ()-[e]->() WHERE e.id = 1 DELETE e")
   client.query("commit")
   # We expect an exception here
   try:
