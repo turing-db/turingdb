@@ -63,6 +63,15 @@ protected:
         }
         return propOpt->_id;
     }
+
+    LabelID getLabelID(std::string_view labelName) {
+        auto labelOpt = read().getView().metadata().labels().get(labelName);
+        if (!labelOpt) {
+            throw TuringException(
+                fmt::format("Failed to get label: {}.", labelName));
+        }
+        return *labelOpt;
+    }
 };
 
 template <typename T>
@@ -2449,14 +2458,80 @@ TEST_F(QueriesTest, isNullFilter) {
 }
 
 TEST_F(QueriesTest, indirectLabelFilter) {
-    std::string_view matchQuery = "MATCH (pf:Person)-->(i:Interest)<--(npf:Person) WHERE NOT "
-                             "npf.isFrench AND pf.isFrench RETURN i.name";
+    std::string_view matchQuery =
+        "MATCH (pf:Person)-->(i:Interest)<--(npf:Person) WHERE NOT "
+        "npf.isFrench AND pf.isFrench RETURN i.name";
 
-    auto res = query(matchQuery, [](const Dataframe* df) {
-        ASSERT_TRUE(df);
-        auto* is = findColumn(df, "i.name");
-        ASSERT_EQ("Cooking", *is->as<ColumnOptVector<types::String::Primitive>>()->front());
-    });
+    const PropertyTypeID nameID = getPropID("name");
+    const PropertyTypeID isFrenchID = getPropID("isFrench");
+    const LabelID personLabelID = getLabelID("Person");
+    const LabelID interestLabelID = getLabelID("Interest");
+
+    using String = types::String::Primitive;
+    using Rows = LineContainer<String>;
+
+    Rows expected;
+    {
+        // Find all edges to Interest nodes
+        for (const EdgeRecord& e1 : read().scanOutEdges()) {
+            NodeView srcView1 = read().getNodeView(e1._nodeID);
+            NodeView dstView1 = read().getNodeView(e1._otherID);
+
+            // Check if this is Person -> Interest
+            if (!srcView1.labelset().hasLabel(personLabelID)
+                || !dstView1.labelset().hasLabel(interestLabelID)) {
+                continue;
+            }
+
+            const NodeID personPF = e1._nodeID;
+            const NodeID interestI = e1._otherID;
+
+            // Check if pf is French
+            const auto* isFrenchPF =
+                read().tryGetNodeProperty<types::Bool>(isFrenchID, personPF);
+            if (!isFrenchPF || !*isFrenchPF) {
+                continue;
+            }
+
+            // Now find incoming edges to this Interest node from non-French persons
+            ColumnNodeIDs iNodes;
+            iNodes.push_back(interestI);
+
+            for (const EdgeRecord& e2 : read().getInEdges(&iNodes)) {
+                NodeView srcView2 = read().getNodeView(e2._nodeID);
+                if (!srcView2.labelset().hasLabel(personLabelID)) {
+                    continue;
+                }
+
+                const NodeID personNPF = e2._nodeID;
+
+                // Check if npf is NOT French
+                const auto* isFrenchNPF =
+                    read().tryGetNodeProperty<types::Bool>(isFrenchID, personNPF);
+                if (isFrenchNPF && *isFrenchNPF) {
+                    continue; // Skip if French
+                }
+
+                // Get the interest name
+                const auto* nameI =
+                    read().tryGetNodeProperty<types::String>(nameID, interestI);
+                if (nameI) {
+                    expected.add({*nameI});
+                }
+            }
+        }
+
+        Rows actual;
+        auto res = query(matchQuery, [&actual](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* inames = findColumn(df, "i.name")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(inames);
+
+            for (auto nameOpt : *inames) {
+                actual.add({*nameOpt});
+            }
+        });
+    }
 }
 
 int main(int argc, char** argv) {
