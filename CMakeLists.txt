@@ -23,8 +23,7 @@ set(CPP_STANDARD "c++23")
 
 # C++ warning flags
 # Note: -Wno-deprecated-declarations is needed for external range-v3 library deprecation warnings
-# Note: -Wno-character-conversion is needed for googletest with LLVM clang
-set(CPP_WARNINGS "-Wall -Werror -Wunused-function -Wunused-variable -Wno-deprecated-declarations -Wno-character-conversion")
+set(CPP_WARNINGS "-Wall -Werror -Wunused-function -Wunused-variable -Wno-deprecated-declarations")
 
 # Detect debug build
 set(DEBUG_BUILD FALSE)
