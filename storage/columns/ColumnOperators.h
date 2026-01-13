@@ -10,6 +10,7 @@
 #include "ColumnMask.h"
 #include "ColumnVector.h"
 #include "ColumnOptMask.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnSet.h"
 
 #include "metadata/PropertyType.h"
@@ -52,6 +53,10 @@ template <typename T, typename U>
 concept OptionallyComparable =
     (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
      || std::totally_ordered_with<unwrap_optional_t<T>, unwrap_optional_t<U>>);
+
+template <typename Func, typename T, typename U>
+concept OptionallyInvokable =
+    std::invocable<Func, unwrap_optional_t<T>, unwrap_optional_t<U>>;
 
 // Types that are semantically equivalent, but one or both may be wrapped in optional
 template <typename T, typename U>
@@ -196,13 +201,48 @@ public:
     INSTANTIATE_PROPERTY_PREDICATES(greaterThanOrEqual, optionalGTE)
     INSTANTIATE_PROPERTY_PREDICATES(lessThanOrEqual, optionalLTE)
 
+    template <typename Res, typename T, typename U>
+        requires std::same_as<Res, std::remove_cvref_t<decltype(std::plus<> {}(
+                                       std::declval<unwrap_optional_t<T>>(),
+                                       std::declval<unwrap_optional_t<U>>()))>>
+    static void add(ColumnOptVector<Res>* res,
+                    const ColumnVector<T>* lhs,
+                    const ColumnVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions.");
+
+        const size_t size = lhs->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = optionalAdd(lhsd[i], rhsd[i]);
+        }
+    }
+
+    template <typename Res, typename T, typename U>
+        requires std::same_as<Res, std::remove_cvref_t<decltype(std::plus<> {}(
+                                       std::declval<unwrap_optional_t<T>>(),
+                                       std::declval<unwrap_optional_t<U>>()))>>
+    static void add(ColumnOptVector<Res>* res,
+                    const ColumnConst<T>* lhs,
+                    const ColumnConst<U>* rhs) {
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        resd = optionalAdd(lhsd, rhsd);
+    }
+
     // Implementation for IS NULL
     template <typename T>
         requires is_optional_v<T>
     static void equal(ColumnOptMask* mask,
                              const ColumnVector<T>* lhs,
                              const ColumnConst<PropertyNull>*) {
-        const auto size = lhs->size();
+        const size_t size = lhs->size();
 
         mask->resize(size);
         auto& maskd = mask->getRaw();
@@ -536,6 +576,40 @@ private:
         return optionalPredicate<std::less_equal<>>(a, b);
     }
 
+    /**
+     * @brief Generic function to apply a generic invokable to two possibly-optional
+     * operands, where either operand being nullopt results in the final result being
+     * nullopt, and the result of applying the invokable otherwise.
+     */
+    template <typename Func, typename T, typename U>
+        requires OptionallyInvokable<Func, T, U>
+    inline static auto optionalGeneric(const T& a, const U& b)
+        -> std::invoke_result<Func, T, U>::type {
+        if constexpr (is_optional_v<T>) {
+            if (!a.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        if constexpr (is_optional_v<U>) {
+            if (!b.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        // a and b are both either engaged optionals or values, so safe to unwrap
+
+        auto&& av = unwrap(a);
+        auto&& bv = unwrap(b);
+
+        return Func {}(av, bv);
+    }
+
+    template <typename T, typename U>
+        requires OptionallyInvokable<std::plus<>, T, U>
+    inline static std::optional<bool> optionalAdd(const T& a, const U& b) {
+        return optionalGeneric<std::plus<>, T, U>(a, b);
+    }
 };
 
 }

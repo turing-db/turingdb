@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string_view>
 
+#include "columns/ColumnConst.h"
 #include "columns/ColumnOperator.h"
 #include "columns/ColumnOperators.h"
 #include "columns/ColumnKind.h"
@@ -137,6 +138,14 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
         ColumnOperators::lessThanOrEqual(static_cast<ColumnOptMask*>(instr._res),        \
                                          static_cast<const Lhs*>(instr._lhs),            \
                                          static_cast<const Rhs*>(instr._rhs));           \
+        break;                                                                           \
+    }
+
+#define ADD_CASE(Lhs, Rhs, Type)                                                         \
+    case OpCase<OP_ADD, Lhs, Rhs>: {                                                     \
+        ColumnOperators::add(static_cast<ColumnOptVector<Type>*>(instr._res),            \
+                             static_cast<const Lhs*>(instr._lhs),                        \
+                             static_cast<const Rhs*>(instr._rhs));                       \
         break;                                                                           \
     }
 
@@ -324,6 +333,10 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         INSTANTIATE_PROPERTY_OPERATOR(LESS_THAN_CASE)
         INSTANTIATE_PROPERTY_OPERATOR(GREATER_THAN_OR_EQUAL_CASE)
         INSTANTIATE_PROPERTY_OPERATOR(LESS_THAN_OR_EQUAL_CASE)
+
+        ADD_CASE(ColumnConst<types::Int64::Primitive>,
+                 ColumnConst<types::Int64::Primitive>,
+                 types::Int64::Primitive)
 
         // Special cases for IS NOT NULL and IS NULL
         EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<PropertyNull>)
