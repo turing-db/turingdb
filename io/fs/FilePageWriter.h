@@ -22,9 +22,28 @@ public:
     }
 
     FilePageWriter(const FilePageWriter&) = delete;
-    FilePageWriter(FilePageWriter&&) noexcept = default;
+    FilePageWriter(FilePageWriter&& other) noexcept
+        : _error(std::move(other._error)),
+          _buffer(std::move(other._buffer)),
+          _fd(other._fd),
+          _reachedEnd(other._reachedEnd),
+          _written(other._written)
+    {
+        other._fd = -1;
+    }
     FilePageWriter& operator=(const FilePageWriter&) = delete;
-    FilePageWriter& operator=(FilePageWriter&&) noexcept = default;
+    FilePageWriter& operator=(FilePageWriter&& other) noexcept {
+        if (this != &other) {
+            finish();
+            _error = std::move(other._error);
+            _buffer = std::move(other._buffer);
+            _fd = other._fd;
+            _reachedEnd = other._reachedEnd;
+            _written = other._written;
+            other._fd = -1;
+        }
+        return *this;
+    }
 
     [[nodiscard]] static Result<FilePageWriter> open(const Path& path,
                                                      size_t pageSize = DEFAULT_PAGE_SIZE);
