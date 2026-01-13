@@ -509,13 +509,6 @@ TEST_F(JoinFeatureTest, sharedInterestJoin) {
     ASSERT_TRUE(res);
 
     // Compare expected vs actual
-    // NOTE: This test catches a query engine bug where:
-    // 1. WHERE clause on interest name is not applied correctly
-    // 2. Only first person variable is returned correctly
-    // Uncomment debug output below to see the discrepancy:
-    // spdlog::info("Expected {} unique tuples, actual {} unique tuples", expected.size(), actual.size());
-    // expected.print(std::cout);
-    // actual.print(std::cout);
     ASSERT_TRUE(expected.equals(actual));
 }
 
@@ -2072,6 +2065,8 @@ TEST_F(JoinFeatureTest, multiJoin_categoryDoubleHop) {
                 if (c1IntsIt == categoryInterests.end()) continue;
 
                 for (const auto& [jID, jName] : c1IntsIt->second) {
+                    // Note: No edge uniqueness in our Cypher - i and j can be the same node
+
                     // Find categories c2 that j belongs to where c1 != c2
                     auto jCatsIt = interestCategories.find(jID);
                     if (jCatsIt == interestCategories.end()) continue;
