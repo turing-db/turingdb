@@ -24,17 +24,26 @@ jobs:
             # fetch-depth: 0 # Allegedly enforces a clean pull on each run
     - name: Install uv
       uses: astral-sh/setup-uv@v3
+    - name: Install LLVM
+      run: |
+        brew install llvm
+        echo "LLVM_PREFIX=$(brew --prefix llvm)" >> $GITHUB_ENV
     - name: Cache dependencies
       id: cache-dependencies
       uses: actions/cache@v4
       with:
         path: external/dependencies
-        key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies.sh', '.gitmodules') }}
+        key: ${{ runner.os }}-llvm-dependencies-${{ hashFiles('dependencies.sh', '.gitmodules') }}
     - name: Install dependencies
       run: ./dependencies.sh
+      env:
+        CC: ${{ env.LLVM_PREFIX }}/bin/clang
+        CXX: ${{ env.LLVM_PREFIX }}/bin/clang++
     - name: Configure cmake
       shell: bash
-      run: mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build && cmake ..
+      run: |
+        mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build
+        cmake .. -DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++
     - name: Build
       shell: bash
       run: cd ${{ github.workspace }}/build && make -j8 && make install
