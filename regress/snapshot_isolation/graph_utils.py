@@ -7,7 +7,7 @@ NUM_NODES : int = NUM_TOTAL_NODES - (2 * NUM_EDGES) # CREATE (n)
 # Helper to create a change and return its ID
 def new_change(client : TuringDB) -> str:
   client.checkout('main')
-  change_id : str = client.query("CHANGE NEW")[0][0]
+  change_id : str = client.query("CHANGE NEW")['changeID'][0]
   client.checkout(change=change_id)
   return change_id
 
@@ -34,19 +34,19 @@ def setup_graph(client : TuringDB, graph_name : str) -> None:
     node_id += 1
 
   for _ in range(NUM_EDGES):
-    client.query(f"create (n:NEWNODE {{id: {node_id}}})-[:NEWEDGE {{id: {edge_id}}}]-(m:NEWNODE {{id: {node_id + 1}}})")
+    client.query(f"create (n:NEWNODE {{id: {node_id}}})-[:NEWEDGE {{id: {edge_id}}}]->(m:NEWNODE {{id: {node_id + 1}}})")
     edge_id += 1
     node_id += 2
 
   submit_current_change(client)
 
 def validate_graph_setup(client : TuringDB) -> bool:
-  num_nodes : int = len(client.query("match (n) return n")[0])
-  num_edges : int = len(client.query("match (n)-[e]-(m) return e")[0])
+  num_nodes : int = client.query("MATCH (n) RETURN COUNT(n) AS COUNT")['COUNT'][0]
+  num_edges : int = client.query("MATCH (n)-[e]->(m) RETURN COUNT(e) AS COUNT")['COUNT'][0]
 
-  if not num_nodes == NUM_TOTAL_NODES:
+  if not (num_nodes == NUM_TOTAL_NODES):
     print(f"Expected {NUM_NODES} nodes but got {num_nodes} nodes.")
-  if not num_edges == NUM_EDGES:
+  if not (num_edges == NUM_EDGES):
     print(f"Expected {NUM_EDGES} edges but got {num_edges} edges.")
 
   return (num_nodes == NUM_TOTAL_NODES) and (num_edges == NUM_EDGES)
