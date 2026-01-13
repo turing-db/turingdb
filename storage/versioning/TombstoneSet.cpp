@@ -2,12 +2,7 @@
 
 #include "ID.h"
 
-using namespace db;
-
 namespace db {
-    template class TombstoneSet<NodeID>;
-    template class TombstoneSet<EdgeID>;
-}
 
 template <TypedInternalID IDT>
 bool TombstoneSet<IDT>::contains(IDT id) const {
@@ -32,9 +27,15 @@ size_t TombstoneSet<IDT>::size() const {
 template <TypedInternalID IDT>
 void TombstoneSet<IDT>::swap(TombstoneSet<IDT>& other) noexcept {
     _set.swap(other._set);
-};
+}
 
 template <TypedInternalID IDT>
 void TombstoneSet<IDT>::setUnion(TombstoneSet<IDT>& set1, const TombstoneSet<IDT>& set2) {
     set1.insert(set2);
 }
+
+// Explicit template instantiations
+template class TombstoneSet<NodeID>;
+template class TombstoneSet<EdgeID>;
+
+} // namespace db

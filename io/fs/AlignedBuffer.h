@@ -1,8 +1,9 @@
 #pragma once
 
-#include <cstdint>
-#include <cstddef>
-#include <cstring>
+#include <stdint.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 #include <stdexcept>
 #include <span>
 #include <string_view>
@@ -18,7 +19,8 @@ class AlignedBufferIterator;
 
 class AlignedBuffer {
 public:
-    static constexpr size_t ALIGNMENT {4096ul};
+    // Alignment must be a multiple of system page size (16KB on Apple Silicon, 4KB on Intel)
+    static constexpr size_t ALIGNMENT {16384ul};
 
     AlignedBuffer()
     {

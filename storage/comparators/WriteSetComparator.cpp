@@ -4,12 +4,7 @@
 
 #include "versioning/WriteSet.h"
 
-using namespace db;
-
 namespace db {
-template class WriteSetComparator<NodeID>;
-template class WriteSetComparator<EdgeID>;
-}
 
 template <TypedInternalID IDT>
 bool WriteSetComparator<IDT>::same(const WriteSet<IDT>& setA , const WriteSet<IDT>& setB) {
@@ -37,3 +32,9 @@ bool WriteSetComparator<IDT>::same(const WriteSet<IDT>& setA , const WriteSet<ID
 
     return true;
 }
+
+// Explicit template instantiations
+template class WriteSetComparator<NodeID>;
+template class WriteSetComparator<EdgeID>;
+
+} // namespace db

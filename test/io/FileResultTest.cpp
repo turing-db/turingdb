@@ -86,16 +86,15 @@ TEST_F(FileResultTest, AlreadyExists) {
 
 TEST_F(FileResultTest, CannotMkdir) {
     fs::Path p {"/path/to/non/existing"};
-    auto fmtMessage = fmt::format("Filesystem error: "
-                                  "Could not make directory (Permission denied)");
 
     {
         auto res = p.mkdir();
         ASSERT_FALSE(res.has_value());
         const auto& e = res.error();
-        ASSERT_STREQ(e.fmtMessage().c_str(), fmtMessage.c_str());
         ASSERT_EQ((int)e.getType(), (int)fs::ErrorType::CANNOT_MKDIR);
-        ASSERT_EQ(e.getErrno(), EACCES);
+        // On Linux: EACCES (Permission denied)
+        // On macOS with SIP: EROFS (Read-only file system)
+        ASSERT_TRUE(e.getErrno() == EACCES || e.getErrno() == EROFS);
     }
 }
 

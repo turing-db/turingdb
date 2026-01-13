@@ -1,5 +1,8 @@
 #pragma once
 
+#include <functional>
+#include <memory>
+
 #include "HTTPParsingInfo.h"
 
 namespace net {

@@ -1,5 +1,7 @@
 #include "DataPartMergeResult.h"
 
+#include <string>
+
 using namespace db;
 
 std::string DataPartMergeError::fmtMessage() const {

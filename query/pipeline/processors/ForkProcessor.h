@@ -2,10 +2,9 @@
 
 #include "Processor.h"
 #include "interfaces/PipelineBlockInputInterface.h"
+#include "interfaces/PipelineBlockOutputInterface.h"
 
 namespace db {
-class PipelineBlockOutputInterface;
-class PipelineBlockInputInterface;
 
 class ForkProcessor : public Processor {
 public:

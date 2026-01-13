@@ -4,3 +4,6 @@
 [submodule "common"]
 	path = common
 	url = https://github.com/turing-db/turing-common.git
+[submodule "test/googletest"]
+	path = test/googletest
+	url = https://github.com/google/googletest.git

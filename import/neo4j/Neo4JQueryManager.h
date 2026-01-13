@@ -1,10 +1,9 @@
 #pragma once
 
 #include "JobSystem.h"
+#include "Neo4JHttpRequest.h"
 
 namespace db {
-
-class Neo4JHttpRequest;
 struct DBStats;
 
 class QueryManager {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <numeric>
 #include <span>
 #include <vector>
@@ -57,7 +58,7 @@ public:
             return _distances[a] < _distances[b];
         });
 
-        std::vector<size_t> shardIdx(_shardSig.size());
+        std::vector<LSHSignature> shardIdx(_shardSig.size());
         std::vector<uint64_t> ids(_ids.size());
         std::vector<float> distances(_distances.size());
 

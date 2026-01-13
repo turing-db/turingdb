@@ -24,7 +24,8 @@ add_library(turing_db_parser_s STATIC ${parser_sources})
 
 target_include_directories(turing_db_parser_s
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
-  PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+  PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
+  PRIVATE ${FLEX_INCLUDE_DIRS})
 
 target_link_libraries(turing_db_parser_s
     PRIVATE turing_common_s

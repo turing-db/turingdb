@@ -4,15 +4,10 @@
 
 #include "versioning/TombstoneSet.h"
 
-using namespace db;
-
 namespace db {
-template class TombstoneSetComparator<NodeID>;
-template class TombstoneSetComparator<EdgeID>;
-}
 
 template <TypedInternalID IDT>
-bool db::TombstoneSetComparator<IDT>::same(const TombstoneSet<IDT>& setA, const TombstoneSet<IDT>& setB) {
+bool TombstoneSetComparator<IDT>::same(const TombstoneSet<IDT>& setA, const TombstoneSet<IDT>& setB) {
     constexpr std::string_view type = std::is_same_v<IDT, NodeID> ? "Node" : "Edge";
 
     if (setA.size() != setB.size()) {
@@ -32,3 +27,9 @@ bool db::TombstoneSetComparator<IDT>::same(const TombstoneSet<IDT>& setA, const 
 
     return true;
 }
+
+// Explicit template instantiations
+template class TombstoneSetComparator<NodeID>;
+template class TombstoneSetComparator<EdgeID>;
+
+} // namespace db

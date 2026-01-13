@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 #include <faiss/Index.h>
 #include <faiss/index_io.h>
 

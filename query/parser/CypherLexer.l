@@ -1,6 +1,7 @@
 %{
 
 #include <charconv>
+#include <stdlib.h>
 
 #include "YCypherScanner.h"
 #include "GeneratedCypherParser.h"
@@ -167,8 +168,7 @@ using Token = db::YCypherParser::token;
 
 -?[0-9]*\.[0-9]+([eE][+-]?[0-9]+)?[fd]? {
     /* Double pattern */
-    double v = 0.0;
-    std::from_chars(yytext, yytext + yyleng, v);
+    const double v = strtod(yytext, nullptr);
     yylval->emplace<double>(v);
 
     return Token::DOUBLE;
@@ -177,8 +177,7 @@ using Token = db::YCypherParser::token;
 
 -?[0-9]+[eE][+-]?[0-9]+[fd]? {
     /* Double pattern */
-    double v = 0.0;
-    std::from_chars(yytext, yytext + yyleng, v);
+    const double v = strtod(yytext, nullptr);
     yylval->emplace<double>(v);
 
     return Token::DOUBLE;
@@ -186,8 +185,7 @@ using Token = db::YCypherParser::token;
 
 
 -?[0-9]+[fd] {
-    double v = 0.0;
-    std::from_chars(yytext, yytext + yyleng, v);
+    const double v = strtod(yytext, nullptr);
     yylval->emplace<double>(v);
 
     return Token::DOUBLE;

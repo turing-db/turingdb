@@ -2,12 +2,7 @@
 
 #include <algorithm>
 
-using namespace db;
-
 namespace db {
-    template class WriteSet<NodeID>;
-    template class WriteSet<EdgeID>;
-}
 
 template <TypedInternalID IDT>
 bool WriteSet<IDT>::contains(IDT id) const {
@@ -61,4 +56,10 @@ bool WriteSet<IDT>::emptyIntersection(const WriteSet<IDT>& set1, const WriteSet<
 
     return true;
 }
+
+// Explicit template instantiations
+template class WriteSet<NodeID>;
+template class WriteSet<EdgeID>;
+
+} // namespace db
 

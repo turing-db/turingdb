@@ -5,7 +5,7 @@
 
 namespace db {
 class Tombstones;
-class EdgeRecord;
+struct EdgeRecord;
 
 class TombstoneRanges {
 public:
