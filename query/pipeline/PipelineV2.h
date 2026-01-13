@@ -11,6 +11,7 @@ class Processor;
 class PipelinePort;
 class PipelineBuffer;
 class ExprProgram;
+class PredicateProgram;
 
 class PipelineV2 {
 public:
@@ -18,6 +19,7 @@ public:
     friend PipelinePort;
     friend PipelineBuffer;
     friend ExprProgram;
+    friend PredicateProgram;
     using Processors = std::vector<Processor*>;
     using SourcesSet = std::unordered_set<Processor*>;
     using Buffers = std::vector<PipelineBuffer*>;

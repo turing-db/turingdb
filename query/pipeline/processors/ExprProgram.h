@@ -5,16 +5,15 @@
 #include "columns/ColumnOperator.h"
 
 namespace db {
-class Column;
-}
-
-namespace db {
 
 class PipelineV2;
+class Column;
+class PredicateProgram;
 
 class ExprProgram {
 public:
     friend PipelineV2;
+    friend PredicateProgram;
     struct Instruction;
 
     using Instructions = std::vector<Instruction>;
@@ -35,20 +34,14 @@ public:
         _instrs.emplace_back(std::forward<Args>(args)...);
     }
 
-    void addTopLevelPredicate(Column* resultCol) { _topLevelPredicate.push_back(resultCol); }
-    const std::vector<Column*>& getTopLevelPredicates() const { return _topLevelPredicate; }
-
     void evaluateInstructions();
 
 private:
     // All instructions which need be evaluated
     Instructions _instrs;
-    // Contains pointers to the result columns of different instructions. All need be true
-    // TODO: Refactor this into derived class just for filters
-    std::vector<Column*> _topLevelPredicate;
 
     ExprProgram() = default;
-    ~ExprProgram() = default;
+    virtual ~ExprProgram() = default;
     void evalInstr(const Instruction& instr);
     void evalBinaryInstr(const Instruction& instr);
     void evalUnaryInstr(const Instruction& instr);

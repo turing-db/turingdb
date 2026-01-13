@@ -11,6 +11,7 @@
 #include "expr/UnaryExpr.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "processors/ExprProgram.h"
+#include "processors/PredicateProgram.h"
 #include "Predicate.h"
 
 #include "expr/Expr.h"
@@ -103,6 +104,12 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
 
 void ExprProgramGenerator::addLabelConstraint(Column* lblsetCol,
                                               const LabelSet& lblConstraint) {
+    auto* predProg = dynamic_cast<PredicateProgram*>(_exprProg);
+    if (!predProg) {
+        throw PlannerException(
+            "Attempted to add label constraint to non-predicate program.");
+    }
+
     std::vector<LabelSetID> matchingLblSets;
     for (const auto& [id, labelset] : _gen->view().metadata().labelsets()) {
         if (labelset->hasAtLeastLabels(lblConstraint)) {
@@ -118,10 +125,10 @@ void ExprProgramGenerator::addLabelConstraint(Column* lblsetCol,
 
         auto* resCol = _gen->memory().alloc<ColumnOptMask>();
 
-        _exprProg->addInstr(ColumnOperator::OP_EQUAL, resCol, lblsetCol, constCol);
+        predProg->addInstr(ColumnOperator::OP_EQUAL, resCol, lblsetCol, constCol);
 
         if (finalLabelMask) {
-            _exprProg->addInstr(ColumnOperator::OP_OR,
+            predProg->addInstr(ColumnOperator::OP_OR,
                                 resCol,
                                 finalLabelMask,
                                 resCol);
@@ -130,23 +137,28 @@ void ExprProgramGenerator::addLabelConstraint(Column* lblsetCol,
         finalLabelMask = resCol;
     }
 
-    _exprProg->addTopLevelPredicate(finalLabelMask);
+    predProg->addTopLevelPredicate(finalLabelMask);
 }
 
 void ExprProgramGenerator::addEdgeTypeConstraint(Column* edgeTypeCol,
                                                  const EdgeTypeID& typeConstr) {
+    auto* predProg = dynamic_cast<PredicateProgram*>(_exprProg);
+    if (!predProg) {
+        throw PlannerException(
+            "Attempted to add label constraint to non-predicate program.");
+    }
     // Add the instruction to calculate equality
     auto* constCol = _gen->memory().alloc<ColumnConst<EdgeTypeID>>();
     constCol->set(typeConstr);
 
     auto* finalEdgeTypeMask = _gen->memory().alloc<ColumnOptMask>();
-    _exprProg->addInstr(ColumnOperator::OP_EQUAL,
+    predProg->addInstr(ColumnOperator::OP_EQUAL,
                         finalEdgeTypeMask,
                         edgeTypeCol,
                         constCol);
 
     // Add the top level predicate that all edges must satisfy this constraint
-    _exprProg->addTopLevelPredicate(finalEdgeTypeMask);
+    predProg->addTopLevelPredicate(finalEdgeTypeMask);
 }
 
 Column* ExprProgramGenerator::registerPropertyConstraint(const Expr* expr) {
@@ -155,6 +167,12 @@ Column* ExprProgramGenerator::registerPropertyConstraint(const Expr* expr) {
 }
 
 void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
+    auto* predProg = dynamic_cast<PredicateProgram*>(_exprProg);
+    if (!predProg) {
+        throw PlannerException(
+            "Attempted to add label constraint to non-predicate program.");
+    }
+
     // Predicates can be singular Boolean properties.
     // For example "MATCH (n) WHERE n.isFrench RETURN n"; "n.isFrench" is a predicate.
     if (pred->getExpr()->getKind() == Expr::Kind::PROPERTY) {
@@ -169,13 +187,13 @@ void ExprProgramGenerator::generatePredicate(const Predicate* pred) {
         // because the result of the instruction is already manifested in the column
         // containing the Boolean property values.
         // _exprProg->addInstr(ColumnOperator::OP_NOOP, booleanPropCol, nullptr, nullptr);
-        _exprProg->addTopLevelPredicate(booleanPropCol);
+        predProg->addTopLevelPredicate(booleanPropCol);
         return;
     }
     // All other predicates should be binary expressions, whose corresponding instructions
     // are added in @ref generateBinaryExpr.
     Column* predicateResultColumn = generateExpr(pred->getExpr());
-    _exprProg->addTopLevelPredicate(predicateResultColumn);
+    predProg->addTopLevelPredicate(predicateResultColumn);
 }
 
 Column* ExprProgramGenerator::generateExpr(const Expr* expr) {

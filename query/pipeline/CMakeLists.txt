@@ -45,6 +45,7 @@ set(processors_sources
     processors/LambdaSourceProcessor.cpp
     processors/ComputeExprProcessor.cpp
     processors/ExprProgram.cpp
+    processors/PredicateProgram.cpp
     processors/FilterProcessor.cpp
     processors/LambdaSourceProcessor.cpp
     processors/ExprProgram.cpp
