@@ -223,9 +223,8 @@ public:
     }
 
     template <typename Res, typename T, typename U>
-        requires std::same_as<Res, std::remove_cvref_t<decltype(std::plus<> {}(
-                                       std::declval<unwrap_optional_t<T>>(),
-                                       std::declval<unwrap_optional_t<U>>()))>>
+        requires std::same_as<
+            Res, std::remove_cvref_t<decltype(std::declval<T>() + std::declval<U>())>>
     static void add(ColumnConst<Res>* res,
                     const ColumnConst<T>* lhs,
                     const ColumnConst<U>* rhs) {
@@ -233,7 +232,28 @@ public:
         const auto& lhsd = lhs->getRaw();
         const auto& rhsd = rhs->getRaw();
 
-        resd = optionalAdd(lhsd, rhsd);
+        resd = lhsd + rhsd;
+    }
+
+    template <typename Res, typename T, typename U>
+        requires std::same_as<Res, std::remove_cvref_t<decltype(std::plus<> {}(
+                                       std::declval<unwrap_optional_t<T>>(),
+                                       std::declval<unwrap_optional_t<U>>()))>>
+    static void add(ColumnOptVector<Res>* res,
+                    const ColumnVector<T>* lhs,
+                    const ColumnConst<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions.");
+
+        const size_t size = lhs->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = optionalAdd(lhsd[i], rhsd);
+        }
     }
 
     // Implementation for IS NULL
@@ -584,7 +604,7 @@ private:
     template <typename Func, typename T, typename U>
         requires OptionallyInvokable<Func, T, U>
     inline static auto optionalGeneric(const T& a, const U& b)
-        -> std::invoke_result<Func, T, U>::type {
+        -> std::optional<typename std::invoke_result<Func, unwrap_optional_t<T>, unwrap_optional_t<U>>::type> {
         if constexpr (is_optional_v<T>) {
             if (!a.has_value()) {
                 return std::nullopt;

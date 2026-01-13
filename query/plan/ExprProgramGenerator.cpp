@@ -5,6 +5,7 @@
 #include "ID.h"
 #include "PipelineGenerator.h"
 #include "columns/ColumnOptMask.h"
+#include "columns/ColumnOptVector.h"
 #include "decl/EvaluatedType.h"
 #include "expr/Operators.h"
 #include "expr/PropertyExpr.h"
@@ -170,6 +171,9 @@ Column* ExprProgramGenerator::generateUnaryExpr(const UnaryExpr* unExpr) {
 
     return resCol;
 }
+
+static_assert(ColumnOptVector<types::Int64::Primitive>::staticKind() == 31);
+static_assert(ColumnConst<types::Int64::Primitive>::staticKind() == 54);
 
 Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
     const Expr* lhs = binExpr->getLHS();

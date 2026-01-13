@@ -149,6 +149,14 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
         break;                                                                           \
     }
 
+#define ADD_CASE(Lhs, Rhs, Type)                                                   \
+    case OpCase<OP_ADD, Lhs, Rhs>: {                                                     \
+        ColumnOperators::add(static_cast<ColumnOptVector<Type>*>(instr._res),            \
+                             static_cast<const Lhs*>(instr._lhs),                        \
+                             static_cast<const Rhs*>(instr._rhs));                       \
+        break;                                                                           \
+    }
+
 #define AND_CASE(Lhs, Rhs)                                                               \
     case OpCase<OP_AND, Lhs, Rhs>: {                                                     \
         ColumnOperators::andOp(                                                          \
@@ -337,6 +345,10 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         ADD_CASE_CONST(ColumnConst<types::Int64::Primitive>,
                        ColumnConst<types::Int64::Primitive>,
                        types::Int64::Primitive)
+
+        ADD_CASE(ColumnOptVector<types::Int64::Primitive>,
+                 ColumnConst<types::Int64::Primitive>,
+                 types::Int64::Primitive);
 
         // Special cases for IS NOT NULL and IS NULL
         EQUAL_CASE(ColumnOptVector<types::Int64::Primitive>, ColumnConst<PropertyNull>)

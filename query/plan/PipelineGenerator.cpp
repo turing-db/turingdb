@@ -607,16 +607,8 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
     const auto& predicates = node->getPredicates();
     const auto& typeConstraint = node->getEdgeTypeConstraints();
 
-<<<<<<< HEAD
     PredicateProgram* predProg = PredicateProgram::create(_pipeline);
     PredicateProgramGenerator predGen(this, predProg, _builder.getPendingOutput());
-||||||| parent of 6fe91c350 (Move predicate logic into PredicateProgram (!expr-eval))
-    ExprProgram* exprProg = ExprProgram::create(_pipeline);
-    ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
-=======
-    PredicateProgram* predProg = PredicateProgram::create(_pipeline);
-    ExprProgramGenerator exprGen(this, predProg, _builder.getPendingOutput());
->>>>>>> 6fe91c350 (Move predicate logic into PredicateProgram (!expr-eval))
 
     if (!predicates.empty()) {
         // Compile predicate expressions into an expression program
