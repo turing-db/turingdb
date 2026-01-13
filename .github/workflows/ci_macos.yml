@@ -42,7 +42,14 @@ jobs:
         brew install openblas libomp
     - name: Configure cmake
       shell: bash
-      run: mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build && cmake ..
+      run: |
+        LIBOMP_PREFIX=$(brew --prefix libomp)
+        mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build && cmake .. \
+          -DOpenMP_C_FLAGS="-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include" \
+          -DOpenMP_C_LIB_NAMES=omp \
+          -DOpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include" \
+          -DOpenMP_CXX_LIB_NAMES=omp \
+          -DOpenMP_omp_LIBRARY="${LIBOMP_PREFIX}/lib/libomp.dylib"
     - name: Build
       shell: bash
       run: cd ${{ github.workspace }}/build && make -j8 && make install
