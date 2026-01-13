@@ -127,6 +127,12 @@ else
     fi
 fi
 
+# Skip building if cache was hit (set by CI)
+if [[ "$SKIP_BUILD_IF_CACHED" == "true" ]]; then
+    echo "Dependencies cache hit, skipping build"
+    exit 0
+fi
+
 # Build aws-sdk-cpp
 mkdir -p $BUILD_DIR/aws-sdk-cpp
 cd $BUILD_DIR/aws-sdk-cpp
