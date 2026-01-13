@@ -568,8 +568,8 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadNeo4j(std::string_view gra
     return output;
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addFilter(ExprProgram* exprProg) {
-    FilterProcessor* filterProc = FilterProcessor::create(_pipeline, exprProg);
+PipelineBlockOutputInterface& PipelineBuilder::addFilter(PredicateProgram* predProg) {
+    FilterProcessor* filterProc = FilterProcessor::create(_pipeline, predProg);
 
     PipelineBlockInputInterface& input = filterProc->input();
     PipelineBlockOutputInterface& output = filterProc->output();

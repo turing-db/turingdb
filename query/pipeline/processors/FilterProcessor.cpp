@@ -15,7 +15,7 @@
 
 #include "PipelineException.h"
 #include "metadata/PropertyType.h"
-#include "processors/ExprProgram.h"
+#include "processors/PredicateProgram.h"
 
 #include "FatalException.h"
 
@@ -73,13 +73,13 @@ std::string FilterProcessor::describe() const {
     return fmt::format("FilterProcessor @={}", fmt::ptr(this));
 }
 
-FilterProcessor::FilterProcessor(ExprProgram* exprProg)
-    : _exprProg(exprProg)
+FilterProcessor::FilterProcessor(PredicateProgram* predProg)
+    : _predProg(predProg)
 {
 }
 
-FilterProcessor* FilterProcessor::create(PipelineV2* pipeline, ExprProgram* exprProg) {
-    auto* proc = new FilterProcessor(exprProg);
+FilterProcessor* FilterProcessor::create(PipelineV2* pipeline, PredicateProgram* predProg) {
+    auto* proc = new FilterProcessor(predProg);
 
     {
         PipelineInputPort* filterInput = PipelineInputPort::create(pipeline, proc);
@@ -117,8 +117,8 @@ void FilterProcessor::execute() {
     const Dataframe* srcDF = _input.getDataframe();
     Dataframe* destDF = _output.getDataframe();
 
-    _exprProg->evaluateInstructions();
-    const std::vector<Column*> predResults = _exprProg->getTopLevelPredicates();
+    _predProg->evaluateInstructions();
+    const std::vector<Column*> predResults = _predProg->getTopLevelPredicates();
 
     // XXX: Should this be an error, or should we just not apply any filters?
     if (predResults.empty()) {
@@ -130,7 +130,7 @@ void FilterProcessor::execute() {
     if (!std::ranges::all_of(predResults, [maskSize](const Column* res) {
             return res->size() == maskSize;
         })) {
-        throw FatalException("FilterProcessor ExprProgram contained instructions with "
+        throw FatalException("FilterProcessor PredicateProgram contained instructions with "
                              "output columns of differing sizes.");
     }
     // Ensure all instruction outputs are Column(Opt)Vector bools, so they can be converted to masks
@@ -141,7 +141,7 @@ void FilterProcessor::execute() {
 
             return thisKind == optBoolKind;
         })) {
-        throw FatalException("FilterProcessor ExprProgram contained an instruction which "
+        throw FatalException("FilterProcessor PredicateProgram contained an instruction which "
                              "was not a predicate.");
     }
 
@@ -149,11 +149,11 @@ void FilterProcessor::execute() {
     // null values
     ColumnOptMask finalOptMask(maskSize, true);
     {
-        for (Column* predicateResult : _exprProg->getTopLevelPredicates()) {
+        for (Column* predicateResult : _predProg->getTopLevelPredicates()) {
             const auto* predResOptMask = dynamic_cast<ColumnOptMask*>(predicateResult);
             if (!predResOptMask) {
                 throw FatalException(
-                    "FilterProcessor ExprProgram encountered non-predicate instruction.");
+                    "FilterProcessor PredicateProgram encountered non-predicate instruction.");
             }
             ColumnOperators::andOp(&finalOptMask, &finalOptMask, predResOptMask);
         }

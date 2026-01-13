@@ -7,11 +7,11 @@
 
 namespace db {
 
-class ExprProgram;
+class PredicateProgram;
 
 class FilterProcessor final : public Processor {
 public:
-    static FilterProcessor* create(PipelineV2* pipeline, ExprProgram* exprProg);
+    static FilterProcessor* create(PipelineV2* pipeline, PredicateProgram* predProg);
 
     void prepare(ExecutionContext* ctxt) final;
     void reset() final;
@@ -26,9 +26,9 @@ private:
     PipelineBlockInputInterface _input;
     PipelineBlockOutputInterface _output;
 
-    ExprProgram* _exprProg {nullptr};
+    PredicateProgram* _predProg {nullptr};
 
-    FilterProcessor(ExprProgram* exprProg);
+    FilterProcessor(PredicateProgram* exprProg);
     ~FilterProcessor() final = default ;
 };
 
