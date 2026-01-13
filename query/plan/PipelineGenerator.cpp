@@ -581,7 +581,11 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
     }
 
     // Then add a filter processor, taking the built expression program to execute
-    _builder.addFilter(exprProg);
+    const auto& output = _builder.addFilter(exprProg);
+
+    _builder.setMaterializeProc(
+        MaterializeProcessor::createFromDf(_pipeline, _mem, output.getDataframe()));
+
     return _builder.getPendingOutputInterface();
 }
 
@@ -627,7 +631,11 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
         exprGen.addEdgeTypeConstraint(edgeTypecol->getColumn(), edgeTypeConstr);
     }
 
-    _builder.addFilter(exprProg);
+    const auto& output = _builder.addFilter(exprProg);
+
+    _builder.setMaterializeProc(
+        MaterializeProcessor::createFromDf(_pipeline, _mem, output.getDataframe()));
+
     return _builder.getPendingOutputInterface();
 }
 
