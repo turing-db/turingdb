@@ -23,19 +23,33 @@ if command -v apt-get &> /dev/null; then
     sudo apt-get update
 fi
 
-# Install curl
+# Install curl, openssl, and zlib
 if [[ "$(uname)" == "Darwin" ]]; then
     # macOS - use Homebrew
     if ! command -v brew &> /dev/null; then
         echo "Homebrew not found. Please install Homebrew first."
         exit 1
     fi
-    
+
     if ! brew list curl &> /dev/null; then
         echo "Installing curl via Homebrew..."
         brew install curl
     else
         echo "curl is already installed"
+    fi
+
+    if ! brew list openssl@3 &> /dev/null; then
+        echo "Installing openssl@3 via Homebrew..."
+        brew install openssl@3
+    else
+        echo "openssl@3 is already installed"
+    fi
+
+    if ! brew list zlib &> /dev/null; then
+        echo "Installing zlib via Homebrew..."
+        brew install zlib
+    else
+        echo "zlib is already installed"
     fi
 else
     # Linux - use apt

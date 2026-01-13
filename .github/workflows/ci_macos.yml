@@ -31,25 +31,10 @@ jobs:
         path: external/dependencies
         key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies.sh', '.gitmodules') }}
     - name: Install dependencies
-      if: steps.cache-dependencies.outputs.cache-hit != 'true'
       run: ./dependencies.sh
-    - name: Install system packages
-      if: steps.cache-dependencies.outputs.cache-hit == 'true'
-      run: |
-        brew install curl openssl@3 zlib
-        brew install bison flex
-        brew install boost
-        brew install openblas libomp
     - name: Configure cmake
       shell: bash
-      run: |
-        LIBOMP_PREFIX=$(brew --prefix libomp)
-        mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build && cmake .. \
-          -DOpenMP_C_FLAGS="-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include" \
-          -DOpenMP_C_LIB_NAMES=omp \
-          -DOpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include" \
-          -DOpenMP_CXX_LIB_NAMES=omp \
-          -DOpenMP_omp_LIBRARY="${LIBOMP_PREFIX}/lib/libomp.dylib"
+      run: mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build && cmake ..
     - name: Build
       shell: bash
       run: cd ${{ github.workspace }}/build && make -j8 && make install
