@@ -44,9 +44,10 @@ Result<FilePageReader> FilePageReader::openNoDirect(const Path& path, size_t pag
 
 Result<void> FilePageReader::nextPage() {
     ssize_t remainingBytes = _buffer.capacity();
+    ssize_t bytesRead = 0;
 
     while (remainingBytes > 0) {
-        const ssize_t nbytes = ::read(_fd, _buffer.data(), remainingBytes);
+        const ssize_t nbytes = ::read(_fd, _buffer.data() + bytesRead, remainingBytes);
 
         if (nbytes == -1) {
             if (errno == EAGAIN) {
@@ -61,6 +62,7 @@ Result<void> FilePageReader::nextPage() {
             break; // Finished reading file
         }
 
+        bytesRead += nbytes;
         remainingBytes -= nbytes;
     }
 

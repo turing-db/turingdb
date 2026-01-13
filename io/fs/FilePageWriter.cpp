@@ -111,9 +111,10 @@ void FilePageWriter::reserveSpace(size_t byteCount) {
 
 void FilePageWriter::flush() {
     ssize_t remainingBytes = buffer().capacity();
+    ssize_t bytesWritten = 0;
 
     while (remainingBytes > 0) {
-        const ssize_t nbytes = ::write(_fd, _buffer.data(), remainingBytes);
+        const ssize_t nbytes = ::write(_fd, _buffer.data() + bytesWritten, remainingBytes);
 
         if (nbytes == -1) {
             if (errno == EAGAIN) {
@@ -125,6 +126,7 @@ void FilePageWriter::flush() {
             return;
         }
 
+        bytesWritten += nbytes;
         remainingBytes -= nbytes;
     }
 
