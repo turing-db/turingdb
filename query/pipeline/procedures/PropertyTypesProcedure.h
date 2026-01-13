@@ -2,10 +2,7 @@
 
 #include "procedures/ProcedureBlueprint.h"
 #include "ProcedureData.h"
-
-namespace db {
-class ScanPropertyTypesChunkWriter;
-}
+#include "iterators/ScanPropertyTypesIterator.h"
 
 namespace db {
 

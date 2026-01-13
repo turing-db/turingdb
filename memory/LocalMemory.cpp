@@ -1,4 +1,9 @@
 #include "LocalMemory.h"
+#include "columns/Column.h"
+#include "columns/ColumnSet.h"
+#include "columns/ColumnVector.h"
+#include "columns/ColumnConst.h"
+#include "columns/ColumnMask.h"
 
 using namespace db;
 
@@ -12,7 +17,7 @@ struct RegisterColumnAllocator {
     }
 
     void operator()(ValueT& value) const {
-        auto lambda = [&value]() { return value.alloc(); };
+        ColumnAllocator::AllocFunc lambda = [&value]() -> db::Column* { return value.alloc(); };
         _columnAllocators.add(KeyT::staticKind(), new ColumnAllocator(lambda));
     }
 };

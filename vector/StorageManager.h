@@ -1,6 +1,8 @@
 #pragma once
 
+#include <memory>
 #include <shared_mutex>
+#include <unordered_map>
 
 #include "LSHSignature.h"
 #include "Path.h"
@@ -11,7 +13,7 @@
 namespace vec {
 
 class VecLib;
-struct LSHShardRouter;
+class LSHShardRouter;
 struct VecLibMetadata;
 
 class StorageManager {

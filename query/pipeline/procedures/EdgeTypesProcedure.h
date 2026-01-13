@@ -2,10 +2,7 @@
 
 #include "procedures/ProcedureBlueprint.h"
 #include "ProcedureData.h"
-
-namespace db {
-class ScanEdgeTypesChunkWriter;
-}
+#include "iterators/ScanEdgeTypesIterator.h"
 
 namespace db {
 

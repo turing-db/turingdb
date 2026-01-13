@@ -2,10 +2,7 @@
 
 #include "procedures/ProcedureBlueprint.h"
 #include "ProcedureData.h"
-
-namespace db {
-class ScanLabelsChunkWriter;
-}
+#include "iterators/ScanLabelsIterator.h"
 
 namespace db {
 

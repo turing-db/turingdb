@@ -18,9 +18,10 @@ void CypherParser::parse(std::string_view query) {
 
     YCypherParser yparser(yscanner, _ast);
 
-    std::istringstream iss;
-    iss.rdbuf()->pubsetbuf((char*)query.data(), query.size());
+    // Use string constructor for istringstream to ensure proper buffer setup
+    // Note: pubsetbuf is a no-op on libc++ (macOS) for string streams
+    std::istringstream iss{std::string{query}};
 
-    yscanner.switch_streams(&iss, NULL);
+    yscanner.switch_streams(&iss, nullptr);
     yparser.parse();
 }

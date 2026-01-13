@@ -5,7 +5,7 @@
 
 namespace vec {
 
-struct LSHShardRouter;
+class LSHShardRouter;
 
 class LSHShardRouterLoader {
 public:

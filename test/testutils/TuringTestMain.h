@@ -1,5 +1,8 @@
 #pragma once
 
+#include <iomanip>
+#include <sstream>
+
 #include <gtest/gtest.h>
 #include <spdlog/fmt/bundled/core.h>
 
@@ -21,7 +24,8 @@ public:
     void OnTestProgramStart(const testing::UnitTest&) override {
         _t0 = Clock::now();
 
-        _today = Clock::to_time_t(_t0);
+        auto now_sys = std::chrono::system_clock::now();
+        _today = std::chrono::system_clock::to_time_t(now_sys);
 
         std::stringstream buffer;
         buffer << std::put_time(std::localtime(&_today), "%a %b %d %H:%M:%S %Y");

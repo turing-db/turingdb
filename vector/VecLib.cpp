@@ -43,7 +43,7 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Builder::build() {
     _vecLib->_shardRouter->initialize();
 
     if (auto res = storageManager->createLibraryStorage(*_vecLib); !res) {
-        return res.get_unexpected();
+        return nonstd::make_unexpected(res.error());
     }
 
     const auto now = Clock::now()
@@ -72,13 +72,13 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Loader::load(VecLibStorage& storag
     VecLibMetadataLoader loader;
     loader.setFile(&storage._metadataFile);
     if (auto res = loader.load(meta); !res) {
-        return res.get_unexpected();
+        return nonstd::make_unexpected(res.error());
     }
 
     LSHShardRouterLoader routerLoader;
     routerLoader.setFile(&storage._shardRouterFile);
     if (auto res = routerLoader.load(*_vecLib->_shardRouter); !res) {
-        return res.get_unexpected();
+        return nonstd::make_unexpected(res.error());
     }
 
     return std::move(_vecLib);

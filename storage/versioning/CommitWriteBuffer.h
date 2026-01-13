@@ -15,7 +15,7 @@ class MetadataBuilder;
 class CommitJournal;
 class MetadataRebaser;
 class Tombstones;
-class ConflictCheckSets;
+struct ConflictCheckSets;
 
 class CommitWriteBuffer {
 

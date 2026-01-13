@@ -85,8 +85,7 @@ public:
 
     // TODO: Iterator hinted insertions and emplacings
 
-    Iterator erase(Iterator pos) { return _data.erase(pos); }
-    ConstIterator erase(ConstIterator cpos) { return _data.erase(cpos); }
+    ConstIterator erase(ConstIterator pos) { return _data.erase(pos); }
     size_t erase(const T& key) { return _data.erase(key); }
 
     void swap(ColumnSet& other) noexcept { _data.swap(other._data); }

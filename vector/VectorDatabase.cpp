@@ -26,7 +26,7 @@ VectorResult<std::unique_ptr<VectorDatabase>> VectorDatabase::create(const fs::P
 
     auto storage = StorageManager::create(rootPath);
     if (!storage) {
-        return storage.get_unexpected();
+        return nonstd::make_unexpected(storage.error());
     }
 
     database->_storageManager = std::move(storage.value());
@@ -34,7 +34,7 @@ VectorResult<std::unique_ptr<VectorDatabase>> VectorDatabase::create(const fs::P
 
     // Build the libraries using the storage
     if (auto res = database->load(); !res) {
-        return res.get_unexpected();
+        return nonstd::make_unexpected(res.error());
     }
 
     return database;
@@ -67,7 +67,7 @@ VectorResult<VecLibID> VectorDatabase::createLibrary(std::string_view libName,
                    .build();
 
     if (!lib) {
-        return lib.get_unexpected();
+        return nonstd::make_unexpected(lib.error());
     }
 
     _vecLibIDs.emplace(lib.value()->name(), id);
@@ -102,7 +102,7 @@ VectorResult<void> VectorDatabase::deleteLibrary(std::string_view libName) {
         _shardCache->evictLibraryShards(libID);
 
         if (auto res = _storageManager->deleteLibraryStorage(libID); !res) {
-            return res.get_unexpected();
+            return nonstd::make_unexpected(res.error());
         }
 
         _vecLibs.erase(libID);
@@ -165,7 +165,7 @@ VectorResult<void> VectorDatabase::load() {
                        .load(*storage);
 
         if (!lib) {
-            return lib.get_unexpected();
+            return nonstd::make_unexpected(lib.error());
         }
 
         _vecLibIDs.emplace(lib.value()->name(), id);

@@ -13,7 +13,6 @@
 
 int main() {
     fs::Path p {SAMPLE_DIR "/test"};
-    const auto info = p.getFileInfo();
 
     fmt::print("## FileInfo struct\n");
     fmt::print("- File: {}\n", p.get());

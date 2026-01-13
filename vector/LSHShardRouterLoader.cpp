@@ -42,7 +42,7 @@ VectorResult<void> LSHShardRouterLoader::load(LSHShardRouter& router) {
 
     // Reading dim
     router._dim = it.get<uint64_t>(); // dim
-    CHECK_VALID(t, VectorErrorCode::ShardRouterInvalidVectors);
+    CHECK_VALID(it, VectorErrorCode::ShardRouterInvalidVectors);
 
     if (router._dim == 0 || router._dim > 32ull * 1024) {
         return VectorError::result<void>(VectorErrorCode::InvalidDimension);

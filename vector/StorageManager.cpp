@@ -38,7 +38,7 @@ VectorResult<std::unique_ptr<StorageManager>> StorageManager::create(const fs::P
     }
 
     if (auto res = storage->initialize(); !res) {
-        return res.get_unexpected();
+        return nonstd::make_unexpected(res.error());
     }
 
     return storage;
@@ -82,12 +82,12 @@ VectorResult<void> StorageManager::createLibraryStorage(const VecLib& lib) {
 
     // Write shard router file
     if (auto res = storage->_shardRouterWriter.write(lib.shardRouter()); !res) {
-        return res.get_unexpected();
+        return nonstd::make_unexpected(res.error());
     }
 
     // Write metadata file
     if (auto res = storage->_metadataWriter.write(meta); !res) {
-        return res.get_unexpected();
+        return nonstd::make_unexpected(res.error());
     }
 
     _storages.emplace(meta._id, std::move(storage));

@@ -10,7 +10,7 @@
 
 namespace vec {
 
-class VecLibShard;
+struct VecLibShard;
 class StorageManager;
 
 class ShardCache {
