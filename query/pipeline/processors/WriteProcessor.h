@@ -80,7 +80,7 @@ private:
 
     ExprProgram* _exprProgram {nullptr};
 
-    bool _wroteRows {false};
+    bool _writtenRowsThisCycle {false};
 
     /**
      * @brief Set up logic called at the start of each call to @ref execute.

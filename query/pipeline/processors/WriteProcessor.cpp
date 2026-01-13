@@ -24,7 +24,6 @@
 #include "versioning/Transaction.h"
 #include "dataframe/Dataframe.h"
 #include "WriteProcessorTypes.h"
-#include "views/PropertyView.h"
 #include "writers/MetadataBuilder.h"
 
 #include "FatalException.h"
@@ -229,11 +228,12 @@ void WriteProcessor::createNodes(size_t numIters) {
     LabelSet lblset;
     for (const WriteProcessorTypes::PendingNode& node : _pendingNodes) {
         // This is checked for validity in the call to @ref setup
-        auto* col = outDf->getColumn(node._tag)->as<ColumnNodeIDs>();
+        auto* createdNodeCol = outDf->getColumn(node._tag)->as<ColumnNodeIDs>();
 
         // Always empty on first call, or has been cleared by @ref setup.
-        bioassert(col->size() == 0, "Pending nodes column should be empty but is size {}",
-                  col->size());
+        bioassert(createdNodeCol->size() == 0,
+                  "Pending nodes column should be empty but is size {}",
+                  createdNodeCol->size());
 
         const std::span labels = node._labels;
 
@@ -278,13 +278,13 @@ void WriteProcessor::createNodes(size_t numIters) {
         // appears. These indexes are later transformed into "fake IDs" (an estimate as to
         // what the NodeID will be when it is committed) in @ref postProcessTempIDs.
 
-        std::vector<NodeID>& raw = col->getRaw();
+        std::vector<NodeID>& raw = createdNodeCol->getRaw();
         const size_t oldSize = raw.size();
         raw.resize(oldSize + numIters);
         std::iota(raw.begin() + oldSize, raw.end(), nextNodeID);
-        nextNodeID += numIters;
+        _writtenRowsThisCycle |= raw.size() > oldSize;
 
-        _wroteRows |= raw.size() > oldSize;
+        nextNodeID += numIters;
     }
 }
 
@@ -296,11 +296,12 @@ void WriteProcessor::createEdges(size_t numIters) {
 
     for (const WriteProcessorTypes::PendingEdge& edge : _pendingEdges) {
         // This is checked for validity in the call to @ref setup
-        auto* col = outDf->getColumn(edge._tag)->as<ColumnEdgeIDs>();
+        auto* createdEdgeColumn = outDf->getColumn(edge._tag)->as<ColumnEdgeIDs>();
 
         // Always empty on first call, or has been cleared by @ref setup.
-        bioassert(col->size() == 0, "Pending edges column should be empty but is size {}",
-                  col->size());
+        bioassert(createdEdgeColumn->size() == 0,
+                  "Pending edges column should be empty but is size {}",
+                  createdEdgeColumn->size());
 
         ColumnNodeIDs* srcCol = nullptr;
         const ColumnTag srcTag = edge._srcTag;
@@ -401,13 +402,13 @@ void WriteProcessor::createEdges(size_t numIters) {
         // appears. These indexes are later transformed into "fake IDs" (an estimate as to
         // what the EdgeID will be when it is committed) in @ref postProcessFakeIDs.
 
-        std::vector<EdgeID>& raw = col->getRaw();
+        std::vector<EdgeID>& raw = createdEdgeColumn->getRaw();
         const size_t oldSize = raw.size();
         raw.resize(oldSize + numIters);
         std::iota(raw.begin() + oldSize, raw.end(), nextEdgeID);
-        nextEdgeID += numIters;
+        _writtenRowsThisCycle |= raw.size() > oldSize;
 
-        _wroteRows |= raw.size() > oldSize;
+        nextEdgeID += numIters;
     }
 }
 
@@ -451,7 +452,7 @@ void WriteProcessor::performCreations() {
 }
 
 void WriteProcessor::setup() {
-    _wroteRows = false;
+    _writtenRowsThisCycle = false;
 
     // Check the output dataframe that all the pending node/edge columns are present
     const Dataframe* outDf = _output.getDataframe();
@@ -523,7 +524,7 @@ void WriteProcessor::execute() {
     // 2. We had an input, but wrote no rows, but that input is now closed.
     // This emits an empty chunk iff our input was empty and is now closed.
     const bool inputClosed = _input && _input->getPort()->isClosed();
-    if (_wroteRows || inputClosed) {
+    if (_writtenRowsThisCycle || inputClosed) {
         _output.getPort()->writeData();
     }
 
