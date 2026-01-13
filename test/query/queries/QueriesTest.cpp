@@ -2455,7 +2455,7 @@ TEST_F(QueriesTest, indirectLabelFilter) {
     auto res = query(matchQuery, [](const Dataframe* df) {
         ASSERT_TRUE(df);
         auto* is = findColumn(df, "i.name");
-        ASSERT_NE("Remy", *is->as<ColumnOptVector<types::String::Primitive>>()->front());
+        ASSERT_EQ("Cooking", *is->as<ColumnOptVector<types::String::Primitive>>()->front());
     });
 }
 

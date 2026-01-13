@@ -297,7 +297,7 @@ TEST_F(MultiHopPatternTest, divergentPattern_returnAllThreeNodes) {
 
 // Test with explicit edge type constraints
 // DISABLED: Crashes in MaterializeProcessor::execute() - edge type labels in multi-hop cause segfault
-TEST_F(MultiHopPatternTest, DISABLED_divergentPattern_withEdgeTypes) {
+TEST_F(MultiHopPatternTest, divergentPattern_withEdgeTypes) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (a:Person)-[e1:INTERESTED_IN]->(b:Interest)<-[e2:INTERESTED_IN]-(c:Person)
         WHERE a <> c
@@ -564,7 +564,7 @@ TEST_F(MultiHopPatternTest, convergentPattern_withFilter) {
 
 // Test convergent pattern with mixed edge types
 // DISABLED: Crashes in MaterializeProcessor::execute() - edge type labels in multi-hop cause segfault
-TEST_F(MultiHopPatternTest, DISABLED_convergentPattern_mixedEdgeTypes) {
+TEST_F(MultiHopPatternTest, convergentPattern_mixedEdgeTypes) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (i:Interest)<-[e1:INTERESTED_IN]-(p:Person)-[e2:KNOWS_WELL]->(f:Person)
         RETURN p.name, i.name, f.name
@@ -644,7 +644,7 @@ TEST_F(MultiHopPatternTest, DISABLED_convergentPattern_mixedEdgeTypes) {
 
 // Test Person -> Person -> Interest (via KNOWS_WELL -> INTERESTED_IN)
 // DISABLED: Crashes in MaterializeProcessor::execute() - edge type labels in multi-hop cause segfault
-TEST_F(MultiHopPatternTest, DISABLED_forwardChain_personKnowsPersonInterest) {
+TEST_F(MultiHopPatternTest, forwardChain_personKnowsPersonInterest) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (a:Person)-[:KNOWS_WELL]->(b:Person)-[:INTERESTED_IN]->(c:Interest)
         RETURN a.name, b.name, c.name
@@ -712,7 +712,7 @@ TEST_F(MultiHopPatternTest, DISABLED_forwardChain_personKnowsPersonInterest) {
 
 // Test forward chain with filters
 // DISABLED: Crashes in MaterializeProcessor::execute() - edge type labels in multi-hop cause segfault
-TEST_F(MultiHopPatternTest, DISABLED_forwardChain_withFilters) {
+TEST_F(MultiHopPatternTest, forwardChain_withFilters) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (a:Person)-[:KNOWS_WELL]->(b:Person)-[:INTERESTED_IN]->(c:Interest)
         WHERE a.isFrench
@@ -782,7 +782,7 @@ TEST_F(MultiHopPatternTest, DISABLED_forwardChain_withFilters) {
 
 // Test three hops with dead end (Interest nodes have no outgoing edges)
 // DISABLED: Crashes in MaterializeProcessor::execute() - edge type labels in multi-hop cause segfault
-TEST_F(MultiHopPatternTest, DISABLED_forwardChain_deadEnd) {
+TEST_F(MultiHopPatternTest, forwardChain_deadEnd) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (p:Person)-[:INTERESTED_IN]->(i:Interest)-->(x)
         RETURN p.name, i.name, x.name
@@ -825,7 +825,7 @@ TEST_F(MultiHopPatternTest, DISABLED_forwardChain_deadEnd) {
 
 // Test Interest <- Person <- (who knows them)
 // DISABLED: Crashes in MaterializeProcessor::execute() - edge type labels in multi-hop cause segfault
-TEST_F(MultiHopPatternTest, DISABLED_backwardChain_interestFromPerson) {
+TEST_F(MultiHopPatternTest, backwardChain_interestFromPerson) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (i:Interest)<-[:INTERESTED_IN]-(p:Person)<-[:KNOWS_WELL]-(q)
         RETURN i.name, p.name, q.name
