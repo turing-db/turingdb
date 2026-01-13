@@ -35,7 +35,8 @@ public:
     /*
     Needed in the fork where we want to copy the mat proc across multiple instances
     */
-    void cloneFromPrev(LocalMemory* mem, DataframeManager* dfMan,
+    void cloneFromPrev(LocalMemory* mem,
+                       DataframeManager* dfMan,
                        const MaterializeData& prevData);
 
     ~MaterializeData();
