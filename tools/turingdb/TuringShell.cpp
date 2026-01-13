@@ -36,6 +36,8 @@ using namespace db;
 
 namespace {
 
+constexpr size_t HISTORY_MAX_LEN = 1500;
+const std::string DEFAULT_HISTORY_FILE = ".turing_history";
 const char* whiteChars = " \n\r\t";
 
 // Remove whitespace in front of a string
@@ -291,9 +293,26 @@ TuringShell::~TuringShell() {
 }
 
 void TuringShell::startLoop() {
-    std::string shellPrompt = composePrompt();
     char* line = NULL;
     std::string lineStr;
+    std::string shellPrompt = composePrompt();
+
+    // History settings
+    linenoiseHistorySetMaxLen(HISTORY_MAX_LEN);
+
+    // Get history file path
+    const char* homeEnvVar = getenv("HOME");
+    if (!homeEnvVar) {
+        panic("$HOME environment variable not found");
+    }
+
+    const std::string historyFilePath = std::string(homeEnvVar)+"/"+DEFAULT_HISTORY_FILE;
+
+    const int restoreRes = linenoiseHistoryLoad(historyFilePath.c_str());
+    if (restoreRes < 0) {
+        spdlog::error("Can not restore history from file {}", historyFilePath);
+    }
+
     while ((line = linenoise(shellPrompt.c_str())) != NULL) {
         lineStr = line;
         if (lineStr.empty()) {
@@ -303,8 +322,13 @@ void TuringShell::startLoop() {
         processLine(lineStr);
 
         linenoiseHistoryAdd(line);
+
         shellPrompt = composePrompt();
         linenoiseFree(line);
+    }
+    
+    if (linenoiseHistorySave(historyFilePath.c_str()) < 0) {
+        spdlog::error("Failed to save history file {}", historyFilePath);
     }
 }
 
