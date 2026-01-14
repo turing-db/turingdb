@@ -81,8 +81,9 @@ Regression tests are Python-based and located in `regress/`. Each test has a `ru
 
 ## C++ Coding Style
 
-See `CODING_STYLE.md` for detailed guidelines. Key points:
+Please read `CODING_STYLE.md` for guidelines before any new work.
 
+Key points:
 **Formatting:**
 - 90 char max line length (ideal ~80)
 - 4 spaces indentation, no tabs
