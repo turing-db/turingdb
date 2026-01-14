@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 #include <spdlog/fmt/bundled/format.h>
 
 #include "EnumToString.h"
