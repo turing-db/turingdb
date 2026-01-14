@@ -2,7 +2,6 @@
 
 #include "columns/ColumnOperator.h"
 #include "expr/Operators.h"
-#include "metadata/LabelSet.h"
 
 namespace db {
 
@@ -17,6 +16,7 @@ class UnaryExpr;
 class BinaryExpr;
 class PropertyExpr;
 class LiteralExpr;
+class SymbolExpr;
 class PipelineGenerator;
 class PendingOutputView;
 
@@ -52,6 +52,7 @@ private:
     Column* generateBinaryExpr(const BinaryExpr* expr);
     Column* generatePropertyExpr(const PropertyExpr* propExpr);
     Column* generateLiteralExpr(const LiteralExpr* literalExpr);
+    Column* generateSymbolExpr(const SymbolExpr* symbolExpr);
 
     Column* allocResultColumn(const Expr* expr);
 

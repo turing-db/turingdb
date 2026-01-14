@@ -5,9 +5,11 @@
 #include "ID.h"
 #include "PipelineGenerator.h"
 #include "columns/ColumnOptMask.h"
+#include "dataframe/ColumnTag.h"
 #include "decl/EvaluatedType.h"
 #include "expr/Operators.h"
 #include "expr/PropertyExpr.h"
+#include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "processors/ExprProgram.h"
@@ -135,7 +137,7 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
 
         // TODO
         case Expr::Kind::SYMBOL:
-            throw PlannerException("Symbol expressions are currently not supported.");
+            return generateSymbolExpr(static_cast<const SymbolExpr*>(expr));
         break;
 
         case Expr::Kind::BINARY:
@@ -229,6 +231,50 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
                 (size_t)literal->getKind()));
         break;
     }
+}
+
+Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
+    const VarDecl* exprVarDecl = symbolExpr->getExprVarDecl();
+    const EvaluatedType type = symbolExpr->getType();
+    symbolExpr->getSymbol();
+
+    if (type != EvaluatedType::NodePattern && type != EvaluatedType::EdgePattern) {
+        throw PlannerException(
+            "Attempted to generate SymbolExpr which was neither Node nor EdgePattern.");
+    }
+
+    const bool isNode = type == EvaluatedType::NodePattern;
+
+    // Search exprVarDecl in column map. It may not be present, in the case that this
+    // variable is only manifested by a VarNode *after* this filter (see
+    // `MATCH (n), (m) WHERE n <> m RETURN n, m` as an example). In this case, the
+    // variable must be from the incoming stream.
+    const auto foundIt = _gen->varColMap().find(exprVarDecl);
+    if (foundIt == _gen->varColMap().end()) {
+        const auto& incomingStream = _pendingOut.getInterface()->getStream();
+        const bool incStreamContainsVar = (isNode && incomingStream.isNodeStream())
+                                       || (!isNode && incomingStream.isEdgeStream());
+        if (!incStreamContainsVar) {
+            throw FatalException(
+                fmt::format("Could not find column associated with symbol variable {}.",
+                            exprVarDecl->getName()));
+        }
+
+        // XXX: Is this correct? May it be an edge stream but we need extract tgt ids tag?
+        const ColumnTag streamedVarTag = isNode
+                                           ? incomingStream.asNodeStream()._nodeIDsTag
+                                           : incomingStream.asEdgeStream()._edgeIDsTag;
+
+        const NamedColumn* streamedCol =
+            _pendingOut.getDataframe()->getColumn(streamedVarTag);
+        return streamedCol->getColumn();
+    }
+
+    const NamedColumn* symCol = _pendingOut.getDataframe()->getColumn(foundIt->second);
+    bioassert(symCol, "Failed to retrieve column for SymbolExpr with tag {}.",
+              foundIt->second.getValue());
+
+    return symCol->getColumn();
 }
 
 #define ALLOC_EVALTYPE_COL(EvalType, Type)                                               \

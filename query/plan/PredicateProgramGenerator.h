@@ -2,6 +2,8 @@
 
 #include "ExprProgramGenerator.h"
 
+#include "metadata/LabelSet.h"
+
 namespace db {
 
 class PredicateProgramGenerator final : public ExprProgramGenerator {

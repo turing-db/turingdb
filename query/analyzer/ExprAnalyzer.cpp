@@ -9,6 +9,7 @@
 #include "Symbol.h"
 #include "Literal.h"
 #include "decl/DeclContext.h"
+#include "decl/EvaluatedType.h"
 #include "decl/VarDecl.h"
 
 #include "expr/All.h"
@@ -124,6 +125,16 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)) {
+                break;
+            }
+
+            if (pair == TypePairBitset(EvaluatedType::NodePattern,
+                                       EvaluatedType::NodePattern)) {
+                break;
+            }
+
+            if (pair == TypePairBitset(EvaluatedType::EdgePattern,
+                                       EvaluatedType::EdgePattern)) {
                 break;
             }
 

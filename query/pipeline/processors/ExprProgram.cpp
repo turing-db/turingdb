@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string_view>
 
+#include "columns/ColumnIDs.h"
 #include "columns/ColumnOperator.h"
 #include "columns/ColumnOperators.h"
 #include "columns/OperationKind.h"
