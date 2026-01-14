@@ -70,6 +70,7 @@
 #include "Overloaded.h"
 #include "processors/ExprProgram.h"
 #include "ExprProgramGenerator.h"
+#include "PredicateProgramGenerator.h"
 
 #include "PipelineException.h"
 #include "PlannerException.h"
@@ -560,11 +561,11 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
     const auto& labelConstrs = node->getLabelConstraints();
 
     PredicateProgram* predProg = PredicateProgram::create(_pipeline);
-    ExprProgramGenerator exprGen(this, predProg, _builder.getPendingOutput());
+    PredicateProgramGenerator predGen(this, predProg, _builder.getPendingOutput());
 
     // Compile predicate expressions into an expression program
     for (const Predicate* pred : predicates) {
-        exprGen.generatePredicate(pred);
+        predGen.generatePredicate(pred);
     }
 
     if (!labelConstrs.empty()) {
@@ -578,7 +579,7 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
             throw FatalException("Could not get label set column for label filter.");
         }
 
-        exprGen.addLabelConstraint(lblSetCol->getColumn(), labelConstrs);
+        predGen.addLabelConstraint(lblSetCol->getColumn(), labelConstrs);
     }
 
     // Then add a filter processor, taking the built expression program to execute
@@ -607,12 +608,12 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
     const auto& typeConstraint = node->getEdgeTypeConstraints();
 
     PredicateProgram* predProg = PredicateProgram::create(_pipeline);
-    ExprProgramGenerator exprGen(this, predProg, _builder.getPendingOutput());
+    PredicateProgramGenerator predGen(this, predProg, _builder.getPendingOutput());
 
     if (!predicates.empty()) {
         // Compile predicate expressions into an expression program
         for (const Predicate* pred : predicates) {
-            exprGen.generatePredicate(pred);
+            predGen.generatePredicate(pred);
         }
     }
 
@@ -633,7 +634,7 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
         // Above checks there is exactly 1 type contraint
         const EdgeTypeID edgeTypeConstr = typeConstraint.front();
 
-        exprGen.addEdgeTypeConstraint(edgeTypecol->getColumn(), edgeTypeConstr);
+        predGen.addEdgeTypeConstraint(edgeTypecol->getColumn(), edgeTypeConstr);
     }
 
     const auto& output = _builder.addFilter(predProg);
