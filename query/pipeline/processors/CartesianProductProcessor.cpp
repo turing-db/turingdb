@@ -25,20 +25,15 @@ void clearDataframe(Dataframe* df) {
     }
 }
 
-constexpr ColumnKind::ColumnKindCode getBaseFromKind(ColumnKind::ColumnKindCode kind) {
-    return kind / ColumnKind::getInternalTypeKindCount();
-}
-
-constexpr ColumnKind::ColumnKindCode COL_VEC_BASE_KIND = ColumnVector<size_t>::BaseKind;
-
 void verifyAllColumnVectors(const Dataframe* df) {
     for (const NamedColumn* nCol : df->cols()) {
         const Column* col = nCol->getColumn();
 
         const ColumnKind::ColumnKindCode kind = col->getKind();
-        const ColumnKind::ColumnKindCode baseKind = getBaseFromKind(kind);
+        const ContainerTypeCodeType containerKind = ColumnKind::getContainerTypeFromColumnKind(kind);
+        constexpr ContainerTypeCodeType ColumnVectorKind = ContainerTypeCodeValue<ColumnVector<size_t>>;
 
-        if (baseKind != COL_VEC_BASE_KIND) {
+        if (containerKind != ColumnVectorKind) {
             throw FatalException("Attempt to calulate the CartesianProduct of a "
                                  "Dataframe whose column is not a ColumnVector.");
         }
@@ -47,6 +42,7 @@ void verifyAllColumnVectors(const Dataframe* df) {
 
 void verifyRectangular(const Dataframe* df) {
     const size_t rowCount = df->getRowCount();
+
     const bool rectangular = std::ranges::all_of(df->cols(), [rowCount](const NamedColumn* ncol) {
         return ncol->getColumn()->size() == rowCount;
     });

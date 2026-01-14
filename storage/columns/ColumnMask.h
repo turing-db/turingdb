@@ -38,7 +38,7 @@ public:
     using ConstIterator = std::vector<Bool_t>::const_iterator;
     using ReverseIterator = std::vector<Bool_t>::reverse_iterator;
     using ConstReverseIterator = std::vector<Bool_t>::const_reverse_iterator;
-    static constexpr ColumnKind::ColumnKindCode BaseKind = (ColumnKind::ColumnKindCode)ColumnKind::BaseColumnKind::MASK;
+    static constexpr ContainerTypeCode BaseKind = ContainerTypeCode::getCode<ColumnMask>();
 
     ColumnMask(const ColumnMask&) = default;
     ColumnMask(ColumnMask&&) noexcept = default;
@@ -48,9 +48,9 @@ public:
     {
     }
 
-    ColumnMask(std::initializer_list<Bool_t>&& v)
+    ColumnMask(std::initializer_list<Bool_t> v)
         : Column(_staticKind),
-        _data(std::forward<std::initializer_list<Bool_t>>(v))
+        _data(v)
     {
     }
 

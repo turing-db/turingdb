@@ -15,7 +15,7 @@ public:
     using Iterator = std::unordered_set<T>::iterator;
     using ConstIterator = std::unordered_set<T>::const_iterator;
 
-    static constexpr ColumnKind::ColumnKindCode BaseKind = (ColumnKind::ColumnKindCode)ColumnKind::BaseColumnKind::SET;
+    static constexpr ContainerTypeCode BaseKind = ContainerTypeCode::getCode<ColumnSet<T>>();
 
     ColumnSet(const ColumnSet&) = default;
     ColumnSet(ColumnSet&&) noexcept = default;
@@ -25,9 +25,9 @@ public:
     {
     }
 
-    ColumnSet(std::initializer_list<T>&& v)
+    ColumnSet(std::initializer_list<T> v)
         : Column(_staticKind),
-          _data(std::forward<std::initializer_list<T>>(v))
+          _data(v)
     {
     }
 
@@ -76,7 +76,7 @@ public:
 
     std::pair<Iterator, bool> insert(const T& val) { return _data.insert(val); }
 
-    std::pair<Iterator, bool> insert(T&& val) { return _data.insert(val); }
+    std::pair<Iterator, bool> insert(T&& val) { return _data.insert(std::move(val)); }
 
     template <typename... Args>
     std::pair<Iterator, bool> emplace(Args&&... args) {

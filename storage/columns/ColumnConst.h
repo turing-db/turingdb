@@ -12,7 +12,7 @@ template <typename T>
 class ColumnConst : public Column {
 public:
     using ValueType = T;
-    static constexpr ColumnKind::ColumnKindCode BaseKind = (ColumnKind::ColumnKindCode)ColumnKind::BaseColumnKind::CONST;
+    static constexpr ContainerTypeCode BaseKind = ContainerTypeCode::getCode<ColumnConst<T>>();
 
     ColumnConst()
         : Column(_staticKind)
@@ -21,7 +21,7 @@ public:
 
     explicit ColumnConst(T&& value)
         : Column(_staticKind),
-          _value(std::forward<T>(value))
+          _value(std::move(value))
     {
     }
 
@@ -30,7 +30,7 @@ public:
     ColumnConst(const ColumnConst&) = default;
     ColumnConst(ColumnConst&&) noexcept = default;
 
-    ColumnConst& operator=(T&& value) { _value = std::forward<T>(value); return *this; }
+    ColumnConst& operator=(T&& value) { _value = std::move(value); return *this; }
     ColumnConst& operator=(const ColumnConst&) = default;
     ColumnConst& operator=(ColumnConst&&) noexcept = default;
 

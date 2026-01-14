@@ -5,6 +5,7 @@
 
 #include "columns/ColumnOperator.h"
 #include "columns/ColumnOperators.h"
+#include "columns/OperationTypeCode.h"
 #include "columns/ColumnKind.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
@@ -20,168 +21,129 @@ using namespace db;
 
 namespace {
 
-constexpr ColumnKind::ColumnKindCode getBaseFromKind(ColumnKind::ColumnKindCode kind) {
-    return kind / ColumnKind::getInternalTypeKindCount();
-}
-
-constexpr ColumnKind::ColumnKindCode getInternalFromKind(ColumnKind::ColumnKindCode kind) {
-    return kind % ColumnKind::getInternalTypeKindCount();
-}
-
-constexpr ColumnKind::ColumnKindCode getPairKind(ColumnKind::ColumnKindCode lhs,
-                                                 ColumnKind::ColumnKindCode rhs) {
-    // Comparing each pair of the same internal type (ex: Vector<size_t> and Const<size_t>
-    const auto baseLhsCode = getBaseFromKind(lhs);
-    const auto baseRhsCode = getBaseFromKind(rhs);
-    const auto baseCount = ColumnKind::getBaseColumnKindCount();
-    const auto typeCount = ColumnKind::getInternalTypeKindCount();
-    const auto basePairCount = baseCount * baseCount;
-    const auto typePairCount = typeCount * typeCount;
-    const auto counts = basePairCount + typePairCount;
-    const auto internalLhsCode = getInternalFromKind(lhs);
-    const auto internalRhsCode = getInternalFromKind(rhs);
-    return baseLhsCode * counts + baseRhsCode * typePairCount + internalLhsCode * typeCount + internalRhsCode;
-}
-
-constexpr ColumnKind::ColumnKindCode getOpCase(ColumnOperator op,
-                                               ColumnKind::ColumnKindCode lhs,
-                                               ColumnKind::ColumnKindCode rhs) {
-    // We need to jump for each operator over spaces that are ColumnKindCount^2 in length
-    const auto columnKindCount = ColumnKind::getColumnKindCount();
-    return op * columnKindCount * columnKindCount + getPairKind(lhs, rhs);
-}
-
-// Unary operator
-constexpr ColumnKind::ColumnKindCode getOpCase(ColumnOperator op,
-                                               ColumnKind::ColumnKindCode lhs) {
-    const auto internalCount = ColumnKind::getInternalTypeKindCount();
-    return (op * internalCount) + lhs;
-}
-
 template <ColumnOperator Op, typename Lhs, typename Rhs>
-constexpr ColumnKind::ColumnKindCode OpCase =
-    getOpCase(Op, Lhs::staticKind(), Rhs::staticKind());
-}
+constexpr ExprOpKind OpCase = ExprOpKindCode::getCode(Op, Lhs::staticKind(), Rhs::staticKind());
 
 template <ColumnOperator Op, typename Lhs>
-constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind());
+constexpr ExprOpKind UnaryOpCase = ExprOpKindCode::getCode(Op, Lhs::staticKind());
+
+}
 
 // Mask operators
-#define AND_MASK_CASE(Lhs, Rhs)                                                          \
-    case OpCase<OP_AND, Lhs, Rhs>: {                                                     \
-        ColumnOperators::andOp(static_cast<ColumnMask*>(instr._res),                     \
-                               static_cast<const Lhs*>(instr._lhs),                      \
-                               static_cast<const Rhs*>(instr._rhs));                     \
-        break;                                                                           \
+#define AND_MASK_CASE(Lhs, Rhs)                                      \
+    case OpCase<OP_AND, Lhs, Rhs>: {                                 \
+        ColumnOperators::andOp(static_cast<ColumnMask*>(instr._res), \
+                               static_cast<const Lhs*>(instr._lhs),  \
+                               static_cast<const Rhs*>(instr._rhs)); \
+        break;                                                       \
     }
 
-#define OR_MASK_CASE(Lhs, Rhs)                                                           \
-    case OpCase<OP_OR, Lhs, Rhs>: {                                                      \
-        ColumnOperators::orOp(static_cast<ColumnMask*>(instr._res),                      \
-                              static_cast<const Lhs*>(instr._lhs),                       \
-                              static_cast<const Rhs*>(instr._rhs));                      \
-        break;                                                                           \
+#define OR_MASK_CASE(Lhs, Rhs)                                      \
+    case OpCase<OP_OR, Lhs, Rhs>: {                                 \
+        ColumnOperators::orOp(static_cast<ColumnMask*>(instr._res), \
+                              static_cast<const Lhs*>(instr._lhs),  \
+                              static_cast<const Rhs*>(instr._rhs)); \
+        break;                                                      \
     }
 
-#define NOT_MASK_CASE(Lhs)                                                               \
-    case UnaryOpCase<OP_NOT, Lhs>: {                                                     \
-        ColumnOperators::notOp(static_cast<ColumnMask*>(instr._res),                     \
-                               static_cast<const Lhs*>(instr._lhs));                     \
-        break;                                                                           \
+#define NOT_MASK_CASE(Lhs)                                           \
+    case UnaryOpCase<OP_NOT, Lhs>: {                                 \
+        ColumnOperators::notOp(static_cast<ColumnMask*>(instr._res), \
+                               static_cast<const Lhs*>(instr._lhs)); \
+        break;                                                       \
     }
-
 
 // Property-based operators - these use a ColumnOpt as their result
-#define EQUAL_CASE(Lhs, Rhs)                                                             \
-    case OpCase<OP_EQUAL, Lhs, Rhs>: {                                                   \
-        ColumnOperators::equal(static_cast<ColumnOptMask*>(instr._res),                  \
-                               static_cast<const Lhs*>(instr._lhs),                      \
-                               static_cast<const Rhs*>(instr._rhs));                     \
-        break;                                                                           \
+#define EQUAL_CASE(Lhs, Rhs)                                            \
+    case OpCase<OP_EQUAL, Lhs, Rhs>: {                                  \
+        ColumnOperators::equal(static_cast<ColumnOptMask*>(instr._res), \
+                               static_cast<const Lhs*>(instr._lhs),     \
+                               static_cast<const Rhs*>(instr._rhs));    \
+        break;                                                          \
     }
 
-#define NOT_EQUAL_CASE(Lhs, Rhs)                                                         \
-    case OpCase<OP_NOT_EQUAL, Lhs, Rhs>: {                                               \
-        ColumnOperators::notEqual(static_cast<ColumnOptMask*>(instr._res),               \
-                                  static_cast<const Lhs*>(instr._lhs),                   \
-                                  static_cast<const Rhs*>(instr._rhs));                  \
-        break;                                                                           \
+#define NOT_EQUAL_CASE(Lhs, Rhs)                                           \
+    case OpCase<OP_NOT_EQUAL, Lhs, Rhs>: {                                 \
+        ColumnOperators::notEqual(static_cast<ColumnOptMask*>(instr._res), \
+                                  static_cast<const Lhs*>(instr._lhs),     \
+                                  static_cast<const Rhs*>(instr._rhs));    \
+        break;                                                             \
     }
 
-#define GREATER_THAN_CASE(Lhs, Rhs)                                                      \
-    case OpCase<OP_GREATER_THAN, Lhs, Rhs>: {                                            \
-        ColumnOperators::greaterThan(static_cast<ColumnOptMask*>(instr._res),            \
-                                     static_cast<const Lhs*>(instr._lhs),                \
-                                     static_cast<const Rhs*>(instr._rhs));               \
-        break;                                                                           \
+#define GREATER_THAN_CASE(Lhs, Rhs)                                           \
+    case OpCase<OP_GREATER_THAN, Lhs, Rhs>: {                                 \
+        ColumnOperators::greaterThan(static_cast<ColumnOptMask*>(instr._res), \
+                                     static_cast<const Lhs*>(instr._lhs),     \
+                                     static_cast<const Rhs*>(instr._rhs));    \
+        break;                                                                \
     }
 
-#define LESS_THAN_CASE(Lhs, Rhs)                                                         \
-    case OpCase<OP_LESS_THAN, Lhs, Rhs>: {                                               \
-        ColumnOperators::lessThan(static_cast<ColumnOptMask*>(instr._res),               \
-                                  static_cast<const Lhs*>(instr._lhs),                   \
-                                  static_cast<const Rhs*>(instr._rhs));                  \
-        break;                                                                           \
+#define LESS_THAN_CASE(Lhs, Rhs)                                           \
+    case OpCase<OP_LESS_THAN, Lhs, Rhs>: {                                 \
+        ColumnOperators::lessThan(static_cast<ColumnOptMask*>(instr._res), \
+                                  static_cast<const Lhs*>(instr._lhs),     \
+                                  static_cast<const Rhs*>(instr._rhs));    \
+        break;                                                             \
     }
 
-#define GREATER_THAN_OR_EQUAL_CASE(Lhs, Rhs)                                             \
-    case OpCase<OP_GREATER_THAN_OR_EQUAL, Lhs, Rhs>: {                                   \
-        ColumnOperators::greaterThanOrEqual(static_cast<ColumnOptMask*>(instr._res),     \
-                                            static_cast<const Lhs*>(instr._lhs),         \
-                                            static_cast<const Rhs*>(instr._rhs));        \
-        break;                                                                           \
+#define GREATER_THAN_OR_EQUAL_CASE(Lhs, Rhs)                                         \
+    case OpCase<OP_GREATER_THAN_OR_EQUAL, Lhs, Rhs>: {                               \
+        ColumnOperators::greaterThanOrEqual(static_cast<ColumnOptMask*>(instr._res), \
+                                            static_cast<const Lhs*>(instr._lhs),     \
+                                            static_cast<const Rhs*>(instr._rhs));    \
+        break;                                                                       \
     }
 
-#define LESS_THAN_OR_EQUAL_CASE(Lhs, Rhs)                                                \
-    case OpCase<OP_LESS_THAN_OR_EQUAL, Lhs, Rhs>: {                                      \
-        ColumnOperators::lessThanOrEqual(static_cast<ColumnOptMask*>(instr._res),        \
-                                         static_cast<const Lhs*>(instr._lhs),            \
-                                         static_cast<const Rhs*>(instr._rhs));           \
-        break;                                                                           \
+#define LESS_THAN_OR_EQUAL_CASE(Lhs, Rhs)                                         \
+    case OpCase<OP_LESS_THAN_OR_EQUAL, Lhs, Rhs>: {                               \
+        ColumnOperators::lessThanOrEqual(static_cast<ColumnOptMask*>(instr._res), \
+                                         static_cast<const Lhs*>(instr._lhs),     \
+                                         static_cast<const Rhs*>(instr._rhs));    \
+        break;                                                                    \
     }
 
-#define AND_CASE(Lhs, Rhs)                                                               \
-    case OpCase<OP_AND, Lhs, Rhs>: {                                                     \
-        ColumnOperators::andOp(                                                          \
-            static_cast<ColumnOptVector<types::Bool::Primitive>*>(instr._res),           \
-            static_cast<const Lhs*>(instr._lhs),                                         \
-            static_cast<const Rhs*>(instr._rhs));                                        \
-        break;                                                                           \
+#define AND_CASE(Lhs, Rhs)                                                     \
+    case OpCase<OP_AND, Lhs, Rhs>: {                                           \
+        ColumnOperators::andOp(                                                \
+            static_cast<ColumnOptVector<types::Bool::Primitive>*>(instr._res), \
+            static_cast<const Lhs*>(instr._lhs),                               \
+            static_cast<const Rhs*>(instr._rhs));                              \
+        break;                                                                 \
     }
 
-#define OR_CASE(Lhs, Rhs)                                                                \
-    case OpCase<OP_OR, Lhs, Rhs>: {                                                      \
-        ColumnOperators::orOp(                                                           \
-            static_cast<ColumnOptVector<types::Bool::Primitive>*>(instr._res),           \
-            static_cast<const Lhs*>(instr._lhs),                                         \
-            static_cast<const Rhs*>(instr._rhs));                                        \
-        break;                                                                           \
+#define OR_CASE(Lhs, Rhs)                                                      \
+    case OpCase<OP_OR, Lhs, Rhs>: {                                            \
+        ColumnOperators::orOp(                                                 \
+            static_cast<ColumnOptVector<types::Bool::Primitive>*>(instr._res), \
+            static_cast<const Lhs*>(instr._lhs),                               \
+            static_cast<const Rhs*>(instr._rhs));                              \
+        break;                                                                 \
     }
 
-#define NOT_CASE(Lhs)                                                                    \
-    case UnaryOpCase<OP_NOT, Lhs>: {                                                     \
-        ColumnOperators::notOp(                                                          \
-            static_cast<ColumnOptVector<types::Bool::Primitive>*>(instr._res),           \
-            static_cast<const Lhs*>(instr._lhs));                                        \
-        break;                                                                           \
+#define NOT_CASE(Lhs)                                                          \
+    case UnaryOpCase<OP_NOT, Lhs>: {                                           \
+        ColumnOperators::notOp(                                                \
+            static_cast<ColumnOptVector<types::Bool::Primitive>*>(instr._res), \
+            static_cast<const Lhs*>(instr._lhs));                              \
+        break;                                                                 \
     }
 
-#define PROJECT_CASE(Lhs, Rhs)                    \
-    case OpCase<OP_PROJECT, Lhs, Rhs>: {          \
-        ColumnOperators::projectOp(               \
-            static_cast<ColumnMask*>(instr._res), \
-            static_cast<const Lhs*>(instr._lhs),  \
-            static_cast<const Rhs*>(instr._rhs)); \
-        break;                                    \
+#define PROJECT_CASE(Lhs, Rhs)                              \
+    case OpCase<OP_PROJECT, Lhs, Rhs>: {                    \
+        ColumnOperators::projectOp(                         \
+            static_cast<ColumnMask*>(instr._res),           \
+            static_cast<const Lhs*>(instr._lhs),            \
+            static_cast<const Rhs*>(instr._rhs));           \
+        break;                                              \
     }
 
-#define IN_CASE(Lhs, Rhs)                         \
-    case OpCase<OP_IN, Lhs, Rhs>: {               \
-        ColumnOperators::inOp(                    \
-            static_cast<ColumnMask*>(instr._res), \
-            static_cast<const Lhs*>(instr._lhs),  \
-            static_cast<const Rhs*>(instr._rhs)); \
-        break;                                    \
+#define IN_CASE(Lhs, Rhs)                              \
+    case OpCase<OP_IN, Lhs, Rhs>: {                    \
+        ColumnOperators::inOp(                         \
+            static_cast<ColumnMask*>(instr._res),      \
+            static_cast<const Lhs*>(instr._lhs),       \
+            static_cast<const Rhs*>(instr._rhs));      \
+        break;                                         \
     }
 
 #define INSTANTIATE_PROPERTY_OPERATOR(CASE_NAME) \
@@ -246,7 +208,6 @@ void ExprProgram::evalInstr(const Instruction& instr) {
         break;
 
         case ColumnOperatorType::OPTYPE_NOOP:
-            return;
         break;
     }
 }
@@ -263,7 +224,7 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         throw FatalException("Binary instruction had null right input.");
     }
 
-    switch (getOpCase(op, lhs->getKind(), rhs->getKind())) {
+    switch (ExprOpKindCode::getCode(op, lhs->getKind(), rhs->getKind())) {
         EQUAL_CASE(ColumnVector<size_t>, ColumnVector<size_t>)
         EQUAL_CASE(ColumnVector<size_t>, ColumnConst<size_t>)
         EQUAL_CASE(ColumnConst<size_t>, ColumnVector<size_t>)
@@ -381,8 +342,9 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
     const ColumnOperator op = instr._op;
     const Column* input = instr._lhs;
 
-    switch (getOpCase(op, input->getKind())) {
-        NOT_CASE(ColumnVector<types::Bool::Primitive>); // Also handles CustomBool
+    switch (ExprOpKindCode::getCode(op, input->getKind())) {
+        // XXX: What else can NOT be applied to?
+        NOT_CASE(ColumnVector<types::Bool::Primitive>);    // Also handles CustomBool
         NOT_CASE(ColumnOptVector<types::Bool::Primitive>); // Also handles CustomBool
 
         default: {
