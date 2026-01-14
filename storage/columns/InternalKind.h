@@ -46,7 +46,7 @@ public:
     template <typename T>
     static consteval Code code() {
         constexpr auto code = codeImpl(tag<T> {});
-        static_assert(code != Invalid);
+        static_assert(code != Invalid, "Internal type was not registered as a valid internal type");
         return code;
     }
 

@@ -42,7 +42,7 @@ public:
     template <typename T>
     static consteval Code code() {
         constexpr auto code = codeImpl(tag<T> {});
-        static_assert(code != Invalid);
+        static_assert(code != Invalid, "Container type was not registered as a valid container");
         return code;
     }
 
