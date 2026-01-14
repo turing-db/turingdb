@@ -200,7 +200,8 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
     CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)      \
     CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)          \
                                                                                                      \
-    /* Numeric types are totally ordered: allow comparisions between types */                        \
+    /* Numeric types are totally ordered: allow comparisions between types.*/                        \
+    /* NOTE: Some are blocked by planner */                                                         \
     CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)   \
     CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Double::Primitive>)   \
     CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::UInt64::Primitive>)       \
