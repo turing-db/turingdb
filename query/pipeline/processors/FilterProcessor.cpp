@@ -163,6 +163,10 @@ void FilterProcessor::execute() {
     finalMask.fromColumnOptVector(finalOptMask);
 
     const size_t colCount = srcDF->size();
+
+    bioassert(colCount == destDF->size(), "FilterProcessor input and output dataframes "
+                                          "have a differing number of columns.");
+
     const auto& srcCols = srcDF->cols();
     const auto& destCols = destDF->cols();
     for (size_t i = 0; i < colCount; i++) {

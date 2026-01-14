@@ -187,21 +187,26 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
 #define INSTANTIATE_PROPERTY_OPERATOR(CASE_NAME) \
     CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)    \
     CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)        \
+    CASE_NAME(ColumnConst<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)        \
                                                                                                      \
     CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)  \
     CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)      \
+    CASE_NAME(ColumnConst<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)      \
                                                                                                      \
     CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)  \
     CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)      \
+    CASE_NAME(ColumnConst<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)      \
                                                                                                      \
     CASE_NAME(ColumnOptVector<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)  \
     CASE_NAME(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)      \
+    CASE_NAME(ColumnConst<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)      \
                                                                                                      \
     CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)      \
     CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)          \
+    CASE_NAME(ColumnConst<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)          \
                                                                                                      \
     /* Numeric types are totally ordered: allow comparisions between types.*/                        \
-    /* NOTE: Some are blocked by planner */                                                         \
+    /* NOTE: Some are blocked by planner */                                                          \
     CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)   \
     CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Double::Primitive>)   \
     CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::UInt64::Primitive>)       \
@@ -377,7 +382,6 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
     const Column* input = instr._lhs;
 
     switch (getOpCase(op, input->getKind())) {
-        // XXX: What else can NOT be applied to?
         NOT_CASE(ColumnVector<types::Bool::Primitive>); // Also handles CustomBool
         NOT_CASE(ColumnOptVector<types::Bool::Primitive>); // Also handles CustomBool
 
