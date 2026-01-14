@@ -7,6 +7,7 @@
 #include "TuringDB.h"
 
 #include "versioning/Transaction.h"
+#include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
 #include "SimpleGraph.h"
@@ -77,7 +78,7 @@ TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
 
             sinkExecuted = true;
 
-            const ColumnConst<size_t>* countValue = df->cols().front()->as<ColumnConst<size_t>>();
+            const ColumnConst<types::UInt64::Primitive>* countValue = df->cols().front()->as<ColumnConst<types::UInt64::Primitive>>();
             rowCount = countValue->getRaw();
         };
 
@@ -146,7 +147,7 @@ TEST_F(CountProcessorTest, expand3) {
 
             sinkExecuted = true;
 
-            const ColumnConst<size_t>* countValue = df->cols().front()->as<ColumnConst<size_t>>();
+            const ColumnConst<types::UInt64::Primitive>* countValue = df->cols().front()->as<ColumnConst<types::UInt64::Primitive>>();
             rowCount = countValue->getRaw();
         };
 
