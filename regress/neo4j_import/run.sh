@@ -4,7 +4,10 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 cd $SCRIPT_DIR
 
-pkill turingdb
+pkill turingdb 2>/dev/null || true
+# Wait for port 6666 to be free
+while lsof -i :6666 -sTCP:LISTEN >/dev/null 2>&1; do sleep 0.1; done
+
 rm -rf $SCRIPT_DIR/.turing
 
 # Create turing directory structure
