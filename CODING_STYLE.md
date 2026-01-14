@@ -400,3 +400,40 @@ You can use C++ concepts in turingdb but please use them parsimoniously. The ove
 
 Pass data by pointer or reference, const reference or result reference, for consistency sake.
 Please do not use RVO, move semantics or anything relying on rvalue references and other related mechanisms in C++.
+
+### Switch formatting
+
+Switch and cases are formatted as follows:
+```cpp
+switch (myCond) {
+    case Value1:
+        // Do something
+    break;
+
+    case Value2:
+        // Do something
+    break;
+}
+```
+
+The break statements are aligned with the case statements.
+Each case must have a break statement.
+Be careful of using a default case as it can hide future cases that will need to be handled, such that for switch on an enum value.
+
+Use a scoped block of statements with brackets if you start to have more than one statement in each case or if you need to declare variables
+local to each case.
+```cpp
+switch (myCond) {
+    case Value1: {
+        const MyData* data = getMyDataFromSource1();
+        compute1(data);
+    }
+    break;
+
+    case Value2: {
+        const MyData* data = getMyDataFromSource2();
+        compute2(data);
+    }
+    break;
+}
+```
