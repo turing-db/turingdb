@@ -4,9 +4,9 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 cd $SCRIPT_DIR
 
-pkill -f turingdb 2>/dev/null || true
+pkill -f "[t]uringdb" 2>/dev/null || true
 # Wait for port 6666 to be free
-while lsof -i :6666 -sTCP:LISTEN >/dev/null 2>&1; do sleep 0.1; done
+for i in $(seq 1 100); do lsof -i :6666 -sTCP:LISTEN >/dev/null 2>&1 || break; sleep 0.1; done
 
 rm -rf $SCRIPT_DIR/.turing
 
@@ -25,6 +25,6 @@ uv add $PYTURINGDB
 uv run main.py
 testres=$?
 
-pkill -f turingdb
+pkill -f "[t]uringdb"
 
 exit $testres
