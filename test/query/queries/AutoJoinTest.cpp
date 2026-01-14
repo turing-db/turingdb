@@ -29,7 +29,6 @@ using namespace turing::test;
 // Tests designed to find bugs and trigger segfaults in the join implementation.
 // Key targets:
 // - HashJoinProcessor.cpp line 203 bug (findInMap vs _rightMap.end())
-// - MaterializeProcessor crashes with explicit edge types
 // - Chunk boundary handling
 // - Empty/null result handling
 // =============================================================================

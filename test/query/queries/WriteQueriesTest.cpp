@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
-#include <optional>
 
+#include <optional>
+#include <algorithm>
 #include <range/v3/view/enumerate.hpp>
 
 #include "EdgeRecord.h"
@@ -1238,6 +1239,115 @@ TEST_F(WriteQueriesTest, exceedChunk) {
         // We should only ever get 1 empty chunk: the result of GetOutEdges on the second
         // chunk of ScanNodes, which contains only 1 node with no edges
         ASSERT_EQ(1, emptyChunks);
+    }
+}
+
+TEST_F(WriteQueriesTest, exceedChunkThenFilter) {
+    setWorkingGraph("default");
+
+    // Create over 1 chunk of nodes
+    const size_t chunkSize = 65'536;
+    const size_t nodeCount = chunkSize * 3; // TODO: Find a way to access ChunkConfig
+
+    newChange();
+    {
+        // Half the nodes will have id = "0", half with id = "1"
+        auto createNodePattern = [](const NodeID id) {
+            const auto idstr = std::to_string(id.getValue());
+            const auto idprop = std::to_string(id.getValue() % 2);
+            return "(n" + idstr + ":Node {id: " + idprop + "})";
+        };
+
+        std::string createQuery = "CREATE ";
+        createQuery += createNodePattern(0);
+
+        for (NodeID n {1}; n < nodeCount; n++) {
+            createQuery += ", ";
+            createQuery += createNodePattern(n);
+        }
+
+        auto res = query(createQuery, [](const Dataframe*) {});
+        ASSERT_TRUE(res);
+
+        ASSERT_TRUE(query("COMMIT", [](const Dataframe*) {}));
+    }
+
+    {
+        std::string_view matchQuery = "MATCH (n) RETURN COUNT(n) as COUNT";
+
+        auto res = query(matchQuery, [nodeCount](const Dataframe* df) {
+            const auto* count = findColumn(df, "COUNT")->as<ColumnConst<size_t>>();
+            ASSERT_TRUE(count);
+
+            ASSERT_EQ(nodeCount, count->getRaw());
+        });
+        ASSERT_TRUE(res);
+    }
+
+    submitCurrentChange();
+
+    { // Verify correct number of nodes with id = 0
+        std::string_view matchQuery = R"(MATCH (n) WHERE n.id = 0 RETURN COUNT(n) AS COUNT)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            const auto* count = findColumn(df, "COUNT")->as<ColumnConst<size_t>>();
+            ASSERT_TRUE(count);
+
+            ASSERT_EQ(nodeCount / 2, count->getRaw());
+        });
+        ASSERT_TRUE(res);
+    }
+
+    { // Verify correct number of nodes with id = 1
+        std::string_view matchQuery = R"(MATCH (n) WHERE n.id = 1 RETURN COUNT(n) AS COUNT)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            const auto* count = findColumn(df, "COUNT")->as<ColumnConst<size_t>>();
+            ASSERT_TRUE(count);
+
+            ASSERT_EQ(nodeCount / 2, count->getRaw());
+        });
+        ASSERT_TRUE(res);
+    }
+
+    { // Verify all nodes returned have the correct ids for id = 0
+        std::string_view matchQuery = R"(MATCH (n) WHERE n.id = 0 RETURN n.id AS ids)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            using IDProp = types::Int64::Primitive;
+            using IDOp = std::optional<IDProp>;
+
+            ASSERT_TRUE(df);
+            const auto* ids = findColumn(df, "ids")->as<ColumnVector<IDOp>>();
+            ASSERT_TRUE(ids);
+
+            ASSERT_TRUE(ids->size() <= chunkSize);
+
+            const auto idZero = [](IDOp id) { return id && *id == 0; };
+            ASSERT_TRUE(std::ranges::all_of(*ids, idZero));
+        });
+        ASSERT_TRUE(res);
+    }
+
+    { // Verify all nodes returned have the correct ids for id = 1
+        std::string_view matchQuery = R"(MATCH (n) WHERE n.id = 1 RETURN n.id AS ids)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            using IDProp = types::Int64::Primitive;
+            using IDOp = std::optional<IDProp>;
+
+            ASSERT_TRUE(df);
+            const auto* ids = findColumn(df, "ids")->as<ColumnVector<IDOp>>();
+            ASSERT_TRUE(ids);
+
+            ASSERT_TRUE(ids->size() <= chunkSize);
+
+            const auto idOne = [](IDOp id) { return id && *id == 1; };
+            ASSERT_TRUE(std::ranges::all_of(*ids, idOne));
+        });
+        ASSERT_TRUE(res);
     }
 }
 
