@@ -118,7 +118,7 @@ void FilterProcessor::execute() {
     Dataframe* destDF = _output.getDataframe();
 
     _predProg->evaluateInstructions();
-    const std::vector<Column*> predResults = _predProg->getTopLevelPredicates();
+    const std::vector<Column*>& predResults = _predProg->getTopLevelPredicates();
 
     // XXX: Should this be an error, or should we just not apply any filters?
     if (predResults.empty()) {
