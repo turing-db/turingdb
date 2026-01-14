@@ -8,7 +8,10 @@ rm -f pyproject.toml
 uv init
 uv add $PYTURINGDB
 
-pkill turingdb
+pkill turingdb 2>/dev/null || true
+# Wait for port 6666 to be free
+while lsof -i :6666 -sTCP:LISTEN >/dev/null 2>&1; do sleep 0.1; done
+
 rm -rf $SCRIPT_DIR/.turing
 
 # Set up an unloadable graph
@@ -27,6 +30,7 @@ else
   echo "SUCCESS: turingdb failed to start with invalid 'default' graph"
 fi
 
+while lsof -i :6666 -sTCP:LISTEN >/dev/null 2>&1; do sleep 0.1; done
 turingdb -turing-dir $SCRIPT_DIR/.turing -reset-default &> /dev/null
 uv run check_db_status.py &> /dev/null
 startres=$?
@@ -35,11 +39,12 @@ if [ "$startres" -ne 0 ]; then # turingdb should succeed in starting
   exit 1
 else
   echo "SUCCESS: turingdb started whilst resetting invalid 'default' graph"
-  pkill turingdb
+  pkill turingdb 2>/dev/null || true
 fi
 
 # Have no default graph, without trying to reset it
 rm -rf ~/.turing/graphs/default/
+while lsof -i :6666 -sTCP:LISTEN >/dev/null 2>&1; do sleep 0.1; done
 turingdb -turing-dir $SCRIPT_DIR/.turing &> /dev/null
 uv run check_db_status.py &> /dev/null
 startres=$?
@@ -48,11 +53,12 @@ if [ "$startres" -ne 0 ]; then # turingdb should succeed in starting
   exit 1
 else
     echo "SUCCESS: turingdb started with no 'default' graph dumped"
-    pkill turingdb
+    pkill turingdb 2>/dev/null || true
 fi
 
 # Have no default graph, and try to reset it
 rm -rf ~/.turing/graphs/default/
+while lsof -i :6666 -sTCP:LISTEN >/dev/null 2>&1; do sleep 0.1; done
 turingdb -turing-dir $SCRIPT_DIR/.turing -reset-default &> /dev/null
 uv run check_db_status.py &> /dev/null
 startres=$?
