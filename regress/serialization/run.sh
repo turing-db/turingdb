@@ -15,14 +15,14 @@ uv init --bare
 uv add $PYTURINGDB
 
 # Make sure turingdb is not running
-pkill -f turingdb 2>/dev/null || true
+pkill -f "[t]uringdb" 2>/dev/null || true
 # Wait for port 6666 to be free
-while lsof -i :6666 -sTCP:LISTEN >/dev/null 2>&1; do sleep 0.1; done
+for i in $(seq 1 100); do lsof -i :6666 -sTCP:LISTEN >/dev/null 2>&1 || break; sleep 0.1; done
 rm -rf $SCRIPT_DIR/.turing
 uv run ../main.py
 testres=$?
 
 # Make sure turingdb was stopped at the end of the script
-pkill -f turingdb
+pkill -f "[t]uringdb"
 
 exit $testres
