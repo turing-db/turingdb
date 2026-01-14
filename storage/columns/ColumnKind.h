@@ -1,7 +1,5 @@
 #pragma once
 
-#include <concepts>
-#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -9,24 +7,6 @@
 #include "ContainerKind.h"
 
 namespace db {
-
-template <typename>
-class ColumnVector;
-
-template <typename>
-class ColumnConst;
-
-class Column;
-class ColumnMask;
-class NodeView;
-class CommitBuilder;
-class Change;
-class ListColumnConst;
-
-template <std::integral TType, size_t TCount>
-class TemplateLabelSet;
-
-using LabelSet = TemplateLabelSet<uint64_t, 4>;
 
 class ColumnKind {
 public:
