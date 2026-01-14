@@ -8,12 +8,8 @@ namespace db {
 
 class Column;
 class LocalMemory;
-
-}
-
-namespace db {
-
 class ExprProgram;
+class PredicateProgramGenerator;
 class Predicate;
 class Expr;
 class VarDecl;
@@ -26,7 +22,10 @@ class PendingOutputView;
 
 class ExprProgramGenerator {
 public:
-    ExprProgramGenerator(PipelineGenerator* gen, ExprProgram* exprProg,
+    friend PredicateProgramGenerator;
+
+    ExprProgramGenerator(PipelineGenerator* gen,
+                         ExprProgram* exprProg,
                          const PendingOutputView& pendingOut)
         : _gen(gen),
         _exprProg(exprProg),
@@ -34,16 +33,12 @@ public:
     {
     }
 
-    ~ExprProgramGenerator() = default;
+    virtual ~ExprProgramGenerator() = default;
 
     ExprProgramGenerator(const ExprProgramGenerator&) = delete;
     ExprProgramGenerator& operator=(const ExprProgramGenerator&) = delete;
     ExprProgramGenerator(ExprProgramGenerator&&) = delete;
     ExprProgramGenerator& operator=(ExprProgramGenerator&&) = delete;
-
-    void generatePredicate(const Predicate* pred);
-    void addLabelConstraint(Column* lblsetCol, const LabelSet& lblConstraint);
-    void addEdgeTypeConstraint(Column* edgeTypeCol, const EdgeTypeID& typeConstr);
 
     Column* registerPropertyConstraint(const Expr* expr);
 

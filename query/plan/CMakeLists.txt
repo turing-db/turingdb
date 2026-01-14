@@ -9,6 +9,7 @@ set(plan_sources
     WriteStmtGenerator.cpp
     PipelineGenerator.cpp
     ExprProgramGenerator.cpp
+    PredicateProgramGenerator.cpp
 )
 
 add_library(turing_db_plan_s STATIC ${plan_sources})
