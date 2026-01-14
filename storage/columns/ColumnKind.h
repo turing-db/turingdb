@@ -39,6 +39,52 @@ public:
         _SIZE,
     };
 
+    // Explicit enum for internal type kinds to avoid __COUNTER__ portability issues
+    // between compilers (GCC vs Clang produce different values)
+    enum class InternalTypeKind : ColumnKindCode {
+        SizeT = 0,
+        EntityID,
+        NodeID,
+        EdgeID,
+        LabelSetID,
+        LabelSet,
+        EdgeTypeID,
+        LabelID,
+        PropertyTypeID,
+        StdString,
+        ValueType,
+        ChangeID,
+        ColumnVectorEntityID,
+        ColumnMask,
+        UInt64Primitive,
+        Int64Primitive,
+        DoublePrimitive,
+        BoolPrimitive,
+        StringPrimitive,
+        OptEntityID,
+        OptNodeID,
+        OptEdgeID,
+        OptChangeID,
+        OptLabelID,
+        OptLabelSetID,
+        OptEdgeTypeID,
+        OptPropertyTypeID,
+        OptSizeT,
+        OptValueType,
+        OptStdString,
+        OptUInt64Primitive,
+        OptInt64Primitive,
+        OptDoublePrimitive,
+        OptBoolPrimitive,
+        OptStringPrimitive,
+        CustomBool,
+        NodeView,
+        CommitBuilderPtr,
+        ChangePtr,
+
+        _SIZE,
+    };
+
     using LabelSet = TemplateLabelSet<uint64_t, 4>;
 
     inline static consteval ColumnKindCode getBaseColumnKindCount() {
@@ -47,94 +93,91 @@ public:
 
     template <typename T>
     inline static consteval ColumnKindCode getInternalTypeKind() {
-        const ColumnKindCode minKind = __COUNTER__ + 1;
-        static_assert(minKind == 1);
-
         if constexpr (std::is_same_v<T, size_t>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::SizeT;
         } else if constexpr (std::is_same_v<T, EntityID>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::EntityID;
         } else if constexpr (std::is_same_v<T, NodeID>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::NodeID;
         } else if constexpr (std::is_same_v<T, EdgeID>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::EdgeID;
         } else if constexpr (std::is_same_v<T, LabelSetID>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::LabelSetID;
         } else if constexpr (std::is_same_v<T, LabelSet>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::LabelSet;
         } else if constexpr (std::is_same_v<T, EdgeTypeID>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::EdgeTypeID;
         } else if constexpr (std::is_same_v<T, LabelID>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::LabelID;
         } else if constexpr (std::is_same_v<T, PropertyTypeID>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::PropertyTypeID;
         } else if constexpr (std::is_same_v<T, std::string>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::StdString;
         } else if constexpr (std::is_same_v<T, ValueType>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::ValueType;
         } else if constexpr (std::is_same_v<T, ChangeID>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::ChangeID;
         } else if constexpr (std::is_same_v<T, ColumnVector<EntityID>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::ColumnVectorEntityID;
         } else if constexpr (std::is_same_v<T, ColumnMask>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::ColumnMask;
         } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::UInt64Primitive;
         } else if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::Int64Primitive;
         } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::DoublePrimitive;
         } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::BoolPrimitive;
         } else if constexpr (std::is_same_v<T, types::String::Primitive>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::StringPrimitive;
         } else if constexpr (std::is_same_v<T, std::optional<EntityID>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptEntityID;
         } else if constexpr (std::is_same_v<T, std::optional<NodeID>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptNodeID;
         } else if constexpr (std::is_same_v<T, std::optional<EdgeID>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptEdgeID;
         } else if constexpr (std::is_same_v<T, std::optional<ChangeID>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptChangeID;
         } else if constexpr (std::is_same_v<T, std::optional<LabelID>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptLabelID;
         } else if constexpr (std::is_same_v<T, std::optional<LabelSetID>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptLabelSetID;
         } else if constexpr (std::is_same_v<T, std::optional<EdgeTypeID>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptEdgeTypeID;
         } else if constexpr (std::is_same_v<T, std::optional<PropertyTypeID>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptPropertyTypeID;
         } else if constexpr (std::is_same_v<T, std::optional<size_t>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptSizeT;
         } else if constexpr (std::is_same_v<T, std::optional<ValueType>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptValueType;
         } else if constexpr (std::is_same_v<T, std::optional<std::string>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptStdString;
         } else if constexpr (std::is_same_v<T, std::optional<types::UInt64::Primitive>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptUInt64Primitive;
         } else if constexpr (std::is_same_v<T, std::optional<types::Int64::Primitive>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptInt64Primitive;
         } else if constexpr (std::is_same_v<T, std::optional<types::Double::Primitive>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptDoublePrimitive;
         } else if constexpr (std::is_same_v<T, std::optional<types::Bool::Primitive>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptBoolPrimitive;
         } else if constexpr (std::is_same_v<T, std::optional<types::String::Primitive>>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::OptStringPrimitive;
         } else if constexpr (std::is_same_v<T, CustomBool>) {
-            return  __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::CustomBool;
         } else if constexpr (std::is_same_v<T, NodeView>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::NodeView;
         } else if constexpr (std::is_same_v<T, const CommitBuilder*>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::CommitBuilderPtr;
         } else if constexpr (std::is_same_v<T, const Change*>) {
-            return __COUNTER__ - minKind;
+            return (ColumnKindCode)InternalTypeKind::ChangePtr;
         }
 
         return -1;
     }
 
     inline static consteval ColumnKindCode getInternalTypeKindCount() {
-        return __COUNTER__ - 1;
+        return (ColumnKindCode)InternalTypeKind::_SIZE;
     }
 
     template <typename T>
