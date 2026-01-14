@@ -25,7 +25,7 @@ Software engineering research is studying the professional practice of programmi
 The production of software can be investigated externally and after the act, by the methods of experimental science. But the actual act itself of an individual writing software is very much a creative act emerging from the human imaginary.
 
 The best software ideas are produced by intuition, rather than by the means of explicit and conscious logical deductive processes.
-We give them a justification after they have emerged. This justification may be technical, practical or theoretical. 
+We give them a justification after they have emerged from our minds. This justification may be technical, practical or theoretical. 
 This concerns architectural ideas, visions of components and systems interacting elegantly with each other.
 
 **The importance of imagination, creativity and diversity**
