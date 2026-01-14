@@ -4,6 +4,8 @@
 
 namespace db {
 
+class AbstractSubscriptOperator;
+
 class Column {
 public:
     Column() = delete;

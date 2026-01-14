@@ -13,6 +13,7 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 
+#include "columns/ListColumnConst.h"
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
 #include "ID.h"
@@ -44,6 +45,7 @@ public:
         MakeMemoryPool<ColumnVector<size_t>>::type,
         MakeMemoryPool<ColumnVector<std::string_view>>::type,
         MakeMemoryPool<ColumnVector<std::string>>::type,
+        MakeMemoryPool<ColumnVector<ValueVariant>>::type,
         MakeMemoryPool<ColumnMask>::type,
         MakeMemoryPool<ColumnConst<NodeID>>::type,
         MakeMemoryPool<ColumnConst<EdgeID>>::type,
@@ -74,7 +76,8 @@ public:
         MakeMemoryPool<ColumnOptVector<types::String::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<types::Bool::Primitive>>::type,
         MakeMemoryPool<ColumnSet<NodeID>>::type,
-        MakeMemoryPool<ColumnSet<EdgeID>>::type
+        MakeMemoryPool<ColumnSet<EdgeID>>::type,
+        MakeMemoryPool<ListColumnConst>::type
         >;
 
     template <typename KeyT, typename ValueT>

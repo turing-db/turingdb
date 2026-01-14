@@ -40,6 +40,19 @@ CharLiteral* CharLiteral::create(CypherAST* ast, char value) {
     return literal;
 }
 
+ListLiteral::ListLiteral()
+{
+}
+
+ListLiteral::~ListLiteral() {
+}
+
+ListLiteral* ListLiteral::create(CypherAST* ast) {
+    ListLiteral* literal = new ListLiteral();
+    ast->addLiteral(literal);
+    return literal;
+}
+
 MapLiteral::MapLiteral()
 {
 }

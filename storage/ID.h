@@ -8,10 +8,7 @@
 
 namespace db {
 
-template <typename T>
-concept IntegralType = (std::is_integral_v<T>);
-
-template <IntegralType T, int = 0>
+template <std::integral T, int = 0>
 class ID {
 public:
     using Type = T;
@@ -106,7 +103,7 @@ concept TypedInternalID = std::is_same_v<T, NodeID> || std::is_same_v<T, EdgeID>
 template <typename T>
 struct IsID : std::false_type {};
 
-template <IntegralType T, int N>
+template <std::integral T, int N>
 struct IsID<ID<T, N>> : std::true_type {};
 
 }

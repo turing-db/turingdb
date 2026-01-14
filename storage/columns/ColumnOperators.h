@@ -12,6 +12,7 @@
 #include "ColumnOptMask.h"
 #include "columns/ColumnSet.h"
 
+#include "columns/ListColumnConst.h"
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
 
@@ -20,10 +21,7 @@
 namespace db {
 
 template <typename T, typename U>
-concept Stringy = (
-    (std::same_as<T, std::string_view> && std::same_as<std::string, U>) ||
-    (std::same_as<std::string_view, U> && std::same_as<T, std::string>)
-);
+concept Stringy = ((std::same_as<T, std::string_view> && std::same_as<std::string, U>) || (std::same_as<std::string_view, U> && std::same_as<T, std::string>));
 
 template <typename T>
 struct is_optional : std::false_type {};
@@ -162,6 +160,29 @@ public:
 
         for (size_t i = 0; i < size; i++) {
             maskd[i] = lhsd[i] && rhsd[i];
+        }
+    }
+
+    /**
+     * @brief Fills a mask corresponding to 'lhs == rhs'
+     *
+     * @param mask The mask to fill
+     * @param lhs Left hand side mask
+     * @param rhs Right hand side mask
+     */
+    template <typename T>
+    static void equal(ColumnOptMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnVector<ValueVariant>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd[i] == rhsd[i];
         }
     }
 
@@ -401,7 +422,7 @@ public:
     // Mask application column operations
 
     template <typename T>
-    static void applyMask(const ColumnVector<T>* src, 
+    static void applyMask(const ColumnVector<T>* src,
                           const ColumnMask* mask,
                           ColumnVector<T>* dest) {
         bioassert(src->size() == mask->size(), "src and mask must have same size");
@@ -465,7 +486,7 @@ private:
         if (a == CustomBool {true}) {
             return false;
         }
-        if (a == CustomBool{false}) {
+        if (a == CustomBool {false}) {
             return true;
         }
         return std::nullopt;

@@ -3,6 +3,7 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "ID.h"
+#include "Overloaded.h"
 #include "PipelineGenerator.h"
 #include "columns/ColumnOptMask.h"
 #include "dataframe/ColumnTag.h"
@@ -39,20 +40,20 @@ ColumnOperator ExprProgramGenerator::unaryOperatorToColumnOperator(UnaryOperator
     switch (op) {
         case UnaryOperator::Not:
             return ColumnOperator::OP_NOT;
-        break;
+            break;
 
         case UnaryOperator::Minus:
             return ColumnOperator::OP_MINUS;
-        break;
+            break;
 
         case UnaryOperator::Plus:
             return ColumnOperator::OP_PLUS;
-        break;
+            break;
 
         case UnaryOperator::_SIZE:
             throw PlannerException(
                 "Attempted to generate invalid unary operator in ExprProgramGenerator.");
-        break;
+            break;
     }
     throw FatalException(
         "Attempted to generate invalid unary operator in ExprProgramGenerator.");
@@ -62,15 +63,15 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
     switch (op) {
         case BinaryOperator::Or:
             return ColumnOperator::OP_OR;
-        break;
+            break;
 
         case BinaryOperator::And:
             return ColumnOperator::OP_AND;
-        break;
+            break;
 
         case BinaryOperator::Equal:
             return ColumnOperator::OP_EQUAL;
-        break;
+            break;
 
         case BinaryOperator::NotEqual:
             return ColumnOperator::OP_NOT_EQUAL;
@@ -95,17 +96,17 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
         case BinaryOperator::_SIZE:
             throw FatalException(
                 "Attempted to generate invalid binary operator in ExprProgramGenerator.");
-        break;
+            break;
 
         default:
             throw PlannerException(fmt::format("Binary operator {} not yet supported.",
                                                BinaryOperatorDescription::value(op)));
-        break;
+            break;
     }
 }
 
 Column* ExprProgramGenerator::registerPropertyConstraint(const Expr* expr) {
-    Column* resCol =  generateExpr(expr);
+    Column* resCol = generateExpr(expr);
     return resCol;
 }
 
@@ -149,6 +150,10 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
 
         case Expr::Kind::LITERAL:
             return generateLiteralExpr(static_cast<const LiteralExpr*>(expr));
+        break;
+
+        case Expr::Kind::LIST_INDEXING:
+            return generateCollectionIndexingExpr(static_cast<const CollectionIndexingExpr*>(expr));
         break;
     }
 
@@ -210,8 +215,8 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
     break;
 
 Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr) {
-    Literal* literal = literalExpr->getLiteral();
-    
+    const Literal* literal = literalExpr->getLiteral();
+
     switch (literal->getKind()) {
         GEN_LITERAL_CASE(BOOL, Bool, BoolLiteral)
         GEN_LITERAL_CASE(INTEGER, Int64, IntegerLiteral)
@@ -224,11 +229,51 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
         }
         break;
 
+        case Literal::Kind::LIST: {
+            const ListLiteral* list = static_cast<const ListLiteral*>(literal);
+            ListColumnConst* listCol = _gen->memory().alloc<ListColumnConst>();
+
+            for (const auto& expr : list->getExprChain()->getExprs()) {
+                if (expr->getKind() == Expr::Kind::LITERAL) {
+                    const LiteralExpr* litExpr = static_cast<const LiteralExpr*>(expr);
+                    const Literal* lit = litExpr->getLiteral();
+
+                    switch (lit->getKind()) {
+                        case Literal::Kind::BOOL: {
+                            const auto* l = static_cast<const BoolLiteral*>(lit);
+                            listCol->getRaw().push_back(ValueVariant {l->getValue()});
+                        } break;
+                        case Literal::Kind::INTEGER: {
+                            const auto* l = static_cast<const IntegerLiteral*>(lit);
+                            listCol->getRaw().push_back(ValueVariant {l->getValue()});
+                        } break;
+                        case Literal::Kind::STRING: {
+                            const auto* l = static_cast<const StringLiteral*>(lit);
+                            listCol->getRaw().push_back(ValueVariant {l->getValue()});
+                        } break;
+                        case Literal::Kind::DOUBLE: {
+                            const auto* l = static_cast<const DoubleLiteral*>(lit);
+                            listCol->getRaw().push_back(ValueVariant {l->getValue()});
+                        } break;
+                        default:
+                            throw PlannerException(
+                                fmt::format("Literals of type '{}' in lists is not supported yet",
+                                            Literal::KindName::value(lit->getKind())));
+                    }
+                } else {
+                    Column* itemCol = generateExpr(expr);
+                    listCol->getRaw().push_back(ValueVariant {itemCol});
+                }
+            }
+
+            return listCol;
+        } break;
+
         default:
             throw PlannerException(
-                fmt::format("ExprProgramGenerator: unsupported literal of type {}",
-                (size_t)literal->getKind()));
-        break;
+                fmt::format("Unsupported literal of type '{}' for expression evaluation",
+                            Literal::KindName::value(literal->getKind())));
+            break;
     }
 }
 
@@ -284,6 +329,42 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
         return _gen->memory().alloc<ColumnOptVector<Type::Primitive>>();                 \
     break;
 
+Column* ExprProgramGenerator::generateCollectionIndexingExpr(const CollectionIndexingExpr* colExpr) {
+    const CollectionIndexingExpr::IndexExpr& indexExpr = colExpr->getIndexExpr();
+    const Expr* lhsExpr = colExpr->getLhsExpr();
+
+    if (lhsExpr->getType() != EvaluatedType::List) {
+        throw PlannerException("Collection indexing expression can only be used on lists");
+    }
+
+    Column* lhsCol = generateExpr(lhsExpr);
+    ListColumn* collection = dynamic_cast<ListColumn*>(lhsCol);
+    bioassert(collection, "Expression should have generated a list column");
+
+    Column* resCol = std::visit(Overloaded {
+                   [&](const CollectionIndexingExpr::ElementRange& range) -> Column* {
+                       throw PlannerException("Subscript operator using ranges is not supported yet.");
+                   },
+                   [&](const CollectionIndexingExpr::SingleElement& single) -> Column* {
+                       bioassert(single._index->getType() == EvaluatedType::Integer, "Index expression must be integer");
+                       Column* indexExpr = generateExpr(single._index);
+                       Column* resCol = allocResultColumn(colExpr);
+                       _exprProg->addInstr(ColumnOperator::OP_SUBSCRIPT, resCol, lhsCol, indexExpr);
+                       return resCol;
+                   },
+                   [&](std::monostate) -> Column* {
+                       throw PlannerException("Invalid index expression in CollectionIndexingExpr.");
+                   }},
+               indexExpr);
+
+    return resCol;
+}
+
+#define ALLOC_EVALTYPE_COL(EvalType, Type)                               \
+    case EvalType:                                                       \
+        return _gen->memory().alloc<ColumnOptVector<Type::Primitive>>(); \
+        break;
+
 Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
     const EvaluatedType exprType = expr->getType();
 
@@ -293,15 +374,21 @@ Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
         ALLOC_EVALTYPE_COL(EvaluatedType::String, types::String)
         ALLOC_EVALTYPE_COL(EvaluatedType::Bool, types::Bool)
 
+        case EvaluatedType::List:
+            return _gen->memory().alloc<ListColumnConst>(); // TODO make it a vector
+
+        case EvaluatedType::Variant:
+            return _gen->memory().alloc<ColumnVector<ValueVariant>>();
+
         case EvaluatedType::Invalid:
             throw PlannerException(
                 "ExprProgramGenerator: encountered expression of invalid type");
-        break;
+            break;
 
         default:
             throw PlannerException(fmt::format(
-                "Expression of type {} not supported",
-                (size_t)exprType));
-        break;
+                "Expression of type '{}' not supported",
+                EvaluatedTypeName::value(exprType)));
+            break;
     }
 }

@@ -17,6 +17,7 @@ class BinaryExpr;
 class PropertyExpr;
 class LiteralExpr;
 class SymbolExpr;
+class CollectionIndexingExpr;
 class PipelineGenerator;
 class PendingOutputView;
 
@@ -52,7 +53,7 @@ private:
     Column* generateBinaryExpr(const BinaryExpr* expr);
     Column* generatePropertyExpr(const PropertyExpr* propExpr);
     Column* generateLiteralExpr(const LiteralExpr* literalExpr);
-    Column* generateSymbolExpr(const SymbolExpr* symbolExpr);
+    Column* generateCollectionIndexingExpr(const CollectionIndexingExpr* expr);
 
     Column* allocResultColumn(const Expr* expr);
 
