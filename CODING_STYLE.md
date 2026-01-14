@@ -4,7 +4,7 @@
 
 We see software engineering as being the art and practice of creating software.
 It is a practice that has a long history, dating back from the 1940s in England,
-and the foundational work of Alan Turing who brought the message of computer science to the world.
+and the foundational work of Alan Turing.
 
 **Software as a creative act**
 
@@ -294,6 +294,13 @@ Generally speaking, the meaning of pointers if the following:
 * Good old pointer: non-owning pointer, unless otherwise specified
 * Unique pointer: owning pointer 
 
+Pay great attention to the ownership of your objects. In TuringDB we usually don't create and pass heap-allocated objects
+freely as argument from function to function. Think first of the ownership structure, what class and which area of the codebase
+should own the objects of your new class. Have a clear and unique owner of these objects. If it is hard or impossible
+to manage ownership using good old pointers and new, or std::unique_ptr, it means that the structure of ownership is wrong.
+Unique pointers should not be used to pass owned objects around from function to function using std::move, but just
+as a shorthand to replace new and delete.
+
 #### Smart pointers
 
 The only allowed type of smart pointer is std::unique_ptr.
@@ -343,6 +350,12 @@ private:
 };
 ```
 Always use the brackets {} initialisation style for class members.
+The brackets must be separated from the variable name by a space, such as:
+```cpp
+struct MyStruct {
+    MyData* myData {nullptr};
+};
+```
 
 Always use the assignment style of initialisation for local variables inside functions:
 ```cpp
