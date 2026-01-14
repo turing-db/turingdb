@@ -20,12 +20,12 @@ VectorResult<void> LSHShardRouterWriter::write(const LSHShardRouter& router) {
         return VectorError::result(VectorErrorCode::CouldNotClearShardRouterFile, res.error());
     }
 
-    _writer.write<uint8_t>(router._nbits);
-    _writer.write<uint64_t>(router._dim);
+    _writer.write(router._nbits);
+    _writer.write(router._dim);
 
     for (const auto& hyperplane : router._hyperplanes) {
         for (const float value : hyperplane) {
-            _writer.write<float>(value);
+            _writer.write(value);
         }
     }
 
