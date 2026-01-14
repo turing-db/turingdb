@@ -99,7 +99,7 @@ See our [detailed benchmarks](https://docs.turingdb.ai/query/benchmarks) for mor
 ### Requirements
 TuringDB requires:
 - **Linux Ubuntu Jammy** 22.04 LTS or later
-- **GCC ** version >=11
+- **GCC** version >=11
 - **CMake** 3.10 or higher
 - **Git** for submodule management
 
