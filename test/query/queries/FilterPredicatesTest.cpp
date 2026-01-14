@@ -69,8 +69,6 @@ protected:
 // =============================================================================
 
 TEST_F(FilterPredicatesTest, stringEquality_exactMatch) {
-    constexpr std::string_view MATCH_QUERY = R"(MATCH (n) WHERE n.name = "Remy" RETURN n)";
-
     using Rows = LineContainer<NodeID>;
 
     Rows expected;
@@ -86,8 +84,8 @@ TEST_F(FilterPredicatesTest, stringEquality_exactMatch) {
     ASSERT_NE(0, expected.size());
 
     Rows actual;
-    {
-        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
+    auto getQueryResults = [&actual, this](std::string_view q) {
+        auto res = query(q, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             auto* ns = df->cols().front()->as<ColumnNodeIDs>();
             ASSERT_TRUE(ns);
@@ -96,8 +94,22 @@ TEST_F(FilterPredicatesTest, stringEquality_exactMatch) {
             }
         });
         ASSERT_TRUE(res);
+    };
+
+    // Test commutativity of predicates
+    {
+        constexpr std::string_view MATCH_QUERY = R"(MATCH (n) WHERE n.name = "Remy" RETURN n)";
+        getQueryResults(MATCH_QUERY);
+        EXPECT_TRUE(expected.equals(actual));
+        actual.clear();
     }
-    EXPECT_TRUE(expected.equals(actual));
+
+    {
+        constexpr std::string_view REVERSE_MATCH_QUERY = R"(MATCH (n) WHERE "Remy" = n.name RETURN n)";
+        getQueryResults(REVERSE_MATCH_QUERY);
+        EXPECT_TRUE(expected.equals(actual));
+        actual.clear();
+    }
 }
 
 TEST_F(FilterPredicatesTest, stringEquality_noMatch) {
@@ -1961,8 +1973,6 @@ TEST_F(FilterPredicatesTest, stringNotEqualOnEdge) {
 // =============================================================================
 
 TEST_F(FilterPredicatesTest, mixedIntAndString) {
-    constexpr std::string_view MATCH_QUERY = R"(MATCH (n) WHERE n.age = 32 AND n.dob = "18/01" RETURN n, n.name)";
-
     using String = types::String::Primitive;
     using Rows = LineContainer<NodeID, String>;
 
@@ -1984,8 +1994,8 @@ TEST_F(FilterPredicatesTest, mixedIntAndString) {
     ASSERT_NE(0, expected.size());
 
     Rows actual;
-    {
-        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
+    auto getQueryResults = [&actual, this](std::string_view q) {
+        auto res = query(q, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
             auto* names = findColumn(df, "n.name")->as<ColumnOptVector<String>>();
@@ -1995,8 +2005,40 @@ TEST_F(FilterPredicatesTest, mixedIntAndString) {
             }
         });
         ASSERT_TRUE(res);
+    };
+
+    // Test commutativity of predicates
+    {
+        constexpr std::string_view MATCH_QUERY =
+            R"(MATCH (n) WHERE n.age = 32 AND n.dob = "18/01" RETURN n, n.name)";
+        getQueryResults(MATCH_QUERY);
+        EXPECT_TRUE(expected.equals(actual));
+        actual.clear();
     }
-    EXPECT_TRUE(expected.equals(actual));
+
+    {
+        constexpr std::string_view REV_1_MATCH_QUERY =
+            R"(MATCH (n) WHERE 32 = n.age AND n.dob = "18/01" RETURN n, n.name)";
+        getQueryResults(REV_1_MATCH_QUERY);
+        EXPECT_TRUE(expected.equals(actual));
+        actual.clear();
+    }
+
+    {
+        constexpr std::string_view REV_2_MATCH_QUERY =
+            R"(MATCH (n) WHERE n.age = 32 AND "18/01" = n.dob RETURN n, n.name)";
+        getQueryResults(REV_2_MATCH_QUERY);
+        EXPECT_TRUE(expected.equals(actual));
+        actual.clear();
+    }
+
+    {
+        constexpr std::string_view REV_3_MATCH_QUERY =
+            R"(MATCH (n) WHERE 32 = n.age AND "18/01" = n.dob RETURN n, n.name)";
+        getQueryResults(REV_3_MATCH_QUERY);
+        EXPECT_TRUE(expected.equals(actual));
+        actual.clear();
+    }
 }
 
 TEST_F(FilterPredicatesTest, mixedBoolAndInt) {
@@ -2186,8 +2228,6 @@ TEST_F(FilterPredicatesTest, zeroValueComparison) {
 }
 
 TEST_F(FilterPredicatesTest, largeValueFilter) {
-    constexpr std::string_view MATCH_QUERY = "MATCH (n)-[e]->(m) WHERE e.duration >= 100 RETURN e, e.duration";
-
     using Int = types::Int64::Primitive;
     using Rows = LineContainer<EdgeID, Int>;
 
@@ -2204,8 +2244,8 @@ TEST_F(FilterPredicatesTest, largeValueFilter) {
     }
 
     Rows actual;
-    {
-        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
+    auto getQueryResults = [&actual, this](std::string_view q) {
+        auto res = query(q, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
             auto* durs = findColumn(df, "e.duration")->as<ColumnOptVector<Int>>();
@@ -2215,8 +2255,24 @@ TEST_F(FilterPredicatesTest, largeValueFilter) {
             }
         });
         ASSERT_TRUE(res);
+    };
+
+    // Test commutativity of predicates
+    {
+        constexpr std::string_view MATCH_QUERY =
+            "MATCH (n)-[e]->(m) WHERE e.duration >= 100 RETURN e, e.duration";
+        getQueryResults(MATCH_QUERY);
+        EXPECT_TRUE(expected.equals(actual));
+        actual.clear();
     }
-    EXPECT_TRUE(expected.equals(actual));
+
+    {
+        constexpr std::string_view REVERSE_MATCH_QUERY =
+            "MATCH (n)-[e]->(m) WHERE 100 <= e.duration RETURN e, e.duration";
+        getQueryResults(REVERSE_MATCH_QUERY);
+        EXPECT_TRUE(expected.equals(actual));
+        actual.clear();
+    }
 }
 
 int main(int argc, char** argv) {
