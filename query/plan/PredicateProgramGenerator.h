@@ -12,6 +12,7 @@ public:
         : ExprProgramGenerator(gen, exprProg, pendingOut)
     {
     }
+
     ~PredicateProgramGenerator() final = default;
     
     void generatePredicate(const Predicate* pred);

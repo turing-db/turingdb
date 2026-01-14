@@ -11,7 +11,7 @@
 using namespace db;
 
 void PredicateProgramGenerator::generatePredicate(const Predicate* pred) {
-    auto* predProg = dynamic_cast<PredicateProgram*>(_exprProg);
+    PredicateProgram* predProg = dynamic_cast<PredicateProgram*>(_exprProg);
     if (!predProg) {
         throw PlannerException(
             "Attempted to add label constraint to non-predicate program.");
@@ -41,8 +41,8 @@ void PredicateProgramGenerator::generatePredicate(const Predicate* pred) {
 }
 
 void PredicateProgramGenerator::addLabelConstraint(Column* lblsetCol,
-                                              const LabelSet& lblConstraint) {
-    auto* predProg = dynamic_cast<PredicateProgram*>(_exprProg);
+                                                   const LabelSet& lblConstraint) {
+    PredicateProgram* predProg = dynamic_cast<PredicateProgram*>(_exprProg);
     if (!predProg) {
         throw PlannerException(
             "Attempted to add label constraint to non-predicate program.");
@@ -58,7 +58,8 @@ void PredicateProgramGenerator::addLabelConstraint(Column* lblsetCol,
     // Fold over all label constraints with OR
     Column* finalLabelMask {nullptr};
     for (const LabelSetID lsID : matchingLblSets) {
-        auto* constCol = _gen->memory().alloc<ColumnConst<LabelSetID>>();
+        ColumnConst<LabelSetID>* constCol =
+            _gen->memory().alloc<ColumnConst<LabelSetID>>();
         constCol->set(lsID);
 
         auto* resCol = _gen->memory().alloc<ColumnOptMask>();
@@ -80,16 +81,16 @@ void PredicateProgramGenerator::addLabelConstraint(Column* lblsetCol,
 
 void PredicateProgramGenerator::addEdgeTypeConstraint(Column* edgeTypeCol,
                                                       const EdgeTypeID& typeConstr) {
-    auto* predProg = dynamic_cast<PredicateProgram*>(_exprProg);
+    PredicateProgram* predProg = dynamic_cast<PredicateProgram*>(_exprProg);
     if (!predProg) {
         throw PlannerException(
             "Attempted to add label constraint to non-predicate program.");
     }
     // Add the instruction to calculate equality
-    auto* constCol = _gen->memory().alloc<ColumnConst<EdgeTypeID>>();
+    ColumnConst<EdgeTypeID>* constCol = _gen->memory().alloc<ColumnConst<EdgeTypeID>>();
     constCol->set(typeConstr);
 
-    auto* finalEdgeTypeMask = _gen->memory().alloc<ColumnOptMask>();
+    ColumnOptMask* finalEdgeTypeMask = _gen->memory().alloc<ColumnOptMask>();
     predProg->addInstr(ColumnOperator::OP_EQUAL,
                         finalEdgeTypeMask,
                         edgeTypeCol,
