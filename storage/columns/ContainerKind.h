@@ -19,8 +19,6 @@ class ColumnSet;
 
 class ColumnMask;
 
-class ListColumnConst;
-
 // Implementation
 
 #define INSTANTIATE_CONTAINER_TYPE_CODE(Type)   \
@@ -65,7 +63,6 @@ private:
     INSTANTIATE_CONTAINER_TYPE_CODE_T(ColumnConst);
     INSTANTIATE_CONTAINER_TYPE_CODE_T(ColumnSet);
     INSTANTIATE_CONTAINER_TYPE_CODE(ColumnMask);
-    INSTANTIATE_CONTAINER_TYPE_CODE(ListColumnConst);
 
 public:
     /// @brief The number of container types

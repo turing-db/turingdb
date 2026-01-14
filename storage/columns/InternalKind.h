@@ -29,7 +29,6 @@ class NodeView;
 class CommitBuilder;
 class Change;
 class Column;
-class ValueVariant;
 
 // Implementation
 
@@ -106,7 +105,6 @@ private:
     INSTANTIATE_INTERNAL_TYPE_CODE(const CommitBuilder*);
     INSTANTIATE_INTERNAL_TYPE_CODE(const Change*);
     INSTANTIATE_INTERNAL_TYPE_CODE(Column*);
-    INSTANTIATE_INTERNAL_TYPE_CODE(ValueVariant);
 
 public:
     /// @brief Number of internal type codes
