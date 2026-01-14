@@ -93,8 +93,15 @@ public:
 
     template <typename T>
     inline static consteval ColumnKindCode getInternalTypeKind() {
+        // size_t and types::UInt64::Primitive may be the same type on some platforms
+        // (both are unsigned long on Linux x86_64). When they are the same, map size_t
+        // to UInt64Primitive to avoid duplicate ColumnKind values.
         if constexpr (std::is_same_v<T, size_t>) {
-            return (ColumnKindCode)InternalTypeKind::SizeT;
+            if constexpr (std::is_same_v<size_t, types::UInt64::Primitive>) {
+                return (ColumnKindCode)InternalTypeKind::UInt64Primitive;
+            } else {
+                return (ColumnKindCode)InternalTypeKind::SizeT;
+            }
         } else if constexpr (std::is_same_v<T, EntityID>) {
             return (ColumnKindCode)InternalTypeKind::EntityID;
         } else if constexpr (std::is_same_v<T, NodeID>) {
@@ -148,7 +155,11 @@ public:
         } else if constexpr (std::is_same_v<T, std::optional<PropertyTypeID>>) {
             return (ColumnKindCode)InternalTypeKind::OptPropertyTypeID;
         } else if constexpr (std::is_same_v<T, std::optional<size_t>>) {
-            return (ColumnKindCode)InternalTypeKind::OptSizeT;
+            if constexpr (std::is_same_v<size_t, types::UInt64::Primitive>) {
+                return (ColumnKindCode)InternalTypeKind::OptUInt64Primitive;
+            } else {
+                return (ColumnKindCode)InternalTypeKind::OptSizeT;
+            }
         } else if constexpr (std::is_same_v<T, std::optional<ValueType>>) {
             return (ColumnKindCode)InternalTypeKind::OptValueType;
         } else if constexpr (std::is_same_v<T, std::optional<std::string>>) {

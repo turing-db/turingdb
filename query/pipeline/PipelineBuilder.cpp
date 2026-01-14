@@ -328,7 +328,7 @@ PipelineValueOutputInterface& PipelineBuilder::addCount(ColumnTag colTag) {
     CountProcessor* count = CountProcessor::create(_pipeline, colTag);
     _pendingOutput.connectTo(count->input());
 
-    NamedColumn* countColumn = allocColumn<ColumnConst<size_t>>(count->output().getDataframe());
+    NamedColumn* countColumn = allocColumn<ColumnConst<types::UInt64::Primitive>>(count->output().getDataframe());
     count->output().setValue(countColumn);
 
     _pendingOutput.updateInterface(&count->output());
