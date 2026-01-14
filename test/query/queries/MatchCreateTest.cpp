@@ -2,6 +2,7 @@
 #include <optional>
 #include <cstdint>
 
+#include "EdgeRecord.h"
 #include "TuringDB.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
@@ -13,6 +14,7 @@
 #include "reader/GraphReader.h"
 #include "dataframe/Dataframe.h"
 
+#include "LineContainer.h"
 #include "TuringTestEnv.h"
 #include "TuringTest.h"
 
@@ -61,6 +63,35 @@ protected:
         _graph = _env->getSystemManager().getGraph(std::string {name});
         ASSERT_TRUE(_graph);
     }
+
+    LabelID getLabelID(std::string_view labelName) {
+        auto labelOpt = read().getMetadata().labels().get(labelName);
+        EXPECT_TRUE(labelOpt.has_value()) << "Label not found: " << labelName;
+        return labelOpt.value_or(LabelID{0});
+    }
+
+    EdgeTypeID getEdgeTypeID(std::string_view edgeTypeName) {
+        auto edgeTypeOpt = read().getMetadata().edgeTypes().get(edgeTypeName);
+        EXPECT_TRUE(edgeTypeOpt.has_value()) << "EdgeType not found: " << edgeTypeName;
+        return edgeTypeOpt.value_or(EdgeTypeID{0});
+    }
+
+    bool nodeHasLabel(NodeID nodeID, LabelID labelID) {
+        return read().getNodeLabelSet(nodeID).hasLabel(labelID);
+    }
+
+    EdgeTypeID getEdgeType(EdgeID edgeID) {
+        return read().getEdgeTypeID(edgeID);
+    }
+
+    static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {
+        for (auto* col : df->cols()) {
+            if (col->getName() == name) {
+                return col;
+            }
+        }
+        return nullptr;
+    }
 };
 
 // =============================================================================
@@ -73,29 +104,59 @@ TEST_F(MatchCreateTest, matchCreateBasicNode) {
 
     const size_t nodesBefore = read().getTotalNodesAllocated();
 
-    // Count Person nodes first
-    size_t personCount = 0;
+    // Collect Person node IDs first
+    std::vector<NodeID> personNodes;
     {
         auto res = query(R"(MATCH (n:Person) RETURN n)", [&](const Dataframe* df) {
-            personCount = df->getRowCount();
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            ASSERT_TRUE(ns);
+            for (size_t i = 0; i < df->getRowCount(); ++i) {
+                personNodes.push_back(ns->at(i));
+            }
         });
         ASSERT_TRUE(res);
     }
-    ASSERT_GT(personCount, 0);
+    ASSERT_GT(personNodes.size(), 0);
 
     newChange();
-    size_t createdCount = 0;
+    // Collect (matchedPerson, createdFriend) pairs
+    using Rows = LineContainer<NodeID, NodeID>;
+    Rows actualRows;
+    std::vector<NodeID> matchedPersons;
+    std::vector<NodeID> createdNodeIDs;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 2);
-        createdCount = df->getRowCount();
+        auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+        auto* ms = df->cols().at(1)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(ns);
+        ASSERT_TRUE(ms);
+        for (size_t i = 0; i < df->getRowCount(); ++i) {
+            actualRows.add({ns->at(i), ms->at(i)});
+            matchedPersons.push_back(ns->at(i));
+            createdNodeIDs.push_back(ms->at(i));
+        }
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
 
-    // Should have created one Friend per Person
-    ASSERT_EQ(createdCount, personCount);
-    ASSERT_EQ(read().getTotalNodesAllocated(), nodesBefore + personCount);
+    // Verify we got the expected number of results
+    ASSERT_EQ(createdNodeIDs.size(), personNodes.size());
+    ASSERT_EQ(read().getTotalNodesAllocated(), nodesBefore + personNodes.size());
+
+    // Verify all matched nodes were Person nodes
+    const LabelID personLabelID = getLabelID("Person");
+    for (const NodeID nodeID : matchedPersons) {
+        EXPECT_TRUE(nodeHasLabel(nodeID, personLabelID))
+            << "Matched node " << nodeID.getValue() << " should have Person label";
+    }
+
+    // Verify all created nodes have the Friend label
+    const LabelID friendLabelID = getLabelID("Friend");
+    for (const NodeID nodeID : createdNodeIDs) {
+        EXPECT_TRUE(nodeHasLabel(nodeID, friendLabelID))
+            << "Created node " << nodeID.getValue() << " should have Friend label";
+    }
 }
 
 TEST_F(MatchCreateTest, matchCreateWithProperty) {
@@ -105,17 +166,31 @@ TEST_F(MatchCreateTest, matchCreateWithProperty) {
     const size_t nodesBefore = read().getTotalNodesAllocated();
 
     newChange();
-    size_t matchCount = 0;
+    NodeID matchedNodeID{0};
+    NodeID createdNodeID{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        matchCount = df->getRowCount();
+        ASSERT_EQ(df->getRowCount(), 1);
+        auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+        auto* ms = df->cols().at(1)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(ns);
+        ASSERT_TRUE(ms);
+        matchedNodeID = ns->at(0);
+        createdNodeID = ms->at(0);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
 
     // Should match exactly one node named "Remy" and create one copy
-    ASSERT_EQ(matchCount, 1);
     ASSERT_EQ(read().getTotalNodesAllocated(), nodesBefore + 1);
+
+    // Verify created node has the MatchedCopy label
+    const LabelID matchedCopyLabelID = getLabelID("MatchedCopy");
+    EXPECT_TRUE(nodeHasLabel(createdNodeID, matchedCopyLabelID))
+        << "Created node should have MatchedCopy label";
+
+    // Verify matched and created are different nodes
+    EXPECT_NE(matchedNodeID, createdNodeID);
 }
 
 TEST_F(MatchCreateTest, matchCreateMultipleNodes) {
@@ -125,16 +200,37 @@ TEST_F(MatchCreateTest, matchCreateMultipleNodes) {
     const size_t nodesBefore = read().getTotalNodesAllocated();
 
     newChange();
+    NodeID nodeA{0}, nodeB{0}, nodeC{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 4);  // n, a, b, c
         ASSERT_EQ(df->getRowCount(), 1);  // One match
+        auto* as = df->cols().at(1)->as<ColumnNodeIDs>();
+        auto* bs = df->cols().at(2)->as<ColumnNodeIDs>();
+        auto* cs = df->cols().at(3)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(as && bs && cs);
+        nodeA = as->at(0);
+        nodeB = bs->at(0);
+        nodeC = cs->at(0);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
 
     // Should have created 3 new nodes
     ASSERT_EQ(read().getTotalNodesAllocated(), nodesBefore + 3);
+
+    // Verify each node has the correct label
+    EXPECT_TRUE(nodeHasLabel(nodeA, getLabelID("TypeA")))
+        << "Node A should have TypeA label";
+    EXPECT_TRUE(nodeHasLabel(nodeB, getLabelID("TypeB")))
+        << "Node B should have TypeB label";
+    EXPECT_TRUE(nodeHasLabel(nodeC, getLabelID("TypeC")))
+        << "Node C should have TypeC label";
+
+    // Verify all created nodes are distinct
+    EXPECT_NE(nodeA, nodeB);
+    EXPECT_NE(nodeB, nodeC);
+    EXPECT_NE(nodeA, nodeC);
 }
 
 TEST_F(MatchCreateTest, matchCreateChain) {
@@ -145,10 +241,19 @@ TEST_F(MatchCreateTest, matchCreateChain) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
+    NodeID nodeA{0}, nodeB{0};
+    EdgeID edgeE{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 4);  // n, a, e, b
         ASSERT_EQ(df->getRowCount(), 1);
+        auto* as = df->cols().at(1)->as<ColumnNodeIDs>();
+        auto* es = df->cols().at(2)->as<ColumnEdgeIDs>();
+        auto* bs = df->cols().at(3)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(as && es && bs);
+        nodeA = as->at(0);
+        edgeE = es->at(0);
+        nodeB = bs->at(0);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -156,6 +261,41 @@ TEST_F(MatchCreateTest, matchCreateChain) {
     // 2 new nodes, 1 new edge
     ASSERT_EQ(read().getTotalNodesAllocated(), nodesBefore + 2);
     ASSERT_EQ(read().getTotalEdgesAllocated(), edgesBefore + 1);
+
+    // Verify node labels, edge type, and connectivity using a single transaction
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+
+        // Verify node labels
+        const auto startLabelOpt = reader.getMetadata().labels().get("Start");
+        const auto endLabelOpt = reader.getMetadata().labels().get("End");
+        ASSERT_TRUE(startLabelOpt.has_value()) << "Start label should exist";
+        ASSERT_TRUE(endLabelOpt.has_value()) << "End label should exist";
+        EXPECT_TRUE(reader.getNodeLabelSet(nodeA).hasLabel(*startLabelOpt))
+            << "Node A should have Start label";
+        EXPECT_TRUE(reader.getNodeLabelSet(nodeB).hasLabel(*endLabelOpt))
+            << "Node B should have End label";
+
+        // Verify edge type
+        const auto connectsTypeOpt = reader.getMetadata().edgeTypes().get("CONNECTS");
+        ASSERT_TRUE(connectsTypeOpt.has_value()) << "CONNECTS edge type should exist";
+        EXPECT_EQ(reader.getEdgeTypeID(edgeE), *connectsTypeOpt)
+            << "Edge should have CONNECTS type";
+
+        // Verify edge connects A to B
+        const auto edgeView = reader.getNodeView(nodeA).edges();
+        bool foundEdge = false;
+        for (auto edge : edgeView.outEdges()) {
+            if (edge._edgeID == edgeE) {
+                EXPECT_EQ(edge._nodeID, nodeA) << "Edge source should be A";
+                EXPECT_EQ(edge._otherID, nodeB) << "Edge target should be B";
+                foundEdge = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(foundEdge) << "Created edge should be found in node A's outgoing edges";
+    }
 }
 
 TEST_F(MatchCreateTest, matchCreateSelfLoop) {
@@ -175,10 +315,16 @@ TEST_F(MatchCreateTest, matchCreateSelfLoop) {
     }
 
     newChange();
-    size_t createdCount = 0;
+    // Collect (node, edge) pairs
+    std::vector<std::pair<NodeID, EdgeID>> selfLoops;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        createdCount = df->getRowCount();
+        auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+        auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
+        ASSERT_TRUE(ns && es);
+        for (size_t i = 0; i < df->getRowCount(); ++i) {
+            selfLoops.emplace_back(ns->at(i), es->at(i));
+        }
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -186,7 +332,42 @@ TEST_F(MatchCreateTest, matchCreateSelfLoop) {
     // No new nodes, one self-loop edge per Interest
     ASSERT_EQ(read().getTotalNodesAllocated(), nodesBefore);
     ASSERT_EQ(read().getTotalEdgesAllocated(), edgesBefore + interestCount);
-    ASSERT_EQ(createdCount, interestCount);
+    ASSERT_EQ(selfLoops.size(), interestCount);
+
+    // Verify each edge is a self-loop with correct type using a single transaction
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+
+        const auto selfRefTypeOpt = reader.getMetadata().edgeTypes().get("SELF_REF");
+        const auto interestLabelOpt = reader.getMetadata().labels().get("Interest");
+        ASSERT_TRUE(selfRefTypeOpt.has_value()) << "SELF_REF edge type should exist";
+        ASSERT_TRUE(interestLabelOpt.has_value()) << "Interest label should exist";
+
+        for (const auto& [nodeID, edgeID] : selfLoops) {
+            // Verify node has Interest label
+            EXPECT_TRUE(reader.getNodeLabelSet(nodeID).hasLabel(*interestLabelOpt))
+                << "Node " << nodeID.getValue() << " should have Interest label";
+
+            // Verify edge type
+            EXPECT_EQ(reader.getEdgeTypeID(edgeID), *selfRefTypeOpt)
+                << "Edge should have SELF_REF type";
+
+            // Verify it's a self-loop (source == target)
+            const auto nodeView = reader.getNodeView(nodeID);
+            const auto edgeView = nodeView.edges();
+            bool foundSelfLoop = false;
+            for (auto edge : edgeView.outEdges()) {
+                if (edge._edgeID == edgeID) {
+                    EXPECT_EQ(edge._nodeID, nodeID) << "Self-loop source should be the node";
+                    EXPECT_EQ(edge._otherID, nodeID) << "Self-loop target should be the same node";
+                    foundSelfLoop = true;
+                    break;
+                }
+            }
+            EXPECT_TRUE(foundSelfLoop) << "Self-loop edge should be found in node's outgoing edges";
+        }
+    }
 }
 
 // =============================================================================
@@ -200,16 +381,50 @@ TEST_F(MatchCreateTest, matchCreateEdgeFromMatched) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
+    NodeID nodeN{0}, nodeM{0};
+    EdgeID edgeE{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 3);
         ASSERT_EQ(df->getRowCount(), 1);
+        auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+        auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
+        auto* ms = df->cols().at(2)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(ns && es && ms);
+        nodeN = ns->at(0);
+        edgeE = es->at(0);
+        nodeM = ms->at(0);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
 
     // One new edge
     ASSERT_EQ(read().getTotalEdgesAllocated(), edgesBefore + 1);
+
+    // Verify edge type
+    EXPECT_EQ(getEdgeType(edgeE), getEdgeTypeID("FRIENDSHIP"))
+        << "Edge should have FRIENDSHIP type";
+
+    // Verify edge connects N to M
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        const auto nodeView = reader.getNodeView(nodeN);
+        const auto edgeView = nodeView.edges();
+        bool foundEdge = false;
+        for (auto edge : edgeView.outEdges()) {
+            if (edge._edgeID == edgeE) {
+                EXPECT_EQ(edge._nodeID, nodeN) << "Edge source should be N (Remy)";
+                EXPECT_EQ(edge._otherID, nodeM) << "Edge target should be M (Adam)";
+                foundEdge = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(foundEdge) << "Created edge should be found in node N's outgoing edges";
+    }
+
+    // Verify N and M are different nodes
+    EXPECT_NE(nodeN, nodeM);
 }
 
 TEST_F(MatchCreateTest, matchCreateEdgeToNew) {
@@ -220,16 +435,51 @@ TEST_F(MatchCreateTest, matchCreateEdgeToNew) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
+    NodeID nodeN{0}, childNode{0};
+    EdgeID edgeE{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 3);
         ASSERT_EQ(df->getRowCount(), 1);
+        auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+        auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
+        auto* children = df->cols().at(2)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(ns && es && children);
+        nodeN = ns->at(0);
+        edgeE = es->at(0);
+        childNode = children->at(0);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
 
     ASSERT_EQ(read().getTotalNodesAllocated(), nodesBefore + 1);
     ASSERT_EQ(read().getTotalEdgesAllocated(), edgesBefore + 1);
+
+    // Verify child node has Child label
+    EXPECT_TRUE(nodeHasLabel(childNode, getLabelID("Child")))
+        << "Created child node should have Child label";
+
+    // Verify edge type
+    EXPECT_EQ(getEdgeType(edgeE), getEdgeTypeID("HAS_CHILD"))
+        << "Edge should have HAS_CHILD type";
+
+    // Verify edge connects N to child
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        const auto nodeView = reader.getNodeView(nodeN);
+        const auto edgeView = nodeView.edges();
+        bool foundEdge = false;
+        for (auto edge : edgeView.outEdges()) {
+            if (edge._edgeID == edgeE) {
+                EXPECT_EQ(edge._nodeID, nodeN) << "Edge source should be N (Remy)";
+                EXPECT_EQ(edge._otherID, childNode) << "Edge target should be the child node";
+                foundEdge = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(foundEdge) << "Created edge should be found in node N's outgoing edges";
+    }
 }
 
 TEST_F(MatchCreateTest, matchCreateEdgeFromNew) {
@@ -240,16 +490,51 @@ TEST_F(MatchCreateTest, matchCreateEdgeFromNew) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
+    NodeID parentNode{0}, nodeN{0};
+    EdgeID edgeE{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 3);
         ASSERT_EQ(df->getRowCount(), 1);
+        auto* parents = df->cols().at(0)->as<ColumnNodeIDs>();
+        auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
+        auto* ns = df->cols().at(2)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(parents && es && ns);
+        parentNode = parents->at(0);
+        edgeE = es->at(0);
+        nodeN = ns->at(0);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
 
     ASSERT_EQ(read().getTotalNodesAllocated(), nodesBefore + 1);
     ASSERT_EQ(read().getTotalEdgesAllocated(), edgesBefore + 1);
+
+    // Verify parent node has Parent label
+    EXPECT_TRUE(nodeHasLabel(parentNode, getLabelID("Parent")))
+        << "Created parent node should have Parent label";
+
+    // Verify edge type
+    EXPECT_EQ(getEdgeType(edgeE), getEdgeTypeID("PARENT_OF"))
+        << "Edge should have PARENT_OF type";
+
+    // Verify edge connects parent to N
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        const auto nodeView = reader.getNodeView(parentNode);
+        const auto edgeView = nodeView.edges();
+        bool foundEdge = false;
+        for (auto edge : edgeView.outEdges()) {
+            if (edge._edgeID == edgeE) {
+                EXPECT_EQ(edge._nodeID, parentNode) << "Edge source should be the parent node";
+                EXPECT_EQ(edge._otherID, nodeN) << "Edge target should be N (Remy)";
+                foundEdge = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(foundEdge) << "Created edge should be found in parent node's outgoing edges";
+    }
 }
 
 TEST_F(MatchCreateTest, matchCreateBidirectional) {
@@ -259,16 +544,73 @@ TEST_F(MatchCreateTest, matchCreateBidirectional) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
+    NodeID nodeN{0}, nodeM{0};
+    EdgeID edge1{0}, edge2{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 4);
         ASSERT_EQ(df->getRowCount(), 1);
+        auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+        auto* ms = df->cols().at(1)->as<ColumnNodeIDs>();
+        auto* e1s = df->cols().at(2)->as<ColumnEdgeIDs>();
+        auto* e2s = df->cols().at(3)->as<ColumnEdgeIDs>();
+        ASSERT_TRUE(ns && ms && e1s && e2s);
+        nodeN = ns->at(0);
+        nodeM = ms->at(0);
+        edge1 = e1s->at(0);
+        edge2 = e2s->at(0);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
 
     // Two new edges
     ASSERT_EQ(read().getTotalEdgesAllocated(), edgesBefore + 2);
+
+    // Verify both edges have LIKES type
+    const EdgeTypeID likesTypeID = getEdgeTypeID("LIKES");
+    EXPECT_EQ(getEdgeType(edge1), likesTypeID) << "Edge e1 should have LIKES type";
+    EXPECT_EQ(getEdgeType(edge2), likesTypeID) << "Edge e2 should have LIKES type";
+
+    // Verify e1 connects N -> M and e2 connects M -> N
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+
+        // Check edge e1: N -> M
+        {
+            const auto nodeViewN = reader.getNodeView(nodeN);
+            const auto edgeViewN = nodeViewN.edges();
+            bool foundEdge1 = false;
+            for (auto edge : edgeViewN.outEdges()) {
+                if (edge._edgeID == edge1) {
+                    EXPECT_EQ(edge._nodeID, nodeN) << "Edge e1 source should be N";
+                    EXPECT_EQ(edge._otherID, nodeM) << "Edge e1 target should be M";
+                    foundEdge1 = true;
+                    break;
+                }
+            }
+            EXPECT_TRUE(foundEdge1) << "Edge e1 should be found in node N's outgoing edges";
+        }
+
+        // Check edge e2: M -> N
+        {
+            const auto nodeViewM = reader.getNodeView(nodeM);
+            const auto edgeViewM = nodeViewM.edges();
+            bool foundEdge2 = false;
+            for (auto edge : edgeViewM.outEdges()) {
+                if (edge._edgeID == edge2) {
+                    EXPECT_EQ(edge._nodeID, nodeM) << "Edge e2 source should be M";
+                    EXPECT_EQ(edge._otherID, nodeN) << "Edge e2 target should be N";
+                    foundEdge2 = true;
+                    break;
+                }
+            }
+            EXPECT_TRUE(foundEdge2) << "Edge e2 should be found in node M's outgoing edges";
+        }
+    }
+
+    // Verify the edges are distinct
+    EXPECT_NE(edge1, edge2);
 }
 
 // =============================================================================
@@ -706,16 +1048,33 @@ TEST_F(MatchCreateTest, matchCreateBackwardEdge) {
 
 TEST_F(MatchCreateTest, matchCreateLongChain) {
     // CREATE a longer chain from matched node
-    constexpr std::string_view QUERY = R"(MATCH (n{name:"Remy"}) CREATE (a:A)-[e1:R]->(b:B)-[e2:R]->(c:C)-[e3:R]->(d:D) RETURN n, a, b, c, d)";
+    constexpr std::string_view QUERY = R"(MATCH (n{name:"Remy"}) CREATE (a:A)-[e1:R]->(b:B)-[e2:R]->(c:C)-[e3:R]->(d:D) RETURN n, a, e1, b, e2, c, e3, d)";
 
     const size_t nodesBefore = read().getTotalNodesAllocated();
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
+    NodeID nodeA{0}, nodeB{0}, nodeC{0}, nodeD{0};
+    EdgeID edgeE1{0}, edgeE2{0}, edgeE3{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        ASSERT_EQ(df->size(), 5);  // n, a, b, c, d
+        ASSERT_EQ(df->size(), 8);  // n, a, e1, b, e2, c, e3, d
         ASSERT_EQ(df->getRowCount(), 1);
+        auto* as = df->cols().at(1)->as<ColumnNodeIDs>();
+        auto* e1s = df->cols().at(2)->as<ColumnEdgeIDs>();
+        auto* bs = df->cols().at(3)->as<ColumnNodeIDs>();
+        auto* e2s = df->cols().at(4)->as<ColumnEdgeIDs>();
+        auto* cs = df->cols().at(5)->as<ColumnNodeIDs>();
+        auto* e3s = df->cols().at(6)->as<ColumnEdgeIDs>();
+        auto* ds = df->cols().at(7)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(as && e1s && bs && e2s && cs && e3s && ds);
+        nodeA = as->at(0);
+        edgeE1 = e1s->at(0);
+        nodeB = bs->at(0);
+        edgeE2 = e2s->at(0);
+        nodeC = cs->at(0);
+        edgeE3 = e3s->at(0);
+        nodeD = ds->at(0);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -723,19 +1082,71 @@ TEST_F(MatchCreateTest, matchCreateLongChain) {
     // 4 new nodes, 3 new edges
     ASSERT_EQ(read().getTotalNodesAllocated(), nodesBefore + 4);
     ASSERT_EQ(read().getTotalEdgesAllocated(), edgesBefore + 3);
+
+    // Verify node labels
+    EXPECT_TRUE(nodeHasLabel(nodeA, getLabelID("A"))) << "Node A should have A label";
+    EXPECT_TRUE(nodeHasLabel(nodeB, getLabelID("B"))) << "Node B should have B label";
+    EXPECT_TRUE(nodeHasLabel(nodeC, getLabelID("C"))) << "Node C should have C label";
+    EXPECT_TRUE(nodeHasLabel(nodeD, getLabelID("D"))) << "Node D should have D label";
+
+    // Verify all edges have R type
+    const EdgeTypeID rTypeID = getEdgeTypeID("R");
+    EXPECT_EQ(getEdgeType(edgeE1), rTypeID) << "Edge e1 should have R type";
+    EXPECT_EQ(getEdgeType(edgeE2), rTypeID) << "Edge e2 should have R type";
+    EXPECT_EQ(getEdgeType(edgeE3), rTypeID) << "Edge e3 should have R type";
+
+    // Verify chain connectivity: A->B->C->D
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        auto verifyEdge = [&](EdgeID edgeID, NodeID src, NodeID dst) {
+            const auto nodeView = reader.getNodeView(src);
+            const auto edgeView = nodeView.edges();
+            bool found = false;
+            for (auto edge : edgeView.outEdges()) {
+                if (edge._edgeID == edgeID) {
+                    EXPECT_EQ(edge._nodeID, src);
+                    EXPECT_EQ(edge._otherID, dst);
+                    found = true;
+                    break;
+                }
+            }
+            return found;
+        };
+
+        EXPECT_TRUE(verifyEdge(edgeE1, nodeA, nodeB)) << "Edge e1 should connect A to B";
+        EXPECT_TRUE(verifyEdge(edgeE2, nodeB, nodeC)) << "Edge e2 should connect B to C";
+        EXPECT_TRUE(verifyEdge(edgeE3, nodeC, nodeD)) << "Edge e3 should connect C to D";
+    }
 }
 
 TEST_F(MatchCreateTest, matchCreateTriangle) {
     // CREATE a triangle from matched node
-    constexpr std::string_view QUERY = R"(MATCH (n{name:"Remy"}) CREATE (a:Tri)-[e1:SIDE]->(b:Tri), (b)-[e2:SIDE]->(c:Tri), (c)-[e3:SIDE]->(a) RETURN a, b, c)";
+    constexpr std::string_view QUERY = R"(MATCH (n{name:"Remy"}) CREATE (a:Tri)-[e1:SIDE]->(b:Tri), (b)-[e2:SIDE]->(c:Tri), (c)-[e3:SIDE]->(a) RETURN a, e1, b, e2, c, e3)";
 
     const size_t nodesBefore = read().getTotalNodesAllocated();
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
+    NodeID nodeA{0}, nodeB{0}, nodeC{0};
+    EdgeID edgeE1{0}, edgeE2{0}, edgeE3{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
+        ASSERT_EQ(df->size(), 6);  // a, e1, b, e2, c, e3
         ASSERT_EQ(df->getRowCount(), 1);
+        auto* as = df->cols().at(0)->as<ColumnNodeIDs>();
+        auto* e1s = df->cols().at(1)->as<ColumnEdgeIDs>();
+        auto* bs = df->cols().at(2)->as<ColumnNodeIDs>();
+        auto* e2s = df->cols().at(3)->as<ColumnEdgeIDs>();
+        auto* cs = df->cols().at(4)->as<ColumnNodeIDs>();
+        auto* e3s = df->cols().at(5)->as<ColumnEdgeIDs>();
+        ASSERT_TRUE(as && e1s && bs && e2s && cs && e3s);
+        nodeA = as->at(0);
+        edgeE1 = e1s->at(0);
+        nodeB = bs->at(0);
+        edgeE2 = e2s->at(0);
+        nodeC = cs->at(0);
+        edgeE3 = e3s->at(0);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -743,6 +1154,47 @@ TEST_F(MatchCreateTest, matchCreateTriangle) {
     // 3 new nodes, 3 new edges (triangle)
     ASSERT_EQ(read().getTotalNodesAllocated(), nodesBefore + 3);
     ASSERT_EQ(read().getTotalEdgesAllocated(), edgesBefore + 3);
+
+    // Verify all nodes have Tri label
+    const LabelID triLabelID = getLabelID("Tri");
+    EXPECT_TRUE(nodeHasLabel(nodeA, triLabelID)) << "Node A should have Tri label";
+    EXPECT_TRUE(nodeHasLabel(nodeB, triLabelID)) << "Node B should have Tri label";
+    EXPECT_TRUE(nodeHasLabel(nodeC, triLabelID)) << "Node C should have Tri label";
+
+    // Verify all edges have SIDE type
+    const EdgeTypeID sideTypeID = getEdgeTypeID("SIDE");
+    EXPECT_EQ(getEdgeType(edgeE1), sideTypeID) << "Edge e1 should have SIDE type";
+    EXPECT_EQ(getEdgeType(edgeE2), sideTypeID) << "Edge e2 should have SIDE type";
+    EXPECT_EQ(getEdgeType(edgeE3), sideTypeID) << "Edge e3 should have SIDE type";
+
+    // Verify triangle connectivity: A->B->C->A
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        auto verifyEdge = [&](EdgeID edgeID, NodeID src, NodeID dst) {
+            const auto nodeView = reader.getNodeView(src);
+            const auto edgeView = nodeView.edges();
+            bool found = false;
+            for (auto edge : edgeView.outEdges()) {
+                if (edge._edgeID == edgeID) {
+                    EXPECT_EQ(edge._nodeID, src);
+                    EXPECT_EQ(edge._otherID, dst);
+                    found = true;
+                    break;
+                }
+            }
+            return found;
+        };
+
+        EXPECT_TRUE(verifyEdge(edgeE1, nodeA, nodeB)) << "Edge e1 should connect A to B";
+        EXPECT_TRUE(verifyEdge(edgeE2, nodeB, nodeC)) << "Edge e2 should connect B to C";
+        EXPECT_TRUE(verifyEdge(edgeE3, nodeC, nodeA)) << "Edge e3 should connect C to A (closing the triangle)";
+    }
+
+    // Verify all nodes are distinct
+    EXPECT_NE(nodeA, nodeB);
+    EXPECT_NE(nodeB, nodeC);
+    EXPECT_NE(nodeA, nodeC);
 }
 
 TEST_F(MatchCreateTest, matchCreateWithStaticProperties) {
@@ -752,21 +1204,41 @@ TEST_F(MatchCreateTest, matchCreateWithStaticProperties) {
     const size_t nodesBefore = read().getTotalNodesAllocated();
 
     newChange();
+    NodeID createdNode{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->getRowCount(), 1);
+        auto* ms = df->cols().at(1)->as<ColumnNodeIDs>();
+        ASSERT_TRUE(ms);
+        createdNode = ms->at(0);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
 
     ASSERT_EQ(read().getTotalNodesAllocated(), nodesBefore + 1);
 
-    // Verify properties were set
-    {
-        auto res = query(R"(MATCH (m:Tagged{source:"remy"}) RETURN m.count)", [&](const Dataframe* df) {
-            ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 1);
-        });
-        ASSERT_TRUE(res);
-    }
+    // Verify the created node has the Tagged label
+    EXPECT_TRUE(nodeHasLabel(createdNode, getLabelID("Tagged")))
+        << "Created node should have Tagged label";
+
+    // Verify properties were set using GraphReader API
+    auto sourcePropID = read().getMetadata().propTypes().get("source");
+    auto countPropID = read().getMetadata().propTypes().get("count");
+    auto activePropID = read().getMetadata().propTypes().get("active");
+
+    ASSERT_TRUE(sourcePropID.has_value()) << "source property should exist";
+    ASSERT_TRUE(countPropID.has_value()) << "count property should exist";
+    ASSERT_TRUE(activePropID.has_value()) << "active property should exist";
+
+    const auto* source = read().tryGetNodeProperty<types::String>(sourcePropID->_id, createdNode);
+    const auto* count = read().tryGetNodeProperty<types::Int64>(countPropID->_id, createdNode);
+    const auto* active = read().tryGetNodeProperty<types::Bool>(activePropID->_id, createdNode);
+
+    ASSERT_TRUE(source != nullptr) << "source property should be set";
+    ASSERT_TRUE(count != nullptr) << "count property should be set";
+    ASSERT_TRUE(active != nullptr) << "active property should be set";
+
+    EXPECT_EQ(*source, "remy") << "source should be 'remy'";
+    EXPECT_EQ(*count, 42) << "count should be 42";
+    EXPECT_TRUE(static_cast<bool>(*active)) << "active should be true";
 }
