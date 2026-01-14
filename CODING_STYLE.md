@@ -6,11 +6,6 @@ We see software engineering as being the art and practice of creating software.
 It is a practice that has a long history, dating back from the 1940s in England,
 and the foundational work of Alan Turing who brought the message of computer science to the world.
 
-Software engineering is the conventional term of the field but software craftsmanship would be closer to the actual practice and to our vision. 
-We very much think that we do not code and that we are not coding or just hacking around. 
-For the subculture and the conceptions behind it, programming is the proper word. 
-We prefer to say that we write or create software, for the level of respect and reverence that we have and that it inspires towards this activity and its practitioners.
-
 **Software as a creative act**
 
 We believe that writing software is a fundamentally creative activity of mankind. 
