@@ -17,8 +17,8 @@ using namespace db;
 
 ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)
     : _ast(ast),
-    _graphView(graphView),
-    _graphMetadata(_graphView.metadata())
+      _graphView(graphView),
+      _graphMetadata(_graphView.metadata())
 {
 }
 
@@ -58,6 +58,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
             break;
         case Expr::Kind::LITERAL:
             analyzeLiteralExpr(static_cast<LiteralExpr*>(expr));
+            break;
+        case Expr::Kind::LIST_INDEXING:
+            analyzeCollectionIndexingExpr(static_cast<CollectionIndexingExpr*>(expr));
             break;
         case Expr::Kind::FUNCTION_INVOCATION:
             analyzeFuncInvocExpr(static_cast<FunctionInvocationExpr*>(expr));
@@ -198,8 +201,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 
         case BinaryOperator::_SIZE: {
             throwError("Invalid operand in binary expression.");
-        }
-        break;
+        } break;
     }
 
     expr->setType(type);
@@ -248,8 +250,7 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
 
         case UnaryOperator::_SIZE: {
             throwError("Invalid operand in unary expression.");
-        }
-        break;
+        } break;
     }
 
     expr->setType(type);
@@ -300,13 +301,78 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
         case Literal::Kind::CHAR: {
             expr->setType(EvaluatedType::Char);
         } break;
+        case Literal::Kind::LIST: {
+            expr->setType(EvaluatedType::List);
+        } break;
         case Literal::Kind::MAP: {
             expr->setType(EvaluatedType::Map);
         } break;
         case Literal::Kind::WILDCARD: {
             expr->setType(EvaluatedType::Wildcard);
         } break;
+        case Literal::Kind::_SIZE: {
+            throwError("Invalid literal", expr);
+        } break;
     }
+}
+
+void ExprAnalyzer::analyzeCollectionIndexingExpr(CollectionIndexingExpr* expr) {
+    Expr* lhs = expr->getLhsExpr();
+    const CollectionIndexingExpr::IndexExpr& index = expr->getIndexExpr();
+
+    analyzeExpr(lhs);
+
+    if (lhs->getType() != EvaluatedType::List
+        && lhs->getType() != EvaluatedType::Map) {
+
+        const std::string error = fmt::format(
+            "Can only access elements of 'List' or 'Map', not '{}'",
+            EvaluatedTypeName::value(lhs->getType()));
+
+        throwError(error, expr);
+    }
+
+    if (lhs->getType() == EvaluatedType::Map) {
+        throwError("Indexing maps is not supported yet", expr);
+    }
+
+    if (const CollectionIndexingExpr::SingleElement* elem = std::get_if<CollectionIndexingExpr::SingleElement>(&index)) {
+        analyzeExpr(elem->_index);
+
+        if (elem->_index->getType() != EvaluatedType::Integer) {
+            const std::string error = fmt::format(
+                "Accessing elements with '{}' is not supported.",
+                EvaluatedTypeName::value(elem->_index->getType()));
+
+            throwError(error, expr);
+        }
+
+        expr->setType(EvaluatedType::Variant);
+    } else if (const CollectionIndexingExpr::ElementRange* range = std::get_if<CollectionIndexingExpr::ElementRange>(&index)) {
+        analyzeExpr(range->_lowerBound);
+        analyzeExpr(range->_upperBound);
+
+        if (range->_lowerBound->getType() != EvaluatedType::Integer
+            || range->_upperBound->getType() != EvaluatedType::Integer) {
+            const std::string error = fmt::format(
+                "Ranges must be defined by integers, not '{}' and '{}'.",
+                EvaluatedTypeName::value(range->_lowerBound->getType()),
+                EvaluatedTypeName::value(range->_upperBound->getType()));
+
+            throwError(error, expr);
+        }
+
+        expr->setType(EvaluatedType::Variant);
+    } else {
+        throwError("Invalid index expression", expr);
+    }
+
+    // For now, collection indexing expressions cannot be evaluated at compile time
+    expr->setDynamic();
+
+    // Create a variable declaration for collection[...] expression
+    // so that it can be retrieved later (for projection or in an expression / filter)
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 }
 
 ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate, ValueType defaultType) {
@@ -583,6 +649,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::Invalid:
         case EvaluatedType::Tuple:
         case EvaluatedType::ValueType:
+        case EvaluatedType::Variant:
         case EvaluatedType::_SIZE:
             return false;
     }

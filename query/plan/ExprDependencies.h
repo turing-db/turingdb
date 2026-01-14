@@ -4,10 +4,11 @@
 #include "PlanGraphVariables.h"
 #include "PlannerException.h"
 #include "PlanGraphTopology.h"
-#include "expr/ExprChain.h"
-#include "expr/SymbolExpr.h"
 #include "nodes/VarNode.h"
 
+#include "expr/ExprChain.h"
+#include "expr/CollectionIndexingExpr.h"
+#include "expr/SymbolExpr.h"
 #include "expr/BinaryExpr.h"
 #include "expr/Expr.h"
 #include "expr/EntityTypeExpr.h"
@@ -93,15 +94,45 @@ public:
                 _varDeps.emplace_back(variables.getVarNode(symbol->getDecl()), expr);
             } break;
 
-            case Expr::Kind::PATH:
+            case Expr::Kind::PATH: {
                 // throwError("Path expression not supported yet", expr);
                 // TODO Find a way to get access to throwError
                 throw PlannerException("Path expression not supported yet");
-                break;
+            } break;
 
-            case Expr::Kind::LITERAL:
+            case Expr::Kind::LIST_INDEXING: {
+                const CollectionIndexingExpr* listIndexing = static_cast<CollectionIndexingExpr*>(expr);
+                genExprDependencies(variables, listIndexing->getLhsExpr());
+                const auto& index = listIndexing->getIndexExpr();
+                
+                if (const auto* offset = std::get_if<CollectionIndexingExpr::SingleElement>(&index)) {
+                    if (!offset->_index) [[unlikely]] {
+                        // This is prohibited by the grammar, so should never happen
+                        throw PlannerException("List indexing offset must have a value");
+                    }
+
+                    genExprDependencies(variables, offset->_index);
+                } else if (const auto* range = std::get_if<CollectionIndexingExpr::ElementRange>(&index)) {
+                    if (!range->_lowerBound && !range->_upperBound) [[unlikely]] {
+                        // This is prohibited by the grammar, so should never happen
+                        throw PlannerException("List indexing range must have at least one bound");
+                    }
+
+                    if (range->_lowerBound) {
+                        genExprDependencies(variables, range->_lowerBound);
+                    }
+
+                    if (range->_upperBound) {
+                        genExprDependencies(variables, range->_upperBound);
+                    }
+                } else {
+                    throw PlannerException("Unknown index type");
+                }
+            } break;
+
+            case Expr::Kind::LITERAL: {
                 // Reached end
-                break;
+            } break;
         }
     }
 

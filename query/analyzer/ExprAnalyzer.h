@@ -20,6 +20,7 @@ class BinaryExpr;
 class UnaryExpr;
 class SymbolExpr;
 class LiteralExpr;
+class CollectionIndexingExpr;
 class PropertyExpr;
 class StringExpr;
 class EntityTypeExpr;
@@ -46,6 +47,7 @@ public:
     void analyzeUnaryExpr(UnaryExpr* expr);
     void analyzeSymbolExpr(SymbolExpr* expr);
     void analyzeLiteralExpr(LiteralExpr* expr);
+    void analyzeCollectionIndexingExpr(CollectionIndexingExpr* expr);
     void analyzeStringExpr(StringExpr* expr);
     void analyzeEntityTypeExpr(EntityTypeExpr* expr);
     void analyzeFuncInvocExpr(FunctionInvocationExpr* expr);

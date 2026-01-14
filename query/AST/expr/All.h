@@ -3,6 +3,7 @@
 #include "expr/Operators.h"
 #include "expr/SymbolExpr.h"
 #include "expr/LiteralExpr.h"
+#include "expr/CollectionIndexingExpr.h"
 #include "expr/BinaryExpr.h"
 #include "expr/UnaryExpr.h"
 #include "expr/PropertyExpr.h"

@@ -11,7 +11,7 @@
 
 namespace fs {
 
-template <db::IntegralType T, int I>
+template <std::integral T, int I>
 void WriteToCurrentPage(fs::FilePageWriter& w, db::ID<T, I> id) {
     w.writeToCurrentPage(id.getValue());
 }
@@ -25,7 +25,7 @@ template <typename, typename = void>
 struct is_dumpable_id : std::false_type {};
 
 // Specialism declares all ID types as dumpable IDs
-template <IntegralType T, int Tag>
+template <std::integral T, int Tag>
 struct is_dumpable_id<ID<T, Tag>> : std::true_type {};
 
 // Concept using the above traits

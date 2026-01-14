@@ -676,6 +676,9 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
         case Expr::Kind::LITERAL:
             dump(out, dynamic_cast<const LiteralExpr*>(expr));
             break;
+        case Expr::Kind::LIST_INDEXING:
+            dump(out, dynamic_cast<const CollectionIndexingExpr*>(expr));
+            break;
         case Expr::Kind::FUNCTION_INVOCATION:
             dump(out, dynamic_cast<const FunctionInvocationExpr*>(expr));
             break;

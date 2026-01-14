@@ -10,22 +10,37 @@ namespace db {
 
 class CypherAST;
 class Expr;
+class ExprChain;
 class Symbol;
 
 class Literal {
 public:
     friend CypherAST;
 
-    enum class Kind {
-        NULL_LITERAL,
+    enum class Kind : uint8_t {
+        NULL_LITERAL = 0,
         BOOL,
         INTEGER,
         DOUBLE,
         STRING,
         CHAR,
+        LIST,
         MAP,
         WILDCARD,
+
+        _SIZE,
     };
+
+    using KindName = EnumToString<Kind>::Create<
+        EnumStringPair<Kind::NULL_LITERAL, "NullLiteral">,
+        EnumStringPair<Kind::BOOL, "BoolLiteral">,
+        EnumStringPair<Kind::INTEGER, "IntegerLiteral">,
+        EnumStringPair<Kind::DOUBLE, "DoubleLiteral">,
+        EnumStringPair<Kind::STRING, "StringLiteral">,
+        EnumStringPair<Kind::CHAR, "CharLiteral">,
+        EnumStringPair<Kind::LIST, "ListLiteral">,
+        EnumStringPair<Kind::MAP, "MapLiteral">,
+        EnumStringPair<Kind::WILDCARD, "WildcardLiteral">>;
 
     virtual Kind getKind() const = 0;
 
@@ -152,6 +167,25 @@ private:
     }
 
     ~CharLiteral() override = default;
+};
+
+class ListLiteral : public Literal {
+public:
+    constexpr Kind getKind() const override { return Kind::LIST; }
+
+    constexpr EvaluatedType getType() const override { return EvaluatedType::List; }
+
+    static ListLiteral* create(CypherAST* ast);
+
+    void setExprChain(ExprChain* exprChain) { _exprChain = exprChain; }
+
+    ExprChain* getExprChain() const { return _exprChain; }
+
+private:
+    ExprChain* _exprChain {nullptr};
+
+    ListLiteral();
+    ~ListLiteral() override;
 };
 
 class MapLiteral : public Literal {

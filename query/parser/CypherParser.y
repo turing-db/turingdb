@@ -208,6 +208,7 @@
 %type<db::Literal*> numLit literal
 %type<db::BoolLiteral*> boolLit
 %type<db::StringLiteral*> stringLit
+%type<db::ListLiteral*> listLit
 %type<db::MapLiteral*> mapLit
 %type<std::pair<db::Symbol*, db::Expr*>> mapPair
 %type<db::MapLiteral*> mapPairChain
@@ -240,7 +241,7 @@
 %type<db::Expr*> powerExpr
 %type<db::Expr*> unaryAddSubExpr
 %type<db::Expr*> atomicExpr
-%type<db::Expr*> listExpr
+%type<db::CollectionIndexingExpr::IndexExpr> listIndexingExpr
 %type<db::Expr*> stringExpr
 %type<db::Expr*> entityTypeExpr
 %type<db::Expr*> propertyOrLabelExpr
@@ -780,15 +781,23 @@ unaryAddSubExpr
 
 atomicExpr
     : propertyOrLabelExpr { $$ = $1; }
-    | atomicExpr listExpr { $$ = nullptr; scanner.notImplemented(@$, "List Exprs"); }
+    | atomicExpr listIndexingExpr {
+        auto* expr = CollectionIndexingExpr::create(ast);
+        $$ = expr;
+        expr->setLhsExpr($1);
+        expr->setIndexExpr($2);
+        LOC($$, @$);
+      }
     ;
 
-listExpr
-    : OBRACK expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expr CBRACK"); }
-    | OBRACK expr RANGE expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expr RANGE expr CBRACK"); }
-    | OBRACK RANGE expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK RANGE expr CBRACK"); }
-    | OBRACK expr RANGE CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expr RANGE CBRACK"); }
-    | OBRACK RANGE CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK RANGE CBRACK"); }
+listIndexingExpr
+    : OBRACK expr CBRACK { $$ = CollectionIndexingExpr::SingleElement {$2}; }
+    | OBRACK expr RANGE expr CBRACK { $$ = CollectionIndexingExpr::ElementRange {$2, $4}; }
+    | OBRACK RANGE expr CBRACK { $$ = CollectionIndexingExpr::ElementRange {nullptr, $3}; }
+    | OBRACK expr RANGE CBRACK { $$ = CollectionIndexingExpr::ElementRange {$2, nullptr}; }
+
+    // Disable [..] for now, not sure if it's useful
+    // | OBRACK RANGE CBRACK { $$ = CollectionIndexingExpr::Range {nullptr, nullptr}; LOC($$, @$); }
     ;
 
 propertyOrLabelExpr
@@ -1117,7 +1126,8 @@ literal
     | numLit { $$ = $1; }
     | NULL_ { $$ = NullLiteral::create(ast); }
     | stringLit { $$ = $1; }
-    | listLit { scanner.notImplemented(@$, "Lists"); }
+    | charLit { $$ = $1; }
+    | listLit { $$ = $1; }
     | mapLit { $$ = $1; }
     ;
 
@@ -1145,8 +1155,8 @@ stringLit
     ;
 
 listLit
-    : OBRACK CBRACK { scanner.notImplemented(@$, "Lists"); }
-    | OBRACK exprChain CBRACK // Enabling this causes conflicts
+    : OBRACK CBRACK { $$ = ListLiteral::create(ast); LOC($$, @$); }
+    | OBRACK exprChain CBRACK { $$ = ListLiteral::create(ast); $$->setExprChain($2); LOC($$, @$); }
     ;
 
 mapLit

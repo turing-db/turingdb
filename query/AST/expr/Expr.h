@@ -22,6 +22,7 @@ public:
         PATH,
         SYMBOL,
         LITERAL,
+        LIST_INDEXING,
         FUNCTION_INVOCATION,
     };
 
