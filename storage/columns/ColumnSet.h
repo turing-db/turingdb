@@ -15,7 +15,7 @@ public:
     using Iterator = std::unordered_set<T>::iterator;
     using ConstIterator = std::unordered_set<T>::const_iterator;
 
-    static constexpr ContainerTypeCode BaseKind = ContainerTypeCode::getCode<ColumnSet<T>>();
+    static constexpr ContainerKind::Code BaseKind = ContainerKind::code<ColumnSet<T>>();
 
     ColumnSet(const ColumnSet&) = default;
     ColumnSet(ColumnSet&&) noexcept = default;
@@ -115,6 +115,6 @@ public:
 private:
     std::unordered_set<T> _data;
 
-    static constexpr auto _staticKind = ColumnKind::getColumnKind<ColumnSet<T>>();
+    static constexpr auto _staticKind = ColumnKind::code<ColumnSet<T>>();
 };
 }

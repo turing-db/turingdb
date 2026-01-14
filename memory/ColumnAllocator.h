@@ -32,18 +32,18 @@ public:
     ColumnAllocatorMap();
     ~ColumnAllocatorMap();
 
-    ColumnAllocator* get(ColumnKind::ColumnKindCode code) const {
+    ColumnAllocator* get(ColumnKind::Code code) const {
         return _allocMap.at(code);
     }
 
-    void add(ColumnKind::ColumnKindCode code, ColumnAllocator* allocator) {
+    void add(ColumnKind::Code code, ColumnAllocator* allocator) {
         _allocators.push_back(allocator);
         _allocMap[code] = allocator;
     }
 
 private:
     std::vector<ColumnAllocator*> _allocators;
-    std::unordered_map<ColumnKind::ColumnKindCode, ColumnAllocator*> _allocMap;
+    std::unordered_map<ColumnKind::Code, ColumnAllocator*> _allocMap;
 };
 
 }

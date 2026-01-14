@@ -20,18 +20,18 @@ public:
 
     virtual void dump(std::ostream& out) const = 0;
 
-    ColumnKind::ColumnKindCode getKind() const { return _kind; }
+    ColumnKind::Code getKind() const { return _kind; }
 
     template <typename T>
     T* cast() { return static_cast<T*>(this); }
 
 protected:
-    explicit Column(ColumnKind::ColumnKindCode kind)
+    explicit Column(ColumnKind::Code kind)
         : _kind(kind)
     {
     }
 
-    ColumnKind::ColumnKindCode _kind = 0;
+    ColumnKind::Code _kind = 0;
 };
 
 }

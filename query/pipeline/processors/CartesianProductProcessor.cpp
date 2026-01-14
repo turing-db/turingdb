@@ -29,9 +29,9 @@ void verifyAllColumnVectors(const Dataframe* df) {
     for (const NamedColumn* nCol : df->cols()) {
         const Column* col = nCol->getColumn();
 
-        const ColumnKind::ColumnKindCode kind = col->getKind();
-        const ContainerTypeCodeType containerKind = ColumnKind::getContainerTypeFromColumnKind(kind);
-        constexpr ContainerTypeCodeType ColumnVectorKind = ContainerTypeCodeValue<ColumnVector<size_t>>;
+        const ColumnKind::Code kind = col->getKind();
+        const ContainerKind::Code containerKind = ColumnKind::extractContainerKind(kind);
+        constexpr ContainerKind::Code ColumnVectorKind = ContainerKind::code<ColumnVector<size_t>>();
 
         if (containerKind != ColumnVectorKind) {
             throw FatalException("Attempt to calulate the CartesianProduct of a "

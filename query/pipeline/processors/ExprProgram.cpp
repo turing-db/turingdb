@@ -5,7 +5,7 @@
 
 #include "columns/ColumnOperator.h"
 #include "columns/ColumnOperators.h"
-#include "columns/OperationTypeCode.h"
+#include "columns/OperationKind.h"
 #include "columns/ColumnKind.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
@@ -22,10 +22,10 @@ using namespace db;
 namespace {
 
 template <ColumnOperator Op, typename Lhs, typename Rhs>
-constexpr ExprOpKind OpCase = ExprOpKindCode::getCode(Op, Lhs::staticKind(), Rhs::staticKind());
+constexpr OperationKind::Code OpCase = OperationKind::code(Op, Lhs::staticKind(), Rhs::staticKind());
 
 template <ColumnOperator Op, typename Lhs>
-constexpr ExprOpKind UnaryOpCase = ExprOpKindCode::getCode(Op, Lhs::staticKind());
+constexpr OperationKind::Code UnaryOpCase = OperationKind::code(Op, Lhs::staticKind());
 
 }
 
@@ -128,22 +128,22 @@ constexpr ExprOpKind UnaryOpCase = ExprOpKindCode::getCode(Op, Lhs::staticKind()
         break;                                                                 \
     }
 
-#define PROJECT_CASE(Lhs, Rhs)                              \
-    case OpCase<OP_PROJECT, Lhs, Rhs>: {                    \
-        ColumnOperators::projectOp(                         \
-            static_cast<ColumnMask*>(instr._res),           \
-            static_cast<const Lhs*>(instr._lhs),            \
-            static_cast<const Rhs*>(instr._rhs));           \
-        break;                                              \
+#define PROJECT_CASE(Lhs, Rhs)                    \
+    case OpCase<OP_PROJECT, Lhs, Rhs>: {          \
+        ColumnOperators::projectOp(               \
+            static_cast<ColumnMask*>(instr._res), \
+            static_cast<const Lhs*>(instr._lhs),  \
+            static_cast<const Rhs*>(instr._rhs)); \
+        break;                                    \
     }
 
-#define IN_CASE(Lhs, Rhs)                              \
-    case OpCase<OP_IN, Lhs, Rhs>: {                    \
-        ColumnOperators::inOp(                         \
-            static_cast<ColumnMask*>(instr._res),      \
-            static_cast<const Lhs*>(instr._lhs),       \
-            static_cast<const Rhs*>(instr._rhs));      \
-        break;                                         \
+#define IN_CASE(Lhs, Rhs)                         \
+    case OpCase<OP_IN, Lhs, Rhs>: {               \
+        ColumnOperators::inOp(                    \
+            static_cast<ColumnMask*>(instr._res), \
+            static_cast<const Lhs*>(instr._lhs),  \
+            static_cast<const Rhs*>(instr._rhs)); \
+        break;                                    \
     }
 
 #define INSTANTIATE_PROPERTY_OPERATOR(CASE_NAME) \
@@ -201,14 +201,14 @@ void ExprProgram::evalInstr(const Instruction& instr) {
     switch (getOperatorType(op)) {
         case ColumnOperatorType::OPTYPE_BINARY:
             evalBinaryInstr(instr);
-        break;
+            break;
 
         case ColumnOperatorType::OPTYPE_UNARY:
             evalUnaryInstr(instr);
-        break;
+            break;
 
         case ColumnOperatorType::OPTYPE_NOOP:
-        break;
+            break;
     }
 }
 
@@ -224,7 +224,7 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         throw FatalException("Binary instruction had null right input.");
     }
 
-    switch (ExprOpKindCode::getCode(op, lhs->getKind(), rhs->getKind())) {
+    switch (OperationKind::code(op, lhs->getKind(), rhs->getKind())) {
         EQUAL_CASE(ColumnVector<size_t>, ColumnVector<size_t>)
         EQUAL_CASE(ColumnVector<size_t>, ColumnConst<size_t>)
         EQUAL_CASE(ColumnConst<size_t>, ColumnVector<size_t>)
@@ -342,7 +342,7 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
     const ColumnOperator op = instr._op;
     const Column* input = instr._lhs;
 
-    switch (ExprOpKindCode::getCode(op, input->getKind())) {
+    switch (OperationKind::code(op, input->getKind())) {
         // XXX: What else can NOT be applied to?
         NOT_CASE(ColumnVector<types::Bool::Primitive>);    // Also handles CustomBool
         NOT_CASE(ColumnOptVector<types::Bool::Primitive>); // Also handles CustomBool

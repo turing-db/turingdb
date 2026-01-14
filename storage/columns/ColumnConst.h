@@ -12,7 +12,7 @@ template <typename T>
 class ColumnConst : public Column {
 public:
     using ValueType = T;
-    static constexpr ContainerTypeCode BaseKind = ContainerTypeCode::getCode<ColumnConst<T>>();
+    static constexpr ContainerKind::Code BaseKind = ContainerKind::code<ColumnConst<T>>();
 
     ColumnConst()
         : Column(_staticKind)
@@ -69,7 +69,7 @@ public:
 private:
     T _value;
 
-    static constexpr auto _staticKind = ColumnKind::getColumnKind<ColumnConst<T>>();
+    static constexpr auto _staticKind = ColumnKind::code<ColumnConst<T>>();
 };
 
 }

@@ -1,0 +1,50 @@
+#pragma once
+
+#include "PairColumnKind.h"
+#include "ColumnOperator.h"
+
+namespace db {
+
+class OperationKind {
+public:
+    using Code = uint64_t;
+
+    static constexpr Code BitCount = sizeof(Code) * 8;
+
+    static constexpr Code MaxValue = (2ull << (BitCount - 1ull)) - 1ull;
+
+    // Checking if we can fit operator kind + pair column type into ExprOpKind
+    static_assert(BitCount >= sizeof(ColumnOperator) * 8 + PairColumnKind::BitCount);
+
+    // Binary expressions
+    template <ColumnOperator Op, typename Lhs, typename Rhs>
+    static consteval Code code() {
+        const Code c1 = std::to_underlying(Op);
+        const Code c2 = PairColumnKind::code<Lhs, Rhs>();
+        return (c1 << (Code)PairColumnKind::BitCount) | c2;
+    }
+
+    // Unary expressions
+    template <ColumnOperator Op, typename Rhs>
+    static consteval Code code() {
+        const Code c1 = std::to_underlying(Op);
+        const Code c2 = ColumnKind::code<Rhs>();
+        return (c1 << PairColumnKind::BitCount) | c2;
+    }
+
+    // Binary expressions
+    static constexpr Code code(ColumnOperator op,
+                               ColumnKind::Code lhs,
+                               ColumnKind::Code rhs) {
+        const auto pair = PairColumnKind::code(lhs, rhs);
+        return ((Code)op << (Code)PairColumnKind::BitCount) | (Code)pair;
+    }
+
+    // Unary expressions
+    static constexpr Code code(ColumnOperator op,
+                               ColumnKind::Code rhs) {
+        return ((Code)op << (Code)PairColumnKind::BitCount) | (Code)rhs;
+    }
+};
+
+}

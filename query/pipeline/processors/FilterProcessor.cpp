@@ -135,9 +135,9 @@ void FilterProcessor::execute() {
     }
     // Ensure all instruction outputs are Column(Opt)Vector bools, so they can be converted to masks
     if (!std::ranges::all_of(predResults, [](const Column* res) {
-            const ColumnKind::ColumnKindCode thisKind = res->getKind();
+            const ColumnKind::Code thisKind = res->getKind();
 
-            const ColumnKind::ColumnKindCode optBoolKind = ColumnOptMask::staticKind();
+            const ColumnKind::Code optBoolKind = ColumnOptMask::staticKind();
 
             return thisKind == optBoolKind;
         })) {

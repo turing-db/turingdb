@@ -18,7 +18,7 @@ public:
     using ReverseIterator = std::vector<T>::reverse_iterator;
     using ConstReverseIterator = std::vector<T>::const_reverse_iterator;
 
-    static constexpr ContainerTypeCode BaseKind = ContainerTypeCode::getCode<ColumnVector<T>>();
+    static constexpr ContainerKind::Code BaseKind = ContainerKind::code<ColumnVector<T>>();
 
     ColumnVector(const ColumnVector&) = default;
     ColumnVector(ColumnVector&&) noexcept = default;
@@ -144,7 +144,7 @@ public:
 private:
     std::vector<T> _data;
 
-    static constexpr auto _staticKind = ColumnKind::getColumnKind<ColumnVector<T>>();
+    static constexpr auto _staticKind = ColumnKind::code<ColumnVector<T>>();
 };
 
 }

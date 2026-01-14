@@ -11,7 +11,7 @@
 
 namespace db {
 
-template <ColumnKind::ColumnKindCode K>
+template <ColumnKind::Code K>
 struct ColumnTypeFromKind;
 
 template <>

@@ -5,8 +5,8 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "InternalTypeCode.h"
-#include "ContainerTypeCode.h"
+#include "InternalKind.h"
+#include "ContainerKind.h"
 
 namespace db {
 
@@ -28,44 +28,54 @@ class TemplateLabelSet;
 
 using LabelSet = TemplateLabelSet<uint64_t, 4>;
 
-struct ColumnKind {
-    using ColumnKindCode = uint16_t;
+class ColumnKind {
+public:
+    using Code = uint16_t;
 
-    static constexpr ColumnKindCode InvalidColumnKind = std::numeric_limits<ColumnKindCode>::max();
+    /// @brief Value indicating an invalid column type code
+    static constexpr Code Invalid = std::numeric_limits<Code>::max();
 
-    static constexpr ColumnKindCode ColumnKindBitCount = sizeof(ColumnKindCode) * 8;
+    /// @brief The number of bits required to represent the column type codes
+    static constexpr Code BitCount = sizeof(Code) * 8;
 
-    static constexpr ColumnKindCode ColumnKindMaxValue = (2 << (ColumnKindBitCount - 1)) - 1;
+    /// @brief The maximum value of the column type codes
+    static constexpr Code MaxValue = (2 << (BitCount - 1)) - 1;
 
-    static_assert(ColumnKindBitCount >= InternalTypeBitCount + ContainerTypeBitCount,
+    static_assert(BitCount >= InternalKind::BitCount + ContainerKind::BitCount,
                   "ColumnKind cannot fit all bits necessary to represent internal + container types");
 
-    ColumnKindCode _value {InvalidColumnKind};
-
-    static consteval ColumnKindCode getBaseColumnKindCount() {
-        return (ColumnKindCode)ContainerTypeCount;
-    }
-
-    static consteval ColumnKindCode getInternalTypeKindCount() {
-        return InternalTypeCount;
-    }
-
     template <typename T>
-    static consteval ColumnKindCode getContainerTypeKind() {
-        constexpr auto code = ContainerTypeCodeValue<T>;
-        static_assert(code != InvalidContainerTypeCode,
-                      "Container was not registered as a valid container type");
-        return (ColumnKindCode)code;
+    static consteval Code code() {
+        using U = inner_type_t<T>;
+
+        if constexpr (std::is_same_v<U, std::false_type>) {
+            // Column is not a template class
+            // It is either ColumnMask or ListColumnConst
+            return ContainerKind::code<T>();
+        } else {
+            // Column is a template class, such as ColumnVector<U>
+            constexpr Code internal = InternalKind::code<U>();
+            constexpr Code container = ContainerKind::code<T>();
+            constexpr Code colKind = (container << InternalKind::BitCount) | internal;
+            static_assert(colKind <= MaxValue);
+
+            return colKind;
+        }
     }
 
-    template <typename T>
-    static consteval ColumnKindCode getInternalTypeKind() {
-        constexpr auto code = InternalTypeCodeValue<T>;
-        static_assert(code != InvalidInternalTypeCode,
-                      "Internal type was not registered as a valid internal type");
-        return (ColumnKindCode)code;
+    static constexpr ContainerKind::Code extractContainerKind(Code code) {
+        constexpr Code ContainerTypeMask = (Code)ContainerKind::MaxValue << InternalKind::BitCount;
+        const ContainerKind::Code container = (code & ContainerTypeMask) >> InternalKind::BitCount;
+        return container;
     }
 
+    static constexpr InternalKind::Code extractInternalKind(Code code) {
+        constexpr Code InternalTypeMask = InternalKind::MaxValue;
+        const InternalKind::Code internal = code & InternalTypeMask;
+        return internal;
+    }
+
+private:
     template <class>
     struct inner_type {
         using type = std::false_type;
@@ -78,37 +88,6 @@ struct ColumnKind {
 
     template <class T>
     using inner_type_t = typename inner_type<T>::type;
-
-    template <typename T>
-    static consteval ColumnKindCode getColumnKind() {
-        using U = inner_type_t<T>;
-
-        if constexpr (std::is_same_v<U, std::false_type>) {
-            // Column is not a template class
-            // It is either ColumnMask or ListColumnConst
-            return getContainerTypeKind<T>();
-        } else {
-            // Column is a template class, such as ColumnVector<U>
-            constexpr ColumnKindCode internal = getInternalTypeKind<U>();
-            constexpr ColumnKindCode container = getContainerTypeKind<T>();
-            constexpr ColumnKindCode colKind = (container << InternalTypeBitCount) | internal;
-            static_assert(colKind <= ColumnKindMaxValue);
-
-            return colKind;
-        }
-    }
-
-    static constexpr ContainerTypeCodeType getContainerTypeFromColumnKind(ColumnKindCode code) {
-        constexpr ColumnKindCode ContainerTypeMask = (ColumnKindCode)ContainerTypeMaxValue << InternalTypeBitCount;
-        const ContainerTypeCodeType container = (code & ContainerTypeMask) >> InternalTypeBitCount;
-        return container;
-    }
-
-    static constexpr InternalTypeCodeType getInternalTypeFromColumnKind(ColumnKindCode code) {
-        constexpr ColumnKindCode InternalTypeMask = InternalTypeMaxValue;
-        const InternalTypeCodeType internal = code & InternalTypeMask;
-        return internal;
-    }
 };
 
 }
