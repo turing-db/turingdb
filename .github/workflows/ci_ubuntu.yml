@@ -58,3 +58,8 @@ jobs:
     - name: Run regress
       shell: bash
       run: cd ${{ github.workspace }}/build && source ${{ github.workspace }}/setup.sh && make run_regress
+    - name: Upload turing_install
+      uses: actions/upload-artifact@v3
+      with:
+        name: turingdb-binaries       # artifact name
+        path: ${{ github.workspace }}/build/turing_install  # upload the whole folder
