@@ -8,7 +8,7 @@ rm -f pyproject.toml
 uv init
 uv add $PYTURINGDB
 
-pkill turingdb 2>/dev/null || true
+pkill -f turingdb 2>/dev/null || true
 # Wait for port 6666 to be free
 while lsof -i :6666 -sTCP:LISTEN >/dev/null 2>&1; do sleep 0.1; done
 
@@ -24,7 +24,7 @@ uv run check_db_status.py &> /dev/null
 startres=$?
 if [ "$startres" -eq 0 ]; then # turingdb should fail to start
   echo "FAILURE: turingdb started with invalid 'default' graph"
-  pkill turingdb
+  pkill -f turingdb
   exit 1
 else
   echo "SUCCESS: turingdb failed to start with invalid 'default' graph"
@@ -39,7 +39,7 @@ if [ "$startres" -ne 0 ]; then # turingdb should succeed in starting
   exit 1
 else
   echo "SUCCESS: turingdb started whilst resetting invalid 'default' graph"
-  pkill turingdb 2>/dev/null || true
+  pkill -f turingdb 2>/dev/null || true
 fi
 
 # Have no default graph, without trying to reset it
@@ -53,7 +53,7 @@ if [ "$startres" -ne 0 ]; then # turingdb should succeed in starting
   exit 1
 else
     echo "SUCCESS: turingdb started with no 'default' graph dumped"
-    pkill turingdb 2>/dev/null || true
+    pkill -f turingdb 2>/dev/null || true
 fi
 
 # Have no default graph, and try to reset it
@@ -67,7 +67,7 @@ if [ "$startres" -ne 0 ]; then # turingdb should succeed in starting
   exit 1
 else
   echo "SUCCESS: turingdb started with no 'default' graph dumped and attempting to reset it"
-  pkill turingdb
+  pkill -f turingdb
 fi
 
 echo "ALL TESTS PASSED"
