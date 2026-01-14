@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 #include <type_traits>
 
 #include "InternalKind.h"
