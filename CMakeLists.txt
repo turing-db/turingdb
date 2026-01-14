@@ -83,6 +83,17 @@ endif()
 # C++ flags
 set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
+# When using LLVM clang from Homebrew on macOS, add libc++ library path for linker
+if(APPLE)
+    get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
+    get_filename_component(LLVM_ROOT ${COMPILER_DIR} DIRECTORY)
+    if(EXISTS "${LLVM_ROOT}/lib/c++")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${LLVM_ROOT}/lib/c++ -Wl,-rpath,${LLVM_ROOT}/lib/c++")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${LLVM_ROOT}/lib/c++ -Wl,-rpath,${LLVM_ROOT}/lib/c++")
+        message(STATUS "Using LLVM libc++ from: ${LLVM_ROOT}/lib/c++")
+    endif()
+endif()
+
 # Create compilation database and symlink in the src folder
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 execute_process(
