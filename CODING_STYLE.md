@@ -57,7 +57,7 @@ Think of the reader, of the person that will your code after you. It can be the 
 Insert blank lines in the implementation of a method to separate the steps or phases of an algorithm.
 Use blank lines to facilitate understanding. We are not limited by the vertical size of the code.
 
-**Make your code beautiful and cultivate your esthetics sense**
+**Make your code beautiful and cultivate your aesthetics sense**
 Try to make your code elegant, beautiful, clear, whenever possible.
 
 **Opinion of last resort**
@@ -77,7 +77,7 @@ We use 4 spaces indentation with spaces only. We do not use tabs.
 
 #### Includes
 
-We use the #include <stdlib.h> style of standard includes, not #include <cstdlib>.
+We use the #include \<stdlib.h\> style of standard includes, not #include \<cstdlib\>.
 
 Always follow the preferred order of includes in turingdb:
 * First the header file of the current class being implemented if that is the case
@@ -89,13 +89,13 @@ Always follow the preferred order of includes in turingdb:
 ** Utility classes, assert, exception classes
 
 Put the current header file first and put an empty line afterwards, before the remaining includes.
-Include directives should be groupes into different paragraphs to facilitate reading. 
+Include directives should be grouped into different paragraphs to facilitate reading. 
 Utility includes should be written last and put in their own paragraph, and not mixed with other includes.
 
 #### Brackets
 
 We put brackets { on the same line for a control flow construct such as if, for, while, with a space between the parenthesis and the opening bracket:
-```
+```cpp
 if (somecond) {
     // Do something
 } else {
@@ -119,7 +119,7 @@ do {
 ```
 
 Constructors are the only place where the opening bracket must be on the next line:
-```
+```cpp
 class MyClass {
 public:
     MyClass()
@@ -137,13 +137,13 @@ MyClass::MyClass()
 ```
 
 Destructors are formatted line any other method with the opening bracket on the same line:
-```
+```cpp
 MyClass::~MyClass() {
 }
 ```
 
 Functions and methods generally have opening brackets on the same line:
-```
+```cpp
 void MyClass::myFunc() {
 }
 ```
@@ -159,7 +159,7 @@ void MyClass::myFunc() {
 #### Class formatting
 
 Example of the preferred way of formatting a class:
-```
+```cpp
 class MyClass {
 public:
 	using Nodes = std::vector<MyClass*>;
@@ -203,7 +203,7 @@ Constructors can not fail and there is no possibility of returning an error in a
 **Constructor formatting**
 
 The typical formatting of a constructor is:
-```
+```cpp
 MyClass::MyClass(ArgType* arg1, ArgType* arg2)
 	: _attrA(arg1),
 	_attrB(arg2)
@@ -220,14 +220,14 @@ MyClass::MyClass(ArgType* arg1, ArgType* arg2)
 ### Function arguments
 
 When a function has few arguments and they fit well on one line, they can be put one after the other on the same line:
-```
+```cpp
 void MyClass::myFunction(Arg1* arg1, Arg2* arg2, Arg3* arg3) {
 }
 ```
 
 When a function has more than 3 arguments or they don't fit well on one line, the arguments have to be broken down
 and put each on their own line. Each argument must then be correctly aligned one below the other:
-```
+```cpp
 void MyClass::myFunction(Arg1* arg1,
                          Arg2* arg2,
 						 Arg3* arg3,
@@ -252,27 +252,27 @@ Don't be afraid of pointers.
 #### Formatting
 
 The star symbol of a pointer is always put close to the type without space:
-```
+```cpp
 void func(Type* obj) {
 }
 ```
 
 #### Argument-passing style
 The primary argument-passing style in turingdb should be good old pointers, not references:
-```
+```cpp
 void MyClass::myFunction(Arg1* arg1, Arg2* arg2, Arg3* arg3) {
 }
 ```
 
 References are reserved for passing STL containers:
-```
+```cpp
 void MyClass::myFunction(Arg1* arg1, const std::string& myStr) {
 	// Do something
 }
 ```
 
 Use a const reference whenever possible, to pass an STL structure that will not be modified:
-```
+```cpp
 void MyClass::myFunction(Arg1* arg1, const std::string& myStr) {
 	// Do something
 }
@@ -280,7 +280,7 @@ void MyClass::myFunction(Arg1* arg1, const std::string& myStr) {
 
 When an STL container has to be filled up or modified or "returned", don't return it as a result of the function
 but pass it by modifiable reference to the function:
-```
+```cpp
 void MyClass::myFunction(Arg1* arg1, std::vector<double>& result) {
 	// Do something
 }
@@ -312,7 +312,7 @@ Always use const whenever possible, unless it adds mindless clutter.
 #### Const for arguments
 
 Use const for pointers and references whenever they will never be modified or are not supposed to be modified.
-```
+```cpp
 void myAlgorithm(std::vector<NodeID>& result, const std:::vector<NodeID>& seed, const AlgoConfig* config) {
 }
 ```
@@ -320,7 +320,7 @@ void myAlgorithm(std::vector<NodeID>& result, const std:::vector<NodeID>& seed, 
 #### Const for local variables and intermediate results
 
 Use const whenever possible for the local variables of a function and to denote the intermediate results of an algorithm.
-```
+```cpp
 void myAlgorithm(std::vector<NodeID>& result, const std:::vector<NodeID>& seed, const AlgoConfig* config) {
 	const double scorePhase1 = computePhase1(seed, config);
 	
@@ -338,7 +338,7 @@ Always initialize local variables to a default value if necessary.
 Always initialize class members to a default value, especially pointers.
 
 Class member initialisation style:
-```
+```cpp
 class MyClass {
 public:
 	// Something..
@@ -350,7 +350,7 @@ private:
 Always use the brackets {} initialisation style for class members.
 
 Always use the assignment style of initialisation for local variables inside functions:
-```
+```cpp
 void myFunc() {
 	// Do something..
 
@@ -362,7 +362,7 @@ void myFunc() {
 ```
 
 The preferred style for new is with an assignment:
-```
+```cpp
 MyData* data = new MyData();
 ```
 
