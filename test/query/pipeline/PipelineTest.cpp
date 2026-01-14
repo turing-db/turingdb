@@ -7,6 +7,7 @@
 #include "TuringDB.h"
 
 #include "versioning/Transaction.h"
+#include "metadata/PropertyType.h"
 #include "views/GraphView.h"
 #include "SimpleGraph.h"
 #include "LocalMemory.h"
@@ -377,7 +378,7 @@ TEST_F(PipelineTest, scanNodesCount) {
     auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         EXPECT_EQ(df->size(), 1);
 
-        const ColumnConst<size_t>* count = dynamic_cast<const ColumnConst<size_t>*>(df->cols().front()->getColumn());
+        const ColumnConst<types::UInt64::Primitive>* count = dynamic_cast<const ColumnConst<types::UInt64::Primitive>*>(df->cols().front()->getColumn());
         ASSERT_TRUE(count != nullptr);
 
         EXPECT_TRUE(count->getRaw() != 0);
@@ -435,7 +436,7 @@ TEST_F(PipelineTest, multiChunkCount) {
     size_t lambdaSinkExecutions = 0;
     auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         EXPECT_EQ(df->size(), 1);
-        const ColumnConst<size_t>* count = dynamic_cast<const ColumnConst<size_t>*>(df->cols().front()->getColumn());
+        const ColumnConst<types::UInt64::Primitive>* count = dynamic_cast<const ColumnConst<types::UInt64::Primitive>*>(df->cols().front()->getColumn());
         ASSERT_TRUE(count != nullptr);
         returnedCount = count->getRaw();
 
@@ -476,7 +477,7 @@ TEST_F(PipelineTest, abcOverwrite) {
             return;
         }
 
-        ColumnConst<size_t>* value = df->getColumn<ColumnConst<size_t>>(sourceATag);
+        ColumnConst<types::UInt64::Primitive>* value = df->getColumn<ColumnConst<types::UInt64::Primitive>>(sourceATag);
         value->set(10+chunkCountA);
 
         if (chunkCountA == maxChunkA) {
@@ -494,7 +495,7 @@ TEST_F(PipelineTest, abcOverwrite) {
 
         isFinished = true;
 
-        ColumnConst<size_t>* value = dest->getColumn<ColumnConst<size_t>>(transBOutTag);
+        ColumnConst<types::UInt64::Primitive>* value = dest->getColumn<ColumnConst<types::UInt64::Primitive>>(transBOutTag);
         ASSERT_TRUE(value != nullptr);
         value->set(20+invocationCountB);
         invocationCountB++;
@@ -511,7 +512,7 @@ TEST_F(PipelineTest, abcOverwrite) {
             return;
         }
 
-        ColumnConst<size_t>* value = dest->getColumn<ColumnConst<size_t>>(transCOutTag);
+        ColumnConst<types::UInt64::Primitive>* value = dest->getColumn<ColumnConst<types::UInt64::Primitive>>(transCOutTag);
         ASSERT_TRUE(value != nullptr);
         value->set(30+chunkCountC);
 
@@ -531,9 +532,9 @@ TEST_F(PipelineTest, abcOverwrite) {
 
         sinkExecuted = true;
 
-        const ColumnConst<size_t>* a = sourceAOut->as<ColumnConst<size_t>>();
-        const ColumnConst<size_t>* b = transBOut->as<ColumnConst<size_t>>();
-        const ColumnConst<size_t>* c = transCOut->as<ColumnConst<size_t>>();
+        const ColumnConst<types::UInt64::Primitive>* a = sourceAOut->as<ColumnConst<types::UInt64::Primitive>>();
+        const ColumnConst<types::UInt64::Primitive>* b = transBOut->as<ColumnConst<types::UInt64::Primitive>>();
+        const ColumnConst<types::UInt64::Primitive>* c = transCOut->as<ColumnConst<types::UInt64::Primitive>>();
         ASSERT_TRUE(a != nullptr);
         ASSERT_TRUE(b != nullptr);
         ASSERT_TRUE(c != nullptr);
@@ -542,13 +543,13 @@ TEST_F(PipelineTest, abcOverwrite) {
     };
 
     builder.addLambdaSource(sourceA);
-    sourceAOut = builder.addColumnToOutput<ColumnConst<size_t>>(sourceATag);
+    sourceAOut = builder.addColumnToOutput<ColumnConst<types::UInt64::Primitive>>(sourceATag);
 
     builder.addLambdaTransform(transformB);
-    transBOut = builder.addColumnToOutput<ColumnConst<size_t>>(transBOutTag);
+    transBOut = builder.addColumnToOutput<ColumnConst<types::UInt64::Primitive>>(transBOutTag);
 
     builder.addLambdaTransform(transformC);
-    transCOut = builder.addColumnToOutput<ColumnConst<size_t>>(transCOutTag);
+    transCOut = builder.addColumnToOutput<ColumnConst<types::UInt64::Primitive>>(transCOutTag);
 
     builder.addLambda(sink);
 

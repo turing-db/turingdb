@@ -1158,7 +1158,7 @@ TEST_F(WriteQueriesTest, exceedChunk) {
         std::string_view matchQuery = "MATCH (n) RETURN COUNT(n) as COUNT";
 
         auto res = query(matchQuery, [nodeCount](const Dataframe* df) {
-            const auto* count = findColumn(df, "COUNT")->as<ColumnConst<size_t>>();
+            const auto* count = findColumn(df, "COUNT")->as<ColumnConst<types::UInt64::Primitive>>();
             ASSERT_TRUE(count);
 
             ASSERT_EQ(nodeCount, count->getRaw());
@@ -1205,7 +1205,7 @@ TEST_F(WriteQueriesTest, exceedChunk) {
 
         auto res = query(matchQuery, [edgeCount](const Dataframe* df) {
             ASSERT_TRUE(df);
-            const auto* count = findColumn(df, "COUNT")->as<ColumnConst<size_t>>();
+            const auto* count = findColumn(df, "COUNT")->as<ColumnConst<types::UInt64::Primitive>>();
             ASSERT_TRUE(count);
 
             ASSERT_EQ(edgeCount, count->getRaw());
