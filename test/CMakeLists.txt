@@ -1,11 +1,19 @@
 add_subdirectory(googletest EXCLUDE_FROM_ALL SYSTEM)
 include(GoogleTest)
 
-# Fix for LLVM clang: googletest's -Wconversion triggers -Wcharacter-conversion warnings
-# that become errors with our -Werror flag
+# Fix for clang: googletest's -Wconversion triggers warnings that become errors with -Werror.
+# -Wno-character-conversion exists in LLVM clang but not Apple clang, so check before using.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    target_compile_options(gtest PRIVATE -Wno-character-conversion)
-    target_compile_options(gtest_main PRIVATE -Wno-character-conversion)
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag(-Wno-character-conversion HAS_WNO_CHARACTER_CONVERSION)
+    if(HAS_WNO_CHARACTER_CONVERSION)
+        target_compile_options(gtest PRIVATE -Wno-character-conversion)
+        target_compile_options(gtest_main PRIVATE -Wno-character-conversion)
+    else()
+        # Fall back to disabling -Wconversion entirely for googletest (third-party code)
+        target_compile_options(gtest PRIVATE -Wno-conversion)
+        target_compile_options(gtest_main PRIVATE -Wno-conversion)
+    endif()
 endif()
 
 add_subdirectory(testutils)
