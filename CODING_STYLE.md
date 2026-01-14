@@ -3,7 +3,7 @@
 ## Philosophy
 
 We see software engineering as being the art and practice of creating software.
-In it is a practice that has a long history, dating back from the 1940s in England,
+It is a practice that has a long history, dating back from the 1940s in England,
 and the foundational work of Alan Turing who brought the message of computer science to the world.
 
 Software engineering is the conventional term of the field but software craftsmanship would be closer to the actual practice and to our vision. 
