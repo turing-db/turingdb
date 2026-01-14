@@ -3,6 +3,7 @@
 #include "Processor.h"
 
 #include "columns/ColumnConst.h"
+#include "metadata/PropertyType.h"
 
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineValueOutputInterface.h"
@@ -28,7 +29,7 @@ private:
     size_t _countRunning {0};
     ColumnTag _colTag;
     const Column* _col {nullptr};
-    ColumnConst<size_t>* _countColumn {nullptr};
+    ColumnConst<types::UInt64::Primitive>* _countColumn {nullptr};
 
     CountProcessor();
     ~CountProcessor();

@@ -2,6 +2,7 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "metadata/PropertyType.h"
 #include "columns/ColumnDispatcher.h"
 #include "dataframe/Dataframe.h"
 #include "columns/ColumnConst.h"
@@ -39,9 +40,9 @@ CountProcessor* CountProcessor::create(PipelineV2* pipeline, ColumnTag colTag) {
 }
 
 void CountProcessor::prepare(ExecutionContext* ctxt) {
-    ColumnConst<size_t>* countColumn = dynamic_cast<ColumnConst<size_t>*>(_output.getValue()->getColumn());
+    auto* countColumn = dynamic_cast<ColumnConst<types::UInt64::Primitive>*>(_output.getValue()->getColumn());
     if (!countColumn) {
-        throw PipelineException("CountProcessor: count column is not a ColumnConst<size_t>");
+        throw PipelineException("CountProcessor: count column is not a ColumnConst<UInt64>");
     }
 
     _countColumn = countColumn;
