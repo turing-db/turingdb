@@ -18,6 +18,8 @@ enum ColumnOperator : uint8_t {
     OP_GREATER_THAN_OR_EQUAL,
     OP_LESS_THAN_OR_EQUAL,
 
+    OP_ADD,
+
     OP_AND,
     OP_OR,
 
@@ -49,6 +51,8 @@ constexpr inline ColumnOperatorType getOperatorType(ColumnOperator op) {
         case OP_LESS_THAN:
         case OP_GREATER_THAN_OR_EQUAL:
         case OP_LESS_THAN_OR_EQUAL:
+
+        case OP_ADD:
 
         case OP_AND:
         case OP_OR:
@@ -86,6 +90,8 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
     EnumStringPair<ColumnOperator::OP_LESS_THAN, "LESS_THAN">,
     EnumStringPair<ColumnOperator::OP_GREATER_THAN_OR_EQUAL, "GREATER_THAN_OR_EQUAL">,
     EnumStringPair<ColumnOperator::OP_LESS_THAN_OR_EQUAL, "LESS_THAN_OR_EQUAL">,
+
+    EnumStringPair<ColumnOperator::OP_ADD, "ADD">,
 
     EnumStringPair<ColumnOperator::OP_AND, "AND">,
     EnumStringPair<ColumnOperator::OP_OR, "OR">,

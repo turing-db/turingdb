@@ -54,6 +54,8 @@ private:
     Column* generateLiteralExpr(const LiteralExpr* literalExpr);
 
     Column* allocResultColumn(const Expr* expr);
+    Column* allocResultConstColumn(const Expr* expr);
+
 
     static ColumnOperator unaryOperatorToColumnOperator(UnaryOperator op);
     static ColumnOperator binaryOperatorToColumnOperator(BinaryOperator op);

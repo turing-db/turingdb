@@ -5,6 +5,7 @@
 #include "ID.h"
 #include "PipelineGenerator.h"
 #include "columns/ColumnOptMask.h"
+#include "columns/ColumnOptVector.h"
 #include "decl/EvaluatedType.h"
 #include "expr/Operators.h"
 #include "expr/PropertyExpr.h"
@@ -90,6 +91,10 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
             return ColumnOperator::OP_LESS_THAN_OR_EQUAL;
         break;
 
+        case BinaryOperator::Add:
+            return ColumnOperator::OP_ADD;
+        break;
+
         case BinaryOperator::_SIZE:
             throw FatalException(
                 "Attempted to generate invalid binary operator in ExprProgramGenerator.");
@@ -167,13 +172,28 @@ Column* ExprProgramGenerator::generateUnaryExpr(const UnaryExpr* unExpr) {
     return resCol;
 }
 
-Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
-    Column* lhs = generateExpr(binExpr->getLHS());
-    Column* rhs = generateExpr(binExpr->getRHS());
-    const ColumnOperator op = binaryOperatorToColumnOperator(binExpr->getOperator());
-    Column* resCol = allocResultColumn(binExpr);
+static_assert(ColumnOptVector<types::Int64::Primitive>::staticKind() == 31);
+static_assert(ColumnConst<types::Int64::Primitive>::staticKind() == 54);
 
-    _exprProg->addInstr(op, resCol, lhs, rhs);
+Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
+    const Expr* lhs = binExpr->getLHS();
+    const Expr* rhs = binExpr->getRHS();
+
+    Column* lhsCol = generateExpr(lhs);
+    Column* rhsCol = generateExpr(rhs);
+    const ColumnOperator op = binaryOperatorToColumnOperator(binExpr->getOperator());
+
+    const bool lhsLiteral = lhs->getKind() == Expr::Kind::LITERAL;
+    const bool rhsLiteral = rhs->getKind() == Expr::Kind::LITERAL;
+
+    Column* resCol {nullptr};
+    if (lhsLiteral && rhsLiteral) {
+        resCol = allocResultConstColumn(binExpr);
+    } else {
+        resCol = allocResultColumn(binExpr);
+    }
+
+    _exprProg->addInstr(op, resCol, lhsCol, rhsCol);
 
     return resCol;
 }
@@ -235,6 +255,33 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
     case EvalType:                                                                       \
         return _gen->memory().alloc<ColumnOptVector<Type::Primitive>>();                 \
     break;
+
+#define ALLOC_EVALTYPE_CONST_COL(EvalType, Type)                                         \
+    case EvalType:                                                                       \
+        return _gen->memory().alloc<ColumnConst<Type::Primitive>>();                     \
+        break;
+
+Column* ExprProgramGenerator::allocResultConstColumn(const Expr* expr) {
+    const EvaluatedType exprType = expr->getType();
+
+    switch (exprType) {
+        ALLOC_EVALTYPE_CONST_COL(EvaluatedType::Integer, types::Int64)
+        ALLOC_EVALTYPE_CONST_COL(EvaluatedType::Double, types::Double)
+        ALLOC_EVALTYPE_CONST_COL(EvaluatedType::String, types::String)
+        ALLOC_EVALTYPE_CONST_COL(EvaluatedType::Bool, types::Bool)
+
+        case EvaluatedType::Invalid:
+            throw PlannerException(
+                "ExprProgramGenerator: encountered expression of invalid type");
+        break;
+
+        default:
+            throw PlannerException(fmt::format(
+                "Expression of type {} not supported",
+                (size_t)exprType));
+        break;
+    }
+}
 
 Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
     const EvaluatedType exprType = expr->getType();
