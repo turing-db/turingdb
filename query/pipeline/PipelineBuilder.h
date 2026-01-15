@@ -36,6 +36,7 @@ class PipelineV2;
 class PipelineOutputInterface;
 class MaterializeProcessor;
 class ExprProgram;
+class PredicateProgram;
 
 
 class PipelineBuilder {
@@ -110,7 +111,7 @@ public:
     PipelineValuesOutputInterface& addComputeExpr(ExprProgram* exprProg);
 
     // Filter
-    PipelineBlockOutputInterface& addFilter(ExprProgram* exprProg);
+    PipelineBlockOutputInterface& addFilter(PredicateProgram* predProg);
 
     // Joins and Products
     // LHS is implict in @ref _pendingOutput

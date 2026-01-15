@@ -25,6 +25,7 @@
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
 #include "procedures/ProcedureBlueprintMap.h"
+#include "processors/PredicateProgram.h"
 #include "processors/WriteProcessor.h"
 #include "processors/WriteProcessorTypes.h"
 #include "reader/GraphReader.h"
@@ -69,6 +70,7 @@
 #include "Overloaded.h"
 #include "processors/ExprProgram.h"
 #include "ExprProgramGenerator.h"
+#include "PredicateProgramGenerator.h"
 
 #include "PipelineException.h"
 #include "PlannerException.h"
@@ -558,12 +560,12 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
     const auto& predicates = node->getPredicates();
     const auto& labelConstrs = node->getLabelConstraints();
 
-    ExprProgram* exprProg = ExprProgram::create(_pipeline);
-    ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
+    PredicateProgram* predProg = PredicateProgram::create(_pipeline);
+    PredicateProgramGenerator predGen(this, predProg, _builder.getPendingOutput());
 
     // Compile predicate expressions into an expression program
     for (const Predicate* pred : predicates) {
-        exprGen.generatePredicate(pred);
+        predGen.generatePredicate(pred);
     }
 
     if (!labelConstrs.empty()) {
@@ -577,11 +579,11 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
             throw FatalException("Could not get label set column for label filter.");
         }
 
-        exprGen.addLabelConstraint(lblSetCol->getColumn(), labelConstrs);
+        predGen.addLabelConstraint(lblSetCol->getColumn(), labelConstrs);
     }
 
     // Then add a filter processor, taking the built expression program to execute
-    const auto& output = _builder.addFilter(exprProg);
+    const auto& output = _builder.addFilter(predProg);
 
     // Explictly create a new @ref MaterializeProcessor which uses the output columns of
     // this filter as its base. This then overrides the behaviour in @ref
@@ -605,13 +607,13 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
     const auto& predicates = node->getPredicates();
     const auto& typeConstraint = node->getEdgeTypeConstraints();
 
-    ExprProgram* exprProg = ExprProgram::create(_pipeline);
-    ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
+    PredicateProgram* predProg = PredicateProgram::create(_pipeline);
+    PredicateProgramGenerator predGen(this, predProg, _builder.getPendingOutput());
 
     if (!predicates.empty()) {
         // Compile predicate expressions into an expression program
         for (const Predicate* pred : predicates) {
-            exprGen.generatePredicate(pred);
+            predGen.generatePredicate(pred);
         }
     }
 
@@ -632,10 +634,10 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
         // Above checks there is exactly 1 type contraint
         const EdgeTypeID edgeTypeConstr = typeConstraint.front();
 
-        exprGen.addEdgeTypeConstraint(edgeTypecol->getColumn(), edgeTypeConstr);
+        predGen.addEdgeTypeConstraint(edgeTypecol->getColumn(), edgeTypeConstr);
     }
 
-    const auto& output = _builder.addFilter(exprProg);
+    const auto& output = _builder.addFilter(predProg);
 
     // Explictly create a new @ref MaterializeProcessor which uses the output columns of
     // this filter as its base. This then overrides the behaviour in @ref

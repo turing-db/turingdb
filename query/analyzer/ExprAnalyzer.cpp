@@ -101,6 +101,15 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::Equal: {
             type = EvaluatedType::Bool;
 
+            if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)) {
+                const std::string error = fmt::format(
+                    "Equality of types '{}' and '{}' is not encouraged due to "
+                    "potential rounding innacuracy. Please constrain with '<' "
+                    "and '>' instead.",
+                    EvaluatedTypeName::value(a), EvaluatedTypeName::value(b));
+                throwError(error, expr);
+            }
+
             if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char)

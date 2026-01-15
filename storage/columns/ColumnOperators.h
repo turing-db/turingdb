@@ -97,11 +97,12 @@ concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
     static void functionName(ColumnOptMask* mask,                                        \
                              const ColumnVector<T>* lhs,                                 \
                              const ColumnConst<U>* rhs) {                                \
-        mask->resize(lhs->size());                                                       \
+        const auto size = lhs->size();                                                   \
+                                                                                         \
+        mask->resize(size);                                                              \
         auto& maskd = mask->getRaw();                                                    \
         const auto& lhsd = lhs->getRaw();                                                \
         const auto& val = rhs->getRaw();                                                 \
-        const auto size = lhs->size();                                                   \
                                                                                          \
         for (size_t i = 0; i < size; i++) {                                              \
             maskd[i] = operatorFunction(lhsd[i], val);                                   \
@@ -114,11 +115,12 @@ concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
     static void functionName(ColumnOptMask* mask,                                        \
                              const ColumnConst<T>* lhs,                                  \
                              const ColumnVector<U>* rhs) {                               \
-        mask->resize(lhs->size());                                                       \
+        const auto size = rhs->size();                                                   \
+                                                                                         \
+        mask->resize(size);                                                              \
         auto& maskd = mask->getRaw();                                                    \
         const auto& val = lhs->getRaw();                                                 \
         const auto& rhsd = rhs->getRaw();                                                \
-        const auto size = lhs->size();                                                   \
                                                                                          \
         for (size_t i = 0; i < size; i++) {                                              \
             maskd[i] = operatorFunction(val, rhsd[i]);                                   \
@@ -151,12 +153,12 @@ public:
                       const ColumnMask* lhs,
                       const ColumnMask* rhs) {
         bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        const auto size = lhs->size();
 
-        mask->resize(lhs->size());
+        mask->resize(size);
         auto& maskd = mask->getRaw();
         const auto& lhsd = lhs->getRaw();
         const auto& rhsd = rhs->getRaw();
-        const auto size = rhs->size();
 
         for (size_t i = 0; i < size; i++) {
             maskd[i] = lhsd[i] && rhsd[i];
@@ -174,12 +176,12 @@ public:
                      const ColumnMask* lhs,
                      const ColumnMask* rhs) {
         bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        const auto size = lhs->size();
 
-        mask->resize(lhs->size());
+        mask->resize(size);
         auto& maskd = mask->getRaw();
         const auto& lhsd = lhs->getRaw();
         const auto& rhsd = rhs->getRaw();
-        const auto size = rhs->size();
 
         for (size_t i = 0; i < size; i++) {
             maskd[i] = lhsd[i] || rhsd[i];
@@ -200,10 +202,11 @@ public:
     static void equal(ColumnOptMask* mask,
                              const ColumnVector<T>* lhs,
                              const ColumnConst<PropertyNull>*) {
-        mask->resize(lhs->size());
+        const auto size = lhs->size();
+
+        mask->resize(size);
         auto& maskd = mask->getRaw();
         const auto& lhsd = lhs->getRaw();
-        const auto size = lhs->size();
 
         for (size_t i = 0; i < size; i++) {
             maskd[i] = lhsd[i] == std::nullopt;
@@ -216,10 +219,11 @@ public:
     static void notEqual(ColumnOptMask* mask,
                              const ColumnVector<T>* lhs,
                              const ColumnConst<PropertyNull>*) {
-        mask->resize(lhs->size());
+        const auto size = lhs->size();
+
+        mask->resize(size);
         auto& maskd = mask->getRaw();
         const auto& lhsd = lhs->getRaw();
-        const auto size = lhs->size();
 
         for (size_t i = 0; i < size; i++) {
             maskd[i] = lhsd[i] != std::nullopt;
@@ -241,12 +245,12 @@ public:
                       const ColumnVector<T>* lhs,
                       const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        const auto size = lhs->size();
 
-        mask->resize(lhs->size());
+        mask->resize(size);
         auto& maskd = mask->getRaw();
         const auto& lhsd = lhs->getRaw();
         const auto& rhsd = rhs->getRaw();
-        const auto size = rhs->size();
 
         for (size_t i = 0; i < size; i++) {
             const auto& l = lhsd[i];
@@ -269,12 +273,12 @@ public:
                      const ColumnVector<T>* lhs,
                      const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        const size_t size = lhs->size();
 
-        mask->resize(lhs->size());
+        mask->resize(size);
         auto& maskd = mask->getRaw();
         const auto& lhsd = lhs->getRaw();
         const auto& rhsd = rhs->getRaw();
-        const size_t size = rhs->size();
 
         for (size_t i = 0; i < size; i++) {
             maskd[i] = optionalOr(lhsd[i], rhsd[i]);
@@ -314,10 +318,11 @@ public:
     static void inOp(ColumnMask* mask,
                      const ColumnVector<T>* lhs,
                      const ColumnSet<U>* rhs) {
-        mask->resize(lhs->size());
+        const auto size = lhs->size();
+
+        mask->resize(size);
         auto& maskd = mask->getRaw();
         const auto& lhsd = lhs->getRaw();
-        const auto size = lhs->size();
 
         for (size_t i = 0; i < size; i++) {
             const T& val = lhsd[i];
@@ -325,12 +330,14 @@ public:
             if constexpr (is_optional_v<T>) {
                 if (!val.has_value()) {
                     maskd[i] = false;
-                } else {
-                    maskd[i] = rhs->contains(val);
+                    continue;
                 }
-            } else {
-                maskd[i] = rhs->contains(val);
             }
+
+            // @ref val is either engaged optional or plain value
+
+            auto&& v = unwrap(val);
+            maskd[i] = rhs->contains(v);
         }
     }
 
@@ -340,11 +347,12 @@ public:
                           const ColumnVector<size_t>* lhs,
                           const ColumnMask* rhs) {
         bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        const auto size = lhs->size();
 
         auto* maskd = mask->data();
         const auto* lhsd = lhs->data();
         const auto* rhsd = rhs->data();
-        const auto size = lhs->size();
+
         for (size_t i = 0; i < size; i++) {
             maskd[lhsd[i]]._value = rhsd[i];
         }
@@ -354,11 +362,11 @@ public:
                           const ColumnMask* lhs,
                           const ColumnVector<size_t>* rhs) {
         bioassert(rhs->size() == lhs->size(), "Columns must have matching dimensions");
+        const auto size = rhs->size();
 
         auto* maskd = mask->data();
         const auto* rhsd = rhs->data();
         const auto* lhsd = lhs->data();
-        const auto size = rhs->size();
         for (size_t i = 0; i < size; i++) {
             maskd[rhsd[i]]._value = lhsd[i];
         }
@@ -397,13 +405,13 @@ public:
                           const ColumnMask* mask,
                           ColumnVector<T>* dest) {
         bioassert(src->size() == mask->size(), "src and mask must have same size");
+        const size_t size = src->size();
 
         dest->clear();
-        dest->reserve(mask->size());
+        dest->reserve(size);
 
         const auto* srcd = src->data();
         const auto* maskd = mask->data();
-        const size_t size = mask->size();
         for (size_t i = 0; i < size; i++) {
             if (maskd[i]) {
                 dest->push_back(srcd[i]);
