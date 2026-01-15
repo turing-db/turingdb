@@ -224,9 +224,7 @@ public:
     INSTANTIATE_PROPERTY_PREDICATES(lessThanOrEqual, optionalLTE)
 
     template <typename Res, typename T, typename U>
-        requires std::same_as<Res, std::remove_cvref_t<decltype(std::plus<> {}(
-                                       std::declval<unwrap_optional_t<T>>(),
-                                       std::declval<unwrap_optional_t<U>>()))>>
+        requires optional_result_of<Res, std::plus<>, T, U>
     static void add(ColumnOptVector<Res>* res,
                     const ColumnVector<T>* lhs,
                     const ColumnVector<U>* rhs) {
@@ -245,8 +243,7 @@ public:
     }
 
     template <typename Res, typename T, typename U>
-        requires std::same_as<
-            Res, std::remove_cvref_t<decltype(std::declval<T>() + std::declval<U>())>>
+        requires optional_result_of<Res, std::plus<>, T, U>
     static void add(ColumnConst<Res>* res,
                     const ColumnConst<T>* lhs,
                     const ColumnConst<U>* rhs) {
@@ -254,7 +251,7 @@ public:
         const auto& lhsd = lhs->getRaw();
         const auto& rhsd = rhs->getRaw();
 
-        resd = lhsd + rhsd;
+        resd = std::plus<>{}(lhsd, rhsd);
     }
 
     template <typename Res, typename T, typename U>
