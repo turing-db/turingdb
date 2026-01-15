@@ -149,7 +149,7 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
         break;                                                                           \
     }
 
-#define ADD_CASE(Lhs, Rhs, Type)                                                   \
+#define ADD_CASE(Lhs, Rhs, Type)                                                         \
     case OpCase<OP_ADD, Lhs, Rhs>: {                                                     \
         ColumnOperators::add(static_cast<ColumnOptVector<Type>*>(instr._res),            \
                              static_cast<const Lhs*>(instr._lhs),                        \
@@ -201,7 +201,7 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
         break;                                    \
     }
 
-#define INSTANTIATE_PROPERTY_OPERATOR(CASE_NAME) \
+#define INSTANTIATE_OPERATOR_ALL_PROPERTIES(CASE_NAME)                                               \
     CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)    \
     CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)        \
     CASE_NAME(ColumnConst<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)        \
@@ -221,7 +221,8 @@ constexpr ColumnKind::ColumnKindCode UnaryOpCase = getOpCase(Op, Lhs::staticKind
     CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)      \
     CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)          \
     CASE_NAME(ColumnConst<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)          \
-                                                                                                     \
+
+#define INSTANTIATE_OPERATOR_TOTALLY_ORDERED_PROPERTIES(CASE_NAME)                                   \
     /* Numeric types are totally ordered: allow comparisions between types.*/                        \
     /* NOTE: Some are blocked by planner */                                                          \
     CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)   \
@@ -334,13 +335,21 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         EQUAL_CASE(ColumnVector<int64_t>, ColumnConst<int64_t>)
         EQUAL_CASE(ColumnConst<int64_t>, ColumnVector<int64_t>)
 
-        // Property opts
-        INSTANTIATE_PROPERTY_OPERATOR(EQUAL_CASE)
-        INSTANTIATE_PROPERTY_OPERATOR(NOT_EQUAL_CASE)
-        INSTANTIATE_PROPERTY_OPERATOR(GREATER_THAN_CASE)
-        INSTANTIATE_PROPERTY_OPERATOR(LESS_THAN_CASE)
-        INSTANTIATE_PROPERTY_OPERATOR(GREATER_THAN_OR_EQUAL_CASE)
-        INSTANTIATE_PROPERTY_OPERATOR(LESS_THAN_OR_EQUAL_CASE)
+        // Property operators which work on all types
+        INSTANTIATE_OPERATOR_ALL_PROPERTIES(EQUAL_CASE)
+        INSTANTIATE_OPERATOR_ALL_PROPERTIES(NOT_EQUAL_CASE)
+        INSTANTIATE_OPERATOR_ALL_PROPERTIES(GREATER_THAN_CASE)
+        INSTANTIATE_OPERATOR_ALL_PROPERTIES(LESS_THAN_CASE)
+        INSTANTIATE_OPERATOR_ALL_PROPERTIES(GREATER_THAN_OR_EQUAL_CASE)
+        INSTANTIATE_OPERATOR_ALL_PROPERTIES(LESS_THAN_OR_EQUAL_CASE)
+
+        // Instantiate cases for totally ordered types i.e.  numerics
+        INSTANTIATE_OPERATOR_TOTALLY_ORDERED_PROPERTIES(EQUAL_CASE)
+        INSTANTIATE_OPERATOR_TOTALLY_ORDERED_PROPERTIES(NOT_EQUAL_CASE)
+        INSTANTIATE_OPERATOR_TOTALLY_ORDERED_PROPERTIES(GREATER_THAN_CASE)
+        INSTANTIATE_OPERATOR_TOTALLY_ORDERED_PROPERTIES(LESS_THAN_CASE)
+        INSTANTIATE_OPERATOR_TOTALLY_ORDERED_PROPERTIES(GREATER_THAN_OR_EQUAL_CASE)
+        INSTANTIATE_OPERATOR_TOTALLY_ORDERED_PROPERTIES(LESS_THAN_OR_EQUAL_CASE)
 
         ADD_CASE_CONST(ColumnConst<types::Int64::Primitive>,
                        ColumnConst<types::Int64::Primitive>,

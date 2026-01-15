@@ -96,9 +96,9 @@ concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
  * instantiated.
  * @detail These functions allow for filters using optionals as null values.
  * @param functionName The name of the function to instantiate
- * @param operatorFunction The name of the function to be applied to input operands
+ * @param predicateOperator The name of the function to be applied to input operands
  */
-#define INSTANTIATE_PROPERTY_PREDICATES(functionName, operatorFunction)                  \
+#define INSTANTIATE_PROPERTY_PREDICATES(functionName, predicateOperator)                 \
     /* Case for producing a mask based on two vector inputs, e.g. n.name = m.name */     \
     template <typename T, typename U>                                                    \
         requires OptionallyComparable<T, U>                                              \
@@ -114,7 +114,7 @@ concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
         const auto& rhsd = rhs->getRaw();                                                \
                                                                                          \
         for (size_t i = 0; i < size; i++) {                                              \
-            maskd[i] = operatorFunction(lhsd[i], rhsd[i]);                               \
+            maskd[i] = predicateOperator(lhsd[i], rhsd[i]);                              \
         }                                                                                \
     }                                                                                    \
                                                                                          \
@@ -132,7 +132,7 @@ concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
         const auto& val = rhs->getRaw();                                                 \
                                                                                          \
         for (size_t i = 0; i < size; i++) {                                              \
-            maskd[i] = operatorFunction(lhsd[i], val);                                   \
+            maskd[i] = predicateOperator(lhsd[i], val);                                  \
         }                                                                                \
     }                                                                                    \
                                                                                          \
@@ -150,7 +150,7 @@ concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
         const auto& rhsd = rhs->getRaw();                                                \
                                                                                          \
         for (size_t i = 0; i < size; i++) {                                              \
-            maskd[i] = operatorFunction(val, rhsd[i]);                                   \
+            maskd[i] = predicateOperator(val, rhsd[i]);                                  \
         }                                                                                \
     }                                                                                    \
                                                                                          \
@@ -162,7 +162,73 @@ concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
                              const ColumnConst<U>* rhs) {                                \
         mask->resize(1);                                                                 \
         auto& maskd = mask->getRaw();                                                    \
-        maskd.front() = operatorFunction(lhs->getRaw(), rhs->getRaw());                  \
+        maskd.front() = predicateOperator(lhs->getRaw(), rhs->getRaw());                 \
+    }
+
+#define INSTANTIATE_PROPERTY_FUNCTION(functionName, operatorFunction)                    \
+    template <typename Res, typename T, typename U>                                      \
+        requires optional_result_of<Res, operatorFunction, T, U>                         \
+    static void functionName(ColumnOptVector<Res>* res,                                  \
+                             const ColumnVector<T>* lhs,                                 \
+                             const ColumnVector<U>* rhs) {                               \
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions."); \
+                                                                                         \
+        const size_t size = lhs->size();                                                 \
+                                                                                         \
+        res->resize(size);                                                               \
+        auto& resd = res->getRaw();                                                      \
+        const auto& lhsd = lhs->getRaw();                                                \
+        const auto& rhsd = rhs->getRaw();                                                \
+                                                                                         \
+        for (size_t i = 0; i < size; i++) {                                              \
+            resd[i] = optionalGeneric<operatorFunction>(lhsd[i], rhsd[i]);               \
+        }                                                                                \
+    }                                                                                    \
+                                                                                         \
+    template <typename Res, typename T, typename U>                                      \
+        requires optional_result_of<Res, operatorFunction, T, U>                         \
+    static void functionName(ColumnOptVector<Res>* res,                                  \
+                             const ColumnVector<T>* lhs,                                 \
+                             const ColumnConst<U>* rhs) {                                \
+        const size_t size = lhs->size();                                                 \
+                                                                                         \
+        res->resize(size);                                                               \
+        auto& resd = res->getRaw();                                                      \
+        const auto& lhsd = lhs->getRaw();                                                \
+        const auto& rhsd = rhs->getRaw();                                                \
+                                                                                         \
+        for (size_t i = 0; i < size; i++) {                                              \
+            resd[i] = optionalGeneric<operatorFunction>(lhsd[i], rhsd);                  \
+        }                                                                                \
+    }                                                                                    \
+                                                                                         \
+    template <typename Res, typename T, typename U>                                      \
+        requires optional_result_of<Res, operatorFunction, T, U>                         \
+    static void functionName(ColumnOptVector<Res>* res,                                  \
+                             const ColumnConst<T>* lhs,                                  \
+                             const ColumnVector<U>* rhs) {                               \
+        const size_t size = rhs->size();                                                 \
+                                                                                         \
+        res->resize(size);                                                               \
+        auto& resd = res->getRaw();                                                      \
+        const auto& lhsd = lhs->getRaw();                                                \
+        const auto& rhsd = rhs->getRaw();                                                \
+                                                                                         \
+        for (size_t i = 0; i < size; i++) {                                              \
+            resd[i] = optionalGeneric<operatorFunction>(lhsd, rhsd[i]);                  \
+        }                                                                                \
+    }                                                                                    \
+                                                                                         \
+    template <typename Res, typename T, typename U>                                      \
+        requires optional_result_of<Res, std::plus<>, T, U>                              \
+    static void functionName(ColumnConst<Res>* res,                                      \
+                             const ColumnConst<T>* lhs,                                  \
+                             const ColumnConst<U>* rhs) {                                \
+        auto& resd = res->getRaw();                                                      \
+        const auto& lhsd = lhs->getRaw();                                                \
+        const auto& rhsd = rhs->getRaw();                                                \
+        /* XXX: This should not return an optional, should not need to unwrap */         \
+        resd = unwrap(optionalGeneric<operatorFunction>(lhsd, rhsd));                    \
     }
 
 class ColumnOperators {
@@ -223,53 +289,7 @@ public:
     INSTANTIATE_PROPERTY_PREDICATES(greaterThanOrEqual, optionalGTE)
     INSTANTIATE_PROPERTY_PREDICATES(lessThanOrEqual, optionalLTE)
 
-    template <typename Res, typename T, typename U>
-        requires optional_result_of<Res, std::plus<>, T, U>
-    static void add(ColumnOptVector<Res>* res,
-                    const ColumnVector<T>* lhs,
-                    const ColumnVector<U>* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions.");
-
-        const size_t size = lhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = optionalAdd(lhsd[i], rhsd[i]);
-        }
-    }
-
-    template <typename Res, typename T, typename U>
-        requires optional_result_of<Res, std::plus<>, T, U>
-    static void add(ColumnConst<Res>* res,
-                    const ColumnConst<T>* lhs,
-                    const ColumnConst<U>* rhs) {
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        resd = std::plus<>{}(lhsd, rhsd);
-    }
-
-    template <typename Res, typename T, typename U>
-        requires optional_result_of<Res, std::plus<>, T, U>
-    static void add(ColumnOptVector<Res>* res,
-                    const ColumnVector<T>* lhs,
-                    const ColumnConst<U>* rhs) {
-        const size_t size = lhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = optionalAdd(lhsd[i], rhsd);
-        }
-    }
+    INSTANTIATE_PROPERTY_FUNCTION(add, std::plus<>)
 
     // Implementation for IS NULL
     template <typename T>
@@ -643,7 +663,7 @@ private:
     template <typename T, typename U>
         requires OptionallyInvokable<std::plus<>, T, U>
     inline static auto optionalAdd(const T& a, const U& b) {
-        return optionalGeneric<std::plus<>, T, U>(a, b);
+        return optionalGeneric<std::plus<>>(a, b);
     }
 };
 
