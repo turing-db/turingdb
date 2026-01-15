@@ -48,13 +48,13 @@ public:
     }
 
     static constexpr ContainerKind::Code extractContainerKind(Code code) {
-        constexpr Code ContainerTypeMask = (Code)ContainerKind::MaxValue << InternalKind::BitCount;
+        constexpr Code ContainerTypeMask = (Code)ContainerKind::Invalid << InternalKind::BitCount;
         const ContainerKind::Code container = (code & ContainerTypeMask) >> InternalKind::BitCount;
         return container;
     }
 
     static constexpr InternalKind::Code extractInternalKind(Code code) {
-        constexpr Code InternalTypeMask = InternalKind::MaxValue;
+        constexpr Code InternalTypeMask = InternalKind::Invalid;
         const InternalKind::Code internal = code & InternalTypeMask;
         return internal;
     }
