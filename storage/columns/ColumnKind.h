@@ -15,7 +15,7 @@ public:
     static constexpr Code Invalid = std::numeric_limits<Code>::max();
 
     /// @brief The number of bits required to represent the column type codes
-    static constexpr Code BitCount = sizeof(Code) * 8;
+    static constexpr size_t BitCount = sizeof(Code) * 8;
 
     /// @brief The maximum value of the column type codes
     static constexpr Code MaxValue = ((Code)ContainerKind::MaxValue << (Code)InternalKind::BitCount)

@@ -96,7 +96,7 @@ public:
     static constexpr size_t BitCount = sizeof(Code) * 8;
 
     /// @brief The maximum value of the internal type codes
-    static constexpr size_t MaxValue = (2 << (BitCount - 1)) - 2;
+    static constexpr Code MaxValue = (2ull << (BitCount - 1ull)) - 2ull;
 
     /// @brief The number of internal type codes
     static constexpr size_t Count = Types::count();
