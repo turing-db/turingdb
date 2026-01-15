@@ -105,6 +105,130 @@ TEST_F(CreateCommandTest, createNodeMultipleLabels) {
     }
 }
 
+TEST_F(CreateCommandTest, createNodeMatchByMultipleLabels) {
+    setWorkingGraph("default");
+    constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Employee:Manager:Mentor{name:"Alice"}) RETURN n)";
+
+    NodeID createdNodeId;
+    {
+        newChange();
+        auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 1);
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            ASSERT_TRUE(ns);
+            ASSERT_EQ(ns->size(), 1);
+            createdNodeId = ns->front();
+        });
+        ASSERT_TRUE(res);
+        submitCurrentChange();
+    }
+
+    ASSERT_EQ(1, read().getTotalNodesAllocated());
+
+    // Match by first label only
+    {
+        auto res = query(R"(MATCH (n:Employee) RETURN n, n.name)", [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->getRowCount(), 1);
+            auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+            auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(names);
+            EXPECT_EQ(ns->front(), createdNodeId);
+            ASSERT_TRUE(names->at(0).has_value());
+            EXPECT_EQ(*names->at(0), "Alice");
+        });
+        ASSERT_TRUE(res);
+    }
+
+    // Match by second label only
+    {
+        auto res = query(R"(MATCH (n:Manager) RETURN n, n.name)", [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->getRowCount(), 1);
+            auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+            auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(names);
+            EXPECT_EQ(ns->front(), createdNodeId);
+            ASSERT_TRUE(names->at(0).has_value());
+            EXPECT_EQ(*names->at(0), "Alice");
+        });
+        ASSERT_TRUE(res);
+    }
+
+    // Match by third label only
+    {
+        auto res = query(R"(MATCH (n:Mentor) RETURN n, n.name)", [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->getRowCount(), 1);
+            auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+            auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(names);
+            EXPECT_EQ(ns->front(), createdNodeId);
+            ASSERT_TRUE(names->at(0).has_value());
+            EXPECT_EQ(*names->at(0), "Alice");
+        });
+        ASSERT_TRUE(res);
+    }
+
+    // Match by two labels combined
+    {
+        auto res = query(R"(MATCH (n:Employee:Manager) RETURN n, n.name)", [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->getRowCount(), 1);
+            auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+            auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(names);
+            EXPECT_EQ(ns->front(), createdNodeId);
+            ASSERT_TRUE(names->at(0).has_value());
+            EXPECT_EQ(*names->at(0), "Alice");
+        });
+        ASSERT_TRUE(res);
+    }
+
+    // Match by all three labels
+    {
+        auto res = query(R"(MATCH (n:Employee:Manager:Mentor) RETURN n, n.name)", [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->getRowCount(), 1);
+            auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+            auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(names);
+            EXPECT_EQ(ns->front(), createdNodeId);
+            ASSERT_TRUE(names->at(0).has_value());
+            EXPECT_EQ(*names->at(0), "Alice");
+        });
+        ASSERT_TRUE(res);
+    }
+
+    // Match by labels in different order
+    {
+        auto res = query(R"(MATCH (n:Mentor:Employee) RETURN n, n.name)", [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->getRowCount(), 1);
+            auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
+            auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(names);
+            EXPECT_EQ(ns->front(), createdNodeId);
+            ASSERT_TRUE(names->at(0).has_value());
+            EXPECT_EQ(*names->at(0), "Alice");
+        });
+        ASSERT_TRUE(res);
+    }
+
+    // Match by non-existent label causes query error (unknown labels are not allowed)
+    {
+        auto res = query(R"(MATCH (n:NonExistent) RETURN n)", [&](const Dataframe*) -> void {});
+        ASSERT_FALSE(res);
+    }
+}
+
 TEST_F(CreateCommandTest, createNodeSingleLabelNoProperties) {
     setWorkingGraph("default");
     constexpr std::string_view CREATE_QUERY = R"(CREATE (n:SimpleNode) RETURN n)";
