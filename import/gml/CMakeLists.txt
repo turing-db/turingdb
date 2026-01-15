@@ -1,5 +1,5 @@
 add_library(turing_db_import_gml_s
-    STATIC GMLImporter.cpp)
+    STATIC GMLImporter.cpp GMLGraphSax.cpp)
 
 target_link_libraries(turing_db_import_gml_s
     PUBLIC  turing_common_s
