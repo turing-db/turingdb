@@ -135,7 +135,6 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
             throw PlannerException("Entity expressions are currently not supported.");
         break;
 
-        // TODO
         case Expr::Kind::SYMBOL:
             return generateSymbolExpr(static_cast<const SymbolExpr*>(expr));
         break;
@@ -250,8 +249,18 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
     // `MATCH (n), (m) WHERE n <> m RETURN n, m` as an example). In this case, the
     // variable must be from the incoming stream.
     const auto foundIt = _gen->varColMap().find(exprVarDecl);
-    if (foundIt == _gen->varColMap().end()) {
-        const auto& incomingStream = _pendingOut.getInterface()->getStream();
+
+    // If we find the var in the map, use that column
+    if (foundIt != _gen->varColMap().end()) {
+        const NamedColumn* symCol = _pendingOut.getDataframe()->getColumn(foundIt->second);
+        bioassert(symCol, "Failed to retrieve column for SymbolExpr with tag {}.",
+                  foundIt->second.getValue());
+
+        return symCol->getColumn();    
+    }
+
+    // Otherwise, var is not in the map, look in the current stream
+    const auto& incomingStream = _pendingOut.getInterface()->getStream();
         const bool incStreamContainsVar = (isNode && incomingStream.isNodeStream())
                                        || (!isNode && incomingStream.isEdgeStream());
         if (!incStreamContainsVar) {
@@ -268,13 +277,6 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
         const NamedColumn* streamedCol =
             _pendingOut.getDataframe()->getColumn(streamedVarTag);
         return streamedCol->getColumn();
-    }
-
-    const NamedColumn* symCol = _pendingOut.getDataframe()->getColumn(foundIt->second);
-    bioassert(symCol, "Failed to retrieve column for SymbolExpr with tag {}.",
-              foundIt->second.getValue());
-
-    return symCol->getColumn();
 }
 
 #define ALLOC_EVALTYPE_COL(EvalType, Type)                                               \

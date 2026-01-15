@@ -234,11 +234,9 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         EQUAL_CASE(ColumnVector<EntityID>, ColumnConst<EntityID>)
         EQUAL_CASE(ColumnConst<EntityID>, ColumnVector<EntityID>)
         EQUAL_CASE(ColumnConst<EntityID>, ColumnConst<EntityID>)
-        EQUAL_CASE(ColumnVector<NodeID>, ColumnVector<NodeID>)
         EQUAL_CASE(ColumnVector<NodeID>, ColumnConst<NodeID>)
         EQUAL_CASE(ColumnConst<NodeID>, ColumnVector<NodeID>)
         EQUAL_CASE(ColumnConst<NodeID>, ColumnConst<NodeID>)
-        EQUAL_CASE(ColumnVector<EdgeID>, ColumnVector<EdgeID>)
         EQUAL_CASE(ColumnVector<EdgeID>, ColumnConst<EdgeID>)
         EQUAL_CASE(ColumnConst<EdgeID>, ColumnVector<EdgeID>)
         EQUAL_CASE(ColumnConst<EdgeID>, ColumnConst<EdgeID>)
@@ -310,6 +308,13 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         OR_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnVector<types::Bool::Primitive>)
         OR_CASE(ColumnVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
         OR_CASE(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)
+
+        // Node/EdgePattern ops
+        EQUAL_CASE(ColumnVector<NodeID>, ColumnVector<NodeID>)
+        EQUAL_CASE(ColumnVector<EdgeID>, ColumnVector<EdgeID>)
+
+        NOT_EQUAL_CASE(ColumnVector<NodeID>, ColumnVector<NodeID>)
+        NOT_EQUAL_CASE(ColumnVector<EdgeID>, ColumnVector<EdgeID>)
 
         // Project ops
         PROJECT_CASE(ColumnVector<size_t>, ColumnMask)
