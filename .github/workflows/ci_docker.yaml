@@ -1,38 +1,20 @@
-name: Nightly Docker Build
+name: Docker Nightly / Release Build
 
 on:
   schedule:
-    - cron: "0 2 * * *" # every night at 02:00 UTC
-  workflow_dispatch: # manual trigger
+    - cron: "0 2 * * *"   # nightly at 02:00 UTC
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      # Checkout the repo
+      # Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v3
-
-      # Download turingdb archive from main CI
-      - name: Download archive
-        uses: actions/download-artifact@v3
-        with:
-          name: turing-install-archive
-          path: docker/artifacts
-      
-      # Extract archive into Docker context
-      - name: Extract turing_install
-        shell: bash
-        run: |
-          mkdir -p docker
-          tar -xzf docker/artifacts/turing_install.tar.gz -C docker
-
-      # Ensure binaries are executable
-      - name: Make binaries executable
-        run: |
-          if [ -d "docker/turing_install/bin" ]; then
-            chmod +x docker/turing_install/bin/*
-          fi
 
       # Log in to Docker Hub
       - name: Log in to Docker Hub
@@ -41,25 +23,30 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Build Docker image
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile
-          push: false
-          tags: turingdbai/turingdb:nightly
-
-      # Test Docker image
-      - name: Test Docker image
+      # Determine Docker image tags
+      ## this checks if workflow was triggered by git tag push
+      - name: Set Docker tags
+        id: tags
         run: |
-          docker run --rm turingdbai/turingdb:nightly turingdb --help
+          echo "NIGHTLY_TAG=nightly" >> $GITHUB_ENV
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          else
+            echo "TAG=nightly" >> $GITHUB_ENV
+          fi
 
-      # Push Docker image to Docker Hub
-      - name: Push Docker image
+      # Build and push Docker image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          tags: turingdbai/turingdb:nightly
+          tags: |
+            turingdbai/turingdb:${{ env.NIGHTLY_TAG }}
+            turingdbai/turingdb:${{ env.TAG }}
+
+      # Test container
+      - name: Test Docker image
+        run: |
+          docker run --rm turingdbai/turingdb:${{ env.TAG }} turingdb --help

@@ -1,10 +1,16 @@
-FROM ubuntu:22.04
+FROM python:3.11-slim
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    ca-certificates \
+    build-essential \
+    cmake \
+    git \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY docker/turing_install/ /usr/local/
+# Install scikit-build-core so pip can build turingdb
+RUN pip install --upgrade pip scikit-build-core wheel setuptools
 
-# Optional: set a default binary
-# ENTRYPOINT ["/usr/local/bin/turingdb"]
+# Install turingdb 
+RUN pip install --upgrade turingdb
+
