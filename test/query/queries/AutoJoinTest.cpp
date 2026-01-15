@@ -767,8 +767,7 @@ TEST_F(JoinFeatureTest, undirectedEdgeJoin) {
 // =============================================================================
 
 // Test 15: Self-join with equality filter (a = b)
-// DISABLED: Comparison on NodePattern not yet supported
-TEST_F(JoinFeatureTest, DISABLED_selfJoinWithEquality) {
+TEST_F(JoinFeatureTest, selfJoinWithEquality) {
     constexpr std::string_view QUERY = R"(
         MATCH (a:Person)-[:KNOWS]->(b:Person)
         WHERE a = b

@@ -225,14 +225,13 @@ TEST_F(MultiHopPatternTest, DISABLED_divergentPattern_returnMiddleNode) {
                 }
             }
         });
-        ASSERT_FALSE(res);
+        ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
 }
 
 // Test returning all three nodes in the pattern
-// DISABLED: Comparison of NodePattern not yet supported
-TEST_F(MultiHopPatternTest, DISABLED_divergentPattern_returnAllThreeNodes) {
+TEST_F(MultiHopPatternTest, divergentPattern_returnAllThreeNodes) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (a:Person)-->(b:Interest)<--(c:Person)
         WHERE a <> c
@@ -291,14 +290,13 @@ TEST_F(MultiHopPatternTest, DISABLED_divergentPattern_returnAllThreeNodes) {
                 }
             }
         });
-        ASSERT_FALSE(res);
+        ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
 }
 
 // Test with explicit edge type constraints
-// DISABLED: Comparisons of NodePatterns not yet supported
-TEST_F(MultiHopPatternTest, DISABLED_divergentPattern_withEdgeTypes) {
+TEST_F(MultiHopPatternTest, divergentPattern_withEdgeTypes) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (a:Person)-[e1:INTERESTED_IN]->(b:Interest)<-[e2:INTERESTED_IN]-(c:Person) WHERE a <> c RETURN a.name, b.name, c.name
     )";
@@ -361,7 +359,7 @@ TEST_F(MultiHopPatternTest, DISABLED_divergentPattern_withEdgeTypes) {
 }
 
 // Test with filter on the middle node property
-// DISABLED: Comparison on NodePattern not yet supported
+// DISABLED: DISTINCT not yet supported
 TEST_F(MultiHopPatternTest, DISABLED_divergentPattern_filterOnMiddleNode) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (a:Person)-->(b:Interest)<--(c:Person)
@@ -421,7 +419,7 @@ TEST_F(MultiHopPatternTest, DISABLED_divergentPattern_filterOnMiddleNode) {
                 }
             }
         });
-        ASSERT_FALSE(res);
+        ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
 }
@@ -432,8 +430,7 @@ TEST_F(MultiHopPatternTest, DISABLED_divergentPattern_filterOnMiddleNode) {
 // =============================================================================
 
 // Test person with multiple interests
-// DISABLED: Comparison on NodePattern not yet supported
-TEST_F(MultiHopPatternTest, DISABLED_convergentPattern_personWithMultipleInterests) {
+TEST_F(MultiHopPatternTest, convergentPattern_personWithMultipleInterests) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (i1:Interest)<--(p:Person)-->(i2:Interest)
         WHERE i1 <> i2
@@ -493,13 +490,13 @@ TEST_F(MultiHopPatternTest, DISABLED_convergentPattern_personWithMultipleInteres
                 }
             }
         });
-        ASSERT_FALSE(res);
+        ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
 }
 
 // Test convergent pattern filtered by French persons
-// DISABLED: Comparison on NodePattern not yet supported
+// DISABLED: DISTINCT not yet supported
 TEST_F(MultiHopPatternTest, DISABLED_convergentPattern_withFilter) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (i1:Interest)<--(p:Person)-->(i2:Interest)
@@ -559,7 +556,7 @@ TEST_F(MultiHopPatternTest, DISABLED_convergentPattern_withFilter) {
                 }
             }
         });
-        ASSERT_FALSE(res);
+        ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
 }
@@ -1007,8 +1004,7 @@ TEST_F(MultiHopPatternTest, backwardChain_withFilter) {
 // =============================================================================
 
 // Test with all nodes labeled
-// DISABLED: Comparison of NodePattern not yet supported
-TEST_F(MultiHopPatternTest, DISABLED_labelConstraint_allNodesLabeled) {
+TEST_F(MultiHopPatternTest, labelConstraint_allNodesLabeled) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (p1:Person)-->(i:Interest)<--(p2:Person)
         WHERE p1 <> p2
@@ -1065,13 +1061,13 @@ TEST_F(MultiHopPatternTest, DISABLED_labelConstraint_allNodesLabeled) {
                 }
             }
         });
-        ASSERT_FALSE(res);
+        ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
 }
 
 // Test with only middle node labeled
-// DISABLED: Comparison of NodePattern not yet supported
+// DISABLED: DISTINCT not yet supported
 TEST_F(MultiHopPatternTest, DISABLED_labelConstraint_middleNodeOnly) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (a)-->(b:Interest)<--(c)
@@ -1124,14 +1120,13 @@ TEST_F(MultiHopPatternTest, DISABLED_labelConstraint_middleNodeOnly) {
                 }
             }
         });
-        ASSERT_FALSE(res);
+        ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
 }
 
 // Test with multiple labels on first node (Person:Founder)
-// DISABLED: Comparison of NodePattern not yet supported
-TEST_F(MultiHopPatternTest, DISABLED_labelConstraint_multipleLabels) {
+TEST_F(MultiHopPatternTest, labelConstraint_multipleLabels) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (p:Person:Founder)-->(i:Interest)<--(q:Person)
         WHERE p <> q
@@ -1200,7 +1195,7 @@ TEST_F(MultiHopPatternTest, DISABLED_labelConstraint_multipleLabels) {
                 }
             }
         });
-        ASSERT_FALSE(res);
+        ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
 }
@@ -1334,8 +1329,7 @@ TEST_F(MultiHopPatternTest, whereFilter_booleanOnBothEnds) {
 }
 
 // Test string equality filter on middle node
-// DISABLED: Comparison of NodePattern not yet supported
-TEST_F(MultiHopPatternTest, DISABLED_whereFilter_stringEquality) {
+TEST_F(MultiHopPatternTest, whereFilter_stringEquality) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (a:Person)-->(b:Interest)<--(c:Person)
         WHERE b.name = 'Cooking' AND a <> c
@@ -1395,7 +1389,7 @@ TEST_F(MultiHopPatternTest, DISABLED_whereFilter_stringEquality) {
                 }
             }
         });
-        ASSERT_FALSE(res);
+        ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
 }
@@ -1405,8 +1399,7 @@ TEST_F(MultiHopPatternTest, DISABLED_whereFilter_stringEquality) {
 // =============================================================================
 
 // Test returning node IDs
-// DISABLED: Comparison of NodePattern not yet supported
-TEST_F(MultiHopPatternTest, DISABLED_returnVariation_nodeIds) {
+TEST_F(MultiHopPatternTest, returnVariation_nodeIds) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (a:Person)-->(b:Interest)<--(c:Person)
         WHERE a <> c
@@ -1452,13 +1445,13 @@ TEST_F(MultiHopPatternTest, DISABLED_returnVariation_nodeIds) {
                 actual.add({nodesA->at(row), nodesB->at(row), nodesC->at(row)});
             }
         });
-        ASSERT_FALSE(res);
+        ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
 }
 
 // Test DISTINCT on middle node
-// DISABLED: Comparison of NodePattern not yet supported
+// DISABLED: DISTINCT not yet supported
 TEST_F(MultiHopPatternTest, DISABLED_returnVariation_distinctMiddle) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (a:Person)-->(b:Interest)<--(c:Person)
@@ -1513,7 +1506,7 @@ TEST_F(MultiHopPatternTest, DISABLED_returnVariation_distinctMiddle) {
                 }
             }
         });
-        ASSERT_FALSE(res);
+        ASSERT_TRUE(res);
     }
     EXPECT_TRUE(expected.equals(actual));
 }
