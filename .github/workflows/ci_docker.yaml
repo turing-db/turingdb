@@ -13,12 +13,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Download binaries from the latest successful main CI run
-      - name: Download binaries
+      # Download turingdb archive from main CI
+      - name: Download archive
         uses: actions/download-artifact@v3
         with:
-          name: turing-binaries
-          path: docker/turing_install
+          name: turing-install-archive
+          path: docker/artifacts
+      
+      # Extract archive into Docker context
+      - name: Extract turing_install
+        shell: bash
+        run: |
+          mkdir -p docker
+          tar -xzf docker/artifacts/turing_install.tar.gz -C docker
 
       # Ensure binaries are executable
       - name: Make binaries executable
