@@ -4,7 +4,6 @@
   inputs = {
     nixpkgs.url =  "github:nixos/nixpkgs/nixpkgs-25.05-darwin";
     flake-utils.url = "github:numtide/flake-utils";
-
   };
 
   outputs = { self, nixpkgs, flake-utils }:
@@ -19,9 +18,23 @@
             pkgs.libiconv
           ];
 
-          sharedNativeBuildInputs = [
-            pkgs.cmake
-            pkgs.git
+          sharedNativeBuildInputs = with pkgs; [
+            cmake
+            git
+            bash
+
+            curl
+            openssl_3
+
+            zlib
+
+            bison
+            flex
+
+            openblas
+            # faiss
+
+            # aws-sdk-cpp
           ];
 
           sharedBuildInputs = [] ++ darwinUtils;
@@ -31,8 +44,9 @@
           devShells.default = pkgs.mkShell {
             nativeBuildInputs = sharedNativeBuildInputs;
             buildInputs = sharedBuildInputs;
+
+            shellHook = "bash ./pull.sh";
           };
         }
-
       );
 }
