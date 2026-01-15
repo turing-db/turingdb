@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <type_traits>
 
 #include "InternalKind.h"
 #include "ContainerKind.h"
@@ -29,7 +28,7 @@ public:
 
     template <typename T>
     static consteval Code code() {
-        using U = inner_type_t<T>;
+        using U = InnerTypeHelper<T>::type;
 
         if constexpr (std::is_same_v<U, std::false_type>) {
             // Column is not a template class
@@ -59,20 +58,6 @@ public:
         const InternalKind::Code internal = code & InternalTypeMask;
         return internal;
     }
-
-private:
-    template <class>
-    struct inner_type {
-        using type = std::false_type;
-    };
-
-    template <template <class> class C, class U>
-    struct inner_type<C<U>> {
-        using type = U;
-    };
-
-    template <class T>
-    using inner_type_t = typename inner_type<T>::type;
 };
 
 }
