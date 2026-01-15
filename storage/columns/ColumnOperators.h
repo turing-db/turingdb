@@ -84,12 +84,12 @@ concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
                              const ColumnVector<T>* lhs,                                 \
                              const ColumnVector<U>* rhs) {                               \
         bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");  \
-        mask->resize(lhs->size());                                                       \
+        const auto size = lhs->size();                                                   \
                                                                                          \
+        mask->resize(size);                                                              \
         auto& maskd = mask->getRaw();                                                    \
         const auto& lhsd = lhs->getRaw();                                                \
         const auto& rhsd = rhs->getRaw();                                                \
-        const auto size = lhs->size();                                                   \
                                                                                          \
         for (size_t i = 0; i < size; i++) {                                              \
             maskd[i] = operatorFunction(lhsd[i], rhsd[i]);                               \
@@ -242,8 +242,6 @@ public:
     static void add(ColumnOptVector<Res>* res,
                     const ColumnVector<T>* lhs,
                     const ColumnConst<U>* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions.");
-
         const size_t size = lhs->size();
 
         res->resize(size);
