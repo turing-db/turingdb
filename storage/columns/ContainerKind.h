@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <limits>
 
+#include "KindTypes.h"
+
 namespace db {
 
 // Forward declarations
@@ -21,27 +23,33 @@ class ColumnMask;
 
 // Implementation
 
-#define INSTANTIATE_CONTAINER_TYPE_CODE(Type)   \
-    static consteval Code codeImpl(tag<Type>) { \
-        return __COUNTER__ - FirstValue;        \
-    }
-
-#define INSTANTIATE_CONTAINER_TYPE_CODE_T(Type)    \
-    template <typename T>                          \
-    static consteval Code codeImpl(tag<Type<T>>) { \
-        return __COUNTER__ - FirstValue;           \
-    }
-
 class ContainerKind {
+private:
+    using Types = KindTypes<
+        TemplateKind<ColumnVector>,
+        TemplateKind<ColumnConst>,
+        TemplateKind<ColumnSet>,
+        ColumnMask>;
+
 public:
     using Code = uint8_t;
 
     /// @brief Returns the code for the given container type
     template <typename T>
     static consteval Code code() {
-        constexpr auto code = codeImpl(tag<T> {});
-        static_assert(code != Invalid, "Container type was not registered as a valid container");
-        return code;
+        using Outer = OuterTypeHelper<T>::type;
+
+        if constexpr (std::is_same_v<Outer, std::false_type>) {
+            // T is not a template class
+            static_assert(Types::contains<T>(), "Container type was not registered as a valid container type");
+            constexpr auto code = (Code)Types::indexOf<T>();
+            return code;
+        } else {
+            // T is a template class
+            static_assert(Types::contains<Outer>(), "Container type was not registered as a valid container type");
+            constexpr auto code = (Code)Types::indexOf<Outer>();
+            return code;
+        }
     }
 
     /// @brief Value indicating an invalid container type code
@@ -53,25 +61,10 @@ public:
     /// @brief The maximum value of the container type codes
     static constexpr size_t MaxValue = (2 << (BitCount - 1)) - 2;
 
-    static_assert(MaxValue != Invalid);
-
-private:
-    static constexpr Code FirstValue = __COUNTER__;
-
-    template <typename T>
-    struct tag {};
-
-    INSTANTIATE_CONTAINER_TYPE_CODE_T(ColumnVector);
-    INSTANTIATE_CONTAINER_TYPE_CODE_T(ColumnConst);
-    INSTANTIATE_CONTAINER_TYPE_CODE_T(ColumnSet);
-    INSTANTIATE_CONTAINER_TYPE_CODE(ColumnMask);
-
-public:
     /// @brief The number of container types
-    //
-    // This value increase later if we add more container types
-    static constexpr size_t Count = __COUNTER__ - FirstValue;
+    static constexpr size_t Count = Types::count();
 
+    static_assert(MaxValue != Invalid);
     static_assert(Count < MaxValue);
 };
 

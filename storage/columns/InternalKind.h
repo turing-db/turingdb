@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <string>
 
+#include "columns/KindTypes.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
@@ -32,19 +33,58 @@ class Column;
 
 // Implementation
 
-#define INSTANTIATE_INTERNAL_TYPE_CODE(T)    \
-    static consteval Code codeImpl(tag<T>) { \
-        return __COUNTER__ - FirstValue;     \
-    }
-
 class InternalKind {
+private:
+    using Types = KindTypes<
+        size_t,
+        EntityID,
+        NodeID,
+        EdgeID,
+        LabelSetID,
+        LabelSet,
+        EdgeTypeID,
+        LabelID,
+        PropertyTypeID,
+        std::string,
+        ValueType,
+        ChangeID,
+        ColumnVector<EntityID>,
+        ColumnMask,
+        PropertyType,
+        PropertyNull,
+        bool,
+        types::Int64::Primitive,
+        types::Double::Primitive,
+        types::Bool::Primitive,
+        types::String::Primitive,
+        std::optional<EntityID>,
+        std::optional<NodeID>,
+        std::optional<EdgeID>,
+        std::optional<LabelSetID>,
+        std::optional<LabelSet>,
+        std::optional<EdgeTypeID>,
+        std::optional<LabelID>,
+        std::optional<PropertyTypeID>,
+        std::optional<types::UInt64::Primitive>,
+        std::optional<types::Int64::Primitive>,
+        std::optional<types::Double::Primitive>,
+        std::optional<types::Bool::Primitive>,
+        std::optional<types::String::Primitive>,
+        std::optional<std::string>,
+        std::optional<ValueType>,
+        std::optional<ChangeID>,
+        NodeView,
+        const CommitBuilder*,
+        const Change*,
+        Column*>;
+
 public:
     using Code = uint8_t;
 
     /// @brief Returns the code for the given type
     template <typename T>
     static consteval Code code() {
-        constexpr auto code = codeImpl(tag<T> {});
+        constexpr auto code = (Code)Types::indexOf<T>();
         static_assert(code != Invalid, "Internal type was not registered as a valid internal type");
         return code;
     }
@@ -58,61 +98,10 @@ public:
     /// @brief The maximum value of the internal type codes
     static constexpr size_t MaxValue = (2 << (BitCount - 1)) - 2;
 
+    /// @brief The number of internal type codes
+    static constexpr size_t Count = Types::count();
+
     static_assert(MaxValue != Invalid);
-
-private:
-    static constexpr Code FirstValue = __COUNTER__;
-
-    template <typename T>
-    struct tag {};
-
-    INSTANTIATE_INTERNAL_TYPE_CODE(size_t);
-    INSTANTIATE_INTERNAL_TYPE_CODE(EntityID);
-    INSTANTIATE_INTERNAL_TYPE_CODE(NodeID);
-    INSTANTIATE_INTERNAL_TYPE_CODE(EdgeID);
-    INSTANTIATE_INTERNAL_TYPE_CODE(LabelSetID);
-    INSTANTIATE_INTERNAL_TYPE_CODE(LabelSet);
-    INSTANTIATE_INTERNAL_TYPE_CODE(EdgeTypeID);
-    INSTANTIATE_INTERNAL_TYPE_CODE(LabelID);
-    INSTANTIATE_INTERNAL_TYPE_CODE(PropertyTypeID);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::string);
-    INSTANTIATE_INTERNAL_TYPE_CODE(ValueType);
-    INSTANTIATE_INTERNAL_TYPE_CODE(ChangeID);
-    INSTANTIATE_INTERNAL_TYPE_CODE(ColumnVector<EntityID>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(ColumnMask);
-    INSTANTIATE_INTERNAL_TYPE_CODE(PropertyType);
-    INSTANTIATE_INTERNAL_TYPE_CODE(PropertyNull);
-    INSTANTIATE_INTERNAL_TYPE_CODE(bool);
-    INSTANTIATE_INTERNAL_TYPE_CODE(types::Int64::Primitive);
-    INSTANTIATE_INTERNAL_TYPE_CODE(types::Double::Primitive);
-    INSTANTIATE_INTERNAL_TYPE_CODE(types::Bool::Primitive);
-    INSTANTIATE_INTERNAL_TYPE_CODE(types::String::Primitive);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<EntityID>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<NodeID>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<EdgeID>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<LabelSetID>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<LabelSet>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<EdgeTypeID>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<LabelID>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<PropertyTypeID>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<types::UInt64::Primitive>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<types::Int64::Primitive>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<types::Double::Primitive>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<types::Bool::Primitive>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<types::String::Primitive>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<std::string>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<ValueType>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(std::optional<ChangeID>);
-    INSTANTIATE_INTERNAL_TYPE_CODE(NodeView);
-    INSTANTIATE_INTERNAL_TYPE_CODE(const CommitBuilder*);
-    INSTANTIATE_INTERNAL_TYPE_CODE(const Change*);
-    INSTANTIATE_INTERNAL_TYPE_CODE(Column*);
-
-public:
-    /// @brief Number of internal type codes
-    static constexpr size_t Count = __COUNTER__ - FirstValue;
-
-    static_assert(Count < MaxValue);
 };
 
 }
