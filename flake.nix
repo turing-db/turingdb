@@ -2,8 +2,9 @@
   description = "TuringDB - the fastest in-memory graph database";
 
   inputs = {
-    nixpkgs.url =  "github::nixos/nixpkgs/nixpkgs-25.05";
-    flake-utils.url = "github::numtide/flake-utils";
+    nixpkgs.url =  "github:nixos/nixpkgs/nixpkgs-25.05-darwin";
+    flake-utils.url = "github:numtide/flake-utils";
+
   };
 
   outputs = { self, nixpkgs, flake-utils }:
@@ -12,9 +13,9 @@
       "aarch64-darwin"
     ] (system:
         let
-          pkgs = nixpkgs.legacyPacakges.${system};
+          pkgs = nixpkgs.legacyPackages.${system};
           darwinUtils  = pkgs.lib.optionals pkgs.stdenv.isDarwin [
-            pkgs.apple-apple-sdk_14
+            pkgs.apple-sdk_14
             pkgs.libiconv
           ];
 
