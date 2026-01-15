@@ -1,46 +1,6 @@
 # TuringDB Project Coding Style Guidelines
 
-## Philosophy
-
-We see software engineering as being the art and practice of creating software.
-It is a practice that has a long history, dating back from the 1940s in England,
-and the foundational work of Alan Turing.
-
-**Software as a creative act**
-
-We believe that writing software is a fundamentally creative activity of mankind. 
-It is about taking into account requirements, constraints and properties of what must be done, mixing them in the creative cauldron of one's mind and firing up the imaginary. 
-Great software emerges from ideas ultimately coming from intuition out of the imaginary.
-These great ideas of interest are often charged with an aesthetic sentiment or have an aesthetic quality in themselves.
-
-The behavior of a piece of software, its properties, both functional and non-functional, can be analyzed, described, formalized, and studied in various ways by different fields of computer science. 
-Software at its most fundamental level, as the actual realization by machine of a program, of an abstract computational entity, is studied by the theory of computation.
-Software engineering research is studying the professional practice of programming and produced a great quantity of recommendations and methodologies on how to produce good software. 
-
-The production of software can be investigated externally and after the act, by the methods of experimental science. But the actual act itself of an individual writing software is very much a creative act emerging from the human imaginary.
-
-The best software ideas are produced by intuition, rather than by the means of explicit and conscious logical deductive processes.
-We give them a justification after they have emerged from our minds. This justification may be technical, practical or theoretical. 
-This concerns architectural ideas, visions of components and systems interacting elegantly with each other.
-
-**The importance of imagination, creativity and diversity**
-
-Even if computer science is the science of computational entities and software, the actual act of producing a piece of software by a human, 
-that is the human experience of writing software, is a creative act, rather than a purely step-by-step process that could be completely prescribed by some kind of engineering methodology. 
-
-And that creation comes from the imaginary, that is the imagination of a living human being.
-Thus we place a great importance and respect for the people writing software, as they are not and can not be just the executants of some methodology or engineering recipe.
-Our imaginary is populated by what we experience, what we live, see, read, smell, enjoy.
-It is filled by our own life experiences in all domains of life, our backgrounds, the personal and the collective. 
-Thus software ideas originates from a unique quality present in each human individual.
-
-So to create the best software, it is of great importance to have the broadest and deepest range of imaginary space, in the people and the teams writing software.
-Thus diversity of the people making software, is of the essence to make great software.
-And on the personal side, we only grow and become better persons because of it.
-
-## C++
-
-### General & meta-rules
+## General & meta-rules
 
 **Simplicity** 
 Try to write for each task the simplest code that satisfies the requirements of the task. 
@@ -59,18 +19,18 @@ Try to make your code elegant, beautiful, clear, whenever possible.
 Remy Boutonnet as the main designer and maintainer of TuringDB provides the opinion of last resort on any code review, PR or element of style or C++ for turingdb.
 
 
-### Formatting
+## Formatting
 
-#### Line length
+### Line length
 
 We must have a maximum line length of 90 characters, with the objective to keep lines short and as readable as possible, with an ideal length around 80 characters. 
 This is quite convenient to have 80-90 characters lines when we want to display many files side-by-side in vim on a wide screen.
 
-#### Indentation
+### Indentation
 
 We use 4 spaces indentation with spaces only. We do not use tabs.
 
-#### Includes
+### Includes
 
 We use the #include \<stdlib.h\> style of standard includes, not #include \<cstdlib\>.
 
@@ -87,7 +47,7 @@ Put the current header file first and put an empty line afterwards, before the r
 Include directives should be grouped into different paragraphs to facilitate reading. 
 Utility includes should be written last and put in their own paragraph, and not mixed with other includes.
 
-#### Brackets
+### Brackets
 
 We put brackets { on the same line for a control flow construct such as if, for, while, with a space between the parenthesis and the opening bracket:
 ```cpp
@@ -143,15 +103,15 @@ void MyClass::myFunc() {
 }
 ```
 
-### Namespaces
+## Namespaces
 
 1. Never do using namespace in header files. This is a horribly bad practice because it contaminates all the cpp files that are including the header file.
 2. Never do using namespace std. We like to explicitly show that something is a standard container.
 3. We create namespaces with care and when it makes sense, such as for things as important as db or Log. Never do it on your own, ask around you if it makes sense.
 
-### Classes
+## Classes
 
-#### Class formatting
+### Class formatting
 
 Example of the preferred way of formatting a class:
 ```cpp
@@ -189,7 +149,7 @@ private:
 15. Destructors should be implemented in a cpp file whenever the class has non-trivial members, such as any STL container or classes that themselves have a non-trivial destructor.
 16. Use your esthetic sense and do not add any unnecessary clutter.
 
-#### Constructors
+### Constructors
 
 **Never do work in constructors**
 
@@ -212,7 +172,7 @@ MyClass::MyClass(ArgType* arg1, ArgType* arg2)
 - The constructor body is ideally empty
 - Each new member initialisation is aligned with the ":" character
 
-### Function arguments
+## Function arguments
 
 When a function has few arguments and they fit well on one line, they can be put one after the other on the same line:
 ```cpp
@@ -231,7 +191,7 @@ void MyClass::myFunction(Arg1* arg1,
 }
 ```
 
-### Function result type
+## Function result type
 
 Do not return non-trivial classes as a function return value. Do not return STL containers.
 Do not count on RVO (Return Value Optimisation), assume that it does not exist.
@@ -240,11 +200,11 @@ or my passing a pointer to your class.
 
 Do not return strings, this is very ugly.
 
-### Pointers and references
+## Pointers and references
 
 Don't be afraid of pointers.
 
-#### Formatting
+### Formatting
 
 The star symbol of a pointer is always put close to the type without space:
 ```cpp
@@ -252,7 +212,7 @@ void func(Type* obj) {
 }
 ```
 
-#### Argument-passing style
+### Argument-passing style
 The primary argument-passing style in turingdb should be good old pointers, not references:
 ```cpp
 void MyClass::myFunction(Arg1* arg1, Arg2* arg2, Arg3* arg3) {
@@ -284,7 +244,7 @@ void MyClass::myFunction(Arg1* arg1, std::vector<double>& result) {
 Do not mix passing styles.
 Never pass smart pointers as function arguments.
 
-#### Ownership
+### Ownership
 
 The primary type of pointer in turingdb is the good old pointer: MyType* mytype
 
@@ -301,17 +261,17 @@ to manage ownership using good old pointers and new, or std::unique_ptr, it mean
 Unique pointers should not be used to pass owned objects around from function to function using std::move, but just
 as a shorthand to replace new and delete.
 
-#### Smart pointers
+### Smart pointers
 
 The only allowed type of smart pointer is std::unique_ptr.
 Do not use std::shared_ptr as it reveals almost always a fault of the infrastructure.
 
-### Const
+## Const
 
 We attach a lot of importance to const-correctness.
 Always use const whenever possible, unless it adds mindless clutter.
 
-#### Const for arguments
+### Const for arguments
 
 Use const for pointers and references whenever they will never be modified or are not supposed to be modified.
 ```cpp
@@ -319,7 +279,7 @@ void myAlgorithm(std::vector<NodeID>& result, const std:::vector<NodeID>& seed, 
 }
 ```
 
-#### Const for local variables and intermediate results
+### Const for local variables and intermediate results
 
 Use const whenever possible for the local variables of a function and to denote the intermediate results of an algorithm.
 ```cpp
@@ -334,7 +294,7 @@ void myAlgorithm(std::vector<NodeID>& result, const std:::vector<NodeID>& seed, 
 }
 ```
 
-### Initialisation
+## Initialisation
 
 Always initialize local variables to a default value if necessary.
 Always initialize class members to a default value, especially pointers.
@@ -374,12 +334,12 @@ The preferred style for new is with an assignment:
 MyData* data = new MyData();
 ```
 
-### Enum
+## Enum
 
 Prefer enum class almost always.
 Prefer to leave a comma at the end of the last alternative of an enum or enum class.
 
-### Assertions
+## Assertions
 
 Use assertions in turingdb to ensure that a critical property of the code is valid at a given point,
 to check conditions without which the code can not absolutely proceed.
@@ -388,7 +348,7 @@ Use only the bioassert API defined in BioAssert.h for assertions in turingdb.
 We decided that bioassert raises an exception if the assertion is not valid.
 Please do not catch that exception yourself. It is only try-catched in QueryInterpreter so that a given query does not crash the entire server.
 
-### Exceptions
+## Exceptions
 
 Exceptions are used and allowed in turingdb.
 Prefer raising an exception by opposition to returning a boolean or an error code.
@@ -400,16 +360,16 @@ All exceptions in turingdb must derive from TuringException.
 
 Only old code in turingdb still uses booleans to indicate errors. This code have to be adapted over time.
 
-### Concepts
+## Concepts
 
 You can use C++ concepts in turingdb but please use them parsimoniously. The overall goal is to not add syntactical noise and clutter to the code.
 
-### Move semantics and rvalue references
+## Move semantics and rvalue references
 
 Pass data by pointer or reference, const reference or result reference, for consistency sake.
 Please do not use RVO, move semantics or anything relying on rvalue references and other related mechanisms in C++.
 
-### Switch formatting
+## Switch formatting
 
 Switch and cases are formatted as follows:
 ```cpp
