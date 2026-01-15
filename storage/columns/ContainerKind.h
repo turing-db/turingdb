@@ -56,7 +56,7 @@ public:
     static constexpr Code Invalid = std::numeric_limits<Code>::max();
 
     /// @brief The number of bits required to represent the container type codes
-    static constexpr size_t BitCount = 8;
+    static constexpr size_t BitCount = sizeof(Code) * 8;
 
     /// @brief The maximum value of the container type codes
     static constexpr size_t MaxValue = (2 << (BitCount - 1)) - 2;
