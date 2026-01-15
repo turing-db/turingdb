@@ -20,12 +20,14 @@
 
 namespace db {
 
+/// @brief Allow comparisons of string types
 template <typename T, typename U>
 concept Stringy = (
     (std::same_as<T, std::string_view> && std::same_as<std::string, U>) ||
     (std::same_as<std::string_view, U> && std::same_as<T, std::string>)
 );
 
+/// @brief Type traits to determine optionals
 template <typename T>
 struct is_optional : std::false_type {};
 
@@ -35,6 +37,7 @@ struct is_optional<std::optional<U>> : std::true_type {};
 template <typename T>
 inline constexpr bool is_optional_v = is_optional<std::remove_cvref_t<T>>::value;
 
+/// @brief Helpers to get U from T = std::optional<U>, or T if T is not an optional
 template <typename T>
 struct unwrap_optional {
     using underlying_type = T;
@@ -48,22 +51,41 @@ struct unwrap_optional<std::optional<U>> {
 template <typename T>
 using unwrap_optional_t = typename unwrap_optional<T>::underlying_type;
 
-// Types that may be compared, but one or both may be wrapped in optional
+/**
+ * @brief Helper to get an optional-wrapped result of a function
+ * which takes two possibly-optional arguments
+ */
+template <typename Func, typename T, typename U>
+using optional_invoke_result = std::optional<
+    typename std::invoke_result<Func, unwrap_optional_t<T>, unwrap_optional_t<U>>::type>;
+
+template <typename ResultT, typename Func, typename ArgU, typename ArgW>
+concept optional_result_of =
+    std::same_as<ResultT, std::remove_cvref_t<decltype(Func {}(
+                              std::declval<unwrap_optional_t<ArgU>>(),
+                              std::declval<unwrap_optional_t<ArgW>>()))>>;
+
+/// @brief Types that may be compared, but one or both may be wrapped in optional
 template <typename T, typename U>
 concept OptionallyComparable =
     (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
      || std::totally_ordered_with<unwrap_optional_t<T>, unwrap_optional_t<U>>);
 
+/**
+ * @brief Function that can be invoked, but one or both arguments may be wrapped in
+ * optional.
+ */
 template <typename Func, typename T, typename U>
 concept OptionallyInvokable =
     std::invocable<Func, unwrap_optional_t<T>, unwrap_optional_t<U>>;
 
-// Types that are semantically equivalent, but one or both may be wrapped in optional
+/// @brief Types that are semantically equivalent, one or both may be wrapped in optional
 template <typename T, typename U>
 concept OptionallyEquivalent =
     (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
      || std::same_as<unwrap_optional_t<T>, unwrap_optional_t<U>>);
 
+/// @brief Helper to work with filters with 3-valued logic
 template <typename T>
 concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
 
@@ -236,9 +258,7 @@ public:
     }
 
     template <typename Res, typename T, typename U>
-        requires std::same_as<Res, std::remove_cvref_t<decltype(std::plus<> {}(
-                                       std::declval<unwrap_optional_t<T>>(),
-                                       std::declval<unwrap_optional_t<U>>()))>>
+        requires optional_result_of<Res, std::plus<>, T, U>
     static void add(ColumnOptVector<Res>* res,
                     const ColumnVector<T>* lhs,
                     const ColumnConst<U>* rhs) {
@@ -601,8 +621,8 @@ private:
      */
     template <typename Func, typename T, typename U>
         requires OptionallyInvokable<Func, T, U>
-    inline static auto optionalGeneric(const T& a, const U& b)
-        -> std::optional<typename std::invoke_result<Func, unwrap_optional_t<T>, unwrap_optional_t<U>>::type> {
+    inline static auto optionalGeneric(const T& a,
+                                       const U& b) -> optional_invoke_result<Func, T, U> {
         if constexpr (is_optional_v<T>) {
             if (!a.has_value()) {
                 return std::nullopt;
