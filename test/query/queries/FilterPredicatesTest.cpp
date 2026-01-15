@@ -1671,8 +1671,6 @@ TEST_F(FilterPredicatesTest, cartesianProductTwoNodesFilter) {
 }
 
 TEST_F(FilterPredicatesTest, cartesianProductSameNodeDifferentProps) {
-    // Node ID comparison (n <> m) is not yet supported.
-    // When implemented, update this test to verify correct results.
     constexpr std::string_view MATCH_QUERY = "MATCH (n), (m) WHERE n.hasPhD AND m.hasPhD AND n <> m RETURN n.name, m.name";
 
     using String = types::String::Primitive;
@@ -1714,9 +1712,9 @@ TEST_F(FilterPredicatesTest, cartesianProductSameNodeDifferentProps) {
                 actual.add({*nNames->at(row), *mNames->at(row)});
             }
         });
-        ASSERT_FALSE(res) << "Node ID comparison not supported";
+        ASSERT_TRUE(res);
     }
-    // EXPECT_TRUE(expected.equals(actual));
+    EXPECT_TRUE(expected.equals(actual));
 }
 
 // =============================================================================
@@ -1844,8 +1842,6 @@ TEST_F(FilterPredicatesTest, noMatchingValue) {
 // =============================================================================
 
 TEST_F(FilterPredicatesTest, nodePropertyEquality) {
-    // Node ID comparison (n <> m) is not yet supported.
-    // When implemented, update this test to verify correct results.
     constexpr std::string_view MATCH_QUERY = "MATCH (n), (m) WHERE n.age = m.age AND n <> m RETURN n.name, m.name";
 
     using String = types::String::Primitive;
@@ -1886,9 +1882,9 @@ TEST_F(FilterPredicatesTest, nodePropertyEquality) {
                 actual.add({*nNames->at(row), *mNames->at(row)});
             }
         });
-        ASSERT_FALSE(res) << "Node ID comparison not supported";
+        ASSERT_TRUE(res);
     }
-    // EXPECT_TRUE(expected.equals(actual));
+    EXPECT_TRUE(expected.equals(actual));
 }
 
 // =============================================================================
