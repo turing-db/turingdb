@@ -1,5 +1,7 @@
 #include "TuringTest.h"
 #include "GMLParser.h"
+#include "GMLGraphParser.h"
+#include "Graph.h"
 
 using namespace db;
 using namespace turing::test;
@@ -335,4 +337,27 @@ TEST_F(GMLParserTest, GraphAttributes) {
         "  node [ id 0 identifier 1]\n"
         "]",
         "GML Error at line 3: Unexpected token '['. Expected: 'alphabet'");
+}
+
+// This test demonstrates a segfault when using the actual GMLGraphSax importer
+// (not the mock GMLSax class used in other tests). The bug is that _currentEdge
+// is nullptr when edge properties appear before source/target in the GML file.
+TEST_F(GMLParserTest, EdgePropertyBeforeSourceTargetCrash) {
+    // This GML has edge property "label" BEFORE "source" and "target"
+    // GMLGraphSax::onEdgeProperty() will dereference _currentEdge which is nullptr
+    constexpr std::string_view crashGml =
+        "graph [\n"
+        "  node [ id 0 ]\n"
+        "  node [ id 1 ]\n"
+        "  edge [ label \"crash\" source 0 target 1 ]\n"
+        "]";
+
+    auto graph = Graph::create();
+    GMLGraphSax sax(graph.get());
+    GMLGraphParser parser(sax);
+
+    sax.prepare();
+    // This will crash due to null pointer dereference in onEdgeProperty
+    auto res = parser.parse(crashGml);
+    ASSERT_TRUE(res);
 }
