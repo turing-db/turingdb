@@ -2,6 +2,27 @@ cmake_minimum_required(VERSION 3.10)
 
 project(turingdb)
 
+# On macOS, require LLVM Clang (not AppleClang) with version >= 15
+# AppleClang has compatibility issues with C++23 features and missing headers
+if(APPLE)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+        message(FATAL_ERROR
+            "AppleClang is not supported. Please use LLVM Clang from Homebrew.\n"
+            "Install with: brew install llvm\n"
+            "Then configure with: cmake -DCMAKE_C_COMPILER=$(brew --prefix llvm)/bin/clang "
+            "-DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++ .."
+        )
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
+            message(FATAL_ERROR
+                "LLVM Clang version ${CMAKE_CXX_COMPILER_VERSION} is too old. "
+                "Please use version 15.0 or newer.\n"
+                "Update with: brew upgrade llvm"
+            )
+        endif()
+    endif()
+endif()
+
 # Set CMAKE_INSTALL_PREFIX to build/turing_install if not set
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/turing_install"
