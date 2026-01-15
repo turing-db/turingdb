@@ -1,11 +1,11 @@
 #pragma once
 
 #include "columns/ColumnVector.h"
+#include "views/NodeView.h"
 
 namespace db {
 
 class Iterator;
-class NodeView;
 
 template <typename T>
 concept ChunkWriter = requires(T it) {
