@@ -34,7 +34,7 @@ class Column;
 
 #define INSTANTIATE_INTERNAL_TYPE_CODE(T)    \
     static consteval Code codeImpl(tag<T>) { \
-        return __COUNTER__ - FirstValue;    \
+        return __COUNTER__ - FirstValue;     \
     }
 
 class InternalKind {
@@ -56,7 +56,9 @@ public:
     static constexpr size_t BitCount = 8;
 
     /// @brief The maximum value of the internal type codes
-    static constexpr size_t MaxValue = (2 << (BitCount - 1)) - 1;
+    static constexpr size_t MaxValue = (2 << (BitCount - 1)) - 2;
+
+    static_assert(MaxValue != Invalid);
 
 private:
     static constexpr Code FirstValue = __COUNTER__;

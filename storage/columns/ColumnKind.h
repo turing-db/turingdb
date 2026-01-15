@@ -19,10 +19,13 @@ public:
     static constexpr Code BitCount = sizeof(Code) * 8;
 
     /// @brief The maximum value of the column type codes
-    static constexpr Code MaxValue = (2 << (BitCount - 1)) - 1;
+    static constexpr Code MaxValue = ((Code)ContainerKind::MaxValue << (Code)InternalKind::BitCount)
+                                   | (Code)InternalKind::MaxValue;
 
     static_assert(BitCount >= InternalKind::BitCount + ContainerKind::BitCount,
                   "ColumnKind cannot fit all bits necessary to represent internal + container types");
+
+    static_assert(MaxValue != Invalid);
 
     template <typename T>
     static consteval Code code() {
@@ -31,7 +34,9 @@ public:
         if constexpr (std::is_same_v<U, std::false_type>) {
             // Column is not a template class
             // It is either ColumnMask or ListColumnConst
-            return ContainerKind::code<T>();
+            constexpr Code container = ContainerKind::code<T>();
+            static_assert(container != ContainerKind::Invalid);
+            return container;
         } else {
             // Column is a template class, such as ColumnVector<U>
             constexpr Code internal = InternalKind::code<U>();

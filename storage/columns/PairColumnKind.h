@@ -10,16 +10,23 @@ public:
 
     static constexpr size_t BitCount = sizeof(Code) * 8;
 
-    static constexpr Code MaxValue = (2ull << (BitCount - 1ull)) - 1ull;
-
     // Check if 2 * ColumnKindCode fits into PairColumnCodeType
     static_assert(sizeof(ColumnKind::Code) * 8 * 2 <= BitCount);
 
+    static constexpr Code MaxValue = (Code)ColumnKind::MaxValue << ColumnKind::BitCount
+                                   | (Code)ColumnKind::MaxValue;
+
+    static constexpr Code Invalid = std::numeric_limits<Code>::max();
+
+    static_assert(MaxValue != Invalid);
+
     template <typename T, typename U>
     static consteval Code code() {
-        const Code c1 = ColumnKind::code<T>();
-        const Code c2 = ColumnKind::code<U>();
-        return (c1 << ColumnKind::BitCount) | c2;
+        constexpr Code c1 = ColumnKind::code<T>();
+        constexpr Code c2 = ColumnKind::code<U>();
+        constexpr Code pair = (c1 << ColumnKind::BitCount) | c2;
+
+        return pair;
     }
 
     static constexpr Code code(ColumnKind::Code lhs,

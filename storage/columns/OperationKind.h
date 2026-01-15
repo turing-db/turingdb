@@ -9,12 +9,17 @@ class OperationKind {
 public:
     using Code = uint64_t;
 
+    static constexpr size_t OpCodeBitCount = sizeof(ColumnOperator) * 8;
+
+    static constexpr Code MaxOpCode = (2ull << (OpCodeBitCount - 1ull)) - 2ull;
+
+    static constexpr Code MaxValue = MaxOpCode << PairColumnKind::BitCount
+                                   | PairColumnKind::MaxValue;
+
     static constexpr Code BitCount = sizeof(Code) * 8;
 
-    static constexpr Code MaxValue = (2ull << (BitCount - 1ull)) - 1ull;
-
     // Checking if we can fit operator kind + pair column type into ExprOpKind
-    static_assert(BitCount >= sizeof(ColumnOperator) * 8 + PairColumnKind::BitCount);
+    static_assert(BitCount >= OpCodeBitCount + PairColumnKind::BitCount);
 
     // Binary expressions
     template <ColumnOperator Op, typename Lhs, typename Rhs>

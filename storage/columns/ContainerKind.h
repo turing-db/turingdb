@@ -51,7 +51,9 @@ public:
     static constexpr size_t BitCount = 8;
 
     /// @brief The maximum value of the container type codes
-    static constexpr size_t MaxValue = (2 << (BitCount - 1)) - 1;
+    static constexpr size_t MaxValue = (2 << (BitCount - 1)) - 2;
+
+    static_assert(MaxValue != Invalid);
 
 private:
     static constexpr Code FirstValue = __COUNTER__;

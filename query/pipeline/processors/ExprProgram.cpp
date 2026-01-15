@@ -201,14 +201,14 @@ void ExprProgram::evalInstr(const Instruction& instr) {
     switch (getOperatorType(op)) {
         case ColumnOperatorType::OPTYPE_BINARY:
             evalBinaryInstr(instr);
-            break;
+        break;
 
         case ColumnOperatorType::OPTYPE_UNARY:
             evalUnaryInstr(instr);
-            break;
+        break;
 
         case ColumnOperatorType::OPTYPE_NOOP:
-            break;
+        break;
     }
 }
 
