@@ -97,11 +97,24 @@ See our [detailed benchmarks](https://docs.turingdb.ai/query/benchmarks) for mor
 ## Quickstart
 
 ### Requirements
+
+**Install via pip**
+
+* Linux: tested primarily on Ubuntu Jammy 22.04 LTS
+* MacOS
+
+**For Build**
+
 TuringDB requires:
+
+For Linux:
 - **Linux Ubuntu Jammy** 22.04 LTS or later
 - **GCC** version >=11
 - **CMake** 3.10 or higher
-- **Git** for submodule management
+
+For MacOS:
+- **LLVM Clang** version >=15
+- **CMake** 3.10 or higher
 
 ### Install TuringDB
 
