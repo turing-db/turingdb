@@ -62,6 +62,34 @@ constexpr OperationKind::Code UnaryOpCase = OperationKind::code(Op, Lhs::staticK
         break;                                                          \
     }
 
+#define MASK_EQUAL_CASE(Lhs, Rhs)                                      \
+    case OpCase<OP_EQUAL, Lhs, Rhs>: {                                 \
+        ColumnOperators::equalOp(static_cast<ColumnMask*>(instr._res), \
+                                 static_cast<const Lhs*>(instr._lhs),  \
+                                 static_cast<const Rhs*>(instr._rhs)); \
+        break;                                                         \
+    }                                                                  \
+    case OpCase<OP_EQUAL, Rhs, Lhs>: {                                 \
+        ColumnOperators::equalOp(static_cast<ColumnMask*>(instr._res), \
+                                 static_cast<const Rhs*>(instr._lhs),  \
+                                 static_cast<const Lhs*>(instr._rhs)); \
+        break;                                                         \
+    }
+
+#define OPT_MASK_EQUAL_CASE(Lhs, Rhs)                                     \
+    case OpCase<OP_EQUAL, Lhs, Rhs>: {                                    \
+        ColumnOperators::equalOp(static_cast<ColumnOptMask*>(instr._res), \
+                                 static_cast<const Lhs*>(instr._lhs),     \
+                                 static_cast<const Rhs*>(instr._rhs));    \
+        break;                                                            \
+    }                                                                     \
+    case OpCase<OP_EQUAL, Rhs, Lhs>: {                                    \
+        ColumnOperators::equalOp(static_cast<ColumnOptMask*>(instr._res), \
+                                 static_cast<const Rhs*>(instr._lhs),     \
+                                 static_cast<const Lhs*>(instr._rhs));    \
+        break;                                                            \
+    }
+
 #define NOT_EQUAL_CASE(Lhs, Rhs)                                           \
     case OpCase<OP_NOT_EQUAL, Lhs, Rhs>: {                                 \
         ColumnOperators::notEqual(static_cast<ColumnOptMask*>(instr._res), \
@@ -146,41 +174,39 @@ constexpr OperationKind::Code UnaryOpCase = OperationKind::code(Op, Lhs::staticK
         break;                                    \
     }
 
-#define INSTANTIATE_PROPERTY_OPERATOR(CASE_NAME) \
-    CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)    \
-    CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)        \
-    CASE_NAME(ColumnConst<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)        \
-                                                                                                     \
-    CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)  \
-    CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)      \
-    CASE_NAME(ColumnConst<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)      \
-                                                                                                     \
-    CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)  \
-    CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)      \
-    CASE_NAME(ColumnConst<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>)      \
-                                                                                                     \
-    CASE_NAME(ColumnOptVector<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)  \
-    CASE_NAME(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)      \
-    CASE_NAME(ColumnConst<types::String::Primitive>, ColumnOptVector<types::String::Primitive>)      \
-                                                                                                     \
-    CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)      \
-    CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)          \
-    CASE_NAME(ColumnConst<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)          \
-                                                                                                     \
-    /* Numeric types are totally ordered: allow comparisions between types.*/                        \
-    /* NOTE: Some are blocked by planner */                                                          \
-    CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::UInt64::Primitive>)   \
-    CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Double::Primitive>)   \
-    CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::UInt64::Primitive>)       \
-    CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Double::Primitive>)       \
-    CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::Int64::Primitive>)   \
-    CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::Double::Primitive>)  \
-    CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::Int64::Primitive>)       \
-    CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::Double::Primitive>)      \
-    CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Int64::Primitive>)   \
-    CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::UInt64::Primitive>)  \
-    CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Int64::Primitive>)       \
-    CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::UInt64::Primitive>)      \
+#define SUBSCRIPT_CASE(Res, Lhs, Rhs)                                  \
+    case OpCase<OP_SUBSCRIPT, Lhs, Rhs>: {                        \
+        ColumnOperators::subscriptOp(                             \
+            static_cast<Res*>(instr._res), \
+            static_cast<const Lhs*>(instr._lhs),                  \
+            static_cast<const Rhs*>(instr._rhs));                 \
+        break;                                                    \
+    }
+
+#define INSTANTIATE_PROPERTY_OPERATOR(CASE_NAME)                                                    \
+    CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnOptVector<types::Int64::Primitive>)   \
+    CASE_NAME(ColumnOptVector<types::Int64::Primitive>, ColumnConst<types::Int64::Primitive>)       \
+                                                                                                    \
+    CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnOptVector<types::UInt64::Primitive>) \
+    CASE_NAME(ColumnOptVector<types::UInt64::Primitive>, ColumnConst<types::UInt64::Primitive>)     \
+                                                                                                    \
+    CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnOptVector<types::Double::Primitive>) \
+    CASE_NAME(ColumnOptVector<types::Double::Primitive>, ColumnConst<types::Double::Primitive>)     \
+                                                                                                    \
+    CASE_NAME(ColumnOptVector<types::String::Primitive>, ColumnOptVector<types::String::Primitive>) \
+    CASE_NAME(ColumnOptVector<types::String::Primitive>, ColumnConst<types::String::Primitive>)     \
+                                                                                                    \
+    CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnOptVector<types::Bool::Primitive>)     \
+    CASE_NAME(ColumnOptVector<types::Bool::Primitive>, ColumnConst<types::Bool::Primitive>)
+
+#define SUBSCRIPT_CASE(Res, Lhs, Rhs)                             \
+    case OpCase<OP_SUBSCRIPT, Lhs, Rhs>: {                        \
+        ColumnOperators::subscriptOp(                             \
+            static_cast<Res*>(instr._res),                        \
+            static_cast<const Lhs*>(instr._lhs),                  \
+            static_cast<const Rhs*>(instr._rhs));                 \
+        break;                                                    \
+    }
 
 ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
     ExprProgram* prog = new ExprProgram();
@@ -222,6 +248,153 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
     }
     if (!rhs) {
         throw FatalException("Binary instruction had null right input.");
+    }
+
+    const InternalKind::Code lhsKind = ColumnKind::extractInternalKind(lhs->getKind());
+    const InternalKind::Code rhsKind = ColumnKind::extractInternalKind(rhs->getKind());
+
+    if (lhsKind == InternalKind::code<ValueVariant>() 
+            || lhsKind == InternalKind::code<std::optional<ValueVariant>>() 
+            || rhsKind == InternalKind::code<ValueVariant>() 
+            || rhsKind == InternalKind::code<std::optional<ValueVariant>>()) {
+
+        switch (OperationKind::code(op, lhs->getKind(), rhs->getKind())) {
+            // Vector<ValueVariant> vs. Vector<T>
+            case OpCase<OP_EQUAL, ColumnVector<ValueVariant>, ColumnVector<ValueVariant>>: {
+                ColumnOperators::equalOp(static_cast<ColumnMask*>(instr._res),
+                                         static_cast<const ColumnVector<ValueVariant>*>(instr._lhs),
+                                         static_cast<const ColumnVector<ValueVariant>*>(instr._rhs));
+            } break;
+
+            MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnVector<types::Int64::Primitive>)
+            MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnVector<types::UInt64::Primitive>)
+            MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnVector<types::Double::Primitive>)
+            MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnVector<types::Bool::Primitive>)
+            MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnVector<types::String::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnVector<std::optional<ValueVariant>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnVector<std::optional<types::Int64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnVector<std::optional<types::UInt64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnVector<std::optional<types::Double::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnVector<std::optional<types::Bool::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnVector<std::optional<types::String::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnVector<types::Int64::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnVector<types::UInt64::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnVector<types::Double::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnVector<types::Bool::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnVector<types::String::Primitive>)
+
+            case OpCase<OP_EQUAL, ColumnVector<std::optional<ValueVariant>>, ColumnVector<std::optional<ValueVariant>>>: {
+                ColumnOperators::equalOp(static_cast<ColumnOptMask*>(instr._res),
+                                         static_cast<const ColumnVector<std::optional<ValueVariant>>*>(instr._lhs),
+                                         static_cast<const ColumnVector<std::optional<ValueVariant>>*>(instr._rhs));
+            }
+
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnVector<std::optional<types::Int64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnVector<std::optional<types::UInt64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnVector<std::optional<types::Double::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnVector<std::optional<types::Bool::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnVector<std::optional<types::String::Primitive>>)
+
+            // Vector<ValueVariant> vs. Const<T>
+            case OpCase<OP_EQUAL, ColumnVector<ValueVariant>, ColumnConst<ValueVariant>>: {
+                ColumnOperators::equalOp(static_cast<ColumnMask*>(instr._res),
+                                         static_cast<const ColumnVector<ValueVariant>*>(instr._lhs),
+                                         static_cast<const ColumnConst<ValueVariant>*>(instr._rhs));
+            }
+
+            MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnConst<types::Int64::Primitive>)
+            MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnConst<types::UInt64::Primitive>)
+            MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnConst<types::Double::Primitive>)
+            MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnConst<types::Bool::Primitive>)
+            MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnConst<types::String::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnConst<std::optional<ValueVariant>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnConst<std::optional<types::Int64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnConst<std::optional<types::UInt64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnConst<std::optional<types::Double::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnConst<std::optional<types::Bool::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<ValueVariant>, ColumnConst<std::optional<types::String::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<ValueVariant>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<types::Int64::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<types::UInt64::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<types::Double::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<types::Bool::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<types::String::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<std::optional<ValueVariant>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<std::optional<types::Int64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<std::optional<types::UInt64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<std::optional<types::Double::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<std::optional<types::Bool::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnVector<std::optional<ValueVariant>>, ColumnConst<std::optional<types::String::Primitive>>)
+
+            // Const<ValueVariant> vs. Vector<T>
+            case OpCase<OP_EQUAL, ColumnConst<ValueVariant>, ColumnVector<ValueVariant>>: {
+                ColumnOperators::equalOp(static_cast<ColumnMask*>(instr._res),
+                                         static_cast<const ColumnConst<ValueVariant>*>(instr._lhs),
+                                         static_cast<const ColumnVector<ValueVariant>*>(instr._rhs));
+            } break;
+
+            MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnVector<types::Int64::Primitive>)
+            MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnVector<types::UInt64::Primitive>)
+            MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnVector<types::Double::Primitive>)
+            MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnVector<types::Bool::Primitive>)
+            MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnVector<types::String::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnVector<std::optional<types::Int64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnVector<std::optional<types::UInt64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnVector<std::optional<types::Double::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnVector<std::optional<types::Bool::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnVector<std::optional<types::String::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnVector<types::Int64::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnVector<types::UInt64::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnVector<types::Double::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnVector<types::Bool::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnVector<types::String::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnVector<std::optional<types::Int64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnVector<std::optional<types::UInt64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnVector<std::optional<types::Double::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnVector<std::optional<types::Bool::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnVector<std::optional<types::String::Primitive>>)
+
+            // Const<ValueVariant> vs. Const<T>
+            case OpCase<OP_EQUAL, ColumnConst<ValueVariant>, ColumnConst<ValueVariant>>: {
+                ColumnOperators::equalOp(static_cast<ColumnMask*>(instr._res),
+                                         static_cast<const ColumnConst<ValueVariant>*>(instr._lhs),
+                                         static_cast<const ColumnConst<ValueVariant>*>(instr._rhs));
+            } break;
+
+            MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnConst<types::Int64::Primitive>)
+            MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnConst<types::UInt64::Primitive>)
+            MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnConst<types::Double::Primitive>)
+            MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnConst<types::Bool::Primitive>)
+            MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnConst<types::String::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnConst<std::optional<ValueVariant>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnConst<std::optional<types::Int64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnConst<std::optional<types::UInt64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnConst<std::optional<types::Double::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnConst<std::optional<types::Bool::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<ValueVariant>, ColumnConst<std::optional<types::String::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnConst<types::Int64::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnConst<types::UInt64::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnConst<types::Double::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnConst<types::Bool::Primitive>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnConst<types::String::Primitive>)
+            case OpCase<OP_EQUAL, ColumnConst<std::optional<ValueVariant>>, ColumnConst<std::optional<ValueVariant>>>: {
+                ColumnOperators::equalOp(static_cast<ColumnOptMask*>(instr._res),
+                                         static_cast<const ColumnConst<std::optional<ValueVariant>>*>(instr._lhs),
+                                         static_cast<const ColumnConst<std::optional<ValueVariant>>*>(instr._rhs));
+            }
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnConst<std::optional<types::Int64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnConst<std::optional<types::UInt64::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnConst<std::optional<types::Double::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnConst<std::optional<types::Bool::Primitive>>)
+            OPT_MASK_EQUAL_CASE(ColumnConst<std::optional<ValueVariant>>, ColumnConst<std::optional<types::String::Primitive>>)
+
+            default: {
+                const std::string_view opName = ColumnOperatorDescription::value(op);
+                throw PipelineException(
+                    fmt::format("Operator {} not implemented (kinds: {} and {})", opName,
+                                lhs->getKind(), rhs->getKind()));
+            }
+        }
     }
 
     switch (OperationKind::code(op, lhs->getKind(), rhs->getKind())) {
@@ -328,6 +501,11 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         IN_CASE(ColumnVector<std::string>, ColumnSet<std::string>)
         IN_CASE(ColumnVector<double>, ColumnSet<double>)
         IN_CASE(ColumnVector<int64_t>, ColumnSet<int64_t>)
+
+        // Subscript ops
+        SUBSCRIPT_CASE(ColumnConst<ValueVariant>, ListColumnConst, ColumnConst<int64_t>)
+        SUBSCRIPT_CASE(ColumnVector<ValueVariant>, ListColumnConst, ColumnVector<int64_t>)
+        SUBSCRIPT_CASE(ColumnOptVector<ValueVariant>, ListColumnConst, ColumnOptVector<int64_t>)
 
         default: {
             const std::string_view opName = ColumnOperatorDescription::value(op);

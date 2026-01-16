@@ -104,17 +104,43 @@ public:
         return false;
     }
 
-    template <typename T>
-    bool operator==(const std::optional<T>& other) const {
-        static_assert(TupleToVariant<Types>::template ExactlyOnce<T>,
-                      "T is not part of the ValueVariant's Types");
-
-        if (!other.has_value()) {
+    friend bool operator==(const ValueVariant& left, const std::optional<ValueVariant>& right) {
+        if (!right.has_value()) {
             return false;
         }
 
-        if (const T* p = getIf<T>()) {
-            return *p == other.value();
+        const auto& r = right.value();
+
+        return left == r;
+    }
+
+    template <typename T>
+    friend bool operator==(const ValueVariant& left, const std::optional<T>& right) {
+        static_assert(TupleToVariant<Types>::template ExactlyOnce<T>,
+                      "T is not part of the ValueVariant's Types");
+
+        if (!right.has_value()) {
+            return false;
+        }
+
+        if (const T* p = left.getIf<T>()) {
+            return *p == right.value();
+        }
+
+        return false;
+    }
+
+    template <typename T>
+    friend bool operator==(const std::optional<T>& left, const ValueVariant& right) {
+        static_assert(TupleToVariant<Types>::template ExactlyOnce<T>,
+                      "T is not part of the ValueVariant's Types");
+
+        if (!left.has_value()) {
+            return false;
+        }
+
+        if (const T* p = right.getIf<T>()) {
+            return left.value() == *p;
         }
 
         return false;

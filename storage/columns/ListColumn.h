@@ -6,7 +6,7 @@ namespace db {
 
 class ListColumn : public Column {
 public:
-    explicit ListColumn(ColumnKind::ColumnKindCode kind)
+    explicit ListColumn(ColumnKind::Code kind)
         : Column(kind) {
     }
 

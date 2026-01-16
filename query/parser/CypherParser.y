@@ -1126,7 +1126,6 @@ literal
     | numLit { $$ = $1; }
     | NULL_ { $$ = NullLiteral::create(ast); }
     | stringLit { $$ = $1; }
-    | charLit { $$ = $1; }
     | listLit { $$ = $1; }
     | mapLit { $$ = $1; }
     ;
