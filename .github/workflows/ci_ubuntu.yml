@@ -59,10 +59,10 @@ jobs:
       shell: bash
       run: cd ${{ github.workspace }}/build && source ${{ github.workspace }}/setup.sh && make run_regress
     - name: Create turing_install archive
-        shell: bash
-        run: |
-          cd ${{ github.workspace }}/build
-          tar -czf turing_install.tar.gz turing_install
+      shell: bash
+      run: |
+        cd ${{ github.workspace }}/build
+        tar -czf turing_install.tar.gz turing_install
     - name: Upload turing_install archive
       uses: actions/upload-artifact@v3
       with:
