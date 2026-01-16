@@ -9,10 +9,14 @@ uv python install $python_version
 # Build wheel (this also configures cmake in build/)
 uv build -o build/dist --wheel --python $python_version
 
+# Reconfigure cmake with correct install prefix (scikit-build-core uses a temp directory)
+# This regenerates scripts like run_regress.sh with correct paths
+# Pass CMAKE_ARGS if set (used on macOS for compiler flags)
+cmake -S . -B build -DCMAKE_INSTALL_PREFIX="$(pwd)/build/turing_install" $CMAKE_ARGS
+
 # Complete build (build remaining targets like tests and samples) and install
 make -C build -j8
-# Use explicit prefix since scikit-build-core overrides CMAKE_INSTALL_PREFIX for wheel staging
-cmake --install build --prefix build/turing_install
+make -C build install
 
 # Repair wheel (Linux only - auditwheel doesn't support macOS)
 if [[ "$(uname)" == "Linux" ]]; then
