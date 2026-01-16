@@ -5,3 +5,9 @@ compile_commands.json
 external/dependencies/
 build/
 turingdb.out
+wheeltest
+wheelhouse
+dist
+uv.lock
+*.pyc
+__pycache__
