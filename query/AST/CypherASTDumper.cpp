@@ -126,6 +126,10 @@ void CypherASTDumper::dump(std::ostream& out) {
             case QueryCommand::Kind::S3_TRANSFER_QUERY:
                 dump(out, static_cast<const S3TransferQuery*>(query));
             break;
+
+            case QueryCommand::Kind::SHOW_PROCEDURES_QUERY:
+                out << "    script ||--o{ SHOW_PROCEDURES : \"\"\n";
+            break;
         }
     }
 }

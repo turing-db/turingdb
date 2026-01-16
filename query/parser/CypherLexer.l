@@ -67,6 +67,7 @@ using Token = db::YCypherParser::token;
 "<"  { return Token::LT; }
 
 
+"PROCEDURES" { KEYWORD(PROCEDURES) }
 "DESCENDING" { KEYWORD(DESCENDING) }
 "CONSTRAINT" { KEYWORD(CONSTRAINT) }
 "MANDATORY" { KEYWORD(MANDATORY) }
@@ -117,6 +118,7 @@ using Token = db::YCypherParser::token;
 "CASE" { KEYWORD(CASE) }
 "ENDS" { KEYWORD(ENDS) }
 "DROP" { KEYWORD(DROP) }
+"SHOW" { KEYWORD(SHOW) }
 "SKIP" { KEYWORD(SKIP) }
 "WITH" { KEYWORD(WITH) }
 "LOAD" { KEYWORD(LOAD) }

@@ -20,6 +20,7 @@ public:
         LOAD_GML_QUERY,
         S3_CONNECT_QUERY,
         S3_TRANSFER_QUERY,
+        SHOW_PROCEDURES_QUERY,
     };
 
     virtual Kind getKind() const = 0;

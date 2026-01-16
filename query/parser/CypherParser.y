@@ -60,6 +60,7 @@
     #include "LoadGraphQuery.h"
     #include "LoadGMLQuery.h"
     #include "LoadNeo4jQuery.h"
+    #include "ShowProceduresQuery.h"
 
     namespace db {
         class YCypherScanner;
@@ -116,6 +117,7 @@
 %token LT
 
 // Keywords
+%token<std::string_view> PROCEDURES
 %token<std::string_view> DESCENDING
 %token<std::string_view> CONSTRAINT
 %token<std::string_view> MANDATORY
@@ -166,6 +168,7 @@
 %token<std::string_view> CASE
 %token<std::string_view> ENDS
 %token<std::string_view> DROP
+%token<std::string_view> SHOW
 %token<std::string_view> SKIP
 %token<std::string_view> WITH
 %token<std::string_view> LOAD
@@ -277,6 +280,7 @@
 %type<db::CreateGraphQuery*> createGraphQuery
 %type<db::S3ConnectQuery*> s3ConnectQuery
 %type<db::S3TransferQuery*> s3TransferQuery
+%type<db::ShowProceduresQuery*> showProceduresQuery
 %type<db::QueryCommand*> singleQuery
 %type<db::QueryCommand*> query
 %type<db::LoadGraphQuery*> loadGraph
@@ -343,6 +347,7 @@ singleQuery
     | loadNeo4j { $$ = $1; }
     | s3ConnectQuery { $$ = $1; }
     | s3TransferQuery { $$ = $1; }
+    | showProceduresQuery { $$ = $1; }
     ;
 
 loadGraph
@@ -360,6 +365,10 @@ loadNeo4j
 
 listGraphQuery
     : LIST GRAPH { $$ = ListGraphQuery::create(ast); LOC($$, @$); }
+    ;
+
+showProceduresQuery
+    : SHOW PROCEDURES { $$ = ShowProceduresQuery::create(ast); LOC($$, @$); }
     ;
 
 createGraphQuery
@@ -1221,7 +1230,8 @@ dropConstraint
     ;
 
 reservedWord
-    : DESCENDING { $$ = Symbol::create(ast, $1); }
+    : PROCEDURES { $$ = Symbol::create(ast, $1); }
+    | DESCENDING { $$ = Symbol::create(ast, $1); }
     | CONSTRAINT { $$ = Symbol::create(ast, $1); }
     | MANDATORY { $$ = Symbol::create(ast, $1); }
     | ASCENDING { $$ = Symbol::create(ast, $1); }
@@ -1267,6 +1277,7 @@ reservedWord
     | CASE { $$ = Symbol::create(ast, $1); }
     | ENDS { $$ = Symbol::create(ast, $1); }
     | DROP { $$ = Symbol::create(ast, $1); }
+    | SHOW { $$ = Symbol::create(ast, $1); }
     | SKIP { $$ = Symbol::create(ast, $1); }
     | WITH { $$ = Symbol::create(ast, $1); }
     | NEW { $$ = Symbol::create(ast, $1); }

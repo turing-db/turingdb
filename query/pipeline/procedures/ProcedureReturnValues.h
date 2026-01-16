@@ -3,6 +3,8 @@
 #include <string_view>
 #include <vector>
 
+#include "EnumToString.h"
+
 namespace db {
 
 enum class ProcedureReturnType : uint8_t {
@@ -19,7 +21,23 @@ enum class ProcedureReturnType : uint8_t {
     BOOL,
     STRING_VIEW,
     STRING,
+    _SIZE,
 };
+
+using ProcedureReturnTypeName = EnumToString<ProcedureReturnType>::Create<
+    EnumStringPair<ProcedureReturnType::INVALID, "INVALID">,
+    EnumStringPair<ProcedureReturnType::NODE, "NODE">,
+    EnumStringPair<ProcedureReturnType::EDGE, "EDGE">,
+    EnumStringPair<ProcedureReturnType::LABEL_ID, "INTEGER">,
+    EnumStringPair<ProcedureReturnType::EDGE_TYPE_ID, "INTEGER">,
+    EnumStringPair<ProcedureReturnType::PROPERTY_TYPE_ID, "INTEGER">,
+    EnumStringPair<ProcedureReturnType::VALUE_TYPE, "STRING">,
+    EnumStringPair<ProcedureReturnType::UINT_64, "INTEGER">,
+    EnumStringPair<ProcedureReturnType::INT64, "INTEGER">,
+    EnumStringPair<ProcedureReturnType::DOUBLE, "FLOAT">,
+    EnumStringPair<ProcedureReturnType::BOOL, "BOOLEAN">,
+    EnumStringPair<ProcedureReturnType::STRING_VIEW, "STRING">,
+    EnumStringPair<ProcedureReturnType::STRING, "STRING">>;
 
 struct ProcedureReturnValue {
     std::string_view _name;

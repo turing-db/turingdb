@@ -50,6 +50,7 @@ set(ast_sources
     LoadNeo4jQuery.cpp
     S3ConnectQuery.cpp
     S3TransferQuery.cpp
+    ShowProceduresQuery.cpp
     NodePattern.cpp
     EdgePattern.cpp
     Symbol.cpp

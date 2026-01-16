@@ -37,6 +37,7 @@ class PipelineOutputInterface;
 class MaterializeProcessor;
 class ExprProgram;
 class PredicateProgram;
+class ProcedureBlueprintMap;
 
 
 class PipelineBuilder {
@@ -161,6 +162,9 @@ public:
 
     // Create Graph
     PipelineValueOutputInterface& addCreateGraph(std::string_view graphName);
+
+    // Show Procedures
+    PipelineBlockOutputInterface& addShowProcedures(const ProcedureBlueprintMap* blueprints);
 
     // S3 Commands
     void addS3Connect(std::string_view accessId,

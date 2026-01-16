@@ -54,6 +54,10 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureBluep
                 case ProcedureReturnType::STRING:
                     declBuilder.addReturnType(EvaluatedType::String, returnItem._name);
                     break;
+
+                case ProcedureReturnType::_SIZE:
+                    throw FatalException("Invalid procedure return type: _SIZE");
+                    break;
             }
         }
     }

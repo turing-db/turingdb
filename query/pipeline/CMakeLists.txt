@@ -42,6 +42,7 @@ set(processors_sources
     processors/S3ConnectProcessor.cpp
     processors/S3PullProcessor.cpp
     processors/S3PushProcessor.cpp
+    processors/ShowProceduresProcessor.cpp
     processors/LambdaSourceProcessor.cpp
     processors/ComputeExprProcessor.cpp
     processors/ExprProgram.cpp

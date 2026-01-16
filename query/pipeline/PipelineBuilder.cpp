@@ -22,6 +22,7 @@
 #include "processors/CountProcessor.h"
 #include "processors/WriteProcessor.h"
 #include "processors/ListGraphProcessor.h"
+#include "processors/ShowProceduresProcessor.h"
 #include "processors/WriteProcessorTypes.h"
 #include "processors/GetLabelSetIDProcessor.h"
 #include "processors/GetEdgeTypeIDProcessor.h"
@@ -798,6 +799,25 @@ void PipelineBuilder::addS3Push(std::string_view s3Bucket,
     PipelineValueOutputInterface& output = pushProc->output();
 
     _pendingOutput.setInterface(&output);
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addShowProcedures(const ProcedureBlueprintMap* blueprints) {
+    ShowProceduresProcessor* proc = ShowProceduresProcessor::create(_pipeline, blueprints);
+
+    PipelineBlockOutputInterface& output = proc->output();
+    Dataframe* df = output.getDataframe();
+
+    NamedColumn* nameCol = allocColumn<ColumnVector<types::String::Primitive>>(df);
+    nameCol->rename("name");
+    proc->setNameColumn(nameCol);
+
+    NamedColumn* signatureCol = allocColumn<ColumnVector<std::string>>(df);
+    signatureCol->rename("signature");
+    proc->setSignatureColumn(signatureCol);
+
+    _pendingOutput.setInterface(&output);
+
+    return output;
 }
 
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Int64>(PropertyType);

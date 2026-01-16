@@ -61,6 +61,7 @@
 #include "nodes/LoadNeo4jNode.h"
 #include "nodes/S3ConnectNode.h"
 #include "nodes/S3TransferNode.h"
+#include "nodes/ShowProceduresNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -340,6 +341,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::S3_TRANSFER:
             return translateS3TransferNode(static_cast<S3TransferNode*>(node));
+        break;
+
+        case PlanGraphOpcode::SHOW_PROCEDURES:
+            return translateShowProceduresNode(static_cast<ShowProceduresNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
@@ -1141,5 +1146,10 @@ PipelineOutputInterface* PipelineGenerator::translateS3TransferNode(S3TransferNo
                            node->getS3File(),
                            node->getLocalPath());
     }
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateShowProceduresNode(ShowProceduresNode* node) {
+    _builder.addShowProcedures(_blueprints);
     return _builder.getPendingOutputInterface();
 }

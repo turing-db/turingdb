@@ -76,6 +76,7 @@ class LoadNeo4jQuery;
 class S3ConnectQuery;
 class S3TransferQuery;
 class CommitQuery;
+class ShowProceduresQuery;
 
 class CypherAST {
 public:
@@ -137,6 +138,7 @@ public:
     friend S3ConnectQuery;
     friend S3TransferQuery;
     friend CommitQuery;
+    friend ShowProceduresQuery;
     friend YCypherParser;
 
     using QueryCommands = std::vector<QueryCommand*>;

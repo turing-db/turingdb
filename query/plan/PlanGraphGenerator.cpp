@@ -39,6 +39,7 @@
 #include "nodes/LoadNeo4jNode.h"
 #include "nodes/S3ConnectNode.h"
 #include "nodes/S3TransferNode.h"
+#include "nodes/ShowProceduresNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
@@ -48,6 +49,7 @@
 #include "CreateGraphQuery.h"
 #include "S3ConnectQuery.h"
 #include "S3TransferQuery.h"
+#include "ShowProceduresQuery.h"
 #include "LoadGraphQuery.h"
 #include "LoadGMLQuery.h"
 #include "LoadNeo4jQuery.h"
@@ -110,6 +112,10 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::S3_TRANSFER_QUERY:
             generateS3TransferQuery(static_cast<const S3TransferQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::SHOW_PROCEDURES_QUERY:
+            generateShowProceduresQuery(static_cast<const ShowProceduresQuery*>(query));
         break;
 
         default:
@@ -224,6 +230,11 @@ void PlanGraphGenerator::generateS3TransferQuery(const S3TransferQuery* query) {
                                                                   query->getS3File(),
                                                                   query->getLocalPath());
     _tree.newOut<ProduceResultsNode>(s3TransferNode);
+}
+
+void PlanGraphGenerator::generateShowProceduresQuery(const ShowProceduresQuery* query) {
+    ShowProceduresNode* showProceduresNode = _tree.create<ShowProceduresNode>();
+    _tree.newOut<ProduceResultsNode>(showProceduresNode);
 }
 
 PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {

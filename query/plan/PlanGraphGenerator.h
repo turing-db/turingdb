@@ -24,6 +24,7 @@ class LoadGMLQuery;
 class LoadNeo4jQuery;
 class S3ConnectQuery;
 class S3TransferQuery;
+class ShowProceduresQuery;
 class QueryCommand;
 
 class PlanGraphGenerator {
@@ -54,6 +55,7 @@ private:
     void generateLoadNeo4jQuery(const LoadNeo4jQuery* query);
     void generateS3ConnectQuery(const S3ConnectQuery* query);
     void generateS3TransferQuery(const S3TransferQuery* query);
+    void generateShowProceduresQuery(const ShowProceduresQuery* query);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
