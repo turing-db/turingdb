@@ -11,8 +11,7 @@ class NamedColumn;
 
 class ShowProceduresProcessor final : public Processor {
 public:
-    static ShowProceduresProcessor* create(PipelineV2* pipeline,
-                                           const ProcedureBlueprintMap* blueprints);
+    static ShowProceduresProcessor* create(PipelineV2* pipeline);
 
     std::string describe() const override;
 
@@ -26,12 +25,12 @@ public:
     void setSignatureColumn(NamedColumn* col) { _signatureCol = col; }
 
 private:
-    const ProcedureBlueprintMap* _blueprints {nullptr};
+    const ExecutionContext* _ctxt {nullptr};
     PipelineBlockOutputInterface _output;
     NamedColumn* _nameCol {nullptr};
     NamedColumn* _signatureCol {nullptr};
 
-    ShowProceduresProcessor(const ProcedureBlueprintMap* blueprints);
+    ShowProceduresProcessor();
     ~ShowProceduresProcessor();
 };
 

@@ -1150,6 +1150,6 @@ PipelineOutputInterface* PipelineGenerator::translateS3TransferNode(S3TransferNo
 }
 
 PipelineOutputInterface* PipelineGenerator::translateShowProceduresNode(ShowProceduresNode* node) {
-    _builder.addShowProcedures(_blueprints);
+    _builder.addShowProcedures();
     return _builder.getPendingOutputInterface();
 }

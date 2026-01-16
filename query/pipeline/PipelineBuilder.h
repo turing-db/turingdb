@@ -164,7 +164,7 @@ public:
     PipelineValueOutputInterface& addCreateGraph(std::string_view graphName);
 
     // Show Procedures
-    PipelineBlockOutputInterface& addShowProcedures(const ProcedureBlueprintMap* blueprints);
+    PipelineBlockOutputInterface& addShowProcedures();
 
     // S3 Commands
     void addS3Connect(std::string_view accessId,

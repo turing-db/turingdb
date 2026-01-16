@@ -141,6 +141,7 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     execCtxt.setTransaction(&txRes.value());
     execCtxt.setGraphName(graphName);
     execCtxt.setJobSystem(_jobSystem);
+    execCtxt.setProcedures(ctxt.getProcedures());
 
     PipelineExecutor executor(&pipeline, &execCtxt);
     try {
