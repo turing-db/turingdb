@@ -11,7 +11,8 @@ uv build -o build/dist --wheel --python $python_version
 
 # Complete build (build remaining targets like tests and samples) and install
 make -C build -j8
-make -C build install
+# Use explicit prefix since scikit-build-core overrides CMAKE_INSTALL_PREFIX for wheel staging
+cmake --install build --prefix build/turing_install
 
 # Repair wheel (Linux only - auditwheel doesn't support macOS)
 if [[ "$(uname)" == "Linux" ]]; then
