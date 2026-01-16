@@ -23,6 +23,17 @@ if(APPLE)
     endif()
 endif()
 
+# Run dependencies script if external/dependencies does not exist
+if (NOT IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies)
+    execute_process(
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/dependencies.sh
+        RESULT_VARIABLE dependenciessh_result)
+
+    if (NOT ${dependenciessh_result} EQUAL 0)
+        message(FATAL_ERROR "The dependencies.sh script failed to execute")
+    endif()
+endif()
+
 # Set CMAKE_INSTALL_PREFIX to build/turing_install if not set
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/turing_install"
