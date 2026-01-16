@@ -109,6 +109,7 @@ void MyClass::myFunc() {
 2. Never do using namespace std. We like to explicitly show that something is a standard container.
 3. We create namespaces with care and when it makes sense, such as for things as important as db or Log. Never do it on your own, ask around you if it makes sense.
 4. `using namespace std` is permitted in cpp files.
+5. Don't prefix your functions by db:: in general, this is very ugly
 
 ## Classes
 
