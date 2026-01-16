@@ -64,7 +64,7 @@ jobs:
         cd ${{ github.workspace }}/build
         tar -czf turing_install.tar.gz turing_install
     - name: Upload turing_install archive
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: turingdb-archive       # artifact name
         path: ${{ github.workspace }}/build/turing_install.tar.gz
