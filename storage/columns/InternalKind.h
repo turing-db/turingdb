@@ -36,7 +36,16 @@ class Column;
 class InternalKind {
 private:
     using Types = KindTypes<
-        size_t,
+        signed char,
+        unsigned char,
+        short int,
+        unsigned short int,
+        int,
+        unsigned int,
+        long int,
+        unsigned long int,
+        long long int,
+        unsigned long long int,
         EntityID,
         NodeID,
         EdgeID,
@@ -53,7 +62,6 @@ private:
         PropertyType,
         PropertyNull,
         bool,
-        types::Int64::Primitive,
         types::Double::Primitive,
         types::Bool::Primitive,
         types::String::Primitive,
