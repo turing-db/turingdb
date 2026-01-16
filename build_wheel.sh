@@ -13,10 +13,15 @@ uv build -o build/dist --wheel --python $python_version
 make -C build -j8
 make -C build install
 
-# Repair wheel
-pip install auditwheel
-auditwheel repair -w build/wheelhouse build/dist/*
+# Repair wheel (Linux only - auditwheel doesn't support macOS)
+if [[ "$(uname)" == "Linux" ]]; then
+    pip install auditwheel
+    auditwheel repair -w build/wheelhouse build/dist/*
+    wheel_dir="build/wheelhouse"
+else
+    wheel_dir="build/dist"
+fi
 
 # Test package installation
 rm -rf build/wheeltest && mkdir build/wheeltest
-cd build/wheeltest && uv venv test_venv --python $python_version && source test_venv/bin/activate && uv pip install ../wheelhouse/*.whl && uv run turingdb --help
+cd build/wheeltest && uv venv test_venv --python $python_version && source test_venv/bin/activate && uv pip install ../${wheel_dir#build/}/*.whl && uv run turingdb --help
