@@ -59,6 +59,7 @@ set(procedures_sources
     procedures/EdgeTypesProcedure.cpp
     procedures/PropertyTypesProcedure.cpp
     procedures/HistoryProcedure.cpp
+    procedures/ProceduresProcedure.cpp
 )
 
 add_library(turing_db_pipeline_s

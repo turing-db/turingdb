@@ -4,6 +4,7 @@
 
 #include "columns/ColumnVector.h"
 #include "dataframe/NamedColumn.h"
+#include "ExecutionContext.h"
 #include "metadata/PropertyType.h"
 #include "procedures/ProcedureBlueprintMap.h"
 #include "procedures/ProcedureBlueprint.h"
@@ -33,8 +34,7 @@ void buildSignature(std::string& result, const ProcedureBlueprint& blueprint) {
 
 }
 
-ShowProceduresProcessor::ShowProceduresProcessor(const ProcedureBlueprintMap* blueprints)
-    : _blueprints(blueprints)
+ShowProceduresProcessor::ShowProceduresProcessor()
 {
 }
 
@@ -45,9 +45,8 @@ std::string ShowProceduresProcessor::describe() const {
     return fmt::format("ShowProceduresProcessor @={}", fmt::ptr(this));
 }
 
-ShowProceduresProcessor* ShowProceduresProcessor::create(PipelineV2* pipeline,
-                                                         const ProcedureBlueprintMap* blueprints) {
-    ShowProceduresProcessor* proc = new ShowProceduresProcessor(blueprints);
+ShowProceduresProcessor* ShowProceduresProcessor::create(PipelineV2* pipeline) {
+    ShowProceduresProcessor* proc = new ShowProceduresProcessor();
 
     PipelineOutputPort* output = PipelineOutputPort::create(pipeline, proc);
     proc->_output.setPort(output);
@@ -58,6 +57,7 @@ ShowProceduresProcessor* ShowProceduresProcessor::create(PipelineV2* pipeline,
 }
 
 void ShowProceduresProcessor::prepare(ExecutionContext* ctxt) {
+    _ctxt = ctxt;
     markAsPrepared();
 }
 
@@ -69,8 +69,10 @@ void ShowProceduresProcessor::execute() {
     auto* colName = _nameCol->as<ColumnVector<types::String::Primitive>>();
     auto* colSignature = _signatureCol->as<ColumnVector<std::string>>();
 
+    const auto& blueprints = _ctxt->getProcedures()->getAll();
+
     std::string signature;
-    for (const auto& blueprint : _blueprints->getAll()) {
+    for (const auto& blueprint : blueprints) {
         colName->push_back(blueprint._name);
         buildSignature(signature, blueprint);
         colSignature->push_back(signature);

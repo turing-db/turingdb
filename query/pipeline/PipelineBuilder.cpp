@@ -801,8 +801,8 @@ void PipelineBuilder::addS3Push(std::string_view s3Bucket,
     _pendingOutput.setInterface(&output);
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addShowProcedures(const ProcedureBlueprintMap* blueprints) {
-    ShowProceduresProcessor* proc = ShowProceduresProcessor::create(_pipeline, blueprints);
+PipelineBlockOutputInterface& PipelineBuilder::addShowProcedures() {
+    ShowProceduresProcessor* proc = ShowProceduresProcessor::create(_pipeline);
 
     PipelineBlockOutputInterface& output = proc->output();
     Dataframe* df = output.getDataframe();

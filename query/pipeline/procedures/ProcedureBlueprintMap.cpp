@@ -4,6 +4,7 @@
 #include "EdgeTypesProcedure.h"
 #include "PropertyTypesProcedure.h"
 #include "HistoryProcedure.h"
+#include "ProceduresProcedure.h"
 
 using namespace db;
 
@@ -19,6 +20,7 @@ std::unique_ptr<ProcedureBlueprintMap> ProcedureBlueprintMap::create() {
     map->_blueprints.emplace_back(PropertyTypesProcedure::createBlueprint());
     map->_blueprints.emplace_back(EdgeTypesProcedure::createBlueprint());
     map->_blueprints.emplace_back(HistoryProcedure::createBlueprint());
+    map->_blueprints.emplace_back(ProceduresProcedure::createBlueprint());
 
     return map;
 }
