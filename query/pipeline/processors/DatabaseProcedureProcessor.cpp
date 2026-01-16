@@ -157,7 +157,7 @@ void DatabaseProcedureProcessor::allocColumns(LocalMemory& mem,
 
             case ProcedureReturnType::_SIZE: {
                 throw PipelineException("Invalid procedure return type: _SIZE");
-                break;
+            break;
             }
         }
         NamedColumn* namedCol = NamedColumn::create(&dfMan, col, dfMan.allocTag());

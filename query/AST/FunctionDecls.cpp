@@ -57,7 +57,7 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureBluep
 
                 case ProcedureReturnType::_SIZE:
                     throw FatalException("Invalid procedure return type: _SIZE");
-                    break;
+                break;
             }
         }
     }
