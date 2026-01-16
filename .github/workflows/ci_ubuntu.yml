@@ -51,7 +51,7 @@ jobs:
 
     - name: Run unit tests
       shell: bash
-      run: cd ${{ github.workspace }}/build && make test
+      run: make -C ${{ github.workspace }}/build test
 
     - name: Run samples
       shell: bash
@@ -59,7 +59,7 @@ jobs:
 
     - name: Run regress
       shell: bash
-      run: cd ${{ github.workspace }}/build && source ${{ github.workspace }}/setup.sh && make run_regress
+      run: source ${{ github.workspace }}/setup.sh && make -C ${{ github.workspace }}/build run_regress
 
     - name: Create turing_install archive
       shell: bash

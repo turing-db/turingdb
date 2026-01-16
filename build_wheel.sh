@@ -6,8 +6,12 @@ python_version=${1-3.10}
 
 uv python install $python_version
 
-# Build wheel
+# Build wheel (this also configures cmake in build/)
 uv build -o build/dist --wheel --python $python_version
+
+# Complete build (build remaining targets like tests and samples) and install
+make -C build -j8
+make -C build install
 
 # Repair wheel
 pip install auditwheel

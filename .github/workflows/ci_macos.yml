@@ -39,23 +39,24 @@ jobs:
       run: ./dependencies.sh
       env:
         SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies.outputs.cache-hit }}
-    - name: Configure cmake
+
+    - name: Build wheel
       shell: bash
-      run: |
-        mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build
-        cmake .. -DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++
-    - name: Build
-      shell: bash
-      run: cd ${{ github.workspace }}/build && make -j8 && make install
+      run: ./build_wheel.sh
+      env:
+        CMAKE_ARGS: -DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++
+
     - name: Prepare SimpleDB
       shell: bash
       run: cd ${{ github.workspace }}/build/samples/simpledb && ./simpledb && mkdir -p $HOME/.turing/graphs && cp -r simpledb.out/simpledb $HOME/.turing/graphs
     - name: Run unit tests
       shell: bash
-      run: cd ${{ github.workspace }}/build && make test
+      run: make -C ${{ github.workspace }}/build test
+
     - name: Run samples
       shell: bash
       run: cd ${{ github.workspace }}/build/turing_install/samples && source ${{ github.workspace }}/setup.sh && bash ./run-samples.sh
+
     - name: Run regress
       shell: bash
-      run: cd ${{ github.workspace }}/build && source ${{ github.workspace }}/setup.sh && make run_regress
+      run: source ${{ github.workspace }}/setup.sh && make -C ${{ github.workspace }}/build run_regress
