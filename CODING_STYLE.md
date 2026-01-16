@@ -108,6 +108,7 @@ void MyClass::myFunc() {
 1. Never do using namespace in header files. This is a horribly bad practice because it contaminates all the cpp files that are including the header file.
 2. Never do using namespace std. We like to explicitly show that something is a standard container.
 3. We create namespaces with care and when it makes sense, such as for things as important as db or Log. Never do it on your own, ask around you if it makes sense.
+4. `using namespace std` is permitted in cpp files.
 
 ## Classes
 
