@@ -30,6 +30,7 @@ class NodeView;
 class CommitBuilder;
 class Change;
 class Column;
+class ValueVariant;
 
 // Implementation
 

@@ -11,7 +11,7 @@ namespace db {
 
 class ListColumnConst : public ListColumn {
 public:
-    static constexpr ColumnKind::ColumnKindCode BaseKind = ColumnKind::getContainerTypeKind<ListColumnConst>();
+    static constexpr ContainerKind::Code BaseKind = ContainerKind::code<ListColumnConst>();
 
     using ValueType = Column*;
 
@@ -58,7 +58,7 @@ public:
 private:
     std::vector<ValueVariant> _values;
 
-    static constexpr auto _staticKind = ColumnKind::getColumnKind<ListColumnConst>();
+    static constexpr auto _staticKind = ColumnKind::code<ListColumnConst>();
 };
 
 }

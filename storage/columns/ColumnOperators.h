@@ -10,9 +10,10 @@
 #include "ColumnMask.h"
 #include "ColumnVector.h"
 #include "ColumnOptMask.h"
-#include "columns/ColumnSet.h"
+#include "ListColumnConst.h"
+#include "ValueVariant.h"
+#include "ColumnSet.h"
 
-#include "columns/ListColumnConst.h"
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
 
@@ -69,75 +70,136 @@ concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
  * @param functionName The name of the function to instantiate
  * @param operatorFunction The name of the function to be applied to input operands
  */
-#define INSTANTIATE_PROPERTY_PREDICATES(functionName, operatorFunction)                  \
-    /* Case for producing a mask based on two vector inputs, e.g. n.name = m.name */     \
-    template <typename T, typename U>                                                    \
-        requires OptionallyComparable<T, U>                                              \
-    static void functionName(ColumnOptMask* mask,                                        \
-                             const ColumnVector<T>* lhs,                                 \
-                             const ColumnVector<U>* rhs) {                               \
-        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");  \
-        mask->resize(lhs->size());                                                       \
-                                                                                         \
-        auto& maskd = mask->getRaw();                                                    \
-        const auto& lhsd = lhs->getRaw();                                                \
-        const auto& rhsd = rhs->getRaw();                                                \
-        const auto size = lhs->size();                                                   \
-                                                                                         \
-        for (size_t i = 0; i < size; i++) {                                              \
-            maskd[i] = operatorFunction(lhsd[i], rhsd[i]);                               \
-        }                                                                                \
-    }                                                                                    \
-                                                                                         \
-    /* Case for producing a mask based on vector and constant input, e.g. n.age = 10 */  \
-    template <typename T, typename U>                                                    \
-        requires OptionallyComparable<T, U>                                              \
-    static void functionName(ColumnOptMask* mask,                                        \
-                             const ColumnVector<T>* lhs,                                 \
-                             const ColumnConst<U>* rhs) {                                \
-        const auto size = lhs->size();                                                   \
-                                                                                         \
-        mask->resize(size);                                                              \
-        auto& maskd = mask->getRaw();                                                    \
-        const auto& lhsd = lhs->getRaw();                                                \
-        const auto& val = rhs->getRaw();                                                 \
-                                                                                         \
-        for (size_t i = 0; i < size; i++) {                                              \
-            maskd[i] = operatorFunction(lhsd[i], val);                                   \
-        }                                                                                \
-    }                                                                                    \
-                                                                                         \
-    /* Case for producing a mask based on constant and vector input, e.g. 10 = n.age */  \
-    template <typename T, typename U>                                                    \
-        requires OptionallyComparable<T, U>                                              \
-    static void functionName(ColumnOptMask* mask,                                        \
-                             const ColumnConst<T>* lhs,                                  \
-                             const ColumnVector<U>* rhs) {                               \
-        const auto size = rhs->size();                                                   \
-                                                                                         \
-        mask->resize(size);                                                              \
-        auto& maskd = mask->getRaw();                                                    \
-        const auto& val = lhs->getRaw();                                                 \
-        const auto& rhsd = rhs->getRaw();                                                \
-                                                                                         \
-        for (size_t i = 0; i < size; i++) {                                              \
-            maskd[i] = operatorFunction(val, rhsd[i]);                                   \
-        }                                                                                \
-    }                                                                                    \
-                                                                                         \
-    /* Case for producing a mask based on two costant inputs, e.g. 10 = 12 */            \
-    template <typename T, typename U>                                                    \
-        requires OptionallyComparable<T, U>                                              \
-    static void functionName(ColumnOptMask* mask,                                        \
-                             const ColumnConst<T>* lhs,                                  \
-                             const ColumnConst<U>* rhs) {                                \
-        mask->resize(1);                                                                 \
-        auto& maskd = mask->getRaw();                                                    \
-        maskd.front() = operatorFunction(lhs->getRaw(), rhs->getRaw());                  \
+#define INSTANTIATE_PROPERTY_PREDICATES(functionName, operatorFunction)                 \
+    /* Case for producing a mask based on two vector inputs, e.g. n.name = m.name */    \
+    template <typename T, typename U>                                                   \
+        requires OptionallyComparable<T, U>                                             \
+    static void functionName(ColumnOptMask* mask,                                       \
+                             const ColumnVector<T>* lhs,                                \
+                             const ColumnVector<U>* rhs) {                              \
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions"); \
+        mask->resize(lhs->size());                                                      \
+                                                                                        \
+        auto& maskd = mask->getRaw();                                                   \
+        const auto& lhsd = lhs->getRaw();                                               \
+        const auto& rhsd = rhs->getRaw();                                               \
+        const auto size = lhs->size();                                                  \
+                                                                                        \
+        for (size_t i = 0; i < size; i++) {                                             \
+            maskd[i] = operatorFunction(lhsd[i], rhsd[i]);                              \
+        }                                                                               \
+    }                                                                                   \
+                                                                                        \
+    /* Case for producing a mask based on vector and constant input, e.g. n.age = 10 */ \
+    template <typename T, typename U>                                                   \
+        requires OptionallyComparable<T, U>                                             \
+    static void functionName(ColumnOptMask* mask,                                       \
+                             const ColumnVector<T>* lhs,                                \
+                             const ColumnConst<U>* rhs) {                               \
+        const auto size = lhs->size();                                                  \
+                                                                                        \
+        mask->resize(size);                                                             \
+        auto& maskd = mask->getRaw();                                                   \
+        const auto& lhsd = lhs->getRaw();                                               \
+        const auto& val = rhs->getRaw();                                                \
+                                                                                        \
+        for (size_t i = 0; i < size; i++) {                                             \
+            maskd[i] = operatorFunction(lhsd[i], val);                                  \
+        }                                                                               \
+    }                                                                                   \
+                                                                                        \
+    /* Case for producing a mask based on constant and vector input, e.g. 10 = n.age */ \
+    template <typename T, typename U>                                                   \
+        requires OptionallyComparable<T, U>                                             \
+    static void functionName(ColumnOptMask* mask,                                       \
+                             const ColumnConst<T>* lhs,                                 \
+                             const ColumnVector<U>* rhs) {                              \
+        const auto size = rhs->size();                                                  \
+                                                                                        \
+        mask->resize(size);                                                             \
+        auto& maskd = mask->getRaw();                                                   \
+        const auto& val = lhs->getRaw();                                                \
+        const auto& rhsd = rhs->getRaw();                                               \
+                                                                                        \
+        for (size_t i = 0; i < size; i++) {                                             \
+            maskd[i] = operatorFunction(val, rhsd[i]);                                  \
+        }                                                                               \
+    }                                                                                   \
+                                                                                        \
+    /* Case for producing a mask based on two costant inputs, e.g. 10 = 12 */           \
+    template <typename T, typename U>                                                   \
+        requires OptionallyComparable<T, U>                                             \
+    static void functionName(ColumnOptMask* mask,                                       \
+                             const ColumnConst<T>* lhs,                                 \
+                             const ColumnConst<U>* rhs) {                               \
+        mask->resize(1);                                                                \
+        auto& maskd = mask->getRaw();                                                   \
+        maskd.front() = operatorFunction(lhs->getRaw(), rhs->getRaw());                 \
     }
 
 class ColumnOperators {
 public:
+    template <std::integral I>
+    static void subscriptOp(ColumnConst<ValueVariant>* res,
+                            const ListColumnConst* list,
+                            const ColumnConst<I>* index) {
+        I i = index->getRaw();
+
+        if (i < 0) {
+            // Negative indexing
+            i += list->size();
+        }
+
+        res->set((size_t)i >= list->size() ? ValueVariant() : list->getRaw()[i]);
+    }
+
+    template <std::integral I>
+    static void subscriptOp(ColumnVector<ValueVariant>* res,
+                            const ListColumnConst* list,
+                            const ColumnVector<I>* index) {
+        res->clear();
+        const auto& indexd = index->getRaw();
+        const auto size = index->size();
+        const auto& listd = list->getRaw();
+
+        for (size_t i = 0; i < size; i++) {
+            auto offset = indexd[i];
+
+            if (offset < 0) {
+                // Negative indexing
+                offset += list->size();
+            }
+
+            res->push_back((size_t)offset >= list->size() ? ValueVariant() : listd[offset]);
+        }
+    }
+
+    template <std::integral I>
+    static void subscriptOp(ColumnOptVector<ValueVariant>* res,
+                            const ListColumnConst* list,
+                            const ColumnOptVector<I>* index) {
+        res->clear();
+        const auto& indexd = index->getRaw();
+        const auto size = index->size();
+        const auto& listd = list->getRaw();
+
+        for (size_t i = 0; i < size; i++) {
+            if (!indexd[i].has_value()) {
+                res->push_back({});
+                continue;
+            }
+
+            auto offset = indexd[i].value();
+
+            if (offset < 0) {
+                // Negative indexing
+                offset += list->size();
+            }
+
+            res->push_back((size_t)offset >= list->size() ? ValueVariant() : listd[offset]);
+        }
+    }
+
     // Boolean column operations
 
     /**
@@ -160,29 +222,6 @@ public:
 
         for (size_t i = 0; i < size; i++) {
             maskd[i] = lhsd[i] && rhsd[i];
-        }
-    }
-
-    /**
-     * @brief Fills a mask corresponding to 'lhs == rhs'
-     *
-     * @param mask The mask to fill
-     * @param lhs Left hand side mask
-     * @param rhs Right hand side mask
-     */
-    template <typename T>
-    static void equal(ColumnOptMask* mask,
-                      const ColumnVector<T>* lhs,
-                      const ColumnVector<ValueVariant>* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
-        mask->resize(lhs->size());
-        auto& maskd = mask->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-        const auto size = lhs->size();
-
-        for (size_t i = 0; i < size; i++) {
-            maskd[i] = lhsd[i] == rhsd[i];
         }
     }
 
@@ -217,12 +256,244 @@ public:
     INSTANTIATE_PROPERTY_PREDICATES(greaterThanOrEqual, optionalGTE)
     INSTANTIATE_PROPERTY_PREDICATES(lessThanOrEqual, optionalLTE)
 
+    template <typename T, typename U>
+    static void equalOp(ColumnMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd[i] == rhsd[i];
+        }
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = rhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd == rhsd[i];
+        }
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnOptMask* mask,
+                      const ColumnConst<std::optional<T>>* lhs,
+                      const ColumnVector<U>* rhs) {
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = rhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd == rhsd[i];
+        }
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnOptMask* mask,
+                      const ColumnConst<std::optional<T>>* lhs,
+                      const ColumnOptVector<U>* rhs) {
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = rhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd == rhsd[i];
+        }
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnOptMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnVector<std::optional<U>>* rhs) {
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = rhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd == rhsd[i];
+        }
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd[i] == rhsd;
+        }
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnOptMask* mask,
+                      const ColumnOptVector<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd[i] == rhsd[i];
+        }
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnOptMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnOptVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd[i] == rhsd[i];
+        }
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnOptMask* mask,
+                      const ColumnVector<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd[i] == rhsd;
+        }
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnOptMask* mask,
+                      const ColumnOptVector<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd[i] == rhsd;
+        }
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnOptMask* mask,
+                      const ColumnOptVector<T>* lhs,
+                      const ColumnOptVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        mask->resize(lhs->size());
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        const auto size = lhs->size();
+
+        for (size_t i = 0; i < size; i++) {
+            maskd[i] = lhsd[i] == rhsd[i];
+        }
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(1);
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        maskd[0] = lhsd == rhsd;
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnOptMask* mask,
+                      const ColumnConst<std::optional<T>>* lhs,
+                      const ColumnConst<U>* rhs) {
+        mask->resize(1);
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        maskd[0] = lhsd == rhsd;
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnOptMask* mask,
+                      const ColumnConst<T>* lhs,
+                      const ColumnConst<std::optional<U>>* rhs) {
+        mask->resize(1);
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        maskd[0] = lhsd == rhsd;
+    }
+
+    template <typename T, typename U>
+    static void equalOp(ColumnOptMask* mask,
+                      const ColumnConst<std::optional<T>>* lhs,
+                      const ColumnConst<std::optional<U>>* rhs) {
+        mask->resize(1);
+
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        maskd[0] = lhsd == rhsd;
+    }
+
     // Implementation for IS NULL
     template <typename T>
         requires is_optional_v<T>
     static void equal(ColumnOptMask* mask,
-                             const ColumnVector<T>* lhs,
-                             const ColumnConst<PropertyNull>*) {
+                      const ColumnVector<T>* lhs,
+                      const ColumnConst<PropertyNull>*) {
         const auto size = lhs->size();
 
         mask->resize(size);
@@ -238,8 +509,8 @@ public:
     template <typename T>
         requires is_optional_v<T>
     static void notEqual(ColumnOptMask* mask,
-                             const ColumnVector<T>* lhs,
-                             const ColumnConst<PropertyNull>*) {
+                         const ColumnVector<T>* lhs,
+                         const ColumnConst<PropertyNull>*) {
         const auto size = lhs->size();
 
         mask->resize(size);
@@ -556,7 +827,6 @@ private:
     inline static std::optional<bool> optionalLTE(const T& a, const U& b) {
         return optionalPredicate<std::less_equal<>>(a, b);
     }
-
 };
 
 }

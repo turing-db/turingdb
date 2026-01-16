@@ -20,6 +20,7 @@ template <typename T>
 class ColumnSet;
 
 class ColumnMask;
+class ListColumnConst;
 
 // Implementation
 

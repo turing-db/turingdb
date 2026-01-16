@@ -93,6 +93,10 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            if (a == EvaluatedType::Variant || b == EvaluatedType::Variant) {
+                break;
+            }
+
             const std::string error = fmt::format(
                 "Operands must be booleans, not '{}' and '{}'",
                 EvaluatedTypeName::value(a),
@@ -104,6 +108,10 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::NotEqual:
         case BinaryOperator::Equal: {
             type = EvaluatedType::Bool;
+
+            if (a == EvaluatedType::Variant || b == EvaluatedType::Variant) {
+                break;
+            }
 
             if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)) {
                 const std::string error = fmt::format(
@@ -154,6 +162,10 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::GreaterThanOrEqual: {
             type = EvaluatedType::Bool;
 
+            if (a == EvaluatedType::Variant || b == EvaluatedType::Variant) {
+                break;
+            }
+
             if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)
                 || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
                 || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)) {
@@ -175,6 +187,10 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::Div:
         case BinaryOperator::Mod:
         case BinaryOperator::Pow: {
+            if (a == EvaluatedType::Variant || b == EvaluatedType::Variant) {
+                break;
+            }
+
             if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)) {
                 type = EvaluatedType::Integer;
                 break;
@@ -196,6 +212,10 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 
         case BinaryOperator::In: {
             type = EvaluatedType::Bool;
+
+            if (a == EvaluatedType::Variant || b == EvaluatedType::Variant) {
+                break;
+            }
 
             if (b != EvaluatedType::List && b != EvaluatedType::Map) {
                 const std::string error = fmt::format("IN operand must be a list or map, not '{}'",
