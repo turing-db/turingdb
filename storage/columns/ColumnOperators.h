@@ -200,8 +200,8 @@ public:
     template <typename T>
         requires is_optional_v<T>
     static void equal(ColumnOptMask* mask,
-                             const ColumnVector<T>* lhs,
-                             const ColumnConst<PropertyNull>*) {
+                      const ColumnVector<T>* lhs,
+                      const ColumnConst<PropertyNull>*) {
         const auto size = lhs->size();
 
         mask->resize(size);
