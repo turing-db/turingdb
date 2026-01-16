@@ -44,6 +44,8 @@ jobs:
     - name: Build wheel
       shell: bash
       run: ./build_wheel.sh
+      env:
+        CMAKE_GENERATOR: Unix Makefiles
 
     - name: Prepare SimpleDB
       shell: bash

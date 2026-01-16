@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*" # Trigger on version tags like v1.0.0, v2.1.3, etc.
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest-m
+    container: buildpack-deps:jammy
+
+    strategy:
+      matrix:
+          python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+    - name: Install sudo and pip
+      run: apt-get update && apt-get install -qqy sudo pip patchelf
+
+    - uses: actions/checkout@v4
+    - name: Checkout submodules
+      run: |
+        git config --global --add safe.directory '*'
+        git submodule update --init --recursive
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+    - name: Install python
+      shell: bash
+      run: uv python install ${{ matrix.python-version }}
+    - name: Build wheel
+      shell: bash
+      run: uv build --wheel --python ${{ matrix.python-version }}
+
+    - name: Repair wheel
+      shell: bash
+      run: pip install auditwheel && auditwheel repair dist/*
+
+    - name: Verify package installation
+      shell: bash
+      run: |
+        uv venv test-venv --python ${{ matrix.python-version }}
+        source test-venv/bin/activate
+        uv pip install wheelhouse/*.whl
+        turingdb --help
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: python-package-distributions-${{ matrix.python-version }}
+        path: wheelhouse/
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build # Wait for all build jobs to complete
+    runs-on: ubuntu-latest
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/turingdb
+    permissions:
+      contents: write # Required to create GitHub releases
+      id-token: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: python-package-distributions-*
+          path: wheelhouse/
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wheelhouse/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish distribution 📦 to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: wheelhouse/

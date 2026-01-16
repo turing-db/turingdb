@@ -44,6 +44,7 @@ jobs:
       shell: bash
       run: ./build_wheel.sh
       env:
+        CMAKE_GENERATOR: Unix Makefiles
         CMAKE_ARGS: -DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++
 
     - name: Prepare SimpleDB
