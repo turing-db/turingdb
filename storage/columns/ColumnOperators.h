@@ -6,7 +6,6 @@
 #include <optional>
 #include <type_traits>
 
-#include <properties/PropertyOperators.h>
 #include "ColumnConst.h"
 #include "ColumnMask.h"
 #include "ColumnVector.h"
@@ -190,7 +189,7 @@ public:
     }
 
     // Optional-based property predicate column operations
-    INSTANTIATE_PROPERTY_PREDICATES(equal, properties::eq)
+    INSTANTIATE_PROPERTY_PREDICATES(equal, optionalEq)
     INSTANTIATE_PROPERTY_PREDICATES(notEqual, optionalNotEq)
     INSTANTIATE_PROPERTY_PREDICATES(greaterThan, optionalGT)
     INSTANTIATE_PROPERTY_PREDICATES(lessThan, optionalLT)
