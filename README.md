@@ -130,6 +130,13 @@ uv add turingdb
 ```
 And then it should be in your $PATH
 
+or using the docker image:
+If you can it’s better to use TuringDB within a `uv` project or with `pip install` to avoid loss in latency performance related to the docker deployment.
+
+``` bash
+docker run -it turingdbai/turingdb:nightly turingdb
+```
+
 ### How to run
 
 Run the turingdb binary to use turingdb in interactive mode in the current terminal:
