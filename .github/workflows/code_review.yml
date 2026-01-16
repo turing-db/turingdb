@@ -36,20 +36,26 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           model: claude-opus-4-5-20251101
           timeout_minutes: 10
+          claude_args: '--allowedTools "mcp__github__create_pending_pull_request_review,mcp__github__add_pull_request_review_comment_to_pending_review,mcp__github__submit_pending_pull_request_review,mcp__github__get_pull_request_diff"'
           direct_prompt: |
             You are a C++ code reviewer for TuringDB. Your task is to review
             the changed files in this PR for violations of the project's
             coding style guidelines.
 
-            INSTRUCTIONS:
+            REVIEW WORKFLOW:
             1. First, read the file CODING_STYLE.md to understand all the rules
-            2. Review only the changed C++ files (.cpp, .h, .hpp) in this PR
-            3. Skip files in external/ directory
-            4. Only flag CLEAR violations - not subjective preferences
-            5. For each violation, cite the specific section from CODING_STYLE.md
-            6. Leave inline comments on the exact lines that violate the rules
-            7. If no violations found, leave a single comment: "Code style review
-               passed. No violations of CODING_STYLE.md found."
+            2. Use `mcp__github__get_pull_request_diff` to get the changed lines
+            3. Use `mcp__github__create_pending_pull_request_review` to start a review
+            4. For each violation, use `mcp__github__add_pull_request_review_comment_to_pending_review`
+               to add an inline comment on the specific line
+            5. When done, use `mcp__github__submit_pending_pull_request_review` with
+               event="COMMENT" to submit the review (do NOT use "REQUEST_CHANGES")
+
+            REVIEW RULES:
+            - Review only changed C++ files (.cpp, .h, .hpp) in this PR
+            - Skip files in external/ directory
+            - Only flag CLEAR violations - not subjective preferences
+            - For each violation, cite the specific section from CODING_STYLE.md
 
             SPECIAL ATTENTION:
             Pay close attention to consecutive blank lines. There should never be
@@ -63,3 +69,6 @@ jobs:
             Example:
             **[Pointers]**: CODING_STYLE.md states "the star symbol needs to be
             close to the type". Change `Type *var` to `Type* var`.
+
+            If no violations found, submit the review with a summary comment:
+            "Code style review passed. No violations of CODING_STYLE.md found."
