@@ -61,7 +61,8 @@ jobs:
 
     - name: Run regress
       shell: bash
-      run: source ${{ github.workspace }}/setup.sh && make -C ${{ github.workspace }}/build run_regress
+      run: source ${{ github.workspace }}/setup.sh && bash ${{ github.workspace }}/build/turing_install/regress/run_regress.sh
+      working-directory: ${{ github.workspace }}/build/turing_install/regress
 
     - name: Create turing_install archive
       shell: bash
