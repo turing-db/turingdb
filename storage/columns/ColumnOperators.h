@@ -97,7 +97,7 @@ concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
     static void functionName(ColumnOptMask* mask,                                        \
                              const ColumnVector<T>* lhs,                                 \
                              const ColumnConst<U>* rhs) {                                \
-        const auto size = lhs->size();                                                   \
+        const size_t size = lhs->size();                                                 \
                                                                                          \
         mask->resize(size);                                                              \
         auto& maskd = mask->getRaw();                                                    \

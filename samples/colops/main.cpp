@@ -1,8 +1,8 @@
 #include <concepts>
 #include <iostream>
-#include <memory>
 
 #include "PropertyOperators.h"
+#include "columns/ColumnOptMask.h"
 #include "columns/ColumnVector.h"
 #include "metadata/PropertyType.h"
 
@@ -14,9 +14,39 @@ static_assert(std::same_as<contained_type<ColumnInts*>::type, types::Int64::Prim
 
 auto
 main() -> int {
-    ColumnInts veca {1, 2, 3};
-    ColumnInts vecb {9, 8, 7};
-    ColumnInts res {};
+    { // Test adding two column vectors
+        ColumnInts veca {1, 2, 3};
+        ColumnInts vecb {0, 8, 7};
+        ColumnInts added {};
 
-    // properties::exec<properties::Add>(&res, &veca, &vecb);
+        exec<Add>(&added, &veca, &vecb);
+
+        for (auto x : added) {
+            std::cout << x << ' ';
+        }
+        std::cout << '\n';
+    }
+
+    // {
+    //     ColumnInts veca {1, 0, 3};
+    //     ColumnInts vecb {1, 8, 3};
+    //     ColumnInts equals {};
+
+    //     exec<Eq>(&equals, &veca, &vecb);
+
+    //     for (auto x : equals) {
+    //         std::cout << x << ' ';
+    //     }
+    //     std::cout << '\n';
+
+    //     /* for (auto x : equals) {
+    //         if (!x.has_value()) {
+    //             std::cout << "_ ";
+    //         } else
+    //             std::cout << *x << ' ';
+    //     }
+    //     std::cout << '\n'; */
+    // }
+
+    
 }
