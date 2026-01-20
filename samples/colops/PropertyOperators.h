@@ -3,6 +3,7 @@
 #include <functional>
 #include <optional>
 #include <type_traits>
+#include <utility>
 
 #include "ColumnCombinations.h"
 
@@ -68,8 +69,9 @@ struct Executor {
         const auto& rhsd = rhs->getRaw();
         auto& resd = res->getRaw();
 
+        const auto op = Op {};
         for (size_t i {0}; i < size; i++) {
-            resd[i] = Op {}(lhsd[i], rhsd[i]);
+            resd[i] = op(lhsd[i], rhsd[i]);
         }
     }
 
@@ -83,24 +85,23 @@ struct Executor {
        const auto& lhsd = lhs->getRaw();
        const auto& val = rhs->getRaw();
 
+       const auto op = Op {};
        for (size_t i {0}; i < size; i++) {
-           resd[i] = Op {}(lhsd[i], val);
+           resd[i] = op(lhsd[i], val);
        }
     }
 };
 
 template <typename F>
 struct GenericOperator {
-    using functor = F;
-    
     template<typename T, typename U>
         requires is_optional_v<T> || is_optional_v<U>
-    inline auto operator()(T&& a, U&& b) {
+    inline decltype(auto) operator()(T&& a, U&& b) {
         return optionalGeneric<F>(std::forward<T>(a), std::forward<U>(b));
     }
 
     template <typename T, typename U>
-    inline auto operator()(T&& a, U&& b) {
+    inline decltype(auto) operator()(T&& a, U&& b) {
         return F {}(std::forward<T>(a), std::forward<U>(b));
     }
 };
@@ -119,6 +120,7 @@ void exec(ColW&& res, ColT&& l, ColU&& r) {
 using Add = GenericOperator<std::plus<>>;
 using Eq = GenericOperator<std::equal_to<>>;
 using Sub = GenericOperator<std::minus<>>;
+using Mul = GenericOperator<std::multiplies<>>;
 
 }
 

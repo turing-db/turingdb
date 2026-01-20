@@ -61,7 +61,6 @@ template <template <typename...> class C, typename T>
 inline constexpr bool is_instantiation_of_v =
     is_instantiation_of<C, std::remove_cvref_t<T>>::value;
 
-
 template <typename ColT>
 struct contained_type { using type = void; };
 
