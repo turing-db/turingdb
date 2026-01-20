@@ -62,9 +62,15 @@ jobs:
             2 or more consecutive blank lines in the code. This is a frequent
             issue in PRs. Flag every occurrence.
 
+            USING NAMESPACE:
+            There should never be a using namespace directive in header files.
+            Using namespace db is allowed in cpp files, do not flag it.
+            Using namespace std is never allowed.
+
             COMMENT FORMAT:
             **[Section Name]**: Quote the relevant rule from CODING_STYLE.md,
-            then explain the violation and how to fix it.
+            then explain the violation and how to fix it. Add a link towards the
+            location in the source file.
 
             Example:
             **[Pointers]**: CODING_STYLE.md states "the star symbol needs to be
