@@ -1021,7 +1021,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
     }
 
     WriteProcessor::PendingEdges penEdges;
-    penNodes.reserve(node->pendingEdges().size());
+    penEdges.reserve(node->pendingEdges().size());
     {
         for (const WriteNode::PendingEdge& pendingPlanEdge : node->pendingEdges()) {
             const EdgePatternData* const data = pendingPlanEdge._data;
