@@ -13,6 +13,10 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROADS_FILE="$SCRIPT_DIR/roads.cypher"
 
+# Expected counts from roads.cypher
+EXPECTED_NODES=175813
+EXPECTED_EDGES=179102
+
 cd $SCRIPT_DIR
 
 # Kill any existing turingdb processes
@@ -28,8 +32,8 @@ echo "Loading roads.cypher (~175K nodes, ~179K edges)..."
 echo ""
 
 # Run turingdb with the large CREATE statement
-# Using timeout to prevent infinite hangs
-timeout 300 bash -c "cat << 'EOF' | turingdb -turing-dir $SCRIPT_DIR/.turing -in-memory 2>&1
+# Capture output to parse node/edge counts
+OUTPUT=$(timeout 300 bash -c "cat << 'EOF' | turingdb -turing-dir $SCRIPT_DIR/.turing -in-memory 2>&1
 CREATE GRAPH roads
 cd roads
 CHANGE NEW
@@ -39,10 +43,11 @@ CHANGE SUBMIT
 MATCH (n:Intersection) RETURN COUNT(n) as node_count
 MATCH ()-[r:ROAD]->() RETURN COUNT(r) as edge_count
 quit
-EOF"
+EOF")
 
 exit_code=$?
 
+echo "$OUTPUT"
 echo ""
 echo "Exit code: $exit_code"
 
@@ -72,5 +77,33 @@ if [ $exit_code -ne 0 ]; then
     exit 1
 fi
 
+# Parse and verify node count
+node_count=$(echo "$OUTPUT" | grep -A2 "node_count" | grep -E "^\| *[0-9]+" | grep -oE "[0-9]+")
+if [ -z "$node_count" ]; then
+    echo "ERROR - Could not parse node count from output"
+    exit 1
+fi
+
+echo "Node count: $node_count (expected: $EXPECTED_NODES)"
+if [ "$node_count" -ne "$EXPECTED_NODES" ]; then
+    echo "ERROR - Node count mismatch: got $node_count, expected $EXPECTED_NODES"
+    exit 1
+fi
+
+# Parse and verify edge count
+edge_count=$(echo "$OUTPUT" | grep -A2 "edge_count" | grep -E "^\| *[0-9]+" | grep -oE "[0-9]+")
+if [ -z "$edge_count" ]; then
+    echo "ERROR - Could not parse edge count from output"
+    exit 1
+fi
+
+echo "Edge count: $edge_count (expected: $EXPECTED_EDGES)"
+if [ "$edge_count" -ne "$EXPECTED_EDGES" ]; then
+    echo "ERROR - Edge count mismatch: got $edge_count, expected $EXPECTED_EDGES"
+    exit 1
+fi
+
+echo ""
 echo "SUCCESS - Large CREATE statement executed without crash"
+echo "Created $node_count nodes and $edge_count edges"
 exit 0
