@@ -71,8 +71,28 @@ struct contained_type<ColumnVector<T>> { using type = T; };
 template <typename T>
 struct contained_type<ColumnVector<T>*> { using type = T; };
 
-template <typename Op, typename ColT, typename ColU>
-struct ColumnCombination {
+template <typename T>
+using decay_col_t = std::remove_cvref_t<std::remove_pointer_t<T>>;
+
+/**
+ * @brief Helper trait to determine the container type of a column operation.
+ * @detail If either operand is a ColumnVector, the result is a ColumnVector.
+ * Otherwise the result is a ColumnConst.
+ * TODO: Add logic for ColumnSet, ColumnMask
+ */
+template <typename ColT, typename ColU, typename T>
+using column_result_t =
+    std::conditional_t<
+        is_instantiation_of_v<ColumnVector, ColT> ||
+        is_instantiation_of_v<ColumnVector, ColU>,
+        ColumnVector<T>,
+        ColumnConst<T>
+    >;
+
+template <typename Op, typename PColT, typename PColU>
+class ColumnCombination {
+    using ColT = decay_col_t<PColT>;
+    using ColU = decay_col_t<PColU>;
     // Get contained types of each column
     using InternalT = contained_type<ColT>::type;
     using InternalU = contained_type<ColU>::type;
@@ -81,8 +101,11 @@ struct ColumnCombination {
     using AbsInternalT = unwrap_optional_t<InternalT>;
     using AbsInternalU = unwrap_optional_t<InternalU>;
 
+    static_assert(std::is_invocable_v<Op, AbsInternalT, AbsInternalU>,
+              "ColumnCombination: Op must be invocable with unwrapped column types");
+
     // Invoke the operator on the non-optional internal types
-    using AbsInternalRes = std::invoke_result<Op, AbsInternalT, AbsInternalU>;
+    using AbsInternalRes = std::invoke_result_t<Op, AbsInternalT, AbsInternalU>;
 
     // Internal result type is optional wrap of the absolute internal result type if
     // either type is optional, or otherwise is the absolute internal type.
@@ -92,13 +115,8 @@ struct ColumnCombination {
                            AbsInternalRes>;
 
     // If either inputs are ColumnVectors, result must be vector. Otherwise const
-    using ColumnType =
-        std::conditional_t<
-            is_instantiation_of_v<ColumnVector, ColT> ||
-            is_instantiation_of_v<ColumnVector, ColU>,
-            ColumnVector<InternalRes>,
-            ColumnConst<InternalRes>
-    >;
+public:
+    using ColumnType = column_result_t<ColT, ColU, InternalRes>;
 };
 
 }

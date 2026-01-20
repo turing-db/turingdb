@@ -19,6 +19,8 @@ main() -> int {
         ColumnInts vecb {0, 8, 7};
         ColumnInts added {};
 
+        static_assert(std::is_same_v<ColumnInts, ColumnCombination<Add, ColumnInts, ColumnInts>::ColumnType>);
+
         exec<Add>(&added, &veca, &vecb);
 
         for (auto x : added) {

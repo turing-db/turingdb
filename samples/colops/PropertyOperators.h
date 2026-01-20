@@ -10,7 +10,6 @@
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 
-
 namespace db {
 
 /**
@@ -107,11 +106,11 @@ struct GenericOperator {
 };
 
 template <typename Op, typename W, typename T, typename U>
-    requires (std::is_same_v<W, ColumnCombination<Op, T, U>>)
+    requires (std::is_same_v<decay_col_t<W>, typename ColumnCombination<Op, T, U>::ColumnType>)
 auto exec(W&& res, T&& l, U&& r) {
-    using InternalT = contained_type<T>::internal_type;
-    using InternalU = contained_type<U>::internal_type;
-    using InternalRes = contained_type<W>::internal_type;
+    using InternalT = contained_type<T>::type;
+    using InternalU = contained_type<U>::type;
+    using InternalRes = contained_type<W>::type;
 
     Executor<Op, InternalRes, InternalT, InternalU>::apply(
         std::forward<W>(res), std::forward<T>(l), std::forward<U>(r));
