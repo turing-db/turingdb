@@ -70,5 +70,5 @@ jobs:
             **[Pointers]**: CODING_STYLE.md states "the star symbol needs to be
             close to the type". Change `Type *var` to `Type* var`.
 
-            If no violations found, submit the review with a summary comment:
-            "Code style review passed. No violations of CODING_STYLE.md found."
+            If no violations found, submit the review with a very short phrase:
+            "Automated code style review passed."
