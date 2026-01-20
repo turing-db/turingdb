@@ -118,6 +118,7 @@ void exec(ColW&& res, ColT&& l, ColU&& r) {
 
 using Add = GenericOperator<std::plus<>>;
 using Eq = GenericOperator<std::equal_to<>>;
+using Sub = GenericOperator<std::minus<>>;
 
 }
 

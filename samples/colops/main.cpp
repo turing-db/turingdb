@@ -3,6 +3,8 @@
 #include <iostream>
 #include <optional>
 
+#include "ColumnCombinations.h"
+#include "LocalMemory.h"
 #include "PropertyOperators.h"
 #include "columns/ColumnOptMask.h"
 #include "columns/ColumnVector.h"
@@ -16,6 +18,17 @@ using MaybeNodeIDs = ColumnOptVector<NodeID>;
 using MaybeBools = ColumnOptVector<bool>;
 
 static_assert(std::same_as<contained_type<ColumnInts*>::type, types::Int64::Primitive>);
+
+/*
+
+Column operators:
+
+switch (op) {
+    case (OP_ADD): exec<Add>(res, lhs, rhs);
+    case (OP_SUB): exec<Sub>(res, lhs, rhs);
+}
+
+*/
 
 auto
 main() -> int {
@@ -56,5 +69,14 @@ main() -> int {
             if (!x.has_value()) std::cout << "_ ";
             else                std::cout << std::boolalpha << *x <<' ';
         } std::cout << '\n';
+    }
+
+    {
+        LocalMemory mem;
+        ColumnInts a;
+        ColumnInts b;
+
+        using ResultColumn = ColumnCombination<Add, decltype(a), decltype(b)>::ResultColumnType;
+        [[maybe_unused]] auto* res = mem.alloc<ResultColumn>();
     }
 }
