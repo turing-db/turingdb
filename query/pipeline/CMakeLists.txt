@@ -50,6 +50,8 @@ set(processors_sources
     processors/FilterProcessor.cpp
     processors/LambdaSourceProcessor.cpp
     processors/ExprProgram.cpp
+    processors/EvalBinaryExpr.cpp
+    processors/EvalUnaryExpr.cpp
 )
 
 set(procedures_sources

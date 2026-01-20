@@ -3,8 +3,8 @@
 #include <vector>
 
 #include "Column.h"
-#include "DebugDump.h"
 
+#include "DebugDump.h"
 #include "BioAssert.h"
 
 namespace db {
@@ -141,10 +141,15 @@ public:
 
     static consteval auto staticKind() { return _staticKind; }
 
+    ContainerKind::Code getContainerKind() const override { return ContainerKind::code<ColumnVector<T>>(); }
+    InternalKind::Code getInternalKind() const override { return InternalKind::code<T>(); }
+
 private:
     std::vector<T> _data;
 
     static constexpr auto _staticKind = ColumnKind::code<ColumnVector<T>>();
 };
 
+template <class T>
+struct ColumnSupportFor<ColumnVector<T>> : std::true_type {};
 }

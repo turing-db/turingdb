@@ -34,7 +34,7 @@ class Column;
 // Implementation
 
 class InternalKind {
-private:
+public:
     using Types = KindTypes<
         signed char,
         unsigned char,
@@ -86,14 +86,14 @@ private:
         const Change*,
         Column*>;
 
-public:
     using Code = uint8_t;
 
     /// @brief Returns the code for the given type
     template <typename T>
     static consteval Code code() {
         constexpr auto code = (Code)Types::indexOf<T>();
-        static_assert(code != Invalid, "Internal type was not registered as a valid internal type");
+        static_assert(code != Invalid,
+                      "Internal type was not registered as a valid internal type");
         return code;
     }
 
