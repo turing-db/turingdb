@@ -200,7 +200,7 @@ void HashJoinProcessor::execute() {
         size_t totalSizeIncrease = 0;
         // calculate total size of new additions from hashes on the right column and allocate once.-
         for (size_t i = _rightInputIdx; i < rightCol->size(); ++i) {
-            if (const auto it = findInMap(_leftMap, rightCol, i); it != _rightMap.end()) {
+            if (const auto it = findInMap(_leftMap, rightCol, i); it != _leftMap.end()) {
                 const auto& rows = it->second;
                 totalSizeIncrease += rows.size();
             }
