@@ -71,7 +71,7 @@ main() -> int {
         } std::cout << '\n';
     }
 
-    {
+    { // Example of using ColumnCombos for alloc'ing result col
         LocalMemory mem;
         ColumnInts a;
         ColumnInts b;
