@@ -8,6 +8,7 @@ using namespace std;  // VIOLATION: Never use "using namespace std"
 #include <iostream>
 
 using namespace biocommon;  // VIOLATION: using namespace in file scope
+using namespace db;
 
 namespace turingdb {
 
