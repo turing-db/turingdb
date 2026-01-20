@@ -116,7 +116,11 @@ class ColumnCombination {
 
     // If either inputs are ColumnVectors, result must be vector. Otherwise const
 public:
-    using ColumnType = column_result_t<ColT, ColU, InternalRes>;
+    using ResultColumnType = column_result_t<ColT, ColU, InternalRes>;
 };
 
+template <typename Op, typename ColT, typename ColU, typename ColRes>
+concept is_result_column =
+    std::is_same_v<decay_col_t<ColRes>,
+                   typename ColumnCombination<Op, ColT, ColU>::ResultColumnType>;
 }

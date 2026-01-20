@@ -81,6 +81,7 @@ private:
         std::optional<std::string>,
         std::optional<ValueType>,
         std::optional<ChangeID>,
+        std::optional<bool>,
         NodeView,
         const CommitBuilder*,
         const Change*,

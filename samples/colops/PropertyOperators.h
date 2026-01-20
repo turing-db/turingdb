@@ -105,15 +105,15 @@ struct GenericOperator {
     }
 };
 
-template <typename Op, typename W, typename T, typename U>
-    requires (std::is_same_v<decay_col_t<W>, typename ColumnCombination<Op, T, U>::ColumnType>)
-auto exec(W&& res, T&& l, U&& r) {
-    using InternalT = contained_type<T>::type;
-    using InternalU = contained_type<U>::type;
-    using InternalRes = contained_type<W>::type;
+template <typename Op, typename ColW, typename ColT, typename ColU>
+    requires is_result_column<Op, ColT, ColU, ColW>
+void exec(ColW&& res, ColT&& l, ColU&& r) {
+    using InternalT = contained_type<ColT>::type;
+    using InternalU = contained_type<ColU>::type;
+    using InternalRes = contained_type<ColW>::type;
 
     Executor<Op, InternalRes, InternalT, InternalU>::apply(
-        std::forward<W>(res), std::forward<T>(l), std::forward<U>(r));
+        std::forward<ColW>(res), std::forward<ColT>(l), std::forward<ColU>(r));
 }
 
 using Add = GenericOperator<std::plus<>>;
