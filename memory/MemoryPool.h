@@ -45,8 +45,9 @@ public:
 
     template <typename... ArgsT>
     inline ObjectT* alloc(ArgsT&&... args) {
-        const size_t currentCapacity = _current->_objects.capacity();
-        if (currentCapacity == 0) {
+        // Check if current block is full
+        const auto& objects = _current->_objects;
+        if (objects.size() >= objects.capacity()) {
             if (!_current->_next) {
                 allocBlock();
             }
