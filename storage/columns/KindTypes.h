@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tuple>
+#include <array>
 
 namespace db {
 
@@ -87,10 +88,16 @@ public:
         return IndexOfHelper<T, Tuple>::value + 1;
     }
 
+    // TypeAt
+    template <std::size_t I>
+    using TypeAt = std::tuple_element_t<I, Tuple>;
+
+    // ALlUnique
     static consteval bool allUnique() {
         return AllUniqueHelper<Ts...>::value();
     }
 
+    // Count
     static consteval std::size_t count() {
         return std::tuple_size_v<Tuple>;
     }

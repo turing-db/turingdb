@@ -3,6 +3,7 @@
 #include <unordered_set>
 
 #include "Column.h"
+
 #include "DebugDump.h"
 #include "BioAssert.h"
 
@@ -27,25 +28,25 @@ public:
 
     ColumnSet(std::initializer_list<T> v)
         : Column(_staticKind),
-          _data(v)
+        _data(v)
     {
     }
 
     explicit ColumnSet(const std::unordered_set<T>& set)
         : Column(_staticKind),
-          _data(set)
+        _data(set)
     {
     }
 
     explicit ColumnSet(std::unordered_set<T>&& set) noexcept
         : Column(_staticKind),
-          _data(std::move(set))
+        _data(std::move(set))
     {
     }
 
     explicit ColumnSet(size_t size)
         : Column(_staticKind),
-          _data(size)
+        _data(size)
     {
     }
 
@@ -112,9 +113,21 @@ public:
 
     static consteval auto staticKind() { return _staticKind; }
 
+    ContainerKind::Code getContainerKind() const override { return ContainerKind::code<ColumnSet<T>>(); }
+    InternalKind::Code getInternalKind() const override { return InternalKind::code<T>(); }
+
 private:
     std::unordered_set<T> _data;
 
     static constexpr auto _staticKind = ColumnKind::code<ColumnSet<T>>();
 };
+
+template <typename T>
+concept SetElement = requires(const T& t) {
+    { std::hash<T> {}(t) } -> std::convertible_to<std::size_t>;
+};
+
+template <SetElement T>
+struct ColumnSupportFor<ColumnSet<T>> : std::true_type {};
+
 }

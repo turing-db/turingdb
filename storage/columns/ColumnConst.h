@@ -66,10 +66,16 @@ public:
 
     static consteval auto staticKind() { return _staticKind; }
 
+    ContainerKind::Code getContainerKind() const override { return ContainerKind::code<ColumnConst<T>>(); }
+    InternalKind::Code getInternalKind() const override { return InternalKind::code<T>(); }
+
 private:
     T _value;
 
     static constexpr auto _staticKind = ColumnKind::code<ColumnConst<T>>();
 };
+
+template <class T>
+struct ColumnSupportFor<ColumnConst<T>> : std::true_type {};
 
 }

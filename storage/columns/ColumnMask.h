@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "Column.h"
-#include "columns/ColumnOptVector.h"
+#include "ColumnOptVector.h"
 
 #include "DebugDump.h"
 #include "BioAssert.h"
@@ -162,6 +162,9 @@ public:
     }
 
     static consteval auto staticKind() { return _staticKind; }
+
+    ContainerKind::Code getContainerKind() const override { return ContainerKind::code<ColumnMask>(); }
+    InternalKind::Code getInternalKind() const override { return 0; }
 
 private:
     std::vector<Bool_t> _data;

@@ -24,14 +24,13 @@ class ColumnMask;
 // Implementation
 
 class ContainerKind {
-private:
+public:
     using Types = KindTypes<
         TemplateKind<ColumnVector>,
         TemplateKind<ColumnConst>,
         TemplateKind<ColumnSet>,
         ColumnMask>;
 
-public:
     using Code = uint8_t;
 
     /// @brief Returns the code for the given container type
@@ -41,15 +40,26 @@ public:
 
         if constexpr (std::is_same_v<Outer, std::false_type>) {
             // T is not a template class
-            static_assert(Types::contains<T>(), "Container type was not registered as a valid container type");
+            static_assert(Types::contains<T>(),
+                          "Container type was not registered as a valid container type");
             constexpr auto code = (Code)Types::indexOf<T>();
             return code;
         } else {
             // T is a template class
-            static_assert(Types::contains<Outer>(), "Container type was not registered as a valid container type");
+            static_assert(Types::contains<Outer>(),
+                          "Container type was not registered as a valid container type");
             constexpr auto code = (Code)Types::indexOf<Outer>();
             return code;
         }
+    }
+
+    /// @brief Returns the code for the given container type
+    template <template <typename> typename T>
+    static consteval Code code() {
+        static_assert(Types::contains<TemplateKind<T>>(),
+                      "Container type was not registered as a valid container type");
+        constexpr auto code = (Code)Types::indexOf<TemplateKind<T>>();
+        return code;
     }
 
     /// @brief Value indicating an invalid container type code
