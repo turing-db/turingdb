@@ -18,6 +18,9 @@ struct is_optional : std::false_type {};
 template <typename U>
 struct is_optional<std::optional<U>> : std::true_type {};
 
+template <>
+struct is_optional<PropertyNull> : std::true_type {};
+
 template <typename T>
 inline constexpr bool is_optional_v = is_optional<std::remove_cvref_t<T>>::value;
 
