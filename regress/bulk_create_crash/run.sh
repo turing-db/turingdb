@@ -33,12 +33,12 @@ echo ""
 
 # Run turingdb with the large CREATE statement
 # Capture output to parse node/edge counts
-OUTPUT=$(cat << 'EOF' | turingdb -turing-dir $SCRIPT_DIR/.turing -in-memory 2>&1
+OUTPUT=$(cat << EOF | turingdb -turing-dir $SCRIPT_DIR/.turing -in-memory 2>&1
 CREATE GRAPH roads
 cd roads
 CHANGE NEW
 checkout change-0
-read $ROADS_FILE
+read ${ROADS_FILE}
 CHANGE SUBMIT
 MATCH (n:Intersection) RETURN COUNT(n) as node_count
 MATCH ()-[r:ROAD]->() RETURN COUNT(r) as edge_count
