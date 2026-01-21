@@ -11,7 +11,8 @@ set(VECTOR_SOURCES
         ShardCache.cpp
         VecLibShard.cpp
         VecLibAccessor.cpp
-        VecLib.cpp)
+        VecLib.cpp
+        import/JsonImporter.cpp)
 
 add_library(turing_vector_s STATIC ${VECTOR_SOURCES})
 

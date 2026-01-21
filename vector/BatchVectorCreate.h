@@ -31,7 +31,9 @@ public:
     BatchVectorCreate(BatchVectorCreate&&) = delete;
     BatchVectorCreate& operator=(BatchVectorCreate&&) = delete;
 
-    void clear() {
+    void clear(Dimension dimension) {
+        _dimension = dimension;
+
         for (auto& data : _data) {
             data._externalIDs.clear();
             data._embeddings.clear();
@@ -85,7 +87,7 @@ public:
     }
 
 private:
-    const Dimension _dimension;
+    Dimension _dimension;
     LSHShardRouter* _router {nullptr};
 
     std::vector<Data> _data;
