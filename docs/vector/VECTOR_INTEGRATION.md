@@ -17,7 +17,13 @@ CREATE VECTOR INDEX vectordb
 This writes the vector index on disk.
 
 ```
-LOAD EMBEDDINGS FROM "myfilepath" IN vectordb
+LOAD EMBEDDING FROM "myfilepath" IN vectordb
+```
+
+or
+
+```
+LOAD VECTOR FROM "myfilepath" IN vectordb
 ```
 
 4. Get a column of the numerical values associated to the n nearest vectors for a given query vector
@@ -38,11 +44,17 @@ or also the associated vectors as well.
 DELETE VECTOR INDEX vectordb
 ```
 
-Concurrency: the vector index would need to be properly guarded for concurrent access.
-
 ## Load and save
 
 When we load a graph we will need to load as well any vector index that may have been created in this graph.
 
 Vector index folder: in the directory storing a graph, we could have a folder with a well-known name indicated the presence of a vector index to load.
 The loading and dumping itself is already implemented.
+
+## Concurrency
+
+Concurrency: the vector index would need to be properly guarded for concurrent access.
+
+It makes sense to support:
+* One exclusive writer for the LOAD EMBEDDINGS query -> acquire unique lock
+* Many concurrent reader for VECTOR SEARCH -> acquire shared lock
