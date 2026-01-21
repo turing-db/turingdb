@@ -35,6 +35,7 @@ add_subdirectory(read_script)
 add_subdirectory(neo4j_import)
 add_subdirectory(wine_ontology)
 add_subdirectory(bulk_create_crash)
+add_subdirectory(get_nodes_invalid_id)
 
 # Python SDK version to be used by uv
 set(PYTURINGDB "turingdb")

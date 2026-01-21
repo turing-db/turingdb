@@ -1030,13 +1030,25 @@ void DBServerProcessor::get_nodes() {
         return;
     }
 
+    // Validate all node IDs before writing response
+    std::vector<NodeView> nodes;
+    nodes.reserve(nodeIDs->size());
+    for (const auto nodeID : *nodeIDs) {
+        NodeView node = reader.getNodeView(nodeID);
+        if (!node.isValid()) {
+            payload.key("error");
+            payload.value("Invalid node ID: " + std::to_string(nodeID.getValue()));
+            return;
+        }
+        nodes.push_back(std::move(node));
+    }
+
     payload.key("data");
     payload.obj();
 
-    for (const auto nodeID : *nodeIDs) {
-        const NodeView node = reader.getNodeView(nodeID);
-        payload.key(nodeID);
-        payload.value(node);
+    for (size_t i = 0; i < nodeIDs->size(); ++i) {
+        payload.key((*nodeIDs)[i]);
+        payload.value(nodes[i]);
     }
 }
 
@@ -1130,6 +1142,16 @@ void DBServerProcessor::get_node_edges() {
         payload.key("error");
         payload.value(EndpointStatusDescription::value(EndpointStatus::COULD_NOT_PARSE_BODY));
         return;
+    }
+
+    // Validate all node IDs before writing response
+    for (const NodeID nodeID : *nodeIDs) {
+        const NodeView node = reader.getNodeView(nodeID);
+        if (!node.isValid()) {
+            payload.key("error");
+            payload.value("Invalid node ID: " + std::to_string(nodeID.getValue()));
+            return;
+        }
     }
 
     std::unordered_map<EdgeTypeID, size_t> outCounts;
@@ -1437,13 +1459,25 @@ void DBServerProcessor::get_edges() {
         return;
     }
 
+    // Validate all edge IDs before writing response
+    std::vector<EdgeView> edges;
+    edges.reserve(edgeIDs->size());
+    for (const auto edgeID : *edgeIDs) {
+        EdgeView edge = reader.getEdgeView(edgeID);
+        if (!edge.isValid()) {
+            payload.key("error");
+            payload.value("Invalid edge ID: " + std::to_string(edgeID.getValue()));
+            return;
+        }
+        edges.push_back(std::move(edge));
+    }
+
     payload.key("data");
     payload.obj();
 
-    for (const auto edgeID : *edgeIDs) {
-        const EdgeView edge = reader.getEdgeView(edgeID);
-        payload.key(edgeID);
-        payload.value(edge);
+    for (size_t i = 0; i < edgeIDs->size(); ++i) {
+        payload.key((*edgeIDs)[i]);
+        payload.value(edges[i]);
     }
 }
 
