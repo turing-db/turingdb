@@ -9,16 +9,22 @@ The query commands that we want can be possibly decomposed into several steps:
 1. Create a vector index for a graph inside TuringDB.
 This is independent of versioning.
 
+```
 CREATE VECTOR INDEX vectordb
+```
 
 2. Load embeddings vectors inside a vector index from a file. A numerical ID is associated to each embedding vector
 This writes the vector index on disk.
 
+```
 LOAD EMBEDDINGS FROM "myfilepath" IN vectordb
+```
 
 4. Get a column of the numerical values associated to the n nearest vectors for a given query vector
 
+```
 VECTOR SEARCH vectordb "embedding vector"
+```
 
 Returns a column of IDs associated to the k neareast vector for a given query vector given for now as a string.
 Later: maybe as a list?
@@ -28,7 +34,9 @@ or also the associated vectors as well.
 
 5. Delete vector index
 
+```
 DELETE VECTOR INDEX vectordb
+```
 
 Concurrency: the vector index would need to be properly guarded for concurrent access.
 
