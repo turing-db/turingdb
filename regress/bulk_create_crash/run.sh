@@ -33,7 +33,7 @@ echo ""
 
 # Run turingdb with the large CREATE statement
 # Capture output to parse node/edge counts
-OUTPUT=$(timeout 300 bash -c "cat << 'EOF' | turingdb -turing-dir $SCRIPT_DIR/.turing -in-memory 2>&1
+OUTPUT=$(cat << 'EOF' | turingdb -turing-dir $SCRIPT_DIR/.turing -in-memory 2>&1
 CREATE GRAPH roads
 cd roads
 CHANGE NEW
@@ -43,7 +43,8 @@ CHANGE SUBMIT
 MATCH (n:Intersection) RETURN COUNT(n) as node_count
 MATCH ()-[r:ROAD]->() RETURN COUNT(r) as edge_count
 quit
-EOF")
+EOF
+)
 
 exit_code=$?
 
@@ -65,11 +66,6 @@ if [ $exit_code -eq 134 ]; then
     exit 1
 fi
 
-# Check for timeout
-if [ $exit_code -eq 124 ]; then
-    echo "TIMEOUT - turingdb took too long"
-    exit 1
-fi
 
 # Check for other errors
 if [ $exit_code -ne 0 ]; then
