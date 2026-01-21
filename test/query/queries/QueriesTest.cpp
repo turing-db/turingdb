@@ -1416,6 +1416,70 @@ TEST_F(QueriesTest, db_history) {
     actualRows.clear();
 }
 
+TEST_F(QueriesTest, matchCrossProductWithDbHistory) {
+    using HistoryRow = LineContainer<std::string, uint64_t, uint64_t, uint64_t>;
+
+    HistoryRow expectedRows;
+    HistoryRow actualRows;
+
+    size_t nodeCount = 0;
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+
+        nodeCount = reader.getNodeCount();
+
+        // Get expected history
+        const std::span commits = reader.commits();
+        for (const auto& commit : commits) {
+            const CommitHash& hash = commit.hash();
+            const std::span parts = commit.dataparts();
+            const Tombstones& tombstones = commit.tombstones();
+
+            size_t histNodeCount = 0;
+            for (const auto& part : parts) {
+                histNodeCount += part->getNodeContainerSize();
+            }
+            histNodeCount -= tombstones.numNodes();
+
+            size_t histEdgeCount = 0;
+            for (const auto& part : parts) {
+                histEdgeCount += part->getEdgeContainerSize();
+            }
+            histEdgeCount -= tombstones.numEdges();
+
+            // The db.history() result is repeated for each row in the cross product
+            for (size_t i = 0; i < nodeCount * nodeCount; i++) {
+                expectedRows.add({fmt::format("{:x}", hash.get()),
+                                  histNodeCount,
+                                  histEdgeCount,
+                                  parts.size()});
+            }
+        }
+    }
+
+    auto result = query("MATCH (n), (m) RETURN db.history()", [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 4);
+        ASSERT_EQ(df->getRowCount(), nodeCount * nodeCount);
+
+        const auto& cols = df->cols();
+        const auto* commitCol = cols.at(0)->as<ColumnVector<std::string>>();
+        const auto* nodeCountCol = cols.at(1)->as<ColumnVector<uint64_t>>();
+        const auto* edgeCountCol = cols.at(2)->as<ColumnVector<uint64_t>>();
+        const auto* partCountCol = cols.at(3)->as<ColumnVector<uint64_t>>();
+
+        for (size_t i = 0; i < df->getRowCount(); i++) {
+            actualRows.add({commitCol->at(i),
+                            nodeCountCol->at(i),
+                            edgeCountCol->at(i),
+                            partCountCol->at(i)});
+        }
+    });
+
+    EXPECT_EQ(result.getStatus(), QueryStatus::Status::PLAN_ERROR);
+}
+
 TEST_F(QueriesTest, scanByLabelOutEdges) {
     const std::string query = "MATCH (n:Person)-[e]->(m) RETURN n, e, m";
 
