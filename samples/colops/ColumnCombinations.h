@@ -62,17 +62,6 @@ template <template <typename...> class C, typename T>
 inline constexpr bool is_instantiation_of_v =
     is_instantiation_of<C, std::remove_cvref_t<T>>::value;
 
-/*
-template <typename ColT>
-struct contained_type { using type = void; };
-
-template <typename T>
-struct contained_type<ColumnVector<T>> { using type = T; };
-
-template <typename T>
-struct contained_type<ColumnVector<T>*> { using type = T; };
-*/
-
 template <typename T>
 using decay_col_t = std::remove_cvref_t<std::remove_pointer_t<T>>;
 

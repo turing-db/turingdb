@@ -2,7 +2,6 @@
 
 #include <functional>
 #include <optional>
-#include <type_traits>
 #include <utility>
 
 #include "ColumnCombinations.h"
@@ -58,7 +57,7 @@ inline static auto optionalGeneric(T&& a,
 }
 
 template <typename Op, typename Res, typename T, typename U>
-struct Executor {
+struct BinaryOpExecutor {
     static void apply(ColumnVector<Res>* res,
                const ColumnVector<T>* lhs,
                const ColumnVector<U>* rhs) {
@@ -95,22 +94,38 @@ struct Executor {
     static void apply(ColumnMask* res,
                       const ColumnMask* lhs,
                       const ColumnMask* rhs) {
-       const size_t size = lhs->size();
+        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
+        const size_t size = lhs->size();
 
-       res->resize(size);
-       auto& resd = res->getRaw();
-       const auto& lhsd = lhs->getRaw();
-       const auto& rhsd = rhs->getRaw();
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
 
-       auto op = Op {};
-       for (size_t i {0}; i < size; i++) {
-           resd[i] = op(lhsd[i], rhsd[i]);
+        auto op = Op {};
+        for (size_t i {0}; i < size; i++) {
+            resd[i] = op(lhsd[i], rhsd[i]);
        }
     }
 };
 
+template <typename Op, typename ColW, typename ColT, typename ColU>
+    requires is_result_column<Op, ColT, ColU, ColW>
+inline void exec(ColW&& res, ColT&& lhs, ColU&& rhs) {
+    using DecayColT = decay_col_t<ColT>;
+    using DecayColU = decay_col_t<ColU>;
+    using DecayColW = decay_col_t<ColW>;
+
+    using InternalT = InnerTypeHelper<DecayColT>::type;
+    using InternalU = InnerTypeHelper<DecayColU>::type;
+    using InternalRes = InnerTypeHelper<DecayColW>::type;
+
+    BinaryOpExecutor<Op, InternalRes, InternalT, InternalU>::apply(
+        std::forward<ColW>(res), std::forward<ColT>(lhs), std::forward<ColU>(rhs));
+}
+
 template <typename F>
-struct GenericOperator {
+struct BinaryOperator {
     template<typename T, typename U>
         requires is_optional_v<T> || is_optional_v<U>
     inline decltype(auto) operator()(T&& a, U&& b) {
@@ -123,27 +138,13 @@ struct GenericOperator {
     }
 };
 
-template <typename Op, typename ColW, typename ColT, typename ColU>
-    requires is_result_column<Op, ColT, ColU, ColW>
-void exec(ColW&& res, ColT&& l, ColU&& r) {
-    using DecayColT = decay_col_t<ColT>;
-    using DecayColU = decay_col_t<ColU>;
-    using DecayColW = decay_col_t<ColW>;
+using Add = BinaryOperator<std::plus<>>;
+using Eq  = BinaryOperator<std::equal_to<>>;
+using Sub = BinaryOperator<std::minus<>>;
+using Mul = BinaryOperator<std::multiplies<>>;
 
-    using InternalT = InnerTypeHelper<DecayColT>::type;
-    using InternalU = InnerTypeHelper<DecayColU>::type;
-    using InternalRes = InnerTypeHelper<DecayColW>::type;
-
-    Executor<Op, InternalRes, InternalT, InternalU>::apply(
-        std::forward<ColW>(res), std::forward<ColT>(l), std::forward<ColU>(r));
-}
-
-using Add = GenericOperator<std::plus<>>;
-using Eq = GenericOperator<std::equal_to<>>;
-using Sub = GenericOperator<std::minus<>>;
-using Mul = GenericOperator<std::multiplies<>>;
-
-using AND = GenericOperator<std::logical_and<>>;
+using AND = BinaryOperator<std::logical_and<>>;
+using OR  = BinaryOperator<std::logical_or<>>;
 
 }
 

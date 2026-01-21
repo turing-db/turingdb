@@ -5,9 +5,8 @@
 
 #include "ColumnCombinations.h"
 #include "LocalMemory.h"
-#include "PropertyOperators.h"
+#include "BinaryOperators.h"
 #include "columns/ColumnMask.h"
-#include "columns/ColumnOptMask.h"
 #include "columns/ColumnVector.h"
 #include "columns/KindTypes.h"
 #include "metadata/PropertyType.h"
@@ -88,6 +87,18 @@ main() -> int {
         ColumnMask res {};
 
         exec<AND>(&res, &a, &b);
+        for (auto x : res) {
+            std::cout << std::boolalpha << x << ' ';
+        }
+        std::cout << '\n';
+    }
+
+    { // Test OR on masks
+        ColumnMask a {true, false, true, false};
+        ColumnMask b {true, false, false, true};
+        ColumnMask res {};
+
+        exec<OR>(&res, &a, &b);
         for (auto x : res) {
             std::cout << std::boolalpha << x << ' ';
         }
