@@ -1,21 +1,35 @@
 #pragma once
 
 #include <functional>
+#include <concepts>
 
 #include "columns/ColumnMask.h"
 #include "columns/ColumnVector.h"
 
 namespace db {
 
+
+template <typename F>
+concept UnaryMaskOp =
+    std::invocable<F, bool> && std::convertible_to<std::invoke_result_t<F, bool>, bool>;
+
+template <typename F>
+concept BinaryMaskOp = std::invocable<F, bool, bool>
+                    && std::convertible_to<std::invoke_result_t<F, bool, bool>, bool>;
+
 template <typename F>
 struct MaskOperator {
     template <typename T, typename U>
-    inline decltype(auto) operator()(T&& a, U&& b) {
+    inline decltype(auto) operator()(T&& a, U&& b)
+        requires BinaryMaskOp<F>
+    {
         return F {}(std::forward<T>(a), std::forward<U>(b));
     }
 
     template <typename T>
-    inline decltype(auto) operator()(T&& a) {
+    inline decltype(auto) operator()(T&& a)
+        requires UnaryMaskOp<F>
+    {
         return F {}(std::forward<T>(a));
     }
 };
@@ -46,7 +60,8 @@ struct MaskOpExecutor {
     }
 
     // Unary operator
-    static void apply(ColumnMask* res, const ColumnMask* arg) {
+    static void apply(ColumnMask* res, const ColumnMask* arg)
+    {
         const size_t size = arg->size();
 
         res->resize(size);
@@ -58,8 +73,9 @@ struct MaskOpExecutor {
             resd[i] = op(argd[i]);
         }
     }
+};
 
-    // Mask application
+struct MaskApplicator {
     template <typename T>
     static void apply(ColumnVector<T>* res,
                       const ColumnVector<T>* src,
@@ -79,7 +95,6 @@ struct MaskOpExecutor {
         }
     }
 
-    // Mask application
     template <typename T>
     static void apply(ColumnVector<T>* res,
                       const ColumnMask* mask,
@@ -115,14 +130,12 @@ static inline void exec(ColumnMask* res, ColumnMask* arg) {
 // Applying masks to vectors
 template <typename Op, typename T>
 static inline void exec(ColumnVector<T>* res, ColumnVector<T>* src, ColumnMask* mask) {
-    MaskOpExecutor<Op>::apply(res, src, mask);
+    MaskApplicator::apply(res, src, mask);
 }
 
 template <typename Op, typename T>
 static inline void exec(ColumnVector<T>* res, ColumnMask* mask, ColumnVector<T>* src) {
-    MaskOpExecutor<Op>::apply(res, src, mask);
+    MaskApplicator::apply(res, src, mask);
 }
-
-
 
 }

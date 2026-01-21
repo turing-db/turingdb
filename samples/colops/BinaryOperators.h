@@ -91,21 +91,28 @@ struct BinaryOpExecutor {
        }
     }
 
-    static void apply(ColumnMask* res,
-                      const ColumnMask* lhs,
-                      const ColumnMask* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
-        const size_t size = lhs->size();
+    static void apply(ColumnVector<Res>* res,
+                      const ColumnConst<T>* lhs,
+                      const ColumnVector<U>* rhs) {
+       const size_t size = rhs->size();
 
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
+       res->resize(size);
+       auto& resd = res->getRaw();
+       const auto& val = lhs->getRaw();
+       const auto& rhsd = rhs->getRaw();
 
-        auto op = Op {};
-        for (size_t i {0}; i < size; i++) {
-            resd[i] = op(lhsd[i], rhsd[i]);
+       auto op = Op {};
+       for (size_t i {0}; i < size; i++) {
+           resd[i] = op(val, rhsd[i]);
        }
+    }
+
+    static void apply(ColumnConst<Res>* res,
+                      const ColumnConst<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        auto op = Op {};
+        const Res& result = op(lhs->getRaw(), rhs->getRaw());
+        res->set(result);
     }
 };
 

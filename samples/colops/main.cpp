@@ -19,6 +19,20 @@ using ColumnBools = ColumnVector<bool>;
 using MaybeNodeIDs = ColumnOptVector<NodeID>;
 using MaybeBools = ColumnOptVector<bool>;
 
+template <typename T, typename = void>
+struct is_iterable : std::false_type {};
+
+template <typename T>
+struct is_iterable<T,
+    std::void_t<
+        decltype(std::declval<T>().begin()),
+        decltype(std::declval<T>().end())
+    >> : std::true_type {};
+
+template <typename T>
+constexpr bool is_iterable_v = is_iterable<T>::value;
+
+
 static_assert(std::same_as<InnerTypeHelper<ColumnInts>::type, types::Int64::Primitive>);
 
 /*
@@ -33,22 +47,38 @@ switch (op) {
 */
 
 auto main() -> int {
-    const auto expect_eq = [](auto const& got,
-                              auto const& expected,
+    const auto expect_eq = [](auto const& got, auto const& expected,
                               std::string_view test_name) {
-        if (got.size() != expected.size()) {
-            std::cerr << "[FAIL] " << test_name
-                      << " size mismatch: got " << got.size()
-                      << ", expected " << expected.size() << '\n';
+        using G = std::decay_t<decltype(got)>;
+        using E = std::decay_t<decltype(expected)>;
+
+        auto fail = [&]() {
+            std::cerr << "[FAIL] " << test_name << '\n';
             std::exit(EXIT_FAILURE);
-        }
+        };
 
-        auto it_g = got.begin();
-        auto it_e = expected.begin();
-        std::size_t i = 0;
+        if constexpr (is_iterable_v<G> && is_iterable_v<E>) {
+            if (got.size() != expected.size()) {
+                std::cerr << "[FAIL] " << test_name << " size mismatch: got "
+                          << got.size() << ", expected " << expected.size() << '\n';
+                std::exit(EXIT_FAILURE);
+            }
 
-        for (; it_g != got.end(); ++it_g, ++it_e, ++i) {
-            if (*it_g != *it_e) {
+            auto it_g = got.begin();
+            auto it_e = expected.begin();
+            std::size_t i = 0;
+
+            for (; it_g != got.end(); ++it_g, ++it_e, ++i) {
+                if (*it_g != *it_e) {
+                    fail();
+                }
+            }
+        } else {
+            // Scalar ColumnConst<T> case
+            const auto& g = got.getRaw();
+            const auto& e = expected.getRaw();
+
+            if (g != e) {
                 std::cerr << "[FAIL] " << test_name << '\n';
                 std::exit(EXIT_FAILURE);
             }
@@ -148,5 +178,34 @@ auto main() -> int {
 
         ColumnInts expected {-10, -20};
         expect_eq(result, expected, "Apply mask");
+    }
+
+    { // Adding a const to a vector
+        ColumnInts vec {4, 5, 6};
+        ColumnConst<types::Int64::Primitive> cnst {1};
+
+        {
+            ColumnInts res {};
+            ColumnInts expected {5, 6, 7};
+            exec<Add>(&res, &vec, &cnst);
+            expect_eq(res, expected, "Vec x Const");
+        }
+
+        {
+            ColumnInts res {};
+            ColumnInts expected {5, 6, 7};
+            exec<Add>(&res, &cnst, &vec);
+            expect_eq(res, expected, "Const x Vec");
+        }
+    }
+
+    { // Adding a const to a const
+        ColumnConst<types::Int64::Primitive> lhs {1};
+        ColumnConst<types::Int64::Primitive> rhs {9};
+        ColumnConst<types::Int64::Primitive> res {};
+        ColumnConst<types::Int64::Primitive> exp {10};
+
+        exec<Add>(&res, &lhs, &rhs);
+        expect_eq(res, exp, "Const x Const");
     }
 }
