@@ -3,6 +3,7 @@ set(VECTOR_SOURCES
         StorageManager.cpp
         LSHShardRouter.cpp
         VectorResult.cpp
+        ImportResult.cpp
         VectorDatabase.cpp
         VecLibMetadataLoader.cpp
         VecLibMetadataWriter.cpp

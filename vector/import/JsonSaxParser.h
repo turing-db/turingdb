@@ -124,7 +124,7 @@ public:
     bool start_object(std::size_t) override {
         switch (_state) {
             case State::Start: {
-                _state = State::ParsingData;
+                throwError(ImportErrorCode::JSONInvalidFormat, "{", "`[`");
             } break;
 
             case State::ParsingData: {
@@ -165,11 +165,7 @@ public:
 
             case State::ParsingEntry: {
                 if (_currentID == InvalidID) {
-                    throw ImportException {ImportErrorCode::JSONInvalidFormat};
-                }
-
-                if (_currentVector.empty()) {
-                    throw ImportException {ImportErrorCode::JSONMissingVectorField};
+                    throw ImportException {ImportErrorCode::JSONMissingIDField};
                 }
 
                 if (_currentVector.size() != _dimension) {
@@ -180,6 +176,7 @@ public:
                 }
 
                 _batch.addPoint(_currentID, _currentVector);
+                _count++;
 
                 _currentVector.clear();
                 _currentID = InvalidID;
@@ -269,8 +266,12 @@ public:
         if (_state == State::ParsingEntry) {
             if (val == "id") {
                 _state = State::ParsingID;
+
+                return true;
             } else if (val == "vector") {
                 _state = State::BeginParsingVector;
+
+                return true;
             }
         }
 
@@ -279,8 +280,6 @@ public:
             fmt::format("Unexpected key `{}` in `{}`",
                         val,
                         StateDescription::value(_state))};
-
-        return true;
     }
 
     bool binary(json::binary_t&) override {
@@ -349,7 +348,7 @@ private:
 
             throw ImportException {
                 code,
-                fmt::format("Unexpected `{}`, expected `{}` while parsing <{}>",
+                fmt::format("Unexpected `{}`, expected {} while parsing <{}>",
                             token,
                             expected,
                             StateDescription::value(_state))};
@@ -362,4 +361,5 @@ private:
             fmt::format("Unexpected `{}`", token)};
     }
 };
+
 }
