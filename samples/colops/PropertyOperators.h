@@ -8,6 +8,7 @@
 #include "ColumnCombinations.h"
 
 #include "BioAssert.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 
@@ -69,7 +70,7 @@ struct Executor {
         const auto& rhsd = rhs->getRaw();
         auto& resd = res->getRaw();
 
-        const auto op = Op {};
+        auto op = Op {};
         for (size_t i {0}; i < size; i++) {
             resd[i] = op(lhsd[i], rhsd[i]);
         }
@@ -85,9 +86,25 @@ struct Executor {
        const auto& lhsd = lhs->getRaw();
        const auto& val = rhs->getRaw();
 
-       const auto op = Op {};
+       auto op = Op {};
        for (size_t i {0}; i < size; i++) {
            resd[i] = op(lhsd[i], val);
+       }
+    }
+
+    static void apply(ColumnMask* res,
+                      const ColumnMask* lhs,
+                      const ColumnMask* rhs) {
+       const size_t size = lhs->size();
+
+       res->resize(size);
+       auto& resd = res->getRaw();
+       const auto& lhsd = lhs->getRaw();
+       const auto& rhsd = rhs->getRaw();
+
+       auto op = Op {};
+       for (size_t i {0}; i < size; i++) {
+           resd[i] = op(lhsd[i], rhsd[i]);
        }
     }
 };
@@ -109,9 +126,13 @@ struct GenericOperator {
 template <typename Op, typename ColW, typename ColT, typename ColU>
     requires is_result_column<Op, ColT, ColU, ColW>
 void exec(ColW&& res, ColT&& l, ColU&& r) {
-    using InternalT = contained_type<ColT>::type;
-    using InternalU = contained_type<ColU>::type;
-    using InternalRes = contained_type<ColW>::type;
+    using DecayColT = decay_col_t<ColT>;
+    using DecayColU = decay_col_t<ColU>;
+    using DecayColW = decay_col_t<ColW>;
+
+    using InternalT = InnerTypeHelper<DecayColT>::type;
+    using InternalU = InnerTypeHelper<DecayColU>::type;
+    using InternalRes = InnerTypeHelper<DecayColW>::type;
 
     Executor<Op, InternalRes, InternalT, InternalU>::apply(
         std::forward<ColW>(res), std::forward<ColT>(l), std::forward<ColU>(r));
@@ -121,6 +142,8 @@ using Add = GenericOperator<std::plus<>>;
 using Eq = GenericOperator<std::equal_to<>>;
 using Sub = GenericOperator<std::minus<>>;
 using Mul = GenericOperator<std::multiplies<>>;
+
+using AND = GenericOperator<std::logical_and<>>;
 
 }
 

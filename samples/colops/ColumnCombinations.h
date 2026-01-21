@@ -1,6 +1,7 @@
 #pragma once
 
 #include "columns/ColumnVector.h"
+#include "columns/KindTypes.h"
 #include <type_traits>
 
 namespace db {
@@ -61,6 +62,7 @@ template <template <typename...> class C, typename T>
 inline constexpr bool is_instantiation_of_v =
     is_instantiation_of<C, std::remove_cvref_t<T>>::value;
 
+/*
 template <typename ColT>
 struct contained_type { using type = void; };
 
@@ -69,6 +71,7 @@ struct contained_type<ColumnVector<T>> { using type = T; };
 
 template <typename T>
 struct contained_type<ColumnVector<T>*> { using type = T; };
+*/
 
 template <typename T>
 using decay_col_t = std::remove_cvref_t<std::remove_pointer_t<T>>;
@@ -88,38 +91,82 @@ using column_result_t =
         ColumnConst<T>
     >;
 
-template <typename Op, typename PColT, typename PColU>
-class ColumnCombination {
-    using ColT = decay_col_t<PColT>;
-    using ColU = decay_col_t<PColU>;
-    // Get contained types of each column
-    using InternalT = contained_type<ColT>::type;
-    using InternalU = contained_type<ColU>::type;
-
+template <typename Op, typename InternalT, typename InternalU>
+class InternalCombination {
     // Get non-optional versions of each internal type
     using AbsInternalT = unwrap_optional_t<InternalT>;
     using AbsInternalU = unwrap_optional_t<InternalU>;
 
     static_assert(std::is_invocable_v<Op, AbsInternalT, AbsInternalU>,
-              "ColumnCombination: Op must be invocable with unwrapped column types");
+                  "ColumnCombination: Op must be invocable with unwrapped column types");
 
     // Invoke the operator on the non-optional internal types
     using AbsInternalRes = std::invoke_result_t<Op, AbsInternalT, AbsInternalU>;
 
     // Internal result type is optional wrap of the absolute internal result type if
     // either type is optional, or otherwise is the absolute internal type.
-    using InternalRes =
+    using InternalResImpl =
         std::conditional_t<is_optional_v<InternalT> || is_optional_v<InternalU>,
                            std::optional<AbsInternalRes>,
                            AbsInternalRes>;
-
-    // If either inputs are ColumnVectors, result must be vector. Otherwise const
 public:
-    using ResultColumnType = column_result_t<ColT, ColU, InternalRes>;
+    using InternalRes = InternalResImpl;
+};
+
+template <typename Op, typename ColT, typename ColU>
+class ColumnCombinationImpl {
+    // Mask cases should be specialised
+    static_assert(!std::is_same_v<ColT, ColumnMask>);
+    static_assert(!std::is_same_v<ColU, ColumnMask>);
+
+    using InternalT = InnerTypeHelper<ColT>::type;
+    using InternalU = InnerTypeHelper<ColU>::type;
+
+    // Only false_type for ColumnMasks, should be specialised
+    static_assert(!std::is_same_v<InternalT, std::false_type>);
+    static_assert(!std::is_same_v<InternalU, std::false_type>);
+
+    using InternalResultType = InternalCombination<Op, InternalT, InternalU>::InternalRes;
+public:
+    using ResultColumn = column_result_t<ColT, ColU, InternalResultType>;
+};
+
+// Mask x Mask = Mask (e.g. AND, OR, etc.)
+template <typename Op>
+class ColumnCombinationImpl<Op, ColumnMask, ColumnMask> {
+public:
+    using ResultColumn = ColumnMask;
+};
+
+// Mask x Other = Other (e.g. applyMask)
+template <typename Op, typename ColU>
+class ColumnCombinationImpl<Op, ColumnMask, ColU> {
+public:
+    using ResultColumn = ColU; // Internal type does not change
+};
+
+// Other x Mask = Other (e.g. applyMask)
+template <typename Op, typename ColT>
+class ColumnCombinationImpl<Op, ColT, ColumnMask> {
+public:
+    using ResultColumn = ColT; // Internal type does not change
+};
+
+template <typename Op, typename PColT, typename PColU>
+class ColumnCombination {
+    using ColT = decay_col_t<PColT>;
+    using ColU = decay_col_t<PColU>;
+    using ResultColumnTypeImpl = ColumnCombinationImpl<Op, ColT, ColU>::ResultColumn;
+public:
+    using ResultColumnType = ResultColumnTypeImpl;
 };
 
 template <typename Op, typename ColT, typename ColU, typename ColRes>
 concept is_result_column =
     std::is_same_v<decay_col_t<ColRes>,
                    typename ColumnCombination<Op, ColT, ColU>::ResultColumnType>;
+
+template <typename Op, typename T, typename U, typename Res>
+concept is_result_type =
+    std::is_same_v<Res, typename InternalCombination<Op, T, U>::InternalRes>;
 }

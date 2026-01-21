@@ -4,6 +4,7 @@
 
 #include "InternalKind.h"
 #include "ContainerKind.h"
+#include "columns/KindTypes.h"
 
 namespace db {
 
@@ -30,7 +31,7 @@ public:
     static consteval Code code() {
         using U = InnerTypeHelper<T>::type;
 
-        if constexpr (std::is_same_v<U, std::false_type>) {
+        if constexpr (is_column_mask<T>) {
             // Column is not a template class
             // It is either ColumnMask or ListColumnConst
             constexpr Code container = ContainerKind::code<T>();

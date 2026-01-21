@@ -6,8 +6,10 @@
 #include "ColumnCombinations.h"
 #include "LocalMemory.h"
 #include "PropertyOperators.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnOptMask.h"
 #include "columns/ColumnVector.h"
+#include "columns/KindTypes.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -17,7 +19,7 @@ using ColumnBools = ColumnVector<bool>;
 using MaybeNodeIDs = ColumnOptVector<NodeID>;
 using MaybeBools = ColumnOptVector<bool>;
 
-static_assert(std::same_as<contained_type<ColumnInts*>::type, types::Int64::Primitive>);
+static_assert(std::same_as<InnerTypeHelper<ColumnInts>::type, types::Int64::Primitive>);
 
 /*
 
@@ -53,7 +55,7 @@ main() -> int {
         exec<Eq>(&equals, &veca, &vecb);
 
         for (auto x : equals) {
-            std::cout << x << ' ';
+            std::cout << std::boolalpha << x << ' ';
         }
         std::cout << '\n';
     }
@@ -78,5 +80,17 @@ main() -> int {
 
         using ResultColumn = ColumnCombination<Add, decltype(a), decltype(b)>::ResultColumnType;
         [[maybe_unused]] auto* res = mem.alloc<ResultColumn>();
+    }
+
+    { // Test AND on masks
+        ColumnMask a {true, false, true, false};
+        ColumnMask b {true, false, false, true};
+        ColumnMask res {};
+
+        exec<AND>(&res, &a, &b);
+        for (auto x : res) {
+            std::cout << std::boolalpha << x << ' ';
+        }
+        std::cout << '\n';
     }
 }

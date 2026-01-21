@@ -54,6 +54,10 @@ struct InnerTypeHelper<C<U>> {
     using type = U;
 };
 
+template <typename ColT>
+static constexpr bool is_column_mask =
+    std::is_same_v<typename InnerTypeHelper<ColT>::type, std::false_type>;
+
 template <class>
 struct OuterTypeHelper {
     using type = std::false_type;
