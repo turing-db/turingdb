@@ -488,7 +488,8 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr) {
         throwError(fmt::format("Function '{}' does not exist", name), expr);
     }
 
-    const auto& requestedArgs = invoc->getArguments()->getExprs();
+    const ExprChain* argsChain = invoc->getArguments();
+    const auto& requestedArgs = argsChain->getExprs();
 
     bool isDynamic = false;
     bool isAggregate = false;
