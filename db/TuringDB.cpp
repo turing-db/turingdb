@@ -2,6 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "VectorDatabase.h"
 #include "SystemManager.h"
 #include "JobSystem.h"
 #include "QueryInterpreterV2.h"
@@ -29,6 +30,7 @@ void TuringDB::init() {
     const auto& turingDir = _config->getTuringDir();
     const auto& graphsDir = _config->getGraphsDir();
     const auto& dataDir = _config->getDataDir();
+    const auto& vectorDir = _config->getVectorDir();
 
     spdlog::info("Starting TuringDB. Root directory: '{}'", turingDir.get());
 
@@ -42,6 +44,10 @@ void TuringDB::init() {
 
     if (dataDir.empty()) {
         panic("Data directory is not set");
+    }
+
+    if (vectorDir.empty()) {
+        panic("Vector directory is not set");
     }
 
     if (!turingDir.exists()) {
@@ -69,6 +75,21 @@ void TuringDB::init() {
             panic("Could not create data directory '{}': {}",
                   dataDir.get(), res.error().fmtMessage());
         }
+    }
+
+    if (!vectorDir.exists()) {
+        spdlog::info("Creating vector directory {}", vectorDir.c_str());
+
+        if (auto res = vectorDir.mkdir(); !res) {
+            panic("Could not create vector directory '{}': {}",
+                  vectorDir.get(), res.error().fmtMessage());
+        }
+    }
+
+    if (auto res = vec::VectorDatabase::create(vectorDir)) {
+        _vectorDatabase = std::move(res.value());
+    } else {
+        panic("Could not create vector database: {}", res.error().fmtMessage());
     }
 
     _systemManager->init();
