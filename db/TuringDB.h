@@ -7,6 +7,10 @@
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
 
+namespace vec {
+class VectorDatabase;
+}
+
 namespace db {
 
 class TuringConfig;
@@ -53,6 +57,7 @@ private:
     std::unique_ptr<SystemManager> _systemManager;
     std::unique_ptr<JobSystem> _jobSystem;
     std::unique_ptr<ProcedureBlueprintMap> _procedures;
+    std::unique_ptr<vec::VectorDatabase> _vectorDatabase;
 };
 
 }

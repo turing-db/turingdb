@@ -15,6 +15,7 @@ TuringConfig::TuringConfig()
     _turingDir = fs::Path(homeEnv) / ".turing";
     _graphsDir = _turingDir / "graphs";
     _dataDir = _turingDir / "data";
+    _vectorDir = _turingDir / "vector";
 }
 
 TuringConfig::~TuringConfig() {
@@ -32,4 +33,5 @@ void TuringConfig::setTuringDirectory(const fs::Path& turingDir) {
     _turingDir = turingDir;
     _graphsDir = _turingDir / "graphs";
     _dataDir = _turingDir / "data";
+    _vectorDir = _turingDir / "vector";
 }
