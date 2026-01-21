@@ -52,6 +52,7 @@
 #include "nodes/GetInEdgesNode.h"
 #include "nodes/AggregateEvalNode.h"
 #include "nodes/ProcedureEvalNode.h"
+#include "nodes/FuncEvalNode.h"
 #include "nodes/WriteNode.h"
 #include "nodes/ScanNodesByLabelNode.h"
 #include "nodes/LoadGraphNode.h"
@@ -294,6 +295,9 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::GET_PROPERTY_WITH_NULL:
             return translateGetPropertyWithNullNode(static_cast<GetPropertyWithNullNode*>(node));
         break;
+
+        case PlanGraphOpcode::FUNC_EVAL:
+            return translateFuncEvalNode(static_cast<FuncEvalNode*>(node));
 
         case PlanGraphOpcode::AGGREGATE_EVAL:
             return translateAggregateEvalNode(static_cast<AggregateEvalNode*>(node));
@@ -906,6 +910,24 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
         }
     }
     return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateFuncEvalNode(FuncEvalNode* node) {
+    if (!_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    const auto& funcs = node->getFuncs();
+
+    if (funcs.empty()) [[unlikely]] {
+        throw PlannerException("FuncEvalNode does not have any functions.");
+    }
+
+    if (funcs.size() != 1) [[unlikely]] {
+        throw PlannerException("Evaluation of multiple functions is not yet supported.");
+    }
+
+    throw FatalException("translateFuncEvalNode not completed.");
 }
 
 PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(ProcedureEvalNode* node) {
