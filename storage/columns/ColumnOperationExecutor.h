@@ -7,6 +7,7 @@
 #include "PairColumnKind.h"
 
 #include "FatalException.h"
+#include "columns/ContainerKind.h"
 
 namespace db {
 
@@ -101,15 +102,13 @@ template <ContainerKind::Code... Excluded>
 struct ExcludedContainers {
     // Contains
     template <typename T>
-    static consteval bool contains() {
-        static constexpr auto code = ContainerKind::code<T>();
-        return ((code == Excluded) || ...);
+    inline static consteval bool contains() {
+        return ((ContainerKind::code<T>() == Excluded) || ...);
     }
 
     template <template <typename> class T>
-    static consteval bool contains() {
-        static constexpr auto code = ContainerKind::code<T>();
-        return ((code == Excluded) || ...);
+    inline static consteval bool contains() {
+        return ((ContainerKind::code<T>() == Excluded) || ...);
     }
 };
 
