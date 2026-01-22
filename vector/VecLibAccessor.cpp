@@ -1,7 +1,6 @@
 #include "VecLibAccessor.h"
 
 #include "VecLib.h"
-#include "BatchVectorCreate.h"
 #include "VectorSearchQuery.h"
 #include "VectorSearchResult.h"
 
@@ -22,9 +21,14 @@ VecLibAccessor::VecLibAccessor(std::shared_mutex& mutex, VecLib& vecLib)
 {
 }
 
-BatchVectorCreate VecLibAccessor::prepareCreateBatch() {
+const VecLibMetadata& VecLibAccessor::metadata() const {
     bioassert(_vecLib, "Invalid VecLib accessor");
-    return _vecLib->prepareCreateBatch();
+    return _vecLib->metadata();
+}
+
+void VecLibAccessor::prepareCreateBatch(BatchVectorCreate* batch) {
+    bioassert(_vecLib, "Invalid VecLib accessor");
+    _vecLib->prepareCreateBatch(batch);
 }
 
 VectorResult<void> VecLibAccessor::addEmbeddings(const BatchVectorCreate& batch) {
@@ -32,7 +36,8 @@ VectorResult<void> VecLibAccessor::addEmbeddings(const BatchVectorCreate& batch)
     return _vecLib->addEmbeddings(batch);
 }
 
-VectorResult<void> VecLibAccessor::search(const VectorSearchQuery& query, VectorSearchResult& results) {
+VectorResult<void> VecLibAccessor::search(const VectorSearchQuery& query,
+                                          VectorSearchResult& results) {
     bioassert(_vecLib, "Invalid VecLib accessor");
     return _vecLib->search(query, results);
 }

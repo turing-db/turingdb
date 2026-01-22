@@ -69,7 +69,8 @@ int main(int argc, char** argv) {
 
         // Generating vectors
         {
-            vec::BatchVectorCreate batch = lib.prepareCreateBatch();
+            vec::BatchVectorCreate batch;
+            lib.prepareCreateBatch(&batch);
 
             for (size_t b = 0; b < batchCount; b++) {
                 batch.clear(dim);

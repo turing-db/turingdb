@@ -7,13 +7,14 @@
 #include "Path.h"
 #include "VecLibMetadata.h"
 #include "VectorResult.h"
+#include "VecLibAccessor.h"
+#include "VecLibWriteAccessor.h"
 
 namespace vec {
 
 class VecLib;
 class StorageManager;
 class ShardCache;
-class VecLibAccessor;
 
 class VectorDatabase {
 public:
@@ -41,6 +42,13 @@ public:
 
     [[nodiscard]] VecLibAccessor getLibrary(const VecLibID& libID);
     [[nodiscard]] VecLibAccessor getLibrary(std::string_view libName);
+
+    [[nodiscard]] VecLibWriteAccessor getLibraryForWrite(const VecLibID& libID);
+    [[nodiscard]] VecLibWriteAccessor getLibraryForWrite(std::string_view libName);
+
+    [[nodiscard]] std::vector<std::string> listLibraryNames() const;
+
+    std::shared_mutex& getMutex() { return _mutex; }
 
 private:
     mutable std::shared_mutex _mutex;

@@ -20,6 +20,7 @@
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
 #include "stmt/LoadCSVStmt.h"
+#include "stmt/VectorSearchStmt.h"
 #include "QualifiedName.h"
 #include "Pattern.h"
 #include "PatternElement.h"
@@ -37,6 +38,7 @@
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "expr/FunctionInvocationExpr.h"
+#include "expr/ListExpr.h"
 
 #include "ProcedureLookup.h"
 
@@ -66,6 +68,10 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
 
         case Stmt::Kind::LOAD_CSV:
             analyze(static_cast<LoadCSVStmt*>(stmt));
+            break;
+
+        case Stmt::Kind::VECTOR_SEARCH:
+            analyze(static_cast<const VectorSearchStmt*>(stmt));
             break;
 
         default:
@@ -117,7 +123,9 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
     const FunctionSignature* signature = func->getSignature();
 
     if (!signature->isProcedure()) {
-        throwError(fmt::format("Function '{} is not a database procedure'", signature->getFullName()), callStmt);
+        throwError(fmt::format("Function '{} is not a database procedure'",
+                               signature->getFullName()),
+                   callStmt);
     }
 
     // Step 3. Analyze YIELD clause
@@ -274,7 +282,9 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = nodePattern->getSymbol()) {
-        decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, symbol->getName());
+        decl = _ctxt->getOrCreateNamedVariable(_ast,
+                                               EvaluatedType::NodePattern,
+                                               symbol->getName());
         nodePattern->setDecl(decl);
     } else {
         decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::NodePattern);
@@ -341,7 +351,9 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = edgePattern->getSymbol()) {
-        decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, symbol->getName());
+        decl = _ctxt->getOrCreateNamedVariable(_ast,
+                                               EvaluatedType::EdgePattern,
+                                               symbol->getName());
         edgePattern->setDecl(decl);
     } else {
         decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::EdgePattern);
@@ -358,7 +370,9 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
         for (const Symbol* edgeTypeSymbol : *types) {
             const std::optional<EdgeTypeID> etID = edgeTypeMap.get(edgeTypeSymbol->getName());
             if (!etID) {
-                throwError(fmt::format("Unknown edge type: {}", edgeTypeSymbol->getName()), edgePattern);
+                throwError(fmt::format("Unknown edge type: {}",
+                                       edgeTypeSymbol->getName()),
+                           edgePattern);
             }
 
             data->addEdgeTypeConstraint(edgeTypeSymbol->getName());
@@ -401,6 +415,58 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
             data->addExprConstraint(propName->getName(), propType->_valueType, predExpr);
         }
+    }
+}
+
+void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
+    // Validate K > 0
+    if (stmt->getK() == 0) {
+        throwError("VECTOR SEARCH k value must be greater than 0", stmt);
+    }
+
+    // Validate vector has elements
+    const ListExpr* queryVector = stmt->getQueryVector();
+    if (!queryVector || queryVector->empty()) {
+        throwError("VECTOR SEARCH query vector cannot be empty", stmt);
+    }
+
+    // Analyze each element in the query vector
+    for (Expr* elem : queryVector->getElements()) {
+        _exprAnalyzer->analyzeRootExpr(elem);
+
+        EvaluatedType elemType = elem->getType();
+        if (elemType != EvaluatedType::Integer && elemType != EvaluatedType::Double) {
+            throwError("VECTOR SEARCH query vector elements must be numeric", stmt);
+        }
+    }
+
+    // Process YIELD clause - create VarDecl for 'ids' variable
+    const YieldClause* yield = stmt->getYield();
+    if (!yield) {
+        throwError("VECTOR SEARCH requires YIELD clause", stmt);
+    }
+
+    YieldItems* yieldItems = yield->getItems();
+    if (!yieldItems || yieldItems->getItems().empty()) {
+        throwError("VECTOR SEARCH YIELD clause cannot be empty", stmt);
+    }
+
+    for (SymbolExpr* yieldItemExpr : *yieldItems) {
+        Symbol* yieldItem = yieldItemExpr->getSymbol();
+
+        if (yieldItem->getName() != "ids") {
+            throwError(fmt::format("VECTOR SEARCH only supports YIELD ids, got '{}'",
+                                   yieldItem->getName()), stmt);
+        }
+
+        if (_ctxt->hasDecl(yieldItem->getName())) {
+            throwError(fmt::format("Variable '{}' already declared", yieldItem->getName()),
+                       yieldItemExpr);
+        }
+
+        VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::Integer,
+                                                         yieldItem->getName());
+        yieldItemExpr->setExprVarDecl(decl);
     }
 }
 

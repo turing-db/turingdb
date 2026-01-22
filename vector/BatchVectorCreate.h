@@ -18,9 +18,7 @@ public:
         std::vector<float> _embeddings;
     };
 
-    BatchVectorCreate(LSHShardRouter& router, Dimension dimension)
-        : _dimension(dimension),
-        _router(&router)
+    BatchVectorCreate()
     {
     }
 
@@ -31,9 +29,12 @@ public:
     BatchVectorCreate(BatchVectorCreate&&) = delete;
     BatchVectorCreate& operator=(BatchVectorCreate&&) = delete;
 
-    void clear(Dimension dimension) {
+    void init(LSHShardRouter* router, Dimension dimension) {
+        _router = router;
         _dimension = dimension;
+    }
 
+    void clear() {
         for (auto& data : _data) {
             data._externalIDs.clear();
             data._embeddings.clear();

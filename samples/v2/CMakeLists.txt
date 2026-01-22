@@ -14,4 +14,5 @@ target_link_libraries(${SAMPLE_NAME}
            turing_db_analyzer_s
            turing_db_plan_s
            turing_db_optimizer_s
-           turing_db_pipeline_s)
+           turing_db_pipeline_s
+           turing_vector_s)

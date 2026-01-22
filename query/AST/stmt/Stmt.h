@@ -17,6 +17,7 @@ public:
         RETURN,
         SHORTESTPATH,
         LOAD_CSV,
+        VECTOR_SEARCH,
     };
 
     virtual Kind getKind() const = 0;

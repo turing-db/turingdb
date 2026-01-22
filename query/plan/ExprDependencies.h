@@ -16,6 +16,7 @@
 #include "expr/UnaryExpr.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/IndexExpr.h"
+#include "expr/ListExpr.h"
 
 #include "BioAssert.h"
 
@@ -136,6 +137,13 @@ public:
             case Expr::Kind::LITERAL:
                 // Reached end
                 break;
+
+            case Expr::Kind::LIST: {
+                const ListExpr* list = static_cast<const ListExpr*>(expr);
+                for (Expr* elem : list->getElements()) {
+                    genExprDependencies(variables, elem);
+                }
+            } break;
         }
     }
 

@@ -49,6 +49,11 @@ class ShowProceduresNode;
 class ShortestPathNode;
 class CommitNode;
 class LoadCSVNode;
+class CreateVectorIndexNode;
+class LoadVectorNode;
+class VectorSearchNode;
+class DeleteVectorIndexNode;
+class ShowVectorIndexesNode;
 
 class PipelineGenerator {
 public:
@@ -138,6 +143,11 @@ private:
     PipelineOutputInterface* translateShowProceduresNode(ShowProceduresNode* node);
     PipelineOutputInterface* translateShortestPathNode(ShortestPathNode* node);
     PipelineOutputInterface* translateLoadCSVNode(LoadCSVNode* node);
+    PipelineOutputInterface* translateCreateVectorIndexNode(CreateVectorIndexNode* node);
+    PipelineOutputInterface* translateLoadVectorNode(LoadVectorNode* node);
+    PipelineOutputInterface* translateVectorSearchNode(VectorSearchNode* node);
+    PipelineOutputInterface* translateDeleteVectorIndexNode(DeleteVectorIndexNode* node);
+    PipelineOutputInterface* translateShowVectorIndexesNode(ShowVectorIndexesNode* node);
 
     std::vector<std::string> _csvHeaders;
     size_t _csvFieldCount {0};

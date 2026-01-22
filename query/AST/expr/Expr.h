@@ -24,6 +24,7 @@ public:
         LITERAL,
         FUNCTION_INVOCATION,
         INDEX,
+        LIST,
     };
 
     enum class Flags : uint8_t {

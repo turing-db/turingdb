@@ -7,6 +7,7 @@
 #include "StorageManager.h"
 #include "VecLib.h"
 #include "VecLibAccessor.h"
+#include "VecLibWriteAccessor.h"
 
 using namespace vec;
 
@@ -154,6 +155,41 @@ VecLibAccessor VectorDatabase::getLibrary(std::string_view libName) {
     }
 
     return getLibrary(it->second);
+}
+
+VecLibWriteAccessor VectorDatabase::getLibraryForWrite(const VecLibID& libID) {
+    std::shared_lock lock {_mutex};
+
+    auto it = _vecLibs.find(libID);
+    if (it == _vecLibs.end()) {
+        return VecLibWriteAccessor {};
+    }
+
+    return VecLibWriteAccessor {*it->second};
+}
+
+VecLibWriteAccessor VectorDatabase::getLibraryForWrite(std::string_view libName) {
+    std::shared_lock lock {_mutex};
+
+    auto it = _vecLibIDs.find(libName);
+    if (it == _vecLibIDs.end()) {
+        return VecLibWriteAccessor {};
+    }
+
+    return getLibraryForWrite(it->second);
+}
+
+std::vector<std::string> VectorDatabase::listLibraryNames() const {
+    std::shared_lock lock {_mutex};
+
+    std::vector<std::string> names;
+    names.reserve(_vecLibs.size());
+
+    for (const auto& [id, lib] : _vecLibs) {
+        names.emplace_back(lib->name());
+    }
+
+    return names;
 }
 
 VectorResult<void> VectorDatabase::load() {

@@ -26,6 +26,10 @@ class LoadJsonlQuery;
 class S3ConnectQuery;
 class S3TransferQuery;
 class ShowProceduresQuery;
+class CreateVectorIndexQuery;
+class LoadVectorQuery;
+class DeleteVectorIndexQuery;
+class ShowVectorIndexesQuery;
 class QueryCommand;
 
 class PlanGraphGenerator {
@@ -58,6 +62,10 @@ private:
     void generateS3ConnectQuery(const S3ConnectQuery* query);
     void generateS3TransferQuery(const S3TransferQuery* query);
     void generateShowProceduresQuery(const ShowProceduresQuery* query);
+    void generateCreateVectorIndexQuery(const CreateVectorIndexQuery* query);
+    void generateLoadVectorQuery(const LoadVectorQuery* query);
+    void generateDeleteVectorIndexQuery(const DeleteVectorIndexQuery* query);
+    void generateShowVectorIndexesQuery(const ShowVectorIndexesQuery* query);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

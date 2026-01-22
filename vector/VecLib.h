@@ -22,6 +22,7 @@ class VectorSearchQuery;
 class VectorSearchResult;
 class LSHShardRouter;
 class VecLibAccessor;
+class VecLibWriteAccessor;
 
 class VecLib {
 public:
@@ -94,7 +95,7 @@ public:
 
     [[nodiscard]] VectorResult<void> addEmbeddings(const BatchVectorCreate& batch);
     [[nodiscard]] VectorResult<void> search(const VectorSearchQuery& query, VectorSearchResult& results);
-    [[nodiscard]] BatchVectorCreate prepareCreateBatch();
+    void prepareCreateBatch(BatchVectorCreate* batch);
 
     [[nodiscard]] VecLibID id() const {
         return _metadata._id;
@@ -123,7 +124,8 @@ public:
 private:
     friend Builder;
     friend VectorDatabase;
-    
+    friend VecLibWriteAccessor;
+
     mutable std::shared_mutex _mutex;
 
     StorageManager* _storage {nullptr};

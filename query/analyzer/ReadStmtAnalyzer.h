@@ -16,6 +16,7 @@ class Stmt;
 class MatchStmt;
 class YieldClause;
 class CallStmt;
+class VectorSearchStmt;
 class OrderBy;
 class Skip;
 class Limit;
@@ -44,6 +45,7 @@ public:
     void analyze(const MatchStmt* matchSt);
     void analyze(const CallStmt* callSt);
     void analyze(LoadCSVStmt* loadCSVSt);
+    void analyze(const VectorSearchStmt* vectorSearchSt);
     void analyze(const FunctionInvocation& func, const YieldClause* yieldSt);
     void analyze(OrderBy* orderBySt);
     void analyze(Skip* skipSt);

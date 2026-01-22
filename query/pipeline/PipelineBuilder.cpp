@@ -36,6 +36,11 @@
 #include "processors/ExprProgram.h"
 #include "processors/FilterProcessor.h"
 #include "processors/ShortestPathProcessor.h"
+#include "processors/CreateVectorIndexProcessor.h"
+#include "processors/LoadVectorProcessor.h"
+#include "processors/VectorSearchProcessor.h"
+#include "processors/DeleteVectorIndexProcessor.h"
+#include "processors/ShowVectorIndexesProcessor.h"
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
@@ -895,6 +900,91 @@ PipelineBlockOutputInterface& PipelineBuilder::addShowProcedures() {
 
     _pendingOutput.setInterface(&output);
 
+    return output;
+}
+
+PipelineValueOutputInterface& PipelineBuilder::addCreateVectorIndex(std::string_view indexName,
+                                                                     vec::Dimension dimension,
+                                                                     vec::DistanceMetric metric) {
+    CreateVectorIndexProcessor* proc = CreateVectorIndexProcessor::create(
+        _pipeline, indexName, dimension, metric);
+
+    PipelineValueOutputInterface& output = proc->output();
+    Dataframe* df = output.getDataframe();
+
+    NamedColumn* indexNameCol = allocColumn<ColumnConst<types::String::Primitive>>(df);
+    indexNameCol->rename("indexName");
+    output.setValue(indexNameCol);
+
+    _pendingOutput.setInterface(&output);
+    return output;
+}
+
+PipelineValueOutputInterface& PipelineBuilder::addLoadVector(std::string_view filePath,
+                                                              std::string_view indexName) {
+    LoadVectorProcessor* proc = LoadVectorProcessor::create(_pipeline, filePath, indexName);
+
+    PipelineValueOutputInterface& output = proc->output();
+    Dataframe* df = output.getDataframe();
+
+    NamedColumn* countCol = allocColumn<ColumnConst<types::UInt64::Primitive>>(df);
+    countCol->rename("count");
+    output.setValue(countCol);
+
+    _pendingOutput.setInterface(&output);
+    return output;
+}
+
+PipelineValuesOutputInterface& PipelineBuilder::addVectorSearch(std::string_view indexName,
+                                                                 uint64_t k,
+                                                                 std::vector<float> queryVector) {
+    VectorSearchProcessor* proc = VectorSearchProcessor::create(
+        _pipeline, indexName, k, std::move(queryVector));
+
+    PipelineValuesOutputInterface& output = proc->outIds();
+    Dataframe* df = output.getDataframe();
+
+    NamedColumn* idsCol = allocColumn<ColumnVector<types::UInt64::Primitive>>(df);
+    idsCol->rename("ids");
+    output.setValues(idsCol);
+
+    _pendingOutput.setInterface(&output);
+    return output;
+}
+
+PipelineValueOutputInterface& PipelineBuilder::addDeleteVectorIndex(std::string_view indexName) {
+    DeleteVectorIndexProcessor* proc = DeleteVectorIndexProcessor::create(_pipeline, indexName);
+
+    PipelineValueOutputInterface& output = proc->output();
+    Dataframe* df = output.getDataframe();
+
+    NamedColumn* nameCol = allocColumn<ColumnConst<types::String::Primitive>>(df);
+    nameCol->rename("indexName");
+    output.setValue(nameCol);
+
+    _pendingOutput.setInterface(&output);
+    return output;
+}
+
+PipelineValuesOutputInterface& PipelineBuilder::addShowVectorIndexes() {
+    ShowVectorIndexesProcessor* proc = ShowVectorIndexesProcessor::create(_pipeline);
+
+    PipelineValuesOutputInterface& output = proc->outNames();
+    Dataframe* df = output.getDataframe();
+
+    NamedColumn* namesCol = allocColumn<ColumnVector<types::String::Primitive>>(df);
+    namesCol->rename("name");
+    output.setValues(namesCol);
+
+    // Add dimensions column to the same dataframe
+    NamedColumn* dimsCol = allocColumn<ColumnVector<types::UInt64::Primitive>>(df);
+    dimsCol->rename("dimension");
+
+    // Set up the dimensions output with the same dataframe's column
+    PipelineValuesOutputInterface& dimsOutput = proc->outDimensions();
+    dimsOutput.setValues(dimsCol);
+
+    _pendingOutput.setInterface(&output);
     return output;
 }
 

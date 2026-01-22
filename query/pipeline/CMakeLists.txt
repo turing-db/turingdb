@@ -55,6 +55,11 @@ set(processors_sources
     processors/EvalBinaryExpr.cpp
     processors/EvalUnaryExpr.cpp
     processors/CSVSourceProcessor.cpp
+    processors/CreateVectorIndexProcessor.cpp
+    processors/LoadVectorProcessor.cpp
+    processors/VectorSearchProcessor.cpp
+    processors/DeleteVectorIndexProcessor.cpp
+    processors/ShowVectorIndexesProcessor.cpp
 )
 
 set(procedures_sources
@@ -84,4 +89,5 @@ target_link_libraries(turing_db_pipeline_s PUBLIC
 target_link_libraries(turing_db_pipeline_s PRIVATE
     turing_db_storage_s
     turing_db_system_s
-    turing_db_io_csv_s)
+    turing_db_io_csv_s
+    turing_vector_s)

@@ -35,6 +35,7 @@ class SymbolExpr;
 class UnaryExpr;
 class FunctionInvocationExpr;
 class IndexExpr;
+class ListExpr;
 class Pattern;
 class PatternElement;
 class EntityPattern;
@@ -81,6 +82,11 @@ class S3TransferQuery;
 class CommitQuery;
 class ShowProceduresQuery;
 class LoadCSVStmt;
+class CreateVectorIndexQuery;
+class LoadVectorQuery;
+class DeleteVectorIndexQuery;
+class ShowVectorIndexesQuery;
+class VectorSearchStmt;
 
 class CypherAST {
 public:
@@ -109,6 +115,7 @@ public:
     friend UnaryExpr;
     friend FunctionInvocationExpr;
     friend IndexExpr;
+    friend ListExpr;
     friend Pattern;
     friend PatternElement;
     friend NodePattern;
@@ -146,6 +153,11 @@ public:
     friend CommitQuery;
     friend ShowProceduresQuery;
     friend LoadCSVStmt;
+    friend CreateVectorIndexQuery;
+    friend LoadVectorQuery;
+    friend DeleteVectorIndexQuery;
+    friend ShowVectorIndexesQuery;
+    friend VectorSearchStmt;
     friend YCypherParser;
 
     using QueryCommands = std::vector<QueryCommand*>;

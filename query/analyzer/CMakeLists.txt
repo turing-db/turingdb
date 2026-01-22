@@ -15,5 +15,6 @@ target_link_libraries(turing_db_analyzer_s
             turing_db_parser_s
             turing_db_ast_s
             turing_db_storage_s
+            turing_vector_s
     PUBLIC turing_db_query_common_s)
 

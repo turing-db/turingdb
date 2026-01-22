@@ -111,10 +111,15 @@ QueryStatus TuringDB::query(std::string_view query,
     // TODO: This is still using NRVO
     //       We should pass the QueryStatus& as argument to the function
     //       however, the function is becoming quite complex. We should
-    //       probably refactor it to take in a QueryContext& instead, 
+    //       probably refactor it to take in a QueryContext& instead,
     //       that would contain everything needed to execute the query.
     QueryStatus status;
-    const InterpreterContext ctxt(mem, &callbacks, _procedures.get(), hash, change);
+    const InterpreterContext ctxt(mem,
+                                  &callbacks,
+                                  _procedures.get(),
+                                  _vectorDatabase.get(),
+                                  hash,
+                                  change);
     interp.execute(ctxt, status, query, graphName);
 
     return status;

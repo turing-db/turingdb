@@ -56,6 +56,12 @@ set(ast_sources
     S3ConnectQuery.cpp
     S3TransferQuery.cpp
     ShowProceduresQuery.cpp
+    CreateVectorIndexQuery.cpp
+    LoadVectorQuery.cpp
+    DeleteVectorIndexQuery.cpp
+    ShowVectorIndexesQuery.cpp
+    stmt/VectorSearchStmt.cpp
+    expr/ListExpr.cpp
     NodePattern.cpp
     EdgePattern.cpp
     Symbol.cpp
@@ -76,6 +82,7 @@ target_link_libraries(turing_db_ast_s
   PRIVATE turing_db_query_common_s
           turing_db_storage_s
           turing_common_s
+          turing_vector_s
           range-v3
   PUBLIC turing_db_pipeline_s)
 
