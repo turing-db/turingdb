@@ -55,6 +55,15 @@ struct InnerTypeHelper<C<U>> {
     using type = U;
 };
 
+template <typename T>
+struct InnerTypeHelper<T&> : InnerTypeHelper<T> {};
+
+template <typename T>
+struct InnerTypeHelper<T*> : InnerTypeHelper<T> {};
+
+template <typename T>
+struct InnerTypeHelper<const T> : InnerTypeHelper<T> {};
+
 template <class>
 struct OuterTypeHelper {
     using type = std::false_type;

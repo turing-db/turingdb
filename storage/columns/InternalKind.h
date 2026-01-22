@@ -81,6 +81,7 @@ public:
         std::optional<std::string>,
         std::optional<ValueType>,
         std::optional<ChangeID>,
+        std::optional<bool>, // XXX: Do we need this?
         NodeView,
         const CommitBuilder*,
         const Change*,

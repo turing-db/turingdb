@@ -1,8 +1,12 @@
 #include "EvalBinaryExpr.h"
 
 #include "columns/ColumnOperationExecutor.h"
+#include "columns/BinaryOperators.h"
+#include "columns/ColumnCombinations.h"
 
 #include "Panic.h"
+#include "BioAssert.h"
+#include "metadata/PropertyType.h"
 
 using namespace db;
 
@@ -17,9 +21,8 @@ struct EqualEval {
         bioassert(_res && lhs && rhs, "Invalid inputs to Equal");
 
         if constexpr (Op == OP_EQUAL) {
-            // using ResultType = ColumnCombinations<Equal, T, U>::ResultType;
-            // execOperation<Equal>(static_cast<ResultType*>(_res), lhs, rhs);
-            fmt::println("EQUAL {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
+            using ResultType = ColumnCombination<Eq, T, U>::ResultColumnType;
+            exec<Eq>(static_cast<ResultType*>(_res), lhs, rhs);
         } else if constexpr (Op == OP_NOT_EQUAL) {
             // using ResultType = ColumnCombinations<NotEqual, T, U>::ResultType;
             // execOperation<NotEqual>(static_cast<ResultType*>(_res), lhs, rhs);
@@ -105,26 +108,22 @@ struct ArithmeticEval {
 template <ColumnOperator Op>
 void EvalBinaryExpr::opEqual(Column* res, const Column* lhs, const Column* rhs) {
     using Allowed = GenerateKindPairList<
-        OptionalKindPairs<int64_t, int64_t>::Pairs,
-        OptionalKindPairs<int64_t, uint64_t>::Pairs,
-        OptionalKindPairs<uint64_t, uint64_t>::Pairs,
-        OptionalKindPairs<CustomBool, CustomBool>::Pairs,
-        OptionalKindPairs<std::string_view, std::string_view>::Pairs,
-        OptionalKindPairs<EntityID, EntityID>::Pairs,
-        OptionalKindPairs<EntityID, NodeID>::Pairs,
-        OptionalKindPairs<EntityID, EdgeID>::Pairs,
+        OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs/*,
+        OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<NodeID, NodeID>::Pairs,
         OptionalKindPairs<EdgeID, EdgeID>::Pairs,
 
-        std::tuple<KindPair<PropertyNull, std::optional<EntityID>>,
-                   KindPair<PropertyNull, std::optional<NodeID>>,
+        std::tuple<KindPair<PropertyNull, std::optional<NodeID>>,
                    KindPair<PropertyNull, std::optional<EdgeID>>,
-                   KindPair<PropertyNull, std::optional<int64_t>>,
-                   KindPair<PropertyNull, std::optional<uint64_t>>,
-                   KindPair<PropertyNull, std::optional<double>>,
-                   KindPair<PropertyNull, std::optional<std::string_view>>,
-                   KindPair<PropertyNull, std::optional<CustomBool>>,
-                   KindPair<PropertyNull, std::optional<ValueType>>>>;
+                   KindPair<PropertyNull, std::optional<types::Int64::Primitive>>,
+                   KindPair<PropertyNull, std::optional<types::UInt64::Primitive>>,
+                   KindPair<PropertyNull, std::optional<types::Double::Primitive>>,
+                   KindPair<PropertyNull, std::optional<types::String::Primitive>>,
+                   KindPair<PropertyNull, std::optional<types::Double::Primitive>>,
+                   KindPair<PropertyNull, std::optional<ValueType>>>*/>;
 
     using AllowedMixed = AllowedMixedList<
         MixedKind<ColumnMask, PropertyNull>,
