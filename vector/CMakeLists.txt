@@ -3,7 +3,6 @@ set(VECTOR_SOURCES
         StorageManager.cpp
         LSHShardRouter.cpp
         VectorResult.cpp
-        ImportResult.cpp
         VectorDatabase.cpp
         VecLibMetadataLoader.cpp
         VecLibMetadataWriter.cpp
@@ -13,6 +12,7 @@ set(VECTOR_SOURCES
         VecLibShard.cpp
         VecLibAccessor.cpp
         VecLib.cpp
+        import/ImportResult.cpp
         import/JsonImporter.cpp)
 
 add_library(turing_vector_s STATIC ${VECTOR_SOURCES})

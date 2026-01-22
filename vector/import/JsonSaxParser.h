@@ -345,7 +345,6 @@ private:
                             token,
                             StateDescription::value(_state))};
         } else {
-
             throw ImportException {
                 code,
                 fmt::format("Unexpected `{}`, expected {} while parsing <{}>",

@@ -40,9 +40,9 @@ using ImportErrorTypeDescription = EnumToString<ImportErrorCode>::Create<
 
 class ImportError {
 public:
-    explicit ImportError(ImportErrorCode type, std::string message = "")
+    explicit ImportError(ImportErrorCode type, const std::string& message = "")
         : _type(type),
-        _message(std::move(message))
+        _message(message)
     {
     }
 
@@ -51,8 +51,8 @@ public:
 
     template <typename... T>
     static BadResult<ImportError> result(ImportErrorCode type,
-                                         std::string message = "") {
-        return BadResult<ImportError>(ImportError(type, std::move(message)));
+                                         const std::string& message = "") {
+        return BadResult<ImportError>(ImportError(type, message));
     }
 
 private:

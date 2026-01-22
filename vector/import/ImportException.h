@@ -2,17 +2,14 @@
 
 #include "ImportResult.h"
 
+#include "TuringException.h"
+
 namespace vec {
 
-class ImportException : public std::exception {
+class ImportException : public TuringException {
 public:
-    ImportException(ImportError&& e)
-        : _e(std::move(e))
-    {
-    }
-
-    ImportException(ImportErrorCode code, std::string message = "")
-        : _e(ImportError(code, std::move(message)))
+    ImportException(ImportErrorCode code, const std::string& message = "")
+        : _e(code, message)
     {
     }
 
