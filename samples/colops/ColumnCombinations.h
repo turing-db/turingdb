@@ -1,8 +1,14 @@
 #pragma once
 
-#include "columns/ColumnVector.h"
-#include "columns/KindTypes.h"
+#include <concepts>
 #include <type_traits>
+
+#include "columns/ColumnOptMask.h"
+#include "columns/ColumnVector.h"
+#include "columns/ColumnMask.h"
+#include "columns/KindTypes.h"
+#include "metadata/PropertyType.h"
+
 
 namespace db {
 
@@ -92,8 +98,12 @@ class InternalCombination {
     static_assert(std::is_invocable_v<Op, AbsInternalT, AbsInternalU>,
                   "ColumnCombination: Op must be invocable with unwrapped column types");
 
-    // Invoke the operator on the non-optional internal types
-    using AbsInternalRes = std::invoke_result_t<Op, AbsInternalT, AbsInternalU>;
+    // Invoke the operator on the non-optional internal types.
+    // If the function is a predicate, we want the return to be a Bool_t, to avoid vector<bool> specialisations
+    using AbsInternalRes =
+        std::conditional<std::predicate<Op, AbsInternalT, AbsInternalU>,
+                         ColumnMask::Bool_t,
+                         std::invoke_result_t<Op, AbsInternalT, AbsInternalU>>;
 
     // Internal result type is optional wrap of the absolute internal result type if
     // either type is optional, or otherwise is the absolute internal type.
@@ -119,8 +129,14 @@ class ColumnCombinationImpl {
     static_assert(!std::is_same_v<InternalU, std::false_type>);
 
     using InternalResultType = InternalCombination<Op, InternalT, InternalU>::InternalRes;
+    using ResultColumnImpl = std::conditional_t<
+        std::predicate<Op, unwrap_optional_t<InternalT>, unwrap_optional_t<InternalU>>,
+        std::conditional_t<is_optional_v<InternalT> || is_optional_v<InternalU>,
+                         ColumnOptMask, ColumnMask>,
+        column_result_t<ColT, ColU, InternalResultType>>;
+
 public:
-    using ResultColumn = column_result_t<ColT, ColU, InternalResultType>;
+    using ResultColumn = ResultColumnImpl;
 };
 
 // Mask x Mask = Mask (e.g. AND, OR, etc.)
@@ -164,7 +180,6 @@ concept is_result_type =
     std::is_same_v<Res, typename InternalCombination<Op, T, U>::InternalRes>;
 
 
-
 static_assert(std::is_same_v<InnerTypeHelper<ColumnConst<std::optional<EdgeID>>>::type, std::optional<EdgeID>>);
 static_assert(std::is_invocable_v<std::plus<>, EdgeID, EdgeID>);
 using Col = const db::ColumnVector<long int>*&;
@@ -173,7 +188,5 @@ using Col = const db::ColumnVector<long int>*&;
     static_assert(std::is_same_v<x,y>);
 
 SAME(InnerTypeHelper<Col>::type, long int);
-
-
 
 }

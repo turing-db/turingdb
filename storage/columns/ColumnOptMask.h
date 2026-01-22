@@ -6,6 +6,6 @@
 
 namespace db {
 
-using ColumnOptMask = ColumnOptVector<CustomBool>;
+using ColumnOptMask = ColumnOptVector<CustomBool>; // TODO: Change to ColumnMask::Bool_t
 
 }

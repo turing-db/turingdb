@@ -2,6 +2,7 @@
 
 #include "columns/ColumnOperationExecutor.h"
 #include "columns/BinaryOperators.h"
+#include "columns/BinaryPredicates.h"
 #include "columns/ColumnCombinations.h"
 
 #include "Panic.h"
@@ -22,7 +23,10 @@ struct EqualEval {
 
         if constexpr (Op == OP_EQUAL) {
             using ResultType = ColumnCombination<Eq, T, U>::ResultColumnType;
-            exec<Eq>(static_cast<ResultType*>(_res), lhs, rhs);
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column.");
+            exec<Eq>(result, lhs, rhs);
+            fmt::println("EQUAL {}, {} = {}", typeid(*lhs).name(), typeid(*rhs).name(), typeid(ResultType).name());
         } else if constexpr (Op == OP_NOT_EQUAL) {
             // using ResultType = ColumnCombinations<NotEqual, T, U>::ResultType;
             // execOperation<NotEqual>(static_cast<ResultType*>(_res), lhs, rhs);

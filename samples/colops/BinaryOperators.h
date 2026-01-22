@@ -2,14 +2,18 @@
 
 #include <functional>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "ColumnCombinations.h"
 
 #include "BioAssert.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "metadata/PropertyNull.h"
+#include "metadata/PropertyType.h"
+#include "spdlog/fmt/bundled/base.h"
 
 namespace db {
 
@@ -146,30 +150,11 @@ static inline void exec(ColW&& res, ColT&& lhs, ColU&& rhs) {
 }
 
 using Add = BinaryOperator<std::plus<>>;
-using Eq  = BinaryOperator<std::equal_to<>>;
 using Sub = BinaryOperator<std::minus<>>;
 using Mul = BinaryOperator<std::multiplies<>>;
 
 using And = BinaryOperator<std::logical_and<>>;
 using Or  = BinaryOperator<std::logical_or<>>;
-
-using ColInt = const ColumnVector<long int>*&;
-static_assert(is_result_column<Eq, ColInt, ColInt, ColumnVector<bool>>);
-using Res = std::invoke_result_t<Eq, long int, long int>;
-
-#define SAME(x, y) \
-    static_assert(std::is_same_v<x,y>);
-SAME(Res, bool);
-
-using T = InnerTypeHelper<ColInt>::type;
-using U = InnerTypeHelper<ColInt>::type;
-
-static_assert(std::is_same_v<
-    InternalCombination<Eq, T, U>::InternalRes,
-    bool
->);
-
-static_assert(OptionallyInvokable<Eq, PropertyNull, std::optional<NodeID>>);
 
 }
 
