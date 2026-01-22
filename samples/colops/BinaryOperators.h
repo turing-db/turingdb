@@ -7,7 +7,6 @@
 #include "ColumnCombinations.h"
 
 #include "BioAssert.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 

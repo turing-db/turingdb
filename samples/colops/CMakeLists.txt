@@ -1,5 +1,5 @@
 set(SAMPLE_NAME colops)
-set(SOURCES PropertyOperators.h main.cpp)
+set(SOURCES BinaryOperators.h MaskOperators.h main.cpp)
 
 turing_sample(${SAMPLE_NAME} ${SOURCES})
 
