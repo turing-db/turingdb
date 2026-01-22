@@ -2,11 +2,11 @@
 
 ## Overview
 
-We want to integrate in the query language the vector DB implementation in the vector/ directory and exemplified by the sample program in samples/vector-db directory.
+We want to integrate the vector DB implementation in the vector/ directory in the query language, as exemplified by the sample program in samples/vector-db directory.
 
 We want to provide to users a vector indexing facility in turingdb where:
 
-* Users can load embeddings from their custom embedding generation pipeline. We believe that power users wish to use their own AI models and providers.
+* Users can load embeddings from their custom embedding generation pipeline. We believe that power users may strongly want to use their own AI models and providers.
 We can later provide a basic embedding generation facility in turingdb for the major AI vendors.
 
 * Users may want to associate a high dimensional embedding vector to any piece of data (e.g. nodes, edges, records, papers, articles..etc)
@@ -23,7 +23,9 @@ to make users observe and rely too much on TuringDB entity IDs as they are not g
 such as documents or other records.
 
 -> Thus we don't know the ID to be used is the user's choice. It may be an arbitrary property.
+
 -> Users may want to come with their own embeddings
+
 -> We obviously to generate embeddings at each commit
 
 So that seems to point us for now to having vector indexes at the TuringDB root level,
@@ -75,7 +77,7 @@ Even if we don't support lists as values in columns now, we support lists in the
 time we can take the list literal in the AST for the query to give directly the query vector
 to the vector search processor.
 
-IMPORTANT: We want the vector search query to be a read statement in the sense of read statements in the analyzer
+IMPORTANT: We want the vector search query to be a read statement, in the sense of read statements in the analyzer,
 to be able to mix it with a MATCH commands. The variable declared in the YIELD clause could be referenced by
 MATCH statements just like for CALL statements.
 
