@@ -12,6 +12,7 @@ set(VECTOR_SOURCES
         ShardCache.cpp
         VecLibShard.cpp
         VecLibAccessor.cpp
+        VecLibWriteAccessor.cpp
         VecLib.cpp
         import/ImportResult.cpp
         import/ImportException.cpp

@@ -44,6 +44,11 @@ enum class PlanGraphOpcode {
     SHOW_PROCEDURES,
     SHORTEST_PATH,
     LOAD_CSV,
+    CREATE_VECTOR_INDEX,
+    LOAD_VECTOR,
+    VECTOR_SEARCH,
+    DELETE_VECTOR_INDEX,
+    SHOW_VECTOR_INDEXES,
     _SIZE
 };
 
@@ -84,7 +89,12 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::S3_TRANSFER, "S3_TRANSFER">,
     EnumStringPair<PlanGraphOpcode::SHOW_PROCEDURES, "SHOW_PROCEDURES">,
     EnumStringPair<PlanGraphOpcode::SHORTEST_PATH, "SHORTEST_PATH">,
-    EnumStringPair<PlanGraphOpcode::LOAD_CSV, "LOAD_CSV">>;
+    EnumStringPair<PlanGraphOpcode::LOAD_CSV, "LOAD_CSV">,
+    EnumStringPair<PlanGraphOpcode::CREATE_VECTOR_INDEX, "CREATE_VECTOR_INDEX">,
+    EnumStringPair<PlanGraphOpcode::LOAD_VECTOR, "LOAD_VECTOR">,
+    EnumStringPair<PlanGraphOpcode::VECTOR_SEARCH, "VECTOR_SEARCH">,
+    EnumStringPair<PlanGraphOpcode::DELETE_VECTOR_INDEX, "DELETE_VECTOR_INDEX">,
+    EnumStringPair<PlanGraphOpcode::SHOW_VECTOR_INDEXES, "SHOW_VECTOR_INDEXES">>;
 
 class PlanGraphNode {
 public:

@@ -177,6 +177,10 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
         case Expr::Kind::LITERAL:
             return generateLiteralExpr(static_cast<const LiteralExpr*>(expr));
         break;
+
+        case Expr::Kind::LIST:
+            throw PlannerException("List expressions are currently not supported.");
+        break;
     }
 
     throw FatalException("Invalid Expr type in ExprProgramGenerator.");

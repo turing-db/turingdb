@@ -131,6 +131,22 @@ void CypherASTDumper::dump(std::ostream& out) {
             case QueryCommand::Kind::SHOW_PROCEDURES_QUERY:
                 out << "    script ||--o{ SHOW_PROCEDURES : \"\"\n";
             break;
+
+            case QueryCommand::Kind::CREATE_VECTOR_INDEX_QUERY:
+                out << "    script ||--o{ CREATE_VECTOR_INDEX : \"\"\n";
+            break;
+
+            case QueryCommand::Kind::LOAD_VECTOR_QUERY:
+                out << "    script ||--o{ LOAD_VECTOR : \"\"\n";
+            break;
+
+            case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
+                out << "    script ||--o{ DELETE_VECTOR_INDEX : \"\"\n";
+            break;
+
+            case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
+                out << "    script ||--o{ SHOW_VECTOR_INDEXES : \"\"\n";
+            break;
         }
     }
 }
@@ -198,6 +214,14 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
                     out << "        ASTType LoadCSVStmt\n";
                     out << "    }\n";
                     out << "    _" << std::hex << query << " ||--o{ _" << std::hex << stmt << " : \"\"\n";
+                }
+                break;
+
+                case Stmt::Kind::VECTOR_SEARCH: {
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << stmt << " : \"\"\n";
+                    out << "    _" << std::hex << stmt << " {\n";
+                    out << "        ASTType VECTOR_SEARCH\n";
+                    out << "    }\n";
                 }
                 break;
             }
@@ -706,6 +730,11 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
             out << "        ASTType IndexExpr\n";
             out << "    }\n";
         } break;
+        case Expr::Kind::LIST:
+            out << "    _" << std::hex << expr << " {\n";
+            out << "        ASTType ListExpr\n";
+            out << "    }\n";
+            break;
     }
 }
 

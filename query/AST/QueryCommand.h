@@ -21,6 +21,10 @@ public:
         S3_CONNECT_QUERY,
         S3_TRANSFER_QUERY,
         SHOW_PROCEDURES_QUERY,
+        CREATE_VECTOR_INDEX_QUERY,
+        LOAD_VECTOR_QUERY,
+        DELETE_VECTOR_INDEX_QUERY,
+        SHOW_VECTOR_INDEXES_QUERY,
     };
 
     virtual Kind getKind() const = 0;

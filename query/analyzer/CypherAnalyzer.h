@@ -19,6 +19,8 @@ class LoadJsonlQuery;
 class ChangeQuery;
 class S3ConnectQuery;
 class S3TransferQuery;
+class CreateVectorIndexQuery;
+class LoadVectorQuery;
 class OrderBy;
 class Skip;
 class Limit;
@@ -47,6 +49,8 @@ public:
     void analyze(LoadJsonlQuery* loadJsonl);
     void analyze(const S3ConnectQuery* s3Connect);
     void analyze(S3TransferQuery* s3Transfer);
+    void analyze(const CreateVectorIndexQuery* query);
+    void analyze(const LoadVectorQuery* query);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt);

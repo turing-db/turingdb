@@ -2,6 +2,7 @@
 
 #include <shared_mutex>
 
+#include "VecLibMetadata.h"
 #include "VectorResult.h"
 
 namespace vec {
@@ -27,7 +28,9 @@ public:
         return _vecLib != nullptr;
     }
 
-    [[nodiscard]] BatchVectorCreate prepareCreateBatch();
+    [[nodiscard]] const VecLibMetadata& metadata() const;
+
+    void prepareCreateBatch(BatchVectorCreate* batch);
     [[nodiscard]] VectorResult<void> addEmbeddings(const BatchVectorCreate& batch);
     [[nodiscard]] VectorResult<void> search(const VectorSearchQuery& query, VectorSearchResult& results);
 

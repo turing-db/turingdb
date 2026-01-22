@@ -17,6 +17,10 @@
 #include "LoadJsonlQuery.h"
 #include "S3ConnectQuery.h"
 #include "S3TransferQuery.h"
+#include "CreateVectorIndexQuery.h"
+#include "LoadVectorQuery.h"
+#include "DeleteVectorIndexQuery.h"
+#include "ShowVectorIndexesQuery.h"
 #include "Projection.h"
 #include "decl/DeclContext.h"
 #include "expr/Expr.h"
@@ -91,11 +95,21 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<S3TransferQuery*>(query));
             break;
 
+            case QueryCommand::Kind::CREATE_VECTOR_INDEX_QUERY:
+                analyze(static_cast<const CreateVectorIndexQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::LOAD_VECTOR_QUERY:
+                analyze(static_cast<const LoadVectorQuery*>(query));
+            break;
+
             // Nothing to analyze
             case QueryCommand::Kind::CHANGE_QUERY:
             case QueryCommand::Kind::COMMIT_QUERY:
             case QueryCommand::Kind::LIST_GRAPH_QUERY:
             case QueryCommand::Kind::SHOW_PROCEDURES_QUERY:
+            case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
+            case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
             break;
 
             default:
@@ -414,6 +428,29 @@ void CypherAnalyzer::analyze(S3TransferQuery* s3Transfer) {
 
     // S3 Directory Resource
     s3Transfer->setS3Prefix(s3URL);
+}
+
+void CypherAnalyzer::analyze(const CreateVectorIndexQuery* query) {
+    if (query->getDimension() == 0) {
+        throwError("Vector index dimension must be greater than 0", query);
+    }
+
+    std::string_view indexName = query->getIndexName();
+    if (indexName.empty()) {
+        throwError("Vector index name cannot be empty", query);
+    }
+}
+
+void CypherAnalyzer::analyze(const LoadVectorQuery* query) {
+    std::string_view filePath = query->getFilePath();
+    if (filePath.empty()) {
+        throwError("LOAD VECTOR file path cannot be empty", query);
+    }
+
+    std::string_view indexName = query->getIndexName();
+    if (indexName.empty()) {
+        throwError("LOAD VECTOR index name cannot be empty", query);
+    }
 }
 
 void CypherAnalyzer::throwError(std::string_view msg, const void* obj) const {

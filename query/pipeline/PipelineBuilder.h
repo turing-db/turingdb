@@ -7,6 +7,7 @@
 #include "Path.h"
 #include "PipelineV2.h"
 #include "PendingOutputView.h"
+#include "VecLibMetadata.h"
 #include "procedures/Procedure.h"
 
 #include "ProjectionItem.h"
@@ -53,7 +54,10 @@ public:
 
     const PendingOutputView& getPendingOutput() const { return _pendingOutput; }
     PendingOutputView& getPendingOutput() { return _pendingOutput; }
-    PipelineOutputInterface* getPendingOutputInterface() const { return _pendingOutput.getInterface(); }
+
+    PipelineOutputInterface* getPendingOutputInterface() const {
+        return _pendingOutput.getInterface();
+    }
 
     // Sources
     PipelineNodeOutputInterface& addScanNodes();
@@ -186,6 +190,18 @@ public:
                    std::string_view s3Prefix,
                    std::string_view s3File,
                    std::string_view localPath);
+
+    // Vector operations
+    PipelineValueOutputInterface& addCreateVectorIndex(std::string_view indexName,
+                                                       vec::Dimension dimension,
+                                                       vec::DistanceMetric metric);
+    PipelineValueOutputInterface& addLoadVector(std::string_view filePath,
+                                                std::string_view indexName);
+    PipelineValuesOutputInterface& addVectorSearch(std::string_view indexName,
+                                                   uint64_t k,
+                                                   std::vector<float> queryVector);
+    PipelineValueOutputInterface& addDeleteVectorIndex(std::string_view indexName);
+    PipelineValuesOutputInterface& addShowVectorIndexes();
 
     // Helper to add a column of a given type to the current output dataframe
     template <typename ColumnType>

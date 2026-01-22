@@ -85,13 +85,17 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Loader::load(VecLibStorage& storag
 }
 
 VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate& batch) {
+    // Iterate with explicit index since the batch stores data at indices
+    // corresponding to LSH signatures (sparse array).
     LSHSignature signature = 0;
-    for (const auto& data : batch) {
+    for (auto it = batch.begin(); it != batch.end(); ++it, ++signature) {
+        const auto& data = *it;
         if (data._externalIDs.empty()) {
             continue;
         }
 
-        auto& shard = _shardCache->getShard(_metadata, signature++);
+        // Use the actual index (signature) where data is stored
+        auto& shard = _shardCache->getShard(_metadata, signature);
 
         {
             std::unique_lock lock(shard._mutex);
@@ -152,8 +156,8 @@ VectorResult<void> VecLib::search(const VectorSearchQuery& query, VectorSearchRe
     return {};
 }
 
-BatchVectorCreate VecLib::prepareCreateBatch() {
-    return BatchVectorCreate(*_shardRouter, _metadata._dimension);
+void VecLib::prepareCreateBatch(BatchVectorCreate* batch) {
+    batch->init(_shardRouter.get(), _metadata._dimension);
 }
 
 const VecLibStorage& VecLib::getStorage() const {

@@ -15,4 +15,5 @@ target_link_libraries(turing_db_interpreter_s PRIVATE
     turing_db_optimizer_s
     turing_db_pipeline_s
     turing_db_system_s
-    turing_db_jobs_s)
+    turing_db_jobs_s
+    turing_vector_s)

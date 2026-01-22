@@ -15,6 +15,10 @@
 #include "Predicate.h"
 #include "YieldClause.h"
 #include "YieldItems.h"
+#include "Literal.h"
+#include "expr/LiteralExpr.h"
+#include "expr/ListExpr.h"
+#include "expr/SymbolExpr.h"
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
 #include "metadata/LabelSet.h"
@@ -31,6 +35,7 @@
 #include "nodes/JoinNode.h"
 #include "nodes/ProcedureEvalNode.h"
 #include "nodes/ProduceResultsNode.h"
+#include "nodes/VectorSearchNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/ShortestPathNode.h"
@@ -41,6 +46,7 @@
 #include "stmt/CallStmt.h"
 #include "stmt/LoadCSVStmt.h"
 #include "nodes/LoadCSVNode.h"
+#include "stmt/VectorSearchStmt.h"
 
 #include "BioAssert.h"
 
@@ -74,6 +80,10 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
 
         case Stmt::Kind::LOAD_CSV:
             generateLoadCSVStmt(static_cast<const LoadCSVStmt*>(stmt));
+            break;
+
+        case Stmt::Kind::VECTOR_SEARCH:
+            generateVectorSearchStmt(static_cast<const VectorSearchStmt*>(stmt));
             break;
 
         default:
@@ -153,6 +163,46 @@ void ReadStmtGenerator::generateLoadCSVStmt(const LoadCSVStmt* stmt) {
         aliasDecl);
 
     _variables->setProducer(aliasDecl, loadCSVNode);
+}
+
+void ReadStmtGenerator::generateVectorSearchStmt(const VectorSearchStmt* stmt) {
+    // Extract float values from ListExpr
+    std::vector<float> queryVector;
+    const ListExpr* listExpr = stmt->getQueryVector();
+
+    for (Expr* elem : listExpr->getElements()) {
+        if (elem->getKind() != Expr::Kind::LITERAL) {
+            throwError("VECTOR SEARCH query vector elements must be literals", stmt);
+        }
+
+        const LiteralExpr* litExpr = static_cast<const LiteralExpr*>(elem);
+        const Literal* lit = litExpr->getLiteral();
+
+        if (lit->getKind() == Literal::Kind::DOUBLE) {
+            const DoubleLiteral* doubleLit = static_cast<const DoubleLiteral*>(lit);
+            queryVector.push_back(static_cast<float>(doubleLit->getValue()));
+        } else if (lit->getKind() == Literal::Kind::INTEGER) {
+            const IntegerLiteral* intLit = static_cast<const IntegerLiteral*>(lit);
+            queryVector.push_back(static_cast<float>(intLit->getValue()));
+        } else {
+            throwError("VECTOR SEARCH query vector elements must be numeric", stmt);
+        }
+    }
+
+    VectorSearchNode* node = _tree->create<VectorSearchNode>(
+        stmt->getIndexName(),
+        stmt->getK(),
+        std::move(queryVector));
+
+    // Register the 'ids' variable for downstream use
+    const YieldClause* yield = stmt->getYield();
+    if (yield) {
+        YieldItems* yieldItems = yield->getItems();
+        for (SymbolExpr* yieldItemExpr : *yieldItems) {
+            const VarDecl* decl = yieldItemExpr->getExprVarDecl();
+            node->setIDsVarDecl(decl);
+        }
+    }
 }
 
 void ReadStmtGenerator::generateWhereClause(const WhereClause* where) {

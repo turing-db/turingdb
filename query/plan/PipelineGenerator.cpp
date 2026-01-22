@@ -64,6 +64,17 @@
 #include "nodes/ShortestPathNode.h"
 #include "nodes/LoadCSVNode.h"
 #include "nodes/ExprEvalNode.h"
+#include "nodes/CreateVectorIndexNode.h"
+#include "nodes/LoadVectorNode.h"
+#include "nodes/VectorSearchNode.h"
+#include "nodes/DeleteVectorIndexNode.h"
+#include "nodes/ShowVectorIndexesNode.h"
+
+#include "processors/CreateVectorIndexProcessor.h"
+#include "processors/LoadVectorProcessor.h"
+#include "processors/VectorSearchProcessor.h"
+#include "processors/DeleteVectorIndexProcessor.h"
+#include "processors/ShowVectorIndexesProcessor.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -365,6 +376,26 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::LOAD_CSV:
             return translateLoadCSVNode(static_cast<LoadCSVNode*>(node));
             break;
+
+        case PlanGraphOpcode::CREATE_VECTOR_INDEX:
+            return translateCreateVectorIndexNode(static_cast<CreateVectorIndexNode*>(node));
+        break;
+
+        case PlanGraphOpcode::LOAD_VECTOR:
+            return translateLoadVectorNode(static_cast<LoadVectorNode*>(node));
+        break;
+
+        case PlanGraphOpcode::VECTOR_SEARCH:
+            return translateVectorSearchNode(static_cast<VectorSearchNode*>(node));
+        break;
+
+        case PlanGraphOpcode::DELETE_VECTOR_INDEX:
+            return translateDeleteVectorIndexNode(static_cast<DeleteVectorIndexNode*>(node));
+        break;
+
+        case PlanGraphOpcode::SHOW_VECTOR_INDEXES:
+            return translateShowVectorIndexesNode(static_cast<ShowVectorIndexesNode*>(node));
+        break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
@@ -1400,3 +1431,38 @@ PipelineOutputInterface* PipelineGenerator::translateLoadCSVNode(LoadCSVNode* no
     return _builder.getPendingOutputInterface();
 }
 
+PipelineOutputInterface* PipelineGenerator::translateCreateVectorIndexNode(CreateVectorIndexNode* node) {
+    _builder.addCreateVectorIndex(node->getIndexName(), node->getDimension(), node->getMetric());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateLoadVectorNode(LoadVectorNode* node) {
+    _builder.addLoadVector(node->getFilePath(), node->getIndexName());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateVectorSearchNode(VectorSearchNode* node) {
+    PipelineValuesOutputInterface& output = _builder.addVectorSearch(
+        node->getIndexName(), node->getK(), node->getQueryVector());
+
+    // Register the 'ids' column so RETURN can find it
+    const VarDecl* idsDecl = node->getIDsVarDecl();
+    if (idsDecl) {
+        NamedColumn* idsCol = output.getValues();
+        if (idsCol) {
+            _declToColumn[idsDecl] = idsCol->getTag();
+        }
+    }
+
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateDeleteVectorIndexNode(DeleteVectorIndexNode* node) {
+    _builder.addDeleteVectorIndex(node->getIndexName());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowVectorIndexesNode* node) {
+    _builder.addShowVectorIndexes();
+    return _builder.getPendingOutputInterface();
+}

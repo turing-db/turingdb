@@ -63,6 +63,13 @@
     #include "LoadJsonlQuery.h"
     #include "ShowProceduresQuery.h"
     #include "stmt/LoadCSVStmt.h"
+    #include "CreateVectorIndexQuery.h"
+    #include "LoadVectorQuery.h"
+    #include "DeleteVectorIndexQuery.h"
+    #include "ShowVectorIndexesQuery.h"
+    #include "stmt/VectorSearchStmt.h"
+    #include "expr/ListExpr.h"
+    #include "VecLibMetadata.h"
 
     namespace db {
         class YCypherScanner;
@@ -191,6 +198,7 @@
 %token<std::string_view> END
 %token<std::string_view> XOR
 %token<std::string_view> FOR
+%token<std::string_view> FROM
 %token<std::string_view> ADD
 %token<std::string_view> AND
 %token<std::string_view> OR
@@ -203,6 +211,16 @@
 %token<std::string_view> ON
 %token<std::string_view> IF
 %token<std::string_view> AS
+
+// Vector query tokens
+%token<std::string_view> VECTOR
+%token<std::string_view> INDEX
+%token<std::string_view> DIMENSION
+%token<std::string_view> METRIC
+%token<std::string_view> EUCLID
+%token<std::string_view> COSINE
+%token<std::string_view> INDEXES
+%token<std::string_view> SEARCH
 
 %token<std::string_view> ESC_LITERAL
 %token<std::string_view> STRING_LITERAL
@@ -287,6 +305,15 @@
 %type<db::S3ConnectQuery*> s3ConnectQuery
 %type<db::S3TransferQuery*> s3TransferQuery
 %type<db::ShowProceduresQuery*> showProceduresQuery
+%type<db::CreateVectorIndexQuery*> createVectorIndexQuery
+%type<db::LoadVectorQuery*> loadVectorQuery
+%type<db::DeleteVectorIndexQuery*> deleteVectorIndexQuery
+%type<db::ShowVectorIndexesQuery*> showVectorIndexesQuery
+%type<db::VectorSearchStmt*> vectorSearchSt
+%type<vec::DistanceMetric> distanceMetric
+%type<db::ListExpr*> listLit
+%type<db::ListExpr*> listLitItems
+%type<db::Expr*> listLitItem
 %type<db::QueryCommand*> singleQuery
 %type<db::QueryCommand*> query
 %type<db::LoadGraphQuery*> loadGraph
@@ -356,6 +383,10 @@ singleQuery
     | s3ConnectQuery { $$ = $1; }
     | s3TransferQuery { $$ = $1; }
     | showProceduresQuery { $$ = $1; }
+    | createVectorIndexQuery { $$ = $1; }
+    | loadVectorQuery { $$ = $1; }
+    | deleteVectorIndexQuery { $$ = $1; }
+    | showVectorIndexesQuery { $$ = $1; }
     ;
 
 loadGraph
@@ -379,17 +410,73 @@ showProceduresQuery
     : SHOW PROCEDURES { $$ = ShowProceduresQuery::create(ast); LOC($$, @$); }
     ;
 
+// CREATE VECTOR INDEX vector1 WITH DIMENSION 4 METRIC EUCLID
+createVectorIndexQuery
+    : CREATE VECTOR INDEX ID WITH DIMENSION DIGIT METRIC distanceMetric {
+        $$ = CreateVectorIndexQuery::create(ast, $4, static_cast<uint64_t>($7), $9);
+        LOC($$, @$);
+      }
+    ;
+
+distanceMetric
+    : EUCLID { $$ = vec::DistanceMetric::EUCLIDEAN_DIST; }
+    | COSINE { $$ = vec::DistanceMetric::INNER_PRODUCT; }
+    ;
+
+// LOAD VECTOR FROM "filepath" IN vector1
+loadVectorQuery
+    : LOAD VECTOR FROM STRING_LITERAL IN ID {
+        $$ = LoadVectorQuery::create(ast, $4, $6);
+        LOC($$, @$);
+      }
+    ;
+
+// DELETE VECTOR INDEX vector1
+deleteVectorIndexQuery
+    : DELETE VECTOR INDEX ID {
+        $$ = DeleteVectorIndexQuery::create(ast, $4);
+        LOC($$, @$);
+      }
+    ;
+
+// SHOW VECTOR INDEXES
+showVectorIndexesQuery
+    : SHOW VECTOR INDEXES { $$ = ShowVectorIndexesQuery::create(ast); LOC($$, @$); }
+    ;
+
+// VECTOR SEARCH IN vector1 FOR 10 [0.1, 0.2, ...] YIELD ids
+vectorSearchSt
+    : VECTOR SEARCH IN ID FOR DIGIT listLit yieldClause {
+        $$ = VectorSearchStmt::create(ast);
+        $$->setIndexName($4);
+        $$->setK(static_cast<uint64_t>($6));
+        $$->setQueryVector($7);
+        $$->setYield($8);
+        LOC($$, @$);
+      }
+    ;
+
 createGraphQuery
     : CREATE GRAPH ID { $$ = CreateGraphQuery::create(ast, $3); LOC($$, @$); }
     ;
 
 loadGML
-    : LOAD GML STRING_LITERAL AS ID { $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3))); $$->setGraphName($5); LOC($$, @$); }
-    | LOAD GML STRING_LITERAL  { $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3))); LOC($$, @$);  }
+    : LOAD GML STRING_LITERAL AS ID {
+        $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3)));
+        $$->setGraphName($5);
+        LOC($$, @$);
+      }
+    | LOAD GML STRING_LITERAL {
+        $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3)));
+        LOC($$, @$);
+      }
     ;
 
 s3ConnectQuery
-    : S3 CONNECT STRING_LITERAL STRING_LITERAL STRING_LITERAL { $$ = S3ConnectQuery::create(ast, $3, $4, $5); LOC($$, @$); }
+    : S3 CONNECT STRING_LITERAL STRING_LITERAL STRING_LITERAL {
+        $$ = S3ConnectQuery::create(ast, $3, $4, $5);
+        LOC($$, @$);
+      }
     ;
 
 s3TransferQuery
@@ -477,7 +564,11 @@ orderBySSt
     ;
 
 singlePartQuery
-    : returnSt { $$ = SinglePartQuery::create(ast); $$->setReturnStmt($1); LOC($$, @$); }
+    : returnSt {
+        $$ = SinglePartQuery::create(ast);
+        $$->setReturnStmt($1);
+        LOC($$, @$);
+      }
     | callSt {
         $$ = SinglePartQuery::create(ast);
         auto* stmts = StmtContainer::create(ast);
@@ -491,7 +582,7 @@ singlePartQuery
     | readingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setReturnStmt($2); LOC($$, @$); }
     | readingStatements updatingStatements { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setUpdateStmts($2); LOC($$, @$); }
     | readingStatements updatingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setUpdateStmts($2); $$->setReturnStmt($3); LOC($$, @$); }
-    | readingStatements shortestPathSt returnSt { 
+    | readingStatements shortestPathSt returnSt {
         $$ = SinglePartQuery::create(ast);
         $$->setReadStmts($1);
         $$->setShortestPathStmt($2);
@@ -598,6 +689,7 @@ readingStatement
     | unwindSt { scanner.notImplemented(@$, "UNWIND"); }
     | callSt { $$ = $1; }
     | loadCSVSt { $$ = $1; }
+    | vectorSearchSt { $$ = $1; }
     ;
 
 updatingStatement
@@ -783,7 +875,10 @@ notExpr
 
 comparisonExpr
     : addSubExpr { $$ = $1; }
-    | comparisonExpr comparisonSign addSubExpr { $$ = BinaryExpr::create(ast, $2, $1, $3); LOC($$, @$); }
+    | comparisonExpr comparisonSign addSubExpr {
+        $$ = BinaryExpr::create(ast, $2, $1, $3);
+        LOC($$, @$);
+      }
     ;
 
 comparisonSign
@@ -800,20 +895,38 @@ comparisonSign
 
 addSubExpr
     : multDivExpr { $$ = $1; }
-    | addSubExpr PLUS multDivExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Add, $1, $3); LOC($$, @$); }
-    | addSubExpr SUB multDivExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Sub, $1, $3); LOC($$, @$); }
+    | addSubExpr PLUS multDivExpr {
+        $$ = BinaryExpr::create(ast, BinaryOperator::Add, $1, $3);
+        LOC($$, @$);
+      }
+    | addSubExpr SUB multDivExpr {
+        $$ = BinaryExpr::create(ast, BinaryOperator::Sub, $1, $3);
+        LOC($$, @$);
+      }
     ;
 
 multDivExpr
     : powerExpr { $$ = $1; }
-    | multDivExpr MULT powerExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Mult, $1, $3); LOC($$, @$); }
-    | multDivExpr DIV powerExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Div, $1, $3); LOC($$, @$); }
-    | multDivExpr MOD powerExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Mod, $1, $3); LOC($$, @$); }
+    | multDivExpr MULT powerExpr {
+        $$ = BinaryExpr::create(ast, BinaryOperator::Mult, $1, $3);
+        LOC($$, @$);
+      }
+    | multDivExpr DIV powerExpr {
+        $$ = BinaryExpr::create(ast, BinaryOperator::Div, $1, $3);
+        LOC($$, @$);
+      }
+    | multDivExpr MOD powerExpr {
+        $$ = BinaryExpr::create(ast, BinaryOperator::Mod, $1, $3);
+        LOC($$, @$);
+      }
     ;
 
 powerExpr
     : stringExpr { $$ = $1; }
-    | powerExpr CARET stringExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Pow, $1, $3); LOC($$, @$); }
+    | powerExpr CARET stringExpr {
+        $$ = BinaryExpr::create(ast, BinaryOperator::Pow, $1, $3);
+        LOC($$, @$);
+      }
     ;
 
 stringExpr
@@ -1190,29 +1303,29 @@ stringLit
     : STRING_LITERAL { $$ = StringLiteral::create(ast, $1); }
     ;
 
+// List literal: build ListExpr directly
 listLit
-    : OBRACK CBRACK { scanner.notImplemented(@$, "Lists"); }
-    //| OBRACK exprChain CBRACK // Enabling this causes conflicts
-    // Instead using this: (simpler, too simple?)
-    | OBRACK listLitItems CBRACK { scanner.notImplemented(@$, "Lists"); }
+    : OBRACK CBRACK { $$ = ListExpr::create(ast); LOC($$, @$); }
+    | OBRACK listLitItems CBRACK { $$ = $2; LOC($$, @$); }
     ;
 
+// Build ListExpr recursively using addItem()
 listLitItems
-    : listLitItem
-    | listLitItems COMMA listLitItem
+    : listLitItem { $$ = ListExpr::create(ast); $$->addItem($1); }
+    | listLitItems COMMA listLitItem { $$ = $1; $$->addItem($3); }
     ;
 
 listLitItem
-    : literal
+    : literal { $$ = LiteralExpr::create(ast, $1); LOC($$, @$); }
     | parameter { scanner.notImplemented(@$, "Parameters"); }
     | caseExpr { scanner.notImplemented(@$, "CASE"); }
-    | countFunc { scanner.notImplemented(@$, "COUNT"); }
+    | countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | listComprehension { scanner.notImplemented(@$, "List comprehensions"); }
     //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
     | filterWith { scanner.notImplemented(@$, "Filters"); }
-    | parenthesizedExpr // Enabling this causes conflicts, not needed?
-    | functionInvocation { scanner.notImplemented(@$, "Function invocations"); }
-    | symbol
+    | parenthesizedExpr { $$ = $1; }
+    | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
+    | symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
     | subqueryExist { scanner.notImplemented(@$, "EXISTS"); }
     ;
 

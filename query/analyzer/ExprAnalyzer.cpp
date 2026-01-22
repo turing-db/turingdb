@@ -68,6 +68,10 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::INDEX:
             analyzeIndexExpr(static_cast<IndexExpr*>(expr));
             break;
+        case Expr::Kind::LIST:
+            // List expressions are handled specially in vector search context
+            // For now, just mark them as having no specific type
+            break;
     }
 }
 

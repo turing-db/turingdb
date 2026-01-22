@@ -45,6 +45,10 @@
 #include "nodes/ShowProceduresNode.h"
 #include "nodes/ShortestPathNode.h"
 #include "nodes/ExprEvalNode.h"
+#include "nodes/CreateVectorIndexNode.h"
+#include "nodes/LoadVectorNode.h"
+#include "nodes/DeleteVectorIndexNode.h"
+#include "nodes/ShowVectorIndexesNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
@@ -58,6 +62,10 @@
 #include "LoadGraphQuery.h"
 #include "LoadGMLQuery.h"
 #include "LoadJsonlQuery.h"
+#include "CreateVectorIndexQuery.h"
+#include "LoadVectorQuery.h"
+#include "DeleteVectorIndexQuery.h"
+#include "ShowVectorIndexesQuery.h"
 
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
@@ -121,6 +129,22 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::SHOW_PROCEDURES_QUERY:
             generateShowProceduresQuery(static_cast<const ShowProceduresQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::CREATE_VECTOR_INDEX_QUERY:
+            generateCreateVectorIndexQuery(static_cast<const CreateVectorIndexQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::LOAD_VECTOR_QUERY:
+            generateLoadVectorQuery(static_cast<const LoadVectorQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
+            generateDeleteVectorIndexQuery(static_cast<const DeleteVectorIndexQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
+            generateShowVectorIndexesQuery(static_cast<const ShowVectorIndexesQuery*>(query));
         break;
 
         default:
@@ -268,6 +292,31 @@ void PlanGraphGenerator::generateS3TransferQuery(const S3TransferQuery* query) {
 void PlanGraphGenerator::generateShowProceduresQuery(const ShowProceduresQuery* query) {
     ShowProceduresNode* showProceduresNode = _tree.create<ShowProceduresNode>();
     _tree.newOut<ProduceResultsNode>(showProceduresNode);
+}
+
+void PlanGraphGenerator::generateCreateVectorIndexQuery(const CreateVectorIndexQuery* query) {
+    CreateVectorIndexNode* node = _tree.create<CreateVectorIndexNode>(
+        query->getIndexName(),
+        query->getDimension(),
+        query->getMetric());
+    _tree.newOut<ProduceResultsNode>(node);
+}
+
+void PlanGraphGenerator::generateLoadVectorQuery(const LoadVectorQuery* query) {
+    LoadVectorNode* node = _tree.create<LoadVectorNode>(
+        query->getFilePath(),
+        query->getIndexName());
+    _tree.newOut<ProduceResultsNode>(node);
+}
+
+void PlanGraphGenerator::generateDeleteVectorIndexQuery(const DeleteVectorIndexQuery* query) {
+    DeleteVectorIndexNode* node = _tree.create<DeleteVectorIndexNode>(query->getIndexName());
+    _tree.newOut<ProduceResultsNode>(node);
+}
+
+void PlanGraphGenerator::generateShowVectorIndexesQuery(const ShowVectorIndexesQuery* query) {
+    ShowVectorIndexesNode* node = _tree.create<ShowVectorIndexesNode>();
+    _tree.newOut<ProduceResultsNode>(node);
 }
 
 PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {

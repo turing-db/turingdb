@@ -17,6 +17,7 @@ class Stmt;
 class MatchStmt;
 class CallStmt;
 class LoadCSVStmt;
+class VectorSearchStmt;
 class Skip;
 class Limit;
 class WhereClause;
@@ -48,6 +49,7 @@ public:
     void generateMatchStmt(const MatchStmt* stmt);
     void generateCallStmt(const CallStmt* stmt);
     void generateLoadCSVStmt(const LoadCSVStmt* stmt);
+    void generateVectorSearchStmt(const VectorSearchStmt* stmt);
     void generateWhereClause(const WhereClause* where);
     void generatePatternElement(const PatternElement* element);
 

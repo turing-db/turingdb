@@ -4,6 +4,10 @@
 
 #include "iterators/ChunkConfig.h"
 
+namespace vec {
+class VectorDatabase;
+}
+
 namespace db {
 class SystemManager;
 class GraphView;
@@ -32,12 +36,14 @@ public:
     JobSystem* getJobSystem() const { return _jobSystem; }
     SystemManager* getSystemManager() const { return _sysMan; }
     const ProcedureManager* getProcedures() const { return _procedures; }
+    vec::VectorDatabase* getVectorDatabase() const { return _vectorDatabase; }
 
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
     void setTransaction(Transaction* tx) { _tx = tx; }
     void setGraphName(std::string_view graphName) { _graphName = graphName; }
     void setJobSystem(JobSystem* jobSystem) { _jobSystem = jobSystem; }
     void setProcedures(const ProcedureManager* procedures) { _procedures = procedures; }
+    void setVectorDatabase(vec::VectorDatabase* vectorDatabase) { _vectorDatabase = vectorDatabase; }
 
 private:
     SystemManager* _sysMan {nullptr};
@@ -47,6 +53,7 @@ private:
     std::string_view _graphName;
     JobSystem* _jobSystem {nullptr};
     const ProcedureManager* _procedures {nullptr};
+    vec::VectorDatabase* _vectorDatabase {nullptr};
 };
 
 }
