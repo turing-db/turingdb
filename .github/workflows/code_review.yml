@@ -16,13 +16,9 @@ jobs:
   review:
     runs-on: ubuntu-latest
 
-    # Only run on PRs from the same repo (not forks) to protect API key
-    if: github.event.pull_request.head.repo.full_name == github.repository
-
     permissions:
       contents: read
       pull-requests: write
-      id-token: write
 
     steps:
       - name: Checkout repository
@@ -30,49 +26,73 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Claude Code Review
-        uses: anthropics/claude-code-action@beta
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          model: claude-opus-4-5-20251101
-          timeout_minutes: 10
-          claude_args: '--allowedTools "mcp__github__create_pull_request_review,mcp__github__get_pull_request_diff"'
-          direct_prompt: |
-            You are a C++ code reviewer for TuringDB. Your task is to review
-            the changed files in this PR for violations of the project's
-            coding style guidelines.
+          python-version: '3.11'
 
-            REVIEW WORKFLOW:
-            1. First, read the file CODING_STYLE.md to understand all the rules
-            2. Use `mcp__github__get_pull_request_diff` to get the changed lines
-            3. Analyze all violations and compile them into a single review
-            4. Use `mcp__github__create_pull_request_review` to submit the review with
-               event="COMMENT" and all findings in the body (do NOT use "REQUEST_CHANGES")
+      - name: Run code style check
+        id: style_check
+        run: |
+          # Run the style checker and capture output
+          set +e
+          python scripts/code_review.py --diff origin/${{ github.base_ref }} --format json > violations.json 2>&1
+          exit_code=$?
+          set -e
 
-            REVIEW RULES:
-            - Review only changed C++ files (.cpp, .h, .hpp) in this PR
-            - Skip files in external/ directory
-            - Only flag CLEAR violations - not subjective preferences
-            - For each violation, cite the specific section from CODING_STYLE.md
+          # Count violations
+          error_count=$(jq '[.[] | select(.severity == "error")] | length' violations.json)
+          warning_count=$(jq '[.[] | select(.severity == "warning")] | length' violations.json)
 
-            SPECIAL ATTENTION:
-            Pay close attention to consecutive blank lines. There should never be
-            2 or more consecutive blank lines in the code. This is a frequent
-            issue in PRs. Flag every occurrence.
+          echo "errors=$error_count" >> $GITHUB_OUTPUT
+          echo "warnings=$warning_count" >> $GITHUB_OUTPUT
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
 
-            USING NAMESPACE:
-            There should never be a using namespace directive in header files.
-            Using namespace db is allowed in cpp files, do not flag it.
-            Using namespace std is never allowed.
+          # Also output as annotations for the Actions UI
+          python scripts/code_review.py --diff origin/${{ github.base_ref }} --format github || true
 
-            COMMENT FORMAT:
-            **[Section Name]**: Quote the relevant rule from CODING_STYLE.md,
-            then explain the violation and how to fix it. Add a link towards the
-            location in the source file.
+      - name: Create PR review comment
+        if: steps.style_check.outputs.errors != '0' || steps.style_check.outputs.warnings != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Build review body
+          error_count=${{ steps.style_check.outputs.errors }}
+          warning_count=${{ steps.style_check.outputs.warnings }}
 
-            Example:
-            **[Pointers]**: CODING_STYLE.md states "the star symbol needs to be
-            close to the type". Change `Type *var` to `Type* var`.
+          body="## Code Style Review Results
 
-            If no violations are found, do NOT create or submit any review.
-            Simply end without calling any review tools. Be completely silent.
+          Found **${error_count} error(s)** and **${warning_count} warning(s)**.
+
+          <details>
+          <summary>Click to see all violations</summary>
+
+          | File | Line | Severity | Rule | Message |
+          |------|------|----------|------|---------|"
+
+          # Add each violation to the table
+          while IFS= read -r line; do
+            file=$(echo "$line" | jq -r '.filepath')
+            lineno=$(echo "$line" | jq -r '.line')
+            severity=$(echo "$line" | jq -r '.severity')
+            rule=$(echo "$line" | jq -r '.rule')
+            message=$(echo "$line" | jq -r '.message' | sed 's/|/\\|/g')
+            body="${body}
+          | \`${file}\` | ${lineno} | ${severity} | ${rule} | ${message} |"
+          done < <(jq -c '.[]' violations.json)
+
+          body="${body}
+
+          </details>
+
+          ---
+          Please fix the errors before merging. See [CODING_STYLE.md](../blob/${{ github.head_ref }}/CODING_STYLE.md) for the style guide."
+
+          # Post review comment
+          gh pr comment ${{ github.event.pull_request.number }} --body "$body"
+
+      - name: Fail if errors found
+        if: steps.style_check.outputs.errors != '0'
+        run: |
+          echo "::error::Found ${{ steps.style_check.outputs.errors }} style error(s). Please fix them before merging."
+          exit 1

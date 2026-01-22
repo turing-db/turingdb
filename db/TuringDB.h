@@ -53,7 +53,7 @@ public:
     }
 
 private:
-    const TuringConfig* _config;
+    const TuringConfig* _config {nullptr};
     std::unique_ptr<SystemManager> _systemManager;
     std::unique_ptr<JobSystem> _jobSystem;
     std::unique_ptr<ProcedureBlueprintMap> _procedures;
