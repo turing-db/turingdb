@@ -2598,6 +2598,34 @@ TEST_F(QueriesTest, indirectLabelFilter) {
     }
 }
 
+// Test that CALL + MATCH + WHERE with YIELD variable reference works correctly.
+// This tests a bug where YIELD variables were not registered as VarNodes in the
+// plan graph, causing a crash in placePredicateJoins when processing WHERE clauses
+// that reference the YIELD variable.
+//
+// The crash occurs because:
+// 1. `CALL db.labels() YIELD id` creates a variable `id`
+// 2. `MATCH (n) WHERE n.age = id` references `id` in the WHERE clause
+// 3. In `ExprDependencies::genExprDependencies`, when processing the SymbolExpr
+//    for `id`, it calls `variables.getVarNode(symbol->getDecl())`
+// 4. This returns `nullptr` because YIELD variables are not registered as VarNodes
+//    in `PlanGraphVariables`
+// 5. The null pointer is then used in `insertDataFlowNode(var, dep._var)`,
+//    causing the crash
+TEST_F(QueriesTest, callYieldWithMatchWhere) {
+    // Query: CALL db.labels() YIELD id MATCH (n) WHERE n.age = id RETURN n
+    // The WHERE clause references 'id' from the YIELD clause.
+    auto res = query(
+        "CALL db.labels() YIELD id MATCH (n) WHERE n.age = id RETURN n",
+        [&](const Dataframe* df) -> void {
+            // This callback won't be reached if a crash occurs
+            ASSERT_TRUE(df != nullptr);
+        });
+
+    // If we get here without crashing, verify result status
+    EXPECT_TRUE(res);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
