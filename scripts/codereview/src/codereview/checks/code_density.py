@@ -10,6 +10,7 @@ class CodeDensityCheck(BaseCheck):
     """Check for code that is too dense and needs blank lines for breathing."""
 
     name = "Code Breathing"
+    enabled_by_default = False
     severity = "warning"
 
     def run(self, context: CheckContext) -> None:
