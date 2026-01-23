@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ColumnCombinations.h"
+#include "columns/ColumnIDs.h"
 #include "columns/ColumnMask.h"
 
 namespace db {
@@ -200,13 +201,12 @@ using ColInt = const ColumnVector<long int>*&;
 using ColInts = ColumnVector<types::Int64::Primitive>;
 using MaybeColInts = ColumnOptVector<types::Int64::Primitive>;
 
-#define SAME(x, y) \
-    static_assert(std::is_same_v<x,y>);
-
-SAME(Res, ColumnMask::Bool_t);
-
 static_assert (
     std::is_same_v<ColumnCombination<Eq, ColInts, ColInts>::ResultColumnType, ColumnMask>
+);
+
+static_assert (
+    std::is_same_v<ColumnCombination<Eq, ColumnNodeIDs, ColumnNodeIDs>::ResultColumnType, ColumnMask>
 );
 
 static_assert (
@@ -216,5 +216,10 @@ static_assert (
 static_assert(std::predicate<Eq, unwrap_optional_t<NodeID>, unwrap_optional_t<NodeID>>);
 
 static_assert(OptionallyInvokable<Eq, PropertyNull, std::optional<NodeID>>);
+
+static_assert(std::is_same_v<ColumnCombination<Eq, ColumnNodeIDs, ColumnNodeIDs>::ResultColumnType, ColumnMask>);
+
+static_assert(std::is_same_v<ColumnCombination<Eq, ColumnOptVector<int>, ColumnOptVector<int>>::ResultColumnType, ColumnOptMask>);
+
 
 }

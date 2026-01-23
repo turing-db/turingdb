@@ -2,9 +2,7 @@
 
 #include <spdlog/fmt/fmt.h>
 
-#include "ID.h"
 #include "PipelineGenerator.h"
-#include "columns/ColumnOptMask.h"
 #include "dataframe/ColumnTag.h"
 #include "decl/EvaluatedType.h"
 #include "expr/Operators.h"
@@ -242,8 +240,6 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
             "Attempted to generate SymbolExpr which was neither Node nor EdgePattern.");
     }
 
-    const bool isNode = type == EvaluatedType::NodePattern;
-
     // Search exprVarDecl in column map. It may not be present, in the case that this
     // variable is only manifested by a VarNode *after* this filter (see
     // `MATCH (n), (m) WHERE n <> m RETURN n, m` as an example). In this case, the
@@ -259,24 +255,23 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
         return symCol->getColumn();    
     }
 
+    const bool isNode = type == EvaluatedType::NodePattern;
     // Otherwise, var is not in the map, look in the current stream
     const auto& incomingStream = _pendingOut.getInterface()->getStream();
-        const bool incStreamContainsVar = (isNode && incomingStream.isNodeStream())
-                                       || (!isNode && incomingStream.isEdgeStream());
-        if (!incStreamContainsVar) {
-            throw FatalException(
-                fmt::format("Could not find column associated with symbol variable {}.",
-                            exprVarDecl->getName()));
-        }
+    const bool incStreamContainsVar = (isNode && incomingStream.isNodeStream())
+                                   || (!isNode && incomingStream.isEdgeStream());
+    if (!incStreamContainsVar) {
+        throw FatalException(
+            fmt::format("Could not find column associated with symbol variable {}.",
+                        exprVarDecl->getName()));
+    }
 
-        // XXX: Is this correct? May it be an edge stream but we need extract tgt ids tag?
-        const ColumnTag streamedVarTag = isNode
-                                           ? incomingStream.asNodeStream()._nodeIDsTag
-                                           : incomingStream.asEdgeStream()._edgeIDsTag;
+    const ColumnTag streamedVarTag = isNode ? incomingStream.asNodeStream()._nodeIDsTag
+                                            : incomingStream.asEdgeStream()._edgeIDsTag;
 
-        const NamedColumn* streamedCol =
-            _pendingOut.getDataframe()->getColumn(streamedVarTag);
-        return streamedCol->getColumn();
+    const NamedColumn* streamedCol =
+        _pendingOut.getDataframe()->getColumn(streamedVarTag);
+    return streamedCol->getColumn();
 }
 
 #define ALLOC_EVALTYPE_COL(EvalType, Type)                                               \

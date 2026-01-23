@@ -11,152 +11,76 @@
 
 namespace db {
 
+namespace {
+// Declaritive implementation of ColumnTypeFromKind
+template <typename... Types>
+struct TypeList {};
+
+// The internal types we want to support in the Column type
+using AllValueTypes = TypeList<
+    NodeID,
+    EdgeID,
+    EntityID,
+    LabelID,
+    EdgeTypeID,
+    PropertyTypeID,
+    LabelSetID,
+    ValueType,
+    types::Int64::Primitive,
+    types::UInt64::Primitive,
+    types::Double::Primitive,
+    types::String::Primitive,
+    types::Bool::Primitive,
+    std::optional<types::Int64::Primitive>,
+    std::optional<types::UInt64::Primitive>,
+    std::optional<types::Double::Primitive>,
+    std::optional<types::String::Primitive>,
+    std::optional<types::Bool::Primitive>,
+    std::string,
+    const CommitBuilder*,
+    const Change*
+>;
+template <ColumnKind::Code K, typename... TypeList>
+struct ColumnTypeFromKindImpl;
+
+// Attempt to match the provided ColumnKind Code with each internal and external type
+template <ColumnKind::Code K, typename... Types>
+struct ColumnTypeFromKindImpl<K, TypeList<Types...>> {
+private:
+    template <typename T>
+    static consteval auto tryType() {
+        if constexpr (K == ColumnVector<T>::staticKind()) {
+            return std::type_identity<ColumnVector<T>> {}; // Found the type
+        } else if constexpr (K == ColumnConst<T>::staticKind()) {
+            return std::type_identity<ColumnConst<T>> {}; // Found the type
+        } else {
+            return std::type_identity<void> {}; // Type did not match
+        }
+    }
+
+    // Head::Tail loop through all possible internal types
+    template <typename First, typename... Rest>
+    static consteval auto findMatch() {
+        using Candidate = typename decltype(tryType<First>())::type; // Type we are looking for
+        if constexpr (!std::is_void_v<Candidate>) {
+            return std::type_identity<Candidate>{}; // Not void => found
+        } else if constexpr (sizeof...(Rest) > 0) { // Other types left to check
+            return findMatch<Rest...>();
+        } else {
+            return std::type_identity<void>{}; // No more types to check, not found: void
+        }
+    }
+
+public:
+    using type = typename decltype(findMatch<Types...>())::type;
+};
+
+};
+
+// Get the ColumnT<U> type for a given ColumnKind code K
 template <ColumnKind::Code K>
-struct ColumnTypeFromKind;
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<NodeID>::staticKind()> {
-    using type = ColumnVector<NodeID>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<EdgeID>::staticKind()> {
-    using type = ColumnVector<EdgeID>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<EntityID>::staticKind()> {
-    using type = ColumnVector<EntityID>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<LabelID>::staticKind()> {
-    using type = ColumnVector<LabelID>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<EdgeTypeID>::staticKind()> {
-    using type = ColumnVector<EdgeTypeID>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<PropertyTypeID>::staticKind()> {
-    using type = ColumnVector<PropertyTypeID>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<LabelSetID>::staticKind()> {
-    using type = ColumnVector<LabelSetID>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<ValueType>::staticKind()> {
-    using type = ColumnVector<ValueType>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<types::UInt64::Primitive>::staticKind()> {
-    using type = ColumnVector<types::UInt64::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<types::Int64::Primitive>::staticKind()> {
-    using type = ColumnVector<types::Int64::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<types::Double::Primitive>::staticKind()> {
-    using type = ColumnVector<types::Double::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<types::String::Primitive>::staticKind()> {
-    using type = ColumnVector<types::String::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<types::Bool::Primitive>::staticKind()> {
-    using type = ColumnVector<types::Bool::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<std::string>::staticKind()> {
-    using type = ColumnVector<std::string>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnOptVector<types::UInt64::Primitive>::staticKind()> {
-    using type = ColumnOptVector<types::UInt64::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnOptVector<types::Int64::Primitive>::staticKind()> {
-    using type = ColumnOptVector<types::Int64::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnOptVector<types::Double::Primitive>::staticKind()> {
-    using type = ColumnOptVector<types::Double::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnOptVector<types::String::Primitive>::staticKind()> {
-    using type = ColumnOptVector<types::String::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnOptVector<types::Bool::Primitive>::staticKind()> {
-    using type = ColumnOptVector<types::Bool::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnConst<NodeID>::staticKind()> {
-    using type = ColumnConst<NodeID>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnConst<EdgeID>::staticKind()> {
-    using type = ColumnConst<EdgeID>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnConst<EntityID>::staticKind()> {
-    using type = ColumnConst<EntityID>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnConst<types::UInt64::Primitive>::staticKind()> {
-    using type = ColumnConst<types::UInt64::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnConst<types::Int64::Primitive>::staticKind()> {
-    using type = ColumnConst<types::Int64::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnConst<types::Double::Primitive>::staticKind()> {
-    using type = ColumnConst<types::Double::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnConst<types::String::Primitive>::staticKind()> {
-    using type = ColumnConst<types::String::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnConst<types::Bool::Primitive>::staticKind()> {
-    using type = ColumnConst<types::Bool::Primitive>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<const CommitBuilder*>::staticKind()> {
-    using type = ColumnVector<const CommitBuilder*>;
-};
-
-template <>
-struct ColumnTypeFromKind<ColumnVector<const Change*>::staticKind()> {
-    using type = ColumnVector<const Change*>;
+struct ColumnTypeFromKind {
+    using type = typename ColumnTypeFromKindImpl<K, AllValueTypes>::type;
 };
 
 #define CASE_COMPONENT(col, Type)                                                        \

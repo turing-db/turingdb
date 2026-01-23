@@ -23,10 +23,10 @@ struct EqualEval {
 
         if constexpr (Op == OP_EQUAL) {
             using ResultType = ColumnCombination<Eq, T, U>::ResultColumnType;
+            fmt::println("EQUAL {}, {} = {}", typeid(*lhs).name(), typeid(*rhs).name(), typeid(ResultType).name());
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column.");
             exec<Eq>(result, lhs, rhs);
-            fmt::println("EQUAL {}, {} = {}", typeid(*lhs).name(), typeid(*rhs).name(), typeid(ResultType).name());
         } else if constexpr (Op == OP_NOT_EQUAL) {
             // using ResultType = ColumnCombinations<NotEqual, T, U>::ResultType;
             // execOperation<NotEqual>(static_cast<ResultType*>(_res), lhs, rhs);
@@ -112,13 +112,13 @@ struct ArithmeticEval {
 template <ColumnOperator Op>
 void EvalBinaryExpr::opEqual(Column* res, const Column* lhs, const Column* rhs) {
     using Allowed = GenerateKindPairList<
-        OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs/*,
+        OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
         OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<NodeID, NodeID>::Pairs,
-        OptionalKindPairs<EdgeID, EdgeID>::Pairs,
+        OptionalKindPairs<EdgeID, EdgeID>::Pairs/*,
 
         std::tuple<KindPair<PropertyNull, std::optional<NodeID>>,
                    KindPair<PropertyNull, std::optional<EdgeID>>,

@@ -43,6 +43,12 @@ struct unwrap_optional<std::optional<U>> {
 template <typename T>
 using unwrap_optional_t = typename unwrap_optional<T>::underlying_type;
 
+template <typename ColT>
+using unwrap_inner_t = unwrap_optional_t<typename InnerTypeHelper<ColT>::type>;
+
+template <typename T, typename U>
+static constexpr bool neither_optional = !is_optional_v<T> && !is_optional_v<U>;
+
 // Types that may be compared, but one or both may be wrapped in optional
 template <typename T, typename U>
 concept OptionallyComparable =
@@ -123,18 +129,16 @@ class ColumnCombinationImpl {
 
     using InternalT = InnerTypeHelper<ColT>::type;
     using InternalU = InnerTypeHelper<ColU>::type;
+    // Predicates should be specialised
+    static_assert(!std::predicate<Op, InternalT, InternalU>);
 
     // Only false_type for ColumnMasks, should be specialised
     static_assert(!std::is_same_v<InternalT, std::false_type>);
     static_assert(!std::is_same_v<InternalU, std::false_type>);
 
     using InternalResultType = InternalCombination<Op, InternalT, InternalU>::InternalRes;
-    using ResultColumnImpl = std::conditional_t<
-        std::predicate<Op, unwrap_optional_t<InternalT>, unwrap_optional_t<InternalU>>,
-        std::conditional_t<is_optional_v<InternalT> || is_optional_v<InternalU>,
-                         ColumnOptMask, ColumnMask>,
-        column_result_t<ColT, ColU, InternalResultType>>;
 
+    using ResultColumnImpl = column_result_t<ColT, ColU, InternalResultType>;
 public:
     using ResultColumn = ResultColumnImpl;
 };
@@ -160,6 +164,26 @@ public:
     using ResultColumn = ColT; // Internal type does not change
 };
 
+// Predicate with two non-optionals = ColumnMask
+template <typename Op, typename ColT, typename ColU>
+    requires std::predicate<Op, unwrap_inner_t<ColT>, unwrap_inner_t<ColU>>
+          && neither_optional<typename InnerTypeHelper<ColT>::type,
+                              typename InnerTypeHelper<ColU>::type>
+class ColumnCombinationImpl<Op, ColT, ColU> {
+public:
+    using ResultColumn = ColumnMask;
+};
+
+// Predicate with at least one optional = ColumnOptMask
+template <typename Op, typename ColT, typename ColU>
+    requires std::predicate<Op, unwrap_inner_t<ColT>, unwrap_inner_t<ColU>>
+          && (!neither_optional<typename InnerTypeHelper<ColT>::type,
+                              typename InnerTypeHelper<ColU>::type>)
+class ColumnCombinationImpl<Op, ColT, ColU> {
+public:
+    using ResultColumn = ColumnOptMask;
+};
+
 template <typename Op, typename PColT, typename PColU>
 class ColumnCombination {
     using ColT = decay_col_t<PColT>;
@@ -182,11 +206,5 @@ concept is_result_type =
 
 static_assert(std::is_same_v<InnerTypeHelper<ColumnConst<std::optional<EdgeID>>>::type, std::optional<EdgeID>>);
 static_assert(std::is_invocable_v<std::plus<>, EdgeID, EdgeID>);
-using Col = const db::ColumnVector<long int>*&;
-
-#define SAME(x, y) \
-    static_assert(std::is_same_v<x,y>);
-
-SAME(InnerTypeHelper<Col>::type, long int);
 
 }
