@@ -326,12 +326,15 @@ class StyleChecker:
             if first_inc[1] != "blank":
                 first_path = Path(first_inc[2]).stem
                 if first_path.lower() != filename.lower():
-                    self.add_violation(
-                        first_inc[0],
-                        "error",
-                        "Includes",
-                        f"First include should be \"{filename}.h\" (current class header)",
-                    )
+                    # Only flag if the expected header file actually exists
+                    expected_header = Path(self.filepath).parent / f"{filename}.h"
+                    if expected_header.exists():
+                        self.add_violation(
+                            first_inc[0],
+                            "error",
+                            "Includes",
+                            f"First include should be \"{filename}.h\" (current class header)",
+                        )
                 else:
                     # Check for blank line after first include
                     if len(includes) > 1 and includes[1][1] != "blank":
@@ -367,6 +370,12 @@ class StyleChecker:
             if first_path.lower() == filename.lower():
                 start_idx = 1
 
+        # In header files, skip parent class headers that appear first
+        # (e.g., #include "Iterator.h" at the top of GetEdgesIterator.h)
+        parent_headers = set()
+        if self._is_header:
+            parent_headers = self._get_parent_class_headers()
+
         # Track the "phase" of includes we're in
         # 0 = standard, 1 = external, 2 = project
         phase = 0
@@ -393,6 +402,11 @@ class StyleChecker:
                     )
                 phase = max(phase, 1)
             elif inc_type == "project":
+                # Allow parent class headers to appear before standard includes
+                include_stem = Path(path).stem.lower()
+                if phase == 0 and include_stem in parent_headers:
+                    # This is a parent class header at the top - allowed
+                    continue
                 phase = 2
 
     def _classify_include(self, bracket: str, path: str) -> str:
@@ -433,11 +447,50 @@ class StyleChecker:
     def _has_class_implementation(self) -> bool:
         """Check if this .cpp file implements a class (has ClassName:: methods)."""
         # Look for method definitions like ClassName::methodName or ClassName::ClassName
-        method_pattern = re.compile(r"^\s*(?:\w+(?:<[^>]+>)?\s+)?(\w+)::~?\w+\s*\(")
+        # Return type can be: void, int, std::string, vector<T>, const Type&, etc.
+        # Class name can include template args: TemplateClass<T>::method()
+        method_pattern = re.compile(
+            r"^\s*"
+            r"(?:(?:const|static|inline|virtual)\s+)*"  # optional qualifiers
+            r"(?:[\w:]+(?:<[^>]+>)?[*&\s]+)*"  # return type (handles std::string, etc.)
+            r"(\w+)(?:<[^>]+>)?::~?\w+\s*\("  # ClassName<T>::methodName(
+        )
         for line in self.lines:
             if method_pattern.match(line.strip()):
                 return True
         return False
+
+    def _get_parent_class_headers(self) -> set[str]:
+        """Get the header names of parent classes from inheritance declarations.
+
+        Looks for patterns like:
+            class ChildClass : public ParentClass {
+            class ChildClass : public Parent1, public Parent2 {
+            struct ChildStruct : public ParentStruct {
+
+        Returns a set of parent class names (lowercased, without .h extension).
+        """
+        parent_headers = set()
+        # Match class/struct inheritance: class Name : access Parent
+        inherit_pattern = re.compile(
+            r"^\s*(?:class|struct)\s+\w+\s*"  # class/struct Name
+            r"(?:final\s*)?"  # optional final
+            r":\s*"  # colon
+            r"(.+?)"  # capture inheritance list
+            r"\s*\{?\s*$"  # optional opening brace
+        )
+        # Pattern to extract parent class names from inheritance list
+        parent_pattern = re.compile(r"(?:public|protected|private)\s+(\w+)")
+
+        for line in self.lines:
+            match = inherit_pattern.match(line.strip())
+            if match:
+                inheritance_list = match.group(1)
+                for parent_match in parent_pattern.finditer(inheritance_list):
+                    parent_name = parent_match.group(1)
+                    parent_headers.add(parent_name.lower())
+
+        return parent_headers
 
     def check_pointer_member_init(self):
         """Check that pointer class members are initialized with {nullptr}.

@@ -1,10 +1,9 @@
-#include "DeleteTest.h"
-
 #include <spdlog/spdlog.h>
 
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "dump/GraphDumper.h"
+#include "DeleteTest.h"
 
 using namespace db;
 

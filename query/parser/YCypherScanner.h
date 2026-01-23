@@ -1,12 +1,11 @@
 #pragma once
 
-#include "SourceLocation.h"
-
 #if !defined(yyFlexLexerOnce)
 #include <FlexLexer.h>
 #endif
 
 #include "GeneratedCypherParser.h"
+#include "SourceLocation.h"
 
 namespace db {
 
