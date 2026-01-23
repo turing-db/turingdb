@@ -3,6 +3,7 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "PipelineGenerator.h"
+#include "columns/AllowedPairs.h"
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnCombinations.h"
 #include "columns/ColumnOperationExecutor.h"
@@ -173,7 +174,7 @@ Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
     Column* lhs = generateExpr(binExpr->getLHS());
     Column* rhs = generateExpr(binExpr->getRHS());
     const ColumnOperator op = binaryOperatorToColumnOperator(binExpr->getOperator());
-    Column* resCol = allocResultColumn(binExpr);
+    Column* resCol = allocResCol(op, lhs, rhs);
 
     _exprProg->addInstr(op, resCol, lhs, rhs);
 
@@ -305,7 +306,7 @@ Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
 }
 
 struct ResultAllocator {
-    Column* _resultCol {nullptr};
+    Column*& _resultCol;
     PipelineGenerator* _gen {nullptr};
     ColumnOperator _op {ColumnOperator::_SIZE};
 
@@ -315,18 +316,58 @@ struct ResultAllocator {
                   "Attempted to allocate a result column with null operands.");
 
         if (_op == OP_EQUAL) {
-            using ResultType = ColumnCombination<Eq, T, U>;
+            using ResultType = ColumnCombination<Eq, T, U>::ResultColumnType;
             _resultCol = _gen->memory().alloc<ResultType>();
         }
     }
 };
 
+#define ALLOCATOR_CASE(Operator)                                                         \
+    case (Operator): {                                                                   \
+        using Pairs = PairRestrictions<Operator>;                                        \
+        ColumnDoubleDispatcher<Pairs::Allowed, Pairs::AllowedMixed, ResultAllocator,     \
+                               Pairs::Excluded>::dispatch(lhs, rhs, allocator);          \
+        break;                                                                           \
+    }
+
+
 Column* ExprProgramGenerator::allocResCol(ColumnOperator op,
-                                          [[maybe_unused]] const Column* lhs,
-                                          [[maybe_unused]] const Column* rhs) {
+                                          const Column* lhs,
+                                          const Column* rhs) {
     Column* result = nullptr;
 
-    [[maybe_unused]] ResultAllocator allocator(result, _gen, op);
-    
-    return nullptr;
+    ResultAllocator allocator(result, _gen, op);
+
+    switch (op) {
+        ALLOCATOR_CASE(OP_EQUAL)
+        // ALLOCATOR_CASE(OP_NOT_EQUAL);
+
+        // ALLOCATOR_CASE(OP_GREATER_THAN)
+        // ALLOCATOR_CASE(OP_LESS_THAN)
+        // ALLOCATOR_CASE(OP_GREATER_THAN_OR_EQUAL)
+        // ALLOCATOR_CASE(OP_LESS_THAN_OR_EQUAL)
+
+        // ALLOCATOR_CASE(OP_AND)
+        // ALLOCATOR_CASE(OP_OR)
+
+        case OP_IN: // TODO: Implement
+            throw PlannerException("Unsupported allocator: IN.");
+
+        case OP_MINUS:
+        case OP_PLUS:
+        case OP_NOT: // TODO: Implement
+            throw PlannerException("Unsupported allocator: MINUS | PLUS | NOT.");
+
+        case OP_NOOP:
+        case OP_PROJECT:
+        case _SIZE:
+            // throw FatalException("Attempted invalid operator result allocation.");
+        // break;
+        default:
+            throw FatalException("Attempted invalid operator result allocation.");
+        break;
+    }
+
+    bioassert(result, "Failed to allocate result column.");
+    return result;
 }

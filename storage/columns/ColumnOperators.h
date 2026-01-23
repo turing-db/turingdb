@@ -60,7 +60,8 @@ concept OptionallyEquivalent =
      || std::same_as<unwrap_optional_t<T>, unwrap_optional_t<U>>);
 
 template <typename T>
-concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>;
+concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>
+                  || std::same_as<ColumnMask::Bool_t, T>;
 
 /**
  * @brief This macro instantiates the boilerplate for various combinations of operands
@@ -244,6 +245,44 @@ public:
     static void andOp(ColumnOptMask* mask,
                       const ColumnVector<T>* lhs,
                       const ColumnVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        const auto size = lhs->size();
+
+        mask->resize(size);
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        for (size_t i = 0; i < size; i++) {
+            const auto& l = lhsd[i];
+            const auto& r = rhsd[i];
+
+            maskd[i] = optionalAnd(l, r);
+        }
+    }
+
+    static void andOp(ColumnOptMask* mask,
+                      const ColumnOptMask* lhs,
+                      const ColumnMask* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
+        const auto size = lhs->size();
+
+        mask->resize(size);
+        auto& maskd = mask->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        for (size_t i = 0; i < size; i++) {
+            const auto& l = lhsd[i];
+            const auto& r = rhsd[i];
+
+            maskd[i] = optionalAnd(l, r);
+        }
+    }
+
+    static void andOp(ColumnOptMask* mask,
+                      const ColumnMask* lhs,
+                      const ColumnOptMask* rhs) {
         bioassert(lhs->size() == rhs->size(), "Columns must have matching dimensions");
         const auto size = lhs->size();
 

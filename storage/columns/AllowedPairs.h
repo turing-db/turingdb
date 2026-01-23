@@ -145,7 +145,8 @@ struct PairRestrictions<Op> {
                                          OptionalKindPairs<double, double>::Pairs>;
 
     using AllowedMixed = AllowedMixedList<>;
-    using Excluded = ExcludedContainers<>;
+    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
+                                        ContainerKind::code<ColumnMask>()>;
 };
 
 template <ColumnOperator Op>

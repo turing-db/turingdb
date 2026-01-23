@@ -138,8 +138,9 @@ void FilterProcessor::execute() {
             const ColumnKind::Code thisKind = res->getKind();
 
             const ColumnKind::Code optBoolKind = ColumnOptMask::staticKind();
+            const ColumnKind::Code maskKind = ColumnMask::staticKind();
 
-            return thisKind == optBoolKind;
+            return (thisKind == optBoolKind) || (thisKind == maskKind);
         })) {
         throw FatalException("FilterProcessor PredicateProgram contained an instruction which "
                              "was not a predicate.");
@@ -150,12 +151,20 @@ void FilterProcessor::execute() {
     ColumnOptMask finalOptMask(maskSize, true);
     {
         for (Column* predicateResult : _predProg->getTopLevelPredicates()) {
-            const auto* predResOptMask = dynamic_cast<ColumnOptMask*>(predicateResult);
-            if (!predResOptMask) {
-                throw FatalException(
-                    "FilterProcessor PredicateProgram encountered non-predicate instruction.");
+            if (const auto* predResOptMask = dynamic_cast<ColumnOptMask*>(predicateResult);
+                    predResOptMask) {
+                ColumnOperators::andOp(&finalOptMask, &finalOptMask, predResOptMask);
+                continue;
             }
-            ColumnOperators::andOp(&finalOptMask, &finalOptMask, predResOptMask);
+
+            if (const auto* predResMask = dynamic_cast<ColumnMask*>(predicateResult);
+                    predResMask) {
+                ColumnOperators::andOp(&finalOptMask, &finalOptMask, predResMask);
+                continue;
+            }
+
+            throw FatalException("FilterProcessor PredicateProgram encountered "
+                                 "non-predicate instruction.");
         }
     }
 
