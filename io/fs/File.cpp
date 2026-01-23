@@ -121,7 +121,7 @@ Result<void> File::write(void* data, size_t size) {
 }
 
 Result<void> File::clearContent() {
-    int res = ::ftruncate(_fd, 0);
+    const int res = ::ftruncate(_fd, 0);
 
     if (res < 0) {
         return Error::result(ErrorType::CLEAR_FILE, errno);

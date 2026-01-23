@@ -68,7 +68,7 @@ void TuringServer::start() {
         return;
     }
 
-    auto serverFunc = [&]() {
+    const auto serverFunc = [&]() {
         const auto startRes = _server->start();
         if (startRes != net::FlowStatus::OK) {
             _server->terminate();

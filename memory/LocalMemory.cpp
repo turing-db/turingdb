@@ -18,7 +18,7 @@ struct RegisterColumnAllocator {
     }
 
     void operator()(ValueT& value) const {
-        ColumnAllocator::AllocFunc lambda = [&value]() -> db::Column* { return value.alloc(); };
+        const ColumnAllocator::AllocFunc lambda = [&value]() -> db::Column* { return value.alloc(); };
         _columnAllocators.add(KeyT::staticKind(), new ColumnAllocator(lambda));
     }
 };

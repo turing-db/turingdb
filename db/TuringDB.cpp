@@ -114,7 +114,7 @@ QueryStatus TuringDB::query(std::string_view query,
                             ChangeID change) {
     QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
 
-    QueryCallbackV2 callback = [](const Dataframe*){};
+    const QueryCallbackV2 callback = [](const Dataframe*){};
 
     InterpreterContext ctxt(mem, callback, _procedures.get(), commit, change);
     return interp.execute(ctxt, query, graphName);

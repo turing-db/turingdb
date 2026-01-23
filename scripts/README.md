@@ -2,24 +2,73 @@
 
 A static C++ code style checker based on `CODING_STYLE.md`. Runs without AI model calls, designed for GitHub Actions integration.
 
+## Installation
+
+The code review tool is a uv-managed Python package located in `scripts/codereview/`.
+
+```bash
+# No installation required - uv handles dependencies automatically
+# Just run from the repository root
+```
+
 ## Usage
 
 ```bash
-# Check specific files
-python3 code_review.py file1.cpp file2.h
+# Recommended: Run using uv from the repository root
+uv run --project scripts/codereview codereview --all
+uv run --project scripts/codereview codereview --diff origin/main
+uv run --project scripts/codereview codereview file1.cpp file2.h
 
-# Check all files changed compared to a base branch
-python3 code_review.py --diff origin/main
+# Legacy: The old script still works (calls the new package internally)
+python3 scripts/code_review.py --all
+python3 scripts/code_review.py --diff origin/main
+python3 scripts/code_review.py file1.cpp file2.h
 
-# Check the entire codebase
-python3 code_review.py --all
+# Output formats
+codereview --format text file.cpp    # Human-readable (default)
+codereview --format github file.cpp  # GitHub Actions annotations
+codereview --format json file.cpp    # Machine-readable JSON
 
-# Output in GitHub Actions annotation format
-python3 code_review.py --format github file.cpp
+# Skip specific checks
+codereview --skip-check "Const" --all
+codereview --skip-check "Code Breathing" --all
 
-# Combine options
-python3 code_review.py --diff origin/main --format github
-python3 code_review.py --all --format text
+# Run only specific checks
+codereview --only-check "Formatting" --only-check "Namespaces" --all
+
+# Use clang-tidy for const checking (requires clang-tidy and compile_commands.json)
+codereview --clang-tidy-const --build-dir build --all
+```
+
+## Project Structure
+
+```
+scripts/codereview/
+├── pyproject.toml              # uv project configuration
+└── src/codereview/
+    ├── __init__.py
+    ├── __main__.py             # Entry point for python -m codereview
+    ├── cli.py                  # Command-line interface
+    ├── checker.py              # StyleChecker orchestrator
+    ├── models.py               # Violation dataclass
+    ├── constants.py            # Shared constants (SKIP_DIRS, STL_CONTAINERS, etc.)
+    ├── output.py               # Output formatters (text, github, json)
+    ├── utils.py                # File discovery utilities
+    ├── clang_tidy.py           # Optional clang-tidy integration
+    └── checks/                 # Individual check modules
+        ├── __init__.py         # Check registry (@register_check)
+        ├── base.py             # BaseCheck ABC, CheckContext
+        ├── consecutive_blanks.py
+        ├── using_namespace.py
+        ├── include_order.py
+        ├── pointer_member_init.py
+        ├── stl_return_by_value.py
+        ├── nontrivial_return_by_value.py
+        ├── missing_const.py
+        ├── constructor_brackets.py
+        ├── destructor_brackets.py
+        ├── bracket_positioning.py
+        └── code_density.py
 ```
 
 ## Exit Codes
@@ -306,7 +355,10 @@ The following are automatically skipped:
 - Files in `external/` directory
 - Files in `third_party/` directory
 - Files in `build/` directory
+- Files in `test/` directory
+- Files in `googletest/` directory
 - Non-C++ files (only `.cpp`, `.h`, `.hpp`, `.cc`, `.cxx` are checked)
+- Unit test files (`*Test.cpp`, `*Test.h`)
 
 ## GitHub Actions Integration
 
@@ -368,21 +420,65 @@ Machine-readable output for programmatic processing:
 
 ## Adding New Checks
 
-To add a new check:
-
-1. Add a method `check_<name>(self)` to the `StyleChecker` class
-2. Call it from `check_all()`
-3. Use `self.add_violation(line, severity, rule, message)` to report issues
+To add a new check, create a new file in `scripts/codereview/src/codereview/checks/`:
 
 ```python
-def check_something(self):
-    """Check for something."""
-    for i, line in enumerate(self.lines, start=1):
-        if problem_detected(line):
-            self.add_violation(
-                i,
-                "error",  # or "warning"
-                "RuleName",
-                "Description of the problem",
-            )
+# scripts/codereview/src/codereview/checks/my_check.py
+"""Check for something specific."""
+
+from . import register_check
+from .base import BaseCheck, CheckContext
+
+
+@register_check
+class MyCheck(BaseCheck):
+    """Description of what this check does."""
+
+    name = "MyRule"           # Rule name shown in violations
+    severity = "error"        # Default severity: "error" or "warning"
+
+    def run(self, context: CheckContext) -> None:
+        """Execute the check logic."""
+        for i, line in enumerate(context.lines, start=1):
+            if self._has_problem(line):
+                self.add_violation(
+                    i,
+                    "Description of the problem",
+                )
+
+    def _has_problem(self, line: str) -> bool:
+        """Helper method to detect the problem."""
+        # Your logic here
+        return False
+```
+
+Then register the check by importing it in `checks/__init__.py`:
+
+```python
+# Add to the imports at the bottom of checks/__init__.py
+from . import (
+    # ... existing imports ...
+    my_check,
+)
+```
+
+### CheckContext Properties
+
+The `context` object provides:
+- `context.filepath` - Full path to the file being checked
+- `context.lines` - List of lines in the file (strings)
+- `context.is_header` - True if the file is a header (.h, .hpp)
+- `context.filename` - Just the filename (e.g., "Graph.cpp")
+- `context.stem` - Filename without extension (e.g., "Graph")
+- `context.path` - pathlib.Path object for the file
+
+### add_violation() Parameters
+
+```python
+self.add_violation(
+    line,                    # Line number (1-indexed)
+    message,                 # Description of the violation
+    severity=None,           # Override default severity
+    rule=None,               # Override default rule name
+)
 ```

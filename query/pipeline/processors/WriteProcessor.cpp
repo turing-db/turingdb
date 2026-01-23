@@ -365,7 +365,7 @@ void WriteProcessor::createEdges(size_t numIters) {
             // then set it to be the corresponding index in its column. Otherwise,
             // src/tgt is already committed node (result of a previous MATCH clause), so
             // set it to be that NodeID value in the relevant column
-            CommitWriteBuffer::ExistingOrPendingNode source =
+            const CommitWriteBuffer::ExistingOrPendingNode source =
                 srcIsPending ? CommitWriteBuffer::ExistingOrPendingNode {
                                     std::in_place_type<CommitWriteBuffer::PendingNodeOffset>,
                                     srcCol->at(rowPtr).getValue()
@@ -374,7 +374,7 @@ void WriteProcessor::createEdges(size_t numIters) {
                                    std::in_place_type<NodeID>, srcCol->at(rowPtr)
                                };
 
-            CommitWriteBuffer::ExistingOrPendingNode target =
+            const CommitWriteBuffer::ExistingOrPendingNode target =
                 tgtIsPending ? CommitWriteBuffer::ExistingOrPendingNode {
                                  std::in_place_type<CommitWriteBuffer::PendingNodeOffset>,
                                  tgtCol->at(rowPtr).getValue()

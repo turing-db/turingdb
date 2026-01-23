@@ -150,7 +150,7 @@ fs::Path StorageManager::getShardPath(const VecLibID& libID, LSHSignature sig) c
 }
 
 VectorResult<void> StorageManager::initialize() {
-    auto listRes = _rootPath.listDir();
+    const auto listRes = _rootPath.listDir();
     if (!listRes) {
         return VectorError::result(VectorErrorCode::CouldNotListLibraries);
     }
@@ -170,7 +170,7 @@ VectorResult<void> StorageManager::initialize() {
 
         // Parse library ID
         const std::string_view idStr = libPath.filename();
-        uint64_t id {};
+        uint64_t id = 0;
         const std::from_chars_result idRes = std::from_chars(idStr.begin(), idStr.end(), id);
         const bool idFailure = (idRes.ec == std::errc::result_out_of_range)
                             || (idRes.ec == std::errc::invalid_argument);

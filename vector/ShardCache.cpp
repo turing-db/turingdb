@@ -128,7 +128,7 @@ ssize_t ShardCache::evictOne() {
 
     victim->second.shard->save();
 
-    ssize_t freedMem = victim->second.shard->getUsedMem();
+    const ssize_t freedMem = victim->second.shard->getUsedMem();
     _accessedMap.erase(victim->first);
     _accessed.erase(victim);
 

@@ -19,7 +19,7 @@ std::string_view nextLine(std::string_view& str) {
         return line;
     }
 
-    auto line = str.substr(0, pos);
+    const auto line = str.substr(0, pos);
     str = str.substr(pos + 1, str.size());
     return line;
 }

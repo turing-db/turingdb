@@ -442,7 +442,7 @@ void ReadStmtGenerator::placeJoinsOnVars() {
         }
 
         // Make a copy of the inputs, because the inputs vector will be modified
-        std::vector inputs = filter->inputs();
+        const std::vector inputs = filter->inputs();
 
         PlanGraphNode* rhsNode = inputs[0];
 

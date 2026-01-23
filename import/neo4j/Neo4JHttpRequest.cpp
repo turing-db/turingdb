@@ -26,9 +26,9 @@ bool Neo4JHttpRequest::exec() {
         return false;
     }
 
-    std::string jsonData = R"({"statements": [{"statement": ")" + _statement + "\"}]}";
-    std::string userPwd = _username + ":" + _password;
-    std::string url = _url + _urlSuffix;
+    const std::string jsonData = R"({"statements": [{"statement": ")" + _statement + "\"}]}";
+    const std::string userPwd = _username + ":" + _password;
+    const std::string url = _url + _urlSuffix;
 
     struct curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, "Accept: application/json");
@@ -81,9 +81,9 @@ bool Neo4JHttpRequest::execStatic(std::string* response,
         return false;
     }
 
-    std::string jsonData = R"({"statements": [{"statement": ")" + statement + "\"}]}";
-    std::string userPwd = username + ":" + password;
-    std::string finalUrl = url + urlSuffix;
+    const std::string jsonData = R"({"statements": [{"statement": ")" + statement + "\"}]}";
+    const std::string userPwd = username + ":" + password;
+    const std::string finalUrl = url + urlSuffix;
 
     struct curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, "Accept: application/json");
@@ -109,7 +109,7 @@ bool Neo4JHttpRequest::execStatic(std::string* response,
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, jsonData.c_str());
     }
 
-    CURLcode res = curl_easy_perform(curl);
+    const CURLcode res = curl_easy_perform(curl);
 
     if (res != 0) {
         spdlog::error("Error in request to Neo4j '{}'", curl_easy_strerror(res));

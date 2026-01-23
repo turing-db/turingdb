@@ -53,7 +53,7 @@ VectorResult<VecLibID> VectorDatabase::createLibrary(std::string_view libName,
         return VectorError::result(VectorErrorCode::LibraryAlreadyExists);
     }
 
-    VecLibID id = RandomGenerator::generateUnique<uint64_t>([&](uint64_t v) {
+    const VecLibID id = RandomGenerator::generateUnique<uint64_t>([&](uint64_t v) {
         return _vecLibs.contains(v);
     });
 

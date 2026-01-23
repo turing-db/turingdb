@@ -172,7 +172,7 @@ void PipelineGenerator::generate() {
             // If we have materialized during the transalate we have to make a new matProc
             newMatProc = MaterializeProcessor::createFromPrev(_pipeline, _mem, *newMatProc);
         }
-        auto processNextNode = [&](PlanGraphNode* nextNode) {
+        const auto processNextNode = [&](PlanGraphNode* nextNode) {
             // Unary node case
             if (!nextNode->isBinary()) {
                 nodeStack.emplace(nextNode, outputIf, newMatProc);

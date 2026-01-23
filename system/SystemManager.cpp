@@ -442,7 +442,7 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
         return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
     }
 
-    auto changeRes = this->getChangeManager().getChange(graph, changeID);
+    const auto changeRes = this->getChangeManager().getChange(graph, changeID);
     if (!changeRes) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }

@@ -294,7 +294,7 @@ void DBServerProcessor::history() {
                                                                     info.commit,
                                                                     info.change);
     if (!transaction) {
-        auto txError = transaction.error().fmtMessage();
+        const auto txError = transaction.error().fmtMessage();
         payload.key("error");
         payload.value(txError);
         return;
@@ -448,7 +448,7 @@ void DBServerProcessor::list_labels() {
                                                                     info.change);
 
     if (!transaction) {
-        auto txError = transaction.error().fmtMessage();
+        const auto txError = transaction.error().fmtMessage();
         payload.key("error");
         payload.value(txError);
         return;
@@ -530,7 +530,7 @@ void DBServerProcessor::list_property_types() {
                                                                     info.change);
 
     if (!transaction) {
-        auto txError = transaction.error().fmtMessage();
+        const auto txError = transaction.error().fmtMessage();
         payload.key("error");
         payload.value(txError);
         return;
@@ -595,7 +595,7 @@ void DBServerProcessor::list_edge_types() {
                                                                     info.change);
 
     if (!transaction) {
-        auto txError = transaction.error().fmtMessage();
+        const auto txError = transaction.error().fmtMessage();
         payload.key("error");
         payload.value(txError);
         return;
@@ -636,7 +636,7 @@ void DBServerProcessor::list_edge_types() {
     const size_t edgeTypeCount = edgeTypes.getCount();
     for (EdgeTypeID etID = 0; etID < edgeTypeCount; etID++) {
         for (const auto edgeID : edgeIDs) {
-            auto currentTypeID = reader.getEdgeTypeID(edgeID);
+            const auto currentTypeID = reader.getEdgeTypeID(edgeID);
             if (etID == currentTypeID) {
                 payload.value(edgeTypes.getName((EdgeTypeID)etID));
                 break;
@@ -660,7 +660,7 @@ void DBServerProcessor::list_nodes() {
                                                                     info.change);
 
     if (!transaction) {
-        auto txError = transaction.error().fmtMessage();
+        const auto txError = transaction.error().fmtMessage();
         payload.key("error");
         payload.value(txError);
         return;
@@ -760,7 +760,7 @@ void DBServerProcessor::get_node_properties() {
                                                                     info.change);
 
     if (!transaction) {
-        auto txError = transaction.error().fmtMessage();
+        const auto txError = transaction.error().fmtMessage();
         payload.key("error");
         payload.value(txError);
         return;
@@ -875,7 +875,7 @@ void DBServerProcessor::get_neighbors() {
                                                                     info.change);
 
     if (!transaction) {
-        auto txError = transaction.error().fmtMessage();
+        const auto txError = transaction.error().fmtMessage();
         payload.key("error");
         payload.value(txError);
         return;
@@ -995,7 +995,7 @@ void DBServerProcessor::get_nodes() {
                                                                     info.change);
 
     if (!transaction) {
-        auto txError = transaction.error().fmtMessage();
+        const auto txError = transaction.error().fmtMessage();
         payload.key("error");
         payload.value(txError);
         return;
@@ -1056,7 +1056,7 @@ void DBServerProcessor::get_node_edges() {
                                                                     info.change);
 
     if (!transaction) {
-        auto txError = transaction.error().fmtMessage();
+        const auto txError = transaction.error().fmtMessage();
         payload.key("error");
         payload.value(txError);
         return;
@@ -1250,7 +1250,7 @@ void DBServerProcessor::explore_node_edges() {
                                                                     info.change);
 
     if (!transaction) {
-        auto txError = transaction.error().fmtMessage();
+        const auto txError = transaction.error().fmtMessage();
         payload.key("error");
         payload.value(txError);
         return;
@@ -1276,7 +1276,7 @@ void DBServerProcessor::explore_node_edges() {
             return;
         }
 
-        NodeID nodeID = (size_t)it.value();
+        const NodeID nodeID = (size_t)it.value();
         if (!nodeID.isValid()) {
             payload.key("error");
             payload.value(EndpointStatusDescription::value(EndpointStatus::INVALID_NODE_ID));
@@ -1404,7 +1404,7 @@ void DBServerProcessor::get_edges() {
                                                                     info.change);
 
     if (!transaction) {
-        auto txError = transaction.error().fmtMessage();
+        const auto txError = transaction.error().fmtMessage();
         payload.key("error");
         payload.value(txError);
         return;
@@ -1465,7 +1465,7 @@ DBServerProcessor::TransactionInfo DBServerProcessor::getTransactionInfo() const
         changeHashStr = "head";
     }
 
-    auto commitHashRes = CommitHash::fromString(commitHashStr);
+    const auto commitHashRes = CommitHash::fromString(commitHashStr);
 
     if (!commitHashRes) {
         return {
@@ -1475,7 +1475,7 @@ DBServerProcessor::TransactionInfo DBServerProcessor::getTransactionInfo() const
         };
     }
 
-    auto changeHashRes = ChangeID::fromString(changeHashStr);
+    const auto changeHashRes = ChangeID::fromString(changeHashStr);
 
     if (!changeHashRes) {
         return {

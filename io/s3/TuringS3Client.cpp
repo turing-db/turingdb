@@ -59,7 +59,7 @@ S3ClientResult<void> TuringS3Client<T>::listKeys(const std::string& bucketName,
                     return S3ClientError::result(S3ClientErrorType::CANNOT_LIST_KEYS);
             }
         } else {
-            Aws::Vector<Aws::S3Crt::Model::Object> objects =
+            const Aws::Vector<Aws::S3Crt::Model::Object> objects =
                 outcome.GetResult().GetContents();
 
             allObjects.insert(allObjects.end(), objects.begin(), objects.end());
@@ -113,7 +113,7 @@ S3ClientResult<void> TuringS3Client<T>::listFiles(const std::string& bucketName,
                     return S3ClientError::result(S3ClientErrorType::CANNOT_LIST_FILES);
             }
         } else {
-            Aws::Vector<Aws::S3Crt::Model::Object> objects =
+            const Aws::Vector<Aws::S3Crt::Model::Object> objects =
                 outcome.GetResult().GetContents();
 
             allObjects.insert(allObjects.end(), objects.begin(), objects.end());
@@ -168,7 +168,7 @@ S3ClientResult<void> TuringS3Client<T>::listFolders(const std::string& bucketNam
                     return S3ClientError::result(S3ClientErrorType::CANNOT_LIST_FOLDERS);
             }
         } else {
-            Aws::Vector<Aws::S3Crt::Model::CommonPrefix> folders =
+            const Aws::Vector<Aws::S3Crt::Model::CommonPrefix> folders =
                 outcome.GetResult().GetCommonPrefixes();
 
             allFolders.insert(allFolders.end(), folders.begin(), folders.end());
@@ -291,7 +291,7 @@ S3ClientResult<void> TuringS3Client<T>::uploadDirectory(const std::string& direc
         if (entry && entry.fileType == Aws::FileSystem::FileType::File) {
             // Change to fmt
             Aws::StringStream ssKey;
-            Aws::String relativePath = entry.relativePath;
+            const Aws::String relativePath = entry.relativePath;
 
             ssKey << prefix << relativePath;
             Aws::String keyName = ssKey.str();

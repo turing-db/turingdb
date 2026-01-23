@@ -26,8 +26,8 @@ Neo4jInstance::~Neo4jInstance() {
 
 bool Neo4jInstance::setup() {
     // Check that neo4j archive exists in installation
-    std::string turingHome = std::getenv("TURING_HOME");
-    if (turingHome.empty()) {
+    const char* turingHome = std::getenv("TURING_HOME");
+    if (!turingHome || turingHome[0] == '\0') {
         logt::TuringHomeUndefined();
         return false;
     }

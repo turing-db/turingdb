@@ -26,17 +26,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          python-version: '3.11'
+          version: "latest"
 
       - name: Run code style check
         id: style_check
         run: |
           # Run the style checker and capture output
           set +e
-          python scripts/code_review.py --diff origin/${{ github.base_ref }} --format json > violations.json 2>&1
+          uv run --project scripts/codereview codereview \
+            --diff origin/${{ github.base_ref }} \
+            --format json > violations.json 2>&1
           exit_code=$?
           set -e
 
@@ -49,7 +51,9 @@ jobs:
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
 
           # Also output as annotations for the Actions UI
-          python scripts/code_review.py --diff origin/${{ github.base_ref }} --format github || true
+          uv run --project scripts/codereview codereview \
+            --diff origin/${{ github.base_ref }} \
+            --format github || true
 
       - name: Create PR review comment
         if: steps.style_check.outputs.errors != '0' || steps.style_check.outputs.warnings != '0'

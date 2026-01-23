@@ -48,8 +48,8 @@ FileCacheResult<void> FileCache<ClientType>::loadGraph(std::string_view graphNam
         return {};
     }
 
-    std::string graphDirectory = fmt::format("{}/{}/", _graphsDir.c_str(), graphName);
-    std::string s3Prefix = fmt::format("{}/graphs/{}/", _userId, graphName);
+    const std::string graphDirectory = fmt::format("{}/{}/", _graphsDir.c_str(), graphName);
+    const std::string s3Prefix = fmt::format("{}/graphs/{}/", _userId, graphName);
     if (auto res = _s3Client.downloadDirectory(graphDirectory, _bucketName, s3Prefix); !res) {
         return FileCacheError::result(FileCacheErrorType::GRAPH_LOAD_FAILED, res.error());
     }
@@ -64,8 +64,8 @@ FileCacheResult<void> FileCache<ClientType>::saveGraph(std::string_view graphNam
         return FileCacheError::result(FileCacheErrorType::FAILED_TO_FIND_GRAPH);
     }
 
-    std::string graphDirectory = fmt::format("{}/{}/", _graphsDir.c_str(), graphName);
-    std::string s3Prefix = fmt::format("{}/graphs/{}/", _userId, graphName);
+    const std::string graphDirectory = fmt::format("{}/{}/", _graphsDir.c_str(), graphName);
+    const std::string s3Prefix = fmt::format("{}/graphs/{}/", _userId, graphName);
     if (auto res = _s3Client.uploadDirectory(graphDirectory, _bucketName, s3Prefix); !res) {
         return FileCacheError::result(FileCacheErrorType::GRAPH_SAVE_FAILED, res.error());
     }
@@ -77,7 +77,7 @@ template <typename ClientType>
 FileCacheResult<void> FileCache<ClientType>::listData(std::vector<std::string>& files,
                                                       std::vector<std::string>& folders,
                                                       std::string_view dir) {
-    auto prefix = fmt::format("{}/data/{}/", _userId, dir);
+    const auto prefix = fmt::format("{}/data/{}/", _userId, dir);
     if (auto res = _s3Client.listFolders(_bucketName, prefix, folders); !res) {
         return FileCacheError::result(FileCacheErrorType::LIST_DATA_FAILED, res.error());
     }
@@ -91,7 +91,7 @@ FileCacheResult<void> FileCache<ClientType>::listData(std::vector<std::string>& 
 template <typename ClientType>
 FileCacheResult<void> FileCache<ClientType>::listData(std::vector<std::string>& files,
                                                       std::vector<std::string>& folders) {
-    auto prefix = fmt::format("{}/data/", _userId);
+    const auto prefix = fmt::format("{}/data/", _userId);
     std::string emptyString;
     return listData(files, folders, emptyString);
 }
@@ -108,7 +108,7 @@ FileCacheResult<void> FileCache<ClientType>::listLocalData(std::vector<fs::Path>
     }
 
     for (const auto& path : list.value()) {
-        auto res = (path).getFileInfo();
+        const auto res = (path).getFileInfo();
 
         if (res.value()._type == fs::FileType::File) {
             files.push_back(path);
@@ -137,8 +137,8 @@ FileCacheResult<void> FileCache<ClientType>::saveDataFile(std::string_view fileP
         return FileCacheError::result(FileCacheErrorType::FILE_PATH_IS_DIRECTORY);
     }
 
-    std::string fullLocalPath = fmt::format("{}/{}", _dataDir.c_str(), filePath);
-    std::string s3Prefix = fmt::format("{}/data/{}/", _userId, filePath);
+    const std::string fullLocalPath = fmt::format("{}/{}", _dataDir.c_str(), filePath);
+    const std::string s3Prefix = fmt::format("{}/data/{}/", _userId, filePath);
     if (auto res = _s3Client.uploadFile(fullLocalPath, _bucketName, s3Prefix); !res) {
         return FileCacheError::result(FileCacheErrorType::DATA_FILE_SAVE_FAILED, res.error());
     }
@@ -156,8 +156,8 @@ FileCacheResult<void> FileCache<ClientType>::loadDataFile(std::string_view fileP
         return {};
     }
 
-    std::string fullLocalPath = fmt::format("{}/{}", _dataDir.c_str(), filePath);
-    std::string s3prefix = fmt::format("{}/data/{}/", _userId, filePath);
+    const std::string fullLocalPath = fmt::format("{}/{}", _dataDir.c_str(), filePath);
+    const std::string s3prefix = fmt::format("{}/data/{}/", _userId, filePath);
     if (auto res = _s3Client.downloadFile(fullLocalPath, _bucketName, s3prefix); !res) {
         return FileCacheError::result(FileCacheErrorType::DATA_FILE_LOAD_FAILED, res.error());
     }
@@ -176,8 +176,8 @@ FileCacheResult<void> FileCache<ClientType>::saveDataDirectory(std::string_view 
         return FileCacheError::result(FileCacheErrorType::DIRECTORY_PATH_IS_FILE);
     }
 
-    std::string fullLocalPath = fmt::format("{}/{}", _dataDir.c_str(), directoryPath);
-    std::string dataDirPrefix = fmt::format("{}/data/{}/", _userId, directoryPath);
+    const std::string fullLocalPath = fmt::format("{}/{}", _dataDir.c_str(), directoryPath);
+    const std::string dataDirPrefix = fmt::format("{}/data/{}/", _userId, directoryPath);
 
     if (auto res = _s3Client.uploadDirectory(fullLocalPath, _bucketName, dataDirPrefix); !res) {
         return FileCacheError::result(FileCacheErrorType::DATA_DIRECTORY_SAVE_FAILED, res.error());
@@ -197,8 +197,8 @@ FileCacheResult<void> FileCache<ClientType>::loadDataDirectory(std::string_view 
         return {};
     }
 
-    std::string fullLocalPath = fmt::format("{}/{}", _dataDir.c_str(), directoryPath);
-    std::string prefix = fmt::format("{}/data/{}/", _userId, directoryPath);
+    const std::string fullLocalPath = fmt::format("{}/{}", _dataDir.c_str(), directoryPath);
+    const std::string prefix = fmt::format("{}/data/{}/", _userId, directoryPath);
     if (auto res = _s3Client.downloadDirectory(fullLocalPath, _bucketName, prefix); !res) {
         return FileCacheError::result(FileCacheErrorType::DATA_DIRECTORY_LOAD_FAILED, res.error());
     }

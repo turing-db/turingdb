@@ -18,7 +18,7 @@ using namespace db;
 namespace {
 
 std::string formatSize(size_t size) {
-    std::array units = {" B", "kB", "MB", "GB"};
+    const std::array units = {" B", "kB", "MB", "GB"};
     double convertedSize = static_cast<double>(size);
     int unitIndex = 0;
 
@@ -195,7 +195,7 @@ bool Neo4jImporter::fromUrlToJsonDirImpl(JobSystem& jobSystem,
 
     for (size_t i = 0; i < edgeQueries.size(); i++) {
         auto& edgeQuery = edgeQueries[i];
-        std::string fileName = "edges_" + std::to_string(i + 1) + ".json";
+        const std::string fileName = "edges_" + std::to_string(i + 1) + ".json";
         writeJsonFile(jsonDir / fileName, edgeQuery);
     }
 
@@ -362,7 +362,7 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
         edgeResults[i] = jobs.submit<bool>(
             [&, i](Promise* p) {
                 auto* promise = p->cast<bool>();
-                std::string fileName = "edges_" + std::to_string(i + 1) + ".json";
+                const std::string fileName = "edges_" + std::to_string(i + 1) + ".json";
 
                 std::string data;
                 if (!FileUtils::readContent(args._jsonDir / fileName, data)) {

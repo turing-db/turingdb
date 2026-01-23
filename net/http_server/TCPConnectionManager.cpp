@@ -16,9 +16,9 @@ TCPConnectionManager::TCPConnectionManager(ServerContext& ctxt)
 
 void TCPConnectionManager::process(AbstractThreadContext* threadContext,
                                    utils::EpollEvent& ev) {
-    uint32_t eventType = ev.events;
+    const uint32_t eventType = ev.events;
     auto& connection = *static_cast<TCPConnection*>(ev.data);
-    utils::Socket s = connection.getSocket();
+    const utils::Socket s = connection.getSocket();
 
     // Process Connection
     if (eventType & (utils::EVENT_RDHUP | utils::EVENT_HUP)) {
