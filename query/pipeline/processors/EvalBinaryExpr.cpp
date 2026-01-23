@@ -42,11 +42,16 @@ template <ColumnOperator Op>
 struct CompareEval {
     Column* _res {nullptr};
 
-    void operator()(const auto* lhs, const auto* rhs) {
+    template <typename T, typename U>
+    void operator()(const T* lhs, const U* rhs) {
         bioassert(_res && lhs && rhs, "Invalid inputs to Compare");
 
         if constexpr (Op == OP_GREATER_THAN) {
             fmt::println("GREATER_THAN_OR_EQUAL {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
+            using ResultType = ColumnCombination<Gt, T, U>::ResultColumnType;
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Eq.");
+            exec<Gt>(result, lhs, rhs);
         } else if constexpr (Op == OP_LESS_THAN) {
             fmt::println("LESS_THAN_OR_EQUAL {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
         } else {
@@ -126,7 +131,8 @@ void EvalBinaryExpr::opCompare(Column* res, const Column* lhs, const Column* rhs
     CompareEval<Op> fn {res};
     ColumnDoubleDispatcher<typename Pairs::Allowed,
                            typename Pairs::AllowedMixed,
-                           ::CompareEval<Op>>::dispatch(lhs, rhs, fn);
+                           ::CompareEval<Op>,
+                           typename Pairs::Excluded>::dispatch(lhs, rhs, fn);
 }
 
 template <ColumnOperator Op>
@@ -135,7 +141,8 @@ void EvalBinaryExpr::opCompareEqual(Column* res, const Column* lhs, const Column
     CompareEqualEval<Op> fn {res};
     ColumnDoubleDispatcher<typename Pairs::Allowed,
                            typename Pairs::AllowedMixed,
-                           ::CompareEqualEval<Op>>::dispatch(lhs, rhs, fn);
+                           ::CompareEqualEval<Op>,
+                           typename Pairs::Excluded>::dispatch(lhs, rhs, fn);
 }
 
 template <ColumnOperator Op>
@@ -144,7 +151,8 @@ void EvalBinaryExpr::opBoolean(Column* res, const Column* lhs, const Column* rhs
     BooleanEval<Op> fn {res};
     ColumnDoubleDispatcher<typename Pairs::Allowed,
                            typename Pairs::AllowedMixed,
-                           ::BooleanEval<Op>>::dispatch(lhs, rhs, fn);
+                           ::BooleanEval<Op>,
+                           typename Pairs::Excluded>::dispatch(lhs, rhs, fn);
 }
 
 template <ColumnOperator Op>
@@ -153,7 +161,8 @@ void EvalBinaryExpr::opArithmetic(Column* res, const Column* lhs, const Column* 
     ArithmeticEval<Op> fn {res};
     ColumnDoubleDispatcher<typename Pairs::Allowed,
                            typename Pairs::AllowedMixed,
-                           ::ArithmeticEval<Op>>::dispatch(lhs, rhs, fn);
+                           ::ArithmeticEval<Op>,
+                           typename Pairs::Excluded>::dispatch(lhs, rhs, fn);
 }
 
 template void EvalBinaryExpr::opEqual<OP_EQUAL>(Column* res, const Column* lhs, const Column* rhs);

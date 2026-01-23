@@ -7,7 +7,6 @@
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "columns/ContainerKind.h"
-#include "range/v3/utility/optional.hpp"
 
 namespace db {
 
@@ -158,7 +157,8 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<uint64_t, uint64_t>::Pairs>;
 
   using AllowedMixed = AllowedMixedList<>;
-  using Excluded = ExcludedContainers<>;
+  using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
+                                      ContainerKind::code<ColumnMask>()>;
 };
 
 template <ColumnOperator Op>
@@ -173,7 +173,8 @@ struct PairRestrictions<Op> {
         MixedKind<ColumnMask, PropertyNull>,
         MixedKind<ColumnMask, CustomBool>,
         MixedKind<ColumnMask, std::optional<CustomBool>>>;
-    using Excluded = ExcludedContainers<>;
+    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
+                                        ContainerKind::code<ColumnMask>()>;
 };
 
 template <ColumnOperator Op>

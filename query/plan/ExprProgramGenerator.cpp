@@ -305,13 +305,14 @@ Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
     }
 }
 
+// Cases for each operator, and their associated functor to determine result column and
+// allocate it
 #define ALLOCATOR_CASE(Operator, Functor)                                                \
     case (Operator): {                                                                   \
         using ResultType = ColumnCombination<Functor, T, U>::ResultColumnType;           \
         _resultCol = _gen->memory().alloc<ResultType>();                                 \
         return;                                                                          \
-    }                                                                                    \
-    break;
+    } break;
 
 struct ResultAllocator {
     Column*& _resultCol;
@@ -326,6 +327,7 @@ struct ResultAllocator {
         switch (_op) {
             ALLOCATOR_CASE(OP_EQUAL, Eq)
             ALLOCATOR_CASE(OP_NOT_EQUAL, Ne)
+            ALLOCATOR_CASE(OP_GREATER_THAN, Gt)
             default:
                 throw FatalException("Unsupported allocator.");
             break;
@@ -335,6 +337,7 @@ struct ResultAllocator {
     }
 };
 
+// Uses Column dispatching to dispatch a functor which allocates the result column
 #define DISPATCHER_CASE(Operator)                                                        \
     case (Operator): {                                                                   \
         using Pairs = PairRestrictions<Operator>;                                        \
@@ -355,7 +358,7 @@ Column* ExprProgramGenerator::allocResCol(ColumnOperator op,
         DISPATCHER_CASE(OP_EQUAL)
         DISPATCHER_CASE(OP_NOT_EQUAL);
 
-        // DISPATCHER_CASE(OP_GREATER_THAN)
+        DISPATCHER_CASE(OP_GREATER_THAN)
         // DISPATCHER_CASE(OP_LESS_THAN)
         // DISPATCHER_CASE(OP_GREATER_THAN_OR_EQUAL)
         // DISPATCHER_CASE(OP_LESS_THAN_OR_EQUAL)

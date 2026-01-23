@@ -198,6 +198,8 @@ static inline void exec(ColumnOptMask* res, ColT&& lhs, ColU&& rhs) {
 
 using Eq = BinaryPredicate<std::equal_to<>>;
 using Ne = BinaryPredicate<std::not_equal_to<>>;
+using Gt = BinaryPredicate<std::greater<>>;
+using Lt = BinaryPredicate<std::less<>>;
 
 using Res = std::invoke_result_t<Eq, long int, long int>;
 using ColInt = const ColumnVector<long int>*&;
