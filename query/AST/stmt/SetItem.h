@@ -13,8 +13,13 @@ class EntityTypeExpr;
 class SetItem {
 public:
     struct PropertyExprAssign {
-        PropertyExpr* propTypeExpr;
-        Expr* propValueExpr;
+        PropertyExprAssign() {}
+        PropertyExprAssign(PropertyExpr* type, Expr* val)
+            : propTypeExpr(type), propValueExpr(val)
+        {
+        }
+        PropertyExpr* propTypeExpr {nullptr};
+        Expr* propValueExpr {nullptr};
     };
 
     struct SymbolAddAssign {
