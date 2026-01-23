@@ -36,9 +36,10 @@ float euclideanDistanceSquared(const std::vector<float>& a, const std::vector<fl
 }
 
 // Find k nearest neighbors using Euclidean distance
-std::vector<uint64_t> findKNearestNeighbors(const std::vector<TestVector>& vectors,
-                                            const std::vector<float>& query,
-                                            size_t k) {
+void findKNearestNeighbors(std::vector<uint64_t>& result,
+                           const std::vector<TestVector>& vectors,
+                           const std::vector<float>& query,
+                           size_t k) {
     // Compute distances for all vectors
     std::vector<std::pair<float, uint64_t>> distances;
     for (const auto& vec : vectors) {
@@ -51,11 +52,10 @@ std::vector<uint64_t> findKNearestNeighbors(const std::vector<TestVector>& vecto
               [](const auto& a, const auto& b) { return a.first < b.first; });
 
     // Extract top k IDs
-    std::vector<uint64_t> result;
+    result.clear();
     for (size_t i = 0; i < k && i < distances.size(); ++i) {
         result.push_back(distances[i].second);
     }
-    return result;
 }
 
 }  // namespace
@@ -380,7 +380,8 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
     // Define query vector and compute expected results
     std::vector<float> queryVector = {1.0f, 0.0f, 0.0f, 0.0f};
     const size_t k = 3;
-    std::vector<uint64_t> expectedIds = findKNearestNeighbors(testVectors, queryVector, k);
+    std::vector<uint64_t> expectedIds;
+    findKNearestNeighbors(expectedIds, testVectors, queryVector, k);
 
     // Search for vectors closest to query
     bool executed = false;
@@ -447,7 +448,8 @@ TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
     // Define query vector and compute expected results for k=2
     std::vector<float> queryVector = {1.0f, 0.0f, 0.0f, 0.0f};
     const size_t k = 2;
-    std::vector<uint64_t> expectedIds = findKNearestNeighbors(testVectors, queryVector, k);
+    std::vector<uint64_t> expectedIds;
+    findKNearestNeighbors(expectedIds, testVectors, queryVector, k);
 
     // Search for top 2
     bool executed = false;
@@ -514,7 +516,8 @@ TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
     // Define query vector (matches vector 100 exactly) and compute expected results
     std::vector<float> queryVector = {0.123456f, 0.678901f, 0.111111f, 0.222222f};
     const size_t k = 3;
-    std::vector<uint64_t> expectedIds = findKNearestNeighbors(testVectors, queryVector, k);
+    std::vector<uint64_t> expectedIds;
+    findKNearestNeighbors(expectedIds, testVectors, queryVector, k);
 
     // Search for vectors closest to query
     bool executed = false;
