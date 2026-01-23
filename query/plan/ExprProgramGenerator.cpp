@@ -305,6 +305,14 @@ Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
     }
 }
 
+#define ALLOCATOR_CASE(Operator, Functor)                                                \
+    case (Operator): {                                                                   \
+        using ResultType = ColumnCombination<Functor, T, U>::ResultColumnType;           \
+        _resultCol = _gen->memory().alloc<ResultType>();                                 \
+        return;                                                                          \
+    }                                                                                    \
+    break;
+
 struct ResultAllocator {
     Column*& _resultCol;
     PipelineGenerator* _gen {nullptr};
@@ -315,14 +323,19 @@ struct ResultAllocator {
         bioassert(lhs && rhs,
                   "Attempted to allocate a result column with null operands.");
 
-        if (_op == OP_EQUAL) {
-            using ResultType = ColumnCombination<Eq, T, U>::ResultColumnType;
-            _resultCol = _gen->memory().alloc<ResultType>();
+        switch (_op) {
+            ALLOCATOR_CASE(OP_EQUAL, Eq)
+            ALLOCATOR_CASE(OP_NOT_EQUAL, Ne)
+            default:
+                throw FatalException("Unsupported allocator.");
+            break;
         }
+
+        throw FatalException("Fatal allocator.");
     }
 };
 
-#define ALLOCATOR_CASE(Operator)                                                         \
+#define DISPATCHER_CASE(Operator)                                                        \
     case (Operator): {                                                                   \
         using Pairs = PairRestrictions<Operator>;                                        \
         ColumnDoubleDispatcher<Pairs::Allowed, Pairs::AllowedMixed, ResultAllocator,     \
@@ -339,16 +352,16 @@ Column* ExprProgramGenerator::allocResCol(ColumnOperator op,
     ResultAllocator allocator(result, _gen, op);
 
     switch (op) {
-        ALLOCATOR_CASE(OP_EQUAL)
-        // ALLOCATOR_CASE(OP_NOT_EQUAL);
+        DISPATCHER_CASE(OP_EQUAL)
+        DISPATCHER_CASE(OP_NOT_EQUAL);
 
-        // ALLOCATOR_CASE(OP_GREATER_THAN)
-        // ALLOCATOR_CASE(OP_LESS_THAN)
-        // ALLOCATOR_CASE(OP_GREATER_THAN_OR_EQUAL)
-        // ALLOCATOR_CASE(OP_LESS_THAN_OR_EQUAL)
+        // DISPATCHER_CASE(OP_GREATER_THAN)
+        // DISPATCHER_CASE(OP_LESS_THAN)
+        // DISPATCHER_CASE(OP_GREATER_THAN_OR_EQUAL)
+        // DISPATCHER_CASE(OP_LESS_THAN_OR_EQUAL)
 
-        // ALLOCATOR_CASE(OP_AND)
-        // ALLOCATOR_CASE(OP_OR)
+        // DISPATCHER_CASE(OP_AND)
+        // DISPATCHER_CASE(OP_OR)
 
         case OP_IN: // TODO: Implement
             throw PlannerException("Unsupported allocator: IN.");

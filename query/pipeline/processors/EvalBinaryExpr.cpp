@@ -24,14 +24,14 @@ struct EqualEval {
 
         if constexpr (Op == OP_EQUAL) {
             using ResultType = ColumnCombination<Eq, T, U>::ResultColumnType;
-            fmt::println("EQUAL {}, {} = {}", typeid(*lhs).name(), typeid(*rhs).name(), typeid(ResultType).name());
             auto* result = dynamic_cast<ResultType*>(_res);
-            bioassert(result, "Invalid to cast for result column.");
+            bioassert(result, "Invalid to cast for result column for Eq.");
             exec<Eq>(result, lhs, rhs);
         } else if constexpr (Op == OP_NOT_EQUAL) {
-            // using ResultType = ColumnCombinations<NotEqual, T, U>::ResultType;
-            // execOperation<NotEqual>(static_cast<ResultType*>(_res), lhs, rhs);
-            fmt::println("NOT EQUAL {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
+            using ResultType = ColumnCombination<Ne, T, U>::ResultColumnType;
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Ne.");
+            exec<Ne>(result, lhs, rhs);
         } else {
             COMPILE_ERROR("Invalid operator for Equal");
         }
