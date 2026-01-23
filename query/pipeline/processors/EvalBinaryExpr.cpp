@@ -1,5 +1,6 @@
 #include "EvalBinaryExpr.h"
 
+#include "columns/AllowedPairs.h"
 #include "columns/ColumnOperationExecutor.h"
 #include "columns/BinaryOperators.h"
 #include "columns/BinaryPredicates.h"
@@ -7,7 +8,7 @@
 
 #include "Panic.h"
 #include "BioAssert.h"
-#include "metadata/PropertyType.h"
+#include "columns/ColumnOperator.h"
 
 using namespace db;
 
@@ -111,95 +112,48 @@ struct ArithmeticEval {
 
 template <ColumnOperator Op>
 void EvalBinaryExpr::opEqual(Column* res, const Column* lhs, const Column* rhs) {
-    using Allowed = GenerateKindPairList<
-        OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
-        OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
-        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
-        OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
-        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
-        OptionalKindPairs<NodeID, NodeID>::Pairs,
-        OptionalKindPairs<EdgeID, EdgeID>::Pairs/*,
-
-        std::tuple<KindPair<PropertyNull, std::optional<NodeID>>,
-                   KindPair<PropertyNull, std::optional<EdgeID>>,
-                   KindPair<PropertyNull, std::optional<types::Int64::Primitive>>,
-                   KindPair<PropertyNull, std::optional<types::UInt64::Primitive>>,
-                   KindPair<PropertyNull, std::optional<types::Double::Primitive>>,
-                   KindPair<PropertyNull, std::optional<types::String::Primitive>>,
-                   KindPair<PropertyNull, std::optional<types::Double::Primitive>>,
-                   KindPair<PropertyNull, std::optional<ValueType>>>*/>;
-
-    using AllowedMixed = AllowedMixedList<
-        MixedKind<ColumnMask, PropertyNull>,
-        MixedKind<ColumnMask, CustomBool>,
-        MixedKind<ColumnMask, std::optional<CustomBool>>>;
-
-    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
-                                        ContainerKind::code<ColumnMask>()>;
-
+    using Pairs = PairRestrictions<Op>;
     EqualEval<Op> fn {res};
-    ColumnDoubleDispatcher<Allowed, AllowedMixed, ::EqualEval<Op>, Excluded>::dispatch(lhs, rhs, fn);
+    ColumnDoubleDispatcher<typename Pairs::Allowed,
+                           typename Pairs::AllowedMixed,
+                           ::EqualEval<Op>,
+                           typename Pairs::Excluded>::dispatch(lhs, rhs, fn);
 }
 
 template <ColumnOperator Op>
 void EvalBinaryExpr::opCompare(Column* res, const Column* lhs, const Column* rhs) {
-    using Allowed = GenerateKindPairList<
-        OptionalKindPairs<int64_t, int64_t>::Pairs,
-        OptionalKindPairs<int64_t, uint64_t>::Pairs,
-        OptionalKindPairs<int64_t, double>::Pairs,
-        OptionalKindPairs<uint64_t, uint64_t>::Pairs,
-        OptionalKindPairs<uint64_t, double>::Pairs,
-        OptionalKindPairs<double, double>::Pairs>;
-
-    using AllowedMixed = AllowedMixedList<>;
-
+    using Pairs = PairRestrictions<Op>;
     CompareEval<Op> fn {res};
-    ColumnDoubleDispatcher<Allowed, AllowedMixed, ::CompareEval<Op>>::dispatch(lhs, rhs, fn);
+    ColumnDoubleDispatcher<typename Pairs::Allowed,
+                           typename Pairs::AllowedMixed,
+                           ::CompareEval<Op>>::dispatch(lhs, rhs, fn);
 }
 
 template <ColumnOperator Op>
 void EvalBinaryExpr::opCompareEqual(Column* res, const Column* lhs, const Column* rhs) {
-    using Allowed = GenerateKindPairList<
-        OptionalKindPairs<int64_t, int64_t>::Pairs,
-        OptionalKindPairs<int64_t, uint64_t>::Pairs,
-        OptionalKindPairs<uint64_t, uint64_t>::Pairs>;
-
-    using AllowedMixed = AllowedMixedList<>;
-
+    using Pairs = PairRestrictions<Op>;
     CompareEqualEval<Op> fn {res};
-    ColumnDoubleDispatcher<Allowed, AllowedMixed, ::CompareEqualEval<Op>>::dispatch(lhs, rhs, fn);
+    ColumnDoubleDispatcher<typename Pairs::Allowed,
+                           typename Pairs::AllowedMixed,
+                           ::CompareEqualEval<Op>>::dispatch(lhs, rhs, fn);
 }
 
 template <ColumnOperator Op>
 void EvalBinaryExpr::opBoolean(Column* res, const Column* lhs, const Column* rhs) {
-    using Allowed = GenerateKindPairList<
-        OptionalKindPairs<CustomBool, CustomBool>::Pairs,
-        std::tuple<KindPair<PropertyNull, CustomBool>,
-                   KindPair<PropertyNull, std::optional<CustomBool>>>>;
-
-    using AllowedMixed = AllowedMixedList<
-        MixedKind<ColumnMask, PropertyNull>,
-        MixedKind<ColumnMask, CustomBool>,
-        MixedKind<ColumnMask, std::optional<CustomBool>>>;
-
+    using Pairs = PairRestrictions<Op>;
     BooleanEval<Op> fn {res};
-    ColumnDoubleDispatcher<Allowed, AllowedMixed, ::BooleanEval<Op>>::dispatch(lhs, rhs, fn);
+    ColumnDoubleDispatcher<typename Pairs::Allowed,
+                           typename Pairs::AllowedMixed,
+                           ::BooleanEval<Op>>::dispatch(lhs, rhs, fn);
 }
 
 template <ColumnOperator Op>
 void EvalBinaryExpr::opArithmetic(Column* res, const Column* lhs, const Column* rhs) {
-    using Allowed = GenerateKindPairList<
-        OptionalKindPairs<int64_t, int64_t>::Pairs,
-        OptionalKindPairs<int64_t, uint64_t>::Pairs,
-        OptionalKindPairs<int64_t, double>::Pairs,
-        OptionalKindPairs<uint64_t, uint64_t>::Pairs,
-        OptionalKindPairs<uint64_t, double>::Pairs,
-        OptionalKindPairs<double, double>::Pairs>;
-
-    using AllowedMixed = AllowedMixedList<>;
-
+    using Pairs = PairRestrictions<Op>;
     ArithmeticEval<Op> fn {res};
-    ColumnDoubleDispatcher<Allowed, AllowedMixed, ::ArithmeticEval<Op>>::dispatch(lhs, rhs, fn);
+    ColumnDoubleDispatcher<typename Pairs::Allowed,
+                           typename Pairs::AllowedMixed,
+                           ::ArithmeticEval<Op>>::dispatch(lhs, rhs, fn);
 }
 
 template void EvalBinaryExpr::opEqual<OP_EQUAL>(Column* res, const Column* lhs, const Column* rhs);

@@ -32,6 +32,7 @@ void EvalUnaryExpr::opBoolean(Column* res, const Column* operand) {
         OptionalKinds<CustomBool>::Types,
 
         // Non-optional types
+        // TODO: Need add ColumnMask::Bool_t here for ColumnMasks?
         std::tuple<PropertyNull>>;
 
     using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>()>;

@@ -3,7 +3,11 @@
 #include <tuple>
 #include <optional>
 
+#include "columns/ColumnOperator.h"
+#include "metadata/PropertyNull.h"
+#include "metadata/PropertyType.h"
 #include "columns/ContainerKind.h"
+#include "range/v3/utility/optional.hpp"
 
 namespace db {
 
@@ -97,5 +101,93 @@ struct IsTuple<std::tuple<Ts...>> : std::true_type {};
 
 template <typename T>
 concept TupleExact = IsTuple<T>::value;
+
+template <ColumnOperator Op>
+struct PairRestrictions;
+
+template <ColumnOperator Op>
+    requires (Op == OP_EQUAL) || (Op == OP_NOT_EQUAL)
+struct PairRestrictions<Op> {
+    using Allowed = GenerateKindPairList<
+        OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
+        OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<NodeID, NodeID>::Pairs,
+        OptionalKindPairs<EdgeID, EdgeID>::Pairs/*,
+
+        std::tuple<KindPair<PropertyNull, std::optional<NodeID>>,
+                   KindPair<PropertyNull, std::optional<EdgeID>>,
+                   KindPair<PropertyNull, std::optional<types::Int64::Primitive>>,
+                   KindPair<PropertyNull, std::optional<types::UInt64::Primitive>>,
+                   KindPair<PropertyNull, std::optional<types::Double::Primitive>>,
+                   KindPair<PropertyNull, std::optional<types::String::Primitive>>,
+                   KindPair<PropertyNull, std::optional<types::Double::Primitive>>,
+                   KindPair<PropertyNull, std::optional<ValueType>>>*/>;
+    using AllowedMixed =
+        AllowedMixedList<MixedKind<ColumnMask, PropertyNull>,
+                         MixedKind<ColumnMask, CustomBool>,
+                         MixedKind<ColumnMask, std::optional<CustomBool>>>;
+
+    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
+                                        ContainerKind::code<ColumnMask>()>;
+};
+
+template <ColumnOperator Op>
+    requires (Op == OP_GREATER_THAN) || (Op == OP_LESS_THAN)
+struct PairRestrictions<Op> {
+    using Allowed = GenerateKindPairList<OptionalKindPairs<int64_t, int64_t>::Pairs,
+                                         OptionalKindPairs<int64_t, uint64_t>::Pairs,
+                                         OptionalKindPairs<int64_t, double>::Pairs,
+                                         OptionalKindPairs<uint64_t, uint64_t>::Pairs,
+                                         OptionalKindPairs<uint64_t, double>::Pairs,
+                                         OptionalKindPairs<double, double>::Pairs>;
+
+    using AllowedMixed = AllowedMixedList<>;
+    using Excluded = ExcludedContainers<>;
+};
+
+template <ColumnOperator Op>
+    requires (Op == OP_GREATER_THAN_OR_EQUAL) || (Op == OP_LESS_THAN_OR_EQUAL)
+struct PairRestrictions<Op> {
+  using Allowed = GenerateKindPairList<
+        OptionalKindPairs<int64_t, int64_t>::Pairs,
+        OptionalKindPairs<int64_t, uint64_t>::Pairs,
+        OptionalKindPairs<uint64_t, uint64_t>::Pairs>;
+
+  using AllowedMixed = AllowedMixedList<>;
+  using Excluded = ExcludedContainers<>;
+};
+
+template <ColumnOperator Op>
+    requires (Op == OP_AND) || (Op == OP_OR)
+struct PairRestrictions<Op> {
+    using Allowed = GenerateKindPairList<
+        OptionalKindPairs<CustomBool, CustomBool>::Pairs,
+        std::tuple<KindPair<PropertyNull, CustomBool>,
+                   KindPair<PropertyNull, std::optional<CustomBool>>>>;
+
+    using AllowedMixed = AllowedMixedList<
+        MixedKind<ColumnMask, PropertyNull>,
+        MixedKind<ColumnMask, CustomBool>,
+        MixedKind<ColumnMask, std::optional<CustomBool>>>;
+    using Excluded = ExcludedContainers<>;
+};
+
+template <ColumnOperator Op>
+    requires (Op == OP_PLUS) || (Op == OP_MINUS)
+struct PairRestrictions<Op> {
+    using Allowed = GenerateKindPairList<
+        OptionalKindPairs<int64_t, int64_t>::Pairs,
+        OptionalKindPairs<int64_t, uint64_t>::Pairs,
+        OptionalKindPairs<int64_t, double>::Pairs,
+        OptionalKindPairs<uint64_t, uint64_t>::Pairs,
+        OptionalKindPairs<uint64_t, double>::Pairs,
+        OptionalKindPairs<double, double>::Pairs>;
+
+    using AllowedMixed = AllowedMixedList<>;
+    using Excluded = ExcludedContainers<>;
+};
 
 }
