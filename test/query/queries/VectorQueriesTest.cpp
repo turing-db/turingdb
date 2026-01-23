@@ -7,9 +7,12 @@
 #include <vector>
 
 #include "TuringDB.h"
+#include "SystemManager.h"
 #include "columns/ColumnConst.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
+#include "versioning/Change.h"
 
 #include "TuringTestEnv.h"
 #include "TuringTest.h"
@@ -539,6 +542,159 @@ TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
                 ASSERT_EQ(colIds->at(i), expectedIds[i])
                     << "Mismatch at position " << i << ": expected " << expectedIds[i]
                     << ", got " << colIds->at(i);
+            }
+
+            executed = true;
+        });
+
+    ASSERT_TRUE(res.isOk()) << "Query failed: " << res.getError();
+    ASSERT_TRUE(executed);
+}
+
+TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
+    // This test verifies that VECTOR SEARCH combined with MATCH correctly
+    // retrieves graph node properties for the k nearest neighbors.
+
+    // Step 1: Create nodes with id and title properties
+    // We need to use change management for write operations
+    {
+        auto changeRes = _env->getSystemManager().newChange("default");
+        ASSERT_TRUE(changeRes) << "Failed to create change";
+        const ChangeID changeId = changeRes.value()->id();
+
+        const auto createRes = _db->query(
+            R"(CREATE (n1:Document {id: 1, title: "Doc One"}),
+                      (n2:Document {id: 2, title: "Doc Two"}),
+                      (n3:Document {id: 3, title: "Doc Three"}),
+                      (n4:Document {id: 4, title: "Doc Four"}),
+                      (n5:Document {id: 5, title: "Doc Five"}))",
+            "default", &_env->getMem(), [](const Dataframe*) {},
+            CommitHash::head(), changeId);
+        ASSERT_TRUE(createRes.isOk()) << "CREATE nodes failed: " << createRes.getError();
+
+        const auto commitRes = _db->query(
+            "change submit", "default", &_env->getMem(), CommitHash::head(), changeId);
+        ASSERT_TRUE(commitRes.isOk()) << "COMMIT failed: " << commitRes.getError();
+    }
+
+    // Step 1b: Verify nodes were created
+    {
+        size_t nodeCount = 0;
+        const auto matchRes = _db->query(
+            "MATCH (n:Document) RETURN n.id",
+            "default", &_env->getMem(),
+            [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                nodeCount = df->getRowCount();
+            });
+        ASSERT_TRUE(matchRes.isOk()) << "MATCH query failed: " << matchRes.getError();
+        ASSERT_EQ(nodeCount, 5) << "Expected 5 Document nodes";
+    }
+
+    // Step 2: Create vector index
+    {
+        const auto createIndexRes = _db->query(
+            "CREATE VECTOR INDEX doc_vectors WITH DIMENSION 4 METRIC EUCLID",
+            "default", &_env->getMem(), [](const Dataframe*) {});
+        ASSERT_TRUE(createIndexRes.isOk())
+            << "Create index failed: " << createIndexRes.getError();
+    }
+
+    // Step 3: Create and load test vectors
+    // Design vectors for predictable k-NN results with query [1.0, 0.0, 0.0, 0.0]:
+    // ID 1: distance = 0 (exact match)
+    // ID 2: distance = 0.02 (second closest)
+    // ID 3: distance = 0.08 (third closest)
+    // ID 4: distance = 2.0 (far)
+    // ID 5: distance = 2.0 (far)
+    const std::vector<TestVector> testVectors = {
+        {1, {1.0f, 0.0f, 0.0f, 0.0f}},
+        {2, {0.9f, 0.1f, 0.0f, 0.0f}},
+        {3, {0.8f, 0.2f, 0.0f, 0.0f}},
+        {4, {0.0f, 1.0f, 0.0f, 0.0f}},
+        {5, {0.0f, 0.0f, 1.0f, 0.0f}},
+    };
+
+    const std::string vectorFile = _outDir + "/doc_vectors.csv";
+    {
+        std::ofstream out(vectorFile);
+        for (const auto& vec : testVectors) {
+            out << vec.id;
+            for (const float v : vec.values) {
+                out << "," << v;
+            }
+            out << "\n";
+        }
+    }
+
+    const std::string loadQuery = "LOAD VECTOR FROM \"" + vectorFile + "\" IN doc_vectors";
+    const auto loadRes =
+        _db->query(loadQuery, "default", &_env->getMem(), [](const Dataframe*) {});
+    ASSERT_TRUE(loadRes.isOk()) << "Load vectors failed: " << loadRes.getError();
+
+    // Step 3b: Verify vector search works standalone
+    {
+        const auto searchRes = _db->query(
+            "VECTOR SEARCH IN doc_vectors FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids RETURN ids",
+            "default", &_env->getMem(),
+            [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                ASSERT_EQ(df->getRowCount(), 3) << "Expected 3 vector search results";
+            });
+        ASSERT_TRUE(searchRes.isOk()) << "Vector search failed: " << searchRes.getError();
+    }
+
+    // Step 4: Execute combined VECTOR SEARCH + MATCH query
+    const std::vector<float> queryVector = {1.0f, 0.0f, 0.0f, 0.0f};
+    const size_t k = 3;
+
+    // Compute expected results using helper function
+    std::vector<uint64_t> expectedIds;
+    findKNearestNeighbors(expectedIds, testVectors, queryVector, k);
+
+    // Expected titles corresponding to the expected IDs
+    const std::vector<std::string> expectedTitles = {"Doc One", "Doc Two", "Doc Three"};
+
+    bool executed = false;
+    const auto res = _db->query(
+        "VECTOR SEARCH IN doc_vectors FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids "
+        "MATCH (n:Document) WHERE n.id = ids "
+        "RETURN n.id, n.title",
+        "default", &_env->getMem(),
+        [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df != nullptr);
+            ASSERT_EQ(df->cols().size(), 2) << "Expected 2 columns (n.id, n.title)";
+            ASSERT_EQ(df->getRowCount(), k) << "Expected " << k << " rows";
+
+            const auto& cols = df->cols();
+
+            // Verify column names
+            ASSERT_EQ(cols.at(0)->getName(), "n.id");
+            ASSERT_EQ(cols.at(1)->getName(), "n.title");
+
+            // Get columns - properties return ColumnOptVector (nullable)
+            const auto* idCol =
+                cols.at(0)->as<ColumnOptVector<types::Int64::Primitive>>();
+            const auto* titleCol =
+                cols.at(1)->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(idCol != nullptr) << "Failed to cast n.id column";
+            ASSERT_TRUE(titleCol != nullptr) << "Failed to cast n.title column";
+
+            // Verify each row has expected values
+            for (size_t i = 0; i < k; ++i) {
+                // Check id value
+                ASSERT_TRUE(idCol->at(i).has_value())
+                    << "n.id is null at row " << i;
+                ASSERT_EQ(static_cast<uint64_t>(*idCol->at(i)), expectedIds[i])
+                    << "ID mismatch at row " << i << ": expected " << expectedIds[i]
+                    << ", got " << *idCol->at(i);
+
+                // Check title value
+                ASSERT_TRUE(titleCol->at(i).has_value())
+                    << "n.title is null at row " << i;
+                ASSERT_EQ(*titleCol->at(i), expectedTitles[i])
+                    << "Title mismatch at row " << i << ": expected " << expectedTitles[i]
+                    << ", got " << *titleCol->at(i);
             }
 
             executed = true;
