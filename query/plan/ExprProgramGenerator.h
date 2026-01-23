@@ -42,12 +42,13 @@ public:
 
     Column* registerPropertyConstraint(const Expr* expr);
 
+    Column* generateExpr(const Expr* expr);
+
 private:
     PipelineGenerator* _gen {nullptr};
     ExprProgram* _exprProg {nullptr};
     const PendingOutputView& _pendingOut;
 
-    Column* generateExpr(const Expr* expr);
     Column* generateUnaryExpr(const UnaryExpr* expr);
     Column* generateBinaryExpr(const BinaryExpr* expr);
     Column* generatePropertyExpr(const PropertyExpr* propExpr);

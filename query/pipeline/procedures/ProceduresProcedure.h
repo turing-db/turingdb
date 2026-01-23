@@ -14,8 +14,8 @@ struct ProceduresProcedure {
             ._name = "db.procedures",
             ._execCallback = &execute,
             ._allocCallback = &allocData,
-            ._returnValues = {{"name", ProcedureReturnType::STRING_VIEW},
-                              {"signature", ProcedureReturnType::STRING}},
+            ._returnValues = {{"name", ProcedureType::STRING_VIEW},
+                              {"signature", ProcedureType::STRING}},
         };
     }
 };

@@ -61,6 +61,7 @@ set(procedures_sources
     procedures/EdgeTypesProcedure.cpp
     procedures/PropertyTypesProcedure.cpp
     procedures/HistoryProcedure.cpp
+    procedures/DescribeCommitProcedure.cpp
     procedures/ProceduresProcedure.cpp
 )
 

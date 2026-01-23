@@ -14,10 +14,10 @@ struct HistoryProcedure {
             ._name = "db.history",
             ._execCallback = &execute,
             ._allocCallback = &allocData,
-            ._returnValues = {{"commit", ProcedureReturnType::STRING},
-                              {"nodeCount", ProcedureReturnType::UINT_64},
-                              {"edgeCount", ProcedureReturnType::UINT_64},
-                              {"partCount", ProcedureReturnType::UINT_64}},
+            ._returnValues = {{"commit", ProcedureType::STRING},
+                              {"nodeCount", ProcedureType::UINT_64},
+                              {"edgeCount", ProcedureType::UINT_64},
+                              {"partCount", ProcedureType::UINT_64}},
         };
     }
 };

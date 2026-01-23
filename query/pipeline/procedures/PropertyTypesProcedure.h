@@ -19,9 +19,9 @@ struct PropertyTypesProcedure {
             ._name = "db.propertyTypes",
             ._execCallback = &execute,
             ._allocCallback = &allocData,
-            ._returnValues = {{"id", ProcedureReturnType::PROPERTY_TYPE_ID},
-                              {"propertyType", ProcedureReturnType::STRING_VIEW},
-                              {"valueType", ProcedureReturnType::VALUE_TYPE}},
+            ._returnValues = {{"id", ProcedureType::PROPERTY_TYPE_ID},
+                              {"propertyType", ProcedureType::STRING_VIEW},
+                              {"valueType", ProcedureType::VALUE_TYPE}},
         };
     }
 };

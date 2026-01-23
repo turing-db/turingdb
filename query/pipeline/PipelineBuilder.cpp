@@ -400,13 +400,15 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourc
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addDatabaseProcedure(const ProcedureBlueprint& blueprint,
+                                                                    std::span<const ProcedureBlueprint::InputItem> args,
                                                                     std::span<ProcedureBlueprint::YieldItem> yield) {
     DatabaseProcedureProcessor* proc = DatabaseProcedureProcessor::create(_pipeline, blueprint);
     auto& output = proc->output();
 
     _pendingOutput.updateInterface(&output);
 
-    proc->allocColumns(*_mem, *_dfMan, yield);
+    proc->setInputValues(args);
+    proc->allocReturnValues(*_mem, *_dfMan, yield);
 
     return output;
 }

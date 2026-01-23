@@ -22,13 +22,23 @@ public:
         NamedColumn* _col {nullptr};
     };
 
+    struct InputItem {
+        size_t _index {0};
+        const Column* _col {nullptr};
+    };
+
     using ExecuteCallback = void (*)(Procedure&);
     using AllocCallback = std::unique_ptr<ProcedureData> (*)();
 
     size_t getReturnValueIndex(std::string_view name) const;
+    size_t getArgumentIndex(std::string_view name) const;
 
-    ProcedureReturnType getReturnValueType(size_t index) const {
+    ProcedureType getReturnValueType(size_t index) const {
         return _returnValues[index]._type;
+    }
+
+    ProcedureType getArgumentType(size_t index) const {
+        return _argumentTypes[index]._type;
     }
 
     void returnAll(std::vector<YieldItem>& yieldItems) const;
@@ -36,7 +46,8 @@ public:
     std::string_view _name;
     ExecuteCallback _execCallback {nullptr};
     AllocCallback _allocCallback {nullptr};
-    ProcedureReturnValues _returnValues;
+    ProcedureTypeVector _returnValues;
+    ProcedureTypeVector _argumentTypes;
 };
 
 }

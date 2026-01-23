@@ -26,7 +26,7 @@ void buildSignature(std::string& result, const ProcedureBlueprint& blueprint) {
         }
         result += rv._name;
         result += " :: ";
-        result += ProcedureReturnTypeName::value(rv._type);
+        result += ProcedureTypeName::value(rv._type);
         first = false;
     }
     result += ")";

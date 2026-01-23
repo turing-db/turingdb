@@ -30,9 +30,10 @@ public:
     void reset() override;
     void execute() override;
 
-    void allocColumns(LocalMemory&,
-                      DataframeManager&,
-                      std::span<ProcedureBlueprint::YieldItem> yield);
+    void setInputValues(std::span<const ProcedureBlueprint::InputItem> args);
+    void allocReturnValues(LocalMemory&,
+                           DataframeManager&,
+                           std::span<ProcedureBlueprint::YieldItem> yieldItems);
 
     PipelineBlockOutputInterface& output() { return _output; }
 

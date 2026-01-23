@@ -33,6 +33,11 @@ public:
             return *this;
         }
 
+        FunctionSignatureBuilder& addArgument(EvaluatedType type) {
+            _signature->_argumentTypes.emplace_back(type);
+            return *this;
+        }
+
         FunctionSignatureBuilder& setReturnTypes(std::initializer_list<FunctionReturnType> types) {
             _signature->_returnTypes = types;
             return *this;

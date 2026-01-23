@@ -7,7 +7,7 @@
 
 namespace db {
 
-enum class ProcedureReturnType : uint8_t {
+enum class ProcedureType : uint8_t {
     INVALID = 0,
     NODE,
     EDGE,
@@ -24,44 +24,44 @@ enum class ProcedureReturnType : uint8_t {
     _SIZE,
 };
 
-using ProcedureReturnTypeName = EnumToString<ProcedureReturnType>::Create<
-    EnumStringPair<ProcedureReturnType::INVALID, "INVALID">,
-    EnumStringPair<ProcedureReturnType::NODE, "NODE">,
-    EnumStringPair<ProcedureReturnType::EDGE, "EDGE">,
-    EnumStringPair<ProcedureReturnType::LABEL_ID, "INTEGER">,
-    EnumStringPair<ProcedureReturnType::EDGE_TYPE_ID, "INTEGER">,
-    EnumStringPair<ProcedureReturnType::PROPERTY_TYPE_ID, "INTEGER">,
-    EnumStringPair<ProcedureReturnType::VALUE_TYPE, "STRING">,
-    EnumStringPair<ProcedureReturnType::UINT_64, "INTEGER">,
-    EnumStringPair<ProcedureReturnType::INT64, "INTEGER">,
-    EnumStringPair<ProcedureReturnType::DOUBLE, "FLOAT">,
-    EnumStringPair<ProcedureReturnType::BOOL, "BOOLEAN">,
-    EnumStringPair<ProcedureReturnType::STRING_VIEW, "STRING">,
-    EnumStringPair<ProcedureReturnType::STRING, "STRING">>;
+using ProcedureTypeName = EnumToString<ProcedureType>::Create<
+    EnumStringPair<ProcedureType::INVALID, "INVALID">,
+    EnumStringPair<ProcedureType::NODE, "NODE">,
+    EnumStringPair<ProcedureType::EDGE, "EDGE">,
+    EnumStringPair<ProcedureType::LABEL_ID, "INTEGER">,
+    EnumStringPair<ProcedureType::EDGE_TYPE_ID, "INTEGER">,
+    EnumStringPair<ProcedureType::PROPERTY_TYPE_ID, "INTEGER">,
+    EnumStringPair<ProcedureType::VALUE_TYPE, "STRING">,
+    EnumStringPair<ProcedureType::UINT_64, "INTEGER">,
+    EnumStringPair<ProcedureType::INT64, "INTEGER">,
+    EnumStringPair<ProcedureType::DOUBLE, "FLOAT">,
+    EnumStringPair<ProcedureType::BOOL, "BOOLEAN">,
+    EnumStringPair<ProcedureType::STRING_VIEW, "STRING">,
+    EnumStringPair<ProcedureType::STRING, "STRING">>;
 
-struct ProcedureReturnValue {
+struct NamedProcedureType {
     std::string_view _name;
-    ProcedureReturnType _type {};
+    ProcedureType _type {};
 };
 
-class ProcedureReturnValues {
+class ProcedureTypeVector {
 public:
-    using Vector = std::vector<ProcedureReturnValue>;
+    using Vector = std::vector<NamedProcedureType>;
 
-    ProcedureReturnValues() = default;
-    ~ProcedureReturnValues() = default;
+    ProcedureTypeVector() = default;
+    ~ProcedureTypeVector() = default;
 
-    ProcedureReturnValues(std::initializer_list<ProcedureReturnValue> values)
+    ProcedureTypeVector(std::initializer_list<NamedProcedureType> values)
         : _returnValues(values)
     {
     }
 
-    ProcedureReturnValues(const ProcedureReturnValues&) = default;
-    ProcedureReturnValues(ProcedureReturnValues&&) noexcept = default;
-    ProcedureReturnValues& operator=(const ProcedureReturnValues&) = default;
-    ProcedureReturnValues& operator=(ProcedureReturnValues&&) noexcept = default;
+    ProcedureTypeVector(const ProcedureTypeVector&) = default;
+    ProcedureTypeVector(ProcedureTypeVector&&) noexcept = default;
+    ProcedureTypeVector& operator=(const ProcedureTypeVector&) = default;
+    ProcedureTypeVector& operator=(ProcedureTypeVector&&) noexcept = default;
 
-    void add(std::string_view name, ProcedureReturnType type) {
+    void add(std::string_view name, ProcedureType type) {
         _returnValues.emplace_back(name, type);
     }
 
@@ -69,7 +69,7 @@ public:
         return _returnValues.size();
     }
 
-    [[nodiscard]] const ProcedureReturnValue& operator[](size_t i) const {
+    [[nodiscard]] const NamedProcedureType& operator[](size_t i) const {
         return _returnValues[i];
     }
 

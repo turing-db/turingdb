@@ -24,38 +24,77 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureBluep
 
         for (const auto& returnItem : blueprint._returnValues) {
             switch (returnItem._type) {
-                case ProcedureReturnType::INVALID:
+                case ProcedureType::INVALID:
                     throw FatalException("Invalid procedure return type");
                     break;
 
-                case ProcedureReturnType::NODE:
+                case ProcedureType::NODE:
                     declBuilder.addReturnType(EvaluatedType::NodePattern, returnItem._name);
                     break;
-                case ProcedureReturnType::EDGE:
+                case ProcedureType::EDGE:
                     declBuilder.addReturnType(EvaluatedType::EdgePattern, returnItem._name);
                     break;
-                case ProcedureReturnType::VALUE_TYPE:
+                case ProcedureType::VALUE_TYPE:
                     declBuilder.addReturnType(EvaluatedType::ValueType, returnItem._name);
                     break;
-                case ProcedureReturnType::LABEL_ID:
-                case ProcedureReturnType::EDGE_TYPE_ID:
-                case ProcedureReturnType::PROPERTY_TYPE_ID:
-                case ProcedureReturnType::UINT_64:
-                case ProcedureReturnType::INT64:
+                case ProcedureType::LABEL_ID:
+                case ProcedureType::EDGE_TYPE_ID:
+                case ProcedureType::PROPERTY_TYPE_ID:
+                case ProcedureType::UINT_64:
+                case ProcedureType::INT64:
                     declBuilder.addReturnType(EvaluatedType::Integer, returnItem._name);
                     break;
-                case ProcedureReturnType::DOUBLE:
+                case ProcedureType::DOUBLE:
                     declBuilder.addReturnType(EvaluatedType::Double, returnItem._name);
                     break;
-                case ProcedureReturnType::BOOL:
+                case ProcedureType::BOOL:
                     declBuilder.addReturnType(EvaluatedType::Bool, returnItem._name);
                     break;
-                case ProcedureReturnType::STRING_VIEW:
-                case ProcedureReturnType::STRING:
+                case ProcedureType::STRING_VIEW:
+                case ProcedureType::STRING:
                     declBuilder.addReturnType(EvaluatedType::String, returnItem._name);
                     break;
 
-                case ProcedureReturnType::_SIZE:
+                case ProcedureType::_SIZE:
+                    throw FatalException("Invalid procedure return type: _SIZE");
+                break;
+            }
+        }
+
+        for (const auto& arg : blueprint._argumentTypes) {
+            switch (arg._type) {
+                case ProcedureType::INVALID:
+                    throw FatalException("Invalid procedure return type");
+                    break;
+
+                case ProcedureType::NODE:
+                    declBuilder.addArgument(EvaluatedType::NodePattern);
+                    break;
+                case ProcedureType::EDGE:
+                    declBuilder.addArgument(EvaluatedType::EdgePattern);
+                    break;
+                case ProcedureType::VALUE_TYPE:
+                    declBuilder.addArgument(EvaluatedType::ValueType);
+                    break;
+                case ProcedureType::LABEL_ID:
+                case ProcedureType::EDGE_TYPE_ID:
+                case ProcedureType::PROPERTY_TYPE_ID:
+                case ProcedureType::UINT_64:
+                case ProcedureType::INT64:
+                    declBuilder.addArgument(EvaluatedType::Integer);
+                    break;
+                case ProcedureType::DOUBLE:
+                    declBuilder.addArgument(EvaluatedType::Double);
+                    break;
+                case ProcedureType::BOOL:
+                    declBuilder.addArgument(EvaluatedType::Bool);
+                    break;
+                case ProcedureType::STRING_VIEW:
+                case ProcedureType::STRING:
+                    declBuilder.addArgument(EvaluatedType::String);
+                    break;
+
+                case ProcedureType::_SIZE:
                     throw FatalException("Invalid procedure return type: _SIZE");
                 break;
             }

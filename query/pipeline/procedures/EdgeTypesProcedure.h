@@ -19,8 +19,8 @@ struct EdgeTypesProcedure {
             ._name = "db.edgeTypes",
             ._execCallback = &execute,
             ._allocCallback = &allocData,
-            ._returnValues = {{"id", ProcedureReturnType::EDGE_TYPE_ID},
-                              {"edgeType", ProcedureReturnType::STRING_VIEW}},
+            ._returnValues = {{"id", ProcedureType::EDGE_TYPE_ID},
+                              {"edgeType", ProcedureType::STRING_VIEW}},
         };
     }
 };

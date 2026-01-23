@@ -95,7 +95,7 @@ private:
     QueryCallbackV2 _callback;
     PipelineBuilder _builder;
 
-     VarColumnMap _declToColumn;
+    VarColumnMap _declToColumn;
 
     ColumnTag getCol(const VarDecl* var);
 

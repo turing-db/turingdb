@@ -60,6 +60,7 @@ public:
     PipelineNodeOutputInterface& addScanNodesByLabel(const LabelSet* labelset);
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
     PipelineBlockOutputInterface& addDatabaseProcedure(const ProcedureBlueprint& blueprint,
+                                                       std::span<const ProcedureBlueprint::InputItem> args,
                                                        std::span<ProcedureBlueprint::YieldItem> yield);
     PipelineBlockOutputInterface& addChangeOp(ChangeOp op);
     PipelineBlockOutputInterface& addCommit();

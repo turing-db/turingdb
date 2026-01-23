@@ -2,25 +2,22 @@
 
 #include "procedures/ProcedureBlueprint.h"
 #include "ProcedureData.h"
-#include "iterators/ScanLabelsIterator.h"
 
 namespace db {
 
-struct LabelsProcedure {
-    struct Data : public ProcedureData {
-        std::unique_ptr<ScanLabelsChunkWriter> _it;
-    };
-
+struct DescribeCommitProcedure {
     static std::unique_ptr<ProcedureData> allocData();
     static void execute(Procedure& proc);
 
     static ProcedureBlueprint createBlueprint() noexcept {
         return {
-            ._name = "db.labels",
+            ._name = "db.describeCommit",
             ._execCallback = &execute,
             ._allocCallback = &allocData,
-            ._returnValues = {{"id", ProcedureType::LABEL_ID},
-                              {"label", ProcedureType::STRING_VIEW}},
+            ._returnValues = {{"nodeCount", ProcedureType::UINT_64},
+                              {"edgeCount", ProcedureType::UINT_64},
+                              {"partCount", ProcedureType::UINT_64}},
+            ._argumentTypes = {{"commit", ProcedureType::STRING}},
         };
     }
 };

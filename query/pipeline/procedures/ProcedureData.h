@@ -21,12 +21,24 @@ public:
     ProcedureData& operator=(const ProcedureData&) = delete;
     ProcedureData& operator=(ProcedureData&&) = delete;
 
-    void resize(size_t size) {
+    void resizeInputColumns(size_t size) {
+        _inputColumns.resize(size);
+    }
+
+    void resizeReturnColumns(size_t size) {
         _returnColumns.resize(size);
+    }
+
+    const Column* getInputColumn(size_t i) {
+        return _inputColumns[i];
     }
 
     Column* getReturnColumn(size_t i) {
         return _returnColumns[i];
+    }
+
+    void setInputColumn(size_t i, const Column* col) {
+        _inputColumns[i] = col;
     }
 
     void setReturnColumn(size_t i, Column* col) {
@@ -34,6 +46,7 @@ public:
     }
 
 private:
+    std::vector<const Column*> _inputColumns;
     std::vector<Column*> _returnColumns;
 };
 

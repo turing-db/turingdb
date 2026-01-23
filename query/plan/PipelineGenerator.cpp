@@ -100,19 +100,19 @@ struct PropertyTypeDispatcher {
         switch (_valueType) {
             case db::ValueType::Int64:
                 executor.template operator()<db::types::Int64>();
-                break;
+            break;
             case db::ValueType::UInt64:
                 executor.template operator()<db::types::UInt64>();
-                break;
+            break;
             case db::ValueType::Double:
                 executor.template operator()<db::types::Double>();
-                break;
+            break;
             case db::ValueType::String:
                 executor.template operator()<db::types::String>();
-                break;
+            break;
             case db::ValueType::Bool:
                 executor.template operator()<db::types::Bool>();
-                break;
+            break;
             case db::ValueType::_SIZE:
             case db::ValueType::Invalid: {
                 throw PlannerException("Unsupported property type");
@@ -287,6 +287,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::JOIN:
             return translateJoinNode(static_cast<JoinNode*>(node));
         break;
+
         case PlanGraphOpcode::GET_PROPERTY:
             return translateGetPropertyNode(static_cast<GetPropertyNode*>(node));
         break;
@@ -504,8 +505,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
             entityTag = stream.asNodeStream()._nodeIDsTag;
         } else if (stream.isEdgeStream()) {
             entityTag = stream.asEdgeStream()._edgeIDsTag;
-        }
-        else {
+        } else {
             throw FatalException("Attempted to add GetPropertiesWithNull to pipeline "
                                  "with unkown entity and empty stream.");
         }
@@ -917,14 +917,14 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
     const YieldClause* yield = node->getYield();
 
     const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
-    const ExprChain* args = invocation->getArguments();
+    const ExprChain* argExprs = invocation->getArguments();
     const FunctionSignature* signature = invocation->getSignature();
 
     if (!invocation) [[unlikely]] {
         throw PlannerException("FunctionInvocationExpr does not have a FunctionInvocation");
     }
 
-    if (!args) [[unlikely]] {
+    if (!argExprs) [[unlikely]] {
         throw PlannerException("FunctionInvocation does not have arguments");
     }
 
@@ -933,6 +933,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
     }
 
     std::vector<const VarDecl*> yieldDecls;
+    std::vector<ProcedureBlueprint::InputItem> inputItems;
     std::vector<ProcedureBlueprint::YieldItem> yieldItems;
 
     const ProcedureBlueprint* blueprint = _blueprints->getBlueprint(signature->_fullName);
@@ -951,7 +952,43 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         }
     }
 
-    _builder.addDatabaseProcedure(*blueprint, yieldItems);
+    PipelineOutputInterface* prevOutput = _builder.getPendingOutputInterface();
+    Dataframe* inDf = nullptr;
+
+    if (prevOutput) {
+        inDf = prevOutput->getDataframe();
+    }
+
+    size_t i = 0;
+    for (const auto* argExpr : *argExprs) {
+        const Column* col = nullptr;
+
+        const VarDecl* argDecl = argExpr->getExprVarDecl();
+
+        if (!argDecl) {
+            ExprProgram* exprProg = ExprProgram::create(_pipeline);
+            ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
+            col = exprGen.generateExpr(argExpr);
+        } else {
+            auto it = _declToColumn.find(argDecl);
+            bioassert(it != _declToColumn.end(),
+                      "Argument does not have a variable declaration");
+            const ColumnTag tag = it->second;
+            const NamedColumn* namedCol = inDf->getColumn(tag);
+
+            if (!namedCol) [[unlikely]] {
+                throw PlannerException("Column not found");
+            }
+
+            col = namedCol->getColumn();
+        }
+
+        bioassert(col, "Column not found");
+
+        inputItems.emplace_back(i++, col);
+    }
+
+    _builder.addDatabaseProcedure(*blueprint, inputItems, yieldItems);
 
     for (size_t i = 0; i < yieldItems.size(); i++) {
         const auto& item = yieldItems[i];
