@@ -327,8 +327,10 @@ struct ResultAllocator {
         switch (_op) {
             ALLOCATOR_CASE(OP_EQUAL, Eq)
             ALLOCATOR_CASE(OP_NOT_EQUAL, Ne)
+
             ALLOCATOR_CASE(OP_GREATER_THAN, Gt)
             ALLOCATOR_CASE(OP_LESS_THAN, Lt)
+
             default:
                 throw FatalException("Unsupported allocator.");
             break;

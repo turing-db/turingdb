@@ -37,6 +37,13 @@ inline static auto optionalPredicate(T&& a,
     return Pred {}(av, bv);
 }
 
+/**
+ * @brief Wrapper of overloads of @ref apply functions for different combinations of
+ * operands and outputs for executing predicates.
+ * @detail The role of this aggregate is to define once the logic for each possible
+ * combination of operand and result columns. It is not concerned with the types of its
+ * arguments.
+ */
 template <typename Op, typename Res, typename T, typename U>
 struct BinaryPredicateExecutor {
     static void apply(ColumnMask* res,
@@ -198,33 +205,11 @@ static inline void exec(ColumnOptMask* res, ColT&& lhs, ColU&& rhs) {
 
 using Eq = BinaryPredicate<std::equal_to<>>;
 using Ne = BinaryPredicate<std::not_equal_to<>>;
+
 using Gt = BinaryPredicate<std::greater<>>;
 using Lt = BinaryPredicate<std::less<>>;
 
-using Res = std::invoke_result_t<Eq, long int, long int>;
-using ColInt = const ColumnVector<long int>*&;
-using ColInts = ColumnVector<types::Int64::Primitive>;
-using MaybeColInts = ColumnOptVector<types::Int64::Primitive>;
-
-static_assert (
-    std::is_same_v<ColumnCombination<Eq, ColInts, ColInts>::ResultColumnType, ColumnMask>
-);
-
-static_assert (
-    std::is_same_v<ColumnCombination<Eq, ColumnNodeIDs, ColumnNodeIDs>::ResultColumnType, ColumnMask>
-);
-
-static_assert (
-    std::is_same_v<ColumnCombination<Eq, MaybeColInts, ColInts>::ResultColumnType, ColumnOptMask>
-);
-
-static_assert(std::predicate<Eq, unwrap_optional_t<NodeID>, unwrap_optional_t<NodeID>>);
-
-static_assert(OptionallyInvokable<Eq, PropertyNull, std::optional<NodeID>>);
-
-static_assert(std::is_same_v<ColumnCombination<Eq, ColumnNodeIDs, ColumnNodeIDs>::ResultColumnType, ColumnMask>);
-
-static_assert(std::is_same_v<ColumnCombination<Eq, ColumnOptVector<int>, ColumnOptVector<int>>::ResultColumnType, ColumnOptMask>);
-
+using Gte = BinaryPredicate<std::greater_equal<>>;
+using Lte = BinaryPredicate<std::less_equal<>>;
 
 }

@@ -2,17 +2,13 @@
 
 #include <functional>
 #include <optional>
-#include <type_traits>
 #include <utility>
 
 #include "ColumnCombinations.h"
 
 #include "BioAssert.h"
-#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
-#include "metadata/PropertyNull.h"
-#include "metadata/PropertyType.h"
 #include "spdlog/fmt/bundled/base.h"
 
 namespace db {
@@ -60,6 +56,13 @@ inline static auto optionalGeneric(T&& a,
     return Func {}(av, bv);
 }
 
+/**
+ * @brief Wrapper of overloads of @ref apply functions for different combinations of
+ * operands and outputs for executing operators.
+ * @detail The role of this aggregate is to define once the logic for each possible
+ * combination of operand and result columns. It is not concerned with the types of its
+ * arguments.
+ */
 template <typename Op, typename Res, typename T, typename U>
 struct BinaryOpExecutor {
     static void apply(ColumnVector<Res>* res,
