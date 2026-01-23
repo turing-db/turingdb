@@ -1,15 +1,14 @@
 #pragma once
 
-#include "MockS3Client.h"
-
+#include <aws/core/Aws.h>
 #include <aws/s3-crt/ClientConfiguration.h>
 #include <aws/s3-crt/S3CrtClient.h>
 #include <aws/s3-crt/model/GetObjectRequest.h>
-#include <aws/s3-crt/model/PutObjectRequest.h>
 #include <aws/s3-crt/model/ListObjectsV2Request.h>
-#include <aws/core/Aws.h>
+#include <aws/s3-crt/model/PutObjectRequest.h>
 
 #include "AwsManager.h"
+#include "MockS3Client.h"
 
 namespace S3 {
 

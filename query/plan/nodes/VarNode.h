@@ -20,5 +20,4 @@ private:
     const VarDecl* _varDecl {nullptr};
 };
 
-
 }

@@ -1,4 +1,5 @@
 #include "TombstoneRanges.h"
+
 #include "BioAssert.h"
 #include "EdgeRecord.h"
 #include "versioning/Tombstones.h"

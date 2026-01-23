@@ -258,6 +258,48 @@ void betterFunction() {
 }
 ```
 
+### 11. Missing Const
+**Severity:** warning
+
+Detects common cases where `const` should be used but is missing:
+
+**Non-const reference parameters for STL containers:**
+```cpp
+// Bad - should be const& if data is not modified
+void processData(std::vector<int>& data);
+void processMap(std::map<int, std::string>& mapping);
+
+// Good - const reference
+void processData(const std::vector<int>& data);
+
+// Good - output parameter (not flagged due to naming)
+void getData(std::vector<int>& result);
+void getValues(std::vector<int>& output);
+```
+
+**Local variables that are never modified:**
+```cpp
+// Bad - value is never changed
+void example() {
+    int value = 42;      // Warning: could be const
+    printf("%d", value);
+}
+
+// Good - explicit const
+void example() {
+    const int value = 42;
+    printf("%d", value);
+}
+
+// Good - variable is modified
+void example() {
+    int counter = 0;
+    counter++;  // Modified, no warning
+}
+```
+
+**Excluded:** Loop variables (i, j, k, etc.), iterators, and output parameters named `result`, `output`, `out`, or `ret`.
+
 ## Skipped Files
 
 The following are automatically skipped:

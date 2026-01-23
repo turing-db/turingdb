@@ -227,7 +227,6 @@ private:
         return BadResult(HTTP::Error::HEADER_INCOMPLETE);
     }
 
-
     static bool isBlank(char c) {
         return (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t');
     }

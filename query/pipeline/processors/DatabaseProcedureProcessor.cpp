@@ -173,7 +173,8 @@ void DatabaseProcedureProcessor::allocColumns(LocalMemory& mem,
     }
 }
 
-DatabaseProcedureProcessor::DatabaseProcedureProcessor() {
+DatabaseProcedureProcessor::DatabaseProcedureProcessor()
+{
 }
 
 DatabaseProcedureProcessor::~DatabaseProcedureProcessor() {

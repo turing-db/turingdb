@@ -24,7 +24,7 @@ using UserData = void*;
 // Cross-platform event structure
 struct EpollEvent {
     uint32_t events;
-    void* data;
+    void* data {nullptr};
 };
 
 // Cross-platform event flags
@@ -41,7 +41,6 @@ inline constexpr uint32_t EVENT_HUP     = EPOLLHUP;
 inline constexpr uint32_t EVENT_ET      = EPOLLET;
 inline constexpr uint32_t EVENT_ONESHOT = EPOLLONESHOT;
 #endif
-
 
 // @brief sets TCP_NODELAY on a socket
 //

@@ -373,7 +373,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterfa
     const Dataframe* leftDf = join->leftInput().getDataframe();
     const Dataframe* rightDf = join->rightInput().getDataframe();
 
-
     PipelineBlockOutputInterface& outInterface = join->output();
     Dataframe* outDf = outInterface.getDataframe();
 

@@ -24,7 +24,6 @@ NodePatternData::NodePatternData()
 NodePatternData::~NodePatternData() {
 }
 
-
 NodePatternData* NodePatternData::create(CypherAST* ast) {
     NodePatternData* data = new NodePatternData();
     ast->addNodePatternData(data);

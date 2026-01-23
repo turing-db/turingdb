@@ -74,7 +74,6 @@ public:
             return true;
         }
 
-
         if (_nesting == 7) {
             _currentPropName += " (UInt64)";
             const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::UInt64);
@@ -209,7 +208,7 @@ public:
 private:
     DataPartBuilder* _buf {nullptr};
     MetadataBuilder* _metadata {nullptr};
-    IDMapper* _nodeIDMapper;
+    IDMapper* _nodeIDMapper {nullptr};
     LabelSet _labelset;
     size_t _nesting = 0;
     NodeID _currentNodeID = 0;

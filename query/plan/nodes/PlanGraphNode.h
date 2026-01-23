@@ -1,8 +1,8 @@
 #pragma once
 
-#include "EnumToString.h"
-
 #include <vector>
+
+#include "EnumToString.h"
 
 namespace db {
 

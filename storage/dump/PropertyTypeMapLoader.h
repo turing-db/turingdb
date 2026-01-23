@@ -63,7 +63,6 @@ public:
                     return DumpError::result(DumpErrorType::COULD_NOT_READ_PROP_TYPES);
                 }
 
-
                 const ValueType valueType = it.get<ValueType>();
                 const uint64_t strsize = it.get<uint64_t>();
 

@@ -4,7 +4,6 @@
 
 using namespace db;
 
-
 static inline std::random_device _rd;
 static inline std::mt19937 _generator(_rd());
 static inline std::uniform_int_distribution<uint64_t> _distribution {

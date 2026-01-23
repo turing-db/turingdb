@@ -8,7 +8,8 @@
 
 using namespace db;
 
-ProcedureBlueprintMap::ProcedureBlueprintMap() {
+ProcedureBlueprintMap::ProcedureBlueprintMap()
+{
 }
 
 ProcedureBlueprintMap::~ProcedureBlueprintMap() {

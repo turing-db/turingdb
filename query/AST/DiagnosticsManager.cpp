@@ -1,4 +1,5 @@
 #include "DiagnosticsManager.h"
+
 #include "CypherError.h"
 #include "SourceLocation.h"
 #include "SourceManager.h"

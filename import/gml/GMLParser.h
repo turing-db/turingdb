@@ -6,8 +6,6 @@
 #include "BasicResult.h"
 #include "GMLError.h"
 
-using namespace db;
-
 template <typename T>
 concept GMLSaxInterface = requires(T t) {
     { t.onNodeProperty(std::string_view {}, std::string_view {}) } -> std::same_as<bool>;
@@ -27,14 +25,14 @@ concept GMLSaxInterface = requires(T t) {
     { t.onEdgeEnd() } -> std::same_as<bool>;
 };
 
-#define CHECK_UNEXPECTED_EOF(expected)                                                     \
-    if (_rem.empty()) {                                                                    \
-        res = GMLError::result(_line, "Unexpected end of file. Expected: '{}'", expected); \
-        return res;                                                                        \
+#define CHECK_UNEXPECTED_EOF(expected)                                                        \
+    if (_rem.empty()) {                                                                       \
+        res = db::GMLError::result(_line, "Unexpected end of file. Expected: '{}'", expected); \
+        return res;                                                                           \
     }
 
-#define UNEXPECTED_TOKEN(unexpected, expected)                                                    \
-    res = GMLError::result(_line, "Unexpected token '{}'. Expected: '{}'", unexpected, expected); \
+#define UNEXPECTED_TOKEN(unexpected, expected)                                                       \
+    res = db::GMLError::result(_line, "Unexpected token '{}'. Expected: '{}'", unexpected, expected); \
     return res;
 
 template <GMLSaxInterface Interface>
@@ -52,15 +50,15 @@ public:
     GMLParser& operator=(const GMLParser&) = delete;
     GMLParser& operator=(GMLParser&&) = delete;
 
-    using StringResult = BasicResult<std::string_view, GMLError>;
-    using UintResult = BasicResult<uint64_t, GMLError>;
+    using StringResult = BasicResult<std::string_view, db::GMLError>;
+    using UintResult = BasicResult<uint64_t, db::GMLError>;
 
-    [[nodiscard]] GMLParseResult parse(std::string_view data) {
+    [[nodiscard]] db::GMLParseResult parse(std::string_view data) {
         _rem = data;
         _state = State::GraphRoot;
         _line = 1;
 
-        GMLParseResult res;
+        db::GMLParseResult res;
         GMLParser::StringResult strRes;
         GMLParser::UintResult uintRes;
 
@@ -71,16 +69,16 @@ public:
                 case State::GraphRoot: {
                     CHECK_UNEXPECTED_EOF("graph");
 
-                    const auto strRes = getNextWord(Tokens::GRAPH);
+                    const auto strRes = this->getNextWord(Tokens::GRAPH);
                     if (!strRes) {
                         return strRes.get_unexpected();
                     }
 
-                    if (res = checkToken(strRes.value(), Tokens::GRAPH); !res) {
+                    if (res = this->checkToken(strRes.value(), Tokens::GRAPH); !res) {
                         return res;
                     }
 
-                    if (res = checkToken(Tokens::OB); !res) {
+                    if (res = this->checkToken(Tokens::OB); !res) {
                         return res;
                     }
 
@@ -95,9 +93,9 @@ public:
                         skipBlanks();
                         if (!_rem.empty()) {
                             // We should have reached the end of the file by now
-                            const auto strRes = getNextWord("Edge/Node");
-                            if (checkToken(strRes.value(), Tokens::GRAPH)) {
-                                res = GMLError::result(_line, "Multigraph parsing is not supported yet");
+                            const auto strRes = this->getNextWord("Edge/Node");
+                            if (this->checkToken(strRes.value(), Tokens::GRAPH)) {
+                                res = db::GMLError::result(_line, "Multigraph parsing is not supported yet");
                                 return res;
                             }
                             UNEXPECTED_TOKEN(*_rem.data(), "end of file");
@@ -109,18 +107,18 @@ public:
                         UNEXPECTED_TOKEN(c, "alphabet");
                     }
 
-                    const auto strRes = getNextWord("Edge/Node");
+                    const auto strRes = this->getNextWord("Edge/Node");
                     if (!strRes) {
                         return strRes.get_unexpected();
                     }
 
-                    if (checkToken(strRes.value(), Tokens::NODE)) {
-                        if (res = checkToken(Tokens::OB); !res) {
+                    if (this->checkToken(strRes.value(), Tokens::NODE)) {
+                        if (res = this->checkToken(Tokens::OB); !res) {
                             return res;
                         }
                         _nodeID = std::numeric_limits<uint64_t>::max();
                         if (!_interface.onNodeBegin()) {
-                            res = GMLError::result(_line, "OnNodeBegin event failed");
+                            res = db::GMLError::result(_line, "OnNodeBegin event failed");
                             return res;
                         }
 
@@ -128,8 +126,8 @@ public:
                         break;
                     }
 
-                    if (checkToken(strRes.value(), Tokens::EDGE)) {
-                        if (res = checkToken(Tokens::OB); !res) {
+                    if (this->checkToken(strRes.value(), Tokens::EDGE)) {
+                        if (res = this->checkToken(Tokens::OB); !res) {
                             return res;
                         }
 
@@ -137,7 +135,7 @@ public:
                         _targetID = std::numeric_limits<uint64_t>::max();
 
                         if (!_interface.onEdgeBegin()) {
-                            res = GMLError::result(_line, "OnEdgeBegin event failed");
+                            res = db::GMLError::result(_line, "OnEdgeBegin event failed");
                             return res;
                         }
 
@@ -169,7 +167,7 @@ public:
                         }
 
                         if (!_interface.onNodeEnd()) {
-                            res = GMLError::result(_line, "OnNodeEnd event failed");
+                            res = db::GMLError::result(_line, "OnNodeEnd event failed");
                             return res;
                         }
 
@@ -183,7 +181,7 @@ public:
                         break;
                     }
 
-                    strRes = getNextWord("node property value");
+                    strRes = this->getNextWord("node property value");
                     if (!strRes) {
                         return strRes.get_unexpected();
                     }
@@ -216,7 +214,7 @@ public:
                         }
 
                         if (!_interface.onEdgeEnd()) {
-                            res = GMLError::result(_line, "OnEdgeEnd event failed");
+                            res = db::GMLError::result(_line, "OnEdgeEnd event failed");
                             return res;
                         }
 
@@ -237,7 +235,7 @@ public:
                         break;
                     }
 
-                    strRes = getNextWord("edge property value");
+                    strRes = this->getNextWord("edge property value");
                     if (!strRes) {
                         return strRes.get_unexpected();
                     }
@@ -249,14 +247,14 @@ public:
                 case State::NodeID: {
                     CHECK_UNEXPECTED_EOF("node ID (unsigned integer)");
 
-                    uintRes = parseID();
+                    uintRes = this->parseID();
                     if (!uintRes) {
                         return uintRes.get_unexpected();
                     }
 
                     _nodeID = uintRes.value();
                     if (!_interface.onNodeID(_nodeID)) {
-                        res = GMLError::result(_line, "OnNodeID event failed: {}", _nodeID);
+                        res = db::GMLError::result(_line, "OnNodeID event failed: {}", _nodeID);
                         return res;
                     }
 
@@ -269,13 +267,13 @@ public:
                         next();
                         CHECK_UNEXPECTED_EOF('"');
 
-                        strRes = parseQuotedString();
+                        strRes = this->parseQuotedString();
                         if (!strRes) {
                             return strRes.get_unexpected();
                         }
 
                         if (!_interface.onNodeProperty(_currentKey, strRes.value())) {
-                            res = GMLError::result(_line,
+                            res = db::GMLError::result(_line,
                                                    "OnNodeProperty event failed: {{{}: {}}}",
                                                    _currentKey,
                                                    strRes.value());
@@ -296,14 +294,14 @@ public:
                         UNEXPECTED_TOKEN(']', "property value");
                     }
 
-                    strRes = getNextWord("property value");
+                    strRes = this->getNextWord("property value");
                     if (!strRes) {
                         return strRes.get_unexpected();
                     }
 
                     // TODO Implement ints, booleans and floats
                     if (!_interface.onNodeProperty(_currentKey, strRes.value())) {
-                        res = GMLError::result(_line,
+                        res = db::GMLError::result(_line,
                                                "OnNodeProperty event failed: {{{}: {}}}",
                                                _currentKey,
                                                strRes.value());
@@ -322,13 +320,13 @@ public:
                         next();
                         CHECK_UNEXPECTED_EOF('"');
 
-                        strRes = parseQuotedString();
+                        strRes = this->parseQuotedString();
                         if (!strRes) {
                             return strRes.get_unexpected();
                         }
 
                         if (!_interface.onEdgeProperty(_currentKey, strRes.value())) {
-                            res = GMLError::result(_line,
+                            res = db::GMLError::result(_line,
                                                    "OnEdgeProperty event failed: {{{}: {}}}",
                                                    _currentKey,
                                                    strRes.value());
@@ -344,19 +342,18 @@ public:
                         break;
                     }
 
-
                     if (*_rem.data() == ']') {
                         UNEXPECTED_TOKEN(']', "property value");
                     }
 
-                    strRes = getNextWord("property value");
+                    strRes = this->getNextWord("property value");
                     if (!strRes) {
                         return strRes.get_unexpected();
                     }
 
                     // TODO Implement ints, booleans and floats
                     if (!_interface.onEdgeProperty(_currentKey, strRes.value())) {
-                        res = GMLError::result(_line,
+                        res = db::GMLError::result(_line,
                                                "OnEdgeProperty event failed: {{{}: {}}}",
                                                _currentKey,
                                                strRes.value());
@@ -371,14 +368,14 @@ public:
                 case State::EdgeSource: {
                     CHECK_UNEXPECTED_EOF("source ID (unsigned integer)");
 
-                    uintRes = parseID();
+                    uintRes = this->parseID();
                     if (!uintRes) {
                         return uintRes.get_unexpected();
                     }
 
                     _sourceID = uintRes.value();
                     if (!_interface.onEdgeSource(_sourceID)) {
-                        res = GMLError::result(_line, "OnEdgeSource event failed: {}", _sourceID);
+                        res = db::GMLError::result(_line, "OnEdgeSource event failed: {}", _sourceID);
                         return res;
                     }
 
@@ -387,21 +384,21 @@ public:
                 case State::EdgeTarget: {
                     CHECK_UNEXPECTED_EOF("target ID (unsigned integer)");
 
-                    const auto uintRes = parseID();
+                    const auto uintRes = this->parseID();
                     if (!uintRes) {
                         return uintRes.get_unexpected();
                     }
 
                     _targetID = uintRes.value();
                     if (!_interface.onEdgeTarget(_targetID)) {
-                        res = GMLError::result(_line, "OnEdgeTarget event failed: {}", _targetID);
+                        res = db::GMLError::result(_line, "OnEdgeTarget event failed: {}", _targetID);
                         return res;
                     }
 
                     _state = State::EdgePropertyKey;
                 } break;
                 case State::GraphAttributeKey: {
-                    strRes = getNextWord("Graph Attribute Key");
+                    strRes = this->getNextWord("Graph Attribute Key");
                     if (!strRes) {
                         return strRes.get_unexpected();
                     }
@@ -416,7 +413,7 @@ public:
                         next();
                         CHECK_UNEXPECTED_EOF('"');
 
-                        strRes = parseQuotedString();
+                        strRes = this->parseQuotedString();
                         if (!strRes) {
                             return strRes.get_unexpected();
                         }
@@ -425,7 +422,7 @@ public:
                         break;
                     }
 
-                    strRes = getNextWord("Graph Attribute Value");
+                    strRes = this->getNextWord("Graph Attribute Value");
                     if (!strRes) {
                         return strRes.get_unexpected();
                     }
@@ -491,9 +488,9 @@ private:
         }
     }
 
-    GMLParseResult checkToken(std::string_view parsedToken, std::string_view expectedToken) {
+    db::GMLParseResult checkToken(std::string_view parsedToken, std::string_view expectedToken) {
         if (parsedToken != expectedToken) {
-            return GMLError::result(_line,
+            return db::GMLError::result(_line,
                                     "Unexpected token '{}'. Expected: '{}'",
                                     parsedToken,
                                     expectedToken);
@@ -504,15 +501,15 @@ private:
         return {};
     }
 
-    GMLParseResult checkToken(char token) {
+    db::GMLParseResult checkToken(char token) {
         if (_rem.empty()) {
-            return GMLError::result(_line,
+            return db::GMLError::result(_line,
                                     "Unexpected end of file. Expected: '{}'",
                                     token);
         }
 
         if (*_rem.data() != token) {
-            return GMLError::result(_line,
+            return db::GMLError::result(_line,
                                     "Unexpected token '{}'. Expected: '{}'",
                                     *_rem.data(),
                                     token);
@@ -531,7 +528,7 @@ private:
             it++;
 
             if (it == _rem.end()) {
-                return GMLError::result(_line,
+                return db::GMLError::result(_line,
                                         "Unexpected end of file. Expected: '{}'",
                                         nextToken);
             }
@@ -551,7 +548,7 @@ private:
                 it++;
 
                 if (it == end) {
-                    return GMLError::result(_line,
+                    return db::GMLError::result(_line,
                                             "Unexpected end of file, Expected: '\"'",
                                             *_rem.data());
                 }
@@ -559,7 +556,7 @@ private:
                 it++;
 
                 if (it == end) {
-                    return GMLError::result(_line,
+                    return db::GMLError::result(_line,
                                             "Unexpected end of file, Expected: '\"'",
                                             *_rem.data());
                 }
@@ -577,14 +574,14 @@ private:
             it++;
 
             if (it == _rem.end()) {
-                return GMLError::result(_line, "Unexpected end of file. Expected: 'property value'");
+                return db::GMLError::result(_line, "Unexpected end of file. Expected: 'property value'");
             }
         }
     }
 
     UintResult parseID() {
         // Gathering
-        auto wordRes = getNextWord("ID (unsigned integer)");
+        auto wordRes = this->getNextWord("ID (unsigned integer)");
 
         if (!wordRes) {
             return wordRes.get_unexpected();
@@ -595,12 +592,12 @@ private:
         const auto res = std::from_chars(word.begin(), word.end(), id);
 
         if (res.ec == std::errc::result_out_of_range) {
-            return GMLError::result(_line,
+            return db::GMLError::result(_line,
                                     "Unexpected token '{}' (integer overflow). Expected: 'ID (unsigned integer)'",
                                     _rem.substr(0, word.size()));
         } else if (res.ec == std::errc::invalid_argument
                    || (size_t)std::distance(_rem.begin(), res.ptr) != word.size()) {
-            return GMLError::result(_line,
+            return db::GMLError::result(_line,
                                     "Unexpected token '{}'. Expected: 'ID (unsigned integer)'",
                                     _rem.substr(0, word.size()));
         }
@@ -609,7 +606,6 @@ private:
         skipBlanks();
         return id;
     }
-
 
     bool checkCurrentWord(std::string_view token) {
         if (_rem.size() < token.size() + 1) {

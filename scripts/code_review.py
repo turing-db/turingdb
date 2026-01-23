@@ -33,7 +33,10 @@ class StyleChecker:
     """Checks a single C++ file for style violations."""
 
     # Directories to skip
-    SKIP_DIRS = {"external", "third_party", "build", ".git"}
+    SKIP_DIRS = {"external", "third_party", "build", ".git", "googletest", "test"}
+
+    # File patterns to skip
+    SKIP_FILES = {"test_violations.h", "test_violations.cpp"}
 
     # File extensions to check
     CPP_EXTENSIONS = {".cpp", ".h", ".hpp", ".cc", ".cxx"}
@@ -55,6 +58,14 @@ class StyleChecker:
         for part in path.parts:
             if part in self.SKIP_DIRS:
                 return False
+
+        # Check if file should be skipped
+        if path.name in self.SKIP_FILES:
+            return False
+
+        # Skip unit test files (*Test.cpp, *Test.h)
+        if path.stem.endswith("Test"):
+            return False
 
         # Check extension
         if path.suffix not in self.CPP_EXTENSIONS:
@@ -81,6 +92,7 @@ class StyleChecker:
     EXTERNAL_LIBS = {
         "spdlog", "nlohmann", "crow", "antlr4", "gtest", "gmock",
         "faiss", "aws", "boost", "fmt", "rapidjson", "tbb",
+        "linenoise", "tabulate", "argparse", "termcolor", "range",
     }
 
     # Known standard library headers
@@ -91,10 +103,25 @@ class StyleChecker:
         "stddef.h", "stdio.h", "stdlib.h", "string.h", "time.h",
         "wchar.h", "wctype.h", "complex.h", "fenv.h", "inttypes.h",
         "stdbool.h", "stdint.h", "tgmath.h", "uchar.h",
-        # POSIX
-        "unistd.h", "fcntl.h", "sys/types.h", "sys/stat.h", "sys/wait.h",
-        "sys/mman.h", "sys/socket.h", "netinet/in.h", "arpa/inet.h",
-        "pthread.h", "dirent.h", "dlfcn.h",
+        # C++ wrapper headers (C headers with c prefix)
+        "cassert", "cctype", "cerrno", "cfloat", "climits", "clocale",
+        "cmath", "csetjmp", "csignal", "cstdarg", "cstddef", "cstdio",
+        "cstdlib", "cstring", "ctime", "cwchar", "cwctype", "ccomplex",
+        "cfenv", "cinttypes", "cstdbool", "cstdint", "ctgmath", "cuchar",
+        # POSIX/System headers
+        "unistd.h", "fcntl.h", "pthread.h", "dirent.h", "dlfcn.h",
+        "sys/types.h", "sys/stat.h", "sys/wait.h", "sys/mman.h",
+        "sys/socket.h", "sys/epoll.h", "sys/event.h", "sys/signalfd.h",
+        "sys/proc_info.h", "sys/time.h", "sys/resource.h", "sys/ioctl.h",
+        "sys/uio.h", "sys/un.h", "sys/select.h", "sys/poll.h",
+        "netinet/in.h", "netinet/tcp.h", "netinet/ip.h", "arpa/inet.h",
+        "net/if.h", "netdb.h",
+        # macOS specific
+        "libproc.h", "mach/mach.h", "mach/mach_time.h",
+        # Compiler intrinsics (x86, ARM, etc.)
+        "immintrin.h", "emmintrin.h", "xmmintrin.h", "pmmintrin.h",
+        "smmintrin.h", "nmmintrin.h", "ammintrin.h", "avxintrin.h",
+        "avx2intrin.h", "arm_neon.h",
         # C++ headers
         "algorithm", "any", "array", "atomic", "barrier", "bit",
         "bitset", "charconv", "chrono", "codecvt", "compare",
@@ -117,10 +144,12 @@ class StyleChecker:
     # STL containers that should not be returned by value
     STL_CONTAINERS = {
         "vector", "map", "unordered_map", "set", "unordered_set",
-        "list", "deque", "array", "forward_list", "multimap",
+        "list", "deque", "forward_list", "multimap",
         "unordered_multimap", "multiset", "unordered_multiset",
         "stack", "queue", "priority_queue", "string", "wstring",
-        "basic_string", "string_view", "span",
+        "basic_string", "string_view",
+        # Note: span is excluded - it's a lightweight non-owning view
+        # Note: array is excluded - it's fixed-size and trivially copyable
     }
 
     # Result type patterns - classes designed to be returned by value
@@ -137,6 +166,7 @@ class StyleChecker:
         self.check_pointer_member_init()
         self.check_stl_return_by_value()
         self.check_nontrivial_return_by_value()
+        self.check_missing_const()
         self.check_constructor_brackets()
         self.check_destructor_brackets()
         self.check_bracket_positioning()
@@ -147,6 +177,8 @@ class StyleChecker:
         """Check for 2+ consecutive blank lines."""
         blank_count = 0
         blank_start = 0
+        # Track recent lines to detect macro blocks
+        recent_nonblank_lines: list[str] = []
 
         for i, line in enumerate(self.lines, start=1):
             if line.strip() == "":
@@ -155,13 +187,24 @@ class StyleChecker:
                 blank_count += 1
             else:
                 if blank_count >= 2:
-                    self.add_violation(
-                        blank_start,
-                        "error",
-                        "Formatting",
-                        f"Found {blank_count} consecutive blank lines (max 1 allowed)",
+                    # Skip if we're after a macro block
+                    # A macro block has lines ending with \ (continuation)
+                    # Check if any of the recent lines were part of a macro
+                    is_after_macro = any(
+                        ln.rstrip().endswith("\\") for ln in recent_nonblank_lines
                     )
+                    if not is_after_macro:
+                        self.add_violation(
+                            blank_start,
+                            "error",
+                            "Formatting",
+                            f"Found {blank_count} consecutive blank lines (max 1 allowed)",
+                        )
                 blank_count = 0
+                # Keep track of recent non-blank lines (last 10)
+                recent_nonblank_lines.append(line)
+                if len(recent_nonblank_lines) > 10:
+                    recent_nonblank_lines.pop(0)
 
         # Check at end of file
         if blank_count >= 2:
@@ -244,9 +287,11 @@ class StyleChecker:
         if not includes:
             return
 
-        # Check 1: For .cpp files, first include should match filename
-        if not self._is_header:
-            filename = Path(self.filepath).stem  # e.g., "Graph" from "Graph.cpp"
+        # Check 1: For .cpp files that implement a class, first include should match filename
+        # Skip main.cpp, tool files, and similar entry point files
+        filename = Path(self.filepath).stem  # e.g., "Graph" from "Graph.cpp"
+        tool_files = {"main", "TuringImport", "TuringDBTool", "S3TestCli", "plan2"}
+        if not self._is_header and self._has_class_implementation() and filename not in tool_files:
             first_inc = includes[0]
             if first_inc[1] != "blank":
                 first_path = Path(first_inc[2]).stem
@@ -271,8 +316,13 @@ class StyleChecker:
         # Filter out blank markers for order checking
         real_includes = [(i, t, p, f) for i, t, p, f in includes if t != "blank"]
 
-        # Skip the first include in .cpp files (it's the class header)
-        start_idx = 1 if (not self._is_header and real_includes) else 0
+        # Skip the first include in .cpp files if it's the class header
+        start_idx = 0
+        if not self._is_header and real_includes and self._has_class_implementation():
+            filename = Path(self.filepath).stem
+            first_path = Path(real_includes[0][2]).stem
+            if first_path.lower() == filename.lower():
+                start_idx = 1
 
         # Track the "phase" of includes we're in
         # 0 = standard, 1 = external, 2 = project
@@ -320,12 +370,31 @@ class StyleChecker:
         if path in self.STD_HEADERS or first_part in self.STD_HEADERS:
             return "standard"
 
-        # Check for common standard library patterns
-        if path.startswith("sys/") or path.startswith("netinet/"):
+        # Check for common standard library/system header patterns
+        system_prefixes = ("sys/", "netinet/", "arpa/", "net/", "mach/")
+        if any(path.startswith(prefix) for prefix in system_prefixes):
             return "standard"
+
+        # FlexLexer.h is a system header (part of flex)
+        if path == "FlexLexer.h":
+            return "standard"
+
+        # range-v3 and similar template libraries in angle brackets
+        # but treat as external since they're not in the standard library
+        if path.startswith("range/"):
+            return "external"
 
         # Default: treat unknown angle-bracket includes as external
         return "external"
+
+    def _has_class_implementation(self) -> bool:
+        """Check if this .cpp file implements a class (has ClassName:: methods)."""
+        # Look for method definitions like ClassName::methodName or ClassName::ClassName
+        method_pattern = re.compile(r"^\s*(?:\w+(?:<[^>]+>)?\s+)?(\w+)::~?\w+\s*\(")
+        for line in self.lines:
+            if method_pattern.match(line.strip()):
+                return True
+        return False
 
     def check_pointer_member_init(self):
         """Check that pointer class members are initialized with {nullptr}.
@@ -396,8 +465,8 @@ class StyleChecker:
             if stripped in ("public:", "private:", "protected:"):
                 continue
 
-            # Skip lines with parentheses (method declarations, function pointers)
-            if "(" in stripped:
+            # Skip lines with parentheses (method declarations, function pointers, default params)
+            if "(" in stripped or stripped.endswith(")"):
                 continue
 
             # Skip lines with return, if, for, etc (shouldn't be here but safety check)
@@ -489,8 +558,34 @@ class StyleChecker:
             r"\s*\("
         )
 
+        # Track brace depth to distinguish function declarations from local variables
+        # Function declarations appear at depth 0 (global) or 1 (class body)
+        # Local variables appear at depth >= 2 (inside method bodies in headers)
+        # or depth >= 1 (inside function bodies in .cpp files)
+        brace_depth = 0
+        in_class = False
+        class_depth = 0
+
         for i, line in enumerate(self.lines, start=1):
             stripped = line.strip()
+
+            # Track class/struct definitions
+            if re.match(r"^(class|struct)\s+\w+", stripped) and ";" not in stripped:
+                in_class = True
+                if "{" in stripped:
+                    class_depth = brace_depth + 1
+                    brace_depth += stripped.count("{") - stripped.count("}")
+                else:
+                    class_depth = brace_depth + 1
+                continue
+
+            # Update brace depth
+            old_depth = brace_depth
+            brace_depth += stripped.count("{") - stripped.count("}")
+
+            # Track when we exit a class
+            if in_class and brace_depth < class_depth:
+                in_class = False
 
             # Skip empty lines, comments, preprocessor
             if not stripped or stripped.startswith("//") or stripped.startswith("#"):
@@ -500,11 +595,26 @@ class StyleChecker:
             if stripped.startswith("return ") or stripped.startswith("if "):
                 continue
 
+            # Only check at declaration scope (not inside function bodies)
+            # In headers: depth 0 (global) or depth == class_depth (class body)
+            # In .cpp files: depth 0 (global)
+            if self._is_header:
+                if brace_depth > 0 and (not in_class or brace_depth > class_depth):
+                    continue  # Inside a method body
+            else:
+                if brace_depth > 0:
+                    continue  # Inside a function body
+
             # Check for STL container return
             match = func_pattern.match(stripped)
             if match:
                 container = match.group(1)
                 func_name = match.group(2)
+
+                # Skip debug/logging methods that commonly return strings
+                if func_name in ("describe", "toString", "to_string", "str", "dump",
+                                 "format", "repr", "debug", "print", "show"):
+                    continue
 
                 # Check if it's an STL container
                 if container in self.STL_CONTAINERS:
@@ -527,6 +637,11 @@ class StyleChecker:
             if match:
                 string_type = match.group(1)
                 func_name = match.group(2)
+
+                # Skip debug/logging methods that commonly return strings
+                if func_name in ("describe", "toString", "to_string", "str", "dump",
+                                 "format", "repr", "debug", "print", "show"):
+                    continue
 
                 # Check it's not returning by reference
                 type_end = stripped.find(string_type) + len(string_type)
@@ -629,6 +744,10 @@ class StyleChecker:
                     if func_name == class_name or func_name.startswith("~"):
                         continue
 
+                    # Skip iterator functions (begin, end, etc.) - standard pattern
+                    if func_name in ("begin", "end", "cbegin", "cend", "rbegin", "rend"):
+                        continue
+
                     # Check it's not returning by reference or pointer
                     type_end = stripped.find(returned_type) + len(returned_type)
                     between = stripped[type_end:stripped.find(func_name)]
@@ -642,11 +761,219 @@ class StyleChecker:
                             f"'{class_name}' by value. Use a pointer or output parameter.",
                         )
 
-    def check_constructor_brackets(self):
-        """Check that constructors have opening bracket on the next line."""
-        # Strategy: Find constructor definitions and verify the constructor body
-        # opener { is on its own line (not on the same line as ) or initializer)
+    def check_missing_const(self):
+        """Check for missing const in common cases.
 
+        Detects:
+        1. Non-const reference parameters for STL containers (likely should be const)
+        2. Local variables that are never modified after initialization
+        """
+        # Only check implementation files for local variable analysis
+        # Check both for reference parameters
+
+        self._check_nonconst_reference_params()
+        if not self._is_header:
+            self._check_nonconst_local_variables()
+
+    def _check_nonconst_reference_params(self):
+        """Check for non-const reference parameters that should likely be const.
+
+        Focuses on STL container references which are almost always input-only.
+        """
+        # Pattern to match function declarations/definitions with parameters
+        # We look for STL container references without const
+        for i, line in enumerate(self.lines, start=1):
+            stripped = line.strip()
+
+            # Skip comments and preprocessor
+            if not stripped or stripped.startswith("//") or stripped.startswith("#"):
+                continue
+
+            # Must have parentheses (function signature)
+            if "(" not in stripped:
+                continue
+
+            # Skip constructors/destructors by checking for ::ClassName( pattern
+            if re.search(r"(\w+)::~?\1\s*\(", stripped):
+                continue
+
+            # Look for non-const STL container references in parameters
+            for container in self.STL_CONTAINERS:
+                # Match: std::vector<...>& name or vector<...>& name
+                # But NOT: std::vector<...>* (pointer)
+                pattern = (
+                    rf"(?:std::)?{container}\s*<[^>]+>\s*&\s*"  # container<T>&
+                    rf"(?!&)"  # not && (rvalue ref)
+                    rf"(\w+)"  # parameter name
+                )
+
+                for match in re.finditer(pattern, stripped):
+                    param_name = match.group(1)
+
+                    # Skip if it looks like an output parameter
+                    if param_name.lower() in ("result", "output", "out", "ret"):
+                        continue
+
+                    # Check if const appears before this match position
+                    match_start = match.start()
+                    before_match = stripped[:match_start]
+                    # Look for "const" followed by optional whitespace at the end of before_match
+                    # or "const " anywhere that applies to this parameter
+                    if re.search(r"\bconst\s+(?:std::)?" + container, stripped[:match.end()]):
+                        continue
+
+                    self.add_violation(
+                        i,
+                        "warning",
+                        "Const",
+                        f"Parameter '{param_name}' is a non-const reference to "
+                        f"std::{container}. Consider using const& if not modified.",
+                    )
+
+    def _check_nonconst_local_variables(self):
+        """Check for local variables that could be const.
+
+        Detects variables that are initialized but never assigned to afterwards.
+        """
+        # Track function bodies
+        brace_depth = 0
+        in_function = False
+        function_start = 0
+
+        # Variables declared in current function: {name: (line, is_modified)}
+        local_vars: dict[str, tuple[int, bool]] = {}
+
+        # Pattern for local variable declarations
+        # Matches: Type name = value; or Type name(value); or Type name{value};
+        var_decl = re.compile(
+            r"^\s*"
+            r"(?!return|if|else|for|while|switch|case|break|continue|goto|throw|void|virtual|static|inline)"
+            r"(?:const\s+)?"
+            r"(\w+(?:::\w+)?(?:<[^>]+>)?)"  # type
+            r"(?:\s*[*&])?\s+"  # optional pointer/ref
+            r"(\w+)"  # variable name
+            r"\s*[=({]"  # initialization
+        )
+
+        # Pattern for assignments
+        assign_pattern = re.compile(r"(\w+)\s*(?:\[.*\])?\s*=[^=]")
+
+        # Pattern for non-const method calls or passing as non-const ref
+        modify_patterns = [
+            re.compile(r"(\w+)\s*\.\s*(?:push|pop|insert|erase|clear|resize|assign|emplace|swap|reset)"),
+            re.compile(r"(\w+)\s*\[\s*.*\s*\]\s*="),  # array/map assignment
+            re.compile(r"(\w+)\s*\+\+"),  # increment
+            re.compile(r"\+\+\s*(\w+)"),  # prefix increment
+            re.compile(r"(\w+)\s*--"),  # decrement
+            re.compile(r"--\s*(\w+)"),  # prefix decrement
+            re.compile(r"(\w+)\s*(?:\+|-|\*|\/|%|&|\||\^)="),  # compound assignment
+        ]
+
+        for i, line in enumerate(self.lines, start=1):
+            stripped = line.strip()
+
+            # Skip comments
+            if stripped.startswith("//"):
+                continue
+
+            # Track brace depth
+            open_braces = stripped.count("{")
+            close_braces = stripped.count("}")
+
+            # Detect function start
+            if not in_function and open_braces > 0:
+                # Check if this looks like a function body start
+                if brace_depth == 0 and "(" in stripped or i > 1:
+                    prev_lines = "".join(self.lines[max(0, i-3):i])
+                    if "(" in prev_lines and ")" in prev_lines:
+                        in_function = True
+                        function_start = i
+                        local_vars = {}
+
+            brace_depth += open_braces - close_braces
+
+            # Function ended
+            if in_function and brace_depth == 0:
+                # Report unmodified variables
+                for var_name, (decl_line, is_modified) in local_vars.items():
+                    if not is_modified:
+                        # Check the declaration line doesn't already have const
+                        decl = self.lines[decl_line - 1]
+                        if not re.search(rf"\bconst\b.*\b{var_name}\b", decl):
+                            self.add_violation(
+                                decl_line,
+                                "warning",
+                                "Const",
+                                f"Local variable '{var_name}' is never modified. "
+                                "Consider declaring it as const.",
+                            )
+                in_function = False
+                local_vars = {}
+                continue
+
+            if not in_function:
+                continue
+
+            # Look for variable declarations
+            match = var_decl.match(stripped)
+            if match:
+                type_name = match.group(1)
+                var_name = match.group(2)
+
+                # Skip loop variables, iterators, and common mutable patterns
+                if var_name in ("i", "j", "k", "n", "it", "iter", "idx", "index"):
+                    continue
+
+                # Skip RAII lock variables (lock_guard, unique_lock, scoped_lock, etc.)
+                if var_name in ("lock", "lk", "guard") or "lock" in var_name.lower():
+                    continue
+                if "lock_guard" in stripped or "unique_lock" in stripped or "scoped_lock" in stripped:
+                    continue
+
+                # Skip if already const
+                if "const " in stripped and stripped.index("const ") < stripped.index(var_name):
+                    continue
+
+                # Skip pointer/reference declarations (complex to analyze)
+                if "*" in stripped[:stripped.index(var_name)] or "&" in stripped[:stripped.index(var_name)]:
+                    continue
+
+                # Skip function calls/declarations: check if ( is followed by ) on same line
+                # This filters out lines like: Type funcName(args);
+                var_pos = stripped.index(var_name)
+                after_var = stripped[var_pos + len(var_name):]
+                if after_var.lstrip().startswith("(") and ")" in after_var:
+                    # Looks like a function call, not a variable declaration
+                    continue
+
+                local_vars[var_name] = (i, False)
+
+            # Check for modifications
+            for var_name in list(local_vars.keys()):
+                if local_vars[var_name][1]:  # Already marked as modified
+                    continue
+
+                # Check assignment
+                if re.search(rf"\b{var_name}\s*(?:\[.*\])?\s*=[^=]", stripped):
+                    # Skip if this is the declaration line
+                    if local_vars[var_name][0] != i:
+                        local_vars[var_name] = (local_vars[var_name][0], True)
+                    continue
+
+                # Check modifying operations
+                for pattern in modify_patterns:
+                    if pattern.search(stripped):
+                        match = pattern.search(stripped)
+                        if match and match.group(1) == var_name:
+                            local_vars[var_name] = (local_vars[var_name][0], True)
+                            break
+
+    def check_constructor_brackets(self):
+        """Check that constructors have opening bracket on the next line.
+
+        Per CODING_STYLE.md: Constructors are the only place where the opening
+        bracket must be on the next line (applies to all constructors).
+        """
         # Regex to match start of constructor: ClassName::ClassName(
         constructor_start = re.compile(r"^(\w+)::(\1)\s*\(")
 
@@ -667,13 +994,19 @@ class StyleChecker:
             paren_depth = stripped.count("(") - stripped.count(")")
 
             # Find the line where parameters end (paren_depth reaches 0)
+            # Also collect all the lines to check for = default/delete
+            constructor_text = stripped
             while paren_depth > 0 and i < len(self.lines):
                 next_line = self.lines[i].strip()
+                constructor_text += " " + next_line
                 paren_depth += next_line.count("(") - next_line.count(")")
                 i += 1
 
-            # Now find the constructor body opener - a line that is just "{"
-            # Skip initializer list lines
+            # Skip defaulted or deleted constructors (no body to check)
+            if "= default" in constructor_text or "= delete" in constructor_text:
+                continue
+
+            # Now find the constructor body opener - should be a line that is just "{"
             found_body_opener = False
             for j in range(i - 1, min(i + 10, len(self.lines))):
                 check_line = self.lines[j].strip()
@@ -690,10 +1023,6 @@ class StyleChecker:
                 # If we find a line ending with { that's not a standalone {
                 # it's a violation (constructor body opener should be on its own line)
                 if check_line.endswith("{"):
-                    # Check if this is the constructor body opener
-                    # A line like ": _value(0) {" is a violation
-                    # A line like "new Foo {bar}," is NOT a violation (brace init)
-
                     # If line has } it's brace initialization, not body opener
                     if "}" in check_line:
                         continue

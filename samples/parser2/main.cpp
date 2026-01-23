@@ -68,6 +68,5 @@ int main(int argc, char** argv) {
         dumper.dump(std::cout);
     }
 
-
     return EXIT_SUCCESS;
 }

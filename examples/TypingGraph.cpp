@@ -31,6 +31,5 @@ void TypingGraph::createTypingGraph(Graph* graph) {
     writer.addEdgeProperty<types::String>(typeFriend, "name", "type has a friend");
     writer.commit();
 
-
     writer.submit();
 }

@@ -57,7 +57,6 @@ bool testGraph(const Graph& graph, const fs::Path& path) {
     const auto t1 = Clock::now();
     logt::ElapsedTime(duration<Seconds>(t0, t1), "s");
 
-
     if (!GraphComparator::same(graph, *loadedGraph)) {
         fmt::print("Loaded graph is not the same as the one dumped\n");
         return false;

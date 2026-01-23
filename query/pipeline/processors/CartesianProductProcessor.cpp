@@ -17,7 +17,6 @@ using namespace db;
 
 namespace {
 
-
 void clearDataframe(Dataframe* df) {
     for (NamedColumn* nCol : df->cols()) {
         Column* col = nCol->getColumn();

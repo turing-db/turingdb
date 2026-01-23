@@ -397,7 +397,6 @@ void WriteProcessor::createEdges(size_t numIters) {
             }
         }
 
-
         // Populate the output column for this edge with the index in the CWB which it
         // appears. These indexes are later transformed into "fake IDs" (an estimate as to
         // what the EdgeID will be when it is committed) in @ref postProcessFakeIDs.

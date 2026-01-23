@@ -1,14 +1,14 @@
 #include "TuringShell.h"
 
+#include <regex>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <linenoise.h>
-#include <regex>
-#include <tabulate/table.hpp>
 #include <argparse.hpp>
+#include <linenoise.h>
 #include <spdlog/spdlog.h>
+#include <tabulate/table.hpp>
 #include <termcolor/termcolor.hpp>
 
 #include "TuringDB.h"
@@ -172,7 +172,6 @@ void checkoutCommand(const TuringShell::Command::Words& args, TuringShell& shell
     }
 
     const auto currentCommit = shell.getCommitHash();
-
 
     if (currentCommit != hashRes.value()) {
         shell.setCommitHash(hashRes.value());

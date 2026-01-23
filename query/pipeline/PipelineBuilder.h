@@ -39,7 +39,6 @@ class ExprProgram;
 class PredicateProgram;
 class ProcedureBlueprintMap;
 
-
 class PipelineBuilder {
 public:
     using ForkOutputs = std::vector<PipelineBlockOutputInterface>;

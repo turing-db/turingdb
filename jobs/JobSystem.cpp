@@ -1,7 +1,8 @@
 #include "JobSystem.h"
 
-#include <spdlog/spdlog.h>
 #include <assert.h>
+
+#include <spdlog/spdlog.h>
 
 #include "JobGroup.h"
 

@@ -1,10 +1,11 @@
 #pragma once
 
 #include <charconv>
-#include <spdlog/fmt/ostr.h>
 #include <cstdint>
 #include <limits>
 #include <string>
+
+#include <spdlog/fmt/ostr.h>
 
 #include "BasicResult.h"
 

@@ -1,5 +1,7 @@
 #include "GetEdgeTypeIDProcessor.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "ExecutionContext.h"
 #include "FatalException.h"
 #include "ID.h"
@@ -8,8 +10,6 @@
 #include "dataframe/NamedColumn.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
-
-#include <spdlog/fmt/fmt.h>
 
 using namespace db;
 

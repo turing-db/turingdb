@@ -2,14 +2,14 @@
 
 #include "Iterator.h"
 
+#include <span>
+
 #include "ChunkWriter.h"
-#include "TombstoneFilter.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "EdgeRecord.h"
 #include "PartIterator.h"
-
-#include <span>
+#include "TombstoneFilter.h"
 
 namespace db {
 

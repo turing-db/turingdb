@@ -6,7 +6,6 @@
 #include "FilePageWriter.h"
 #include "PropertyContainerDumpConstants.h"
 
-
 namespace db {
 
 template <TrivialSupportedType T>
@@ -81,7 +80,6 @@ public:
                 const std::span valueSpan = std::span {values}.subspan(offset, countInPage);
                 offset += countInPage;
 
-
                 // Header
                 _writer.writeToCurrentPage(countInPage);
 
@@ -98,7 +96,6 @@ public:
 
         return {};
     }
-
 
 private:
     fs::FilePageWriter& _writer;
@@ -193,7 +190,6 @@ public:
 
             auto* buffer = &_writer.buffer();
 
-
             for (uint64_t i = 0; i < buckets.bucketCount(); i++) {
                 const auto& bucket = buckets.bucket(i);
                 const std::span limits = bucket.limits();
@@ -257,7 +253,6 @@ public:
 
         return {};
     }
-
 
 private:
     fs::FilePageWriter& _writer;

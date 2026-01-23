@@ -1,7 +1,8 @@
 #pragma once
 
-#include "QueryCommand.h"
 #include <string_view>
+
+#include "QueryCommand.h"
 
 namespace db {
 

@@ -1,9 +1,9 @@
-#include <spdlog/spdlog.h>
-
-#include <memory>
-#include <vector>
 #include <bitset>
+#include <memory>
 #include <stack>
+#include <vector>
+
+#include <spdlog/spdlog.h>
 
 template <typename T>
 using rc = std::shared_ptr<T>;
@@ -163,7 +163,6 @@ int main(int argc, const char** argv) {
         }
     }
 
-
     // Initialize tree to be a single leaf pointing to first element
     auto root = std::make_shared<SignatureNode>();
     auto& signature = signatures.front();
@@ -204,7 +203,6 @@ int main(int argc, const char** argv) {
                        it.getBitCompareCount());
         }
     }
-
 
     return 0;
 }

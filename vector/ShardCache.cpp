@@ -1,7 +1,8 @@
 #include "ShardCache.h"
 
-#include <faiss/IndexFlat.h>
 #include <mutex>
+
+#include <faiss/IndexFlat.h>
 
 #include "StorageManager.h"
 #include "VecLibShard.h"

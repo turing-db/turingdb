@@ -64,7 +64,6 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         }
     }
 
-
     // Edges
     if (metadata.edgeTypesChanged()) {
         for (auto& e : edges->_outEdges) {

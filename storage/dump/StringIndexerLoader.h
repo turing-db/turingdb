@@ -1,10 +1,11 @@
 #pragma once
 
+#include <memory>
+
 #include "AlignedBuffer.h"
 #include "DumpResult.h"
 #include "FilePageReader.h"
 #include "indexers/StringPropertyIndexer.h"
-#include <memory>
 
 namespace db {
 

@@ -30,8 +30,8 @@ public:
     JoinType getJoinType() const { return _type; };
 
 private:
-    const VarDecl* _leftJoinKeyVar;
-    const VarDecl* _rightJoinKeyVar;
+    const VarDecl* _leftJoinKeyVar {nullptr};
+    const VarDecl* _rightJoinKeyVar {nullptr};
 
     JoinType _type;
 };

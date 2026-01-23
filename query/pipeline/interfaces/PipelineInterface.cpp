@@ -1,3 +1,5 @@
+#include "PipelineInterface.h"
+
 #include <spdlog/fmt/bundled/format.h>
 
 #include "PipelineBlockInputInterface.h"

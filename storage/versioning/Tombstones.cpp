@@ -1,7 +1,8 @@
 #include "Tombstones.h"
 
-#include "ID.h"
 #include <type_traits>
+
+#include "ID.h"
 
 using namespace db;
 

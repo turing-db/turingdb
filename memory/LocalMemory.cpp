@@ -1,4 +1,5 @@
 #include "LocalMemory.h"
+
 #include "columns/Column.h"
 #include "columns/ColumnSet.h"
 #include "columns/ColumnVector.h"

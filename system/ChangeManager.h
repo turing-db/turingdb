@@ -17,7 +17,7 @@ class JobSystem;
 class ChangeManager {
 public:
     struct GraphChangePair {
-        const Graph* _graph;
+        const Graph* _graph {nullptr};
         ChangeID _changeID;
 
         struct Hasher {

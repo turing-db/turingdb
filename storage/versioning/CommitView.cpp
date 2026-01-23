@@ -1,4 +1,5 @@
 #include "CommitView.h"
+
 #include "versioning/Commit.h"
 #include "versioning/Tombstones.h"
 #include "versioning/Transaction.h"

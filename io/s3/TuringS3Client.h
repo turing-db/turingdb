@@ -14,7 +14,6 @@ public:
     TuringS3Client& operator=(const ClientType&) = delete;
     TuringS3Client() = delete;
 
-
     ~TuringS3Client() = default;
 
     S3ClientResult<void> listKeys(const std::string& bucketName,

@@ -4,12 +4,12 @@
 
 #include <span>
 
-#include "PartIterator.h"
 #include "ChunkWriter.h"
-#include "TombstoneFilter.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "EdgeRecord.h"
+#include "PartIterator.h"
+#include "TombstoneFilter.h"
 
 namespace db {
 

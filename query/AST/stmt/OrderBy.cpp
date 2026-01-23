@@ -8,8 +8,7 @@ OrderBy::OrderBy()
 {
 }
 
-OrderBy::~OrderBy()
-{
+OrderBy::~OrderBy() {
 }
 
 OrderBy* OrderBy::create(CypherAST* ast) {

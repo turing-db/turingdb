@@ -1,7 +1,8 @@
 #pragma once
 
-#include <nlohmann/json.hpp>
 #include <regex>
+
+#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
 #include "Graph.h"
@@ -218,7 +219,7 @@ public:
 private:
     DataPartBuilder* _buf {nullptr};
     MetadataBuilder* _metadata {nullptr};
-    const IDMapper* _nodeIDMapper;
+    const IDMapper* _nodeIDMapper {nullptr};
     GraphReader _reader;
     size_t _nesting = 0;
     const EdgeRecord* _currentEdge {nullptr};

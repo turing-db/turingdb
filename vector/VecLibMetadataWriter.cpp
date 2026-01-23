@@ -4,7 +4,8 @@
 
 using namespace vec;
 
-VecLibMetadataWriter::VecLibMetadataWriter() {
+VecLibMetadataWriter::VecLibMetadataWriter()
+{
 }
 
 VecLibMetadataWriter::~VecLibMetadataWriter() {

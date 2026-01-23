@@ -23,7 +23,6 @@ public:
     JobSystem& operator=(JobSystem&&) = delete;
     ~JobSystem();
 
-
     /* @brief submits a job to be executed
      *
      * @param operation closure to be executed on one of the threads

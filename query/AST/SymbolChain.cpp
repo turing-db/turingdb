@@ -9,8 +9,7 @@ SymbolChain::SymbolChain()
 {
 }
 
-SymbolChain::~SymbolChain()
-{
+SymbolChain::~SymbolChain() {
 }
 
 SymbolChain* SymbolChain::create(CypherAST* ast) {

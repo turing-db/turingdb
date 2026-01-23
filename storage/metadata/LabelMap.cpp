@@ -10,7 +10,8 @@ LabelMap::LabelMap() = default;
 
 LabelMap::~LabelMap() = default;
 
-LabelMap::LabelMap(const LabelMap& other) {
+LabelMap::LabelMap(const LabelMap& other)
+{
     for (const auto& pair : other._container) {
         const LabelID id = pair._id;
         const auto& name = pair._name;

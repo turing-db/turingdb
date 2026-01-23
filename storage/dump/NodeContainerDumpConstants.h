@@ -24,7 +24,6 @@ public:
     // Single node record stride
     static constexpr size_t RECORD_STRIDE = sizeof(NodeRecord);
 
-
     // Avail space in range pages
     static constexpr size_t RANGES_PAGE_AVAIL = DumpConfig::PAGE_SIZE - RANGES_HEADER_STRIDE;
 

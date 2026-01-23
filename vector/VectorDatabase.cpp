@@ -10,11 +10,11 @@
 
 using namespace vec;
 
-VectorDatabase::VectorDatabase() {
+VectorDatabase::VectorDatabase()
+{
 }
 
-VectorDatabase::~VectorDatabase()
-{
+VectorDatabase::~VectorDatabase() {
 }
 
 VectorResult<std::unique_ptr<VectorDatabase>> VectorDatabase::create(const fs::Path& rootPath) {

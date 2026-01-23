@@ -21,7 +21,7 @@ public:
 private:
     PipelineValueOutputInterface _output;
 
-    ExecutionContext* _ctxt;
+    ExecutionContext* _ctxt {nullptr};
 
     ListGraphProcessor();
     ~ListGraphProcessor();

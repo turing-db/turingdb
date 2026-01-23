@@ -20,5 +20,4 @@ private:
     NamedColumn* _nodeIDs {nullptr};
 };
 
-
 }

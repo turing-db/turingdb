@@ -1,4 +1,5 @@
 #include "StringIndexerComparator.h"
+
 #include "spdlog/spdlog.h"
 
 using namespace db;

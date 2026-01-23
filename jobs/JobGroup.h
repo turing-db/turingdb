@@ -37,7 +37,7 @@ public:
 
 private:
     std::vector<std::shared_ptr<AbstractFuture>> _futures;
-    JobSystem* _jobSystem;
+    JobSystem* _jobSystem {nullptr};
 };
 
 }

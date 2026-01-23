@@ -1,9 +1,9 @@
 #pragma once
 
+#include <variant>
+
 #include "ID.h"
 #include "metadata/PropertyType.h"
-
-#include <variant>
 
 namespace db {
 

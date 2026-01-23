@@ -9,8 +9,7 @@ Limit::Limit(Expr* expr)
 {
 }
 
-Limit::~Limit()
-{
+Limit::~Limit() {
 }
 
 Limit* Limit::create(CypherAST* ast, Expr* expr) {

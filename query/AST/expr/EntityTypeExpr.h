@@ -24,7 +24,7 @@ public:
 
 private:
     Symbol* _symbol {nullptr};
-    SymbolChain* _types;
+    SymbolChain* _types {nullptr};
     VarDecl* _entityDecl {nullptr};
 
     EntityTypeExpr(Symbol* symbol, SymbolChain* types);

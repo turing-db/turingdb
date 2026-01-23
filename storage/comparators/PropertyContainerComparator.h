@@ -13,7 +13,6 @@ public:
                                    const TypedPropertyContainer<T>& b) {
         namespace rv = ranges::views;
 
-
         if (a.size() != b.size()) {
             return false;
         }

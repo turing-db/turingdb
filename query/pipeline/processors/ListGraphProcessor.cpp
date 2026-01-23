@@ -1,12 +1,12 @@
 #include "ListGraphProcessor.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "ExecutionContext.h"
 #include "SystemManager.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/NamedColumn.h"
 #include "metadata/PropertyType.h"
-
-#include <spdlog/fmt/fmt.h>
 
 using namespace db;
 

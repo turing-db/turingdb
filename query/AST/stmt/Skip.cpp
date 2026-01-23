@@ -9,8 +9,7 @@ Skip::Skip(Expr* expr)
 {
 }
 
-Skip::~Skip()
-{
+Skip::~Skip() {
 }
 
 Skip* Skip::create(CypherAST* ast, Expr* expr) {

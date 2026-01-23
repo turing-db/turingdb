@@ -103,7 +103,6 @@ int main(int argc, char** argv) {
             return EXIT_FAILURE;
         }
 
-
         CypherASTDumper dumper(analyzer.getAST());
         dumper.dump(std::cout);
     }

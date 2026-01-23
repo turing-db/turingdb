@@ -1,6 +1,5 @@
 #include "Utils.h"
 
-#include <spdlog/spdlog.h>
 #include <arpa/inet.h>
 #include <csignal>
 #include <cstring>
@@ -8,13 +7,14 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
-
 #ifdef __APPLE__
 #include <sys/event.h>
 #else
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
 #endif
+
+#include <spdlog/spdlog.h>
 
 namespace net::utils {
 
@@ -79,7 +79,6 @@ bool setNonBlock(Socket s, bool enable) {
              ? fcntl(s, F_SETFL, flags | O_NONBLOCK) != -1
              : fcntl(s, F_SETFL, flags & ~O_NONBLOCK) != -1;
 }
-
 
 inline constexpr socklen_t socketAddrLen = sizeof(struct sockaddr_in);
 

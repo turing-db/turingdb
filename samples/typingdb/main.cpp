@@ -72,7 +72,6 @@ int main(int argc, const char** argv) {
             }
         }
 
-
         spdlog::info("Edges:");
         {
             auto it = reader.scanEdgeProperties<types::String>(name._id).begin();

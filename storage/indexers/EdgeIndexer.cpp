@@ -125,7 +125,6 @@ std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
         }
     }
 
-
     // Patch in edges
     {
         NodeID currentNodeID;

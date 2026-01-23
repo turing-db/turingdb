@@ -1,8 +1,9 @@
 #include "VecLibShard.h"
 
+#include <mutex>
+
 #include <faiss/IndexFlat.h>
 #include <faiss/index_io.h>
-#include <mutex>
 
 #include "FileReader.h"
 #include "FileWriter.h"

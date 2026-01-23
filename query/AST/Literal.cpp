@@ -57,7 +57,8 @@ void MapLiteral::set(Symbol* key, Expr* value) {
     _map[key] = value;
 }
 
-WildcardLiteral::WildcardLiteral() {
+WildcardLiteral::WildcardLiteral()
+{
 }
 
 WildcardLiteral::~WildcardLiteral() {

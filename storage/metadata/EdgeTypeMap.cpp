@@ -6,7 +6,8 @@ EdgeTypeMap::EdgeTypeMap() = default;
 
 EdgeTypeMap::~EdgeTypeMap() = default;
  
-EdgeTypeMap::EdgeTypeMap(const EdgeTypeMap& other) {
+EdgeTypeMap::EdgeTypeMap(const EdgeTypeMap& other)
+{
     for (const auto& pair : other._container) {
         const EdgeTypeID id = pair._id;
         const auto& name = pair._name;

@@ -1,12 +1,12 @@
 #pragma once
 
-#include "ID.h"
-#include "SupportedType.h"
-#include "EnumToString.h"
-
 #include <map>
 #include <optional>
 #include <span>
+
+#include "EnumToString.h"
+#include "ID.h"
+#include "SupportedType.h"
 
 namespace db {
 
@@ -64,7 +64,6 @@ struct PropertyType {
 
     bool isValid() const { return _id.isValid(); }
 
-    
     bool operator==(const PropertyType& other) const {
         return _id.getValue() == other._id.getValue() && _valueType == other._valueType ;
     }

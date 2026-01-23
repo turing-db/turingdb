@@ -6,7 +6,8 @@ PropertyTypeMap::PropertyTypeMap() = default;
 
 PropertyTypeMap::~PropertyTypeMap() = default;
 
-PropertyTypeMap::PropertyTypeMap(const PropertyTypeMap& other) {
+PropertyTypeMap::PropertyTypeMap(const PropertyTypeMap& other)
+{
     for (const auto& pair : other._container) {
         const PropertyType& pt = pair._pt;
         const auto& name = pair._name;

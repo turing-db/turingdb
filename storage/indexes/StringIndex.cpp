@@ -1,11 +1,12 @@
 #include "StringIndex.h"
-#include "ID.h"
-#include "TuringException.h"
 
-#include <memory>
 #include <deque>
+#include <memory>
 #include <string>
 #include <unordered_set>
+
+#include "ID.h"
+#include "TuringException.h"
 
 using namespace db;
 
@@ -128,7 +129,6 @@ void StringIndex::split(std::vector<std::string>& res, std::string_view str,
 
     res.push_back(std::string(str.substr(l, std::min(r, str.size()) - l + 1)));
 }
-
 
 void StringIndex::preprocess(std::vector<std::string>& res, const std::string_view in) {
     std::string cleaned;

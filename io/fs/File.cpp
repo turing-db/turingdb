@@ -192,7 +192,6 @@ Result<void> File::refreshInfo() {
     return {};
 }
 
-
 Result<void> File::close() {
     if (::close(_fd) != 0) {
         return Error::result(ErrorType::CLOSE_FILE, errno);

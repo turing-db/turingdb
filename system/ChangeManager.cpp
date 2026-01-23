@@ -1,7 +1,7 @@
+#include "ChangeManager.h"
+
 #include <mutex>
 #include <shared_mutex>
-
-#include "ChangeManager.h"
 #include "Graph.h"
 #include "JobSystem.h"
 #include "versioning/CommitBuilder.h"

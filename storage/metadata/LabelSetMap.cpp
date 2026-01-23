@@ -4,7 +4,8 @@ using namespace db;
 
 LabelSetMap::LabelSetMap() = default;
 
-LabelSetMap::LabelSetMap(const LabelSetMap& other) {
+LabelSetMap::LabelSetMap(const LabelSetMap& other)
+{
     for (const auto& pair : other._container) {
         const LabelSetID id = pair._id;
         const auto& labelset = pair._value;

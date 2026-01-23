@@ -45,7 +45,6 @@ public:
     TemplateLabelSetHandle& operator=(const TemplateLabelSetHandle&) = default;
     TemplateLabelSetHandle& operator=(TemplateLabelSetHandle&& other) noexcept = default;
 
-
     ~TemplateLabelSetHandle() = default;
 
     LabelSetID getID() const { return _id; };

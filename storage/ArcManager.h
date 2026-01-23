@@ -289,7 +289,6 @@ private:
     mutable std::atomic<size_t> _refs {0};
 };
 
-
 /** Manages a set of atomically reference counted objects.
  * */
 template <typename T>

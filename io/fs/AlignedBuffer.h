@@ -239,7 +239,7 @@ public:
     const uint8_t* data() const { return _data; }
 
 private:
-    const AlignedBuffer* _buf;
+    const AlignedBuffer* _buf {nullptr};
     const uint8_t* _data {nullptr};
 };
 

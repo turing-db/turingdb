@@ -1,8 +1,8 @@
 #pragma once
 
-#include "decl/EvaluatedType.h"
-
 #include <stdint.h>
+
+#include "decl/EvaluatedType.h"
 
 namespace db {
 

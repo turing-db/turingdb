@@ -26,7 +26,6 @@ public:
 
     Direction getDirection() const { return _direction; }
 
-
     std::string_view getS3Url() const { return _s3Url; }
     std::string_view getLocalPath() const { return _localPath; }
 

@@ -38,7 +38,6 @@ public:
                                                size_t patchOutEdgeCount,
                                                size_t patchInEdgeCount);
 
-
     const LabelSetIndexer<EdgeSpans>& getOutsByLabelSet() const {
         return _outLabelSetSpans;
     }
@@ -65,7 +64,7 @@ private:
 
     NodeID _firstNodeID;
     EdgeID _firstEdgeID;
-    const EdgeContainer* _edges = nullptr;
+    const EdgeContainer* _edges {nullptr};
 
     // Out edge ranges and in edge ranges for each node
     std::vector<NodeEdgeData> _nodes;

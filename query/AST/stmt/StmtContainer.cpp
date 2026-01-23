@@ -4,7 +4,8 @@
 
 using namespace db;
 
-StmtContainer::StmtContainer() {
+StmtContainer::StmtContainer()
+{
 }
 
 StmtContainer::~StmtContainer() {

@@ -45,7 +45,6 @@ bool DataPartComparator::same(const DataPart& a, const DataPart& b) {
         return false;
     }
 
-
     if (!StringIndexerComparator::same(a.getEdgeStrPropIndexer(),
                                        b.getEdgeStrPropIndexer())) {
         spdlog::error("Error occured comparing edge string indexers");

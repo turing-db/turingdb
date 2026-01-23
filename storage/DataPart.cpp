@@ -2,10 +2,11 @@
 
 #include <memory>
 #include <numeric>
+#include <string>
+
 #include <range/v3/action/sort.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/transform.hpp>
-#include <string>
 
 #include "ID.h"
 #include "NodeContainer.h"

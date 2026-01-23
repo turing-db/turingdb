@@ -1,11 +1,11 @@
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <memory>
+
 #include "FlowStatus.h"
 #include "Utils.h"
-
-#include <atomic>
-#include <memory>
-#include <functional>
 
 namespace net {
 

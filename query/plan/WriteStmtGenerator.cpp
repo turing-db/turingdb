@@ -1,7 +1,8 @@
 #include "WriteStmtGenerator.h"
 
-#include <spdlog/fmt/bundled/format.h>
 #include <type_traits>
+
+#include <spdlog/fmt/bundled/format.h>
 
 #include "CypherAST.h"
 #include "ExprDependencies.h"
