@@ -38,7 +38,7 @@ jobs:
           set +e
           uv run --project scripts/codereview codereview \
             --diff origin/${{ github.base_ref }} \
-            --format json > violations.json 2>&1
+            --format json > violations.json
           exit_code=$?
           set -e
 
