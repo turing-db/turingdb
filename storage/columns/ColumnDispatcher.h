@@ -50,9 +50,11 @@ private:
     template <typename T>
     static consteval auto tryType() {
         if constexpr (K == ColumnVector<T>::staticKind()) {
-            return std::type_identity<ColumnVector<T>> {}; // Found the type
+            // Found the type: it's a ColumnVector
+            return std::type_identity<ColumnVector<T>> {};
         } else if constexpr (K == ColumnConst<T>::staticKind()) {
-            return std::type_identity<ColumnConst<T>> {}; // Found the type
+            // Found the type: it's a ColumnConst
+            return std::type_identity<ColumnConst<T>> {};
         } else {
             return std::type_identity<void> {}; // Type did not match
         }

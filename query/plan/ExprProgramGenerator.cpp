@@ -3,6 +3,9 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "PipelineGenerator.h"
+#include "columns/BinaryPredicates.h"
+#include "columns/ColumnCombinations.h"
+#include "columns/ColumnOperationExecutor.h"
 #include "dataframe/ColumnTag.h"
 #include "decl/EvaluatedType.h"
 #include "expr/Operators.h"
@@ -299,4 +302,31 @@ Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
                 (size_t)exprType));
         break;
     }
+}
+
+struct ResultAllocator {
+    Column* _resultCol {nullptr};
+    PipelineGenerator* _gen {nullptr};
+    ColumnOperator _op {ColumnOperator::_SIZE};
+
+    template <typename T, typename U>
+    void operator()(const T* lhs, const U* rhs) {
+        bioassert(lhs && rhs,
+                  "Attempted to allocate a result column with null operands.");
+
+        if (_op == OP_EQUAL) {
+            using ResultType = ColumnCombination<Eq, T, U>;
+            _resultCol = _gen->memory().alloc<ResultType>();
+        }
+    }
+};
+
+Column* ExprProgramGenerator::allocResCol(ColumnOperator op,
+                                          [[maybe_unused]] const Column* lhs,
+                                          [[maybe_unused]] const Column* rhs) {
+    Column* result = nullptr;
+
+    [[maybe_unused]] ResultAllocator allocator(result, _gen, op);
+    
+    return nullptr;
 }
