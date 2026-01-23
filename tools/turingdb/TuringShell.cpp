@@ -213,9 +213,10 @@ void readCommand(const TuringShell::Command::Words& args, TuringShell& shell, st
         return;
     }
 
-    fileName = FileUtils::expandPath(fileName);
-    if (!FileUtils::readContent(fileName, line)) {
-        spdlog::error("Can not read content of file {}", fileName);
+    std::string expandedPath;
+    FileUtils::expandPath(fileName, expandedPath);
+    if (!FileUtils::readContent(expandedPath, line)) {
+        spdlog::error("Can not read content of file {}", expandedPath);
         line.clear();
         return;
     }

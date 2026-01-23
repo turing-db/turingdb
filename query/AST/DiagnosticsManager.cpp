@@ -14,9 +14,9 @@ DiagnosticsManager::DiagnosticsManager(SourceManager* sourceManager)
 DiagnosticsManager::~DiagnosticsManager() {
 }
 
-std::string DiagnosticsManager::createErrorString(std::string_view msg, const void* obj) const {
+void DiagnosticsManager::createErrorString(std::string_view msg, const void* obj,
+                                            std::string& result) const {
     const SourceLocation* location = _sourceManager->getLocation((uintptr_t)obj);
-    std::string errorMsg;
 
     CypherError err {_sourceManager->getQueryString()};
     err.setTitle("Query error");
@@ -26,7 +26,5 @@ std::string DiagnosticsManager::createErrorString(std::string_view msg, const vo
         err.setLocation(*location);
     }
 
-    err.generate(errorMsg);
-
-    return errorMsg;
+    err.generate(result);
 }

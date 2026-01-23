@@ -46,7 +46,9 @@ VarDecl* DeclContext::getOrCreateNamedVariable(CypherAST* ast, EvaluatedType typ
         std::string msg = fmt::format("Variable '{}' is already declared with type '{}'",
                                       name,
                                       EvaluatedTypeName::value(decl->getType()));
-        throw CompilerException(ast->getDiagnosticsManager()->createErrorString(msg, nullptr));
+        std::string errorStr;
+        ast->getDiagnosticsManager()->createErrorString(msg, nullptr, errorStr);
+        throw CompilerException(std::move(errorStr));
     }
 
     return decl;

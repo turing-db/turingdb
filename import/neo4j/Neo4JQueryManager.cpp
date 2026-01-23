@@ -94,13 +94,14 @@ QueryManager::Query QueryManager::edgePropertiesQuery() const {
     return Query{std::move(query)};
 }
 
-std::vector<QueryManager::Query> QueryManager::nodesQueries(size_t nodeCount,
-                                                            size_t countPerQuery) const {
-    std::vector<Query> queries;
+void QueryManager::nodesQueries(size_t nodeCount,
+                                size_t countPerQuery,
+                                std::vector<Query>& result) const {
+    result.clear();
     uint64_t requested = 0;
 
     while (requested < nodeCount) {
-        auto& query = queries.emplace_back();
+        auto& query = result.emplace_back();
         query._request = std::make_unique<Neo4JHttpRequest>();
         query._request->setUrl(_url);
         query._request->setUrlSuffix(_urlSuffix);
@@ -115,17 +116,16 @@ std::vector<QueryManager::Query> QueryManager::nodesQueries(size_t nodeCount,
                                     + std::to_string(countPerQuery));
         requested += countPerQuery;
     }
-
-    return queries;
 }
 
-std::vector<QueryManager::Query> QueryManager::edgesQueries(size_t edgeCount,
-                                                            size_t countPerQuery) const {
-    std::vector<Query> queries;
+void QueryManager::edgesQueries(size_t edgeCount,
+                                size_t countPerQuery,
+                                std::vector<Query>& result) const {
+    result.clear();
     uint64_t requested = 0;
 
     while (requested < edgeCount) {
-        auto& query = queries.emplace_back();
+        auto& query = result.emplace_back();
         query._request = std::make_unique<Neo4JHttpRequest>();
         query._request->setUrl(_url);
         query._request->setUrlSuffix(_urlSuffix);
@@ -140,6 +140,4 @@ std::vector<QueryManager::Query> QueryManager::edgesQueries(size_t edgeCount,
                                     + std::to_string(countPerQuery));
         requested += countPerQuery;
     }
-
-    return queries;
 }

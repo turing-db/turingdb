@@ -603,5 +603,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
 }
 
 void ExprAnalyzer::throwError(std::string_view msg, const void* obj) const {
-    throw AnalyzeException(_ast->getDiagnosticsManager()->createErrorString(msg, obj));
+    std::string errorStr;
+    _ast->getDiagnosticsManager()->createErrorString(msg, obj, errorStr);
+    throw AnalyzeException(std::move(errorStr));
 }

@@ -668,5 +668,7 @@ void ReadStmtGenerator::insertDataFlowNode(VarNode* node, VarNode* dependency) {
 }
 
 void ReadStmtGenerator::throwError(std::string_view msg, const void* obj) const {
-    throw PlannerException(_ast->getDiagnosticsManager()->createErrorString(msg, obj));
+    std::string errorStr;
+    _ast->getDiagnosticsManager()->createErrorString(msg, obj, errorStr);
+    throw PlannerException(std::move(errorStr));
 }

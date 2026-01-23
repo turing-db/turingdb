@@ -165,7 +165,8 @@ bool Neo4jImporter::fromUrlToJsonDirImpl(JobSystem& jobSystem,
     }
 
     // Query nodes and write json files
-    auto nodeQueries = manager.nodesQueries(stats.nodeCount, nodeCountPerQuery);
+    std::vector<QueryManager::Query> nodeQueries;
+    manager.nodesQueries(stats.nodeCount, nodeCountPerQuery, nodeQueries);
 
     for (auto& nodeQuery : nodeQueries) {
         submitQuery(nodeQuery);
@@ -178,7 +179,8 @@ bool Neo4jImporter::fromUrlToJsonDirImpl(JobSystem& jobSystem,
     }
 
     // Query edges and write json files
-    auto edgeQueries = manager.edgesQueries(stats.edgeCount, edgeCountPerQuery);
+    std::vector<QueryManager::Query> edgeQueries;
+    manager.edgesQueries(stats.edgeCount, edgeCountPerQuery, edgeQueries);
 
     for (auto& edgeQuery : edgeQueries) {
         submitQuery(edgeQuery);

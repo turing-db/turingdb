@@ -17,7 +17,7 @@ public:
     DiagnosticsManager& operator=(const DiagnosticsManager&) = delete;
     DiagnosticsManager& operator=(DiagnosticsManager&&) = delete;
 
-    std::string createErrorString(std::string_view msg, const void* obj) const;
+    void createErrorString(std::string_view msg, const void* obj, std::string& result) const;
 
 private:
     SourceManager* _sourceManager {nullptr};

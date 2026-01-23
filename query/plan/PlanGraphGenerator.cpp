@@ -392,5 +392,7 @@ PlanGraphNode* PlanGraphGenerator::generateReturnNone(PlanGraphNode* prevNode) {
 }
 
 void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {
-    throw PlannerException(_ast->getDiagnosticsManager()->createErrorString(msg, obj));
+    std::string errorStr;
+    _ast->getDiagnosticsManager()->createErrorString(msg, obj, errorStr);
+    throw PlannerException(std::move(errorStr));
 }

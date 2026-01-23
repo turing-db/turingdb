@@ -66,10 +66,12 @@ public:
     Query edgeTypesQuery() const;
     Query nodePropertiesQuery() const;
     Query edgePropertiesQuery() const;
-    std::vector<Query> nodesQueries(size_t nodeCount,
-                                    size_t countPerQuery) const;
-    std::vector<Query> edgesQueries(size_t edgeCount,
-                                    size_t countPerQuery) const;
+    void nodesQueries(size_t nodeCount,
+                      size_t countPerQuery,
+                      std::vector<Query>& result) const;
+    void edgesQueries(size_t edgeCount,
+                      size_t countPerQuery,
+                      std::vector<Query>& result) const;
 
     void setUrl(std::string url) { _url = std::move(url); }
     void setUrlSuffix(std::string urlSuffix) { _urlSuffix = std::move(urlSuffix); }
