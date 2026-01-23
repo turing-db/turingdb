@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "EdgeRecord.h"
 #include "DumpConfig.h"

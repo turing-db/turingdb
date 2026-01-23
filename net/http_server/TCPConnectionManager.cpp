@@ -1,6 +1,6 @@
 #include "TCPConnectionManager.h"
 
-#include <cstdint>
+#include <stdint.h>
 #include <sys/socket.h>
 #include <unistd.h>
 

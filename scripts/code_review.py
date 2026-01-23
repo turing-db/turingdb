@@ -103,7 +103,8 @@ class StyleChecker:
         "stddef.h", "stdio.h", "stdlib.h", "string.h", "time.h",
         "wchar.h", "wctype.h", "complex.h", "fenv.h", "inttypes.h",
         "stdbool.h", "stdint.h", "tgmath.h", "uchar.h",
-        # C++ wrapper headers (C headers with c prefix)
+        # C++ wrapper headers (C headers with c prefix) - NOTE: these are discouraged,
+        # prefer the .h versions (e.g., <stdint.h> instead of <cstdint>)
         "cassert", "cctype", "cerrno", "cfloat", "climits", "clocale",
         "cmath", "csetjmp", "csignal", "cstdarg", "cstddef", "cstdio",
         "cstdlib", "cstring", "ctime", "cwchar", "cwctype", "ccomplex",
@@ -156,6 +157,35 @@ class StyleChecker:
     RESULT_TYPE_PATTERNS = {
         "Result", "Error", "Status", "Optional", "Expected",
         "Outcome", "Maybe", "Either", "Try", "Response",
+    }
+
+    # C++ wrapper headers mapped to their preferred C-style equivalents
+    # Per CODING_STYLE.md: use <stdlib.h> style, not <cstdlib>
+    CPP_TO_C_HEADERS = {
+        "cassert": "assert.h",
+        "ccomplex": "complex.h",
+        "cctype": "ctype.h",
+        "cerrno": "errno.h",
+        "cfenv": "fenv.h",
+        "cfloat": "float.h",
+        "cinttypes": "inttypes.h",
+        "climits": "limits.h",
+        "clocale": "locale.h",
+        "cmath": "math.h",
+        "csetjmp": "setjmp.h",
+        "csignal": "signal.h",
+        "cstdarg": "stdarg.h",
+        "cstdbool": "stdbool.h",
+        "cstddef": "stddef.h",
+        "cstdint": "stdint.h",
+        "cstdio": "stdio.h",
+        "cstdlib": "stdlib.h",
+        "cstring": "string.h",
+        "ctgmath": "tgmath.h",
+        "ctime": "time.h",
+        "cuchar": "uchar.h",
+        "cwchar": "wchar.h",
+        "cwctype": "wctype.h",
     }
 
     def check_all(self) -> list[Violation]:
@@ -312,7 +342,20 @@ class StyleChecker:
                             "Current class header should be followed by a blank line",
                         )
 
-        # Check 2: Verify include order (standard -> external -> project)
+        # Check 2: Flag C++ wrapper headers (cstdint, cstdlib, etc.)
+        for line_num, inc_type, path, full in includes:
+            if inc_type == "blank":
+                continue
+            if path in self.CPP_TO_C_HEADERS:
+                preferred = self.CPP_TO_C_HEADERS[path]
+                self.add_violation(
+                    line_num,
+                    "error",
+                    "Includes",
+                    f"Use <{preferred}> instead of <{path}> (prefer C-style headers)",
+                )
+
+        # Check 3: Verify include order (standard -> external -> project)
         # Filter out blank markers for order checking
         real_includes = [(i, t, p, f) for i, t, p, f in includes if t != "blank"]
 

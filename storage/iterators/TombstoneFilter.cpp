@@ -1,7 +1,7 @@
 #include "TombstoneFilter.h"
 
 #include <memory>
-#include <cstring>
+#include <string.h>
 
 #include "versioning/Tombstones.h"
 #include "columns/ColumnVector.h"

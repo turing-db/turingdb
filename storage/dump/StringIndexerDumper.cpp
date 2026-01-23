@@ -1,6 +1,6 @@
 #include "StringIndexerDumper.h"
 
-#include <cstddef>
+#include <stddef.h>
 #include <memory>
 
 #include "DumpUtils.h"

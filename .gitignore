@@ -5,3 +5,5 @@ compile_commands.json
 external/dependencies/
 build/
 turingdb.out
+__pycache__
+*.pyc

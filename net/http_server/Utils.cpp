@@ -1,8 +1,8 @@
 #include "Utils.h"
 
 #include <arpa/inet.h>
-#include <csignal>
-#include <cstring>
+#include <signal.h>
+#include <string.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>

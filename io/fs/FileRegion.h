@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstddef>
-#include <cstring>
+#include <stddef.h>
+#include <string.h>
 #include <span>
 #include <string_view>
 
@@ -63,12 +63,12 @@ public:
     }
 
     void write(void* buf, size_t size, size_t offset = 0) {
-        std::memcpy(_map + offset + _alignmentOffset, buf, size);
+        memcpy(_map + offset + _alignmentOffset, buf, size);
     }
 
     template <typename T>
     void write(const T& content, size_t offset = 0) {
-        std::memcpy(_map + offset + _alignmentOffset, &content, sizeof(content));
+        memcpy(_map + offset + _alignmentOffset, &content, sizeof(content));
     }
 
 private:

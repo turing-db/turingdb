@@ -7,7 +7,7 @@
 #endif
 
 #include <array>
-#include <cstdint>
+#include <stdint.h>
 
 namespace net::utils {
 

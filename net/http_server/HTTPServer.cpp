@@ -1,7 +1,7 @@
 #include "HTTPServer.h"
 
 #include <thread>
-#include <csignal>
+#include <signal.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <spdlog/spdlog.h>

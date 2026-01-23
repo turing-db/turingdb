@@ -1,7 +1,7 @@
 #pragma once
 
 #include <charconv>
-#include <cstdint>
+#include <stdint.h>
 #include <limits>
 #include <string>
 
