@@ -91,8 +91,49 @@ jobs:
           # Post review comment
           gh pr comment ${{ github.event.pull_request.number }} --body "$body"
 
-      - name: Fail if errors found
+      - name: Check for manual override from authorized user
+        id: override_check
         if: steps.style_check.outputs.errors != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Check if there's a comment from rjb32 (Remy Boutonnet) that authorizes ignoring errors
+          # Look for phrases like "ignore errors", "override", "lgtm", "approved" in their comments
+
+          override_found="false"
+
+          # Get all comments on this PR from rjb32
+          comments=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '.[] | select(.user.login == "rjb32") | .body' 2>/dev/null || echo "")
+
+          # Also check review comments (comments on specific lines)
+          review_comments=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
+            --jq '.[] | select(.user.login == "rjb32") | .body' 2>/dev/null || echo "")
+
+          # Also check PR reviews (approve/request changes with body)
+          reviews=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews \
+            --jq '.[] | select(.user.login == "rjb32") | .body' 2>/dev/null || echo "")
+
+          all_comments="$comments $review_comments $reviews"
+
+          # Check for override phrases (case-insensitive)
+          # Phrases that indicate explicit approval to ignore style errors
+          if echo "$all_comments" | grep -iqE "(ignore\s+(style\s+)?errors?|override\s+(style\s+)?(check|errors?)|style\s+(errors?\s+)?approved|lgtm\s+style|style\s+lgtm|errors?\s+can\s+be\s+ignored|approved?\s+despite\s+(style\s+)?errors?|skip\s+style\s+check)"; then
+            override_found="true"
+            echo "::notice::Manual override found from authorized user rjb32"
+          fi
+
+          echo "override=$override_found" >> $GITHUB_OUTPUT
+
+      - name: Fail if errors found
+        if: steps.style_check.outputs.errors != '0' && steps.override_check.outputs.override != 'true'
         run: |
           echo "::error::Found ${{ steps.style_check.outputs.errors }} style error(s). Please fix them before merging."
+          echo "::notice::A maintainer (rjb32) can override by commenting 'ignore style errors' or similar phrase."
           exit 1
+
+      - name: Report override applied
+        if: steps.style_check.outputs.errors != '0' && steps.override_check.outputs.override == 'true'
+        run: |
+          echo "::warning::Found ${{ steps.style_check.outputs.errors }} style error(s), but manual override from rjb32 is in effect."
+          echo "Style check passing due to maintainer override."
