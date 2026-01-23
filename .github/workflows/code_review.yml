@@ -64,7 +64,14 @@ jobs:
           error_count=${{ steps.style_check.outputs.errors }}
           warning_count=${{ steps.style_check.outputs.warnings }}
 
-          body="## Code Style Review Results
+          # Add green check emoji if no errors
+          if [ "$error_count" -eq 0 ]; then
+            title="## &#x2705; Code Style Review Results"
+          else
+            title="## Code Style Review Results"
+          fi
+
+          body="${title}
 
           Found **${error_count} error(s)** and **${warning_count} warning(s)**.
 
@@ -87,10 +94,15 @@ jobs:
 
           body="${body}
 
-          </details>
+          </details>"
+
+          # Only add footer with "Please fix errors" message if there are errors
+          if [ "$error_count" -gt 0 ]; then
+            body="${body}
 
           ---
           Please fix the errors before merging. See [CODING_STYLE.md](../blob/${{ github.head_ref }}/CODING_STYLE.md) for the style guide."
+          fi
 
           # Post review comment
           gh pr comment ${{ github.event.pull_request.number }} --body "$body"
