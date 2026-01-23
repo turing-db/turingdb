@@ -328,6 +328,7 @@ struct ResultAllocator {
             ALLOCATOR_CASE(OP_EQUAL, Eq)
             ALLOCATOR_CASE(OP_NOT_EQUAL, Ne)
             ALLOCATOR_CASE(OP_GREATER_THAN, Gt)
+            ALLOCATOR_CASE(OP_LESS_THAN, Lt)
             default:
                 throw FatalException("Unsupported allocator.");
             break;
@@ -346,7 +347,6 @@ struct ResultAllocator {
         break;                                                                           \
     }
 
-
 Column* ExprProgramGenerator::allocResCol(ColumnOperator op,
                                           const Column* lhs,
                                           const Column* rhs) {
@@ -359,7 +359,7 @@ Column* ExprProgramGenerator::allocResCol(ColumnOperator op,
         DISPATCHER_CASE(OP_NOT_EQUAL);
 
         DISPATCHER_CASE(OP_GREATER_THAN)
-        // DISPATCHER_CASE(OP_LESS_THAN)
+        DISPATCHER_CASE(OP_LESS_THAN)
         // DISPATCHER_CASE(OP_GREATER_THAN_OR_EQUAL)
         // DISPATCHER_CASE(OP_LESS_THAN_OR_EQUAL)
 

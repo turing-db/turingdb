@@ -47,13 +47,15 @@ struct CompareEval {
         bioassert(_res && lhs && rhs, "Invalid inputs to Compare");
 
         if constexpr (Op == OP_GREATER_THAN) {
-            fmt::println("GREATER_THAN_OR_EQUAL {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
             using ResultType = ColumnCombination<Gt, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
-            bioassert(result, "Invalid to cast for result column for Eq.");
+            bioassert(result, "Invalid to cast for result column for Gt.");
             exec<Gt>(result, lhs, rhs);
         } else if constexpr (Op == OP_LESS_THAN) {
-            fmt::println("LESS_THAN_OR_EQUAL {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
+            using ResultType = ColumnCombination<Lt, T, U>::ResultColumnType;
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Lt.");
+            exec<Lt>(result, lhs, rhs);
         } else {
             COMPILE_ERROR("Invalid operator for Compare");
         }
