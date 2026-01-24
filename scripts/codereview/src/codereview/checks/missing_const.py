@@ -42,6 +42,9 @@ class MissingConstCheck(BaseCheck):
         )
         subscript_assign_pattern = re.compile(r"\b(\w+)\s*\[[^\]]*\]\s*=[^=]")
         direct_assign_pattern = re.compile(r"\b(\w+)\s*=[^=]")
+        # For maps, even operator[] access without assignment is non-const
+        # because it may insert a default value
+        subscript_access_pattern = re.compile(r"\b(\w+)\s*\[[^\]]+\]")
 
         i = 0
         lines = context.lines
@@ -62,18 +65,53 @@ class MissingConstCheck(BaseCheck):
             if re.search(r"(\w+)::~?\1\s*\(", stripped):
                 continue
 
+            # IMPORTANT: Skip lines that are NOT function declarations/definitions
+            # These are local reference variable declarations like:
+            #   std::vector<T>& var = expr.getVec();
+            # They have '=' BEFORE the first '(' which indicates assignment, not a signature
+            paren_pos = stripped.find("(")
+            equals_pos = stripped.find("=")
+            if equals_pos != -1 and equals_pos < paren_pos:
+                continue
+
+            # Skip if this looks like a control flow statement or variable initialization
+            # Control flow: if(...), while(...), for(...), switch(...)
+            # Lambda: [...](...) { }
+            if re.match(r"^\s*(?:if|while|for|switch|catch)\s*\(", stripped):
+                continue
+
+            # Skip if this is just a variable declaration with brace initialization
+            # e.g., Type var {init};
+            if re.match(r"^\s*\w+(?:<[^>]+>)?\s+\w+\s*\{", stripped):
+                continue
+
             # Collect non-const reference params from this function declaration
             nonconst_params: dict[str, tuple[int, str]] = {}  # name -> (line, container)
 
             for container in STL_CONTAINERS:
+                # Match container type followed by & and parameter name
+                # The parameter name must be followed by:
+                #   - comma (more params), or
+                #   - closing paren (last param), or
+                #   - = (default value)
+                # This prevents matching function return types like:
+                #   std::vector<T>& funcName(params...)
+                # Use word boundary \b to prevent 'map' matching 'unordered_map'
                 pattern = (
-                    rf"(?:std::)?{container}\s*<[^>]+>\s*&\s*"
-                    rf"(?!&)"
-                    rf"(\w+)"
+                    rf"(?:std::)?\b{container}\b\s*<[^>]+>\s*&\s*"
+                    rf"(?!&)"  # Not && (rvalue reference)
+                    rf"(\w+)"  # Parameter name
+                    rf"(?=\s*[,)=])"  # Must be followed by comma, closing paren, or =
                 )
 
                 for match in re.finditer(pattern, stripped):
                     param_name = match.group(1)
+
+                    # Extra check: make sure this param appears inside parentheses
+                    # to avoid matching return types (return type comes BEFORE the paren)
+                    paren_start = stripped.find("(")
+                    if paren_start == -1 or match.start() < paren_start:
+                        continue
 
                     # Skip if it looks like an output parameter by name
                     if param_name.lower() in (
@@ -142,11 +180,27 @@ class MissingConstCheck(BaseCheck):
                         modified_params.add(param_name)
                         continue
 
+                    # Check subscript access on map types (non-const even without assignment)
+                    # For maps, operator[] can insert default values, making it non-const
+                    container_type = nonconst_params[param_name][1]
+                    map_containers = {"map", "unordered_map", "multimap", "unordered_multimap"}
+                    if container_type in map_containers:
+                        subscript_match = subscript_access_pattern.search(body_line)
+                        if subscript_match and subscript_match.group(1) == param_name:
+                            modified_params.add(param_name)
+                            continue
+
                     # Check if passed to non-const reference function
                     # This is a heuristic - if param is passed to a function, assume it might be modified
+                    # Pattern 1: sole argument - func(param)
                     if re.search(rf"\(\s*{param_name}\s*\)", body_line):
                         modified_params.add(param_name)
                         continue
+                    # Pattern 2: first argument - func(param, ...)
+                    if re.search(rf"\(\s*{param_name}\s*,", body_line):
+                        modified_params.add(param_name)
+                        continue
+                    # Pattern 3: middle or last argument - func(..., param, ...) or func(..., param)
                     if re.search(rf",\s*{param_name}\s*[,)]", body_line):
                         modified_params.add(param_name)
                         continue
@@ -206,25 +260,54 @@ class MissingConstCheck(BaseCheck):
         # Pattern for std::move() which prevents const
         move_pattern = re.compile(r"\bstd::move\s*\(\s*(\w+)\s*\)")
 
-        # Pattern for return statements - returned variables can't be const for move-only types
-        return_pattern = re.compile(r"\breturn\s+(\w+)\s*;")
-
         # Pattern for non-const method calls (object.method() or object->method())
         # This catches methods that likely modify state
         nonconst_method_pattern = re.compile(
             r"(\w+)\s*(?:\.|\->)\s*(?:set|add|remove|delete|update|write|commit|submit|"
             r"start|stop|open|close|init|load|save|send|receive|connect|disconnect|"
             r"append|prepend|put|post|execute|run|process|handle|build|create|destroy|"
-            r"allocate|free|release|acquire|lock|unlock|notify|signal|wait|join|detach)\w*\s*\("
+            r"allocate|free|release|acquire|lock|unlock|notify|signal|wait|join|detach|"
+            r"dump|flush|emit|generate|finish|finalize|compute|calculate|resolve|apply|"
+            r"transform|mutate|modify|change|reset|invalidate|parse|read|fetch|pull|push|"
+            r"enqueue|dequeue|schedule|dispatch|register|unregister|enable|disable|"
+            r"attach|mount|configure|setup|prepare|complete|abort|cancel|terminate|"
+            r"incr|decr|increment|decrement|advance|rewind|seek|skip|next|prev|move|copy)\w*\s*\("
         )
 
         # Pattern for passing variable by pointer (address-of)
         # Functions that take &var can modify it
         address_of_pattern = re.compile(r"[,(]\s*&(\w+)\s*[,)]")
 
-        # Pattern for passing variable to a function (could be by non-const reference)
-        # Skip analysis for these variables as they might be output parameters
-        func_arg_pattern = re.compile(r"\w+\s*\([^)]*\b(\w+)\b[^)]*\)")
+        # Known const accessor method prefixes - calling these doesn't modify the object
+        # Using abstract interpretation principle: if we see a method that's NOT in this
+        # list, conservatively assume it might be non-const
+        const_method_prefixes = (
+            "get", "is", "has", "can", "should", "will", "was", "does", "did",
+            "size", "length", "count", "empty", "valid", "contains", "find",
+            "at", "front", "back", "begin", "end", "cbegin", "cend",
+            "rbegin", "rend", "crbegin", "crend", "data", "c_str",
+            "to", "as", "what", "describe", "str", "string", "name", "type",
+            "value", "key", "first", "second", "ptr", "ref", "view", "span",
+            "check", "test", "compare", "equal", "match", "exists", "defined",
+            "operator",  # comparison operators are typically const
+        )
+
+        # Pattern to detect any method call on an object: obj.method() or obj->method()
+        any_method_pattern = re.compile(r"\b(\w+)\s*(?:\.|\->)\s*(\w+)\s*\(")
+
+        # Known functions that take arguments by value (don't modify their args)
+        # These are typically printf-family, assertion macros, and logging functions
+        const_safe_functions = {
+            "printf", "sprintf", "snprintf", "fprintf", "vprintf", "vsprintf",
+            "vsnprintf", "vfprintf", "puts", "fputs", "putchar", "fputc",
+            "assert", "static_assert", "bioassert",
+            "sizeof", "alignof", "decltype", "typeid",
+            "std::cout", "std::cerr", "std::clog",
+            "fmt::print", "fmt::format", "fmt::println",
+            "spdlog::info", "spdlog::debug", "spdlog::warn", "spdlog::error",
+            "spdlog::trace", "spdlog::critical",
+            "LOG_INFO", "LOG_DEBUG", "LOG_WARN", "LOG_ERROR", "LOG_TRACE",
+        }
 
         lines = context.lines
         for i, line in enumerate(lines, start=1):
@@ -241,9 +324,13 @@ class MissingConstCheck(BaseCheck):
             # Detect function start
             if not in_function and open_braces > 0:
                 # Check if this looks like a function body start
-                if brace_depth == 0 and "(" in stripped or i > 1:
-                    prev_lines = "".join(lines[max(0, i - 3) : i])
-                    if "(" in prev_lines and ")" in prev_lines:
+                # Look for function signature with () either on this line or previous lines
+                if brace_depth == 0:
+                    # Check current line and up to 3 previous lines for function signature
+                    # Note: i is 1-indexed, lines is 0-indexed, so lines[i-1] is current line
+                    prev_lines = "".join(lines[max(0, i - 4) : i - 1])
+                    all_context = prev_lines + stripped
+                    if "(" in all_context and ")" in all_context:
                         in_function = True
                         function_start = i
                         local_vars = {}
@@ -363,12 +450,40 @@ class MissingConstCheck(BaseCheck):
                         break
 
                 # Check if passed to a function as argument (could be non-const reference)
-                # Skip variables that are passed to functions with non-trivial names
                 # This is conservative - better to miss a const than suggest wrong const
-                for func_match in func_arg_pattern.finditer(stripped):
-                    if func_match.group(1) == var_name:
-                        # Skip if it's just the declaration line or a simple getter call
-                        if local_vars[var_name][0] != i:
+                if local_vars[var_name][0] != i:  # Skip declaration line
+                    # First check if this is a call to a known const-safe function
+                    # (functions that take arguments by value)
+                    is_const_safe_call = False
+                    for func_name in const_safe_functions:
+                        if func_name in stripped:
+                            is_const_safe_call = True
+                            break
+
+                    if not is_const_safe_call:
+                        # Check if var appears as a function argument:
+                        # 1. After ( or , and before , or ) - handles: func(var), func(a, var)
+                        # 2. This handles nested parens: func(a.method(), var, b)
+                        # Pattern matches: "(var," or "(var)" or ", var," or ", var)"
+                        if re.search(rf"[,(]\s*{var_name}\s*[,)]", stripped):
+                            local_vars[var_name] = (local_vars[var_name][0], True)
+                            continue
+                        # Also match: "(var " for cases like "(var ," with space
+                        if re.search(rf"\(\s*{var_name}\s*,", stripped):
+                            local_vars[var_name] = (local_vars[var_name][0], True)
+                            continue
+
+                # Abstract interpretation: Check method calls on this object
+                # If a method is called that's NOT known to be const, assume modification
+                for method_match in any_method_pattern.finditer(stripped):
+                    if method_match.group(1) == var_name:
+                        method_name = method_match.group(2).lower()
+                        # Check if this is a known const method by prefix
+                        is_const_method = any(
+                            method_name.startswith(prefix)
+                            for prefix in const_method_prefixes
+                        )
+                        if not is_const_method:
                             local_vars[var_name] = (local_vars[var_name][0], True)
                             break
 

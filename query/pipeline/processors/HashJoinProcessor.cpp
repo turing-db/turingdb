@@ -27,7 +27,7 @@ void fillOutputColumn(T* outputColumn,
 }
 
 template <typename Key, typename Value>
-auto findInMap(std::unordered_map<Key, Value>& map, Column* col, size_t index) {
+auto findInMap(const std::unordered_map<Key, Value>& map, Column* col, size_t index) {
     const auto it = map.find((*static_cast<ColumnVector<Key>*>(col))[index]);
     return it;
 }

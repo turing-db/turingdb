@@ -31,6 +31,13 @@ jobs:
         with:
           version: "latest"
 
+      - name: Run codereview tests
+        working-directory: scripts/codereview
+        run: |
+          # Run pytest to validate the code review checkers before using them
+          # This catches regressions in the checkers before running on real code
+          uv run pytest tests/ -v
+
       - name: Run code style check
         id: style_check
         run: |

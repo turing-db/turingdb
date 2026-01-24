@@ -139,7 +139,7 @@ CommitBuilder::CommitBuilder(VersionController& controller, Change* change, cons
 void CommitBuilder::initialize() {
     Profile profile {"CommitBuilder::initialize"};
 
-    auto reader = _view.read();
+    const auto reader = _view.read();
 
     // The first ID of this commit will be one more than the max ID in the graph
     _firstNodeID = reader.getTotalNodesAllocated();
@@ -172,7 +172,7 @@ void CommitBuilder::initialize() {
 void CommitBuilder::initializeMerge() {
     Profile profile {"CommitBuilder::initialize"};
 
-    auto reader = _view.read();
+    const auto reader = _view.read();
 
     _firstNodeID = 0;
     _firstEdgeID = 0;
