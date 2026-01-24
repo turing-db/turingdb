@@ -97,8 +97,11 @@ class MissingConstCheck(BaseCheck):
                 # This prevents matching function return types like:
                 #   std::vector<T>& funcName(params...)
                 # Use word boundary \b to prevent 'map' matching 'unordered_map'
+                # Template pattern handles nested templates like vector<pair<int, string>>
+                # by matching non-<> chars OR complete nested <...> groups
+                nested_template = r"<(?:[^<>]|<[^<>]*>)*>"
                 pattern = (
-                    rf"(?:std::)?\b{container}\b\s*<[^>]+>\s*&\s*"
+                    rf"(?:std::)?\b{container}\b\s*{nested_template}\s*&\s*"
                     rf"(?!&)"  # Not && (rvalue reference)
                     rf"(\w+)"  # Parameter name
                     rf"(?=\s*[,)=])"  # Must be followed by comma, closing paren, or =
@@ -567,7 +570,13 @@ class MissingConstCheck(BaseCheck):
                             is_const_safe_call = True
                             break
 
-                    if not is_const_safe_call:
+                    # Skip control flow statements - these are not function calls
+                    # if (var), while (var), for (...; var; ...), switch (var)
+                    is_control_flow = re.match(
+                        r"^\s*(?:if|while|for|switch|catch|return)\s*\(", stripped
+                    )
+
+                    if not is_const_safe_call and not is_control_flow:
                         # Check if var appears as a function argument:
                         # 1. After ( or , and before , or ) - handles: func(var), func(a, var)
                         # 2. This handles nested parens: func(a.method(), var, b)
