@@ -91,7 +91,7 @@ void runPlan2(std::string_view query) {
 
     PlanGraphGenerator planGen(ast, view);
     try {
-        auto t0 = Clock::now();
+        const auto t0 = Clock::now();
         planGen.generate(ast.queries().front());
         fmt::print("Query plan generated in {} us\n", duration<Microseconds>(t0, Clock::now()));
     } catch (const CompilerException& e) {

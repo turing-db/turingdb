@@ -219,7 +219,7 @@ void CypherAnalyzer::analyze(const LoadGraphQuery* loadGraph) {
 }
 
 void CypherAnalyzer::analyze(const CreateGraphQuery* createGraph) {
-    std::string_view graphName = createGraph->getGraphName();
+    const std::string_view graphName = createGraph->getGraphName();
     if (graphName.empty()) {
         throwError("CREATE GRAPH should not have an empty graph name");
         // Check that the graph name is only [A-Z0-9_]+

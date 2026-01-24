@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
     TuringConfig config;
     config.setSyncedOnDisk(false);
 
-    auto jobSystem = JobSystem::create();
+    const auto jobSystem = JobSystem::create();
     SystemManager sysMan(&config);
     Graph* graph = sysMan.createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
         {
             fmt::print("\n=== Pipeline generation ===\n\n");
 
-            auto callback = [](const Dataframe* dataframe) {};
+            const auto callback = [](const Dataframe* dataframe) {};
 
             PipelineGenerator pipelineGen(&planGraph,
                                           view,
@@ -176,9 +176,9 @@ int main(int argc, char** argv) {
 
             PipelineExecutor executor(&pipeline, &execCtxt);
             try {
-                auto t0 = Clock::now();
+                const auto t0 = Clock::now();
                 executor.execute();
-                auto t1 = Clock::now();
+                const auto t1 = Clock::now();
                 fmt::print("Query pipeline executed in {} us\n", duration<Microseconds>(t0, t1));
             } catch (const CompilerException& e) {
                 fmt::print("{}\n", e.what());

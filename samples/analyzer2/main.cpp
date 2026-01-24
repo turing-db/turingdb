@@ -61,9 +61,9 @@ int main(int argc, char** argv) {
         CypherAnalyzer analyzer(&ast, view);
 
         try {
-            auto t0 = Clock::now();
+            const auto t0 = Clock::now();
             analyzer.analyze();
-            auto t1 = Clock::now();
+            const auto t1 = Clock::now();
             fmt::print("Query analyzed in {} us\n", duration<Microseconds>(t0, t1));
         } catch (const CompilerException& e) {
             fmt::print("{}\n", e.what());

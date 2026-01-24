@@ -12,7 +12,7 @@ using namespace db;
 DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
     Profile profile {"GraphLoader::load"};
 
-    auto pathInfo = path.getFileInfo();
+    const auto pathInfo = path.getFileInfo();
     if (!pathInfo) {
         return DumpError::result(DumpErrorType::GRAPH_DOES_NOT_EXIST);
     }

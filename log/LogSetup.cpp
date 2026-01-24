@@ -15,7 +15,7 @@ void setLogPattern(std::shared_ptr<spdlog::logger> logger) {
 void LogSetup::setupLogFileBacked(const std::string& path) {
     auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path, true);
-    spdlog::sinks_init_list sinkList = {consoleSink, fileSink};
+    const spdlog::sinks_init_list sinkList = {consoleSink, fileSink};
     auto logger = std::make_shared<spdlog::logger>("log_sink", sinkList.begin(), sinkList.end());
     setLogPattern(logger);
     logger->flush_on(spdlog::level::info);

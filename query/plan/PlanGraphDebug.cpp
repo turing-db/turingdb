@@ -191,7 +191,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 for (const auto& node : n->pendingNodes()) {
                     output << "        __node__ (" << j;
 
-                    std::span labels = node._data->labelConstraints();
+                    const std::span labels = node._data->labelConstraints();
                     for (const auto& label : labels) {
                         output << ":" << label << "";
                     }

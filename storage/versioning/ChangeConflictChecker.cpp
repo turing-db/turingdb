@@ -90,7 +90,7 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
 
     // 1. Check out edges
     {
-        GetOutEdgesRange outEdges {mostRecentView, &_deletedExistingNodes};
+        const GetOutEdgesRange outEdges {mostRecentView, &_deletedExistingNodes};
         GetOutEdgesIterator outEdgesIt = outEdges.begin();
         
         outEdgesIt.goToPart(startingIndex);
@@ -111,7 +111,7 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
 
     // 2. Check in edges
     {
-        GetInEdgesRange inEdges {mostRecentView, &_deletedExistingNodes};
+        const GetInEdgesRange inEdges {mostRecentView, &_deletedExistingNodes};
         GetInEdgesIterator inEdgesIt = inEdges.begin();
 
         inEdgesIt.goToPart(startingIndex);

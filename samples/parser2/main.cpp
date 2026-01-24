@@ -55,9 +55,9 @@ int main(int argc, char** argv) {
         CypherParser parser(&ast);
 
         try {
-            auto t0 = Clock::now();
+            const auto t0 = Clock::now();
             parser.parse(queryStr);
-            auto t1 = Clock::now();
+            const auto t1 = Clock::now();
             fmt::print("Query parsed in {} us\n", duration<Microseconds>(t0, t1));
         } catch (const CompilerException& e) {
             fmt::print("{}\n", e.what());

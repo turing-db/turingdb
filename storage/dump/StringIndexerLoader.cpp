@@ -30,7 +30,7 @@ DumpResult<std::unique_ptr<StringPropertyIndexer>> StringIndexerLoader::load() {
 
     // 2. Metadata
     LoadUtils::ensureLoadSpace(sizeof(size_t), _reader, it);
-    size_t numIndexes = it.get<size_t>();
+    const size_t numIndexes = it.get<size_t>();
     _reader.nextPage();
 
     auto idxer = std::make_unique<StringPropertyIndexer>();
@@ -147,6 +147,6 @@ DumpResult<void> StringIndexerLoader::loadOwners(StringIndex::PrefixTreeNode* no
         return {};
     }
     std::vector<EntityID>& ownersVec = node->_owners;
-    auto res = LoadUtils::loadVector(ownersVec, sz, auxReader, auxIt);
+    const auto res = LoadUtils::loadVector(ownersVec, sz, auxReader, auxIt);
     return res;
 }

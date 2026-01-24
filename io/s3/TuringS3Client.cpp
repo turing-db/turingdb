@@ -357,7 +357,7 @@ S3ClientResult<void> TuringS3Client<T>::downloadDirectory(const std::string& dir
 
     for (const auto& result : results) {
         if (!isFolder(result)) {
-            auto pos = result.find(prefix) + prefix.size();
+            const auto pos = result.find(prefix) + prefix.size();
             downloadPath = fmt::format("{}/{}", directory, result.substr(pos));
 
             auto lastDelimiter = downloadPath.find_last_of('/');

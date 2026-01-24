@@ -70,7 +70,7 @@ int main() {
     while (!reader->reachedEnd()) {
         reader->nextPage();
         fs::AlignedBufferIterator it = reader->begin();
-        auto end = it.end();
+        const auto end = it.end();
 
         while (it != end) {
             sum += it.get<Integer>();

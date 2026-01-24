@@ -615,13 +615,13 @@ void TuringShell::checkShellContext() {
     }
 
     if (_changeID == ChangeID::head()) {
-        FrozenCommitTx transaction = graph->openTransaction(_hash);
+        const FrozenCommitTx transaction = graph->openTransaction(_hash);
         if (transaction.isValid()) {
             return;
         }
     }
 
-    auto res = _turingDB.getSystemManager().getChangeManager().getChange(graph, _changeID);
+    const auto res = _turingDB.getSystemManager().getChangeManager().getChange(graph, _changeID);
     if (!res) {
         fmt::print("Change '{:x}' does not exist anymore, switching back to head\n", _changeID.get());
         setChangeID(ChangeID::head());

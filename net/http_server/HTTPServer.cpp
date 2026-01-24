@@ -143,8 +143,8 @@ void HTTPServer::runThread(size_t threadID, ServerContext& ctxt) {
     constexpr size_t eventCount = 5;
     std::vector<utils::EpollEvent> events(eventCount);
 
-    utils::ServerSocket server = ctxt._socket;
-    utils::EpollInstance instance = ctxt._instance;
+    const utils::ServerSocket server = ctxt._socket;
+    const utils::EpollInstance instance = ctxt._instance;
 
     TCPListener listener(ctxt);
     TCPConnectionManager connectionManager(ctxt);

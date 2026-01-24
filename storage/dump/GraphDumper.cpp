@@ -40,7 +40,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_GRAPH_INFO, reader.error());
             }
 
-            GraphInfoLoader loader {reader.value()};
+            const GraphInfoLoader loader {reader.value()};
 
             auto res = loader.isSameGraph(graph);
             if (!res) {

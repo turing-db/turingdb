@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        float totalDur = duration<Seconds>(t0, Clock::now());
+        const float totalDur = duration<Seconds>(t0, Clock::now());
         fmt::println("- Generated vectors in {:.2f} s", totalDur);
     }
 
@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
 
     vec::VectorSearchResult results;
 
-    auto t0Search = Clock::now();
+    const auto t0Search = Clock::now();
 
     if (auto res = lib.search(query, results); !res) {
         fmt::println("Could not search vectors. {}", res.error().fmtMessage());

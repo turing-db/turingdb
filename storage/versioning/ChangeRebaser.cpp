@@ -31,7 +31,7 @@ void ChangeRebaser::init(const GraphReader& mainReader,
     _newMainReader = &mainReader;
 
     NodeID branchTimeNextNodeID = branchTimeReader.getTotalNodesAllocated();
-    EdgeID branchTimeNextEdgeID = branchTimeReader.getTotalEdgesAllocated();
+    const EdgeID branchTimeNextEdgeID = branchTimeReader.getTotalEdgesAllocated();
     _newNextNodeID = mainReader.getTotalNodesAllocated();
     _newNextEdgeID = mainReader.getTotalEdgesAllocated();
 

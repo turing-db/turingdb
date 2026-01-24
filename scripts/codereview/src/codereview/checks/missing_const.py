@@ -277,6 +277,13 @@ class MissingConstCheck(BaseCheck):
             r"incr|decr|increment|decrement|advance|rewind|seek|skip|next|prev|move|copy)\w*\s*\("
         )
 
+        # Pattern for chained method calls ending in non-const method: var.method().release()
+        # This detects var.something().release() or var.something()->release()
+        chained_nonconst_methods = ("release", "reset", "swap", "clear")
+        chained_nonconst_pattern = re.compile(
+            r"\b(\w+)\s*(?:\.|\->).*?\.(?:" + "|".join(chained_nonconst_methods) + r")\s*\("
+        )
+
         # Pattern for passing variable by pointer (address-of)
         # Functions that take &var can modify it
         # Handles: func(&var), func(a, &var), (Type*)&var, reinterpret_cast<T>(&var)
@@ -475,6 +482,12 @@ class MissingConstCheck(BaseCheck):
                     local_vars[var_name] = (local_vars[var_name][0], True)
                     continue
 
+                # Check chained non-const method calls: var.something().release()
+                chained_match = chained_nonconst_pattern.search(stripped)
+                if chained_match and chained_match.group(1) == var_name:
+                    local_vars[var_name] = (local_vars[var_name][0], True)
+                    continue
+
                 # Check if passed by pointer (address-of &var)
                 # Use finditer to find ALL matches, not just the first one
                 for addr_match in address_of_pattern.finditer(stripped):
@@ -541,8 +554,11 @@ class MissingConstCheck(BaseCheck):
 
                 # Check modifying operations
                 for pattern in modify_patterns:
-                    if pattern.search(stripped):
-                        match = pattern.search(stripped)
-                        if match and match.group(1) == var_name:
+                    # Use finditer to find ALL matches, not just the first one
+                    for match in pattern.finditer(stripped):
+                        if match.group(1) == var_name:
                             local_vars[var_name] = (local_vars[var_name][0], True)
                             break
+                    else:
+                        continue
+                    break
