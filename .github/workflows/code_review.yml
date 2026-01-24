@@ -114,6 +114,17 @@ jobs:
           # Post review comment
           gh pr comment ${{ github.event.pull_request.number }} --body "$body"
 
+      - name: Create PR success comment
+        if: steps.style_check.outputs.errors == '0' && steps.style_check.outputs.warnings == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body="## &#x2705; Code Style Review Results
+
+          Congratulations! No style violations found. Your code looks great!"
+
+          gh pr comment ${{ github.event.pull_request.number }} --body "$body"
+
       - name: Check for manual override from authorized user
         id: override_check
         if: steps.style_check.outputs.errors != '0'
