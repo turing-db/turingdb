@@ -1,7 +1,7 @@
 """Shared constants for the code review system."""
 
 # Directories to skip
-SKIP_DIRS = {"external", "third_party", "build", ".git", "googletest", "test"}
+SKIP_DIRS = {"external", "third_party", "build", ".git", "googletest", "test", "scripts"}
 
 # File patterns to skip
 SKIP_FILES = {"test_violations.h", "test_violations.cpp"}

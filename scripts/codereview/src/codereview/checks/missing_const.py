@@ -298,6 +298,22 @@ class MissingConstCheck(BaseCheck):
         # Pattern for &var at start of line (multi-line function call continuation)
         line_start_address_of_pattern = re.compile(r"^\s*&(\w+)\s*[,)]")
 
+        # Pattern for const accessor methods passed as function arguments
+        # These methods have const/non-const overloads with different return types,
+        # so the variable may need to be non-const for the result to be usable
+        # e.g., file->write(hello.data(), ...) - if hello were const, .data() returns
+        # const char* which can't convert to void*
+        const_accessor_arg_pattern = re.compile(
+            r"[,(]\s*(\w+)\s*\.\s*(?:data|c_str|get|value|ptr|ref)\s*\(\s*\)\s*[,)]"
+        )
+
+        # Pattern for reference binding: auto& ref = var.method()
+        # When a reference is bound to an object's internal state and later moved,
+        # the source object is indirectly modified
+        ref_binding_pattern = re.compile(
+            r"auto\s*&\s*(\w+)\s*=\s*(\w+)\s*\.\s*\w+\s*\("
+        )
+
         # Known const accessor method prefixes - calling these doesn't modify the object
         # Using abstract interpretation principle: if we see a method that's NOT in this
         # list, conservatively assume it might be non-const
@@ -354,6 +370,7 @@ class MissingConstCheck(BaseCheck):
                         in_function = True
                         function_start = i
                         local_vars = {}
+                        reference_bindings: dict[str, str] = {}  # ref_name -> source_var
 
             brace_depth += open_braces - close_braces
 
@@ -372,6 +389,7 @@ class MissingConstCheck(BaseCheck):
                             )
                 in_function = False
                 local_vars = {}
+                reference_bindings = {}
                 continue
 
             if not in_function:
@@ -448,6 +466,16 @@ class MissingConstCheck(BaseCheck):
                 if should_add:
                     local_vars[var_name] = (i, False)
 
+            # Detect reference bindings: auto& ref = var.method()
+            # When a reference is bound to internal state and later moved,
+            # the source variable is indirectly modified
+            ref_match = ref_binding_pattern.search(stripped)
+            if ref_match:
+                ref_name = ref_match.group(1)
+                source_var = ref_match.group(2)
+                if source_var in local_vars:
+                    reference_bindings[ref_name] = source_var
+
             # Check for modifications
             for var_name in list(local_vars.keys()):
                 if local_vars[var_name][1]:  # Already marked as modified
@@ -467,10 +495,20 @@ class MissingConstCheck(BaseCheck):
 
                 # Check std::move() - variable cannot be const if it's moved
                 # Handles both std::move(var) and std::move(var.method())
+                # Also handles move via reference binding (auto& ref = var.value(); move(ref))
                 move_match = move_pattern.search(stripped)
-                if move_match and move_match.group(1) == var_name:
-                    local_vars[var_name] = (local_vars[var_name][0], True)
-                    continue
+                if move_match:
+                    moved_name = move_match.group(1)
+                    # Direct move of this variable
+                    if moved_name == var_name:
+                        local_vars[var_name] = (local_vars[var_name][0], True)
+                        continue
+                    # Move via reference binding - mark source as modified
+                    if moved_name in reference_bindings:
+                        source = reference_bindings[moved_name]
+                        if source == var_name:
+                            local_vars[var_name] = (local_vars[var_name][0], True)
+                            continue
                 move_member_match = move_member_pattern.search(stripped)
                 if move_member_match and move_member_match.group(1) == var_name:
                     local_vars[var_name] = (local_vars[var_name][0], True)
@@ -487,6 +525,14 @@ class MissingConstCheck(BaseCheck):
                 if chained_match and chained_match.group(1) == var_name:
                     local_vars[var_name] = (local_vars[var_name][0], True)
                     continue
+
+                # Check if const accessor method result is passed to a function
+                # e.g., file->write(hello.data(), hello.size())
+                # If hello were const, .data() returns const char* which can't convert to void*
+                for accessor_match in const_accessor_arg_pattern.finditer(stripped):
+                    if accessor_match.group(1) == var_name:
+                        local_vars[var_name] = (local_vars[var_name][0], True)
+                        break
 
                 # Check if passed by pointer (address-of &var)
                 # Use finditer to find ALL matches, not just the first one
