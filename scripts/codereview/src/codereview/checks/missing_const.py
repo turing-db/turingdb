@@ -258,7 +258,10 @@ class MissingConstCheck(BaseCheck):
         ]
 
         # Pattern for std::move() which prevents const
+        # Handles: std::move(var), std::move(var.method()), std::move(var->method())
         move_pattern = re.compile(r"\bstd::move\s*\(\s*(\w+)\s*\)")
+        # Also match std::move(var.something) or std::move(var->something)
+        move_member_pattern = re.compile(r"\bstd::move\s*\(\s*(\w+)\s*(?:\.|\->)")
 
         # Pattern for non-const method calls (object.method() or object->method())
         # This catches methods that likely modify state
@@ -276,7 +279,17 @@ class MissingConstCheck(BaseCheck):
 
         # Pattern for passing variable by pointer (address-of)
         # Functions that take &var can modify it
+        # Handles: func(&var), func(a, &var), (Type*)&var, reinterpret_cast<T>(&var)
         address_of_pattern = re.compile(r"[,(]\s*&(\w+)\s*[,)]")
+        # Additional patterns for cast before address-of:
+        # C-style cast: (Type*)&var or (struct foo*)&var
+        c_style_cast_address_of = re.compile(r"\([^)]+\)\s*&(\w+)")
+        # C++ style cast: reinterpret_cast<T>(&var)
+        cpp_style_cast_address_of = re.compile(
+            r"(?:reinterpret|static|const|dynamic)_cast\s*<[^>]+>\s*\(\s*&(\w+)\s*\)"
+        )
+        # Pattern for &var at start of line (multi-line function call continuation)
+        line_start_address_of_pattern = re.compile(r"^\s*&(\w+)\s*[,)]")
 
         # Known const accessor method prefixes - calling these doesn't modify the object
         # Using abstract interpretation principle: if we see a method that's NOT in this
@@ -366,73 +379,93 @@ class MissingConstCheck(BaseCheck):
             if match:
                 type_name = match.group(1)
                 var_name = match.group(2)
+                should_add = True
 
                 # Skip loop variables, iterators, and common mutable patterns
                 if var_name in ("i", "j", "k", "n", "it", "iter", "idx", "index"):
-                    continue
+                    should_add = False
 
                 # Skip class member-like names (start with underscore)
-                if var_name.startswith("_"):
-                    continue
+                if should_add and var_name.startswith("_"):
+                    should_add = False
 
                 # Skip RAII lock variables (lock_guard, unique_lock, scoped_lock, etc.)
-                if var_name in ("lock", "lk", "guard") or "lock" in var_name.lower():
-                    continue
-                if (
+                if should_add and (
+                    var_name in ("lock", "lk", "guard") or "lock" in var_name.lower()
+                ):
+                    should_add = False
+                if should_add and (
                     "lock_guard" in stripped
                     or "unique_lock" in stripped
                     or "scoped_lock" in stripped
                 ):
-                    continue
+                    should_add = False
 
                 # Skip RAII objects (Profile, Timer, Scope, Guard, etc.)
                 raii_types = ("Profile", "Timer", "Scope", "Guard", "Clock", "Stopwatch")
-                if type_name in raii_types or any(t in type_name for t in raii_types):
-                    continue
+                if should_add and (
+                    type_name in raii_types or any(t in type_name for t in raii_types)
+                ):
+                    should_add = False
 
                 # Skip smart pointers (unique_ptr, shared_ptr) - commonly moved/returned
-                if "unique_ptr" in stripped or "make_unique" in stripped:
-                    continue
-                if "shared_ptr" in stripped or "make_shared" in stripped:
-                    continue
+                if should_add and (
+                    "unique_ptr" in stripped or "make_unique" in stripped
+                ):
+                    should_add = False
+                if should_add and (
+                    "shared_ptr" in stripped or "make_shared" in stripped
+                ):
+                    should_add = False
 
                 # Skip if already const
-                if "const " in stripped and stripped.index("const ") < stripped.index(
-                    var_name
-                ):
-                    continue
+                if should_add and "const " in stripped:
+                    if stripped.index("const ") < stripped.index(var_name):
+                        should_add = False
 
                 # Skip pointer/reference declarations (complex to analyze)
-                if "*" in stripped[: stripped.index(var_name)] or "&" in stripped[
-                    : stripped.index(var_name)
-                ]:
-                    continue
+                if should_add:
+                    var_idx = stripped.index(var_name)
+                    if "*" in stripped[:var_idx] or "&" in stripped[:var_idx]:
+                        should_add = False
 
                 # Skip function calls/declarations: check if ( is followed by ) on same line
                 # This filters out lines like: Type funcName(args);
-                var_pos = stripped.index(var_name)
-                after_var = stripped[var_pos + len(var_name) :]
-                if after_var.lstrip().startswith("(") and ")" in after_var:
-                    # Looks like a function call, not a variable declaration
-                    continue
+                if should_add:
+                    var_pos = stripped.index(var_name)
+                    after_var = stripped[var_pos + len(var_name) :]
+                    if after_var.lstrip().startswith("(") and ")" in after_var:
+                        # Looks like a function call, not a variable declaration
+                        should_add = False
 
-                local_vars[var_name] = (i, False)
+                if should_add:
+                    local_vars[var_name] = (i, False)
 
             # Check for modifications
             for var_name in list(local_vars.keys()):
                 if local_vars[var_name][1]:  # Already marked as modified
                     continue
 
-                # Check assignment
+                # Check assignment (direct assignment or array assignment)
                 if re.search(rf"\b{var_name}\s*(?:\[.*\])?\s*=[^=]", stripped):
                     # Skip if this is the declaration line
                     if local_vars[var_name][0] != i:
                         local_vars[var_name] = (local_vars[var_name][0], True)
                     continue
 
+                # Check assignment through pointer member access: var->member = ...
+                if re.search(rf"\b{var_name}\s*->\s*\w+\s*=[^=]", stripped):
+                    local_vars[var_name] = (local_vars[var_name][0], True)
+                    continue
+
                 # Check std::move() - variable cannot be const if it's moved
+                # Handles both std::move(var) and std::move(var.method())
                 move_match = move_pattern.search(stripped)
                 if move_match and move_match.group(1) == var_name:
+                    local_vars[var_name] = (local_vars[var_name][0], True)
+                    continue
+                move_member_match = move_member_pattern.search(stripped)
+                if move_member_match and move_member_match.group(1) == var_name:
                     local_vars[var_name] = (local_vars[var_name][0], True)
                     continue
 
@@ -448,6 +481,21 @@ class MissingConstCheck(BaseCheck):
                     if addr_match.group(1) == var_name:
                         local_vars[var_name] = (local_vars[var_name][0], True)
                         break
+
+                # Check for cast before address-of: (Type*)&var or cast<T>(&var)
+                for cast_match in c_style_cast_address_of.finditer(stripped):
+                    if cast_match.group(1) == var_name:
+                        local_vars[var_name] = (local_vars[var_name][0], True)
+                        break
+                for cast_match in cpp_style_cast_address_of.finditer(stripped):
+                    if cast_match.group(1) == var_name:
+                        local_vars[var_name] = (local_vars[var_name][0], True)
+                        break
+
+                # Check for &var at start of line (multi-line function call)
+                line_start_match = line_start_address_of_pattern.match(stripped)
+                if line_start_match and line_start_match.group(1) == var_name:
+                    local_vars[var_name] = (local_vars[var_name][0], True)
 
                 # Check if passed to a function as argument (could be non-const reference)
                 # This is conservative - better to miss a const than suggest wrong const
@@ -470,6 +518,10 @@ class MissingConstCheck(BaseCheck):
                             continue
                         # Also match: "(var " for cases like "(var ," with space
                         if re.search(rf"\(\s*{var_name}\s*,", stripped):
+                            local_vars[var_name] = (local_vars[var_name][0], True)
+                            continue
+                        # Check for dereferenced variable passed as argument: func(*var)
+                        if re.search(rf"[,(]\s*\*{var_name}\s*[,)]", stripped):
                             local_vars[var_name] = (local_vars[var_name][0], True)
                             continue
 
