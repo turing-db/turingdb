@@ -248,7 +248,7 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
             const fs::Path strIndexerPath = path / "edge-string-prop-indexer";
             const fs::Path strIndexerPathAlt = path / "edge-string-prop-indexer-owners";
             auto writer = fs::FilePageWriter::open(strIndexerPath, DumpConfig::PAGE_SIZE);
-            const auto auxWriter = fs::FilePageWriter::open(strIndexerPathAlt, DumpConfig::PAGE_SIZE);
+            auto auxWriter = fs::FilePageWriter::open(strIndexerPathAlt, DumpConfig::PAGE_SIZE);
             if (!writer || !auxWriter) {
                 return DumpError::result(
                     DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER,
