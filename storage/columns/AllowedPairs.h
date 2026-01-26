@@ -120,7 +120,9 @@ struct PairRestrictions<Op> {
             KindPair<NodeID, NodeID>,
             KindPair<EdgeID, EdgeID>,
             KindPair<LabelSetID, LabelSetID>,
-            KindPair<EdgeTypeID, EdgeTypeID>
+            KindPair<EdgeTypeID, EdgeTypeID>,
+
+            KindPair<std::optional<types::Int64::Primitive>, PropertyNull>
         >
         /*,
 
