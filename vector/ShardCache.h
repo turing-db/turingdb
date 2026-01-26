@@ -49,6 +49,7 @@ public:
 
     void updateMemUsage();
     void evictLibraryShards(VecLibID libID);
+    void flush();
 
     void setMemLimit(ssize_t memLimit) {
         _memLimit = memLimit;
