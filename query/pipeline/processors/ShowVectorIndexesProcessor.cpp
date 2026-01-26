@@ -12,7 +12,8 @@
 
 using namespace db;
 
-ShowVectorIndexesProcessor::ShowVectorIndexesProcessor() {
+ShowVectorIndexesProcessor::ShowVectorIndexesProcessor()
+{
 }
 
 ShowVectorIndexesProcessor::~ShowVectorIndexesProcessor() {

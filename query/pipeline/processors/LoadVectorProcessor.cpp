@@ -1,10 +1,10 @@
 #include "LoadVectorProcessor.h"
 
-#include <spdlog/fmt/fmt.h>
-
 #include <fstream>
 #include <sstream>
 #include <span>
+
+#include <spdlog/fmt/fmt.h>
 
 #include "columns/ColumnConst.h"
 #include "dataframe/NamedColumn.h"
