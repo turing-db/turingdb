@@ -79,23 +79,25 @@ void LoadVectorProcessor::execute() {
     accessor.prepareCreateBatch(&batch);
 
     std::string line;
+    std::string token;
+    std::vector<float> values;
+    values.reserve(dimension);
+
     while (std::getline(file, line)) {
         if (line.empty()) {
             continue;
         }
 
         std::istringstream iss(line);
-        std::string token;
 
         // Read ID
         if (!std::getline(iss, token, ',')) {
             throw PipelineException("Invalid vector file format: missing ID");
         }
-        uint64_t id = std::stoull(token);
+        const uint64_t id = std::stoull(token);
 
         // Read vector values
-        std::vector<float> values;
-        values.reserve(dimension);
+        values.clear();
 
         while (std::getline(iss, token, ',')) {
             values.push_back(std::stof(token));
