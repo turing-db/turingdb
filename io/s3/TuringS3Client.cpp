@@ -294,7 +294,7 @@ S3ClientResult<void> TuringS3Client<T>::uploadDirectory(const std::string& direc
             const Aws::String relativePath = entry.relativePath;
 
             ssKey << prefix << relativePath;
-            Aws::String keyName = ssKey.str();
+            const Aws::String keyName = ssKey.str();
             if (auto res = uploadFile(entry.path, bucketName, keyName); !res) {
                 directoryRes = res;
                 return false;

@@ -349,11 +349,24 @@ class MissingConstCheck(BaseCheck):
         }
 
         lines = context.lines
+        in_multiline_comment = False
         for i, line in enumerate(lines, start=1):
             stripped = line.strip()
 
-            # Skip comments
+            # Handle multi-line comments
+            if in_multiline_comment:
+                if "*/" in stripped:
+                    in_multiline_comment = False
+                continue
+
+            # Skip single-line comments
             if stripped.startswith("//"):
+                continue
+
+            # Check for start of multi-line comment
+            if "/*" in stripped:
+                if "*/" not in stripped:  # Comment continues to next line
+                    in_multiline_comment = True
                 continue
 
             # Track brace depth

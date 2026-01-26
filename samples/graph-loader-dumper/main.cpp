@@ -93,9 +93,9 @@ int main() {
         // Dump pole
         const fs::Path path {SAMPLE_DIR "/pole"};
 
-        auto jobSystem = JobSystem::create();
+        const auto jobSystem = JobSystem::create();
 
-        auto graph = Graph::create();
+        const auto graph = Graph::create();
         const std::string turingHome = std::getenv("TURING_HOME");
         const fs::Path jsonDir = fs::Path {turingHome} / "neo4j" / "pole-db";
 

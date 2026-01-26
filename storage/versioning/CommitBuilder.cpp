@@ -76,7 +76,7 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     std::unique_lock<std::mutex> lock {_mutex};
 
-    GraphView view {*_commitData};
+    const GraphView view {*_commitData};
 
     CommitHistoryBuilder historyBuilder {_commitData->_history};
     for (const auto& builder : _builders) {
