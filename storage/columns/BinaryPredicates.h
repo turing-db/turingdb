@@ -43,7 +43,7 @@ inline static auto optionalPredicate(T&& a,
  * combination of operand and result columns. It is not concerned with the types of its
  * arguments.
  */
-template <typename Op, typename Res, typename T, typename U>
+template <typename Op, typename T, typename U>
 struct BinaryPredicateExecutor {
     static void apply(ColumnMask* res,
                const ColumnVector<T>* lhs,
@@ -184,7 +184,7 @@ static inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
     using InternalT = InnerTypeHelper<DecayColT>::type;
     using InternalU = InnerTypeHelper<DecayColU>::type;
 
-    BinaryPredicateExecutor<Op, ColumnMask, InternalT, InternalU>::apply(
+    BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(
         res, std::forward<ColT>(lhs), std::forward<ColU>(rhs)
     );
 }
@@ -197,7 +197,7 @@ static inline void exec(ColumnOptMask* res, ColT&& lhs, ColU&& rhs) {
     using InternalT = InnerTypeHelper<DecayColT>::type;
     using InternalU = InnerTypeHelper<DecayColU>::type;
 
-    BinaryPredicateExecutor<Op, ColumnMask, InternalT, InternalU>::apply(
+    BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(
         res, std::forward<ColT>(lhs), std::forward<ColU>(rhs)
     );
 }
