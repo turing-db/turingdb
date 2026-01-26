@@ -66,13 +66,20 @@ template <ColumnOperator Op>
 struct CompareEqualEval {
     Column* _res {nullptr};
 
-    void operator()(const auto* lhs, const auto* rhs) {
+    template <typename T, typename U>
+    void operator()(const T* lhs, const U* rhs) {
         bioassert(_res && lhs && rhs, "Invalid inputs to CompareEqual");
 
         if constexpr (Op == OP_GREATER_THAN_OR_EQUAL) {
-            fmt::println("GREATER_THAN {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
+            using ResultType = ColumnCombination<Gte, T, U>::ResultColumnType;
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Gt.");
+            exec<Gte>(result, lhs, rhs);
         } else if constexpr (Op == OP_LESS_THAN_OR_EQUAL) {
-            fmt::println("LESS_THAN_OR_EQUAL {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
+            using ResultType = ColumnCombination<Lte, T, U>::ResultColumnType;
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Gt.");
+            exec<Lte>(result, lhs, rhs);
         } else {
             COMPILE_ERROR("Invalid operator for CompareEqual");
         }

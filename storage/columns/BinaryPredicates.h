@@ -3,7 +3,6 @@
 #include <functional>
 
 #include "ColumnCombinations.h"
-#include "columns/ColumnIDs.h"
 #include "columns/ColumnMask.h"
 
 namespace db {
@@ -99,16 +98,16 @@ struct BinaryPredicateExecutor {
     static void apply(ColumnOptMask* res,
                       const ColumnVector<T>* lhs,
                       const ColumnConst<U>* rhs) {
-       const size_t size = lhs->size();
+        const size_t size = lhs->size();
 
-       res->resize(size);
-       auto& resd = res->getRaw();
-       const auto& lhsd = lhs->getRaw();
-       const auto& val = rhs->getRaw();
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& val = rhs->getRaw();
 
-       auto op = Op {};
-       for (size_t i {0}; i < size; i++) {
-           resd[i] = op(lhsd[i], val);
+        auto op = Op {};
+        for (size_t i {0}; i < size; i++) {
+            resd[i] = op(lhsd[i], val);
        }
     }
 
