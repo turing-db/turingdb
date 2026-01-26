@@ -173,7 +173,8 @@ template <ColumnOperator Op>
     requires (Op == OP_AND) || (Op == OP_OR)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
-        OptionalKindPairs<CustomBool, CustomBool>::Pairs/*,
+        OptionalKindPairs<CustomBool, CustomBool>::Pairs
+        /*,
         std::tuple<KindPair<PropertyNull, CustomBool>,
                    KindPair<PropertyNull, std::optional<CustomBool>>>*/>;
 
@@ -181,8 +182,7 @@ struct PairRestrictions<Op> {
         MixedKind<ColumnMask, PropertyNull>,
         MixedKind<ColumnMask, CustomBool>,
         MixedKind<ColumnMask, std::optional<CustomBool>>*/>;
-    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
-                                        ContainerKind::code<ColumnMask>()>;
+    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>()>;
 };
 
 template <ColumnOperator Op>

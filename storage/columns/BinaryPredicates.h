@@ -159,6 +159,23 @@ struct BinaryPredicateExecutor {
         const auto& result = op(lhs->getRaw(), rhs->getRaw());
         res->front() = result;
     }
+
+    static void apply(ColumnMask* res,
+                      const ColumnMask* lhs,
+                      const ColumnMask* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
+        const size_t size = lhs->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        auto op = Op {};
+        for (size_t i {0}; i < size; i++) {
+            resd[i] = op(lhsd[i], rhsd[i]);
+       }
+    }
 };
 
 template <typename F>
