@@ -68,7 +68,7 @@ void LoadVectorProcessor::execute() {
 
     // Parse file and load embeddings
     // Expected format: CSV with id,dim1,dim2,...,dimN
-    std::string filePath{_filePath};
+    const std::string filePath{_filePath};
     std::ifstream file{filePath};
     if (!file.is_open()) {
         throw PipelineException(fmt::format("Failed to open file '{}'", _filePath));
@@ -83,7 +83,11 @@ void LoadVectorProcessor::execute() {
     std::vector<float> values;
     values.reserve(dimension);
 
-    while (std::getline(file, line)) {
+    for (;;) {
+        const bool hasLine = static_cast<bool>(std::getline(file, line));
+        if (!hasLine) {
+            break;
+        }
         if (line.empty()) {
             continue;
         }
