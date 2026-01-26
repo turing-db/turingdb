@@ -3,6 +3,7 @@
 #include <tuple>
 #include <optional>
 
+#include "ID.h"
 #include "columns/ColumnOperator.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -113,8 +114,15 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
-        OptionalKindPairs<NodeID, NodeID>::Pairs,
-        OptionalKindPairs<EdgeID, EdgeID>::Pairs/*,
+
+        // For filtering by ID or labels/edge type
+        std::tuple<
+            KindPair<NodeID, NodeID>,
+            KindPair<EdgeID, EdgeID>,
+            KindPair<LabelSetID, LabelSetID>,
+            KindPair<EdgeTypeID, EdgeTypeID>
+        >
+        /*,
 
         std::tuple<KindPair<PropertyNull, std::optional<NodeID>>,
                    KindPair<PropertyNull, std::optional<EdgeID>>,

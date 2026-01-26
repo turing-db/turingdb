@@ -1,10 +1,12 @@
 #include "PredicateProgramGenerator.h"
 
 #include "PipelineGenerator.h"
-#include "processors/PredicateProgram.h"
+
 #include "Predicate.h"
+#include "processors/PredicateProgram.h"
 #include "expr/Expr.h"
-#include "columns/ColumnOptMask.h"
+#include "columns/BinaryPredicates.h"
+#include "columns/ColumnCombinations.h"
 
 #include "PlannerException.h"
 
@@ -62,7 +64,9 @@ void PredicateProgramGenerator::addLabelConstraint(Column* lblsetCol,
             _gen->memory().alloc<ColumnConst<LabelSetID>>();
         constCol->set(lsID);
 
-        auto* resCol = _gen->memory().alloc<ColumnOptMask>();
+        using ResultType = ColumnCombination<Eq, ColumnVector<LabelSetID>,
+                                             ColumnConst<LabelSetID>>::ResultColumnType;
+        auto* resCol = _gen->memory().alloc<ResultType>();
 
         predProg->addInstr(ColumnOperator::OP_EQUAL, resCol, lblsetCol, constCol);
 
@@ -90,7 +94,9 @@ void PredicateProgramGenerator::addEdgeTypeConstraint(Column* edgeTypeCol,
     ColumnConst<EdgeTypeID>* constCol = _gen->memory().alloc<ColumnConst<EdgeTypeID>>();
     constCol->set(typeConstr);
 
-    ColumnOptMask* finalEdgeTypeMask = _gen->memory().alloc<ColumnOptMask>();
+    using ResultType = ColumnCombination<Eq, ColumnVector<EdgeTypeID>,
+                                         ColumnConst<EdgeTypeID>>::ResultColumnType;
+    auto* finalEdgeTypeMask = _gen->memory().alloc<ResultType>();
     predProg->addInstr(ColumnOperator::OP_EQUAL,
                         finalEdgeTypeMask,
                         edgeTypeCol,
