@@ -51,7 +51,7 @@ void DeleteVectorIndexProcessor::execute() {
         throw PipelineException("VectorDatabase not available");
     }
 
-    vec::VectorResult<void> result = vectorDb->deleteLibrary(std::string(_indexName));
+    const vec::VectorResult<void> result = vectorDb->deleteLibrary(std::string(_indexName));
 
     if (!result.has_value()) {
         throw PipelineException(fmt::format("Failed to delete vector index '{}': {}",

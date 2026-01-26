@@ -85,8 +85,11 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Loader::load(VecLibStorage& storag
 }
 
 VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate& batch) {
-    // Iterate with explicit index since the batch stores data at indices
-    // corresponding to LSH signatures (sparse array).
+    // The BatchVectorCreate stores vectors grouped by LSH signature. We need to iterate
+    // using explicit indices rather than simple range-based iteration because the batch
+    // is a sparse array - vectors are stored at indices matching their LSH signature,
+    // with empty entries for unused signatures. The signature value is needed to route
+    // each vector to the correct shard in the cache.
     LSHSignature signature = 0;
     for (auto it = batch.begin(); it != batch.end(); ++it, ++signature) {
         const auto& data = *it;
