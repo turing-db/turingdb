@@ -36,14 +36,17 @@ using namespace db;
 namespace {
 
 void outputDependency(std::ostream& output, const ExprDependencies::VarDependency& dep) {
-    output << "        __dep__ _" << dep._var->getVarDecl()->getName() << "_";
     if (const auto* expr = dynamic_cast<const EntityTypeExpr*>(dep._expr)) {
         const auto* types = expr->getTypes();
+
+        output << "        __dep__ _" << expr->getEntityVarDecl()->getName() << "_";
 
         for (const auto& type : *types) {
             output << ":_" << type->getName() << "_\n";
         }
     } else if (const auto* expr = dynamic_cast<const PropertyExpr*>(dep._expr)) {
+        output << "        __dep__ _" << expr->getEntityVarDecl()->getName() << "_";
+
         fmt::println(output, "._{}_ ({})",
                      expr->getPropName(),
                      EvaluatedTypeName::value(expr->getType()));
@@ -306,7 +309,8 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
                 const auto* yield = n->getYield();
                 if (!yield) {
-                    continue;
+                    break;
+                    break;
                 }
 
                 output << "        __yield__\n";
@@ -316,7 +320,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
                 const auto* args = invocation->getArguments();
                 if (!args || args->empty()) {
-                    continue;
+                    break;
                 }
 
                 output << "        __args__\n";

@@ -29,7 +29,7 @@ TEST_F(ShowProceduresTest, showProcedures) {
                                 [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 2);
-        ASSERT_EQ(df->getRowCount(), 5);
+        ASSERT_EQ(df->getRowCount(), 6);
 
         const auto& cols = df->cols();
         const auto* colName = cols.at(0)->as<ColumnVector<types::String::Primitive>>();
@@ -43,7 +43,8 @@ TEST_F(ShowProceduresTest, showProcedures) {
         ASSERT_EQ(colName->at(1), "db.propertyTypes");
         ASSERT_EQ(colName->at(2), "db.edgeTypes");
         ASSERT_EQ(colName->at(3), "db.history");
-        ASSERT_EQ(colName->at(4), "db.procedures");
+        ASSERT_EQ(colName->at(4), "db.describeCommit");
+        ASSERT_EQ(colName->at(5), "db.procedures");
 
         // Check exact signatures
         ASSERT_EQ(colSignature->at(0), "db.labels() :: (id :: INTEGER, label :: STRING)");
@@ -53,7 +54,9 @@ TEST_F(ShowProceduresTest, showProcedures) {
         ASSERT_EQ(colSignature->at(3),
                   "db.history() :: (commit :: STRING, nodeCount :: INTEGER, edgeCount :: INTEGER, "
                   "partCount :: INTEGER)");
-        ASSERT_EQ(colSignature->at(4), "db.procedures() :: (name :: STRING, signature :: STRING)");
+        ASSERT_EQ(colSignature->at(4), "db.describeCommit(commit :: STRING)"
+                                       " :: (nodeCount :: INTEGER, edgeCount :: INTEGER, partCount :: INTEGER)");
+        ASSERT_EQ(colSignature->at(5), "db.procedures() :: (name :: STRING, signature :: STRING)");
 
         executed = true;
     });

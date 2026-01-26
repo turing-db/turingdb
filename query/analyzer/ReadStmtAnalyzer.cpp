@@ -152,6 +152,7 @@ void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause
             if (returnItem._name == yieldItem->getOriginalName()) {
                 bioassert(!returnItem._name.empty(), "Procedure return item has empty name");
                 decl = _ctxt->getOrCreateNamedVariable(_ast, returnItem._type, yieldItem->getName());
+                yieldItemExpr->setDecl(decl);
                 break;
             }
         }

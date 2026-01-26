@@ -17,9 +17,22 @@ namespace {
 void buildSignature(std::string& result, const ProcedureBlueprint& blueprint) {
     result.clear();
     result += blueprint._name;
-    result += "() :: (";
+    result += "(";
 
     bool first = true;
+    for (const auto& arg : blueprint._argumentTypes) {
+        if (!first) {
+            result += ", ";
+        }
+        result += arg._name;
+        result += " :: ";
+        result += ProcedureTypeName::value(arg._type);
+        first = false;
+    }
+
+    result += ") :: (";
+
+    first = true;
     for (const auto& rv : blueprint._returnValues) {
         if (!first) {
             result += ", ";
@@ -29,6 +42,7 @@ void buildSignature(std::string& result, const ProcedureBlueprint& blueprint) {
         result += ProcedureTypeName::value(rv._type);
         first = false;
     }
+
     result += ")";
 }
 

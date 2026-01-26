@@ -16,12 +16,14 @@
 #include "expr/UnaryExpr.h"
 #include "expr/FunctionInvocationExpr.h"
 
+#include "BioAssert.h"
+
 namespace db {
 
 class ExprDependencies {
 public:
     struct VarDependency {
-        VarNode* _var {nullptr};
+        PlanGraphNode* _var {nullptr};
         Expr* _expr {nullptr};
     };
 
@@ -48,7 +50,7 @@ public:
         return _varDeps.empty() && _funcDeps.empty();
     }
 
-    void genExprDependencies(const PlanGraphVariables& variables, Expr* expr) {
+    void genExprDependencies(const std::unordered_map<const VarDecl*, PlanGraphNode*>& variables, Expr* expr) {
         switch (expr->getKind()) {
             case Expr::Kind::BINARY: {
                 const BinaryExpr* binary = static_cast<BinaryExpr*>(expr);
@@ -69,12 +71,28 @@ public:
 
             case Expr::Kind::ENTITY_TYPES: {
                 const EntityTypeExpr* entityType = static_cast<EntityTypeExpr*>(expr);
-                _varDeps.emplace_back(variables.getVarNode(entityType->getEntityVarDecl()), expr);
+                auto it = variables.find(entityType->getEntityVarDecl());
+                bioassert(it != variables.end(), "VarDecl not found");
+
+                auto* var = dynamic_cast<VarNode*>(it->second);
+                if (!var) {
+                    throw PlannerException("Can only reference entity types from matched variables");
+                }
+
+                _varDeps.emplace_back(var, expr);
             } break;
 
             case Expr::Kind::PROPERTY: {
                 const PropertyExpr* prop = static_cast<PropertyExpr*>(expr);
-                _varDeps.emplace_back(variables.getVarNode(prop->getEntityVarDecl()), expr);
+                auto it = variables.find(prop->getEntityVarDecl());
+                bioassert(it != variables.end(), "VarDecl not found");
+
+                auto* var = dynamic_cast<VarNode*>(it->second);
+                if (!var) {
+                    throw PlannerException("Can only reference properties from matched variables");
+                }
+
+                _varDeps.emplace_back(var, expr);
             } break;
 
             case Expr::Kind::FUNCTION_INVOCATION: {
@@ -90,7 +108,10 @@ public:
 
             case Expr::Kind::SYMBOL: {
                 const SymbolExpr* symbol = static_cast<SymbolExpr*>(expr);
-                _varDeps.emplace_back(variables.getVarNode(symbol->getDecl()), expr);
+                auto it = variables.find(symbol->getDecl());
+                bioassert(it != variables.end(), "VarDecl not found");
+
+                _varDeps.emplace_back(it->second, expr);
             } break;
 
             case Expr::Kind::PATH:

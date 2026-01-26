@@ -318,6 +318,8 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
             expr->setType(EvaluatedType::Wildcard);
         } break;
     }
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 }
 
 ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate, ValueType defaultType) {

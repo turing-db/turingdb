@@ -37,10 +37,10 @@ namespace {
 
 template <typename T>
     requires (std::is_same_v<const NodePatternData*, T>) || (std::is_same_v<const EdgePatternData*, T>)
-void checkDependencies(PlanGraphVariables* vars, T data) {
+void checkDependencies(std::unordered_map<const VarDecl*, PlanGraphNode*>& producers, T data) {
     ExprDependencies deps;
     for (auto&& d : data->exprConstraints()) {
-        deps.genExprDependencies(*vars, d._expr);
+        deps.genExprDependencies(producers, d._expr);
     }
     if (!deps.empty()) {
         throw PlannerException("CREATE statements with entity dependencies "
@@ -191,10 +191,14 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
     // Step 1. Handle the origin
     const VarNode* varNode = _variables->getVarNode(originDecl);
 
+    auto& producers = _tree->getDeclProducers();
+
     if (!_currentNode->hasPendingNode(originDecl) && varNode == nullptr) {
         // Node is not created yet and is not an input
-        checkDependencies(_variables, data);
+        checkDependencies(producers, data);
         _currentNode->addNode(originDecl, data);
+
+        producers.emplace(originDecl, _currentNode);
     }
 
     lhs = originDecl;
@@ -208,15 +212,17 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
 
         if (!_currentNode->hasPendingNode(rhs) && rhsVarNode == nullptr) {
             // Node is not created yet and is not an input
-            checkDependencies(_variables, rhsData);
+            checkDependencies(producers, rhsData);
             _currentNode->addNode(rhs, rhsData);
+            producers.emplace(rhs, _currentNode);
         }
 
         // - Create the new edge
         const VarDecl* edgeDecl = edge->getDecl();
         {
             const EdgePatternData* edgeData = edge->getData();
-            checkDependencies(_variables, edgeData);
+            checkDependencies(producers, edgeData);
+            producers.emplace(edgeDecl, _currentNode);
         }
 
         switch (edge->getDirection()) {

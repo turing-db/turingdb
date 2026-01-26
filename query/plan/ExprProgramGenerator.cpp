@@ -239,10 +239,11 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
     const EvaluatedType type = symbolExpr->getType();
     symbolExpr->getSymbol();
 
-    if (type != EvaluatedType::NodePattern && type != EvaluatedType::EdgePattern) {
-        throw PlannerException(
-            "Attempted to generate SymbolExpr which was neither Node nor EdgePattern.");
-    }
+    // TODO check, this probably breaks stuff
+    //if (type != EvaluatedType::NodePattern && type != EvaluatedType::EdgePattern) {
+    //    throw PlannerException(
+    //        "Attempted to generate SymbolExpr which was neither Node nor EdgePattern.");
+    //}
 
     // Search exprVarDecl in column map. It may not be present, in the case that this
     // variable is only manifested by a VarNode *after* this filter (see

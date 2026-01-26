@@ -59,7 +59,7 @@ public:
     void placeJoinsOnProcedures();
     PlanGraphNode* generateEndpoint();
 
-    void insertDataFlowNode(VarNode* node, VarNode* dependency);
+    void insertDataFlowNode(VarNode* node, PlanGraphNode* dependency);
 
     void setIsStandaloneCall(bool hasReturn) { _isStandaloneCall = hasReturn; }
 

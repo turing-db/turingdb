@@ -117,9 +117,17 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
     const FunctionInvocationExpr* funcExpr = callStmt->getFunc();
     YieldClause* yield = callStmt->getYield();
 
-    // Here generate the dependencies?
-
     ProcedureEvalNode* procNode = _tree->create<ProcedureEvalNode>(funcExpr, yield);
+
+
+    if (yield) {
+        YieldItems* yieldItems = yield->getItems();
+        auto& producers = _tree->getDeclProducers();
+
+        for (SymbolExpr* item : yieldItems->getItems()) {
+            producers.emplace(item->getDecl(), procNode);
+        }
+    }
 
     if (callStmt->isStandaloneCall()) {
         _tree->newOut<ProduceResultsNode>(procNode);
@@ -179,6 +187,8 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
         // Scan nodes
         ScanNodesNode* scan = _tree->create<ScanNodesNode>();
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
+        auto& producers = _tree->getDeclProducers();
+        producers.emplace(decl, var);
 
         scan->connectOut(filter);
     }
@@ -206,7 +216,7 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
         }
 
         Predicate* predicate = _tree->createPredicate(constraint._expr);
-        predicate->generate(*_variables);
+        predicate->generate(_tree->getDeclProducers());
     }
 
     return var;
@@ -244,6 +254,8 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
     auto [var, filter] = _variables->getVarNodeAndFilter(decl);
     if (!var) {
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
+        auto& producers = _tree->getDeclProducers();
+        producers.emplace(decl, var);
     } else {
         throwError("Re-using the same edge variable, this is not supported", edge);
     }
@@ -269,7 +281,7 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
         }
 
         Predicate* predicate = _tree->createPredicate(constraint._expr);
-        predicate->generate(*_variables);
+        predicate->generate(_tree->getDeclProducers());
     }
 
     return var;
@@ -290,6 +302,9 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
     auto [var, filter] = _variables->getVarNodeAndFilter(decl);
     if (!var) {
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
+        auto& producers = _tree->getDeclProducers();
+        producers.emplace(decl, var);
+
         currentNode->connectOut(filter);
     } else {
         currentNode->connectOut(filter);
@@ -323,7 +338,7 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
         }
 
         Predicate* predicate = _tree->createPredicate(constraint._expr);
-        predicate->generate(*_variables);
+        predicate->generate(_tree->getDeclProducers());
     }
 
     return var;
@@ -405,7 +420,7 @@ void ReadStmtGenerator::unwrapWhereExpr(Expr* expr) {
     // Unwraped the first list of AND expressions,
     // Treating other cases as a whole Where predicate
     Predicate* predicate = _tree->createPredicate(expr);
-    predicate->generate(*_variables);
+    predicate->generate(_tree->getDeclProducers());
 }
 
 void ReadStmtGenerator::placeJoinsOnVars() {
@@ -431,7 +446,7 @@ void ReadStmtGenerator::placeJoinsOnVars() {
                 return _tree->create<JoinNode>(node->getVarDecl(),
                                                node->getVarDecl(),
                                                JoinType::DIAMOND);
-            }
+        }
 
         throwError("Unexpected erorr. Cannot place join on variables");
     };
@@ -483,9 +498,10 @@ void ReadStmtGenerator::placePredicateJoins() {
 
         // Step 2: Place joins
         for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
-            FilterNode* filter = _variables->getNodeFilter(dep._var);
-
             if (auto* expr = dynamic_cast<PropertyExpr*>(dep._expr)) {
+                auto* varNode = dynamic_cast<VarNode*>(dep._var);
+                FilterNode* filter = _variables->getNodeFilter(varNode);
+
                 const VarDecl* entityDecl = expr->getEntityVarDecl();
                 const VarDecl* exprDecl = expr->getExprVarDecl();
 
@@ -505,6 +521,8 @@ void ReadStmtGenerator::placePredicateJoins() {
                 }
 
             } else if (auto* expr = dynamic_cast<EntityTypeExpr*>(dep._expr)) {
+                auto* varNode = dynamic_cast<VarNode*>(dep._var);
+                FilterNode* filter = _variables->getNodeFilter(varNode);
                 const VarDecl* entityDecl = expr->getEntityVarDecl();
                 const VarDecl* exprDecl = expr->getExprVarDecl();
 
@@ -540,17 +558,41 @@ void ReadStmtGenerator::placePredicateJoins() {
 }
 
 void ReadStmtGenerator::placeJoinsOnProcedures() {
-    ProcedureEvalNode* prevNode = nullptr;
+    const auto& producers = _tree->getDeclProducers();
 
     for (const auto& node : _tree->nodes()) {
         if (node->getOpcode() == PlanGraphOpcode::PROCEDURE_EVAL) {
             auto* n = static_cast<ProcedureEvalNode*>(node.get());
+            const ExprChain* args = n->getFuncExpr()->getFunctionInvocation()->getArguments();
 
-            if (prevNode) {
-                prevNode->connectOut(n);
+            for (const Expr* arg : *args) {
+                const VarDecl* decl = arg->getExprVarDecl();
+                if (!decl) [[unlikely]] {
+                    throwError("Procedure argument does not have a variable declaration", arg);
+                }
+
+                auto it = producers.find(decl);
+                if (it == producers.end()) {
+                    continue;
+                }
+
+                PlanGraphNode* producer = it->second;
+                const auto [path, ancestorNode] = _topology->getShortestPath(n, producer);
+
+                switch (path) {
+                    case PlanGraphTopology::PathToDependency::SameVar:
+                    case PlanGraphTopology::PathToDependency::BackwardPath: {
+                        return;
+                    }
+
+                    case PlanGraphTopology::PathToDependency::UndirectedPath:
+                    case PlanGraphTopology::PathToDependency::NoPath: {
+                        PlanGraphNode* depBranchTip = _topology->getBranchTip(producer);
+                        depBranchTip->connectOut(n);
+                        return;
+                    }
+                }
             }
-
-            prevNode = n;
         }
     }
 }
@@ -654,7 +696,7 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
     return rhsNode;
 }
 
-void ReadStmtGenerator::insertDataFlowNode(VarNode* node, VarNode* dependency) {
+void ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* dependency) {
     FilterNode* filter = _variables->getNodeFilter(node);
     const auto [path, ancestorNode] = _topology->getShortestPath(node, dependency);
 

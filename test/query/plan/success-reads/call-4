@@ -14,14 +14,11 @@ flowchart TD
         __func__ db.describeCommit
         __yield__
         __yield_item__: partCount
+        __args__
+        __arg__: unnamed
     `"]
     2["`
-        __CARTESIAN_PRODUCT__
-    `"]
-    3["`
         __PRODUCE_RESULTS__
     `"]
-    0-->2
+    0-->1
     1-->2
-    2-->3
-

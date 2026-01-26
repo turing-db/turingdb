@@ -96,14 +96,14 @@ public:
 
             // Find query delimiter
             const size_t queryDelimiterPos = content.find(queryDelimiter);
-            ASSERT_NE(queryDelimiterPos, std::string_view::npos);
+            EXPECT_NE(queryDelimiterPos, std::string_view::npos);
 
             // Remove the query delimiter
             std::string_view queryStr = content.substr(queryDelimiter.size() + 1);
 
             // Find result delimiter
             const size_t resDelimiterPos = queryStr.find(resDelimiter);
-            ASSERT_NE(resDelimiterPos, std::string_view::npos);
+            EXPECT_NE(resDelimiterPos, std::string_view::npos);
 
             std::string_view resStr = queryStr.substr(resDelimiterPos + resDelimiter.size() + 1);
             queryStr = queryStr.substr(0, resDelimiterPos);
@@ -118,7 +118,7 @@ public:
                 std::cout << "== Expected:\n" << resStr << '\n';
                 std::cout << "== Actual:\n" << generatedPlan << '\n';
                 std::cout << std::flush;
-                ASSERT_TRUE(false);
+                EXPECT_TRUE(false);
             }
         }
     }

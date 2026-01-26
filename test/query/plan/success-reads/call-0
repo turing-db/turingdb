@@ -6,8 +6,8 @@ flowchart TD
     0["`
         __PROCEDURE_EVAL__
         __func__ db.history
+    `"]
     1["`
         __PRODUCE_RESULTS__
     `"]
     0-->1
-
