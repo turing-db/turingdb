@@ -90,7 +90,7 @@ public:
         return (std::is_same_v<T<Ts>, TemplateKind<T>> || ...);
     }
 
-    // IndexOf
+    // IndexOf - 1-indexed
     template <typename T>
     static consteval std::size_t indexOf() {
         static_assert(contains<T>());
