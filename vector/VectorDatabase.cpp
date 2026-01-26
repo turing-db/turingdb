@@ -179,17 +179,15 @@ VecLibWriteAccessor VectorDatabase::getLibraryForWrite(std::string_view libName)
     return getLibraryForWrite(it->second);
 }
 
-std::vector<std::string> VectorDatabase::listLibraryNames() const {
+void VectorDatabase::listLibraryNames(std::vector<std::string>& out) const {
     std::shared_lock lock {_mutex};
 
-    std::vector<std::string> names;
-    names.reserve(_vecLibs.size());
+    out.clear();
+    out.reserve(_vecLibs.size());
 
     for (const auto& [id, lib] : _vecLibs) {
-        names.emplace_back(lib->name());
+        out.emplace_back(lib->name());
     }
-
-    return names;
 }
 
 VectorResult<void> VectorDatabase::load() {

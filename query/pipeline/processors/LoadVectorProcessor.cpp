@@ -110,7 +110,7 @@ void LoadVectorProcessor::execute() {
         batch.addPoint(id, std::span<const float>(values));
     }
 
-    vec::VectorResult<void> result = accessor.addEmbeddings(batch);
+    const vec::VectorResult<void> result = accessor.addEmbeddings(batch);
     if (!result.has_value()) {
         throw PipelineException(fmt::format(
             "Failed to add embeddings: {}", result.error().fmtMessage()));

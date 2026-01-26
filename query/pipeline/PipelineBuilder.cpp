@@ -904,8 +904,8 @@ PipelineBlockOutputInterface& PipelineBuilder::addShowProcedures() {
 }
 
 PipelineValueOutputInterface& PipelineBuilder::addCreateVectorIndex(std::string_view indexName,
-                                                                     vec::Dimension dimension,
-                                                                     vec::DistanceMetric metric) {
+                                                                    vec::Dimension dimension,
+                                                                    vec::DistanceMetric metric) {
     CreateVectorIndexProcessor* proc = CreateVectorIndexProcessor::create(
         _pipeline, indexName, dimension, metric);
 
@@ -936,10 +936,9 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadVector(std::string_view fi
 }
 
 PipelineValuesOutputInterface& PipelineBuilder::addVectorSearch(std::string_view indexName,
-                                                                 uint64_t k,
-                                                                 std::vector<float> queryVector) {
-    VectorSearchProcessor* proc = VectorSearchProcessor::create(
-        _pipeline, indexName, k, std::move(queryVector));
+                                                                uint64_t k,
+                                                                const std::vector<float>& queryVector) {
+    VectorSearchProcessor* proc = VectorSearchProcessor::create(_pipeline, indexName, k, queryVector);
 
     PipelineValuesOutputInterface& output = proc->outIds();
     Dataframe* df = output.getDataframe();

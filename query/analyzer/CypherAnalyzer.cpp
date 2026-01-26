@@ -435,19 +435,19 @@ void CypherAnalyzer::analyze(const CreateVectorIndexQuery* query) {
         throwError("Vector index dimension must be greater than 0", query);
     }
 
-    std::string_view indexName = query->getIndexName();
+    const std::string_view indexName = query->getIndexName();
     if (indexName.empty()) {
         throwError("Vector index name cannot be empty", query);
     }
 }
 
 void CypherAnalyzer::analyze(const LoadVectorQuery* query) {
-    std::string_view filePath = query->getFilePath();
+    const std::string_view filePath = query->getFilePath();
     if (filePath.empty()) {
         throwError("LOAD VECTOR file path cannot be empty", query);
     }
 
-    std::string_view indexName = query->getIndexName();
+    const std::string_view indexName = query->getIndexName();
     if (indexName.empty()) {
         throwError("LOAD VECTOR index name cannot be empty", query);
     }

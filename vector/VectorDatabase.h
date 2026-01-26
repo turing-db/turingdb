@@ -46,7 +46,7 @@ public:
     [[nodiscard]] VecLibWriteAccessor getLibraryForWrite(const VecLibID& libID);
     [[nodiscard]] VecLibWriteAccessor getLibraryForWrite(std::string_view libName);
 
-    [[nodiscard]] std::vector<std::string> listLibraryNames() const;
+    void listLibraryNames(std::vector<std::string>& out) const;
 
     std::shared_mutex& getMutex() { return _mutex; }
 

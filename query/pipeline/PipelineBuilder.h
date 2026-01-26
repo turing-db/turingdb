@@ -54,10 +54,7 @@ public:
 
     const PendingOutputView& getPendingOutput() const { return _pendingOutput; }
     PendingOutputView& getPendingOutput() { return _pendingOutput; }
-
-    PipelineOutputInterface* getPendingOutputInterface() const {
-        return _pendingOutput.getInterface();
-    }
+    PipelineOutputInterface* getPendingOutputInterface() const { return _pendingOutput.getInterface(); }
 
     // Sources
     PipelineNodeOutputInterface& addScanNodes();
@@ -199,7 +196,7 @@ public:
                                                 std::string_view indexName);
     PipelineValuesOutputInterface& addVectorSearch(std::string_view indexName,
                                                    uint64_t k,
-                                                   std::vector<float> queryVector);
+                                                   const std::vector<float>& queryVector);
     PipelineValueOutputInterface& addDeleteVectorIndex(std::string_view indexName);
     PipelineValuesOutputInterface& addShowVectorIndexes();
 

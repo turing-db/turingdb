@@ -58,7 +58,8 @@ void ShowVectorIndexesProcessor::execute() {
     ColumnString* colNames = _outNames.getValues()->as<ColumnString>();
     ColumnUInt* colDimensions = _outDimensions.getValues()->as<ColumnUInt>();
 
-    std::vector<std::string> indexNames = vectorDb->listLibraryNames();
+    std::vector<std::string> indexNames;
+    vectorDb->listLibraryNames(indexNames);
     for (const std::string& name : indexNames) {
         vec::VecLibAccessor accessor = vectorDb->getLibrary(name);
         if (accessor.isValid()) {

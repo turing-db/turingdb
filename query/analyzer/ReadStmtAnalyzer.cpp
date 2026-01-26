@@ -446,13 +446,13 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
         throwError("VECTOR SEARCH requires YIELD clause", stmt);
     }
 
-    YieldItems* yieldItems = yield->getItems();
+    const YieldItems* yieldItems = yield->getItems();
     if (!yieldItems || yieldItems->getItems().empty()) {
         throwError("VECTOR SEARCH YIELD clause cannot be empty", stmt);
     }
 
     for (SymbolExpr* yieldItemExpr : *yieldItems) {
-        Symbol* yieldItem = yieldItemExpr->getSymbol();
+        const Symbol* yieldItem = yieldItemExpr->getSymbol();
 
         if (yieldItem->getName() != "ids") {
             throwError(fmt::format("VECTOR SEARCH only supports YIELD ids, got '{}'",
@@ -464,8 +464,9 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
                        yieldItemExpr);
         }
 
-        VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::Integer,
-                                                         yieldItem->getName());
+        VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast,
+                                                       EvaluatedType::Integer,
+                                                       yieldItem->getName());
         yieldItemExpr->setExprVarDecl(decl);
     }
 }
