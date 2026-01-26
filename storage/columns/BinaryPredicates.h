@@ -3,7 +3,7 @@
 #include <functional>
 
 #include "ColumnCombinations.h"
-#include "columns/ColumnMask.h"
+#include "ColumnMask.h"
 
 namespace db {
 
@@ -14,8 +14,7 @@ namespace db {
  */
 template <typename Pred, typename T, typename U>
     requires OptionalPredicate<Pred, T, U>
-inline static auto optionalPredicate(T&& a,
-                                   U&& b) -> optional_invoke_result<Pred, T, U> {
+inline auto optionalPredicate(T&& a, U&& b) -> optional_invoke_result<Pred, T, U> {
     if constexpr (is_optional_v<T>) {
         if (!a.has_value()) {
             return std::nullopt;
@@ -177,7 +176,7 @@ struct BinaryPredicate {
 };
 
 template <typename Op, typename ColT, typename ColU>
-static inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
+inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
     using DecayColT = decay_col_t<ColT>;
     using DecayColU = decay_col_t<ColU>;
 
@@ -190,7 +189,7 @@ static inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
 }
 
 template <typename Op, typename ColT, typename ColU>
-static inline void exec(ColumnOptMask* res, ColT&& lhs, ColU&& rhs) {
+inline void exec(ColumnOptMask* res, ColT&& lhs, ColU&& rhs) {
     using DecayColT = decay_col_t<ColT>;
     using DecayColU = decay_col_t<ColU>;
 

@@ -4,28 +4,14 @@
 #include <optional>
 #include <utility>
 
+#include "ColumnVector.h"
+#include "ColumnConst.h"
 #include "ColumnCombinations.h"
 
 #include "BioAssert.h"
-#include "columns/ColumnVector.h"
-#include "columns/ColumnConst.h"
 #include "spdlog/fmt/bundled/base.h"
 
 namespace db {
-
-/**
- * @brief Partial function which returns the underlying value of an  optional, and
- * is otherwise the identity function. Undefined for nullopt input.
- * @warn Assumes the optional is engaged, does not check for engagement.
- */
-template <typename T>
-static constexpr decltype(auto) unwrap(T&& t) {
-    if constexpr (is_optional_v<T>) {
-        return *std::forward<T>(t);
-    } else {
-        return std::forward<T>(t);
-    }
-}
 
 /**
  * @brief Generic function to apply a generic invokable to two possibly-optional

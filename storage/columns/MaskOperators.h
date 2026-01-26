@@ -55,8 +55,7 @@ struct MaskOpExecutor {
     }
 
     // Unary operator
-    static void apply(ColumnMask* res, const ColumnMask* arg)
-    {
+    static void apply(ColumnMask* res, const ColumnMask* arg) {
         const size_t size = arg->size();
 
         res->resize(size);
