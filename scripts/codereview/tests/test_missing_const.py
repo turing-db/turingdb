@@ -948,6 +948,39 @@ void test() {
         warnings = get_warnings_on_lines(code)
         # Static locals often get modified across calls
 
+    def test_namespace_declaration(self):
+        """Namespace declarations should not be mistaken for variables."""
+        code = """
+namespace db {
+template class ShortestPathProcessor<types::UInt64>;
+template class ShortestPathProcessor<types::Double>;
+}
+"""
+        warnings = get_warnings_on_lines(code)
+        assert 1 not in warnings, "Namespace name should not be flagged as variable"
+
+    def test_class_declaration(self):
+        """Class declarations should not be mistaken for variables."""
+        code = """
+class MyClass {
+public:
+    int value;
+};
+"""
+        warnings = get_warnings_on_lines(code)
+        assert 1 not in warnings, "Class name should not be flagged as variable"
+
+    def test_struct_declaration(self):
+        """Struct declarations should not be mistaken for variables."""
+        code = """
+struct MyStruct {
+    int x;
+    int y;
+};
+"""
+        warnings = get_warnings_on_lines(code)
+        assert 1 not in warnings, "Struct name should not be flagged as variable"
+
 
 # =============================================================================
 # Iterator and range patterns

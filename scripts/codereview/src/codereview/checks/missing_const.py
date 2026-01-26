@@ -236,7 +236,8 @@ class MissingConstCheck(BaseCheck):
         # Matches: Type name = value; or Type name(value); or Type name{value};
         var_decl = re.compile(
             r"^\s*"
-            r"(?!return|if|else|for|while|switch|case|break|continue|goto|throw|void|virtual|static|inline)"
+            r"(?!return|if|else|for|while|switch|case|break|continue|goto|throw|void|virtual|static|inline|"
+            r"namespace|class|struct|enum|union)"
             r"(?:const\s+)?"
             r"(\w+(?:::\w+)?(?:<[^>]+>)?)"  # type
             r"(?:\s*[*&])?\s+"  # optional pointer/ref
