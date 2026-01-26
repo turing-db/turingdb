@@ -10,19 +10,21 @@ class CypherAST;
 
 class ListExpr : public Expr {
 public:
-    static ListExpr* create(CypherAST* ast);
+    using Elements = std::vector<Expr*>;
 
     void addItem(Expr* expr) { _elements.push_back(expr); }
 
-    const std::vector<Expr*>& getElements() const { return _elements; }
+    const Elements& getElements() const { return _elements; }
     size_t size() const { return _elements.size(); }
     bool empty() const { return _elements.empty(); }
 
-    std::vector<Expr*>::const_iterator begin() const { return _elements.begin(); }
-    std::vector<Expr*>::const_iterator end() const { return _elements.end(); }
+    static ListExpr* create(CypherAST* ast);
+
+    Elements::const_iterator begin() const { return _elements.begin(); }
+    Elements::const_iterator end() const { return _elements.end(); }
 
 private:
-    std::vector<Expr*> _elements;
+    Elements _elements;
 
     ListExpr()
         : Expr(Kind::LIST)
