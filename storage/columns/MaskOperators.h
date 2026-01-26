@@ -34,11 +34,6 @@ struct MaskOperator {
     }
 };
 
-using AND = MaskOperator<std::logical_and<>>;
-using OR  = MaskOperator<std::logical_or<>>;
-using NOT = MaskOperator<std::logical_not<>>;
-using Apply = MaskOperator<std::identity>;
-
 template <typename Op>
 struct MaskOpExecutor {
     // Binary operator
@@ -137,5 +132,10 @@ template <typename Op, typename T>
 static inline void exec(ColumnVector<T>* res, ColumnMask* mask, ColumnVector<T>* src) {
     MaskApplicator::apply(res, src, mask);
 }
+
+using AND = MaskOperator<std::logical_and<>>;
+using OR  = MaskOperator<std::logical_or<>>;
+using NOT = MaskOperator<std::logical_not<>>;
+using Apply = MaskOperator<std::identity>;
 
 }

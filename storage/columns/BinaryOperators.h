@@ -156,8 +156,5 @@ using Add = BinaryOperator<std::plus<>>;
 using Sub = BinaryOperator<std::minus<>>;
 using Mul = BinaryOperator<std::multiplies<>>;
 
-using And = BinaryOperator<std::logical_and<>>;
-using Or  = BinaryOperator<std::logical_or<>>;
-
 }
 

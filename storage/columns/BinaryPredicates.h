@@ -13,7 +13,7 @@ namespace db {
  * nullopt, and the result of applying the predicate otherwise.
  */
 template <typename Pred, typename T, typename U>
-    requires OptionallyInvokable<Pred, T, U>
+    requires OptionalPredicate<Pred, T, U>
 inline static auto optionalPredicate(T&& a,
                                    U&& b) -> optional_invoke_result<Pred, T, U> {
     if constexpr (is_optional_v<T>) {
@@ -210,5 +210,8 @@ using Lt = BinaryPredicate<std::less<>>;
 
 using Gte = BinaryPredicate<std::greater_equal<>>;
 using Lte = BinaryPredicate<std::less_equal<>>;
+
+using And = BinaryPredicate<std::logical_and<>>;
+using Or = BinaryPredicate<std::logical_or<>>;
 
 }

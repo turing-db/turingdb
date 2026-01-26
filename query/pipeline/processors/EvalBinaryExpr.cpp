@@ -90,15 +90,20 @@ template <ColumnOperator Op>
 struct BooleanEval {
     Column* _res {nullptr};
 
-    void operator()(const auto* lhs, const auto* rhs) {
+    template <typename T, typename U>
+    void operator()(const T* lhs, const U* rhs) {
         bioassert(_res && lhs && rhs, "Invalid inputs to Boolean");
 
         if constexpr (Op == OP_AND) {
-            fmt::println("AND {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
+            using ResultType = ColumnCombination<And, T, U>::ResultColumnType;
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Gt.");
+            exec<And>(result, lhs, rhs);
         } else if constexpr (Op == OP_OR) {
-            fmt::println("OR {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
-        } else if constexpr (Op == OP_NOT) {
-            fmt::println("NOT {}", typeid(*lhs).name());
+            using ResultType = ColumnCombination<Or, T, U>::ResultColumnType;
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Gt.");
+            exec<Or>(result, lhs, rhs);
         } else {
             COMPILE_ERROR("Invalid operator for Boolean");
         }

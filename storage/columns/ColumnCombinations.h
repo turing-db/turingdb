@@ -59,9 +59,13 @@ concept OptionallyComparable =
  * @brief Function that can be invoked, but one or both arguments may be wrapped in
  * optional.
  */
-template <typename Func, typename T, typename U>
+template <typename Func, typename... Args>
 concept OptionallyInvokable =
-    std::invocable<Func, unwrap_optional_t<T>, unwrap_optional_t<U>>;
+    std::invocable<Func, unwrap_optional_t<Args>...>;
+
+template <typename Pred, typename... Args>
+concept OptionalPredicate =
+    std::predicate<Pred, unwrap_optional_t<Args>...>;
 
 template <typename Func, typename T, typename U>
 using optional_invoke_result = std::optional<
