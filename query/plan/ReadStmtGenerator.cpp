@@ -539,6 +539,22 @@ void ReadStmtGenerator::placePredicateJoins() {
     }
 }
 
+void ReadStmtGenerator::placeJoinsOnProcedures() {
+    ProcedureEvalNode* prevNode = nullptr;
+
+    for (const auto& node : _tree->nodes()) {
+        if (node->getOpcode() == PlanGraphOpcode::PROCEDURE_EVAL) {
+            auto* n = static_cast<ProcedureEvalNode*>(node.get());
+
+            if (prevNode) {
+                prevNode->connectOut(n);
+            }
+
+            prevNode = n;
+        }
+    }
+}
+
 PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
     // Step 1: Find all end points
     std::vector<PlanGraphNode*> ends;

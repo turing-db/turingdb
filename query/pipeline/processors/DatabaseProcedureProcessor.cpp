@@ -13,9 +13,19 @@
 using namespace db;
 
 DatabaseProcedureProcessor* DatabaseProcedureProcessor::create(PipelineV2* pipeline,
-                                                               const ProcedureBlueprint& blueprint) {
+                                                               const ProcedureBlueprint& blueprint,
+                                                               bool hasInput) {
 
     DatabaseProcedureProcessor* processor = new DatabaseProcedureProcessor();
+
+    if (hasInput) {
+        processor->_input = std::make_optional<PipelineBlockInputInterface>();
+
+        auto* inputPort = PipelineInputPort::create(pipeline, processor);
+        processor->_input->setPort(inputPort);
+        processor->addInput(inputPort);
+        inputPort->setNeedsData(true);
+    }
 
     PipelineOutputPort* output = PipelineOutputPort::create(pipeline, processor);
     processor->_output.setPort(output);

@@ -402,8 +402,17 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourc
 PipelineBlockOutputInterface& PipelineBuilder::addDatabaseProcedure(const ProcedureBlueprint& blueprint,
                                                                     std::span<const ProcedureBlueprint::InputItem> args,
                                                                     std::span<ProcedureBlueprint::YieldItem> yield) {
-    DatabaseProcedureProcessor* proc = DatabaseProcedureProcessor::create(_pipeline, blueprint);
+    const bool hasInput = _pendingOutput.getInterface() != nullptr;
+
+    DatabaseProcedureProcessor* proc = DatabaseProcedureProcessor::create(_pipeline, blueprint, hasInput);
     auto& output = proc->output();
+
+
+    if (hasInput) {
+        auto& input = proc->input();
+        _pendingOutput.connectTo(input);
+        input.propagateColumns(output);
+    }
 
     _pendingOutput.updateInterface(&output);
 

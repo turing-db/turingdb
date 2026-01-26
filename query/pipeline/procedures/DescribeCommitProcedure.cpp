@@ -3,6 +3,7 @@
 #include <span>
 
 #include "ExecutionContext.h"
+#include "FatalException.h"
 #include "procedures/Procedure.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
@@ -16,7 +17,9 @@ using namespace db;
 namespace {
 
 struct Data : public ProcedureData {
-    std::vector<std::string_view>::const_iterator _it;
+    size_t _i {0};
+    ContainerKind::Code _containerKind {ContainerKind::Invalid};
+    InternalKind::Code _internalKind {InternalKind::Invalid};
 };
 
 }
@@ -39,18 +42,19 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
     auto* edgeCountCol = static_cast<ColumnVector<types::UInt64::Primitive>*>(rawEdgeCountCol);
     auto* partCountCol = static_cast<ColumnVector<types::UInt64::Primitive>*>(rawPartCountCol);
 
-    const auto* commitVecCol = dynamic_cast<const ColumnVector<types::String::Primitive>*>(rawCommitCol);
-    const auto* commitConstCol = dynamic_cast<const ColumnConst<types::String::Primitive>*>(rawCommitCol);
-
-    bioassert(commitVecCol || commitConstCol,
-              "db.describeCommit: must be provided a commit hash");
-
     switch (proc.step()) {
         case Procedure::Step::PREPARE: {
-            if (commitVecCol) {
-                // if received multiple commit hashes as input
-                data._it = commitVecCol->begin();
-            }
+            bioassert(rawCommitCol, "db.describeCommit: must be provided a commit hash");
+
+            data._containerKind = ColumnKind::extractContainerKind(rawCommitCol->getKind());
+            data._internalKind = ColumnKind::extractInternalKind(rawCommitCol->getKind());
+
+            bioassert(data._containerKind == ContainerKind::code<ColumnVector<void>>()
+                          || data._containerKind == ContainerKind::code<ColumnConst<void>>(),
+                      "db.describeCommit: must be provided a commit hash as a vector or const");
+            bioassert(data._internalKind == InternalKind::code<std::string_view>()
+                          || data._internalKind == InternalKind::code<std::string>(),
+                      "db.describeCommit: must be provided a commit hash as a string or string_view");
             return;
         }
 
@@ -95,14 +99,13 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
                 }
             };
 
-            size_t remaining = commitVecCol ? std::distance(data._it, commitVecCol->end()) : 1;
+            size_t remaining = rawCommitCol->size();
             remaining = std::min(remaining, ctxt->getChunkSize());
 
-            // If received mutiple commit hashes as input
-            if (commitVecCol) {
-                for (size_t i = 0; i < remaining; ++i) {
+            const auto treatVector = [&]<typename T>(const ColumnVector<T>& vecCol) {
+                for (size_t i = data._i; i < remaining + data._i; ++i) {
                     std::string currentCommitStr;
-                    std::string inputCommitStr {*data._it};
+                    std::string inputCommitStr {vecCol[i]};
                     std::transform(inputCommitStr.begin(),
                                    inputCommitStr.end(),
                                    inputCommitStr.begin(),
@@ -117,17 +120,18 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
                             break;
                         }
                     }
-
-                    ++data._it;
-
-                    if (data._it == commitVecCol->end()) {
-                        proc.finish();
-                    }
                 }
-            } else {
-                // Const case
+
+                data._i += remaining;
+
+                if (data._i == vecCol.size()) {
+                    proc.finish();
+                }
+            };
+
+            const auto treatConst = [&]<typename T>(const ColumnConst<T>& constCol) {
                 std::string currentCommitStr;
-                std::string inputCommitStr {commitConstCol->getRaw()};
+                std::string inputCommitStr {constCol.getRaw()};
                 std::transform(inputCommitStr.begin(),
                                inputCommitStr.end(),
                                inputCommitStr.begin(),
@@ -144,6 +148,26 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
                 }
 
                 proc.finish();
+            };
+
+            // If received mutiple commit hashes as input
+            switch (rawCommitCol->getKind()) {
+                case ColumnVector<std::string>::staticKind(): {
+                    treatVector(*static_cast<const ColumnVector<std::string>*>(rawCommitCol));
+                } break;
+                case ColumnVector<std::string_view>::staticKind(): {
+                    treatVector(*static_cast<const ColumnVector<std::string_view>*>(rawCommitCol));
+                } break;
+                case ColumnConst<std::string>::staticKind(): {
+                    treatConst(*static_cast<const ColumnConst<std::string>*>(rawCommitCol));
+                } break;
+                case ColumnConst<std::string_view>::staticKind(): {
+                    treatConst(*static_cast<const ColumnConst<std::string_view>*>(rawCommitCol));
+                } break;
+
+                default: {
+                    throw FatalException(fmt::format("Unexpected column kind: {}", rawCommitCol->getKind()));
+                }
             }
 
             return;

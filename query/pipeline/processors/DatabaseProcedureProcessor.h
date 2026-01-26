@@ -1,9 +1,12 @@
 #pragma once
 
+#include <optional>
 #include <span>
 #include <stdint.h>
 
+#include "FatalException.h"
 #include "Processor.h"
+#include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "procedures/Procedure.h"
 
@@ -22,7 +25,8 @@ class ProcedureBlueprint;
 class DatabaseProcedureProcessor : public Processor {
 public:
     static DatabaseProcedureProcessor* create(PipelineV2* pipeline,
-                                              const ProcedureBlueprint& blueprint);
+                                              const ProcedureBlueprint& blueprint,
+                                              bool hasInput);
 
     std::string describe() const override;
 
@@ -30,10 +34,20 @@ public:
     void reset() override;
     void execute() override;
 
+    bool hasInput() const { return _input.has_value(); }
+
     void setInputValues(std::span<const ProcedureBlueprint::InputItem> args);
     void allocReturnValues(LocalMemory&,
                            DataframeManager&,
                            std::span<ProcedureBlueprint::YieldItem> yieldItems);
+
+    PipelineBlockInputInterface& input() {
+        if (!_input) {
+            throw FatalException("Attempted to get null input of DatabaseProcedureProcessor.");
+        }
+
+        return _input.value();
+    }
 
     PipelineBlockOutputInterface& output() { return _output; }
 
@@ -41,6 +55,7 @@ public:
 
 private:
     Procedure _procedure;
+    std::optional<PipelineBlockInputInterface> _input;
     PipelineBlockOutputInterface _output;
 
     DatabaseProcedureProcessor();

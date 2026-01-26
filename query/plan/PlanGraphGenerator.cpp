@@ -157,6 +157,9 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
         // Place joins based on predicates
         readGenerator.placePredicateJoins();
 
+        // Place joins based on procedures calls
+        readGenerator.placeJoinsOnProcedures();
+
         // Place joins that generate the endpoint, and retrieve it
         currentNode = readGenerator.generateEndpoint();
     }

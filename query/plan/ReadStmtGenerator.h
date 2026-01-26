@@ -56,6 +56,7 @@ public:
 
     void placeJoinsOnVars();
     void placePredicateJoins();
+    void placeJoinsOnProcedures();
     PlanGraphNode* generateEndpoint();
 
     void insertDataFlowNode(VarNode* node, VarNode* dependency);
