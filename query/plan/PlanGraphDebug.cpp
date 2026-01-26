@@ -300,7 +300,8 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
             case PlanGraphOpcode::PROCEDURE_EVAL: {
                 const auto* n = dynamic_cast<ProcedureEvalNode*>(node.get());
-                const auto* signature = n->getFuncExpr()->getFunctionInvocation()->getSignature();
+                const auto* invocation = n->getFuncExpr()->getFunctionInvocation();
+                const auto* signature = invocation->getSignature();
                 output << "        __func__ " << signature->_fullName << "\n";
 
                 const auto* yield = n->getYield();
@@ -311,6 +312,16 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 output << "        __yield__\n";
                 for (const auto* item : *yield->getItems()) {
                     output << "        __yield_item__: " << item->getSymbol()->getName() << "\n";
+                }
+
+                const auto* args = invocation->getArguments();
+                if (!args || args->empty()) {
+                    continue;
+                }
+
+                output << "        __args__\n";
+                for (const auto* arg : *args) {
+                    output << "        __arg__: " << (arg->getName().empty() ? "unnamed" : arg->getName()) << "\n";
                 }
             } break;
 

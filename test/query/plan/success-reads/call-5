@@ -1,0 +1,18 @@
+/// QUERY
+CALL db.describeCommit("13dae432f") YIELD partCount
+
+/// RESULT
+flowchart TD
+    0["`
+        __PROCEDURE_EVAL__
+        __func__ db.describeCommit
+        __yield__
+        __yield_item__: partCount
+        __args__
+        __arg__: unnamed
+    `"]
+    1["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->1
+

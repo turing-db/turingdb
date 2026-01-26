@@ -117,6 +117,8 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
     const FunctionInvocationExpr* funcExpr = callStmt->getFunc();
     YieldClause* yield = callStmt->getYield();
 
+    // Here generate the dependencies?
+
     ProcedureEvalNode* procNode = _tree->create<ProcedureEvalNode>(funcExpr, yield);
 
     if (callStmt->isStandaloneCall()) {

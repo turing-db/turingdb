@@ -1,0 +1,27 @@
+/// QUERY
+CALL db.history() YIELD commit AS c CALL db.describeCommit(c) yield partCount RETURN c, partCount
+
+/// RESULT
+flowchart TD
+    0["`
+        __PROCEDURE_EVAL__
+        __func__ db.history
+        __yield__
+        __yield_item__: c
+    `"]
+    1["`
+        __PROCEDURE_EVAL__
+        __func__ db.describeCommit
+        __yield__
+        __yield_item__: partCount
+    `"]
+    2["`
+        __CARTESIAN_PRODUCT__
+    `"]
+    3["`
+        __PRODUCE_RESULTS__
+    `"]
+    0-->2
+    1-->2
+    2-->3
+
