@@ -38,6 +38,7 @@ add_subdirectory(get_nodes_invalid_id)
 add_subdirectory(test_suite_queries)
 add_subdirectory(load_csv)
 add_subdirectory(load_csv_stations)
+add_subdirectory(vector_serialization)
 
 # write run_regress target
 # The script finds the wheel at runtime to avoid needing to re-run cmake after wheel build

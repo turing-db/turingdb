@@ -117,6 +117,8 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate& batch) {
 
     _metadata._modifiedAt = Clock::now().time_since_epoch().count();
 
+    _shardCache->flush();
+
     return {};
 }
 

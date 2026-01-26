@@ -112,6 +112,14 @@ void ShardCache::evictLibraryShards(VecLibID libID) {
     }
 }
 
+void ShardCache::flush() {
+    std::unique_lock lock {_mutex};
+
+    for (auto& [id, it] : _accessedMap) {
+        it->second.shard->save();
+    }
+}
+
 ssize_t ShardCache::evictOne() {
     bioassert(!_accessed.empty(), "Shard cache is empty");
 
