@@ -52,7 +52,8 @@ protected:
 TEST_F(JsonImporterTest, importInvalidJson) {
     VecLibAccessor accessor = _db->getLibrary(_mylibID);
 
-    BatchVectorCreate batch = accessor.prepareCreateBatch();
+    BatchVectorCreate batch;
+    accessor.prepareCreateBatch(&batch);
 
     INVALID_JSON("");
     INVALID_JSON("{");
@@ -88,7 +89,8 @@ TEST_F(JsonImporterTest, importInvalidJson) {
 TEST_F(JsonImporterTest, ValidJson) {
     VecLibAccessor accessor = _db->getLibrary(_mylibID);
 
-    BatchVectorCreate batch = accessor.prepareCreateBatch();
+    BatchVectorCreate batch;
+    accessor.prepareCreateBatch(&batch);
 
     {
         const std::string json = R"(
@@ -145,7 +147,7 @@ TEST_F(JsonImporterTest, ValidJson) {
         ASSERT_TRUE(res);
     }
 
-    batch.clear(8);
+    batch.clear();
 
     {
         const std::string json = R"(

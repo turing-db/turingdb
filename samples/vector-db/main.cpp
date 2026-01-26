@@ -73,7 +73,7 @@ int main(int argc, char** argv) {
             lib.prepareCreateBatch(&batch);
 
             for (size_t b = 0; b < batchCount; b++) {
-                batch.clear(dim);
+                batch.clear();
                 fmt::println("    * Generating {} vectors", vecCountPerBatch);
 
                 t1 = Clock::now();
