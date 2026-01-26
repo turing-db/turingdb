@@ -35,7 +35,8 @@ public:
             // It is either ColumnMask or ListColumnConst
             constexpr Code container = ContainerKind::code<T>();
             static_assert(container != ContainerKind::Invalid);
-            return container;
+            constexpr auto code = container << InternalKind::BitCount;
+            return code;
         } else {
             // Column is a template class, such as ColumnVector<U>
             constexpr Code internal = InternalKind::code<U>();
