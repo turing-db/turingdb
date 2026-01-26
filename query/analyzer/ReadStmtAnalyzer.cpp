@@ -434,7 +434,7 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
     for (Expr* elem : queryVector->getElements()) {
         _exprAnalyzer->analyzeRootExpr(elem);
 
-        EvaluatedType elemType = elem->getType();
+        const EvaluatedType elemType = elem->getType();
         if (elemType != EvaluatedType::Integer && elemType != EvaluatedType::Double) {
             throwError("VECTOR SEARCH query vector elements must be numeric", stmt);
         }
