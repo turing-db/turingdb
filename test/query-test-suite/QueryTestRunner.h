@@ -26,6 +26,7 @@ struct QueryTestResult {
     std::string resultOutput;
     bool planMatched {false};
     bool resultMatched {false};
+    uint64_t timeUs {0};
 };
 
 class QueryTestRunner {

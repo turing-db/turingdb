@@ -44,6 +44,7 @@ type TestResult = {
   planMatched: boolean;
   resultMatched: boolean;
   error?: string;
+  timeUs?: number;
 };
 
 const API_BASE = "/api";
@@ -682,13 +683,14 @@ export default function App() {
       setParsedResult(null);
       return;
     }
+    const csv = trimmed;
     const rows: string[][] = [];
     let current: string[] = [];
     let cell = "";
     let inQuotes = false;
-    for (let i = 0; i < trimmed.length; i += 1) {
-      const ch = trimmed[i];
-      const next = trimmed[i + 1];
+    for (let i = 0; i < csv.length; i += 1) {
+      const ch = csv[i];
+      const next = csv[i + 1];
       if (inQuotes) {
         if (ch === "\"" && next === "\"") {
           cell += "\"";
@@ -811,6 +813,10 @@ export default function App() {
                         ? "bg-red-500/20 text-red-200"
                         : "bg-white/5 text-muted-foreground";
                   const icon = isDisabled ? "■" : isPass ? "●" : testResult ? "●" : "○";
+                  const timingLabel =
+                    isPass && typeof testResult?.timeUs === "number"
+                      ? `${testResult.timeUs} μs`
+                      : null;
                   return (
                     <SidebarMenuItem key={test.name}>
                         <SidebarMenuButton
@@ -822,9 +828,15 @@ export default function App() {
                           <span className={`text-[10px] ${statusClass}`}>{icon}</span>
                           <span className="truncate text-xs font-medium text-sidebar-foreground">{test.name}</span>
                           <span
-                            className={`ml-auto rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] ${badgeClass}`}
+                            className={`ml-auto rounded-full px-2 py-0.5 text-[10px] tracking-[0.16em] ${badgeClass}`}
                           >
-                          {isDisabled ? "disabled" : isPending ? "pending" : isPass ? "pass" : "fail"}
+                          {isDisabled
+                            ? "disabled"
+                            : isPending
+                              ? "pending"
+                              : isPass
+                                ? timingLabel ?? "pass"
+                                : "fail"}
                         </span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

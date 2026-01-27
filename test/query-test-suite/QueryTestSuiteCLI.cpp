@@ -86,6 +86,7 @@ int main(int argc, char** argv) {
                       << ",\"resultOutput\":\"" << escapeJson(result.resultOutput) << "\""
                       << ",\"planMatched\":" << (result.planMatched ? "true" : "false")
                       << ",\"resultMatched\":" << (result.resultMatched ? "true" : "false")
+                      << ",\"timeUs\":" << result.timeUs
                       << "}\n";
             return 0;
         }
@@ -111,6 +112,7 @@ int main(int argc, char** argv) {
                       << ",\"resultOutput\":\"" << escapeJson(result.resultOutput) << "\""
                       << ",\"planMatched\":" << (result.planMatched ? "true" : "false")
                       << ",\"resultMatched\":" << (result.resultMatched ? "true" : "false")
+                      << ",\"timeUs\":" << result.timeUs
                       << "}";
         }
         std::cout << "]\n";

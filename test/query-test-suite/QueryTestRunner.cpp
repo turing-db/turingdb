@@ -1,6 +1,7 @@
 #include "QueryTestRunner.h"
 
 #include <algorithm>
+#include <chrono>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -301,12 +302,16 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
                   db::ChangeID::head());
     }
 
+    const auto queryStart = std::chrono::steady_clock::now();
     const db::QueryStatus status = db->query(spec.query,
                                              spec.graphName,
                                              &env->getMem(),
                                              callback,
                                              db::CommitHash::head(),
                                              changeID);
+    const auto queryEnd = std::chrono::steady_clock::now();
+    result.timeUs = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(queryEnd - queryStart).count());
 
     std::stringstream resultOut;
     if (!status.isOk()) {
