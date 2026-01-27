@@ -13,23 +13,23 @@ struct PropertyNull {
 };
 
 template <typename T>
-constexpr inline bool operator==(const PropertyNull&, const std::optional<T>&) noexcept {
-    return false;
+constexpr inline bool operator==(const PropertyNull&, const std::optional<T>& o) noexcept {
+    return o == std::nullopt;
 }
 
 template <typename T>
-constexpr inline bool operator==(const std::optional<T>&, const PropertyNull&) noexcept {
-    return false;
+constexpr inline bool operator==(const std::optional<T>& o, const PropertyNull&) noexcept {
+    return o == std::nullopt;
 }
 
 template <typename T>
-constexpr inline bool operator!=(const PropertyNull&, const std::optional<T>&) noexcept {
-    return true;
+constexpr inline bool operator!=(const PropertyNull&, const std::optional<T>& o) noexcept {
+    return o != std::nullopt;
 }
 
 template <typename T>
-constexpr inline bool operator!=(const std::optional<T>&, const PropertyNull&) noexcept {
-    return true;
+constexpr inline bool operator!=(const std::optional<T>& o, const PropertyNull&) noexcept {
+    return o != std::nullopt;
 }
 
 template <typename T>

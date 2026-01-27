@@ -107,7 +107,7 @@ struct BinaryPredicateExecutor {
         auto op = Op {};
         for (size_t i {0}; i < size; i++) {
             resd[i] = op(lhsd[i], val);
-       }
+        }
     }
 
     static void apply(ColumnMask* res,
@@ -189,6 +189,13 @@ struct BinaryPredicate {
     template <typename T, typename U>
     inline ColumnMask::Bool_t operator()(T&& a, U&& b) {
         return F {}(std::forward<T>(a), std::forward<U>(b));
+    }
+
+    // Specialisation for IS NOT NULL and IS NULL
+    template<typename T>
+        requires (is_optional_v<T>)
+    inline ColumnMask::Bool_t operator()(T&& a, const PropertyNull& null) {
+        return F {} (std::forward<T>(a), null);
     }
 };
 
