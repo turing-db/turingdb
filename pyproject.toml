@@ -1,6 +1,7 @@
 [build-system]
-requires = ["scikit-build-core"]
-build-backend = "scikit_build_core.build"
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "build_backend"
+backend-path = ["."]
 
 [project]
 name = "turingdb"
@@ -16,9 +17,7 @@ dependencies = [
     "prompt-toolkit>=3.0.52",
 ]
 requires-python = ">=3.10"
-classifiers = [
-    "Operating System :: POSIX :: Linux",
-]
+classifiers = ["Operating System :: POSIX :: Linux"]
 
 [project.urls]
 Homepage = "https://github.com/turing-db/turingdb"
@@ -27,25 +26,17 @@ Repository = "https://github.com/turing-db/turingdb"
 [project.scripts]
 turingdb = "turingdb:main"
 
-[tool.scikit-build]
-cmake.build-type = "Release"
-cmake.args = ["-G", "Unix Makefiles", "-DCMAKE_MAKE_PROGRAM=/usr/bin/make"]
-build.tool-args = ["-j"]
-build-dir = "build/"
-wheel.packages = ["python/turingdb"]
-wheel.exclude = [
-    "regress/**",
-    "samples/**",
-    "test/**",
-    "external/**",
-    "common/**",
-]
+[tool.setuptools]
+package-dir = {"" = "python"}
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.setuptools.package-data]
+turingdb = ["bin/*"]
 
 [tool.uv]
-dev-dependencies = [
-    "build>=0.10.0",
-    "twine>=4.0.0",
-]
+dev-dependencies = ["build>=0.10.0", "twine>=4.0.0"]
 
 [tool.uv.workspace]
 members = []

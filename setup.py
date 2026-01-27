@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+import os
+import shutil
+import subprocess
+from pathlib import Path
+from setuptools import setup, find_packages
+from setuptools.command.develop import develop
+from setuptools.command.egg_info import egg_info
+
+
+def _get_project_root() -> Path:
+    """Get the project root directory."""
+    return Path(__file__).parent.resolve()
+
+
+def _get_build_executable() -> Path:
+    """Get the path to the executable in the build directory."""
+    return _get_project_root() / "build" / "turing_install" / "bin" / "turingdb"
+
+
+def _run_cmake_build():
+    """Run cmake configure, build, and install."""
+    source_dir = _get_project_root()
+    build_dir = source_dir / "build"
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    cmake_args = [
+        "cmake",
+        "-G", "Unix Makefiles",
+        "-DCMAKE_MAKE_PROGRAM=/usr/bin/make",
+        "-DCMAKE_BUILD_TYPE=Release",
+        str(source_dir),
+    ]
+    subprocess.check_call(cmake_args, cwd=str(build_dir))
+    subprocess.check_call(["make", f"-j{os.cpu_count() or 4}"], cwd=str(build_dir))
+    subprocess.check_call(["make", "install"], cwd=str(build_dir))
+
+
+def _ensure_executable_built() -> Path:
+    """Ensure the executable is built, building if necessary."""
+    exe_path = _get_build_executable()
+
+    if exe_path.exists():
+        return exe_path
+
+    cmake_file = _get_project_root() / "CMakeLists.txt"
+    if not cmake_file.exists():
+        raise RuntimeError(
+            "Cannot build turingdb: CMakeLists.txt not found and no pre-built "
+            "executable exists. Please build from the source repository:\n"
+            "  cd build && cmake .. && make -j8 && make install\n"
+            "Then run the build again."
+        )
+
+    _run_cmake_build()
+
+    if not exe_path.exists():
+        raise RuntimeError(f"Build completed but executable not found at {exe_path}")
+
+    return exe_path
+
+
+class BuildDirEggInfo(egg_info):
+    """Custom egg_info that writes to build/ instead of python/."""
+    def initialize_options(self):
+        super().initialize_options()
+        build_dir = _get_project_root() / "build"
+        build_dir.mkdir(parents=True, exist_ok=True)
+        self.egg_base = str(build_dir)
+
+
+class CMakeDevelop(develop):
+    """Custom develop command that ensures the executable is built."""
+    def run(self):
+        _ensure_executable_built()
+        super().run()
+
+
+setup(
+    name="turingdb",
+    version="1.16",
+    packages=find_packages(where="python"),
+    package_dir={"": "python"},
+    include_package_data=True,
+    package_data={"turingdb": ["bin/*"]},
+    cmdclass={
+        "egg_info": BuildDirEggInfo,
+        "develop": CMakeDevelop,
+    },
+    python_requires=">=3.10",
+    install_requires=[
+        "boto3>=1.42.22",
+        "boto3-stubs>=1.42.22",
+        "click>=8.3.1",
+        "httpx>=0.28.1",
+        "orjson>=3.11.5",
+        "pandas>=2.3.3",
+        "pandas-stubs>=2.3.3.251219",
+        "prompt-toolkit>=3.0.52",
+    ],
+    entry_points={"console_scripts": ["turingdb=turingdb:main"]},
+)
