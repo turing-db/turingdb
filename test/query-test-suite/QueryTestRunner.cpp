@@ -245,7 +245,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
             std::vector<std::string> values;
             values.reserve(df->cols().size());
             for (auto* col : df->cols()) {
-                values.push_back(columnValueToString(col->getColumn(), row));
+               values.push_back(columnValueToString(col->getColumn(), row));
             }
             rows.push_back(std::move(values));
         }

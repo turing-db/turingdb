@@ -25,3 +25,79 @@ body {
   border: 1px solid rgba(56, 189, 248, 0.12);
   box-shadow: 0 24px 80px rgba(2, 6, 23, 0.6);
 }
+
+/* Subtle dark scrollbar to match the UI */
+* {
+  scrollbar-color: hsl(var(--accent) / 0.4) hsl(var(--background));
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--accent) / 0.35);
+  border-radius: 999px;
+  border: 2px solid hsl(var(--background));
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--accent) / 0.55);
+}
+
+
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 96%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 210 40% 96%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 215 28% 17%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 215 28% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 199 89% 56%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 215 28% 22%;
+    --input: 215 28% 22%;
+    --ring: 199 89% 56%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.8rem;
+    --sidebar-background: 222 47% 8%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 199 89% 56%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 215 28% 14%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 215 28% 22%;
+    --sidebar-ring: 199 89% 56%;
+  }
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

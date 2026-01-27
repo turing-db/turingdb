@@ -1,5 +1,22 @@
 import React from "react";
-import { Button } from "./components/ui/button";
+import { Button } from "@/components/ui/button";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInput,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar
+} from "@/components/ui/sidebar";
+import { PanelLeft } from "lucide-react";
 
 type TestMeta = {
   id: string;
@@ -19,8 +36,51 @@ type TestResult = {
 };
 
 const API_BASE = "/api";
+const SIDEBAR_MIN_WIDTH = 200;
+const SIDEBAR_MAX_WIDTH = 820;
+
+function SidebarEdgeTrigger() {
+  const { state, toggleSidebar } = useSidebar();
+  const isCollapsed = state === "collapsed";
+  return (
+    <button
+      type="button"
+      onClick={toggleSidebar}
+      className="absolute left-0 top-6 z-40 flex items-center gap-2 rounded-r-full border border-sidebar-border bg-sidebar px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-sidebar-foreground shadow-lg hover:border-accent/50"
+      aria-label={isCollapsed ? "Open menu" : "Collapse menu"}
+    >
+      <PanelLeft className="h-4 w-4" />
+      {isCollapsed ? "Menu" : "Hide"}
+    </button>
+  );
+}
+
+function SidebarResizeHandle({
+  onStart
+}: {
+  onStart: (event: React.MouseEvent<HTMLDivElement>) => void;
+}) {
+  const { state } = useSidebar();
+  if (state !== "expanded") return null;
+  return (
+    <div
+      className="absolute inset-y-0 left-0 z-40 hidden w-3 -translate-x-1/2 cursor-col-resize md:block"
+      onMouseDown={(event) => {
+        event.preventDefault();
+        onStart(event);
+      }}
+    />
+  );
+}
 
 export default function App() {
+  const [sidebarWidth, setSidebarWidth] = React.useState(260);
+  const sidebarRef = React.useRef<HTMLDivElement>(null);
+  const dragStartX = React.useRef(0);
+  const dragStartWidth = React.useRef(0);
+  const isDragging = React.useRef(false);
+  const dragWidth = React.useRef(sidebarWidth);
+  const dragRaf = React.useRef<number | null>(null);
   const [tests, setTests] = React.useState<TestMeta[]>([]);
   const [selected, setSelected] = React.useState<TestMeta | null>(null);
   const [results, setResults] = React.useState<Record<string, TestResult>>({});
@@ -30,6 +90,7 @@ export default function App() {
   const [confirmTarget, setConfirmTarget] = React.useState<"plan" | "result" | null>(null);
   const [queryDraft, setQueryDraft] = React.useState("");
   const [isEditingQuery, setIsEditingQuery] = React.useState(false);
+  const [tagFilters, setTagFilters] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     fetch(`${API_BASE}/tests`)
@@ -169,6 +230,15 @@ export default function App() {
   };
 
   const selectedResult = selected ? results[selected.id] : undefined;
+  const allTags = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const test of tests) {
+      for (const tag of test.tags ?? []) {
+        set.add(tag);
+      }
+    }
+    return Array.from(set).sort();
+  }, [tests]);
   const filteredTests = React.useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return tests;
@@ -177,86 +247,183 @@ export default function App() {
       return hay.includes(term);
     });
   }, [search, tests]);
+  const visibleTests = React.useMemo(() => {
+    if (tagFilters.length === 0) return filteredTests;
+    return filteredTests.filter((test) => {
+      const tags = test.tags ?? [];
+      return tagFilters.every((tag) => tags.includes(tag));
+    });
+  }, [filteredTests, tagFilters]);
+
+  React.useEffect(() => {
+    const onMove = (event: MouseEvent) => {
+      if (!isDragging.current) return;
+      const delta = event.clientX - dragStartX.current;
+      const next = Math.min(
+        SIDEBAR_MAX_WIDTH,
+        Math.max(SIDEBAR_MIN_WIDTH, dragStartWidth.current + delta)
+      );
+      dragWidth.current = next;
+      if (dragRaf.current === null) {
+        dragRaf.current = window.requestAnimationFrame(() => {
+          dragRaf.current = null;
+          const node = sidebarRef.current;
+          if (node) {
+            node.style.setProperty("--sidebar-width", `${dragWidth.current}px`);
+          }
+        });
+      }
+    };
+    const onUp = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        document.body.style.userSelect = "";
+        setSidebarWidth(dragWidth.current);
+      }
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (dragRaf.current !== null) {
+        window.cancelAnimationFrame(dragRaf.current);
+        dragRaf.current = null;
+      }
+    };
+  }, []);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden px-6 py-10">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-moss">TuringDB</p>
-          <h1 className="text-4xl font-semibold text-ink">
-            Query Test Suite
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={runAll} disabled={loading}>
-            Run All
-          </Button>
-          <Button variant="accent" onClick={() => selected && runTest(selected.id)} disabled={!selected || loading}>
-            Run Selected
-          </Button>
-        </div>
-      </header>
-
-      <main className="mx-auto mt-8 grid w-full max-w-6xl flex-1 gap-6 overflow-hidden lg:grid-cols-[1.1fr_1.6fr]">
-        <section className="surface flex min-h-0 flex-col overflow-hidden rounded-3xl p-6">
+    <SidebarProvider ref={sidebarRef} defaultOpen sidebarWidth={sidebarWidth}>
+      <Sidebar>
+        <SidebarHeader className="gap-3 border-b border-sidebar-border px-4 py-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Available Tests</h2>
-            <span className="text-xs text-ink/60">{filteredTests.length} total</span>
+            <h2 className="text-base font-semibold">Available Tests</h2>
           </div>
-          <div className="mt-4">
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search tests or query text (e.g., MATCH (n))…"
-              className="w-full rounded-2xl border border-white/10 bg-steel/40 px-4 py-2 text-sm text-ink placeholder:text-ink/40 focus:border-accent/60 focus:outline-none"
-            />
-          </div>
-          <div className="mt-4 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-2">
-            {filteredTests.map((test) => (
-              (() => {
-                const testResult = results[test.id];
-                const isPending = !testResult;
-                const isPass = !!testResult && testResult.planMatched && testResult.resultMatched;
-                const statusClass = isPass
-                  ? "text-emerald-600"
-                  : testResult
-                    ? "text-red-500"
-                    : "text-ink/40";
-                const badgeClass = isPass
-                  ? "bg-emerald-600/15 text-emerald-700"
-                  : testResult
-                    ? "bg-red-500/20 text-red-600"
-                    : "bg-black/5 text-ink/40";
-                const icon = isPass ? "●" : testResult ? "●" : "○";
-                return (
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{visibleTests.length} total</span>
+            {tagFilters.length > 0 && (
               <button
-                key={test.id}
-                onClick={() => setSelected(test)}
-                className={`w-full rounded-xl border px-2.5 py-1.5 text-left transition ${
-                  selected?.id === test.id
-                    ? "border-accent/60 bg-accent/10"
-                    : "border-white/10 bg-steel/40 hover:border-accent/30"
-                }`}
+                className="text-[10px] uppercase tracking-[0.16em] text-accent"
+                onClick={() => setTagFilters([])}
               >
-                <div className="flex items-center gap-2">
-                  <span className={`text-[10px] ${statusClass}`}>{icon}</span>
-                  <span className="truncate text-sm font-medium text-ink">{test.name}</span>
-                  <span className="text-[10px] text-ink/40">•</span>
-                  <span className="truncate text-[11px] text-ink/50">{test.id}</span>
-                  <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] ${badgeClass}`}>
-                    {isPending ? "pending" : isPass ? "pass" : "fail"}
-                  </span>
-                </div>
+                Clear filters
               </button>
-                );
-              })()
-            ))}
+            )}
           </div>
-        </section>
+          <SidebarInput
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search tests or query text (e.g., MATCH (n))…"
+          />
+        </SidebarHeader>
+        <SidebarContent>
+          {allTags.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Filter Tags</SidebarGroupLabel>
+              <SidebarGroupContent className="flex flex-wrap gap-2">
+                {allTags.map((tag) => {
+                  const active = tagFilters.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() =>
+                        setTagFilters((prev) =>
+                          active ? prev.filter((t) => t !== tag) : [...prev, tag]
+                        )
+                      }
+                      className={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.16em] ${
+                        active
+                          ? "border-accent/60 bg-accent/15 text-accent"
+                          : "border-sidebar-border bg-sidebar-accent/40 text-muted-foreground hover:border-accent/30"
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+          <SidebarGroup>
+            <SidebarGroupLabel>Tests</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {visibleTests.map((test) => {
+                  const testResult = results[test.id];
+                  const isPending = !testResult;
+                  const isPass = !!testResult && testResult.planMatched && testResult.resultMatched;
+                  const statusClass = isPass
+                    ? "text-emerald-400"
+                    : testResult
+                      ? "text-red-400"
+                      : "text-muted-foreground";
+                  const badgeClass = isPass
+                    ? "bg-emerald-400/15 text-emerald-200"
+                    : testResult
+                      ? "bg-red-500/20 text-red-200"
+                      : "bg-white/5 text-muted-foreground";
+                  const icon = isPass ? "●" : testResult ? "●" : "○";
+                  return (
+                    <SidebarMenuItem key={test.id}>
+                      <SidebarMenuButton
+                        onClick={() => setSelected(test)}
+                        isActive={selected?.id === test.id}
+                        size="sm"
+                        className="px-2"
+                      >
+                        <span className={`text-[10px] ${statusClass}`}>{icon}</span>
+                        <span className="truncate text-xs font-medium text-sidebar-foreground">{test.name}</span>
+                        <span className="text-[10px] text-muted-foreground">•</span>
+                        <span className="truncate text-[11px] text-muted-foreground">{test.id}</span>
+                        <span
+                          className={`ml-auto rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] ${badgeClass}`}
+                        >
+                          {isPending ? "pending" : isPass ? "pass" : "fail"}
+                        </span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+      </Sidebar>
 
-        <section className="surface rounded-3xl p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Run Output</h2>
+      <SidebarInset className="bg-transparent">
+        <div className="relative flex min-h-svh w-full flex-col overflow-hidden px-6 py-10">
+          <SidebarEdgeTrigger />
+          <SidebarResizeHandle
+            onStart={(event) => {
+              isDragging.current = true;
+              dragStartX.current = event.clientX;
+              dragStartWidth.current = sidebarWidth;
+              dragWidth.current = sidebarWidth;
+              document.body.style.userSelect = "none";
+            }}
+          />
+          <header className="mx-auto flex w-full max-w-6xl items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-moss">TuringDB</p>
+                <h1 className="text-4xl font-semibold text-ink">Query Test Suite</h1>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" onClick={runAll} disabled={loading}>
+                Run All
+              </Button>
+              <Button variant="accent" onClick={() => selected && runTest(selected.id)} disabled={!selected || loading}>
+                Run Selected
+              </Button>
+            </div>
+          </header>
+
+          <main className="mx-auto mt-8 flex w-full max-w-6xl flex-1 gap-6 overflow-hidden">
+            <section className="surface min-w-0 flex-1 rounded-3xl p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Run Output</h2>
             <div className="flex items-center gap-2 text-xs text-ink/60">
               <span>Plan</span>
               <span>•</span>
@@ -408,26 +575,28 @@ export default function App() {
             </div>
           )}
         </section>
-      </main>
-      {confirmTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="surface w-full max-w-md rounded-3xl p-6">
-            <h3 className="text-lg font-semibold">Update test expectations?</h3>
-            <p className="mt-2 text-sm text-ink/70">
-              This will overwrite the expected {confirmTarget} in the JSON file for{" "}
-              <span className="font-semibold text-ink">{selected?.id}</span>.
-            </p>
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <Button variant="ghost" onClick={() => setConfirmTarget(null)}>
-                Cancel
-              </Button>
-              <Button variant="accent" onClick={() => acceptOutputs(confirmTarget)}>
-                Confirm Update
-              </Button>
+          </main>
+          {confirmTarget && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+              <div className="surface w-full max-w-md rounded-3xl p-6">
+                <h3 className="text-lg font-semibold">Update test expectations?</h3>
+                <p className="mt-2 text-sm text-ink/70">
+                  This will overwrite the expected {confirmTarget} in the JSON file for{" "}
+                  <span className="font-semibold text-ink">{selected?.id}</span>.
+                </p>
+                <div className="mt-6 flex items-center justify-end gap-3">
+                  <Button variant="ghost" onClick={() => setConfirmTarget(null)}>
+                    Cancel
+                  </Button>
+                  <Button variant="accent" onClick={() => acceptOutputs(confirmTarget)}>
+                    Confirm Update
+                  </Button>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
