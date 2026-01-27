@@ -1,5 +1,6 @@
 #include "EvalBinaryExpr.h"
 
+#include "PipelineException.h"
 #include "columns/AllowedPairs.h"
 #include "columns/ColumnOperationExecutor.h"
 #include "columns/BinaryOperators.h"
@@ -15,7 +16,7 @@ using namespace db;
 namespace {
 
 template <ColumnOperator Op>
-struct EqualEval {
+struct Eval {
     Column* _res {nullptr};
 
     template <typename T, typename U>
@@ -32,21 +33,7 @@ struct EqualEval {
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Ne.");
             exec<Ne>(result, lhs, rhs);
-        } else {
-            COMPILE_ERROR("Invalid operator for Equal");
-        }
-    }
-};
-
-template <ColumnOperator Op>
-struct CompareEval {
-    Column* _res {nullptr};
-
-    template <typename T, typename U>
-    void operator()(const T* lhs, const U* rhs) {
-        bioassert(_res && lhs && rhs, "Invalid inputs to Compare");
-
-        if constexpr (Op == OP_GREATER_THAN) {
+        } else if constexpr (Op == OP_GREATER_THAN) {
             using ResultType = ColumnCombination<Gt, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Gt.");
@@ -56,73 +43,34 @@ struct CompareEval {
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Lt.");
             exec<Lt>(result, lhs, rhs);
-        } else {
-            COMPILE_ERROR("Invalid operator for Compare");
-        }
-    }
-};
-
-template <ColumnOperator Op>
-struct CompareEqualEval {
-    Column* _res {nullptr};
-
-    template <typename T, typename U>
-    void operator()(const T* lhs, const U* rhs) {
-        bioassert(_res && lhs && rhs, "Invalid inputs to CompareEqual");
-
-        if constexpr (Op == OP_GREATER_THAN_OR_EQUAL) {
+        } else if constexpr (Op == OP_GREATER_THAN_OR_EQUAL) {
             using ResultType = ColumnCombination<Gte, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
-            bioassert(result, "Invalid to cast for result column for Gt.");
+            bioassert(result, "Invalid to cast for result column for Gte.");
             exec<Gte>(result, lhs, rhs);
         } else if constexpr (Op == OP_LESS_THAN_OR_EQUAL) {
             using ResultType = ColumnCombination<Lte, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
-            bioassert(result, "Invalid to cast for result column for Gt.");
+            bioassert(result, "Invalid to cast for result column for Lte.");
             exec<Lte>(result, lhs, rhs);
-        } else {
-            COMPILE_ERROR("Invalid operator for CompareEqual");
-        }
-    }
-};
-
-template <ColumnOperator Op>
-struct BooleanEval {
-    Column* _res {nullptr};
-
-    template <typename T, typename U>
-    void operator()(const T* lhs, const U* rhs) {
-        bioassert(_res && lhs && rhs, "Invalid inputs to Boolean");
-
-        if constexpr (Op == OP_AND) {
+        } else if constexpr (Op == OP_AND) {
             using ResultType = ColumnCombination<And, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
-            bioassert(result, "Invalid to cast for result column for Gt.");
+            bioassert(result, "Invalid to cast for result column for And.");
             exec<And>(result, lhs, rhs);
         } else if constexpr (Op == OP_OR) {
             using ResultType = ColumnCombination<Or, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
-            bioassert(result, "Invalid to cast for result column for Gt.");
+            bioassert(result, "Invalid to cast for result column for Or.");
             exec<Or>(result, lhs, rhs);
-        } else {
-            COMPILE_ERROR("Invalid operator for Boolean");
-        }
-    }
-};
-
-template <ColumnOperator Op>
-struct ArithmeticEval {
-    Column* _res {nullptr};
-
-    void operator()(const auto* lhs, const auto* rhs) {
-        bioassert(_res && lhs && rhs, "Invalid inputs to Arithmetic");
-
-        if constexpr (Op == OP_MINUS) {
+        } else if constexpr (Op == OP_MINUS) {
             fmt::println("MINUS {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
+            throw PipelineException("Sub not yet implemented");
         } else if constexpr (Op == OP_PLUS) {
             fmt::println("PLUS {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
+            throw PipelineException("Add not yet implemented");
         } else {
-            COMPILE_ERROR("Invalid operator for Arithmetic");
+            COMPILE_ERROR("Unknown operator");
         }
     }
 };
@@ -130,66 +78,26 @@ struct ArithmeticEval {
 }
 
 template <ColumnOperator Op>
-void EvalBinaryExpr::opEqual(Column* res, const Column* lhs, const Column* rhs) {
+void EvalBinaryExpr::eval(Column* res, const Column* lhs, const Column* rhs) {
     using Pairs = PairRestrictions<Op>;
-    EqualEval<Op> fn {res};
+    Eval<Op> fn {res};
     ColumnDoubleDispatcher<typename Pairs::Allowed,
                            typename Pairs::AllowedMixed,
-                           ::EqualEval<Op>,
+                           Eval<Op>,
                            typename Pairs::Excluded>::dispatch(lhs, rhs, fn);
 }
 
-template <ColumnOperator Op>
-void EvalBinaryExpr::opCompare(Column* res, const Column* lhs, const Column* rhs) {
-    using Pairs = PairRestrictions<Op>;
-    CompareEval<Op> fn {res};
-    ColumnDoubleDispatcher<typename Pairs::Allowed,
-                           typename Pairs::AllowedMixed,
-                           ::CompareEval<Op>,
-                           typename Pairs::Excluded>::dispatch(lhs, rhs, fn);
-}
+template void EvalBinaryExpr::eval<OP_EQUAL>(Column* res, const Column* lhs, const Column* rhs);
+template void EvalBinaryExpr::eval<OP_NOT_EQUAL>(Column* res, const Column* lhs, const Column* rhs);
 
-template <ColumnOperator Op>
-void EvalBinaryExpr::opCompareEqual(Column* res, const Column* lhs, const Column* rhs) {
-    using Pairs = PairRestrictions<Op>;
-    CompareEqualEval<Op> fn {res};
-    ColumnDoubleDispatcher<typename Pairs::Allowed,
-                           typename Pairs::AllowedMixed,
-                           ::CompareEqualEval<Op>,
-                           typename Pairs::Excluded>::dispatch(lhs, rhs, fn);
-}
+template void EvalBinaryExpr::eval<OP_GREATER_THAN>(Column* res, const Column* lhs, const Column* rhs);
+template void EvalBinaryExpr::eval<OP_LESS_THAN>(Column* res, const Column* lhs, const Column* rhs);
 
-template <ColumnOperator Op>
-void EvalBinaryExpr::opBoolean(Column* res, const Column* lhs, const Column* rhs) {
-    using Pairs = PairRestrictions<Op>;
-    BooleanEval<Op> fn {res};
-    ColumnDoubleDispatcher<typename Pairs::Allowed,
-                           typename Pairs::AllowedMixed,
-                           ::BooleanEval<Op>,
-                           typename Pairs::Excluded>::dispatch(lhs, rhs, fn);
-}
+template void EvalBinaryExpr::eval<OP_GREATER_THAN_OR_EQUAL>(Column* res, const Column* lhs, const Column* rhs);
+template void EvalBinaryExpr::eval<OP_LESS_THAN_OR_EQUAL>(Column* res, const Column* lhs, const Column* rhs);
 
-template <ColumnOperator Op>
-void EvalBinaryExpr::opArithmetic(Column* res, const Column* lhs, const Column* rhs) {
-    using Pairs = PairRestrictions<Op>;
-    ArithmeticEval<Op> fn {res};
-    ColumnDoubleDispatcher<typename Pairs::Allowed,
-                           typename Pairs::AllowedMixed,
-                           ::ArithmeticEval<Op>,
-                           typename Pairs::Excluded>::dispatch(lhs, rhs, fn);
-}
+template void EvalBinaryExpr::eval<OP_AND>(Column* res, const Column* lhs, const Column* rhs);
+template void EvalBinaryExpr::eval<OP_OR>(Column* res, const Column* lhs, const Column* rhs);
 
-template void EvalBinaryExpr::opEqual<OP_EQUAL>(Column* res, const Column* lhs, const Column* rhs);
-template void EvalBinaryExpr::opEqual<OP_NOT_EQUAL>(Column* res, const Column* lhs, const Column* rhs);
-
-template void EvalBinaryExpr::opCompare<OP_GREATER_THAN>(Column* res, const Column* lhs, const Column* rhs);
-template void EvalBinaryExpr::opCompare<OP_LESS_THAN>(Column* res, const Column* lhs, const Column* rhs);
-
-template void EvalBinaryExpr::opCompareEqual<OP_GREATER_THAN_OR_EQUAL>(Column* res, const Column* lhs, const Column* rhs);
-template void EvalBinaryExpr::opCompareEqual<OP_LESS_THAN_OR_EQUAL>(Column* res, const Column* lhs, const Column* rhs);
-
-template void EvalBinaryExpr::opBoolean<OP_AND>(Column* res, const Column* lhs, const Column* rhs);
-template void EvalBinaryExpr::opBoolean<OP_OR>(Column* res, const Column* lhs, const Column* rhs);
-
-template void EvalBinaryExpr::opArithmetic<OP_MINUS>(Column* res, const Column* lhs, const Column* rhs);
-template void EvalBinaryExpr::opArithmetic<OP_PLUS>(Column* res, const Column* lhs, const Column* rhs);
+template void EvalBinaryExpr::eval<OP_MINUS>(Column* res, const Column* lhs, const Column* rhs);
+template void EvalBinaryExpr::eval<OP_PLUS>(Column* res, const Column* lhs, const Column* rhs);

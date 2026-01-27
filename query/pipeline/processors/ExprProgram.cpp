@@ -2,7 +2,6 @@
 
 #include <stdint.h>
 
-#include "columns/ColumnIDs.h"
 #include "columns/ColumnOperator.h"
 #include "EvalBinaryExpr.h"
 #include "EvalUnaryExpr.h"
@@ -59,39 +58,39 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
 
     switch (op) {
         case OP_EQUAL: {
-            EvalBinaryExpr::opEqual<OP_EQUAL>(res, lhs, rhs);
+            EvalBinaryExpr::eval<OP_EQUAL>(res, lhs, rhs);
         } break;
         case OP_NOT_EQUAL: {
-            EvalBinaryExpr::opEqual<OP_NOT_EQUAL>(res, lhs, rhs);
+            EvalBinaryExpr::eval<OP_NOT_EQUAL>(res, lhs, rhs);
         } break;
         case OP_GREATER_THAN: {
-            EvalBinaryExpr::opCompare<OP_GREATER_THAN>(res, lhs, rhs);
+            EvalBinaryExpr::eval<OP_GREATER_THAN>(res, lhs, rhs);
         } break;
         case OP_LESS_THAN: {
-            EvalBinaryExpr::opCompare<OP_LESS_THAN>(res, lhs, rhs);
+            EvalBinaryExpr::eval<OP_LESS_THAN>(res, lhs, rhs);
         } break;
         case OP_GREATER_THAN_OR_EQUAL: {
-            EvalBinaryExpr::opCompareEqual<OP_GREATER_THAN_OR_EQUAL>(res, lhs, rhs);
+            EvalBinaryExpr::eval<OP_GREATER_THAN_OR_EQUAL>(res, lhs, rhs);
         } break;
         case OP_LESS_THAN_OR_EQUAL: {
-            EvalBinaryExpr::opCompareEqual<OP_LESS_THAN_OR_EQUAL>(res, lhs, rhs);
+            EvalBinaryExpr::eval<OP_LESS_THAN_OR_EQUAL>(res, lhs, rhs);
         } break;
 
         case OP_AND: {
-            EvalBinaryExpr::opBoolean<OP_AND>(res, lhs, rhs);
+            EvalBinaryExpr::eval<OP_AND>(res, lhs, rhs);
         } break;
         case OP_OR: {
-            EvalBinaryExpr::opBoolean<OP_OR>(res, lhs, rhs);
+            EvalBinaryExpr::eval<OP_OR>(res, lhs, rhs);
         } break;
         case OP_NOT: {
             throw FatalException("NOT binary operator is not supported.");
         } break;
 
         case OP_MINUS: {
-            EvalBinaryExpr::opArithmetic<OP_MINUS>(res, lhs, rhs);
+            EvalBinaryExpr::eval<OP_MINUS>(res, lhs, rhs);
         } break;
         case OP_PLUS: {
-            EvalBinaryExpr::opArithmetic<OP_PLUS>(res, lhs, rhs);
+            EvalBinaryExpr::eval<OP_PLUS>(res, lhs, rhs);
         } break;
 
         case OP_PROJECT: {
