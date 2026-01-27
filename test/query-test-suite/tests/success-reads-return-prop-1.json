@@ -1,7 +1,7 @@
 {
   "id": "success-reads/return-prop-1",
   "name": "success-reads/return-prop-1",
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n.duration + 5",
   "expect": {

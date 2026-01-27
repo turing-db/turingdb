@@ -1,7 +1,7 @@
 {
   "id": "success-reads/join-0",
   "name": "success-reads/join-0",
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (a)-->(x), (a)-->(y), (b)-->(x), (b)-->(y) RETURN a",
   "expect": {

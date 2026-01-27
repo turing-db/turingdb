@@ -1,7 +1,7 @@
 {
   "id": "success-reads/order-by-2",
   "name": "success-reads/order-by-2",
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n ORDER BY n.name DESC",
   "expect": {

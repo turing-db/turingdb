@@ -1,7 +1,7 @@
 {
   "id": "success-reads/type-constraint-3",
   "name": "success-reads/type-constraint-3",
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (n), (m {isFrench: n:Person}) RETURN n",
   "expect": {

@@ -94,6 +94,10 @@ export default function App() {
   const [tagFilters, setTagFilters] = React.useState<string[]>([]);
   const [tagDraft, setTagDraft] = React.useState("");
   const [writeRequired, setWriteRequired] = React.useState(false);
+  const [showPassing, setShowPassing] = React.useState(true);
+  const [showFailing, setShowFailing] = React.useState(true);
+  const [showDisabled, setShowDisabled] = React.useState(true);
+  const [showNotRun, setShowNotRun] = React.useState(true);
 
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
@@ -374,6 +378,45 @@ export default function App() {
     }
   };
 
+  const updateEnabled = async (nextValue: boolean) => {
+    if (!selected) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/update`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: selected.name,
+          enabled: nextValue
+        })
+      });
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message =
+          typeof details?.error === "string"
+            ? `${details.error}${details.details ? `: ${details.details}` : ""}`
+            : "Failed to update test";
+        throw new Error(message);
+      }
+      setTests((prev) =>
+        prev.map((test) =>
+          test.name === selected.name
+            ? { ...test, enabled: nextValue }
+            : test
+        )
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, enabled: nextValue } : prev
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update enabled state.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const addTag = async () => {
     if (!selected) return;
     const nextTag = tagDraft.trim();
@@ -435,12 +478,21 @@ export default function App() {
     });
   }, [search, tests]);
   const visibleTests = React.useMemo(() => {
-    if (tagFilters.length === 0) return filteredTests;
-    return filteredTests.filter((test) => {
-      const tags = test.tags ?? [];
-      return tagFilters.every((tag) => tags.includes(tag));
+    let next = filteredTests;
+    if (tagFilters.length > 0) {
+      next = next.filter((test) => {
+        const tags = test.tags ?? [];
+        return tagFilters.every((tag) => tags.includes(tag));
+      });
+    }
+    return next.filter((test) => {
+      if (!test.enabled) return showDisabled;
+      const testResult = results[test.name];
+      if (!testResult) return showNotRun;
+      const isPass = testResult.planMatched && testResult.resultMatched;
+      return isPass ? showPassing : showFailing;
     });
-  }, [filteredTests, tagFilters]);
+  }, [filteredTests, tagFilters, results, showDisabled, showFailing, showNotRun, showPassing]);
 
   React.useEffect(() => {
     const onMove = (event: MouseEvent) => {
@@ -503,6 +555,24 @@ export default function App() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search tests or query text (e.g., MATCH (n))…"
           />
+          <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={showPassing} onChange={(e) => setShowPassing(e.target.checked)} />
+              Pass
+            </label>
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={showFailing} onChange={(e) => setShowFailing(e.target.checked)} />
+              Fail
+            </label>
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={showNotRun} onChange={(e) => setShowNotRun(e.target.checked)} />
+              Not Run
+            </label>
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={showDisabled} onChange={(e) => setShowDisabled(e.target.checked)} />
+              Disabled
+            </label>
+          </div>
         </SidebarHeader>
         <SidebarContent>
           {allTags.length > 0 && (
@@ -537,22 +607,27 @@ export default function App() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {visibleTests.map((test) => {
-                  const testResult = results[test.id];
+                  const testResult = results[test.name];
                   const isPending = !testResult;
+                  const isDisabled = !test.enabled;
                   const isPass = !!testResult && testResult.planMatched && testResult.resultMatched;
-                  const statusClass = isPass
-                    ? "text-emerald-400"
-                    : testResult
-                      ? "text-red-400"
-                      : "text-muted-foreground";
-                  const badgeClass = isPass
-                    ? "bg-emerald-400/15 text-emerald-200"
-                    : testResult
-                      ? "bg-red-500/20 text-red-200"
-                      : "bg-white/5 text-muted-foreground";
-                  const icon = isPass ? "●" : testResult ? "●" : "○";
+                  const statusClass = isDisabled
+                    ? "text-amber-400"
+                    : isPass
+                      ? "text-emerald-400"
+                      : testResult
+                        ? "text-red-400"
+                        : "text-muted-foreground";
+                  const badgeClass = isDisabled
+                    ? "bg-amber-400/20 text-amber-100"
+                    : isPass
+                      ? "bg-emerald-400/15 text-emerald-200"
+                      : testResult
+                        ? "bg-red-500/20 text-red-200"
+                        : "bg-white/5 text-muted-foreground";
+                  const icon = isDisabled ? "■" : isPass ? "●" : testResult ? "●" : "○";
                   return (
-                    <SidebarMenuItem key={test.id}>
+                    <SidebarMenuItem key={test.name}>
                         <SidebarMenuButton
                           onClick={() => setSelected(test)}
                           isActive={selected?.name === test.name}
@@ -564,7 +639,7 @@ export default function App() {
                           <span
                             className={`ml-auto rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] ${badgeClass}`}
                           >
-                          {isPending ? "pending" : isPass ? "pass" : "fail"}
+                          {isDisabled ? "disabled" : isPending ? "pending" : isPass ? "pass" : "fail"}
                         </span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -602,7 +677,7 @@ export default function App() {
               <Button variant="ghost" onClick={createTest} disabled={loading}>
                 New Test
               </Button>
-              <Button variant="accent" onClick={() => selected && runTest(selected.id)} disabled={!selected || loading}>
+              <Button variant="accent" onClick={() => selected && runTest(selected.name)} disabled={!selected || loading}>
                 Run Selected
               </Button>
             </div>
@@ -665,6 +740,15 @@ export default function App() {
                   className="h-4 w-4 rounded border border-white/20 bg-paper text-accent focus:ring-2 focus:ring-accent/40"
                 />
                 Require write transaction
+              </label>
+              <label className="mt-2 flex items-center gap-2 text-xs text-ink/70">
+                <input
+                  type="checkbox"
+                  checked={selected.enabled}
+                  onChange={(event) => updateEnabled(event.target.checked)}
+                  className="h-4 w-4 rounded border border-white/20 bg-paper text-accent focus:ring-2 focus:ring-accent/40"
+                />
+                Enabled
               </label>
             </div>
           )}

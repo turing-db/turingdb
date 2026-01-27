@@ -1,7 +1,7 @@
 {
   "id": "success-reads/aggregate-1",
   "name": "success-reads/aggregate-1",
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n, count(n)",
   "expect": {

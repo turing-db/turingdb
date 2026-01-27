@@ -1,5 +1,5 @@
 {
-  "id": "fail-reads/aggregate-0",
+  "id": "fail-reads/aggregate-count",
   "name": "fail-reads/aggregate-count",
   "enabled": true,
   "graph": "simpledb",
@@ -14,5 +14,5 @@
     "aggregate",
     "count"
   ],
-  "write-required": false
+  "write-required": true
 }

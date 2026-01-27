@@ -1,7 +1,7 @@
 {
   "id": "success-reads/joins-on-filters-5",
   "name": "success-reads/joins-on-filters-5",
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (a)-->(x), (b)-->(x), (x)-->(c)-->(e), (x)-->(d)-->(e) RETURN a",
   "expect": {

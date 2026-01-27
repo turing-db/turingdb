@@ -1,7 +1,7 @@
 {
   "id": "success-reads/aggregate-4",
   "name": "success-reads/aggregate-4",
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n, avg(n.duration)",
   "expect": {

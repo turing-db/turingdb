@@ -62,7 +62,8 @@ async function updateTestFile(
   query?: string,
   newName?: string,
   tags?: string[],
-  writeRequired?: boolean
+  writeRequired?: boolean,
+  enabled?: boolean
 ) {
     const entries = await Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: dir }));
     for (const entry of entries) {
@@ -97,6 +98,9 @@ async function updateTestFile(
         }
         if (typeof writeRequired === "boolean") {
           data["write-required"] = writeRequired;
+        }
+        if (typeof enabled === "boolean") {
+          data.enabled = enabled;
         }
         await Bun.write(path, JSON.stringify(data, null, 2) + "\n");
         return true;
@@ -226,8 +230,9 @@ Bun.serve({
       const hasNewName = typeof body?.newName === "string";
       const hasTags = Array.isArray(body?.tags);
       const hasWriteRequired = typeof body?.writeRequired === "boolean";
+      const hasEnabled = typeof body?.enabled === "boolean";
       const targetName = typeof body?.name === "string" ? body.name.trim() : "";
-      if (!targetName || (!hasPlan && !hasResult && !hasQuery && !hasNewName && !hasTags && !hasWriteRequired)) {
+      if (!targetName || (!hasPlan && !hasResult && !hasQuery && !hasNewName && !hasTags && !hasWriteRequired && !hasEnabled)) {
         return errorResponse("Invalid payload", 400);
       }
       if (hasNewName) {
@@ -248,7 +253,8 @@ Bun.serve({
         body.query,
         body.newName,
         body.tags,
-        body.writeRequired
+        body.writeRequired,
+        body.enabled
       );
       let updatedBuild = false;
       try {
@@ -260,7 +266,8 @@ Bun.serve({
           body.query,
           body.newName,
           body.tags,
-          body.writeRequired
+          body.writeRequired,
+          body.enabled
         );
       } catch {
         updatedBuild = false;

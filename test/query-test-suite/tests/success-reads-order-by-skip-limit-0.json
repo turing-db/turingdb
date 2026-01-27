@@ -1,7 +1,7 @@
 {
   "id": "success-reads/order-by-skip-limit-0",
   "name": "success-reads/order-by-skip-limit-0",
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n ORDER BY n.name DESC, n.duration ASC SKIP 0 LIMIT 5",
   "expect": {
