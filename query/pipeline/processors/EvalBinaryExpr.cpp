@@ -1,7 +1,7 @@
 #include "EvalBinaryExpr.h"
 
 #include "PipelineException.h"
-#include "columns/AllowedPairs.h"
+#include "columns/AllowedKinds.h"
 #include "columns/ColumnOperationExecutor.h"
 #include "columns/BinaryOperators.h"
 #include "columns/BinaryPredicates.h"

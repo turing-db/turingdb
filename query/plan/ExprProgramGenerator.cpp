@@ -3,7 +3,7 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "PipelineGenerator.h"
-#include "columns/AllowedPairs.h"
+#include "columns/AllowedKinds.h"
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnCombinations.h"
 #include "columns/ColumnOperationExecutor.h"

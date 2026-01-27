@@ -109,100 +109,109 @@ template <ColumnOperator Op>
     requires (Op == OP_EQUAL) || (Op == OP_NOT_EQUAL)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
+        // Standard equality of property types
         OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
         OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
 
-        // For filtering by ID or labels/edge type
         std::tuple<
+            // Filtering by ID or labels/edge type
             KindPair<NodeID, NodeID>,
             KindPair<EdgeID, EdgeID>,
             KindPair<LabelSetID, LabelSetID>,
             KindPair<EdgeTypeID, EdgeTypeID>,
 
+            // IS (NOT) NULL
             KindPair<std::optional<types::Int64::Primitive>, PropertyNull>,
             KindPair<std::optional<types::UInt64::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Double::Primitive>, PropertyNull>,
             KindPair<std::optional<types::String::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Bool::Primitive>, PropertyNull>
         >
-        /*,
+    >;
 
-        std::tuple<KindPair<PropertyNull, std::optional<NodeID>>,
-                   KindPair<PropertyNull, std::optional<EdgeID>>,
-                   KindPair<PropertyNull, std::optional<types::Int64::Primitive>>,
-                   KindPair<PropertyNull, std::optional<types::UInt64::Primitive>>,
-                   KindPair<PropertyNull, std::optional<types::Double::Primitive>>,
-                   KindPair<PropertyNull, std::optional<types::String::Primitive>>,
-                   KindPair<PropertyNull, std::optional<types::Double::Primitive>>,
-                   KindPair<PropertyNull, std::optional<ValueType>>>*/>;
-    using AllowedMixed =
-        AllowedMixedList<MixedKind<ColumnMask, PropertyNull>,
-                         MixedKind<ColumnMask, CustomBool>,
-                         MixedKind<ColumnMask, std::optional<CustomBool>>>;
+    using AllowedMixed = AllowedMixedList<
+        MixedKind<ColumnMask, CustomBool>,
+        MixedKind<ColumnMask, std::optional<CustomBool>>
+    >;
 
-    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
-                                        ContainerKind::code<ColumnMask>()>;
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
 };
 
 template <ColumnOperator Op>
     requires (Op == OP_GREATER_THAN) || (Op == OP_LESS_THAN)
 struct PairRestrictions<Op> {
-    using Allowed = GenerateKindPairList<OptionalKindPairs<int64_t, int64_t>::Pairs,
-                                         OptionalKindPairs<int64_t, uint64_t>::Pairs,
-                                         OptionalKindPairs<int64_t, double>::Pairs,
-                                         OptionalKindPairs<uint64_t, uint64_t>::Pairs,
-                                         OptionalKindPairs<uint64_t, double>::Pairs,
-                                         OptionalKindPairs<double, double>::Pairs>;
+    using Allowed = GenerateKindPairList<
+        // Standard ordering of numeric types
+        OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
+        OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::Int64::Primitive, types::Double::Primitive>::Pairs,
+        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
+        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs
+    >;
 
     using AllowedMixed = AllowedMixedList<>;
-    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
-                                        ContainerKind::code<ColumnMask>()>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
 };
 
 template <ColumnOperator Op>
     requires (Op == OP_GREATER_THAN_OR_EQUAL) || (Op == OP_LESS_THAN_OR_EQUAL)
 struct PairRestrictions<Op> {
-  using Allowed = GenerateKindPairList<
-        OptionalKindPairs<int64_t, int64_t>::Pairs,
-        OptionalKindPairs<int64_t, uint64_t>::Pairs,
-        OptionalKindPairs<uint64_t, uint64_t>::Pairs>;
+    using Allowed = GenerateKindPairList<
+        // Standard ordering of numeric types - excluding doubles
+        OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
+        OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs
+    >;
 
-  using AllowedMixed = AllowedMixedList<>;
-  using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
-                                      ContainerKind::code<ColumnMask>()>;
+    using AllowedMixed = AllowedMixedList<>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
 };
 
 template <ColumnOperator Op>
     requires (Op == OP_AND) || (Op == OP_OR)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
-        OptionalKindPairs<CustomBool, CustomBool>::Pairs
-        /*,
-        std::tuple<KindPair<PropertyNull, CustomBool>,
-                   KindPair<PropertyNull, std::optional<CustomBool>>>*/>;
+        // Boolean properties; optional (3-valued logic) and non-optional
+        OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs
+    >;
 
-    using AllowedMixed = AllowedMixedList</*
-        MixedKind<ColumnMask, PropertyNull>,
-        MixedKind<ColumnMask, CustomBool>,
-        MixedKind<ColumnMask, std::optional<CustomBool>>*/>;
-    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>()>;
+    using AllowedMixed = AllowedMixedList<>;
+
+    // Mask operations also included
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>()
+    >;
 };
 
 template <ColumnOperator Op>
     requires (Op == OP_PLUS) || (Op == OP_MINUS)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
-        OptionalKindPairs<int64_t, int64_t>::Pairs,
-        OptionalKindPairs<int64_t, uint64_t>::Pairs,
-        OptionalKindPairs<int64_t, double>::Pairs,
-        OptionalKindPairs<uint64_t, uint64_t>::Pairs,
-        OptionalKindPairs<uint64_t, double>::Pairs,
-        OptionalKindPairs<double, double>::Pairs>;
+        OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
+        OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::Int64::Primitive, types::Double::Primitive>::Pairs,
+        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
+        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs
+    >;
 
     using AllowedMixed = AllowedMixedList<>;
+
     using Excluded = ExcludedContainers<>;
 };
 

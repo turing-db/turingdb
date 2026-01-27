@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AllowedPairs.h"
+#include "AllowedKinds.h"
 #include "ColumnVector.h"
 #include "ColumnConst.h"
 #include "ColumnSet.h"
