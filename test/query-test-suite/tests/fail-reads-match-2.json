@@ -1,6 +1,4 @@
 {
-  "id": "fail-reads/match-2",
-  "name": "fail-reads/match-2",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n:Person)-[e]->(m:Person)-[e]->(m)\nRETURN n;",

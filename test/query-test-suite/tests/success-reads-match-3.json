@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/match-3",
-  "name": "success-reads/match-3",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n: Person { name: \"Luc\" })-[e:KNOWS_WELL { name: \"Whatever\" }]-(m) RETURN n, e, m;",

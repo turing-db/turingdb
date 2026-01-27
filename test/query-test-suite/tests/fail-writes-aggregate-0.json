@@ -1,6 +1,4 @@
 {
-  "id": "fail-writes/aggregate-0",
-  "name": "fail-writes/aggregate-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) CREATE (m:Person { c: count(n) }) RETURN n",

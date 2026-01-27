@@ -9,7 +9,6 @@
 namespace turing::test {
 
 struct QueryTestSpec {
-    std::string id;
     std::string name;
     std::string graphName {"simpledb"};
     std::string query;
@@ -21,7 +20,7 @@ struct QueryTestSpec {
 };
 
 struct QueryTestResult {
-    std::string id;
+    std::string name;
     std::string planOutput;
     std::string resultOutput;
     bool planMatched {false};

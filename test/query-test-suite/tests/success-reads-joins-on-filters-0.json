@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/joins-on-filters-0",
-  "name": "success-reads/joins-on-filters-0",
   "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (a)-->(x), (b)-->(x) RETURN a",

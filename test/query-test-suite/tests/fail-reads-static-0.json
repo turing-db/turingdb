@@ -1,6 +1,4 @@
 {
-  "id": "fail-reads/static-0",
-  "name": "fail-reads/static-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n SKIP n.duration",

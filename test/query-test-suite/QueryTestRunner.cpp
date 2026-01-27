@@ -183,12 +183,21 @@ std::vector<QueryTestSpec> QueryTestRunner::loadTestsFromDir(const fs::Path& dir
             continue;
         }
 
+        std::string filename = path.get();
+        const auto lastSlash = filename.find_last_of("/\\");
+        if (lastSlash != std::string::npos) {
+            filename = filename.substr(lastSlash + 1);
+        }
+        if (filename.size() > 5 && filename.ends_with(".json")) {
+            filename = filename.substr(0, filename.size() - 5);
+        }
+        std::replace(filename.begin(), filename.end(), '/', '-');
+
         const std::string content = readFile(path);
         json doc = json::parse(content, nullptr, true, true);
 
         QueryTestSpec spec;
-        spec.id = doc.value("id", path.get());
-        spec.name = doc.value("name", spec.id);
+        spec.name = filename;
         spec.graphName = doc.value("graph", spec.graphName);
         spec.query = doc.value("query", "");
         spec.enabled = doc.value("enabled", true);
@@ -215,7 +224,7 @@ std::vector<QueryTestSpec> QueryTestRunner::loadTestsFromDir(const fs::Path& dir
 
 QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Path& outDir) {
     QueryTestResult result;
-    result.id = spec.id;
+    result.name = spec.name;
 
     auto env = turing::test::TuringTestEnv::create(outDir);
     db::Graph* graph = env->getSystemManager().createGraph(spec.graphName);

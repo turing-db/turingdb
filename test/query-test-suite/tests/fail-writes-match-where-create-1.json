@@ -1,6 +1,4 @@
 {
-  "id": "fail-writes/match-where-create-1",
-  "name": "fail-writes/match-where-create-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n:Person)-[e]->(m:Person)\nWHERE n.name = \"Remy\" AND n.name = \"Adam\"\nCREATE (n)-[e]->(m)\nRETURN n;",

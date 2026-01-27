@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/constraint-1",
-  "name": "success-reads/constraint-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (a { name: \"Remy\", duration: 10 }) RETURN a;",

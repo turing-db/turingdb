@@ -1,6 +1,4 @@
 {
-  "id": "fail-writes/create-delete-1",
-  "name": "fail-writes/create-delete-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e",

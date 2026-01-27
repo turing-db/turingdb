@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/match-11",
-  "name": "success-reads/match-11",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (a), (b { name: a.name }) RETURN a, b",

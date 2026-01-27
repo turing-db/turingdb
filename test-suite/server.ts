@@ -65,11 +65,13 @@ async function updateTestFile(
   writeRequired?: boolean,
   enabled?: boolean
 ) {
-    const entries = await Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: dir }));
-    for (const entry of entries) {
-        const path = join(dir, entry);
-        const file = Bun.file(path);
-        if (!(await file.exists())) continue;
+  const entries = await Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: dir }));
+  for (const entry of entries) {
+    const entryName = entry.replace(/\.json$/i, "");
+    if (entryName !== name) continue;
+    const path = join(dir, entry);
+    const file = Bun.file(path);
+    if (!(await file.exists())) continue;
     const text = await file.text();
     let data: any;
     try {
@@ -77,52 +79,50 @@ async function updateTestFile(
     } catch {
       continue;
     }
-    const matches = data?.name === name || data?.id === name;
-    if (!matches) continue;
-        data.expect = data.expect ?? {};
-        if (typeof plan === "string") {
-          data.expect.plan = plan;
-        }
-        if (typeof result === "string") {
-          data.expect.result = result;
-        }
-        if (typeof query === "string") {
-          data.query = query;
-        }
-        if (typeof newName === "string") {
-          data.name = newName;
-          data.id = newName;
-        }
-        if (Array.isArray(tags)) {
-          data.tags = tags;
-        }
-        if (typeof writeRequired === "boolean") {
-          data["write-required"] = writeRequired;
-        }
-        if (typeof enabled === "boolean") {
-          data.enabled = enabled;
-        }
-        await Bun.write(path, JSON.stringify(data, null, 2) + "\n");
-        return true;
+    data.expect = data.expect ?? {};
+    if (typeof plan === "string") {
+      data.expect.plan = plan;
     }
-    return false;
+    if (typeof result === "string") {
+      data.expect.result = result;
+    }
+    if (typeof query === "string") {
+      data.query = query;
+    }
+    if (Array.isArray(tags)) {
+      data.tags = tags;
+    }
+    if (typeof writeRequired === "boolean") {
+      data["write-required"] = writeRequired;
+    }
+    if (typeof enabled === "boolean") {
+      data.enabled = enabled;
+    }
+    if (typeof newName === "string") {
+      delete data.name;
+      delete data.id;
+      const sanitized = idToFilename(newName);
+      const targetPath = join(dir, `${sanitized}.json`);
+      await Bun.write(targetPath, JSON.stringify(data, null, 2) + "\n");
+      if (targetPath !== path) {
+        await Bun.remove(path);
+      }
+      return true;
+    }
+    delete data.name;
+    delete data.id;
+    await Bun.write(path, JSON.stringify(data, null, 2) + "\n");
+    return true;
+  }
+  return false;
 }
 
 async function loadExistingNames(dir: string) {
   const names = new Set<string>();
   const entries = await Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: dir }));
   for (const entry of entries) {
-    const path = join(dir, entry);
-    const file = Bun.file(path);
-    if (!(await file.exists())) continue;
-    const text = await file.text();
-    try {
-      const data = JSON.parse(text);
-      if (typeof data?.name === "string") names.add(data.name);
-      if (typeof data?.id === "string") names.add(data.id);
-    } catch {
-      continue;
-    }
+    const name = entry.replace(/\.json$/i, "");
+    names.add(name);
   }
   return names;
 }
@@ -133,25 +133,19 @@ function idToFilename(id: string) {
 
 async function createTestFile(dir: string, name: string) {
   const existingNames = await loadExistingNames(dir);
-  let finalName = name.trim() || "new-test";
-  if (existingNames.has(finalName)) {
-    let suffix = 2;
-    while (existingNames.has(`${finalName} (${suffix})`)) {
-      suffix += 1;
-    }
-    finalName = `${finalName} (${suffix})`;
-  }
-  const baseName = idToFilename(finalName) || "new-test";
+  const baseName = idToFilename(name.trim()) || "new-test";
   let candidate = baseName;
-  let suffix = 1;
+  let suffix = 2;
+  while (existingNames.has(candidate)) {
+    candidate = `${baseName}-${suffix}`;
+    suffix += 1;
+  }
   while (await Bun.file(join(dir, `${candidate}.json`)).exists()) {
     candidate = `${baseName}-${suffix}`;
     suffix += 1;
   }
   const filePath = join(dir, `${candidate}.json`);
   const payload = {
-    id: finalName,
-    name: finalName,
     enabled: true,
     graph: "simpledb",
     query: "MATCH (n) RETURN n",
@@ -163,7 +157,7 @@ async function createTestFile(dir: string, name: string) {
     "write-required": false
   };
   await Bun.write(filePath, JSON.stringify(payload, null, 2) + "\n");
-  return { name: finalName, path: filePath };
+  return { name: candidate, path: filePath };
 }
 
 Bun.serve({
@@ -231,12 +225,12 @@ Bun.serve({
       const hasTags = Array.isArray(body?.tags);
       const hasWriteRequired = typeof body?.writeRequired === "boolean";
       const hasEnabled = typeof body?.enabled === "boolean";
-      const targetName = typeof body?.name === "string" ? body.name.trim() : "";
+      const targetName = typeof body?.name === "string" ? idToFilename(body.name.trim()) : "";
       if (!targetName || (!hasPlan && !hasResult && !hasQuery && !hasNewName && !hasTags && !hasWriteRequired && !hasEnabled)) {
         return errorResponse("Invalid payload", 400);
       }
       if (hasNewName) {
-        const newName = body.newName.trim();
+        const newName = idToFilename(body.newName.trim());
         if (!newName) {
           return errorResponse("Invalid payload", 400);
         }

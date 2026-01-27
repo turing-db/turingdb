@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/type-constraint-1",
-  "name": "success-reads/type-constraint-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n)-[e]-(m) WHERE e:KNOWS_WELL RETURN n",

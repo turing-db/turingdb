@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/type-constraint-0",
-  "name": "success-reads/type-constraint-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) WHERE n:Person RETURN n",

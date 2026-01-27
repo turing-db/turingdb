@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/order-by-0",
-  "name": "success-reads/order-by-0",
   "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n ORDER BY n.name",

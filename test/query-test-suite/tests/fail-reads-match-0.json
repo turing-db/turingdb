@@ -1,6 +1,4 @@
 {
-  "id": "fail-reads/match-0",
-  "name": "fail-reads/match-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n: Person { name: \"Luc\" })-[e:KNOWS_WELL { name: \"Whatever\" }]->(m)-[e2]->(c:Person)\nMATCH (a)-->(b)-->(e)\nRETURN n, e, m;",

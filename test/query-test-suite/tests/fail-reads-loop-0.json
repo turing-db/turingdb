@@ -1,6 +1,4 @@
 {
-  "id": "fail-reads/loop-0",
-  "name": "fail-reads/loop-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (a)-->(b)-->(a) RETURN a, b;",

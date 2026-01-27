@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/return-prop-2",
-  "name": "success-reads/return-prop-2",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n { name: \"Remy\" }) RETURN n.name",

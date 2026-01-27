@@ -1,6 +1,4 @@
 {
-  "id": "success-writes/create-4",
-  "name": "success-writes/create-4",
   "enabled": true,
   "graph": "simpledb",
   "query": "CREATE (n:Person), (n)-[e:NewEdge]->(m:Person)",

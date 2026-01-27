@@ -1,6 +1,4 @@
 {
-  "id": "success-writes/create-1",
-  "name": "success-writes/create-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "CREATE (n:Person:Officer) RETURN n;",

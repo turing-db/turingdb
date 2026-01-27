@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/return-prop-0",
-  "name": "success-reads/return-prop-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n.name",

@@ -1,6 +1,4 @@
 {
-  "id": "fail-reads/aggregate-1",
-  "name": "fail-reads/aggregate-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) WHERE n.duration = count(n) RETURN n",

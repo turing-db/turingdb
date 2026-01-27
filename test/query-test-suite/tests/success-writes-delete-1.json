@@ -1,6 +1,4 @@
 {
-  "id": "success-writes/delete-1",
-  "name": "success-writes/delete-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n:Person { name: \"Remy\" })-[e]->(m:Person)\nDELETE n, e",

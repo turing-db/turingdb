@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/where-0",
-  "name": "success-reads/where-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (a { name: \"Remy\" })-[e:KNOWS_WELL]-(m { name: \"Adam\" })\nWHERE a:Person AND m:Person AND e.duration > 10 \nRETURN a;",

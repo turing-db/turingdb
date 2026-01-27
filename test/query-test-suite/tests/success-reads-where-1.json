@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/where-1",
-  "name": "success-reads/where-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n), (m) WHERE m.isFrench AND NOT (n.isFrench = m.isFrench) RETURN n.name, m.name",

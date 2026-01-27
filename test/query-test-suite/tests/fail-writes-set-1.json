@@ -1,6 +1,4 @@
 {
-  "id": "fail-writes/set-1",
-  "name": "fail-writes/set-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) SET n:Node",

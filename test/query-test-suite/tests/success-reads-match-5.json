@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/match-5",
-  "name": "success-reads/match-5",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n: Person { name: \"Luc\" })-[e:KNOWS_WELL { name: \"Whatever\" }]->(m)-[e2]->(c:Person)\nMATCH (a)-->(b)-->(m)\nRETURN n, e, m;",

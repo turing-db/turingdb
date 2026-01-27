@@ -1,6 +1,4 @@
 {
-  "id": "fail-writes/create-0",
-  "name": "fail-writes/create-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "CREATE (n) RETURN n;",

@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/match-8",
-  "name": "success-reads/match-8",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (b)-->(c), (a)-->(b) RETURN a, b, c;",

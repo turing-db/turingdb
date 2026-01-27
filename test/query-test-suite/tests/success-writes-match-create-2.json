@@ -1,6 +1,4 @@
 {
-  "id": "success-writes/match-create-2",
-  "name": "success-writes/match-create-2",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n:Person { name: \"Remy\" })\nMATCH (m:Person { name: \"Adam\" })\nCREATE (n)-[e:IS_FRIEND]->(m)\nRETURN n;",

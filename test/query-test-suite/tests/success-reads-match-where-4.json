@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/match-where-4",
-  "name": "success-reads/match-where-4",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (a)-->(x), (b { duration: a.duration })-->(x ), (c)-->(x) WHERE (a.name = b.name) OR (b.name = c.name) OR (b.name = x.name) RETURN a",

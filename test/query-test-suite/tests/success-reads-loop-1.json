@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/loop-1",
-  "name": "success-reads/loop-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (a)-->(x), (b { name: a.name})-->(x), (c {name: b.name})-->(x) RETURN a",

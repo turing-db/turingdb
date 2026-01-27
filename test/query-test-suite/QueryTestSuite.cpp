@@ -25,17 +25,17 @@ TEST_F(QueryTestSuite, RunAll) {
         }
 
         ++executed;
-        const fs::Path outDir = fs::Path {_outDir} / test.id;
+        const fs::Path outDir = fs::Path {_outDir} / test.name;
         const QueryTestResult result = runner.runTest(test, outDir);
 
         if (!result.planMatched) {
-            ADD_FAILURE() << "Plan output mismatch for test: " << test.id;
+            ADD_FAILURE() << "Plan output mismatch for test: " << test.name;
             ADD_FAILURE() << "Expected plan:\n" << QueryTestRunner::normalizeOutput(test.expectPlan);
             ADD_FAILURE() << "Actual plan:\n" << result.planOutput;
         }
 
         if (!result.resultMatched) {
-            ADD_FAILURE() << "Result output mismatch for test: " << test.id;
+            ADD_FAILURE() << "Result output mismatch for test: " << test.name;
             ADD_FAILURE() << "Expected result:\n" << QueryTestRunner::normalizeOutput(test.expectResult);
             ADD_FAILURE() << "Actual result:\n" << result.resultOutput;
         }

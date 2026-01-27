@@ -7,7 +7,7 @@
 namespace {
 
 void printUsage() {
-    std::cout << "query_test_suite_cli --list | --run <id> | --run-all\n";
+    std::cout << "query_test_suite_cli --list | --run <name> | --run-all\n";
 }
 
 std::string escapeJson(std::string_view input) {
@@ -52,8 +52,7 @@ int main(int argc, char** argv) {
                 std::cout << ",";
             }
             first = false;
-            std::cout << "{\"id\":\"" << escapeJson(test.id) << "\""
-                      << ",\"name\":\"" << escapeJson(test.name) << "\""
+            std::cout << "{\"name\":\"" << escapeJson(test.name) << "\""
                       << ",\"query\":\"" << escapeJson(test.query) << "\""
                       << ",\"writeRequired\":" << (test.writeRequired ? "true" : "false")
                       << ",\"tags\":[";
@@ -74,14 +73,14 @@ int main(int argc, char** argv) {
     QueryTestRunner runner;
 
     if (command == "--run" && argc >= 3) {
-        const std::string id = argv[2];
+        const std::string name = argv[2];
         for (const auto& test : tests) {
-            if (test.id != id) {
+            if (test.name != name) {
                 continue;
             }
-            const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test.id;
+            const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test.name;
             const QueryTestResult result = runner.runTest(test, outDir);
-            std::cout << "{\"id\":\"" << escapeJson(result.id) << "\""
+            std::cout << "{\"name\":\"" << escapeJson(result.name) << "\""
                       << ",\"planOutput\":\"" << escapeJson(result.planOutput) << "\""
                       << ",\"resultOutput\":\"" << escapeJson(result.resultOutput) << "\""
                       << ",\"planMatched\":" << (result.planMatched ? "true" : "false")
@@ -89,7 +88,7 @@ int main(int argc, char** argv) {
                       << "}\n";
             return 0;
         }
-        std::cout << "{\"error\":\"Unknown test id\"}\n";
+        std::cout << "{\"error\":\"Unknown test name\"}\n";
         return 1;
     }
 
@@ -100,13 +99,13 @@ int main(int argc, char** argv) {
             if (!test.enabled) {
                 continue;
             }
-            const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test.id;
+            const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test.name;
             const QueryTestResult result = runner.runTest(test, outDir);
             if (!first) {
                 std::cout << ",";
             }
             first = false;
-            std::cout << "{\"id\":\"" << escapeJson(result.id) << "\""
+            std::cout << "{\"name\":\"" << escapeJson(result.name) << "\""
                       << ",\"planOutput\":\"" << escapeJson(result.planOutput) << "\""
                       << ",\"resultOutput\":\"" << escapeJson(result.resultOutput) << "\""
                       << ",\"planMatched\":" << (result.planMatched ? "true" : "false")

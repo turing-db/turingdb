@@ -1,6 +1,4 @@
 {
-  "id": "fail-reads/skip-0",
-  "name": "fail-reads/skip-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n: Person { name: \"Luc\" })-[e:KNOWS_WELL { name: \"Whatever\" }]->(m)-[e2]->(c:Person)\nMATCH (a)-->(b)-->(c)\nRETURN n, e, m SKIP 3.5",

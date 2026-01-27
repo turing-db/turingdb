@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/match-7",
-  "name": "success-reads/match-7",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) MATCH (m) WHERE n.duration = m.duration RETURN n, m;",

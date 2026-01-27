@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/match-limit-0",
-  "name": "success-reads/match-limit-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n: Person { name: \"Luc\" })-[e:KNOWS_WELL { name: \"Whatever\" }]->(m)-[e2]->(c:Person)\nMATCH (a)-->(b)-->(c)\nRETURN n, e, m LIMIT 5;",

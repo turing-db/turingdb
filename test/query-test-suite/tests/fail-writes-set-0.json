@@ -1,6 +1,4 @@
 {
-  "id": "fail-writes/set-0",
-  "name": "fail-writes/set-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n:Person) SET n.name = 5",

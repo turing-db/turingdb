@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/type-constraint-2",
-  "name": "success-reads/type-constraint-2",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) WHERE n:Person:SoftwareEngineering RETURN n",

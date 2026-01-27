@@ -1,6 +1,4 @@
 {
-  "id": "success-writes/match-create-1",
-  "name": "success-writes/match-create-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n:Person) CREATE (n)-[e:KNOWS_WELL]->(m:Person) RETURN n;",

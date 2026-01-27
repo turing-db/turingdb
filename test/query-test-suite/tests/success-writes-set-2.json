@@ -1,6 +1,4 @@
 {
-  "id": "success-writes/set-2",
-  "name": "success-writes/set-2",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) SET n.integer = 5, n.name = \"Node\"",

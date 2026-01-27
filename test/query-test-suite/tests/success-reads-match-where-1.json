@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/match-where-1",
-  "name": "success-reads/match-where-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (a)-->(x), (b)-->(x) WHERE a.name = b.name RETURN a",

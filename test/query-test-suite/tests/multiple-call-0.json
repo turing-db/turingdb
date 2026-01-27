@@ -1,6 +1,4 @@
 {
-  "id": "multiple-call-0",
-  "name": "multiple-call-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "CALL db.history() YIELD nodeCount\nCALL db.labels() YIELD label\nRETURN nodeCount, label",

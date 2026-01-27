@@ -1,6 +1,4 @@
 {
-  "id": "success-writes/match-where-create-1",
-  "name": "success-writes/match-where-create-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n:Person)-->(m:Person)\nWHERE n.name = \"Remy\" AND m.name = \"Adam\"\nCREATE (n)-[e:IS_FRIEND]->(m)\nRETURN n;",

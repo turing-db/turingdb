@@ -27,7 +27,7 @@ type TestMeta = {
 };
 
 type TestResult = {
-  id: string;
+  name: string;
   planOutput: string;
   resultOutput: string;
   planMatched: boolean;
@@ -38,6 +38,10 @@ type TestResult = {
 const API_BASE = "/api";
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 820;
+
+function sanitizeTestName(name: string) {
+  return name.trim().replace(/[\\/]/g, "-").replace(/[^a-z0-9._-]+/gi, "-");
+}
 
 function SidebarEdgeTrigger() {
   const { state, toggleSidebar } = useSidebar();
@@ -132,17 +136,17 @@ export default function App() {
     setIsEditingQuery(false);
   }, [selected]);
 
-  const runTest = async (id: string) => {
+  const runTest = async (name: string) => {
     setLoading(true);
     setError(null);
     setResults((prev) => ({ ...prev }));
     try {
-      const res = await fetch(`${API_BASE}/run?test=${encodeURIComponent(id)}`);
+      const res = await fetch(`${API_BASE}/run?test=${encodeURIComponent(name)}`);
       if (!res.ok) {
         throw new Error("Runner API unavailable");
       }
       const data = (await res.json()) as TestResult;
-      setResults((prev) => ({ ...prev, [data.id]: data }));
+      setResults((prev) => ({ ...prev, [data.name]: data }));
     } catch (err) {
       setError("Runner API unavailable. Build and run query_test_suite_cli to wire this up.");
     } finally {
@@ -162,7 +166,7 @@ export default function App() {
       const data = (await res.json()) as TestResult[];
       const next: Record<string, TestResult> = {};
       for (const entry of data) {
-        next[entry.id] = entry;
+        next[entry.name] = entry;
       }
       setResults(next);
     } catch (err) {
@@ -253,6 +257,8 @@ export default function App() {
 
   const updateName = async () => {
     if (!selected) return;
+    const sanitized = sanitizeTestName(nameDraft);
+    if (!sanitized) return;
     setLoading(true);
     setError(null);
     try {
@@ -261,7 +267,7 @@ export default function App() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name: selected.name,
-          newName: nameDraft
+          newName: sanitized
         })
       });
       if (!res.ok) {
@@ -275,18 +281,18 @@ export default function App() {
       setTests((prev) =>
         prev.map((test) =>
           test.name === selected.name
-            ? { ...test, name: nameDraft }
+            ? { ...test, name: sanitized }
             : test
         )
       );
       setSelected((prev) =>
-        prev ? { ...prev, name: nameDraft } : prev
+        prev ? { ...prev, name: sanitized } : prev
       );
       setResults((prev) => {
         const next = { ...prev };
         const existing = next[selected.name];
         if (existing) {
-          next[nameDraft] = { ...existing, id: nameDraft };
+          next[sanitized] = { ...existing, name: sanitized };
           delete next[selected.name];
         }
         return next;
@@ -882,10 +888,10 @@ export default function App() {
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
               <div className="surface w-full max-w-md rounded-3xl p-6">
                 <h3 className="text-lg font-semibold">Update test expectations?</h3>
-                <p className="mt-2 text-sm text-ink/70">
-                  This will overwrite the expected {confirmTarget} in the JSON file for{" "}
-                  <span className="font-semibold text-ink">{selected?.id}</span>.
-                </p>
+              <p className="mt-2 text-sm text-ink/70">
+                This will overwrite the expected {confirmTarget} in the JSON file for{" "}
+                <span className="font-semibold text-ink">{selected?.name}</span>.
+              </p>
                 <div className="mt-6 flex items-center justify-end gap-3">
                   <Button variant="ghost" onClick={() => setConfirmTarget(null)}>
                     Cancel

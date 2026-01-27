@@ -1,6 +1,4 @@
 {
-  "id": "fail-reads/type-constraint-1",
-  "name": "fail-reads/type-constraint-1",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n",

@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/aggregate-3",
-  "name": "success-reads/aggregate-3",
   "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN count(n) * avg(n.duration)",

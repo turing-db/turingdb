@@ -1,6 +1,4 @@
 {
-  "id": "success-writes/create-2",
-  "name": "success-writes/create-2",
   "enabled": true,
   "graph": "simpledb",
   "query": "CREATE (n:Person { newProp: \"This is a new string prop\" })",

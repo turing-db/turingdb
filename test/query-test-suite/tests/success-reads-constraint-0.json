@@ -1,6 +1,4 @@
 {
-  "id": "success-reads/constraint-0",
-  "name": "success-reads/constraint-0",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (b)-->(c), (a { name: c.name })-->(b) RETURN a, b, c;",
