@@ -21,7 +21,7 @@ struct Eval {
 
     template <typename T, typename U>
     void operator()(const T* lhs, const U* rhs) {
-        bioassert(_res && lhs && rhs, "Invalid inputs to Equal");
+        bioassert(_res && lhs && rhs, "Invalid inputs to binary Eval.");
 
         if constexpr (Op == OP_EQUAL) {
             using ResultType = ColumnCombination<Eq, T, U>::ResultColumnType;

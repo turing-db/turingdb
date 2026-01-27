@@ -71,8 +71,8 @@ inline auto optionalPredicate(T&& a, U&& b) -> optional_invoke_result<Pred, T, U
  * @brief Wrapper of overloads of @ref apply functions for different combinations of
  * operands and outputs for executing predicates.
  * @detail The role of this aggregate is to define once the logic for each possible
- * combination of operand and result columns. It is not concerned with the types of its
- * arguments.
+ * combination of operand and result columns. It is not concerned with the internal types
+ * of its arguments.
  */
 template <typename Op, typename T, typename U>
 struct BinaryPredicateExecutor {

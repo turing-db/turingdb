@@ -102,6 +102,7 @@ struct IsTuple<std::tuple<Ts...>> : std::true_type {};
 template <typename T>
 concept TupleExact = IsTuple<T>::value;
 
+// Restriction for Binary operators
 template <ColumnOperator Op>
 struct PairRestrictions;
 
@@ -109,7 +110,7 @@ template <ColumnOperator Op>
     requires (Op == OP_EQUAL) || (Op == OP_NOT_EQUAL)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
-        // Standard equality of property types
+        // Standard equality of property types - except doubles
         OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
         OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,

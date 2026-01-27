@@ -22,9 +22,6 @@ struct is_optional : std::false_type {};
 template <typename U>
 struct is_optional<std::optional<U>> : std::true_type {};
 
-// template <>
-// struct is_optional<PropertyNull> : std::true_type {};
-
 template <typename T>
 inline constexpr bool is_optional_v = is_optional<std::remove_cvref_t<T>>::value;
 
@@ -96,7 +93,10 @@ static constexpr decltype(auto) unwrap(T&& t) {
     }
 }
 
+// Helper to determine the internal type of an operation, e.g. Double + Int = Double
+// Predicates should be specialised cases of @ref ColumnCombination
 template <typename Op, typename InternalT, typename InternalU>
+    requires (!OptionalPredicate<Op, InternalT, InternalU>)
 class InternalCombination {
     // Get non-optional versions of each internal type
     using AbsInternalT = unwrap_optional_t<InternalT>;
@@ -106,18 +106,15 @@ class InternalCombination {
                   "ColumnCombination: Op must be invocable with unwrapped column types");
 
     // Invoke the operator on the non-optional internal types.
-    // If the function is a predicate, we want the return to be a Bool_t, to avoid vector<bool> specialisations
-    using AbsInternalRes =
-        std::conditional<std::predicate<Op, AbsInternalT, AbsInternalU>,
-                         ColumnMask::Bool_t,
-                         std::invoke_result_t<Op, AbsInternalT, AbsInternalU>>;
+    // NOTE: This will never be a predicate (Boolean) result
+    using AbsInternalRes = std::invoke_result_t<Op, AbsInternalT, AbsInternalU>;
 
     // Internal result type is optional wrap of the absolute internal result type if
     // either type is optional, or otherwise is the absolute internal type.
-    using InternalResImpl =
-        std::conditional_t<is_optional_v<InternalT> || is_optional_v<InternalU>,
-                           std::optional<AbsInternalRes>,
-                           AbsInternalRes>;
+    using InternalResImpl = std::conditional_t<
+                               is_optional_v<InternalT> || is_optional_v<InternalU>,
+                               std::optional<AbsInternalRes>,
+                               AbsInternalRes>;
 public:
     using type = InternalResImpl;
 };

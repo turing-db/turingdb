@@ -163,7 +163,7 @@ Column* ExprProgramGenerator::generateUnaryExpr(const UnaryExpr* unExpr) {
 
     const ColumnOperator colOp = unaryOperatorToColumnOperator(optor);
     Column* operandColumn = generateExpr(operand);
-    Column* resCol = allocResultColumn(unExpr);
+    Column* resCol = allocUnaryResultCol(unExpr);
 
     _exprProg->addInstr(colOp, resCol, operandColumn, nullptr);
 
@@ -174,7 +174,7 @@ Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
     Column* lhs = generateExpr(binExpr->getLHS());
     Column* rhs = generateExpr(binExpr->getRHS());
     const ColumnOperator op = binaryOperatorToColumnOperator(binExpr->getOperator());
-    Column* resCol = allocResCol(op, lhs, rhs);
+    Column* resCol = allocBinaryResultCol(op, lhs, rhs);
 
     _exprProg->addInstr(op, resCol, lhs, rhs);
 
@@ -283,7 +283,7 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
         return _gen->memory().alloc<ColumnOptVector<Type::Primitive>>();                 \
     break;
 
-Column* ExprProgramGenerator::allocResultColumn(const Expr* expr) {
+Column* ExprProgramGenerator::allocUnaryResultCol(const Expr* expr) {
     const EvaluatedType exprType = expr->getType();
 
     switch (exprType) {
@@ -355,7 +355,7 @@ struct ResultAllocator {
         break;                                                                           \
     }
 
-Column* ExprProgramGenerator::allocResCol(ColumnOperator op,
+Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
                                           const Column* lhs,
                                           const Column* rhs) {
     Column* result = nullptr;
@@ -385,8 +385,6 @@ Column* ExprProgramGenerator::allocResCol(ColumnOperator op,
         case OP_NOOP:
         case OP_PROJECT:
         case _SIZE:
-            // throw FatalException("Attempted invalid operator result allocation.");
-        // break;
         default:
             throw FatalException("Attempted invalid operator result allocation.");
         break;

@@ -68,6 +68,8 @@ void PredicateProgramGenerator::addLabelConstraint(Column* lblsetCol,
                                              ColumnConst<LabelSetID>>::ResultColumnType;
         auto* resCol = _gen->memory().alloc<ResultType>();
 
+        // Add an instruction for equality between a Node's label set and the current
+        // matching label set
         predProg->addInstr(ColumnOperator::OP_EQUAL, resCol, lblsetCol, constCol);
 
         if (finalLabelMask) {
