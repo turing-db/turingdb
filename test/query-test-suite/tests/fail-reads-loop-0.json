@@ -1,0 +1,11 @@
+{
+  "id": "fail-reads/loop-0",
+  "name": "fail-reads/loop-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a)-->(b)-->(a) RETURN a, b;",
+  "expect": {
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (a)-->(b)-->(a) RETURN a, b;\n       |                   ^^^\n-------* Loop detected. This is not supported yet",
+    "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (a)-->(b)-->(a) RETURN a, b;\n       |                   ^^^\n-------* Loop detected. This is not supported yet"
+  }
+}

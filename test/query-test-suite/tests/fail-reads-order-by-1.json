@@ -1,0 +1,11 @@
+{
+  "id": "fail-reads/order-by-1",
+  "name": "fail-reads/order-by-1",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC\n       |                             ^^^^^\n-------* Property type 'nam' not found",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC\n       |                             ^^^^^\n-------* Property type 'nam' not found"
+  }
+}

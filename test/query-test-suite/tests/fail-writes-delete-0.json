@@ -1,0 +1,11 @@
+{
+  "id": "fail-writes/delete-0",
+  "name": "fail-writes/delete-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person { name: \"Remy\" })\nDELETE n.name",
+  "expect": {
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n:Person { name: \"Remy\" })\n     2 | DELETE n.name\n       |        ^^^^^^\n-------* Expressions in DELETE statements can only be symbols",
+    "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n:Person { name: \"Remy\" })\n     2 | DELETE n.name\n       |        ^^^^^^\n-------* Expressions in DELETE statements can only be symbols"
+  }
+}

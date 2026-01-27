@@ -1,0 +1,11 @@
+{
+  "id": "success-reads/where-1",
+  "name": "success-reads/where-1",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n), (m) WHERE m.isFrench AND NOT (n.isFrench = m.isFrench) RETURN n.name, m.name",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __has predicate__\n        __dep__ _n_._isFrench_ (Bool)\n        __dep__ _m_._isFrench_ (Bool)\n    `\"]\n    3[\"`\n        __SCAN_NODES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    5[\"`\n        __FILTER_NODE__\n        __has predicate__\n        __dep__ _m_._isFrench_ (Bool)\n    `\"]\n    6[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ m\n        __prop__ isFrench\n    `\"]\n    7[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ isFrench\n    `\"]\n    8[\"`\n        __CARTESIAN_PRODUCT__\n    `\"]\n    9[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    10[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ m\n        __prop__ name\n    `\"]\n    11[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->7\n    1-->9\n    2-->1\n    3-->6\n    4-->8\n    5-->4\n    6-->5\n    7-->8\n    8-->2\n    9-->10\n    10-->11",
+    "result": "COLUMNS: n.name, m.name\nROWS: 16\n0: Martina | Remy\n1: Martina | Adam\n2: Martina | Maxime\n3: Martina | Luc\n4: Suhas | Remy\n5: Suhas | Adam\n6: Suhas | Maxime\n7: Suhas | Luc\n8: Cyrus | Remy\n9: Cyrus | Adam\n10: Cyrus | Maxime\n11: Cyrus | Luc\n12: Doruk | Remy\n13: Doruk | Adam\n14: Doruk | Maxime\n15: Doruk | Luc"
+  }
+}

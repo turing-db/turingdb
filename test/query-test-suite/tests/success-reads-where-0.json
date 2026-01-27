@@ -1,0 +1,11 @@
+{
+  "id": "success-reads/where-0",
+  "name": "success-reads/where-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a { name: \"Remy\" })-[e:KNOWS_WELL]-(m { name: \"Adam\" })\nWHERE a:Person AND m:Person AND e.duration > 10 \nRETURN a;",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: a\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __label__: Person\n        __has predicate__\n        __dep__ _a_._name_ (String)\n    `\"]\n    3[\"`\n        __GET_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: e\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n        __edge_type__: KNOWS_WELL\n        __has predicate__\n        __dep__ _e_._duration_ (Integer)\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n        __label__: Person\n        __has predicate__\n        __dep__ _m_._name_ (String)\n    `\"]\n    9[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ a\n        __prop__ name\n    `\"]\n    10[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ m\n        __prop__ name\n    `\"]\n    11[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ e\n        __prop__ duration\n    `\"]\n    12[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->9\n    1-->3\n    2-->1\n    3-->11\n    4-->6\n    5-->4\n    6-->10\n    7-->12\n    8-->7\n    9-->2\n    10-->8\n    11-->5",
+    "result": "COLUMNS: a\nROWS: 2\n0: 0\n1: 0"
+  }
+}

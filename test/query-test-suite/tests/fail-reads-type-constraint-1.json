@@ -1,0 +1,11 @@
+{
+  "id": "fail-reads/type-constraint-1",
+  "name": "fail-reads/type-constraint-1",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n",
+  "expect": {
+    "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n\n       |             ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Not implemented: EdgeType | EdgeType | ...",
+    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n\n       |             ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Not implemented: EdgeType | EdgeType | ..."
+  }
+}

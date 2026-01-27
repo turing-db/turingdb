@@ -1,0 +1,11 @@
+{
+  "id": "fail-reads/match-1",
+  "name": "fail-reads/match-1",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) MATCH (m) WHERE n.duration = a.duration RETURN n, m;",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) MATCH (m) WHERE n.duration = a.duration RETURN n, m;\n       |                                        ^^^^^^^^^^\n-------* Variable 'a' not found",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) MATCH (m) WHERE n.duration = a.duration RETURN n, m;\n       |                                        ^^^^^^^^^^\n-------* Variable 'a' not found"
+  }
+}

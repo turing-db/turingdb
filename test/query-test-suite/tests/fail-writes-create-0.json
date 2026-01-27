@@ -1,0 +1,11 @@
+{
+  "id": "fail-writes/create-0",
+  "name": "fail-writes/create-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (n) RETURN n;",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n) RETURN n;\n       |        ^^^\n-------* Node pattern must have at least one label",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n) RETURN n;\n       |        ^^^\n-------* Node pattern must have at least one label"
+  }
+}

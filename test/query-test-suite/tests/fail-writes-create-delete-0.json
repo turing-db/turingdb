@@ -1,0 +1,11 @@
+{
+  "id": "fail-writes/create-delete-0",
+  "name": "fail-writes/create-delete-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (n:Person) DELETE n",
+  "expect": {
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person) DELETE n\n       |                          ^\n-------* Cannot delete pending node",
+    "result": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person) DELETE n\n       |                          ^\n-------* Cannot delete pending node"
+  }
+}

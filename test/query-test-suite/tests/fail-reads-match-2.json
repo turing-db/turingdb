@@ -1,0 +1,11 @@
+{
+  "id": "fail-reads/match-2",
+  "name": "fail-reads/match-2",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person)-[e]->(m:Person)-[e]->(m)\nRETURN n;",
+  "expect": {
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n:Person)-[e]->(m:Person)-[e]->(m)\n       |                                 ^^^^^^\n-------* Re-using the same edge variable, this is not supported",
+    "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n:Person)-[e]->(m:Person)-[e]->(m)\n       |                                 ^^^^^^\n-------* Re-using the same edge variable, this is not supported"
+  }
+}

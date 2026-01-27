@@ -1,0 +1,11 @@
+{
+  "id": "success-reads/return-prop-1",
+  "name": "success-reads/return-prop-1",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN n.duration + 5",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ duration\n    `\"]\n    4[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4",
+    "result": "PLAN ERROR\nUnexpected exception: _Map_base::at"
+  }
+}

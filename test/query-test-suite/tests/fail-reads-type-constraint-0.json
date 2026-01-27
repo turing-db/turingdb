@@ -1,0 +1,11 @@
+{
+  "id": "fail-reads/type-constraint-0",
+  "name": "fail-reads/type-constraint-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n)-[e]-(m) WHERE e:KNOWS_WELL|INTERESTED_IN RETURN n",
+  "expect": {
+    "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n)-[e]-(m) WHERE e:KNOWS_WELL|INTERESTED_IN RETURN n\n       |                                     ^\n-------* syntax error, unexpected PIPE",
+    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n)-[e]-(m) WHERE e:KNOWS_WELL|INTERESTED_IN RETURN n\n       |                                     ^\n-------* syntax error, unexpected PIPE"
+  }
+}

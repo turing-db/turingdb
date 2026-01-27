@@ -1,0 +1,11 @@
+{
+  "id": "success-reads/order-by-skip-limit-0",
+  "name": "success-reads/order-by-skip-limit-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN n ORDER BY n.name DESC, n.duration ASC SKIP 0 LIMIT 5",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __ORDER_BY__\n        __item__: DESC\n        __item__: ASC\n    `\"]\n    4[\"`\n        __SKIP__\n    `\"]\n    5[\"`\n        __LIMIT__\n    `\"]\n    6[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4\n    4-->5\n    5-->6",
+    "result": "PLAN ERROR\nPipelineGenerator does not support PlanGraphNode: ORDER_BY"
+  }
+}

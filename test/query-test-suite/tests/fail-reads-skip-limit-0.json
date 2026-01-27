@@ -1,0 +1,11 @@
+{
+  "id": "fail-reads/skip-limit-0",
+  "name": "fail-reads/skip-limit-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n: Person { name: \"Luc\" })-[e:KNOWS_WELL { name: \"Whatever\" }]->(m)-[e2]->(c:Person)\nMATCH (a)-->(b)-->(c)\nRETURN n, e, m SKIP 2.5 LIMIT 3;",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     2 | MATCH (a)-->(b)-->(c)\n     3 | RETURN n, e, m SKIP 2.5 LIMIT 3;\n       |                ^^^^^^^^\n-------* SKIP expression must be an integer",
+    "result": "ANALYZE ERROR\n-------* Query error\n     2 | MATCH (a)-->(b)-->(c)\n     3 | RETURN n, e, m SKIP 2.5 LIMIT 3;\n       |                ^^^^^^^^\n-------* SKIP expression must be an integer"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "fail-writes/match-create-1",
+  "name": "fail-writes/match-create-1",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) CREATE (n)-[e]->(m:Person) RETURN n;",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) CREATE (n)-[e]->(m:Person) RETURN n;\n       |                            ^^^^^^\n-------* Edge pattern must have at least one edge type",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) CREATE (n)-[e]->(m:Person) RETURN n;\n       |                            ^^^^^^\n-------* Edge pattern must have at least one edge type"
+  }
+}

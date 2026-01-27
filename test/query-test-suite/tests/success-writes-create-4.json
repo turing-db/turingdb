@@ -1,0 +1,11 @@
+{
+  "id": "success-writes/create-4",
+  "name": "success-writes/create-4",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (n:Person), (n)-[e:NewEdge]->(m:Person)",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __WRITE__\n        __node__ (0:Person)\n        __node__ (1:Person)\n        __edge__ (0)-[0:NewEdge]->(1)\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "result": "EXEC ERROR\nWriteProcessor: Cannot perform writes outside of a write transaction"
+  }
+}

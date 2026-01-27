@@ -1,0 +1,11 @@
+{
+  "id": "fail-reads/order-by-0",
+  "name": "fail-reads/order-by-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) ORDER BY n.name RETURN n",
+  "expect": {
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) ORDER BY n.name RETURN n\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* MATCH ... ORDER BY ... is not supported yet. Please use RETURN ... ORDER BY ... instead",
+    "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) ORDER BY n.name RETURN n\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* MATCH ... ORDER BY ... is not supported yet. Please use RETURN ... ORDER BY ... instead"
+  }
+}

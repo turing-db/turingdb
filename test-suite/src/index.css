@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  font-family: "Space Grotesk", "Poppins", sans-serif;
+  background: radial-gradient(1200px 600px at 10% 10%, rgba(255, 107, 61, 0.15), transparent 60%),
+    radial-gradient(900px 500px at 90% 20%, rgba(42, 92, 77, 0.18), transparent 55%),
+    #f4f0e8;
+  color: #14131f;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.surface {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(20, 19, 31, 0.08);
+  box-shadow: 0 24px 80px rgba(20, 19, 31, 0.12);
+}

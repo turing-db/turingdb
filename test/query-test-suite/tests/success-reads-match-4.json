@@ -1,0 +1,11 @@
+{
+  "id": "success-reads/match-4",
+  "name": "success-reads/match-4",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n: Person { name: \"Luc\" })-[e:KNOWS_WELL { name: \"Whatever\" }]->(m)-[e2]->(c:Person)\nRETURN n, e, m;",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __label__: Person\n        __has predicate__\n        __dep__ _n_._name_ (String)\n    `\"]\n    3[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: e\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n        __edge_type__: KNOWS_WELL\n        __has predicate__\n        __dep__ _e_._name_ (String)\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n    `\"]\n    9[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    10[\"`\n        __VAR__\n        __name__: e2\n    `\"]\n    11[\"`\n        __FILTER_EDGE__\n    `\"]\n    12[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    13[\"`\n        __VAR__\n        __name__: c\n    `\"]\n    14[\"`\n        __FILTER_NODE__\n        __label__: Person\n    `\"]\n    15[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    16[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ e\n        __prop__ name\n    `\"]\n    17[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->15\n    1-->3\n    2-->1\n    3-->16\n    4-->6\n    5-->4\n    6-->8\n    7-->9\n    8-->7\n    9-->11\n    10-->12\n    11-->10\n    12-->14\n    13-->17\n    14-->13\n    15-->2\n    16-->5",
+    "result": "COLUMNS: n, e, m\nROWS: 0"
+  }
+}

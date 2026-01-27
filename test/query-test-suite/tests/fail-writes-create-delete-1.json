@@ -1,0 +1,11 @@
+{
+  "id": "fail-writes/create-delete-1",
+  "name": "fail-writes/create-delete-1",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e",
+  "expect": {
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e\n       |                                                  ^\n-------* Cannot delete pending edge",
+    "result": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e\n       |                                                  ^\n-------* Cannot delete pending edge"
+  }
+}

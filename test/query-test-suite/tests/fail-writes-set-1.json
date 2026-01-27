@@ -1,0 +1,11 @@
+{
+  "id": "fail-writes/set-1",
+  "name": "fail-writes/set-1",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) SET n:Node",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) SET n:Node\n       |               ^^^^^^\n-------* SET cannot update entity types yet",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) SET n:Node\n       |               ^^^^^^\n-------* SET cannot update entity types yet"
+  }
+}

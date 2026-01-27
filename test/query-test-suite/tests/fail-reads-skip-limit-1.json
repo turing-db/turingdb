@@ -1,0 +1,11 @@
+{
+  "id": "fail-reads/skip-limit-1",
+  "name": "fail-reads/skip-limit-1",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n: Person { name: \"Luc\" })-[e:KNOWS_WELL { name: \"Whatever\" }]->(m)-[e2]->(c:Person)\nMATCH (a)-->(b)-->(c)\nRETURN n, e, m LIMIT 3 SKIP 2;",
+  "expect": {
+    "plan": "PARSE ERROR\n-------* Cypher parser\n     2 | MATCH (a)-->(b)-->(c)\n     3 | RETURN n, e, m LIMIT 3 SKIP 2;\n       |                        ^^^^\n-------* syntax error, unexpected SKIP, expecting PROG_END",
+    "result": "PARSE ERROR\n-------* Cypher parser\n     2 | MATCH (a)-->(b)-->(c)\n     3 | RETURN n, e, m LIMIT 3 SKIP 2;\n       |                        ^^^^\n-------* syntax error, unexpected SKIP, expecting PROG_END"
+  }
+}

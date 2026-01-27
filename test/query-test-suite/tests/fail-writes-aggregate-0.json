@@ -1,0 +1,11 @@
+{
+  "id": "fail-writes/aggregate-0",
+  "name": "fail-writes/aggregate-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) CREATE (m:Person { c: count(n) }) RETURN n",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) CREATE (m:Person { c: count(n) }) RETURN n\n       |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Invalid use of aggregate expression in this context",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) CREATE (m:Person { c: count(n) }) RETURN n\n       |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Invalid use of aggregate expression in this context"
+  }
+}

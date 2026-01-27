@@ -1,0 +1,11 @@
+{
+  "id": "success-reads/type-constraint-1",
+  "name": "success-reads/type-constraint-1",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n)-[e]-(m) WHERE e:KNOWS_WELL RETURN n",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __GET_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: e\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n        __edge_type__: KNOWS_WELL\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n    `\"]\n    9[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->8\n    7-->9\n    8-->7",
+    "result": "COLUMNS: n\nROWS: 6\n0: 0\n1: 0\n2: 0\n3: 1\n4: 1\n5: 6"
+  }
+}

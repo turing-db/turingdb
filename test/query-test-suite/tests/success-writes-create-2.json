@@ -1,0 +1,11 @@
+{
+  "id": "success-writes/create-2",
+  "name": "success-writes/create-2",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (n:Person { newProp: \"This is a new string prop\" })",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __WRITE__\n        __node__ (0:Person {newProp (String): *expr* })\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "result": "EXEC ERROR\nWriteProcessor: Cannot perform writes outside of a write transaction"
+  }
+}

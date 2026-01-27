@@ -1,0 +1,11 @@
+{
+  "id": "success-reads/aggregate-3",
+  "name": "success-reads/aggregate-3",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN count(n) * avg(n.duration)",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: count\n        __aggregate_func__: avg\n    `\"]\n    4[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ duration\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->4\n    2-->1\n    3-->5\n    4-->3",
+    "result": "PLAN ERROR\nEvaluation of multiple aggregate functions is not supported yet"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "fail-writes/set-0",
+  "name": "fail-writes/set-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) SET n.name = 5",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) SET n.name = 5\n       |                      ^^^^^^^^^^\n-------* Cannot evaluate property: types 'String' and 'Integer' are incompatible",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) SET n.name = 5\n       |                      ^^^^^^^^^^\n-------* Cannot evaluate property: types 'String' and 'Integer' are incompatible"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "success-reads/match-9",
+  "name": "success-reads/match-9",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (b)-->(c), (a)-->(b)-->(c) RETURN a, b, c;",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: b\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: v0\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: c\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n    `\"]\n    9[\"`\n        __SCAN_NODES__\n    `\"]\n    10[\"`\n        __VAR__\n        __name__: a\n    `\"]\n    11[\"`\n        __FILTER_NODE__\n    `\"]\n    12[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    13[\"`\n        __VAR__\n        __name__: v1\n    `\"]\n    14[\"`\n        __FILTER_EDGE__\n    `\"]\n    15[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    16[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    17[\"`\n        __VAR__\n        __name__: v2\n    `\"]\n    18[\"`\n        __FILTER_EDGE__\n    `\"]\n    19[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    20[\"`\n        __JOIN__\n    `\"]\n    21[\"`\n        __JOIN__\n    `\"]\n    22[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->20\n    1-->3\n    1-->16\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->21\n    7-->22\n    8-->7\n    9-->11\n    10-->12\n    11-->10\n    12-->14\n    13-->15\n    14-->13\n    15-->20\n    16-->18\n    17-->19\n    18-->17\n    19-->21\n    20-->2\n    21-->8",
+    "result": "PLAN ERROR\nCommon Successor Joins With Common Ancestor Unsupported"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "fail-reads/match-0",
+  "name": "fail-reads/match-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n: Person { name: \"Luc\" })-[e:KNOWS_WELL { name: \"Whatever\" }]->(m)-[e2]->(c:Person)\nMATCH (a)-->(b)-->(e)\nRETURN n, e, m;",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n       | Variable 'e' is already declared with type 'EdgePattern'",
+    "result": "ANALYZE ERROR\n-------* Query error\n       | Variable 'e' is already declared with type 'EdgePattern'"
+  }
+}

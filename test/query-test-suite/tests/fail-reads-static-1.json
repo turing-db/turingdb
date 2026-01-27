@@ -1,0 +1,11 @@
+{
+  "id": "fail-reads/static-1",
+  "name": "fail-reads/static-1",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN n LIMIT n.duration",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN n LIMIT n.duration\n       |                    ^^^^^^^^^^^^^^^^\n-------* LIMIT expression must be a value that can be evaluated at compile time",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN n LIMIT n.duration\n       |                    ^^^^^^^^^^^^^^^^\n-------* LIMIT expression must be a value that can be evaluated at compile time"
+  }
+}
