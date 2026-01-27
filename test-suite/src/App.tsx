@@ -1,6 +1,15 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
+import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
@@ -102,6 +111,8 @@ export default function App() {
   const [showFailing, setShowFailing] = React.useState(true);
   const [showDisabled, setShowDisabled] = React.useState(true);
   const [showNotRun, setShowNotRun] = React.useState(true);
+  const [newTestOpen, setNewTestOpen] = React.useState(false);
+  const [newTestName, setNewTestName] = React.useState("");
 
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
@@ -437,7 +448,7 @@ export default function App() {
   };
 
   const createTest = async () => {
-    const name = window.prompt("New test name?");
+    const name = sanitizeTestName(newTestName);
     if (!name) return;
     setLoading(true);
     setError(null);
@@ -457,6 +468,8 @@ export default function App() {
       }
       const payload = (await res.json()) as { name?: string };
       await loadTests(payload.name);
+      setNewTestOpen(false);
+      setNewTestName("");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create test.";
       setError(message);
@@ -680,9 +693,38 @@ export default function App() {
               <Button variant="ghost" onClick={runAll} disabled={loading}>
                 Run All
               </Button>
-              <Button variant="ghost" onClick={createTest} disabled={loading}>
-                New Test
-              </Button>
+              <Dialog open={newTestOpen} onOpenChange={setNewTestOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" disabled={loading}>
+                    New Test
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="surface border-white/10">
+                  <DialogHeader>
+                    <DialogTitle>Create new test</DialogTitle>
+                    <DialogDescription>
+                      Provide a unique test name. It will be used as the filename.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-2">
+                    <label className="text-xs uppercase tracking-[0.2em] text-ink/60">Test name</label>
+                    <input
+                      value={newTestName}
+                      onChange={(event) => setNewTestName(event.target.value)}
+                      placeholder="e.g. reads-match-basic"
+                      className="w-full rounded-xl border border-white/10 bg-paper px-3 py-2 text-sm text-ink focus:border-accent/60 focus:outline-none"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button variant="ghost" onClick={() => setNewTestOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button variant="accent" onClick={createTest} disabled={loading || !newTestName.trim()}>
+                      Create
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
               <Button variant="accent" onClick={() => selected && runTest(selected.name)} disabled={!selected || loading}>
                 Run Selected
               </Button>
