@@ -50,7 +50,7 @@ public:
         return _varDeps.empty() && _funcDeps.empty();
     }
 
-    void genExprDependencies(const std::unordered_map<const VarDecl*, PlanGraphNode*>& variables, Expr* expr) {
+    void genExprDependencies(PlanGraphVariables& variables, Expr* expr) {
         switch (expr->getKind()) {
             case Expr::Kind::BINARY: {
                 const BinaryExpr* binary = static_cast<BinaryExpr*>(expr);
@@ -71,10 +71,10 @@ public:
 
             case Expr::Kind::ENTITY_TYPES: {
                 const EntityTypeExpr* entityType = static_cast<EntityTypeExpr*>(expr);
-                auto it = variables.find(entityType->getEntityVarDecl());
-                bioassert(it != variables.end(), "VarDecl not found");
+                PlanGraphNode* rawVar = variables.getProducer(entityType->getEntityVarDecl());
+                bioassert(rawVar, "VarDecl not found");
 
-                auto* var = dynamic_cast<VarNode*>(it->second);
+                auto* var = dynamic_cast<VarNode*>(rawVar);
                 if (!var) {
                     throw PlannerException("Can only reference entity types from matched variables");
                 }
@@ -84,10 +84,10 @@ public:
 
             case Expr::Kind::PROPERTY: {
                 const PropertyExpr* prop = static_cast<PropertyExpr*>(expr);
-                auto it = variables.find(prop->getEntityVarDecl());
-                bioassert(it != variables.end(), "VarDecl not found");
+                PlanGraphNode* rawVar = variables.getProducer(prop->getEntityVarDecl());
+                bioassert(rawVar, "VarDecl not found");
 
-                auto* var = dynamic_cast<VarNode*>(it->second);
+                auto* var = dynamic_cast<VarNode*>(rawVar);
                 if (!var) {
                     throw PlannerException("Can only reference properties from matched variables");
                 }
@@ -108,10 +108,10 @@ public:
 
             case Expr::Kind::SYMBOL: {
                 const SymbolExpr* symbol = static_cast<SymbolExpr*>(expr);
-                auto it = variables.find(symbol->getDecl());
-                bioassert(it != variables.end(), "VarDecl not found");
+                PlanGraphNode* rawVar = variables.getProducer(symbol->getDecl());
+                bioassert(rawVar, "VarDecl not found");
 
-                _varDeps.emplace_back(it->second, expr);
+                _varDeps.emplace_back(rawVar, expr);
             } break;
 
             case Expr::Kind::PATH:

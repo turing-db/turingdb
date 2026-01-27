@@ -69,13 +69,10 @@ public:
 
     GetPropertyCache& getGetPropertyCache() { return _getPropertyCache; }
     GetEntityTypeCache& getGetEntityTypeCache() { return _getEntityTypeCache; }
-    std::unordered_map<const VarDecl*, PlanGraphNode*>& getDeclProducers() { return _declProducers; }
-    const std::unordered_map<const VarDecl*, PlanGraphNode*>& getDeclProducers() const { return _declProducers; }
 
 private:
     friend class PlanGraphDebug;
 
-    std::unordered_map<const VarDecl*, PlanGraphNode*> _declProducers;
     std::vector<std::unique_ptr<PlanGraphNode>> _nodes;
     std::vector<std::unique_ptr<Predicate>> _predicates;
     GetPropertyCache _getPropertyCache;

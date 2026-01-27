@@ -259,7 +259,7 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
 
     for (Expr* item : proj->items()) {
         ExprDependencies deps;
-        deps.genExprDependencies(_tree.getDeclProducers(), item);
+        deps.genExprDependencies(*_variables, item);
 
         for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
             if (auto* expr = dynamic_cast<PropertyExpr*>(dep._expr)) {

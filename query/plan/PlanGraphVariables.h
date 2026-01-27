@@ -18,6 +18,7 @@ public:
 
     using VarNodeMap = std::unordered_map<const VarDecl*, VarNode*>;
     using FilterNodeMap = std::unordered_map<const VarNode*, FilterNode*>;
+    using ProducerMap = std::unordered_map<const VarDecl*, PlanGraphNode*>;
 
     PlanGraphVariables(const PlanGraphVariables&) = delete;
     PlanGraphVariables(PlanGraphVariables&&) = delete;
@@ -34,17 +35,24 @@ public:
         return _varNodes;
     };
 
+    void setProducer(const VarDecl* varDecl, PlanGraphNode* producer);
+    PlanGraphNode* getProducer(const VarDecl* varDecl) const;
+
 private:
     PlanGraph* _tree {nullptr};
 
     // List of all var nodes. Used for predictable order iteration
     std::vector<VarNode*> _varNodes;
 
-    // Map of VerDecl -> VarNode
+    // Map of VarDecl -> VarNode
     VarNodeMap _varNodesMap;
 
     // Map of VarNode -> Filter
     FilterNodeMap _nodeFiltersMap;
+
+    // Map of VarDecl -> PlanGraphNode
+    // Used to track the producers of a VarDecl, even if they're not produced by a VarNode
+    ProducerMap _producers;
 };
 
 }

@@ -121,10 +121,8 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
 
     if (yield) {
         YieldItems* yieldItems = yield->getItems();
-        auto& producers = _tree->getDeclProducers();
-
         for (SymbolExpr* item : yieldItems->getItems()) {
-            producers.emplace(item->getDecl(), procNode);
+            _variables->setProducer(item->getDecl(), procNode);
         }
     }
 
@@ -186,8 +184,7 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
         // Scan nodes
         ScanNodesNode* scan = _tree->create<ScanNodesNode>();
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
-        auto& producers = _tree->getDeclProducers();
-        producers.emplace(decl, var);
+        _variables->setProducer(decl, var);
 
         scan->connectOut(filter);
     }
@@ -215,7 +212,7 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
         }
 
         Predicate* predicate = _tree->createPredicate(constraint._expr);
-        predicate->generate(_tree->getDeclProducers());
+        predicate->generate(*_variables);
     }
 
     return var;
@@ -253,8 +250,7 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
     auto [var, filter] = _variables->getVarNodeAndFilter(decl);
     if (!var) {
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
-        auto& producers = _tree->getDeclProducers();
-        producers.emplace(decl, var);
+        _variables->setProducer(decl, var);
     } else {
         throwError("Re-using the same edge variable, this is not supported", edge);
     }
@@ -280,7 +276,7 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
         }
 
         Predicate* predicate = _tree->createPredicate(constraint._expr);
-        predicate->generate(_tree->getDeclProducers());
+        predicate->generate(*_variables);
     }
 
     return var;
@@ -301,8 +297,7 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
     auto [var, filter] = _variables->getVarNodeAndFilter(decl);
     if (!var) {
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
-        auto& producers = _tree->getDeclProducers();
-        producers.emplace(decl, var);
+        _variables->setProducer(decl, var);
 
         currentNode->connectOut(filter);
     } else {
@@ -337,7 +332,7 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
         }
 
         Predicate* predicate = _tree->createPredicate(constraint._expr);
-        predicate->generate(_tree->getDeclProducers());
+        predicate->generate(*_variables);
     }
 
     return var;
@@ -419,7 +414,7 @@ void ReadStmtGenerator::unwrapWhereExpr(Expr* expr) {
     // Unwraped the first list of AND expressions,
     // Treating other cases as a whole Where predicate
     Predicate* predicate = _tree->createPredicate(expr);
-    predicate->generate(_tree->getDeclProducers());
+    predicate->generate(*_variables);
 }
 
 void ReadStmtGenerator::placeJoinsOnVars() {
@@ -506,8 +501,6 @@ void ReadStmtGenerator::placePredicateJoins() {
 }
 
 void ReadStmtGenerator::placeJoinsOnProcedures() {
-    const auto& producers = _tree->getDeclProducers();
-    
     for (const auto& node : _tree->nodes()) {
         if (node->getOpcode() == PlanGraphOpcode::PROCEDURE_EVAL) {
             auto* n = static_cast<ProcedureEvalNode*>(node.get());
@@ -515,7 +508,7 @@ void ReadStmtGenerator::placeJoinsOnProcedures() {
 
             for (Expr* arg : *args) {
                 ExprDependencies deps;
-                deps.genExprDependencies(producers, arg);
+                deps.genExprDependencies(*_variables, arg);
 
                 for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
                     generateDependency(dep._var, dep._expr);

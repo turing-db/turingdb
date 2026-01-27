@@ -32,7 +32,7 @@ public:
         return _dependencies;
     }
 
-    void generate(const std::unordered_map<const VarDecl*, PlanGraphNode*>& variables) {
+    void generate(PlanGraphVariables& variables) {
         _dependencies.genExprDependencies(variables, _expr);
     }
 

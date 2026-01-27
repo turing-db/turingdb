@@ -64,3 +64,16 @@ std::tuple<VarNode*, FilterNode*> PlanGraphVariables::createVarNodeAndFilter(con
 
     return {varNode, filterNode};
 }
+
+void PlanGraphVariables::setProducer(const VarDecl* varDecl, PlanGraphNode* producer) {
+    _producers[varDecl] = producer;
+}
+
+PlanGraphNode* PlanGraphVariables::getProducer(const VarDecl* varDecl) const {
+    const auto it = _producers.find(varDecl);
+    if (it == _producers.end()) {
+        return nullptr;
+    }
+
+    return it->second;
+}
