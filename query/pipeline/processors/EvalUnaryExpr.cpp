@@ -10,7 +10,7 @@ using namespace db;
 namespace {
 
 template <ColumnOperator Op>
-struct BooleanEval {
+struct Eval {
     Column* _res {nullptr};
 
     template <typename T>
@@ -23,7 +23,7 @@ struct BooleanEval {
             bioassert(result, "Invalid to cast for result column for Not.");
             exec<Not>(result, arg);
         } else {
-            COMPILE_ERROR("Invalid operator for Boolean");
+            COMPILE_ERROR("Invalid operator for Unary evaluation.");
         }
     }
 };
@@ -31,21 +31,14 @@ struct BooleanEval {
 }
 
 template <ColumnOperator Op>
-void EvalUnaryExpr::opBoolean(Column* res, const Column* operand) {
-    using Allowed = GenerateKindList<
-        std::tuple<std::optional<CustomBool>>
-        // Optional types
-        /*OptionalKinds<CustomBool>::Types,
-
-        // Non-optional types
-        // TODO: Need add ColumnMask::Bool_t here for ColumnMasks?
-        std::tuple<PropertyNull>*/>;
+void EvalUnaryExpr::eval(Column* res, const Column* operand) {
+    using Allowed = GenerateKindList<std::tuple<std::optional<CustomBool>>>;
 
     using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
                                         ContainerKind::code<ColumnConst>()>;
 
-    BooleanEval<Op> fn {res};
-    ColumnSingleDispatcher<Allowed, ::BooleanEval<Op>, Excluded>::dispatch(operand, fn);
+    Eval<Op> fn {res};
+    ColumnSingleDispatcher<Allowed, Eval<Op>, Excluded>::dispatch(operand, fn);
 }
 
-template void EvalUnaryExpr::opBoolean<OP_NOT>(Column* res, const Column* operand);
+template void EvalUnaryExpr::eval<OP_NOT>(Column* res, const Column* operand);

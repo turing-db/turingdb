@@ -38,7 +38,7 @@ void ExprProgram::evalInstr(const Instruction& instr) {
         break;
 
         case ColumnOperatorType::OPTYPE_NOOP:
-        break;
+            break;
     }
 }
 
@@ -57,57 +57,63 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
     }
 
     switch (op) {
-        case OP_EQUAL: {
+        case OP_EQUAL:
             EvalBinaryExpr::eval<OP_EQUAL>(res, lhs, rhs);
-        } break;
-        case OP_NOT_EQUAL: {
+        break;
+
+        case OP_NOT_EQUAL:
             EvalBinaryExpr::eval<OP_NOT_EQUAL>(res, lhs, rhs);
-        } break;
-        case OP_GREATER_THAN: {
+        break;
+
+        case OP_GREATER_THAN:
             EvalBinaryExpr::eval<OP_GREATER_THAN>(res, lhs, rhs);
-        } break;
-        case OP_LESS_THAN: {
+        break;
+
+        case OP_LESS_THAN:
             EvalBinaryExpr::eval<OP_LESS_THAN>(res, lhs, rhs);
-        } break;
-        case OP_GREATER_THAN_OR_EQUAL: {
+        break;
+
+        case OP_GREATER_THAN_OR_EQUAL:
             EvalBinaryExpr::eval<OP_GREATER_THAN_OR_EQUAL>(res, lhs, rhs);
-        } break;
-        case OP_LESS_THAN_OR_EQUAL: {
+        break;
+
+        case OP_LESS_THAN_OR_EQUAL:
             EvalBinaryExpr::eval<OP_LESS_THAN_OR_EQUAL>(res, lhs, rhs);
-        } break;
+        break;
 
-        case OP_AND: {
+        case OP_AND:
             EvalBinaryExpr::eval<OP_AND>(res, lhs, rhs);
-        } break;
-        case OP_OR: {
+        break;
+
+        case OP_OR:
             EvalBinaryExpr::eval<OP_OR>(res, lhs, rhs);
-        } break;
-        case OP_NOT: {
-            throw FatalException("NOT binary operator is not supported.");
-        } break;
+        break;
 
-        case OP_MINUS: {
+        case OP_MINUS:
             EvalBinaryExpr::eval<OP_MINUS>(res, lhs, rhs);
-        } break;
-        case OP_PLUS: {
+        break;
+
+        case OP_PLUS:
             EvalBinaryExpr::eval<OP_PLUS>(res, lhs, rhs);
-        } break;
+        break;
 
-        case OP_PROJECT: {
-            throw FatalException("Project operator is not supported.");
-        } break;
-        case OP_IN: {
-            throw FatalException("In operator is not supported.");
-        } break;
-
-        case OP_NOOP: {
-            throw FatalException("NOOP operator is not supported.");
-        } break;
-
-        case _SIZE: {
+        case OP_NOT:
             throw FatalException(
-                "Attempted to evaluate invalid ColumnOperator.");
-        } break;
+                fmt::format("Attempted to evaluate {} as binary operator.",
+                            ColumnOperatorDescription::value(op)));
+        break;
+
+        case OP_PROJECT:
+        case OP_IN:
+            throw FatalException(
+                fmt::format("Unsupported binary operator: {}.",
+                            ColumnOperatorDescription::value(op)));
+        break;
+
+        case OP_NOOP:
+        case _SIZE:
+            throw FatalException("Attempted to evaluate invalid ColumnOperator.");
+        break;
     }
 }
 
@@ -117,56 +123,35 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
     Column* res = instr._res;
 
     switch (op) {
-        case OP_EQUAL: {
-            throw FatalException("Equal operator is not supported.");
-        } break;
-        case OP_NOT_EQUAL: {
-            throw FatalException("NotEqual operator is not supported.");
-        } break;
-        case OP_GREATER_THAN: {
-            throw FatalException("GreaterThan operator is not supported.");
-        } break;
-        case OP_LESS_THAN: {
-            throw FatalException("LessThan operator is not supported.");
-        } break;
-        case OP_GREATER_THAN_OR_EQUAL: {
-            throw FatalException("GreaterThanOrEqual operator is not supported.");
-        } break;
-        case OP_LESS_THAN_OR_EQUAL: {
-            throw FatalException("LessThanOrEqual operator is not supported.");
-        } break;
+        case OP_NOT:
+            EvalUnaryExpr::eval<OP_NOT>(res, input);
+        break;
 
-        case OP_AND: {
-            throw FatalException("And operator is not supported.");
-        } break;
-        case OP_OR: {
-            throw FatalException("Or operator is not supported.");
-        } break;
-        case OP_NOT: {
-            EvalUnaryExpr::opBoolean<OP_NOT>(res, input);
-        } break;
-
-        case OP_MINUS: {
+        case OP_MINUS:
             throw FatalException("Minus operator is not supported.");
-        } break;
-        case OP_PLUS: {
+        break;
+
+        case OP_PLUS:
             throw FatalException("Plus operator is not supported.");
-        } break;
+        break;
 
-        case OP_PROJECT: {
-            throw FatalException("Project operator is not supported.");
-        } break;
-        case OP_IN: {
-            throw FatalException("In operator is not supported.");
-        } break;
+        case OP_EQUAL:
+        case OP_NOT_EQUAL:
+        case OP_GREATER_THAN:
+        case OP_LESS_THAN:
+        case OP_GREATER_THAN_OR_EQUAL:
+        case OP_LESS_THAN_OR_EQUAL:
+        case OP_AND:
+        case OP_OR:
+        case OP_PROJECT:
+        case OP_IN:
+            throw FatalException(fmt::format("Attempted to evalute {} as unary operator.",
+                                             ColumnOperatorDescription::value(op)));
+        break;
 
-        case OP_NOOP: {
-            throw FatalException("NOOP operator is not supported.");
-        } break;
-
-        case _SIZE: {
-            throw FatalException(
-                "Attempted to evaluate invalid ColumnOperator.");
-        } break;
+        case OP_NOOP:
+        case _SIZE:
+            throw FatalException("Attempted to evaluate invalid ColumnOperator.");
+        break;
     }
 }

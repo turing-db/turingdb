@@ -9,7 +9,7 @@ class Column;
 class EvalUnaryExpr {
 public:
     template <ColumnOperator Op>
-    static void opBoolean(Column* res, const Column* operand);
+    static void eval(Column* res, const Column* operand);
 };
 
 }
