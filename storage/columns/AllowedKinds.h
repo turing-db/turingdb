@@ -215,4 +215,20 @@ struct PairRestrictions<Op> {
     using Excluded = ExcludedContainers<>;
 };
 
+// Restriction for Unary operators
+template <ColumnOperator Op>
+struct TypeRestrictions;
+
+template <>
+struct TypeRestrictions<OP_NOT> {
+    using Allowed = GenerateKindList<
+        std::tuple<std::optional<CustomBool>>
+    >;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnConst>()
+    >;
+};
+
 }

@@ -1,5 +1,6 @@
 #include "EvalUnaryExpr.h"
 
+#include "columns/AllowedKinds.h"
 #include "columns/UnaryPredicates.h"
 #include "columns/ColumnOperationExecutor.h"
 
@@ -32,13 +33,11 @@ struct Eval {
 
 template <ColumnOperator Op>
 void EvalUnaryExpr::eval(Column* res, const Column* operand) {
-    using Allowed = GenerateKindList<std::tuple<std::optional<CustomBool>>>;
-
-    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
-                                        ContainerKind::code<ColumnConst>()>;
-
+    using Types = TypeRestrictions<Op>;
     Eval<Op> fn {res};
-    ColumnSingleDispatcher<Allowed, Eval<Op>, Excluded>::dispatch(operand, fn);
+    ColumnSingleDispatcher<typename Types::Allowed,
+                           Eval<Op>,
+                           typename Types::Excluded>::dispatch(operand, fn);
 }
 
 template void EvalUnaryExpr::eval<OP_NOT>(Column* res, const Column* operand);
