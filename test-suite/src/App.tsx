@@ -1,4 +1,5 @@
 import React from "react";
+import mermaid from "mermaid";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -113,6 +114,8 @@ export default function App() {
   const [showNotRun, setShowNotRun] = React.useState(true);
   const [newTestOpen, setNewTestOpen] = React.useState(false);
   const [newTestName, setNewTestName] = React.useState("");
+  const [planSvg, setPlanSvg] = React.useState<string | null>(null);
+  const renderSeq = React.useRef(0);
 
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
@@ -551,6 +554,42 @@ export default function App() {
     };
   }, []);
 
+  React.useEffect(() => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "dark",
+      securityLevel: "strict",
+      themeVariables: {
+        primaryColor: "#0f172a",
+        primaryTextColor: "#e2e8f0",
+        lineColor: "#38bdf8",
+        nodeBorder: "#38bdf8",
+        edgeLabelBackground: "#0b0f14"
+      }
+    });
+  }, []);
+
+  React.useEffect(() => {
+    const source = selectedResult?.planOutput?.trim();
+    if (!source || (!source.startsWith("flowchart") && !source.startsWith("graph"))) {
+      setPlanSvg(null);
+      return;
+    }
+    let cancelled = false;
+    const id = `plan-${renderSeq.current++}`;
+    mermaid
+      .render(id, source)
+      .then((res) => {
+        if (!cancelled) setPlanSvg(res.svg);
+      })
+      .catch(() => {
+        if (!cancelled) setPlanSvg(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedResult?.planOutput]);
+
   return (
     <SidebarProvider ref={sidebarRef} defaultOpen sidebarWidth={sidebarWidth}>
       <Sidebar>
@@ -860,35 +899,6 @@ export default function App() {
             <div className="mt-6 grid gap-4">
               <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Plan Output</p>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
-                        selectedResult.planMatched
-                          ? "bg-moss/15 text-moss"
-                          : "bg-accent/15 text-accent"
-                      }`}
-                    >
-                      {selectedResult.planMatched ? "match" : "mismatch"}
-                    </span>
-                    {!selectedResult.planMatched && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setConfirmTarget("plan")}
-                        disabled={loading}
-                      >
-                        Accept
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-{selectedResult.planOutput || "(empty)"}
-                </pre>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
-                <div className="flex items-center justify-between">
                   <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Result Output</p>
                   <div className="flex items-center gap-2">
                     <span
@@ -912,9 +922,45 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
+                <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
 {selectedResult.resultOutput || "(empty)"}
                 </pre>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Plan Output</p>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
+                        selectedResult.planMatched
+                          ? "bg-moss/15 text-moss"
+                          : "bg-accent/15 text-accent"
+                      }`}
+                    >
+                      {selectedResult.planMatched ? "match" : "mismatch"}
+                    </span>
+                    {!selectedResult.planMatched && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmTarget("plan")}
+                        disabled={loading}
+                      >
+                        Accept
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {planSvg ? (
+                  <div
+                    className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3"
+                    dangerouslySetInnerHTML={{ __html: planSvg }}
+                  />
+                ) : (
+                  <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
+{selectedResult.planOutput || "(empty)"}
+                  </pre>
+                )}
               </div>
             </div>
           )}
