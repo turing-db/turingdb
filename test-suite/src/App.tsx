@@ -207,7 +207,7 @@ export default function App() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search tests or query text (e.g., MATCH (n))…"
-              className="w-full rounded-2xl border border-black/10 bg-white/80 px-4 py-2 text-sm text-ink placeholder:text-ink/40 focus:border-moss/40 focus:outline-none"
+              className="w-full rounded-2xl border border-white/10 bg-steel/40 px-4 py-2 text-sm text-ink placeholder:text-ink/40 focus:border-accent/60 focus:outline-none"
             />
           </div>
           <div className="mt-4 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-2">
@@ -233,8 +233,8 @@ export default function App() {
                 onClick={() => setSelected(test)}
                 className={`w-full rounded-xl border px-2.5 py-1.5 text-left transition ${
                   selected?.id === test.id
-                    ? "border-accent bg-accent/10"
-                    : "border-black/10 bg-white/60 hover:border-ink/20"
+                    ? "border-accent/60 bg-accent/10"
+                    : "border-white/10 bg-steel/40 hover:border-accent/30"
                 }`}
               >
                 <div className="flex items-center gap-2">
@@ -264,14 +264,14 @@ export default function App() {
           </div>
 
           {selected && (
-            <div className="mt-4 rounded-2xl border border-black/10 bg-white/70 p-4">
+            <div className="mt-4 rounded-2xl border border-white/10 bg-steel/40 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Selected</p>
               <p className="mt-1 text-lg font-semibold text-ink">{selected.name}</p>
               <p className="text-xs text-ink/60">{selected.id}</p>
             </div>
           )}
           {selected && (
-            <div className="mt-4 rounded-2xl border border-black/10 bg-white/70 p-4">
+            <div className="mt-4 rounded-2xl border border-white/10 bg-steel/40 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Query</p>
               {!isEditingQuery ? (
                 <pre
@@ -285,7 +285,7 @@ export default function App() {
                   <textarea
                     value={queryDraft}
                     onChange={(event) => setQueryDraft(event.target.value)}
-                    className="mt-2 h-28 w-full resize-none rounded-xl border border-black/10 bg-paper p-3 text-xs font-mono text-ink focus:border-moss/40 focus:outline-none"
+                    className="mt-2 h-28 w-full resize-none rounded-xl border border-white/10 bg-paper p-3 text-xs font-mono text-ink focus:border-accent/60 focus:outline-none"
                     placeholder="(query not loaded)"
                   />
                   <div className="mt-3 flex items-center justify-end gap-2">
@@ -315,7 +315,7 @@ export default function App() {
           )}
 
           {loading && (
-            <div className="mt-6 rounded-2xl border border-black/10 bg-white/70 p-4">
+            <div className="mt-6 rounded-2xl border border-white/10 bg-steel/40 p-4">
               <p className="text-sm text-ink/70">Running tests…</p>
             </div>
           )}
@@ -328,7 +328,7 @@ export default function App() {
 
           {selected && selectedResult && (
             <div className="mt-6 grid gap-4">
-              <div className="rounded-2xl border border-black/10 bg-white/80 p-4">
+              <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
                 <div className="flex items-center justify-between">
                   <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Plan Output</p>
                   <div className="flex items-center gap-2">
@@ -357,7 +357,7 @@ export default function App() {
 {selectedResult.planOutput || "(empty)"}
                 </pre>
               </div>
-              <div className="rounded-2xl border border-black/10 bg-white/80 p-4">
+              <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
                 <div className="flex items-center justify-between">
                   <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Result Output</p>
                   <div className="flex items-center gap-2">
@@ -390,7 +390,7 @@ export default function App() {
           )}
 
           {(!selected || !selectedResult) && !loading && !error && (
-            <div className="mt-6 rounded-2xl border border-black/10 bg-white/70 p-4 text-sm text-ink/70">
+            <div className="mt-6 rounded-2xl border border-white/10 bg-steel/40 p-4 text-sm text-ink/70">
               Connect the C++ runner API to populate plan/result output.
             </div>
           )}

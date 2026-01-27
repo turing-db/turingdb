@@ -4,11 +4,11 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        ink: "#14131f",
-        paper: "#f4f0e8",
-        accent: "#ff6b3d",
-        moss: "#2a5c4d",
-        steel: "#1f2937"
+        ink: "#e2e8f0",
+        paper: "#0b0f14",
+        accent: "#38bdf8",
+        moss: "#22c55e",
+        steel: "#1e293b"
       },
       fontFamily: {
         display: ["Space Grotesk", "Poppins", "sans-serif"],
