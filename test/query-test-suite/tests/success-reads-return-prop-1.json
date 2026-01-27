@@ -12,5 +12,6 @@
     "return",
     "prop"
   ],
-  "write-required": false
+  "write-required": false,
+  "disabled-reason": "Returning arbitrary expressions is not supported (https://github.com/turing-db/turingdb/issues/343)"
 }

@@ -12,5 +12,6 @@
     "type",
     "constraint"
   ],
-  "write-required": false
+  "write-required": false,
+  "disabled-reason": "GetEntityType is not supported in the pipeline generation phase (https://github.com/turing-db/turingdb/issues/342)"
 }

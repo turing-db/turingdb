@@ -11,5 +11,6 @@
     "reads",
     "join"
   ],
-  "write-required": false
+  "write-required": false,
+  "disabled-reason": "Common Successor Joins With Common Ancestor Unsupported"
 }

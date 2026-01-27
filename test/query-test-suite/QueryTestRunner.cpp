@@ -224,6 +224,7 @@ std::vector<QueryTestSpec> QueryTestRunner::loadTestsFromDir(const fs::Path& dir
         spec.query = doc.value("query", "");
         spec.enabled = doc.value("enabled", true);
         spec.writeRequired = doc.value("write-required", false);
+        spec.disabledReason = doc.value("disabled-reason", "");
         if (doc.contains("tags") && doc["tags"].is_array()) {
             for (const auto& tag : doc["tags"]) {
                 if (tag.is_string()) {

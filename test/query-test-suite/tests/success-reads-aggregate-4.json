@@ -11,5 +11,6 @@
     "reads",
     "aggregate"
   ],
-  "write-required": false
+  "write-required": false,
+  "disabled-reason": "Group by keys are not supported"
 }

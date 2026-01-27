@@ -34,6 +34,7 @@ type TestMeta = {
   query?: string;
   tags?: string[];
   writeRequired?: boolean;
+  disabledReason?: string;
 };
 
 type TestResult = {
@@ -117,6 +118,7 @@ export default function App() {
   const [planSvg, setPlanSvg] = React.useState<string | null>(null);
   const renderSeq = React.useRef(0);
   const [parsedResult, setParsedResult] = React.useState<string[][] | null>(null);
+  const [disabledReasonDraft, setDisabledReasonDraft] = React.useState("");
 
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
@@ -148,6 +150,7 @@ export default function App() {
     setNameDraft(selected?.name ?? "");
     setTagDraft("");
     setWriteRequired(selected?.writeRequired ?? false);
+    setDisabledReasonDraft(selected?.disabledReason ?? "");
     setIsEditingQuery(false);
   }, [selected]);
 
@@ -432,6 +435,45 @@ export default function App() {
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to update enabled state.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateDisabledReason = async () => {
+    if (!selected) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/update`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: selected.name,
+          disabledReason: disabledReasonDraft
+        })
+      });
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message =
+          typeof details?.error === "string"
+            ? `${details.error}${details.details ? `: ${details.details}` : ""}`
+            : "Failed to update test";
+        throw new Error(message);
+      }
+      setTests((prev) =>
+        prev.map((test) =>
+          test.name === selected.name
+            ? { ...test, disabledReason: disabledReasonDraft }
+            : test
+        )
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, disabledReason: disabledReasonDraft } : prev
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update disabled reason.";
       setError(message);
     } finally {
       setLoading(false);
@@ -884,6 +926,24 @@ export default function App() {
                 />
                 Enabled
               </label>
+              {!selected.enabled && (
+                <div className="mt-3">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-ink/60">
+                    Disabled reason
+                  </label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      value={disabledReasonDraft}
+                      onChange={(event) => setDisabledReasonDraft(event.target.value)}
+                      placeholder="Why is this test disabled?"
+                      className="flex-1 rounded-xl border border-white/10 bg-paper px-3 py-2 text-xs text-ink focus:border-accent/60 focus:outline-none"
+                    />
+                    <Button variant="ghost" size="sm" onClick={updateDisabledReason} disabled={loading}>
+                      Update
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {selected && (

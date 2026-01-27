@@ -12,5 +12,6 @@
     "match",
     "where"
   ],
-  "write-required": false
+  "write-required": false,
+  "disabled-reason": "Instable results, for some reason the output is not stable across runs"
 }

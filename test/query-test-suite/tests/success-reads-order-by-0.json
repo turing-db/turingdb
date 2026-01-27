@@ -12,5 +12,6 @@
     "order",
     "by"
   ],
-  "write-required": false
+  "write-required": false,
+  "disabled-reason": "Order by not supported"
 }

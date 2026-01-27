@@ -63,7 +63,8 @@ async function updateTestFile(
   newName?: string,
   tags?: string[],
   writeRequired?: boolean,
-  enabled?: boolean
+  enabled?: boolean,
+  disabledReason?: string
 ) {
   const entries = await Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: dir }));
   for (const entry of entries) {
@@ -97,6 +98,13 @@ async function updateTestFile(
     }
     if (typeof enabled === "boolean") {
       data.enabled = enabled;
+    }
+    if (typeof disabledReason === "string") {
+      if (disabledReason.trim()) {
+        data["disabled-reason"] = disabledReason;
+      } else {
+        delete data["disabled-reason"];
+      }
     }
     if (typeof newName === "string") {
       delete data.name;
@@ -225,8 +233,9 @@ Bun.serve({
       const hasTags = Array.isArray(body?.tags);
       const hasWriteRequired = typeof body?.writeRequired === "boolean";
       const hasEnabled = typeof body?.enabled === "boolean";
+      const hasDisabledReason = typeof body?.disabledReason === "string";
       const targetName = typeof body?.name === "string" ? idToFilename(body.name.trim()) : "";
-      if (!targetName || (!hasPlan && !hasResult && !hasQuery && !hasNewName && !hasTags && !hasWriteRequired && !hasEnabled)) {
+      if (!targetName || (!hasPlan && !hasResult && !hasQuery && !hasNewName && !hasTags && !hasWriteRequired && !hasEnabled && !hasDisabledReason)) {
         return errorResponse("Invalid payload", 400);
       }
       if (hasNewName) {
@@ -248,7 +257,8 @@ Bun.serve({
         body.newName,
         body.tags,
         body.writeRequired,
-        body.enabled
+        body.enabled,
+        body.disabledReason
       );
       let updatedBuild = false;
       try {
@@ -261,7 +271,8 @@ Bun.serve({
           body.newName,
           body.tags,
           body.writeRequired,
-          body.enabled
+          body.enabled,
+          body.disabledReason
         );
       } catch {
         updatedBuild = false;
