@@ -54,7 +54,7 @@ function errorResponse(message: string, status = 500, details?: string) {
   return jsonResponse({ error: message, details }, status);
 }
 
-async function updateTestFile(dir: string, id: string, plan?: string, result?: string) {
+async function updateTestFile(dir: string, id: string, plan?: string, result?: string, query?: string) {
     const entries = await Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: dir }));
     for (const entry of entries) {
         const path = join(dir, entry);
@@ -74,6 +74,9 @@ async function updateTestFile(dir: string, id: string, plan?: string, result?: s
         }
         if (typeof result === "string") {
           data.expect.result = result;
+        }
+        if (typeof query === "string") {
+          data.query = query;
         }
         await Bun.write(path, JSON.stringify(data, null, 2) + "\n");
         return true;
@@ -141,13 +144,14 @@ Bun.serve({
       const body = await req.json().catch(() => null);
       const hasPlan = typeof body?.plan === "string";
       const hasResult = typeof body?.result === "string";
-      if (!body?.id || (!hasPlan && !hasResult)) {
+      const hasQuery = typeof body?.query === "string";
+      if (!body?.id || (!hasPlan && !hasResult && !hasQuery)) {
         return errorResponse("Invalid payload", 400);
       }
-      const updatedSource = await updateTestFile(sourceTestsDir, body.id, body.plan, body.result);
+      const updatedSource = await updateTestFile(sourceTestsDir, body.id, body.plan, body.result, body.query);
       let updatedBuild = false;
       try {
-        updatedBuild = await updateTestFile(buildTestsDir, body.id, body.plan, body.result);
+        updatedBuild = await updateTestFile(buildTestsDir, body.id, body.plan, body.result, body.query);
       } catch {
         updatedBuild = false;
       }

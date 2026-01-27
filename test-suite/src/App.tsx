@@ -27,6 +27,8 @@ export default function App() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = React.useState<"plan" | "result" | null>(null);
+  const [queryDraft, setQueryDraft] = React.useState("");
+  const [isEditingQuery, setIsEditingQuery] = React.useState(false);
 
   React.useEffect(() => {
     fetch(`${API_BASE}/tests`)
@@ -34,11 +36,17 @@ export default function App() {
       .then((data) => {
         setTests(data);
         setSelected(data[0] ?? null);
+        setQueryDraft(data[0]?.query ?? "");
       })
       .catch(() => {
         setError("Failed to load test list. Ensure the bun server is running.");
       });
   }, []);
+  
+  React.useEffect(() => {
+    setQueryDraft(selected?.query ?? "");
+    setIsEditingQuery(false);
+  }, [selected]);
 
   const runTest = async (id: string) => {
     setLoading(true);
@@ -115,6 +123,47 @@ export default function App() {
     } finally {
       setLoading(false);
       setConfirmTarget(null);
+    }
+  };
+
+  const updateQuery = async () => {
+    if (!selected) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/update`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: selected.id,
+          query: queryDraft
+        })
+      });
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message =
+          typeof details?.error === "string"
+            ? `${details.error}${details.details ? `: ${details.details}` : ""}`
+            : "Failed to update test";
+        throw new Error(message);
+      }
+      setTests((prev) =>
+        prev.map((test) =>
+          test.id === selected.id
+            ? { ...test, query: queryDraft }
+            : test
+        )
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, query: queryDraft } : prev
+      );
+      await runTest(selected.id);
+      setIsEditingQuery(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update query.";
+      setError(message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -224,9 +273,44 @@ export default function App() {
           {selected && (
             <div className="mt-4 rounded-2xl border border-black/10 bg-white/70 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Query</p>
-              <pre className="mt-2 whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
+              {!isEditingQuery ? (
+                <pre
+                  onClick={() => setIsEditingQuery(true)}
+                  className="mt-2 cursor-text whitespace-pre-wrap rounded-xl border border-transparent bg-paper p-3 text-xs font-mono text-ink"
+                >
 {selected.query ?? "(query not loaded)"}
-              </pre>
+                </pre>
+              ) : (
+                <>
+                  <textarea
+                    value={queryDraft}
+                    onChange={(event) => setQueryDraft(event.target.value)}
+                    className="mt-2 h-28 w-full resize-none rounded-xl border border-black/10 bg-paper p-3 text-xs font-mono text-ink focus:border-moss/40 focus:outline-none"
+                    placeholder="(query not loaded)"
+                  />
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setQueryDraft(selected.query ?? "");
+                        setIsEditingQuery(false);
+                      }}
+                      disabled={loading}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      onClick={updateQuery}
+                      disabled={loading || !selected}
+                    >
+                      Update Query
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
