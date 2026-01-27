@@ -1,0 +1,17 @@
+{
+  "id": "multiple-call-0",
+  "name": "multiple-call-0",
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.history() YIELD commit AS c\nCALL db.labels() YIELD label\nRETURN c, label",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.history\n        __yield__\n        __yield_item__: c\n    `\"]\n    1[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.labels\n        __yield__\n        __yield_item__: label\n    `\"]\n    2[\"`\n        __CARTESIAN_PRODUCT__\n    `\"]\n    3[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->2\n    2-->3",
+    "result": "COLUMNS: c, label\nROWS: 72\n0: 1ebb9b9aa4d44aec | Person\n1: 1ebb9b9aa4d44aec | SoftwareEngineering\n2: 1ebb9b9aa4d44aec | Founder\n3: 1ebb9b9aa4d44aec | Bioinformatics\n4: 1ebb9b9aa4d44aec | Interest\n5: 1ebb9b9aa4d44aec | Exotic\n6: 1ebb9b9aa4d44aec | Supernatural\n7: 1ebb9b9aa4d44aec | SleepDisturber\n8: 1ebb9b9aa4d44aec | Sales\n9: bb72a12544ad264c | Person\n10: bb72a12544ad264c | SoftwareEngineering\n11: bb72a12544ad264c | Founder\n12: bb72a12544ad264c | Bioinformatics\n13: bb72a12544ad264c | Interest\n14: bb72a12544ad264c | Exotic\n15: bb72a12544ad264c | Supernatural\n16: bb72a12544ad264c | SleepDisturber\n17: bb72a12544ad264c | Sales\n18: e52801c01452a72 | Person\n19: e52801c01452a72 | SoftwareEngineering\n20: e52801c01452a72 | Founder\n21: e52801c01452a72 | Bioinformatics\n22: e52801c01452a72 | Interest\n23: e52801c01452a72 | Exotic\n24: e52801c01452a72 | Supernatural\n25: e52801c01452a72 | SleepDisturber\n26: e52801c01452a72 | Sales\n27: 7886d802ec8a5770 | Person\n28: 7886d802ec8a5770 | SoftwareEngineering\n29: 7886d802ec8a5770 | Founder\n30: 7886d802ec8a5770 | Bioinformatics\n31: 7886d802ec8a5770 | Interest\n32: 7886d802ec8a5770 | Exotic\n33: 7886d802ec8a5770 | Supernatural\n34: 7886d802ec8a5770 | SleepDisturber\n35: 7886d802ec8a5770 | Sales\n36: 922c6317597a6de6 | Person\n37: 922c6317597a6de6 | SoftwareEngineering\n38: 922c6317597a6de6 | Founder\n39: 922c6317597a6de6 | Bioinformatics\n40: 922c6317597a6de6 | Interest\n41: 922c6317597a6de6 | Exotic\n42: 922c6317597a6de6 | Supernatural\n43: 922c6317597a6de6 | SleepDisturber\n44: 922c6317597a6de6 | Sales\n45: e67d12d9e081abca | Person\n46: e67d12d9e081abca | SoftwareEngineering\n47: e67d12d9e081abca | Founder\n48: e67d12d9e081abca | Bioinformatics\n49: e67d12d9e081abca | Interest\n50: e67d12d9e081abca | Exotic\n51: e67d12d9e081abca | Supernatural\n52: e67d12d9e081abca | SleepDisturber\n53: e67d12d9e081abca | Sales\n54: fbb23900df81720a | Person\n55: fbb23900df81720a | SoftwareEngineering\n56: fbb23900df81720a | Founder\n57: fbb23900df81720a | Bioinformatics\n58: fbb23900df81720a | Interest\n59: fbb23900df81720a | Exotic\n60: fbb23900df81720a | Supernatural\n61: fbb23900df81720a | SleepDisturber\n62: fbb23900df81720a | Sales\n63: 8de938ef204f5a50 | Person\n64: 8de938ef204f5a50 | SoftwareEngineering\n65: 8de938ef204f5a50 | Founder\n66: 8de938ef204f5a50 | Bioinformatics\n67: 8de938ef204f5a50 | Interest\n68: 8de938ef204f5a50 | Exotic\n69: 8de938ef204f5a50 | Supernatural\n70: 8de938ef204f5a50 | SleepDisturber\n71: 8de938ef204f5a50 | Sales"
+  },
+  "tags": [
+    "CALL",
+    "DEPENDENCIES",
+    "HISTORY",
+    "labels"
+  ]
+}

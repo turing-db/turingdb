@@ -54,7 +54,15 @@ function errorResponse(message: string, status = 500, details?: string) {
   return jsonResponse({ error: message, details }, status);
 }
 
-async function updateTestFile(dir: string, id: string, plan?: string, result?: string, query?: string) {
+async function updateTestFile(
+  dir: string,
+  name: string,
+  plan?: string,
+  result?: string,
+  query?: string,
+  newName?: string,
+  tags?: string[]
+) {
     const entries = await Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: dir }));
     for (const entry of entries) {
         const path = join(dir, entry);
@@ -67,7 +75,8 @@ async function updateTestFile(dir: string, id: string, plan?: string, result?: s
     } catch {
       continue;
     }
-    if (data?.id !== id) continue;
+    const matches = data?.name === name || data?.id === name;
+    if (!matches) continue;
         data.expect = data.expect ?? {};
         if (typeof plan === "string") {
           data.expect.plan = plan;
@@ -78,10 +87,74 @@ async function updateTestFile(dir: string, id: string, plan?: string, result?: s
         if (typeof query === "string") {
           data.query = query;
         }
+        if (typeof newName === "string") {
+          data.name = newName;
+          data.id = newName;
+        }
+        if (Array.isArray(tags)) {
+          data.tags = tags;
+        }
         await Bun.write(path, JSON.stringify(data, null, 2) + "\n");
         return true;
     }
     return false;
+}
+
+async function loadExistingNames(dir: string) {
+  const names = new Set<string>();
+  const entries = await Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: dir }));
+  for (const entry of entries) {
+    const path = join(dir, entry);
+    const file = Bun.file(path);
+    if (!(await file.exists())) continue;
+    const text = await file.text();
+    try {
+      const data = JSON.parse(text);
+      if (typeof data?.name === "string") names.add(data.name);
+      if (typeof data?.id === "string") names.add(data.id);
+    } catch {
+      continue;
+    }
+  }
+  return names;
+}
+
+function idToFilename(id: string) {
+  return id.replace(/[\\/]/g, "-").replace(/[^a-z0-9._-]+/gi, "-");
+}
+
+async function createTestFile(dir: string, name: string) {
+  const existingNames = await loadExistingNames(dir);
+  let finalName = name.trim() || "new-test";
+  if (existingNames.has(finalName)) {
+    let suffix = 2;
+    while (existingNames.has(`${finalName} (${suffix})`)) {
+      suffix += 1;
+    }
+    finalName = `${finalName} (${suffix})`;
+  }
+  const baseName = idToFilename(finalName) || "new-test";
+  let candidate = baseName;
+  let suffix = 1;
+  while (await Bun.file(join(dir, `${candidate}.json`)).exists()) {
+    candidate = `${baseName}-${suffix}`;
+    suffix += 1;
+  }
+  const filePath = join(dir, `${candidate}.json`);
+  const payload = {
+    id: finalName,
+    name: finalName,
+    enabled: true,
+    graph: "simpledb",
+    query: "MATCH (n) RETURN n",
+    expect: {
+      plan: "",
+      result: ""
+    },
+    tags: [] as string[]
+  };
+  await Bun.write(filePath, JSON.stringify(payload, null, 2) + "\n");
+  return { name: finalName, path: filePath };
 }
 
 Bun.serve({
@@ -145,13 +218,42 @@ Bun.serve({
       const hasPlan = typeof body?.plan === "string";
       const hasResult = typeof body?.result === "string";
       const hasQuery = typeof body?.query === "string";
-      if (!body?.id || (!hasPlan && !hasResult && !hasQuery)) {
+      const hasNewName = typeof body?.newName === "string";
+      const hasTags = Array.isArray(body?.tags);
+      const targetName = typeof body?.name === "string" ? body.name.trim() : "";
+      if (!targetName || (!hasPlan && !hasResult && !hasQuery && !hasNewName && !hasTags)) {
         return errorResponse("Invalid payload", 400);
       }
-      const updatedSource = await updateTestFile(sourceTestsDir, body.id, body.plan, body.result, body.query);
+      if (hasNewName) {
+        const newName = body.newName.trim();
+        if (!newName) {
+          return errorResponse("Invalid payload", 400);
+        }
+        const existingNames = await loadExistingNames(sourceTestsDir);
+        if (existingNames.has(newName) && newName !== targetName) {
+          return errorResponse("Test name already exists", 409);
+        }
+      }
+      const updatedSource = await updateTestFile(
+        sourceTestsDir,
+        targetName,
+        body.plan,
+        body.result,
+        body.query,
+        body.newName,
+        body.tags
+      );
       let updatedBuild = false;
       try {
-        updatedBuild = await updateTestFile(buildTestsDir, body.id, body.plan, body.result, body.query);
+        updatedBuild = await updateTestFile(
+          buildTestsDir,
+          targetName,
+          body.plan,
+          body.result,
+          body.query,
+          body.newName,
+          body.tags
+        );
       } catch {
         updatedBuild = false;
       }
@@ -159,6 +261,25 @@ Bun.serve({
         return errorResponse("Test not found", 404);
       }
       return jsonResponse({ ok: true, updatedSource, updatedBuild });
+    }
+
+    if (pathname === "/api/create" && req.method === "POST") {
+      const body = await req.json().catch(() => null);
+      const name = typeof body?.name === "string" ? body.name.trim() : "";
+      if (!name) {
+        return errorResponse("Invalid payload", 400);
+      }
+      try {
+        const created = await createTestFile(sourceTestsDir, name);
+        try {
+          await createTestFile(buildTestsDir, name);
+        } catch {
+          // optional
+        }
+        return jsonResponse({ ok: true, name: created.name });
+      } catch (err) {
+        return errorResponse("Failed to create test", 500, err instanceof Error ? err.message : undefined);
+      }
     }
 
     return errorResponse("Not found", 404);

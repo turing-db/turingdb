@@ -1,6 +1,6 @@
 {
   "id": "fail-reads/aggregate-0",
-  "name": "fail-reads/aggregate-0",
+  "name": "fail-reads/aggregate-count",
   "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n { name: count(n.duration)}) RETURN n",
@@ -11,6 +11,7 @@
   "tags": [
     "fail",
     "reads",
-    "aggregate"
+    "aggregate",
+    "count"
   ]
 }

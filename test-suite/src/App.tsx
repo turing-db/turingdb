@@ -19,7 +19,6 @@ import {
 import { PanelLeft } from "lucide-react";
 
 type TestMeta = {
-  id: string;
   name: string;
   enabled: boolean;
   query?: string;
@@ -74,7 +73,7 @@ function SidebarResizeHandle({
 }
 
 export default function App() {
-  const [sidebarWidth, setSidebarWidth] = React.useState(260);
+  const [sidebarWidth, setSidebarWidth] = React.useState(420);
   const sidebarRef = React.useRef<HTMLDivElement>(null);
   const dragStartX = React.useRef(0);
   const dragStartWidth = React.useRef(0);
@@ -88,25 +87,41 @@ export default function App() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = React.useState<"plan" | "result" | null>(null);
+  const [nameDraft, setNameDraft] = React.useState("");
   const [queryDraft, setQueryDraft] = React.useState("");
   const [isEditingQuery, setIsEditingQuery] = React.useState(false);
   const [tagFilters, setTagFilters] = React.useState<string[]>([]);
+  const [tagDraft, setTagDraft] = React.useState("");
+
+  const loadTests = React.useCallback(async (preferName?: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/tests`);
+      const data = (await res.json()) as TestMeta[];
+      setTests(data);
+      setSelected((prev) => {
+        if (preferName) {
+          const preferred = data.find((test) => test.name === preferName);
+          if (preferred) return preferred;
+        }
+        if (!prev) return data[0] ?? null;
+        const next = data.find((test) => test.name === prev.name);
+        return next ?? data[0] ?? null;
+      });
+      return data;
+    } catch {
+      setError("Failed to load test list. Ensure the bun server is running.");
+      return [];
+    }
+  }, []);
 
   React.useEffect(() => {
-    fetch(`${API_BASE}/tests`)
-      .then((res) => res.json())
-      .then((data) => {
-        setTests(data);
-        setSelected(data[0] ?? null);
-        setQueryDraft(data[0]?.query ?? "");
-      })
-      .catch(() => {
-        setError("Failed to load test list. Ensure the bun server is running.");
-      });
-  }, []);
+    loadTests();
+  }, [loadTests]);
   
   React.useEffect(() => {
     setQueryDraft(selected?.query ?? "");
+    setNameDraft(selected?.name ?? "");
+    setTagDraft("");
     setIsEditingQuery(false);
   }, [selected]);
 
@@ -155,7 +170,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const payload: { id: string; plan?: string; result?: string } = { id: selected.id };
+      const payload: { name: string; plan?: string; result?: string } = { name: selected.name };
       if (target === "plan") payload.plan = selectedResult.planOutput;
       if (target === "result") payload.result = selectedResult.resultOutput;
       const res = await fetch(`${API_BASE}/update`, {
@@ -173,7 +188,7 @@ export default function App() {
       }
       setResults((prev) => ({
         ...prev,
-        [selected.id]: {
+        [selected.name]: {
           ...selectedResult,
           planMatched: target === "plan" ? true : selectedResult.planMatched,
           resultMatched: target === "result" ? true : selectedResult.resultMatched
@@ -197,7 +212,7 @@ export default function App() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          id: selected.id,
+          name: selected.name,
           query: queryDraft
         })
       });
@@ -211,7 +226,7 @@ export default function App() {
       }
       setTests((prev) =>
         prev.map((test) =>
-          test.id === selected.id
+          test.name === selected.name
             ? { ...test, query: queryDraft }
             : test
         )
@@ -219,7 +234,7 @@ export default function App() {
       setSelected((prev) =>
         prev ? { ...prev, query: queryDraft } : prev
       );
-      await runTest(selected.id);
+      await runTest(selected.name);
       setIsEditingQuery(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to update query.";
@@ -229,7 +244,136 @@ export default function App() {
     }
   };
 
-  const selectedResult = selected ? results[selected.id] : undefined;
+  const updateName = async () => {
+    if (!selected) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/update`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: selected.name,
+          newName: nameDraft
+        })
+      });
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message =
+          typeof details?.error === "string"
+            ? `${details.error}${details.details ? `: ${details.details}` : ""}`
+            : "Failed to update test";
+        throw new Error(message);
+      }
+      setTests((prev) =>
+        prev.map((test) =>
+          test.name === selected.name
+            ? { ...test, name: nameDraft }
+            : test
+        )
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, name: nameDraft } : prev
+      );
+      setResults((prev) => {
+        const next = { ...prev };
+        const existing = next[selected.name];
+        if (existing) {
+          next[nameDraft] = { ...existing, id: nameDraft };
+          delete next[selected.name];
+        }
+        return next;
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update name.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateTags = async (tags: string[]) => {
+    if (!selected) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/update`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: selected.name,
+          tags
+        })
+      });
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message =
+          typeof details?.error === "string"
+            ? `${details.error}${details.details ? `: ${details.details}` : ""}`
+            : "Failed to update test";
+        throw new Error(message);
+      }
+      setTests((prev) =>
+        prev.map((test) =>
+          test.name === selected.name
+            ? { ...test, tags }
+            : test
+        )
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, tags } : prev
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update tags.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addTag = async () => {
+    if (!selected) return;
+    const nextTag = tagDraft.trim();
+    if (!nextTag) return;
+    const current = selected.tags ?? [];
+    if (current.includes(nextTag)) {
+      setTagDraft("");
+      return;
+    }
+    await updateTags([...current, nextTag]);
+    setTagDraft("");
+  };
+
+  const createTest = async () => {
+    const name = window.prompt("New test name?");
+    if (!name) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/create`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name })
+      });
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message =
+          typeof details?.error === "string"
+            ? `${details.error}${details.details ? `: ${details.details}` : ""}`
+            : "Failed to create test";
+        throw new Error(message);
+      }
+      const payload = (await res.json()) as { name?: string };
+      await loadTests(payload.name);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create test.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectedResult = selected ? results[selected.name] : undefined;
   const allTags = React.useMemo(() => {
     const set = new Set<string>();
     for (const test of tests) {
@@ -243,7 +387,7 @@ export default function App() {
     const term = search.trim().toLowerCase();
     if (!term) return tests;
     return tests.filter((test) => {
-      const hay = `${test.name} ${test.id} ${test.query ?? ""}`.toLowerCase();
+      const hay = `${test.name} ${test.query ?? ""}`.toLowerCase();
       return hay.includes(term);
     });
   }, [search, tests]);
@@ -366,19 +510,17 @@ export default function App() {
                   const icon = isPass ? "●" : testResult ? "●" : "○";
                   return (
                     <SidebarMenuItem key={test.id}>
-                      <SidebarMenuButton
-                        onClick={() => setSelected(test)}
-                        isActive={selected?.id === test.id}
-                        size="sm"
-                        className="px-2"
-                      >
-                        <span className={`text-[10px] ${statusClass}`}>{icon}</span>
-                        <span className="truncate text-xs font-medium text-sidebar-foreground">{test.name}</span>
-                        <span className="text-[10px] text-muted-foreground">•</span>
-                        <span className="truncate text-[11px] text-muted-foreground">{test.id}</span>
-                        <span
-                          className={`ml-auto rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] ${badgeClass}`}
+                        <SidebarMenuButton
+                          onClick={() => setSelected(test)}
+                          isActive={selected?.name === test.name}
+                          size="sm"
+                          className="px-2"
                         >
+                          <span className={`text-[10px] ${statusClass}`}>{icon}</span>
+                          <span className="truncate text-xs font-medium text-sidebar-foreground">{test.name}</span>
+                          <span
+                            className={`ml-auto rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] ${badgeClass}`}
+                          >
                           {isPending ? "pending" : isPass ? "pass" : "fail"}
                         </span>
                       </SidebarMenuButton>
@@ -414,6 +556,9 @@ export default function App() {
               <Button variant="ghost" onClick={runAll} disabled={loading}>
                 Run All
               </Button>
+              <Button variant="ghost" onClick={createTest} disabled={loading}>
+                New Test
+              </Button>
               <Button variant="accent" onClick={() => selected && runTest(selected.id)} disabled={!selected || loading}>
                 Run Selected
               </Button>
@@ -434,20 +579,41 @@ export default function App() {
           {selected && (
             <div className="mt-4 rounded-2xl border border-white/10 bg-steel/40 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Selected</p>
-              <p className="mt-1 text-lg font-semibold text-ink">{selected.name}</p>
-              <p className="text-xs text-ink/60">{selected.id}</p>
-              {selected.tags && selected.tags.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {selected.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full border border-white/10 bg-steel/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-ink/70"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                  value={nameDraft}
+                  onChange={(event) => setNameDraft(event.target.value)}
+                  className="flex-1 rounded-xl border border-white/10 bg-paper px-3 py-2 text-sm text-ink focus:border-accent/60 focus:outline-none"
+                />
+                <Button variant="ghost" size="sm" onClick={updateName} disabled={loading || !selected}>
+                  Update Name
+                </Button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(selected.tags ?? []).map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() =>
+                      updateTags((selected.tags ?? []).filter((entry) => entry !== tag))
+                    }
+                    className="rounded-full border border-white/10 bg-steel/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-ink/70 hover:border-accent/40"
+                    title="Remove tag"
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  value={tagDraft}
+                  onChange={(event) => setTagDraft(event.target.value)}
+                  placeholder="Add tag"
+                  className="flex-1 rounded-xl border border-white/10 bg-paper px-3 py-2 text-xs text-ink focus:border-accent/60 focus:outline-none"
+                />
+                <Button variant="ghost" size="sm" onClick={addTag} disabled={loading || !selected}>
+                  Add Tag
+                </Button>
+              </div>
             </div>
           )}
           {selected && (
