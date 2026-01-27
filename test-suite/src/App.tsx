@@ -26,7 +26,7 @@ import {
   SidebarTrigger,
   useSidebar
 } from "@/components/ui/sidebar";
-import { PanelLeft } from "lucide-react";
+import { PanelLeft, Play, PlayCircle, Plus, Share2 } from "lucide-react";
 
 type TestMeta = {
   name: string;
@@ -119,6 +119,8 @@ export default function App() {
   const renderSeq = React.useRef(0);
   const [parsedResult, setParsedResult] = React.useState<string[][] | null>(null);
   const [disabledReasonDraft, setDisabledReasonDraft] = React.useState("");
+  const [shareNotice, setShareNotice] = React.useState<string | null>(null);
+  const shareTimerRef = React.useRef<number | null>(null);
 
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
@@ -126,6 +128,11 @@ export default function App() {
       const data = (await res.json()) as TestMeta[];
       setTests(data);
       setSelected((prev) => {
+        const urlName = new URLSearchParams(window.location.search).get("test");
+        if (urlName) {
+          const preferred = data.find((test) => test.name === urlName);
+          if (preferred) return preferred;
+        }
         if (preferName) {
           const preferred = data.find((test) => test.name === preferName);
           if (preferred) return preferred;
@@ -153,6 +160,13 @@ export default function App() {
     setDisabledReasonDraft(selected?.disabledReason ?? "");
     setIsEditingQuery(false);
   }, [selected]);
+
+  React.useEffect(() => {
+    if (!selected) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("test", selected.name);
+    window.history.replaceState({}, "", url.toString());
+  }, [selected?.name]);
 
   const runTest = async (name: string) => {
     setLoading(true);
@@ -524,6 +538,30 @@ export default function App() {
     }
   };
 
+  const shareSelected = async () => {
+    if (!selected) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("test", selected.name);
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setShareNotice("URL copied to clipboard");
+      if (shareTimerRef.current) {
+        window.clearTimeout(shareTimerRef.current);
+      }
+      shareTimerRef.current = window.setTimeout(() => {
+        setShareNotice(null);
+      }, 2000);
+    } catch {
+      setShareNotice("Failed to copy URL");
+      if (shareTimerRef.current) {
+        window.clearTimeout(shareTimerRef.current);
+      }
+      shareTimerRef.current = window.setTimeout(() => {
+        setShareNotice(null);
+      }, 2000);
+    }
+  };
+
   const selectedResult = selected ? results[selected.name] : undefined;
   const allTags = React.useMemo(() => {
     const set = new Set<string>();
@@ -819,11 +857,13 @@ export default function App() {
             </div>
             <div className="flex items-center gap-3">
               <Button variant="ghost" onClick={runAll} disabled={loading}>
+                <PlayCircle />
                 Run All
               </Button>
               <Dialog open={newTestOpen} onOpenChange={setNewTestOpen}>
                 <DialogTrigger asChild>
                   <Button variant="ghost" disabled={loading}>
+                    <Plus />
                     New Test
                   </Button>
                 </DialogTrigger>
@@ -853,11 +893,21 @@ export default function App() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+              <Button variant="ghost" onClick={shareSelected} disabled={!selected}>
+                <Share2 />
+                Share
+              </Button>
               <Button variant="accent" onClick={() => selected && runTest(selected.name)} disabled={!selected || loading}>
+                <Play />
                 Run Selected
               </Button>
             </div>
           </header>
+          {shareNotice && (
+            <div className="fixed right-6 top-6 z-50 animate-slide-in rounded-full border border-white/10 bg-steel/80 px-4 py-2 text-xs uppercase tracking-[0.2em] text-ink shadow-lg">
+              {shareNotice}
+            </div>
+          )}
 
           <main className="mx-auto mt-8 flex w-full max-w-6xl flex-1 gap-6 overflow-hidden">
             <section className="surface min-w-0 flex-1 rounded-3xl p-6">

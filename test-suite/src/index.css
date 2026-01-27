@@ -26,6 +26,29 @@ body {
   box-shadow: 0 24px 80px rgba(2, 6, 23, 0.6);
 }
 
+@keyframes toastSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  85% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+.animate-slide-in {
+  animation: toastSlide 2s ease-in-out forwards;
+}
+
 /* Subtle dark scrollbar to match the UI */
 * {
   scrollbar-color: hsl(var(--accent) / 0.4) hsl(var(--background));
