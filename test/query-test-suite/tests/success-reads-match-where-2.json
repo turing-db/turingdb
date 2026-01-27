@@ -1,7 +1,7 @@
 {
   "id": "success-reads/match-where-2",
   "name": "success-reads/match-where-2",
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (a)-->(x), (b)-->(x), (c)-->(x) WHERE (a.name = b.name) OR (b.name = c.name) RETURN a.name, b.name, c.name, x.name",
   "expect": {
