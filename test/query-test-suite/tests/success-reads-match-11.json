@@ -7,5 +7,10 @@
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: a\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __SCAN_NODES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: b\n    `\"]\n    5[\"`\n        __FILTER_NODE__\n        __has predicate__\n        __dep__ _b_._name_ (String)\n        __dep__ _a_._name_ (String)\n    `\"]\n    6[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ b\n        __prop__ name\n    `\"]\n    7[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ a\n        __prop__ name\n    `\"]\n    8[\"`\n        __CARTESIAN_PRODUCT__\n    `\"]\n    9[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->7\n    1-->8\n    2-->1\n    3-->6\n    4-->9\n    5-->4\n    6-->8\n    7-->2\n    8-->5",
     "result": "COLUMNS: a, b\nROWS: 18\n0: 0 | 0\n1: 1 | 1\n2: 2 | 2\n3: 3 | 3\n4: 4 | 4\n5: 5 | 5\n6: 6 | 6\n7: 7 | 7\n8: 8 | 8\n9: 9 | 9\n10: 10 | 10\n11: 11 | 11\n12: 12 | 12\n13: 13 | 13\n14: 14 | 14\n15: 15 | 15\n16: 16 | 16\n17: 17 | 17"
-  }
+  },
+  "tags": [
+    "success",
+    "reads",
+    "match"
+  ]
 }

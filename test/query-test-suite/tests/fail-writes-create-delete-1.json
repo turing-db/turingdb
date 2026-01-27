@@ -7,5 +7,11 @@
   "expect": {
     "plan": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e\n       |                                                  ^\n-------* Cannot delete pending edge",
     "result": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e\n       |                                                  ^\n-------* Cannot delete pending edge"
-  }
+  },
+  "tags": [
+    "fail",
+    "writes",
+    "create",
+    "delete"
+  ]
 }

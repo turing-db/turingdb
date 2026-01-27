@@ -7,5 +7,11 @@
   "expect": {
     "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n\n       |             ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Not implemented: EdgeType | EdgeType | ...",
     "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n\n       |             ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Not implemented: EdgeType | EdgeType | ..."
-  }
+  },
+  "tags": [
+    "fail",
+    "reads",
+    "type",
+    "constraint"
+  ]
 }

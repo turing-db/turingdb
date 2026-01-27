@@ -15,6 +15,7 @@ struct QueryTestSpec {
     std::string query;
     std::string expectPlan;
     std::string expectResult;
+    std::vector<std::string> tags;
     bool enabled {true};
 };
 

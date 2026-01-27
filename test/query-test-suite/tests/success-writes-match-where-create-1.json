@@ -7,5 +7,12 @@
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __label__: Person\n        __has predicate__\n        __dep__ _n_._name_ (String)\n    `\"]\n    3[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: v0\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n        __label__: Person\n        __has predicate__\n        __dep__ _m_._name_ (String)\n    `\"]\n    9[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    10[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ m\n        __prop__ name\n    `\"]\n    11[\"`\n        __WRITE__\n        __edge__ (n)-[0:IS_FRIEND]->(m)\n    `\"]\n    12[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->9\n    1-->3\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->10\n    7-->11\n    8-->7\n    9-->2\n    10-->8\n    11-->12",
     "result": "EXEC ERROR\nWriteProcessor: Cannot perform writes outside of a write transaction"
-  }
+  },
+  "tags": [
+    "success",
+    "writes",
+    "match",
+    "where",
+    "create"
+  ]
 }

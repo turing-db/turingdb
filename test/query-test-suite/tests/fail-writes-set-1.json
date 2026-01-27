@@ -7,5 +7,10 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) SET n:Node\n       |               ^^^^^^\n-------* SET cannot update entity types yet",
     "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) SET n:Node\n       |               ^^^^^^\n-------* SET cannot update entity types yet"
-  }
+  },
+  "tags": [
+    "fail",
+    "writes",
+    "set"
+  ]
 }

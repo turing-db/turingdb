@@ -192,6 +192,13 @@ std::vector<QueryTestSpec> QueryTestRunner::loadTestsFromDir(const fs::Path& dir
         spec.graphName = doc.value("graph", spec.graphName);
         spec.query = doc.value("query", "");
         spec.enabled = doc.value("enabled", true);
+        if (doc.contains("tags") && doc["tags"].is_array()) {
+            for (const auto& tag : doc["tags"]) {
+                if (tag.is_string()) {
+                    spec.tags.push_back(tag.get<std::string>());
+                }
+            }
+        }
 
         if (doc.contains("expect")) {
             const auto& expect = doc["expect"];

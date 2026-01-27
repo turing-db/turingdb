@@ -7,5 +7,11 @@
   "expect": {
     "plan": "PARSE ERROR\n-------* Cypher parser\n     2 | MATCH (a)-->(b)-->(c)\n     3 | RETURN n, e, m LIMIT 3 SKIP 2;\n       |                        ^^^^\n-------* syntax error, unexpected SKIP, expecting PROG_END",
     "result": "PARSE ERROR\n-------* Cypher parser\n     2 | MATCH (a)-->(b)-->(c)\n     3 | RETURN n, e, m LIMIT 3 SKIP 2;\n       |                        ^^^^\n-------* syntax error, unexpected SKIP, expecting PROG_END"
-  }
+  },
+  "tags": [
+    "fail",
+    "reads",
+    "skip",
+    "limit"
+  ]
 }

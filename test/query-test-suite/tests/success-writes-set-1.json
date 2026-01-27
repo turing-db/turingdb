@@ -7,5 +7,10 @@
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __WRITE__\n        __node_update__ integer\n        __node_update__ integer\n    `\"]\n    4[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4",
     "result": "EXEC ERROR\nWriteProcessor: Cannot perform writes outside of a write transaction"
-  }
+  },
+  "tags": [
+    "success",
+    "writes",
+    "set"
+  ]
 }

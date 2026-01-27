@@ -55,6 +55,14 @@ int main(int argc, char** argv) {
             std::cout << "{\"id\":\"" << escapeJson(test.id) << "\""
                       << ",\"name\":\"" << escapeJson(test.name) << "\""
                       << ",\"query\":\"" << escapeJson(test.query) << "\""
+                      << ",\"tags\":[";
+            for (size_t i = 0; i < test.tags.size(); ++i) {
+                if (i > 0) {
+                    std::cout << ",";
+                }
+                std::cout << "\"" << escapeJson(test.tags[i]) << "\"";
+            }
+            std::cout << "]"
                       << ",\"enabled\":" << (test.enabled ? "true" : "false")
                       << "}";
         }

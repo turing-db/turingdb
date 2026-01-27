@@ -7,5 +7,11 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) CREATE (n)-[e]->(m:Person) RETURN n;\n       |                            ^^^^^^\n-------* Edge pattern must have at least one edge type",
     "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) CREATE (n)-[e]->(m:Person) RETURN n;\n       |                            ^^^^^^\n-------* Edge pattern must have at least one edge type"
-  }
+  },
+  "tags": [
+    "fail",
+    "writes",
+    "match",
+    "create"
+  ]
 }

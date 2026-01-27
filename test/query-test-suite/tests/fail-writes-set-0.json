@@ -7,5 +7,10 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) SET n.name = 5\n       |                      ^^^^^^^^^^\n-------* Cannot evaluate property: types 'String' and 'Integer' are incompatible",
     "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) SET n.name = 5\n       |                      ^^^^^^^^^^\n-------* Cannot evaluate property: types 'String' and 'Integer' are incompatible"
-  }
+  },
+  "tags": [
+    "fail",
+    "writes",
+    "set"
+  ]
 }

@@ -7,5 +7,12 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     2 | WHERE n.name = \"Remy\" AND n.name = \"Adam\"\n     3 | CREATE (n)-[e:IS_FRIEND]->(m:Person)\n       |                           ^^^^^^^^^^\n-------* Variable already defined",
     "result": "ANALYZE ERROR\n-------* Query error\n     2 | WHERE n.name = \"Remy\" AND n.name = \"Adam\"\n     3 | CREATE (n)-[e:IS_FRIEND]->(m:Person)\n       |                           ^^^^^^^^^^\n-------* Variable already defined"
-  }
+  },
+  "tags": [
+    "fail",
+    "writes",
+    "match",
+    "where",
+    "create"
+  ]
 }

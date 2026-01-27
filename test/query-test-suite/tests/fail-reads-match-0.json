@@ -7,5 +7,10 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n       | Variable 'e' is already declared with type 'EdgePattern'",
     "result": "ANALYZE ERROR\n-------* Query error\n       | Variable 'e' is already declared with type 'EdgePattern'"
-  }
+  },
+  "tags": [
+    "fail",
+    "reads",
+    "match"
+  ]
 }

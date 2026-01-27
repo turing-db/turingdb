@@ -7,5 +7,11 @@
   "expect": {
     "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) ORDER BY n.name RETURN n\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* MATCH ... ORDER BY ... is not supported yet. Please use RETURN ... ORDER BY ... instead",
     "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) ORDER BY n.name RETURN n\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* MATCH ... ORDER BY ... is not supported yet. Please use RETURN ... ORDER BY ... instead"
-  }
+  },
+  "tags": [
+    "fail",
+    "reads",
+    "order",
+    "by"
+  ]
 }

@@ -7,5 +7,11 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) CREATE (n:Officer) RETURN n;\n       |                         ^^^^^^^^^^^\n-------* Variable already defined",
     "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) CREATE (n:Officer) RETURN n;\n       |                         ^^^^^^^^^^^\n-------* Variable already defined"
-  }
+  },
+  "tags": [
+    "fail",
+    "writes",
+    "match",
+    "create"
+  ]
 }

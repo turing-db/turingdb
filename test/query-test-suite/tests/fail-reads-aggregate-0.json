@@ -7,5 +7,10 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n { name: count(n.duration)}) RETURN n\n       |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Invalid use of aggregate expression in this context",
     "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n { name: count(n.duration)}) RETURN n\n       |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Invalid use of aggregate expression in this context"
-  }
+  },
+  "tags": [
+    "fail",
+    "reads",
+    "aggregate"
+  ]
 }

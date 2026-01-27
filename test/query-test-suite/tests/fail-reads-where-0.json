@@ -7,5 +7,10 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (a { name: \"Remy\" })-[e:KNOWS_WELL]-(m { name: \"Adam\" })\n     2 | WHERE a:Person AND m:Person AND e.dration > 10 \n       |                                 ^^^^^^^^^\n-------* Property type 'dration' not found",
     "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (a { name: \"Remy\" })-[e:KNOWS_WELL]-(m { name: \"Adam\" })\n     2 | WHERE a:Person AND m:Person AND e.dration > 10\n       |                                 ^^^^^^^^^\n-------* Property type 'dration' not found"
-  }
+  },
+  "tags": [
+    "fail",
+    "reads",
+    "where"
+  ]
 }

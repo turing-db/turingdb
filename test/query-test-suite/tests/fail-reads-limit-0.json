@@ -7,5 +7,10 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     2 | MATCH (a)-->(b)-->(c)\n     3 | RETURN n, e, m LIMIT 3.5\n       |                ^^^^^^^^^\n-------* LIMIT expression must be an integer",
     "result": "ANALYZE ERROR\n-------* Query error\n     2 | MATCH (a)-->(b)-->(c)\n     3 | RETURN n, e, m LIMIT 3.5\n       |                ^^^^^^^^^\n-------* LIMIT expression must be an integer"
-  }
+  },
+  "tags": [
+    "fail",
+    "reads",
+    "limit"
+  ]
 }

@@ -6,6 +6,7 @@ type TestMeta = {
   name: string;
   enabled: boolean;
   query?: string;
+  tags?: string[];
 };
 
 type TestResult = {
@@ -268,6 +269,18 @@ export default function App() {
               <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Selected</p>
               <p className="mt-1 text-lg font-semibold text-ink">{selected.name}</p>
               <p className="text-xs text-ink/60">{selected.id}</p>
+              {selected.tags && selected.tags.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selected.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-white/10 bg-steel/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-ink/70"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           {selected && (

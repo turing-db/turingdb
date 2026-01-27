@@ -7,5 +7,12 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     2 | WHERE n.name = \"Remy\" AND n.name = \"Adam\"\n     3 | CREATE (n)-[e]->(m)\n       |           ^^^^^^\n-------* Edges cannot be inputs to write queries",
     "result": "ANALYZE ERROR\n-------* Query error\n     2 | WHERE n.name = \"Remy\" AND n.name = \"Adam\"\n     3 | CREATE (n)-[e]->(m)\n       |           ^^^^^^\n-------* Edges cannot be inputs to write queries"
-  }
+  },
+  "tags": [
+    "fail",
+    "writes",
+    "match",
+    "where",
+    "create"
+  ]
 }

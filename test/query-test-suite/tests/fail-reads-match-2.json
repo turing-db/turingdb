@@ -7,5 +7,10 @@
   "expect": {
     "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n:Person)-[e]->(m:Person)-[e]->(m)\n       |                                 ^^^^^^\n-------* Re-using the same edge variable, this is not supported",
     "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n:Person)-[e]->(m:Person)-[e]->(m)\n       |                                 ^^^^^^\n-------* Re-using the same edge variable, this is not supported"
-  }
+  },
+  "tags": [
+    "fail",
+    "reads",
+    "match"
+  ]
 }

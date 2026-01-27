@@ -7,5 +7,10 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) MATCH (m) WHERE n.duration = a.duration RETURN n, m;\n       |                                        ^^^^^^^^^^\n-------* Variable 'a' not found",
     "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) MATCH (m) WHERE n.duration = a.duration RETURN n, m;\n       |                                        ^^^^^^^^^^\n-------* Variable 'a' not found"
-  }
+  },
+  "tags": [
+    "fail",
+    "reads",
+    "match"
+  ]
 }
