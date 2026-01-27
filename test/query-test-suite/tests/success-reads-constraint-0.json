@@ -4,7 +4,7 @@
   "query": "MATCH (b)-->(c), (a { name: c.name })-->(b) RETURN a, b, c;",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: b\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: v0\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: c\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n        __has predicate__\n        __dep__ _a_._name_ (String)\n        __dep__ _c_._name_ (String)\n    `\"]\n    9[\"`\n        __SCAN_NODES__\n    `\"]\n    10[\"`\n        __VAR__\n        __name__: a\n    `\"]\n    11[\"`\n        __FILTER_NODE__\n    `\"]\n    12[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    13[\"`\n        __VAR__\n        __name__: v5\n    `\"]\n    14[\"`\n        __FILTER_EDGE__\n    `\"]\n    15[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    16[\"`\n        __JOIN__\n    `\"]\n    17[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ a\n        __prop__ name\n    `\"]\n    18[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ c\n        __prop__ name\n    `\"]\n    19[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->16\n    1-->3\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->18\n    7-->19\n    8-->7\n    9-->17\n    10-->12\n    11-->10\n    12-->14\n    13-->15\n    14-->13\n    15-->16\n    16-->2\n    17-->11\n    18-->8",
-    "result": "COLUMNS: a, b, c\nROWS: 4\n0: 1 | 0 | 1\n1: 6 | 0 | 6\n2: 0 | 1 | 0\n3: 0 | 6 | 0"
+    "result": "a,b,c\n1,0,1\n6,0,6\n0,1,0\n0,6,0"
   },
   "tags": [
     "success",

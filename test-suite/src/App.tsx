@@ -116,6 +116,7 @@ export default function App() {
   const [newTestName, setNewTestName] = React.useState("");
   const [planSvg, setPlanSvg] = React.useState<string | null>(null);
   const renderSeq = React.useRef(0);
+  const [parsedResult, setParsedResult] = React.useState<string[][] | null>(null);
 
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
@@ -590,6 +591,52 @@ export default function App() {
     };
   }, [selectedResult?.planOutput]);
 
+  React.useEffect(() => {
+    const output = selectedResult?.resultOutput ?? "";
+    const trimmed = output.trim();
+    if (!trimmed) {
+      setParsedResult(null);
+      return;
+    }
+    if (/error/i.test(trimmed) || trimmed.startsWith("ANALYZE") || trimmed.startsWith("EXEC")) {
+      setParsedResult(null);
+      return;
+    }
+    const rows: string[][] = [];
+    let current: string[] = [];
+    let cell = "";
+    let inQuotes = false;
+    for (let i = 0; i < trimmed.length; i += 1) {
+      const ch = trimmed[i];
+      const next = trimmed[i + 1];
+      if (inQuotes) {
+        if (ch === "\"" && next === "\"") {
+          cell += "\"";
+          i += 1;
+        } else if (ch === "\"") {
+          inQuotes = false;
+        } else {
+          cell += ch;
+        }
+      } else if (ch === "\"") {
+        inQuotes = true;
+      } else if (ch === ",") {
+        current.push(cell);
+        cell = "";
+      } else if (ch === "\n") {
+        current.push(cell);
+        rows.push(current);
+        current = [];
+        cell = "";
+      } else {
+        cell += ch;
+      }
+    }
+    current.push(cell);
+    rows.push(current);
+    setParsedResult(rows);
+  }, [selectedResult?.resultOutput]);
+
   return (
     <SidebarProvider ref={sidebarRef} defaultOpen sidebarWidth={sidebarWidth}>
       <Sidebar>
@@ -922,9 +969,36 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
+                {parsedResult && parsedResult.length > 0 ? (
+                  <div className="mt-3 max-h-[48rem] overflow-auto rounded-xl border border-white/5 bg-paper">
+                    <table className="w-full border-collapse text-left text-xs text-ink">
+                      <thead className="sticky top-0 bg-steel/60 text-ink/80">
+                        <tr>
+                          {parsedResult[0].map((cell, idx) => (
+                            <th key={idx} className="border-b border-white/5 px-3 py-2 font-semibold">
+                              {cell}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parsedResult.slice(1).map((row, rowIdx) => (
+                          <tr key={rowIdx} className="odd:bg-white/5">
+                            {row.map((cell, cellIdx) => (
+                              <td key={cellIdx} className="border-b border-white/5 px-3 py-2">
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <pre className="mt-3 max-h-[48rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
 {selectedResult.resultOutput || "(empty)"}
-                </pre>
+                  </pre>
+                )}
               </div>
               <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
                 <div className="flex items-center justify-between">

@@ -4,7 +4,7 @@
   "query": "MATCH (n { name: \"Remy\" }) RETURN n.name",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __has predicate__\n        __dep__ _n_._name_ (String)\n    `\"]\n    3[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    4[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->3\n    1-->4\n    2-->1\n    3-->2",
-    "result": "COLUMNS: n.name\nROWS: 1\n0: Remy"
+    "result": "n.name\nRemy"
   },
   "tags": [
     "success",

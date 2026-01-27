@@ -112,6 +112,28 @@ std::string columnValueToString(const db::Column* column, size_t row) {
     });
 }
 
+std::string escapeCsv(std::string_view value) {
+    bool needsQuotes = false;
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (char ch : value) {
+        if (ch == '"') {
+            escaped.push_back('"');
+            escaped.push_back('"');
+            needsQuotes = true;
+            continue;
+        }
+        if (ch == ',' || ch == '\n' || ch == '\r') {
+            needsQuotes = true;
+        }
+        escaped.push_back(ch);
+    }
+    if (!needsQuotes) {
+        return std::string {value};
+    }
+    return "\"" + escaped + "\"";
+}
+
 std::string formatStatusError(db::QueryStatus::Status status, std::string_view message) {
     auto statusName = std::string(db::QueryStatusDescription::value(status));
     for (auto& ch : statusName) {
@@ -289,21 +311,19 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
     if (!status.isOk()) {
         resultOut << formatStatusError(status.getStatus(), status.getError());
     } else {
-        resultOut << "COLUMNS: ";
         for (size_t i = 0; i < columnNames.size(); ++i) {
             if (i > 0) {
-                resultOut << ", ";
+                resultOut << ",";
             }
-            resultOut << columnNames[i];
+            resultOut << escapeCsv(columnNames[i]);
         }
-        resultOut << "\nROWS: " << rows.size();
-        for (size_t row = 0; row < rows.size(); ++row) {
-            resultOut << "\n" << row << ": ";
-            for (size_t col = 0; col < rows[row].size(); ++col) {
+        for (const auto& row : rows) {
+            resultOut << "\n";
+            for (size_t col = 0; col < row.size(); ++col) {
                 if (col > 0) {
-                    resultOut << " | ";
+                    resultOut << ",";
                 }
-                resultOut << rows[row][col];
+                resultOut << escapeCsv(row[col]);
             }
         }
     }

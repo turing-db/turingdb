@@ -4,7 +4,7 @@
   "query": "CREATE (n:Person { newProp: 5 }), (m:Person { newProp: 6 })",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __WRITE__\n        __node__ (0:Person {newProp (Int64): *expr* })\n        __node__ (1:Person {newProp (Int64): *expr* })\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": "COLUMNS:\nROWS: 0"
+    "result": ""
   },
   "tags": [
     "success",
