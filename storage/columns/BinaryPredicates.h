@@ -1,11 +1,43 @@
 #pragma once
 
+#include <concepts>
 #include <functional>
+#include <type_traits>
 
 #include "ColumnCombinations.h"
 #include "ColumnMask.h"
 
 namespace db {
+
+template <typename T>
+concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>
+                  || std::same_as<ColumnMask::Bool_t, T>;
+
+// Implementations of basic operations in Kleene/3-valued logic
+
+// The following Boolean operators have unique semantics for 3-way logic (i.e.
+// short-circuiting) so are defined explicitly rather than generically
+template <BooleanOpt T, BooleanOpt U>
+static std::optional<bool> optionalOr(const T& a, const U& b) {
+    if (a == CustomBool {true} || b == CustomBool {true}) {
+        return true;
+    }
+    if (a == CustomBool {false} && b == CustomBool {false}) {
+        return false;
+    }
+    return std::nullopt;
+}
+
+template <BooleanOpt T, BooleanOpt U>
+static std::optional<bool> optionalAnd(const T& a, const U& b) {
+    if (a == CustomBool {true} && b == CustomBool {true}) {
+        return true;
+    }
+    if (a == CustomBool {false} || b == CustomBool {false}) {
+        return false;
+    }
+    return std::nullopt;
+}
 
 /**
  * @brief Generic function to apply a generic predicate to two possibly-optional
@@ -180,22 +212,33 @@ struct BinaryPredicateExecutor {
 
 template <typename F>
 struct BinaryPredicate {
+    // Handle optional cases
     template<typename T, typename U>
         requires (is_optional_v<T> || is_optional_v<U>)
     inline std::optional<CustomBool> operator()(T&& a, U&& b) {
-        return optionalPredicate<F>(std::forward<T>(a), std::forward<U>(b));
+        // Short-circuiting implementations for AND and OR
+        if constexpr (std::is_same_v<F, std::logical_or<>>) {
+            return optionalOr(std::forward<T>(a), std::forward<U>(b));
+        } else if constexpr (std::is_same_v<F, std::logical_and<>>) {
+            return optionalAnd(std::forward<T>(a), std::forward<U>(b));
+        } else { // General implementation for >, <, <=, etc
+            return optionalPredicate<F>(std::forward<T>(a), std::forward<U>(b));
+        }
     }
-
+    
+    // Handle non-optional cases
     template <typename T, typename U>
     inline ColumnMask::Bool_t operator()(T&& a, U&& b) {
-        return F {}(std::forward<T>(a), std::forward<U>(b));
+        return F{}(std::forward<T>(a), std::forward<U>(b));
     }
-
+    
     // Specialisation for IS NOT NULL and IS NULL
-    template<typename T>
-        requires (is_optional_v<T>)
+    template <typename T>
+        requires(is_optional_v<T>
+                 && (std::is_same_v<F, std::equal_to<>>
+                     || std::is_same_v<F, std::not_equal_to<>>))
     inline ColumnMask::Bool_t operator()(T&& a, const PropertyNull& null) {
-        return F {} (std::forward<T>(a), null);
+        return F{}(std::forward<T>(a), null);
     }
 };
 

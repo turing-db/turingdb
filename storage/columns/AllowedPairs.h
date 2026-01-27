@@ -122,7 +122,11 @@ struct PairRestrictions<Op> {
             KindPair<LabelSetID, LabelSetID>,
             KindPair<EdgeTypeID, EdgeTypeID>,
 
-            KindPair<std::optional<types::Int64::Primitive>, PropertyNull>
+            KindPair<std::optional<types::Int64::Primitive>, PropertyNull>,
+            KindPair<std::optional<types::UInt64::Primitive>, PropertyNull>,
+            KindPair<std::optional<types::Double::Primitive>, PropertyNull>,
+            KindPair<std::optional<types::String::Primitive>, PropertyNull>,
+            KindPair<std::optional<types::Bool::Primitive>, PropertyNull>
         >
         /*,
 
