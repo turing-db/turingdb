@@ -17,6 +17,7 @@ struct QueryTestSpec {
     std::string expectResult;
     std::vector<std::string> tags;
     bool enabled {true};
+    bool writeRequired {false};
 };
 
 struct QueryTestResult {

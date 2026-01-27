@@ -23,6 +23,7 @@ type TestMeta = {
   enabled: boolean;
   query?: string;
   tags?: string[];
+  writeRequired?: boolean;
 };
 
 type TestResult = {
@@ -92,6 +93,7 @@ export default function App() {
   const [isEditingQuery, setIsEditingQuery] = React.useState(false);
   const [tagFilters, setTagFilters] = React.useState<string[]>([]);
   const [tagDraft, setTagDraft] = React.useState("");
+  const [writeRequired, setWriteRequired] = React.useState(false);
 
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
@@ -122,6 +124,7 @@ export default function App() {
     setQueryDraft(selected?.query ?? "");
     setNameDraft(selected?.name ?? "");
     setTagDraft("");
+    setWriteRequired(selected?.writeRequired ?? false);
     setIsEditingQuery(false);
   }, [selected]);
 
@@ -325,6 +328,46 @@ export default function App() {
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to update tags.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateWriteRequired = async (nextValue: boolean) => {
+    if (!selected) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/update`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: selected.name,
+          writeRequired: nextValue
+        })
+      });
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message =
+          typeof details?.error === "string"
+            ? `${details.error}${details.details ? `: ${details.details}` : ""}`
+            : "Failed to update test";
+        throw new Error(message);
+      }
+      setTests((prev) =>
+        prev.map((test) =>
+          test.name === selected.name
+            ? { ...test, writeRequired: nextValue }
+            : test
+        )
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, writeRequired: nextValue } : prev
+      );
+      setWriteRequired(nextValue);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update write mode.";
       setError(message);
     } finally {
       setLoading(false);
@@ -614,6 +657,15 @@ export default function App() {
                   Add Tag
                 </Button>
               </div>
+              <label className="mt-4 flex items-center gap-2 text-xs text-ink/70">
+                <input
+                  type="checkbox"
+                  checked={writeRequired}
+                  onChange={(event) => updateWriteRequired(event.target.checked)}
+                  className="h-4 w-4 rounded border border-white/20 bg-paper text-accent focus:ring-2 focus:ring-accent/40"
+                />
+                Require write transaction
+              </label>
             </div>
           )}
           {selected && (

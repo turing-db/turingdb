@@ -12,5 +12,6 @@
     "success",
     "reads",
     "constraint"
-  ]
+  ],
+  "write-required": false
 }

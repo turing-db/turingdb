@@ -12,5 +12,6 @@
     "fail",
     "reads",
     "limit"
-  ]
+  ],
+  "write-required": false
 }

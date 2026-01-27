@@ -13,5 +13,6 @@
     "reads",
     "skip",
     "limit"
-  ]
+  ],
+  "write-required": false
 }

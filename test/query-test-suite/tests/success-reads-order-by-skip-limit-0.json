@@ -15,5 +15,6 @@
     "by",
     "skip",
     "limit"
-  ]
+  ],
+  "write-required": false
 }

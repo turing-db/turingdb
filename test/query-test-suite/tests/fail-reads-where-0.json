@@ -12,5 +12,6 @@
     "fail",
     "reads",
     "where"
-  ]
+  ],
+  "write-required": false
 }

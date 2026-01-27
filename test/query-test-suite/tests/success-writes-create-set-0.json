@@ -6,12 +6,13 @@
   "query": "CREATE (n:Person) SET n.name = \"Node\"",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __WRITE__\n        __node__ (0:Person)\n        __node_update__ name\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": "EXEC ERROR\nWriteProcessor: Cannot perform writes outside of a write transaction"
+    "result": "COLUMNS:\nROWS: 0"
   },
   "tags": [
     "success",
     "writes",
     "create",
     "set"
-  ]
+  ],
+  "write-required": true
 }

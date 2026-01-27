@@ -14,5 +14,6 @@
     "joins",
     "on",
     "filters"
-  ]
+  ],
+  "write-required": false
 }

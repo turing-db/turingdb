@@ -14,5 +14,6 @@
     "match",
     "skip",
     "limit"
-  ]
+  ],
+  "write-required": false
 }

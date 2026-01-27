@@ -14,5 +14,6 @@
     "match",
     "where",
     "create"
-  ]
+  ],
+  "write-required": true
 }

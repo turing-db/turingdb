@@ -13,5 +13,6 @@
     "reads",
     "match",
     "where"
-  ]
+  ],
+  "write-required": false
 }

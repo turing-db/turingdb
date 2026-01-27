@@ -12,5 +12,6 @@
     "success",
     "reads",
     "where"
-  ]
+  ],
+  "write-required": false
 }

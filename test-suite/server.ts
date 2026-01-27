@@ -61,7 +61,8 @@ async function updateTestFile(
   result?: string,
   query?: string,
   newName?: string,
-  tags?: string[]
+  tags?: string[],
+  writeRequired?: boolean
 ) {
     const entries = await Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: dir }));
     for (const entry of entries) {
@@ -93,6 +94,9 @@ async function updateTestFile(
         }
         if (Array.isArray(tags)) {
           data.tags = tags;
+        }
+        if (typeof writeRequired === "boolean") {
+          data["write-required"] = writeRequired;
         }
         await Bun.write(path, JSON.stringify(data, null, 2) + "\n");
         return true;
@@ -151,7 +155,8 @@ async function createTestFile(dir: string, name: string) {
       plan: "",
       result: ""
     },
-    tags: [] as string[]
+    tags: [] as string[],
+    "write-required": false
   };
   await Bun.write(filePath, JSON.stringify(payload, null, 2) + "\n");
   return { name: finalName, path: filePath };
@@ -220,8 +225,9 @@ Bun.serve({
       const hasQuery = typeof body?.query === "string";
       const hasNewName = typeof body?.newName === "string";
       const hasTags = Array.isArray(body?.tags);
+      const hasWriteRequired = typeof body?.writeRequired === "boolean";
       const targetName = typeof body?.name === "string" ? body.name.trim() : "";
-      if (!targetName || (!hasPlan && !hasResult && !hasQuery && !hasNewName && !hasTags)) {
+      if (!targetName || (!hasPlan && !hasResult && !hasQuery && !hasNewName && !hasTags && !hasWriteRequired)) {
         return errorResponse("Invalid payload", 400);
       }
       if (hasNewName) {
@@ -241,7 +247,8 @@ Bun.serve({
         body.result,
         body.query,
         body.newName,
-        body.tags
+        body.tags,
+        body.writeRequired
       );
       let updatedBuild = false;
       try {
@@ -252,7 +259,8 @@ Bun.serve({
           body.result,
           body.query,
           body.newName,
-          body.tags
+          body.tags,
+          body.writeRequired
         );
       } catch {
         updatedBuild = false;

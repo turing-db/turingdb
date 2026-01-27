@@ -192,6 +192,7 @@ std::vector<QueryTestSpec> QueryTestRunner::loadTestsFromDir(const fs::Path& dir
         spec.graphName = doc.value("graph", spec.graphName);
         spec.query = doc.value("query", "");
         spec.enabled = doc.value("enabled", true);
+        spec.writeRequired = doc.value("write-required", false);
         if (doc.contains("tags") && doc["tags"].is_array()) {
             for (const auto& tag : doc["tags"]) {
                 if (tag.is_string()) {
@@ -251,12 +252,29 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
         }
     };
 
+    db::ChangeID changeID = db::ChangeID::head();
+
+    if (spec.writeRequired) {
+        db->query("CHANGE NEW",
+                  spec.graphName,
+                  &env->getMem(),
+                  [&](const db::Dataframe* df) {
+                      NamedColumn* col = df->getColumn(ColumnTag {0});
+                      bioassert(col, "Column not found");
+                      auto& c = *static_cast<ColumnVector<ChangeID>*>(col->getColumn());
+                      bioassert(c.size() == 1, "Expected 1 change");
+                      changeID = c[0];
+                  },
+                  db::CommitHash::head(),
+                  db::ChangeID::head());
+    }
+
     const db::QueryStatus status = db->query(spec.query,
                                              spec.graphName,
                                              &env->getMem(),
                                              callback,
                                              db::CommitHash::head(),
-                                             db::ChangeID::head());
+                                             changeID);
 
     std::stringstream resultOut;
     if (!status.isOk()) {
@@ -279,6 +297,15 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
                 resultOut << rows[row][col];
             }
         }
+    }
+
+    if (spec.writeRequired) {
+        db->query("CHANGE SUBMIT",
+                  spec.graphName,
+                  &env->getMem(),
+                  [](const db::Dataframe*) {},
+                  db::CommitHash::head(),
+                  changeID);
     }
 
     result.planOutput = normalizeOutput(planOut.str());

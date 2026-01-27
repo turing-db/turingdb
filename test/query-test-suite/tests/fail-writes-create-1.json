@@ -12,5 +12,6 @@
     "fail",
     "writes",
     "create"
-  ]
+  ],
+  "write-required": true
 }

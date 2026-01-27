@@ -13,5 +13,6 @@
     "DEPENDENCIES",
     "HISTORY",
     "labels"
-  ]
+  ],
+  "write-required": false
 }

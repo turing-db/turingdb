@@ -13,5 +13,6 @@
     "writes",
     "match",
     "create"
-  ]
+  ],
+  "write-required": true
 }

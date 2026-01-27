@@ -12,5 +12,6 @@
     "success",
     "reads",
     "loop"
-  ]
+  ],
+  "write-required": false
 }

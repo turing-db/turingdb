@@ -6,12 +6,13 @@
   "query": "MATCH (n:Person) CREATE (n) RETURN n;",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __label__: Person\n    `\"]\n    3[\"`\n        __WRITE__\n    `\"]\n    4[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4",
-    "result": "EXEC ERROR\nWriteProcessor: Cannot perform writes outside of a write transaction"
+    "result": "COLUMNS: n\nROWS: 8\n0: 0\n1: 1\n2: 8\n3: 9\n4: 11\n5: 12\n6: 15\n7: 17"
   },
   "tags": [
     "success",
     "writes",
     "match",
     "create"
-  ]
+  ],
+  "write-required": true
 }

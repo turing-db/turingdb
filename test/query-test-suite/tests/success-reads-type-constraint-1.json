@@ -13,5 +13,6 @@
     "reads",
     "type",
     "constraint"
-  ]
+  ],
+  "write-required": false
 }

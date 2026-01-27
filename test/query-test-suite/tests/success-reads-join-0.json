@@ -12,5 +12,6 @@
     "success",
     "reads",
     "join"
-  ]
+  ],
+  "write-required": false
 }
