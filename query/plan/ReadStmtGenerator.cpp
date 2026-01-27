@@ -119,7 +119,6 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
 
     ProcedureEvalNode* procNode = _tree->create<ProcedureEvalNode>(funcExpr, yield);
 
-
     if (yield) {
         YieldItems* yieldItems = yield->getItems();
         auto& producers = _tree->getDeclProducers();
@@ -493,60 +492,9 @@ void ReadStmtGenerator::placePredicateJoins() {
             throwError("Unknown error. Could not place predicate");
         }
 
-        GetPropertyCache& getPropertyCache = _tree->getGetPropertyCache();
-        GetEntityTypeCache& getEntityTypeCache = _tree->getGetEntityTypeCache();
-
         // Step 2: Place joins
         for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
-            if (auto* expr = dynamic_cast<PropertyExpr*>(dep._expr)) {
-                auto* varNode = dynamic_cast<VarNode*>(dep._var);
-                FilterNode* filter = _variables->getNodeFilter(varNode);
-
-                const VarDecl* entityDecl = expr->getEntityVarDecl();
-                const VarDecl* exprDecl = expr->getExprVarDecl();
-
-                const auto* cached = getPropertyCache.cacheOrRetrieve(entityDecl, exprDecl, expr->getPropName());
-
-                if (cached) {
-                    // GetProperty is already present in the cache. Map the existing expr to the current one
-                    if (!cached->_exprDecl) [[unlikely]] {
-                        throwError("GetProperty expression does not have an expression variable declaration", expr);
-                    }
-
-                    expr->setExprVarDecl(cached->_exprDecl);
-                } else {
-                    GetPropertyWithNullNode* n = _tree->insertBefore<GetPropertyWithNullNode>(filter, expr->getPropName());
-                    n->setEntityVarDecl(entityDecl);
-                    n->setExpr(expr);
-                }
-
-            } else if (auto* expr = dynamic_cast<EntityTypeExpr*>(dep._expr)) {
-                auto* varNode = dynamic_cast<VarNode*>(dep._var);
-                FilterNode* filter = _variables->getNodeFilter(varNode);
-                const VarDecl* entityDecl = expr->getEntityVarDecl();
-                const VarDecl* exprDecl = expr->getExprVarDecl();
-
-                const auto* cached = getEntityTypeCache.cacheOrRetrieve(entityDecl, exprDecl);
-
-                if (cached) {
-                    // GetEntityType is already present in the cache. Map the existing expr to the current one
-                    if (!cached->_exprDecl) [[unlikely]] {
-                        throwError("GetEntityType expression does not have an expression variable declaration", expr);
-                    }
-
-                    expr->setExprVarDecl(cached->_exprDecl);
-                } else {
-                    GetEntityTypeNode* n = _tree->insertBefore<GetEntityTypeNode>(filter);
-                    n->setExpr(expr);
-                    n->setEntityVarDecl(entityDecl);
-                }
-
-            } else if (dynamic_cast<const SymbolExpr*>(dep._expr)) {
-                // Symbol value should already be in a column in a block, no need to change anything
-            } else {
-                throwError("Expression dependency could not be handled in the predicate evaluation");
-            }
-
+            generateDependency(dep._var, dep._expr);
             insertDataFlowNode(var, dep._var);
         }
 
@@ -559,37 +507,32 @@ void ReadStmtGenerator::placePredicateJoins() {
 
 void ReadStmtGenerator::placeJoinsOnProcedures() {
     const auto& producers = _tree->getDeclProducers();
-
+    
     for (const auto& node : _tree->nodes()) {
         if (node->getOpcode() == PlanGraphOpcode::PROCEDURE_EVAL) {
             auto* n = static_cast<ProcedureEvalNode*>(node.get());
             const ExprChain* args = n->getFuncExpr()->getFunctionInvocation()->getArguments();
 
-            for (const Expr* arg : *args) {
-                const VarDecl* decl = arg->getExprVarDecl();
-                if (!decl) [[unlikely]] {
-                    throwError("Procedure argument does not have a variable declaration", arg);
-                }
+            for (Expr* arg : *args) {
+                ExprDependencies deps;
+                deps.genExprDependencies(producers, arg);
 
-                auto it = producers.find(decl);
-                if (it == producers.end()) {
-                    continue;
-                }
+                for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
+                    generateDependency(dep._var, dep._expr);
+                    const auto [path, ancestorNode] = _topology->getShortestPath(n, dep._var);
 
-                PlanGraphNode* producer = it->second;
-                const auto [path, ancestorNode] = _topology->getShortestPath(n, producer);
+                    switch (path) {
+                        case PlanGraphTopology::PathToDependency::SameVar:
+                        case PlanGraphTopology::PathToDependency::BackwardPath: {
+                            return;
+                        }
 
-                switch (path) {
-                    case PlanGraphTopology::PathToDependency::SameVar:
-                    case PlanGraphTopology::PathToDependency::BackwardPath: {
-                        return;
-                    }
-
-                    case PlanGraphTopology::PathToDependency::UndirectedPath:
-                    case PlanGraphTopology::PathToDependency::NoPath: {
-                        PlanGraphNode* depBranchTip = _topology->getBranchTip(producer);
-                        depBranchTip->connectOut(n);
-                        return;
+                        case PlanGraphTopology::PathToDependency::UndirectedPath:
+                        case PlanGraphTopology::PathToDependency::NoPath: {
+                            PlanGraphNode* depBranchTip = _topology->getBranchTip(dep._var);
+                            depBranchTip->connectOut(n);
+                            return;
+                        }
                     }
                 }
             }
@@ -724,6 +667,60 @@ void ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* depende
             depBranchTip->connectOut(join);
             return;
         }
+    }
+}
+
+void ReadStmtGenerator::generateDependency(PlanGraphNode* producer, Expr* rawExpr) {
+    auto& getPropertyCache = _tree->getGetPropertyCache();
+    auto& getEntityTypeCache = _tree->getGetEntityTypeCache();
+
+    if (auto* expr = dynamic_cast<PropertyExpr*>(rawExpr)) {
+        auto* varNode = dynamic_cast<VarNode*>(producer);
+        FilterNode* filter = _variables->getNodeFilter(varNode);
+
+        const VarDecl* entityDecl = expr->getEntityVarDecl();
+        const VarDecl* exprDecl = expr->getExprVarDecl();
+
+        const auto* cached = getPropertyCache.cacheOrRetrieve(entityDecl, exprDecl, expr->getPropName());
+
+        if (cached) {
+            // GetProperty is already present in the cache. Map the existing expr to the current one
+            if (!cached->_exprDecl) [[unlikely]] {
+                throwError("GetProperty expression does not have an expression variable declaration", expr);
+            }
+
+            expr->setExprVarDecl(cached->_exprDecl);
+        } else {
+            GetPropertyWithNullNode* n = _tree->insertBefore<GetPropertyWithNullNode>(filter, expr->getPropName());
+            n->setEntityVarDecl(entityDecl);
+            n->setExpr(expr);
+        }
+
+    } else if (auto* expr = dynamic_cast<EntityTypeExpr*>(rawExpr)) {
+        auto* varNode = dynamic_cast<VarNode*>(producer);
+        FilterNode* filter = _variables->getNodeFilter(varNode);
+        const VarDecl* entityDecl = expr->getEntityVarDecl();
+        const VarDecl* exprDecl = expr->getExprVarDecl();
+
+        const auto* cached = getEntityTypeCache.cacheOrRetrieve(entityDecl, exprDecl);
+
+        if (cached) {
+            // GetEntityType is already present in the cache. Map the existing expr to the current one
+            if (!cached->_exprDecl) [[unlikely]] {
+                throwError("GetEntityType expression does not have an expression variable declaration", expr);
+            }
+
+            expr->setExprVarDecl(cached->_exprDecl);
+        } else {
+            GetEntityTypeNode* n = _tree->insertBefore<GetEntityTypeNode>(filter);
+            n->setExpr(expr);
+            n->setEntityVarDecl(entityDecl);
+        }
+
+    } else if (dynamic_cast<const SymbolExpr*>(rawExpr)) {
+        // Symbol value should already be in a column in a block, no need to change anything
+    } else {
+        throwError("Expression dependency could not be handled in the predicate evaluation");
     }
 }
 

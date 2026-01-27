@@ -72,6 +72,8 @@ private:
     std::unique_ptr<PlanGraphTopology> _topology;
     bool _isStandaloneCall {false};
 
+    void generateDependency(PlanGraphNode* producer, Expr* rawExpr);
+
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
 

@@ -53,7 +53,9 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
                           || data._containerKind == ContainerKind::code<ColumnConst<void>>(),
                       "db.describeCommit: must be provided a commit hash as a vector or const");
             bioassert(data._internalKind == InternalKind::code<std::string_view>()
-                          || data._internalKind == InternalKind::code<std::string>(),
+                          || data._internalKind == InternalKind::code<std::string>()
+                          || data._internalKind == InternalKind::code<std::optional<std::string_view>>()
+                          || data._internalKind == InternalKind::code<std::optional<std::string>>(),
                       "db.describeCommit: must be provided a commit hash as a string or string_view");
             return;
         }
@@ -105,19 +107,41 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
             const auto treatVector = [&]<typename T>(const ColumnVector<T>& vecCol) {
                 for (size_t i = data._i; i < remaining + data._i; ++i) {
                     std::string currentCommitStr;
-                    std::string inputCommitStr {vecCol[i]};
+                    std::string inputCommitStr;
+
+                    if constexpr (requires { vecCol[i].has_value(); }) {
+                        inputCommitStr = vecCol[i].value_or("");
+                    } else {
+                        inputCommitStr = vecCol[i];
+                    }
                     std::transform(inputCommitStr.begin(),
                                    inputCommitStr.end(),
                                    inputCommitStr.begin(),
                                    [](char c) { return std::tolower(c); });
 
                     // Iterate over all commits and find the one that matches the current input
+                    bool found = false;
                     for (const auto& commit : _view.commits()) {
                         currentCommitStr = fmt::format("{:x}", commit.hash().get());
 
                         if (inputCommitStr == currentCommitStr) {
                             writeCommit(commit);
+                            found = true;
                             break;
+                        }
+                    }
+
+                    if (!found) {
+                        if (nodeCountCol) {
+                            nodeCountCol->push_back(0);
+                        }
+
+                        if (edgeCountCol) {
+                            edgeCountCol->push_back(0);
+                        }
+
+                        if (partCountCol) {
+                            partCountCol->push_back(0);
                         }
                     }
                 }
@@ -131,19 +155,42 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
 
             const auto treatConst = [&]<typename T>(const ColumnConst<T>& constCol) {
                 std::string currentCommitStr;
-                std::string inputCommitStr {constCol.getRaw()};
+                std::string inputCommitStr;
+
+                if constexpr (requires { constCol.getRaw().has_value(); }) {
+                    inputCommitStr = constCol.getRaw().value_or("");
+                } else {
+                    inputCommitStr = constCol.getRaw();
+                }
+
                 std::transform(inputCommitStr.begin(),
                                inputCommitStr.end(),
                                inputCommitStr.begin(),
                                [](char c) { return std::tolower(c); });
 
                 // Iterate over all commits and find the one that matches the current input
+                bool found = false;
                 for (const auto& commit : _view.commits()) {
                     currentCommitStr = fmt::format("{:x}", commit.hash().get());
 
                     if (inputCommitStr == currentCommitStr) {
                         writeCommit(commit);
+                        found = true;
                         break;
+                    }
+                }
+
+                if (!found) {
+                    if (nodeCountCol) {
+                        nodeCountCol->push_back(0);
+                    }
+
+                    if (edgeCountCol) {
+                        edgeCountCol->push_back(0);
+                    }
+
+                    if (partCountCol) {
+                        partCountCol->push_back(0);
                     }
                 }
 
@@ -163,6 +210,19 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
                 } break;
                 case ColumnConst<std::string_view>::staticKind(): {
                     treatConst(*static_cast<const ColumnConst<std::string_view>*>(rawCommitCol));
+                } break;
+
+                case ColumnVector<std::optional<std::string>>::staticKind(): {
+                    treatVector(*static_cast<const ColumnVector<std::optional<std::string>>*>(rawCommitCol));
+                } break;
+                case ColumnVector<std::optional<std::string_view>>::staticKind(): {
+                    treatVector(*static_cast<const ColumnVector<std::optional<std::string_view>>*>(rawCommitCol));
+                } break;
+                case ColumnConst<std::optional<std::string>>::staticKind(): {
+                    treatConst(*static_cast<const ColumnConst<std::optional<std::string>>*>(rawCommitCol));
+                } break;
+                case ColumnConst<std::optional<std::string_view>>::staticKind(): {
+                    treatConst(*static_cast<const ColumnConst<std::optional<std::string_view>>*>(rawCommitCol));
                 } break;
 
                 default: {
