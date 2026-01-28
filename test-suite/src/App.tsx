@@ -26,7 +26,7 @@ import {
   SidebarTrigger,
   useSidebar
 } from "@/components/ui/sidebar";
-import { PanelLeft, Play, PlayCircle, Plus, Share2 } from "lucide-react";
+import { PanelLeft, Play, PlayCircle, Plus, Share2, Trash2 } from "lucide-react";
 
 type TestMeta = {
   name: string;
@@ -116,6 +116,7 @@ export default function App() {
   const [showNotRun, setShowNotRun] = React.useState(true);
   const [newTestOpen, setNewTestOpen] = React.useState(false);
   const [newTestName, setNewTestName] = React.useState("");
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [planSvg, setPlanSvg] = React.useState<string | null>(null);
   const renderSeq = React.useRef(0);
   const [parsedResult, setParsedResult] = React.useState<string[][] | null>(null);
@@ -539,6 +540,44 @@ export default function App() {
     }
   };
 
+  const deleteTest = async () => {
+    if (!selected) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/delete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: selected.name })
+      });
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message =
+          typeof details?.error === "string"
+            ? `${details.error}${details.details ? `: ${details.details}` : ""}`
+            : "Failed to delete test";
+        throw new Error(message);
+      }
+      setTests((prev) => prev.filter((test) => test.name !== selected.name));
+      setResults((prev) => {
+        const next = { ...prev };
+        delete next[selected.name];
+        return next;
+      });
+      setSelected((prev) => {
+        if (!prev) return prev;
+        const remaining = tests.filter((test) => test.name !== prev.name);
+        return remaining[0] ?? null;
+      });
+      setDeleteOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete test.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const shareSelected = async () => {
     if (!selected) return;
     const url = new URL(window.location.href);
@@ -909,6 +948,30 @@ export default function App() {
                 <Share2 />
                 Share
               </Button>
+              <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" disabled={!selected || loading}>
+                    <Trash2 />
+                    Delete
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="surface border-white/10">
+                  <DialogHeader>
+                    <DialogTitle>Delete test</DialogTitle>
+                    <DialogDescription>
+                      This will permanently delete the selected test.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button variant="accent" onClick={deleteTest} disabled={loading}>
+                      Delete
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
               <Button variant="accent" onClick={() => selected && runTest(selected.name)} disabled={!selected || loading}>
                 <Play />
                 Run Selected

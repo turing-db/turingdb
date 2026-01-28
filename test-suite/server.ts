@@ -1,20 +1,16 @@
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
 const PORT = 5566;
 
-const turingSrc= process.env.TURING_SRC;
+const turingSrc = process.env.TURING_SRC;
 if (!turingSrc) {
 	throw new Error(
 		"TURING_SRC is not set. Source setup.sh before running the server.",
 	);
 }
 
-const sourceTestsDir = join(
-	turingSrc,
-	"test",
-	"query-test-suite",
-	"tests",
-);
+const sourceTestsDir = join(turingSrc, "test", "query-test-suite", "tests");
 
 async function runCli(args: string[]) {
 	const proc = Bun.spawn(["turingdb-test-cli", ...args], {
@@ -123,7 +119,7 @@ async function updateTestFile(
 			const targetPath = join(dir, `${sanitized}.json`);
 			await Bun.write(targetPath, JSON.stringify(data, null, 2) + "\n");
 			if (targetPath !== path) {
-				await Bun.remove(path);
+				await rm(path);
 			}
 			return true;
 		}
@@ -178,6 +174,22 @@ async function createTestFile(dir: string, name: string) {
 	};
 	await Bun.write(filePath, JSON.stringify(payload, null, 2) + "\n");
 	return { name: candidate, path: filePath };
+}
+
+async function deleteTestFile(dir: string, name: string) {
+	const entries = await Array.fromAsync(
+		new Bun.Glob("*.json").scan({ cwd: dir }),
+	);
+	for (const entry of entries) {
+		const entryName = entry.replace(/\.json$/i, "");
+		if (entryName !== name) continue;
+		const path = join(dir, entry);
+		const file = Bun.file(path);
+		if (!(await file.exists())) return false;
+		await rm(path);
+		return true;
+	}
+	return false;
 }
 
 Bun.serve({
@@ -314,11 +326,6 @@ Bun.serve({
 			}
 			try {
 				const created = await createTestFile(sourceTestsDir, name);
-				try {
-					await createTestFile(sourceTestsDir, name);
-				} catch {
-					// optional
-				}
 				return jsonResponse({ ok: true, name: created.name });
 			} catch (err) {
 				return errorResponse(
@@ -327,6 +334,20 @@ Bun.serve({
 					err instanceof Error ? err.message : undefined,
 				);
 			}
+		}
+
+		if (pathname === "/api/delete" && req.method === "POST") {
+			const body = await req.json().catch(() => null);
+			const name = typeof body?.name === "string" ? body.name.trim() : "";
+			if (!name) {
+				return errorResponse("Invalid payload", 400);
+			}
+			const targetName = idToFilename(name);
+			const deletedSource = await deleteTestFile(sourceTestsDir, targetName);
+			if (!deletedSource) {
+				return errorResponse("Test not found", 404);
+			}
+			return jsonResponse({ ok: true, deletedSource });
 		}
 
 		return errorResponse("Not found", 404);
