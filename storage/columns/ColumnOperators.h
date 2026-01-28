@@ -4,13 +4,14 @@
 #include <concepts>
 #include <functional>
 #include <optional>
-#include <type_traits>
 
 #include "ColumnConst.h"
 #include "ColumnMask.h"
 #include "ColumnVector.h"
 #include "ColumnOptMask.h"
+#include "columns/BinaryPredicates.h"
 #include "columns/ColumnSet.h"
+#include "ColumnCombinations.h"
 
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
@@ -18,50 +19,6 @@
 #include "BioAssert.h"
 
 namespace db {
-
-template <typename T, typename U>
-concept Stringy = (
-    (std::same_as<T, std::string_view> && std::same_as<std::string, U>) ||
-    (std::same_as<std::string_view, U> && std::same_as<T, std::string>)
-);
-
-template <typename T>
-struct is_optional : std::false_type {};
-
-template <typename U>
-struct is_optional<std::optional<U>> : std::true_type {};
-
-template <typename T>
-inline constexpr bool is_optional_v = is_optional<std::remove_cvref_t<T>>::value;
-
-template <typename T>
-struct unwrap_optional {
-    using underlying_type = T;
-};
-
-template <typename U>
-struct unwrap_optional<std::optional<U>> {
-    using underlying_type = U;
-};
-
-template <typename T>
-using unwrap_optional_t = typename unwrap_optional<T>::underlying_type;
-
-// Types that may be compared, but one or both may be wrapped in optional
-template <typename T, typename U>
-concept OptionallyComparable =
-    (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
-     || std::totally_ordered_with<unwrap_optional_t<T>, unwrap_optional_t<U>>);
-
-// Types that are semantically equivalent, but one or both may be wrapped in optional
-template <typename T, typename U>
-concept OptionallyEquivalent =
-    (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
-     || std::same_as<unwrap_optional_t<T>, unwrap_optional_t<U>>);
-
-template <typename T>
-concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>
-                  || std::same_as<ColumnMask::Bool_t, T>;
 
 /**
  * @brief This macro instantiates the boilerplate for various combinations of operands
@@ -353,7 +310,6 @@ public:
      * @param rhs Lookup set
      */
     template <typename T, typename U>
-        requires OptionallyEquivalent<T, U> && (!is_optional_v<U>)
     static void inOp(ColumnMask* mask,
                      const ColumnVector<T>* lhs,
                      const ColumnSet<U>* rhs) {

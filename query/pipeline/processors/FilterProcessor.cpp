@@ -4,8 +4,10 @@
 #include <range/v3/view/drop.hpp>
 
 #include "ID.h"
+#include "columns/BinaryPredicates.h"
 #include "columns/ColumnKind.h"
 #include "columns/ColumnMask.h"
+#include "columns/ColumnOpExecutor.h"
 #include "columns/ColumnOperators.h"
 #include "columns/ColumnOptVector.h"
 #include "dataframe/NamedColumn.h"
@@ -153,13 +155,13 @@ void FilterProcessor::execute() {
         for (Column* predicateResult : _predProg->getTopLevelPredicates()) {
             if (const auto* predResOptMask = dynamic_cast<ColumnOptMask*>(predicateResult);
                     predResOptMask) {
-                ColumnOperators::andOp(&finalOptMask, &finalOptMask, predResOptMask);
+                exec<And>(&finalOptMask, &finalOptMask, predResOptMask);
                 continue;
             }
 
             if (const auto* predResMask = dynamic_cast<ColumnMask*>(predicateResult);
                     predResMask) {
-                ColumnOperators::andOp(&finalOptMask, &finalOptMask, predResMask);
+                exec<And>(&finalOptMask, &finalOptMask, predResMask);
                 continue;
             }
 
@@ -169,7 +171,7 @@ void FilterProcessor::execute() {
     }
 
     ColumnMask finalMask;
-    finalMask.fromColumnOptVector(finalOptMask);
+    finalMask.fromOptMask(finalOptMask);
 
     const size_t colCount = srcDF->size();
 

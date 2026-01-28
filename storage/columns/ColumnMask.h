@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "Column.h"
-#include "ColumnOptVector.h"
+#include "ColumnOptMask.h"
 
 #include "DebugDump.h"
 #include "BioAssert.h"
@@ -152,12 +152,12 @@ public:
     std::vector<Bool_t>& getRaw() { return _data; }
     const std::vector<Bool_t>& getRaw() const { return _data; }
 
-    void fromColumnOptVector(const ColumnOptVector<types::Bool::Primitive>& vec) {
-        const size_t sz = vec.size();
+    void fromOptMask(const ColumnOptMask& optMask) {
+        const size_t sz = optMask.size();
         this->resize(sz);
         std::vector<Bool_t>& raw = getRaw();
         for (size_t i {0}; i < sz; i++) {
-            raw[i] = vec[i].value_or(false);
+            raw[i] = optMask[i].value_or(false);
         }
     }
 
