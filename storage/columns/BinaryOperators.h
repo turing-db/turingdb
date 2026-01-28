@@ -52,8 +52,8 @@ inline static auto optionalGeneric(T&& a,
 template <typename Op, typename Res, typename T, typename U>
 struct BinaryOpExecutor {
     static void apply(ColumnVector<Res>* res,
-               const ColumnVector<T>* lhs,
-               const ColumnVector<U>* rhs) {
+                      const ColumnVector<T>* lhs,
+                      const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
         const size_t size = lhs->size();
         res->resize(size);

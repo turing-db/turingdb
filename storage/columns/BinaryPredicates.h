@@ -79,8 +79,8 @@ inline auto optionalPredicate(T&& a, U&& b) -> optional_invoke_result<Pred, T, U
 template <typename Op, typename T, typename U>
 struct BinaryPredicateExecutor {
     static void apply(ColumnMask* res,
-               const ColumnVector<T>* lhs,
-               const ColumnVector<U>* rhs) {
+                      const ColumnVector<T>* lhs,
+                      const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
         const size_t size = lhs->size();
         res->resize(size);
@@ -96,8 +96,8 @@ struct BinaryPredicateExecutor {
     }
 
     static void apply(ColumnOptMask* res,
-               const ColumnVector<T>* lhs,
-               const ColumnVector<U>* rhs) {
+                      const ColumnVector<T>* lhs,
+                      const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
         const size_t size = lhs->size();
         res->resize(size);
