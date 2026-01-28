@@ -159,6 +159,18 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         _exprAnalyzer->analyzeRootExpr(item);
         isAggregate |= item->isAggregate();
         hasGroupingKeys |= !item->isAggregate();
+
+        const bool isBinary = item->getKind() == Expr::Kind::BINARY;
+        if (isBinary) {
+            throw AnalyzeException(
+                "Binary expressions in RETURN clauses are not yet supported.");
+        }
+
+        const bool isUnary = item->getKind() == Expr::Kind::UNARY;
+        if (isUnary) {
+            throw AnalyzeException(
+                "Unary expressions in RETURN clauses are not yet supported.");
+        }
     }
 
     if (isAggregate) {

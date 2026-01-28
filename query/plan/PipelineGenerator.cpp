@@ -672,7 +672,12 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                 throw PlannerException("Projection item does not have a variable declaration");
             }
 
-            const ColumnTag tag = _declToColumn.at(decl);
+            const auto findColIt = _declToColumn.find(decl);
+            if (findColIt == _declToColumn.end()) {
+                throw PlannerException(fmt::format("Unregistered variable {}.", decl->getName()));
+            }
+
+            const ColumnTag tag = findColIt->second;
             const std::string_view name = item->getName();
 
             const std::string_view repr = name.empty()
