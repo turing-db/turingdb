@@ -192,7 +192,7 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         const DeclContext* ctxt = _currentQuery->getDeclContext();
         bioassert(ctxt, "Query context is invalid");
 
-        for (VarDecl* decl : *ctxt) {
+        for (VarDecl* decl : std::views::reverse(*ctxt)) {
             if (decl->isUnnamed()) {
                 continue;
             }
