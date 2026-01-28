@@ -1,12 +1,12 @@
 #pragma once
 
-#include "ColumnCombinations.h"
+#include <type_traits>
 
+#include "ColumnCombinations.h"
 #include "BinaryOperators.h"
 #include "BinaryPredicates.h"
 #include "UnaryPredicates.h"
 #include "MaskOperators.h"
-#include <type_traits>
 
 namespace db {
 
@@ -28,6 +28,7 @@ inline void exec(ColW&& res, ColT&& lhs, ColU&& rhs) {
 
 /// Binary predicates
 template <typename Op, typename ColT, typename ColU>
+    requires(!std::is_same_v<Op, Apply>) // FIXME: More meaningful constraint
 inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
     using DecayColT = decay_col_t<ColT>;
     using DecayColU = decay_col_t<ColU>;
@@ -41,6 +42,7 @@ inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
 }
 
 template <typename Op, typename ColT, typename ColU>
+    requires(!std::is_same_v<Op, Apply>) // FIXME: More meaningful constraint
 inline void exec(ColumnOptMask* res, ColT&& lhs, ColU&& rhs) {
     using DecayColT = decay_col_t<ColT>;
     using DecayColU = decay_col_t<ColU>;
@@ -74,26 +76,26 @@ inline void exec(ColumnOptMask* res, ColT&& arg) {
 
 /// Binary operation on masks
 template <typename Op>
-inline void exec(ColumnMask* res, ColumnMask* lhs, ColumnMask* rhs) {
+inline void exec(ColumnMask* res, const ColumnMask* lhs, const ColumnMask* rhs) {
     MaskOpExecutor<Op>::apply(res, lhs, rhs);
 }
 
 /// Unary operation on masks
 template <typename Op>
-inline void exec(ColumnMask* res, ColumnMask* arg) {
+inline void exec(ColumnMask* res, const ColumnMask* arg) {
     MaskOpExecutor<Op>::apply(res, arg);
 }
 
 /// Applying masks to vectors
 template <typename Op, typename T>
     requires std::is_same_v<Op, Apply>
-inline void exec(ColumnVector<T>* res, ColumnVector<T>* src, ColumnMask* mask) {
+inline void exec(ColumnVector<T>* res, const ColumnVector<T>* src, const ColumnMask* mask) {
     MaskApplicator::apply(res, src, mask);
 }
 
 template <typename Op, typename T>
     requires std::is_same_v<Op, Apply>
-inline void exec(ColumnVector<T>* res, ColumnMask* mask, ColumnVector<T>* src) {
+inline void exec(ColumnVector<T>* res, const ColumnMask* mask, const ColumnVector<T>* src) {
     MaskApplicator::apply(res, src, mask);
 }
 

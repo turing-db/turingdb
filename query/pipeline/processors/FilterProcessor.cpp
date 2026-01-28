@@ -28,13 +28,12 @@ namespace rv = rg::views;
 
 namespace {
 
-#define APPLY_MASK_CASE(Type)                \
-    case Type::staticKind(): {               \
-        ColumnOperators::applyMask(          \
-            static_cast<const Type*>(src),   \
-            mask,                            \
-            static_cast<Type*>(dest));       \
-    }                                        \
+#define APPLY_MASK_CASE(Type)                 \
+    case Type::staticKind(): {                \
+        exec<Apply>(static_cast<Type*>(dest), \
+            static_cast<const Type*>(src),    \
+            mask);                            \
+    }                                         \
     break;
 
 
