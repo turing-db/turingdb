@@ -4,13 +4,15 @@
 #include <functional>
 #include <type_traits>
 
-#include "ColumnCombinations.h"
+#include "TypeUtils.h"
 #include "ColumnMask.h"
 
-namespace db {
+namespace {
+
+using namespace db;
 
 template <typename T>
-concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>
+concept BooleanOpt = std::same_as<TypeUtils::unwrap_optional_t<T>, types::Bool::Primitive>
                   || std::same_as<ColumnMask::Bool_t, T>;
 
 template <typename F>
@@ -20,7 +22,7 @@ concept TestsEquality =
 // The following Boolean operators have unique semantics for 3-way logic (i.e.
 // short-circuiting) so are defined explicitly rather than generically
 template <BooleanOpt T, BooleanOpt U>
-static std::optional<bool> optionalOr(const T& a, const U& b) {
+inline std::optional<bool> optionalOr(const T& a, const U& b) {
     if (a == CustomBool {true} || b == CustomBool {true}) {
         return true;
     }
@@ -31,7 +33,7 @@ static std::optional<bool> optionalOr(const T& a, const U& b) {
 }
 
 template <BooleanOpt T, BooleanOpt U>
-static std::optional<bool> optionalAnd(const T& a, const U& b) {
+inline std::optional<bool> optionalAnd(const T& a, const U& b) {
     if (a == CustomBool {true} && b == CustomBool {true}) {
         return true;
     }
@@ -48,14 +50,15 @@ static std::optional<bool> optionalAnd(const T& a, const U& b) {
  */
 template <typename Pred, typename T, typename U>
     requires OptionalPredicate<Pred, T, U>
-inline auto optionalPredicate(T&& a, U&& b) -> optional_invoke_result<Pred, T, U> {
-    if constexpr (is_optional_v<T>) {
+inline auto optionalPredicate(T&& a,
+                              U&& b) -> TypeUtils::optional_invoke_result<Pred, T, U> {
+    if constexpr (TypeUtils::is_optional_v<T>) {
         if (!a.has_value()) {
             return std::nullopt;
         }
     }
 
-    if constexpr (is_optional_v<U>) {
+    if constexpr (TypeUtils::is_optional_v<U>) {
         if (!b.has_value()) {
             return std::nullopt;
         }
@@ -63,8 +66,8 @@ inline auto optionalPredicate(T&& a, U&& b) -> optional_invoke_result<Pred, T, U
 
     // a and b are both either engaged optionals or values, so safe to unwrap
 
-    auto&& av = unwrap(a);
-    auto&& bv = unwrap(b);
+    auto&& av = TypeUtils::unwrap(a);
+    auto&& bv = TypeUtils::unwrap(b);
 
     return Pred {}(av, bv);
 }
@@ -256,7 +259,7 @@ template <typename F>
 struct BinaryPredicate {
     // Handle optional cases
     template<typename T, typename U>
-        requires (is_optional_v<T> || is_optional_v<U>)
+        requires (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
     inline std::optional<CustomBool> operator()(T&& a, U&& b) {
         // Short-circuiting implementations for AND and OR
         if constexpr (std::is_same_v<F, std::logical_or<>>) {
@@ -276,11 +279,15 @@ struct BinaryPredicate {
     
     // Specialisation for IS NOT NULL and IS NULL
     template <typename T>
-        requires(is_optional_v<T> && TestsEquality<F>)
+        requires(TypeUtils::is_optional_v<T> && TestsEquality<F>)
     inline ColumnMask::Bool_t operator()(T&& a, const PropertyNull& null) {
         return F{}(std::forward<T>(a), null);
     }
 };
+
+}
+
+namespace db {
 
 using Eq = BinaryPredicate<std::equal_to<>>;
 using Ne = BinaryPredicate<std::not_equal_to<>>;

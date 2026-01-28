@@ -8,15 +8,17 @@
 #include "UnaryPredicates.h"
 #include "MaskOperators.h"
 
+#include "TypeUtils.h"
+
 namespace db {
 
 /// Generic binary operators
 template <typename Op, typename ColW, typename ColT, typename ColU>
     requires is_result_column<Op, ColT, ColU, ColW>
 inline void exec(ColW&& res, ColT&& lhs, ColU&& rhs) {
-    using DecayColT = decay_col_t<ColT>;
-    using DecayColU = decay_col_t<ColU>;
-    using DecayColW = decay_col_t<ColW>;
+    using DecayColT = TypeUtils::decay_col_t<ColT>;
+    using DecayColU = TypeUtils::decay_col_t<ColU>;
+    using DecayColW = TypeUtils::decay_col_t<ColW>;
 
     using InternalT = InnerTypeHelper<DecayColT>::type;
     using InternalU = InnerTypeHelper<DecayColU>::type;
@@ -30,8 +32,8 @@ inline void exec(ColW&& res, ColT&& lhs, ColU&& rhs) {
 template <typename Op, typename ColT, typename ColU>
     requires(!std::is_same_v<Op, ApplyMask>) // FIXME: More meaningful constraint
 inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
-    using DecayColT = decay_col_t<ColT>;
-    using DecayColU = decay_col_t<ColU>;
+    using DecayColT = TypeUtils::decay_col_t<ColT>;
+    using DecayColU = TypeUtils::decay_col_t<ColU>;
 
     using InternalT = InnerTypeHelper<DecayColT>::type;
     using InternalU = InnerTypeHelper<DecayColU>::type;
@@ -44,8 +46,8 @@ inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
 template <typename Op, typename ColT, typename ColU>
     requires(!std::is_same_v<Op, ApplyMask>) // FIXME: More meaningful constraint
 inline void exec(ColumnOptMask* res, ColT&& lhs, ColU&& rhs) {
-    using DecayColT = decay_col_t<ColT>;
-    using DecayColU = decay_col_t<ColU>;
+    using DecayColT = TypeUtils::decay_col_t<ColT>;
+    using DecayColU = TypeUtils::decay_col_t<ColU>;
 
     using InternalT = InnerTypeHelper<DecayColT>::type;
     using InternalU = InnerTypeHelper<DecayColU>::type;
@@ -58,7 +60,7 @@ inline void exec(ColumnOptMask* res, ColT&& lhs, ColU&& rhs) {
 /// Unary predicates
 template <typename Op, typename ColT>
 inline void exec(ColumnMask* res, ColT&& arg) {
-    using DecayColT = decay_col_t<ColT>;
+    using DecayColT = TypeUtils::decay_col_t<ColT>;
 
     using InternalT = InnerTypeHelper<DecayColT>::type;
 
@@ -67,7 +69,7 @@ inline void exec(ColumnMask* res, ColT&& arg) {
 
 template <typename Op, typename ColT>
 inline void exec(ColumnOptMask* res, ColT&& arg) {
-    using DecayColT = decay_col_t<ColT>;
+    using DecayColT = TypeUtils::decay_col_t<ColT>;
 
     using InternalT = InnerTypeHelper<DecayColT>::type;
 

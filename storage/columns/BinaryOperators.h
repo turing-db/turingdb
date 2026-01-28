@@ -2,16 +2,16 @@
 
 #include <functional>
 #include <optional>
-#include <utility>
 
 #include "ColumnVector.h"
 #include "ColumnConst.h"
-#include "ColumnCombinations.h"
+#include "TypeUtils.h"
 
 #include "BioAssert.h"
-#include "spdlog/fmt/bundled/base.h"
 
-namespace db {
+namespace {
+
+using namespace db;
 
 /**
  * @brief Generic function to apply a generic invokable to two possibly-optional
@@ -20,15 +20,15 @@ namespace db {
  */
 template <typename Func, typename T, typename U>
     requires OptionallyInvokable<Func, T, U>
-inline static auto optionalGeneric(T&& a,
-                                   U&& b) -> optional_invoke_result<Func, T, U> {
-    if constexpr (is_optional_v<T>) {
+inline auto optionalGeneric(T&& a,
+                            U&& b) -> TypeUtils::optional_invoke_result<Func, T, U> {
+    if constexpr (TypeUtils::is_optional_v<T>) {
         if (!a.has_value()) {
             return std::nullopt;
         }
     }
 
-    if constexpr (is_optional_v<U>) {
+    if constexpr (TypeUtils::is_optional_v<U>) {
         if (!b.has_value()) {
             return std::nullopt;
         }
@@ -36,8 +36,8 @@ inline static auto optionalGeneric(T&& a,
 
     // a and b are both either engaged optionals or values, so safe to unwrap
 
-    auto&& av = unwrap(a);
-    auto&& bv = unwrap(b);
+    auto&& av = TypeUtils::unwrap(a);
+    auto&& bv = TypeUtils::unwrap(b);
 
     return Func {}(av, bv);
 }
@@ -116,7 +116,7 @@ struct BinaryOpExecutor {
 template <typename F>
 struct BinaryOperator {
     template<typename T, typename U>
-        requires is_optional_v<T> || is_optional_v<U>
+        requires TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>
     inline decltype(auto) operator()(T&& a, U&& b) {
         return optionalGeneric<F>(std::forward<T>(a), std::forward<U>(b));
     }
@@ -126,6 +126,10 @@ struct BinaryOperator {
         return F {}(std::forward<T>(a), std::forward<U>(b));
     }
 };
+
+}
+
+namespace db {
 
 using Add = BinaryOperator<std::plus<>>;
 using Sub = BinaryOperator<std::minus<>>;

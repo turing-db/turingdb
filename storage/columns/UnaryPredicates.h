@@ -4,9 +4,11 @@
 #include "ColumnOptMask.h"
 #include "ColumnVector.h"
 
-#include "ColumnCombinations.h"
+#include "TypeUtils.h"
 
-namespace db {
+namespace {
+
+using namespace db;
 
 /**
  * @brief Generic function to apply a generic unary predicate to a possibly-optional
@@ -15,8 +17,8 @@ namespace db {
  */
 template <typename Pred, typename T>
     requires OptionalPredicate<Pred, T>
-inline static auto optionalUnaryPredicate(T&& a) -> optional_invoke_result<Pred, T>{
-    if constexpr (is_optional_v<T>) {
+inline auto optionalUnaryPredicate(T&& a) -> TypeUtils::optional_invoke_result<Pred, T>{
+    if constexpr (TypeUtils::is_optional_v<T>) {
         if (!a.has_value()) {
             return std::nullopt;
         }
@@ -24,7 +26,7 @@ inline static auto optionalUnaryPredicate(T&& a) -> optional_invoke_result<Pred,
 
     // a is either engaged optional or value, so safe to unwrap
 
-    auto&& av = unwrap(a);
+    auto&& av = TypeUtils::unwrap(a);
 
     return Pred {}(av);
 }
@@ -52,7 +54,7 @@ struct UnaryPredicateExecutor {
     }
 
     static void apply(ColumnOptMask* res, const ColumnVector<T>* arg)
-        requires is_optional_v<T>
+        requires TypeUtils::is_optional_v<T>
     {
         const size_t size = arg->size();
 
@@ -74,7 +76,7 @@ struct UnaryPredicateExecutor {
 template <typename F>
 struct UnaryPredicate {
     template<typename T>
-        requires is_optional_v<T>
+        requires TypeUtils::is_optional_v<T>
     inline std::optional<CustomBool> operator()(T&& a) {
         return optionalUnaryPredicate<F>(std::forward<T>(a));
     }
@@ -84,6 +86,11 @@ struct UnaryPredicate {
         return F {}(std::forward<T>(a));
     }
 };
+
+
+}
+
+namespace db {
 
 using Not = UnaryPredicate<std::logical_not<>>;
 
