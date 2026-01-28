@@ -966,6 +966,11 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         const VarDecl* argDecl = argExpr->getExprVarDecl();
 
         if (!argDecl) {
+            if (argExpr->getKind() != Expr::Kind::LITERAL && argExpr->getKind() != Expr::Kind::SYMBOL) {
+                // TODO: replace this with an expression evaluation processor
+                throw PlannerException("Procedure arguments must be literals or symbols");
+            }
+
             ExprProgram* exprProg = ExprProgram::create(_pipeline);
             ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
             col = exprGen.generateExpr(argExpr);
