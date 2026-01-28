@@ -4,7 +4,6 @@
 #include <span>
 #include <stdint.h>
 
-#include "FatalException.h"
 #include "Processor.h"
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
@@ -41,14 +40,7 @@ public:
                            DataframeManager&,
                            std::span<ProcedureBlueprint::YieldItem> yieldItems);
 
-    PipelineBlockInputInterface& input() {
-        if (!_input) {
-            throw FatalException("Attempted to get null input of DatabaseProcedureProcessor.");
-        }
-
-        return _input.value();
-    }
-
+    PipelineBlockInputInterface& input();
     PipelineBlockOutputInterface& output() { return _output; }
 
     const Procedure& procedure() const { return _procedure; }

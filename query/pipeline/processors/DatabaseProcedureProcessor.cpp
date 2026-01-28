@@ -178,6 +178,14 @@ void DatabaseProcedureProcessor::allocReturnValues(LocalMemory& mem,
     }
 }
 
+PipelineBlockInputInterface& DatabaseProcedureProcessor::input() {
+    if (!_input.has_value()) {
+        throw PipelineException("No input port");
+    }
+
+    return *_input;
+}
+
 DatabaseProcedureProcessor::DatabaseProcedureProcessor()
 {
 }

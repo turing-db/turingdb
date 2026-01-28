@@ -23,7 +23,7 @@ namespace db {
 class ExprDependencies {
 public:
     struct VarDependency {
-        PlanGraphNode* _var {nullptr};
+        PlanGraphNode* _producerNode {nullptr};
         Expr* _expr {nullptr};
     };
 
@@ -84,15 +84,15 @@ public:
 
             case Expr::Kind::PROPERTY: {
                 const PropertyExpr* prop = static_cast<PropertyExpr*>(expr);
-                PlanGraphNode* rawVar = variables.getProducer(prop->getEntityVarDecl());
-                bioassert(rawVar, "VarDecl not found");
+                PlanGraphNode* producer = variables.getProducer(prop->getEntityVarDecl());
+                bioassert(producer, "VarDecl not found");
 
-                auto* var = dynamic_cast<VarNode*>(rawVar);
-                if (!var) {
+                auto* p = dynamic_cast<VarNode*>(producer);
+                if (!p) {
                     throw PlannerException("Can only reference properties from matched variables");
                 }
 
-                _varDeps.emplace_back(var, expr);
+                _varDeps.emplace_back(p, expr);
             } break;
 
             case Expr::Kind::FUNCTION_INVOCATION: {
@@ -108,10 +108,10 @@ public:
 
             case Expr::Kind::SYMBOL: {
                 const SymbolExpr* symbol = static_cast<SymbolExpr*>(expr);
-                PlanGraphNode* rawVar = variables.getProducer(symbol->getDecl());
-                bioassert(rawVar, "VarDecl not found");
+                PlanGraphNode* producer = variables.getProducer(symbol->getDecl());
+                bioassert(producer, "VarDecl not found");
 
-                _varDeps.emplace_back(rawVar, expr);
+                _varDeps.emplace_back(producer, expr);
             } break;
 
             case Expr::Kind::PATH:
@@ -128,7 +128,7 @@ public:
 
     VarNode* findCommonSuccessor(PlanGraphTopology* topology, VarNode* var) const {
         for (const VarDependency& dep : _varDeps) {
-            PlanGraphNode* successor = topology->findCommonSuccessor(var, dep._var);
+            PlanGraphNode* successor = topology->findCommonSuccessor(var, dep._producerNode);
 
             if (successor) {
                 var = topology->findNextVar(successor);

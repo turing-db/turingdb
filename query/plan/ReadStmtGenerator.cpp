@@ -489,8 +489,8 @@ void ReadStmtGenerator::placePredicateJoins() {
 
         // Step 2: Place joins
         for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
-            generateDependency(dep._var, dep._expr);
-            insertDataFlowNode(var, dep._var);
+            generateDependency(dep._producerNode, dep._expr);
+            insertDataFlowNode(var, dep._producerNode);
         }
 
         // Step 3: Place the constraint
@@ -511,8 +511,8 @@ void ReadStmtGenerator::placeJoinsOnProcedures() {
                 deps.genExprDependencies(*_variables, arg);
 
                 for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
-                    generateDependency(dep._var, dep._expr);
-                    const auto [path, ancestorNode] = _topology->getShortestPath(n, dep._var);
+                    generateDependency(dep._producerNode, dep._expr);
+                    const auto [path, ancestorNode] = _topology->getShortestPath(n, dep._producerNode);
 
                     switch (path) {
                         case PlanGraphTopology::PathToDependency::SameVar:
@@ -522,7 +522,7 @@ void ReadStmtGenerator::placeJoinsOnProcedures() {
 
                         case PlanGraphTopology::PathToDependency::UndirectedPath:
                         case PlanGraphTopology::PathToDependency::NoPath: {
-                            PlanGraphNode* depBranchTip = _topology->getBranchTip(dep._var);
+                            PlanGraphNode* depBranchTip = _topology->getBranchTip(dep._producerNode);
                             depBranchTip->connectOut(n);
                             return;
                         }
