@@ -3,7 +3,7 @@
 #include "columns/AllowedKinds.h"
 #include "columns/UnaryPredicates.h"
 #include "columns/ColumnOperatorDispatcher.h"
-#include "columns/ColumnOpExecutor.h"
+#include "columns/ColumnOperators.h"
 
 #include "Panic.h"
 

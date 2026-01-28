@@ -7,7 +7,7 @@
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnKind.h"
 #include "columns/ColumnMask.h"
-#include "columns/ColumnOpExecutor.h"
+#include "columns/ColumnOperators.h"
 #include "columns/ColumnOptVector.h"
 #include "dataframe/NamedColumn.h"
 #include "dataframe/Dataframe.h"

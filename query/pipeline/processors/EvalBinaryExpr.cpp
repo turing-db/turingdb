@@ -3,7 +3,7 @@
 #include "PipelineException.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
-#include "columns/ColumnOpExecutor.h"
+#include "columns/ColumnOperators.h"
 #include "columns/BinaryOperators.h"
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnCombinations.h"

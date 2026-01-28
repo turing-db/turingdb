@@ -2,7 +2,7 @@
 
 #include "MaterializeData.h"
 
-#include "columns/ColumnOpExecutor.h"
+#include "columns/ColumnOperators.h"
 #include "columns/ColumnOptVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
