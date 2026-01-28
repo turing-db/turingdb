@@ -74,7 +74,7 @@ async function loadMainVersion(name: string) {
 	const relPath = `${testsRelDir}/${name}.json`;
 	const { stdout, exitCode } = await runGit([
 		"show",
-		`feature/unit-test-suite:${relPath}`,
+		`main:${relPath}`,
 	]);
 	if (exitCode !== 0 || !stdout.trim()) return null;
 	try {
