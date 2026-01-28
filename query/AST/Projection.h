@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdint.h>
 #include <list>
 #include <string_view>
 #include <unordered_map>
@@ -83,7 +84,7 @@ private:
     bool _returningAll {false};
 
     Items _items;
-    std::unordered_map<std::uintptr_t, std::string_view> _names;
+    std::unordered_map<uintptr_t, std::string_view> _names;
     std::unordered_set<std::string_view> _namesSet;
 
     Projection();

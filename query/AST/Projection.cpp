@@ -18,12 +18,12 @@ Projection* Projection::create(CypherAST* ast) {
 }
 
 void Projection::setName(const Expr* item, std::string_view name) {
-    _names[std::bit_cast<std::uintptr_t>(item)] = name;
+    _names[std::bit_cast<uintptr_t>(item)] = name;
     _namesSet.emplace(name);
 }
 
 void Projection::setName(const VarDecl* item, std::string_view name) {
-    _names[std::bit_cast<std::uintptr_t>(item)] = name;
+    _names[std::bit_cast<uintptr_t>(item)] = name;
     _namesSet.emplace(name);
 }
 
@@ -36,7 +36,7 @@ void Projection::pushFrontDecl(VarDecl* decl) {
 }
 
 const std::string_view* Projection::getName(const Expr* item) const {
-    auto it = _names.find(std::bit_cast<std::uintptr_t>(item));
+    auto it = _names.find(std::bit_cast<uintptr_t>(item));
     if (it == end(_names)) {
         return nullptr;
     }
@@ -45,7 +45,7 @@ const std::string_view* Projection::getName(const Expr* item) const {
 }
 
 const std::string_view* Projection::getName(const VarDecl* item) const {
-    auto it = _names.find(std::bit_cast<std::uintptr_t>(item));
+    auto it = _names.find(std::bit_cast<uintptr_t>(item));
     if (it == end(_names)) {
         return nullptr;
     }
