@@ -6,9 +6,9 @@
 
 #include "TypeUtils.h"
 
-namespace {
+namespace db {
 
-using namespace db;
+namespace {
 
 /**
  * @brief Generic function to apply a generic unary predicate to a possibly-optional
@@ -87,10 +87,7 @@ struct UnaryPredicate {
     }
 };
 
-
 }
-
-namespace db {
 
 using Not = UnaryPredicate<std::logical_not<>>;
 

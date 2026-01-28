@@ -1,9 +1,10 @@
 #pragma once
 
-#include "columns/KindTypes.h"
 #include <concepts>
 #include <optional>
 #include <string_view>
+
+#include "columns/KindTypes.h"
 
 namespace db {
 

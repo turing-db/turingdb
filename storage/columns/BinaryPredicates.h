@@ -7,9 +7,9 @@
 #include "TypeUtils.h"
 #include "ColumnMask.h"
 
-namespace {
+namespace db {
 
-using namespace db;
+namespace {
 
 template <typename T>
 concept BooleanOpt = std::same_as<TypeUtils::unwrap_optional_t<T>, types::Bool::Primitive>
@@ -286,8 +286,6 @@ struct BinaryPredicate {
 };
 
 }
-
-namespace db {
 
 using Eq = BinaryPredicate<std::equal_to<>>;
 using Ne = BinaryPredicate<std::not_equal_to<>>;

@@ -6,9 +6,9 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnVector.h"
 
-namespace {
+namespace db {
 
-using namespace db;
+namespace {
 
 template <typename F>
 concept UnaryMaskOp =
@@ -117,10 +117,7 @@ struct MaskApplicator {
     }
 };
 
-
 }
-
-namespace db {
 
 using ApplyMask = MaskOperator<std::identity>;
 

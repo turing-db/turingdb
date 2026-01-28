@@ -9,9 +9,9 @@
 
 #include "BioAssert.h"
 
-namespace {
+namespace db {
 
-using namespace db;
+namespace {
 
 /**
  * @brief Generic function to apply a generic invokable to two possibly-optional
@@ -128,8 +128,6 @@ struct BinaryOperator {
 };
 
 }
-
-namespace db {
 
 using Add = BinaryOperator<std::plus<>>;
 using Sub = BinaryOperator<std::minus<>>;
