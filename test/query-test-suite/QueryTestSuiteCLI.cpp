@@ -97,7 +97,13 @@ int main(int argc, char** argv) {
     }
 
     const fs::Path testsDir {QUERY_TEST_SUITE_DIR};
-    const auto tests = QueryTestRunner::loadTestsFromDir(testsDir);
+    std::vector<QueryTestSpec> tests;
+
+    try {
+        QueryTestRunner::loadTestsFromDir(tests, testsDir);
+    } catch (const std::exception& e) {
+        fmt::println("{{\"error\":\"{}\"}}", e.what());
+    }
 
     if (doList) {
         fmt::print("[");

@@ -7,7 +7,7 @@ namespace turing::test {
 class QueryTestSuite : public TuringTest {
 public:
     void initialize() override {
-        _tests = QueryTestRunner::loadTestsFromDir(fs::Path {QUERY_TEST_SUITE_DIR});
+        QueryTestRunner::loadTestsFromDir(_tests, fs::Path {QUERY_TEST_SUITE_DIR});
     }
 
 protected:
@@ -17,6 +17,7 @@ protected:
 TEST_F(QueryTestSuite, RunAll) {
     QueryTestRunner runner;
     size_t executed = 0;
+    std::string normalized;
 
     for (const auto& test : _tests) {
         if (!test.enabled) {
@@ -28,17 +29,19 @@ TEST_F(QueryTestSuite, RunAll) {
         const QueryTestResult result = runner.runTest(test, outDir);
 
         if (!result.planMatched) {
+            QueryTestRunner::normalizeOutput(normalized, test.expectPlan);
             ADD_FAILURE() << "Plan output mismatch for test: " << test.name;
             ADD_FAILURE() << "Expected plan:\n"
-                          << QueryTestRunner::normalizeOutput(test.expectPlan);
+                          << normalized;
             ADD_FAILURE() << "Actual plan:\n"
                           << result.planOutput;
         }
 
         if (!result.resultMatched) {
+            QueryTestRunner::normalizeOutput(normalized, test.expectResult);
             ADD_FAILURE() << "Result output mismatch for test: " << test.name;
             ADD_FAILURE() << "Expected result:\n"
-                          << QueryTestRunner::normalizeOutput(test.expectResult);
+                          << normalized;
             ADD_FAILURE() << "Actual result:\n"
                           << result.resultOutput;
         }

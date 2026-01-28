@@ -4,7 +4,6 @@
 #include <chrono>
 #include <optional>
 #include <sstream>
-#include <stdexcept>
 
 #include <nlohmann/json.hpp>
 #include <spdlog/fmt/bundled/format.h>
@@ -41,8 +40,10 @@ using json = nlohmann::json;
 
 namespace {
 
-std::string rtrim(std::string_view value) {
+void rtrim(std::string& trimmed, std::string_view value) {
+    trimmed.clear();
     size_t end = value.size();
+
     while (end > 0) {
         const char c = value[end - 1];
         if (c != ' ' && c != '\t' && c != '\r') {
@@ -50,13 +51,17 @@ std::string rtrim(std::string_view value) {
         }
         --end;
     }
-    return std::string(value.substr(0, end));
+
+    trimmed = std::string(value.substr(0, end));
 }
 
-std::string trimTrailingEmptyLines(std::vector<std::string>& lines) {
+void trimTrailingEmptyLines(std::string& trimmed, std::vector<std::string>& lines) {
+    trimmed.clear();
+
     while (!lines.empty() && lines.back().empty()) {
         lines.pop_back();
     }
+
     std::ostringstream out;
     for (size_t i = 0; i < lines.size(); ++i) {
         if (i > 0) {
@@ -64,7 +69,8 @@ std::string trimTrailingEmptyLines(std::vector<std::string>& lines) {
         }
         out << lines[i];
     }
-    return out.str();
+
+    trimmed = out.str();
 }
 
 std::string valueToString(const std::string& value) {
@@ -101,6 +107,7 @@ std::string valueToString(const std::optional<T>& value) {
     if (!value.has_value()) {
         return "null";
     }
+
     return valueToString(*value);
 }
 
@@ -113,10 +120,12 @@ std::string columnValueToString(const db::Column* column, size_t row) {
     });
 }
 
-std::string escapeCsv(std::string_view value) {
+void escapeCsv(std::string& escaped, std::string_view value) {
+    escaped.clear();
+
     bool needsQuotes = false;
-    std::string escaped;
     escaped.reserve(value.size());
+
     for (char ch : value) {
         if (ch == '"') {
             escaped.push_back('"');
@@ -124,15 +133,18 @@ std::string escapeCsv(std::string_view value) {
             needsQuotes = true;
             continue;
         }
+
         if (ch == ',' || ch == '\n' || ch == '\r') {
             needsQuotes = true;
         }
         escaped.push_back(ch);
     }
+
     if (!needsQuotes) {
-        return std::string {value};
+        escaped = value;
+    } else {
+        escaped = "\"" + escaped + "\"";
     }
-    return "\"" + escaped + "\"";
 }
 
 std::string formatStatusError(db::QueryStatus::Status status, std::string_view message) {
@@ -184,22 +196,24 @@ void generatePlanGraph(std::string_view query,
 
     const db::PlanGraph& planGraph = planGen.getPlanGraph();
     db::PlanGraphDebug::dumpMermaidContent(out, view, planGraph);
-    return;
 }
 
 } // namespace
 
-std::vector<QueryTestSpec> QueryTestRunner::loadTestsFromDir(const fs::Path& dir) {
-    std::vector<QueryTestSpec> specs;
+void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs, const fs::Path& dir) {
+    specs.clear();
+
     auto filesOpt = dir.listDir();
     if (!filesOpt) {
-        return specs;
+        throw FatalException(fmt::format("Failed to list directory: {}", filesOpt.error().fmtMessage()));
     }
 
     std::vector<fs::Path> files = *filesOpt;
     std::sort(files.begin(), files.end(), [](const fs::Path& a, const fs::Path& b) {
         return a.get() < b.get();
     });
+
+    std::string content;
 
     for (const auto& path : files) {
         if (!path.get().ends_with(".json")) {
@@ -208,15 +222,18 @@ std::vector<QueryTestSpec> QueryTestRunner::loadTestsFromDir(const fs::Path& dir
 
         std::string filename = path.get();
         const auto lastSlash = filename.find_last_of("/\\");
+
         if (lastSlash != std::string::npos) {
             filename = filename.substr(lastSlash + 1);
         }
+
         if (filename.size() > 5 && filename.ends_with(".json")) {
             filename = filename.substr(0, filename.size() - 5);
         }
+
         std::replace(filename.begin(), filename.end(), '/', '-');
 
-        const std::string content = readFile(path);
+        readFile(content, path);
         json doc = json::parse(content, nullptr, true, true);
 
         QueryTestSpec spec;
@@ -226,6 +243,7 @@ std::vector<QueryTestSpec> QueryTestRunner::loadTestsFromDir(const fs::Path& dir
         spec.enabled = doc.value("enabled", true);
         spec.writeRequired = doc.value("write-required", false);
         spec.disabledReason = doc.value("disabled-reason", "");
+
         if (doc.contains("tags") && doc["tags"].is_array()) {
             for (const auto& tag : doc["tags"]) {
                 if (tag.is_string()) {
@@ -242,8 +260,6 @@ std::vector<QueryTestSpec> QueryTestRunner::loadTestsFromDir(const fs::Path& dir
 
         specs.push_back(std::move(spec));
     }
-
-    return specs;
 }
 
 QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Path& outDir) {
@@ -275,12 +291,16 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
             }
         }
         const size_t rowCount = df->getRowCount();
+        std::vector<std::string> values;
+
         for (size_t row = 0; row < rowCount; ++row) {
-            std::vector<std::string> values;
+            values.clear();
             values.reserve(df->cols().size());
+
             for (auto* col : df->cols()) {
-               values.push_back(columnValueToString(col->getColumn(), row));
+                values.push_back(columnValueToString(col->getColumn(), row));
             }
+
             rows.push_back(std::move(values));
         }
     };
@@ -288,18 +308,12 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
     db::ChangeID changeID = db::ChangeID::head();
 
     if (spec.writeRequired) {
-        db->query("CHANGE NEW",
-                  spec.graphName,
-                  &env->getMem(),
-                  [&](const db::Dataframe* df) {
+        db->query("CHANGE NEW", spec.graphName, &env->getMem(), [&](const db::Dataframe* df) {
                       NamedColumn* col = df->getColumn(ColumnTag {0});
                       bioassert(col, "Column not found");
                       auto& c = *static_cast<ColumnVector<ChangeID>*>(col->getColumn());
                       bioassert(c.size() == 1, "Expected 1 change");
-                      changeID = c[0];
-                  },
-                  db::CommitHash::head(),
-                  db::ChangeID::head());
+                      changeID = c[0]; }, db::CommitHash::head(), db::ChangeID::head());
     }
 
     const auto queryStart = std::chrono::steady_clock::now();
@@ -314,6 +328,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
         std::chrono::duration_cast<std::chrono::microseconds>(queryEnd - queryStart).count());
 
     std::stringstream resultOut;
+    std::string escaped;
     if (!status.isOk()) {
         resultOut << formatStatusError(status.getStatus(), status.getError());
     } else {
@@ -321,7 +336,9 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
             if (i > 0) {
                 resultOut << ",";
             }
-            resultOut << escapeCsv(columnNames[i]);
+
+            escapeCsv(escaped, columnNames[i]);
+            resultOut << escaped;
         }
         for (const auto& row : rows) {
             resultOut << "\n";
@@ -329,30 +346,31 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
                 if (col > 0) {
                     resultOut << ",";
                 }
-                resultOut << escapeCsv(row[col]);
+
+                escapeCsv(escaped, row[col]);
+                resultOut << escaped;
             }
         }
     }
 
     if (spec.writeRequired) {
-        db->query("CHANGE SUBMIT",
-                  spec.graphName,
-                  &env->getMem(),
-                  [](const db::Dataframe*) {},
-                  db::CommitHash::head(),
-                  changeID);
+        db->query("CHANGE SUBMIT", spec.graphName, &env->getMem(), [](const db::Dataframe*) {}, db::CommitHash::head(), changeID);
     }
 
-    result.planOutput = normalizeOutput(planOut.str());
-    result.resultOutput = normalizeOutput(resultOut.str());
-    result.planMatched = normalizeOutput(spec.expectPlan) == result.planOutput;
-    result.resultMatched = normalizeOutput(spec.expectResult) == result.resultOutput;
+    normalizeOutput(result.planOutput, planOut.str());
+    normalizeOutput(result.resultOutput, resultOut.str());
+
+    std::string expected;
+    normalizeOutput(expected, spec.expectPlan);
+    result.planMatched = expected == result.planOutput;
+    normalizeOutput(expected, spec.expectResult);
+    result.resultMatched = expected == result.resultOutput;
 
     return result;
 }
 
-std::string QueryTestRunner::normalizeOutput(std::string_view output) {
-    std::string normalized;
+void QueryTestRunner::normalizeOutput(std::string& normalized, std::string_view output) {
+    normalized.clear();
     normalized.reserve(output.size());
 
     for (char ch : output) {
@@ -364,28 +382,33 @@ std::string QueryTestRunner::normalizeOutput(std::string_view output) {
     std::vector<std::string> lines;
     std::stringstream stream(normalized);
     std::string line;
+
     while (std::getline(stream, line, '\n')) {
-        lines.push_back(rtrim(line));
+        rtrim(normalized, line);
+        lines.push_back(std::move(normalized));
     }
 
-    return trimTrailingEmptyLines(lines);
+    trimTrailingEmptyLines(normalized, lines);
 }
 
-std::string QueryTestRunner::readFile(const fs::Path& path) {
+void QueryTestRunner::readFile(std::string& content, const fs::Path& path) {
+    content.clear();
+
     const auto file = fs::File::open(path);
     if (!file) {
-        throw std::runtime_error(fmt::format("Failed to open file {}", path.get()));
+        throw FatalException(fmt::format("Failed to open file '{}': {}",
+                                         path.get(),
+                                         file.error().fmtMessage()));
     }
 
     const size_t fileSize = file->getInfo()._size;
-    std::string content;
     content.resize(fileSize);
 
     if (!file->read(content.data(), fileSize)) {
-        throw std::runtime_error(fmt::format("Failed to read file {}", path.get()));
+        throw FatalException(fmt::format("Failed to read file '{}': {}",
+                                         path.get(),
+                                         file.error().fmtMessage()));
     }
-
-    return content;
 }
 
 }

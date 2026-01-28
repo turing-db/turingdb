@@ -31,14 +31,14 @@ struct QueryTestResult {
 
 class QueryTestRunner {
 public:
-    static std::vector<QueryTestSpec> loadTestsFromDir(const fs::Path& dir);
+    static void loadTestsFromDir(std::vector<QueryTestSpec>& specs, const fs::Path& dir);
 
     QueryTestResult runTest(const QueryTestSpec& spec, const fs::Path& outDir);
 
-    static std::string normalizeOutput(std::string_view output);
+    static void normalizeOutput(std::string& normalized, std::string_view output);
 
 private:
-    static std::string readFile(const fs::Path& path);
+    static void readFile(std::string& content, const fs::Path& path);
 };
 
 }
