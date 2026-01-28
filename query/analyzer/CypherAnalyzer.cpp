@@ -248,7 +248,6 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         }
     }
 
-
     if (isAggregate) {
         projection->setAggregate();
         projection->setHasGroupingKeys(hasGroupingKeys);
