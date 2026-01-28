@@ -30,6 +30,8 @@ public:
 
     Decls::const_iterator begin() const { return _decls.begin(); }
     Decls::const_iterator end() const { return _decls.end(); }
+    Decls::const_reverse_iterator rbegin() const { return _decls.rbegin(); }
+    Decls::const_reverse_iterator rend() const { return _decls.rend(); }
 
 private:
     DeclContext* _parent {nullptr};
