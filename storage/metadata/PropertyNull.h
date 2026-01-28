@@ -3,6 +3,7 @@
 #include <optional>
 
 namespace db {
+
 /**
  * @brief Default-initialisable wrapper for std::nullopt_t, for use in @ref
  * ColumnConst<PropertyNull>, required for IS NULL or IS NOT NULL operations.
@@ -32,6 +33,7 @@ constexpr inline bool operator!=(const std::optional<T>& o, const PropertyNull&)
     return o != std::nullopt;
 }
 
+// Any non-optional is not equal to PropertyNull
 template <typename T>
 constexpr inline bool operator==(const PropertyNull&, const T&) noexcept {
     return false;

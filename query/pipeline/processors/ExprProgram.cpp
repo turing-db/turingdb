@@ -38,7 +38,7 @@ void ExprProgram::evalInstr(const Instruction& instr) {
         break;
 
         case ColumnOperatorType::OPTYPE_NOOP:
-            break;
+        break;
     }
 }
 

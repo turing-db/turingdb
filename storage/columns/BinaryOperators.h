@@ -44,10 +44,10 @@ inline static auto optionalGeneric(T&& a,
 
 /**
  * @brief Wrapper of overloads of @ref apply functions for different combinations of
- * operands and outputs for executing operators.
+ * operands shapes and outputs for executing operators.
  * @detail The role of this aggregate is to define once the logic for each possible
- * combination of operand and result columns. It is not concerned with the types of its
- * arguments.
+ * combination of operand and result columns. It is not concerned with the internal types
+ * of its arguments.
  */
 template <typename Op, typename Res, typename T, typename U>
 struct BinaryOpExecutor {
@@ -109,6 +109,10 @@ struct BinaryOpExecutor {
     }
 };
 
+/**
+ * @brief Thin wrapper over a provided functor @param F to dispatch optional logic
+ * accordingly
+ */
 template <typename F>
 struct BinaryOperator {
     template<typename T, typename U>

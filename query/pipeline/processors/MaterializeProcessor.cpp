@@ -27,7 +27,7 @@ namespace {
     }
 
 inline void copyChunkImpl(const Column* srcPtr,
-                      Column* dstPtr) {
+                          Column* dstPtr) {
     switch (srcPtr->getKind()) {
         COPY_CHUNK_CASE(ColumnVector<EntityID>)
         COPY_CHUNK_CASE(ColumnVector<NodeID>)
@@ -64,8 +64,8 @@ inline void copyChunkImpl(const Column* srcPtr,
     }
 
 inline void copyTransformedChunkImpl(const ColumnVector<size_t>* transform,
-                                 const Column* srcPtr,
-                                 Column* dstPtr) {
+                                     const Column* srcPtr,
+                                     Column* dstPtr) {
     switch (srcPtr->getKind()) {
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<EntityID>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<NodeID>)

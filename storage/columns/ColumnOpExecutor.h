@@ -28,7 +28,7 @@ inline void exec(ColW&& res, ColT&& lhs, ColU&& rhs) {
 
 /// Binary predicates
 template <typename Op, typename ColT, typename ColU>
-    requires(!std::is_same_v<Op, Apply>) // FIXME: More meaningful constraint
+    requires(!std::is_same_v<Op, ApplyMask>) // FIXME: More meaningful constraint
 inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
     using DecayColT = decay_col_t<ColT>;
     using DecayColU = decay_col_t<ColU>;
@@ -42,7 +42,7 @@ inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
 }
 
 template <typename Op, typename ColT, typename ColU>
-    requires(!std::is_same_v<Op, Apply>) // FIXME: More meaningful constraint
+    requires(!std::is_same_v<Op, ApplyMask>) // FIXME: More meaningful constraint
 inline void exec(ColumnOptMask* res, ColT&& lhs, ColU&& rhs) {
     using DecayColT = decay_col_t<ColT>;
     using DecayColU = decay_col_t<ColU>;
@@ -88,13 +88,13 @@ inline void exec(ColumnMask* res, const ColumnMask* arg) {
 
 /// Applying masks to vectors
 template <typename Op, typename T>
-    requires std::is_same_v<Op, Apply>
+    requires std::is_same_v<Op, ApplyMask>
 inline void exec(ColumnVector<T>* res, const ColumnVector<T>* src, const ColumnMask* mask) {
     MaskApplicator::apply(res, src, mask);
 }
 
 template <typename Op, typename T>
-    requires std::is_same_v<Op, Apply>
+    requires std::is_same_v<Op, ApplyMask>
 inline void exec(ColumnVector<T>* res, const ColumnMask* mask, const ColumnVector<T>* src) {
     MaskApplicator::apply(res, src, mask);
 }

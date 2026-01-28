@@ -22,9 +22,11 @@ public:
     static MaterializeProcessor* clone(PipelineV2* pipeline,
                                        LocalMemory* mem,
                                        const MaterializeProcessor& prev);
+
     static MaterializeProcessor* createFromDf(PipelineV2* pipeline,
                                               LocalMemory* mem,
                                               Dataframe* df);
+
     static MaterializeProcessor* createFromPrev(PipelineV2* pipeline,
                                                 LocalMemory* mem,
                                                 const MaterializeProcessor& prev);

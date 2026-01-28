@@ -44,12 +44,6 @@ using unwrap_inner_t = unwrap_optional_t<typename InnerTypeHelper<ColT>::type>;
 template <typename T, typename U>
 static constexpr bool neither_optional = !is_optional_v<T> && !is_optional_v<U>;
 
-// Types that may be compared, but one or both may be wrapped in optional
-template <typename T, typename U>
-concept OptionallyComparable =
-    (Stringy<unwrap_optional_t<T>, unwrap_optional_t<U>>
-     || std::totally_ordered_with<unwrap_optional_t<T>, unwrap_optional_t<U>>);
-
 /**
  * @brief Function that can be invoked, but one or both arguments may be wrapped in
  * optional.
@@ -58,29 +52,22 @@ template <typename Func, typename... Args>
 concept OptionallyInvokable =
     std::invocable<Func, unwrap_optional_t<Args>...>;
 
+/**
+ * @brief Predicate that can be invoked, but one or both arguments may be wrapped in
+ * optional.
+ */
 template <typename Pred, typename... Args>
-concept OptionalPredicate =
-    std::predicate<Pred, unwrap_optional_t<Args>...>;
+concept OptionalPredicate = std::predicate<Pred, unwrap_optional_t<Args>...>;
 
 template <typename Func, typename... Args>
 using optional_invoke_result = std::optional<
     typename std::invoke_result<Func, unwrap_optional_t<Args>...>::type>;
 
-template <template <typename...> class C, typename T>
-struct is_instantiation_of : std::false_type {};
-
-template <template <typename...> class C, typename... Ts>
-struct is_instantiation_of<C, C<Ts...>> : std::true_type {};
-
-template <template <typename...> class C, typename T>
-inline constexpr bool is_instantiation_of_v =
-    is_instantiation_of<C, std::remove_cvref_t<T>>::value;
-
 template <typename T>
 using decay_col_t = std::remove_cvref_t<std::remove_pointer_t<T>>;
 
 /**
- * @brief Partial function which returns the underlying value of an  optional, and
+ * @brief Partial function which returns the underlying value of an optional, and
  * is otherwise the identity function. Undefined for nullopt input.
  * @warn Assumes the optional is engaged, does not check for engagement.
  */

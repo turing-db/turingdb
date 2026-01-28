@@ -33,6 +33,9 @@ struct MaskOperator {
     }
 };
 
+/**
+ * @brief Wrapper of overloads of @ref apply functions which are unique to masks.
+ */
 template <typename Op>
 struct MaskOpExecutor {
     // Binary operator
@@ -68,6 +71,10 @@ struct MaskOpExecutor {
     }
 };
 
+/**
+ * @brief Wrapper of overloads of @ref apply functions to apply a mask to some other
+ * column.
+ */
 struct MaskApplicator {
     template <typename T>
     static void apply(ColumnVector<T>* res,
@@ -108,9 +115,6 @@ struct MaskApplicator {
     }
 };
 
-/* using AND = MaskOperator<std::logical_and<>>;
-using OR  = MaskOperator<std::logical_or<>>;
-using NOT = MaskOperator<std::logical_not<>>; */
-using Apply = MaskOperator<std::identity>;
+using ApplyMask = MaskOperator<std::identity>;
 
 }

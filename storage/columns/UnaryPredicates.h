@@ -8,6 +8,34 @@
 
 namespace db {
 
+/**
+ * @brief Generic function to apply a generic unary predicate to a possibly-optional
+ * operand, where the operand being nullopt results in the final result being
+ * nullopt, and the result of applying the predicate otherwise.
+ */
+template <typename Pred, typename T>
+    requires OptionalPredicate<Pred, T>
+inline static auto optionalUnaryPredicate(T&& a) -> optional_invoke_result<Pred, T>{
+    if constexpr (is_optional_v<T>) {
+        if (!a.has_value()) {
+            return std::nullopt;
+        }
+    }
+
+    // a is either engaged optional or value, so safe to unwrap
+
+    auto&& av = unwrap(a);
+
+    return Pred {}(av);
+}
+
+/**
+ * @brief Wrapper of overloads of @ref apply functions for different operand shapes and
+ * outputs for executing unary predicates.
+ * @detail The role of this aggregate is to define once the logic for each possible
+ * operand shape and result columns. It is not concerned with the internal type
+ * of its argument.
+ */
 template <typename Op, typename T>
 struct UnaryPredicateExecutor {
     static void apply(ColumnMask* res, const ColumnMask* arg) {
@@ -39,22 +67,10 @@ struct UnaryPredicateExecutor {
     }
 };
 
-template <typename Pred, typename T>
-    requires OptionalPredicate<Pred, T>
-inline static auto optionalUnaryPredicate(T&& a) -> optional_invoke_result<Pred, T>{
-    if constexpr (is_optional_v<T>) {
-        if (!a.has_value()) {
-            return std::nullopt;
-        }
-    }
-
-    // a is either engaged optional or value, so safe to unwrap
-
-    auto&& av = unwrap(a);
-
-    return Pred {}(av);
-}
-
+/**
+ * @brief Thin wrapper over a provided functor @param F to dispatch optional logic
+ * accordingly.
+ */
 template <typename F>
 struct UnaryPredicate {
     template<typename T>

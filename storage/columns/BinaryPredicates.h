@@ -13,7 +13,9 @@ template <typename T>
 concept BooleanOpt = std::same_as<unwrap_optional_t<T>, types::Bool::Primitive>
                   || std::same_as<ColumnMask::Bool_t, T>;
 
-// Implementations of basic operations in Kleene/3-valued logic
+template <typename F>
+concept TestsEquality =
+    (std::is_same_v<F, std::equal_to<>> || std::is_same_v<F, std::not_equal_to<>>);
 
 // The following Boolean operators have unique semantics for 3-way logic (i.e.
 // short-circuiting) so are defined explicitly rather than generically
@@ -69,7 +71,7 @@ inline auto optionalPredicate(T&& a, U&& b) -> optional_invoke_result<Pred, T, U
 
 /**
  * @brief Wrapper of overloads of @ref apply functions for different combinations of
- * operands and outputs for executing predicates.
+ * operand shapes and outputs for executing predicates.
  * @detail The role of this aggregate is to define once the logic for each possible
  * combination of operand and result columns. It is not concerned with the internal types
  * of its arguments.
@@ -244,6 +246,12 @@ struct BinaryPredicateExecutor {
     }
 };
 
+/**
+ * @brief Thin wrapper over a provided functor @param F to dispatch optional logic
+ * accordingly.
+ * @detail Short-circuiting Boolean operations are not handled as a generic predicate as
+ * they requires special short-circuiting logic.
+ */
 template <typename F>
 struct BinaryPredicate {
     // Handle optional cases
@@ -268,9 +276,7 @@ struct BinaryPredicate {
     
     // Specialisation for IS NOT NULL and IS NULL
     template <typename T>
-        requires(is_optional_v<T>
-                 && (std::is_same_v<F, std::equal_to<>>
-                     || std::is_same_v<F, std::not_equal_to<>>))
+        requires(is_optional_v<T> && TestsEquality<F>)
     inline ColumnMask::Bool_t operator()(T&& a, const PropertyNull& null) {
         return F{}(std::forward<T>(a), null);
     }

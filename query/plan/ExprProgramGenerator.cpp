@@ -305,14 +305,14 @@ Column* ExprProgramGenerator::allocUnaryResultCol(const Expr* expr) {
     }
 }
 
-// Cases for each operator, and their associated functor to determine result column and
-// allocate it
+// Allocate the result column, determined by operator functor and arguments
 #define ALLOCATOR_CASE(Operator, Functor)                                                \
     case (Operator): {                                                                   \
         using ResultType = ColumnCombination<Functor, T, U>::ResultColumnType;           \
         _resultCol = _gen->memory().alloc<ResultType>();                                 \
         return;                                                                          \
-    } break;
+    }                                                                                    \
+    break;                                                                               \
 
 struct ResultAllocator {
     Column*& _resultCol;
@@ -352,8 +352,8 @@ struct ResultAllocator {
         using Pairs = PairRestrictions<Operator>;                                        \
         ColumnDoubleDispatcher<Pairs::Allowed, Pairs::AllowedMixed, ResultAllocator,     \
                                Pairs::Excluded>::dispatch(lhs, rhs, allocator);          \
-        break;                                                                           \
-    }
+    }                                                                                    \
+    break;                                                                               \
 
 Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
                                           const Column* lhs,
@@ -376,11 +376,13 @@ Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
 
         case OP_IN: // TODO: Implement
             throw PlannerException("Unsupported allocator: IN.");
+        break;
 
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT: // TODO: Implement
             throw PlannerException("Unsupported allocator: MINUS | PLUS | NOT.");
+        break;
 
         case OP_NOOP:
         case OP_PROJECT:
