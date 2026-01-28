@@ -69,24 +69,6 @@ struct UnaryPredicate {
     }
 };
 
-template <typename Op, typename ColT>
-inline void exec(ColumnMask* res, ColT&& arg) {
-    using DecayColT = decay_col_t<ColT>;
-
-    using InternalT = InnerTypeHelper<DecayColT>::type;
-
-    UnaryPredicateExecutor<Op, InternalT>::apply(res, std::forward<ColT>(arg));
-}
-
-template <typename Op, typename ColT>
-inline void exec(ColumnOptMask* res, ColT&& arg) {
-    using DecayColT = decay_col_t<ColT>;
-
-    using InternalT = InnerTypeHelper<DecayColT>::type;
-
-    UnaryPredicateExecutor<Op, InternalT>::apply(res, std::forward<ColT>(arg));
-}
-
 using Not = UnaryPredicate<std::logical_not<>>;
 
 }

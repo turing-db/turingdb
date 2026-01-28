@@ -6,7 +6,7 @@
 #include "columns/AllowedKinds.h"
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnCombinations.h"
-#include "columns/ColumnOperationExecutor.h"
+#include "columns/ColumnOperatorDispatcher.h"
 #include "dataframe/ColumnTag.h"
 #include "decl/EvaluatedType.h"
 #include "expr/Operators.h"

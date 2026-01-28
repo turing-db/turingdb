@@ -242,32 +242,6 @@ struct BinaryPredicate {
     }
 };
 
-template <typename Op, typename ColT, typename ColU>
-inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
-    using DecayColT = decay_col_t<ColT>;
-    using DecayColU = decay_col_t<ColU>;
-
-    using InternalT = InnerTypeHelper<DecayColT>::type;
-    using InternalU = InnerTypeHelper<DecayColU>::type;
-
-    BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(
-        res, std::forward<ColT>(lhs), std::forward<ColU>(rhs)
-    );
-}
-
-template <typename Op, typename ColT, typename ColU>
-inline void exec(ColumnOptMask* res, ColT&& lhs, ColU&& rhs) {
-    using DecayColT = decay_col_t<ColT>;
-    using DecayColU = decay_col_t<ColU>;
-
-    using InternalT = InnerTypeHelper<DecayColT>::type;
-    using InternalU = InnerTypeHelper<DecayColU>::type;
-
-    BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(
-        res, std::forward<ColT>(lhs), std::forward<ColU>(rhs)
-    );
-}
-
 using Eq = BinaryPredicate<std::equal_to<>>;
 using Ne = BinaryPredicate<std::not_equal_to<>>;
 

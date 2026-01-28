@@ -123,21 +123,6 @@ struct BinaryOperator {
     }
 };
 
-template <typename Op, typename ColW, typename ColT, typename ColU>
-    requires is_result_column<Op, ColT, ColU, ColW>
-static inline void exec(ColW&& res, ColT&& lhs, ColU&& rhs) {
-    using DecayColT = decay_col_t<ColT>;
-    using DecayColU = decay_col_t<ColU>;
-    using DecayColW = decay_col_t<ColW>;
-
-    using InternalT = InnerTypeHelper<DecayColT>::type;
-    using InternalU = InnerTypeHelper<DecayColU>::type;
-    using InternalRes = InnerTypeHelper<DecayColW>::type;
-
-    BinaryOpExecutor<Op, InternalRes, InternalT, InternalU>::apply(
-        std::forward<ColW>(res), std::forward<ColT>(lhs), std::forward<ColU>(rhs));
-}
-
 using Add = BinaryOperator<std::plus<>>;
 using Sub = BinaryOperator<std::minus<>>;
 using Mul = BinaryOperator<std::multiplies<>>;

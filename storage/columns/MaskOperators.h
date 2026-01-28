@@ -8,7 +8,6 @@
 
 namespace db {
 
-
 template <typename F>
 concept UnaryMaskOp =
     std::invocable<F, bool> && std::convertible_to<std::invoke_result_t<F, bool>, bool>;
@@ -109,32 +108,9 @@ struct MaskApplicator {
     }
 };
 
-// Binary operation on masks
-template <typename Op>
-static inline void exec(ColumnMask* res, ColumnMask* lhs, ColumnMask* rhs) {
-    MaskOpExecutor<Op>::apply(res, lhs, rhs);
-}
-
-// Unary operation on masks
-template <typename Op>
-static inline void exec(ColumnMask* res, ColumnMask* arg) {
-    MaskOpExecutor<Op>::apply(res, arg);
-}
-
-// Applying masks to vectors
-template <typename Op, typename T>
-static inline void exec(ColumnVector<T>* res, ColumnVector<T>* src, ColumnMask* mask) {
-    MaskApplicator::apply(res, src, mask);
-}
-
-template <typename Op, typename T>
-static inline void exec(ColumnVector<T>* res, ColumnMask* mask, ColumnVector<T>* src) {
-    MaskApplicator::apply(res, src, mask);
-}
-
-using AND = MaskOperator<std::logical_and<>>;
+/* using AND = MaskOperator<std::logical_and<>>;
 using OR  = MaskOperator<std::logical_or<>>;
-using NOT = MaskOperator<std::logical_not<>>;
+using NOT = MaskOperator<std::logical_not<>>; */
 using Apply = MaskOperator<std::identity>;
 
 }
