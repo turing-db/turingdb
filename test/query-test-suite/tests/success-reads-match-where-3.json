@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (a)-->(x), (b)-->(x), (c)-->(x) WHERE (a.name = b.name) OR (b.name = c.name) OR (b.name = x.name) RETURN a.name, b.name, c.name",
   "expect": {

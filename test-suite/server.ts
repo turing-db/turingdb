@@ -147,6 +147,39 @@ function idToFilename(id: string) {
 	return id.replace(/[\\/]/g, "-").replace(/[^a-z0-9._-]+/gi, "-");
 }
 
+async function loadExpectedFromFile(dir: string, name: string) {
+	const rawName = name.trim();
+	const sanitized = idToFilename(rawName);
+	if (!sanitized) return null;
+	const entries = await Array.fromAsync(
+		new Bun.Glob("*.json").scan({ cwd: dir }),
+	);
+	let path: string | null = null;
+	for (const entry of entries) {
+		const entryName = entry.replace(/\.json$/i, "");
+		if (entryName === sanitized || entryName === rawName) {
+			path = join(dir, entry);
+			break;
+		}
+	}
+	if (!path) {
+		path = join(dir, `${sanitized}.json`);
+	}
+	const file = Bun.file(path);
+	if (!(await file.exists())) return null;
+	let data: any;
+	try {
+		data = JSON.parse(await file.text());
+	} catch {
+		return null;
+	}
+	const expect = data?.expect ?? {};
+	return {
+		plan: typeof expect.plan === "string" ? expect.plan : "",
+		result: typeof expect.result === "string" ? expect.result : "",
+	};
+}
+
 async function createTestFile(dir: string, name: string) {
 	const existingNames = await loadExistingNames(dir);
 	const baseName = idToFilename(name.trim()) || "new-test";
@@ -218,6 +251,18 @@ Bun.serve({
 			} catch (err) {
 				return errorResponse("Invalid list response", 500, stdout);
 			}
+		}
+
+		if (pathname === "/api/expected") {
+			const name = searchParams.get("name") ?? searchParams.get("test");
+			if (!name) {
+				return errorResponse("Missing test parameter", 400);
+			}
+			const expected = await loadExpectedFromFile(sourceTestsDir, name);
+			if (!expected) {
+				return errorResponse("Test not found", 404);
+			}
+			return jsonResponse(expected);
 		}
 
 		if (pathname === "/api/run") {

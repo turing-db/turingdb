@@ -120,9 +120,14 @@ export default function App() {
   const [planSvg, setPlanSvg] = React.useState<string | null>(null);
   const renderSeq = React.useRef(0);
   const [parsedResult, setParsedResult] = React.useState<string[][] | null>(null);
+  const [parsedExpectedResult, setParsedExpectedResult] = React.useState<string[][] | null>(null);
   const [disabledReasonDraft, setDisabledReasonDraft] = React.useState("");
   const [shareNotice, setShareNotice] = React.useState<string | null>(null);
   const shareTimerRef = React.useRef<number | null>(null);
+  const [expectedPlan, setExpectedPlan] = React.useState<string>("");
+  const [expectedResult, setExpectedResult] = React.useState<string>("");
+  const [resultTab, setResultTab] = React.useState<"actual" | "expected">("actual");
+  const [planTab, setPlanTab] = React.useState<"actual" | "expected">("actual");
 
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
@@ -161,7 +166,33 @@ export default function App() {
     setWriteRequired(selected?.writeRequired ?? false);
     setDisabledReasonDraft(selected?.disabledReason ?? "");
     setIsEditingQuery(false);
+    setResultTab("actual");
+    setPlanTab("actual");
   }, [selected]);
+
+  React.useEffect(() => {
+    if (!selected) {
+      setExpectedPlan("");
+      setExpectedResult("");
+      return;
+    }
+    let active = true;
+    fetch(`${API_BASE}/expected?name=${encodeURIComponent(selected.name)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active) return;
+        setExpectedPlan(typeof data?.plan === "string" ? data.plan : "");
+        setExpectedResult(typeof data?.result === "string" ? data.result : "");
+      })
+      .catch(() => {
+        if (!active) return;
+        setExpectedPlan("");
+        setExpectedResult("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected?.name]);
 
   React.useEffect(() => {
     if (!selected) return;
@@ -712,51 +743,50 @@ export default function App() {
   }, [selectedResult?.planOutput]);
 
   React.useEffect(() => {
-    const output = selectedResult?.resultOutput ?? "";
-    const trimmed = output.trim();
-    if (!trimmed) {
-      setParsedResult(null);
-      return;
-    }
-    if (/error/i.test(trimmed) || trimmed.startsWith("ANALYZE") || trimmed.startsWith("EXEC")) {
-      setParsedResult(null);
-      return;
-    }
-    const csv = trimmed;
-    const rows: string[][] = [];
-    let current: string[] = [];
-    let cell = "";
-    let inQuotes = false;
-    for (let i = 0; i < csv.length; i += 1) {
-      const ch = csv[i];
-      const next = csv[i + 1];
-      if (inQuotes) {
-        if (ch === "\"" && next === "\"") {
-          cell += "\"";
-          i += 1;
+    const parseCsv = (output: string) => {
+      const trimmed = output.trim();
+      if (!trimmed) return null;
+      if (/error/i.test(trimmed) || trimmed.startsWith("ANALYZE") || trimmed.startsWith("EXEC")) {
+        return null;
+      }
+      const rows: string[][] = [];
+      let current: string[] = [];
+      let cell = "";
+      let inQuotes = false;
+      for (let i = 0; i < trimmed.length; i += 1) {
+        const ch = trimmed[i];
+        const next = trimmed[i + 1];
+        if (inQuotes) {
+          if (ch === "\"" && next === "\"") {
+            cell += "\"";
+            i += 1;
+          } else if (ch === "\"") {
+            inQuotes = false;
+          } else {
+            cell += ch;
+          }
         } else if (ch === "\"") {
-          inQuotes = false;
+          inQuotes = true;
+        } else if (ch === ",") {
+          current.push(cell);
+          cell = "";
+        } else if (ch === "\n") {
+          current.push(cell);
+          rows.push(current);
+          current = [];
+          cell = "";
         } else {
           cell += ch;
         }
-      } else if (ch === "\"") {
-        inQuotes = true;
-      } else if (ch === ",") {
-        current.push(cell);
-        cell = "";
-      } else if (ch === "\n") {
-        current.push(cell);
-        rows.push(current);
-        current = [];
-        cell = "";
-      } else {
-        cell += ch;
       }
-    }
-    current.push(cell);
-    rows.push(current);
-    setParsedResult(rows);
-  }, [selectedResult?.resultOutput]);
+      current.push(cell);
+      rows.push(current);
+      return rows;
+    };
+
+    setParsedResult(parseCsv(selectedResult?.resultOutput ?? ""));
+    setParsedExpectedResult(parseCsv(expectedResult));
+  }, [selectedResult?.resultOutput, expectedResult]);
 
   return (
     <SidebarProvider ref={sidebarRef} defaultOpen sidebarWidth={sidebarWidth}>
@@ -1133,6 +1163,20 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Result Output</p>
                   <div className="flex items-center gap-2">
+                    <div className="flex items-center rounded-full border border-white/10 bg-paper/60 p-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
+                      <button
+                        className={`rounded-full px-2 py-1 ${resultTab === "actual" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setResultTab("actual")}
+                      >
+                        Actual
+                      </button>
+                      <button
+                        className={`rounded-full px-2 py-1 ${resultTab === "expected" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setResultTab("expected")}
+                      >
+                        Expected
+                      </button>
+                    </div>
                     <span
                       className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
                         selectedResult.resultMatched
@@ -1154,12 +1198,43 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                {parsedResult && parsedResult.length > 0 ? (
+                {resultTab === "actual" ? (
+                  parsedResult && parsedResult.length > 0 ? (
+                    <div className="mt-3 max-h-[48rem] overflow-auto rounded-xl border border-white/5 bg-paper">
+                      <table className="w-full border-collapse text-left text-xs text-ink">
+                        <thead className="sticky top-0 bg-steel/60 text-ink/80">
+                          <tr>
+                            {parsedResult[0].map((cell, idx) => (
+                              <th key={idx} className="border-b border-white/5 px-3 py-2 font-semibold">
+                                {cell}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parsedResult.slice(1).map((row, rowIdx) => (
+                            <tr key={rowIdx} className="odd:bg-white/5">
+                              {row.map((cell, cellIdx) => (
+                                <td key={cellIdx} className="border-b border-white/5 px-3 py-2">
+                                  {cell}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <pre className="mt-3 max-h-[48rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
+{selectedResult.resultOutput || "(empty)"}
+                    </pre>
+                  )
+                ) : parsedExpectedResult && parsedExpectedResult.length > 0 ? (
                   <div className="mt-3 max-h-[48rem] overflow-auto rounded-xl border border-white/5 bg-paper">
                     <table className="w-full border-collapse text-left text-xs text-ink">
                       <thead className="sticky top-0 bg-steel/60 text-ink/80">
                         <tr>
-                          {parsedResult[0].map((cell, idx) => (
+                          {parsedExpectedResult[0].map((cell, idx) => (
                             <th key={idx} className="border-b border-white/5 px-3 py-2 font-semibold">
                               {cell}
                             </th>
@@ -1167,7 +1242,7 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {parsedResult.slice(1).map((row, rowIdx) => (
+                        {parsedExpectedResult.slice(1).map((row, rowIdx) => (
                           <tr key={rowIdx} className="odd:bg-white/5">
                             {row.map((cell, cellIdx) => (
                               <td key={cellIdx} className="border-b border-white/5 px-3 py-2">
@@ -1181,7 +1256,7 @@ export default function App() {
                   </div>
                 ) : (
                   <pre className="mt-3 max-h-[48rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-{selectedResult.resultOutput || "(empty)"}
+{expectedResult || "(empty)"}
                   </pre>
                 )}
               </div>
@@ -1189,6 +1264,20 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Plan Output</p>
                   <div className="flex items-center gap-2">
+                    <div className="flex items-center rounded-full border border-white/10 bg-paper/60 p-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
+                      <button
+                        className={`rounded-full px-2 py-1 ${planTab === "actual" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setPlanTab("actual")}
+                      >
+                        Actual
+                      </button>
+                      <button
+                        className={`rounded-full px-2 py-1 ${planTab === "expected" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setPlanTab("expected")}
+                      >
+                        Expected
+                      </button>
+                    </div>
                     <span
                       className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
                         selectedResult.planMatched
@@ -1210,14 +1299,20 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                {planSvg ? (
-                  <div
-                    className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3"
-                    dangerouslySetInnerHTML={{ __html: planSvg }}
-                  />
+                {planTab === "actual" ? (
+                  planSvg ? (
+                    <div
+                      className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3"
+                      dangerouslySetInnerHTML={{ __html: planSvg }}
+                    />
+                  ) : (
+                    <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
+{selectedResult.planOutput || "(empty)"}
+                    </pre>
+                  )
                 ) : (
                   <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-{selectedResult.planOutput || "(empty)"}
+{expectedPlan || "(empty)"}
                   </pre>
                 )}
               </div>
