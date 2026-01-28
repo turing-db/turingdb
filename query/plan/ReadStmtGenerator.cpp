@@ -515,12 +515,25 @@ void ReadStmtGenerator::placeJoinsOnProcedures() {
                     const auto [path, ancestorNode] = _topology->getShortestPath(n, dep._producerNode);
 
                     switch (path) {
-                        case PlanGraphTopology::PathToDependency::SameVar:
+                        case PlanGraphTopology::PathToDependency::SameVar: {
+                            throwError("Unknown error. Cannot place procedure call on the same var", args);
+                        }
+
                         case PlanGraphTopology::PathToDependency::BackwardPath: {
                             return;
                         }
 
-                        case PlanGraphTopology::PathToDependency::UndirectedPath:
+                        case PlanGraphTopology::PathToDependency::UndirectedPath: {
+                            // Join
+                            const auto* varDecl = static_cast<VarNode*>(ancestorNode)->getVarDecl();
+                            JoinNode* join = _tree->create<JoinNode>(varDecl,
+                                                                     varDecl,
+                                                                     JoinType::COMMON_ANCESTOR);
+                            PlanGraphNode* depBranchTip = _topology->getBranchTip(dep._producerNode);
+                            depBranchTip->connectOut(join);
+                            return;
+                        }
+
                         case PlanGraphTopology::PathToDependency::NoPath: {
                             PlanGraphNode* depBranchTip = _topology->getBranchTip(dep._producerNode);
                             depBranchTip->connectOut(n);
