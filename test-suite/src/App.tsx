@@ -26,7 +26,7 @@ import {
   SidebarTrigger,
   useSidebar
 } from "@/components/ui/sidebar";
-import { PanelLeft, Play, PlayCircle, Plus, Share2, Trash2 } from "lucide-react";
+import { FilePlus, GitCompareArrows, PanelLeft, Play, PlayCircle, Plus, Share2, Trash2 } from "lucide-react";
 
 type TestMeta = {
   name: string;
@@ -35,6 +35,16 @@ type TestMeta = {
   tags?: string[];
   writeRequired?: boolean;
   disabledReason?: string;
+  mainVersion?: {
+    query?: string;
+    expect?: { plan?: string; result?: string };
+    tags?: string[];
+    enabled?: boolean;
+    ["write-required"]?: boolean;
+    ["disabled-reason"]?: string;
+  };
+  changed?: boolean;
+  isNew?: boolean;
 };
 
 type TestResult = {
@@ -118,16 +128,21 @@ export default function App() {
   const [newTestName, setNewTestName] = React.useState("");
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [planSvg, setPlanSvg] = React.useState<string | null>(null);
+  const [planSvgExpected, setPlanSvgExpected] = React.useState<string | null>(null);
+  const [planSvgMain, setPlanSvgMain] = React.useState<string | null>(null);
   const renderSeq = React.useRef(0);
   const [parsedResult, setParsedResult] = React.useState<string[][] | null>(null);
   const [parsedExpectedResult, setParsedExpectedResult] = React.useState<string[][] | null>(null);
+  const [parsedMainResult, setParsedMainResult] = React.useState<string[][] | null>(null);
   const [disabledReasonDraft, setDisabledReasonDraft] = React.useState("");
   const [shareNotice, setShareNotice] = React.useState<string | null>(null);
   const shareTimerRef = React.useRef<number | null>(null);
   const [expectedPlan, setExpectedPlan] = React.useState<string>("");
   const [expectedResult, setExpectedResult] = React.useState<string>("");
-  const [resultTab, setResultTab] = React.useState<"actual" | "expected">("actual");
-  const [planTab, setPlanTab] = React.useState<"actual" | "expected">("actual");
+  const [mainPlan, setMainPlan] = React.useState<string>("");
+  const [mainResult, setMainResult] = React.useState<string>("");
+  const [resultTab, setResultTab] = React.useState<"actual" | "expected" | "main">("actual");
+  const [planTab, setPlanTab] = React.useState<"actual" | "expected" | "main">("actual");
 
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
@@ -174,6 +189,8 @@ export default function App() {
     if (!selected) {
       setExpectedPlan("");
       setExpectedResult("");
+      setMainPlan("");
+      setMainResult("");
       return;
     }
     let active = true;
@@ -189,6 +206,24 @@ export default function App() {
         setExpectedPlan("");
         setExpectedResult("");
       });
+    const mainExpect = selected.mainVersion?.expect ?? {};
+    if (typeof mainExpect.plan === "string" || typeof mainExpect.result === "string") {
+      setMainPlan(typeof mainExpect.plan === "string" ? mainExpect.plan : "");
+      setMainResult(typeof mainExpect.result === "string" ? mainExpect.result : "");
+    } else {
+      fetch(`${API_BASE}/main?name=${encodeURIComponent(selected.name)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!active) return;
+          setMainPlan(typeof data?.plan === "string" ? data.plan : "");
+          setMainResult(typeof data?.result === "string" ? data.result : "");
+        })
+        .catch(() => {
+          if (!active) return;
+          setMainPlan("");
+          setMainResult("");
+        });
+    }
     return () => {
       active = false;
     };
@@ -743,6 +778,48 @@ export default function App() {
   }, [selectedResult?.planOutput]);
 
   React.useEffect(() => {
+    const source = expectedPlan?.trim();
+    if (!source || (!source.startsWith("flowchart") && !source.startsWith("graph"))) {
+      setPlanSvgExpected(null);
+      return;
+    }
+    let cancelled = false;
+    const id = `plan-expected-${renderSeq.current++}`;
+    mermaid
+      .render(id, source)
+      .then((res) => {
+        if (!cancelled) setPlanSvgExpected(res.svg);
+      })
+      .catch(() => {
+        if (!cancelled) setPlanSvgExpected(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expectedPlan]);
+
+  React.useEffect(() => {
+    const source = mainPlan?.trim();
+    if (!source || (!source.startsWith("flowchart") && !source.startsWith("graph"))) {
+      setPlanSvgMain(null);
+      return;
+    }
+    let cancelled = false;
+    const id = `plan-main-${renderSeq.current++}`;
+    mermaid
+      .render(id, source)
+      .then((res) => {
+        if (!cancelled) setPlanSvgMain(res.svg);
+      })
+      .catch(() => {
+        if (!cancelled) setPlanSvgMain(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mainPlan]);
+
+  React.useEffect(() => {
     const parseCsv = (output: string) => {
       const trimmed = output.trim();
       if (!trimmed) return null;
@@ -786,7 +863,8 @@ export default function App() {
 
     setParsedResult(parseCsv(selectedResult?.resultOutput ?? ""));
     setParsedExpectedResult(parseCsv(expectedResult));
-  }, [selectedResult?.resultOutput, expectedResult]);
+    setParsedMainResult(parseCsv(mainResult));
+  }, [selectedResult?.resultOutput, expectedResult, mainResult]);
 
   return (
     <SidebarProvider ref={sidebarRef} defaultOpen sidebarWidth={sidebarWidth}>
@@ -896,6 +974,11 @@ export default function App() {
                         >
                           <span className={`text-[10px] ${statusClass}`}>{icon}</span>
                           <span className="truncate text-xs font-medium text-sidebar-foreground">{test.name}</span>
+                          {test.isNew ? (
+                            <FilePlus className="ml-2 h-3 w-3 text-emerald-300" />
+                          ) : test.mainVersion || test.changed ? (
+                            <GitCompareArrows className="ml-2 h-3 w-3 text-amber-300" />
+                          ) : null}
                           <span
                             className={`ml-auto rounded-full px-2 py-0.5 text-[10px] tracking-[0.16em] ${badgeClass}`}
                           >
@@ -1176,6 +1259,13 @@ export default function App() {
                       >
                         Expected
                       </button>
+                      <button
+                        className={`rounded-full px-2 py-1 ${resultTab === "main" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setResultTab("main")}
+                        disabled={!selected?.changed}
+                      >
+                        Main
+                      </button>
                     </div>
                     <span
                       className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
@@ -1229,7 +1319,38 @@ export default function App() {
 {selectedResult.resultOutput || "(empty)"}
                     </pre>
                   )
-                ) : parsedExpectedResult && parsedExpectedResult.length > 0 ? (
+                ) : resultTab === "expected" ? (
+                  parsedExpectedResult && parsedExpectedResult.length > 0 ? (
+                    <div className="mt-3 max-h-[48rem] overflow-auto rounded-xl border border-white/5 bg-paper">
+                      <table className="w-full border-collapse text-left text-xs text-ink">
+                        <thead className="sticky top-0 bg-steel/60 text-ink/80">
+                          <tr>
+                            {parsedExpectedResult[0].map((cell, idx) => (
+                              <th key={idx} className="border-b border-white/5 px-3 py-2 font-semibold">
+                                {cell}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parsedExpectedResult.slice(1).map((row, rowIdx) => (
+                            <tr key={rowIdx} className="odd:bg-white/5">
+                              {row.map((cell, cellIdx) => (
+                                <td key={cellIdx} className="border-b border-white/5 px-3 py-2">
+                                  {cell}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <pre className="mt-3 max-h-[48rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
+{expectedResult || "(empty)"}
+                    </pre>
+                  )
+                ) : parsedMainResult && parsedMainResult.length > 0 ? (
                   <div className="mt-3 max-h-[48rem] overflow-auto rounded-xl border border-white/5 bg-paper">
                     <table className="w-full border-collapse text-left text-xs text-ink">
                       <thead className="sticky top-0 bg-steel/60 text-ink/80">
@@ -1256,7 +1377,7 @@ export default function App() {
                   </div>
                 ) : (
                   <pre className="mt-3 max-h-[48rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-{expectedResult || "(empty)"}
+{mainResult || "(empty)"}
                   </pre>
                 )}
               </div>
@@ -1276,6 +1397,13 @@ export default function App() {
                         onClick={() => setPlanTab("expected")}
                       >
                         Expected
+                      </button>
+                      <button
+                        className={`rounded-full px-2 py-1 ${planTab === "main" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setPlanTab("main")}
+                        disabled={!selected?.changed}
+                      >
+                        Main
                       </button>
                     </div>
                     <span
@@ -1310,9 +1438,25 @@ export default function App() {
 {selectedResult.planOutput || "(empty)"}
                     </pre>
                   )
+                ) : planTab === "expected" ? (
+                  planSvgExpected ? (
+                    <div
+                      className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3"
+                      dangerouslySetInnerHTML={{ __html: planSvgExpected }}
+                    />
+                  ) : (
+                    <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
+{expectedPlan || "(empty)"}
+                    </pre>
+                  )
+                ) : planSvgMain ? (
+                  <div
+                    className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3"
+                    dangerouslySetInnerHTML={{ __html: planSvgMain }}
+                  />
                 ) : (
                   <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-{expectedPlan || "(empty)"}
+{mainPlan || "(empty)"}
                   </pre>
                 )}
               </div>
