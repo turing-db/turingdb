@@ -28,6 +28,11 @@ esac
 
 bun run server &
 server_pid=$!
+sleep 0.5  # Give it a moment to fail if it's going to
+if ! kill -0 "$server_pid" 2>/dev/null; then
+  echo "Error: server failed to start" >&2
+  exit 1
+fi
 
 cleanup() {
   kill "$server_pid" 2>/dev/null || true

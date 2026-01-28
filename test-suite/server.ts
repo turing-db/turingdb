@@ -2,18 +2,15 @@ import { join } from "node:path";
 
 const PORT = 5566;
 
+const turingSrc= process.env.TURING_SRC;
+if (!turingSrc) {
+	throw new Error(
+		"TURING_SRC is not set. Source setup.sh before running the server.",
+	);
+}
+
 const sourceTestsDir = join(
-	import.meta.dir,
-	"..",
-	"test",
-	"query-test-suite",
-	"tests",
-);
-const buildTestsDir = join(
-	import.meta.dir,
-	"..",
-	"build",
-	"build_package",
+	turingSrc,
 	"test",
 	"query-test-suite",
 	"tests",
@@ -289,7 +286,7 @@ Bun.serve({
 			let updatedBuild = false;
 			try {
 				updatedBuild = await updateTestFile(
-					buildTestsDir,
+					sourceTestsDir,
 					targetName,
 					body.plan,
 					body.result,
@@ -318,7 +315,7 @@ Bun.serve({
 			try {
 				const created = await createTestFile(sourceTestsDir, name);
 				try {
-					await createTestFile(buildTestsDir, name);
+					await createTestFile(sourceTestsDir, name);
 				} catch {
 					// optional
 				}
