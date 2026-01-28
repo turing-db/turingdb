@@ -2,6 +2,7 @@
 
 #include "MaterializeData.h"
 
+#include "columns/ColumnOpExecutor.h"
 #include "columns/ColumnOptVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
@@ -22,11 +23,11 @@ namespace {
     case TType::staticKind(): {                                                               \
         const auto* src = static_cast<const TType*>(srcPtr);                                  \
         auto* dst = static_cast<TType*>(dstPtr);                                              \
-        ColumnOperators::copyChunk<typename TType::ValueType>(src->begin(), src->end(), dst); \
+        copyChunk<typename TType::ValueType>(src->begin(), src->end(), dst); \
         return;                                                                               \
     }
 
-inline void copyChunk(const Column* srcPtr,
+inline void copyChunkImpl(const Column* srcPtr,
                       Column* dstPtr) {
     switch (srcPtr->getKind()) {
         COPY_CHUNK_CASE(ColumnVector<EntityID>)
@@ -56,14 +57,14 @@ inline void copyChunk(const Column* srcPtr,
 
 #define COPY_TRANSFORMED_CHUNK_CASE(TType)                                \
     case TType::staticKind(): {                                           \
-        ColumnOperators::copyTransformedChunk<typename TType::ValueType>( \
+        copyTransformedChunk<typename TType::ValueType>( \
             transform,                                                    \
             static_cast<const TType*>(srcPtr),                            \
             static_cast<TType*>(dstPtr));                                 \
         return;                                                           \
     }
 
-inline void copyTransformedChunk(const ColumnVector<size_t>* transform,
+inline void copyTransformedChunkImpl(const ColumnVector<size_t>* transform,
                                  const Column* srcPtr,
                                  Column* dstPtr) {
     switch (srcPtr->getKind()) {
@@ -173,7 +174,7 @@ void MaterializeProcessor::execute() {
         for (const MaterializeData::Columns& cols : columnsPerStep) {
             for (const Column* col : cols) {
                 NamedColumn* destCol = output[currentColIndex];
-                copyChunk(col, destCol->getColumn());
+                copyChunkImpl(col, destCol->getColumn());
                 ++currentColIndex;
             }
         }
@@ -198,7 +199,7 @@ void MaterializeProcessor::execute() {
             for (auto colIt = cols.rbegin(); colIt != cols.rend(); ++colIt) {
                 const Column* colPtr = *colIt;
                 NamedColumn* destCol = output[currentColIndex];
-                copyChunk(colPtr, destCol->getColumn());
+                copyChunkImpl(colPtr, destCol->getColumn());
                 --currentColIndex;
             }
 
@@ -209,7 +210,7 @@ void MaterializeProcessor::execute() {
         for (auto colIt = cols.rbegin(); colIt != cols.rend(); ++colIt) {
             const Column* colPtr = *colIt;
             NamedColumn* destCol = output[currentColIndex];
-            copyTransformedChunk(&_transform, colPtr, destCol->getColumn());
+            copyTransformedChunkImpl(&_transform, colPtr, destCol->getColumn());
             --currentColIndex;
         }
 

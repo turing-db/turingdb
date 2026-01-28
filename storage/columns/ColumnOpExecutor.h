@@ -99,4 +99,27 @@ inline void exec(ColumnVector<T>* res, const ColumnMask* mask, const ColumnVecto
     MaskApplicator::apply(res, src, mask);
 }
 
+template <typename T>
+inline void copyChunk(typename ColumnVector<T>::ConstIterator srcStart,
+                      typename ColumnVector<T>::ConstIterator srcEnd,
+                      ColumnVector<T>* dst) {
+    const size_t count = std::distance(srcStart, srcEnd);
+    dst->resize(count);
+    std::copy(srcStart, srcEnd, dst->begin());
+}
+
+template <typename T>
+inline void copyTransformedChunk(const ColumnVector<size_t>* transform,
+                                 const ColumnVector<T>* src,
+                                 ColumnVector<T>* dst) {
+    const auto& srcd = src->getRaw();
+    const auto& transformd = transform->getRaw();
+    const size_t count = transform->size();
+    dst->resize(count);
+
+    auto& dstd = dst->getRaw();
+    for (size_t i = 0; i < count; i++) {
+        dstd[i] = srcd[transformd[i]];
+    }
+}
 }
