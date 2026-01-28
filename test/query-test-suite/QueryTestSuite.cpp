@@ -1,7 +1,6 @@
-#include <gtest/gtest.h>
+#include "TuringTest.h"
 
 #include "QueryTestRunner.h"
-#include "TuringTest.h"
 
 namespace turing::test {
 
@@ -30,22 +29,26 @@ TEST_F(QueryTestSuite, RunAll) {
 
         if (!result.planMatched) {
             ADD_FAILURE() << "Plan output mismatch for test: " << test.name;
-            ADD_FAILURE() << "Expected plan:\n" << QueryTestRunner::normalizeOutput(test.expectPlan);
-            ADD_FAILURE() << "Actual plan:\n" << result.planOutput;
+            ADD_FAILURE() << "Expected plan:\n"
+                          << QueryTestRunner::normalizeOutput(test.expectPlan);
+            ADD_FAILURE() << "Actual plan:\n"
+                          << result.planOutput;
         }
 
         if (!result.resultMatched) {
             ADD_FAILURE() << "Result output mismatch for test: " << test.name;
-            ADD_FAILURE() << "Expected result:\n" << QueryTestRunner::normalizeOutput(test.expectResult);
-            ADD_FAILURE() << "Actual result:\n" << result.resultOutput;
+            ADD_FAILURE() << "Expected result:\n"
+                          << QueryTestRunner::normalizeOutput(test.expectResult);
+            ADD_FAILURE() << "Actual result:\n"
+                          << result.resultOutput;
         }
     }
 
     EXPECT_GE(executed, 0u);
 }
 
-} // namespace turing::test
+}
 
 int main(int argc, char** argv) {
-    return turing::test::turingTestMain(argc, argv, [] { testing::GTEST_FLAG(repeat) = 1; });
+    return turing::test::turingTestMain(argc, argv, [] { testing::GTEST_FLAG(repeat) = 3; });
 }

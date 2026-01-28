@@ -1,7 +1,10 @@
 function(add_query_suite_target exe_name)
     add_executable(${exe_name} ${ARGN})
     target_link_libraries(${exe_name}
-        PRIVATE turing_db_parser_s
+        PRIVATE turing_common_s
+                spdlog::spdlog
+                argparse
+                turing_db_parser_s
                 turing_db_analyzer_s
                 turing_db_ast_s
                 turing_db_system_s
@@ -25,6 +28,9 @@ add_query_suite_target(query_test_suite_cli
     QueryTestSuiteCLI.cpp
     QueryTestRunner.cpp)
 
+set_target_properties(query_test_suite_cli PROPERTIES
+    OUTPUT_NAME turingdb-test-cli)
+
 set(QUERY_TEST_SUITE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
 target_compile_definitions(test_query_test_suite
@@ -32,3 +38,6 @@ target_compile_definitions(test_query_test_suite
 
 target_compile_definitions(query_test_suite_cli
     PRIVATE QUERY_TEST_SUITE_DIR="${QUERY_TEST_SUITE_DIR}")
+
+install(RUNTIME_DEPENDENCY_SET turingdb-test-cli
+    RUNTIME DESTINATION bin)

@@ -1,14 +1,14 @@
-#include <iostream>
+#include <sstream>
 
+#include <argparse.hpp>
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include "QueryTestRunner.h"
 
-namespace {
+using namespace turing::test;
 
-void printUsage() {
-    std::cout << "query_test_suite_cli --list | --run <name> | --run-all\n";
-}
+namespace {
 
 std::string escapeJson(std::string_view input) {
     std::string out;
@@ -26,99 +26,124 @@ std::string escapeJson(std::string_view input) {
     return out;
 }
 
+std::string argParserUsage(const argparse::ArgumentParser& parser) {
+    std::ostringstream out;
+    out << parser;
+    return out.str();
+}
+
+std::string serializeTest(const QueryTestSpec& test) {
+    std::string out = fmt::format(
+        "{{\"name\":\"{}\",\"query\":\"{}\",\"writeRequired\":{},\"disabledReason\":\"{}\",\"tags\":[",
+        escapeJson(test.name),
+        escapeJson(test.query),
+        test.writeRequired ? "true" : "false",
+        escapeJson(test.disabledReason));
+    for (size_t i = 0; i < test.tags.size(); ++i) {
+        if (i > 0) {
+            out += ",";
+        }
+        out += fmt::format("\"{}\"", escapeJson(test.tags[i]));
+    }
+    out += fmt::format("],\"enabled\":{}}}", test.enabled ? "true" : "false");
+    return out;
+}
+
+std::string serializeResult(const QueryTestResult& result) {
+    return fmt::format(
+        "{{\"name\":\"{}\",\"planOutput\":\"{}\",\"resultOutput\":\"{}\",\"planMatched\":{},\"resultMatched\":{},\"timeUs\":{}}}",
+        escapeJson(result.name),
+        escapeJson(result.planOutput),
+        escapeJson(result.resultOutput),
+        result.planMatched ? "true" : "false",
+        result.resultMatched ? "true" : "false",
+        result.timeUs);
+}
+
 }
 
 int main(int argc, char** argv) {
-    using turing::test::QueryTestRunner;
-    using turing::test::QueryTestSpec;
-    using turing::test::QueryTestResult;
-
     spdlog::set_level(spdlog::level::off);
 
-    if (argc < 2) {
-        printUsage();
+    argparse::ArgumentParser program("turingdb-test-cli");
+    program.add_argument("--list")
+        .help("List tests as JSON")
+        .default_value(false)
+        .implicit_value(true);
+    program.add_argument("--run")
+        .help("Run a single test by name")
+        .metavar("name")
+        .nargs(1);
+    program.add_argument("--run-all")
+        .help("Run all enabled tests")
+        .default_value(false)
+        .implicit_value(true);
+
+    try {
+        program.parse_args(argc, argv);
+    } catch (const std::exception& e) {
+        fmt::print(stderr, "{}\n", e.what());
+        fmt::println("{}", argParserUsage(program));
         return 1;
     }
 
-    const std::string command = argv[1];
+    const bool doList = program.get<bool>("--list");
+    const bool doRunAll = program.get<bool>("--run-all");
+    const bool doRun = program.is_used("--run");
+
+    if ((doList ? 1 : 0) + (doRun ? 1 : 0) + (doRunAll ? 1 : 0) != 1) {
+        fmt::println("{}", argParserUsage(program));
+        return 1;
+    }
+
     const fs::Path testsDir {QUERY_TEST_SUITE_DIR};
     const auto tests = QueryTestRunner::loadTestsFromDir(testsDir);
 
-    if (command == "--list") {
-        std::cout << "[";
+    if (doList) {
+        fmt::print("[");
         bool first = true;
         for (const auto& test : tests) {
             if (!first) {
-                std::cout << ",";
+                fmt::print(",");
             }
             first = false;
-            std::cout << "{\"name\":\"" << escapeJson(test.name) << "\""
-                      << ",\"query\":\"" << escapeJson(test.query) << "\""
-                      << ",\"writeRequired\":" << (test.writeRequired ? "true" : "false")
-                      << ",\"disabledReason\":\"" << escapeJson(test.disabledReason) << "\""
-                      << ",\"tags\":[";
-            for (size_t i = 0; i < test.tags.size(); ++i) {
-                if (i > 0) {
-                    std::cout << ",";
-                }
-                std::cout << "\"" << escapeJson(test.tags[i]) << "\"";
-            }
-            std::cout << "]"
-                      << ",\"enabled\":" << (test.enabled ? "true" : "false")
-                      << "}";
+            fmt::print("{}", serializeTest(test));
         }
-        std::cout << "]\n";
+        fmt::println("]");
         return 0;
     }
 
     QueryTestRunner runner;
 
-    if (command == "--run" && argc >= 3) {
-        const std::string name = argv[2];
+    if (doRun) {
+        const std::string name = program.get<std::string>("--run");
         for (const auto& test : tests) {
             if (test.name != name) {
                 continue;
             }
             const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test.name;
             const QueryTestResult result = runner.runTest(test, outDir);
-            std::cout << "{\"name\":\"" << escapeJson(result.name) << "\""
-                      << ",\"planOutput\":\"" << escapeJson(result.planOutput) << "\""
-                      << ",\"resultOutput\":\"" << escapeJson(result.resultOutput) << "\""
-                      << ",\"planMatched\":" << (result.planMatched ? "true" : "false")
-                      << ",\"resultMatched\":" << (result.resultMatched ? "true" : "false")
-                      << ",\"timeUs\":" << result.timeUs
-                      << "}\n";
+            fmt::println("{}", serializeResult(result));
             return 0;
         }
-        std::cout << "{\"error\":\"Unknown test name\"}\n";
+        fmt::println("{}", "{\"error\":\"Unknown test name\"}");
         return 1;
     }
 
-    if (command == "--run-all") {
-        std::cout << "[";
-        bool first = true;
-        for (const auto& test : tests) {
-            if (!test.enabled) {
-                continue;
-            }
-            const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test.name;
-            const QueryTestResult result = runner.runTest(test, outDir);
-            if (!first) {
-                std::cout << ",";
-            }
-            first = false;
-            std::cout << "{\"name\":\"" << escapeJson(result.name) << "\""
-                      << ",\"planOutput\":\"" << escapeJson(result.planOutput) << "\""
-                      << ",\"resultOutput\":\"" << escapeJson(result.resultOutput) << "\""
-                      << ",\"planMatched\":" << (result.planMatched ? "true" : "false")
-                      << ",\"resultMatched\":" << (result.resultMatched ? "true" : "false")
-                      << ",\"timeUs\":" << result.timeUs
-                      << "}";
+    fmt::print("[");
+    bool first = true;
+    for (const auto& test : tests) {
+        if (!test.enabled) {
+            continue;
         }
-        std::cout << "]\n";
-        return 0;
+        const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test.name;
+        const QueryTestResult result = runner.runTest(test, outDir);
+        if (!first) {
+            fmt::print(",");
+        }
+        first = false;
+        fmt::print("{}", serializeResult(result));
     }
-
-    printUsage();
-    return 1;
+    fmt::println("]");
+    return 0;
 }
