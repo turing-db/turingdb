@@ -22,7 +22,7 @@ namespace {
     case TType::staticKind(): {                                                               \
         const auto* src = static_cast<const TType*>(srcPtr);                                  \
         auto* dst = static_cast<TType*>(dstPtr);                                              \
-        copyChunk<typename TType::ValueType>(src->begin(), src->end(), dst); \
+        ColumnOperators::copyChunk<typename TType::ValueType>(src->begin(), src->end(), dst); \
         return;                                                                               \
     }
 
@@ -54,13 +54,12 @@ inline void copyChunkImpl(const Column* srcPtr,
     }
 }
 
-#define COPY_TRANSFORMED_CHUNK_CASE(TType)                                \
-    case TType::staticKind(): {                                           \
-        copyTransformedChunk<typename TType::ValueType>( \
-            transform,                                                    \
-            static_cast<const TType*>(srcPtr),                            \
-            static_cast<TType*>(dstPtr));                                 \
-        return;                                                           \
+#define COPY_TRANSFORMED_CHUNK_CASE(TType)                                                                  \
+    case TType::staticKind(): {                                                                             \
+        ColumnOperators::copyTransformedChunk<typename TType::ValueType>(transform,                         \
+                                                                         static_cast<const TType*>(srcPtr), \
+                                                                         static_cast<TType*>(dstPtr));      \
+        return;                                                                                             \
     }
 
 inline void copyTransformedChunkImpl(const ColumnVector<size_t>* transform,

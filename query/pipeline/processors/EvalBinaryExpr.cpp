@@ -28,42 +28,42 @@ struct Eval {
             using ResultType = ColumnCombination<Eq, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Eq.");
-            exec<Eq>(result, lhs, rhs);
+            ColumnOperators::exec<Eq>(result, lhs, rhs);
         } else if constexpr (Op == OP_NOT_EQUAL) {
             using ResultType = ColumnCombination<Ne, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Ne.");
-            exec<Ne>(result, lhs, rhs);
+            ColumnOperators::exec<Ne>(result, lhs, rhs);
         } else if constexpr (Op == OP_GREATER_THAN) {
             using ResultType = ColumnCombination<Gt, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Gt.");
-            exec<Gt>(result, lhs, rhs);
+            ColumnOperators::exec<Gt>(result, lhs, rhs);
         } else if constexpr (Op == OP_LESS_THAN) {
             using ResultType = ColumnCombination<Lt, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Lt.");
-            exec<Lt>(result, lhs, rhs);
+            ColumnOperators::exec<Lt>(result, lhs, rhs);
         } else if constexpr (Op == OP_GREATER_THAN_OR_EQUAL) {
             using ResultType = ColumnCombination<Gte, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Gte.");
-            exec<Gte>(result, lhs, rhs);
+            ColumnOperators::exec<Gte>(result, lhs, rhs);
         } else if constexpr (Op == OP_LESS_THAN_OR_EQUAL) {
             using ResultType = ColumnCombination<Lte, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Lte.");
-            exec<Lte>(result, lhs, rhs);
+            ColumnOperators::exec<Lte>(result, lhs, rhs);
         } else if constexpr (Op == OP_AND) {
             using ResultType = ColumnCombination<And, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for And.");
-            exec<And>(result, lhs, rhs);
+            ColumnOperators::exec<And>(result, lhs, rhs);
         } else if constexpr (Op == OP_OR) {
             using ResultType = ColumnCombination<Or, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Or.");
-            exec<Or>(result, lhs, rhs);
+            ColumnOperators::exec<Or>(result, lhs, rhs);
         } else if constexpr (Op == OP_MINUS) {
             fmt::println("MINUS {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
             throw PipelineException("Sub not yet implemented");
