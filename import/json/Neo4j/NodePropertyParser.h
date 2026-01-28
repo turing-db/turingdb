@@ -63,23 +63,22 @@ public:
 
         if (_nesting == 7) {
             if (val == "Integer" || val == "Long") {
-                _metadata->getOrCreatePropertyType(_currentPropName + " (Int64)", ValueType::Int64);
-                _metadata->getOrCreatePropertyType(_currentPropName + " (UInt64)", ValueType::UInt64);
+                _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Int64);
                 return true;
             }
 
             if (val == "Double") {
-                _metadata->getOrCreatePropertyType(_currentPropName + " (Double)", ValueType::Double);
+                _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Double);
                 return true;
             }
 
             if (val == "Boolean") {
-                _metadata->getOrCreatePropertyType(_currentPropName + " (Bool)", ValueType::Bool);
+                _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Bool);
                 return true;
             }
 
             if (val == "String" || val == "Date") {
-                _metadata->getOrCreatePropertyType(_currentPropName + " (String)", ValueType::String);
+                _metadata->getOrCreatePropertyType(_currentPropName, ValueType::String);
                 return true;
             }
 

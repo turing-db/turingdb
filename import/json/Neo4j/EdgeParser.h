@@ -41,11 +41,15 @@ public:
         }
 
         if (_nesting == 7) {
-            _currentPropName += " (Bool)";
-            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Bool);
+            PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Bool);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
+            }
+
+            if (propType._valueType != ValueType::Bool) {
+                _currentPropName += " (Bool)";
+                propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Bool);
             }
 
             _buf->addEdgeProperty<types::Bool>(*_currentEdge, propType._id, val);
@@ -61,11 +65,15 @@ public:
         }
 
         if (_nesting == 7) {
-            _currentPropName += " (Int64)";
-            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Int64);
+            PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Int64);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
+            }
+
+            if (propType._valueType != ValueType::Int64) {
+                _currentPropName += " (Int64)";
+                propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Int64);
             }
 
             _buf->addEdgeProperty<types::Int64>(*_currentEdge, propType._id, val);
@@ -81,14 +89,18 @@ public:
         }
 
         if (_nesting == 7) {
-            _currentPropName += " (UInt64)";
-            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::UInt64);
+            PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Int64);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
             }
 
-            _buf->addEdgeProperty<types::UInt64>(*_currentEdge, propType._id, val);
+            if (propType._valueType != ValueType::Int64) {
+                _currentPropName += " (Int64)";
+                propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Int64);
+            }
+
+            _buf->addEdgeProperty<types::Int64>(*_currentEdge, propType._id, val);
             return true;
         }
 
@@ -121,11 +133,15 @@ public:
         }
 
         if (_nesting == 7) {
-            _currentPropName += " (Double)";
-            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Double);
+            PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Double);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
+            }
+
+            if (propType._valueType != ValueType::Double) {
+                _currentPropName += " (Double)";
+                propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::Double);
             }
 
             _buf->addEdgeProperty<types::Double>(*_currentEdge, propType._id, val);
@@ -141,11 +157,15 @@ public:
         }
 
         if (_nesting == 7) {
-            _currentPropName += " (String)";
-            const PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::String);
+            PropertyType propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::String);
             if (!propType.isValid()) {
                 spdlog::info("Property type {} not supported", _currentPropName);
                 return true;
+            }
+
+            if (propType._valueType != ValueType::String) {
+                _currentPropName += " (String)";
+                propType = _metadata->getOrCreatePropertyType(_currentPropName, ValueType::String);
             }
 
             std::string escaped;
@@ -234,4 +254,5 @@ private:
     std::regex _regEscapes {"\"|\\\\"};
     std::regex _regNewline {"\n"};
 };
+
 }
