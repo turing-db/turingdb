@@ -6,7 +6,6 @@
 #include "columns/ColumnOptVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
-#include "columns/ColumnOperators.h"
 #include "columns/ColumnIndices.h"
 
 #include "PipelineV2.h"
