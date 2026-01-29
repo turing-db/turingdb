@@ -10,26 +10,11 @@ from pathlib import Path
 from setuptools.build_meta import (
     get_requires_for_build_wheel,
     get_requires_for_build_editable,
+    get_requires_for_build_sdist,
     prepare_metadata_for_build_wheel,
     prepare_metadata_for_build_editable,
     build_editable,
 )
-
-
-def get_requires_for_build_sdist(config_settings=None):
-    """Sdist is not supported - use 'uv build --wheel' instead."""
-    raise NotImplementedError(
-        "Source distributions are not supported for turingdb. "
-        "Use 'uv build --wheel --no-build-isolation' to build a wheel directly."
-    )
-
-
-def build_sdist(sdist_directory, config_settings=None):
-    """Sdist is not supported - use 'uv build --wheel' instead."""
-    raise NotImplementedError(
-        "Source distributions are not supported for turingdb. "
-        "Use 'uv build --wheel --no-build-isolation' to build a wheel directly."
-    )
 
 
 def _get_project_root() -> Path:
@@ -40,6 +25,11 @@ def _get_project_root() -> Path:
 def _get_build_executable() -> Path:
     """Get the path to the executable in the build directory."""
     return _get_project_root() / "build" / "turing_install" / "bin" / "turingdb"
+
+
+def _get_package_executable() -> Path:
+    """Get the path to the executable in the package directory (used by sdist)."""
+    return _get_project_root() / "python" / "turingdb" / "bin" / "turingdb"
 
 
 def _run_cmake_build():
@@ -62,8 +52,13 @@ def _run_cmake_build():
 
 def _ensure_executable_built() -> Path:
     """Ensure the executable is built, building if necessary. Returns path to executable."""
-    exe_path = _get_build_executable()
+    # Check package directory first (for sdist builds)
+    pkg_exe = _get_package_executable()
+    if pkg_exe.exists():
+        return pkg_exe
 
+    # Check build directory
+    exe_path = _get_build_executable()
     if exe_path.exists():
         return exe_path
 
@@ -93,6 +88,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
 
     project_root = _get_project_root()
     bin_dir = project_root / "python" / "turingdb" / "bin"
+    dest_exe = bin_dir / "turingdb"
     build_lib_dir = project_root / "build" / "lib"
 
     # Clean up build/lib to avoid including gtest/gmock static libraries
@@ -100,12 +96,15 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         for f in build_lib_dir.glob("*.a"):
             f.unlink()
 
+    # Check if binary is already in package dir (sdist case)
+    binary_already_in_place = exe_path == dest_exe
+
     try:
-        # Copy binary to package directory temporarily
-        bin_dir.mkdir(parents=True, exist_ok=True)
-        dest_exe = bin_dir / "turingdb"
-        shutil.copy2(exe_path, dest_exe)
-        os.chmod(dest_exe, 0o755)
+        if not binary_already_in_place:
+            # Copy binary to package directory temporarily
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(exe_path, dest_exe)
+            os.chmod(dest_exe, 0o755)
 
         # Build the wheel using setuptools
         wheel_name = backend.build_wheel(
@@ -114,6 +113,37 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
 
         return wheel_name
     finally:
-        # Clean up - remove the temporary binary from source tree
-        if bin_dir.exists():
+        # Clean up - remove the temporary binary from source tree (only if we copied it)
+        if not binary_already_in_place and bin_dir.exists():
+            shutil.rmtree(bin_dir)
+
+
+def build_sdist(sdist_directory, config_settings=None):
+    """Build an sdist with the C++ binary included."""
+    import setuptools.build_meta as backend
+
+    # Ensure the executable exists
+    exe_path = _ensure_executable_built()
+
+    project_root = _get_project_root()
+    bin_dir = project_root / "python" / "turingdb" / "bin"
+    dest_exe = bin_dir / "turingdb"
+
+    # Check if binary is already in package dir
+    binary_already_in_place = exe_path == dest_exe
+
+    try:
+        if not binary_already_in_place:
+            # Copy binary to package directory temporarily
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(exe_path, dest_exe)
+            os.chmod(dest_exe, 0o755)
+
+        # Build the sdist using setuptools
+        sdist_name = backend.build_sdist(sdist_directory, config_settings)
+
+        return sdist_name
+    finally:
+        # Clean up - remove the temporary binary from source tree (only if we copied it)
+        if not binary_already_in_place and bin_dir.exists():
             shutil.rmtree(bin_dir)

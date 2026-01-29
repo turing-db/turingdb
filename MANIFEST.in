@@ -1,0 +1,12 @@
+# Build configuration
+include pyproject.toml
+include setup.py
+include build_backend.py
+
+# Documentation
+include README.md
+include LICENSE
+
+# Python package with pre-built binary
+recursive-include python *.py
+include python/turingdb/bin/turingdb
