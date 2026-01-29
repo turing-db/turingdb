@@ -356,8 +356,8 @@ struct ResultAllocator {
     break;                                                                               \
 
 Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
-                                          const Column* lhs,
-                                          const Column* rhs) {
+                                                   const Column* lhs,
+                                                   const Column* rhs) {
     Column* result = nullptr;
 
     ResultAllocator allocator(result, _gen, op);
