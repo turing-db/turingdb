@@ -2,14 +2,13 @@
 
 #include <functional>
 #include <optional>
-#include <type_traits>
 
 #include "ColumnVector.h"
 #include "ColumnConst.h"
 #include "TypeUtils.h"
 
 #include "BioAssert.h"
-#include "columns/ColumnCombinations.h"
+#include "PipelineException.h"
 
 namespace db {
 
@@ -129,12 +128,22 @@ struct BinaryOp {
     }
 };
 
+struct SafeDivides {
+    template <typename T, typename U>
+    inline auto operator()(T&& a, U&& b) {
+        if (b == 0) {
+            throw PipelineException("Attempted to divide by zero.");
+        }
+        return std::divides<> {}(std::forward<T>(a), std::forward<U>(b));
+    }
+};
+
 }
 
 using Add = BinaryOp<std::plus<>>;
 using Sub = BinaryOp<std::minus<>>;
 using Mul = BinaryOp<std::multiplies<>>;
-using Div = BinaryOp<std::divides<>>;
+using Div = BinaryOp<SafeDivides>;
 
 }
 
