@@ -134,6 +134,7 @@ struct BinaryOp {
 using Add = BinaryOp<std::plus<>>;
 using Sub = BinaryOp<std::minus<>>;
 using Mul = BinaryOp<std::multiplies<>>;
+using Div = BinaryOp<std::divides<>>;
 
 }
 

@@ -103,6 +103,14 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
             return ColumnOperator::OP_SUB;
         break;
 
+        case BinaryOperator::Mult:
+            return ColumnOperator::OP_MUL;
+        break;
+
+        case BinaryOperator::Div:
+            return ColumnOperator::OP_DIV;
+        break;
+
         case BinaryOperator::_SIZE:
             throw FatalException(
                 "Attempted to generate invalid binary operator in ExprProgramGenerator.");
@@ -315,15 +323,6 @@ Column* ExprProgramGenerator::allocUnaryResultCol(const Expr* expr) {
     }
 }
 
-// Allocate the result column, determined by operator functor and arguments
-#define ALLOCATOR_CASE(Operator, Functor)                                                \
-    case (Operator): {                                                                   \
-        using ResultType = ColumnCombination<Functor, T, U>::ResultColumnType;           \
-        _resultCol = _gen->memory().alloc<ResultType>();                                 \
-        return;                                                                          \
-    }                                                                                    \
-    break;                                                                               \
-
 template <ColumnOperator Op>
 struct ResultAllocator {
     Column*& _resultCol;
@@ -364,6 +363,12 @@ struct ResultAllocator {
         } else if constexpr (Op == OP_SUB) {
             using ResultType = typename ColumnCombination<Sub, T, U>::ResultColumnType;
             _resultCol = _gen->memory().alloc<ResultType>();
+        } else if constexpr (Op == OP_MUL) {
+            using ResultType = typename ColumnCombination<Mul, T, U>::ResultColumnType;
+            _resultCol = _gen->memory().alloc<ResultType>();
+        } else if constexpr (Op == OP_DIV) {
+            using ResultType = typename ColumnCombination<Div, T, U>::ResultColumnType;
+            _resultCol = _gen->memory().alloc<ResultType>();
         } else {
             throw FatalException("Unsupported allocator.");
         }
@@ -400,6 +405,8 @@ Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
 
         DISPATCHER_CASE(OP_ADD)
         DISPATCHER_CASE(OP_SUB)
+        DISPATCHER_CASE(OP_MUL)
+        DISPATCHER_CASE(OP_DIV)
 
         case OP_IN: // TODO: Implement
             throw PlannerException("Unsupported allocator: IN.");

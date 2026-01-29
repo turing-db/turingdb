@@ -97,6 +97,14 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
             EvalBinaryExpr::eval<OP_SUB>(res, lhs, rhs);
         break;
 
+        case OP_MUL:
+            EvalBinaryExpr::eval<OP_MUL>(res, lhs, rhs);
+        break;
+
+        case OP_DIV:
+            EvalBinaryExpr::eval<OP_DIV>(res, lhs, rhs);
+        break;
+
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:
@@ -147,6 +155,8 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         case OP_OR:
         case OP_ADD:
         case OP_SUB:
+        case OP_MUL:
+        case OP_DIV:
         case OP_PROJECT:
         case OP_IN:
             throw FatalException(fmt::format("Attempted to evalute {} as unary operator.",

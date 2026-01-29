@@ -73,6 +73,16 @@ struct Eval {
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Sub.");
             ColumnOperators::exec<Sub>(result, lhs, rhs);
+        } else if constexpr (Op == OP_MUL) {
+            using ResultType = ColumnCombination<Mul, T, U>::ResultColumnType;
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Mul.");
+            ColumnOperators::exec<Mul>(result, lhs, rhs);
+        } else if constexpr (Op == OP_DIV) {
+            using ResultType = ColumnCombination<Div, T, U>::ResultColumnType;
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Div.");
+            ColumnOperators::exec<Div>(result, lhs, rhs);
         } else {
             COMPILE_ERROR("Unknown operator");
         }
@@ -105,3 +115,5 @@ template void EvalBinaryExpr::eval<OP_OR>(Column* res, const Column* lhs, const 
 
 template void EvalBinaryExpr::eval<OP_ADD>(Column* res, const Column* lhs, const Column* rhs);
 template void EvalBinaryExpr::eval<OP_SUB>(Column* res, const Column* lhs, const Column* rhs);
+template void EvalBinaryExpr::eval<OP_MUL>(Column* res, const Column* lhs, const Column* rhs);
+template void EvalBinaryExpr::eval<OP_DIV>(Column* res, const Column* lhs, const Column* rhs);
