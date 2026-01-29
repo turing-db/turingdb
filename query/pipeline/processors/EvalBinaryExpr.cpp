@@ -1,6 +1,5 @@
 #include "EvalBinaryExpr.h"
 
-#include "PipelineException.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnOperators.h"
@@ -64,12 +63,15 @@ struct Eval {
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Or.");
             ColumnOperators::exec<Or>(result, lhs, rhs);
-        } else if constexpr (Op == OP_MINUS) {
-            fmt::println("MINUS {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
-            throw PipelineException("Sub not yet implemented");
-        } else if constexpr (Op == OP_PLUS) {
+        } else if constexpr (Op == OP_ADD) {
+            fmt::println("ADD {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
+            using ResultType = ColumnCombination<Add, T, U>::ResultColumnType;
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Or.");
+            ColumnOperators::exec<Add>(result, lhs, rhs);
+        /* } else if constexpr (Op == OP_PLUS) {
             fmt::println("PLUS {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
-            throw PipelineException("Add not yet implemented");
+            throw PipelineException("Add not yet implemented"); */
         } else {
             COMPILE_ERROR("Unknown operator");
         }
@@ -100,5 +102,5 @@ template void EvalBinaryExpr::eval<OP_LESS_THAN_OR_EQUAL>(Column* res, const Col
 template void EvalBinaryExpr::eval<OP_AND>(Column* res, const Column* lhs, const Column* rhs);
 template void EvalBinaryExpr::eval<OP_OR>(Column* res, const Column* lhs, const Column* rhs);
 
-template void EvalBinaryExpr::eval<OP_MINUS>(Column* res, const Column* lhs, const Column* rhs);
-template void EvalBinaryExpr::eval<OP_PLUS>(Column* res, const Column* lhs, const Column* rhs);
+template void EvalBinaryExpr::eval<OP_ADD>(Column* res, const Column* lhs, const Column* rhs);
+// template void EvalBinaryExpr::eval<OP_PLUS>(Column* res, const Column* lhs, const Column* rhs);

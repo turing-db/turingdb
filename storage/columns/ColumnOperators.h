@@ -16,7 +16,7 @@ class ColumnOperators {
 public:
     /// Generic binary operators
     template <typename Op, typename ColW, typename ColT, typename ColU>
-        requires is_result_column<Op, ColT, ColU, ColW>
+        requires is_result_column<Op, ColT, ColU, TypeUtils::decay_col_t<ColW>>
     static inline void exec(ColW&& res, ColT&& lhs, ColU&& rhs) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
         using DecayColU = TypeUtils::decay_col_t<ColU>;

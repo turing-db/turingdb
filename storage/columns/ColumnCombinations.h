@@ -1,6 +1,6 @@
 #pragma once
 
-#include <concepts>
+#include <type_traits>
 
 #include "ColumnVector.h"
 #include "ColumnMask.h"
@@ -35,27 +35,27 @@ public:
     using type = InternalResImpl;
 };
 
-template <typename Op, typename PColT, typename PColU>
-class ColumnCombination;
+template <typename Op, typename ColT, typename ColU>
+class ColumnCombinationImpl;
 
 /*
  * @brief Mask Operations
  * @detail Resultant type is always the type of the non-mask operand
  */
 template <typename Op>
-class ColumnCombination<Op, ColumnMask, ColumnMask> {
+class ColumnCombinationImpl<Op, ColumnMask, ColumnMask> {
 public:
     using ResultColumnType = ColumnMask;
 };
 
 template <typename Op, typename T>
-class ColumnCombination<Op, ColumnMask, ColumnVector<T>> {
+class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<T>> {
 public:
     using ResultColumnType = ColumnVector<T>;
 };
 
 template <typename Op, typename T>
-class ColumnCombination<Op, ColumnVector<T>, ColumnMask> {
+class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnMask> {
 public:
     using ResultColumnType = ColumnVector<T>;
 };
@@ -65,29 +65,29 @@ public:
  * @detail Predicates applied to two non-optional operands produce a @ref ColumnMask
  */
 template <typename Op, typename T, typename U>
-    requires std::predicate<Op, T, U>
-class ColumnCombination<Op, ColumnVector<T>, ColumnVector<U>> {
+    requires TuringPredicate<Op, T, U>
+class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnVector<U>> {
 public:
     using ResultColumnType = ColumnMask;
 };
 
 template <typename Op, typename T, typename U>
-    requires std::predicate<Op, T, U>
-class ColumnCombination<Op, ColumnVector<T>, ColumnConst<U>> {
+    requires TuringPredicate<Op, T, U>
+class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnConst<U>> {
 public:
     using ResultColumnType = ColumnMask;
 };
 
 template <typename Op, typename T, typename U>
-    requires std::predicate<Op, T, U>
-class ColumnCombination<Op, ColumnConst<T>, ColumnVector<U>> {
+    requires TuringPredicate<Op, T, U>
+class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnVector<U>> {
 public:
     using ResultColumnType = ColumnMask;
 };
 
 template <typename Op, typename T, typename U>
-    requires std::predicate<Op, T, U>
-class ColumnCombination<Op, ColumnConst<T>, ColumnConst<U>> {
+    requires TuringPredicate<Op, T, U>
+class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
 public:
     using ResultColumnType = ColumnMask;
 };
@@ -98,28 +98,28 @@ public:
  */
 template <typename Op, typename T, typename U>
     requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
-class ColumnCombination<Op, ColumnVector<T>, ColumnVector<U>> {
+class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnVector<U>> {
 public:
     using ResultColumnType = ColumnOptMask;
 };
 
 template <typename Op, typename T, typename U>
     requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
-class ColumnCombination<Op, ColumnVector<T>, ColumnConst<U>> {
+class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnConst<U>> {
 public:
     using ResultColumnType = ColumnOptMask;
 };
 
 template <typename Op, typename T, typename U>
     requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
-class ColumnCombination<Op, ColumnConst<T>, ColumnVector<U>> {
+class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnVector<U>> {
 public:
     using ResultColumnType = ColumnOptMask;
 };
 
 template <typename Op, typename T, typename U>
     requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
-class ColumnCombination<Op, ColumnConst<T>, ColumnConst<U>> {
+class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
 public:
     using ResultColumnType = ColumnOptMask;
 };
@@ -132,31 +132,39 @@ public:
  * - if at least one operand is a ColumnVector, the result is a ColumnVector
  */
 template <typename Op, typename T, typename U>
-class ColumnCombination<Op, ColumnVector<T>, ColumnVector<U>> {
+class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnVector<U>> {
 public:
     using ResultColumnType =
         ColumnVector<typename InternalCombination<Op, T, U>::type>;
 };
 
 template <typename Op, typename T, typename U>
-class ColumnCombination<Op, ColumnVector<T>, ColumnConst<U>> {
+class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnConst<U>> {
 public:
     using ResultColumnType =
         ColumnVector<typename InternalCombination<Op, T, U>::type>;
 };
 
 template <typename Op, typename T, typename U>
-class ColumnCombination<Op, ColumnConst<T>, ColumnVector<U>> {
+class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnVector<U>> {
 public:
     using ResultColumnType =
         ColumnVector<typename InternalCombination<Op, T, U>::type>;
 };
 
 template <typename Op, typename T, typename U>
-class ColumnCombination<Op, ColumnConst<T>, ColumnConst<U>> {
+class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
 public:
     using ResultColumnType =
         ColumnConst<typename InternalCombination<Op, T, U>::type>;
+};
+
+template <typename Op, typename PColT, typename PColU>
+class ColumnCombination {
+public:
+    using ResultColumnType =
+        ColumnCombinationImpl<Op, TypeUtils::decay_col_t<PColT>,
+                              TypeUtils::decay_col_t<PColU>>::ResultColumnType;
 };
 
 template <typename Op, typename ColT, typename ColU, typename ColRes>
@@ -169,4 +177,8 @@ template <typename Op, typename T, typename U, typename Res>
 concept is_result_type =
     std::is_same_v<Res, typename InternalCombination<Op, T, U>::type>;
 
+
+using ColumnInts = ColumnVector<int>;
+using ColumnMaybeInts = ColumnVector<std::optional<int>>;
+    
 }

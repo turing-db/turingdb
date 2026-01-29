@@ -2,12 +2,14 @@
 
 #include <functional>
 #include <optional>
+#include <type_traits>
 
 #include "ColumnVector.h"
 #include "ColumnConst.h"
 #include "TypeUtils.h"
 
 #include "BioAssert.h"
+#include "columns/ColumnCombinations.h"
 
 namespace db {
 
@@ -114,7 +116,7 @@ struct BinaryOpExecutor {
  * accordingly
  */
 template <typename F>
-struct BinaryOperator {
+struct BinaryOp {
     template<typename T, typename U>
         requires TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>
     inline decltype(auto) operator()(T&& a, U&& b) {
@@ -129,9 +131,15 @@ struct BinaryOperator {
 
 }
 
-using Add = BinaryOperator<std::plus<>>;
-using Sub = BinaryOperator<std::minus<>>;
-using Mul = BinaryOperator<std::multiplies<>>;
+using Add = BinaryOp<std::plus<>>;
+using Sub = BinaryOp<std::minus<>>;
+using Mul = BinaryOp<std::multiplies<>>;
+
+using lhs = ColumnVector<std::optional<CustomBool>>;
+using rhs = ColumnVector<CustomBool>;
+using res = ColumnCombination<Add, lhs, rhs>::ResultColumnType;
+
+// static_assert(std::is_same_v<res, ColumnVector<std::optional<CustomBool>>>);
 
 }
 

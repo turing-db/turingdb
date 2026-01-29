@@ -3,8 +3,11 @@
 #include <concepts>
 #include <optional>
 #include <string_view>
+#include <type_traits>
 
+#include "columns/ColumnMask.h"
 #include "columns/KindTypes.h"
+#include "metadata/PropertyType.h"
 
 namespace db {
 
@@ -35,7 +38,7 @@ struct TypeUtils {
     };
 
     template <typename T>
-    using unwrap_optional_t = typename unwrap_optional<T>::underlying_type;
+    using unwrap_optional_t = typename unwrap_optional<std::remove_cvref_t<T>>::underlying_type;
 
     template <typename ColT>
     using unwrap_inner_t = unwrap_optional_t<typename InnerTypeHelper<ColT>::type>;
@@ -74,11 +77,19 @@ template <typename Func, typename... Args>
 concept OptionallyInvokable =
     std::invocable<Func, TypeUtils::unwrap_optional_t<Args>...>;
 
+template <typename Func, typename... Args>
+concept TuringPredicate =
+    std::same_as<ColumnMask::Bool_t, std::invoke_result_t<Func, Args...>>
+    || std::same_as<CustomBool,  std::invoke_result_t<Func, Args...>>
+    || std::same_as<bool,  std::invoke_result_t<Func, Args...>>;
+
 /**
  * @brief Predicate that can be invoked, but one or both arguments may be wrapped in
  * optional.
  */
 template <typename Pred, typename... Args>
-concept OptionalPredicate = std::predicate<Pred, TypeUtils::unwrap_optional_t<Args>...>;
+concept OptionalPredicate = TuringPredicate<Pred, TypeUtils::unwrap_optional_t<Args>...>;
+
+static_assert(OptionallyInvokable<std::plus<void>, const std::optional<long int>&, const long int&>);
 
 }

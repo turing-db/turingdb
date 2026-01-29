@@ -1,7 +1,6 @@
 #pragma once
 
 #include <tuple>
-#include <array>
 
 namespace db {
 

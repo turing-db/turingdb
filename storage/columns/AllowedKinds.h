@@ -109,6 +109,7 @@ struct PairRestrictions;
 template <ColumnOperator Op>
     requires (Op == OP_EQUAL) || (Op == OP_NOT_EQUAL)
 struct PairRestrictions<Op> {
+    static_assert(Op != OP_ADD, "ADD IN EQ");
     using Allowed = GenerateKindPairList<
         // Standard equality of property types - except doubles
         OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
@@ -200,20 +201,27 @@ struct PairRestrictions<Op> {
 };
 
 template <ColumnOperator Op>
-    requires (Op == OP_PLUS) || (Op == OP_MINUS)
+    requires (Op == OP_ADD)
 struct PairRestrictions<Op> {
+    static_assert(Op == OP_ADD, "ADD IN ADD");
     using Allowed = GenerateKindPairList<
+        // Homogeneous arithmetic types
         OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
+        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
+
+        // Mixed arithmetic types
         OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::Int64::Primitive, types::Double::Primitive>::Pairs,
-        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
-        OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
-        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs
+        OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;
 
-    using Excluded = ExcludedContainers<>;
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
 };
 
 // Restriction for Unary operators

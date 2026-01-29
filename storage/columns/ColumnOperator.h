@@ -21,6 +21,8 @@ enum ColumnOperator : uint8_t {
     OP_AND,
     OP_OR,
 
+    OP_ADD,
+
     OP_PROJECT,
     OP_IN,
 
@@ -52,6 +54,8 @@ constexpr inline ColumnOperatorType getOperatorType(ColumnOperator op) {
 
         case OP_AND:
         case OP_OR:
+
+        case OP_ADD:
 
         case OP_PROJECT:
         case OP_IN:
@@ -89,6 +93,8 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
 
     EnumStringPair<ColumnOperator::OP_AND, "AND">,
     EnumStringPair<ColumnOperator::OP_OR, "OR">,
+
+    EnumStringPair<ColumnOperator::OP_ADD, "ADD">,
 
     EnumStringPair<ColumnOperator::OP_PROJECT, "PROJECT">,
     EnumStringPair<ColumnOperator::OP_IN, "IN">,

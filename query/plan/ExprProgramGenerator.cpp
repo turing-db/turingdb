@@ -4,6 +4,7 @@
 
 #include "PipelineGenerator.h"
 #include "columns/AllowedKinds.h"
+#include "columns/BinaryOperators.h"
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnCombinations.h"
 #include "columns/ColumnOperatorDispatcher.h"
@@ -92,6 +93,10 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
 
         case BinaryOperator::LessThanOrEqual:
             return ColumnOperator::OP_LESS_THAN_OR_EQUAL;
+        break;
+
+        case BinaryOperator::Add:
+            return ColumnOperator::OP_ADD;
         break;
 
         case BinaryOperator::_SIZE:
@@ -338,6 +343,13 @@ struct ResultAllocator {
             ALLOCATOR_CASE(OP_AND, And)
             ALLOCATOR_CASE(OP_OR, Or)
 
+            case (OP_ADD): {
+                using ResultType = ColumnCombination<Add, T, U>::ResultColumnType;
+                _resultCol = _gen->memory().alloc<ResultType>();
+                return;
+            }
+            break;
+
             default:
                 throw FatalException("Unsupported allocator.");
             break;
@@ -374,6 +386,13 @@ Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
 
         DISPATCHER_CASE(OP_AND)
         DISPATCHER_CASE(OP_OR)
+
+        case (OP_ADD): {
+            using Pairs = PairRestrictions<OP_ADD>;
+            ColumnDoubleDispatcher<Pairs::Allowed, Pairs::AllowedMixed, ResultAllocator,
+                                   Pairs::Excluded>::dispatch(lhs, rhs, allocator);
+        }
+        break;
 
         case OP_IN: // TODO: Implement
             throw PlannerException("Unsupported allocator: IN.");
