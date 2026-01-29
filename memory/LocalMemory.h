@@ -58,6 +58,13 @@ public:
         MakeMemoryPool<ColumnConst<types::String::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::Bool::Primitive>>::type,
 
+        MakeMemoryPool<ColumnConst<std::optional<types::Int64::Primitive>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<types::Int64::Primitive>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<types::UInt64::Primitive>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<types::Double::Primitive>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<types::String::Primitive>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<types::Bool::Primitive>>>::type,
+
         MakeMemoryPool<ColumnConst<PropertyNull>>::type,
 
         MakeMemoryPool<ColumnVector<types::Int64::Primitive>>::type,

@@ -139,7 +139,5 @@ using lhs = ColumnVector<std::optional<CustomBool>>;
 using rhs = ColumnVector<CustomBool>;
 using res = ColumnCombination<Add, lhs, rhs>::ResultColumnType;
 
-// static_assert(std::is_same_v<res, ColumnVector<std::optional<CustomBool>>>);
-
 }
 
