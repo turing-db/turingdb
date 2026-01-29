@@ -7,6 +7,7 @@
 #include "ReadStmtAnalyzer.h"
 #include "Symbol.h"
 #include "SourceManager.h"
+#include "Symbol.h"
 #include "WriteStmtAnalyzer.h"
 #include "ExprAnalyzer.h"
 #include "QueryCommand.h"
@@ -214,10 +215,16 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         Expr* item = *exprPtr;
         std::string_view name;
 
-        if (auto* symbol = dynamic_cast<SymbolExpr*>(item)) {
+        if (auto* symbolExpr = dynamic_cast<SymbolExpr*>(item)) {
+            Symbol* symbol = symbolExpr->getSymbol();
             name = symbol->getName();
         } else {
-            name = srcMan->getStringRepr(std::bit_cast<std::uintptr_t>(item));
+            name = item->getName();
+            if (name.empty()) {
+                item->setName(srcMan->getStringRepr(std::bit_cast<std::uintptr_t>(item)));
+            }
+
+            name = item->getName();
         }
 
         _exprAnalyzer->analyzeRootExpr(item);
