@@ -10,29 +10,32 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest-m
 
     steps:
     - uses: actions/checkout@v4
       with:
-            # Fetch submodules using the built-in token over HTTPS
-            submodules: recursive
-            # Ensure credentials are set for submodule fetches
-            persist-credentials: true
-            lfs: true # Pull LFS files
-            # fetch-depth: 0 # Allegedly enforces a clean pull on each run
+        submodules: recursive
+        persist-credentials: true
+        lfs: true
+
     - name: Install uv
       uses: astral-sh/setup-uv@v3
+
+    - name: Setup Python 3.14
+      run: uv python install 3.14
+
     - name: Cache dependencies
       id: cache-dependencies
       uses: actions/cache@v4
       with:
         path: external/dependencies
         key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies.sh', '.gitmodules') }}
+
     - name: Install dependencies
       if: steps.cache-dependencies.outputs.cache-hit != 'true'
       run: ./dependencies.sh
+
     - name: Install system packages
       if: steps.cache-dependencies.outputs.cache-hit == 'true'
       run: |
@@ -40,31 +43,26 @@ jobs:
         sudo apt-get install -qqy curl libcurl4-openssl-dev zlib1g-dev libssl-dev
         sudo apt-get install -qqy bison flex libfl-dev
         sudo apt-get install -qqy libopenblas-dev
-    - name: Configure cmake
-      shell: bash
-      run: mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build && cmake ..
-    - name: Build
-      shell: bash
-      run: cd ${{ github.workspace }}/build && make -j8 && make install
-    - name: Prepare SimpleDB
-      shell: bash
-      run: cd ${{ github.workspace }}/build/samples/simpledb && ./simpledb && mkdir -p $HOME/.turing/graphs && cp -r simpledb.out/simpledb $HOME/.turing/graphs
-    - name: Run unit tests
-      shell: bash
-      run: cd ${{ github.workspace }}/build && make test
-    - name: Run samples
-      shell: bash
-      run: cd ${{ github.workspace }}/build/turing_install/samples && source ${{ github.workspace }}/setup.sh && bash ./run-samples.sh
-    - name: Run regress
-      shell: bash
-      run: cd ${{ github.workspace }}/build && source ${{ github.workspace }}/setup.sh && make run_regress
-    - name: Create turing_install archive
-      shell: bash
+
+    - name: Install patchelf
+      run: sudo apt-get install -y patchelf
+
+    - name: Build wheel
+      run: uv build --wheel --python 3.14
+
+    - name: Repair wheel with auditwheel
       run: |
-        cd ${{ github.workspace }}/build
-        tar -czf turing_install.tar.gz turing_install
-    - name: Upload turing_install archive
+        mkdir -p wheelhouse
+        uvx auditwheel repair dist/*.whl -w wheelhouse
+
+    - name: Verify wheel installation
+      run: |
+        uv venv .venv-test --python 3.14
+        uv pip install wheelhouse/*.whl --python .venv-test/bin/python
+        .venv-test/bin/turingdb --help
+
+    - name: Upload wheel artifact
       uses: actions/upload-artifact@v4
       with:
-        name: turingdb-archive       # artifact name
-        path: ${{ github.workspace }}/build/turing_install.tar.gz
+        name: turingdb-wheel-linux
+        path: wheelhouse/*.whl

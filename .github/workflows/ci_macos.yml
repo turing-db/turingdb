@@ -10,24 +10,26 @@ on:
 
 jobs:
   build:
-
     runs-on: macos-latest
 
     steps:
     - uses: actions/checkout@v4
       with:
-            # Fetch submodules using the built-in token over HTTPS
-            submodules: recursive
-            # Ensure credentials are set for submodule fetches
-            persist-credentials: true
-            lfs: true # Pull LFS files
-            # fetch-depth: 0 # Allegedly enforces a clean pull on each run
+        submodules: recursive
+        persist-credentials: true
+        lfs: true
+
     - name: Install uv
       uses: astral-sh/setup-uv@v3
+
+    - name: Setup Python 3.14
+      run: uv python install 3.14
+
     - name: Install LLVM
       run: |
         brew install llvm
         echo "LLVM_PREFIX=$(brew --prefix llvm)" >> $GITHUB_ENV
+
     - name: Cache dependencies
       id: cache-dependencies
       uses: actions/cache@v4
@@ -35,27 +37,30 @@ jobs:
         path: external/dependencies
         key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies.sh', '.gitmodules') }}
         save-always: true
+
     - name: Install dependencies
       run: ./dependencies.sh
       env:
         SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies.outputs.cache-hit }}
-    - name: Configure cmake
-      shell: bash
+
+    - name: Build wheel
+      run: uv build --wheel --python 3.14
+      env:
+        CMAKE_ARGS: "-DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++"
+
+    - name: Repair wheel with delocate
       run: |
-        mkdir -p ${{ github.workspace }}/build && cd ${{ github.workspace }}/build
-        cmake .. -DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++
-    - name: Build
-      shell: bash
-      run: cd ${{ github.workspace }}/build && make -j8 && make install
-    - name: Prepare SimpleDB
-      shell: bash
-      run: cd ${{ github.workspace }}/build/samples/simpledb && ./simpledb && mkdir -p $HOME/.turing/graphs && cp -r simpledb.out/simpledb $HOME/.turing/graphs
-    - name: Run unit tests
-      shell: bash
-      run: cd ${{ github.workspace }}/build && make test
-    - name: Run samples
-      shell: bash
-      run: cd ${{ github.workspace }}/build/turing_install/samples && source ${{ github.workspace }}/setup.sh && bash ./run-samples.sh
-    - name: Run regress
-      shell: bash
-      run: cd ${{ github.workspace }}/build && source ${{ github.workspace }}/setup.sh && make run_regress
+        mkdir -p wheelhouse
+        uvx --from delocate delocate-wheel -w wheelhouse dist/*.whl
+
+    - name: Verify wheel installation
+      run: |
+        uv venv .venv-test --python 3.14
+        uv pip install wheelhouse/*.whl --python .venv-test/bin/python
+        .venv-test/bin/turingdb --help
+
+    - name: Upload wheel artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: turingdb-wheel-macos
+        path: wheelhouse/*.whl
