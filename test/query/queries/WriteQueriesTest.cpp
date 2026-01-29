@@ -71,7 +71,8 @@ protected:
 
     static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {
         for (auto* col : df->cols()) {
-            if (col->getName() == name) {
+            std::string_view n = col->getName();
+            if (n == name) {
                 return col;
             }
         }
