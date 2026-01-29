@@ -1,12 +1,11 @@
 {
-  "name": "turingdb-test-suite",
+  "name": "turingdb-test-suite-frontend",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host --port 5555",
-    "server": "bun run server.ts",
-    "build": "vite build",
-    "preview": "vite preview --port 5555"
+    "dev": "vite --config vite.config.ts --host --port 5555",
+    "build": "vite build --config vite.config.ts",
+    "preview": "vite preview --config vite.config.ts --port 5555"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

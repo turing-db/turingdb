@@ -26,7 +26,10 @@ case "${1-}" in
     ;;
 esac
 
-bun run server &
+(
+  cd "$(dirname "$0")/backend"
+  bun run server
+) &
 server_pid=$!
 sleep 0.5  # Give it a moment to fail if it's going to
 if ! kill -0 "$server_pid" 2>/dev/null; then
@@ -39,4 +42,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-bun run dev
+(
+  cd "$(dirname "$0")/frontend"
+  bun run dev
+)
