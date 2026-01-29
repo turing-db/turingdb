@@ -3,11 +3,35 @@ import { join } from "node:path";
 
 const PORT = 5566;
 
+const args = process.argv.slice(2);
+
 const turingSrc = process.env.TURING_SRC;
 if (!turingSrc) {
 	throw new Error(
 		"TURING_SRC is not set. Source setup.sh before running the server.",
 	);
+}
+
+const cliArgIndex = args.findIndex((arg) => arg === "--cli-binary");
+const cliBinary =
+	cliArgIndex === -1 || !args[cliArgIndex + 1]
+		? join(
+				turingSrc,
+				"build",
+				"build_package",
+				"dev-bin",
+				"query_test_suite_cli",
+			)
+		: args[cliArgIndex + 1];
+
+console.log(`Using test suite CLI binary ${cliBinary}`);
+if (!(await Bun.file(cliBinary).exists())) {
+	throw new Error(
+		`Test suite CLI binary ${cliBinary} does not exist. Build it first. ` +
+			`If the binary is in a different location, pass it with --cli-binary`,
+	);
+} else {
+	console.log(`EXISTS Using test suite CLI binary ${cliBinary}`);
 }
 
 const sourceTestsDir = join(turingSrc, "test", "query-test-suite", "tests");
@@ -72,10 +96,7 @@ async function getChangedTests() {
 
 async function loadMainVersion(name: string) {
 	const relPath = `${testsRelDir}/${name}.json`;
-	const { stdout, exitCode } = await runGit([
-		"show",
-		`main:${relPath}`,
-	]);
+	const { stdout, exitCode } = await runGit(["show", `main:${relPath}`]);
 	if (exitCode !== 0 || !stdout.trim()) return null;
 	try {
 		return JSON.parse(stdout);
@@ -95,7 +116,7 @@ async function loadMainExpected(name: string) {
 }
 
 async function runCli(args: string[]) {
-	const proc = Bun.spawn(["turingdb-test-cli", ...args], {
+	const proc = Bun.spawn([cliBinary, ...args], {
 		stdout: "pipe",
 		stderr: "pipe",
 	});
