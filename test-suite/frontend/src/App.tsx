@@ -26,7 +26,7 @@ import {
   SidebarTrigger,
   useSidebar
 } from "@/components/ui/sidebar";
-import { FilePlus, GitCompareArrows, PanelLeft, Play, PlayCircle, Plus, Share2, Trash2 } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, Clock3, FilePlus, GitCompareArrows, PanelLeft, Play, PlayCircle, Plus, Share2, Trash2 } from "lucide-react";
 
 type TestMeta = {
   name: string;
@@ -137,6 +137,8 @@ export default function App() {
   const [disabledReasonDraft, setDisabledReasonDraft] = React.useState("");
   const [shareNotice, setShareNotice] = React.useState<string | null>(null);
   const shareTimerRef = React.useRef<number | null>(null);
+  const [failNotice, setFailNotice] = React.useState<string | null>(null);
+  const failTimerRef = React.useRef<number | null>(null);
   const [expectedPlan, setExpectedPlan] = React.useState<string>("");
   const [expectedResult, setExpectedResult] = React.useState<string>("");
   const [mainPlan, setMainPlan] = React.useState<string>("");
@@ -247,6 +249,9 @@ export default function App() {
       }
       const data = (await res.json()) as TestResult;
       setResults((prev) => ({ ...prev, [data.name]: data }));
+      if (!data.planMatched || !data.resultMatched) {
+        showFailToast(1);
+      }
     } catch (err) {
       setError("Runner API unavailable. Build and run query_test_suite_cli to wire this up.");
     } finally {
@@ -269,6 +274,10 @@ export default function App() {
         next[entry.name] = entry;
       }
       setResults(next);
+      const failed = data.filter((entry) => !entry.planMatched || !entry.resultMatched).length;
+      if (failed > 0) {
+        showFailToast(failed);
+      }
     } catch (err) {
       setError("Runner API unavailable. Build and run query_test_suite_cli to wire this up.");
     } finally {
@@ -703,6 +712,42 @@ export default function App() {
     });
   }, [filteredTests, tagFilters, results, showDisabled, showFailing, showNotRun, showPassing]);
 
+  const stats = React.useMemo(() => {
+    let passed = 0;
+    let failed = 0;
+    let disabled = 0;
+    let notRun = 0;
+    for (const test of tests) {
+      if (!test.enabled) {
+        disabled += 1;
+        continue;
+      }
+      const result = results[test.name];
+      if (!result) {
+        notRun += 1;
+        continue;
+      }
+      const isPass = result.planMatched && result.resultMatched;
+      if (isPass) {
+        passed += 1;
+      } else {
+        failed += 1;
+      }
+    }
+    return { passed, failed, disabled, notRun };
+  }, [tests, results]);
+
+  const showFailToast = React.useCallback((failedCount: number) => {
+    if (failedCount <= 0) return;
+    setFailNotice(`${failedCount} test${failedCount === 1 ? "" : "s"} failed`);
+    if (failTimerRef.current) {
+      window.clearTimeout(failTimerRef.current);
+    }
+    failTimerRef.current = window.setTimeout(() => {
+      setFailNotice(null);
+    }, 2500);
+  }, []);
+
   React.useEffect(() => {
     const onMove = (event: MouseEvent) => {
       if (!isDragging.current) return;
@@ -872,6 +917,30 @@ export default function App() {
         <SidebarHeader className="gap-3 border-b border-sidebar-border px-4 py-4">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-semibold">Available Tests</h2>
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em]">
+              <span className="flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-emerald-200">
+                <CheckCircle2 className="h-3 w-3" />
+                {stats.passed}
+              </span>
+              <span
+                className={`flex items-center gap-1 rounded-full px-2 py-1 text-red-200 ${
+                  stats.failed > 0
+                    ? "border-2 border-red-400/80 bg-red-500/25 shadow-[0_0_0_1px_rgba(239,68,68,0.25)]"
+                    : "border border-red-400/30 bg-red-500/10"
+                }`}
+              >
+                <AlertTriangle className="h-3 w-3" />
+                {stats.failed}
+              </span>
+              <span className="flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-amber-200">
+                <Ban className="h-3 w-3" />
+                {stats.disabled}
+              </span>
+              <span className="flex items-center gap-1 rounded-full border border-slate-400/30 bg-white/5 px-2 py-1 text-slate-200">
+                <Clock3 className="h-3 w-3" />
+                {stats.notRun}
+              </span>
+            </div>
           </div>
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>{visibleTests.length} total</span>
@@ -1094,6 +1163,11 @@ export default function App() {
           {shareNotice && (
             <div className="fixed right-6 top-6 z-50 animate-slide-in rounded-full border border-white/10 bg-steel/80 px-4 py-2 text-xs uppercase tracking-[0.2em] text-ink shadow-lg">
               {shareNotice}
+            </div>
+          )}
+          {failNotice && (
+            <div className="fixed right-6 top-16 z-50 animate-slide-in rounded-full border border-red-400/40 bg-red-500/15 px-4 py-2 text-xs uppercase tracking-[0.2em] text-red-100 shadow-lg">
+              {failNotice}
             </div>
           )}
 
