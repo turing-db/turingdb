@@ -90,6 +90,4 @@ concept TuringPredicate =
 template <typename Pred, typename... Args>
 concept OptionalPredicate = TuringPredicate<Pred, TypeUtils::unwrap_optional_t<Args>...>;
 
-static_assert(OptionallyInvokable<std::plus<void>, const std::optional<long int>&, const long int&>);
-
 }

@@ -177,7 +177,4 @@ template <typename Op, typename T, typename U, typename Res>
 concept is_result_type =
     std::is_same_v<Res, typename InternalCombination<Op, T, U>::type>;
 
-using ColumnInts = ColumnVector<int>;
-using ColumnMaybeInts = ColumnVector<std::optional<int>>;
-    
 }
