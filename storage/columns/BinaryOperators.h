@@ -135,9 +135,5 @@ using Add = BinaryOp<std::plus<>>;
 using Sub = BinaryOp<std::minus<>>;
 using Mul = BinaryOp<std::multiplies<>>;
 
-using lhs = ColumnVector<std::optional<CustomBool>>;
-using rhs = ColumnVector<CustomBool>;
-using res = ColumnCombination<Add, lhs, rhs>::ResultColumnType;
-
 }
 

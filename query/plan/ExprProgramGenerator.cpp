@@ -99,6 +99,10 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
             return ColumnOperator::OP_ADD;
         break;
 
+        case BinaryOperator::Sub:
+            return ColumnOperator::OP_SUB;
+        break;
+
         case BinaryOperator::_SIZE:
             throw FatalException(
                 "Attempted to generate invalid binary operator in ExprProgramGenerator.");
@@ -357,6 +361,9 @@ struct ResultAllocator {
         } else if constexpr (Op == OP_ADD) {
             using ResultType = typename ColumnCombination<Add, T, U>::ResultColumnType;
             _resultCol = _gen->memory().alloc<ResultType>();
+        } else if constexpr (Op == OP_SUB) {
+            using ResultType = typename ColumnCombination<Sub, T, U>::ResultColumnType;
+            _resultCol = _gen->memory().alloc<ResultType>();
         } else {
             throw FatalException("Unsupported allocator.");
         }
@@ -380,24 +387,19 @@ Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
 
 
     switch (op) {
-        case (OP_EQUAL): {
-            ResultAllocator<OP_EQUAL> allocator(result, _gen);
-            using Pairs = PairRestrictions<OP_EQUAL>;
-            ColumnDoubleDispatcher<Pairs ::Allowed, Pairs ::AllowedMixed,
-                                   ResultAllocator<OP_EQUAL>,
-                                   Pairs ::Excluded>::dispatch(lhs, rhs, allocator);
-        } break;
-            DISPATCHER_CASE(OP_NOT_EQUAL);
+        DISPATCHER_CASE(OP_EQUAL)
+        DISPATCHER_CASE(OP_NOT_EQUAL);
 
-            DISPATCHER_CASE(OP_GREATER_THAN)
-            DISPATCHER_CASE(OP_LESS_THAN)
-            DISPATCHER_CASE(OP_GREATER_THAN_OR_EQUAL)
-            DISPATCHER_CASE(OP_LESS_THAN_OR_EQUAL)
+        DISPATCHER_CASE(OP_GREATER_THAN)
+        DISPATCHER_CASE(OP_LESS_THAN)
+        DISPATCHER_CASE(OP_GREATER_THAN_OR_EQUAL)
+        DISPATCHER_CASE(OP_LESS_THAN_OR_EQUAL)
 
-            DISPATCHER_CASE(OP_AND)
-            DISPATCHER_CASE(OP_OR)
+        DISPATCHER_CASE(OP_AND)
+        DISPATCHER_CASE(OP_OR)
 
-            DISPATCHER_CASE(OP_ADD)
+        DISPATCHER_CASE(OP_ADD)
+        DISPATCHER_CASE(OP_SUB)
 
         case OP_IN: // TODO: Implement
             throw PlannerException("Unsupported allocator: IN.");

@@ -109,7 +109,6 @@ struct PairRestrictions;
 template <ColumnOperator Op>
     requires (Op == OP_EQUAL) || (Op == OP_NOT_EQUAL)
 struct PairRestrictions<Op> {
-    static_assert(Op != OP_ADD, "ADD IN EQ");
     using Allowed = GenerateKindPairList<
         // Standard equality of property types - except doubles
         OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
@@ -201,9 +200,8 @@ struct PairRestrictions<Op> {
 };
 
 template <ColumnOperator Op>
-    requires (Op == OP_ADD)
+    requires (Op == OP_ADD) || (Op == OP_SUB)
 struct PairRestrictions<Op> {
-    static_assert(Op == OP_ADD, "ADD IN ADD");
     using Allowed = GenerateKindPairList<
         // Homogeneous arithmetic types
         OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,

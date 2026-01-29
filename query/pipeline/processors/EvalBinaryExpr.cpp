@@ -64,14 +64,15 @@ struct Eval {
             bioassert(result, "Invalid to cast for result column for Or.");
             ColumnOperators::exec<Or>(result, lhs, rhs);
         } else if constexpr (Op == OP_ADD) {
-            fmt::println("ADD {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
             using ResultType = ColumnCombination<Add, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
-            bioassert(result, "Invalid to cast for result column for Or.");
+            bioassert(result, "Invalid to cast for result column for Add.");
             ColumnOperators::exec<Add>(result, lhs, rhs);
-        /* } else if constexpr (Op == OP_PLUS) {
-            fmt::println("PLUS {}, {}", typeid(*lhs).name(), typeid(*rhs).name());
-            throw PipelineException("Add not yet implemented"); */
+        } else if constexpr (Op == OP_SUB) {
+            using ResultType = ColumnCombination<Sub, T, U>::ResultColumnType;
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Sub.");
+            ColumnOperators::exec<Sub>(result, lhs, rhs);
         } else {
             COMPILE_ERROR("Unknown operator");
         }
@@ -103,4 +104,4 @@ template void EvalBinaryExpr::eval<OP_AND>(Column* res, const Column* lhs, const
 template void EvalBinaryExpr::eval<OP_OR>(Column* res, const Column* lhs, const Column* rhs);
 
 template void EvalBinaryExpr::eval<OP_ADD>(Column* res, const Column* lhs, const Column* rhs);
-// template void EvalBinaryExpr::eval<OP_PLUS>(Column* res, const Column* lhs, const Column* rhs);
+template void EvalBinaryExpr::eval<OP_SUB>(Column* res, const Column* lhs, const Column* rhs);
