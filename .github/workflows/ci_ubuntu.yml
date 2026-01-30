@@ -84,6 +84,7 @@ jobs:
       run: |
         cd build
         cmake ..
+        make install
         source ${{ github.workspace }}/setup.sh
         make run_regress
 
