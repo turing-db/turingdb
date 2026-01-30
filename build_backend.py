@@ -1,6 +1,7 @@
 """Custom build backend for turingdb that builds wheels with the C++ binary."""
 
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -43,8 +44,15 @@ def _run_cmake_build():
         "-G", "Unix Makefiles",
         "-DCMAKE_MAKE_PROGRAM=/usr/bin/make",
         "-DCMAKE_BUILD_TYPE=Release",
-        str(source_dir),
     ]
+
+    # Read CMAKE_ARGS from environment (used by CI for compiler paths)
+    extra_cmake_args = os.environ.get("CMAKE_ARGS", "")
+    if extra_cmake_args:
+        cmake_args.extend(shlex.split(extra_cmake_args))
+
+    cmake_args.append(str(source_dir))
+
     subprocess.check_call(cmake_args, cwd=str(build_dir))
     subprocess.check_call(["make", f"-j{os.cpu_count() or 4}"], cwd=str(build_dir))
     subprocess.check_call(["make", "install"], cwd=str(build_dir))
