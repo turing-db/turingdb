@@ -148,7 +148,7 @@ VectorResult<void> VecLib::search(const VectorSearchQuery& query, VectorSearchRe
         shard._index->search(1, embeddings.data(), k, distances.data(), indices.data());
 
         for (size_t i = 0; i < k; i++) {
-            if (indices[i] == std::numeric_limits<faiss::idx_t>::max()) {
+            if (indices[i] < 0) {
                 break;
             }
 
