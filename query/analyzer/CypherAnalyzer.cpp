@@ -5,6 +5,7 @@
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
 #include "ReadStmtAnalyzer.h"
+#include "Symbol.h"
 #include "WriteStmtAnalyzer.h"
 #include "ExprAnalyzer.h"
 #include "QueryCommand.h"
@@ -16,7 +17,9 @@
 #include "S3ConnectQuery.h"
 #include "S3TransferQuery.h"
 #include "Projection.h"
+#include "decl/DeclContext.h"
 #include "expr/Expr.h"
+#include "stmt/ShortestPathStmt.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/OrderBy.h"
@@ -96,8 +99,11 @@ void CypherAnalyzer::analyze() {
 }
 
 void CypherAnalyzer::analyze(const SinglePartQuery* query) {
+    DeclContext* ctxt = query->getDeclContext();
+
     const StmtContainer* readStmts = query->getReadStmts();
     const StmtContainer* updateStmts = query->getUpdateStmts();
+    const ShortestPathStmt* shortestPathStmt = query->getShortestPathStmt();
     const ReturnStmt* returnStmt = query->getReturnStmt();
 
     bool returnMandatory = updateStmts == nullptr;
@@ -112,6 +118,22 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
             }
             _readAnalyzer->analyze(stmt);
         }
+    }
+
+    if (shortestPathStmt) {
+        const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
+        auto propName = shortestPathStmt->getEdgeProperty()->getName();
+
+        const std::optional<PropertyType> propType = propTypeMap.get(propName);
+        if (!propType) {
+            throwError(fmt::format("Unknown property: {}", propName));
+        }
+        ctxt->getOrCreateNamedVariable(_ast,
+                                       EvaluatedType::Integer,
+                                       shortestPathStmt->getDistVar()->getName());
+        ctxt->getOrCreateNamedVariable(_ast,
+                                       EvaluatedType::GraphPath,
+                                       shortestPathStmt->getPathVar()->getName());
     }
 
     // Generate update statements (optional)

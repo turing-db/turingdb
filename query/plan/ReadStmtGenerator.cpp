@@ -33,7 +33,9 @@
 #include "nodes/ProduceResultsNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/VarNode.h"
+#include "nodes/ShortestPathNode.h"
 
+#include "spdlog/spdlog.h"
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
@@ -620,6 +622,11 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
 
             case PlanGraphTopology::PathToDependency::UndirectedPath: {
                 // Join
+                if (lhsNode->getOpcode() == PlanGraphOpcode::SHORTEST_PATH ||
+                    rhsNode->getOpcode() == PlanGraphOpcode::SHORTEST_PATH) {
+                    throwError("Common Ancestor Joins With Shortest Path Unsupported");
+                }
+
                 const auto* varDecl = static_cast<VarNode*>(ancestorNode)->getVarDecl();
                 JoinNode* join = _tree->create<JoinNode>(varDecl,
                                                          varDecl,
@@ -643,6 +650,25 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
     // From here, there is only one endpoint remaining which can be connected
     // to the next stage of the query pipeline
     return rhsNode;
+}
+
+void ReadStmtGenerator::insertShortestPathNode(VarNode* source,
+                                               VarNode* target,
+                                               const PropertyType& edgeType,
+                                               const VarDecl* distDecl,
+                                               const VarDecl* pathDecl) {
+    auto* sourceTip = _topology->getBranchTip(source);
+    auto* targetTip = _topology->getBranchTip(target);
+
+    ShortestPathNode* node = _tree->create<ShortestPathNode>(source->getVarDecl(),
+                                                             target->getVarDecl(),
+                                                             distDecl,
+                                                             pathDecl,
+                                                             edgeType);
+    sourceTip->connectOut(node);
+    targetTip->connectOut(node);
+    _variables->setProducer(distDecl, node);
+    _variables->setProducer(pathDecl, node);
 }
 
 void ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* dependency) {

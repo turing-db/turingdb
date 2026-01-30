@@ -121,6 +121,14 @@ public:
                                               ColumnTag leftJoinKey,
                                               ColumnTag rightJoinKey);
 
+    template <SupportedType T>
+    PipelineBlockOutputInterface& addShortestPath(PipelineOutputInterface* rhs,
+                                                  ColumnTag sourceKey,
+                                                  ColumnTag targetKey,
+                                                  const PropertyType& edgeType,
+                                                  NamedColumn*& distCol,
+                                                  NamedColumn*& pathCol);
+
     // Aggregations
     PipelineBlockOutputInterface& addSkip(size_t count);
     PipelineBlockOutputInterface& addLimit(size_t count);

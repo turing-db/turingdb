@@ -30,6 +30,7 @@ set(ast_sources
     stmt/CreateStmt.cpp
     stmt/DeleteStmt.cpp
     stmt/ReturnStmt.cpp
+    stmt/ShortestPathStmt.cpp
     stmt/OrderByItem.cpp
     stmt/OrderBy.cpp
     stmt/Limit.cpp

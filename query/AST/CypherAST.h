@@ -49,6 +49,7 @@ class OrderBy;
 class OrderByItem;
 class StmtContainer;
 class MatchStmt;
+class ShortestPathStmt;
 class CallStmt;
 class CreateStmt;
 class SetStmt;
@@ -116,6 +117,7 @@ public:
     friend OrderByItem;
     friend StmtContainer;
     friend MatchStmt;
+    friend ShortestPathStmt;
     friend CallStmt;
     friend CreateStmt;
     friend SetStmt;

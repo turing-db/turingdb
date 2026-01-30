@@ -14,7 +14,8 @@ public:
         CREATE,
         SET,
         DELETE,
-        RETURN
+        RETURN,
+        SHORTESTPATH,
     };
 
     virtual Kind getKind() const = 0;

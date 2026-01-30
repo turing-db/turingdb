@@ -12,6 +12,8 @@ enum class EvaluatedType : uint8_t {
     NodePattern,
     EdgePattern,
 
+    GraphPath,
+
     Null,
     Integer,
     Double,
@@ -53,6 +55,7 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::Invalid, "Invalid">,
     EnumStringPair<EvaluatedType::NodePattern, "NodePattern">,
     EnumStringPair<EvaluatedType::EdgePattern, "EdgePattern">,
+    EnumStringPair<EvaluatedType::GraphPath, "GraphPath">,
     EnumStringPair<EvaluatedType::Null, "Null">,
     EnumStringPair<EvaluatedType::Integer, "Integer">,
     EnumStringPair<EvaluatedType::Double, "Double">,

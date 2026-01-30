@@ -41,6 +41,7 @@ enum class PlanGraphOpcode {
     S3_CONNECT,
     S3_TRANSFER,
     SHOW_PROCEDURES,
+    SHORTEST_PATH,
     _SIZE
 };
 
@@ -78,7 +79,8 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::LIST_GRAPH, "LIST_GRAPH">,
     EnumStringPair<PlanGraphOpcode::S3_CONNECT, "S3_CONNECT">,
     EnumStringPair<PlanGraphOpcode::S3_TRANSFER, "S3_TRANSFER">,
-    EnumStringPair<PlanGraphOpcode::SHOW_PROCEDURES, "SHOW_PROCEDURES">>;
+    EnumStringPair<PlanGraphOpcode::SHOW_PROCEDURES, "SHOW_PROCEDURES">,
+    EnumStringPair<PlanGraphOpcode::SHORTEST_PATH, "SHORTEST_PATH">>;
 
 class PlanGraphNode {
 public:

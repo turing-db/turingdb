@@ -28,6 +28,7 @@
     #include "stmt/StmtContainer.h"
     #include "stmt/ReturnStmt.h"
     #include "stmt/MatchStmt.h"
+    #include "stmt/ShortestPathStmt.h"
     #include "stmt/CallStmt.h"
     #include "stmt/CreateStmt.h"
     #include "stmt/SetStmt.h"
@@ -118,6 +119,7 @@
 
 // Keywords
 %token<std::string_view> PROCEDURES
+%token<std::string_view> SHORTESTPATH 
 %token<std::string_view> DESCENDING
 %token<std::string_view> CONSTRAINT
 %token<std::string_view> MANDATORY
@@ -292,6 +294,7 @@
 %type<db::StmtContainer*> updatingStatements
 %type<db::ChangeOp> changeOp
 %type<db::MatchStmt*> matchSt
+%type<db::ShortestPathStmt*> shortestPathSt
 %type<db::CallStmt*> callSt
 %type<db::CreateStmt*> createSt
 %type<db::SetStmt*> setSt
@@ -483,6 +486,12 @@ singlePartQuery
     | readingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setReturnStmt($2); LOC($$, @$); }
     | readingStatements updatingStatements { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setUpdateStmts($2); LOC($$, @$); }
     | readingStatements updatingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setUpdateStmts($2); $$->setReturnStmt($3); LOC($$, @$); }
+    | readingStatements shortestPathSt returnSt { 
+        $$ = SinglePartQuery::create(ast);
+        $$->setReadStmts($1);
+        $$->setShortestPathStmt($2);
+        $$->setReturnStmt($3);
+        LOC($$, @$); }
     ;
 
 changeQuery
@@ -536,6 +545,13 @@ matchSt
         $$->setSkip($5);
         $$->setLimit($6);
         $$->setOptional(true);
+        LOC($$, @$);
+      }
+    ;
+
+shortestPathSt
+    : SHORTESTPATH OPAREN symbol COMMA symbol COMMA name COMMA symbol COMMA symbol CPAREN {
+        $$ = ShortestPathStmt::create(ast,$3,$5,$7,$9,$11);
         LOC($$, @$);
       }
     ;

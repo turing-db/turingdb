@@ -45,6 +45,7 @@ class LoadGMLNode;
 class S3ConnectNode;
 class S3TransferNode;
 class ShowProceduresNode;
+class ShortestPathNode;
 class CommitNode;
 
 class PipelineGenerator {
@@ -132,6 +133,7 @@ private:
     PipelineOutputInterface* translateS3ConnectNode(S3ConnectNode* node);
     PipelineOutputInterface* translateS3TransferNode(S3TransferNode* node);
     PipelineOutputInterface* translateShowProceduresNode(ShowProceduresNode* node);
+    PipelineOutputInterface* translateShortestPathNode(ShortestPathNode* node);
 };
 
 }

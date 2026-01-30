@@ -35,6 +35,7 @@
 #include "processors/S3PushProcessor.h"
 #include "processors/ComputeExprProcessor.h"
 #include "processors/FilterProcessor.h"
+#include "processors/ShortestPathProcessor.h"
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
@@ -161,6 +162,41 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     matData.addToStep<ColumnEdgeIDs>(edgeIDs);
     matData.addToStep<ColumnEdgeTypes>(edgeTypes);
     matData.addToStep<ColumnNodeIDs>(targetNodes);
+
+    _pendingOutput.updateInterface(&output);
+
+    return output;
+}
+
+template <SupportedType T>
+PipelineBlockOutputInterface& PipelineBuilder::addShortestPath(PipelineOutputInterface* rhs,
+                                                               ColumnTag sourceKey,
+                                                               ColumnTag targetKey,
+                                                               const PropertyType& edgeType,
+                                                               NamedColumn*& distCol,
+                                                               NamedColumn*& pathCol) {
+
+    ShortestPathProcessor<T>* shortestPath = ShortestPathProcessor<T>::create(_pipeline,
+                                                                              _mem,
+                                                                              sourceKey,
+                                                                              targetKey,
+                                                                              edgeType);
+
+    if (_pendingOutput.getDataframe()->hasColumn(sourceKey)) {
+        _pendingOutput.connectTo(shortestPath->leftHandSide());
+        rhs->connectTo(shortestPath->rightHandSide());
+    } else {
+        _pendingOutput.connectTo(shortestPath->rightHandSide());
+        rhs->connectTo(shortestPath->leftHandSide());
+    }
+
+    PipelineBlockOutputInterface& output = shortestPath->output();
+    Dataframe* outDf = output.getDataframe();
+    distCol = allocColumn<ColumnVector<types::Double::Primitive>>(outDf);
+    pathCol = allocColumn<ColumnVector<Path>>(outDf);
+
+    shortestPath->addDistVarTag(distCol->getTag());
+    shortestPath->addPathVarTag(pathCol->getTag());
 
     _pendingOutput.updateInterface(&output);
 
@@ -348,6 +384,11 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
     // Forward only the projected columns to the next processor
     for (const auto& item : items) {
         NamedColumn* col = inDf->getColumn(item._tag);
+
+        if (!col) {
+            throw PipelineException(fmt::format("projection variable {} not found in output column", item._name));
+        }
+
         outDf->addColumn(col);
 
         if (!item._name.empty()) {
@@ -850,3 +891,22 @@ template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNul
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Double>(ColumnTag, PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::String>(ColumnTag, PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Bool>(ColumnTag, PropertyType);
+
+template PipelineBlockOutputInterface& PipelineBuilder::addShortestPath<db::types::Double>(PipelineOutputInterface*,
+                                                                                           ColumnTag,
+                                                                                           ColumnTag,
+                                                                                           const PropertyType&,
+                                                                                           NamedColumn*&,
+                                                                                           NamedColumn*&);
+template PipelineBlockOutputInterface& PipelineBuilder::addShortestPath<db::types::UInt64>(PipelineOutputInterface*,
+                                                                                           ColumnTag,
+                                                                                           ColumnTag,
+                                                                                           const PropertyType&,
+                                                                                           NamedColumn*&,
+                                                                                           NamedColumn*&);
+template PipelineBlockOutputInterface& PipelineBuilder::addShortestPath<db::types::Int64>(PipelineOutputInterface*,
+                                                                                          ColumnTag,
+                                                                                          ColumnTag,
+                                                                                          const PropertyType&,
+                                                                                          NamedColumn*&,
+                                                                                          NamedColumn*&);

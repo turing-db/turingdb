@@ -23,7 +23,9 @@
 #include "columns/ColumnOptVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
+#include "GraphPath.h"
 
+#include "spdlog/fmt/bundled/ranges.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 
@@ -367,6 +369,28 @@ void tabulateWrite(tabulate::RowStream& rs, const std::optional<T>& value) {
     }
 }
 
+void tabulateWrite(tabulate::RowStream& rs, const db::Path& path) {
+    if (path.empty()) {
+        rs << "";
+        return;
+    }
+
+    std::string result;
+    const auto reversed = path | std::views::reverse;
+    size_t i = 0;
+    for (auto val : reversed) {
+        if (i % 2 == 0) {
+            // NodeID
+            result += fmt::format("({})", val);
+        } else {
+            // EdgeID
+            result += fmt::format("-[{}]->", val);
+        }
+        ++i;
+    }
+    rs << result;
+}
+
 void tabulateWrite(tabulate::RowStream& rs, db::ValueType v) {
     rs << ValueTypeName::value(v);
 }
@@ -423,6 +447,7 @@ void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table
                 TABULATE_COL_CASE(ColumnVector<EntityID>, i)
                 TABULATE_COL_CASE(ColumnVector<NodeID>, i)
                 TABULATE_COL_CASE(ColumnVector<EdgeID>, i)
+                TABULATE_COL_CASE(ColumnVector<Path>, i)
                 TABULATE_COL_CASE(ColumnVector<PropertyTypeID>, i)
                 TABULATE_COL_CASE(ColumnVector<LabelID>, i)
                 TABULATE_COL_CASE(ColumnVector<EdgeTypeID>, i)

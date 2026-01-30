@@ -30,6 +30,7 @@ set(processors_sources
     processors/LambdaSourceProcessor.cpp
     processors/LambdaTransformProcessor.cpp
     processors/CartesianProductProcessor.cpp
+    processors/ShortestPathProcessor.cpp
     processors/HashJoinProcessor.cpp
     processors/WriteProcessor.cpp
     processors/GetLabelSetIDProcessor.cpp

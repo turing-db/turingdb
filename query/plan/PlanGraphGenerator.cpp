@@ -5,14 +5,17 @@
 #include "Projection.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
+#include "decl/DeclContext.h"
 #include "expr/Expr.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "ExprDependencies.h"
 #include "nodes/ChangeNode.h"
 #include "nodes/CommitNode.h"
+#include "spdlog/spdlog.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/ReturnStmt.h"
+#include "stmt/ShortestPathStmt.h"
 #include "stmt/Skip.h"
 #include "stmt/StmtContainer.h"
 #include "views/GraphView.h"
@@ -40,6 +43,7 @@
 #include "nodes/S3ConnectNode.h"
 #include "nodes/S3TransferNode.h"
 #include "nodes/ShowProceduresNode.h"
+#include "nodes/ShortestPathNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
@@ -139,6 +143,7 @@ void PlanGraphGenerator::generateCommitQuery(const CommitQuery* query) {
 void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
     const StmtContainer* readStmts = query->getReadStmts();
     const StmtContainer* updateStmts = query->getUpdateStmts();
+    const ShortestPathStmt* shortestPathStmt = query->getShortestPathStmt();
     const ReturnStmt* returnStmt = query->getReturnStmt();
 
     PlanGraphNode* currentNode = nullptr;
@@ -159,6 +164,30 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
         // Place joins based on procedures calls
         readGenerator.placeJoinsOnProcedures();
+
+        // Insert ShortestPath Node
+        if (shortestPathStmt) {
+            const auto* declContext = query->getDeclContext();
+            auto sourceName = shortestPathStmt->getSource()->getName();
+            auto targetName = shortestPathStmt->getTarget()->getName();
+            const auto propertyType = _view.metadata().propTypes().get(shortestPathStmt->getEdgeProperty()->getName()).value();
+            auto distName = shortestPathStmt->getDistVar()->getName();
+            auto pathName = shortestPathStmt->getPathVar()->getName();
+
+            const auto* sourceDecl = declContext->getDecl(sourceName);
+            const auto* targetDecl = declContext->getDecl(targetName);
+            const auto* distDecl = declContext->getDecl(distName);
+            const auto* pathDecl = declContext->getDecl(pathName);
+
+            auto* sourceNode = _variables->getVarNode(sourceDecl);
+            auto* targetNode = _variables->getVarNode(targetDecl);
+
+            readGenerator.insertShortestPathNode(sourceNode,
+                                                 targetNode,
+                                                 propertyType,
+                                                 distDecl,
+                                                 pathDecl);
+        }
 
         // Place joins that generate the endpoint, and retrieve it
         currentNode = readGenerator.generateEndpoint();

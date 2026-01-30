@@ -9,8 +9,6 @@
 
 namespace db {
 
-class Path;
-
 enum class DumpErrorType : uint8_t {
     UNKNOWN = 0,
 

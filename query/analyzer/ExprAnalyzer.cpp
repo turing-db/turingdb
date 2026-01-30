@@ -596,6 +596,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::Wildcard:
         case EvaluatedType::Invalid:
         case EvaluatedType::Tuple:
+        case EvaluatedType::GraphPath:
         case EvaluatedType::ValueType:
         case EvaluatedType::_SIZE:
             return false;

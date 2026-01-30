@@ -21,6 +21,7 @@ using AllValueTypes = TypeList<
     NodeID,
     EdgeID,
     EntityID,
+    Path,
     LabelID,
     EdgeTypeID,
     PropertyTypeID,
@@ -105,6 +106,7 @@ struct ColumnTypeFromKind {
     switch ((col)->getKind()) {                                                          \
         COL_CASE(ColumnVector<NodeID>)                                                   \
         COL_CASE(ColumnVector<EdgeID>)                                                   \
+        COL_CASE(ColumnVector<Path>)                                                     \
         COL_CASE(ColumnVector<EntityID>)                                                 \
         COL_CASE(ColumnVector<LabelID>)                                                  \
         COL_CASE(ColumnVector<EdgeTypeID>)                                               \

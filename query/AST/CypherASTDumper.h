@@ -14,6 +14,7 @@ class CreateStmt;
 class CallStmt;
 class DeleteStmt;
 class SetStmt;
+class ShortestPathStmt;
 class Limit;
 class Skip;
 class ReturnStmt;
@@ -107,7 +108,7 @@ private:
     void dump(std::ostream& out, const PropertyExpr* expr);
     void dump(std::ostream& out, const VarDecl* decl);
     void dump(std::ostream& out, const FunctionInvocationExpr* expr);
+    void dump(std::ostream& out, const ShortestPathStmt* stmt);
 };
 
 }
-

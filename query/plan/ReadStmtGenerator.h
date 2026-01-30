@@ -27,6 +27,7 @@ class NodePattern;
 class EdgePattern;
 class PropertyExpr;
 class EntityTypeExpr;
+class VarDecl;
 
 class ReadStmtGenerator {
 public:
@@ -61,6 +62,12 @@ public:
 
     void insertDataFlowNode(VarNode* node, PlanGraphNode* dependency);
 
+    void insertShortestPathNode(VarNode* source,
+                                VarNode* target,
+                                const PropertyType& edgeType,
+                                const VarDecl* distDecl,
+                                const VarDecl* pathDecl);
+
     void setIsStandaloneCall(bool hasReturn) { _isStandaloneCall = hasReturn; }
 
 private:
@@ -76,5 +83,4 @@ private:
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
-
 }

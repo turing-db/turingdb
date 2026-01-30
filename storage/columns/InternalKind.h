@@ -9,6 +9,7 @@
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
+#include "GraphPath.h"
 
 namespace db {
 
@@ -49,6 +50,7 @@ public:
         EntityID,
         NodeID,
         EdgeID,
+        Path,
         LabelSetID,
         LabelSet,
         EdgeTypeID,

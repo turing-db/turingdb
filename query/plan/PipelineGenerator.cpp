@@ -62,6 +62,7 @@
 #include "nodes/S3ConnectNode.h"
 #include "nodes/S3TransferNode.h"
 #include "nodes/ShowProceduresNode.h"
+#include "nodes/ShortestPathNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -346,7 +347,11 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::SHOW_PROCEDURES:
             return translateShowProceduresNode(static_cast<ShowProceduresNode*>(node));
-        break;
+            break;
+
+        case PlanGraphOpcode::SHORTEST_PATH:
+            return translateShortestPathNode(static_cast<ShortestPathNode*>(node));
+            break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
@@ -1198,5 +1203,51 @@ PipelineOutputInterface* PipelineGenerator::translateS3TransferNode(S3TransferNo
 
 PipelineOutputInterface* PipelineGenerator::translateShowProceduresNode(ShowProceduresNode* node) {
     _builder.addShowProcedures();
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateShortestPathNode(ShortestPathNode* node) {
+    if (!_binaryVisitedMap.contains(node)) {
+        throw PipelineException("Attempted to translate ShortestPath Node which was "
+                                "not already encountered.");
+    }
+
+    PipelineOutputInterface* inputA = _builder.getPendingOutputInterface();
+    auto& [inputB, isBLhs] = _binaryVisitedMap.at(node);
+
+    PipelineOutputInterface* lhs = isBLhs ? inputB : inputA;
+    PipelineOutputInterface* rhs = isBLhs ? inputA : inputB;
+
+    // LHS is implicit in @ref _pendingOutput
+    _builder.getPendingOutput().updateInterface(lhs);
+
+    NamedColumn* distCol {nullptr};
+    NamedColumn* pathCol {nullptr};
+
+    PipelineBlockOutputInterface* output = nullptr;
+
+    const PropertyType edgeType = node->getEdgeType();
+    const auto process = [&]<SupportedType Type>() {
+        if constexpr (std::is_arithmetic_v<typename Type::Primitive>) {
+            output = &_builder.addShortestPath<Type>(rhs,
+                                                     _declToColumn[node->getSource()],
+                                                     _declToColumn[node->getTarget()],
+                                                     node->getEdgeType(),
+                                                     distCol,
+                                                     pathCol);
+            distCol->rename(node->getDistance()->getName());
+            pathCol->rename(node->getPath()->getName());
+        } else {
+            throw PlannerException("Unsupported Edge Weight Type");
+        }
+    };
+    PropertyTypeDispatcher {edgeType._valueType}.execute(process);
+
+    _declToColumn[node->getDistance()] = distCol->getTag();
+    _declToColumn[node->getPath()] = pathCol->getTag();
+
+    _builder.setMaterializeProc(MaterializeProcessor::createFromDf(_pipeline,
+                                                                   _mem,
+                                                                   output->getDataframe()));
     return _builder.getPendingOutputInterface();
 }
