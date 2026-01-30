@@ -51,7 +51,9 @@ jobs:
       run: sudo apt-get install -y patchelf
 
     - name: Build wheel
-      run: uv build --wheel --python ${{ env.PYTHON_VERSION }}
+      run: |
+        source ${{ github.workspace }}/setup.sh
+        uv build --wheel --python ${{ env.PYTHON_VERSION }}
 
     - name: Prepare SimpleDB
       run: |

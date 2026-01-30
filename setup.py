@@ -15,6 +15,9 @@ def _get_project_root() -> Path:
 
 def _get_build_executable() -> Path:
     """Get the path to the executable in the build directory."""
+    turing_home = os.environ.get("TURING_HOME")
+    if turing_home:
+        return Path(turing_home) / "bin" / "turingdb"
     return _get_project_root() / "build" / "turing_install" / "bin" / "turingdb"
 
 
@@ -88,15 +91,6 @@ setup(
         "develop": CMakeDevelop,
     },
     python_requires=">=3.10",
-    install_requires=[
-        "boto3>=1.42.22",
-        "boto3-stubs>=1.42.22",
-        "click>=8.3.1",
-        "httpx>=0.28.1",
-        "orjson>=3.11.5",
-        "pandas>=2.3.3",
-        "pandas-stubs>=2.3.3.251219",
-        "prompt-toolkit>=3.0.52",
-    ],
+    # Dependencies are defined in pyproject.toml
     entry_points={"console_scripts": ["turingdb=turingdb:main"]},
 )

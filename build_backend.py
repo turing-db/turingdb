@@ -25,6 +25,9 @@ def _get_project_root() -> Path:
 
 def _get_build_executable() -> Path:
     """Get the path to the executable in the build directory."""
+    turing_home = os.environ.get("TURING_HOME")
+    if turing_home:
+        return Path(turing_home) / "bin" / "turingdb"
     return _get_project_root() / "build" / "turing_install" / "bin" / "turingdb"
 
 

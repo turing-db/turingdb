@@ -47,7 +47,9 @@ jobs:
         SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies.outputs.cache-hit }}
 
     - name: Build wheel
-      run: uv build --wheel --python ${{ env.PYTHON_VERSION }}
+      run: |
+        source ${{ github.workspace }}/setup.sh
+        uv build --wheel --python ${{ env.PYTHON_VERSION }}
       env:
         CMAKE_ARGS: "-DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++"
 
