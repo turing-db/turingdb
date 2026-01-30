@@ -3,17 +3,20 @@ name: CI Ubuntu
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - "v*"
   pull_request:
     branches: [ "main" ]
   schedule:
-    - cron: "0 */12 * * *"
+    - cron: "0 2 * * *"
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest-m
 
     env:
-      PYTHON_VERSION: 3.14
+      DEV_PYTHON_VERSION: 3.14
 
     steps:
     - uses: actions/checkout@v4
@@ -21,12 +24,13 @@ jobs:
         submodules: recursive
         persist-credentials: true
         lfs: true
+        fetch-depth: 0
 
     - name: Install uv
       uses: astral-sh/setup-uv@v3
 
     - name: Setup Python 
-      run: uv python install ${{ env.PYTHON_VERSION }}
+      run: uv python install ${{ env.DEV_PYTHON_VERSION }}
 
     - name: Cache dependencies
       id: cache-dependencies
@@ -53,7 +57,7 @@ jobs:
     - name: Build wheel
       run: |
         source ${{ github.workspace }}/setup.sh
-        uv build --wheel --python ${{ env.PYTHON_VERSION }}
+        uv build --wheel --python ${{ env.DEV_PYTHON_VERSION }}
 
     - name: Prepare SimpleDB
       run: |
@@ -90,3 +94,116 @@ jobs:
       with:
         name: turingdb-wheel-linux
         path: wheelhouse/*.whl
+
+  build-release:
+    name: Build Release Wheels
+    if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest-m
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        persist-credentials: true
+        lfs: true
+        fetch-depth: 0
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Setup Python
+      run: uv python install ${{ matrix.python-version }}
+
+    - name: Cache dependencies
+      id: cache-dependencies
+      uses: actions/cache@v4
+      with:
+        path: external/dependencies
+        key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies.sh', '.gitmodules') }}
+
+    - name: Install dependencies
+      if: steps.cache-dependencies.outputs.cache-hit != 'true'
+      run: ./dependencies.sh
+
+    - name: Install system packages
+      if: steps.cache-dependencies.outputs.cache-hit == 'true'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -qqy curl libcurl4-openssl-dev zlib1g-dev libssl-dev
+        sudo apt-get install -qqy bison flex libfl-dev
+        sudo apt-get install -qqy libopenblas-dev
+
+    - name: Install patchelf
+      run: sudo apt-get install -y patchelf
+
+    - name: Build wheel
+      run: |
+        source ${{ github.workspace }}/setup.sh
+        uv build --wheel --python ${{ matrix.python-version }}
+
+    - name: Prepare SimpleDB
+      run: |
+        cd build/samples/simpledb
+        ./simpledb
+        mkdir -p $HOME/.turing/graphs
+        cp -r simpledb.out/simpledb $HOME/.turing/graphs
+
+    - name: Run unit tests
+      run: |
+        cd build
+        make test
+
+    - name: Run regress
+      run: |
+        cd build
+        cmake ..
+        source ${{ github.workspace }}/setup.sh
+        make run_regress
+
+    - name: Repair wheel with auditwheel
+      run: |
+        mkdir -p wheelhouse
+        uvx auditwheel repair dist/*.whl -w wheelhouse
+
+    - name: Upload wheel artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: turingdb-wheel-linux-py${{ matrix.python-version }}
+        path: wheelhouse/*.whl
+
+  publish:
+    name: Publish to PyPI
+    if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    needs: build-release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/turingdb
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: turingdb-wheel-linux-py*
+          path: wheelhouse/
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wheelhouse/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: wheelhouse/
+          skip-existing: true
