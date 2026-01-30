@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "CALL db.labels()",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.labels\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.labels\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
     "result": "id,label\n0,Person\n1,SoftwareEngineering\n2,Founder\n3,Bioinformatics\n4,Interest\n5,Exotic\n6,Supernatural\n7,SleepDisturber\n8,Sales"
   },
   "tags": [
