@@ -82,7 +82,7 @@ class CMakeDevelop(develop):
 
 
 class bdist_wheel(_bdist_wheel):
-    """Custom bdist_wheel that allows overriding the Python tag via environment variable."""
+    """Custom bdist_wheel that sets Python and ABI tags for platform-specific wheels."""
 
     def finalize_options(self):
         super().finalize_options()
@@ -93,6 +93,9 @@ class bdist_wheel(_bdist_wheel):
         else:
             # Default to current Python version (cpXY format)
             self.python_tag = f'cp{sys.version_info.major}{sys.version_info.minor}'
+        # Set ABI tag to match python_tag (e.g., cp314-cp314)
+        # This ensures compatibility with pip/uv for platform-specific wheels
+        self.abi_tag = self.python_tag
 
 
 setup(
