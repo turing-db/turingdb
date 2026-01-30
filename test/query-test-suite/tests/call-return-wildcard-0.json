@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.propertyTypes() YIELD propertyType, valueType RETURN *",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.propertyTypes\n        __yield__\n        __yield_item__: propertyType\n        __yield_item__: valueType\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "result": "propertyType,valueType\nname,String\ndob,String\nage,Int64\nisFrench,Bool\nhasPhD,Bool\nisReal,Bool\nduration,Int64\nproficiency,String"
+  },
+  "tags": [
+    "call",
+    "wildcard",
+    "return",
+    "yield"
+  ],
+  "write-required": false
+}

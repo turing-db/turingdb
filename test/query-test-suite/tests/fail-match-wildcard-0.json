@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN n, *",
+  "expect": {
+    "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) RETURN n, *\n       |                     ^\n-------* syntax error, unexpected MULT",
+    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) RETURN n, *\n       |                     ^\n-------* syntax error, unexpected MULT"
+  },
+  "tags": [
+    "match",
+    "wildcard"
+  ],
+  "write-required": false
+}

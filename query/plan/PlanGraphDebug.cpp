@@ -320,9 +320,14 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     break;
                 }
 
-                output << "        __yield__\n";
-                for (const auto* item : *yield->getItems()) {
-                    output << "        __yield_item__: " << item->getSymbol()->getName() << "\n";
+                const YieldItems* yieldItems = yield->getItems();
+                if (!yieldItems) {
+                    output << "        __yield__: *all*\n";
+                } else {
+                    output << "        __yield__\n";
+                    for (const auto* item : *yield->getItems()) {
+                        output << "        __yield_item__: " << item->getSymbol()->getName() << "\n";
+                    }
                 }
 
                 const auto* args = invocation->getArguments();
