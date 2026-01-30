@@ -6,21 +6,22 @@
 #include "dataframe/NamedColumn.h"
 #include "ExecutionContext.h"
 #include "metadata/PropertyType.h"
-#include "procedures/ProcedureBlueprintMap.h"
-#include "procedures/ProcedureBlueprint.h"
+#include "procedures/ProcedureManager.h"
+#include "procedures/ProcedureNamespace.h"
+#include "procedures/Procedure.h"
 #include "procedures/ProcedureReturnValues.h"
 
 using namespace db;
 
 namespace {
 
-void buildSignature(std::string& result, const ProcedureBlueprint& blueprint) {
+void buildSignature(std::string& result, const Procedure& proc) {
     result.clear();
-    result += blueprint._name;
+    result += proc.getFullName();
     result += "(";
 
     bool first = true;
-    for (const auto& arg : blueprint._argumentTypes) {
+    for (const auto& arg : proc.argumentTypes()) {
         if (!first) {
             result += ", ";
         }
@@ -33,7 +34,7 @@ void buildSignature(std::string& result, const ProcedureBlueprint& blueprint) {
     result += ") :: (";
 
     first = true;
-    for (const auto& rv : blueprint._returnValues) {
+    for (const auto& rv : proc.returnValues()) {
         if (!first) {
             result += ", ";
         }
@@ -83,13 +84,15 @@ void ShowProceduresProcessor::execute() {
     auto* colName = _nameCol->as<ColumnVector<types::String::Primitive>>();
     auto* colSignature = _signatureCol->as<ColumnVector<std::string>>();
 
-    const auto& blueprints = _ctxt->getProcedures()->getAll();
+    const ProcedureManager* manager = _ctxt->getProcedures();
 
     std::string signature;
-    for (const auto& blueprint : blueprints) {
-        colName->push_back(blueprint._name);
-        buildSignature(signature, blueprint);
-        colSignature->push_back(signature);
+    for (const auto* ns : manager->namespaces()) {
+        for (const auto* proc : ns->procedures()) {
+            colName->push_back(proc->getFullName());
+            buildSignature(signature, *proc);
+            colSignature->push_back(signature);
+        }
     }
 
     _output.getPort()->writeData();

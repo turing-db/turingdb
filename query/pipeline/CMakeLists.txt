@@ -10,7 +10,7 @@ set(pipeline_sources
     interfaces/PipelineInterface.cpp)
 
 set(processors_sources
-    processors/DatabaseProcedureProcessor.cpp
+    processors/CallProcedureProcessor.cpp
     processors/ChangeProcessor.cpp
     processors/CommitProcessor.cpp
     processors/ScanNodesProcessor.cpp
@@ -58,8 +58,9 @@ set(processors_sources
 )
 
 set(procedures_sources
-    procedures/ProcedureBlueprint.cpp
-    procedures/ProcedureBlueprintMap.cpp
+    procedures/Procedure.cpp
+    procedures/ProcedureNamespace.cpp
+    procedures/ProcedureManager.cpp
     procedures/LabelsProcedure.cpp
     procedures/EdgeTypesProcedure.cpp
     procedures/PropertyTypesProcedure.cpp

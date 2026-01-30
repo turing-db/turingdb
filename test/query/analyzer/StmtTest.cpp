@@ -7,7 +7,7 @@
 #include "Graph.h"
 #include "Literal.h"
 #include "SimpleGraph.h"
-#include "procedures/ProcedureBlueprintMap.h"
+#include "procedures/ProcedureManager.h"
 #include "expr/All.h"
 #include "versioning/Transaction.h"
 
@@ -18,12 +18,13 @@ public:
     void initialize() override {
         _graph = Graph::create();
         SimpleGraph::createSimpleGraph(_graph.get());
-        _blueprints = ProcedureBlueprintMap::create();
+        _blueprints = std::make_unique<ProcedureManager>();
+        _blueprints->init();
     }
 
 protected:
     std::unique_ptr<Graph> _graph;
-    std::unique_ptr<ProcedureBlueprintMap> _blueprints;
+    std::unique_ptr<ProcedureManager> _blueprints;
 };
 
 TEST_F(StmtTest, matchAllNodes) {

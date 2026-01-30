@@ -10,7 +10,7 @@
 #include "SimpleGraph.h"
 #include "CypherAST.h"
 #include "CompilerException.h"
-#include "procedures/ProcedureBlueprintMap.h"
+#include "procedures/ProcedureManager.h"
 #include "versioning/Transaction.h"
 
 using namespace db;
@@ -21,7 +21,8 @@ int main(int argc, char** argv) {
     std::unique_ptr<Graph> graph = Graph::create();
     SimpleGraph::createSimpleGraph(graph.get());
 
-    auto procedures = ProcedureBlueprintMap::create();
+    ProcedureManager procedures;
+    procedures.init();
 
     const Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
@@ -43,7 +44,7 @@ int main(int argc, char** argv) {
         queryStr = it.get<char>(file.getInfo()._size);
     }
 
-    CypherAST ast(*procedures, queryStr);
+    CypherAST ast(procedures, queryStr);
 
     {
         CypherParser parser(&ast);

@@ -1,25 +1,17 @@
 #pragma once
 
-#include "procedures/ProcedureBlueprint.h"
 #include "ProcedureData.h"
 
 namespace db {
 
-struct DescribeCommitProcedure {
-    static std::unique_ptr<ProcedureData> allocData();
-    static void execute(Procedure& proc);
+class ProcedureState;
+class ProcedureNamespace;
 
-    static ProcedureBlueprint createBlueprint() noexcept {
-        return {
-            ._name = "db.describeCommit",
-            ._execCallback = &execute,
-            ._allocCallback = &allocData,
-            ._returnValues = {{"nodeCount", ProcedureType::UINT_64},
-                              {"edgeCount", ProcedureType::UINT_64},
-                              {"partCount", ProcedureType::UINT_64}},
-            ._argumentTypes = {{"commit", ProcedureType::STRING}},
-        };
-    }
+struct DescribeCommitProcedure {
+    static ProcedureData* allocData();
+    static void deallocData(ProcedureData* data);
+    static void execute(ProcedureState& proc);
+    static void registerProcedure(ProcedureNamespace* ns);
 };
 
 }

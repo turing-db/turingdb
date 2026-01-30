@@ -28,7 +28,7 @@
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
 #include "JsonEncoder.h"
-#include "procedures/ProcedureBlueprintMap.h"
+#include "procedures/ProcedureManager.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
@@ -201,10 +201,13 @@ std::string formatStatusError(db::QueryStatus::Status status,
     return fmt::format("{}\n{}", statusName, message);
 }
 
-void generatePlanGraph(std::string_view query, db::GraphView view, std::ostream& out) {
-    auto procedures = db::ProcedureBlueprintMap::create();
+void generatePlanGraph(std::string_view query,
+                       db::GraphView view,
+                       std::ostream& out) {
+    db::ProcedureManager procedures;
+    procedures.init();
 
-    db::CypherAST ast(*procedures, query);
+    db::CypherAST ast(procedures, query);
     db::CypherParser parser(&ast);
     db::CypherAnalyzer analyzer(&ast, view);
     db::PlanGraphGenerator planGen(ast, view);

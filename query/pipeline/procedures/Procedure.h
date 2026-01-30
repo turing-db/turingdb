@@ -1,47 +1,82 @@
 #pragma once
 
-#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
 
-#include "ProcedureBlueprint.h"
 #include "ProcedureData.h"
-
-#include "BioAssert.h"
+#include "procedures/ProcedureReturnValues.h"
 
 namespace db {
 
-class ExecutionContext;
+class NamedColumn;
+class ProcedureState;
+class ProcedureNamespace;
 
 class Procedure {
 public:
-    enum class Step {
-        PREPARE,
-        RESET,
-        EXECUTE,
+    struct Argument {
+        size_t _index {0};
+        const Column* _col {nullptr};
     };
 
-    template <ProcedureDataType T>
-    T& data() {
-        bioassert(_data != nullptr, "Procedure data is not initialized");
-        bioassert(dynamic_cast<T*>(_data.get()) != nullptr, "Procedure data is not of the expected type");
-        return *static_cast<T*>(_data.get());
+    struct YieldItem {
+        std::string_view _baseName;
+        std::string_view _asName;
+        NamedColumn* _col {nullptr};
+    };
+
+    using ExecuteCallback = void (*)(ProcedureState&);
+    using AllocCallback = ProcedureData* (*)();
+    using DeallocCallback = void (*)(ProcedureData*);
+
+    Procedure(std::string_view name);
+    ~Procedure();
+
+    Procedure(const Procedure&) = delete;
+    Procedure& operator=(const Procedure&) = delete;
+    Procedure(Procedure&&) = delete;
+    Procedure& operator=(Procedure&&) = delete;
+
+    // Setters (used during registration)
+    void setExecuteCallback(ExecuteCallback cb);
+    void setAllocCallback(AllocCallback cb);
+    void setDeallocCallback(DeallocCallback cb);
+    void addReturnValue(std::string_view name, ProcedureType type);
+    void addArgument(std::string_view name, ProcedureType type);
+
+    // Getters
+    std::string_view getName() const { return _name; }
+    const std::string& getFullName() const { return _fullName; }
+    ExecuteCallback getExecCallback() const { return _execCallback; }
+    AllocCallback getAllocCallback() const { return _allocCallback; }
+    DeallocCallback getDeallocCallback() const { return _deallocCallback; }
+    const ProcedureTypeVector& returnValues() const { return _returnValues; }
+    const ProcedureTypeVector& argumentTypes() const { return _argumentTypes; }
+
+    size_t getReturnValueIndex(std::string_view name) const;
+    size_t getArgumentIndex(std::string_view name) const;
+
+    ProcedureType getReturnValueType(size_t index) const {
+        return _returnValues[index]._type;
     }
 
-    const ProcedureData& data() const { return *_data; }
+    ProcedureType getArgumentType(size_t index) const {
+        return _argumentTypes[index]._type;
+    }
 
-    [[nodiscard]] bool isFinished() const { return _finished; }
-    [[nodiscard]] Step step() const { return _step; }
-    [[nodiscard]] const ExecutionContext* ctxt() const { return _ctxt; }
-
-    void finish() { _finished = true; }
+    void returnAll(std::vector<YieldItem>& yieldItems) const;
 
 private:
-    friend class DatabaseProcedureProcessor;
+    friend class ProcedureNamespace;
 
-    std::unique_ptr<ProcedureData> _data;
-    const ProcedureBlueprint* _blueprint {nullptr};
-    const ExecutionContext* _ctxt {nullptr};
-    bool _finished {false};
-    Step _step {};
+    std::string_view _name;
+    std::string _fullName;
+    ExecuteCallback _execCallback {nullptr};
+    AllocCallback _allocCallback {nullptr};
+    DeallocCallback _deallocCallback {nullptr};
+    ProcedureTypeVector _returnValues;
+    ProcedureTypeVector _argumentTypes;
 };
 
 }

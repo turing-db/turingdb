@@ -70,7 +70,7 @@ class YCypherParser;
 class ListGraphQuery;
 class CreateGraphQuery;
 class FunctionDecls;
-class ProcedureBlueprintMap;
+class ProcedureManager;
 class LoadGraphQuery;
 class LoadGMLQuery;
 class LoadNeo4jQuery;
@@ -147,7 +147,7 @@ public:
 
     using QueryCommands = std::vector<QueryCommand*>;
 
-    CypherAST(const ProcedureBlueprintMap& procedures,
+    CypherAST(const ProcedureManager& procedures,
               std::string_view queryString);
     ~CypherAST();
 

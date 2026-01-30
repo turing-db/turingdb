@@ -8,7 +8,7 @@
 #include "SimpleGraph.h"
 #include "decl/DeclContext.h"
 #include "expr/All.h"
-#include "procedures/ProcedureBlueprintMap.h"
+#include "procedures/ProcedureManager.h"
 #include "versioning/Transaction.h"
 
 using namespace db;
@@ -16,7 +16,7 @@ using namespace db;
 class ExpressionTest : public turing::test::TuringTest {
 public:
     ExpressionTest()
-        : _procedures(ProcedureBlueprintMap::create()),
+        : _procedures(std::make_unique<ProcedureManager>()),
         _ast(*_procedures, "")
     {
     }
@@ -36,7 +36,7 @@ public:
 protected:
     std::unique_ptr<Graph> _graph;
     std::unique_ptr<ExprAnalyzer> _analyzer;
-    std::unique_ptr<ProcedureBlueprintMap> _procedures;
+    std::unique_ptr<ProcedureManager> _procedures;
     DeclContext* _declContext {nullptr};
 
     CypherAST _ast;

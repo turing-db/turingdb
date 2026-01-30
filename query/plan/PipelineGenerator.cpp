@@ -24,7 +24,7 @@
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
-#include "procedures/ProcedureBlueprintMap.h"
+#include "procedures/ProcedureManager.h"
 #include "processors/PredicateProgram.h"
 #include "processors/WriteProcessor.h"
 #include "processors/WriteProcessorTypes.h"
@@ -954,16 +954,16 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
     }
 
     std::vector<const VarDecl*> yieldDecls;
-    std::vector<ProcedureBlueprint::InputItem> inputItems;
-    std::vector<ProcedureBlueprint::YieldItem> yieldItems;
+    std::vector<Procedure::Argument> inputItems;
+    std::vector<Procedure::YieldItem> yieldItems;
 
-    const ProcedureBlueprint* blueprint = _blueprints->getBlueprint(signature->_fullName);
-    if (!blueprint) {
+    const Procedure* procedure = _procedures->getProcedure(signature->_fullName);
+    if (!procedure) {
         throw PlannerException(fmt::format("Procedure '{}' does not exist", signature->_fullName));
     }
 
     if (!yield || !yield->getItems()) {
-        blueprint->returnAll(yieldItems);
+        procedure->returnAll(yieldItems);
     } else {
         for (const auto* item : *yield->getItems()) {
             const Symbol* symbol = item->getSymbol();
@@ -1014,7 +1014,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         inputItems.emplace_back(i++, col);
     }
 
-    _builder.addDatabaseProcedure(*blueprint, inputItems, yieldItems);
+    _builder.addCallProcedure(*procedure, inputItems, yieldItems);
 
     for (size_t i = 0; i < yieldItems.size(); i++) {
         const auto& item = yieldItems[i];
