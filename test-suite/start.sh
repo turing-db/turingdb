@@ -21,6 +21,8 @@ if [ -z "${TURING_SRC-}" ]; then
 fi
 
 cli_binary="${TURING_SRC}/build/build_package/dev-bin/query_test_suite_cli"
+current_dir="$(pwd)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 
 case "${1-}" in
   -h|--help)
@@ -28,7 +30,7 @@ case "${1-}" in
     exit 0
     ;;
   -b|--cli-binary)
-    cli_binary="$2"
+    cli_binary="$current_dir/$2"
     shift 2
     ;;
   "")
@@ -39,8 +41,6 @@ case "${1-}" in
     exit 1
     ;;
 esac
-
-script_dir="$(cd "$(dirname "$0")" && pwd)"
 
 # Install dependencies
 bun i --cwd="$script_dir/backend"
