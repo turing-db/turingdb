@@ -20,7 +20,7 @@ def spawn_turingdb():
 
 def stop_turingdb(proc):
     print(f"- {GREEN}Stopping turingdb{NC}")
-    subprocess.call('killall -9 turingdb', shell=True)
+    subprocess.call('pkill -9 turingdb', shell=True)
     # Wait for port to be released
     import socket
     for _ in range(100):

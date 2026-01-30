@@ -15,7 +15,7 @@ uv init --bare
 uv add $PYTURINGDB
 
 # Make sure turingdb is not running (SIGKILL for reliability)
-killall -9 turingdb 2>/dev/null || true
+pkill -9 turingdb 2>/dev/null || true
 # Brief sleep to ensure process dies and port is released
 sleep 0.5
 # Wait for port 6666 to be free (nc -z returns 0 if open, 1 if closed)
@@ -25,6 +25,6 @@ uv run ../main.py
 testres=$?
 
 # Make sure turingdb was stopped at the end of the script
-killall -9 turingdb 2>/dev/null || true
+pkill -9 turingdb 2>/dev/null || true
 
 exit $testres

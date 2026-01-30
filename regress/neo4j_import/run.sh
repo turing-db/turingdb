@@ -5,7 +5,7 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd $SCRIPT_DIR
 
 # Kill any existing turingdb processes (SIGKILL for reliability)
-killall -9 turingdb 2>/dev/null || true
+pkill -9 turingdb 2>/dev/null || true
 # Brief sleep to ensure process dies and port is released
 sleep 0.5
 # Wait for port 6666 to be free (nc -z returns 0 if open, 1 if closed)
@@ -17,7 +17,10 @@ rm -rf $SCRIPT_DIR/.turing
 mkdir -p $SCRIPT_DIR/.turing/graphs
 
 # Import neo4j cyber-security-db using turing-import
-turing-import -neo4j-json $TURING_HOME/neo4j/cyber-security-db -db-path $SCRIPT_DIR/.turing/graphs
+turing-import -neo4j-json $TURING_HOME/neo4j/cyber-security-db
+
+# Move imported graph to where TuringDB expects it
+mv turing-import.out/bindump/cyber_security_db $SCRIPT_DIR/.turing/graphs/cyber_security_db
 
 turingdb -demon -turing-dir $SCRIPT_DIR/.turing
 # Wait for turingdb to be ready
@@ -30,6 +33,6 @@ uv add $PYTURINGDB
 uv run main.py
 testres=$?
 
-killall -9 turingdb 2>/dev/null || true
+pkill -9 turingdb 2>/dev/null || true
 
 exit $testres

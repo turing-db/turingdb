@@ -5,7 +5,7 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd $SCRIPT_DIR
 
 # Kill any existing turingdb processes (SIGKILL for reliability)
-killall -9 turingdb 2>/dev/null || true
+pkill -9 turingdb 2>/dev/null || true
 # Brief sleep to ensure process dies and port is released
 sleep 0.5
 # Wait for port 6666 to be free (nc -z returns 0 if open, 1 if closed)
@@ -23,7 +23,7 @@ uv add $PYTURINGDB
 uv run main.py
 testres=$?
 
-killall -9 turingdb 2>/dev/null || true
+pkill -9 turingdb 2>/dev/null || true
 
 exit $testres
 
