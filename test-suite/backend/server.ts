@@ -43,11 +43,9 @@ const cliBinary =
 console.log(`Using test suite CLI binary ${cliBinary}`);
 if (!(await Bun.file(cliBinary).exists())) {
 	throw new Error(
-		`Test suite CLI binary ${cliBinary} does not exist. Build it first. ` +
+		`Test suite CLI binary '${cliBinary}' does not exist. Build it first. ` +
 			`If the binary is in a different location, pass it with --cli-binary`,
 	);
-} else {
-	console.log(`EXISTS Using test suite CLI binary ${cliBinary}`);
 }
 
 const sourceTestsDir = join(turingSrc, "test", "query-test-suite", "tests");

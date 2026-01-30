@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --config vite.config.ts --host --port 5555",
+    "dev": "vite --config vite.config.ts --host 0.0.0.0 --port 5555",
     "build": "vite build --config vite.config.ts",
-    "preview": "vite preview --config vite.config.ts --port 5555"
+    "preview": "vite preview --config vite.config.ts --port 5555 --host 0.0.0.0"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
