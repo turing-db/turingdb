@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "graph": "simpledb",
+  "query": "CALL db.labels() YIELD label, id\nMATCH (n) WHERE n.name = label\nRETURN n, label",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.labels\n        __yield__\n        __yield_item__: label\n        __yield_item__: id\n    `\"]\n    1[\"`\n        __SCAN_NODES__\n    `\"]\n    2[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    3[\"`\n        __FILTER_NODE__\n        __has predicate__\n        __dep__ _n_._name_ (String)\n    `\"]\n    4[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    5[\"`\n        __CARTESIAN_PRODUCT__\n    `\"]\n    6[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->5\n    1-->4\n    2-->6\n    3-->2\n    4-->5\n    5-->3",
+    "result": "EXEC ERROR\nUnsupported mask application for kind 273"
+  },
+  "tags": [
+    "call",
+    "dependencies",
+    "where",
+    "match"
+  ],
+  "write-required": false,
+  "disabled-reason": "Unsupported mask application for kind 273"
+}

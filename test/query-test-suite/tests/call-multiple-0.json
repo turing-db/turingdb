@@ -10,7 +10,8 @@
     "CALL",
     "DEPENDENCIES",
     "HISTORY",
-    "labels"
+    "labels",
+    "procedure"
   ],
   "write-required": false
 }

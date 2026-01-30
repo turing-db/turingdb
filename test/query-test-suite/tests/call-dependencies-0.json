@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n)\nCALL db.describeCommit(n.name) YIELD nodeCount, edgeCount\nRETURN n, nodeCount, edgeCount",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.describeCommit\n        __yield__\n        __yield_item__: nodeCount\n        __yield_item__: edgeCount\n        __args__\n        __arg__: unnamed\n    `\"]\n    4[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->4\n    1-->3\n    2-->1\n    3-->5\n    4-->2",
+    "result": "n,nodeCount,edgeCount\n0,0,0\n1,0,0\n2,0,0\n3,0,0\n4,0,0\n5,0,0\n6,0,0\n7,0,0\n8,0,0\n9,0,0\n10,0,0\n11,0,0\n12,0,0\n13,0,0\n14,0,0\n15,0,0\n16,0,0\n17,0,0"
+  },
+  "tags": [
+    "call",
+    "dependencies",
+    "args",
+    "match"
+  ],
+  "write-required": false
+}

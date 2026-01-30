@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.history() YIELD commit AS c\nCALL db.describeCommit(c) YIELD partCount, nodeCount, edgeCount\nRETURN partCount, nodeCount, edgeCount",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.history\n        __yield__\n        __yield_item__: c\n    `\"]\n    1[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.describeCommit\n        __yield__\n        __yield_item__: partCount\n        __yield_item__: nodeCount\n        __yield_item__: edgeCount\n        __args__\n        __arg__: unnamed\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1\n    1-->2",
+    "result": "partCount,nodeCount,edgeCount\n0,0,0\n1,7,8\n1,2,2\n1,2,2\n1,1,1\n1,1,0\n1,3,2\n1,2,3"
+  },
+  "tags": [
+    "CALL",
+    "dependencies",
+    "args"
+  ],
+  "write-required": false
+}

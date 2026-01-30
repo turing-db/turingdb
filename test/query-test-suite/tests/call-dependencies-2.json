@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.history() YIELD nodeCount, edgeCount\nMATCH (n) WHERE n.age > nodeCount OR n.age > edgeCount\nRETURN n.name, n.age",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.history\n        __yield__\n        __yield_item__: nodeCount\n        __yield_item__: edgeCount\n    `\"]\n    1[\"`\n        __SCAN_NODES__\n    `\"]\n    2[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    3[\"`\n        __FILTER_NODE__\n        __has predicate__\n        __dep__ _n_._age_ (Integer)\n        __dep__ _n_._age_ (Integer)\n    `\"]\n    4[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ age\n    `\"]\n    5[\"`\n        __CARTESIAN_PRODUCT__\n    `\"]\n    6[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    7[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->5\n    1-->4\n    2-->6\n    3-->2\n    4-->5\n    5-->3\n    6-->7",
+    "result": "n.name,n.age\nRemy,32\nRemy,32\nRemy,32\nRemy,32\nRemy,32\nRemy,32\nRemy,32\nRemy,32\nAdam,32\nAdam,32\nAdam,32\nAdam,32\nAdam,32\nAdam,32\nAdam,32\nAdam,32"
+  },
+  "tags": [
+    "call",
+    "match",
+    "where",
+    "dependencies"
+  ],
+  "write-required": false
+}
