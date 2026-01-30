@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) WHERE n.age = 32 + 1 RETURN n.name",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __has predicate__\n        __dep__ _n_._age_ (Integer)\n    `\"]\n    3[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ age\n    `\"]\n    4[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->3\n    1-->4\n    2-->1\n    3-->2\n    4-->5",
+    "result": "n.name"
+  },
+  "tags": [
+    "operators",
+    "filters"
+  ],
+  "write-required": false
+}
