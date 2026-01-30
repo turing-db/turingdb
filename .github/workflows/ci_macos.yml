@@ -139,6 +139,8 @@ jobs:
 
     - name: Build wheel
       run: |
+        # Convert Python version (e.g., "3.10") to tag format (e.g., "cp310")
+        export PYTHON_TAG="cp$(echo '${{ matrix.python-version }}' | tr -d '.')"
         source ${{ github.workspace }}/setup.sh
         uv build --wheel --python ${{ matrix.python-version }}
       env:

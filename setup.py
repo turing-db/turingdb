@@ -2,10 +2,12 @@
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from setuptools import setup, find_packages
 from setuptools.command.develop import develop
 from setuptools.command.egg_info import egg_info
+from setuptools.command.bdist_wheel import bdist_wheel as _bdist_wheel
 
 
 def _get_project_root() -> Path:
@@ -79,6 +81,20 @@ class CMakeDevelop(develop):
         super().run()
 
 
+class bdist_wheel(_bdist_wheel):
+    """Custom bdist_wheel that allows overriding the Python tag via environment variable."""
+
+    def finalize_options(self):
+        super().finalize_options()
+        # Allow overriding python_tag via PYTHON_TAG environment variable
+        python_tag = os.environ.get('PYTHON_TAG')
+        if python_tag:
+            self.python_tag = python_tag
+        else:
+            # Default to current Python version (cpXY format)
+            self.python_tag = f'cp{sys.version_info.major}{sys.version_info.minor}'
+
+
 setup(
     name="turingdb",
     packages=find_packages(where="python"),
@@ -88,6 +104,7 @@ setup(
     cmdclass={
         "egg_info": BuildDirEggInfo,
         "develop": CMakeDevelop,
+        "bdist_wheel": bdist_wheel,
     },
     python_requires=">=3.10",
     # Dependencies are defined in pyproject.toml
