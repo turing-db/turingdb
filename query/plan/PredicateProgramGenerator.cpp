@@ -5,6 +5,7 @@
 #include "Predicate.h"
 #include "processors/PredicateProgram.h"
 #include "expr/Expr.h"
+#include "expr/PropertyExpr.h"
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnCombinations.h"
 

@@ -7,6 +7,7 @@ set(plan_sources
     PlanGraphTopology.cpp
     ReadStmtGenerator.cpp
     WriteStmtGenerator.cpp
+    ExprDependencies.cpp
     PipelineGenerator.cpp
     ExprProgramGenerator.cpp
     PredicateProgramGenerator.cpp

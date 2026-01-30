@@ -467,6 +467,7 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
         VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast,
                                                        EvaluatedType::Integer,
                                                        yieldItem->getName());
+        yieldItemExpr->setDecl(decl);
         yieldItemExpr->setExprVarDecl(decl);
     }
 }

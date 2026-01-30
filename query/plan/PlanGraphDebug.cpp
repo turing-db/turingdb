@@ -29,6 +29,12 @@
 #include "SymbolChain.h"
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
+#include "expr/EntityTypeExpr.h"
+#include "expr/ExprChain.h"
+#include "expr/FunctionInvocationExpr.h"
+#include "expr/PropertyExpr.h"
+#include "expr/SymbolExpr.h"
+#include "FunctionInvocation.h"
 
 #include "metadata/LabelSet.h"
 
