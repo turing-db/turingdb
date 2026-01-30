@@ -2,7 +2,7 @@ name: Docker Nightly / Release Build
 
 on:
   schedule:
-    - cron: "0 2 * * *"   # nightly at 02:00 UTC
+    - cron: "0 4 * * *"   # nightly at 04:00 UTC
   workflow_dispatch:
   push:
     tags:
