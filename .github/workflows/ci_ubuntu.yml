@@ -12,6 +12,9 @@ jobs:
   build:
     runs-on: ubuntu-latest-m
 
+    env:
+      PYTHON_VERSION: 3.14
+
     steps:
     - uses: actions/checkout@v4
       with:
@@ -22,8 +25,8 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v3
 
-    - name: Setup Python 3.14
-      run: uv python install 3.14
+    - name: Setup Python 
+      run: uv python install ${{ env.PYTHON_VERSION }}
 
     - name: Cache dependencies
       id: cache-dependencies
@@ -48,7 +51,12 @@ jobs:
       run: sudo apt-get install -y patchelf
 
     - name: Build wheel
-      run: uv build --wheel --python 3.14
+      run: uv build --wheel --python ${{ env.PYTHON_VERSION }} 
+
+    - name: Run unit tests
+      run: |
+        cd build
+        make test
 
     - name: Repair wheel with auditwheel
       run: |

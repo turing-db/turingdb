@@ -12,6 +12,9 @@ jobs:
   build:
     runs-on: macos-latest
 
+    env:
+      PYTHON_VERSION: 3.14
+
     steps:
     - uses: actions/checkout@v4
       with:
@@ -22,8 +25,8 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v3
 
-    - name: Setup Python 3.14
-      run: uv python install 3.14
+    - name: Setup Python
+      run: uv python install ${{ env.PYTHON_VERSION }}
 
     - name: Install LLVM
       run: |
@@ -44,9 +47,14 @@ jobs:
         SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies.outputs.cache-hit }}
 
     - name: Build wheel
-      run: uv build --wheel --python 3.14
+      run: uv build --wheel --python ${{ env.PYTHON_VERSION }}
       env:
         CMAKE_ARGS: "-DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++"
+
+    - name: Run unit tests
+      run: |
+        cd build
+        make test
 
     - name: Repair wheel with delocate
       run: |
