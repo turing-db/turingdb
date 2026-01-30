@@ -51,7 +51,14 @@ jobs:
       run: sudo apt-get install -y patchelf
 
     - name: Build wheel
-      run: uv build --wheel --python ${{ env.PYTHON_VERSION }} 
+      run: uv build --wheel --python ${{ env.PYTHON_VERSION }}
+
+    - name: Prepare SimpleDB
+      run: |
+        cd build/samples/simpledb
+        ./simpledb
+        mkdir -p $HOME/.turing/graphs
+        cp -r simpledb.out/simpledb $HOME/.turing/graphs
 
     - name: Run unit tests
       run: |

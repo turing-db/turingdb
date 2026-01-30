@@ -51,6 +51,13 @@ jobs:
       env:
         CMAKE_ARGS: "-DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++"
 
+    - name: Prepare SimpleDB
+      run: |
+        cd build/samples/simpledb
+        ./simpledb
+        mkdir -p $HOME/.turing/graphs
+        cp -r simpledb.out/simpledb $HOME/.turing/graphs
+
     - name: Run unit tests
       run: |
         cd build
