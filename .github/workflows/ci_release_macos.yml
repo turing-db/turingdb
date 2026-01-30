@@ -1,20 +1,22 @@
-name: CI macOS
+name: Release macOS
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
   schedule:
     - cron: "0 2 * * *"
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
 
 jobs:
-  build:
+  build-release:
+    name: Build Release Wheels
     runs-on: macos-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
 
     env:
-      DEV_PYTHON_VERSION: 3.14
       MACOSX_DEPLOYMENT_TARGET: "11.0"
 
     steps:
@@ -29,7 +31,7 @@ jobs:
       uses: astral-sh/setup-uv@v3
 
     - name: Setup Python
-      run: uv python install ${{ env.DEV_PYTHON_VERSION }}
+      run: uv python install ${{ matrix.python-version }}
 
     - name: Install LLVM
       run: |
@@ -51,8 +53,10 @@ jobs:
 
     - name: Build wheel
       run: |
+        # Convert Python version (e.g., "3.10") to tag format (e.g., "cp310")
+        export PYTHON_TAG="cp$(echo '${{ matrix.python-version }}' | tr -d '.')"
         source ${{ github.workspace }}/setup.sh
-        uv build --wheel --python ${{ env.DEV_PYTHON_VERSION }}
+        uv build --wheel --python ${{ matrix.python-version }}
       env:
         CMAKE_ARGS: "-DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++"
 
@@ -68,17 +72,6 @@ jobs:
         cd build
         make test
 
-    - name: Repair wheel with delocate
-      run: |
-        mkdir -p wheelhouse
-        uvx --from delocate delocate-wheel -w wheelhouse dist/*.whl
-
-    - name: Verify wheel installation
-      run: |
-        uv venv .venv-test --python 3.14
-        uv pip install wheelhouse/*.whl --python .venv-test/bin/python
-        .venv-test/bin/turingdb --help
-
     - name: Run regress
       run: |
         cd build
@@ -86,8 +79,46 @@ jobs:
         source ${{ github.workspace }}/setup.sh
         make run_regress
 
+    - name: Repair wheel with delocate
+      run: |
+        mkdir -p wheelhouse
+        uvx --from delocate delocate-wheel -w wheelhouse dist/*.whl
+
     - name: Upload wheel artifact
       uses: actions/upload-artifact@v4
       with:
-        name: turingdb-wheel-macos
+        name: turingdb-wheel-macos-py${{ matrix.python-version }}
         path: wheelhouse/*.whl
+
+  publish:
+    name: Publish to PyPI
+    needs: build-release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/turingdb
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: turingdb-wheel-macos-py*
+          path: wheelhouse/
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wheelhouse/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: wheelhouse/
+          skip-existing: true
