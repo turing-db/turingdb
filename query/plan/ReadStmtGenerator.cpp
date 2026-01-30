@@ -121,7 +121,7 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
 
     ProcedureEvalNode* procNode = _tree->create<ProcedureEvalNode>(funcExpr, yield);
 
-    if (yield) {
+    if (yield && yield->getItems()) {
         YieldItems* yieldItems = yield->getItems();
         for (SymbolExpr* item : yieldItems->getItems()) {
             _variables->setProducer(item->getDecl(), procNode);

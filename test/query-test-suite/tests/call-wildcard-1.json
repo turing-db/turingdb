@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.propertyTypes() YIELD * RETURN *",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | CALL db.propertyTypes() YIELD * RETURN *\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Procedure call inside a query requires to name the return items explicitly with a YIELD clause",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CALL db.propertyTypes() YIELD * RETURN *\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Procedure call inside a query requires to name the return items explicitly with a YIELD clause"
+  },
+  "tags": [
+    "call",
+    "wildcard"
+  ],
+  "write-required": false
+}

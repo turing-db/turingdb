@@ -115,7 +115,7 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
 
     // Step 3. Analyze YIELD clause
     const YieldClause* yield = callStmt->getYield();
-    if (yield == nullptr) {
+    if (yield == nullptr || yield->getItems() == nullptr) {
         // No yield OR YIELD *.
         // In the current implemention those are equivalent. In neo4j YIELD * returns all columns
         // including deprecated ones.
@@ -132,7 +132,6 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
 
 void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause* yield) {
     bioassert(func.getSignature(), "Analyzed a yield function that has no signature");
-    bioassert(yield->getItems(), "Analyzed a yield function that has no yield items");
 
     FunctionSignature* signature = func.getSignature();
     YieldItems* yieldItems = yield->getItems();

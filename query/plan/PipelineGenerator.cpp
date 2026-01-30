@@ -963,7 +963,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         throw PlannerException(fmt::format("Procedure '{}' does not exist", signature->_fullName));
     }
 
-    if (!yield) {
+    if (!yield || !yield->getItems()) {
         blueprint->returnAll(yieldItems);
     } else {
         for (const auto* item : *yield->getItems()) {
