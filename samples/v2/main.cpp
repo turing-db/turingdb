@@ -10,7 +10,7 @@
 #include "SimpleGraph.h"
 #include "CypherAST.h"
 #include "CompilerException.h"
-#include "procedures/ProcedureBlueprintMap.h"
+#include "procedures/ProcedureManager.h"
 #include "versioning/Transaction.h"
 #include "PlanGraphGenerator.h"
 #include "PlanGraph.h"
@@ -38,7 +38,8 @@ int main(int argc, char** argv) {
     Graph* graph = sysMan.createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
 
-    auto procedures = ProcedureBlueprintMap::create();
+    ProcedureManager procedures;
+    procedures.init();
 
     Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
@@ -72,7 +73,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    CypherAST ast(*procedures, queryStr);
+    CypherAST ast(procedures, queryStr);
 
     {
         CypherParser parser(&ast);
@@ -152,7 +153,7 @@ int main(int argc, char** argv) {
                                           view,
                                           &pipeline,
                                           &mem,
-                                          procedures.get(),
+                                          &procedures,
                                           &callbacks);
             try {
                 auto t0 = Clock::now();

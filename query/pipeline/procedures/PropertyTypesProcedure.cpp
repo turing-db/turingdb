@@ -1,7 +1,9 @@
 #include "PropertyTypesProcedure.h"
 
 #include "ExecutionContext.h"
+#include "procedures/ProcedureState.h"
 #include "procedures/Procedure.h"
+#include "procedures/ProcedureNamespace.h"
 #include "iterators/ScanPropertyTypesIterator.h"
 #include "columns/ColumnVector.h"
 #include "views/GraphView.h"
@@ -10,14 +12,31 @@
 
 using namespace db;
 
-std::unique_ptr<ProcedureData> PropertyTypesProcedure::allocData() {
-    return std::make_unique<Data>();
+ProcedureData* PropertyTypesProcedure::allocData() {
+    return new Data();
 }
 
-void PropertyTypesProcedure::execute(Procedure& proc) {
+void PropertyTypesProcedure::deallocData(ProcedureData* data) {
+    delete data;
+}
+
+void PropertyTypesProcedure::registerProcedure(
+    ProcedureNamespace* ns) {
+
+    Procedure* proc = new Procedure("propertyTypes");
+    proc->setExecuteCallback(&execute);
+    proc->setAllocCallback(&allocData);
+    proc->setDeallocCallback(&deallocData);
+    proc->addReturnValue("id", ProcedureType::PROPERTY_TYPE_ID);
+    proc->addReturnValue("propertyType", ProcedureType::STRING_VIEW);
+    proc->addReturnValue("valueType", ProcedureType::VALUE_TYPE);
+    ns->addProcedure(proc);
+}
+
+void PropertyTypesProcedure::execute(ProcedureState& proc) {
     Data& data = proc.data<Data>();
     const ExecutionContext* ctxt = proc.ctxt();
-    const GraphView& _view = ctxt->getGraphView();
+    const GraphView& view = ctxt->getGraphView();
 
     Column* rawIdsCol = data.getReturnColumn(0);
     Column* rawNamesCol = data.getReturnColumn(1);
@@ -28,20 +47,21 @@ void PropertyTypesProcedure::execute(Procedure& proc) {
     auto* valueTypesCol = static_cast<ColumnVector<ValueType>*>(rawValueTypesCol);
 
     switch (proc.step()) {
-        case Procedure::Step::PREPARE: {
-            data._it = std::make_unique<ScanPropertyTypesChunkWriter>(_view.metadata().propTypes());
+        case ProcedureState::Step::PREPARE: {
+            data._it = std::make_unique<ScanPropertyTypesChunkWriter>(
+                view.metadata().propTypes());
             data._it->setPropertyTypes(idsCol);
             data._it->setNames(namesCol);
             data._it->setValueTypes(valueTypesCol);
             return;
         }
 
-        case Procedure::Step::RESET: {
+        case ProcedureState::Step::RESET: {
             data._it->reset();
             return;
         }
 
-        case Procedure::Step::EXECUTE: {
+        case ProcedureState::Step::EXECUTE: {
             data._it->fill(proc.ctxt()->getChunkSize());
 
             if (!data._it->isValid()) {
@@ -54,4 +74,3 @@ void PropertyTypesProcedure::execute(Procedure& proc) {
 
     throw PipelineException("Unknown procedure step");
 }
-

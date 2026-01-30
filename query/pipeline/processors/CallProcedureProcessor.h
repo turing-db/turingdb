@@ -7,7 +7,7 @@
 #include "Processor.h"
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
-#include "procedures/Procedure.h"
+#include "procedures/ProcedureState.h"
 
 namespace db {
 
@@ -19,13 +19,13 @@ class DataframeManager;
 namespace db {
 
 class PipelineV2;
-class ProcedureBlueprint;
+class Procedure;
 
-class DatabaseProcedureProcessor : public Processor {
+class CallProcedureProcessor : public Processor {
 public:
-    static DatabaseProcedureProcessor* create(PipelineV2* pipeline,
-                                              const ProcedureBlueprint& blueprint,
-                                              bool hasInput);
+    static CallProcedureProcessor* create(PipelineV2* pipeline,
+                                          const Procedure& procedure,
+                                          bool hasInput);
 
     std::string describe() const override;
 
@@ -35,23 +35,26 @@ public:
 
     bool hasInput() const { return _input.has_value(); }
 
-    void setInputValues(std::span<const ProcedureBlueprint::InputItem> args);
+    void setInputValues(std::span<const Procedure::Argument> args);
     void allocReturnValues(LocalMemory&,
                            DataframeManager&,
-                           std::span<ProcedureBlueprint::YieldItem> yieldItems);
+                           std::span<Procedure::YieldItem> yieldItems);
 
     PipelineBlockInputInterface& input();
     PipelineBlockOutputInterface& output() { return _output; }
 
-    const Procedure& procedure() const { return _procedure; }
+    const ProcedureState& procedureState() const {
+        return _procedureState;
+    }
 
 private:
-    Procedure _procedure;
+    const Procedure* _procedure {nullptr};
+    ProcedureState _procedureState;
     std::optional<PipelineBlockInputInterface> _input;
     PipelineBlockOutputInterface _output;
 
-    DatabaseProcedureProcessor();
-    ~DatabaseProcedureProcessor();
+    CallProcedureProcessor();
+    ~CallProcedureProcessor();
 };
 
 }

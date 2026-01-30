@@ -1,28 +1,22 @@
 #pragma once
 
-#include "procedures/ProcedureBlueprint.h"
 #include "ProcedureData.h"
 #include "iterators/ScanLabelsIterator.h"
 
 namespace db {
+
+class ProcedureState;
+class ProcedureNamespace;
 
 struct LabelsProcedure {
     struct Data : public ProcedureData {
         std::unique_ptr<ScanLabelsChunkWriter> _it;
     };
 
-    static std::unique_ptr<ProcedureData> allocData();
-    static void execute(Procedure& proc);
-
-    static ProcedureBlueprint createBlueprint() noexcept {
-        return {
-            ._name = "db.labels",
-            ._execCallback = &execute,
-            ._allocCallback = &allocData,
-            ._returnValues = {{"id", ProcedureType::LABEL_ID},
-                              {"label", ProcedureType::STRING_VIEW}},
-        };
-    }
+    static ProcedureData* allocData();
+    static void deallocData(ProcedureData* data);
+    static void execute(ProcedureState& proc);
+    static void registerProcedure(ProcedureNamespace* ns);
 };
 
 }

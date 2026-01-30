@@ -1,7 +1,9 @@
 #include "LabelsProcedure.h"
 
 #include "ExecutionContext.h"
+#include "procedures/ProcedureState.h"
 #include "procedures/Procedure.h"
+#include "procedures/ProcedureNamespace.h"
 #include "iterators/ScanLabelsIterator.h"
 #include "columns/ColumnVector.h"
 #include "views/GraphView.h"
@@ -10,14 +12,28 @@
 
 using namespace db;
 
-std::unique_ptr<ProcedureData> LabelsProcedure::allocData() {
-    return std::make_unique<Data>();
+ProcedureData* LabelsProcedure::allocData() {
+    return new Data();
 }
 
-void LabelsProcedure::execute(Procedure& proc) {
+void LabelsProcedure::deallocData(ProcedureData* data) {
+    delete data;
+}
+
+void LabelsProcedure::registerProcedure(ProcedureNamespace* ns) {
+    Procedure* proc = new Procedure("labels");
+    proc->setExecuteCallback(&execute);
+    proc->setAllocCallback(&allocData);
+    proc->setDeallocCallback(&deallocData);
+    proc->addReturnValue("id", ProcedureType::LABEL_ID);
+    proc->addReturnValue("label", ProcedureType::STRING_VIEW);
+    ns->addProcedure(proc);
+}
+
+void LabelsProcedure::execute(ProcedureState& proc) {
     Data& data = proc.data<Data>();
     const ExecutionContext* ctxt = proc.ctxt();
-    const GraphView& _view = ctxt->getGraphView();
+    const GraphView& view = ctxt->getGraphView();
 
     Column* rawIdsCol = data.getReturnColumn(0);
     Column* rawNamesCol = data.getReturnColumn(1);
@@ -26,19 +42,20 @@ void LabelsProcedure::execute(Procedure& proc) {
     auto* namesCol = static_cast<ColumnVector<std::string_view>*>(rawNamesCol);
 
     switch (proc.step()) {
-        case Procedure::Step::PREPARE: {
-            data._it = std::make_unique<ScanLabelsChunkWriter>(_view.metadata().labels());
+        case ProcedureState::Step::PREPARE: {
+            data._it = std::make_unique<ScanLabelsChunkWriter>(
+                view.metadata().labels());
             data._it->setIDs(idsCol);
             data._it->setNames(namesCol);
             return;
         }
 
-        case Procedure::Step::RESET: {
+        case ProcedureState::Step::RESET: {
             data._it->reset();
             return;
         }
 
-        case Procedure::Step::EXECUTE: {
+        case ProcedureState::Step::EXECUTE: {
             data._it->fill(proc.ctxt()->getChunkSize());
 
             if (!data._it->isValid()) {
@@ -51,4 +68,3 @@ void LabelsProcedure::execute(Procedure& proc) {
 
     throw PipelineException("Unknown procedure step");
 }
-

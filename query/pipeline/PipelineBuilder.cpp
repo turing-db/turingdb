@@ -3,7 +3,7 @@
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
-#include "processors/DatabaseProcedureProcessor.h"
+#include "processors/CallProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
 #include "processors/HashJoinProcessor.h"
 #include "processors/ExprProgram.h"
@@ -446,12 +446,12 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourc
     return source->output();
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addDatabaseProcedure(const ProcedureBlueprint& blueprint,
-                                                                    std::span<const ProcedureBlueprint::InputItem> args,
-                                                                    std::span<ProcedureBlueprint::YieldItem> yield) {
+PipelineBlockOutputInterface& PipelineBuilder::addCallProcedure(const Procedure& procedure,
+                                                                std::span<const Procedure::Argument> args,
+                                                                std::span<Procedure::YieldItem> yield) {
     const bool hasInput = _pendingOutput.getInterface() != nullptr;
 
-    DatabaseProcedureProcessor* proc = DatabaseProcedureProcessor::create(_pipeline, blueprint, hasInput);
+    CallProcedureProcessor* proc = CallProcedureProcessor::create(_pipeline, procedure, hasInput);
     auto& output = proc->output();
 
     if (hasInput) {

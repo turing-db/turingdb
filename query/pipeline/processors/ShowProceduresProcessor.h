@@ -6,7 +6,7 @@
 
 namespace db {
 
-class ProcedureBlueprintMap;
+class ProcedureManager;
 class NamedColumn;
 
 class ShowProceduresProcessor final : public Processor {

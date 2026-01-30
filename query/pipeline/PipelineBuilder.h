@@ -7,7 +7,7 @@
 #include "Path.h"
 #include "PipelineV2.h"
 #include "PendingOutputView.h"
-#include "procedures/ProcedureBlueprint.h"
+#include "procedures/Procedure.h"
 
 #include "ProjectionItem.h"
 #include "dataframe/Dataframe.h"
@@ -37,7 +37,7 @@ class PipelineOutputInterface;
 class MaterializeProcessor;
 class ExprProgram;
 class PredicateProgram;
-class ProcedureBlueprintMap;
+class ProcedureManager;
 
 class PipelineBuilder {
 public:
@@ -59,9 +59,9 @@ public:
     PipelineNodeOutputInterface& addScanNodes();
     PipelineNodeOutputInterface& addScanNodesByLabel(const LabelSet* labelset);
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
-    PipelineBlockOutputInterface& addDatabaseProcedure(const ProcedureBlueprint& blueprint,
-                                                       std::span<const ProcedureBlueprint::InputItem> args,
-                                                       std::span<ProcedureBlueprint::YieldItem> yield);
+    PipelineBlockOutputInterface& addCallProcedure(const Procedure& procedure,
+                                                   std::span<const Procedure::Argument> args,
+                                                   std::span<Procedure::YieldItem> yield);
     PipelineBlockOutputInterface& addChangeOp(ChangeOp op);
     PipelineBlockOutputInterface& addCommit();
 

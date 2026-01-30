@@ -3,7 +3,9 @@
 #include <span>
 
 #include "ExecutionContext.h"
+#include "procedures/ProcedureState.h"
 #include "procedures/Procedure.h"
+#include "procedures/ProcedureNamespace.h"
 #include "columns/ColumnVector.h"
 #include "DataPart.h"
 #include "views/GraphView.h"
@@ -20,14 +22,30 @@ struct Data : public ProcedureData {
 
 }
 
-std::unique_ptr<ProcedureData> HistoryProcedure::allocData() {
-    return std::make_unique<Data>();
+ProcedureData* HistoryProcedure::allocData() {
+    return new Data();
 }
 
-void HistoryProcedure::execute(Procedure& proc) {
+void HistoryProcedure::deallocData(ProcedureData* data) {
+    delete data;
+}
+
+void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
+    Procedure* proc = new Procedure("history");
+    proc->setExecuteCallback(&execute);
+    proc->setAllocCallback(&allocData);
+    proc->setDeallocCallback(&deallocData);
+    proc->addReturnValue("commit", ProcedureType::STRING);
+    proc->addReturnValue("nodeCount", ProcedureType::UINT_64);
+    proc->addReturnValue("edgeCount", ProcedureType::UINT_64);
+    proc->addReturnValue("partCount", ProcedureType::UINT_64);
+    ns->addProcedure(proc);
+}
+
+void HistoryProcedure::execute(ProcedureState& proc) {
     Data& data = proc.data<Data>();
     const ExecutionContext* ctxt = proc.ctxt();
-    const GraphView& _view = ctxt->getGraphView();
+    const GraphView& view = ctxt->getGraphView();
 
     Column* rawCommitCol = data.getReturnColumn(0);
     Column* rawNodeCountCol = data.getReturnColumn(1);
@@ -40,17 +58,17 @@ void HistoryProcedure::execute(Procedure& proc) {
     auto* partCountCol = static_cast<ColumnVector<types::UInt64::Primitive>*>(rawPartCountCol);
 
     switch (proc.step()) {
-        case Procedure::Step::PREPARE: {
-            data._it = _view.commits().begin();
+        case ProcedureState::Step::PREPARE: {
+            data._it = view.commits().begin();
             return;
         }
 
-        case Procedure::Step::RESET: {
+        case ProcedureState::Step::RESET: {
             return;
         }
 
-        case Procedure::Step::EXECUTE: {
-            size_t remaining = std::distance(data._it, _view.commits().end());
+        case ProcedureState::Step::EXECUTE: {
+            size_t remaining = std::distance(data._it, view.commits().end());
             remaining = std::min(remaining, ctxt->getChunkSize());
 
             if (commitCol) {
@@ -101,7 +119,7 @@ void HistoryProcedure::execute(Procedure& proc) {
                 ++data._it;
             }
 
-            if (data._it == _view.commits().end()) {
+            if (data._it == view.commits().end()) {
                 proc.finish();
             }
 
@@ -111,4 +129,3 @@ void HistoryProcedure::execute(Procedure& proc) {
 
     throw PipelineException("Unknown procedure step");
 }
-

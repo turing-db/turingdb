@@ -1,7 +1,8 @@
 #include "FunctionDecls.h"
 
-#include "procedures/ProcedureBlueprint.h"
-#include "procedures/ProcedureBlueprintMap.h"
+#include "procedures/Procedure.h"
+#include "procedures/ProcedureManager.h"
+#include "procedures/ProcedureNamespace.h"
 
 #include "FatalException.h"
 
@@ -14,15 +15,16 @@ FunctionDecls::FunctionDecls()
 FunctionDecls::~FunctionDecls() {
 }
 
-std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureBlueprintMap& procedures) {
+std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureManager& procedures) {
     auto decls = std::make_unique<FunctionDecls>();
 
     // Metadata
-    for (const auto& blueprint : procedures.getAll()) {
-        auto declBuilder = decls->create(blueprint._name);
+    for (const auto* ns : procedures.namespaces()) {
+    for (const auto* proc : ns->procedures()) {
+        auto declBuilder = decls->create(proc->getFullName());
         declBuilder.setIsDatabaseProcedure(true);
 
-        for (const auto& returnItem : blueprint._returnValues) {
+        for (const auto& returnItem : proc->returnValues()) {
             switch (returnItem._type) {
                 case ProcedureType::INVALID:
                     throw FatalException("Invalid procedure return type");
@@ -61,7 +63,7 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureBluep
             }
         }
 
-        for (const auto& arg : blueprint._argumentTypes) {
+        for (const auto& arg : proc->argumentTypes()) {
             switch (arg._type) {
                 case ProcedureType::INVALID:
                     throw FatalException("Invalid procedure return type");
@@ -99,6 +101,7 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureBluep
                 break;
             }
         }
+    }
     }
 
     // Entity patterns

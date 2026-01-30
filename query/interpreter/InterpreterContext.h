@@ -10,13 +10,13 @@ class LocalMemory;
 
 namespace db {
 
-class ProcedureBlueprintMap;
+class ProcedureManager;
 
 class InterpreterContext {
 public:
     InterpreterContext(LocalMemory* mem,
                        const QueryCallbacks* callbacks,
-                       const ProcedureBlueprintMap* procedures,
+                       const ProcedureManager* procedures,
                        CommitHash commitHash = CommitHash::head(),
                        ChangeID changeID = ChangeID::head())
         : _mem(mem),
@@ -30,7 +30,7 @@ public:
     ~InterpreterContext() = default;
 
     LocalMemory* getLocalMemory() const { return _mem; }
-    const ProcedureBlueprintMap* getProcedures() const { return _procedures; }
+    const ProcedureManager* getProcedures() const { return _procedures; }
     const QueryCallbacks* getQueryCallbacks() const { return _callbacks; }
     CommitHash getCommitHash() const { return _commitHash; }
     ChangeID getChangeID() const { return _changeID; }
@@ -38,7 +38,7 @@ public:
 private:
     LocalMemory* _mem {nullptr};
     const QueryCallbacks* _callbacks {nullptr};
-    const ProcedureBlueprintMap* _procedures {nullptr};
+    const ProcedureManager* _procedures {nullptr};
     CommitHash _commitHash;
     ChangeID _changeID;
 };

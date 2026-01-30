@@ -7,7 +7,7 @@
 #include "JobSystem.h"
 #include "QueryInterpreterV2.h"
 #include "InterpreterContext.h"
-#include "procedures/ProcedureBlueprintMap.h"
+#include "procedures/ProcedureManager.h"
 
 #include "Panic.h"
 #include "TuringConfig.h"
@@ -18,7 +18,7 @@ TuringDB::TuringDB(const TuringConfig* config)
     : _config(config),
     _systemManager(std::make_unique<SystemManager>(config)),
     _jobSystem(JobSystem::create()),
-    _procedures(ProcedureBlueprintMap::create())
+    _procedures(std::make_unique<ProcedureManager>())
 {
 }
 
@@ -93,6 +93,7 @@ void TuringDB::init() {
     }
 
     _systemManager->init();
+    _procedures->init();
 }
 
 QueryStatus TuringDB::query(std::string_view query,

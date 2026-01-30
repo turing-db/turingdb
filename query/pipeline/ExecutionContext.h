@@ -11,7 +11,7 @@ class Transaction;
 class SystemManager;
 class JobSystem;
 class Graph;
-class ProcedureBlueprintMap;
+class ProcedureManager;
 }
 
 namespace db {
@@ -31,13 +31,13 @@ public:
     std::string_view getGraphName() const { return _graphName; }
     JobSystem* getJobSystem() const { return _jobSystem; }
     SystemManager* getSystemManager() const { return _sysMan; }
-    const ProcedureBlueprintMap* getProcedures() const { return _procedures; }
+    const ProcedureManager* getProcedures() const { return _procedures; }
 
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
     void setTransaction(Transaction* tx) { _tx = tx; }
     void setGraphName(std::string_view graphName) { _graphName = graphName; }
     void setJobSystem(JobSystem* jobSystem) { _jobSystem = jobSystem; }
-    void setProcedures(const ProcedureBlueprintMap* procedures) { _procedures = procedures; }
+    void setProcedures(const ProcedureManager* procedures) { _procedures = procedures; }
 
 private:
     SystemManager* _sysMan {nullptr};
@@ -46,7 +46,7 @@ private:
     Transaction* _tx {nullptr};
     std::string_view _graphName;
     JobSystem* _jobSystem {nullptr};
-    const ProcedureBlueprintMap* _procedures {nullptr};
+    const ProcedureManager* _procedures {nullptr};
 };
 
 }

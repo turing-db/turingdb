@@ -1,9 +1,10 @@
 #include "ProceduresProcedure.h"
 
 #include "ExecutionContext.h"
+#include "procedures/ProcedureState.h"
 #include "procedures/Procedure.h"
-#include "procedures/ProcedureBlueprintMap.h"
-#include "procedures/ProcedureBlueprint.h"
+#include "procedures/ProcedureNamespace.h"
+#include "procedures/ProcedureManager.h"
 #include "procedures/ProcedureReturnValues.h"
 #include "columns/ColumnVector.h"
 
@@ -14,16 +15,30 @@ using namespace db;
 namespace {
 
 struct Data : public ProcedureData {
-    std::vector<ProcedureBlueprint>::const_iterator _it;
+    size_t _nsIndex {0};
+    size_t _procIndex {0};
 };
 
-void buildSignature(std::string& result, const ProcedureBlueprint& blueprint) {
+void buildSignature(std::string& result, const Procedure& proc) {
     result.clear();
-    result += blueprint._name;
-    result += "() :: (";
+    result += proc.getFullName();
+    result += "(";
 
     bool first = true;
-    for (const auto& rv : blueprint._returnValues) {
+    for (const auto& arg : proc.argumentTypes()) {
+        if (!first) {
+            result += ", ";
+        }
+        result += arg._name;
+        result += " :: ";
+        result += ProcedureTypeName::value(arg._type);
+        first = false;
+    }
+
+    result += ") :: (";
+
+    first = true;
+    for (const auto& rv : proc.returnValues()) {
         if (!first) {
             result += ", ";
         }
@@ -35,67 +50,112 @@ void buildSignature(std::string& result, const ProcedureBlueprint& blueprint) {
     result += ")";
 }
 
+void writeProcedures(Data& data,
+                     ProcedureState& proc,
+                     const ProcedureManager* manager,
+                     ColumnVector<std::string>* nameCol,
+                     ColumnVector<std::string>* signatureCol,
+                     size_t chunkSize) {
+
+    const auto& namespaces = manager->namespaces();
+
+    if (nameCol) {
+        nameCol->clear();
+    }
+
+    if (signatureCol) {
+        signatureCol->clear();
+    }
+
+    size_t remaining = chunkSize;
+    std::string signature;
+
+    while (remaining > 0
+           && data._nsIndex < namespaces.size()) {
+
+        const ProcedureNamespace* ns = namespaces[data._nsIndex];
+        const auto& procs = ns->procedures();
+
+        while (remaining > 0
+               && data._procIndex < procs.size()) {
+
+            const Procedure* p = procs[data._procIndex];
+
+            if (nameCol) {
+                nameCol->push_back(p->getFullName());
+            }
+
+            if (signatureCol) {
+                buildSignature(signature, *p);
+                signatureCol->push_back(signature);
+            }
+
+            ++data._procIndex;
+            --remaining;
+        }
+
+        if (data._procIndex >= procs.size()) {
+            ++data._nsIndex;
+            data._procIndex = 0;
+        }
+    }
+
+    if (data._nsIndex >= namespaces.size()) {
+        proc.finish();
+    }
 }
 
-std::unique_ptr<ProcedureData> ProceduresProcedure::allocData() {
-    return std::make_unique<Data>();
 }
 
-void ProceduresProcedure::execute(Procedure& proc) {
+ProcedureData* ProceduresProcedure::allocData() {
+    return new Data();
+}
+
+void ProceduresProcedure::deallocData(ProcedureData* data) {
+    delete data;
+}
+
+void ProceduresProcedure::registerProcedure(ProcedureNamespace* ns) {
+    Procedure* proc = new Procedure("procedures");
+    proc->setExecuteCallback(&execute);
+    proc->setAllocCallback(&allocData);
+    proc->setDeallocCallback(&deallocData);
+    proc->addReturnValue("name", ProcedureType::STRING);
+    proc->addReturnValue("signature", ProcedureType::STRING);
+    ns->addProcedure(proc);
+}
+
+void ProceduresProcedure::execute(ProcedureState& proc) {
     Data& data = proc.data<Data>();
     const ExecutionContext* ctxt = proc.ctxt();
-    const ProcedureBlueprintMap* blueprints = ctxt->getProcedures();
+    const ProcedureManager* manager = ctxt->getProcedures();
 
     Column* rawNameCol = data.getReturnColumn(0);
     Column* rawSignatureCol = data.getReturnColumn(1);
 
-    auto* nameCol = static_cast<ColumnVector<types::String::Primitive>*>(rawNameCol);
+    auto* nameCol = static_cast<ColumnVector<std::string>*>(rawNameCol);
     auto* signatureCol = static_cast<ColumnVector<std::string>*>(rawSignatureCol);
 
     switch (proc.step()) {
-        case Procedure::Step::PREPARE: {
-            data._it = blueprints->getAll().begin();
+        case ProcedureState::Step::PREPARE: {
+            data._nsIndex = 0;
+            data._procIndex = 0;
             return;
         }
 
-        case Procedure::Step::RESET: {
-            data._it = blueprints->getAll().begin();
+        case ProcedureState::Step::RESET: {
+            data._nsIndex = 0;
+            data._procIndex = 0;
             return;
         }
 
-        case Procedure::Step::EXECUTE: {
-            const auto& allBlueprints = blueprints->getAll();
-            size_t remaining = std::distance(data._it, allBlueprints.end());
-            remaining = std::min(remaining, ctxt->getChunkSize());
-
-            if (nameCol) {
-                nameCol->clear();
-            }
-
-            if (signatureCol) {
-                signatureCol->clear();
-            }
-
-            std::string signature;
-            for (size_t i = 0; i < remaining; ++i) {
-                const ProcedureBlueprint& blueprint = *data._it;
-
-                if (nameCol) {
-                    nameCol->push_back(blueprint._name);
-                }
-
-                if (signatureCol) {
-                    buildSignature(signature, blueprint);
-                    signatureCol->push_back(signature);
-                }
-
-                ++data._it;
-            }
-
-            if (data._it == allBlueprints.end()) {
-                proc.finish();
-            }
-
+        case ProcedureState::Step::EXECUTE: {
+            writeProcedures(data,
+                            proc,
+                            manager,
+                            nameCol,
+                            signatureCol,
+                            ctxt->getChunkSize());
             return;
         }
     }

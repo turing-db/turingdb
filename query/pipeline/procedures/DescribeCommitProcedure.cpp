@@ -4,7 +4,9 @@
 
 #include "ExecutionContext.h"
 #include "FatalException.h"
+#include "procedures/ProcedureState.h"
 #include "procedures/Procedure.h"
+#include "procedures/ProcedureNamespace.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "DataPart.h"
@@ -24,14 +26,32 @@ struct Data : public ProcedureData {
 
 }
 
-std::unique_ptr<ProcedureData> DescribeCommitProcedure::allocData() {
-    return std::make_unique<Data>();
+ProcedureData* DescribeCommitProcedure::allocData() {
+    return new Data();
 }
 
-void DescribeCommitProcedure::execute(Procedure& proc) {
+void DescribeCommitProcedure::deallocData(ProcedureData* data) {
+    delete data;
+}
+
+void DescribeCommitProcedure::registerProcedure(
+    ProcedureNamespace* ns) {
+
+    Procedure* proc = new Procedure("describeCommit");
+    proc->setExecuteCallback(&execute);
+    proc->setAllocCallback(&allocData);
+    proc->setDeallocCallback(&deallocData);
+    proc->addArgument("commit", ProcedureType::STRING);
+    proc->addReturnValue("nodeCount", ProcedureType::UINT_64);
+    proc->addReturnValue("edgeCount", ProcedureType::UINT_64);
+    proc->addReturnValue("partCount", ProcedureType::UINT_64);
+    ns->addProcedure(proc);
+}
+
+void DescribeCommitProcedure::execute(ProcedureState& proc) {
     Data& data = proc.data<Data>();
     const ExecutionContext* ctxt = proc.ctxt();
-    const GraphView& _view = ctxt->getGraphView();
+    const GraphView& view = ctxt->getGraphView();
 
     const Column* rawCommitCol = data.getInputColumn(0);
     Column* rawNodeCountCol = data.getReturnColumn(0);
@@ -43,7 +63,7 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
     auto* partCountCol = static_cast<ColumnVector<types::UInt64::Primitive>*>(rawPartCountCol);
 
     switch (proc.step()) {
-        case Procedure::Step::PREPARE: {
+        case ProcedureState::Step::PREPARE: {
             bioassert(rawCommitCol, "db.describeCommit: must be provided a commit hash");
 
             data._containerKind = ColumnKind::extractContainerKind(rawCommitCol->getKind());
@@ -60,11 +80,11 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
             return;
         }
 
-        case Procedure::Step::RESET: {
+        case ProcedureState::Step::RESET: {
             return;
         }
 
-        case Procedure::Step::EXECUTE: {
+        case ProcedureState::Step::EXECUTE: {
             if (nodeCountCol) {
                 nodeCountCol->clear();
             }
@@ -119,9 +139,8 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
                                    inputCommitStr.begin(),
                                    [](char c) { return std::tolower(c); });
 
-                    // Iterate over all commits and find the one that matches the current input
                     bool found = false;
-                    for (const auto& commit : _view.commits()) {
+                    for (const auto& commit : view.commits()) {
                         currentCommitStr = fmt::format("{:x}", commit.hash().get());
 
                         if (inputCommitStr == currentCommitStr) {
@@ -168,9 +187,8 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
                                inputCommitStr.begin(),
                                [](char c) { return std::tolower(c); });
 
-                // Iterate over all commits and find the one that matches the current input
                 bool found = false;
-                for (const auto& commit : _view.commits()) {
+                for (const auto& commit : view.commits()) {
                     currentCommitStr = fmt::format("{:x}", commit.hash().get());
 
                     if (inputCommitStr == currentCommitStr) {
@@ -197,7 +215,6 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
                 proc.finish();
             };
 
-            // If received mutiple commit hashes as input
             switch (rawCommitCol->getKind()) {
                 case ColumnVector<std::string>::staticKind(): {
                     treatVector(*static_cast<const ColumnVector<std::string>*>(rawCommitCol));
@@ -236,4 +253,3 @@ void DescribeCommitProcedure::execute(Procedure& proc) {
 
     throw PipelineException("Unknown procedure step");
 }
-

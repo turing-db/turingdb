@@ -7,7 +7,7 @@
 #include "FunctionSignature.h"
 
 namespace db {
-class ProcedureBlueprintMap;
+class ProcedureManager;
 
 class FunctionDecls {
 public:
@@ -60,7 +60,7 @@ public:
     FunctionDecls& operator=(const FunctionDecls&) = delete;
     FunctionDecls& operator=(FunctionDecls&&) = delete;
 
-    static std::unique_ptr<FunctionDecls> createDefault(const ProcedureBlueprintMap& procedures);
+    static std::unique_ptr<FunctionDecls> createDefault(const ProcedureManager& procedures);
 
     FunctionSignatureBuilder create(std::string_view fullName);
 

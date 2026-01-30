@@ -6,12 +6,13 @@
 #include "TuringTime.h"
 #include "CompilerException.h"
 #include "FileReader.h"
-#include "procedures/ProcedureBlueprintMap.h"
+#include "procedures/ProcedureManager.h"
 
 using namespace db;
 
 int main(int argc, char** argv) {
-    auto procedures = ProcedureBlueprintMap::create();
+    ProcedureManager procedures;
+    procedures.init();
 
     std::string queryStr;
 
@@ -32,7 +33,7 @@ int main(int argc, char** argv) {
         queryStr = it.get<char>(file.getInfo()._size);
     }
 
-    CypherAST ast(*procedures, queryStr);
+    CypherAST ast(procedures, queryStr);
 
     {
         // Try but allow not implemented to test the parser

@@ -1,22 +1,24 @@
-#include "DatabaseProcedureProcessor.h"
+#include "CallProcedureProcessor.h"
 
 #include <spdlog/fmt/fmt.h>
 
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
-#include "procedures/ProcedureBlueprint.h"
+#include "procedures/Procedure.h"
 #include "LocalMemory.h"
 
 #include "PipelineException.h"
 
 using namespace db;
 
-DatabaseProcedureProcessor* DatabaseProcedureProcessor::create(PipelineV2* pipeline,
-                                                               const ProcedureBlueprint& blueprint,
-                                                               bool hasInput) {
+CallProcedureProcessor* CallProcedureProcessor::create(
+    PipelineV2* pipeline,
+    const Procedure& procedure,
+    bool hasInput) {
 
-    DatabaseProcedureProcessor* processor = new DatabaseProcedureProcessor();
+    CallProcedureProcessor* processor = new CallProcedureProcessor();
+    processor->_procedure = &procedure;
 
     if (hasInput) {
         processor->_input = std::make_optional<PipelineBlockInputInterface>();
@@ -31,80 +33,84 @@ DatabaseProcedureProcessor* DatabaseProcedureProcessor::create(PipelineV2* pipel
     processor->_output.setPort(output);
     processor->addOutput(output);
 
-    Procedure& procedure = processor->_procedure;
-    procedure._blueprint = &blueprint;
-
-    if (blueprint._allocCallback) {
-        procedure._data = blueprint._allocCallback();
+    const Procedure::AllocCallback alloc = procedure.getAllocCallback();
+    if (alloc) {
+        processor->_procedureState._data = alloc();
     }
+
+    processor->_procedureState._procedure = &procedure;
 
     processor->postCreate(pipeline);
     return processor;
 }
 
-std::string DatabaseProcedureProcessor::describe() const {
-    return fmt::format("DatabaseProcedureProcessor @={}", fmt::ptr(this));
+std::string CallProcedureProcessor::describe() const {
+    return fmt::format("CallProcedureProcessor @={}", fmt::ptr(this));
 }
 
-void DatabaseProcedureProcessor::prepare(ExecutionContext* ctxt) {
-    _procedure._ctxt = ctxt;
-    _procedure._step = Procedure::Step::PREPARE;
-    _procedure._blueprint->_execCallback(_procedure);
+void CallProcedureProcessor::prepare(ExecutionContext* ctxt) {
+    _procedureState._ctxt = ctxt;
+    _procedureState._step = ProcedureState::Step::PREPARE;
+    _procedure->getExecCallback()(_procedureState);
 
-    if (_procedure.isFinished()) [[unlikely]] {
+    if (_procedureState.isFinished()) [[unlikely]] {
         throw PipelineException("Cannot finish a procedure in the prepare phase");
     }
 
     markAsPrepared();
 }
 
-void DatabaseProcedureProcessor::reset() {
-    _procedure._step = Procedure::Step::RESET;
-    _procedure._blueprint->_execCallback(_procedure);
+void CallProcedureProcessor::reset() {
+    _procedureState._step = ProcedureState::Step::RESET;
+    _procedure->getExecCallback()(_procedureState);
 
-    if (_procedure.isFinished()) [[unlikely]] {
+    if (_procedureState.isFinished()) [[unlikely]] {
         throw PipelineException("Cannot finish a procedure in the reset phase");
     }
 
     markAsReset();
 }
 
-void DatabaseProcedureProcessor::execute() {
-    _procedure._step = Procedure::Step::EXECUTE;
-    _procedure._blueprint->_execCallback(_procedure);
+void CallProcedureProcessor::execute() {
+    _procedureState._step = ProcedureState::Step::EXECUTE;
+    _procedure->getExecCallback()(_procedureState);
     _output.getPort()->writeData();
 
-    if (_procedure.isFinished()) {
+    if (_procedureState.isFinished()) {
         finish();
     }
 }
 
-void DatabaseProcedureProcessor::setInputValues(std::span<const ProcedureBlueprint::InputItem> args) {
-    ProcedureData& data = *_procedure._data;
+void CallProcedureProcessor::setInputValues(
+    std::span<const Procedure::Argument> args) {
 
-    data.resizeInputColumns(_procedure._blueprint->_argumentTypes.size());
+    ProcedureData& data = *_procedureState._data;
+
+    data.resizeInputColumns(_procedure->argumentTypes().size());
 
     for (const auto& item : args) {
         data.setInputColumn(item._index, item._col);
     }
 }
 
-void DatabaseProcedureProcessor::allocReturnValues(LocalMemory& mem,
-                                                   DataframeManager& dfMan,
-                                                   std::span<ProcedureBlueprint::YieldItem> yieldItems) {
-    ProcedureData& data = *_procedure._data;
+void CallProcedureProcessor::allocReturnValues(
+    LocalMemory& mem,
+    DataframeManager& dfMan,
+    std::span<Procedure::YieldItem> yieldItems) {
+
+    ProcedureData& data = *_procedureState._data;
 
     PipelineBlockOutputInterface& output = _output;
     Dataframe* outDf = output.getDataframe();
 
-    data.resizeReturnColumns(_procedure._blueprint->_returnValues.size());
+    data.resizeReturnColumns(_procedure->returnValues().size());
 
     for (auto& item : yieldItems) {
         const std::string_view& colName = item._baseName;
         const std::string_view& asName = item._asName;
 
-        const size_t colIndex = _procedure._blueprint->getReturnValueIndex(colName);
-        const ProcedureType colType = _procedure._blueprint->getReturnValueType(colIndex);
+        const size_t colIndex = _procedure->getReturnValueIndex(colName);
+        const ProcedureType colType = _procedure->getReturnValueType(colIndex);
 
         Column* col = nullptr;
 
@@ -178,7 +184,7 @@ void DatabaseProcedureProcessor::allocReturnValues(LocalMemory& mem,
     }
 }
 
-PipelineBlockInputInterface& DatabaseProcedureProcessor::input() {
+PipelineBlockInputInterface& CallProcedureProcessor::input() {
     if (!_input.has_value()) {
         throw PipelineException("No input port");
     }
@@ -186,10 +192,15 @@ PipelineBlockInputInterface& DatabaseProcedureProcessor::input() {
     return *_input;
 }
 
-DatabaseProcedureProcessor::DatabaseProcedureProcessor()
+CallProcedureProcessor::CallProcedureProcessor()
 {
 }
 
-DatabaseProcedureProcessor::~DatabaseProcedureProcessor() {
+CallProcedureProcessor::~CallProcedureProcessor() {
+    if (_procedureState._data && _procedure) {
+        const Procedure::DeallocCallback dealloc = _procedure->getDeallocCallback();
+        if (dealloc) {
+            dealloc(_procedureState._data);
+        }
+    }
 }
-
