@@ -81,7 +81,6 @@ class CMakeDevelop(develop):
 
 setup(
     name="turingdb",
-    version="1.16",
     packages=find_packages(where="python"),
     package_dir={"": "python"},
     include_package_data=True,

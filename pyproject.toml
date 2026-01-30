@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0", "wheel", "setuptools-scm>=8"]
 build-backend = "build_backend"
 backend-path = ["."]
 
 [project]
 name = "turingdb"
-version = "1.16"
+dynamic = ["version"]
 dependencies = [
     "boto3>=1.42.22",
     "boto3-stubs>=1.42.22",
@@ -15,9 +15,9 @@ dependencies = [
     "pandas>=2.3.3",
     "pandas-stubs>=2.3.3.251219",
     "prompt-toolkit>=3.0.52",
+    "patchelf>=0.17.2.4",
 ]
 requires-python = ">=3.10"
-classifiers = ["Operating System :: POSIX :: Linux"]
 
 [project.urls]
 Homepage = "https://github.com/turing-db/turingdb"
@@ -41,3 +41,10 @@ dev-dependencies = ["build>=0.10.0", "twine>=4.0.0"]
 [tool.uv.workspace]
 members = []
 exclude = ["build/**"]
+
+[tool.setuptools_scm]
+version_scheme = "python-simplified-semver"
+local_scheme = "no-local-version"
+write_to = "python/turingdb/_version.py"
+git_describe_command = "git describe --dirty --tags --long --match 'v*' --first-parent"
+tag_regex = "^v(?P<version>.*)$"
