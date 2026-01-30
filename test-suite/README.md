@@ -20,6 +20,12 @@ The script starts both the API server and the UI dev server. Stop with Ctrl+C.
 ./start.sh --help
 ```
 
+- If the `start.sh` script cannot find the query test CLI, specify its path with `--cli-binary`.
+
+```bash
+./start.sh --cli-binary ../build/dev-bin/query_test_suite_cli
+```
+
 ## Notes
 - The API server expects the C++ test runner binary to be built and available as configured in `server.ts`.
 - The UI (port 5555) will talk to the API server on the port defined in `server.ts` (default 5566).
@@ -28,3 +34,5 @@ The script starts both the API server and the UI dev server. Stop with Ctrl+C.
 ```bash
 ssh -NL 5555:localhost:5555 remote-machine
 ```
+
+- If used through coder, access the UI using the 5555 forwarded port.
