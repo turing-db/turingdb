@@ -671,6 +671,8 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
     const Projection* projNode = node->getProjection();
 
+    ExprProgram* exprProg = ExprProgram::create(_pipeline);
+    ExprProgramGenerator progGen(this, exprProg, _builder.getPendingOutput());
     // No projection can happen in the case of a Standalone call
     // in which case, we can simply output the whole dataframe
     if (projNode) {
@@ -681,6 +683,14 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
             if (!decl) {
                 throw PlannerException("Projection item does not have a variable declaration");
             }
+
+            const Expr::Kind itemKind = item->getKind();
+            // FIXME: Other kinds need evaluation?
+            const bool needsEvaluation = itemKind == Expr::Kind::BINARY || itemKind == Expr::Kind::UNARY;
+            if (needsEvaluation) {
+                progGen.generateExpr(item);
+            }
+            // XXX: Need to insert a processor here
 
             const auto findColIt = _declToColumn.find(decl);
             if (findColIt == _declToColumn.end()) {
@@ -969,8 +979,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         inDf = prevOutput->getDataframe();
     }
 
-    size_t i = 0;
-    for (const auto* argExpr : *argExprs) {
+    for (size_t i {0}; const auto* argExpr : *argExprs) {
         const Column* col = nullptr;
 
         const VarDecl* argDecl = argExpr->getExprVarDecl();
