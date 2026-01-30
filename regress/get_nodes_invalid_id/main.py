@@ -15,7 +15,7 @@ Expected: Once fixed, the server should return an error or skip invalid nodes.
 
 import sys
 import time
-import requests
+import httpx
 from turingdb import TuringDB
 
 HOST = "http://localhost:6666"
@@ -50,23 +50,23 @@ def main():
     }
 
     try:
-        response = requests.post(f"{HOST}/get_nodes", json=payload, headers=headers, timeout=5)
+        response = httpx.post(f"{HOST}/get_nodes", json=payload, headers=headers, timeout=5)
         print(f"   Response status: {response.status_code}")
         print(f"   Response body: {response.text[:200]}")
         print()
-    except requests.exceptions.ChunkedEncodingError as e:
+    except httpx.RemoteProtocolError as e:
         print(f"   ERROR: Response ended prematurely - server crashed mid-response")
         print(f"   Exception: {e}")
         print()
         print("TEST FAILED: Server crashed when requesting invalid node ID")
         return 1
-    except requests.exceptions.ConnectionError as e:
+    except httpx.ConnectError as e:
         print(f"   ERROR: Connection failed - server likely crashed")
         print(f"   Exception: {e}")
         print()
         print("TEST FAILED: Server crashed when requesting invalid node ID")
         return 1
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         print("   ERROR: Request timed out - server may have crashed or hung")
         print()
         print("TEST FAILED: Server unresponsive when requesting invalid node ID")
@@ -75,7 +75,7 @@ def main():
     # Verify server is still alive
     print("3. Verifying server is still responding...")
     try:
-        check_response = requests.get(f"{HOST}/status", timeout=5)
+        check_response = httpx.get(f"{HOST}/status", timeout=5)
         print(f"   Server status: {check_response.status_code}")
     except Exception as e:
         print(f"   ERROR: Server not responding after /get_nodes request")

@@ -28,7 +28,6 @@ rm -f pyproject.toml
 uv init
 # PYTURINGDB is set by the regression test runner, fallback to "turingdb" if not set
 uv add ${PYTURINGDB:-turingdb}
-uv add requests
 
 uv run main.py
 testres=$?
