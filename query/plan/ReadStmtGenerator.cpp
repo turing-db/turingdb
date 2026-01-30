@@ -4,41 +4,46 @@
 
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
+#include "FunctionInvocation.h"
+#include "Literal.h"
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "PlanGraph.h"
+#include "PlanGraphTopology.h"
+#include "PlanGraphVariables.h"
+#include "Predicate.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
 #include "WhereClause.h"
-#include "PlanGraphVariables.h"
-#include "PlanGraphTopology.h"
-#include "Predicate.h"
 #include "YieldClause.h"
 #include "YieldItems.h"
-#include "Literal.h"
-#include "expr/LiteralExpr.h"
-#include "expr/ListExpr.h"
-#include "expr/SymbolExpr.h"
-#include "decl/VarDecl.h"
 #include "decl/PatternData.h"
+#include "decl/VarDecl.h"
+#include "expr/BinaryExpr.h"
+#include "expr/EntityTypeExpr.h"
+#include "expr/ExprChain.h"
+#include "expr/FunctionInvocationExpr.h"
+#include "expr/ListExpr.h"
+#include "expr/LiteralExpr.h"
+#include "expr/PropertyExpr.h"
+#include "expr/SymbolExpr.h"
 #include "metadata/LabelSet.h"
-
 #include "nodes/CartesianProductNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/GetEdgeTargetNode.h"
 #include "nodes/GetEdgesNode.h"
+#include "nodes/GetEntityTypeNode.h"
 #include "nodes/GetInEdgesNode.h"
 #include "nodes/GetOutEdgesNode.h"
 #include "nodes/GetPropertyNode.h"
-#include "nodes/GetEntityTypeNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/JoinNode.h"
 #include "nodes/ProcedureEvalNode.h"
 #include "nodes/ProduceResultsNode.h"
-#include "nodes/VectorSearchNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/ShortestPathNode.h"
+#include "nodes/VectorSearchNode.h"
 
 #include "spdlog/spdlog.h"
 #include "stmt/Stmt.h"
@@ -47,6 +52,8 @@
 #include "stmt/LoadCSVStmt.h"
 #include "nodes/LoadCSVNode.h"
 #include "stmt/VectorSearchStmt.h"
+
+#include "PlannerException.h"
 
 #include "BioAssert.h"
 
@@ -201,6 +208,7 @@ void ReadStmtGenerator::generateVectorSearchStmt(const VectorSearchStmt* stmt) {
         for (SymbolExpr* yieldItemExpr : *yieldItems) {
             const VarDecl* decl = yieldItemExpr->getExprVarDecl();
             node->setIDsVarDecl(decl);
+            _variables->setProducer(yieldItemExpr->getDecl(), node);
         }
     }
 }
