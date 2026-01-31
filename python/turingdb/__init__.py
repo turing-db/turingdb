@@ -62,7 +62,7 @@ def get_executable_path():
     if hasattr(sys, 'prefix') and sys.prefix != sys.base_prefix:
         # We're in a virtual environment
         venv_site = Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
-        search_locations.append(venv_site / "turingdb")
+        search_locations.append(venv_site / "turingdb" / "bin")
 
     # Search all locations
     for location in search_locations:
@@ -70,7 +70,7 @@ def get_executable_path():
             continue
 
         executable_path = location / executable_name
-        if executable_path.exists() and os.access(executable_path, os.X_OK):
+        if executable_path.is_file() and os.access(executable_path, os.X_OK):
             return str(executable_path)
 
 
