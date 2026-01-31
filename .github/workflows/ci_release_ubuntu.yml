@@ -81,6 +81,7 @@ jobs:
         cd build
         cmake ..
         source ${{ github.workspace }}/setup.sh
+        make install
         make run_regress
 
     - name: Upload wheel artifact

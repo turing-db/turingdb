@@ -39,7 +39,7 @@ add_subdirectory(get_nodes_invalid_id)
 
 # Python SDK version to be used by uv
 # Can be overridden with -DPYTURINGDB=/path/to/wheel.whl
-# By default, looks for a wheel in wheelhouse/ or dist/, falls back to "turingdb"
+# By default, looks for a wheel in wheelhouse/ or dist/
 if(NOT DEFINED PYTURINGDB)
     file(GLOB _WHEELHOUSE_WHEELS "${CMAKE_SOURCE_DIR}/wheelhouse/*.whl")
     file(GLOB _DIST_WHEELS "${CMAKE_SOURCE_DIR}/dist/*.whl")
@@ -50,8 +50,7 @@ if(NOT DEFINED PYTURINGDB)
         list(GET _DIST_WHEELS 0 PYTURINGDB)
         message(STATUS "Using wheel from dist: ${PYTURINGDB}")
     else()
-        set(PYTURINGDB "turingdb")
-        message(STATUS "No local wheel found, using PyPI package: ${PYTURINGDB}")
+        message(FATAL_ERROR "No wheel found in wheelhouse/ or dist/. Build the wheel first with: uv build --wheel")
     endif()
 endif()
 
