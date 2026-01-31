@@ -80,7 +80,6 @@ jobs:
     - name: Run regress
       run: |
         cd build
-        cmake .. -DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++
         source ${{ github.workspace }}/setup.sh
         make run_regress
 
