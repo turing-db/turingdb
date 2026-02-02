@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN n.age + 1",
+  "expect": {
+    "plan": "",
+    "result": "n.age + 1\n33\n33\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull"
+  },
+  "tags": [
+    "where",
+    "return",
+    "projection",
+    "operators"
+  ],
+  "write-required": false
+}
