@@ -75,7 +75,64 @@ jobs:
     - name: Repair wheel with delocate
       run: |
         mkdir -p wheelhouse
-        uvx --from delocate delocate-wheel -w wheelhouse dist/*.whl
+        uvx --from delocate delocate-wheel --require-archs arm64 -w wheelhouse dist/*.whl
+
+    - name: Fix wheel platform tags
+      run: |
+        cd wheelhouse
+        # Get Python version tag (e.g., cp313)
+        PYTHON_TAG="cp$(echo '${{ matrix.python-version }}' | tr -d '.')"
+
+        for wheel in *.whl; do
+          echo "Processing: $wheel"
+
+          # Extract wheel name components
+          # Format: {name}-{version}-{python}-{abi}-{platform}.whl
+
+          # Rename wheel with proper macOS platform tag
+          # delocate doesn't rename wheels, so we need to do it manually
+          NEW_WHEEL=$(echo "$wheel" | sed "s/-none-any\.whl/-${PYTHON_TAG}-macosx_11_0_arm64.whl/")
+
+          if [ "$wheel" != "$NEW_WHEEL" ]; then
+            # Unpack, update WHEEL metadata, and repack
+            TMPDIR=$(mktemp -d)
+            unzip -q "$wheel" -d "$TMPDIR"
+
+            # Update the WHEEL file with correct tags
+            WHEEL_FILE=$(find "$TMPDIR" -name "WHEEL" -path "*dist-info*")
+            if [ -f "$WHEEL_FILE" ]; then
+              sed -i '' "s/Tag: ${PYTHON_TAG}-none-any/Tag: ${PYTHON_TAG}-${PYTHON_TAG}-macosx_11_0_arm64/" "$WHEEL_FILE"
+            fi
+
+            # Update RECORD file (remove old hashes, wheel will regenerate on install)
+            RECORD_FILE=$(find "$TMPDIR" -name "RECORD" -path "*dist-info*")
+            if [ -f "$RECORD_FILE" ]; then
+              # Update WHEEL entry in RECORD
+              sed -i '' "s/Tag: ${PYTHON_TAG}-none-any/Tag: ${PYTHON_TAG}-${PYTHON_TAG}-macosx_11_0_arm64/" "$RECORD_FILE" 2>/dev/null || true
+            fi
+
+            # Repack with correct filename
+            rm "$wheel"
+            cd "$TMPDIR"
+            zip -q -r "../$NEW_WHEEL" .
+            cd ..
+            rm -rf "$TMPDIR"
+
+            echo "Renamed to: $NEW_WHEEL"
+          fi
+        done
+
+    - name: Verify wheel platform tags
+      run: |
+        echo "Verifying wheel platform tags..."
+        for wheel in wheelhouse/*.whl; do
+          if [[ "$wheel" == *"-none-any.whl" ]]; then
+            echo "ERROR: Found platform-independent wheel: $wheel"
+            echo "Packages with native binaries must have platform-specific tags"
+            exit 1
+          fi
+          echo "OK: $wheel"
+        done
 
     - name: Run regress
       run: |
@@ -106,6 +163,17 @@ jobs:
           pattern: turingdb-wheel-macos-py*
           path: wheelhouse/
           merge-multiple: true
+
+      - name: Verify no platform-independent wheels
+        run: |
+          echo "Final verification before publish..."
+          for wheel in wheelhouse/*.whl; do
+            if [[ "$wheel" == *"-none-any.whl" ]]; then
+              echo "ERROR: Found platform-independent wheel: $wheel"
+              exit 1
+            fi
+            echo "Will publish: $wheel"
+          done
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
