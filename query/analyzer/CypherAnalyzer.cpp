@@ -24,6 +24,7 @@
 #include "stmt/ShortestPathStmt.h"
 #include "decl/VarDecl.h"
 #include "expr/SymbolExpr.h"
+#include "spdlog/spdlog.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/OrderBy.h"
@@ -249,6 +250,20 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
         isAggregate |= item->isAggregate();
         hasGroupingKeys |= !item->isAggregate();
+
+        const bool isBinary = item->getKind() == Expr::Kind::BINARY;
+        if (isBinary) {
+            spdlog::info("Detect binary");
+            // throw AnalyzeException(
+                // "Binary expressions in RETURN clauses are not yet supported.");
+        }
+
+        const bool isUnary = item->getKind() == Expr::Kind::UNARY;
+        if (isUnary) {
+            spdlog::info("Detect unary");
+            // throw AnalyzeException(
+                // "Unary expressions in RETURN clauses are not yet supported.");
+        }
     }
 
     if (isAggregate) {
