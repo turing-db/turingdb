@@ -17,6 +17,7 @@
 #include "nodes/LoadGraphNode.h"
 #include "nodes/LoadGMLNode.h"
 #include "nodes/LoadNeo4jNode.h"
+#include "nodes/ExprEvalNode.h"
 
 #include "stmt/OrderByItem.h"
 #include "views/GraphView.h"
@@ -335,6 +336,17 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     output << "        __arg__: " << (arg->getName().empty() ? "unnamed" : arg->getName()) << "\n";
                 }
             } break;
+
+            case PlanGraphOpcode::EXPR_EVAL: {
+                const auto* n = dynamic_cast<ExprEvalNode*>(node.get());
+                output << "        __exprs__\n";
+                for (const Expr* expr : n->getExprs()) {
+                    const VarDecl* var = expr->getExprVarDecl();
+                    const std::string_view name = var->getName();
+                    output << " __expr__: " << name << '\n';
+                }
+            }
+            break;
 
             case PlanGraphOpcode::CHANGE: {
                 const auto* n = dynamic_cast<ChangeNode*>(node.get());
