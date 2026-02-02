@@ -8,6 +8,13 @@ else
     NUM_JOBS=$(nproc)
 fi
 
+# Use sudo if available, otherwise run directly (for containers running as root)
+if command -v sudo &> /dev/null; then
+    SUDO="sudo"
+else
+    SUDO=""
+fi
+
 SOURCE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 DEPENDENCIES_DIR=$SOURCE_DIR/external/dependencies
 BUILD_DIR=$DEPENDENCIES_DIR/build
@@ -30,7 +37,12 @@ if [[ "$(uname)" != "Darwin" ]]; then
     
     # Update package cache
     echo "Updating $PKG_MANAGER cache..."
-    sudo $PKG_MANAGER update
+    if [[ "$PKG_MANAGER" == "apt-get" ]]; then
+        $SUDO $PKG_MANAGER update
+    else
+        # dnf automatically refreshes cache, but we can force it
+        $SUDO $PKG_MANAGER makecache || true
+    fi
 fi
 
 # Install curl, openssl, and zlib
@@ -64,7 +76,12 @@ if [[ "$(uname)" == "Darwin" ]]; then
 else
     # Linux - use detected package manager
     echo "Installing curl, openssl, and zlib via $PKG_MANAGER..."
-    sudo $PKG_MANAGER $PKG_INSTALL curl libcurl4-openssl-dev zlib1g-dev libssl-dev
+    if [[ "$PKG_MANAGER" == "apt-get" ]]; then
+        $SUDO $PKG_MANAGER $PKG_INSTALL curl libcurl4-openssl-dev zlib1g-dev libssl-dev
+    else
+        # dnf (RHEL/AlmaLinux) uses different package names
+        $SUDO $PKG_MANAGER $PKG_INSTALL curl libcurl-devel zlib-devel openssl-devel
+    fi
 fi
 
 # Install bison and flex
@@ -86,7 +103,12 @@ if [[ "$(uname)" == "Darwin" ]]; then
 else
     # Linux - use detected package manager
     echo "Installing bison and flex via $PKG_MANAGER..."
-    sudo $PKG_MANAGER $PKG_INSTALL bison flex libfl-dev
+    if [[ "$PKG_MANAGER" == "apt-get" ]]; then
+        $SUDO $PKG_MANAGER $PKG_INSTALL bison flex libfl-dev
+    else
+        # dnf (RHEL/AlmaLinux) - libfl-dev equivalent is included in flex
+        $SUDO $PKG_MANAGER $PKG_INSTALL bison flex
+    fi
 fi
 
 # Install BLAS
@@ -109,7 +131,12 @@ if [[ "$(uname)" == "Darwin" ]]; then
 else
     # Linux - use detected package manager
     echo "Installing BLAS via $PKG_MANAGER..."
-    sudo $PKG_MANAGER $PKG_INSTALL libopenblas-dev
+    if [[ "$PKG_MANAGER" == "apt-get" ]]; then
+        $SUDO $PKG_MANAGER $PKG_INSTALL libopenblas-dev
+    else
+        # dnf (RHEL/AlmaLinux) uses different package name
+        $SUDO $PKG_MANAGER $PKG_INSTALL openblas-devel
+    fi
 fi
 
 # Skip building if cache was hit (set by CI)
