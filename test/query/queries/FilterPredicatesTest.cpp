@@ -2160,7 +2160,8 @@ TEST_F(FilterPredicatesTest, multiHopWithFilter) {
             ColumnNodeIDs bNodes;
             bNodes.push_back(e1._otherID);
 
-            for (const EdgeRecord& e2 : read().getOutEdges(&bNodes)) {
+            auto outEdges = read().getOutEdges(&bNodes);
+            for (const EdgeRecord& e2 : outEdges) {
                 const auto* cName = read().tryGetNodeProperty<types::String>(nameID, e2._otherID);
                 if (cName) {
                     expected.add({*aName, *cName});

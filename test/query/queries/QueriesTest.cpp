@@ -2101,7 +2101,8 @@ TEST_F(QueriesTest, pitchDeckPersonInterest) {
                 people.push_back(n);
             }
         }
-        for (EdgeRecord e : read().getOutEdges(&people)) {
+        auto outEdges = read().getOutEdges(&people);
+        for (EdgeRecord e : outEdges) {
             NodeView v = read().getNodeView(e._otherID);
             if (v.labelset().hasLabel(interestLabel)) {
                 expected.add({e._nodeID, e._otherID});
@@ -2561,7 +2562,8 @@ TEST_F(QueriesTest, indirectLabelFilter) {
             ColumnNodeIDs iNodes;
             iNodes.push_back(interestI);
 
-            for (const EdgeRecord& e2 : read().getInEdges(&iNodes)) {
+            auto inEdges = read().getInEdges(&iNodes);
+            for (const EdgeRecord& e2 : inEdges) {
                 NodeView srcView2 = read().getNodeView(e2._nodeID);
                 if (!srcView2.labelset().hasLabel(personLabelID)) {
                     continue;
