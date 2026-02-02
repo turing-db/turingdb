@@ -10,9 +10,9 @@ namespace db {
 class ExecutionContext;
 class ExprProgram;
 
-class ComputeExprProcessor final : public Processor {
+class ExprEvalProcessor final : public Processor {
 public:
-    static ComputeExprProcessor* create(PipelineV2* pipeline,
+    static ExprEvalProcessor* create(PipelineV2* pipeline,
                                         ExprProgram* exprProg);
 
     std::string describe() const final;
@@ -29,8 +29,8 @@ private:
     PipelineValuesOutputInterface _output;
     ExprProgram* _exprProg {nullptr};
 
-    ComputeExprProcessor(ExprProgram* exprProg);
-    ~ComputeExprProcessor() final = default;
+    ExprEvalProcessor(ExprProgram* exprProg);
+    ~ExprEvalProcessor() final = default;
     void evalProgram();
 };
 
