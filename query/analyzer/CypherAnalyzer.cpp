@@ -21,6 +21,7 @@
 #include "decl/DeclContext.h"
 #include "expr/Expr.h"
 #include "stmt/ShortestPathStmt.h"
+#include "spdlog/spdlog.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/OrderBy.h"
@@ -189,14 +190,16 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
         const bool isBinary = item->getKind() == Expr::Kind::BINARY;
         if (isBinary) {
-            throw AnalyzeException(
-                "Binary expressions in RETURN clauses are not yet supported.");
+            spdlog::info("Detect binary");
+            // throw AnalyzeException(
+                // "Binary expressions in RETURN clauses are not yet supported.");
         }
 
         const bool isUnary = item->getKind() == Expr::Kind::UNARY;
         if (isUnary) {
-            throw AnalyzeException(
-                "Unary expressions in RETURN clauses are not yet supported.");
+            spdlog::info("Detect unary");
+            // throw AnalyzeException(
+                // "Unary expressions in RETURN clauses are not yet supported.");
         }
     }
 

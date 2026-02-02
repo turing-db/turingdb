@@ -6,6 +6,7 @@
 #include "QualifiedName.h"
 #include "Symbol.h"
 #include "decl/DeclContext.h"
+#include "expr/BinaryExpr.h"
 #include "expr/Expr.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "ExprDependencies.h"
@@ -362,6 +363,10 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
 
             } else if (dynamic_cast<const SymbolExpr*>(dep._expr)) {
                 // Symbol value should already be in a column in a block, no need to change anything
+            } else if ([[maybe_unused]]auto* binExpr = dynamic_cast<BinaryExpr*>(dep._expr)) {
+                throwError("Binary expressions in return clauses are not yet supported.");
+            } else if ([[maybe_unused]]auto* unExpr = dynamic_cast<UnaryExpr*>(dep._expr)) {
+                throwError("Unary expressions in return clauses are not yet supported.");
             } else {
                 throwError("Expression dependency could not be handled in the predicate evaluation");
             }
