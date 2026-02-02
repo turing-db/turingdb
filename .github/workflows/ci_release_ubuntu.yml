@@ -11,18 +11,12 @@ on:
 jobs:
   build-release:
     name: Build Release Wheels
-    runs-on: ubuntu-latest
-    container:
-      image: quay.io/pypa/manylinux_2_28_x86_64
+    runs-on: ubuntu-latest-m
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
 
     steps:
-    - name: Install git (for checkout with submodules)
-      run: |
-        dnf install -y git git-lfs
-
     - uses: actions/checkout@v4
       with:
         submodules: recursive
@@ -30,66 +24,40 @@ jobs:
         lfs: true
         fetch-depth: 0
 
-    - name: Configure git safe directory
-      run: |
-        git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-    - name: Setup Python path
-      run: |
-        # Convert Python version (e.g., "3.10") to path format (e.g., "cp310-cp310")
-        PYTHON_VERSION_NODOT=$(echo '${{ matrix.python-version }}' | tr -d '.')
-        PYTHON_PATH="/opt/python/cp${PYTHON_VERSION_NODOT}-cp${PYTHON_VERSION_NODOT}/bin"
-        echo "$PYTHON_PATH" >> $GITHUB_PATH
-        echo "PYTHON_PATH=$PYTHON_PATH" >> $GITHUB_ENV
-
     - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+      uses: astral-sh/setup-uv@v3
 
-    - name: Install system dependencies
-      run: |
-        # manylinux_2_28 uses AlmaLinux 8 (RHEL 8 compatible)
-        dnf install -y \
-          curl libcurl-devel \
-          zlib-devel \
-          openssl-devel \
-          flex \
-          openblas-devel \
-          patchelf \
-          cmake make gcc gcc-c++ \
-          m4 texinfo
-
-        # Install newer bison (3.8+) from source - AlmaLinux 8's bison 3.0.4
-        # doesn't support --warning=counterexamples needed by the project
-        curl -L https://ftp.gnu.org/gnu/bison/bison-3.8.2.tar.xz | tar xJ
-        cd bison-3.8.2
-        ./configure --prefix=/usr/local
-        make -j$(nproc)
-        make install
-        cd ..
-        rm -rf bison-3.8.2
-        # Ensure the new bison is found first
-        echo "/usr/local/bin" >> $GITHUB_PATH
+    - name: Setup Python
+      run: uv python install ${{ matrix.python-version }}
 
     - name: Cache dependencies
       id: cache-dependencies
       uses: actions/cache@v4
       with:
         path: external/dependencies
-        key: manylinux_2_28-dependencies-${{ hashFiles('dependencies.sh', '.gitmodules') }}
+        key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies.sh', '.gitmodules') }}
 
-    - name: Install project dependencies
+    - name: Install dependencies
       if: steps.cache-dependencies.outputs.cache-hit != 'true'
       run: ./dependencies.sh
+
+    - name: Install system packages
+      if: steps.cache-dependencies.outputs.cache-hit == 'true'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -qqy curl libcurl4-openssl-dev zlib1g-dev libssl-dev
+        sudo apt-get install -qqy bison flex libfl-dev
+        sudo apt-get install -qqy libopenblas-dev
+
+    - name: Install patchelf
+      run: sudo apt-get install -y patchelf
 
     - name: Build wheel
       run: |
         # Convert Python version (e.g., "3.10") to tag format (e.g., "cp310")
         export PYTHON_TAG="cp$(echo '${{ matrix.python-version }}' | tr -d '.')"
-        source $GITHUB_WORKSPACE/setup.sh
-        $PYTHON_PATH/python -m pip install build setuptools wheel setuptools-scm
-        $PYTHON_PATH/python -m build --wheel
+        source ${{ github.workspace }}/setup.sh
+        uv build --wheel --python ${{ matrix.python-version }}
 
     - name: Prepare SimpleDB
       run: |
@@ -106,9 +74,9 @@ jobs:
     - name: Repair wheel with auditwheel
       run: |
         mkdir -p wheelhouse
-        $PYTHON_PATH/python -m pip install auditwheel
-        # Use manylinux_2_28 for broad compatibility (glibc 2.28+)
-        auditwheel repair dist/*.whl -w wheelhouse --plat manylinux_2_28_x86_64
+        # Force manylinux_2_28 tag for broader compatibility (glibc 2.28+)
+        # instead of letting auditwheel detect the host's glibc version
+        uvx auditwheel repair dist/*.whl -w wheelhouse --plat manylinux_2_28_x86_64
 
     - name: Verify wheel platform tags
       run: |
@@ -119,13 +87,18 @@ jobs:
             echo "Packages with native binaries must have platform-specific tags"
             exit 1
           fi
+          # Verify it has manylinux_2_28 tag
+          if [[ "$wheel" != *"manylinux_2_28"* ]]; then
+            echo "ERROR: Wheel does not have manylinux_2_28 tag: $wheel"
+            exit 1
+          fi
           echo "OK: $wheel"
         done
 
     - name: Run regress
       run: |
         cd build
-        source $GITHUB_WORKSPACE/setup.sh
+        source ${{ github.workspace }}/setup.sh
         make run_regress
 
     - name: Upload wheel artifact
