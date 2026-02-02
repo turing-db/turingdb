@@ -128,7 +128,7 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
 }
 
 Column* ExprProgramGenerator::registerPropertyConstraint(const Expr* expr) {
-    Column* resCol =  generateExpr(expr);
+    Column* resCol = generateExpr(expr);
     return resCol;
 }
 
