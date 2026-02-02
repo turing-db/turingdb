@@ -18,7 +18,7 @@ namespace db {
                       && !ExcludedContainers::template contains<RHS>()) {                \
             dispatchInternal<LHS, RHS>(lhs, rhs, fn);                                    \
         } else {                                                                         \
-            throw FatalException("Unsupported operation");                               \
+            unsupported(lhs, rhs, fn);                                                   \
         }                                                                                \
     } break;
 
@@ -27,7 +27,7 @@ namespace db {
         if constexpr (!ExcludedContainers::template contains<Operand>()) { \
             dispatchInternal<Operand>(operand, fn);                        \
         } else {                                                           \
-            throw FatalException("Unsupported operation");                 \
+            unsupported(operand, fn);                                      \
         }                                                                  \
     } break;
 
@@ -38,8 +38,9 @@ class ColumnSingleDispatcher {
 
     using Fn = void (*)(const Column*, Functor&);
 
-    static void unsupported(const Column*, Functor&) {
-        throw FatalException("Unsupported operation");
+    static void unsupported(const Column* c, Functor&) {
+        throw FatalException(fmt::format(
+            "Unsupported unary operation on column of type {}", c->getKind()));
     }
 
 public:
@@ -108,8 +109,10 @@ template <KindPairListExact AllowedPairs, class AllowedMixed, class Functor, cla
 class ColumnDoubleDispatcher {
     using Fn = void (*)(const Column*, const Column*, Functor&);
 
-    static void unsupported(const Column*, const Column*, Functor&) {
-        throw FatalException("Unsupported operation");
+    static void unsupported(const Column* c1, const Column* c2, Functor&) {
+        throw FatalException(
+            fmt::format("Unsupported binary operation of columns of kinds {} and {}.",
+                        c1->getKind(), c2->getKind()));
     }
 
 public:
