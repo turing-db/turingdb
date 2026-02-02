@@ -1058,6 +1058,8 @@ PipelineOutputInterface* PipelineGenerator::translateExprEvalNode(ExprEvalNode* 
         _declToColumn[var] = resultNCol->getTag();
     }
 
+    _builder.addExprEval(prog);
+
     return _builder.getPendingOutputInterface();
 }
 
