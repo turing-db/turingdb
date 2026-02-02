@@ -685,8 +685,6 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
     const Projection* projNode = node->getProjection();
 
-    ExprProgram* exprProg = ExprProgram::create(_pipeline);
-    ExprProgramGenerator progGen(this, exprProg, _builder.getPendingOutput());
     // No projection can happen in the case of a Standalone call
     // in which case, we can simply output the whole dataframe
     if (projNode) {
@@ -762,14 +760,6 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
                 items.push_back({tag, *name});
             }
-
-            const Expr::Kind itemKind = item->getKind();
-            // FIXME: Other kinds need evaluation?
-            const bool needsEvaluation = itemKind == Expr::Kind::BINARY || itemKind == Expr::Kind::UNARY;
-            if (needsEvaluation) {
-                progGen.generateExpr(item);
-            }
-            // XXX: Need to insert a processor here
 
             const auto findColIt = _declToColumn.find(decl);
             if (findColIt == _declToColumn.end()) {

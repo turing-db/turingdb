@@ -242,9 +242,8 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
         const bool isUnary = item->getKind() == Expr::Kind::UNARY;
         if (isUnary) {
-            spdlog::info("Detect unary");
-            // throw AnalyzeException(
-                // "Unary expressions in RETURN clauses are not yet supported.");
+            throw AnalyzeException(
+                "Unary expressions in RETURN clauses are not yet supported.");
         }
     }
 
