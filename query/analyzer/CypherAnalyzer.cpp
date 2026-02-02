@@ -25,6 +25,7 @@
 #include "decl/VarDecl.h"
 #include "expr/SymbolExpr.h"
 #include "spdlog/spdlog.h"
+#include "spdlog/spdlog.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/OrderBy.h"
