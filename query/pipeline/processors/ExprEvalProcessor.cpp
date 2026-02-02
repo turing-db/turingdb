@@ -1,9 +1,11 @@
 #include "ExprEvalProcessor.h"
 
+#include <iostream>
 #include <spdlog/fmt/fmt.h>
 
 #include "PipelineV2.h"
 #include "ExprProgram.h"
+#include "dataframe/Dataframe.h"
 
 using namespace db;
 
@@ -17,7 +19,7 @@ std::string ExprEvalProcessor::describe() const {
 }
 
 ExprEvalProcessor* ExprEvalProcessor::create(PipelineV2* pipeline,
-                                                   ExprProgram* exprProg) {
+                                             ExprProgram* exprProg) {
     ExprEvalProcessor* proc = new ExprEvalProcessor(exprProg);
 
     {
@@ -50,6 +52,8 @@ void ExprEvalProcessor::execute() {
     _output.getPort()->writeData();
 
     _exprProg->evaluateInstructions();
+
+    _output.getDataframe()->dump(std::cout);
 
     finish();
 }
