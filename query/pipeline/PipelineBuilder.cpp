@@ -6,7 +6,6 @@
 #include "processors/DatabaseProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
 #include "processors/HashJoinProcessor.h"
-#include "processors/ExprProgram.h"
 #include "processors/ScanNodesProcessor.h"
 #include "processors/ScanNodesByLabelProcessor.h"
 #include "processors/GetInEdgesProcessor.h"
@@ -35,6 +34,7 @@
 #include "processors/S3PullProcessor.h"
 #include "processors/S3PushProcessor.h"
 #include "processors/ExprEvalProcessor.h"
+#include "processors/ExprProgram.h"
 #include "processors/FilterProcessor.h"
 #include "processors/ShortestPathProcessor.h"
 
@@ -508,6 +508,18 @@ PipelineValuesOutputInterface& PipelineBuilder::addExprEval(ExprProgram* exprPro
 
     _pendingOutput.connectTo(compExpr->input());
     input.propagateColumns(output);
+
+    Dataframe* outputDf = output.getDataframe();
+
+    // ExprPrograms store their instructions in plain Column*s, i.e. no association with
+    // any Dataframe nor NamedColumn. Register each resultant instruction in the output
+    // dataframe as a NamedColumn.
+    // FIXME: Sync up expected tags with current tags: do not allocate new tag.
+    for (const ExprProgram::Instruction& instruction : exprProg->instrs()) {
+        const ColumnTag newTag = _dfMan->allocTag();
+        NamedColumn* resultNamedColumn = NamedColumn::create(_dfMan, instruction._res, newTag);
+        outputDf->addColumn(resultNamedColumn);
+    }
 
     _pendingOutput.updateInterface(&output);
 
