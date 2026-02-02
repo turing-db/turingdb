@@ -3,7 +3,7 @@
 #include "Processor.h"
 
 #include "interfaces/PipelineBlockInputInterface.h"
-#include "interfaces/PipelineValuesOutputInterface.h"
+#include "interfaces/PipelineBlockOutputInterface.h"
 
 namespace db {
 
@@ -22,11 +22,11 @@ public:
     void execute() final;
 
     PipelineBlockInputInterface& input() { return _input; }
-    PipelineValuesOutputInterface& output() { return _output; }
+    PipelineBlockOutputInterface& output() { return _output; }
 
 private:
     PipelineBlockInputInterface _input;
-    PipelineValuesOutputInterface _output;
+    PipelineBlockOutputInterface _output;
     ExprProgram* _exprProg {nullptr};
 
     ExprEvalProcessor(ExprProgram* exprProg);
