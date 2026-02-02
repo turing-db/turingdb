@@ -632,13 +632,13 @@ TEST_F(HashJoinProcessorTest, millionRowJoinCase) {
 
     /*
      * Generate Dataframe looking like:
-     * 1001   2001   1
-     * 1002   2002   2
-     * 1003   2003   3
-     * 1004   2004   4
-     * 1005   2005   5
-     * ....   ....  ...
-     * 2000   3000 1000
+     * 1000001   2000001   1
+     * 1000002   2000002   2
+     * 1000003   2000003   3
+     * 1000004   2000004   4
+     * 1000005   2000005   5
+     * ....      ....     ...
+     * 2000000   3000000   1000000
      */
 
     const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
@@ -668,13 +668,13 @@ TEST_F(HashJoinProcessorTest, millionRowJoinCase) {
 
     /*
      * Generate Dataframe looking like:
-     * 3001   4001   1
-     * 3002   4002   2
-     * 3003   4003   3
-     * 3004   4004   4
-     * 3005   4005   5
-     * ....   ....  ...
-     * 4000   5000 1000
+     * 3000001   4000001   1
+     * 3000002   4000002   2
+     * 3000003   4000003   3
+     * 3000004   4000004   4
+     * 3000005   4000005   5
+     * ....      ....     ...
+     * 4000000   5000000   1000000
      */
 
     const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
@@ -688,8 +688,7 @@ TEST_F(HashJoinProcessorTest, millionRowJoinCase) {
             ASSERT_TRUE(col != nullptr);
             ASSERT_TRUE(col->empty());
             col->resize(RHS_NUM_ROWS);
-
-            std::iota(col->begin(), col->end(), (colPtr + LHS_NUM_COLS) * (1000000) + 1);
+            std::iota(col->begin(), col->end(), (colPtr + LHS_NUM_COLS) * 1000000 + 1);
         }
 
         // Allocate The Join Column

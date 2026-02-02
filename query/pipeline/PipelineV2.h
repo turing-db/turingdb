@@ -21,7 +21,7 @@ public:
     friend ExprProgram;
     friend PredicateProgram;
     using Processors = std::vector<Processor*>;
-    using SourcesSet = std::unordered_set<Processor*>;
+    using SourcesSet = std::vector<Processor*>;
     using Buffers = std::vector<PipelineBuffer*>;
     using Ports = std::vector<PipelinePort*>;
     using ExprPrograms = std::vector<ExprProgram*>;

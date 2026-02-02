@@ -107,6 +107,8 @@ void HashJoinProcessor::execute() {
 
     Dataframe* outDf = _output.getDataframe();
 
+    // Restart reading from a row store if we had paused due to filling
+    // out a chunk in the previous cycle.
     if (_rowOffsetState.hasRowOffsets()) {
         // resize the output columns to fit the new rows we are inserting
         const size_t rowOffsetsRemaining = _rowOffsetState.numRemainingOffsets();
@@ -138,6 +140,9 @@ void HashJoinProcessor::execute() {
             return;
         }
 
+        // The case where we have don't have any rows left to copy from the rows store
+        // and there is no space left in the output data frame (the entire generated output
+        // fits perfectly into 1 chunk).
         if (rowsRemaining == 0) {
             // If there are no rows remaining in our output chunk we can write the output
             _output.getPort()->writeData();
@@ -159,6 +164,9 @@ void HashJoinProcessor::execute() {
         }
 
         if (totalSizeIncrease) {
+            // The output size of the df will be the number of rows we have already
+            // added so far in the execution + the calculated total size increase we
+            // have just calculated.
             const size_t newOutputSize = std::min(_ctxt->getChunkSize(),
                                                   totalRowsInserted + totalSizeIncrease);
             for (const auto* namedCol : outDf->cols()) {
@@ -235,13 +243,21 @@ void HashJoinProcessor::execute() {
         _hasWritten = true;
     }
 
+    // This covers the case when we have empty inputs to a processor. Writing
+    // Data to the output port lets the pipeline cycle continue.
     if (_leftInput.getPort()->isClosed() && _rightInput.getPort()->isClosed()) {
         if (!_hasWritten) {
             _output.getPort()->writeData();
         }
     }
 
-    finish();
+    //Only mark as finished if we have consumed all the inputs and do not have any
+    //rows left to copy.
+    if(!_rowOffsetState.hasRowOffsets() &&
+        !_leftInput.getPort()->hasData() &&
+        !_rightInput.getPort()->hasData()) {
+        finish();
+    }
 }
 
 void HashJoinProcessor::processLeftStream(size_t& rowsRemaining,

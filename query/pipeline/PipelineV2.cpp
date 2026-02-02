@@ -29,7 +29,7 @@ PipelineV2::~PipelineV2() {
 void PipelineV2::addProcessor(Processor* processor) {
     _processors.push_back(processor);
     if (processor->isSource()) {
-        _sources.insert(processor);
+        _sources.push_back(processor);
     }
 }
 
