@@ -1102,13 +1102,23 @@ PipelineOutputInterface* PipelineGenerator::translateExprEvalNode(ExprEvalNode* 
     ExprProgramGenerator progGen =
         ExprProgramGenerator(this, prog, _builder.getPendingOutput());
 
+    // Add the evaluating processor to the pipeline. It takes a pointer to the above
+    // @ref ExprProg (@ref prog), and the below loop over expressions modifies @ref prog
+    // via that same pointer, in place.
     _builder.addExprEval(prog);
 
     for (const Expr* expr : exprs) {
         const VarDecl* var = expr->getExprVarDecl();
         bioassert(var, "Expression to evaluate had null variable declaration.");
+
+        // Tree walk the expression to allocate result columns as raw Column*s
         Column* resultantColumn = progGen.generateExpr(expr);
+        // Create a @ref NamedColumn which wraps the result @ref Column* produced by the
+        // @ref ExprProgramGenerator, and add that wraped NamedCol to output of the newly
+        // added @ref ExprEvalProcessor.
         NamedColumn* resultNCol = _builder.addColumnToOutput(resultantColumn);
+
+        // Map back this variable to the new column for return projections, etc.
         _declToColumn[var] = resultNCol->getTag();
     }
 

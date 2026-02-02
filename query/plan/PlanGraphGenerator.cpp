@@ -310,7 +310,7 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
         if (itemKind == Expr::Kind::BINARY) {
             exprEval->addExpr(item);
         } else if (itemKind == Expr::Kind::UNARY) {
-            throwError("Unary expressions in return clauses are not yet supported.");
+            exprEval->addExpr(item);
         }
 
         ExprDependencies deps;
