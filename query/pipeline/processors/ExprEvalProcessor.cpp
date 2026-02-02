@@ -53,7 +53,5 @@ void ExprEvalProcessor::execute() {
 
     _exprProg->evaluateInstructions();
 
-    _output.getDataframe()->dump(std::cout);
-
     finish();
 }
