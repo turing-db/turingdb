@@ -1050,6 +1050,8 @@ PipelineOutputInterface* PipelineGenerator::translateExprEvalNode(ExprEvalNode* 
     ExprProgramGenerator progGen =
         ExprProgramGenerator(this, prog, _builder.getPendingOutput());
 
+    _builder.addExprEval(prog);
+
     for (const Expr* expr : exprs) {
         const VarDecl* var = expr->getExprVarDecl();
         bioassert(var, "Expression to evaluate had null variable declaration.");
@@ -1057,8 +1059,6 @@ PipelineOutputInterface* PipelineGenerator::translateExprEvalNode(ExprEvalNode* 
         NamedColumn* resultNCol = _builder.addColumnToOutput(resultantColumn);
         _declToColumn[var] = resultNCol->getTag();
     }
-
-    _builder.addExprEval(prog);
 
     return _builder.getPendingOutputInterface();
 }
