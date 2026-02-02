@@ -45,6 +45,7 @@
 #include "nodes/S3TransferNode.h"
 #include "nodes/ShowProceduresNode.h"
 #include "nodes/ShortestPathNode.h"
+#include "nodes/ExprEvalNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
@@ -293,6 +294,7 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
 
     FuncEvalNode* funcEval = _tree.create<FuncEvalNode>();
     AggregateEvalNode* aggregateEval = _tree.create<AggregateEvalNode>();
+    ExprEvalNode* exprEval = _tree.create<ExprEvalNode>();
 
     GetPropertyCache& getPropertyCache = _tree.getGetPropertyCache();
     GetEntityTypeCache& getEntityTypeCache = _tree.getGetEntityTypeCache();
@@ -304,6 +306,13 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
         }
 
         Expr* item = *exprPtr;
+        const Expr::Kind itemKind = item->getKind();
+        if (itemKind == Expr::Kind::BINARY) {
+            exprEval->addExpr(item);
+        } else if (itemKind == Expr::Kind::UNARY) {
+            throwError("Unary expressions in return clauses are not yet supported.");
+        }
+
         ExprDependencies deps;
         deps.genExprDependencies(*_variables, item);
 
@@ -369,10 +378,6 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
 
             } else if (dynamic_cast<const SymbolExpr*>(dep._expr)) {
                 // Symbol value should already be in a column in a block, no need to change anything
-            } else if ([[maybe_unused]]auto* binExpr = dynamic_cast<BinaryExpr*>(dep._expr)) {
-                throwError("Binary expressions in return clauses are not yet supported.");
-            } else if ([[maybe_unused]]auto* unExpr = dynamic_cast<UnaryExpr*>(dep._expr)) {
-                throwError("Unary expressions in return clauses are not yet supported.");
             } else {
                 throwError("Expression dependency could not be handled in the predicate evaluation");
             }
@@ -401,6 +406,11 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
 
             aggregateEval->addGroupByKey(item);
         }
+    }
+
+    if (!exprEval->getExprs().empty()) {
+        prevNode->connectOut(exprEval);
+        prevNode = exprEval;
     }
 
     if (!funcEval->getFuncs().empty()) {

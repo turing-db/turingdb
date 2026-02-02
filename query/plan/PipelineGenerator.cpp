@@ -24,6 +24,7 @@
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
+#include "nodes/ExprEvalNode.h"
 #include "procedures/ProcedureBlueprintMap.h"
 #include "processors/PredicateProgram.h"
 #include "processors/WriteProcessor.h"
@@ -306,7 +307,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         break;
 
         case PlanGraphOpcode::EXPR_EVAL:
-            throw FatalException("EvalExpressionsNode not yet implemented.");
+            return translateExprEvalNode(static_cast<ExprEvalNode*>(node));
         break;
 
         case PlanGraphOpcode::WRITE:
@@ -674,8 +675,6 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
     const Projection* projNode = node->getProjection();
 
-    ExprProgram* exprProg = ExprProgram::create(_pipeline);
-    ExprProgramGenerator progGen(this, exprProg, _builder.getPendingOutput());
     // No projection can happen in the case of a Standalone call
     // in which case, we can simply output the whole dataframe
     if (projNode) {
@@ -684,14 +683,6 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
             if (const auto* exprPtr = std::get_if<Expr*>(&item)) {
                 const Expr* item = *exprPtr;
                 const VarDecl* decl = item->getExprVarDecl();
-
-                const Expr::Kind itemKind = item->getKind();
-                // FIXME: Other kinds need evaluation?
-                const bool needsEvaluation = itemKind == Expr::Kind::BINARY || itemKind == Expr::Kind::UNARY;
-                if (needsEvaluation) {
-                    progGen.generateExpr(item);
-                }
-
 
                 if (!decl) {
                     throw PlannerException("Projection item does not have a variable declaration");
@@ -1039,6 +1030,14 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
             const VarDecl* decl = yieldDecls[i];
             _declToColumn[decl] = col->getTag();
         }
+    }
+
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateExprEvalNode(ExprEvalNode* node) {
+    if (!_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
     }
 
     return _builder.getPendingOutputInterface();
