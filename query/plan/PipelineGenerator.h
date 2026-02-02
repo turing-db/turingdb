@@ -9,12 +9,10 @@
 #include "views/GraphView.h"
 
 namespace db {
+
 class LocalMemory;
-}
-
-namespace db {
-
-class ProcedureManager;
+class SourceManager;
+class ProcedureBlueprintMap;
 class PlanGraph;
 class PipelineV2;
 class PlanGraphNode;
@@ -36,6 +34,7 @@ class LimitNode;
 class CartesianProductNode;
 class AggregateEvalNode;
 class ProcedureEvalNode;
+class ExprEvalNode;
 class WriteNode;
 class ScanNodesByLabelNode;
 class LoadGraphNode;
@@ -125,6 +124,7 @@ private:
     PipelineOutputInterface* translateCartesianProductNode(CartesianProductNode* node);
     PipelineOutputInterface* translateAggregateEvalNode(AggregateEvalNode* node);
     PipelineOutputInterface* translateProcedureEvalNode(ProcedureEvalNode* node);
+    PipelineOutputInterface* translateExprEvalNode(ExprEvalNode* node);
     PipelineOutputInterface* translateWriteNode(WriteNode* node);
     PipelineOutputInterface* translateScanNodesByLabelNode(ScanNodesByLabelNode* node);
     PipelineOutputInterface* translateLoadGraph(LoadGraphNode* node);
