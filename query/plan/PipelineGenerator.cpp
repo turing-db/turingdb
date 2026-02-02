@@ -305,6 +305,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateProcedureEvalNode(static_cast<ProcedureEvalNode*>(node));
         break;
 
+        case PlanGraphOpcode::EXPR_EVAL:
+            throw FatalException("EvalExpressionsNode not yet implemented.");
+        break;
+
         case PlanGraphOpcode::WRITE:
             return translateWriteNode(static_cast<WriteNode*>(node));
         break;
