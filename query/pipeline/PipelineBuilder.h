@@ -109,7 +109,7 @@ public:
     }
 
     // Expression evaluation
-    PipelineValuesOutputInterface& addComputeExpr(ExprProgram* exprProg);
+    PipelineValuesOutputInterface& addExprEval(ExprProgram* exprProg);
 
     // Filter
     PipelineBlockOutputInterface& addFilter(PredicateProgram* predProg);

@@ -46,7 +46,7 @@ set(processors_sources
     processors/S3PushProcessor.cpp
     processors/ShowProceduresProcessor.cpp
     processors/LambdaSourceProcessor.cpp
-    processors/ComputeExprProcessor.cpp
+    processors/ExprEvalProcessor.cpp
     processors/ExprProgram.cpp
     processors/PredicateProgram.cpp
     processors/FilterProcessor.cpp
