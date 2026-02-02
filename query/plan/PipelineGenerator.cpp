@@ -1028,6 +1028,24 @@ PipelineOutputInterface* PipelineGenerator::translateExprEvalNode(ExprEvalNode* 
         _builder.addMaterialize();
     }
 
+    const ExprEvalNode::Expressions& exprs = node->getExprs();
+
+    if (exprs.empty()) {
+        return _builder.getPendingOutputInterface();
+    }
+
+    ExprProgram* prog = ExprProgram::create(_pipeline);
+    ExprProgramGenerator progGen =
+        ExprProgramGenerator(this, prog, _builder.getPendingOutput());
+
+    for (const Expr* expr : exprs) {
+        const VarDecl* var = expr->getExprVarDecl();
+        bioassert(var, "Expression to evaluate had null variable declaration.");
+        Column* resultantColumn = progGen.generateExpr(expr);
+        NamedColumn* resultNCol = _builder.addColumnToOutput(resultantColumn);
+        _declToColumn[var] = resultNCol->getTag();
+    }
+
     return _builder.getPendingOutputInterface();
 }
 

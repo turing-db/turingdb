@@ -500,26 +500,14 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTr
     return output;
 }
 
-PipelineValuesOutputInterface& PipelineBuilder::addExprEval(ExprProgram* exprProg) {
-    ExprEvalProcessor* compExpr = ExprEvalProcessor::create(_pipeline, exprProg);
+PipelineBlockOutputInterface& PipelineBuilder::addExprEval(ExprProgram* exprProg) {
+    ExprEvalProcessor* proc = ExprEvalProcessor::create(_pipeline, exprProg);
 
-    PipelineBlockInputInterface& input = compExpr->input();
-    PipelineValuesOutputInterface& output = compExpr->output();
+    PipelineBlockInputInterface& input = proc->input();
+    PipelineBlockOutputInterface& output = proc->output();
 
-    _pendingOutput.connectTo(compExpr->input());
+    _pendingOutput.connectTo(proc->input());
     input.propagateColumns(output);
-
-    Dataframe* outputDf = output.getDataframe();
-
-    // ExprPrograms store their instructions in plain Column*s, i.e. no association with
-    // any Dataframe nor NamedColumn. Register each resultant instruction in the output
-    // dataframe as a NamedColumn.
-    // FIXME: Sync up expected tags with current tags: do not allocate new tag.
-    for (const ExprProgram::Instruction& instruction : exprProg->instrs()) {
-        const ColumnTag newTag = _dfMan->allocTag();
-        NamedColumn* resultNamedColumn = NamedColumn::create(_dfMan, instruction._res, newTag);
-        outputDf->addColumn(resultNamedColumn);
-    }
 
     _pendingOutput.updateInterface(&output);
 
