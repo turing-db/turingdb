@@ -35,6 +35,8 @@
 #include "processors/S3PushProcessor.h"
 #include "processors/ExprEvalProcessor.h"
 #include "processors/ExprProgram.h"
+#include "processors/ComputeExprProcessor.h"
+#include "processors/ExprEvalProcessor.h"
 #include "processors/FilterProcessor.h"
 #include "processors/ShortestPathProcessor.h"
 
