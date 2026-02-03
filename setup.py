@@ -106,6 +106,7 @@ setup(
     package_dir={"": "python"},
     include_package_data=True,
     package_data={"turingdb": ["bin/*"]},
+    has_ext_modules=lambda: True,
     cmdclass={
         "egg_info": BuildDirEggInfo,
         "develop": CMakeDevelop,
