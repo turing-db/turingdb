@@ -101,17 +101,24 @@ else()
     endif()
 endif()
 
-# C++ flags
-set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
+# C++ flags (append to preserve any flags passed via CMAKE_ARGS)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
-# When using LLVM clang from Homebrew on macOS, add libc++ library path for linker
+# When using LLVM clang on macOS, add libc++ library path for linker
 if(APPLE)
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
     get_filename_component(LLVM_ROOT ${COMPILER_DIR} DIRECTORY)
+    # Homebrew LLVM uses lib/c++, official LLVM releases use lib directly
     if(EXISTS "${LLVM_ROOT}/lib/c++")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${LLVM_ROOT}/lib/c++ -Wl,-rpath,${LLVM_ROOT}/lib/c++")
         set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${LLVM_ROOT}/lib/c++ -Wl,-rpath,${LLVM_ROOT}/lib/c++")
         message(STATUS "Using LLVM libc++ from: ${LLVM_ROOT}/lib/c++")
+    elseif(EXISTS "${LLVM_ROOT}/lib/libc++.dylib")
+        # Official LLVM release - add lib path for runtime library resolution
+        # Don't explicitly link libc++ to avoid ABI conflicts with system libraries
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${LLVM_ROOT}/lib -Wl,-rpath,${LLVM_ROOT}/lib")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${LLVM_ROOT}/lib -Wl,-rpath,${LLVM_ROOT}/lib")
+        message(STATUS "Using LLVM libc++ from: ${LLVM_ROOT}/lib")
     endif()
 endif()
 
