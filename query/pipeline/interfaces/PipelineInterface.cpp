@@ -14,6 +14,7 @@
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
 
+#include "BioAssert.h"
 #include "PipelineException.h"
 
 using namespace db;
@@ -40,6 +41,7 @@ void PipelineOutputInterface::rename(std::string_view name) {
 
 void PipelineInputInterface::propagateColumns(PipelineOutputInterface& output) const {
     const Dataframe* inDf = getDataframe();
+    bioassert(inDf, "Attempted to propagate columns from a null input.");
     Dataframe* outDf = output.getDataframe();
 
     for (const auto& col : inDf->cols()) {
