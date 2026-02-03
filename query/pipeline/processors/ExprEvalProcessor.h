@@ -1,9 +1,13 @@
 #pragma once
 
+#include <optional>
+
 #include "Processor.h"
 
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
+
+#include "FatalException.h"
 
 namespace db {
 
@@ -13,7 +17,8 @@ class ExprProgram;
 class ExprEvalProcessor final : public Processor {
 public:
     static ExprEvalProcessor* create(PipelineV2* pipeline,
-                                        ExprProgram* exprProg);
+                                     ExprProgram* exprProg,
+                                     bool hasInput = false);
 
     std::string describe() const final;
 
@@ -21,11 +26,18 @@ public:
     void reset() final;
     void execute() final;
 
-    PipelineBlockInputInterface& input() { return _input; }
+    PipelineBlockInputInterface& input() {
+        if (!_input) {
+            throw FatalException("Attempted to get null input of ExprEvalProcessor.");
+        }
+        return *_input;
+    }
+
     PipelineBlockOutputInterface& output() { return _output; }
 
 private:
-    PipelineBlockInputInterface _input;
+    /// May not have input in case of standalone return, e.g. `RETURN 4 + 5`
+    std::optional<PipelineBlockInputInterface> _input;
     PipelineBlockOutputInterface _output;
     ExprProgram* _exprProg {nullptr};
 

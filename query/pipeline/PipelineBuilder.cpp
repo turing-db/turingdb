@@ -526,13 +526,16 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTr
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addExprEval(ExprProgram* exprProg) {
-    ExprEvalProcessor* proc = ExprEvalProcessor::create(_pipeline, exprProg);
+    const bool hasInput = _pendingOutput.getInterface();
+    ExprEvalProcessor* proc = ExprEvalProcessor::create(_pipeline, exprProg, hasInput);
 
-    PipelineBlockInputInterface& input = proc->input();
     PipelineBlockOutputInterface& output = proc->output();
 
-    _pendingOutput.connectTo(proc->input());
-    input.propagateColumns(output);
+    if (hasInput) {
+        PipelineBlockInputInterface& input = proc->input();
+        _pendingOutput.connectTo(proc->input());
+        input.propagateColumns(output);
+    }
 
     _pendingOutput.updateInterface(&output);
 
