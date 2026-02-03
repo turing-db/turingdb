@@ -175,7 +175,7 @@ if(APPLE)
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
     if(NOT HOMEBREW_FLEX_PREFIX)
-        message(FATAL_ERROR "Homebrew Flex prefix not found. Please install Flex using Homebrew.")
+        message(STATUS "Homebrew Flex prefix not found. Please install Flex using Homebrew.")
     endif()
 
     set(FLEX_INCLUDE_DIRS "${HOMEBREW_FLEX_PREFIX}/include")
@@ -187,7 +187,7 @@ endif()
 if(APPLE)
     find_program(BREW_EXECUTABLE brew)
     if(NOT BREW_EXECUTABLE)
-        message(FATAL_ERROR "Homebrew not found")
+        message(STATUS "Homebrew not found")
     endif()
 
     execute_process(
@@ -196,7 +196,7 @@ if(APPLE)
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
     if(NOT HOMEBREW_BISON_PREFIX)
-        message(FATAL_ERROR "Homebrew Bison prefix not found. Please install Bison using Homebrew.")
+        message(STATUS "Homebrew Bison prefix not found. Please install Bison using Homebrew.")
     endif()
 
     set(BISON_INCLUDE_DIRS "${HOMEBREW_BISON_PREFIX}/include")
