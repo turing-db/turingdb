@@ -134,11 +134,11 @@ Instead of exposing N separate columns to the pipeline (one per CSV field), the 
 
 ### Decision 5: Chunked Processing
 
-CSV files are processed in chunks of 100,000 rows to bound memory usage.
+CSV files are processed in chunks using the standard `ChunkConfig::CHUNK_SIZE` to bound memory usage.
 
 **Rationale**:
 - 100GB files cannot be fully materialized in memory
-- Chunk size balances memory usage vs. overhead
+- Uses the same chunk size as other processors for consistency
 - Aligns with TuringDB's existing batch processing model (WriteProcessor collects creates)
 
 ### Decision 6: Skip Malformed Lines
@@ -565,14 +565,11 @@ class LocalMemory;
 
 class CSVSourceProcessor : public Processor {
 public:
-    static constexpr size_t DEFAULT_CHUNK_SIZE = 100'000;
-
     // Factory method - all processors are created via PipelineV2
     static CSVSourceProcessor* create(PipelineV2* pipeline,
                                        const fs::Path& path,
                                        bool hasHeaders,
-                                       ColumnTag outputTag,
-                                       size_t chunkSize = DEFAULT_CHUNK_SIZE);
+                                       ColumnTag outputTag);
 
     // Processor interface
     std::string describe() const override;
@@ -591,7 +588,6 @@ private:
     fs::Path _path;
     bool _hasHeaders;
     ColumnTag _outputTag;          // Tag for the ColumnStringTable output
-    size_t _chunkSize;
 
     LocalMemory* _memory {nullptr};       // From ExecutionContext
     CSVParser* _parser {nullptr};         // Owned, created in prepare()
@@ -600,8 +596,7 @@ private:
 
     CSVSourceProcessor(const fs::Path& path,
                        bool hasHeaders,
-                       ColumnTag outputTag,
-                       size_t chunkSize);
+                       ColumnTag outputTag);
     ~CSVSourceProcessor() override;
 };
 
@@ -643,7 +638,7 @@ Strings parsed from CSV are **copied** into `ColumnString` storage, not referenc
 
 The copy overhead is acceptable because:
 - String data is typically small relative to the file size
-- Memory is bounded by chunk size (100K rows)
+- Memory is bounded by `ChunkConfig::CHUNK_SIZE`
 - Columnar string storage uses efficient arena allocation via `LocalMemory`
 
 ### Analyzer Changes
@@ -727,8 +722,7 @@ void PipelineGenerator::generate(const LoadCSVStmt* stmt) {
         _pipeline,
         stmt->getFilePath(),
         stmt->hasHeaders(),
-        csvTag,
-        CSVSourceProcessor::DEFAULT_CHUNK_SIZE
+        csvTag
     );
 
     // 3. Register the alias variable with its ColumnTag in PipelineBuilder
