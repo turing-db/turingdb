@@ -11,13 +11,13 @@ on:
 jobs:
   build-release:
     name: Build Release Wheels
-    runs-on: macos-latest
+    runs-on: macos-14
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
 
     env:
-      MACOSX_DEPLOYMENT_TARGET: "11.0"
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
 
     steps:
     - uses: actions/checkout@v4
@@ -91,7 +91,7 @@ jobs:
 
           # Rename wheel with proper macOS platform tag
           # delocate doesn't rename wheels, so we need to do it manually
-          NEW_WHEEL=$(echo "$wheel" | sed "s/-none-any\.whl/-${PYTHON_TAG}-macosx_11_0_arm64.whl/")
+          NEW_WHEEL=$(echo "$wheel" | sed "s/-none-any\.whl/-${PYTHON_TAG}-macosx_14_0_arm64.whl/")
 
           if [ "$wheel" != "$NEW_WHEEL" ]; then
             # Unpack, update WHEEL metadata, and repack
@@ -101,14 +101,14 @@ jobs:
             # Update the WHEEL file with correct tags
             WHEEL_FILE=$(find "$TMPDIR" -name "WHEEL" -path "*dist-info*")
             if [ -f "$WHEEL_FILE" ]; then
-              sed -i '' "s/Tag: ${PYTHON_TAG}-none-any/Tag: ${PYTHON_TAG}-${PYTHON_TAG}-macosx_11_0_arm64/" "$WHEEL_FILE"
+              sed -i '' "s/Tag: ${PYTHON_TAG}-none-any/Tag: ${PYTHON_TAG}-${PYTHON_TAG}-macosx_14_0_arm64/" "$WHEEL_FILE"
             fi
 
             # Update RECORD file (remove old hashes, wheel will regenerate on install)
             RECORD_FILE=$(find "$TMPDIR" -name "RECORD" -path "*dist-info*")
             if [ -f "$RECORD_FILE" ]; then
               # Update WHEEL entry in RECORD
-              sed -i '' "s/Tag: ${PYTHON_TAG}-none-any/Tag: ${PYTHON_TAG}-${PYTHON_TAG}-macosx_11_0_arm64/" "$RECORD_FILE" 2>/dev/null || true
+              sed -i '' "s/Tag: ${PYTHON_TAG}-none-any/Tag: ${PYTHON_TAG}-${PYTHON_TAG}-macosx_14_0_arm64/" "$RECORD_FILE" 2>/dev/null || true
             fi
 
             # Repack with correct filename
