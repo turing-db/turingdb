@@ -102,7 +102,7 @@ void CypherAnalyzer::analyze() {
             break;
 
             default:
-                 throwError("Unsupported query type", query);
+                throwError("Unsupported query type", query);
             break;
         }
     }
@@ -193,12 +193,18 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         const DeclContext* ctxt = _currentQuery->getDeclContext();
         bioassert(ctxt, "Query context is invalid");
 
+        // Iterate the decls in reverse declaration order. Since we call `pushFrontDecl()`
+        // The decls end up in order. e.g. MATCH (a), (b), (c) RETURN *, a.name
+        // - Initial projection items: ['a.name'];
+        // - After first `pushFrontDecl()`: ['c', 'a.name'];
+        // - After second `pushFrontDecl()`: ['b', 'c', 'a.name'];
+        // - After third `pushFrontDecl()`: ['a', 'b', 'c', 'a.name'];
         for (VarDecl* decl : std::views::reverse(*ctxt)) {
             if (decl->isUnnamed()) {
                 continue;
             }
 
-            // Push at the front since only since '*' is only allowed the beginning of the return statement
+            // Push at the front since '*' is only allowed at the beginning of the return statement
             projection->pushFrontDecl(decl);
             projection->setName(decl, decl->getName());
         }
@@ -221,7 +227,12 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         } else {
             name = item->getName();
             if (name.empty()) {
-                item->setName(srcMan->getStringRepr(std::bit_cast<std::uintptr_t>(item)));
+                const std::string_view name = srcMan->getStringRepr(std::bit_cast<std::uintptr_t>(item));
+                if (name.empty()) [[unlikely]] {
+                    throwError("Failed to generate name for projection item", item);
+                }
+
+                item->setName(name);
             }
 
             name = item->getName();
