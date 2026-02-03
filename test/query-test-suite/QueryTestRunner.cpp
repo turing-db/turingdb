@@ -9,6 +9,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "File.h"
+#include "ID.h"
 #include "TuringDB.h"
 #include "TuringTestEnv.h"
 #include "SystemManager.h"
@@ -16,6 +17,8 @@
 #include "CompilerException.h"
 #include "PlanGraphDebug.h"
 #include "Graph.h"
+#include "columns/AllowedKinds.h"
+#include "columns/ColumnOperatorDispatcher.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "procedures/ProcedureBlueprintMap.h"
@@ -73,37 +76,46 @@ void trimTrailingEmptyLines(std::string& trimmed, std::vector<std::string>& line
     trimmed = out.str();
 }
 
-std::string valueToString(const std::string& value) {
+[[maybe_unused]] std::string valueToString(const std::string& value) {
     return value;
 }
 
-std::string valueToString(const std::string_view& value) {
+[[maybe_unused]] std::string valueToString(const std::string_view& value) {
     return std::string(value);
 }
 
-std::string valueToString(const db::ValueType& value) {
+[[maybe_unused]] std::string valueToString(const db::ValueType& value) {
     return std::string(db::ValueTypeName::value(value));
 }
 
-std::string valueToString(const db::CustomBool& value) {
+template <IntegralType T, int tag>
+[[maybe_unused]] std::string valueToString(const db::ID<T, tag> value) {
+    return std::to_string(value.getValue());
+}
+
+[[maybe_unused]] std::string valueToString(const ChangeID value) {
+    return std::to_string(value.get());
+}
+
+[[maybe_unused]] std::string valueToString(const db::CustomBool& value) {
     return value ? "true" : "false";
 }
 
-std::string valueToString(const db::CommitBuilder* value) {
+[[maybe_unused]] std::string valueToString(const db::CommitBuilder* value) {
     return value ? "commit_builder_ptr" : "null";
 }
 
-std::string valueToString(const db::Change* value) {
+[[maybe_unused]] std::string valueToString(const db::Change* value) {
     return value ? "change_ptr" : "null";
 }
 
 template <typename T>
-std::string valueToString(const T& value) {
+[[maybe_unused]] std::string valueToString(const T& value) {
     return fmt::format("{}", value);
 }
 
 template <typename T>
-std::string valueToString(const std::optional<T>& value) {
+[[maybe_unused]] std::string valueToString(const std::optional<T>& value) {
     if (!value.has_value()) {
         return "null";
     }
@@ -111,13 +123,30 @@ std::string valueToString(const std::optional<T>& value) {
     return valueToString(*value);
 }
 
+struct Stringify {
+    std::string& string;
+    size_t row;
+
+    template <typename T>
+    void operator()(const ColumnVector<T>* typed) {
+        const T& value = typed->at(row);
+        string = valueToString(value);
+    }
+
+    template <typename T>
+    void operator()(const ColumnConst<T>* typed) {
+        bioassert(row == 0, "Attempted to output row {} of ColumnConst.", row);
+        const T& value = typed->getRaw();
+        string = valueToString(value);
+    }
+};
+
 std::string columnValueToString(const db::Column* column, size_t row) {
-    return db::dispatchColumnVector(column, [&](const auto* typed) {
-        using ColumnType = std::decay_t<decltype(*typed)>;
-        using ValueType = typename ColumnType::ValueType;
-        const ValueType& value = (*typed)[row];
-        return valueToString(value);
-    });
+    std::string string;
+    Stringify stringify(string, row);
+    using Types = OutputtedTypes;
+    ColumnSingleDispatcher<Types::Allowed, Stringify, Types::Excluded>::dispatch(column, stringify);
+    return string;
 }
 
 void escapeCsv(std::string& escaped, std::string_view value) {

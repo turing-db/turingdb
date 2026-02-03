@@ -4,10 +4,11 @@
 #include <optional>
 
 #include "ID.h"
-#include "columns/ColumnOperator.h"
+#include "versioning/ChangeID.h"
+#include "ColumnOperator.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
-#include "columns/ContainerKind.h"
+#include "ContainerKind.h"
 
 namespace db {
 
@@ -235,6 +236,38 @@ struct TypeRestrictions<OP_NOT> {
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
         ContainerKind::code<ColumnConst>()
+    >;
+};
+
+/// Types that are outputted by queries, used in @ref QueryTestRunner
+struct OutputtedTypes {
+    using Allowed = GenerateKindList<std::tuple<
+        types::Int64::Primitive,
+        types::Int64::Primitive,
+        types::UInt64::Primitive,
+        types::Double::Primitive,
+        types::String::Primitive,
+        types::Bool::Primitive,
+        std::optional<types::Int64::Primitive>,
+        std::optional<types::Int64::Primitive>,
+        std::optional<types::UInt64::Primitive>,
+        std::optional<types::Double::Primitive>,
+        std::optional<types::String::Primitive>,
+        std::optional<types::Bool::Primitive>,
+
+        NodeID,
+        EdgeID,
+        LabelID,
+        LabelSetID,
+        EdgeTypeID,
+        PropertyTypeID,
+        ChangeID,
+        size_t
+    >>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
     >;
 };
 
