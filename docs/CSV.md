@@ -117,7 +117,6 @@ Instead of exposing N separate columns to the pipeline (one per CSV field), the 
 
 **Structure**:
 - `ColumnStringTable`: Container holding N `ColumnString` columns (one per CSV field, already parsed/split)
-- `ColumnStringTableSlice`: Lightweight interval slice referencing one specific `ColumnString` within the table
 
 **Rationale**:
 - No need to read CSV twice (once for schema, once for data)
@@ -128,7 +127,7 @@ Instead of exposing N separate columns to the pipeline (one per CSV field), the 
 
 **Type mappings**:
 - `row` variable has type `StringTable` (analyzer) / `ColumnStringTable` (storage)
-- `row[i]` returns `StringTableSlice` (analyzer) / `ColumnStringTableSlice` (storage)
+- `row[i]` returns `String` (analyzer) / `ColumnString*` (storage)
 
 **Memory**: CSVSourceProcessor allocates the `ColumnStringTable` dynamically via `LocalMemory`.
 
@@ -263,7 +262,7 @@ NEW FILES:
 MODIFIED FILES:
 ├── query/parser/CypherParser.y          # Grammar additions
 ├── query/parser/CypherLexer.l           # CSV token
-├── query/AST/decl/EvaluatedType.h       # StringTable, StringTableSlice, DenseVector types
+├── query/AST/decl/EvaluatedType.h       # StringTable, DenseVector types
 ├── query/analyzer/ReadStmtAnalyzer.h
 ├── query/analyzer/ReadStmtAnalyzer.cpp  # LoadCSVStmt analysis
 ├── query/analyzer/ExprAnalyzer.h
@@ -379,7 +378,6 @@ enum class EvaluatedType : uint8_t {
     ValueType,
 
     StringTable,       // NEW: CSV row, supports [int] and .columnName
-    StringTableSlice,  // NEW: Result of row[i], represents a single field
     DenseVector,       // NEW: Dense float vector for embeddings
 
     _SIZE,
@@ -388,8 +386,7 @@ enum class EvaluatedType : uint8_t {
 
 **Type relationships**:
 - `StringTable`: Type of the `row` variable from `LOAD CSV ... AS row`
-- `StringTableSlice`: Type of `row[i]` expression, convertible to String
-- Storage: `ColumnStringTable` contains N `ColumnString` columns; `ColumnStringTableSlice` references one
+- `row[i]` expression returns `String` type, extracting the `ColumnString*` from the `ColumnStringTable`
 
 Update `EvaluatedTypeName` accordingly.
 
@@ -431,29 +428,12 @@ private:
     std::vector<ColumnString*> _columns;  // One per CSV field
 };
 
-// Lightweight slice referencing a single field column within a ColumnStringTable.
-// Result of row[i] expression.
-class ColumnStringTableSlice : public Column {
-public:
-    ColumnStringTableSlice(ColumnStringTable* table, size_t fieldIndex);
-
-    ColumnStringTable* getTable() const { return _table; }
-    size_t getFieldIndex() const { return _fieldIndex; }
-
-    // Returns the underlying ColumnString for this field
-    ColumnString* getFieldColumn() const;
-
-private:
-    ColumnStringTable* _table;
-    size_t _fieldIndex;
-};
-
 }
 ```
 
 **Design notes**:
 - `ColumnStringTable` owns the field columns and manages their lifecycle
-- `ColumnStringTableSlice` is a non-owning reference, lightweight to create
+- `row[i]` extracts the `ColumnString*` pointer at index `i` from the table
 - Field columns are allocated via `LocalMemory` by CSVSourceProcessor
 - Header names (for `WITH HEADERS`) are stored separately in the processor, not in the column
 
@@ -616,7 +596,7 @@ The processor uses `PipelineBlockOutputInterface` which:
 - Produces a `Dataframe` with a single `NamedColumn` containing the `ColumnStringTable`
 - The `ColumnStringTable` internally holds N `ColumnString` instances (one per CSV field)
 - Column is identified by the single pre-allocated `ColumnTag`
-- Downstream processors access fields via `ColumnStringTableSlice`
+- Downstream processors access individual `ColumnString*` fields via `row[i]` indexing
 
 ### Memory Management
 
@@ -687,8 +667,8 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     // Index is already resolved to literal during parsing (must be non-negative)
     // Stored as size_t in IndexExpr
 
-    // Result type is StringTableSlice
-    expr->setType(EvaluatedType::StringTableSlice);
+    // Result type is String (extracts ColumnString* from ColumnStringTable)
+    expr->setType(EvaluatedType::String);
 }
 
 // For row.columnName (in analyzePropertyExpr)
@@ -699,7 +679,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, ...) {
     if (baseType == EvaluatedType::StringTable) {
         // This is a header-based column access: row.columnName
         // Store the column name; actual index resolution happens at runtime
-        expr->setType(EvaluatedType::StringTableSlice);
+        expr->setType(EvaluatedType::String);
         expr->setCSVHeaderAccess(true);  // New flag
         return ValueType::String;  // Underlying value type
     }
@@ -763,9 +743,9 @@ void ExprProgramGenerator::generate(const IndexExpr* expr) {
     // Get the field index (compile-time literal)
     size_t fieldIndex = expr->getIndex();
 
-    // Emit instruction to create a ColumnStringTableSlice
-    // This extracts field[fieldIndex] from the ColumnStringTable
-    emitStringTableSlice(tableTag, fieldIndex);
+    // Emit instruction to extract the ColumnString* at fieldIndex
+    // from the ColumnStringTable
+    emitStringTableIndex(tableTag, fieldIndex);
 }
 
 void ExprProgramGenerator::generate(const PropertyExpr* expr) {
@@ -777,9 +757,9 @@ void ExprProgramGenerator::generate(const PropertyExpr* expr) {
         // Look up the ColumnTag via standard variable lookup
         ColumnTag tableTag = _pipelineBuilder->getVariableTag(varDecl);
 
-        // Emit instruction to create a ColumnStringTableSlice by header name
+        // Emit instruction to extract the ColumnString* by header name
         // Header name -> field index resolution happens at runtime
-        emitStringTableSliceByHeader(tableTag, columnName);
+        emitStringTableIndexByHeader(tableTag, columnName);
         return;
     }
 
@@ -788,8 +768,8 @@ void ExprProgramGenerator::generate(const PropertyExpr* expr) {
 ```
 
 **Runtime behavior**:
-- `emitStringTableSlice(tag, index)`: Creates a `ColumnStringTableSlice` referencing field at `index`
-- `emitStringTableSliceByHeader(tag, name)`: Looks up header name in `CSVParser::getHeaders()`, then creates slice
+- `emitStringTableIndex(tag, index)`: Extracts the `ColumnString*` at `index` from the `ColumnStringTable`
+- `emitStringTableIndexByHeader(tag, name)`: Looks up header name in `CSVParser::getHeaders()`, then extracts the corresponding `ColumnString*`
 - If index is out of bounds or header not found, a runtime error is raised
 
 ### Conversion Functions
