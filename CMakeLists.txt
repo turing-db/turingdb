@@ -166,7 +166,7 @@ find_package(OpenMP REQUIRED)
 if(APPLE)
     find_program(BREW_EXECUTABLE brew)
     if(NOT BREW_EXECUTABLE)
-        message(FATAL_ERROR "Homebrew not found")
+        message(STATUS "Homebrew not found")
     endif()
 
     execute_process(
@@ -208,9 +208,7 @@ endif()
 find_package(ZLIB REQUIRED)
 
 # aws-sdk-cpp
-find_package(AWSSDK REQUIRED COMPONENTS s3 s3-crt ec2
-    PATHS ${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies/
-)
+find_package(AWSSDK REQUIRED COMPONENTS s3 s3-crt ec2)
 
 # openssl
 find_package(OpenSSL REQUIRED)
