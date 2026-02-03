@@ -190,6 +190,8 @@ bool SystemManager::importGraph(const std::string& graphName, const fs::Path& fi
         case GraphFileType::_SIZE:
             throw TuringException("Unsupported graph type");
     }
+
+    throw TuringException("Unsupported graph type");
 }
 
 DumpResult<void> SystemManager::dumpGraph(const std::string& graphName) {
