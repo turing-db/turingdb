@@ -6,6 +6,7 @@
 #include "PipelineV2.h"
 #include "ExprProgram.h"
 #include "dataframe/Dataframe.h"
+#include "interfaces/PipelineBlockInputInterface.h"
 
 using namespace db;
 
@@ -19,13 +20,18 @@ std::string ExprEvalProcessor::describe() const {
 }
 
 ExprEvalProcessor* ExprEvalProcessor::create(PipelineV2* pipeline,
-                                             ExprProgram* exprProg) {
+                                             ExprProgram* exprProg,
+                                             bool hasInput) {
     ExprEvalProcessor* proc = new ExprEvalProcessor(exprProg);
 
-    {
-        PipelineInputPort* input = PipelineInputPort::create(pipeline, proc);
-        proc->_input.setPort(input);
-        proc->addInput(input);
+    if (hasInput) {
+        proc->_input = std::make_optional<PipelineBlockInputInterface>();
+
+        PipelineInputPort* inputPort = PipelineInputPort::create(pipeline, proc);
+
+        proc->_input->setPort(inputPort);
+        proc->addInput(inputPort);
+        inputPort->setNeedsData(true);
     }
 
     {
@@ -48,7 +54,9 @@ void ExprEvalProcessor::reset() {
 }
 
 void ExprEvalProcessor::execute() {
-    _input.getPort()->consume();
+    if (_input) {
+        _input->getPort()->consume();
+    }
     _output.getPort()->writeData();
 
     _exprProg->evaluateInstructions();
