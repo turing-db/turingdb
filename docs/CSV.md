@@ -12,7 +12,7 @@ This document specifies the design and architecture for CSV loading functionalit
 6. [Implementation Details](#implementation-details)
    - [AST Nodes](#ast-nodes)
    - [Type System Additions](#type-system-additions)
-   - [CSV Schema Reader](#csv-schema-reader)
+   - [ColumnStringTable Storage](#columnstringtable-storage)
    - [CSV Parser](#csv-parser)
    - [CSV Source Processor](#csv-source-processor)
    - [Memory Management](#memory-management)
@@ -111,16 +111,26 @@ The `row` variable introduced by `LOAD CSV ... AS row` has a new `EvaluatedType:
 - Simpler implementation without runtime bounds checking logic
 - Matches common usage patterns
 
-### Decision 4: Schema Discovery at Pipeline Generation
+### Decision 4: Single Column Storage (ColumnStringTable)
 
-The CSV schema (column count, headers) is determined by reading the first line of the file during pipeline generation, not during parsing or analysis.
+Instead of exposing N separate columns to the pipeline (one per CSV field), the CSV data is stored in a single `ColumnStringTable` column. This column contains multiple `ColumnString` instances inside (one per CSV field), with fields already split during parsing.
+
+**Structure**:
+- `ColumnStringTable`: Container holding N `ColumnString` columns (one per CSV field, already parsed/split)
+- `ColumnStringTableSlice`: Lightweight interval slice referencing one specific `ColumnString` within the table
 
 **Rationale**:
-- Separates parsing/analysis from I/O operations
-- Schema reading is encapsulated in a utility class
-- Analysis can proceed without file access (useful for query validation)
+- No need to read CSV twice (once for schema, once for data)
+- Schema discovery happens at runtime as part of execution
+- More flexible - can handle CSVs with varying column counts
+- Simpler pipeline generation since column count is not needed upfront
+- Single column abstraction simplifies dataframe management
 
-**Trade-off**: Column name typos in `row.columnName` are caught at pipeline generation time, not analysis time.
+**Type mappings**:
+- `row` variable has type `StringTable` (analyzer) / `ColumnStringTable` (storage)
+- `row[i]` returns `StringTableSlice` (analyzer) / `ColumnStringTableSlice` (storage)
+
+**Memory**: CSVSourceProcessor allocates the `ColumnStringTable` dynamically via `LocalMemory`.
 
 ### Decision 5: Chunked Processing
 
@@ -215,8 +225,8 @@ EMBEDDING  { return token::EMBEDDING; }
 │  ┌──────────────┐    ┌──────────────┐    ┌────────────────────┐    │
 │  │   Parser     │───►│   Analyzer   │───►│ PipelineGenerator  │    │
 │  │              │    │              │    │                    │    │
-│  │ LoadCSVStmt  │    │ Type: String │    │ CSVSchemaReader    │    │
-│  │ IndexExpr    │    │ Table        │    │ CSVSourceProcessor │    │
+│  │ LoadCSVStmt  │    │ Type: String │    │ CSVSourceProcessor │    │
+│  │ IndexExpr    │    │ Table        │    │                    │    │
 │  └──────────────┘    └──────────────┘    └────────────────────┘    │
 │                                                   │                  │
 │                                                   ▼                  │
@@ -225,7 +235,7 @@ EMBEDDING  { return token::EMBEDDING; }
 │                              │                                 │    │
 │                              │  CSVSourceProcessor             │    │
 │                              │    │                            │    │
-│                              │    ▼ (N string columns)         │    │
+│                              │    ▼ (ColumnStringTable)        │    │
 │                              │  FilterProcessor (optional)     │    │
 │                              │    │                            │    │
 │                              │    ▼                            │    │
@@ -243,8 +253,8 @@ NEW FILES:
 ├── query/AST/stmt/LoadCSVStmt.cpp
 ├── query/AST/expr/IndexExpr.h
 ├── query/AST/expr/IndexExpr.cpp
-├── io/CSVSchemaReader.h
-├── io/CSVSchemaReader.cpp
+├── storage/columns/ColumnStringTable.h
+├── storage/columns/ColumnStringTable.cpp
 ├── io/CSVParser.h
 ├── io/CSVParser.cpp
 ├── query/pipeline/processors/CSVSourceProcessor.h
@@ -253,7 +263,7 @@ NEW FILES:
 MODIFIED FILES:
 ├── query/parser/CypherParser.y          # Grammar additions
 ├── query/parser/CypherLexer.l           # CSV token
-├── query/AST/decl/EvaluatedType.h       # StringTable, DenseVector types
+├── query/AST/decl/EvaluatedType.h       # StringTable, StringTableSlice, DenseVector types
 ├── query/analyzer/ReadStmtAnalyzer.h
 ├── query/analyzer/ReadStmtAnalyzer.cpp  # LoadCSVStmt analysis
 ├── query/analyzer/ExprAnalyzer.h
@@ -325,19 +335,19 @@ class IndexExpr : public Expr {
 public:
     friend CypherAST;
 
-    static IndexExpr* create(CypherAST* ast, Expr* base, int64_t index);
+    static IndexExpr* create(CypherAST* ast, Expr* base, size_t index);
 
     Expr* getBase() const { return _base; }
-    int64_t getIndex() const { return _index; }
+    size_t getIndex() const { return _index; }
 
     Kind getKind() const override { return Kind::INDEX; }
 
 private:
-    IndexExpr(Expr* base, int64_t index);
+    IndexExpr(Expr* base, size_t index);
     ~IndexExpr() = default;
 
     Expr* _base;
-    int64_t _index;
+    size_t _index;
 };
 
 }
@@ -368,50 +378,84 @@ enum class EvaluatedType : uint8_t {
     Tuple,
     ValueType,
 
-    StringTable,    // NEW: CSV row, supports [int] and .columnName
-    DenseVector,    // NEW: Dense float vector for embeddings
+    StringTable,       // NEW: CSV row, supports [int] and .columnName
+    StringTableSlice,  // NEW: Result of row[i], represents a single field
+    DenseVector,       // NEW: Dense float vector for embeddings
 
     _SIZE,
 };
 ```
 
+**Type relationships**:
+- `StringTable`: Type of the `row` variable from `LOAD CSV ... AS row`
+- `StringTableSlice`: Type of `row[i]` expression, convertible to String
+- Storage: `ColumnStringTable` contains N `ColumnString` columns; `ColumnStringTableSlice` references one
+
 Update `EvaluatedTypeName` accordingly.
 
-### CSV Schema Reader
+### ColumnStringTable Storage
 
 ```cpp
-// io/CSVSchemaReader.h
+// storage/columns/ColumnStringTable.h
 #pragma once
 
-#include <string>
-#include <vector>
-
-#include "io/Path.h"
+#include "storage/columns/Column.h"
+#include "storage/columns/ColumnString.h"
 
 namespace db {
 
-class CSVSchemaReader {
+// Container column holding multiple ColumnString instances (one per CSV field).
+// Fields are already parsed and split during CSV reading.
+class ColumnStringTable : public Column {
 public:
-    struct Schema {
-        size_t columnCount {0};
-        std::vector<std::string> headers;  // Empty if no headers
+    ColumnStringTable();
+    ~ColumnStringTable() override;
 
-        bool hasHeaders() const { return !headers.empty(); }
+    // Number of CSV columns (fields per row)
+    size_t getFieldCount() const { return _columns.size(); }
 
-        // Returns -1 if not found
-        int64_t getColumnIndex(std::string_view name) const;
-    };
+    // Number of rows
+    size_t getRowCount() const;
 
-    // Reads first line(s) to determine schema
-    // If hasHeaders is true, first line is treated as header row
-    static void readSchema(const fs::Path& path, bool hasHeaders, Schema& outSchema);
+    // Access a specific field column
+    ColumnString* getFieldColumn(size_t fieldIndex);
+    const ColumnString* getFieldColumn(size_t fieldIndex) const;
+
+    // Add a new field column (called during parsing as columns are discovered)
+    void addFieldColumn(ColumnString* column);
+
+    // Clear all data for reuse
+    void clear();
 
 private:
-    static std::vector<std::string> parseLine(std::string_view line);
+    std::vector<ColumnString*> _columns;  // One per CSV field
+};
+
+// Lightweight slice referencing a single field column within a ColumnStringTable.
+// Result of row[i] expression.
+class ColumnStringTableSlice : public Column {
+public:
+    ColumnStringTableSlice(ColumnStringTable* table, size_t fieldIndex);
+
+    ColumnStringTable* getTable() const { return _table; }
+    size_t getFieldIndex() const { return _fieldIndex; }
+
+    // Returns the underlying ColumnString for this field
+    ColumnString* getFieldColumn() const;
+
+private:
+    ColumnStringTable* _table;
+    size_t _fieldIndex;
 };
 
 }
 ```
+
+**Design notes**:
+- `ColumnStringTable` owns the field columns and manages their lifecycle
+- `ColumnStringTableSlice` is a non-owning reference, lightweight to create
+- Field columns are allocated via `LocalMemory` by CSVSourceProcessor
+- Header names (for `WITH HEADERS`) are stored separately in the processor, not in the column
 
 ### CSV Parser
 
@@ -432,9 +476,11 @@ The CSV parser uses memory-mapped I/O (mmap) for efficient reading of large file
 #include <vector>
 
 #include "io/Path.h"
-#include "io/CSVSchemaReader.h"
+#include "storage/columns/ColumnStringTable.h"
 
 namespace db {
+
+class LocalMemory;
 
 class CSVParser {
 public:
@@ -442,19 +488,23 @@ public:
     static constexpr size_t DEFAULT_MMAP_CHUNK_SIZE = 512 * 1024 * 1024;
 
     CSVParser(const fs::Path& path,
-              const CSVSchemaReader::Schema& schema,
+              bool hasHeaders,
+              LocalMemory* memory,
               size_t mmapChunkSize = DEFAULT_MMAP_CHUNK_SIZE);
     ~CSVParser();
 
     CSVParser(const CSVParser&) = delete;
     CSVParser& operator=(const CSVParser&) = delete;
 
-    // Read up to maxRows into column-oriented output
+    // Read up to maxRows into the output ColumnStringTable
     // Returns number of rows read (0 at EOF)
     // Malformed lines are skipped and logged
-    // Output columns must be pre-allocated ColumnString instances
-    size_t readChunk(size_t maxRows,
-                     std::vector<ColumnString*>& outputColumns);
+    // Field columns are allocated dynamically via LocalMemory
+    size_t readChunk(size_t maxRows, ColumnStringTable* output);
+
+    // Header access (only valid after first readChunk if hasHeaders was true)
+    const std::vector<std::string>& getHeaders() const { return _headers; }
+    size_t getHeaderIndex(std::string_view name) const;
 
     size_t getLinesRead() const { return _linesRead; }
     size_t getLinesSkipped() const { return _linesSkipped; }
@@ -470,8 +520,11 @@ private:
     size_t _mappedSize {0};                // Size of mapped region
 
     std::string_view _remaining;           // Unparsed data in current region
-    CSVSchemaReader::Schema _schema;
+    bool _hasHeaders;
+    std::vector<std::string> _headers;     // Populated from first line if hasHeaders
+    size_t _fieldCount {0};                // Discovered from first data row
 
+    LocalMemory* _memory;                  // For allocating field columns
     size_t _linesRead {0};
     size_t _linesSkipped {0};
 
@@ -485,6 +538,9 @@ private:
 
     // Handle line that spans mmap chunk boundary
     bool handlePartialLine(std::string& lineBuffer);
+
+    // Ensure output has enough field columns, allocating if needed
+    void ensureFieldColumns(ColumnStringTable* output, size_t fieldCount);
 };
 
 }
@@ -498,12 +554,14 @@ private:
 
 #include "Processor.h"
 #include "io/CSVParser.h"
-#include "io/CSVSchemaReader.h"
 #include "io/Path.h"
 #include "dataframe/ColumnTag.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
+#include "storage/columns/ColumnStringTable.h"
 
 namespace db {
+
+class LocalMemory;
 
 class CSVSourceProcessor : public Processor {
 public:
@@ -512,8 +570,8 @@ public:
     // Factory method - all processors are created via PipelineV2
     static CSVSourceProcessor* create(PipelineV2* pipeline,
                                        const fs::Path& path,
-                                       const CSVSchemaReader::Schema& schema,
-                                       const std::vector<ColumnTag>& columnTags,
+                                       bool hasHeaders,
+                                       ColumnTag outputTag,
                                        size_t chunkSize = DEFAULT_CHUNK_SIZE);
 
     // Processor interface
@@ -522,23 +580,27 @@ public:
     void reset() override;
     void execute() override;
 
-    // Output interface - produces N string columns (one per CSV column)
+    // Output interface - produces a single ColumnStringTable
     PipelineBlockOutputInterface& output() { return _output; }
 
-    const CSVSchemaReader::Schema& getSchema() const { return _schema; }
+    // Header access (only valid after first execute() if hasHeaders)
+    const std::vector<std::string>& getHeaders() const;
+    size_t getHeaderIndex(std::string_view name) const;
 
 private:
     fs::Path _path;
-    CSVSchemaReader::Schema _schema;
-    std::vector<ColumnTag> _columnTags;  // Pre-allocated tags for output columns
+    bool _hasHeaders;
+    ColumnTag _outputTag;          // Tag for the ColumnStringTable output
     size_t _chunkSize;
 
-    CSVParser* _parser {nullptr};        // Owned, created in prepare()
+    LocalMemory* _memory {nullptr};       // From ExecutionContext
+    CSVParser* _parser {nullptr};         // Owned, created in prepare()
+    ColumnStringTable* _outputTable {nullptr};  // Allocated via LocalMemory
     PipelineBlockOutputInterface _output;
 
     CSVSourceProcessor(const fs::Path& path,
-                       const CSVSchemaReader::Schema& schema,
-                       const std::vector<ColumnTag>& columnTags,
+                       bool hasHeaders,
+                       ColumnTag outputTag,
                        size_t chunkSize);
     ~CSVSourceProcessor() override;
 };
@@ -549,18 +611,27 @@ private:
 #### Processor Lifecycle
 
 1. **create()**: Called by `PipelineGenerator` to instantiate the processor and register it with the pipeline
-2. **prepare()**: Called once before execution starts; opens the file, creates `CSVParser`, allocates output columns
-3. **execute()**: Called repeatedly by the pipeline executor; reads one chunk of rows and writes to output
+2. **prepare()**: Called once before execution starts; gets `LocalMemory` from context, opens file, creates `CSVParser`, allocates `ColumnStringTable`
+3. **execute()**: Called repeatedly by the pipeline executor; reads one chunk of rows into `ColumnStringTable` and writes to output
 4. **reset()**: Called to reset state for re-execution (e.g., if pipeline needs to restart)
 
 #### Output Interface
 
 The processor uses `PipelineBlockOutputInterface` which:
-- Produces a `Dataframe` with N `NamedColumn` instances (one per CSV column)
-- Each column is a `ColumnString` containing the string values for that CSV column
-- Columns are identified by the pre-allocated `ColumnTag` values
+- Produces a `Dataframe` with a single `NamedColumn` containing the `ColumnStringTable`
+- The `ColumnStringTable` internally holds N `ColumnString` instances (one per CSV field)
+- Column is identified by the single pre-allocated `ColumnTag`
+- Downstream processors access fields via `ColumnStringTableSlice`
 
 ### Memory Management
+
+#### LocalMemory Allocation
+
+`CSVSourceProcessor` obtains a `LocalMemory` instance from the `ExecutionContext` during `prepare()`. All column allocations go through `LocalMemory`:
+
+- `ColumnStringTable` is allocated via `LocalMemory`
+- Each `ColumnString` within the table is allocated via `LocalMemory`
+- Memory is released when the pipeline execution completes
 
 #### String Ownership
 
@@ -573,7 +644,7 @@ Strings parsed from CSV are **copied** into `ColumnString` storage, not referenc
 The copy overhead is acceptable because:
 - String data is typically small relative to the file size
 - Memory is bounded by chunk size (100K rows)
-- Columnar string storage uses efficient arena allocation
+- Columnar string storage uses efficient arena allocation via `LocalMemory`
 
 ### Analyzer Changes
 
@@ -618,14 +689,11 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
         throwError("Index operator [] only supported on CSV row variables", expr);
     }
 
-    // Index is already resolved to literal during parsing
-    int64_t index = expr->getIndex();
-    if (index < 0) {
-        throwError("CSV column index must be non-negative", expr);
-    }
+    // Index is already resolved to literal during parsing (must be non-negative)
+    // Stored as size_t in IndexExpr
 
-    // Result type is String
-    expr->setType(EvaluatedType::String);
+    // Result type is StringTableSlice
+    expr->setType(EvaluatedType::StringTableSlice);
 }
 
 // For row.columnName (in analyzePropertyExpr)
@@ -635,10 +703,10 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, ...) {
     // Check if base is StringTable (CSV row with headers)
     if (baseType == EvaluatedType::StringTable) {
         // This is a header-based column access: row.columnName
-        // Store the column name; actual index resolution happens at pipeline generation
-        expr->setType(EvaluatedType::String);
+        // Store the column name; actual index resolution happens at runtime
+        expr->setType(EvaluatedType::StringTableSlice);
         expr->setCSVHeaderAccess(true);  // New flag
-        return ValueType::String;
+        return ValueType::String;  // Underlying value type
     }
 
     // ... existing property access code ...
@@ -651,39 +719,29 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, ...) {
 // In PipelineGenerator.cpp
 
 void PipelineGenerator::generate(const LoadCSVStmt* stmt) {
-    // 1. Read schema from CSV file
-    CSVSchemaReader::Schema schema;
-    CSVSchemaReader::readSchema(stmt->getFilePath(), stmt->hasHeaders(), schema);
+    // 1. Allocate a single ColumnTag for the ColumnStringTable output
+    ColumnTag csvTag = _dataframeManager->allocTag();
 
-    // 2. Validate any header-based accesses (row.columnName)
-    validateCSVHeaderAccesses(stmt, schema);
-
-    // 3. Create source processor
-    auto csvSource = std::make_unique<CSVSourceProcessor>(
+    // 2. Create source processor (no schema reading needed upfront)
+    auto csvSource = CSVSourceProcessor::create(
+        _pipeline,
         stmt->getFilePath(),
-        std::move(schema),
+        stmt->hasHeaders(),
+        csvTag,
         CSVSourceProcessor::DEFAULT_CHUNK_SIZE
     );
 
-    // 4. Register column mappings for expression evaluation
-    // Maps row[i] -> column i in the processor output
-    // Maps row.colName -> column index from schema
-    registerCSVColumnMappings(stmt->getAlias(), csvSource->getSchema());
+    // 3. Register the alias variable with its ColumnTag in PipelineBuilder
+    // Uses existing variable registration mechanism
+    VarDecl* aliasDecl = stmt->getAlias()->getVarDecl();
+    _pipelineBuilder->registerVariable(aliasDecl, csvTag);
 
-    // 5. Add to pipeline
-    _pipeline->setSource(std::move(csvSource));
-}
-
-void PipelineGenerator::validateCSVHeaderAccesses(
-    const LoadCSVStmt* stmt,
-    const CSVSchemaReader::Schema& schema
-) {
-    // Walk the AST and find all PropertyExpr nodes that reference
-    // the CSV alias with CSV header access flag set
-    // Validate that the column name exists in schema.headers
-    // Resolve column name to index
+    // 4. Add to pipeline
+    _pipeline->setSource(csvSource);
 }
 ```
+
+**Note**: Schema discovery (column count, headers) happens at runtime during `CSVParser::readChunk()`. Header name validation for `row.columnName` access is deferred to runtime - if the header doesn't exist, a runtime error is raised.
 
 ### Expression Lowering (ExprProgramGenerator)
 
@@ -691,33 +749,7 @@ This section describes how `row[i]` and `row.columnName` are lowered to executab
 
 #### Column Tag Allocation
 
-During pipeline generation, CSVSourceProcessor allocates a `ColumnTag` for each CSV column via `DataframeManager`:
-
-```cpp
-void PipelineGenerator::generate(const LoadCSVStmt* stmt) {
-    // ... schema reading ...
-
-    // Allocate column tags for each CSV column
-    std::vector<ColumnTag> csvColumnTags;
-    for (size_t i = 0; i < schema.columnCount; ++i) {
-        ColumnTag tag = _dataframeManager->allocTag();
-        csvColumnTags.push_back(tag);
-    }
-
-    // Register mappings: alias + index -> ColumnTag
-    // This is used by ExprProgramGenerator to resolve row[i]
-    registerIndexedTableColumnTags(stmt->getAlias()->getName(), csvColumnTags);
-
-    // If WITH HEADERS, also register: alias + columnName -> ColumnTag
-    if (stmt->hasHeaders()) {
-        for (size_t i = 0; i < schema.headers.size(); ++i) {
-            registerIndexedTableHeaderTag(stmt->getAlias()->getName(),
-                                 schema.headers[i],
-                                 csvColumnTags[i]);
-        }
-    }
-}
-```
+During pipeline generation, a single `ColumnTag` is allocated for the `ColumnStringTable` and registered via the standard `PipelineBuilder::registerVariable()` mechanism.
 
 #### ExprProgramGenerator Handling
 
@@ -727,37 +759,44 @@ void PipelineGenerator::generate(const LoadCSVStmt* stmt) {
 // In ExprProgramGenerator.cpp
 
 void ExprProgramGenerator::generate(const IndexExpr* expr) {
-    // Get the alias from the base SymbolExpr
+    // Get the VarDecl from the base SymbolExpr
     const SymbolExpr* baseExpr = static_cast<const SymbolExpr*>(expr->getBase());
-    std::string_view alias = baseExpr->getSymbol()->getName();
+    VarDecl* varDecl = baseExpr->getSymbol()->getVarDecl();
 
-    // Get the column index
-    int64_t colIndex = expr->getIndex();
+    // Look up the ColumnTag via standard variable lookup
+    ColumnTag tableTag = _pipelineBuilder->getVariableTag(varDecl);
 
-    // Look up the ColumnTag for this CSV column
-    ColumnTag tag = _pipelineGen->getIndexedTableColumnTag(alias, colIndex);
+    // Get the field index (compile-time literal)
+    size_t fieldIndex = expr->getIndex();
 
-    // Emit instruction to read from this column
-    // The result is a string value
-    emitColumnRead(tag, EvaluatedType::String);
+    // Emit instruction to create a ColumnStringTableSlice
+    // This extracts field[fieldIndex] from the ColumnStringTable
+    emitStringTableSlice(tableTag, fieldIndex);
 }
 
 void ExprProgramGenerator::generate(const PropertyExpr* expr) {
     if (expr->isCSVHeaderAccess()) {
-        // Get alias and column name
-        std::string_view alias = /* from base */;
+        // Get VarDecl and column name
+        VarDecl* varDecl = /* from base SymbolExpr */;
         std::string_view columnName = expr->getPropertyName();
 
-        // Look up the ColumnTag (resolved during pipeline generation)
-        ColumnTag tag = _pipelineGen->getIndexedTableHeaderTag(alias, columnName);
+        // Look up the ColumnTag via standard variable lookup
+        ColumnTag tableTag = _pipelineBuilder->getVariableTag(varDecl);
 
-        emitColumnRead(tag, EvaluatedType::String);
+        // Emit instruction to create a ColumnStringTableSlice by header name
+        // Header name -> field index resolution happens at runtime
+        emitStringTableSliceByHeader(tableTag, columnName);
         return;
     }
 
     // ... existing property access logic ...
 }
 ```
+
+**Runtime behavior**:
+- `emitStringTableSlice(tag, index)`: Creates a `ColumnStringTableSlice` referencing field at `index`
+- `emitStringTableSliceByHeader(tag, name)`: Looks up header name in `CSVParser::getHeaders()`, then creates slice
+- If index is out of bounds or header not found, a runtime error is raised
 
 ### Conversion Functions
 
@@ -813,9 +852,10 @@ These errors skip the line and log a warning. The import continues.
 
 #### Runtime Errors (Abort Query)
 
-- `row[i]` where `i >= columnCount`: Runtime error
+- `row[i]` where `i >= fieldCount`: Runtime error (index out of bounds)
+- `row.columnName` where `columnName` not in headers: Runtime error
 - `toInteger("abc")`: Runtime error (cannot parse)
-- File not found: Error at pipeline generation time
+- File not found: Error at `CSVSourceProcessor::prepare()` time
 
 ### Edge Cases
 
