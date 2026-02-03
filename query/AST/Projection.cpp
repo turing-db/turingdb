@@ -27,7 +27,7 @@ void Projection::setName(const VarDecl* item, std::string_view name) {
     _namesSet.emplace(name);
 }
 
-void Projection::pushBackExpr(Expr* expr) {
+void Projection::addExpr(Expr* expr) {
     _items.emplace_back(expr);
 }
 
