@@ -86,6 +86,8 @@ class bdist_wheel(_bdist_wheel):
 
     def finalize_options(self):
         super().finalize_options()
+        # Mark as platform-specific (contains native binary)
+        self.root_is_pure = False
         # Allow overriding python_tag via PYTHON_TAG environment variable
         python_tag = os.environ.get('PYTHON_TAG')
         if python_tag:
