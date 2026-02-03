@@ -282,9 +282,8 @@ void PlanGraphGenerator::generateShowProceduresQuery(const ShowProceduresQuery* 
 }
 
 PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {
-    if (prevNode == nullptr) {
-        throwError("Return statement without previous node", stmt);
-    }
+    // A "standalone return" is a sole return clause, e.g. `RETURN 4 + 5`
+    const bool isStandaloneReturn = prevNode == nullptr;
 
     const Projection* proj = stmt->getProjection();
 
@@ -317,6 +316,8 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
         deps.genExprDependencies(*_variables, item);
 
         for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
+            bioassert(prevNode, "Expression had dependencies, but no previous node to provide them.");
+
             if (auto* expr = dynamic_cast<PropertyExpr*>(dep._expr)) {
                 const VarDecl* entityDecl = expr->getEntityVarDecl();
                 const VarDecl* exprDecl = expr->getExprVarDecl();
@@ -408,6 +409,14 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
         }
     }
 
+    if (isStandaloneReturn) {
+        ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
+        exprEval->connectOut(results);
+        // FIXME: Connect up functions here too, they can also input a standalone return
+        results->setProjection(proj);
+        return results;
+    }
+
     if (!exprEval->getExprs().empty()) {
         prevNode->connectOut(exprEval);
         prevNode = exprEval;
@@ -445,7 +454,6 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
     results->setProjection(proj);
 
     return results;
-
 }
 
 PlanGraphNode* PlanGraphGenerator::generateReturnNone(PlanGraphNode* prevNode) {

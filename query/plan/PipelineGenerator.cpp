@@ -1102,7 +1102,7 @@ PipelineOutputInterface* PipelineGenerator::translateExprEvalNode(ExprEvalNode* 
     ExprProgramGenerator progGen(this, prog, _builder.getPendingOutput());
 
     // Add the evaluating processor to the pipeline. It takes a pointer to the above
-    // @ref ExprProg (@ref prog), and the below loop over expressions modifies @ref prog
+    // @ref ExprProg (@ref prog), and the below loops over expressions modifies @ref prog
     // via that same pointer, in place.
     _builder.addExprEval(prog);
 
