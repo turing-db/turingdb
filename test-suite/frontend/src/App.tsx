@@ -149,6 +149,14 @@ export default function App() {
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
       const res = await fetch(`${API_BASE}/tests`);
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message =
+          typeof details?.error === "string"
+            ? `${details.error}${details.details ? `: ${details.details}` : ""}`
+            : "Failed to load test list";
+        throw new Error(message);
+      }
       const data = (await res.json()) as TestMeta[];
       setTests(data);
       setSelected((prev) => {
@@ -1182,6 +1190,20 @@ export default function App() {
             </div>
           </div>
 
+          {!selected && tests.length === 0 && (
+            <div className="mt-6 flex flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-steel/40 p-10 text-center">
+              <AlertTriangle className="h-8 w-8 text-amber-400/80" />
+              <p className="text-sm text-ink/80">
+                {error
+                  ? "Could not load the test list. Check that the backend server and CLI binary are available."
+                  : "No tests available."}
+              </p>
+              <Button variant="ghost" size="sm" onClick={() => { setError(null); loadTests(); }}>
+                Retry
+              </Button>
+            </div>
+          )}
+
           {selected && (
             <div className="mt-4 rounded-2xl border border-white/10 bg-steel/40 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Selected</p>
@@ -1308,7 +1330,7 @@ export default function App() {
             </div>
           )}
 
-          {error && (
+          {error && selected && (
             <div className="mt-6 rounded-2xl border border-accent/40 bg-accent/10 p-4 text-sm text-ink">
               {error}
             </div>
