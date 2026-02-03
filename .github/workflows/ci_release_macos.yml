@@ -35,8 +35,17 @@ jobs:
 
     - name: Install LLVM
       run: |
-        brew install llvm
-        echo "LLVM_PREFIX=$(brew --prefix llvm)" >> $GITHUB_ENV
+        # Use official LLVM releases (target macOS 11.0+) instead of Homebrew (targets macOS 15.0)
+        curl -L -o llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.6/LLVM-19.1.6-macOS-ARM64.tar.xz
+        mkdir -p $HOME/llvm
+        tar -xf llvm.tar.xz -C $HOME/llvm --strip-components=1
+        echo "LLVM_PREFIX=$HOME/llvm" >> $GITHUB_ENV
+
+    - name: Install OpenMP runtime
+      run: |
+        # Official LLVM macOS releases don't include libomp; get it from R-project (targets macOS 11+ on ARM64)
+        curl -O https://mac.r-project.org/openmp/openmp-19.1.5-darwin20-Release.tar.gz
+        sudo tar fvxz openmp-19.1.5-darwin20-Release.tar.gz -C /
 
     - name: Cache dependencies
       id: cache-dependencies
