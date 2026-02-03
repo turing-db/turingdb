@@ -68,7 +68,8 @@ jobs:
         uv build --wheel --python ${{ matrix.python-version }}
       env:
         # Use LLVM's lld linker to avoid Xcode linker loading wrong libc++ at runtime
-        CMAKE_ARGS: "-DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++ -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld -DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld -DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=lld"
+        # Add -fexperimental-library to enable std::jthread support in LLVM 19's libc++
+        CMAKE_ARGS: "-DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++ -DCMAKE_CXX_FLAGS=-fexperimental-library -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld -DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld -DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=lld"
 
     - name: Prepare SimpleDB
       run: |
