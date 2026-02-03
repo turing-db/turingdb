@@ -32,9 +32,11 @@ void PlanGraph::removeIsolatedNodes() {
     std::vector<std::unique_ptr<PlanGraphNode>> newNodes;
 
     for (auto& node : _nodes) {
-        if (node->inputs().empty()
-            && node->outputs().empty()
-            && node->getOpcode() != PlanGraphOpcode::WRITE) {
+        const PlanGraphOpcode opc = node->getOpcode();
+        const bool disconnected = node->inputs().empty() && node->outputs().empty();
+        const bool canBeStandalone = opc == PlanGraphOpcode::WRITE || opc == PlanGraphOpcode::PRODUCE_RESULTS;
+
+        if (disconnected && !canBeStandalone) {
             continue;
         }
 
