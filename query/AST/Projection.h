@@ -66,7 +66,7 @@ public:
         return _items;
     }
 
-    void pushBackExpr(Expr* expr);
+    void addExpr(Expr* expr);
     void pushFrontDecl(VarDecl* decl);
 
     void setReturnAll() { _returningAll = true; }
