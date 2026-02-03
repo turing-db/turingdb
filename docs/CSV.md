@@ -96,20 +96,19 @@ The `row` variable introduced by `LOAD CSV ... AS row` has a new `EvaluatedType:
 
 **Rationale**:
 - Special-case handling avoids implementing general list indexing
-- Compile-time index resolution (literals only) enables efficient code generation
+- Compile-time index resolution for literals enables efficient code generation
+- Runtime indexing with bounds checking for non-literal expressions
 - Clear semantics specific to CSV use case
 
-### Decision 3: Index Must Be Literal Integer
+### Decision 3: Index Expression
 
-`row[i]` only supports literal integer indices, not expressions.
+`row[e]` supports any integer-typed expression `e`. When `e` is a literal integer, the index is resolved at compile time for efficiency.
 
-**Valid**: `row[0]`, `row[42]`
-**Invalid**: `row[i]`, `row[1+1]`
+**Valid**: `row[0]`, `row[42]`, `row[i]`, `row[1+1]`
 
-**Rationale**:
-- Enables compile-time resolution of column access
-- Simpler implementation without runtime bounds checking logic
-- Matches common usage patterns
+**Compile-time optimization**: When the index is a literal integer, the column access is resolved at compile time, avoiding runtime bounds checking overhead.
+
+**Runtime indexing**: When the index is a non-literal expression, bounds checking occurs at runtime. If the index is out of bounds, a runtime error is raised.
 
 ### Decision 4: Single Column Storage (ColumnStringTable)
 
@@ -193,13 +192,13 @@ loadCSVSt
 // For LOAD EMBEDDING CSV (Phase 2)
 loadEmbeddingCSVSt
     : LOAD EMBEDDING CSV STRING_LITERAL AS
-      OPAREN symbol COMMA symbol OBRACK DIGIT COLON DIGIT CBRACK CPAREN
+      OPAREN symbol COMMA symbol OBRACK INTEGER_LITERAL COLON INTEGER_LITERAL CBRACK CPAREN
     ;
 
-// Index expression for row[i]
+// Index expression for row[e]
 atomicExpr
     : propertyOrLabelExpr
-    | atomicExpr OBRACK DIGIT CBRACK   // NEW: row[0]
+    | atomicExpr OBRACK expr CBRACK   // NEW: row[0], row[i], row[1+1]
     ;
 ```
 
@@ -334,19 +333,30 @@ class IndexExpr : public Expr {
 public:
     friend CypherAST;
 
-    static IndexExpr* create(CypherAST* ast, Expr* base, size_t index);
+    static IndexExpr* create(CypherAST* ast, Expr* base, Expr* indexExpr);
 
     Expr* getBase() const { return _base; }
-    size_t getIndex() const { return _index; }
+    Expr* getIndexExpr() const { return _indexExpr; }
+
+    // Returns true if the index expression is a literal integer
+    bool hasLiteralIndex() const { return _hasLiteralIndex; }
+
+    // Returns the literal index value (only valid if hasLiteralIndex() is true)
+    size_t getLiteralIndex() const { return _literalIndex; }
+
+    // Called by analyzer when the index is a literal
+    void setLiteralIndex(size_t index) { _hasLiteralIndex = true; _literalIndex = index; }
 
     Kind getKind() const override { return Kind::INDEX; }
 
 private:
-    IndexExpr(Expr* base, size_t index);
+    IndexExpr(Expr* base, Expr* indexExpr);
     ~IndexExpr() = default;
 
     Expr* _base;
-    size_t _index;
+    Expr* _indexExpr;
+    bool _hasLiteralIndex {false};
+    size_t _literalIndex {0};
 };
 
 }
@@ -657,6 +667,7 @@ void ReadStmtAnalyzer::analyze(const LoadCSVStmt* stmt) {
 
 void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     analyzeExpr(expr->getBase());
+    analyzeExpr(expr->getIndexExpr());
 
     EvaluatedType baseType = expr->getBase()->getType();
 
@@ -664,8 +675,21 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
         throwError("Index operator [] only supported on CSV row variables", expr);
     }
 
-    // Index is already resolved to literal during parsing (must be non-negative)
-    // Stored as size_t in IndexExpr
+    // Index expression must be integer-typed
+    EvaluatedType indexType = expr->getIndexExpr()->getType();
+    if (indexType != EvaluatedType::Integer) {
+        throwError("Index expression must be of type Integer", expr->getIndexExpr());
+    }
+
+    // Check if the index is a literal integer for compile-time optimization
+    if (expr->getIndexExpr()->getKind() == Expr::Kind::LITERAL) {
+        const LiteralExpr* lit = static_cast<const LiteralExpr*>(expr->getIndexExpr());
+        int64_t value = lit->getIntegerValue();
+        if (value < 0) {
+            throwError("Index must be non-negative", expr->getIndexExpr());
+        }
+        expr->setLiteralIndex(static_cast<size_t>(value));
+    }
 
     // Result type is String (extracts ColumnString* from ColumnStringTable)
     expr->setType(EvaluatedType::String);
@@ -740,12 +764,22 @@ void ExprProgramGenerator::generate(const IndexExpr* expr) {
     // Look up the ColumnTag via standard variable lookup
     ColumnTag tableTag = _pipelineBuilder->getVariableTag(varDecl);
 
-    // Get the field index (compile-time literal)
-    size_t fieldIndex = expr->getIndex();
+    if (expr->hasLiteralIndex()) {
+        // Compile-time optimization: index is known at compile time
+        size_t fieldIndex = expr->getLiteralIndex();
 
-    // Emit instruction to extract the ColumnString* at fieldIndex
-    // from the ColumnStringTable
-    emitStringTableIndex(tableTag, fieldIndex);
+        // Emit instruction to extract the ColumnString* at fieldIndex
+        // from the ColumnStringTable (no runtime bounds check needed if
+        // schema is validated at prepare time)
+        emitStringTableIndexLiteral(tableTag, fieldIndex);
+    } else {
+        // Runtime indexing: generate code to evaluate the index expression
+        generate(expr->getIndexExpr());
+
+        // Emit instruction to extract the ColumnString* at runtime index
+        // from the ColumnStringTable (includes bounds checking)
+        emitStringTableIndexDynamic(tableTag);
+    }
 }
 
 void ExprProgramGenerator::generate(const PropertyExpr* expr) {
@@ -768,7 +802,8 @@ void ExprProgramGenerator::generate(const PropertyExpr* expr) {
 ```
 
 **Runtime behavior**:
-- `emitStringTableIndex(tag, index)`: Extracts the `ColumnString*` at `index` from the `ColumnStringTable`
+- `emitStringTableIndexLiteral(tag, index)`: Extracts the `ColumnString*` at compile-time known `index` from the `ColumnStringTable`. Bounds can optionally be validated at prepare time if schema is known.
+- `emitStringTableIndexDynamic(tag)`: Pops the index from the evaluation stack and extracts the `ColumnString*` at that index from the `ColumnStringTable`. Includes runtime bounds checking; raises a runtime error if index is out of bounds or negative.
 - `emitStringTableIndexByHeader(tag, name)`: Looks up header name in `CSVParser::getHeaders()`, then extracts the corresponding `ColumnString*`
 - If index is out of bounds or header not found, a runtime error is raised
 
@@ -826,7 +861,8 @@ These errors skip the line and log a warning. The import continues.
 
 #### Runtime Errors (Abort Query)
 
-- `row[i]` where `i >= fieldCount`: Runtime error (index out of bounds)
+- `row[e]` where `e >= fieldCount`: Runtime error (index out of bounds)
+- `row[e]` where `e < 0`: Runtime error (negative index)
 - `row.columnName` where `columnName` not in headers: Runtime error
 - `toInteger("abc")`: Runtime error (cannot parse)
 - File not found: Error at `CSVSourceProcessor::prepare()` time
@@ -840,7 +876,7 @@ An empty CSV file (0 bytes) produces an empty result set with 0 columns. This is
 A file with only a header line (when using `WITH HEADERS`) produces an empty result set with the schema defined by the headers. This is not an error.
 
 #### Duplicate Column Names in Headers
-If a CSV file has duplicate column names in the header row, this is an error at pipeline generation time. Users must fix the CSV or use index-based access without `WITH HEADERS`.
+If a CSV file has duplicate column names in the header row, this is a runtime error when the first chunk is read. Users must fix the CSV or use index-based access without `WITH HEADERS`.
 
 #### Maximum Line Length
 No explicit limit on line length. Lines are bounded only by available memory for the line buffer (used when a line spans mmap chunk boundaries). Extremely long lines (>1GB) may cause memory issues.
@@ -852,7 +888,7 @@ Empty fields (e.g., `a,,b`) are valid and produce empty strings (`""`).
 
 - **Absolute paths**: Used as-is
 - **Relative paths**: Resolved relative to the current working directory of the TuringDB server process
-- **Path validation**: Paths are validated at pipeline generation time; file must exist and be readable
+- **Path validation**: Paths are validated at `CSVSourceProcessor::prepare()` time; file must exist and be readable
 - **Symlinks**: Followed (standard filesystem behavior)
 
 ### Encoding
@@ -955,7 +991,7 @@ Where:
 ```yacc
 loadEmbeddingCSVSt
     : LOAD EMBEDDING CSV STRING_LITERAL AS
-      OPAREN symbol COMMA symbol OBRACK DIGIT COLON DIGIT CBRACK CPAREN {
+      OPAREN symbol COMMA symbol OBRACK INTEGER_LITERAL COLON INTEGER_LITERAL CBRACK CPAREN {
         $$ = LoadEmbeddingCSVStmt::create(ast, $4, $7, $9, $11, $13);
         LOC($$, @$);
       }
@@ -982,7 +1018,7 @@ public:
     int64_t getStartColumn() const { return _startCol; }
     int64_t getEndColumn() const { return _endCol; }
 
-    size_t getDimension() const { return _endCol - _startCol; }
+    size_t getDimension() const { return _endCol - _startCol + 1; }
 
 private:
     fs::Path _filePath;
@@ -1002,7 +1038,7 @@ private:
 
 The embedding CSV processor:
 1. Parses column 0 directly as UInt64 (no string intermediate)
-2. Parses columns [startCol, endCol) directly as floats into dense vector
+2. Parses columns [startCol, endCol] (inclusive) directly as floats into dense vector
 3. No `WITH HEADERS` support (always positional)
 
 ---
@@ -1035,7 +1071,7 @@ CREATE (n:Person {
 
 ```cypher
 LOAD CSV 'knows.csv' AS row
-MATCH (a:Person {id: row[0]}), (b:Person {id: row[1]})
+MATCH (a:Person {id: toInteger(row[0])}), (b:Person {id: toInteger(row[1])})
 CREATE (a)-[:KNOWS {since: toInteger(row[2])}]->(b)
 ```
 
@@ -1051,11 +1087,11 @@ SET n.embedding = embedding
 
 ```cypher
 LOAD CSV 'nodes.csv' AS nodeRow
-CREATE (n:Entity {id: nodeRow[0], name: nodeRow[1]})
+CREATE (n:Entity {id: toInteger(nodeRow[0]), name: nodeRow[1]})
 
 // Then in a separate query:
 LOAD CSV 'edges.csv' AS edgeRow
-MATCH (a:Entity {id: edgeRow[0]}), (b:Entity {id: edgeRow[1]})
+MATCH (a:Entity {id: toInteger(edgeRow[0])}), (b:Entity {id: toInteger(edgeRow[1])})
 CREATE (a)-[:RELATED]->(b)
 ```
 
