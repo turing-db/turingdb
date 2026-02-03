@@ -167,19 +167,32 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
 
                 EdgeTypeID edgeTypeID = metadataBuilder.getOrCreateEdgeType(edgeType->get<std::string_view>());
 
-                const auto srcIDIt = start->find("id");
-                const auto tgtIDIt = end->find("id");
+                NodeID srcNodeID;
+                NodeID tgtNodeID;
 
-                if (srcIDIt == start->end()) {
-                    return JsonlImportError::result(JsonlImportErrorType::MISSING_EDGE_SRC_ID, lineNumber);
+                if (start->is_object()) {
+                    const auto srcIDIt = start->find("id");
+
+                    if (srcIDIt == start->end()) {
+                        return JsonlImportError::result(JsonlImportErrorType::MISSING_EDGE_SRC_ID, lineNumber);
+                    }
+
+                    srcNodeID = nodeIDs.at(parseEntityID(*srcIDIt));
+                } else {
+                    srcNodeID = parseEntityID(*start);
                 }
 
-                if (tgtIDIt == end->end()) {
-                    return JsonlImportError::result(JsonlImportErrorType::MISSING_EDGE_TGT_ID, lineNumber);
-                }
+                if (end->is_object()) {
+                    const auto tgtIDIt = end->find("id");
 
-                const NodeID srcNodeID = nodeIDs.at(parseEntityID(*srcIDIt));
-                const NodeID tgtNodeID = nodeIDs.at(parseEntityID(*tgtIDIt));
+                    if (tgtIDIt == end->end()) {
+                        return JsonlImportError::result(JsonlImportErrorType::MISSING_EDGE_TGT_ID, lineNumber);
+                    }
+
+                    tgtNodeID = nodeIDs.at(parseEntityID(*tgtIDIt));
+                } else {
+                    tgtNodeID = parseEntityID(*end);
+                }
 
                 [[maybe_unused]] const EdgeRecord& edge = builder.addEdge(edgeTypeID, srcNodeID, tgtNodeID);
 
