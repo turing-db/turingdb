@@ -12,6 +12,7 @@ class QueryCommand;
 class SinglePartQuery;
 class LoadGraphQuery;
 class CreateGraphQuery;
+class DeclContext;
 class ChangeQuery;
 class LoadGMLQuery;
 class LoadNeo4jQuery;
@@ -58,7 +59,7 @@ private:
     CypherAST* _ast {nullptr};
     GraphView _graphView;
     const GraphMetadata& _graphMetadata;
-    const QueryCommand* _currentQuery {nullptr};
+    DeclContext* _ctxt {nullptr};
 
     std::unique_ptr<ExprAnalyzer> _exprAnalyzer;
     std::unique_ptr<ReadStmtAnalyzer> _readAnalyzer;

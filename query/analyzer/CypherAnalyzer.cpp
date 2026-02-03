@@ -7,7 +7,6 @@
 #include "ReadStmtAnalyzer.h"
 #include "Symbol.h"
 #include "SourceManager.h"
-#include "Symbol.h"
 #include "WriteStmtAnalyzer.h"
 #include "ExprAnalyzer.h"
 #include "QueryCommand.h"
@@ -54,12 +53,11 @@ CypherAnalyzer::~CypherAnalyzer() {
 
 void CypherAnalyzer::analyze() {
     for (QueryCommand* query : _ast->queries()) {
-        _currentQuery = query;
-        DeclContext* ctxt = query->getDeclContext();
+        _ctxt = query->getDeclContext();
 
-        _exprAnalyzer->setDeclContext(ctxt);
-        _readAnalyzer->setDeclContext(ctxt);
-        _writeAnalyzer->setDeclContext(ctxt);
+        _exprAnalyzer->setDeclContext(_ctxt);
+        _readAnalyzer->setDeclContext(_ctxt);
+        _writeAnalyzer->setDeclContext(_ctxt);
 
         switch (query->getKind()) {
             case QueryCommand::Kind::SINGLE_PART_QUERY:
@@ -190,8 +188,7 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     if (projection->isReturningAll()) {
         // Return all variables defined in the current query
 
-        const DeclContext* ctxt = _currentQuery->getDeclContext();
-        bioassert(ctxt, "Query context is invalid");
+        bioassert(_ctxt, "Query context is invalid");
 
         // Iterate the decls in reverse declaration order. Since we call `pushFrontDecl()`
         // The decls end up in order. e.g. MATCH (a), (b), (c) RETURN *, a.name
@@ -199,7 +196,7 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         // - After first `pushFrontDecl()`: ['c', 'a.name'];
         // - After second `pushFrontDecl()`: ['b', 'c', 'a.name'];
         // - After third `pushFrontDecl()`: ['a', 'b', 'c', 'a.name'];
-        for (VarDecl* decl : std::views::reverse(*ctxt)) {
+        for (VarDecl* decl : std::views::reverse(*_ctxt)) {
             if (decl->isUnnamed()) {
                 continue;
             }

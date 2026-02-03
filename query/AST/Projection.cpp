@@ -35,22 +35,22 @@ void Projection::pushFrontDecl(VarDecl* decl) {
     _items.emplace_front(decl);
 }
 
-const std::string_view* Projection::getName(const Expr* item) const {
+std::optional<std::string_view> Projection::getName(const Expr* item) const {
     auto it = _names.find(std::bit_cast<uintptr_t>(item));
     if (it == end(_names)) {
-        return nullptr;
+        return std::nullopt;
     }
 
-    return &it->second;
+    return it->second;
 }
 
-const std::string_view* Projection::getName(const VarDecl* item) const {
+std::optional<std::string_view> Projection::getName(const VarDecl* item) const {
     auto it = _names.find(std::bit_cast<uintptr_t>(item));
     if (it == end(_names)) {
-        return nullptr;
+        return std::nullopt;
     }
 
-    return &it->second;
+    return it->second;
 }
 
 bool Projection::hasName(const std::string_view& name) const {

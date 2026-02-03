@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <stdint.h>
 #include <list>
 #include <string_view>
@@ -70,8 +71,8 @@ public:
 
     void setReturnAll() { _returningAll = true; }
 
-    const std::string_view* getName(const Expr* item) const;
-    const std::string_view* getName(const VarDecl* item) const;
+    std::optional<std::string_view> getName(const Expr* item) const;
+    std::optional<std::string_view> getName(const VarDecl* item) const;
     bool hasName(const std::string_view& name) const;
 
 private:
