@@ -684,7 +684,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                 }
 
                 const ColumnTag tag = _declToColumn.at(decl);
-                const std::string_view* name = projNode->getName(item);
+                const std::optional<std::string_view> name = projNode->getName(item);
                 if (!name) {
                     continue;
                 }
@@ -694,7 +694,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
             } else if (const auto* declPtr = std::get_if<VarDecl*>(&item)) {
                 const VarDecl* decl = *declPtr;
                 const ColumnTag tag = _declToColumn.at(decl);
-                const std::string_view* name = projNode->getName(decl);
+                const std::optional<std::string_view> name = projNode->getName(decl);
 
                 if (!name) {
                     continue;

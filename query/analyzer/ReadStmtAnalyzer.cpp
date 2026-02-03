@@ -116,8 +116,8 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
     // Step 3. Analyze YIELD clause
     const YieldClause* yield = callStmt->getYield();
     if (yield == nullptr || yield->getItems() == nullptr) {
-        // No yield OR YIELD *.
-        // In the current implemention those are equivalent. In neo4j YIELD * returns all columns
+        // In the current implemention having YIELD * or no yield at all means the same thing.
+        // In neo4j YIELD * returns all columns including deprecated ones.
         // including deprecated ones.
         if (!callStmt->isStandaloneCall()) {
             throwError("Procedure call inside a query requires to name the "
