@@ -462,8 +462,8 @@ opt_limitSSt
 
 projectionItems
     : MULT { $$ = Projection::create(ast); $$->setReturnAll(); LOC($$, @$); }
-    | projectionItem { $$ = Projection::create(ast); $$->pushBackExpr($1); LOC($$, @$); }
-    | projectionItems COMMA projectionItem { $$ = $1; $$->pushBackExpr($3); LOC($$, @$); }
+    | projectionItem { $$ = Projection::create(ast); $$->addExpr($1); LOC($$, @$); }
+    | projectionItems COMMA projectionItem { $$ = $1; $$->addExpr($3); LOC($$, @$); }
     ;
 
 projectionItem
