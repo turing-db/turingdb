@@ -38,6 +38,7 @@ class WriteNode;
 class ScanNodesByLabelNode;
 class LoadGraphNode;
 class LoadNeo4jNode;
+class LoadJsonlNode;
 class ChangeNode;
 class ListGraphNode;
 class CreateGraphNode;
@@ -125,6 +126,7 @@ private:
     PipelineOutputInterface* translateScanNodesByLabelNode(ScanNodesByLabelNode* node);
     PipelineOutputInterface* translateLoadGraph(LoadGraphNode* node);
     PipelineOutputInterface* translateLoadNeo4j(LoadNeo4jNode* node);
+    PipelineOutputInterface* translateLoadJsonl(LoadJsonlNode* node);
     PipelineOutputInterface* translateChangeNode(ChangeNode* node);
     PipelineOutputInterface* translateCommitNode(CommitNode* node);
     PipelineOutputInterface* translateListGraphNode(ListGraphNode* node);

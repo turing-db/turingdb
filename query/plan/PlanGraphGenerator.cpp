@@ -11,7 +11,6 @@
 #include "ExprDependencies.h"
 #include "nodes/ChangeNode.h"
 #include "nodes/CommitNode.h"
-#include "spdlog/spdlog.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/ReturnStmt.h"
@@ -40,6 +39,7 @@
 #include "nodes/CreateGraphNode.h"
 #include "nodes/LoadGMLNode.h"
 #include "nodes/LoadNeo4jNode.h"
+#include "nodes/LoadJsonlNode.h"
 #include "nodes/S3ConnectNode.h"
 #include "nodes/S3TransferNode.h"
 #include "nodes/ShowProceduresNode.h"
@@ -57,6 +57,7 @@
 #include "LoadGraphQuery.h"
 #include "LoadGMLQuery.h"
 #include "LoadNeo4jQuery.h"
+#include "LoadJsonlQuery.h"
 
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
@@ -92,6 +93,10 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::LOAD_NEO4J_QUERY:
             generateLoadNeo4jQuery(static_cast<const LoadNeo4jQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::LOAD_JSONL_QUERY:
+            generateLoadJsonlQuery(static_cast<const LoadJsonlQuery*>(query));
         break;
 
         case QueryCommand::Kind::CHANGE_QUERY:
@@ -241,6 +246,11 @@ void PlanGraphGenerator::generateLoadGMLQuery(const LoadGMLQuery* loadGML) {
 
 void PlanGraphGenerator::generateLoadNeo4jQuery(const LoadNeo4jQuery* query) {
     LoadNeo4jNode* n = _tree.create<LoadNeo4jNode>(query->getFilePath(), query->getGraphName());
+    _tree.newOut<ProduceResultsNode>(n);
+}
+
+void PlanGraphGenerator::generateLoadJsonlQuery(const LoadJsonlQuery* query) {
+    LoadJsonlNode* n = _tree.create<LoadJsonlNode>(query->getFilePath(), query->getGraphName());
     _tree.newOut<ProduceResultsNode>(n);
 }
 

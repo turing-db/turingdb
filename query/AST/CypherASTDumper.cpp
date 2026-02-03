@@ -31,6 +31,7 @@
 #include "CreateGraphQuery.h"
 #include "LoadGMLQuery.h"
 #include "LoadNeo4jQuery.h"
+#include "LoadJsonlQuery.h"
 #include "S3ConnectQuery.h"
 #include "S3TransferQuery.h"
 #include "YieldClause.h"
@@ -98,6 +99,10 @@ void CypherASTDumper::dump(std::ostream& out) {
 
             case QueryCommand::Kind::LOAD_NEO4J_QUERY:
                 dump(out, static_cast<const LoadNeo4jQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::LOAD_JSONL_QUERY:
+                dump(out, static_cast<const LoadJsonlQuery*>(query));
             break;
 
             case QueryCommand::Kind::CHANGE_QUERY:
@@ -220,7 +225,14 @@ void CypherASTDumper::dump(std::ostream& out, const LoadGraphQuery* query) {
 void CypherASTDumper::dump(std::ostream& out, const LoadNeo4jQuery* query) {
     out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
     out << "    _" << std::hex << query << " {\n";
-    out << "        ASTType LoadGraphQuery\n";
+    out << "        ASTType LoadNeo4jQuery\n";
+    out << "    }\n";
+}
+
+void CypherASTDumper::dump(std::ostream& out, const LoadJsonlQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType LoadJsonlQuery\n";
     out << "    }\n";
 }
 

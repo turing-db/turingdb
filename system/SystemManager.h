@@ -99,6 +99,7 @@ private:
 
     bool loadNeo4jJsonDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadNeo4jDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
+    bool loadJsonlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadGmlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadBinaryDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool addGraph(std::unique_ptr<Graph> graph);

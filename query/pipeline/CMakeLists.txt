@@ -40,6 +40,7 @@ set(processors_sources
     processors/CreateGraphProcessor.cpp
     processors/LoadGMLProcessor.cpp
     processors/LoadNeo4jProcessor.cpp
+    processors/LoadJsonlProcessor.cpp
     processors/S3ConnectProcessor.cpp
     processors/S3PullProcessor.cpp
     processors/S3PushProcessor.cpp

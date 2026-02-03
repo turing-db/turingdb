@@ -107,6 +107,7 @@ using Token = db::YCypherParser::token;
 "GRAPH" { KEYWORD(GRAPH) }
 "COUNT" { KEYWORD(COUNT) }
 "NEO4J" { KEYWORD(NEO4J) }
+"JSONL" { KEYWORD(JSONL) }
 "LIST" { KEYWORD(LIST) }
 "DESC" { KEYWORD(DESC) }
 "CALL" { KEYWORD(CALL) }

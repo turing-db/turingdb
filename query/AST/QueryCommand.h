@@ -13,6 +13,7 @@ public:
         SINGLE_PART_QUERY = 0,
         LOAD_GRAPH_QUERY,
         LOAD_NEO4J_QUERY,
+        LOAD_JSONL_QUERY,
         CHANGE_QUERY,
         COMMIT_QUERY,
         LIST_GRAPH_QUERY,

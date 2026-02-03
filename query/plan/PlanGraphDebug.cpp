@@ -7,6 +7,7 @@
 #include "nodes/GetEntityTypeNode.h"
 #include "nodes/GetPropertyNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
+#include "nodes/LoadJsonlNode.h"
 #include "nodes/OrderByNode.h"
 #include "nodes/ProcedureEvalNode.h"
 #include "nodes/VarNode.h"
@@ -125,6 +126,12 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
             case PlanGraphOpcode::LOAD_NEO4J: {
                 const auto* n = dynamic_cast<LoadNeo4jNode*>(node.get());
+                output << "        __graph__: " << n->getGraphName() << "\n";
+                output << "        __filepath__: " << n->getFilePath().get() << "\n";
+            } break;
+
+            case PlanGraphOpcode::LOAD_JSONL: {
+                const auto* n = dynamic_cast<LoadJsonlNode*>(node.get());
                 output << "        __graph__: " << n->getGraphName() << "\n";
                 output << "        __filepath__: " << n->getFilePath().get() << "\n";
             } break;

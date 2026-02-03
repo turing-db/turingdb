@@ -14,6 +14,7 @@ class CreateGraphQuery;
 class ChangeQuery;
 class LoadGMLQuery;
 class LoadNeo4jQuery;
+class LoadJsonlQuery;
 class ChangeQuery;
 class S3ConnectQuery;
 class S3TransferQuery;
@@ -43,6 +44,7 @@ public:
     void analyze(const CreateGraphQuery* createGraph);
     void analyze(LoadGMLQuery* loadGML);
     void analyze(LoadNeo4jQuery* loadNeo4j);
+    void analyze(LoadJsonlQuery* loadJsonl);
     void analyze(const S3ConnectQuery* s3Connect);
     void analyze(S3TransferQuery* s3Transfer);
 

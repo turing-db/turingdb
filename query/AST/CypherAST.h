@@ -74,6 +74,7 @@ class ProcedureBlueprintMap;
 class LoadGraphQuery;
 class LoadGMLQuery;
 class LoadNeo4jQuery;
+class LoadJsonlQuery;
 class S3ConnectQuery;
 class S3TransferQuery;
 class CommitQuery;
@@ -137,6 +138,7 @@ public:
     friend CreateGraphQuery;
     friend LoadGMLQuery;
     friend LoadNeo4jQuery;
+    friend LoadJsonlQuery;
     friend S3ConnectQuery;
     friend S3TransferQuery;
     friend CommitQuery;

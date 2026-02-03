@@ -8,6 +8,7 @@
 #include "Graph.h"
 #include "Neo4j/Neo4JParserConfig.h"
 #include "Neo4jImporter.h"
+#include "JsonlParser.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 #include "GMLImporter.h"
@@ -180,12 +181,14 @@ bool SystemManager::importGraph(const std::string& graphName, const fs::Path& fi
             return loadGmlDB(graphName, absolute, jobSystem);
         case GraphFileType::NEO4J:
             return loadNeo4jDB(graphName, absolute, jobSystem);
+        case GraphFileType::JSONL:
+            return loadJsonlDB(graphName, absolute, jobSystem);
         case GraphFileType::NEO4J_JSON:
             return loadNeo4jJsonDB(graphName, absolute, jobSystem);
         case GraphFileType::BINARY:
             return loadBinaryDB(graphName, absolute, jobSystem);
-        default:
-            return false;
+        case GraphFileType::_SIZE:
+            throw TuringException("Unsupported graph type");
     }
 }
 
@@ -214,6 +217,10 @@ std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& gra
         return GraphFileType::NEO4J;
     }
 
+    if (graphPath.extension() == ".json" || graphPath.extension() == ".jsonl") {
+        return GraphFileType::JSONL;
+    }
+
     const auto typeFilePath = graphPath / "type";
     std::string typeName;
     if (!FileUtils::readContent(typeFilePath.get(), typeName)) {
@@ -224,6 +231,8 @@ std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& gra
         return GraphFileType::NEO4J_JSON;
     } else if (typeName == GraphFileTypeDescription::value(GraphFileType::BINARY)) {
         return GraphFileType::BINARY;
+    } else if (typeName == GraphFileTypeDescription::value(GraphFileType::JSONL)) {
+        return GraphFileType::JSONL;
     }
 
     return {};
@@ -343,6 +352,63 @@ bool SystemManager::loadNeo4jDB(const std::string& graphName,
     if (_config->isSyncedOnDisk()) {
         if (!graph->getSerializer().dump()) {
             _graphLoadStatus.removeLoadingGraph(graphName);
+            return false;
+        }
+    }
+
+    if (!addGraph(std::move(graph))) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
+    _graphLoadStatus.removeLoadingGraph(graphName);
+    return true;
+}
+
+bool SystemManager::loadJsonlDB(const std::string& graphName,
+                                const fs::Path& dbPath,
+                                JobSystem& jobsystem) {
+    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
+        return false;
+    }
+
+    const auto& graphPath = _config->getGraphsDir() / graphName;
+    if (graphPath == dbPath) {
+        return false;
+    }
+
+    auto graph = Graph::create(graphName, graphPath);
+    std::ifstream file(dbPath.get());
+    if (!file) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
+    Change* change = _changes->createChange(graph.get(), CommitHash::head());
+    ChangeAccessor changeAccessor = change->access();
+
+    const auto importRes = JsonlParser::parse(changeAccessor, file);
+
+    if (!importRes) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        spdlog::error(importRes.error().fmtMessage());
+        return false;
+    }
+
+    const auto submitRes = _changes->submitChange(changeAccessor, jobsystem);
+
+    if (!submitRes) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        spdlog::error(submitRes.error().fmtMessage());
+        return false;
+    }
+
+    if (_config->isSyncedOnDisk()) {
+        const auto dumpRes = graph->getSerializer().dump();
+
+        if (!dumpRes) {
+            _graphLoadStatus.removeLoadingGraph(graphName);
+            spdlog::error(dumpRes.error().fmtMessage());
             return false;
         }
     }
