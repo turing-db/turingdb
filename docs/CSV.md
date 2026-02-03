@@ -59,7 +59,7 @@ The design follows Neo4j's `LOAD CSV` semantics where possible, adapted for Turi
 2. **Columnar Alignment**: Produce columnar data structures compatible with TuringDB's storage
 3. **Simplicity**: Avoid complex type systems (no variants, no runtime type dispatch)
 4. **Composability**: `LOAD CSV` works as a reading statement, composable with `MATCH`, `CREATE`, etc.
-5. **Error Handling**: Graceful handling of malformed lines with skip-and-log behavior
+5. **Error Handling**: Malformed lines are runtime errors by default
 
 ### Non-Goals (Deferred)
 
@@ -139,16 +139,14 @@ CSV files are processed in chunks using the standard `ChunkConfig::CHUNK_SIZE` t
 - Uses the same chunk size as other processors for consistency
 - Aligns with TuringDB's existing batch processing model (WriteProcessor collects creates)
 
-### Decision 6: Skip Malformed Lines
+### Decision 6: Malformed Lines Are Runtime Errors
 
-Malformed CSV lines (wrong column count, encoding errors) are skipped and logged, rather than aborting the entire import.
+Malformed CSV lines (wrong column count, unterminated quotes, encoding errors) cause a runtime error that aborts the query.
 
 **Rationale**:
-- Practical for large imports where some data quality issues are expected
-- Users can review logs to identify problematic lines
-- Consistent with data engineering best practices
-
-**Note**: Type conversion errors (e.g., `toInteger("abc")`) are runtime errors that abort the query. This is distinct from CSV parsing errors.
+- Fail-fast behavior ensures data integrity
+- Users are immediately aware of data quality issues
+- Consistent with type conversion errors (e.g., `toInteger("abc")`)
 
 ---
 
@@ -488,7 +486,7 @@ public:
 
     // Read up to maxRows into the output ColumnStringTable
     // Returns number of rows read (0 at EOF)
-    // Malformed lines are skipped and logged
+    // Throws runtime error on malformed lines
     // Field columns are allocated dynamically via LocalMemory
     size_t readChunk(size_t maxRows, ColumnStringTable* output);
 
@@ -497,7 +495,6 @@ public:
     size_t getHeaderIndex(std::string_view name) const;
 
     size_t getLinesRead() const { return _linesRead; }
-    size_t getLinesSkipped() const { return _linesSkipped; }
 
 private:
     int _fd {-1};                          // File descriptor
@@ -516,7 +513,6 @@ private:
 
     LocalMemory* _memory;                  // For allocating field columns
     size_t _linesRead {0};
-    size_t _linesSkipped {0};
 
     // Memory mapping
     bool mapNextChunk();
@@ -851,20 +847,20 @@ Implementation in `FuncEvalNode`:
 
 ### Error Handling
 
-#### CSV Parsing Errors (Skip and Log)
+#### Runtime Errors (Abort Query)
 
+**CSV parsing errors**:
 - Wrong number of columns in a line
 - Unterminated quoted field
 - Invalid UTF-8 encoding
 
-These errors skip the line and log a warning. The import continues.
+**Expression evaluation errors**:
+- `row[e]` where `e >= fieldCount`: Index out of bounds
+- `row[e]` where `e < 0`: Negative index
+- `row.columnName` where `columnName` not in headers: Unknown header
+- `toInteger("abc")`: Cannot parse value
 
-#### Runtime Errors (Abort Query)
-
-- `row[e]` where `e >= fieldCount`: Runtime error (index out of bounds)
-- `row[e]` where `e < 0`: Runtime error (negative index)
-- `row.columnName` where `columnName` not in headers: Runtime error
-- `toInteger("abc")`: Runtime error (cannot parse)
+**File errors**:
 - File not found: Error at `CSVSourceProcessor::prepare()` time
 
 ### Edge Cases
@@ -895,7 +891,7 @@ Empty fields (e.g., `a,,b`) are valid and produce empty strings (`""`).
 
 - **Required encoding**: UTF-8
 - **BOM handling**: UTF-8 BOM (0xEF 0xBB 0xBF) at file start is skipped if present
-- **Invalid UTF-8**: Lines with invalid UTF-8 sequences are skipped and logged (treated as malformed)
+- **Invalid UTF-8**: Lines with invalid UTF-8 sequences cause a runtime error
 - **Other encodings**: Not supported. Users must convert files to UTF-8 before import.
 
 ### Concurrency
@@ -953,18 +949,11 @@ enum class Kind {
 #### Statistics Collection
 `CSVParser` tracks and exposes:
 - `getLinesRead()`: Total lines successfully parsed
-- `getLinesSkipped()`: Lines skipped due to errors
 
 #### Logging
 At the end of import, log a summary:
 ```
-[INFO] LOAD CSV completed: 1,234,567 lines read, 42 lines skipped
-```
-
-If lines were skipped, log at WARNING level with details:
-```
-[WARN] LOAD CSV: skipped line 12345 (wrong column count: expected 5, got 3)
-[WARN] LOAD CSV: skipped line 67890 (invalid UTF-8 sequence)
+[INFO] LOAD CSV completed: 1,234,567 lines read
 ```
 
 #### Progress Indication (Future)
@@ -1117,9 +1106,9 @@ CREATE (a)-[:RELATED]->(b)
 
 5. **Parallel CSV Parsing**: Split file for parallel processing
 
-6. **Error Modes**: Configurable behavior for malformed lines
+6. **Error Modes**: Configurable behavior for malformed lines (default is FAIL)
    ```cypher
-   LOAD CSV 'file.csv' AS row ON ERROR SKIP  // or ON ERROR FAIL
+   LOAD CSV 'file.csv' AS row ON ERROR SKIP  // skip and log malformed lines
    ```
 
 ---
