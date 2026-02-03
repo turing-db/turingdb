@@ -45,6 +45,7 @@ add_subdirectory(analyzer2)
 add_subdirectory(v2)
 #add_subdirectory(deletions)
 add_subdirectory(vector-db)
+add_subdirectory(jsonl-import)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)

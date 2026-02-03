@@ -57,6 +57,8 @@ public:
             const auto [integerOffset, bitShift] = computeBitShift(id);
             _integers[integerOffset] |= bitShift;
         }
+
+        return *this;
     }
 
     static TemplateLabelSet fromList(std::initializer_list<LabelID> labels) {
