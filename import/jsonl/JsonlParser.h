@@ -19,7 +19,7 @@ public:
     JsonlParser& operator=(const JsonlParser&) = delete;
     JsonlParser& operator=(JsonlParser&&) = delete;
 
-    static JsonlImportResult<void> parse(ChangeAccessor& change, std::istream& stream);
+    [[nodiscard]] static JsonlImportResult<void> parse(ChangeAccessor& change, std::istream& stream);
 };
 
 }

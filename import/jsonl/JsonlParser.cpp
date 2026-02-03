@@ -194,7 +194,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                     tgtNodeID = parseEntityID(*end);
                 }
 
-                [[maybe_unused]] const EdgeRecord& edge = builder.addEdge(edgeTypeID, srcNodeID, tgtNodeID);
+                const EdgeRecord& edge = builder.addEdge(edgeTypeID, srcNodeID, tgtNodeID);
 
                 if (properties != obj.end()) {
                     for (const auto& [key, value] : properties->items()) {

@@ -41,10 +41,10 @@ public:
     {
     }
 
-    [[nodiscard]] JsonlImportErrorType getType() const { return _type; }
-    [[nodiscard]] size_t getLine() const { return _line; }
-    [[nodiscard]] std::string_view getMessage() const { return _message; }
-    [[nodiscard]] std::string fmtMessage() const;
+    JsonlImportErrorType getType() const { return _type; }
+    size_t getLine() const { return _line; }
+    std::string_view getMessage() const { return _message; }
+    std::string fmtMessage() const;
 
     template <typename... T>
     static BadResult<JsonlImportError> result(JsonlImportErrorType type,
