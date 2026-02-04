@@ -85,6 +85,8 @@ private:
     bool _returningAll {false};
 
     Items _items;
+
+    // Maps a VarDecl*/Expr* to its column name
     std::unordered_map<uintptr_t, std::string_view> _names;
     std::unordered_set<std::string_view> _namesSet;
 
