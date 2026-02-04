@@ -306,9 +306,12 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
 
         Expr* item = *exprPtr;
         const Expr::Kind itemKind = item->getKind();
-        if (itemKind == Expr::Kind::BINARY) {
-            exprEval->addExpr(item);
-        } else if (itemKind == Expr::Kind::UNARY) {
+        // Literals that appear only on the RHS of a return, e.g. `RETURN 5`, need a
+        // column allocated for them, otherwise they will not exist
+        const bool needsEvaluation = itemKind == Expr::Kind::BINARY
+                                  || itemKind == Expr::Kind::UNARY
+                                  || itemKind == Expr::Kind::LITERAL;
+        if (needsEvaluation) {
             exprEval->addExpr(item);
         }
 
