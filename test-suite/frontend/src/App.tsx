@@ -26,7 +26,7 @@ import {
   SidebarTrigger,
   useSidebar
 } from "@/components/ui/sidebar";
-import { AlertTriangle, Ban, CheckCircle2, Clock3, Copy, FilePlus, GitCompareArrows, PanelLeft, Play, PlayCircle, Plus, Share2, Trash2 } from "lucide-react";
+import { AlertTriangle, Ban, Bug, CheckCircle2, Clock3, Copy, FilePlus, GitCompareArrows, PanelLeft, Play, PlayCircle, Plus, Share2, Trash2 } from "lucide-react";
 
 type TestMeta = {
   name: string;
@@ -722,6 +722,42 @@ export default function App() {
     }
   };
 
+  const reportSelectedTestIssue = () => {
+    if (!selected) return;
+    const testUrl = `http://localhost:5555/?test=${encodeURIComponent(selected.name)}`;
+    const title = `[Test] ${selected.name}`;
+    const lines = [
+      "## Test Details",
+      `- Name: \`${selected.name}\``,
+      `- URL: ${testUrl}`,
+      `- Enabled: ${selected.enabled ? "true" : "false"}`,
+      `- Write required: ${selected.writeRequired ? "true" : "false"}`,
+      `- Tags: ${(selected.tags ?? []).join(", ") || "(none)"}`,
+      "",
+      "## Query",
+      "```cypher",
+      selected.query ?? "",
+      "```"
+    ];
+    if (selectedResult) {
+      lines.push(
+        "",
+        "## Last Run",
+        `- Plan matched: ${selectedResult.planMatched ? "true" : "false"}`,
+        `- Result matched: ${selectedResult.resultMatched ? "true" : "false"}`,
+        typeof selectedResult.timeUs === "number"
+          ? `- Time: ${selectedResult.timeUs} μs`
+          : "- Time: (not available)"
+      );
+    }
+    const params = new URLSearchParams({
+      title,
+      body: lines.join("\n")
+    });
+    const issueUrl = `https://github.com/turing-db/turingdb/issues/new?${params.toString()}`;
+    window.open(issueUrl, "_blank", "noopener,noreferrer");
+  };
+
   const selectedResult = selected ? results[selected.name] : undefined;
   const allTags = React.useMemo(() => {
     const set = new Set<string>();
@@ -1308,6 +1344,16 @@ export default function App() {
                 />
                 Enabled
               </label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={reportSelectedTestIssue}
+                disabled={!selected}
+                className="mt-3"
+              >
+                <Bug />
+                Report Issue
+              </Button>
               {!selected.enabled && (
                 <div className="mt-3">
                   <label className="text-[10px] uppercase tracking-[0.2em] text-ink/60">
