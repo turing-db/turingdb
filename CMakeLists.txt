@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.15)
 
 project(turingdb)
 
+if (NIX_BUILD)
+    message(STATUS Building with nix)
+endif()
+
 # On macOS, require LLVM Clang (not AppleClang) with version >= 15
 # AppleClang has compatibility issues with C++23 features and missing headers
 if(APPLE)
@@ -136,6 +140,20 @@ find_package(CURL REQUIRED)
 # Bison and Flex
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
+
+# Use Nix-provided Flex and Bison
+if(NIX_BUILD)
+    # BISON_EXECUTABLE and FLEX_EXECUTABLE should already be set via CMake flags
+    # But ensure they're used by verifying they exist
+    if(NOT BISON_EXECUTABLE)
+        message(FATAL_ERROR "BISON_EXECUTABLE not set in Nix build")
+    endif()
+    if(NOT FLEX_EXECUTABLE)
+        message(FATAL_ERROR "FLEX_EXECUTABLE not set in Nix build")
+    endif()
+    message(STATUS "Using Nix Bison: ${BISON_EXECUTABLE}")
+    message(STATUS "Using Nix Flex: ${FLEX_EXECUTABLE}")
+endif()
 
 # Faiss
 find_package(Faiss REQUIRED)
