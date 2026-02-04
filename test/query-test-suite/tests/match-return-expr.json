@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n)-[e]->(m) RETURN n, e, m, 2 + 1",
+  "expect": {
+    "plan": "",
+    "result": ""
+  },
+  "tags": [],
+  "write-required": false
+}
