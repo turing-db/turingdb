@@ -13,36 +13,41 @@
     ] (system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          darwinUtils  = pkgs.lib.optionals pkgs.stdenv.isDarwin [
-            pkgs.apple-sdk_14
-            pkgs.libiconv
+
+          darwin = pkgs.stdenv.isDarwin;
+
+          turingstdenv =
+            if darwin
+            then pkgs.llvmPackages_20.stdenv
+            else pkgs.stdenv;
+          
+          darwinUtils  = pkgs.lib.optionals darwin [
+            pkgs.llvmPackages_20.openmp
           ];
 
           sharedNativeBuildInputs = with pkgs; [
             cmake
+            pkg-config
             git
-            bash
-
-            curl
-            openssl_3
-
-            zlib
-
             bison
             flex
-
-            openblas
-
-            faiss
-            aws-sdk-cpp
-            gtest
           ];
 
-          sharedBuildInputs = [] ++ darwinUtils;
+          sharedBuildInputs = with pkgs; [
+            curl
+            openssl
+            curl
+            openssl
+            boost
+            openblas
+            aws-sdk-cpp
+            faiss
+            zlib
+          ] ++ lib.optionals darwin darwinUtils;
 
         in
         {
-          devShells.default = pkgs.mkShell {
+          devShells.default = pkgs.mkShell.override { stdenv = turingstdenv; } {
             nativeBuildInputs = sharedNativeBuildInputs;
             buildInputs = sharedBuildInputs;
 
