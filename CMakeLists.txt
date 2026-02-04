@@ -1,6 +1,31 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.15)
 
 project(turingdb)
+
+if (NIX_BUILD)
+    message(STATUS Building with nix)
+endif()
+
+# On macOS, require LLVM Clang (not AppleClang) with version >= 15
+# AppleClang has compatibility issues with C++23 features and missing headers
+if(APPLE)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+        message(FATAL_ERROR
+            "AppleClang is not supported. Please use LLVM Clang.\n"
+            "Installation with brew: brew install llvm\n"
+            "Then configure with: cmake -DCMAKE_C_COMPILER=$(brew --prefix llvm)/bin/clang "
+            "-DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++ .."
+        )
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
+            message(FATAL_ERROR
+                "LLVM Clang version ${CMAKE_CXX_COMPILER_VERSION} is too old. "
+                "Please use version 15.0 or newer.\n"
+                "Update with: brew upgrade llvm"
+            )
+        endif()
+    endif()
+endif()
 
 # Set CMAKE_INSTALL_PREFIX to build/turing_install if not set
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -84,7 +109,7 @@ endif()
 set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
 # When using LLVM clang from Homebrew on macOS, add libc++ library path for linker
-if(APPLE)
+if(APPLE AND NOT NIX_BUILD)
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
     get_filename_component(LLVM_ROOT ${COMPILER_DIR} DIRECTORY)
     if(EXISTS "${LLVM_ROOT}/lib/c++")
@@ -121,7 +146,7 @@ find_package(Faiss REQUIRED)
 
 # OpenMP (required by Faiss)
 # On macOS, AppleClang doesn't include OpenMP, so we need to use Homebrew's libomp
-if(APPLE)
+if(APPLE AND NOT NIX_BUILD)
     find_program(BREW_EXECUTABLE brew)
     if(BREW_EXECUTABLE)
         execute_process(
@@ -142,7 +167,7 @@ find_package(OpenMP REQUIRED)
 
 
 # Use Homebrew for Flex and Bison on macOS
-if(APPLE)
+if(APPLE AND NOT NIX_BUILD)
     find_program(BREW_EXECUTABLE brew)
     if(NOT BREW_EXECUTABLE)
         message(FATAL_ERROR "Homebrew not found")
@@ -161,13 +186,6 @@ if(APPLE)
     set(FLEX_EXECUTABLE "${HOMEBREW_FLEX_PREFIX}/bin/flex")
     set(FLEX_LIBRARIES "${HOMEBREW_FLEX_PREFIX}/lib/libfl.a")
     message(STATUS "Using Homebrew Flex include directory: ${FLEX_INCLUDE_DIRS}")
-endif()
-
-if(APPLE)
-    find_program(BREW_EXECUTABLE brew)
-    if(NOT BREW_EXECUTABLE)
-        message(FATAL_ERROR "Homebrew not found")
-    endif()
 
     execute_process(
         COMMAND ${BREW_EXECUTABLE} --prefix bison
@@ -187,9 +205,7 @@ endif()
 find_package(ZLIB REQUIRED)
 
 # aws-sdk-cpp
-find_package(AWSSDK REQUIRED COMPONENTS s3 s3-crt ec2
-    PATHS ${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies/
-)
+find_package(AWSSDK REQUIRED COMPONENTS s3 s3-crt ec2)
 
 # openssl
 find_package(OpenSSL REQUIRED)
