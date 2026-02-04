@@ -32,9 +32,10 @@
             flex
 
             openblas
-            # faiss
 
-            # aws-sdk-cpp
+            faiss
+            aws-sdk-cpp
+            gtest
           ];
 
           sharedBuildInputs = [] ++ darwinUtils;
