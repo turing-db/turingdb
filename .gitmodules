@@ -1,9 +1,6 @@
 [submodule "external/aws-sdk-cpp"]
 	path = external/aws-sdk-cpp
 	url = https://github.com/aws/aws-sdk-cpp.git
-[submodule "common"]
-	path = common
-	url = https://github.com/turing-db/turing-common.git
 [submodule "test/googletest"]
 	path = test/googletest
 	url = https://github.com/google/googletest.git
