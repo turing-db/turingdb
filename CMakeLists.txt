@@ -11,8 +11,8 @@ endif()
 if(APPLE)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
         message(FATAL_ERROR
-            "AppleClang is not supported. Please use LLVM Clang from Homebrew.\n"
-            "Install with: brew install llvm\n"
+            "AppleClang is not supported. Please use LLVM Clang.\n"
+            "Installation with brew: brew install llvm\n"
             "Then configure with: cmake -DCMAKE_C_COMPILER=$(brew --prefix llvm)/bin/clang "
             "-DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++ .."
         )
@@ -141,20 +141,6 @@ find_package(CURL REQUIRED)
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 
-# Use Nix-provided Flex and Bison
-if(NIX_BUILD)
-    # BISON_EXECUTABLE and FLEX_EXECUTABLE should already be set via CMake flags
-    # But ensure they're used by verifying they exist
-    if(NOT BISON_EXECUTABLE)
-        message(FATAL_ERROR "BISON_EXECUTABLE not set in Nix build")
-    endif()
-    if(NOT FLEX_EXECUTABLE)
-        message(FATAL_ERROR "FLEX_EXECUTABLE not set in Nix build")
-    endif()
-    message(STATUS "Using Nix Bison: ${BISON_EXECUTABLE}")
-    message(STATUS "Using Nix Flex: ${FLEX_EXECUTABLE}")
-endif()
-
 # Faiss
 find_package(Faiss REQUIRED)
 
@@ -184,7 +170,7 @@ find_package(OpenMP REQUIRED)
 if(APPLE AND NOT NIX_BUILD)
     find_program(BREW_EXECUTABLE brew)
     if(NOT BREW_EXECUTABLE)
-        message(STATUS "Homebrew not found")
+        message(FATAL_ERROR "Homebrew not found")
     endif()
 
     execute_process(
@@ -193,20 +179,13 @@ if(APPLE AND NOT NIX_BUILD)
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
     if(NOT HOMEBREW_FLEX_PREFIX)
-        message(STATUS "Homebrew Flex prefix not found. Please install Flex using Homebrew.")
+        message(FATAL_ERROR "Homebrew Flex prefix not found. Please install Flex using Homebrew.")
     endif()
 
     set(FLEX_INCLUDE_DIRS "${HOMEBREW_FLEX_PREFIX}/include")
     set(FLEX_EXECUTABLE "${HOMEBREW_FLEX_PREFIX}/bin/flex")
     set(FLEX_LIBRARIES "${HOMEBREW_FLEX_PREFIX}/lib/libfl.a")
     message(STATUS "Using Homebrew Flex include directory: ${FLEX_INCLUDE_DIRS}")
-endif()
-
-if(APPLE AND NOT NIX_BUILD)
-    find_program(BREW_EXECUTABLE brew)
-    if(NOT BREW_EXECUTABLE)
-        message(STATUS "Homebrew not found")
-    endif()
 
     execute_process(
         COMMAND ${BREW_EXECUTABLE} --prefix bison
@@ -214,7 +193,7 @@ if(APPLE AND NOT NIX_BUILD)
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
     if(NOT HOMEBREW_BISON_PREFIX)
-        message(STATUS "Homebrew Bison prefix not found. Please install Bison using Homebrew.")
+        message(FATAL_ERROR "Homebrew Bison prefix not found. Please install Bison using Homebrew.")
     endif()
 
     set(BISON_INCLUDE_DIRS "${HOMEBREW_BISON_PREFIX}/include")
