@@ -26,7 +26,7 @@ import {
   SidebarTrigger,
   useSidebar
 } from "@/components/ui/sidebar";
-import { AlertTriangle, Ban, CheckCircle2, Clock3, FilePlus, GitCompareArrows, PanelLeft, Play, PlayCircle, Plus, Share2, Trash2 } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, Clock3, Copy, FilePlus, GitCompareArrows, PanelLeft, Play, PlayCircle, Plus, Share2, Trash2 } from "lucide-react";
 
 type TestMeta = {
   name: string;
@@ -127,6 +127,7 @@ export default function App() {
   const [newTestOpen, setNewTestOpen] = React.useState(false);
   const [newTestName, setNewTestName] = React.useState("");
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [duplicateOpen, setDuplicateOpen] = React.useState(false);
   const [planSvg, setPlanSvg] = React.useState<string | null>(null);
   const [planSvgExpected, setPlanSvgExpected] = React.useState<string | null>(null);
   const [planSvgMain, setPlanSvgMain] = React.useState<string | null>(null);
@@ -620,6 +621,42 @@ export default function App() {
       setError(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const duplicateSelectedTest = async () => {
+    if (!selected) return;
+    setDuplicateOpen(true);
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/duplicate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: selected.name })
+      });
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message =
+          typeof details?.error === "string"
+            ? `${details.error}${details.details ? `: ${details.details}` : ""}`
+            : "Failed to duplicate test";
+        throw new Error(message);
+      }
+      const payload = (await res.json()) as { name?: string };
+      const loaded = await loadTests(payload.name);
+      if (payload.name) {
+        const created = loaded.find((test) => test.name === payload.name);
+        if (created) {
+          setSelected(created);
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to duplicate test.";
+      setError(message);
+    } finally {
+      setLoading(false);
+      setDuplicateOpen(false);
     }
   };
 
@@ -1134,6 +1171,10 @@ export default function App() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+              <Button variant="ghost" onClick={duplicateSelectedTest} disabled={!selected || loading}>
+                <Copy />
+                Duplicate
+              </Button>
               <Button variant="ghost" onClick={shareSelected} disabled={!selected}>
                 <Share2 />
                 Share
@@ -1176,6 +1217,13 @@ export default function App() {
           {failNotice && (
             <div className="fixed right-6 top-16 z-50 animate-slide-in rounded-full border border-red-400/40 bg-red-500/15 px-4 py-2 text-xs uppercase tracking-[0.2em] text-red-100 shadow-lg">
               {failNotice}
+            </div>
+          )}
+          {duplicateOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+              <div className="surface rounded-2xl border border-white/10 px-6 py-4 text-sm text-ink">
+                Duplicating test...
+              </div>
             </div>
           )}
 

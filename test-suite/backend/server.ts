@@ -2,6 +2,7 @@ import { join } from "node:path";
 
 import {
 	createTestFile,
+	duplicateTestFile,
 	deleteTestFile,
 	errorResponse,
 	getChangedTests,
@@ -268,6 +269,19 @@ Bun.serve({
 				return errorResponse("Test not found", 404);
 			}
 			return jsonResponse({ ok: true, deletedSource });
+		}
+
+		if (pathname === "/api/duplicate" && req.method === "POST") {
+			const body = await req.json().catch(() => null);
+			const name = typeof body?.name === "string" ? body.name.trim() : "";
+			if (!name) {
+				return errorResponse("Invalid payload", 400);
+			}
+			const duplicated = await duplicateTestFile(sourceTestsDir, name);
+			if (!duplicated) {
+				return errorResponse("Test not found", 404);
+			}
+			return jsonResponse({ ok: true, name: duplicated.name });
 		}
 
 		return errorResponse("Not found", 404);

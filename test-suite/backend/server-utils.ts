@@ -355,3 +355,40 @@ export async function deleteTestFile(
 	}
 	return false;
 }
+
+function nextDuplicatedName(existingNames: Set<string>, sourceName: string): string {
+	const match = sourceName.match(/^(.*?)-(\d+)$/);
+	const base = match ? match[1] : sourceName;
+	let next = match ? Number.parseInt(match[2], 10) + 1 : 2;
+	let candidate = `${base}-${next}`;
+	while (existingNames.has(candidate)) {
+		next += 1;
+		candidate = `${base}-${next}`;
+	}
+	return candidate;
+}
+
+export async function duplicateTestFile(
+	dir: string,
+	name: string,
+): Promise<{ name: string; path: string } | null> {
+	const sourcePath = await findTestPath(dir, name);
+	if (!sourcePath) return null;
+	const sourceFile = Bun.file(sourcePath);
+	if (!(await sourceFile.exists())) return null;
+	const sourceText = await sourceFile.text();
+	let data: Record<string, unknown>;
+	try {
+		data = JSON.parse(sourceText) as Record<string, unknown>;
+	} catch {
+		return null;
+	}
+	delete data.name;
+	delete data.id;
+	const existingNames = await loadExistingNames(dir);
+	const sourceName = idToFilename(name);
+	const duplicatedName = nextDuplicatedName(existingNames, sourceName);
+	const targetPath = join(dir, `${duplicatedName}.json`);
+	await Bun.write(targetPath, JSON.stringify(data, null, 2) + "\n");
+	return { name: duplicatedName, path: targetPath };
+}
