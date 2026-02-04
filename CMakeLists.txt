@@ -105,7 +105,7 @@ endif()
 set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
 # When using LLVM clang from Homebrew on macOS, add libc++ library path for linker
-if(APPLE)
+if(APPLE AND NOT NIX_BUILD)
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
     get_filename_component(LLVM_ROOT ${COMPILER_DIR} DIRECTORY)
     if(EXISTS "${LLVM_ROOT}/lib/c++")
@@ -142,7 +142,7 @@ find_package(Faiss REQUIRED)
 
 # OpenMP (required by Faiss)
 # On macOS, AppleClang doesn't include OpenMP, so we need to use Homebrew's libomp
-if(APPLE)
+if(APPLE AND NOT NIX_BUILD)
     find_program(BREW_EXECUTABLE brew)
     if(BREW_EXECUTABLE)
         execute_process(
@@ -163,7 +163,7 @@ find_package(OpenMP REQUIRED)
 
 
 # Use Homebrew for Flex and Bison on macOS
-if(APPLE)
+if(APPLE AND NOT NIX_BUILD)
     find_program(BREW_EXECUTABLE brew)
     if(NOT BREW_EXECUTABLE)
         message(STATUS "Homebrew not found")
@@ -184,7 +184,7 @@ if(APPLE)
     message(STATUS "Using Homebrew Flex include directory: ${FLEX_INCLUDE_DIRS}")
 endif()
 
-if(APPLE)
+if(APPLE AND NOT NIX_BUILD)
     find_program(BREW_EXECUTABLE brew)
     if(NOT BREW_EXECUTABLE)
         message(STATUS "Homebrew not found")
