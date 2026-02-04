@@ -164,9 +164,9 @@ LOAD CSV 'path/to/file.csv' WITH HEADERS AS row
 CREATE (n:Person {name: row.name, age: toInteger(row.age)})
 ```
 
-### ON ERROR SKIP Mode
+### Error Handling Mode
 
-By default, malformed lines cause a runtime error. Use `ON ERROR SKIP` to skip malformed lines and continue processing:
+By default, malformed lines cause a runtime error (`ON ERROR FAIL`). Use `ON ERROR SKIP` to skip malformed lines and continue processing:
 
 ```cypher
 LOAD CSV 'path/to/file.csv' ON ERROR SKIP AS row
@@ -177,8 +177,6 @@ CREATE (n:Person {name: row[0], age: toInteger(row[1])})
 LOAD CSV 'path/to/file.csv' WITH HEADERS ON ERROR SKIP AS row
 CREATE (n:Person {name: row.name, age: toInteger(row.age)})
 ```
-
-Skipped lines are logged at WARNING level with details about the error.
 
 ### LOAD EMBEDDING CSV (Specialized)
 
@@ -203,6 +201,8 @@ loadCSVSt
     | LOAD CSV STRING_LITERAL WITH HEADERS AS symbol
     | LOAD CSV STRING_LITERAL ON ERROR SKIP AS symbol
     | LOAD CSV STRING_LITERAL WITH HEADERS ON ERROR SKIP AS symbol
+    | LOAD CSV STRING_LITERAL ON ERROR FAIL AS symbol
+    | LOAD CSV STRING_LITERAL WITH HEADERS ON ERROR FAIL AS symbol
     ;
 
 // For LOAD EMBEDDING CSV (Phase 2)
@@ -223,9 +223,11 @@ atomicExpr
 ```lex
 CSV        { return token::CSV; }
 EMBEDDING  { return token::EMBEDDING; }
-ERROR      { return token::ERROR; }
 SKIP       { return token::SKIP; }
+FAIL       { return token::FAIL; }
 ```
+
+**Note**: `ON` and `ERROR` are existing tokens.
 
 ---
 
@@ -309,6 +311,12 @@ namespace db {
 class CypherAST;
 class Symbol;
 
+// Error handling mode for malformed CSV lines
+enum class CSVErrorMode : uint8_t {
+    Fail,   // Default: abort query on malformed line
+    Skip,   // Skip malformed lines and continue
+};
+
 class LoadCSVStmt : public Stmt {
 public:
     friend CypherAST;
@@ -323,8 +331,8 @@ public:
     bool hasHeaders() const { return _hasHeaders; }
     void setHasHeaders(bool v) { _hasHeaders = v; }
 
-    bool skipOnError() const { return _skipOnError; }
-    void setSkipOnError(bool v) { _skipOnError = v; }
+    CSVErrorMode getErrorMode() const { return _errorMode; }
+    void setErrorMode(CSVErrorMode mode) { _errorMode = mode; }
 
 private:
     LoadCSVStmt(std::string_view filePath, Symbol* alias);
@@ -333,7 +341,7 @@ private:
     fs::Path _filePath;
     Symbol* _alias;
     bool _hasHeaders {false};
-    bool _skipOnError {false};
+    CSVErrorMode _errorMode {CSVErrorMode::Fail};
 };
 
 }
@@ -501,7 +509,7 @@ public:
 
     CSVParser(const fs::Path& path,
               bool hasHeaders,
-              bool skipOnError,
+              CSVErrorMode errorMode,
               LocalMemory* memory,
               size_t mmapChunkSize = DEFAULT_MMAP_CHUNK_SIZE);
     ~CSVParser();
@@ -511,8 +519,7 @@ public:
 
     // Read up to maxRows into the output ColumnStringTable
     // Returns number of rows read (0 at EOF)
-    // If skipOnError is false, throws runtime error on malformed lines
-    // If skipOnError is true, skips malformed lines and logs warnings
+    // On malformed lines: throws if errorMode is Fail, skips if Skip
     // Field columns are allocated dynamically via LocalMemory
     size_t readChunk(size_t maxRows, ColumnStringTable* output);
 
@@ -521,7 +528,7 @@ public:
     size_t getHeaderIndex(std::string_view name) const;
 
     size_t getLinesRead() const { return _linesRead; }
-    size_t getLinesSkipped() const { return _linesSkipped; }  // Only non-zero if skipOnError
+    size_t getLinesSkipped() const { return _linesSkipped; }  // Only incremented in Skip mode
 
 private:
     int _fd {-1};                          // File descriptor
@@ -535,13 +542,13 @@ private:
 
     std::string_view _remaining;           // Unparsed data in current region
     bool _hasHeaders;
-    bool _skipOnError;
+    CSVErrorMode _errorMode;
     std::vector<std::string> _headers;     // Populated from first line if hasHeaders
     size_t _fieldCount {0};                // Discovered from first data row
 
     LocalMemory* _memory;                  // For allocating field columns
     size_t _linesRead {0};
-    size_t _linesSkipped {0};              // Only incremented if _skipOnError is true
+    size_t _linesSkipped {0};              // Lines skipped due to errors (Skip mode only)
 
     // Memory mapping
     bool mapNextChunk();
@@ -584,7 +591,7 @@ public:
     static CSVSourceProcessor* create(PipelineV2* pipeline,
                                        const fs::Path& path,
                                        bool hasHeaders,
-                                       bool skipOnError,
+                                       CSVErrorMode errorMode,
                                        ColumnTag outputTag);
 
     // Processor interface
@@ -600,13 +607,10 @@ public:
     const std::vector<std::string>& getHeaders() const;
     size_t getHeaderIndex(std::string_view name) const;
 
-    // Statistics (linesSkipped only non-zero if skipOnError)
-    size_t getLinesSkipped() const;
-
 private:
     fs::Path _path;
     bool _hasHeaders;
-    bool _skipOnError;
+    CSVErrorMode _errorMode;
     ColumnTag _outputTag;          // Tag for the ColumnStringTable output
 
     LocalMemory* _memory {nullptr};       // From ExecutionContext
@@ -616,7 +620,7 @@ private:
 
     CSVSourceProcessor(const fs::Path& path,
                        bool hasHeaders,
-                       bool skipOnError,
+                       CSVErrorMode errorMode,
                        ColumnTag outputTag);
     ~CSVSourceProcessor() override;
 };
@@ -757,7 +761,7 @@ void PipelineGenerator::generate(const LoadCSVStmt* stmt) {
         _pipeline,
         stmt->getFilePath(),
         stmt->hasHeaders(),
-        stmt->skipOnError(),
+        stmt->getErrorMode(),
         csvTag
     );
 
@@ -885,23 +889,18 @@ Implementation in `FuncEvalNode`:
 
 #### CSV Parsing Errors
 
-The following errors can occur while parsing CSV lines:
+These errors occur when a line cannot be parsed:
 - Wrong number of columns in a line
 - Unterminated quoted field
 - Invalid UTF-8 encoding
 
-**Default behavior**: These errors cause a runtime error that aborts the query.
-
-**ON ERROR SKIP mode**: These errors skip the malformed line and log a warning. The import continues with the next line.
-
-```
-[WARN] LOAD CSV: skipped line 12345 (wrong column count: expected 5, got 3)
-[WARN] LOAD CSV: skipped line 67890 (invalid UTF-8 sequence)
-```
+**Behavior depends on error mode**:
+- `ON ERROR FAIL` (default): Abort query with runtime error
+- `ON ERROR SKIP`: Skip the malformed line, log a warning, and continue
 
 #### Runtime Errors (Always Abort Query)
 
-These errors always abort the query, regardless of error mode:
+These errors always abort the query regardless of error mode:
 
 **Expression evaluation errors**:
 - `row[e]` where `e >= fieldCount`: Index out of bounds
@@ -998,17 +997,20 @@ enum class Kind {
 #### Statistics Collection
 `CSVParser` tracks and exposes:
 - `getLinesRead()`: Total lines successfully parsed
-- `getLinesSkipped()`: Lines skipped due to errors (only non-zero with `ON ERROR SKIP`)
+- `getLinesSkipped()`: Lines skipped due to errors (only incremented in `ON ERROR SKIP` mode)
 
 #### Logging
+
 At the end of import, log a summary:
 ```
 [INFO] LOAD CSV completed: 1,234,567 lines read
 ```
 
-With `ON ERROR SKIP`, if lines were skipped:
+When using `ON ERROR SKIP` and lines were skipped:
 ```
 [INFO] LOAD CSV completed: 1,234,567 lines read, 42 lines skipped
+[WARN] LOAD CSV: skipped line 12345 (wrong column count: expected 5, got 3)
+[WARN] LOAD CSV: skipped line 67890 (invalid UTF-8 sequence)
 ```
 
 #### Progress Indication (Future)
