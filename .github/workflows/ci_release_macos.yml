@@ -35,8 +35,9 @@ jobs:
 
     - name: Install LLVM
       run: |
-        brew install llvm
-        echo "LLVM_PREFIX=$(brew --prefix llvm)" >> $GITHUB_ENV
+        # Pin to LLVM 20 due to header incompatibility between LLVM 21+ and macOS 15 SDK
+        brew install llvm@20
+        echo "LLVM_PREFIX=$(brew --prefix llvm@20)" >> $GITHUB_ENV
 
     - name: Cache dependencies
       id: cache-dependencies
