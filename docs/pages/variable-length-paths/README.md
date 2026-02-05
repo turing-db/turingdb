@@ -40,7 +40,7 @@ MATCH (n)-[:KNOWS]->{1,4}(m)-->(c:Crime) RETURN n, m, c
 
 ### [Phase 2: Relationship Return Support](phase-2-spec.md)
 
-> ![WARNING]
+> [!WARNING]
 > The specs of this phase are to be filled
 
 Adds the ability to return relationships from quantified patterns as lists.
@@ -58,7 +58,7 @@ MATCH (n)-[r]->+(m) RETURN n, r, m  -- r is a list of relationships
 
 ### [Phase 3: Parenthesized Quantified Patterns](phase-3-spec.md)
 
-> ![WARNING]
+> [!WARNING]
 > The specs of this phase are to be filled
 
 Support for `((pattern)){n,m}` with variable bindings and intermediate node returns.
