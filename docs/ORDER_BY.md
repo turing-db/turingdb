@@ -13,17 +13,26 @@
 Advantages:
 
 - Sorting cost is distributed over calls to `execute`
-- Final sort of sorted runs is optimisable to near $O(n)$
-- "Memory" can be either in-memory for full speed, or offloaded to disk (see [^4] for plenty on classical algorithms to do this with memory-constraints)
+- Final sort of sorted runs is optimisable to near $O(n)$ [^3]
+- The processor's "memory" can be either in-memory for full speed, or offloaded to disk
+  (see [^4] for plenty on classical algorithms to do this with memory-constraints),
+  allowing us to more easily convert to a memory-constrained, disk-spilling implementation
 
 ## Sorting Chunks
 
 Ideas from CMU:
 1. Late materialisation
-  - We store 
+  - We sort only row-indexes and ordered columns
+  - Sort by ordered columns, then "materialise" the sorted chunk
+    by transposing the row indexes into the final block thats stored to memory
 
 Ideas from DuckDB:
-1. 
+1. Use blobbing to remove operator dispatch
+  - DuckDB converts the ordered keys to binary blobs, meaning the type which is being
+    sorted is always known, and we can hopefully inline `operator<==>(const Blob& a, const Blob& b)`
+    instead of having to do a runtime dispatch on whatever `T` we are sorting in the`ColumnVector<T>`
+    \* I'm not too sure on this one: I feel like since we deal in chunks of at least ~65k, we can do a
+     single dispatch to get the operator per chunk, and reuse that, so this might not be that useful
 
 
 [^1] [DuckDB Sorting Rows](https://duckdb.org/pdf/ICDE2023-kuiper-muehleisen-sorting.pdf)
