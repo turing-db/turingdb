@@ -12,6 +12,8 @@ SOURCE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 DEPENDENCIES_DIR=$SOURCE_DIR/external/dependencies
 BUILD_DIR=$DEPENDENCIES_DIR/build
 
+BREW_LLVM_VERSION=llvm@21
+
 mkdir -p $DEPENDENCIES_DIR
 mkdir -p $BUILD_DIR
 
@@ -33,7 +35,7 @@ if [[ "$(uname)" != "Darwin" ]]; then
     sudo $PKG_MANAGER update
 fi
 
-# Install curl, openssl, and zlib
+# Install curl, openssl, zlib and cmake
 if [[ "$(uname)" == "Darwin" ]]; then
     # macOS - use Homebrew
     if ! command -v brew &> /dev/null; then
@@ -61,10 +63,29 @@ if [[ "$(uname)" == "Darwin" ]]; then
     else
         echo "zlib is already installed"
     fi
+
+    if ! brew list cmake &> /dev/null; then
+        echo "Installing cmake via Homebrew..."
+        brew install cmake
+    else
+        echo "cmake is already installed"
+    fi
 else
     # Linux - use detected package manager
     echo "Installing curl, openssl, and zlib via $PKG_MANAGER..."
-    sudo $PKG_MANAGER $PKG_INSTALL curl libcurl4-openssl-dev zlib1g-dev libssl-dev
+    sudo $PKG_MANAGER $PKG_INSTALL curl libcurl4-openssl-dev zlib1g-dev libssl-dev cmake
+fi
+
+# llvm for macos
+if [[ "$(uname)" == "Darwin" ]]; then
+    if ! brew list $BREW_LLVM_VERSION &> /dev/null; then
+        echo "Installing llvm via Homebrew..."
+        brew install $BREW_LLVM_VERSION
+    else
+        echo "llvm is already installed"
+    fi
+
+    LLVM_PREFIX=$(brew --prefix $BREW_LLVM_VERSION 2>/dev/null)
 fi
 
 # Install bison and flex
@@ -177,6 +198,8 @@ if [[ "$(uname)" == "Darwin" ]]; then
         "-DOpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include"
         -DOpenMP_CXX_LIB_NAMES=omp
         "-DOpenMP_omp_LIBRARY=${LIBOMP_PREFIX}/lib/libomp.dylib"
+        -DCMAKE_C_COMPILER=${LLVM_PREFIX}/bin/clang
+        -DCMAKE_CXX_COMPILER=${LLVM_PREFIX}/bin/clang++
     )
 fi
 
@@ -188,11 +211,20 @@ cmake --install $BUILD_DIR/faiss
 mkdir -p $BUILD_DIR/nlohmann_json
 cd $BUILD_DIR/nlohmann_json
 
-cmake \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR \
-    -DJSON_BuildTests=OFF \
-    $SOURCE_DIR/external/nlohmann_json
+NLOHMANN_CMAKE_ARGS=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
+    -DJSON_BuildTests=OFF
+)
+
+if [[ "$(uname)" == "Darwin" ]]; then
+    NLOHMANN_CMAKE_ARGS+=(
+        -DCMAKE_C_COMPILER=${LLVM_PREFIX}/bin/clang
+        -DCMAKE_CXX_COMPILER=${LLVM_PREFIX}/bin/clang++
+    )
+fi
+
+cmake "${NLOHMANN_CMAKE_ARGS[@]}" $SOURCE_DIR/external/nlohmann_json
 cmake --build $BUILD_DIR/nlohmann_json -j $NUM_JOBS
 cmake --install $BUILD_DIR/nlohmann_json
 
@@ -210,7 +242,6 @@ MINIO_CMAKE_ARGS=(
 )
 
 if [[ "$(uname)" == "Darwin" ]]; then
-    LLVM_PREFIX=$(brew --prefix llvm@20 2>/dev/null || brew --prefix llvm)
     MINIO_CMAKE_ARGS+=(
         -DCMAKE_C_COMPILER=${LLVM_PREFIX}/bin/clang
         -DCMAKE_CXX_COMPILER=${LLVM_PREFIX}/bin/clang++
