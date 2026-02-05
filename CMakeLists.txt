@@ -115,14 +115,20 @@ endif()
 # C++ flags
 set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
-# When using LLVM clang from Homebrew on macOS, add libc++ library path for linker
+# When using LLVM clang from Homebrew on macOS, configure libc++ paths
 if(APPLE AND NOT NIX_BUILD)
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
     get_filename_component(LLVM_ROOT ${COMPILER_DIR} DIRECTORY)
     if(EXISTS "${LLVM_ROOT}/lib/c++")
+        # Add libc++ library path for linker
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${LLVM_ROOT}/lib/c++ -Wl,-rpath,${LLVM_ROOT}/lib/c++")
         set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${LLVM_ROOT}/lib/c++ -Wl,-rpath,${LLVM_ROOT}/lib/c++")
         message(STATUS "Using LLVM libc++ from: ${LLVM_ROOT}/lib/c++")
+    endif()
+    # Use LLVM's libc++ and add include path for headers (required for LLVM 21+ on macOS 15+)
+    if(EXISTS "${LLVM_ROOT}/include/c++/v1")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -isystem ${LLVM_ROOT}/include/c++/v1")
+        message(STATUS "Using LLVM libc++ headers from: ${LLVM_ROOT}/include/c++/v1")
     endif()
 endif()
 
