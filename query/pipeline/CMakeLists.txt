@@ -6,6 +6,7 @@ set(pipeline_sources
     PipelinePort.cpp
     PipelineBuilder.cpp
     PipelineExecutor.cpp
+    PipelineException.cpp
     interfaces/PipelineInterface.cpp)
 
 set(processors_sources

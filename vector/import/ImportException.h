@@ -8,10 +8,8 @@ namespace vec {
 
 class ImportException : public TuringException {
 public:
-    ImportException(ImportErrorCode code, const std::string& message = "")
-        : _e(code, message)
-    {
-    }
+    ImportException(ImportErrorCode code, const std::string& message = "");
+    ~ImportException() noexcept override;
 
     const ImportError& err() const {
         return _e;

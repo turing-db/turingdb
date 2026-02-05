@@ -1,5 +1,6 @@
 set(VECTOR_SOURCES
         RandomGenerator.cpp
+        VectorException.cpp
         StorageManager.cpp
         LSHShardRouter.cpp
         VectorResult.cpp
@@ -13,6 +14,7 @@ set(VECTOR_SOURCES
         VecLibAccessor.cpp
         VecLib.cpp
         import/ImportResult.cpp
+        import/ImportException.cpp
         import/JsonImporter.cpp)
 
 add_library(turing_vector_s STATIC ${VECTOR_SOURCES})

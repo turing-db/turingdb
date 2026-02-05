@@ -10,6 +10,7 @@ set(plan_sources
     PipelineGenerator.cpp
     ExprProgramGenerator.cpp
     PredicateProgramGenerator.cpp
+    PlannerException.cpp
 )
 
 add_library(turing_db_plan_s STATIC ${plan_sources})
