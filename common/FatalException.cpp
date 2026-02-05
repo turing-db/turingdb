@@ -10,6 +10,9 @@ FatalException::FatalException(std::string&& msg)
 {
 }
 
+FatalException::~FatalException() noexcept {
+}
+
 const char* FatalException::what() const noexcept {
     return _msg.c_str();
 }

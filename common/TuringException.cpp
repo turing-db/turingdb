@@ -10,6 +10,9 @@ TuringException::TuringException(std::string&& msg)
 {
 }
 
+TuringException::~TuringException() noexcept {
+}
+
 const char* TuringException::what() const noexcept {
     return _msg.c_str();
 }

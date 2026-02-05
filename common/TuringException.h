@@ -11,7 +11,7 @@ public:
     TuringException(TuringException&&) = default;
     TuringException& operator=(const TuringException&) = default;
     TuringException& operator=(TuringException&&) = default;
-    ~TuringException() noexcept override = default;
+    ~TuringException() noexcept override;
 
     const char* what() const noexcept override;
 

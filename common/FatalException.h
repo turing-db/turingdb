@@ -16,7 +16,7 @@ public:
     FatalException(FatalException&&) = default;
     FatalException& operator=(const FatalException&) = default;
     FatalException& operator=(FatalException&&) = default;
-    ~FatalException() noexcept override = default;
+    ~FatalException() noexcept override;
 
     const char* what() const noexcept override;
 
