@@ -7,7 +7,7 @@
 #include "RWSpinLock.h"
 #include "GraphLoadStatus.h"
 #include "TuringS3Client.h"
-#include "AwsS3ClientWrapper.h"
+#include "MinioS3ClientWrapper.h"
 #include "Path.h"
 #include "GraphFileType.h"
 #include "versioning/ChangeID.h"
@@ -77,11 +77,11 @@ public:
                                               ChangeID changeID);
 
     void setS3Client(const std::string& accessId, const std::string& secretKey, const std::string& region) {
-        auto wrapper = S3::AwsS3ClientWrapper<>(accessId, secretKey, region);
-        _s3Client = std::make_unique<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>>(std::move(wrapper));
+        auto wrapper = S3::MinioS3ClientWrapper(accessId, secretKey, region);
+        _s3Client = std::make_unique<S3::TuringS3Client<S3::MinioS3ClientWrapper>>(std::move(wrapper));
     }
 
-    S3::TuringS3Client<S3::AwsS3ClientWrapper<>>* getS3Client() {
+    S3::TuringS3Client<S3::MinioS3ClientWrapper>* getS3Client() {
         return _s3Client.get();
     }
 
@@ -91,7 +91,7 @@ private:
     mutable RWSpinLock _graphsLock;
     const TuringConfig* _config {nullptr};
     Graph* _defaultGraph {nullptr};
-    std::unique_ptr<S3::TuringS3Client<S3::AwsS3ClientWrapper<>>> _s3Client {nullptr};
+    std::unique_ptr<S3::TuringS3Client<S3::MinioS3ClientWrapper>> _s3Client {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
     std::unique_ptr<ChangeManager> _changes;
     std::unique_ptr<Neo4jImporter> _neo4JImporter;

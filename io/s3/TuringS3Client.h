@@ -1,11 +1,13 @@
 #pragma once
 
-#include <aws/core/utils/memory/stl/AWSString.h>
+#include <string>
+#include <vector>
 
 #include "S3ClientResult.h"
 
 class RemoteStorageClient;
 namespace S3 {
+
 template <typename ClientType>
 class TuringS3Client {
 public:
@@ -39,6 +41,10 @@ public:
     S3ClientResult<void> downloadDirectory(const std::string& directory,
                                            const std::string& bucketName,
                                            const std::string& prefix);
+
+    S3ClientResult<bool> bucketExists(const std::string& bucketName);
+    S3ClientResult<void> createDirectoryMarker(const std::string& bucketName,
+                                               const std::string& prefix);
 
 private:
     ClientType _client;

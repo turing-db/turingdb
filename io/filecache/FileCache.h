@@ -40,11 +40,18 @@ public:
     FileCacheResult<void> saveDataDirectory(std::string_view directoryPath);
     FileCacheResult<void> loadDataDirectory(std::string_view directoryPath);
 
+    FileCacheResult<void> initS3Storage();
+
+    void setBucketName(const std::string& bucketName);
+    const std::string& getBucketName() const;
+
+    S3::TuringS3Client<ClientType>& getS3Client();
+
 private:
     fs::Path _graphsDir;
     fs::Path _dataDir;
     S3::TuringS3Client<ClientType>& _s3Client;
-    std::string _userId = "turingDefault";
+    std::string _userId = "turing";
     std::string _bucketName = "turing-disk-test";
 };
 }

@@ -5,7 +5,7 @@
 #include "Processor.h"
 #include "interfaces/PipelineValueOutputInterface.h"
 #include "TuringS3Client.h"
-#include "AwsS3ClientWrapper.h"
+#include "MinioS3ClientWrapper.h"
 
 namespace db {
 
@@ -31,7 +31,7 @@ protected:
     std::string_view _s3File;
     std::string_view _localPath;
 
-    S3::TuringS3Client<S3::AwsS3ClientWrapper<>>* _s3Client {nullptr};
+    S3::TuringS3Client<S3::MinioS3ClientWrapper>* _s3Client {nullptr};
     PipelineValueOutputInterface _output;
 
     S3PullProcessor(std::string_view s3Bucket,

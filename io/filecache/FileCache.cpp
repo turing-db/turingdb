@@ -2,7 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include "AwsS3ClientWrapper.h"
+#include "MinioS3ClientWrapper.h"
 #include "MockS3Client.h"
 
 using namespace db;
@@ -206,5 +206,62 @@ FileCacheResult<void> FileCache<ClientType>::loadDataDirectory(std::string_view 
     return {};
 }
 
-template class db::FileCache<S3::AwsS3ClientWrapper<>>;
-template class db::FileCache<S3::AwsS3ClientWrapper<S3::MockS3Client>>;
+template <typename ClientType>
+FileCacheResult<void> FileCache<ClientType>::initS3Storage() {
+    // Check if bucket exists
+    auto existsResult = _s3Client.bucketExists(_bucketName);
+    if (!existsResult) {
+        return FileCacheError::result(FileCacheErrorType::S3_STORAGE_INIT_FAILED,
+                                      existsResult.error());
+    }
+
+    if (!existsResult.value()) {
+        spdlog::error("Bucket '{}' does not exist", _bucketName);
+        return FileCacheError::result(FileCacheErrorType::S3_STORAGE_INIT_FAILED);
+    }
+
+    // Create directory structure: {userId}/
+    const std::string userPrefix = fmt::format("{}/", _userId);
+    spdlog::info("Creating directory marker: {}", userPrefix);
+    if (auto res = _s3Client.createDirectoryMarker(_bucketName, userPrefix); !res) {
+        return FileCacheError::result(FileCacheErrorType::S3_STORAGE_INIT_FAILED,
+                                      res.error());
+    }
+
+    // Create {userId}/graphs/
+    const std::string graphsPrefix = fmt::format("{}/graphs/", _userId);
+    spdlog::info("Creating directory marker: {}", graphsPrefix);
+    if (auto res = _s3Client.createDirectoryMarker(_bucketName, graphsPrefix); !res) {
+        return FileCacheError::result(FileCacheErrorType::S3_STORAGE_INIT_FAILED,
+                                      res.error());
+    }
+
+    // Create {userId}/data/
+    const std::string dataPrefix = fmt::format("{}/data/", _userId);
+    spdlog::info("Creating directory marker: {}", dataPrefix);
+    if (auto res = _s3Client.createDirectoryMarker(_bucketName, dataPrefix); !res) {
+        return FileCacheError::result(FileCacheErrorType::S3_STORAGE_INIT_FAILED,
+                                      res.error());
+    }
+
+    spdlog::info("S3 storage initialized successfully");
+    return {};
+}
+
+template <typename ClientType>
+void FileCache<ClientType>::setBucketName(const std::string& bucketName) {
+    _bucketName = bucketName;
+}
+
+template <typename ClientType>
+const std::string& FileCache<ClientType>::getBucketName() const {
+    return _bucketName;
+}
+
+template <typename ClientType>
+S3::TuringS3Client<ClientType>& FileCache<ClientType>::getS3Client() {
+    return _s3Client;
+}
+
+template class db::FileCache<S3::MinioS3ClientWrapper>;
+template class db::FileCache<S3::MockS3Client>;

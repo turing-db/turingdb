@@ -137,6 +137,7 @@ execute_process(
 set(EXTERNAL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external)
 
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # Threads
 find_package(Threads REQUIRED)
@@ -210,9 +211,6 @@ if(APPLE AND NOT NIX_BUILD)
 endif()
 
 find_package(ZLIB REQUIRED)
-
-# aws-sdk-cpp
-find_package(AWSSDK REQUIRED COMPONENTS s3 s3-crt ec2)
 
 # openssl
 find_package(OpenSSL REQUIRED)

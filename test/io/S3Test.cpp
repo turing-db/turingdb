@@ -5,12 +5,8 @@
 #include <filesystem>
 #include <sys/unistd.h>
 
-#include <aws/s3-crt/model/Object.h>
-#include <aws/s3-crt/model/ListObjectsV2Result.h>
-#include <aws/s3-crt/model/Error.h>
-
 #include "MockS3Client.h"
-#include "AwsS3ClientWrapper.h"
+#include "MinioS3ClientWrapper.h"
 #include "DummyDirectory.h"
 
 using namespace turing::test;
@@ -28,46 +24,32 @@ protected:
 };
 
 TEST_F(S3Test, SucessfulListOperations) {
-    Aws::S3Crt::Model::ListObjectsV2Result listResult;
+    S3::MockListResult listResult;
+    listResult.success = true;
+    listResult.keys = {"dir0/dir1/file1", "dir0/file2", "file3"};
+    listResult.commonPrefixes = {"dir0/dir0.5/dir1/", "dir0/dir0.5/dir2/", "dir0/dir0.5/dir3/"};
 
     std::vector<std::string> keyNames = {"dir0/dir1/file1", "dir0/file2", "file3"};
     std::vector<std::string> fileNames = {"file1", "file2", "file3"};
-    std::vector<std::string> keyResults;
-    std::vector<std::string> fileResults;
-
-    Aws::Vector<Aws::S3Crt::Model::Object> objects(keyNames.size());
-    for (size_t i = 0; i < keyNames.size(); i++) {
-        objects[i].SetKey(keyNames[i]);
-    }
-
-    std::vector<std::string> commonPrefixNames = {"dir0/dir0.5/dir1/", "dir0/dir0.5/dir2/", "dir0/dir0.5/dir3/"};
     std::vector<std::string> folderNames = {"dir1", "dir2", "dir3"};
-    std::vector<std::string> folderResults;
 
-    Aws::Vector<Aws::S3Crt::Model::CommonPrefix> commonPrefixes(commonPrefixNames.size());
-    for (size_t i = 0; i < commonPrefixNames.size(); i++) {
-        commonPrefixes[i].SetPrefix(commonPrefixNames[i]);
-    }
+    S3::MockUploadResult uploadResult;
+    S3::MockDownloadResult downloadResult;
 
-    listResult.SetContents(objects);
-    listResult.SetCommonPrefixes(commonPrefixes);
+    S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+    S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
-    Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome(listResult);
-    Aws::S3Crt::Model::PutObjectOutcome putOutcome;
-    Aws::S3Crt::Model::GetObjectOutcome getOutcome;
-
-    S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-    S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-    S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
-
+    std::vector<std::string> keyResults;
     auto res = turingS3Client.listKeys("bucketName", "prefix/", keyResults);
     ASSERT_TRUE(res);
     EXPECT_EQ(keyNames, keyResults);
 
+    std::vector<std::string> fileResults;
     res = turingS3Client.listFiles("bucketName", "prefix/", fileResults);
     ASSERT_TRUE(res);
     EXPECT_EQ(fileNames, fileResults);
 
+    std::vector<std::string> folderResults;
     res = turingS3Client.listFolders("bucketName", "prefix/", folderResults);
     ASSERT_TRUE(res);
     EXPECT_EQ(folderNames, folderResults);
@@ -75,15 +57,15 @@ TEST_F(S3Test, SucessfulListOperations) {
 
 TEST_F(S3Test, UnsucessfulListOperations) {
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::ACCESS_DENIED;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome(s3Err);
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockListResult listResult;
+        listResult.success = false;
+        listResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockUploadResult uploadResult;
+        S3::MockDownloadResult downloadResult;
+
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         std::vector<std::string> keyResults;
         std::vector<std::string> fileResults;
@@ -103,15 +85,15 @@ TEST_F(S3Test, UnsucessfulListOperations) {
     }
 
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::NO_SUCH_BUCKET;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome(s3Err);
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockListResult listResult;
+        listResult.success = false;
+        listResult.errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockUploadResult uploadResult;
+        S3::MockDownloadResult downloadResult;
+
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         std::vector<std::string> keyResults;
         std::vector<std::string> fileResults;
@@ -131,13 +113,15 @@ TEST_F(S3Test, UnsucessfulListOperations) {
     }
 
     {
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockListResult listResult;
+        listResult.success = false;
+        listResult.errorType = S3::S3ClientErrorType::CANNOT_LIST_KEYS;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockUploadResult uploadResult;
+        S3::MockDownloadResult downloadResult;
+
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         std::vector<std::string> keyResults;
         std::vector<std::string> fileResults;
@@ -147,26 +131,33 @@ TEST_F(S3Test, UnsucessfulListOperations) {
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::S3ClientErrorType::CANNOT_LIST_KEYS);
 
-        res = turingS3Client.listFiles("bucketName", "prefix/", fileResults);
+        listResult.errorType = S3::S3ClientErrorType::CANNOT_LIST_FILES;
+        S3::MockS3Client mockClient2(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client2(std::move(mockClient2));
+
+        res = turingS3Client2.listFiles("bucketName", "prefix/", fileResults);
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::S3ClientErrorType::CANNOT_LIST_FILES);
 
-        res = turingS3Client.listFolders("bucketName", "prefix/", folderResults);
+        listResult.errorType = S3::S3ClientErrorType::CANNOT_LIST_FOLDERS;
+        S3::MockS3Client mockClient3(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client3(std::move(mockClient3));
+
+        res = turingS3Client3.listFolders("bucketName", "prefix/", folderResults);
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::S3ClientErrorType::CANNOT_LIST_FOLDERS);
     }
 }
 
 TEST_F(S3Test, SuccesfulFileUpload) {
-    Aws::S3Crt::Model::PutObjectResult putResult;
+    S3::MockUploadResult uploadResult;
+    uploadResult.success = true;
 
-    Aws::S3Crt::Model::PutObjectOutcome putOutcome(putResult);
-    Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-    Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+    S3::MockDownloadResult downloadResult;
+    S3::MockListResult listResult;
 
-    S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-    S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-    S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+    S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+    S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
     auto res = turingS3Client.uploadFile("/dev/null", "bucketName", "keyName");
     ASSERT_TRUE(res);
@@ -174,15 +165,14 @@ TEST_F(S3Test, SuccesfulFileUpload) {
 
 TEST_F(S3Test, UnsuccesfulFileUpload) {
     {
-        Aws::S3Crt::Model::PutObjectResult putResult;
+        S3::MockUploadResult uploadResult;
+        uploadResult.success = true;
 
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome(putResult);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockDownloadResult downloadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.uploadFile("/does/not/exist", "bucketName", "keyName");
         ASSERT_FALSE(res);
@@ -190,16 +180,15 @@ TEST_F(S3Test, UnsuccesfulFileUpload) {
     }
 
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::ACCESS_DENIED;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
+        S3::MockUploadResult uploadResult;
+        uploadResult.success = false;
+        uploadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockDownloadResult downloadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.uploadFile("/dev/null", "bucketName", "keyName");
         ASSERT_FALSE(res);
@@ -207,16 +196,15 @@ TEST_F(S3Test, UnsuccesfulFileUpload) {
     }
 
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::NO_SUCH_BUCKET;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
+        S3::MockUploadResult uploadResult;
+        uploadResult.success = false;
+        uploadResult.errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
 
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockDownloadResult downloadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.uploadFile("/dev/null", "bucketName", "keyName");
         ASSERT_FALSE(res);
@@ -224,35 +212,31 @@ TEST_F(S3Test, UnsuccesfulFileUpload) {
     }
 
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::UNKNOWN;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
-        s3Err.SetResponseCode(Aws::Http::HttpResponseCode::PRECONDITION_FAILED);
+        S3::MockUploadResult uploadResult;
+        uploadResult.success = false;
+        uploadResult.statusCode = 412;
 
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockDownloadResult downloadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.uploadFile("/dev/null", "bucketName", "keyName");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::S3ClientErrorType::FILE_EXISTS);
     }
 
-    // Covers Unspecified S3 Error Case
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::UNKNOWN;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
+        S3::MockUploadResult uploadResult;
+        uploadResult.success = false;
+        uploadResult.errorType = S3::S3ClientErrorType::CANNOT_UPLOAD_FILE;
 
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockDownloadResult downloadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.uploadFile("/dev/null", "bucketName", "keyName");
         ASSERT_FALSE(res);
@@ -261,16 +245,15 @@ TEST_F(S3Test, UnsuccesfulFileUpload) {
 }
 
 TEST_F(S3Test, SuccesfulFileDownload) {
-    // Aws makes an empty stream for the result if none is provided
-    Aws::S3Crt::Model::GetObjectResult getResult;
+    S3::MockDownloadResult downloadResult;
+    downloadResult.success = true;
+    downloadResult.content = "";
 
-    Aws::S3Crt::Model::GetObjectOutcome getOutcome(std::move(getResult));
-    Aws::S3Crt::Model::PutObjectOutcome putOutcome;
-    Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
+    S3::MockUploadResult uploadResult;
+    S3::MockListResult listResult;
 
-    S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-    S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-    S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+    S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+    S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
     auto res = turingS3Client.downloadFile("/dev/null", "bucketName", "keyName");
     ASSERT_TRUE(res);
@@ -278,15 +261,15 @@ TEST_F(S3Test, SuccesfulFileDownload) {
 
 TEST_F(S3Test, UnsuccesfulFileDownload) {
     {
-        Aws::S3Crt::Model::GetObjectResult getResult;
+        S3::MockDownloadResult downloadResult;
+        downloadResult.success = true;
+        downloadResult.content = "";
 
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome(std::move(getResult));
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
+        S3::MockUploadResult uploadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.downloadFile("/does/not/exist", "bucketName", "keyName");
         ASSERT_FALSE(res);
@@ -294,16 +277,15 @@ TEST_F(S3Test, UnsuccesfulFileDownload) {
     }
 
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::ACCESS_DENIED;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
+        S3::MockDownloadResult downloadResult;
+        downloadResult.success = false;
+        downloadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome(s3Err);
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
+        S3::MockUploadResult uploadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.downloadFile(_tempTestDir + "err", "bucketName", "keyName");
         ASSERT_FALSE(res);
@@ -311,16 +293,15 @@ TEST_F(S3Test, UnsuccesfulFileDownload) {
     }
 
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::NO_SUCH_KEY;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
+        S3::MockDownloadResult downloadResult;
+        downloadResult.success = false;
+        downloadResult.errorType = S3::S3ClientErrorType::INVALID_KEY_NAME;
 
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome(s3Err);
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
+        S3::MockUploadResult uploadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.downloadFile(_tempTestDir + "err", "bucketName", "keyName");
         ASSERT_FALSE(res);
@@ -328,34 +309,31 @@ TEST_F(S3Test, UnsuccesfulFileDownload) {
     }
 
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::NO_SUCH_BUCKET;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
+        S3::MockDownloadResult downloadResult;
+        downloadResult.success = false;
+        downloadResult.errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
 
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome(s3Err);
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
+        S3::MockUploadResult uploadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.downloadFile(_tempTestDir + "err", "bucketName", "keyName");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::S3ClientErrorType::INVALID_BUCKET_NAME);
     }
 
-    // Covers Unspecified S3 Error Case
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::UNKNOWN;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
+        S3::MockDownloadResult downloadResult;
+        downloadResult.success = false;
+        downloadResult.errorType = S3::S3ClientErrorType::CANNOT_DOWNLOAD_FILE;
 
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome(s3Err);
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
+        S3::MockUploadResult uploadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.downloadFile(_tempTestDir + "err", "bucketName", "keyName");
         ASSERT_FALSE(res);
@@ -366,15 +344,14 @@ TEST_F(S3Test, UnsuccesfulFileDownload) {
 TEST_F(S3Test, SuccesfulDirectoryUpload) {
     DummyDirectory dir(_tempTestDir, "turingS3DirTest");
 
-    Aws::S3Crt::Model::PutObjectResult putResult;
+    S3::MockUploadResult uploadResult;
+    uploadResult.success = true;
 
-    Aws::S3Crt::Model::PutObjectOutcome putOutcome(putResult);
-    Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-    Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+    S3::MockDownloadResult downloadResult;
+    S3::MockListResult listResult;
 
-    S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-    S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-    S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+    S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+    S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
     auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix/");
     ASSERT_TRUE(res);
@@ -382,15 +359,14 @@ TEST_F(S3Test, SuccesfulDirectoryUpload) {
 
 TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
     {
-        Aws::S3Crt::Model::PutObjectResult putResult;
+        S3::MockUploadResult uploadResult;
+        uploadResult.success = true;
 
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome(putResult);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockDownloadResult downloadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.uploadDirectory("/does/not/exist", "bucketName", "prefix/");
         ASSERT_FALSE(res);
@@ -400,16 +376,15 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
     {
         DummyDirectory dir(_tempTestDir, "turingS3DirTest");
 
-        const auto errorType = Aws::S3Crt::S3CrtErrors::ACCESS_DENIED;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
+        S3::MockUploadResult uploadResult;
+        uploadResult.success = false;
+        uploadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockDownloadResult downloadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix/");
         ASSERT_FALSE(res);
@@ -419,16 +394,15 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
     {
         DummyDirectory dir(_tempTestDir, "turingS3DirTest");
 
-        const auto errorType = Aws::S3Crt::S3CrtErrors::NO_SUCH_BUCKET;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
+        S3::MockUploadResult uploadResult;
+        uploadResult.success = false;
+        uploadResult.errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
 
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockDownloadResult downloadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix/");
         ASSERT_FALSE(res);
@@ -438,37 +412,33 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
     {
         DummyDirectory dir(_tempTestDir, "turingS3DirTest");
 
-        const auto errorType = Aws::S3Crt::S3CrtErrors::UNKNOWN;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
-        s3Err.SetResponseCode(Aws::Http::HttpResponseCode::PRECONDITION_FAILED);
+        S3::MockUploadResult uploadResult;
+        uploadResult.success = false;
+        uploadResult.statusCode = 412;
 
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockDownloadResult downloadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::S3ClientErrorType::DIRECTORY_EXISTS);
     }
 
-    // Covers Unspecified S3 Error Case
     {
         DummyDirectory dir(_tempTestDir, "turingS3DirTest");
 
-        const auto errorType = Aws::S3Crt::S3CrtErrors::UNKNOWN;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
+        S3::MockUploadResult uploadResult;
+        uploadResult.success = false;
+        uploadResult.errorType = S3::S3ClientErrorType::CANNOT_UPLOAD_FILE;
 
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome;
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome;
+        S3::MockDownloadResult downloadResult;
+        S3::MockListResult listResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.uploadDirectory(dir.getPath(), "bucketName", "prefix/");
         ASSERT_FALSE(res);
@@ -477,24 +447,18 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
 }
 
 TEST_F(S3Test, SuccesfulDirectoryDownload) {
-    Aws::S3Crt::Model::GetObjectResult getResult;
-    Aws::S3Crt::Model::ListObjectsV2Result listResult;
+    S3::MockListResult listResult;
+    listResult.success = true;
+    listResult.keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
 
-    std::vector<std::string> keyNames = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
-    std::vector<std::string> keyResults;
-    Aws::Vector<Aws::S3Crt::Model::Object> objects(keyNames.size());
-    for (size_t i = 0; i < keyNames.size(); i++) {
-        objects[i].SetKey(keyNames[i]);
-    }
-    listResult.SetContents(objects);
+    S3::MockDownloadResult downloadResult;
+    downloadResult.success = true;
+    downloadResult.content = "";
 
-    Aws::S3Crt::Model::GetObjectOutcome getOutcome(std::move(getResult));
-    Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome(listResult);
-    Aws::S3Crt::Model::PutObjectOutcome putOutcome;
+    S3::MockUploadResult uploadResult;
 
-    S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-    S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-    S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+    S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+    S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
     auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
     ASSERT_TRUE(res);
@@ -502,20 +466,17 @@ TEST_F(S3Test, SuccesfulDirectoryDownload) {
 
 TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
     {
-        // Test for when S3 Directory does not exist
-        Aws::S3Crt::Model::GetObjectResult getResult;
-        Aws::S3Crt::Model::ListObjectsV2Result listResult;
+        S3::MockListResult listResult;
+        listResult.success = true;
+        listResult.keys = {};
 
-        Aws::Vector<Aws::S3Crt::Model::Object> objects;
-        listResult.SetContents(objects);
+        S3::MockDownloadResult downloadResult;
+        downloadResult.success = true;
 
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome(std::move(getResult));
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome(listResult);
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
+        S3::MockUploadResult uploadResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
         ASSERT_FALSE(res);
@@ -523,25 +484,18 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
     }
 
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::ACCESS_DENIED;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
-        Aws::S3Crt::Model::ListObjectsV2Result listResult;
+        S3::MockListResult listResult;
+        listResult.success = true;
+        listResult.keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
 
-        std::vector<std::string> keyNames = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
-        std::vector<std::string> keyResults;
-        Aws::Vector<Aws::S3Crt::Model::Object> objects(keyNames.size());
-        for (size_t i = 0; i < keyNames.size(); i++) {
-            objects[i].SetKey(keyNames[i]);
-        }
-        listResult.SetContents(objects);
+        S3::MockDownloadResult downloadResult;
+        downloadResult.success = false;
+        downloadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome(listResult);
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
+        S3::MockUploadResult uploadResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
         ASSERT_FALSE(res);
@@ -549,25 +503,18 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
     }
 
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::NO_SUCH_KEY;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
-        Aws::S3Crt::Model::ListObjectsV2Result listResult;
+        S3::MockListResult listResult;
+        listResult.success = true;
+        listResult.keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
 
-        std::vector<std::string> keyNames = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
-        std::vector<std::string> keyResults;
-        Aws::Vector<Aws::S3Crt::Model::Object> objects(keyNames.size());
-        for (size_t i = 0; i < keyNames.size(); i++) {
-            objects[i].SetKey(keyNames[i]);
-        }
-        listResult.SetContents(objects);
+        S3::MockDownloadResult downloadResult;
+        downloadResult.success = false;
+        downloadResult.errorType = S3::S3ClientErrorType::INVALID_KEY_NAME;
 
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome(listResult);
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
+        S3::MockUploadResult uploadResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
         ASSERT_FALSE(res);
@@ -575,52 +522,37 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
     }
 
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::NO_SUCH_BUCKET;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
-        Aws::S3Crt::Model::ListObjectsV2Result listResult;
+        S3::MockListResult listResult;
+        listResult.success = true;
+        listResult.keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
 
-        std::vector<std::string> keyNames = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
-        std::vector<std::string> keyResults;
-        Aws::Vector<Aws::S3Crt::Model::Object> objects(keyNames.size());
-        for (size_t i = 0; i < keyNames.size(); i++) {
-            objects[i].SetKey(keyNames[i]);
-        }
-        listResult.SetContents(objects);
+        S3::MockDownloadResult downloadResult;
+        downloadResult.success = false;
+        downloadResult.errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
 
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome(listResult);
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
+        S3::MockUploadResult uploadResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::S3ClientErrorType::INVALID_BUCKET_NAME);
     }
 
-    // Covers Unspecified S3 Error Case
     {
-        const auto errorType = Aws::S3Crt::S3CrtErrors::UNKNOWN;
-        Aws::S3Crt::S3CrtError s3Err(Aws::Client::AWSError(errorType, false));
-        Aws::S3Crt::Model::ListObjectsV2Result listResult;
+        S3::MockListResult listResult;
+        listResult.success = true;
+        listResult.keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
 
-        std::vector<std::string> keyNames = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
-        std::vector<std::string> keyResults;
-        Aws::Vector<Aws::S3Crt::Model::Object> objects(keyNames.size());
-        for (size_t i = 0; i < keyNames.size(); i++) {
-            objects[i].SetKey(keyNames[i]);
-        }
-        listResult.SetContents(objects);
+        S3::MockDownloadResult downloadResult;
+        downloadResult.success = false;
+        downloadResult.errorType = S3::S3ClientErrorType::CANNOT_DOWNLOAD_FILE;
 
-        Aws::S3Crt::Model::GetObjectOutcome getOutcome(s3Err);
-        Aws::S3Crt::Model::ListObjectsV2Outcome listOutcome(listResult);
-        Aws::S3Crt::Model::PutObjectOutcome putOutcome;
+        S3::MockUploadResult uploadResult;
 
-        S3::MockS3Client mockClient(putOutcome, getOutcome, listOutcome);
-        S3::AwsS3ClientWrapper<S3::MockS3Client> clientWrapper(mockClient);
-        S3::TuringS3Client<S3::AwsS3ClientWrapper<S3::MockS3Client>> turingS3Client(std::move(clientWrapper));
+        S3::MockS3Client mockClient(uploadResult, downloadResult, listResult);
+        S3::TuringS3Client<S3::MockS3Client> turingS3Client(std::move(mockClient));
 
         auto res = turingS3Client.downloadDirectory(_tempTestDir, "bucketName", "prefix/");
         ASSERT_FALSE(res);

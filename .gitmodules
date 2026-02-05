@@ -1,6 +1,3 @@
-[submodule "external/aws-sdk-cpp"]
-	path = external/aws-sdk-cpp
-	url = https://github.com/aws/aws-sdk-cpp.git
 [submodule "test/googletest"]
 	path = test/googletest
 	url = https://github.com/google/googletest.git
@@ -13,3 +10,6 @@
 [submodule "external/spdlog"]
 	path = external/spdlog
 	url = https://github.com/gabime/spdlog.git
+[submodule "external/minio-cpp"]
+	path = external/minio-cpp
+	url = https://github.com/turing-db/minio-cpp.git

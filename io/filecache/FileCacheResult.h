@@ -29,6 +29,7 @@ enum class FileCacheErrorType : uint8_t {
     DATA_DIRECTORY_SAVE_FAILED,
     FAILED_TO_FIND_DATA_DIRECTORY,
     DIRECTORY_PATH_IS_FILE,
+    S3_STORAGE_INIT_FAILED,
     _SIZE,
 };
 
@@ -49,7 +50,8 @@ using ErrorTypeDescription = EnumToString<FileCacheErrorType>::Create<
     EnumStringPair<FileCacheErrorType::DATA_DIRECTORY_LOAD_FAILED, "Failed to load directory from remote storage">,
     EnumStringPair<FileCacheErrorType::DATA_DIRECTORY_SAVE_FAILED, "Failed to save directory to remote storage">,
     EnumStringPair<FileCacheErrorType::FAILED_TO_FIND_DATA_DIRECTORY, "Failed to find directory in local file cache">,
-    EnumStringPair<FileCacheErrorType::DIRECTORY_PATH_IS_FILE, "Provided directory path points to a file">>;
+    EnumStringPair<FileCacheErrorType::DIRECTORY_PATH_IS_FILE, "Provided directory path points to a file">,
+    EnumStringPair<FileCacheErrorType::S3_STORAGE_INIT_FAILED, "Failed to initialize S3 storage">>;
 
 class FileCacheError {
 public:

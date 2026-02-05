@@ -112,18 +112,41 @@ else
     sudo $PKG_MANAGER $PKG_INSTALL libopenblas-dev
 fi
 
+# Install minio-cpp dependencies
+if [[ "$(uname)" == "Darwin" ]]; then
+    # macOS - use Homebrew
+    if ! brew list curlpp &> /dev/null; then
+        echo "Installing curlpp via Homebrew..."
+        brew install curlpp
+    else
+        echo "curlpp is already installed"
+    fi
+
+    if ! brew list pugixml &> /dev/null; then
+        echo "Installing pugixml via Homebrew..."
+        brew install pugixml
+    else
+        echo "pugixml is already installed"
+    fi
+
+    # inih - may need to be built from source on macOS
+    # For now, we'll check if it's available via brew
+    if brew list inih &> /dev/null 2>&1; then
+        echo "inih is already installed"
+    else
+        echo "Note: inih may need to be installed manually on macOS"
+    fi
+else
+    # Linux - use detected package manager
+    echo "Installing minio-cpp dependencies via $PKG_MANAGER..."
+    sudo $PKG_MANAGER $PKG_INSTALL libcurlpp-dev libinih-dev libpugixml-dev
+fi
+
 # Skip building if cache was hit (set by CI)
 if [[ "$SKIP_BUILD_IF_CACHED" == "true" ]]; then
     echo "Dependencies cache hit, skipping build"
     exit 0
 fi
-
-# Build aws-sdk-cpp
-mkdir -p $BUILD_DIR/aws-sdk-cpp
-cd $BUILD_DIR/aws-sdk-cpp
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR -DBUILD_ONLY="s3;s3-crt;ec2" -DENABLE_TESTING=OFF -DBUILD_SHARED_LIBS=OFF $SOURCE_DIR/external/aws-sdk-cpp
-cmake --build $BUILD_DIR/aws-sdk-cpp -j $NUM_JOBS
-cmake --install $BUILD_DIR/aws-sdk-cpp
 
 # Build faiss
 mkdir -p $BUILD_DIR/faiss
