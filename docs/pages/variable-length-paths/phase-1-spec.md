@@ -21,7 +21,6 @@ Phase 1 implements basic quantified path patterns without the ability to return 
 - Use relationship variables in quantified patterns
 - Use parenthesized path patterns
 - Use WHERE clauses in patterns
-- Use expression-based quantifiers
 
 ---
 
@@ -66,31 +65,49 @@ All combinations of direction and quantifier are supported:
 ### Outgoing (Right Arrow)
 ```cypher
 ->+          // 1 or more hops
+-[]->+
 ->*          // 0 or more hops
+-[]->*
 ->{n,m}      // between n and m hops
+-[]->{n,m}
 ->{n,}       // n or more hops
+-[]->{n,}
 ->{,m}       // 0 to m hops
+-[]->{,m}
 ->{n}        // exactly n hops (equivalent to {n,n})
+-[]->{n}
 ```
 
 ### Incoming (Left Arrow)
 ```cypher
 <-+
+<-[]-+
 <-*
+<-[]-*
 <-{n,m}
+<-[]-{n,m}
 <-{n,}
+<-[]-{n,}
 <-{,m}
+<-[]-{,m}
 <-{n}
+<-[]-{n}
 ```
 
 ### Undirected
 ```cypher
--+
--*
--{n,m}
--{n,}
--{,m}
--{n}
+--+
+--[]-+
+--*
+--[]-*
+--{n,m}
+--[]-{n,m}
+--{n,}
+--[]-{n,}
+--{,m}
+--[]-{,m}
+--{n}
+--[]-{n}
 ```
 
 ---
@@ -170,7 +187,7 @@ RETURN a, b, c
 ### Different Directions
 ```cypher
 -- Incoming
-MATCH (manager)<-[:REPORTS_TO]+(employee)
+MATCH (manager)<-[:REPORTS_TO]-+(employee)
 RETURN manager, employee
 
 -- Undirected
@@ -207,12 +224,8 @@ RETURN n, m
 
 ### Quantifiers Must Be Literals
 ```cypher
--- ERROR: Dynamic quantifiers not supported in Phase 1
+-- ERROR: Expected literal integer
 MATCH (n)-[:KNOWS]->{1,$maxHops}(m)
-RETURN n, m
-
--- ERROR: Parameter-based quantifiers not supported
-MATCH (n)-[:KNOWS]->{1,$param}(m)
 RETURN n, m
 ```
 
@@ -220,13 +233,6 @@ RETURN n, m
 ```cypher
 -- ERROR: Parenthesized patterns not supported in Phase 1
 MATCH (n) ((a)-[:NEXT]->(b)){1,5} (m)
-RETURN n, m
-```
-
-### No WHERE Clauses in Patterns
-```cypher
--- ERROR: WHERE clauses in patterns not supported in Phase 1
-MATCH (n)-[:KNOWS]->+ WHERE n.age > 18 (m)
 RETURN n, m
 ```
 
@@ -257,12 +263,6 @@ ERROR: Parenthesized path patterns not yet implemented
   MATCH (n) ((a)-[:REL]->(b)){1,5} (m)
             ^
 HINT: This feature is planned for Phase 3.
-
-ERROR: WHERE clauses in path patterns not yet implemented
-  MATCH (n)-[:KNOWS]->+ WHERE n.age > 18 (m)
-                        ^
-HINT: This feature is planned for Phase 4.
-      Use a regular WHERE clause after the MATCH: MATCH ... WHERE n.age > 18
 ```
 
 ---
