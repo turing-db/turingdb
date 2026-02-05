@@ -16,6 +16,7 @@ dependencies = [
     "pandas-stubs>=2.3.3.251219",
     "prompt-toolkit>=3.0.52",
     "patchelf>=0.17.2.4",
+    "delocate>=0.13.0",
 ]
 requires-python = ">=3.10"
 

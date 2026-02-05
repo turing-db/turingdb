@@ -41,21 +41,10 @@ jobs:
       if: steps.cache-dependencies.outputs.cache-hit != 'true'
       run: ./dependencies.sh
 
-    - name: Install system packages
-      if: steps.cache-dependencies.outputs.cache-hit == 'true'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -qqy curl libcurl4-openssl-dev zlib1g-dev libssl-dev
-        sudo apt-get install -qqy bison flex libfl-dev
-        sudo apt-get install -qqy libopenblas-dev
-
-    - name: Install patchelf
-      run: sudo apt-get install -y patchelf
-
     - name: Build wheel
       run: |
         source ${{ github.workspace }}/setup.sh
-        uv build --wheel --python ${{ env.DEV_PYTHON_VERSION }}
+        ./build.sh
 
     - name: Prepare SimpleDB
       run: |
@@ -69,15 +58,10 @@ jobs:
         cd build
         make test
 
-    - name: Repair wheel with auditwheel
-      run: |
-        mkdir -p wheelhouse
-        uvx auditwheel repair dist/*.whl -w wheelhouse
-
     - name: Verify wheel installation
       run: |
         uv venv .venv-test --python 3.14
-        uv pip install wheelhouse/*.whl --python .venv-test/bin/python
+        uv pip install wheel/*.whl --python .venv-test/bin/python
         .venv-test/bin/turingdb --help
 
     - name: Run regress
@@ -92,4 +76,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: turingdb-wheel-linux
-        path: wheelhouse/*.whl
+        path: wheel/*.whl
