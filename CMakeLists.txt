@@ -216,6 +216,7 @@ if(APPLE AND NOT NIX_BUILD)
     message(STATUS "Using Homebrew Bison include directory: ${BISON_INCLUDE_DIRS}")
 endif()
 
+# zlib
 find_package(ZLIB REQUIRED)
 
 # openssl
@@ -236,6 +237,10 @@ execute_process(COMMAND git show --no-patch --format=%at
 
 add_subdirectory(cmake)
 add_subdirectory(external)
+
+# miniocpp (MinIO S3 client)
+find_package(miniocpp REQUIRED)
+
 add_subdirectory(common)
 add_subdirectory(base)
 add_subdirectory(log)

@@ -183,3 +183,40 @@ fi
 cmake "${FAISS_CMAKE_ARGS[@]}" $SOURCE_DIR/external/faiss-1.13.1
 cmake --build $BUILD_DIR/faiss -j $NUM_JOBS
 cmake --install $BUILD_DIR/faiss
+
+# Build nlohmann_json (needed by minio-cpp)
+mkdir -p $BUILD_DIR/nlohmann_json
+cd $BUILD_DIR/nlohmann_json
+
+cmake \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR \
+    -DJSON_BuildTests=OFF \
+    $SOURCE_DIR/external/nlohmann_json
+cmake --build $BUILD_DIR/nlohmann_json -j $NUM_JOBS
+cmake --install $BUILD_DIR/nlohmann_json
+
+# Build minio-cpp
+mkdir -p $BUILD_DIR/minio-cpp
+cd $BUILD_DIR/minio-cpp
+
+MINIO_CMAKE_ARGS=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
+    -DCMAKE_PREFIX_PATH=$DEPENDENCIES_DIR
+    -DCMAKE_MODULE_PATH=$SOURCE_DIR/cmake
+    -DBUILD_SHARED_LIBS=OFF
+    -DMINIO_CPP_TEST=OFF
+)
+
+if [[ "$(uname)" == "Darwin" ]]; then
+    LLVM_PREFIX=$(brew --prefix llvm@20 2>/dev/null || brew --prefix llvm)
+    MINIO_CMAKE_ARGS+=(
+        -DCMAKE_C_COMPILER=${LLVM_PREFIX}/bin/clang
+        -DCMAKE_CXX_COMPILER=${LLVM_PREFIX}/bin/clang++
+    )
+fi
+
+cmake "${MINIO_CMAKE_ARGS[@]}" $SOURCE_DIR/external/minio-cpp
+cmake --build $BUILD_DIR/minio-cpp -j $NUM_JOBS
+cmake --install $BUILD_DIR/minio-cpp
