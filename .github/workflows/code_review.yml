@@ -103,6 +103,18 @@ jobs:
           echo "errors=${{ needs.analyze.outputs.errors }}" >> $GITHUB_OUTPUT
           echo "warnings=${{ needs.analyze.outputs.warnings }}" >> $GITHUB_OUTPUT
 
+      - name: Delete previous code review comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Find and delete all previous code review comments from this workflow
+          gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("Code Style Review Results"))) | .id' \
+            | while read -r comment_id; do
+                echo "Deleting comment $comment_id"
+                gh api -X DELETE repos/${{ github.repository }}/issues/comments/$comment_id
+              done
+
       - name: Create PR review comment
         if: steps.decode.outputs.errors != '0' || steps.decode.outputs.warnings != '0'
         env:
