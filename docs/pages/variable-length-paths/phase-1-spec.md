@@ -336,8 +336,6 @@ Results:
   (A, C) // only once
 ```
 
-**Decision:** _To be filled by team_
-
 **Implications:**
 - Option A: More rows, reflects actual paths found
 - Option B: Fewer rows, simpler results, requires deduplication
@@ -402,7 +400,9 @@ Results:
 - Query-level hint
 - Separate operators for cycle-allowing vs cycle-forbidding
 
-**Decision:** _To be filled by team_
+> [!WARNING]
+> Regardless of our choice, allowing cycles should be forbidden for unbounded quantifiers
+> which will run infinitely in the case of cycles.
 
 **Implications:**
 - Option A: More flexible but requires max hop limit for safety
@@ -411,19 +411,22 @@ Results:
 
 ---
 
-### Empty Relationship Type Behavior
+### Filtering strategies
 
-**Question:** Should `-[]->+` match any relationship type?
+> [!WARNING]
+> This section should be carefully considered and discussed with the team.
+> Our design choices will drastically impact our decisions on the implementation.
 
-**Decision: Yes (wildcard)**
+**Question:** How do we execute filters in the middle of a path?
 
 ```cypher
-// Matches any relationship type
-MATCH (n)-[]->+(m)
+MATCH (n)-[:KNOWS {since: 2020}]->+(m)
 RETURN n, m
 ```
 
-This aligns with Neo4j behavior and user expectations.
+In this query, all edges that are matched should have the `:KNOWS {since: 2020}` filter applied.
+In practice, it means that we cannot simply run a depth/breadth-first exploration from `n` since
+we need to apply the filters in the middle of the path.
 
 ---
 
@@ -447,7 +450,7 @@ Graph: (A)-[:FRIEND]->(B)-[:FRIEND]->(C)
 Query: MATCH (a)-[:FRIEND]->+(c) RETURN a, c
 ```
 
-One row per path: 4 rows
+One row per path: 4 rows (**preferred**)
 - (A, B)
 - (A, C) via B
 - (A, D)
@@ -457,59 +460,6 @@ One row per endpoint pair: 3 rows
 - (A, B)
 - (A, C)
 - (A, D)
-
----
-
-## Parser Considerations
-
-The grammar requires **lookahead** to distinguish quantified from regular relationships:
-
-```cypher
--[:REL]->+     // quantified relationship
--[:REL]->(n)   // regular relationship followed by node
-```
-
-**Suggested approach:**
-1. Parse relationship pattern (direction, types, properties)
-2. Check next token for quantifier (`*`, `+`, `{`)
-3. If quantifier present → create `QuantifiedRelationship` AST node
-4. If no quantifier → create `Relationship` AST node
-
-**Key requirement:** Relationship variables are only allowed in non-quantified relationships.
-
----
-
-## AST Representation
-
-Suggested AST structure for quantified relationships:
-
-```
-QuantifiedRelationship {
-    direction: Direction        // LEFT, RIGHT, BOTH
-    relationshipTypes: List<String>
-    properties: PropertyMap
-    quantifier: Quantifier
-}
-
-Quantifier {
-    type: QuantifierType        // ZERO_OR_MORE, ONE_OR_MORE, RANGE
-    min: Optional<Integer>
-    max: Optional<Integer>
-}
-
-Direction {
-    LEFT    // <-
-    RIGHT   // ->
-    BOTH    // -
-}
-```
-
-**Examples:**
-- `->+` → `Quantifier(ONE_OR_MORE, min=1, max=null)`
-- `->*` → `Quantifier(ZERO_OR_MORE, min=0, max=null)`
-- `->{3,7}` → `Quantifier(RANGE, min=3, max=7)`
-- `->{5,}` → `Quantifier(RANGE, min=5, max=null)`
-- `->{,10}` → `Quantifier(RANGE, min=0, max=10)`
 
 ---
 
