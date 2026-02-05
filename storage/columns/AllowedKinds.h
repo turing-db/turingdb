@@ -260,6 +260,7 @@ struct OutputtedTypes {
         LabelID,
         LabelSetID,
         EdgeTypeID,
+        ValueType,
         PropertyTypeID,
         ChangeID,
         size_t
