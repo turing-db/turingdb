@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 #include "ExprEvalProcessor.h"
 
 #include <iostream>

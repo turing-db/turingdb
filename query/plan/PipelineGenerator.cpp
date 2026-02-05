@@ -679,8 +679,8 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
     // in which case, we can simply output the whole dataframe
     if (projNode) {
         std::vector<ProjectionItem> items;
-        for (const Projection::ReturnItem& item : projNode->items()) {
-            if (const auto* exprPtr = std::get_if<Expr*>(&item)) {
+        for (const Projection::ReturnItem& ritem : projNode->items()) {
+            if (const auto* exprPtr = std::get_if<Expr*>(&ritem)) {
                 const Expr* item = *exprPtr;
                 const VarDecl* decl = item->getExprVarDecl();
 
@@ -688,7 +688,13 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                     throw PlannerException("Projection item does not have a variable declaration");
                 }
 
-                const ColumnTag tag = _declToColumn.at(decl);
+                const auto findColIt = _declToColumn.find(decl);
+                if (findColIt == _declToColumn.end()) {
+                    throw PlannerException(
+                        fmt::format("Unregistered variable {}.", decl->getName()));
+                }
+                const ColumnTag tag = findColIt->second;
+
                 const std::optional<std::string_view> name = projNode->getName(item);
                 if (!name) {
                     continue;
@@ -696,7 +702,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
                 items.push_back({tag, *name});
 
-            } else if (const auto* declPtr = std::get_if<VarDecl*>(&item)) {
+            } else if (const auto* declPtr = std::get_if<VarDecl*>(&ritem)) {
                 const VarDecl* decl = *declPtr;
                 const ColumnTag tag = _declToColumn.at(decl);
                 const std::optional<std::string_view> name = projNode->getName(decl);
@@ -707,20 +713,6 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
                 items.push_back({tag, *name});
             }
-
-            const auto findColIt = _declToColumn.find(decl);
-            if (findColIt == _declToColumn.end()) {
-                throw PlannerException(fmt::format("Unregistered variable {}.", decl->getName()));
-            }
-
-            const ColumnTag tag = findColIt->second;
-            const std::string_view name = item->getName();
-
-            const std::string_view repr = name.empty()
-                ? _sourceManager->getStringRepr((std::uintptr_t)item)
-                : name;
-
-            items.push_back({tag, repr});
         }
 
         _builder.addProjection(items);
