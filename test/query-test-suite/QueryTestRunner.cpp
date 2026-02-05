@@ -88,10 +88,6 @@ void trimTrailingEmptyLines(std::string& trimmed, std::vector<std::string>& line
     return std::string(db::ValueTypeName::value(value));
 }
 
-// [[maybe_unused]] std::string valueToString(const db::ValueType& value) {
-    // return std::string(db::ValueTypeName::value(value));
-// }
-
 template <IntegralType T, int tag>
 [[maybe_unused]] std::string valueToString(const db::ID<T, tag> value) {
     return std::to_string(value.getValue());
