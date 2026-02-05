@@ -64,33 +64,33 @@ All combinations of direction and quantifier are supported:
 
 ### Outgoing (Right Arrow)
 ```cypher
-->+          // 1 or more hops
+-->+          // 1 or more hops
 -[]->+
-->*          // 0 or more hops
+-->*          // 0 or more hops
 -[]->*
-->{n,m}      // between n and m hops
+-->{n,m}      // between n and m hops
 -[]->{n,m}
-->{n,}       // n or more hops
+-->{n,}       // n or more hops
 -[]->{n,}
-->{,m}       // 0 to m hops
+-->{,m}       // 0 to m hops
 -[]->{,m}
-->{n}        // exactly n hops (equivalent to {n,n})
+-->{n}        // exactly n hops (equivalent to {n,n})
 -[]->{n}
 ```
 
 ### Incoming (Left Arrow)
 ```cypher
-<-+
+<--+
 <-[]-+
-<-*
+<--*
 <-[]-*
-<-{n,m}
+<--{n,m}
 <-[]-{n,m}
-<-{n,}
+<--{n,}
 <-[]-{n,}
-<-{,m}
+<--{,m}
 <-[]-{,m}
-<-{n}
+<--{n}
 <-[]-{n}
 ```
 
