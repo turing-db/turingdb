@@ -17,14 +17,14 @@ Phase 2 adds the ability to return relationships from quantified patterns. This 
 ```cypher
 MATCH (n)-[r]->+(m)
 RETURN n, r, m
--- r will be a list of relationships
+// r will be a list of relationships
 ```
 
 **Variable binding:**
 ```cypher
 MATCH (n)-[rels:KNOWS]->+(m)
 RETURN n, rels, m
--- rels is a list of :KNOWS relationships
+// rels is a list of :KNOWS relationships
 ```
 
 ---

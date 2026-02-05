@@ -17,7 +17,7 @@ Phase 3 adds support for parenthesized path patterns with quantifiers, allowing 
 ```cypher
 MATCH (start) ((n:Stop)-[:NEXT]->(m:Stop)){1,10} (end)
 RETURN n, m
--- n and m are lists of intermediate nodes
+// n and m are lists of intermediate nodes
 ```
 
 **Nested patterns:**
