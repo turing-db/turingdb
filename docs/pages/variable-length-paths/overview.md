@@ -128,7 +128,7 @@ MATCH (a)-[:REL]->{1,5}(b)-->(c) RETURN a, b, c
 **New capabilities:**
 ```cypher
 MATCH (n)-[r]->+(m) RETURN n, r, m
--- r is a list: [rel1, rel2, ..., relN]
+// r is a list: [rel1, rel2, ..., relN]
 ```
 
 ---
@@ -141,7 +141,7 @@ MATCH (n)-[r]->+(m) RETURN n, r, m
 ```cypher
 MATCH (start) ((n:Stop)-[:NEXT]->(m:Stop)){1,10} (end)
 RETURN n, m
--- n and m are lists of intermediate nodes
+// n and m are lists of intermediate nodes
 ```
 
 ---

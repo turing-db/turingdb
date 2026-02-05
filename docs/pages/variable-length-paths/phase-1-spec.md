@@ -134,70 +134,70 @@ All combinations of direction and quantifier are supported:
 
 ### Basic Usage
 ```cypher
--- Simple one-or-more
+// Simple one-or-more
 MATCH (n)-[:KNOWS]->+(m)
 RETURN n, m
 
--- Zero-or-more (includes starting node)
+// Zero-or-more (includes starting node)
 MATCH (n:Person {name: 'Alice'})-[:MANAGES]->*(m)
-RETURN m  -- Returns Alice herself plus all direct/indirect reports
+RETURN m  // Returns Alice herself plus all direct/indirect reports
 
--- Bounded hops
+// Bounded hops
 MATCH (n)-[:KNOWS]->{1,4}(m)
 RETURN n, m
 
--- Exactly n hops
+// Exactly n hops
 MATCH (n)-[:KNOWS]->{3}(m)
 RETURN n, m
 ```
 
 ### With Relationship Types
 ```cypher
--- Single type
+// Single type
 MATCH (n)-[:FRIEND]->+(m)
 RETURN n, m
 
--- Multiple types (OR semantics)
+// Multiple types (OR semantics)
 MATCH (n)-[:KNOWS|FRIEND]->+(m)
 RETURN n, m
 ```
 
 ### With Properties
 ```cypher
--- Property filter applies to ALL hops
+// Property filter applies to ALL hops
 MATCH (n)-[:KNOWS {since: 2020}]->+(m)
 RETURN n, m
 ```
 
 ### Mixed with Regular Patterns
 ```cypher
--- Quantified followed by regular
+// Quantified followed by regular
 MATCH (n)-[:KNOWS]->*(m)-->(c:Crime)
 RETURN n, m, c
 
--- Multiple quantified segments
+// Multiple quantified segments
 MATCH (a)-[:FRIEND]->+(b)-[:WORKS_AT]->{1,2}(c:Company)
 RETURN a, b, c
 
--- Sandwiched patterns
+// Sandwiched patterns
 MATCH (a)-[:KNOWS]->+(b)<-[:REPORTS_TO]-(c)
 RETURN a, b, c
 ```
 
 ### Different Directions
 ```cypher
--- Incoming
+// Incoming
 MATCH (manager)<-[:REPORTS_TO]-+(employee)
 RETURN manager, employee
 
--- Undirected
+// Undirected
 MATCH (person1)-[:CONNECTED]-+(person2)
 RETURN person1, person2
 ```
 
 ### Empty Relationship Type (Wildcard)
 ```cypher
--- Matches any relationship type
+// Matches any relationship type
 MATCH (n)-[]->+(m)
 RETURN n, m
 ```
@@ -208,14 +208,14 @@ RETURN n, m
 
 ### Cannot Return Relationships
 ```cypher
--- ERROR: Cannot return relationship variable from quantified pattern
+// ERROR: Cannot return relationship variable from quantified pattern
 MATCH (n)-[r]->+(m)
 RETURN n, r, m
 ```
 
 ### Cannot Use Relationship Variables
 ```cypher
--- ERROR: Relationship variables not supported in quantified patterns
+// ERROR: Relationship variables not supported in quantified patterns
 MATCH (n)-[r:KNOWS]->+(m)
 RETURN n, m
 ```
@@ -224,14 +224,14 @@ RETURN n, m
 
 ### Quantifiers Must Be Literals
 ```cypher
--- ERROR: Expected literal integer
+// ERROR: Expected literal integer
 MATCH (n)-[:KNOWS]->{1,$maxHops}(m)
 RETURN n, m
 ```
 
 ### No Parenthesized Path Patterns
 ```cypher
--- ERROR: Parenthesized patterns not supported in Phase 1
+// ERROR: Parenthesized patterns not supported in Phase 1
 MATCH (n) ((a)-[:NEXT]->(b)){1,5} (m)
 RETURN n, m
 ```
@@ -283,12 +283,12 @@ A quantified pattern `(n)-[:REL]->{min,max}(m)` matches if there exists a path:
 `->*` and `->{0,}` include the starting node:
 
 ```cypher
--- Graph: (A)-[:MANAGES]->(B)-[:MANAGES]->(C)
+// Graph: (A)-[:MANAGES]->(B)-[:MANAGES]->(C)
 
 MATCH (n:Person {name: 'A'})-[:MANAGES]->*(m)
 RETURN m
 
--- Results: A (0 hops), B (1 hop), C (2 hops)
+// Results: A (0 hops), B (1 hop), C (2 hops)
 ```
 
 This is useful for hierarchical queries where you want to include the root.
@@ -298,13 +298,13 @@ This is useful for hierarchical queries where you want to include the root.
 Property filters must match **ALL** relationships in the path:
 
 ```cypher
--- Graph: (A)-[:KNOWS {since: 2020}]->(B)-[:KNOWS {since: 2021}]->(C)
+// Graph: (A)-[:KNOWS {since: 2020}]->(B)-[:KNOWS {since: 2021}]->(C)
 
 MATCH (n)-[:KNOWS {since: 2020}]->+(m)
 RETURN n, m
 
--- Result: (A, B) only
--- Does NOT return (A, C) because the second hop has since: 2021
+// Result: (A, B) only
+// Does NOT return (A, C) because the second hop has since: 2021
 ```
 
 ---
@@ -325,7 +325,7 @@ MATCH (a)-[:REL]->+(c) RETURN a, c
 
 Results:
   (A, C) from path A->B->C
-  (A, C) from path A->D->C  -- duplicate endpoints
+  (A, C) from path A->D->C  // duplicate endpoints
 ```
 
 **Option B - One row per unique (n, m) pair:**
@@ -333,7 +333,7 @@ Results:
 Same graph and query:
 
 Results:
-  (A, C) -- only once
+  (A, C) // only once
 ```
 
 **Decision:** _To be filled by team_
@@ -418,7 +418,7 @@ Results:
 **Decision: Yes (wildcard)**
 
 ```cypher
--- Matches any relationship type
+// Matches any relationship type
 MATCH (n)-[]->+(m)
 RETURN n, m
 ```
@@ -559,7 +559,7 @@ MATCH (n)-[:KNOWS {since: 2020}]->+(m)
 RETURN n, m
 
 Expected: (a,b) only
--- Does NOT match a->c because second hop has since: 2021
+// Does NOT match a->c because second hop has since: 2021
 ```
 
 ### Test 6: Cycle Graph (depends on cycle handling decision)

@@ -51,7 +51,7 @@ Adds the ability to return relationships from quantified patterns as lists.
 
 **Example queries:**
 ```cypher
-MATCH (n)-[r]->+(m) RETURN n, r, m  -- r is a list of relationships
+MATCH (n)-[r]->+(m) RETURN n, r, m  // r is a list of relationships
 ```
 
 ---
@@ -66,7 +66,7 @@ Support for `((pattern)){n,m}` with variable bindings and intermediate node retu
 **Example queries:**
 ```cypher
 MATCH (start) ((n:Stop)-[:NEXT]->(m:Stop)){1,10} (end)
-RETURN n, m  -- n and m are lists
+RETURN n, m  // n and m are lists
 ```
 
 ---
