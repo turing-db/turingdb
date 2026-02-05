@@ -7,10 +7,10 @@ Neo4j's Cypher query language has **two overlapping syntaxes** for variable-leng
 ### 1. Variable-Length Patterns (Legacy)
 Uses `*` inside the relationship brackets:
 ```cypher
-(a)-[*]->(b)           // 0 or more hops
-(a)-[*1..]->(b)        // 1 or more hops
-(a)-[*0..5]->(b)       // 0 to 5 hops
-(a)-[*3..7]->(b)       // 3 to 7 hops
+(a)-[*]->(b)                  // 0 or more hops
+(a)-[*1..]->(b)               // 1 or more hops
+(a)-[*0..5]->(b)              // 0 to 5 hops
+(a)-[*3..7]->(b)              // 3 to 7 hops
 (a)-[r*..5 {name: 'X'}]->(b)  // with properties
 ```
 
@@ -24,10 +24,10 @@ Uses `*` inside the relationship brackets:
 ### 2. Quantified Relationships (Modern)
 Uses quantifiers `*`, `+`, `{n,m}` **after** the relationship brackets:
 ```cypher
-(a)-[]->*              // 0 or more hops
-(a)-[]->+              // 1 or more hops
-(a)-[]->{1,5}          // 1 to 5 hops
-(a)-[]->{3,7}          // 3 to 7 hops
+(a)-[]->*                    // 0 or more hops
+(a)-[]->+                    // 1 or more hops
+(a)-[]->{1,5}                // 1 to 5 hops
+(a)-[]->{3,7}                // 3 to 7 hops
 (a)-[:REL {prop: 'X'}]->+    // with types and properties
 ```
 
@@ -39,6 +39,7 @@ Uses quantifiers `*`, `+`, `{n,m}` **after** the relationship brackets:
 
 ### 3. Parenthesized Path Patterns
 Complex patterns with repetition:
+
 ```cypher
 (start) ((n:Stop)-[:NEXT]->(m:Stop)){1,10} (end)
 ```
@@ -66,7 +67,7 @@ Complex patterns with repetition:
 
 ✅ **Relationship type and property filtering:**
 ```cypher
--[:KNOWS|FRIEND]->+
+-[:KNOWS]->+
 -[:KNOWS {since: 2020}]->*
 ```
 
@@ -113,7 +114,6 @@ MATCH (a)-[:REL]->{1,5}(b)-->(c) RETURN a, b, c
 - Use relationship variables: `MATCH (n)-[r:KNOWS]->+(m)`
 - Use parenthesized patterns: `((a)-[:REL]->(b)){1,5}`
 - Use WHERE clauses in patterns
-- Use expression-based quantifiers: `->{1,$maxHops}`
 
 ---
 
@@ -146,34 +146,6 @@ RETURN n, m
 
 ---
 
-### [Phase 4: Path Pattern WHERE Clauses](phase-4-spec.md)
-
-**Scope:** Support filtering within quantified patterns.
-
-**New capabilities:**
-```cypher
-MATCH (n)-[:KNOWS]->+ WHERE m.age > 18 (m)
-RETURN n, m
-```
-
----
-
-## Neo4j Compatibility Matrix
-
-| Feature | Neo4j | Our Implementation |
-|---------|-------|-------------------|
-| Quantified relationships (`->+`, `->*`, `->{n,m}`) | ✅ | ✅ Phase 1 |
-| Variable-length patterns (`-[*]->`, `-[*1..5]->`) | ✅ | ❌ Not supported |
-| Relationship type filters | ✅ | ✅ Phase 1 |
-| Property filters | ✅ | ✅ Phase 1 |
-| Return relationships from quantified patterns | ✅ | ✅ Phase 2 |
-| Parenthesized path patterns | ✅ | ✅ Phase 3 |
-| WHERE clauses in patterns | ✅ | ✅ Phase 4 |
-| Path variables | ✅ | ❌ TBD |
-| Dynamic quantifiers (expressions in `{...}`) | ❌ | ❌ TBD |
-
----
-
 ## Why This Phased Approach?
 
 ### Phase 1: Minimal Viable Implementation
@@ -191,11 +163,6 @@ RETURN n, m
 - Enables complex graph traversals
 - Supports Neo4j's advanced pattern syntax
 - Useful for sophisticated applications
-
-### Phase 4: Filtering Flexibility
-- Adds expressive filtering capabilities
-- Reduces need for post-processing in application code
-- Performance optimization opportunities
 
 ---
 

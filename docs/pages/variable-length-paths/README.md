@@ -1,8 +1,5 @@
 # Cypher Quantified Path Patterns
 
-**Status:** Design Phase  
-**Last Updated:** 2026-02-05
-
 ---
 
 ## Overview
@@ -18,9 +15,8 @@ For a general overview of what Cypher supports and our implementation approach, 
 Our implementation is split into four phases, each building on the previous:
 
 ### [Phase 1: Basic Quantified Path Patterns](phase-1-spec.md)
-**Status:** Active Design
-
 Basic support for quantified relationships without the ability to return intermediate relationships or nodes.
+Returning relationships is planned for a future phase since it requires list/array type support in the query pipeline.
 
 **Features:**
 - Quantified relationships: `->+`, `->*`, `->{n,m}`
@@ -37,13 +33,15 @@ MATCH (n)-[:KNOWS]->{1,4}(m)-->(c:Crime) RETURN n, m, c
 **Restrictions:**
 - Cannot return relationships from quantified patterns
 - No relationship variables in quantified patterns
-- Literal quantifiers only (no expressions)
-- No parenthesized patterns
+- Literal quantifiers only (no expressions): This is a Cypher limitation
+- No parenthesized patterns: `(n) ((:Person)-->+()) (m)`
 
 ---
 
 ### [Phase 2: Relationship Return Support](phase-2-spec.md)
-**Status:** To be filled
+
+> ![WARNING]
+> The specs of this phase are to be filled
 
 Adds the ability to return relationships from quantified patterns as lists.
 
@@ -59,7 +57,9 @@ MATCH (n)-[r]->+(m) RETURN n, r, m  -- r is a list of relationships
 ---
 
 ### [Phase 3: Parenthesized Quantified Patterns](phase-3-spec.md)
-**Status:** To be filled
+
+> ![WARNING]
+> The specs of this phase are to be filled
 
 Support for `((pattern)){n,m}` with variable bindings and intermediate node returns.
 
@@ -67,19 +67,6 @@ Support for `((pattern)){n,m}` with variable bindings and intermediate node retu
 ```cypher
 MATCH (start) ((n:Stop)-[:NEXT]->(m:Stop)){1,10} (end)
 RETURN n, m  -- n and m are lists
-```
-
----
-
-### [Phase 4: Path Pattern WHERE Clauses](phase-4-spec.md)
-**Status:** To be filled
-
-Support for filtering within quantified patterns using WHERE clauses.
-
-**Example queries:**
-```cypher
-MATCH (n)-[:KNOWS]->+ WHERE m.age > 18 (m)
-RETURN n, m
 ```
 
 ---
@@ -113,17 +100,6 @@ Should paths be allowed to revisit nodes, and if so, under what conditions?
 
 - **[Implementation Notes](implementation-notes.md)** - Execution algorithms and optimization strategies
 - **[Testing Strategy](testing-strategy.md)** - Test coverage and validation approach
-
----
-
-## Timeline
-
-**Phase 1 Estimated Duration:** 3-4 weeks
-- Parser/Lexer: 3-5 days
-- AST updates: 2-3 days
-- Query executor: 5-7 days
-- Testing: 5-7 days
-- Documentation: 2-3 days
 
 ---
 
