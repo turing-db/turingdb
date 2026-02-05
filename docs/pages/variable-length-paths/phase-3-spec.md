@@ -21,6 +21,11 @@ RETURN n, m
 ```
 
 **Nested patterns:**
+
+> [!WARNING]
+> Chdeck if Cypher allows thisj
+
+
 ```cypher
 MATCH ((a)-[:REL]->(b)-[:REL]->(c)){2,5}
 RETURN a, b, c

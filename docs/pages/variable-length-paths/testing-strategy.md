@@ -472,12 +472,6 @@ Query: MATCH ((a)-[:REL]->(b)){1,5}
 Expected: ERROR: Planned for Phase 3
 ```
 
-**Test: WHERE clause in pattern**
-```
-Query: MATCH (n)-[:REL]->+ WHERE n.age > 18 (m)
-Expected: ERROR: Planned for Phase 4
-```
-
 ---
 
 ## Regression Tests
@@ -651,7 +645,7 @@ tests/
 **Parser:**
 - ✅ Parses all valid quantified patterns
 - ✅ Rejects invalid syntax with helpful errors
-- ✅ Rejects unsupported Phase 2/3/4 features
+- ✅ Rejects unsupported Phase 2/3 features
 
 **Execution:**
 - ✅ Returns correct results for all test cases
