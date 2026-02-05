@@ -115,6 +115,13 @@ fi
 # Install minio-cpp dependencies
 if [[ "$(uname)" == "Darwin" ]]; then
     # macOS - use Homebrew
+    if ! brew list pkg-config &> /dev/null; then
+        echo "Installing pkg-config via Homebrew..."
+        brew install pkg-config
+    else
+        echo "pkg-config is already installed"
+    fi
+
     if ! brew list curlpp &> /dev/null; then
         echo "Installing curlpp via Homebrew..."
         brew install curlpp
@@ -129,12 +136,11 @@ if [[ "$(uname)" == "Darwin" ]]; then
         echo "pugixml is already installed"
     fi
 
-    # inih - may need to be built from source on macOS
-    # For now, we'll check if it's available via brew
-    if brew list inih &> /dev/null 2>&1; then
-        echo "inih is already installed"
+    if ! brew list inih &> /dev/null; then
+        echo "Installing inih via Homebrew..."
+        brew install inih
     else
-        echo "Note: inih may need to be installed manually on macOS"
+        echo "inih is already installed"
     fi
 else
     # Linux - use detected package manager
