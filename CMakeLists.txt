@@ -128,6 +128,9 @@ if(APPLE AND NOT NIX_BUILD)
     # Use LLVM's libc++ and add include path for headers (required for LLVM 21+ on macOS 15+)
     if(EXISTS "${LLVM_ROOT}/include/c++/v1")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -isystem ${LLVM_ROOT}/include/c++/v1")
+        # Also add as global include directory with high priority for subdirectory targets
+        # that use target_compile_features (like minio-cpp) which may not inherit CMAKE_CXX_FLAGS properly
+        include_directories(SYSTEM BEFORE ${LLVM_ROOT}/include/c++/v1)
         message(STATUS "Using LLVM libc++ headers from: ${LLVM_ROOT}/include/c++/v1")
     endif()
 endif()
