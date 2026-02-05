@@ -35,7 +35,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: external/dependencies
-        key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies.sh', '.gitmodules') }}
+        key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies.sh', '.gitmodules', 'build.sh') }}
 
     - name: Install dependencies
       if: steps.cache-dependencies.outputs.cache-hit != 'true'
