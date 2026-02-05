@@ -13,12 +13,8 @@ public:
     PipelineException& operator=(const PipelineException&) = default;
     PipelineException& operator=(PipelineException&&) = default;
 
-    explicit PipelineException(std::string&& msg)
-        : TuringException(std::move(msg))
-    {
-    }
-
-    ~PipelineException() noexcept override = default;
+    explicit PipelineException(std::string&& msg);
+    ~PipelineException() noexcept override;
 };
 
 }
