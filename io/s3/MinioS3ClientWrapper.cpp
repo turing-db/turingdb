@@ -57,7 +57,8 @@ std::string getRegionFromAwsConfig() {
 
 }
 
-MinioS3ClientWrapper::MinioS3ClientWrapper() {
+MinioS3ClientWrapper::MinioS3ClientWrapper() 
+{
     std::string endpoint = "s3.amazonaws.com";
     std::string region;
 
@@ -97,7 +98,8 @@ MinioS3ClientWrapper::MinioS3ClientWrapper() {
 
 MinioS3ClientWrapper::MinioS3ClientWrapper(const std::string& accessKey,
                                            const std::string& secretKey,
-                                           const std::string& region) {
+                                           const std::string& region) 
+{
     const std::string endpoint = "s3." + region + ".amazonaws.com";
     _baseUrl = std::make_unique<minio::s3::BaseUrl>(endpoint);
 
