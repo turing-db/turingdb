@@ -15,7 +15,7 @@ class TuringDB:
         self,
         instance_id: str = "",
         auth_token: str = "",
-        host: str = "https://engines.turingdb.ai/sdk",
+        host: str = "http://localhost:6666",
         timeout: Optional[int] = None,
     ):
         import copy
@@ -115,7 +115,7 @@ class TuringDB:
             raise TuringDBException("Cannot create a new change while working on a commit")
 
         res = self.query("CHANGE NEW")
-        self._params["change"] = res.values["changeID"][0]
+        self._params["change"] = res.loc[0, "changeID"]
         change_id = int(self._params["change"])
         return change_id
 
