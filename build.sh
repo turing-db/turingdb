@@ -18,6 +18,7 @@ fi
 
 # Build
 uv build --wheel $UV_PYTHON_FLAG
+cd build && make install && cd ..
 
 if [[ "$(uname)" == "Darwin" ]]; then
     uv add delocate
