@@ -61,6 +61,8 @@ jobs:
 
     - name: Build wheel
       run: ./build.sh
+      env:
+        PYTHON_VERSION: ${{ matrix.python_version }}
 
     - name: Prepare SimpleDB
       run: |

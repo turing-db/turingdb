@@ -17,6 +17,7 @@ if [[ "$(uname)" == "Darwin" ]]; then
 fi
 
 # Build
+echo "PYTHON_VERSION=$PYTHON_VERSION"
 uv build --wheel $UV_PYTHON_FLAG
 cd build && make install && cd ..
 
