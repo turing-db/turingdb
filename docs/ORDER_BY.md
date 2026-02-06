@@ -32,7 +32,7 @@ Advantages:
 
 Ideas from CMU:
 1. Late materialisation
-  - We sort only row-indexes and ordered columns
+  - We sort only row-indexes and order-by keyed columns
   - Sort by ordered columns, then "materialise" the sorted chunk
     by transposing the row indexes into the final block thats stored to memory
   - We can probably reuse the "transform" logic used in `MaterializeProcessor`
@@ -50,13 +50,18 @@ Ideas from DuckDB:
 - `MATCH ... RETURN ... ORDER BY x, y, z` is a sort with respect to `x`, then `y`, then `z`
   - i.e. the precedence of sorting order is left-to-right
 
-- We can use functional dependencies on keys to eliminate uneccesarry sorting; outlined by Remyfor
+- We can use functional dependencies on keys to eliminate uneccesarry sorting; outlined by Remy for
   `DISTINCT` by here on Notion [^5].
   - e.g. `MATCH (n) RETURN n, n.name ORDER BY n, n.name`
+  `n.name` is functionally dependent on `n`: we can remove `n.name` from the ordered keys
 
 
 [^1] [DuckDB Sorting Rows](https://duckdb.org/pdf/ICDE2023-kuiper-muehleisen-sorting.pdf)
+
 [^2] [New DuckDB sorting blog](https://duckdb.org/2025/09/24/sorting-again)
+
 [^3] [Vergesort](https://github.com/Morwenn/vergesort)
+
 [^4] [CMU Sorting 2024](https://www.youtube.com/watch?v=mM3sFwSuGNY)
+
 [^5] [Remy's DISTINCT notes](https://www.notion.so/turingbio/DISTINCT-study-2f13aad664c880aaa97fd2d6dd5c4486)
