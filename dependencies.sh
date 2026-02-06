@@ -161,42 +161,6 @@ else
     sudo $PKG_MANAGER $PKG_INSTALL libopenblas-dev
 fi
 
-# Install minio-cpp dependencies
-if [[ "$(uname)" == "Darwin" ]]; then
-    # macOS - use Homebrew
-    if ! brew list pkg-config &> /dev/null; then
-        echo "Installing pkg-config via Homebrew..."
-        brew install pkg-config
-    else
-        echo "pkg-config is already installed"
-    fi
-
-    if ! brew list curlpp &> /dev/null; then
-        echo "Installing curlpp via Homebrew..."
-        brew install curlpp
-    else
-        echo "curlpp is already installed"
-    fi
-
-    if ! brew list pugixml &> /dev/null; then
-        echo "Installing pugixml via Homebrew..."
-        brew install pugixml
-    else
-        echo "pugixml is already installed"
-    fi
-
-    if ! brew list inih &> /dev/null; then
-        echo "Installing inih via Homebrew..."
-        brew install inih
-    else
-        echo "inih is already installed"
-    fi
-else
-    # Linux - use detected package manager
-    echo "Installing minio-cpp dependencies via $PKG_MANAGER..."
-    sudo $PKG_MANAGER $PKG_INSTALL libcurlpp-dev libinih-dev libpugixml-dev
-fi
-
 # Skip building if cache was hit (set by CI)
 if [[ "$SKIP_BUILD_IF_CACHED" == "true" ]]; then
     echo "Dependencies cache hit, skipping build"
