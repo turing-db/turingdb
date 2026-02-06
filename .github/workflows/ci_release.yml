@@ -69,7 +69,7 @@ jobs:
           skip-existing: true
 
   test-published-wheel:
-    name: Test published wheel (${{ matrix.os }}, py${{ matrix.python_version }})
+    name: Test published wheel 
     needs: [publish, setup]
     strategy:
       fail-fast: false
