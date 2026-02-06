@@ -88,18 +88,21 @@ if [[ "$(uname)" == "Darwin" ]]; then
 
     LLVM_PREFIX=$(brew --prefix $BREW_LLVM_VERSION 2>/dev/null)
 
+    # Detect the macOS SDK path. Homebrew's LLVM formula generates clang
+    # config files with -isysroot pointing to the CommandLineTools SDK,
+    # but CI runners often only have Xcode (no CLT). CMake does not
+    # auto-set CMAKE_OSX_SYSROOT for non-Apple Clang, so we must detect
+    # and pass it explicitly to override the (possibly invalid) config.
+    MACOS_SDK_PATH=$(xcrun --show-sdk-path 2>/dev/null)
+
     # Common macOS toolchain args for building all dependencies with LLVM.
-    # Using -stdlib=libc++ tells clang to use its bundled libc++. Do NOT add
-    # an explicit -isystem for the libc++ headers: when CMake's find_package
-    # adds dependency -isystem paths (curlpp, inih, etc.), those appear
-    # BEFORE CMAKE_CXX_FLAGS on the compile command, which causes clang to
-    # deduplicate the libc++ path out of its built-in "C++ system include"
-    # slot and into a lower-priority position, breaking the internal
-    # cstddef -> stddef.h include chain.
+    # Do NOT add -isystem for libc++ headers; let the compiler manage its
+    # own built-in C++ system include paths via -stdlib=libc++.
     MACOS_COMPILER_ARGS=(
         "-DCMAKE_C_COMPILER=${LLVM_PREFIX}/bin/clang"
         "-DCMAKE_CXX_COMPILER=${LLVM_PREFIX}/bin/clang++"
         "-DCMAKE_CXX_FLAGS=-stdlib=libc++"
+        "-DCMAKE_OSX_SYSROOT=${MACOS_SDK_PATH}"
         "-DCMAKE_EXE_LINKER_FLAGS=-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++"
         "-DCMAKE_SHARED_LINKER_FLAGS=-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++"
     )
@@ -270,6 +273,23 @@ if [[ "$(uname)" == "Darwin" ]]; then
     )
 fi
 
-cmake "${MINIO_CMAKE_ARGS[@]}" $SOURCE_DIR/external/minio-cpp
+cmake "${MINIO_CMAKE_ARGS[@]}" -DCMAKE_VERBOSE_MAKEFILE=ON $SOURCE_DIR/external/minio-cpp
+
+# Diagnostic: show search paths and check for shadowing headers
+if [[ "$(uname)" == "Darwin" ]]; then
+    echo "=== clang config file ==="
+    DARWIN_VER=$(uname -r | cut -d. -f1)
+    cat /opt/homebrew/etc/clang/arm64-apple-darwin${DARWIN_VER}.cfg 2>/dev/null || echo "(not found)"
+    echo "=== CMAKE_OSX_SYSROOT ==="
+    grep CMAKE_OSX_SYSROOT $BUILD_DIR/minio-cpp/CMakeCache.txt 2>/dev/null
+    echo "=== Header search paths (clang -v) ==="
+    echo | ${LLVM_PREFIX}/bin/clang++ -stdlib=libc++ -xc++ -E -v - 2>&1 | sed -n '/#include.*search/,/End of search/p'
+    echo "=== Checking for stddef.h in Homebrew include dirs ==="
+    for dir in /opt/homebrew/include /opt/homebrew/Cellar/inih/*/include /opt/homebrew/Cellar/pugixml/*/include; do
+        test -f "$dir/stddef.h" && echo "FOUND: $dir/stddef.h" || true
+    done
+    echo "=== end diagnostics ==="
+fi
+
 cmake --build $BUILD_DIR/minio-cpp -j $NUM_JOBS
 cmake --install $BUILD_DIR/minio-cpp
