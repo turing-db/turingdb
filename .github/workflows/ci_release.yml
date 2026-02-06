@@ -10,11 +10,20 @@ on:
 
 
 jobs:
-  build-release:
-    uses: ./.github/workflows/ci_build.yml
-    with:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
       os_list: '["ubuntu-24.04", "macos-14", "macos-15", "macos-26"]'
       python_version_list: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+    steps:
+      - run: echo "Defining matrix"
+
+  build-release:
+    needs: setup
+    uses: ./.github/workflows/ci_build.yml
+    with:
+      os_list: ${{ needs.setup.outputs.os_list }}
+      python_version_list: ${{ needs.setup.outputs.python_version_list }}
 
   publish:
     name: Publish to PyPI
@@ -49,4 +58,40 @@ jobs:
           packages-dir: wheel/
           skip-existing: true
 
+  test-published-wheel:
+    name: Test published wheel (${{ matrix.os }}, py${{ matrix.python_version }})
+    needs: [publish, setup]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJson(needs.setup.outputs.os_list) }}
+        python_version: ${{ fromJson(needs.setup.outputs.python_version_list) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
 
+      - name: Setup Python
+        run: uv python install ${{ matrix.python_version }}
+
+      - name: Install turingdb from PyPI
+        run: |
+          uv venv .venv --python ${{ matrix.python_version }}
+          for i in 1 2 3 4 5; do
+            uv pip install turingdb --python .venv/bin/python && break
+            echo "Attempt $i failed, retrying in 30s..."
+            sleep 30
+          done
+
+      - name: Verify turingdb launches
+        run: .venv/bin/turingdb --help
+
+      - name: Test exception handling with incorrect query
+        run: |
+          echo "THIS IS NOT VALID CYPHER;" | .venv/bin/turingdb
+          EXIT_CODE=$?
+          if [ $EXIT_CODE -eq 139 ] || [ $EXIT_CODE -eq 134 ]; then
+            echo "turingdb crashed with signal (exit code $EXIT_CODE)"
+            exit 1
+          fi
+          echo "turingdb handled invalid query gracefully (exit code $EXIT_CODE)"
