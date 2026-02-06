@@ -53,80 +53,16 @@ Stage 2; executed at each call to `OrderByProcessor::execute` once input is clos
 - "Late materialisation" sorting, defined in [^4] as sorting only row-indices, and then materialising the final output
   once sorting has completed, is shown to be favoured in scenarios adjacent to Stage 1 and Stage 2 [^1]
 
-## Top-level Algorithm:
-
-- `OrderByProcessor::execute` sorts its input chunk (some algorithm)
-- Produces a sorted chunk, we call this a sorted run
-- Stores that sorted chunk into its "memory"
-
-- Say we recieve $n$ chunks in total as input
-- After sorting chunk $n$, we have $n$ sorted runs in our memory
-- Apply a run-sorted optimised algorithm such as Vergesort [^3] (used in DuckDB)
-  - We can also roll our own custom implementation, with `std::inplace_merge`,
-    which is $O(n)$ on sorted ranges
-
-Advantages:
-
-- Sorting cost is distributed over calls to `execute`
-- Final sort of sorted runs is optimisable to near $O(n)$ [^3]
-- The processor's "memory" can be either in-memory for full speed, or offloaded to disk
-  (see [^4] for plenty on classical algorithms to do this with memory-constraints),
-  allowing us to more easily convert to a memory-constrained, disk-spilling implementation
-
-## Sorting Individual Chunks
-
-- `std::sort` can be a starting place, best performance-effort tradeoff
-  - Can roll our own custom sort after if needed
-
-Ideas from CMU:
-1. Late materialisation
-  - We sort only row-indexes and order-by keyed columns
-  - Sort by ordered columns, then "materialise" the sorted chunk
-    by transposing the row indexes into the final block thats stored to memory
-  - We can probably reuse the "transform" logic used in `MaterializeProcessor`
-    to materialize rows after sorting
-
-Ideas from DuckDB:
-1. Use blobbing to remove operator dispatch
-  - DuckDB converts the ordered keys to binary blobs, meaning the type which is being
-    sorted is always known, and we can hopefully inline `operator<==>(const Blob& a, const Blob& b)`
-    instead of having to do a runtime dispatch on whatever `T` we are sorting in the`ColumnVector<T>`
-    \* I'm not too sure on this one: I feel like since we deal in chunks of at least ~65k, we can do a
-     single dispatch to get the operator per chunk, and reuse that, so this might not be that useful
-
-2. Since sorting is inherently a row-based operation, DuckDB present an approach to convert columnar
-   data (such as ours) to row format, and sort the row-representation.
-   Their data shows a ~1.15x speedup on sorting row-oriented versus column-oriented data of size ~65k rows
-   (i.e. our chunk size) for a sort with three keys [^1] (page 5). This speedup does not account for the time
-   spent converting a columnar format to the row format. I believe the speedup they present would not outweigh
-   the latency (nor engineering effort) which our column-to-row and post-sort row-to-column mutations would require.
-
-3. "Subsort approach" [^1]
-- To sort by multiple keys in a column-oriented manner:
-  1. Sort by the first key
-  2. Identify rows where the first key is equal
-  3. Sort these rows w.r.t the second key
-  4. Identify rows where the second key is equal
-  ...
-  Repeat until no ties or all keys sorted
-
-  - DuckDB identifies this as faster than "tuple-at-a-time" approach (basically row based) [^1]
-  - This also integrates nicely into `std::sort`
-  - Drawbacks: cannot be used for a merging sort, because a merge requires seeing the entire row at once
-    This means that columnar-subsort is appropriate (and favoured) for sortings of individual chunks for each call to
-    `OrderByProcessor::execute`, however it is not suitable for manifesting the final result, which requires merging
-    all the aggregated sorted runs. To solve this, we can use a "blobbing" approach which is also mentioned by DuckDB [^1].
-
-## Handling multiple `ORDER BY` keys
-
-- `MATCH ... RETURN ... ORDER BY x, y, z` is a sort with respect to `x`, then `y`, then `z`
-  - i.e. the precedence of sorting order is left-to-right
+> Semantics of multiple `ORDER BY` keys
+> - `MATCH ... RETURN ... ORDER BY x, y, z` is a sort with respect to `x`, then `y`, then `z`
+>   - i.e. the precedence of sorting order is left-to-right
 
 ### Key elimination via functional dependencies
 - We can use functional dependencies on keys to eliminate uneccesarry sorting; outlined by Remy for
   `DISTINCT` here on Notion [^5].
   - e.g. `MATCH (n) RETURN n, n.name ORDER BY n, n.name`
   `n.name` is functionally dependent on `n`: we can remove `n.name` from the ordered keys
+<!-- TODO: EXPAND -->
 
 
 [^1] [DuckDB Sorting Rows](https://duckdb.org/pdf/ICDE2023-kuiper-muehleisen-sorting.pdf)
