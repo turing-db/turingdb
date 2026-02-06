@@ -25,8 +25,11 @@ Stage 2; executed at each call to `OrderByProcessor::execute` once input is clos
 
   for an ordered sequence of order-keys, $k_1, k_2, k_3,\dots, k_i$
     1. Sort with respect to values in $k_1$
+
     for $2\le j < i$:
+
       2. Check for rows in column $k_{j}$ where there are ties on the same value in $k_{j-1}$, call these runs $R$
+
       3. Sort the rows in each run $r \in R$ with respect to $k_{j}$
 
 - Sort input chunks using a column-orientated subsort approach (as defined in [^1] page 4)
@@ -62,7 +65,7 @@ Stage 2; executed at each call to `OrderByProcessor::execute` once input is clos
   `DISTINCT` here on Notion [^5].
   - e.g. `MATCH (n) RETURN n, n.name ORDER BY n, n.name`
   `n.name` is functionally dependent on `n`: we can remove `n.name` from the ordered keys
-<!-- TODO: EXPAND -->
+TODO: Expand on this
 
 
 [^1] [DuckDB Sorting Rows](https://duckdb.org/pdf/ICDE2023-kuiper-muehleisen-sorting.pdf)
