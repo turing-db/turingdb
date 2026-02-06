@@ -1,4 +1,4 @@
-name: CI ubuntu
+name: CI Build
 
 on:
   push:
@@ -10,8 +10,13 @@ on:
   workflow_dispatch:
 
 jobs:
+  os_matrix:
+    strategy:
+      matrix:
+        os: [macos15, ubuntu-24.04]
+
   build:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
 
     env:
       DEV_PYTHON_VERSION: 3.14
