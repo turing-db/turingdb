@@ -21,17 +21,12 @@ on:
   workflow_dispatch:
 
 
-env:
-  DEFAULT_OS_LIST: '["ubuntu-24.04", "macos-15"]'
-  DEFAULT_PYTHON_VERSION_LIST: '["3.14"]'
-
-
 jobs:
   build:
     strategy:
       matrix:
-        os: ${{ fromJson(inputs.os_list || env.DEFAULT_OS_LIST) }}
-        python_version: ${{ fromJson(inputs.python_version_list || env.DEFAULT_PYTHON_VERSION_LIST) }}
+        os: ${{ fromJson(inputs.os_list || '["ubuntu-24.04", "macos-15"]') }}
+        python_version: ${{ fromJson(inputs.python_version_list || '["3.14"]') }}
 
     runs-on: ${{ matrix.os }}
 
