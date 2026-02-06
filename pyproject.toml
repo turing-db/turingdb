@@ -17,6 +17,7 @@ dependencies = [
     "prompt-toolkit>=3.0.52",
     "patchelf>=0.17.2.4",
     "delocate>=0.13.0",
+    "auditwheel>=6.6.0",
 ]
 requires-python = ">=3.10"
 
