@@ -30,7 +30,7 @@ jobs:
       - name: Download all wheel artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: turingdb-wheel-linux-py*
+          pattern: turingdb-wheel-*
           path: wheel/
           merge-multiple: true
 
