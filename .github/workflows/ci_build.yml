@@ -30,6 +30,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    env:
+      OS_NAME: ${{ startsWith(matrix.os, 'ubuntu') && 'linux' || matrix.os }}
+
     steps:
     - uses: actions/checkout@v4
       with:
@@ -84,5 +87,5 @@ jobs:
     - name: Upload wheel artifact
       uses: actions/upload-artifact@v4
       with:
-        name: turingdb-wheel-*
+        name: turingdb-wheel-${{ env.OS_NAME }}-py${{ matrix.python_version }}
         path: wheel/*.whl
