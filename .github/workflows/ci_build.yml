@@ -5,20 +5,32 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "0 */2 * * *"
+
+  workflow_call:
+    inputs:
+      os_list:
+        required: false
+        type: string
+        default: '["ubuntu-24.04", "macos-15"]'
+      python_version_list:
+        required: false
+        type: string
+        default: '["3.14"]'
+
   workflow_dispatch:
+
 
 jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-24.04, macos-15]
+        os: ${{ fromJson(inputs.os_list) }}
+        python_version: ${{ fromJson(inputs.python_version_list) }}
 
     runs-on: ${{ matrix.os }}
-
-    env:
-      DEV_PYTHON_VERSION: 3.14
 
     steps:
     - uses: actions/checkout@v4
@@ -31,9 +43,6 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v3
 
-    - name: Setup Python
-      run: uv python install ${{ env.DEV_PYTHON_VERSION }}
-
     - name: Cache dependencies
       id: cache-dependencies
       uses: actions/cache@v4
@@ -45,6 +54,9 @@ jobs:
       run: ./dependencies.sh
       env:
         SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies.outputs.cache-hit }}
+
+    - name: Setup Python
+      run: uv python install ${{ matrix.python_version }}
 
     - name: Build wheel
       run: ./build.sh
@@ -63,10 +75,16 @@ jobs:
 
     - name: Verify wheel installation
       run: |
-        uv venv .venv-test --python ${{ env.DEV_PYTHON_VERSION }}
+        uv venv .venv-test --python ${{ inputs.python_version }}
         uv pip install wheel/*.whl --python .venv-test/bin/python
         .venv-test/bin/turingdb --help
 
     - name: Run regress
       run: |
         ./run_regress.sh
+
+    - name: Upload wheel artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: turingdb-wheel-*
+        path: wheel/*.whl
