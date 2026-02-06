@@ -73,7 +73,7 @@ jobs:
 
     - name: Verify wheel installation
       run: |
-        uv venv .venv-test --python ${{ inputs.python_version }}
+        uv venv .venv-test --python ${{ matrix.python_version }}
         uv pip install wheel/*.whl --python .venv-test/bin/python
         .venv-test/bin/turingdb --help
 
