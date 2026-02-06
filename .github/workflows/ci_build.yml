@@ -10,12 +10,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  os_matrix:
+  build:
     strategy:
       matrix:
-        os: [macos15, ubuntu-24.04]
+        os: [ubuntu-24.04, macos15]
 
-  build:
     runs-on: ${{ matrix.os }}
 
     env:
