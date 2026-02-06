@@ -29,6 +29,8 @@ jobs:
     name: Publish to PyPI
     needs: build-release
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
     environment:
       name: pypi
       url: https://pypi.org/p/turingdb
@@ -42,6 +44,14 @@ jobs:
           pattern: turingdb-wheel-*
           path: wheel/
           merge-multiple: true
+
+      - name: Extract version from wheel filename
+        id: get-version
+        run: |
+          WHEEL=$(ls wheel/*.whl | head -1)
+          VERSION=$(basename "$WHEEL" | sed 's/^turingdb-\([^-]*\)-.*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VERSION"
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -78,10 +88,21 @@ jobs:
         run: |
           uv venv .venv --python ${{ matrix.python_version }}
           for i in 1 2 3 4 5; do
-            uv pip install turingdb --python .venv/bin/python && break
+            uv pip install turingdb==${{ needs.publish.outputs.version }} --prerelease allow --python .venv/bin/python && break
             echo "Attempt $i failed, retrying in 30s..."
             sleep 30
           done
+
+      - name: Verify installed version matches
+        run: |
+          INSTALLED=$(.venv/bin/python -c "import importlib.metadata; print(importlib.metadata.version('turingdb'))")
+          EXPECTED="${{ needs.publish.outputs.version }}"
+          echo "Installed: $INSTALLED"
+          echo "Expected:  $EXPECTED"
+          if [ "$INSTALLED" != "$EXPECTED" ]; then
+            echo "ERROR: Version mismatch!"
+            exit 1
+          fi
 
       - name: Verify turingdb launches
         run: .venv/bin/turingdb --help
