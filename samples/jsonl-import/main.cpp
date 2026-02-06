@@ -25,7 +25,7 @@ int main(int argc, const char** argv) {
         {"type":"node","id":"6","labels":["Exotic","Interest","SleepDisturber","Supernatural"],"properties":{"isReal":true,"name":"Ghosts"}}
         {"type":"node","id":"7","labels":["Interest"],"properties":{"name":"Bio"}}
         {"type":"node","id":"8","labels":["Interest"],"properties":{"name":"Cooking"}}
-        {"type":"node","id":"9","labels":["Interest"],"properties":{"name":"Paddle"}}
+        {"type":"node","id":"9","labels":["Interest"],"properties":{"name":"Padel"}}
         {"type":"node","id":"10","labels":["Interest","SleepDisturber"],"properties":{"isReal":true,"name":"Animals"}}
         {"type":"node","id":"11","labels":["Interest"],"properties":{"isReal":true,"name":"Computers"}}
         {"type":"node","id":"12","labels":["Exotic","Interest"],"properties":{"isReal":false,"name":"Eighties"}}
@@ -40,7 +40,7 @@ int main(int argc, const char** argv) {
         {"type":"relationship","id":"8","label":"INTERESTED_IN","properties":{"duration":20,"name":"Luc -> Animals"},"start":{"id":"2","labels":["Person","SoftwareEngineering"],"prope rties":{"isFrench":true,"dob":"28/05","hasPhD":true,"name":"Luc"}},"end":{"id":"10","labels":["Interest","SleepDisturber"],"properties":{"isReal":true,"name":"Animals"}}}
         {"type":"relationship","id":"9","label":"INTERESTED_IN","properties":{"duration":15,"name":"Luc -> Computers"},"start":{"id":"2","labels":["Person","SoftwareEngineering"],"pro perties":{"isFrench":true,"dob":"28/05","hasPhD":true,"name":"Luc"}},"end":{"id":"11","labels":["Interest"],"properties":{"isReal":true,"name":"Computers"}}}
         {"type":"relationship","id":"10","label":"INTERESTED_IN","properties":{"name":"Maxime -> Bio"},"start":{"id":"3","labels":["Bioinformatics","Person"],"properties":{"isFrench": true,"dob":"24/07","hasPhD":false,"name":"Maxime"}},"end":{"id":"7","labels":["Interest"],"properties":{"name":"Bio"}}}
-        {"type":"relationship","id":"11","label":"INTERESTED_IN","properties":{"name":"Maxime -> Paddle","proficiency":"expert"},"start":{"id":"3","labels":["Bioinformatics","Person"] ,"properties":{"isFrench":true,"dob":"24/07","hasPhD":false,"name":"Maxime"}},"end":{"id":"9","labels":["Interest"],"properties":{"name":"Paddle"}}}
+        {"type":"relationship","id":"11","label":"INTERESTED_IN","properties":{"name":"Maxime -> Padel","proficiency":"expert"},"start":{"id":"3","labels":["Bioinformatics","Person"] ,"properties":{"isFrench":true,"dob":"24/07","hasPhD":false,"name":"Maxime"}},"end":{"id":"9","labels":["Interest"],"properties":{"name":"Padel"}}}
         {"type":"relationship","id":"12","label":"INTERESTED_IN","properties":{"duration":10,"name":"Martina -> Cooking"},"start":{"id":"4","labels":["Bioinformatics","Person"],"prope rties":{"isFrench":false,"hasPhD":true,"name":"Martina"}},"end":{"id":"8","labels":["Interest"],"properties":{"name":"Cooking"}}}
     )"};
 

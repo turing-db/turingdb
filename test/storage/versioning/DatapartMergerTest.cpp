@@ -362,10 +362,10 @@ protected:
         writer.addNodeProperty<types::Int64>(maxime, "id", 8);
         tmpNodeIDToIdPropMap.emplace(maxime, 8);
 
-        const auto paddle = writer.addNode({"Interest"});
-        addNodePropertyHelper<types::String>(writer, paddle, "name", "Paddle", 9);
-        writer.addNodeProperty<types::Int64>(paddle, "id", 9);
-        tmpNodeIDToIdPropMap.emplace(paddle, 9);
+        const auto padel = writer.addNode({"Interest"});
+        addNodePropertyHelper<types::String>(writer, padel, "name", "Padel", 9);
+        writer.addNodeProperty<types::Int64>(padel, "id", 9);
+        tmpNodeIDToIdPropMap.emplace(padel, 9);
 
         const auto maximeBio = addEdgeHelper(writer, "INTERESTED_IN",
                                              maxime,
@@ -375,10 +375,10 @@ protected:
         addEdgePropertyHelper<types::String>(writer, maximeBio, "name", "Maxime -> Bio", 9);
         writer.addEdgeProperty<types::Int64>(maximeBio, "id", 9);
 
-        const auto maximePaddle = addEdgeHelper(writer, "INTERESTED_IN", maxime, paddle, 10, tmpNodeIDToIdPropMap);
-        addEdgePropertyHelper<types::String>(writer, maximePaddle, "name", "Maxime -> Paddle", 10);
-        addEdgePropertyHelper<types::String>(writer, maximePaddle, "proficiency", "expert", 10);
-        writer.addEdgeProperty<types::Int64>(maximePaddle, "id", 10);
+        const auto maximePadel = addEdgeHelper(writer, "INTERESTED_IN", maxime, padel, 10, tmpNodeIDToIdPropMap);
+        addEdgePropertyHelper<types::String>(writer, maximePadel, "name", "Maxime -> Padel", 10);
+        addEdgePropertyHelper<types::String>(writer, maximePadel, "proficiency", "expert", 10);
+        writer.addEdgeProperty<types::Int64>(maximePadel, "id", 10);
 
         writer.commit();
         resetTmpNodeIDToIdPropMap();
@@ -857,7 +857,7 @@ TEST_F(DataPartMergerTest, DeleteAllEdgePropertiesAndMerge) {
     writer.deleteEdge(findEdgeIDInWriter<types::String>(writer, "Remy -> Computers", namePropType->_id));
     writer.deleteEdge(findEdgeIDInWriter<types::String>(writer, "Remy -> Ghosts", namePropType->_id));
     writer.deleteEdge(findEdgeIDInWriter<types::String>(writer, "Ghosts -> Remy", namePropType->_id));
-    writer.deleteEdge(findEdgeIDInWriter<types::String>(writer, "Maxime -> Paddle", namePropType->_id));
+    writer.deleteEdge(findEdgeIDInWriter<types::String>(writer, "Maxime -> Padel", namePropType->_id));
     writer.submit();
 
     auto* commitBuilder = writer.openWriteTransaction().commitBuilder();

@@ -154,15 +154,15 @@ void SimpleGraph::createSimpleGraph(Graph* graph) {
     writer.addNodeProperty<types::Bool>(maxime, "isFrench", true);
     writer.addNodeProperty<types::Bool>(maxime, "hasPhD", false);
 
-    const auto paddle = writer.addNode({"Interest"});
-    writer.addNodeProperty<types::String>(paddle, "name", "Paddle");
+    const auto padel = writer.addNode({"Interest"});
+    writer.addNodeProperty<types::String>(padel, "name", "Padel");
 
     const auto maximeBio = writer.addEdge("INTERESTED_IN", maxime, findNodeIDInWriter("Bio"));
     writer.addEdgeProperty<types::String>(maximeBio, "name", "Maxime -> Bio");
 
-    const auto maximePaddle = writer.addEdge("INTERESTED_IN", maxime, paddle);
-    writer.addEdgeProperty<types::String>(maximePaddle, "name", "Maxime -> Paddle");
-    writer.addEdgeProperty<types::String>(maximePaddle, "proficiency", "expert");
+    const auto maximePadel = writer.addEdge("INTERESTED_IN", maxime, padel);
+    writer.addEdgeProperty<types::String>(maximePadel, "name", "Maxime -> Padel");
+    writer.addEdgeProperty<types::String>(maximePadel, "proficiency", "expert");
 
     writer.commit();
 
