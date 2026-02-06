@@ -8,16 +8,13 @@ on:
       - "v*"
   workflow_dispatch:
 
-env:
-  OS_LIST: '["ubuntu-24.04", "macos-14", "macos-15"]'
-  PYTHON_VERSIONS: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
 
 jobs:
   build-release:
     uses: ./.github/workflows/ci_build.yml
     with:
-      os_list: ${{ env.OS_LIST }}
-      python_version_list: ${{ env.PYTHON_VERSIONS }}
+      os_list: '["ubuntu-24.04", "macos-14", "macos-15"]'
+      python_version_list: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
 
   publish:
     name: Publish to PyPI
