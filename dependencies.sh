@@ -11,6 +11,7 @@ fi
 SOURCE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 DEPENDENCIES_DIR=$SOURCE_DIR/external/dependencies
 BUILD_DIR=$DEPENDENCIES_DIR/build
+MACOS_SETENV=$DEPENDENCIES_DIR/macos_setenv.sh
 
 BREW_LLVM_VERSION=llvm@21
 
@@ -86,6 +87,26 @@ if [[ "$(uname)" == "Darwin" ]]; then
     fi
 
     LLVM_PREFIX=$(brew --prefix $BREW_LLVM_VERSION 2>/dev/null)
+
+    # Common macOS toolchain args for building all dependencies with LLVM.
+    # Using -stdlib=libc++ lets clang properly manage the C++ header chain,
+    # and -isystem ensures LLVM's libc++ headers take priority over any
+    # system SDK headers injected by CMake (e.g. via CMAKE_OSX_SYSROOT).
+    MACOS_COMPILER_ARGS=(
+        "-DCMAKE_C_COMPILER=${LLVM_PREFIX}/bin/clang"
+        "-DCMAKE_CXX_COMPILER=${LLVM_PREFIX}/bin/clang++"
+        "-DCMAKE_CXX_FLAGS=-stdlib=libc++ -isystem ${LLVM_PREFIX}/include/c++/v1"
+        "-DCMAKE_EXE_LINKER_FLAGS=-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++"
+        "-DCMAKE_SHARED_LINKER_FLAGS=-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++"
+    )
+
+    # Build a properly quoted CMAKE_ARGS string
+    QUOTED_ARGS=()
+    for arg in "${MACOS_COMPILER_ARGS[@]}"; do
+        QUOTED_ARGS+=("'$arg'")
+    done
+    echo "export LLVM_PREFIX=${LLVM_PREFIX}" > "$MACOS_SETENV"
+    echo "export CMAKE_ARGS=\"${QUOTED_ARGS[*]}\"" >> "$MACOS_SETENV"
 fi
 
 # Install bison and flex
@@ -198,8 +219,7 @@ if [[ "$(uname)" == "Darwin" ]]; then
         "-DOpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include"
         -DOpenMP_CXX_LIB_NAMES=omp
         "-DOpenMP_omp_LIBRARY=${LIBOMP_PREFIX}/lib/libomp.dylib"
-        -DCMAKE_C_COMPILER=${LLVM_PREFIX}/bin/clang
-        -DCMAKE_CXX_COMPILER=${LLVM_PREFIX}/bin/clang++
+        "${MACOS_COMPILER_ARGS[@]}"
     )
 fi
 
@@ -219,8 +239,7 @@ NLOHMANN_CMAKE_ARGS=(
 
 if [[ "$(uname)" == "Darwin" ]]; then
     NLOHMANN_CMAKE_ARGS+=(
-        -DCMAKE_C_COMPILER=${LLVM_PREFIX}/bin/clang
-        -DCMAKE_CXX_COMPILER=${LLVM_PREFIX}/bin/clang++
+        "${MACOS_COMPILER_ARGS[@]}"
     )
 fi
 
@@ -243,8 +262,7 @@ MINIO_CMAKE_ARGS=(
 
 if [[ "$(uname)" == "Darwin" ]]; then
     MINIO_CMAKE_ARGS+=(
-        -DCMAKE_C_COMPILER=${LLVM_PREFIX}/bin/clang
-        -DCMAKE_CXX_COMPILER=${LLVM_PREFIX}/bin/clang++
+        "${MACOS_COMPILER_ARGS[@]}"
     )
 fi
 

@@ -1,4 +1,4 @@
-name: CI Ubuntu
+name: CI macOS
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest-m
+    runs-on: macos-latest
 
     env:
       DEV_PYTHON_VERSION: 3.14
@@ -27,7 +27,7 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v3
 
-    - name: Setup Python 
+    - name: Setup Python
       run: uv python install ${{ env.DEV_PYTHON_VERSION }}
 
     - name: Cache dependencies
@@ -43,9 +43,7 @@ jobs:
         SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies.outputs.cache-hit }}
 
     - name: Build wheel
-      run: |
-        source ${{ github.workspace }}/setup.sh
-        ./build.sh
+      run: ./build.sh
 
     - name: Prepare SimpleDB
       run: |
@@ -61,20 +59,16 @@ jobs:
 
     - name: Verify wheel installation
       run: |
-        uv venv .venv-test --python 3.14
+        uv venv .venv-test --python ${{ env.DEV_PYTHON_VERSION }}
         uv pip install wheel/*.whl --python .venv-test/bin/python
         .venv-test/bin/turingdb --help
 
     - name: Run regress
       run: |
-        cd build
-        cmake ..
-        make install
-        source ${{ github.workspace }}/setup.sh
-        make run_regress
+        ./run_regress.sh
 
     - name: Upload wheel artifact
       uses: actions/upload-artifact@v4
       with:
-        name: turingdb-wheel-linux
+        name: turingdb-wheel-macos
         path: wheel/*.whl

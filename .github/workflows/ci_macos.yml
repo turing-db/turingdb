@@ -15,7 +15,6 @@ jobs:
 
     env:
       DEV_PYTHON_VERSION: 3.14
-      MACOSX_DEPLOYMENT_TARGET: "11.0"
 
     steps:
     - uses: actions/checkout@v4
@@ -31,12 +30,6 @@ jobs:
     - name: Setup Python
       run: uv python install ${{ env.DEV_PYTHON_VERSION }}
 
-    - name: Install LLVM
-      run: |
-        # Pin to LLVM 20 due to header incompatibility between LLVM 21+ and macOS 15 SDK
-        brew install llvm@20
-        echo "LLVM_PREFIX=$(brew --prefix llvm@20)" >> $GITHUB_ENV
-
     - name: Cache dependencies
       id: cache-dependencies
       uses: actions/cache@v4
@@ -50,11 +43,7 @@ jobs:
         SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies.outputs.cache-hit }}
 
     - name: Build wheel
-      run: |
-        source ${{ github.workspace }}/setup.sh
-        uv build --wheel --python ${{ env.DEV_PYTHON_VERSION }}
-      env:
-        CMAKE_ARGS: "-DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++"
+      run: ./build.sh
 
     - name: Prepare SimpleDB
       run: |
@@ -68,27 +57,18 @@ jobs:
         cd build
         make test
 
-    - name: Repair wheel with delocate
-      run: |
-        mkdir -p wheelhouse
-        uvx --from delocate delocate-wheel -w wheelhouse dist/*.whl
-
     - name: Verify wheel installation
       run: |
-        uv venv .venv-test --python 3.14
-        uv pip install wheelhouse/*.whl --python .venv-test/bin/python
+        uv venv .venv-test --python ${{ env.DEV_PYTHON_VERSION }}
+        uv pip install wheel/*.whl --python .venv-test/bin/python
         .venv-test/bin/turingdb --help
 
     - name: Run regress
       run: |
-        cd build
-        cmake .. -DCMAKE_C_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang -DCMAKE_CXX_COMPILER=${{ env.LLVM_PREFIX }}/bin/clang++
-        make install
-        source ${{ github.workspace }}/setup.sh
-        make run_regress
+        ./run_regress.sh
 
     - name: Upload wheel artifact
       uses: actions/upload-artifact@v4
       with:
         name: turingdb-wheel-macos
-        path: wheelhouse/*.whl
+        path: wheel/*.whl
