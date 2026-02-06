@@ -89,13 +89,17 @@ if [[ "$(uname)" == "Darwin" ]]; then
     LLVM_PREFIX=$(brew --prefix $BREW_LLVM_VERSION 2>/dev/null)
 
     # Common macOS toolchain args for building all dependencies with LLVM.
-    # Using -stdlib=libc++ lets clang properly manage the C++ header chain,
-    # and -isystem ensures LLVM's libc++ headers take priority over any
-    # system SDK headers injected by CMake (e.g. via CMAKE_OSX_SYSROOT).
+    # Using -stdlib=libc++ tells clang to use its bundled libc++. Do NOT add
+    # an explicit -isystem for the libc++ headers: when CMake's find_package
+    # adds dependency -isystem paths (curlpp, inih, etc.), those appear
+    # BEFORE CMAKE_CXX_FLAGS on the compile command, which causes clang to
+    # deduplicate the libc++ path out of its built-in "C++ system include"
+    # slot and into a lower-priority position, breaking the internal
+    # cstddef -> stddef.h include chain.
     MACOS_COMPILER_ARGS=(
         "-DCMAKE_C_COMPILER=${LLVM_PREFIX}/bin/clang"
         "-DCMAKE_CXX_COMPILER=${LLVM_PREFIX}/bin/clang++"
-        "-DCMAKE_CXX_FLAGS=-stdlib=libc++ -isystem ${LLVM_PREFIX}/include/c++/v1"
+        "-DCMAKE_CXX_FLAGS=-stdlib=libc++"
         "-DCMAKE_EXE_LINKER_FLAGS=-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++"
         "-DCMAKE_SHARED_LINKER_FLAGS=-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++"
     )
