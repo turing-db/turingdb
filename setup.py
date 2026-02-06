@@ -86,6 +86,7 @@ class bdist_wheel(_bdist_wheel):
 
     def finalize_options(self):
         super().finalize_options()
+        self.root_is_pure = False
         # Allow overriding python_tag via PYTHON_TAG environment variable
         python_tag = os.environ.get('PYTHON_TAG')
         if python_tag:
@@ -104,6 +105,7 @@ setup(
     package_dir={"": "python"},
     include_package_data=True,
     package_data={"turingdb": ["bin/*"]},
+    has_ext_modules=lambda: True,
     cmdclass={
         "egg_info": BuildDirEggInfo,
         "develop": CMakeDevelop,
