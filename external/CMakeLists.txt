@@ -1,4 +1,3 @@
-add_subdirectory(nlohmann_json)
 add_subdirectory(argparse)
 add_subdirectory(expected)
 add_subdirectory(linenoise)
