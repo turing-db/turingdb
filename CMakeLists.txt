@@ -198,6 +198,9 @@ find_package(CURL REQUIRED)
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 
+# Nlohmann json
+find_package(nlohmann_json REQUIRED)
+
 # Faiss
 find_package(Faiss REQUIRED)
 

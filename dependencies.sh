@@ -238,22 +238,5 @@ if [[ "$(uname)" == "Darwin" ]]; then
 fi
 
 cmake "${MINIO_CMAKE_ARGS[@]}" -DCMAKE_VERBOSE_MAKEFILE=ON $SOURCE_DIR/external/minio-cpp
-
-# Diagnostic: show search paths and check for shadowing headers
-if [[ "$(uname)" == "Darwin" ]]; then
-    echo "=== clang config file ==="
-    DARWIN_VER=$(uname -r | cut -d. -f1)
-    cat /opt/homebrew/etc/clang/arm64-apple-darwin${DARWIN_VER}.cfg 2>/dev/null || echo "(not found)"
-    echo "=== CMAKE_OSX_SYSROOT ==="
-    grep CMAKE_OSX_SYSROOT $BUILD_DIR/minio-cpp/CMakeCache.txt 2>/dev/null
-    echo "=== Header search paths (clang -v) ==="
-    echo | ${LLVM_PREFIX}/bin/clang++ -stdlib=libc++ -xc++ -E -v - 2>&1 | sed -n '/#include.*search/,/End of search/p'
-    echo "=== Checking for stddef.h in Homebrew include dirs ==="
-    for dir in /opt/homebrew/include /opt/homebrew/Cellar/inih/*/include /opt/homebrew/Cellar/pugixml/*/include; do
-        test -f "$dir/stddef.h" && echo "FOUND: $dir/stddef.h" || true
-    done
-    echo "=== end diagnostics ==="
-fi
-
 cmake --build $BUILD_DIR/minio-cpp -j $NUM_JOBS
 cmake --install $BUILD_DIR/minio-cpp
