@@ -1,4 +1,4 @@
-name: CI Macos14
+name: CI Full Matrix Build
 
 on:
   workflow_dispatch:
