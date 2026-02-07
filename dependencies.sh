@@ -30,13 +30,13 @@ if [[ "$(uname)" != "Darwin" ]]; then
         echo "Neither apt-get nor dnf found. Please install dependencies manually."
         exit 1
     fi
-    
+
     # Update package cache
     echo "Updating $PKG_MANAGER cache..."
     sudo $PKG_MANAGER update
 fi
 
-# Install curl, openssl, zlib and cmake
+# Install system packages (only what cannot be built from source easily)
 if [[ "$(uname)" == "Darwin" ]]; then
     # macOS - use Homebrew
     if ! command -v brew &> /dev/null; then
@@ -44,25 +44,11 @@ if [[ "$(uname)" == "Darwin" ]]; then
         exit 1
     fi
 
-    if ! brew list curl &> /dev/null; then
-        echo "Installing curl via Homebrew..."
-        brew install curl
-    else
-        echo "curl is already installed"
-    fi
-
     if ! brew list openssl@3 &> /dev/null; then
         echo "Installing openssl@3 via Homebrew..."
         brew install openssl@3
     else
         echo "openssl@3 is already installed"
-    fi
-
-    if ! brew list zlib &> /dev/null; then
-        echo "Installing zlib via Homebrew..."
-        brew install zlib
-    else
-        echo "zlib is already installed"
     fi
 
     if ! brew list cmake &> /dev/null; then
@@ -73,11 +59,11 @@ if [[ "$(uname)" == "Darwin" ]]; then
     fi
 else
     # Linux - use detected package manager
-    echo "Installing curl, openssl, and zlib via $PKG_MANAGER..."
-    sudo $PKG_MANAGER $PKG_INSTALL curl libcurl4-openssl-dev zlib1g-dev libssl-dev cmake
+    echo "Installing openssl and cmake via $PKG_MANAGER..."
+    sudo $PKG_MANAGER $PKG_INSTALL libssl-dev cmake
 fi
 
-# llvm for macos
+# LLVM for macos
 if [[ "$(uname)" == "Darwin" ]]; then
     if ! brew list $BREW_LLVM_VERSION &> /dev/null; then
         echo "Installing llvm via Homebrew..."
@@ -107,6 +93,7 @@ if [[ "$(uname)" == "Darwin" ]]; then
         "-DCMAKE_SHARED_LINKER_FLAGS=-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++"
     )
 
+    # Write environment variables in $MACOS_SETENV
     # Build a properly quoted CMAKE_ARGS string
     QUOTED_ARGS=()
     for arg in "${MACOS_COMPILER_ARGS[@]}"; do
@@ -138,42 +125,166 @@ else
     sudo $PKG_MANAGER $PKG_INSTALL bison flex libfl-dev
 fi
 
-# Install BLAS
-if [[ "$(uname)" == "Darwin" ]]; then
-    # macOS - use Homebrew
-    if ! brew list openblas &> /dev/null; then
-        echo "Installing openblas via Homebrew..."
-        brew install openblas
-    else
-        echo "openblas is already installed"
-    fi
-
-    # Install libomp for OpenMP support (needed by FAISS)
-    if ! brew list libomp &> /dev/null; then
-        echo "Installing libomp via Homebrew..."
-        brew install libomp
-    else
-        echo "libomp is already installed"
-    fi
-else
-    # Linux - use detected package manager
-    echo "Installing BLAS via $PKG_MANAGER..."
-    sudo $PKG_MANAGER $PKG_INSTALL libopenblas-dev
-fi
-
 # Skip building if cache was hit (set by CI)
 if [[ "$SKIP_BUILD_IF_CACHED" == "true" ]]; then
     echo "Dependencies cache hit, skipping build"
     exit 0
 fi
 
+# ============================================================
+# Build zlib from source
+# ============================================================
+echo "Building zlib..."
+mkdir -p $BUILD_DIR/zlib
+cd $BUILD_DIR/zlib
+
+ZLIB_CMAKE_ARGS=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    -DBUILD_SHARED_LIBS=OFF
+    -DZLIB_BUILD_EXAMPLES=OFF
+)
+
+if [[ "$(uname)" == "Darwin" ]]; then
+    ZLIB_CMAKE_ARGS+=(
+        "${MACOS_COMPILER_ARGS[@]}"
+    )
+fi
+
+cmake "${ZLIB_CMAKE_ARGS[@]}" $SOURCE_DIR/external/zlib
+cmake --build $BUILD_DIR/zlib -j $NUM_JOBS
+cmake --install $BUILD_DIR/zlib
+
+# Remove shared libraries so CMake's find_package(ZLIB) picks the static lib
+rm -f $DEPENDENCIES_DIR/lib/libz.dylib $DEPENDENCIES_DIR/lib/libz.*.dylib
+rm -f $DEPENDENCIES_DIR/lib/libz.so $DEPENDENCIES_DIR/lib/libz.so.*
+
+# zlib's cmake renames zconf.h → zconf.h.included in the source tree;
+# restore it so the submodule stays clean.
+git -C $SOURCE_DIR/external/zlib checkout -- zconf.h 2>/dev/null || true
+
+# ============================================================
+# Build OpenBLAS from source
+# ============================================================
+echo "Building OpenBLAS..."
+mkdir -p $BUILD_DIR/OpenBLAS
+cd $BUILD_DIR/OpenBLAS
+
+OPENBLAS_CMAKE_ARGS=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    -DBUILD_SHARED_LIBS=OFF
+    -DBUILD_TESTING=OFF
+    -DNOFORTRAN=1
+)
+
+if [[ "$(uname)" == "Darwin" ]]; then
+    OPENBLAS_CMAKE_ARGS+=(
+        "${MACOS_COMPILER_ARGS[@]}"
+    )
+fi
+
+cmake "${OPENBLAS_CMAKE_ARGS[@]}" $SOURCE_DIR/external/OpenBLAS
+cmake --build $BUILD_DIR/OpenBLAS -j $NUM_JOBS
+cmake --install $BUILD_DIR/OpenBLAS
+
+# ============================================================
+# Build libomp from source (macOS only — Linux uses libgomp)
+# ============================================================
+if [[ "$(uname)" == "Darwin" ]]; then
+    # Detect the LLVM version to download the matching openmp tarball
+    LLVM_VERSION=$($LLVM_PREFIX/bin/clang --version | head -1 | sed 's/.*version \([0-9.]*\).*/\1/')
+    LLVM_MAJOR=$(echo $LLVM_VERSION | cut -d. -f1)
+    OPENMP_TARBALL="openmp-${LLVM_VERSION}.src.tar.xz"
+    OPENMP_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/${OPENMP_TARBALL}"
+    OPENMP_SRC_DIR=$BUILD_DIR/openmp-${LLVM_VERSION}.src
+
+    if [[ ! -d "$OPENMP_SRC_DIR" ]]; then
+        echo "Downloading LLVM OpenMP ${LLVM_VERSION}..."
+        cd $BUILD_DIR
+        curl -L -o "$OPENMP_TARBALL" "$OPENMP_URL"
+        tar xf "$OPENMP_TARBALL"
+        rm -f "$OPENMP_TARBALL"
+
+        # Download LLVM cmake modules (needed for standalone openmp build)
+        CMAKE_TARBALL="cmake-${LLVM_VERSION}.src.tar.xz"
+        CMAKE_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/${CMAKE_TARBALL}"
+        curl -L -o "$CMAKE_TARBALL" "$CMAKE_URL"
+        tar xf "$CMAKE_TARBALL"
+        rm -f "$CMAKE_TARBALL"
+        # Rename to "cmake" so it sits as a sibling at ../cmake relative to openmp source
+        rm -rf cmake
+        mv "cmake-${LLVM_VERSION}.src" cmake
+    fi
+
+    echo "Building libomp..."
+    mkdir -p $BUILD_DIR/libomp
+    cd $BUILD_DIR/libomp
+
+    LIBOMP_CMAKE_ARGS=(
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        -DOPENMP_STANDALONE_BUILD=ON
+        -DLIBOMP_ENABLE_SHARED=OFF
+        -DOPENMP_ENABLE_LIBOMPTARGET=OFF
+        "${MACOS_COMPILER_ARGS[@]}"
+    )
+
+    cmake "${LIBOMP_CMAKE_ARGS[@]}" $OPENMP_SRC_DIR
+    cmake --build $BUILD_DIR/libomp -j $NUM_JOBS
+    cmake --install $BUILD_DIR/libomp
+fi
+
+# ============================================================
+# Build curl from source
+# ============================================================
+echo "Building curl..."
+mkdir -p $BUILD_DIR/curl
+cd $BUILD_DIR/curl
+
+CURL_CMAKE_ARGS=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
+    -DCMAKE_PREFIX_PATH=$DEPENDENCIES_DIR
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    -DBUILD_SHARED_LIBS=OFF
+    -DBUILD_CURL_EXE=OFF
+    -DBUILD_TESTING=OFF
+    -DCURL_USE_OPENSSL=ON
+    -DCURL_USE_SECTRANSP=OFF
+    -DCURL_DISABLE_LDAP=ON
+    -DUSE_LIBIDN2=OFF
+    -DCURL_USE_LIBSSH2=OFF
+    -DCURL_USE_LIBPSL=OFF
+)
+
+if [[ "$(uname)" == "Darwin" ]]; then
+    OPENSSL_PREFIX=$(brew --prefix openssl@3)
+    CURL_CMAKE_ARGS+=(
+        "-DOPENSSL_ROOT_DIR=${OPENSSL_PREFIX}"
+        "${MACOS_COMPILER_ARGS[@]}"
+    )
+fi
+
+cmake "${CURL_CMAKE_ARGS[@]}" $SOURCE_DIR/external/curl
+cmake --build $BUILD_DIR/curl -j $NUM_JOBS
+cmake --install $BUILD_DIR/curl
+
+# ============================================================
 # Build faiss
+# ============================================================
+echo "Building faiss..."
 mkdir -p $BUILD_DIR/faiss
 cd $BUILD_DIR/faiss
 
 FAISS_CMAKE_ARGS=(
     -DCMAKE_BUILD_TYPE=Release
     -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
+    -DCMAKE_PREFIX_PATH=$DEPENDENCIES_DIR
     -DBUILD_TESTING=OFF
     -DBUILD_SHARED_LIBS=OFF
     -DFAISS_ENABLE_GPU=OFF
@@ -181,15 +292,16 @@ FAISS_CMAKE_ARGS=(
     -DFAISS_ENABLE_MKL=OFF
     -DFAISS_ENABLE_PYTHON=OFF
     -DFAISS_ENABLE_EXTRAS=OFF
+    -DBLA_VENDOR=OpenBLAS
+    "-DBLAS_LIBRARIES=$DEPENDENCIES_DIR/lib/libopenblas.a"
+    "-DLAPACK_LIBRARIES=$DEPENDENCIES_DIR/lib/libopenblas.a"
 )
 
-# On macOS, we need to explicitly tell CMake where to find OpenMP from Homebrew's libomp
 if [[ "$(uname)" == "Darwin" ]]; then
-    LIBOMP_PREFIX=$(brew --prefix libomp)
     FAISS_CMAKE_ARGS+=(
-        "-DOpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include"
+        "-DOpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp -I${DEPENDENCIES_DIR}/include"
         -DOpenMP_CXX_LIB_NAMES=omp
-        "-DOpenMP_omp_LIBRARY=${LIBOMP_PREFIX}/lib/libomp.dylib"
+        "-DOpenMP_omp_LIBRARY=${DEPENDENCIES_DIR}/lib/libomp.a"
         "${MACOS_COMPILER_ARGS[@]}"
     )
 fi
@@ -198,7 +310,10 @@ cmake "${FAISS_CMAKE_ARGS[@]}" $SOURCE_DIR/external/faiss-1.13.1
 cmake --build $BUILD_DIR/faiss -j $NUM_JOBS
 cmake --install $BUILD_DIR/faiss
 
+# ============================================================
 # Build nlohmann_json (needed by minio-cpp)
+# ============================================================
+echo "Building nlohmann_json..."
 mkdir -p $BUILD_DIR/nlohmann_json
 cd $BUILD_DIR/nlohmann_json
 
@@ -218,7 +333,10 @@ cmake "${NLOHMANN_CMAKE_ARGS[@]}" $SOURCE_DIR/external/nlohmann_json
 cmake --build $BUILD_DIR/nlohmann_json -j $NUM_JOBS
 cmake --install $BUILD_DIR/nlohmann_json
 
+# ============================================================
 # Build minio-cpp
+# ============================================================
+echo "Building minio-cpp..."
 mkdir -p $BUILD_DIR/minio-cpp
 cd $BUILD_DIR/minio-cpp
 
