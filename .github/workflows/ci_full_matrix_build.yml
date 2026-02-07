@@ -1,0 +1,13 @@
+name: CI Macos14
+
+on:
+  workflow_dispatch:
+
+
+jobs:
+  build:
+    uses: ./.github/workflows/ci_build.yml
+    with:
+      os_list: '["ubuntu-22.04", "ubuntu-24.04", "macos-14", "macos-15", "macos-26"]'
+      python_version_list: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+
