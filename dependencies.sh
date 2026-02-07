@@ -36,19 +36,12 @@ if [[ "$(uname)" != "Darwin" ]]; then
     sudo $PKG_MANAGER update
 fi
 
-# Install system packages (only what cannot be built from source easily)
+# Install system packages 
 if [[ "$(uname)" == "Darwin" ]]; then
-    # macOS - use Homebrew
+    # macOS - use Homebrew (only cmake and llvm needed)
     if ! command -v brew &> /dev/null; then
         echo "Homebrew not found. Please install Homebrew first."
         exit 1
-    fi
-
-    if ! brew list openssl@3 &> /dev/null; then
-        echo "Installing openssl@3 via Homebrew..."
-        brew install openssl@3
-    else
-        echo "openssl@3 is already installed"
     fi
 
     if ! brew list cmake &> /dev/null; then
@@ -59,8 +52,8 @@ if [[ "$(uname)" == "Darwin" ]]; then
     fi
 else
     # Linux - use detected package manager
-    echo "Installing openssl and cmake via $PKG_MANAGER..."
-    sudo $PKG_MANAGER $PKG_INSTALL libssl-dev cmake
+    echo "Installing cmake via $PKG_MANAGER..."
+    sudo $PKG_MANAGER $PKG_INSTALL cmake
 fi
 
 # LLVM for macos
@@ -103,28 +96,6 @@ if [[ "$(uname)" == "Darwin" ]]; then
     echo "export CMAKE_ARGS=\"${QUOTED_ARGS[*]}\"" >> "$MACOS_SETENV"
 fi
 
-# Install bison and flex
-if [[ "$(uname)" == "Darwin" ]]; then
-    # macOS - use Homebrew
-    if ! brew list bison &> /dev/null; then
-        echo "Installing bison via Homebrew..."
-        brew install bison
-    else
-        echo "bison is already installed"
-    fi
-
-    if ! brew list flex &> /dev/null; then
-        echo "Installing flex via Homebrew..."
-        brew install flex
-    else
-        echo "flex is already installed"
-    fi
-else
-    # Linux - use detected package manager
-    echo "Installing bison and flex via $PKG_MANAGER..."
-    sudo $PKG_MANAGER $PKG_INSTALL bison flex libfl-dev
-fi
-
 # Skip building if cache was hit (set by CI)
 if [[ "$SKIP_BUILD_IF_CACHED" == "true" ]]; then
     echo "Dependencies cache hit, skipping build"
@@ -165,6 +136,36 @@ rm -f $DEPENDENCIES_DIR/lib/libz.so $DEPENDENCIES_DIR/lib/libz.so.*
 git -C $SOURCE_DIR/external/zlib checkout -- zconf.h 2>/dev/null || true
 
 # ============================================================
+# Build OpenSSL from source
+# ============================================================
+OPENSSL_VERSION="3.5.5"
+OPENSSL_TARBALL="openssl-${OPENSSL_VERSION}.tar.gz"
+OPENSSL_SRC_DIR=$BUILD_DIR/openssl-${OPENSSL_VERSION}
+
+if [[ ! -d "$OPENSSL_SRC_DIR" ]]; then
+    echo "Extracting OpenSSL ${OPENSSL_VERSION}..."
+    cd $BUILD_DIR
+    tar xf "$SOURCE_DIR/external/$OPENSSL_TARBALL"
+fi
+
+echo "Building OpenSSL..."
+cd $OPENSSL_SRC_DIR
+
+if [[ "$(uname)" == "Darwin" ]]; then
+    CC="${LLVM_PREFIX}/bin/clang" \
+    CFLAGS="-isysroot ${MACOS_SDK_PATH} -fPIC" \
+        ./Configure darwin64-arm64-cc no-shared no-module no-tests \
+            --prefix=$DEPENDENCIES_DIR --openssldir=$DEPENDENCIES_DIR/ssl --libdir=lib
+else
+    CFLAGS="-fPIC" \
+        ./Configure linux-x86_64 no-shared no-module no-tests \
+            --prefix=$DEPENDENCIES_DIR --openssldir=$DEPENDENCIES_DIR/ssl --libdir=lib
+fi
+
+make -j $NUM_JOBS
+make install_sw
+
+# ============================================================
 # Build OpenBLAS from source
 # ============================================================
 echo "Building OpenBLAS..."
@@ -199,22 +200,16 @@ if [[ "$(uname)" == "Darwin" ]]; then
     LLVM_VERSION=$($LLVM_PREFIX/bin/clang --version | head -1 | sed 's/.*version \([0-9.]*\).*/\1/')
     LLVM_MAJOR=$(echo $LLVM_VERSION | cut -d. -f1)
     OPENMP_TARBALL="openmp-${LLVM_VERSION}.src.tar.xz"
-    OPENMP_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/${OPENMP_TARBALL}"
     OPENMP_SRC_DIR=$BUILD_DIR/openmp-${LLVM_VERSION}.src
 
     if [[ ! -d "$OPENMP_SRC_DIR" ]]; then
-        echo "Downloading LLVM OpenMP ${LLVM_VERSION}..."
+        echo "Extracting LLVM OpenMP ${LLVM_VERSION}..."
         cd $BUILD_DIR
-        curl -L -o "$OPENMP_TARBALL" "$OPENMP_URL"
-        tar xf "$OPENMP_TARBALL"
-        rm -f "$OPENMP_TARBALL"
+        tar xf "$SOURCE_DIR/external/$OPENMP_TARBALL"
 
-        # Download LLVM cmake modules (needed for standalone openmp build)
+        # Extract LLVM cmake modules (needed for standalone openmp build)
         CMAKE_TARBALL="cmake-${LLVM_VERSION}.src.tar.xz"
-        CMAKE_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/${CMAKE_TARBALL}"
-        curl -L -o "$CMAKE_TARBALL" "$CMAKE_URL"
-        tar xf "$CMAKE_TARBALL"
-        rm -f "$CMAKE_TARBALL"
+        tar xf "$SOURCE_DIR/external/$CMAKE_TARBALL"
         # Rename to "cmake" so it sits as a sibling at ../cmake relative to openmp source
         rm -rf cmake
         mv "cmake-${LLVM_VERSION}.src" cmake
@@ -240,6 +235,58 @@ if [[ "$(uname)" == "Darwin" ]]; then
 fi
 
 # ============================================================
+# Build bison from source
+# ============================================================
+BISON_VERSION="3.8.2"
+BISON_TARBALL="bison-${BISON_VERSION}.tar.xz"
+BISON_SRC_DIR=$BUILD_DIR/bison-${BISON_VERSION}
+
+if [[ ! -d "$BISON_SRC_DIR" ]]; then
+    echo "Extracting bison ${BISON_VERSION}..."
+    cd $BUILD_DIR
+    tar xf "$SOURCE_DIR/external/$BISON_TARBALL"
+fi
+
+echo "Building bison..."
+cd $BISON_SRC_DIR
+
+if [[ "$(uname)" == "Darwin" ]]; then
+    CC="${LLVM_PREFIX}/bin/clang" CXX="${LLVM_PREFIX}/bin/clang++" \
+        ./configure --prefix=$DEPENDENCIES_DIR
+else
+    ./configure --prefix=$DEPENDENCIES_DIR
+fi
+
+make -j $NUM_JOBS
+make install
+
+# ============================================================
+# Build flex from source
+# ============================================================
+FLEX_VERSION="2.6.4"
+FLEX_TARBALL="flex-${FLEX_VERSION}.tar.gz"
+FLEX_SRC_DIR=$BUILD_DIR/flex-${FLEX_VERSION}
+
+if [[ ! -d "$FLEX_SRC_DIR" ]]; then
+    echo "Extracting flex ${FLEX_VERSION}..."
+    cd $BUILD_DIR
+    tar xf "$SOURCE_DIR/external/$FLEX_TARBALL"
+fi
+
+echo "Building flex..."
+cd $FLEX_SRC_DIR
+
+if [[ "$(uname)" == "Darwin" ]]; then
+    CC="${LLVM_PREFIX}/bin/clang" \
+        ./configure --prefix=$DEPENDENCIES_DIR
+else
+    ./configure --prefix=$DEPENDENCIES_DIR
+fi
+
+make -j $NUM_JOBS
+make install
+
+# ============================================================
 # Build curl from source
 # ============================================================
 echo "Building curl..."
@@ -262,10 +309,13 @@ CURL_CMAKE_ARGS=(
     -DCURL_USE_LIBPSL=OFF
 )
 
+# OpenSSL is built from source in $DEPENDENCIES_DIR on all platforms
+CURL_CMAKE_ARGS+=(
+    "-DOPENSSL_ROOT_DIR=${DEPENDENCIES_DIR}"
+)
+
 if [[ "$(uname)" == "Darwin" ]]; then
-    OPENSSL_PREFIX=$(brew --prefix openssl@3)
     CURL_CMAKE_ARGS+=(
-        "-DOPENSSL_ROOT_DIR=${OPENSSL_PREFIX}"
         "${MACOS_COMPILER_ARGS[@]}"
     )
 fi
