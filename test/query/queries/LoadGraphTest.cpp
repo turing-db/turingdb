@@ -1,4 +1,3 @@
-#include <filesystem>
 #include <gtest/gtest.h>
 
 #include "TuringDB.h"
@@ -8,6 +7,7 @@
 #include "dataframe/Dataframe.h"
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
+#include "dump/GraphDumper.h"
 
 #include "TuringTestEnv.h"
 #include "TuringTest.h"
@@ -21,16 +21,11 @@ public:
         _env = TuringTestEnv::createSyncedOnDisk(testTuringDir);
         _db = &_env->getDB();
 
-        const char* homeDir = getenv("HOME");
-        bioassert(homeDir && *homeDir, "failed to find $HOME");
-        const auto homeTuringDir = FileUtils::Path(homeDir)/".turing";
-
-        const auto simpleDBDir = homeTuringDir/"graphs/simpledb";
-        const auto destDir = FileUtils::Path(testTuringDir.get())/"graphs/simpledb";
-
-        const auto copyOptions = std::filesystem::copy_options::overwrite_existing
-            | std::filesystem::copy_options::recursive;
-        std::filesystem::copy(simpleDBDir, destDir, copyOptions);
+        auto graph = Graph::create();
+        SimpleGraph::createSimpleGraph(graph.get());
+        const auto graphDir = testTuringDir / "graphs" / "simpledb";
+        const auto dumpRes = GraphDumper::dump(*graph, graphDir);
+        bioassert(dumpRes, "failed to dump simpledb graph");
     }
 
 protected:
