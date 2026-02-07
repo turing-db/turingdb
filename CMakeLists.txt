@@ -205,23 +205,14 @@ find_package(nlohmann_json REQUIRED)
 find_package(Faiss REQUIRED)
 
 # OpenMP (required by Faiss)
-# On macOS, AppleClang doesn't include OpenMP, so we need to use Homebrew's libomp
+# On macOS, use libomp built from source in external/dependencies
 if(APPLE AND NOT NIX_BUILD)
-    find_program(BREW_EXECUTABLE brew)
-    if(BREW_EXECUTABLE)
-        execute_process(
-            COMMAND ${BREW_EXECUTABLE} --prefix libomp
-            OUTPUT_VARIABLE LIBOMP_PREFIX
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-        )
-        if(LIBOMP_PREFIX)
-            set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
-            set(OpenMP_C_LIB_NAMES "omp")
-            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
-            set(OpenMP_CXX_LIB_NAMES "omp")
-            set(OpenMP_omp_LIBRARY "${LIBOMP_PREFIX}/lib/libomp.dylib")
-        endif()
-    endif()
+    set(LIBOMP_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies")
+    set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
+    set(OpenMP_C_LIB_NAMES "omp")
+    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
+    set(OpenMP_CXX_LIB_NAMES "omp")
+    set(OpenMP_omp_LIBRARY "${LIBOMP_PREFIX}/lib/libomp.a")
 endif()
 find_package(OpenMP REQUIRED)
 
