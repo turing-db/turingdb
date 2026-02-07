@@ -217,40 +217,16 @@ endif()
 find_package(OpenMP REQUIRED)
 
 
-# Use Homebrew for Flex and Bison on macOS
-if(APPLE AND NOT NIX_BUILD)
-    find_program(BREW_EXECUTABLE brew)
-    if(NOT BREW_EXECUTABLE)
-        message(FATAL_ERROR "Homebrew not found")
-    endif()
-
-    execute_process(
-        COMMAND ${BREW_EXECUTABLE} --prefix flex
-        OUTPUT_VARIABLE HOMEBREW_FLEX_PREFIX
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if(NOT HOMEBREW_FLEX_PREFIX)
-        message(FATAL_ERROR "Homebrew Flex prefix not found. Please install Flex using Homebrew.")
-    endif()
-
-    set(FLEX_INCLUDE_DIRS "${HOMEBREW_FLEX_PREFIX}/include")
-    set(FLEX_EXECUTABLE "${HOMEBREW_FLEX_PREFIX}/bin/flex")
-    set(FLEX_LIBRARIES "${HOMEBREW_FLEX_PREFIX}/lib/libfl.a")
-    message(STATUS "Using Homebrew Flex include directory: ${FLEX_INCLUDE_DIRS}")
-
-    execute_process(
-        COMMAND ${BREW_EXECUTABLE} --prefix bison
-        OUTPUT_VARIABLE HOMEBREW_BISON_PREFIX
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if(NOT HOMEBREW_BISON_PREFIX)
-        message(FATAL_ERROR "Homebrew Bison prefix not found. Please install Bison using Homebrew.")
-    endif()
-
-    set(BISON_INCLUDE_DIRS "${HOMEBREW_BISON_PREFIX}/include")
-    set(BISON_EXECUTABLE "${HOMEBREW_BISON_PREFIX}/bin/bison")
-    set(BISON_LIBRARIES "${HOMEBREW_BISON_PREFIX}/lib/liby.a")
-    message(STATUS "Using Homebrew Bison include directory: ${BISON_INCLUDE_DIRS}")
+# Use bison and flex built from source in external/dependencies
+if(NOT NIX_BUILD)
+    set(DEPS_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies")
+    set(FLEX_INCLUDE_DIRS "${DEPS_PREFIX}/include")
+    set(FLEX_EXECUTABLE "${DEPS_PREFIX}/bin/flex")
+    set(FLEX_LIBRARIES "${DEPS_PREFIX}/lib/libfl.a")
+    set(BISON_EXECUTABLE "${DEPS_PREFIX}/bin/bison")
+    set(BISON_LIBRARIES "${DEPS_PREFIX}/lib/liby.a")
+    message(STATUS "Using flex from: ${FLEX_EXECUTABLE}")
+    message(STATUS "Using bison from: ${BISON_EXECUTABLE}")
 endif()
 
 # zlib
