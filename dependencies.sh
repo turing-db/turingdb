@@ -307,6 +307,7 @@ CURL_CMAKE_ARGS=(
     -DUSE_LIBIDN2=OFF
     -DCURL_USE_LIBSSH2=OFF
     -DCURL_USE_LIBPSL=OFF
+    -DUSE_NGHTTP2=OFF
 )
 
 # OpenSSL is built from source in $DEPENDENCIES_DIR on all platforms
