@@ -117,53 +117,40 @@ set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
 if(APPLE AND NOT NIX_BUILD)
 
-# When using LLVM clang from Homebrew on macOS, configure libc++ paths.
-# System libraries (e.g. libcurl) transitively load Apple's libc++abi at
-# runtime.  On macOS 14 Apple's libc++abi is ABI-incompatible with LLVM 21's
-# version, which breaks C++ exception handling (especially through
-# std::function).  Statically linking just libc++abi embeds the exception-
-# handling symbols into the binary so they take precedence over the system
-# copy, while keeping libc++ itself dynamic (static libc++ causes crashes
-# during static initialisation on macOS arm64).
-# On macOS 15+ the two ABIs are compatible, but this is harmless.
+# Statically link the entire LLVM C++ runtime (libc++, libc++abi, libunwind)
+# so the binary has no dynamic dependency on Homebrew's LLVM libraries.
+# -nostdlib++ prevents the compiler from automatically linking libc++.dylib.
+# -load_hidden loads the static archives with hidden visibility so that
+# the dynamic linker cannot weak-coalesce our libc++ symbols with Apple's
+# libc++ (which system frameworks load transitively at runtime).  Without
+# hidden visibility, many libc++ template instantiations are emitted as
+# weak exports and the dynamic linker replaces them with Apple's non-weak
+# definitions, causing ABI mismatches and crashes.
 
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
     get_filename_component(LLVM_ROOT ${COMPILER_DIR} DIRECTORY)
 
-    if(EXISTS "${LLVM_ROOT}/lib/c++")
-        set(CMAKE_EXE_LINKER_FLAGS
-            "${CMAKE_EXE_LINKER_FLAGS} -L${LLVM_ROOT}/lib/c++ -Wl,-rpath,${LLVM_ROOT}/lib/c++")
-        set(CMAKE_SHARED_LINKER_FLAGS
-            "${CMAKE_SHARED_LINKER_FLAGS} -L${LLVM_ROOT}/lib/c++ -Wl,-rpath,${LLVM_ROOT}/lib/c++")
-        message(STATUS "Using LLVM libc++ from: ${LLVM_ROOT}/lib/c++")
-    else()
-        message(FATAL_ERROR "Can not find ${LLVM_ROOT}/lib/c++")
-    endif()
-
-    # Statically link libc++abi and libunwind so their symbols (especially
-    # __cxa_throw, __cxa_begin_catch, personality routines, _Unwind_*)
-    # take precedence over Apple's ABI-incompatible versions loaded
-    # transitively by system libraries.  Both must come from the same
-    # LLVM version: mixing LLVM's libc++abi with Apple's libunwind
-    # causes SIGBUS because their internal unwind-cursor structs differ.
-    if(EXISTS "${LLVM_ROOT}/lib/c++/libc++abi.a")
-        link_libraries(${LLVM_ROOT}/lib/c++/libc++abi.a)
-        if(EXISTS "${LLVM_ROOT}/lib/unwind/libunwind.a")
-            link_libraries(${LLVM_ROOT}/lib/unwind/libunwind.a)
-            message(STATUS "Statically linking LLVM libunwind from: ${LLVM_ROOT}/lib/unwind")
+    foreach(_lib
+        "${LLVM_ROOT}/lib/c++/libc++.a"
+        "${LLVM_ROOT}/lib/c++/libc++abi.a"
+        "${LLVM_ROOT}/lib/unwind/libunwind.a")
+        if(NOT EXISTS "${_lib}")
+            message(FATAL_ERROR "Can not find ${_lib}")
         endif()
+    endforeach()
 
-        # Force flat namespace so the binary's static libc++abi and
-        # libunwind symbols are used by ALL code including loaded dylibs.
-        # Without this, LLVM's libc++.dylib uses its own dynamic
-        # libc++abi for throws while the binary's catch handler uses the
-        # static copy, causing a mismatch.
-        set(CMAKE_EXE_LINKER_FLAGS
-            "${CMAKE_EXE_LINKER_FLAGS} -Wl,-flat_namespace")
-        message(STATUS "Statically linking LLVM libc++abi from: ${LLVM_ROOT}/lib/c++")
-    else()
-        message(FATAL_ERROR "Can not find ${LLVM_ROOT}/lib/c++/libc++abi.a")
-    endif()
+    set(LLVM_LIBCXX_HIDDEN_FLAGS
+        "-Wl,-load_hidden,${LLVM_ROOT}/lib/c++/libc++.a \
+-Wl,-load_hidden,${LLVM_ROOT}/lib/c++/libc++abi.a \
+-Wl,-load_hidden,${LLVM_ROOT}/lib/unwind/libunwind.a")
+
+    set(CMAKE_EXE_LINKER_FLAGS
+        "${CMAKE_EXE_LINKER_FLAGS} -nostdlib++ ${LLVM_LIBCXX_HIDDEN_FLAGS}")
+    set(CMAKE_SHARED_LINKER_FLAGS
+        "${CMAKE_SHARED_LINKER_FLAGS} -nostdlib++ ${LLVM_LIBCXX_HIDDEN_FLAGS}")
+    message(STATUS "Statically linking LLVM libc++ from: ${LLVM_ROOT}/lib/c++")
+    message(STATUS "Statically linking LLVM libc++abi from: ${LLVM_ROOT}/lib/c++")
+    message(STATUS "Statically linking LLVM libunwind from: ${LLVM_ROOT}/lib/unwind")
 
     # Use LLVM's libc++ headers.
     if(EXISTS "${LLVM_ROOT}/include/c++/v1")
