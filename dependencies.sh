@@ -18,24 +18,6 @@ BREW_LLVM_VERSION=llvm@21
 mkdir -p $DEPENDENCIES_DIR
 mkdir -p $BUILD_DIR
 
-# Detect package manager (apt-get or dnf) on Linux only
-if [[ "$(uname)" != "Darwin" ]]; then
-    if command -v apt-get &> /dev/null; then
-        PKG_MANAGER="apt-get"
-        PKG_INSTALL="install -qqy"
-    elif command -v dnf &> /dev/null; then
-        PKG_MANAGER="dnf"
-        PKG_INSTALL="install -y"
-    else
-        echo "Neither apt-get nor dnf found. Please install dependencies manually."
-        exit 1
-    fi
-
-    # Update package cache
-    echo "Updating $PKG_MANAGER cache..."
-    sudo $PKG_MANAGER update
-fi
-
 # Install system packages 
 if [[ "$(uname)" == "Darwin" ]]; then
     # macOS - use Homebrew (only cmake and llvm needed)
