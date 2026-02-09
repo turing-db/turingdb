@@ -174,6 +174,7 @@ class TuringDB:
             )
         response.raise_for_status()
 
+        print(response.text)
         json = orjson.loads(response.text)
 
         if isinstance(json, dict):

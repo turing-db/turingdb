@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <unordered_set>
 
 #include "dataframe/DataframeManager.h"
 
@@ -12,6 +11,7 @@ class PipelinePort;
 class PipelineBuffer;
 class ExprProgram;
 class PredicateProgram;
+class Dataframe;
 
 class PipelineV2 {
 public:
@@ -37,6 +37,10 @@ public:
 
     void clear();
 
+    void setOutputDataframe(const Dataframe* df) { _outputDataframe = df; }
+
+    const Dataframe* getOutputDataframe() const { return _outputDataframe; }
+
 private:
     Processors _processors;
     Buffers _buffers;
@@ -44,6 +48,7 @@ private:
     SourcesSet _sources;
     ExprPrograms _exprProgs;
     DataframeManager _dfMan;
+    const Dataframe* _outputDataframe {nullptr};
 
     void addProcessor(Processor* processor);
     void addPort(PipelinePort* port);

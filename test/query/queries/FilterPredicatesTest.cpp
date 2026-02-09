@@ -39,9 +39,9 @@ protected:
 
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
-    auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
-                              CommitHash::head(), ChangeID::head());
+    auto query(std::string_view query, QueryCallbacks::OnOutputData&& callback = QueryCallbacks::defaultOnOutputData()) {
+        auto res = _db->query(query, _graphName, &_env->getMem(),
+                              CommitHash::head(), ChangeID::head(), std::move(callback));
         return res;
     }
 

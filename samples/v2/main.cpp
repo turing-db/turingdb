@@ -147,14 +147,13 @@ int main(int argc, char** argv) {
         {
             fmt::print("\n=== Pipeline generation ===\n\n");
 
-            const auto callback = [](const Dataframe* dataframe) {};
-
+            QueryCallbacks handler;
             PipelineGenerator pipelineGen(&planGraph,
                                           view,
                                           &pipeline,
                                           &mem,
                                           *procedures,
-                                          callback);
+                                          handler);
             try {
                 auto t0 = Clock::now();
                 pipelineGen.generate();

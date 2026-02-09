@@ -25,31 +25,44 @@ using namespace db;
 QueryInterpreterV2::QueryInterpreterV2(db::SystemManager* sysMan,
                                        db::JobSystem* jobSystem)
     : _sysMan(sysMan),
-    _jobSystem(jobSystem)
-{
+      _jobSystem(jobSystem) {
 }
 
 QueryInterpreterV2::~QueryInterpreterV2() {
 }
 
-db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
-                                            std::string_view query,
-                                            std::string_view graphName) {
+// TODO: change
+//       This is using RVO at best, making a copy in the worst case
+QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
+                                        std::string_view query,
+                                        std::string_view graphName) {
     Profile profile {"QueryInterpreterV2::execute"};
 
     const auto start = Clock::now();
+
+    auto& callbacks = ctxt.getQueryCallbacks();
+    callbacks.onBegin();
 
     auto txRes = _sysMan->openTransaction(graphName,
                                           ctxt.getCommitHash(),
                                           ctxt.getChangeID());
     if (!txRes) {
         switch (txRes.error().getType()) {
-            case ChangeErrorType::GRAPH_NOT_FOUND:
-                return QueryStatus(QueryStatus::Status::GRAPH_NOT_FOUND);
-            case ChangeErrorType::CHANGE_NOT_FOUND:
-                return QueryStatus(QueryStatus::Status::CHANGE_NOT_FOUND);
-            default:
-                return QueryStatus(QueryStatus::Status::COMMIT_NOT_FOUND);
+            case ChangeErrorType::GRAPH_NOT_FOUND: {
+                const QueryStatus status {QueryStatus::Status::GRAPH_NOT_FOUND};
+                callbacks.onError(status);
+                return status;
+            } break;
+            case ChangeErrorType::CHANGE_NOT_FOUND: {
+                const QueryStatus status {QueryStatus::Status::CHANGE_NOT_FOUND};
+                callbacks.onError(status);
+                return status;
+            } break;
+            default: {
+                const QueryStatus status {QueryStatus::Status::COMMIT_NOT_FOUND};
+                callbacks.onError(status);
+                return status;
+            } break;
         }
     }
 
@@ -61,13 +74,19 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     try {
         parser.parse(query);
     } catch (const CompilerException& e) {
-        return QueryStatus(QueryStatus::Status::PARSE_ERROR, e.what());
+        const QueryStatus status {QueryStatus::Status::PARSE_ERROR, e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (const std::exception& e) {
-        return QueryStatus(QueryStatus::Status::PARSE_ERROR,
-                           std::string("Unexpected exception: ") + e.what());
+        const QueryStatus status {QueryStatus::Status::PARSE_ERROR,
+                                  std::string("Unexpected exception: ") + e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (...) {
-        return QueryStatus(QueryStatus::Status::PARSE_ERROR,
-                           "Unknown exception occurred");
+        const QueryStatus status {QueryStatus::Status::PARSE_ERROR,
+                                  "Unknown exception occurred"};
+        callbacks.onError(status); 
+        return status;
     }
 
     // Analyze query
@@ -75,13 +94,19 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     try {
         analyzer.analyze();
     } catch (const CompilerException& e) {
-        return QueryStatus(QueryStatus::Status::ANALYZE_ERROR, e.what());
+        const QueryStatus status {QueryStatus::Status::ANALYZE_ERROR, e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (const std::exception& e) {
-        return QueryStatus(QueryStatus::Status::ANALYZE_ERROR,
-                           std::string("Unexpected exception: ") + e.what());
+        const QueryStatus status {QueryStatus::Status::ANALYZE_ERROR,
+                                  std::string("Unexpected exception: ") + e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (...) {
-        return QueryStatus(QueryStatus::Status::ANALYZE_ERROR,
-                           "Unknown exception occurred");
+        const QueryStatus status {QueryStatus::Status::ANALYZE_ERROR,
+                                  "Unknown exception occurred"};
+        callbacks.onError(status);
+        return status;
     }
 
     // Generate plan graph
@@ -89,13 +114,19 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     try {
         planGen.generate(ast.queries().front());
     } catch (const CompilerException& e) {
-        return QueryStatus(QueryStatus::Status::PLAN_ERROR, e.what());
+        const QueryStatus status {QueryStatus::Status::PLAN_ERROR, e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (const std::exception& e) {
-        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
-                           std::string("Unexpected exception: ") + e.what());
+        const QueryStatus status {QueryStatus::Status::PLAN_ERROR,
+                                  std::string("Unexpected exception: ") + e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (...) {
-        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
-                           "Unknown exception occurred");
+        const QueryStatus status {QueryStatus::Status::PLAN_ERROR,
+                                  "Unknown exception occurred"};
+        callbacks.onError(status);
+        return status;
     }
 
     PlanGraph& planGraph = planGen.getPlanGraph();
@@ -105,13 +136,19 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     try {
         planOpt.optimize();
     } catch (const CompilerException& e) {
-        return QueryStatus(QueryStatus::Status::PLAN_ERROR, e.what());
+        const QueryStatus status {QueryStatus::Status::PLAN_ERROR, e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (const std::exception& e) {
-        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
-                           std::string("Unexpected exception: ") + e.what());
+        const QueryStatus status {QueryStatus::Status::PLAN_ERROR,
+                                  std::string("Unexpected exception: ") + e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (...) {
-        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
-                           "Unknown exception occurred");
+        const QueryStatus status {QueryStatus::Status::PLAN_ERROR,
+                                  "Unknown exception occurred"};
+        callbacks.onError(status);
+        return status;
     }
 
     // Generate pipeline
@@ -122,17 +159,23 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
                                   &pipeline,
                                   mem,
                                   *ctxt.getProcedures(),
-                                  ctxt.getQueryCallback());
+                                  ctxt.getQueryCallbacks());
     try {
         pipelineGen.generate();
     } catch (const CompilerException& e) {
-        return QueryStatus(QueryStatus::Status::PLAN_ERROR, e.what());
+        const QueryStatus status {QueryStatus::Status::PLAN_ERROR, e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (const std::exception& e) {
-        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
-                           std::string("Unexpected exception: ") + e.what());
+        const QueryStatus status {QueryStatus::Status::PLAN_ERROR,
+                                  std::string("Unexpected exception: ") + e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (...) {
-        return QueryStatus(QueryStatus::Status::PLAN_ERROR,
-                           "Unknown exception occurred");
+        const QueryStatus status {QueryStatus::Status::PLAN_ERROR,
+                                  "Unknown exception occurred"};
+        callbacks.onError(status);
+        return status;
     }
 
     // Execute pipeline
@@ -142,19 +185,32 @@ db::QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     execCtxt.setJobSystem(_jobSystem);
     execCtxt.setProcedures(ctxt.getProcedures());
 
+    const Dataframe* outDf = pipeline.getOutputDataframe();
+    if (outDf) {
+        callbacks.onOutputHeader(outDf);
+    }
+
     PipelineExecutor executor(&pipeline, &execCtxt);
     try {
         executor.execute();
     } catch (const PipelineException& e) {
-        return QueryStatus(QueryStatus::Status::EXEC_ERROR, e.what());
+        const QueryStatus status {QueryStatus::Status::EXEC_ERROR, e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (const VersionControlException& e) {
-        return QueryStatus(QueryStatus::Status::EXEC_ERROR, e.what());
+        const QueryStatus status {QueryStatus::Status::EXEC_ERROR, e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (const std::exception& e) {
-        return QueryStatus(QueryStatus::Status::EXEC_ERROR,
-                           std::string("Unexpected exception: ") + e.what());
+        const QueryStatus status {QueryStatus::Status::EXEC_ERROR,
+                                  std::string("Unexpected exception: ") + e.what()};
+        callbacks.onError(status);
+        return status;
     } catch (...) {
-        return QueryStatus(QueryStatus::Status::EXEC_ERROR,
-                           "Unknown exception occurred");
+        const QueryStatus status {QueryStatus::Status::EXEC_ERROR,
+                                  "Unknown exception occurred"};
+        callbacks.onError(status);
+        return status;
     }
 
     const auto end = Clock::now();

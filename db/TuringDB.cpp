@@ -98,24 +98,26 @@ void TuringDB::init() {
 QueryStatus TuringDB::query(std::string_view query,
                             std::string_view graphName,
                             LocalMemory* mem,
-                            QueryCallbackV2 callback,
-                            CommitHash commit,
+                            QueryCallbacks& callbacks,
+                            CommitHash hash,
                             ChangeID change) {
     QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
 
-    InterpreterContext ctxt(mem, callback, _procedures.get(), commit, change);
+    InterpreterContext ctxt(mem, callbacks, _procedures.get(), hash, change);
     return interp.execute(ctxt, query, graphName);
 }
 
 QueryStatus TuringDB::query(std::string_view query,
                             std::string_view graphName,
                             LocalMemory* mem,
-                            CommitHash commit,
-                            ChangeID change) {
+                            CommitHash hash,
+                            ChangeID change,
+                            QueryCallbacks::OnOutputData&& callback) {
     QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
 
-    const QueryCallbackV2 callback = [](const Dataframe*){};
+    QueryCallbacks handler;
+    handler.setOnOutputData(std::move(callback));
 
-    InterpreterContext ctxt(mem, callback, _procedures.get(), commit, change);
+    InterpreterContext ctxt(mem, handler, _procedures.get(), hash, change);
     return interp.execute(ctxt, query, graphName);
 }

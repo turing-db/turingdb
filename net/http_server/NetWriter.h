@@ -116,7 +116,7 @@ public:
         _header.reset();
     }
 
-    void flush() {
+    void flush() noexcept {
         if (_errorOccured) {
             return;
         }
@@ -133,7 +133,7 @@ public:
         _chunk.reset();
     }
 
-    void write(std::string_view content) {
+    void write(std::string_view content) noexcept {
         if (_errorOccured) {
             return;
         }

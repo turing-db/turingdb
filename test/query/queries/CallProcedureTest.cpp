@@ -30,7 +30,7 @@ protected:
 TEST_F(CallProcedureTest, Labels) {
     bool executed = false;
     const auto res = _db->query(
-        "CALL db.labels()", "simpledb", &_env->getMem(),
+        "CALL db.labels()", "simpledb", &_env->getMem(), CommitHash::head(), ChangeID::head(),
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2);
@@ -46,7 +46,7 @@ TEST_F(CallProcedureTest, Labels) {
 TEST_F(CallProcedureTest, EdgeTypes) {
     bool executed = false;
     const auto res = _db->query(
-        "CALL db.edgeTypes()", "simpledb", &_env->getMem(),
+        "CALL db.edgeTypes()", "simpledb", &_env->getMem(), CommitHash::head(), ChangeID::head(),
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2);
@@ -62,7 +62,7 @@ TEST_F(CallProcedureTest, EdgeTypes) {
 TEST_F(CallProcedureTest, PropertyTypes) {
     bool executed = false;
     const auto res = _db->query(
-        "CALL db.propertyTypes()", "simpledb", &_env->getMem(),
+        "CALL db.propertyTypes()", "simpledb", &_env->getMem(), CommitHash::head(), ChangeID::head(),
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 3);
@@ -78,7 +78,7 @@ TEST_F(CallProcedureTest, PropertyTypes) {
 TEST_F(CallProcedureTest, History) {
     bool executed = false;
     const auto res = _db->query(
-        "CALL db.propertyTypes()", "simpledb", &_env->getMem(),
+        "CALL db.propertyTypes()", "simpledb", &_env->getMem(), CommitHash::head(), ChangeID::head(),
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 3);
@@ -98,7 +98,7 @@ TEST_F(CallProcedureTest, DescribeCommit) {
         "CALL db.describeCommit(c) YIELD nodeCount, edgeCount "
         "RETURN nodeCount, edgeCount",
         "simpledb",
-        &_env->getMem(),
+        &_env->getMem(), CommitHash::head(), ChangeID::head(),
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2);
