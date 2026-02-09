@@ -167,15 +167,17 @@ void HTTPServer::runThread(size_t threadID, ServerContext& ctxt) {
     threadContext->setThreadID(threadID);
 
     for (;;) {
-        const int nfds = utils::eventWait(instance, events.data(), eventCount, -1);
+        if (!ctxt._running.load()) {
+            return;
+        }
+
+        const int nfds = utils::eventWait(instance, events.data(), eventCount, 1000);
 
         if (!ctxt._running.load()) {
             return;
         }
 
         if (nfds <= 0) {
-            utils::logError("EpollWait");
-            ctxt._status.store(FlowStatus::WAIT_ERROR);
             continue;
         }
 
