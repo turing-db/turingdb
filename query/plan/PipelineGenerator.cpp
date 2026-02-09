@@ -717,10 +717,14 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
             return;
         }
 
-        _callback(df);
+        _callbacks.onOutputData(df);
     };
 
+    const Dataframe* df = _builder.getPendingOutputInterface()->getDataframe();
+
     _builder.addLambda(lambdaCallback);
+    _builder.setOutputDataframe(df);
+
     return _builder.getPendingOutputInterface();
 }
 

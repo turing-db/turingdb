@@ -21,7 +21,7 @@ if(APPLE)
             message(FATAL_ERROR
                 "LLVM Clang version ${CMAKE_CXX_COMPILER_VERSION} is too old. "
                 "Please use version 15.0 or newer.\n"
-                "Update with: brew upgrade llvm"
+                "Update with: brew upgrade llvy"
             )
         endif()
     endif()

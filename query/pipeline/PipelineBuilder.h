@@ -201,6 +201,8 @@ public:
         return namedCol;
     }
 
+    void setOutputDataframe(const Dataframe* df);
+
 private:
     LocalMemory* _mem {nullptr};
     PipelineV2* _pipeline {nullptr};

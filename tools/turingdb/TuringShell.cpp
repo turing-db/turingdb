@@ -25,7 +25,6 @@
 #include "dataframe/NamedColumn.h"
 #include "GraphPath.h"
 
-#include "spdlog/fmt/bundled/ranges.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 
@@ -272,88 +271,13 @@ void shCommand(const TuringShell::Command::Words& args, TuringShell& shell, std:
     }
 }
 
-} // namespace
-
-TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
-    : _turingDB(turingDB),
-    _mem(mem)
-{
-    _localCommands.emplace("q", Command {quitCommand});
-    _localCommands.emplace("quit", Command {quitCommand});
-    _localCommands.emplace("exit", Command {quitCommand});
-    _localCommands.emplace("help", Command {helpCommand});
-    _localCommands.emplace("cd", Command {changeDBCommand});
-    _localCommands.emplace("checkout", Command {checkoutCommand});
-    _localCommands.emplace("quiet", Command {quietCommand});
-    _localCommands.emplace("unquiet", Command {unquietCommand});
-    _localCommands.emplace("read", Command {readCommand});
-    _localCommands.emplace("sh", Command {shCommand});
-    _localCommands.emplace("shell", Command {shCommand});
-}
-
-TuringShell::~TuringShell() {
-}
-
-void TuringShell::startLoop() {
-    char* line = NULL;
-    std::string lineStr;
-    std::string shellPrompt = composePrompt();
-
-    // History settings
-    linenoiseHistorySetMaxLen(HISTORY_MAX_LEN);
-
-    // Get history file path
-    const char* homeEnvVar = getenv("HOME");
-    if (!homeEnvVar) {
-        panic("$HOME environment variable not found");
-    }
-
-    const std::string historyFilePath = std::string(homeEnvVar)+"/"+DEFAULT_HISTORY_FILE;
-
-    const int restoreRes = linenoiseHistoryLoad(historyFilePath.c_str());
-    if (restoreRes < 0) {
-        spdlog::error("Can not restore history from file {}", historyFilePath);
-    }
-
-    while ((line = linenoise(shellPrompt.c_str())) != NULL) {
-        lineStr = line;
-        if (lineStr.empty()) {
-            continue;
-        }
-
-        processLine(lineStr);
-
-        linenoiseHistoryAdd(line);
-
-        shellPrompt = composePrompt();
-        linenoiseFree(line);
-    }
-    
-    if (linenoiseHistorySave(historyFilePath.c_str()) < 0) {
-        spdlog::error("Failed to save history file {}", historyFilePath);
-    }
-}
-
-std::string TuringShell::composePrompt() {
-    const std::string basePrompt = "turing";
-    if (_changeID == ChangeID::head()) {
-        return _hash == CommitHash::head()
-                 ? fmt::format("{}:{}> ", basePrompt, _graphName)
-                 : fmt::format("{}:{}(detached {:x})> ", basePrompt, _graphName, _hash.get());
-    }
-
-    return _hash == CommitHash::head()
-             ? fmt::format("{}:{}@{:x}> ", basePrompt, _graphName, _changeID.get())
-             : fmt::format("{}:{}@{:x}(detached {:x})> ", basePrompt, _graphName, _changeID.get(), _hash.get());
-}
-
 template <typename T>
 void tabulateWrite(tabulate::RowStream& rs, const T& value) {
     // @_ref HistoryStep uses double escaped new line (\\n) so that it is valid JSON
     // if the `/query -d "history"` endpoint is hit. When writing to CLI we replace double
     // escaped with single escape so that it is rendered in terminal correctly.
     if constexpr (std::same_as<T, std::string>) {
-        std::regex re(R"(\\n)");  
+        std::regex re(R"(\\n)");
         rs << std::regex_replace(value, re, "\n");
         return;
     }
@@ -486,6 +410,80 @@ void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table
     }
 }
 
+} // namespace
+
+TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
+    : _turingDB(turingDB),
+      _mem(mem) {
+    _localCommands.emplace("q", Command {quitCommand});
+    _localCommands.emplace("quit", Command {quitCommand});
+    _localCommands.emplace("exit", Command {quitCommand});
+    _localCommands.emplace("help", Command {helpCommand});
+    _localCommands.emplace("cd", Command {changeDBCommand});
+    _localCommands.emplace("checkout", Command {checkoutCommand});
+    _localCommands.emplace("quiet", Command {quietCommand});
+    _localCommands.emplace("unquiet", Command {unquietCommand});
+    _localCommands.emplace("read", Command {readCommand});
+    _localCommands.emplace("sh", Command {shCommand});
+    _localCommands.emplace("shell", Command {shCommand});
+}
+
+TuringShell::~TuringShell() {
+}
+
+void TuringShell::startLoop() {
+    char* line = NULL;
+    std::string lineStr;
+    std::string shellPrompt = composePrompt();
+
+    // History settings
+    linenoiseHistorySetMaxLen(HISTORY_MAX_LEN);
+
+    // Get history file path
+    const char* homeEnvVar = getenv("HOME");
+    if (!homeEnvVar) {
+        panic("$HOME environment variable not found");
+    }
+
+    const std::string historyFilePath = std::string(homeEnvVar) + "/" + DEFAULT_HISTORY_FILE;
+
+    const int restoreRes = linenoiseHistoryLoad(historyFilePath.c_str());
+    if (restoreRes < 0) {
+        spdlog::error("Can not restore history from file {}", historyFilePath);
+    }
+
+    while ((line = linenoise(shellPrompt.c_str())) != NULL) {
+        lineStr = line;
+        if (lineStr.empty()) {
+            continue;
+        }
+
+        processLine(lineStr);
+
+        linenoiseHistoryAdd(line);
+
+        shellPrompt = composePrompt();
+        linenoiseFree(line);
+    }
+
+    if (linenoiseHistorySave(historyFilePath.c_str()) < 0) {
+        spdlog::error("Failed to save history file {}", historyFilePath);
+    }
+}
+
+std::string TuringShell::composePrompt() {
+    const std::string basePrompt = "turing";
+    if (_changeID == ChangeID::head()) {
+        return _hash == CommitHash::head()
+                 ? fmt::format("{}:{}> ", basePrompt, _graphName)
+                 : fmt::format("{}:{}(detached {:x})> ", basePrompt, _graphName, _hash.get());
+    }
+
+    return _hash == CommitHash::head()
+             ? fmt::format("{}:{}@{:x}> ", basePrompt, _graphName, _changeID.get())
+             : fmt::format("{}:{}@{:x}(detached {:x})> ", basePrompt, _graphName, _changeID.get(), _hash.get());
+}
+
 // Cleans double-escaped characters to single-escaped characters
 void TuringShell::formatMessage(std::string& msg) {
     const std::regex newLine(R"(\\n)");
@@ -531,12 +529,12 @@ void TuringShell::processLine(std::string& line) {
     // Execute query
     tabulate::Table table;
     size_t rowCount = 0;
+    size_t execCount = 0;
 
     QueryStatus res;
     {
-        size_t execCount = 0;
-
-        auto callback = [&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
+        QueryCallbacks callback;
+        callback.setOnOutputData([&](const Dataframe* df) {
             rowCount += df->getLogicalRowCount();
 
             if (_quiet) {
@@ -544,7 +542,7 @@ void TuringShell::processLine(std::string& line) {
             }
 
             queryCallback(execCount++, df, table);
-        };
+        });
 
         res = _turingDB.query(line, _graphName, _mem, callback, _hash, _changeID);
     }

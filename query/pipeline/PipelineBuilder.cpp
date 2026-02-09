@@ -891,6 +891,10 @@ PipelineBlockOutputInterface& PipelineBuilder::addShowProcedures() {
     return output;
 }
 
+void PipelineBuilder::setOutputDataframe(const Dataframe* df) {
+    _pipeline->setOutputDataframe(df);
+}
+
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Int64>(PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::UInt64>(PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Double>(PropertyType);

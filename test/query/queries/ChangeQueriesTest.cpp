@@ -47,8 +47,6 @@ protected:
     static constexpr std::string_view GET_PROPERTIES_QUERY =
         "CALL db.propertyTypes() YIELD propertyType as property";
 
-    static constexpr auto emptyCallback = [](const Dataframe*) -> void {};
-
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     void newChange() {
@@ -61,14 +59,14 @@ protected:
 
     void submitCurrentChange() {
         auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(),
-                                emptyCallback, CommitHash::head(), _currentChange);
+                              CommitHash::head(), _currentChange);
         ASSERT_TRUE(res);
         _currentChange = ChangeID::head();
     }
 
     void submitChange(ChangeID chid) {
         auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(),
-                                emptyCallback, CommitHash::head(), chid);
+                              CommitHash::head(), chid);
 
         ASSERT_TRUE(res);
         _currentChange = ChangeID::head();
@@ -78,9 +76,8 @@ protected:
         _currentChange = chid;
     }
 
-    auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
-                                CommitHash::head(), _currentChange);
+    auto query(std::string_view query, QueryCallbacks::OnOutputData&& callback = QueryCallbacks::defaultOnOutputData()) {
+        auto res = _db->query(query, _graphName, &_env->getMem(), CommitHash::head(), _currentChange, std::move(callback));
         return res;
     }
 
@@ -140,13 +137,13 @@ TEST_F(ChangeQueriesTest, changeWithRebaseQueries) {
         newChange(), change1 = _currentChange;
         std::string_view CREATE_QUERY =
             R"(CREATE (n:TestNode1 { name: "1" })-[e:TestEdge1 { name: "1->2" }]->(m:TestNode1 { name: "2" }))";
-        ASSERT_TRUE(query(CREATE_QUERY, emptyCallback));
+        ASSERT_TRUE(query(CREATE_QUERY));
     }
     {
         newChange(), change2 = _currentChange;
         std::string_view CREATE_QUERY =
             R"(CREATE (n:TestNode2 { name: "3" })-[e:TestEdge2 { name: "3->4" }]->(m:TestNode2 { name: "4" }))";
-        ASSERT_TRUE(query(CREATE_QUERY, emptyCallback));
+        ASSERT_TRUE(query(CREATE_QUERY));
     }
 
     submitChange(change2);
@@ -223,11 +220,11 @@ TEST_F(ChangeQueriesTest, threeChangeRebase) {
     auto makeChanges = [&]() -> void {
         newChange();
         { // Change
-            ASSERT_TRUE(query("CREATE (n:NODE)", emptyCallback));
-            ASSERT_TRUE(query("COMMIT", emptyCallback));
+            ASSERT_TRUE(query("CREATE (n:NODE)"));
+            ASSERT_TRUE(query("COMMIT"));
 
-            ASSERT_TRUE(query("MATCH (n:NODE) CREATE (n)-[:EDGE]->(m:NODE)", emptyCallback));
-            ASSERT_TRUE(query("COMMIT", emptyCallback));
+            ASSERT_TRUE(query("MATCH (n:NODE) CREATE (n)-[:EDGE]->(m:NODE)"));
+            ASSERT_TRUE(query("COMMIT"));
         }
     };
 
@@ -310,21 +307,11 @@ TEST_F(ChangeQueriesTest, commitThenRebase) {
     ChangeID change1 = _currentChange;
 
     { // Change 1 commits locally, does not submit
-        ASSERT_TRUE(query(
-            R"(create (n:CHANGE1LABEL {id:1, changeid: "ONE", committed:true}))",
-            emptyCallback));
-
-        ASSERT_TRUE(query("COMMIT", emptyCallback));
-
-        ASSERT_TRUE(query(
-            R"(create (n:CHANGE1LABEL {cheeky:true, id:2, changeid: "ONE", committed:true}))",
-            emptyCallback));
-
-        ASSERT_TRUE(query(
-            R"(create (n:CHANGE1LABEL {cheeky:true, id:3, changeid: "ONE", committed:true}))",
-            emptyCallback));
-
-        ASSERT_TRUE(query("COMMIT", emptyCallback));
+        ASSERT_TRUE(query(R"(create (n:CHANGE1LABEL {id:1, changeid: "ONE", committed:true}))"));
+        ASSERT_TRUE(query("COMMIT"));
+        ASSERT_TRUE(query(R"(create (n:CHANGE1LABEL {cheeky:true, id:2, changeid: "ONE", committed:true}))"));
+        ASSERT_TRUE(query(R"(create (n:CHANGE1LABEL {cheeky:true, id:3, changeid: "ONE", committed:true}))"));
+        ASSERT_TRUE(query("COMMIT"));
         ASSERT_TRUE(ensureProperties({"id", "changeid", "committed"}));
     }
 
@@ -332,12 +319,8 @@ TEST_F(ChangeQueriesTest, commitThenRebase) {
     [[maybe_unused]] ChangeID change2 = _currentChange;
 
     { // Change 2
-        ASSERT_TRUE(query(
-            R"(create (n:CHANGE2LABEL {id:4, changeid: "TWO", committed:false}))",
-            emptyCallback));
-        ASSERT_TRUE(query(
-            R"(create (n:CHANGE2LABEL {id:5, changeid: "TWO", committed:false}))",
-            emptyCallback));
+        ASSERT_TRUE(query(R"(create (n:CHANGE2LABEL {id:4, changeid: "TWO", committed:false}))"));
+        ASSERT_TRUE(query(R"(create (n:CHANGE2LABEL {id:5, changeid: "TWO", committed:false}))"));
         submitCurrentChange();
     }
 
@@ -431,19 +414,19 @@ TEST_F(ChangeQueriesTest, deleteNodeConflict) {
     {
         newChange(), change1 = _currentChange;
 
-        ASSERT_TRUE(query(deleteRemy, emptyCallback));
+        ASSERT_TRUE(query(deleteRemy));
     }
 
     {
         newChange(), change2 = _currentChange;
 
-        ASSERT_TRUE(query(deleteRemy, emptyCallback));
+        ASSERT_TRUE(query(deleteRemy));
     }
 
     submitChange(change2);
 
     setChange(change1);
-    auto res = query("CHANGE SUBMIT", emptyCallback);
+    auto res = query("CHANGE SUBMIT");
 
     EXPECT_FALSE(res);
     ASSERT_TRUE(res.hasErrorMessage());
@@ -464,19 +447,19 @@ TEST_F(ChangeQueriesTest, deleteEdgeConflict) {
     {
         newChange(), change1 = _currentChange;
 
-        ASSERT_TRUE(query(deleteCyrusTravel, emptyCallback));
+        ASSERT_TRUE(query(deleteCyrusTravel));
     }
 
     {
         newChange(), change2 = _currentChange;
 
-        ASSERT_TRUE(query(deleteCyrusTravel, emptyCallback));
+        ASSERT_TRUE(query(deleteCyrusTravel));
     }
 
     submitChange(change2);
 
     setChange(change1);
-    auto res = query("CHANGE SUBMIT", emptyCallback);
+    auto res = query("CHANGE SUBMIT");
 
     EXPECT_FALSE(res);
     ASSERT_TRUE(res.hasErrorMessage());
@@ -503,20 +486,20 @@ TEST_F(ChangeQueriesTest, deleteOutEdgeSideEffect) {
     {
         newChange(), change1 = _currentChange;
 
-        ASSERT_TRUE(query(createSuhasCyrus, emptyCallback));
+        ASSERT_TRUE(query(createSuhasCyrus));
     }
 
     {
         newChange(), change2 = _currentChange;
 
-        ASSERT_TRUE(query(deleteSuhas, emptyCallback));
+        ASSERT_TRUE(query(deleteSuhas));
     }
 
     submitChange(change1);
 
     setChange(change2);
 
-    auto res = query("CHANGE SUBMIT", emptyCallback);
+    auto res = query("CHANGE SUBMIT");
 
     EXPECT_FALSE(res);
     ASSERT_TRUE(res.hasErrorMessage());
@@ -537,20 +520,20 @@ TEST_F(ChangeQueriesTest, deleteInEdgeSideEffect) {
     {
         newChange(), change1 = _currentChange;
 
-        ASSERT_TRUE(query(createCyrusSuhas, emptyCallback));
+        ASSERT_TRUE(query(createCyrusSuhas));
     }
 
     {
         newChange(), change2 = _currentChange;
 
-        ASSERT_TRUE(query(deleteSuhas, emptyCallback));
+        ASSERT_TRUE(query(deleteSuhas));
     }
 
     submitChange(change1);
 
     setChange(change2);
 
-    auto res = query("CHANGE SUBMIT", emptyCallback);
+    auto res = query("CHANGE SUBMIT");
 
     EXPECT_FALSE(res);
     ASSERT_TRUE(res.hasErrorMessage());
@@ -575,7 +558,7 @@ TEST_F(ChangeQueriesTest, noConflictOnDeletedEdge) {
     {
         newChange();
         std::string_view createQuery = "CREATE (n:Source)-[e:NEWEDGE]->(m:Target)";
-        query(createQuery, emptyCallback);
+        query(createQuery);
         submitCurrentChange();
     }
 
@@ -583,7 +566,7 @@ TEST_F(ChangeQueriesTest, noConflictOnDeletedEdge) {
         newChange();
         // This should also delete the edge "e" created above
         std::string_view deleteSource = "MATCH (n:Source) DELETE n";
-        query(deleteSource, emptyCallback);
+        query(deleteSource);
         submitCurrentChange();
     }
 
@@ -591,7 +574,7 @@ TEST_F(ChangeQueriesTest, noConflictOnDeletedEdge) {
         newChange();
         // This would result in deleting edge "e", but it was already deleted: no conflict
         std::string_view deleteTarget = "MATCH (n:Target) DELETE n";
-        query(deleteTarget, emptyCallback);
+        query(deleteTarget);
         submitCurrentChange();
     }
 }
@@ -614,7 +597,7 @@ TEST_F(ChangeQueriesTest, conflictOnDeletedEdge) {
     {
         newChange();
         std::string_view createQuery = "CREATE (n:Source)-[e:NEWEDGE]->(m:Target)";
-        ASSERT_TRUE(query(createQuery, emptyCallback));
+        ASSERT_TRUE(query(createQuery ));
         submitCurrentChange();
     }
 
@@ -625,18 +608,18 @@ TEST_F(ChangeQueriesTest, conflictOnDeletedEdge) {
 
     {
         setChange(change2);
-        ASSERT_TRUE(query("MATCH (n:Source) DELETE n", emptyCallback));
+        ASSERT_TRUE(query("MATCH (n:Source) DELETE n"));
     }
 
     {
         setChange(change3);
-        ASSERT_TRUE(query("MATCH (n:Target) DELETE n", emptyCallback));
+        ASSERT_TRUE(query("MATCH (n:Target) DELETE n"));
     }
 
     submitChange(change3); // Should succeed
 
     setChange(change2);
-    auto res = query("CHANGE SUBMIT", emptyCallback);
+    auto res = query("CHANGE SUBMIT");
 
     EXPECT_FALSE(res);
     ASSERT_TRUE(res.hasErrorMessage());
@@ -654,7 +637,7 @@ TEST_F(ChangeQueriesTest, resolvedOutEdgesDeleteConflict) {
 
     { // Try delete Luc
         setChange(change0);
-        ASSERT_TRUE(query(R"(MATCH (n) WHERE n.name = "Luc" DELETE n)", emptyCallback));
+        ASSERT_TRUE(query(R"(MATCH (n) WHERE n.name = "Luc" DELETE n)"));
     }
 
     { // But create an edge between Luc and Cyrus
@@ -662,7 +645,7 @@ TEST_F(ChangeQueriesTest, resolvedOutEdgesDeleteConflict) {
         std::string_view createLucCyrus =
             R"(MATCH (l), (c) WHERE l.name = "Luc" AND c.name = "Cyrus" CREATE (l)-[:WORKS_WITH]->(c))";
 
-        ASSERT_TRUE(query(createLucCyrus, emptyCallback));
+        ASSERT_TRUE(query(createLucCyrus));
         submitCurrentChange();
     }
 
@@ -670,7 +653,7 @@ TEST_F(ChangeQueriesTest, resolvedOutEdgesDeleteConflict) {
         newChange(); // Change 3
         std::string_view deleteLucCyrus =
             R"(MATCH (l)-[e]->(c) WHERE l.name = "Luc" AND c.name = "Cyrus" DELETE e)";
-        ASSERT_TRUE(query(deleteLucCyrus, emptyCallback));
+        ASSERT_TRUE(query(deleteLucCyrus));
         submitCurrentChange();
     }
 
@@ -688,8 +671,8 @@ TEST_F(ChangeQueriesTest, resolvedOutEdgesDeleteConflictWithCommit) {
 
     { // Try delete Luc
         setChange(change0);
-        ASSERT_TRUE(query(R"(MATCH (n) WHERE n.name = "Luc" DELETE n)", emptyCallback));
-        ASSERT_TRUE(query("COMMIT", emptyCallback));
+        ASSERT_TRUE(query(R"(MATCH (n) WHERE n.name = "Luc" DELETE n)"));
+        ASSERT_TRUE(query("COMMIT"));
     }
 
     { // But create an edge between Luc and Cyrus
@@ -697,7 +680,7 @@ TEST_F(ChangeQueriesTest, resolvedOutEdgesDeleteConflictWithCommit) {
         std::string_view createLucCyrus =
             R"(MATCH (l), (c) WHERE l.name = "Luc" AND c.name = "Cyrus" CREATE (l)-[:WORKS_WITH]->(c))";
 
-        ASSERT_TRUE(query(createLucCyrus, emptyCallback));
+        ASSERT_TRUE(query(createLucCyrus));
         submitCurrentChange();
     }
 
@@ -705,7 +688,7 @@ TEST_F(ChangeQueriesTest, resolvedOutEdgesDeleteConflictWithCommit) {
         newChange(); // Change 3
         std::string_view deleteLucCyrus =
             R"(MATCH (l)-[e]->(c) WHERE l.name = "Luc" AND c.name = "Cyrus" DELETE e)";
-        ASSERT_TRUE(query(deleteLucCyrus, emptyCallback));
+        ASSERT_TRUE(query(deleteLucCyrus));
         submitCurrentChange();
     }
 
@@ -743,8 +726,8 @@ TEST_F(ChangeQueriesTest, rebasedTombstones) {
         std::string_view createEleanor = R"(CREATE (e:Person{name:"Eleanor"}))";
         std::string_view createCats = R"(CREATE (c:Interest{name:"Cats"}))";
 
-        ASSERT_TRUE(query(createEleanor, emptyCallback));
-        ASSERT_TRUE(query(createCats, emptyCallback));
+        ASSERT_TRUE(query(createEleanor));
+        ASSERT_TRUE(query(createCats));
 
         submitCurrentChange();
     }
@@ -757,15 +740,15 @@ TEST_F(ChangeQueriesTest, rebasedTombstones) {
         std::string_view createDogs = R"(CREATE (n:Interest{name:"Dogs"}))";
 
         for (auto&& q : {createManchester, createMusic, createDogs}) {
-            ASSERT_TRUE(query(q, emptyCallback));
+            ASSERT_TRUE(query(q));
         }
 
-        ASSERT_TRUE(query("COMMIT", emptyCallback));
+        ASSERT_TRUE(query("COMMIT"));
 
         std::string_view deleteManchester =
             R"(MATCH (m) WHERE m.name = "Manchester" DELETE m)";
 
-        ASSERT_TRUE(query(deleteManchester, emptyCallback));
+        ASSERT_TRUE(query(deleteManchester));
 
         // Change1's new nodes will need to be rebased, but Manchester should be deleted
         submitCurrentChange();
@@ -820,8 +803,8 @@ TEST_F(ChangeQueriesTest, rebasedTombstonesWithCommit) {
         std::string_view createEleanor = R"(CREATE (e:Person{name:"Eleanor"}))";
         std::string_view createCats = R"(CREATE (c:Interest{name:"Cats"}))";
 
-        ASSERT_TRUE(query(createEleanor, emptyCallback));
-        ASSERT_TRUE(query(createCats, emptyCallback));
+        ASSERT_TRUE(query(createEleanor));
+        ASSERT_TRUE(query(createCats));
 
         submitCurrentChange();
     }
@@ -833,16 +816,16 @@ TEST_F(ChangeQueriesTest, rebasedTombstonesWithCommit) {
         std::string_view createMusic = R"(CREATE (n:Interest{name:"Music"}))";
         std::string_view createDogs = R"(CREATE (n:Interest{name:"Dogs"}))";
 
-        ASSERT_TRUE(query(createManchester, emptyCallback));
-        ASSERT_TRUE(query("COMMIT", emptyCallback));
-        ASSERT_TRUE(query(createMusic, emptyCallback));
-        ASSERT_TRUE(query(createDogs, emptyCallback));
-        ASSERT_TRUE(query("COMMIT", emptyCallback));
+        ASSERT_TRUE(query(createManchester));
+        ASSERT_TRUE(query("COMMIT"));
+        ASSERT_TRUE(query(createMusic));
+        ASSERT_TRUE(query(createDogs));
+        ASSERT_TRUE(query("COMMIT"));
 
         std::string_view deleteManchester =
             R"(MATCH (m) WHERE m.name = "Manchester" DELETE m)";
 
-        ASSERT_TRUE(query(deleteManchester, emptyCallback));
+        ASSERT_TRUE(query(deleteManchester));
 
         // Change1's new nodes will need to be rebased, but Manchester should be deleted
         submitCurrentChange();
@@ -881,14 +864,14 @@ TEST_F(ChangeQueriesTest, concurrentWritesSmall) {
 
     {
         setChange(change0);
-        ASSERT_TRUE(query("CREATE (n:NODE1)", emptyCallback));
+        ASSERT_TRUE(query("CREATE (n:NODE1)"));
     }
 
     {
         setChange(change1);
-        ASSERT_TRUE(query("CREATE (n:NODE2)", emptyCallback));
-        ASSERT_TRUE(query("COMMIT", emptyCallback));
-        ASSERT_TRUE(query("CREATE (:NODE3)-[:NEWEDGE1]->(:NODE4)", emptyCallback));
+        ASSERT_TRUE(query("CREATE (n:NODE2)"));
+        ASSERT_TRUE(query("COMMIT"));
+        ASSERT_TRUE(query("CREATE (:NODE3)-[:NEWEDGE1]->(:NODE4)"));
     }
 
     submitChange(change0);
@@ -963,13 +946,13 @@ TEST_F(ChangeQueriesTest, concurrentWritesLarge) {
         newChange(), change0 = _currentChange;
 
         for (size_t i {0}; i < change0SingleNodes; i++) {
-            ASSERT_TRUE(query("CREATE (:NODE)", emptyCallback));
+            ASSERT_TRUE(query("CREATE (:NODE)"));
         }
 
-        ASSERT_TRUE(query("COMMIT", emptyCallback));
+        ASSERT_TRUE(query("COMMIT"));
 
         for (size_t i {0}; i < change0EdgePairs; i++) {
-            ASSERT_TRUE(query("CREATE (:NODE)-[:EDGE]->(:NODE)", emptyCallback));
+            ASSERT_TRUE(query("CREATE (:NODE)-[:EDGE]->(:NODE)"));
         }
     }
 
@@ -977,13 +960,13 @@ TEST_F(ChangeQueriesTest, concurrentWritesLarge) {
         newChange(), change1 = _currentChange;
 
         for (size_t i {0}; i < change1SingleNodes; i++) {
-            ASSERT_TRUE(query("CREATE (:NODE)", emptyCallback));
+            ASSERT_TRUE(query("CREATE (:NODE)"));
         }
 
-        ASSERT_TRUE(query("COMMIT", emptyCallback));
+        ASSERT_TRUE(query("COMMIT"));
 
         for (size_t i {0}; i < change1EdgePairs; i++) {
-            ASSERT_TRUE(query("CREATE (:NODE)-[:EDGE]->(:NODE)", emptyCallback));
+            ASSERT_TRUE(query("CREATE (:NODE)-[:EDGE]->(:NODE)"));
         }
     }
 
@@ -1067,14 +1050,14 @@ TEST_F(ChangeQueriesTest, historyWithDeletions) {
     {
         newChange();
         for (size_t _ {0}; _ < numNodes; _++) {
-            ASSERT_TRUE(query("CREATE (n:Node)", emptyCallback));
+            ASSERT_TRUE(query("CREATE (n:Node)"));
         }
         submitCurrentChange();
     }
 
     {
         newChange();
-        ASSERT_TRUE(query("MATCH (n) DELETE n", emptyCallback));
+        ASSERT_TRUE(query("MATCH (n) DELETE n"));
         submitCurrentChange();
     }
 

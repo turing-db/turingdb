@@ -4,6 +4,7 @@
 
 #include "TuringDB.h"
 #include "Graph.h"
+#include "outputs/JsonEncoder.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "views/EdgeView.h"
@@ -97,8 +98,7 @@ void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
         case Endpoint::LIST_LABELS: {
              list_labels();
         }
-        break;
-        case Endpoint::LIST_PROPERTY_TYPES: {
+        break; case Endpoint::LIST_PROPERTY_TYPES: {
              list_property_types();
         }
         break;
@@ -171,57 +171,45 @@ void DBServerProcessor::query() {
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
                                             !_connection.isCloseRequired());
 
-    PayloadWriter payload(_writer.getWriter());
-    payload.obj();
+    net::NetWriter* writer = _writer.getWriter();
+    bioassert(writer, "Invalid writer");
 
-    bool isFirstExec = true;
+    QueryCallbacks queryCallbacks;
+    VJsonEncoder<net::NetWriter> encoder {*writer};
 
-    const QueryCallbackV2 queryCallback = [&](const Dataframe* df) {
-        if (isFirstExec) {
-            JsonEncoder::writeDataframeHeader(payload, *df);
-            payload.key("data");
-            payload.arr();
-            isFirstExec = false;
-        }
+    queryCallbacks.setOnBegin([&] {
+        encoder.start();
+    });
 
-        JsonEncoder::writeDataframe(payload, *df);
-    };
+    queryCallbacks.setOnOutputData([&] (const Dataframe* df) {
+        bioassert(df != nullptr, "Dataframe is null");
+        encoder.writeDataframe(*df);
+    });
+
+    queryCallbacks.setOnOutputHeader([&] (const Dataframe* df) {
+        bioassert(df != nullptr, "Dataframe is null");
+        encoder.writeDataframeHeader(*df);
+    });
+
+    queryCallbacks.setOnError([&] (const QueryStatus& status) {
+        bioassert(status.isOk(), "Query status is not ok");
+        encoder.encodeError(status.getStatus(), status.getError());
+    });
 
     const auto res = _db.query(
         httpInfo._payload,
         transactionInfo.graphName,
         &mem,
-        queryCallback,
+        queryCallbacks,
         transactionInfo.commit,
         transactionInfo.change);
 
     if (!res.isOk()) {
-        while (payload.currentNestingLevel() > 1) {
-            payload.end();
-        }
-
-        payload.key("error");
-        const std::string errorType = std::string(QueryStatusDescription::value(res.getStatus()));
-        payload.value(errorType);
-
-        const std::string& errorMsg =
-            res.getError().empty() ? "No error message available." : res.getError();
-
-        payload.key("error_details");
-
-        std::string sanitizedString;
-        sanitizeJsonString(errorMsg, sanitizedString);
-        payload.value(sanitizedString);
-
+        encoder.encodeError(res.getStatus(), res.getError());
         return;
     }
 
-    payload.end();
-
-    payload.key("time");
-    payload.value(res.getTotalTime().count());
-
-    payload.end();
+    encoder.encodeTime(res.getTotalTime().count());
 }
 
 void DBServerProcessor::load_graph() {
@@ -377,43 +365,41 @@ void DBServerProcessor::list_loaded_graphs() {
 
     payload.obj();
 
-    bool isFirstExec = true;
-
-    const QueryCallbackV2 queryCallback = [&](const Dataframe* df) {
-        if (isFirstExec) {
-            JsonEncoder::writeDataframeHeader(payload, *df);
-            payload.key("data");
-            payload.arr();
-            isFirstExec = false;
-        }
-
+    QueryCallbacks::OnOutputData queryCallback = [&](const Dataframe* df) {
         JsonEncoder::writeDataframe(payload, *df);
     };
 
-    const auto res = _db.query("LIST GRAPH",
-                               "",
-                               &mem,
-                               queryCallback);
-    if (!res.isOk()) {
+    QueryCallbacks::OnOutputHeader beginCallback = [&](const Dataframe* df) {
+            JsonEncoder::writeDataframeHeader(payload, *df);
+            payload.key("data");
+            payload.arr();
+    };
+
+    QueryCallbacks::OnError errorCallback = [&](const QueryStatus& status) {
         while (payload.currentNestingLevel() > 1) {
             payload.end();
         }
 
         payload.key("error");
-        const std::string errorType = std::string(QueryStatusDescription::value(res.getStatus()));
+        const std::string errorType = std::string(QueryStatusDescription::value(status.getStatus()));
         payload.value(errorType);
 
         const std::string& errorMsg =
-            res.getError().empty() ? "No error message available." : res.getError();
+            status.getError().empty() ? "No error message available." : status.getError();
 
         payload.key("error_details");
 
         std::string sanitizedString;
         sanitizeJsonString(errorMsg, sanitizedString);
         payload.value(sanitizedString);
+    };
 
-        return;
-    }
+    const auto res = _db.query("LIST GRAPH",
+                               "",
+                               &mem,
+                               CommitHash::head(),
+                               ChangeID::head(),
+                               std::move(queryCallback));
 }
 
 void DBServerProcessor::list_avail_graphs() {

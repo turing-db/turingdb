@@ -120,9 +120,9 @@ protected:
     TuringDB* _db{nullptr};
     Graph* _graph{nullptr};
 
-    auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
-                              CommitHash::head(), ChangeID::head());
+    auto query(std::string_view query, QueryCallbacks::OnOutputData&& callback = QueryCallbacks::defaultOnOutputData()) {
+        auto res = _db->query(query, _graphName, &_env->getMem(),
+                              CommitHash::head(), ChangeID::head(), std::move(callback));
         return res;
     }
 

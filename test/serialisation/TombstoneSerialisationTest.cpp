@@ -72,8 +72,7 @@ public:
             }
         };
 
-        ASSERT_TRUE(db.query("match (n) return n", _workingGraphName, &_env->getMem(),
-                             VERIFY, CommitHash::head(), ChangeID::head()));
+        ASSERT_TRUE(db.query("match (n) return n", _workingGraphName, &_env->getMem(), CommitHash::head(), ChangeID::head(), VERIFY));
 
         spdlog::info("Successfully populated graph");
     }
@@ -184,7 +183,7 @@ TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
 
         const auto res = db.query("match (n) return n.id",
                                   _workingGraphName,
-                                  &_env->getMem(),
+                                  &_env->getMem(), CommitHash::head(), ChangeID::head(),
                                   callback);
         ASSERT_TRUE(res);
         ASSERT_TRUE(!actualNodes.empty());
@@ -206,7 +205,7 @@ TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
 
         const auto res = db.query("match (n)-[e]->(m) return e.id",
                                   _workingGraphName,
-                                  &_env->getMem(),
+                                  &_env->getMem(), CommitHash::head(), ChangeID::head(),
                                   callback);
         ASSERT_TRUE(res);
         ASSERT_TRUE(!actualEdges.empty());
