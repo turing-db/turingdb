@@ -439,7 +439,7 @@ void WriteProcessor::postProcessTempIDs() {
 void WriteProcessor::performCreations() {
     // We apply the CREATE command for each row in the input, or just a single row if we
     // have no inputs
-    const size_t numIters = _input ? _input->getDataframe()->getRowCount() : 1;
+    const size_t numIters = _input ? _input->getDataframe()->getLogicalRowCount() : 1;
     if (numIters == 0) {
         return;
     }
