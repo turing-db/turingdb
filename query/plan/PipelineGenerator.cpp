@@ -684,6 +684,11 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                 const Expr* item = *exprPtr;
                 const VarDecl* decl = item->getExprVarDecl();
 
+                const std::optional<std::string_view> name = projNode->getName(item);
+                if (!name) {
+                    continue;
+                }
+
                 if (!decl) {
                     throw PlannerException("Projection item does not have a variable declaration");
                 }
@@ -694,38 +699,25 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                 }
                 const ColumnTag tag = findColIt->second;
 
-                const std::optional<std::string_view> name = projNode->getName(item);
-                if (!name) {
-                    continue;
-                }
-
                 items.push_back({tag, *name});
 
             } else if (const auto* declPtr = std::get_if<VarDecl*>(&item)) {
                 const VarDecl* decl = *declPtr;
-                const ColumnTag tag = _declToColumn.at(decl);
-                const std::optional<std::string_view> name = projNode->getName(decl);
 
+                const std::optional<std::string_view> name = projNode->getName(decl);
                 if (!name) {
                     continue;
                 }
 
+                const auto findColIt = _declToColumn.find(decl);
+                if (findColIt == _declToColumn.end()) {
+                    throw PlannerException(
+                        fmt::format("Unregistered variable {}.", decl->getName()));
+                }
+                const ColumnTag tag = findColIt->second;
+
                 items.push_back({tag, *name});
             }
-
-            const auto findColIt = _declToColumn.find(decl);
-            if (findColIt == _declToColumn.end()) {
-                throw PlannerException(fmt::format("Unregistered variable {}.", decl->getName()));
-            }
-
-            const ColumnTag tag = findColIt->second;
-            const std::string_view name = item->getName();
-
-            const std::string_view repr = name.empty()
-                ? _sourceManager->getStringRepr((std::uintptr_t)item)
-                : name;
-
-            items.push_back({tag, repr});
         }
 
         _builder.addProjection(items);
