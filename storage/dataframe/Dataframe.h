@@ -27,7 +27,9 @@ public:
 
     size_t size() const { return _cols.size(); }
 
-    size_t getRowCount() const;
+    size_t getLogicalRowCount() const;
+
+    bool isRectangular() const;
 
     const NamedColumns& cols() const { return _cols; }
 

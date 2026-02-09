@@ -29,7 +29,7 @@ TEST_F(ShowProceduresTest, showProcedures) {
                                 [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 2);
-        ASSERT_EQ(df->getRowCount(), 6);
+        ASSERT_EQ(df->getLogicalRowCount(), 6);
 
         const auto& cols = df->cols();
         const auto* colName = cols.at(0)->as<ColumnVector<types::String::Primitive>>();

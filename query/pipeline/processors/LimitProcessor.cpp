@@ -52,7 +52,7 @@ void LimitProcessor::execute() {
     } else {
         const Dataframe* inputDf = _input.getDataframe();
         Dataframe* outputDf = _output.getDataframe();
-        const size_t blockRowCount = inputDf->getRowCount();
+        const size_t blockRowCount = inputDf->getLogicalRowCount();
         const size_t remainingCapacity = _limit - _currentRowCount;
 
         // Write rows of inputBlock that are below the limit

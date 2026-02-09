@@ -440,7 +440,7 @@ TEST_F(HashJoinProcessorTest, multipleValuesPerJoinKey) {
         auto* frthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
         auto* joinCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(4)->getColumn());
 
-        for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+        for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
             actual.add({fstCol->at(rowPtr),
                         sndCol->at(rowPtr),
                         thdCol->at(rowPtr),
@@ -767,7 +767,7 @@ TEST_F(HashJoinProcessorTest, millionRowJoinCase) {
         auto* frthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
         auto* fifthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(4)->getColumn());
 
-        for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+        for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
             actual.add({fstCol->at(rowPtr),
                         sndCol->at(rowPtr),
                         thdCol->at(rowPtr),
@@ -942,7 +942,7 @@ TEST_F(HashJoinProcessorTest, thousandRowJoinCaseChunkedInputs) {
         auto* frthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
         auto* fifthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(4)->getColumn());
 
-        for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+        for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
             actual.add({fstCol->at(rowPtr),
                         sndCol->at(rowPtr),
                         thdCol->at(rowPtr),
@@ -1135,7 +1135,7 @@ TEST_F(HashJoinProcessorTest, finishPausedStreamTest) {
         auto* frthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
         auto* fifthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(4)->getColumn());
 
-        for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+        for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
             actual.add({fstCol->at(rowPtr),
                         sndCol->at(rowPtr),
                         thdCol->at(rowPtr),
@@ -1328,7 +1328,7 @@ TEST_F(HashJoinProcessorTest, finishPausedStreamAndContinueToProcessTest) {
         auto* frthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
         auto* fifthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(4)->getColumn());
 
-        for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+        for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
             actual.add({fstCol->at(rowPtr),
                         sndCol->at(rowPtr),
                         thdCol->at(rowPtr),
@@ -1514,7 +1514,7 @@ TEST_F(HashJoinProcessorTest, multipleValuesPerKeyWithChunkedInputs) {
         auto* frthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
         auto* joinCol = dynamic_cast<ColumnNodeIDs*>(df->getColumn(joinKey)->getColumn());
 
-        for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+        for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
             actual.add({fstCol->at(rowPtr),
                         sndCol->at(rowPtr),
                         thdCol->at(rowPtr),

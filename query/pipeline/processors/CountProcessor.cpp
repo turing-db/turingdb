@@ -85,7 +85,7 @@ void CountProcessor::execute() {
     const Dataframe* inputDf = _input.getDataframe();
 
     if (_col == nullptr) {
-        const size_t blockRowCount = inputDf->getRowCount();
+        const size_t blockRowCount = inputDf->getLogicalRowCount();
         _countRunning += blockRowCount;
     } else {
         dispatchColumnVector(_col, [&](auto* col) {
@@ -99,7 +99,7 @@ void CountProcessor::execute() {
                     }
                 }
             } else {
-                const size_t blockRowCount = inputDf->getRowCount();
+                const size_t blockRowCount = inputDf->getLogicalRowCount();
                 _countRunning += blockRowCount;
             }
         });

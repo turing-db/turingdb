@@ -189,7 +189,7 @@ void HashJoinProcessor::execute() {
             // and we don't have any more columns to read we can consume
             // the leftInput (the case where we finish reading the left
             // input stream and the output fits perfectly into a chunk)
-            if (!_rowOffsetState.hasRowOffsets() && _leftInputIdx == leftDf->getRowCount()) {
+            if (!_rowOffsetState.hasRowOffsets() && _leftInputIdx == leftDf->getLogicalRowCount()) {
                 _leftInputIdx = 0;
                 _leftInput.getPort()->consume();
             }
@@ -231,7 +231,7 @@ void HashJoinProcessor::execute() {
         // if we aren't paused mid-row vector (no _copyState)
         // and we don't have any more columns to read we can consume
         // the rightInput
-        if (!_rowOffsetState.hasRowOffsets() && _rightInputIdx == rightDf->getRowCount()) {
+        if (!_rowOffsetState.hasRowOffsets() && _rightInputIdx == rightDf->getLogicalRowCount()) {
             _rightInputIdx = 0;
             _rightInput.getPort()->consume();
         }
@@ -366,7 +366,7 @@ void HashJoinProcessor::processRightStream(size_t& rowsRemaining,
 
     auto* rightCol = rightDf->getColumn(_rightJoinKey)->getColumn();
 
-    for (; _rightInputIdx < rightDf->getRowCount(); ++_rightInputIdx) {
+    for (; _rightInputIdx < rightDf->getLogicalRowCount(); ++_rightInputIdx) {
         const auto it = findInMap(_leftMap, rightCol, _rightInputIdx);
         if (it != _leftMap.end()) {
             const auto& rows = it->second;

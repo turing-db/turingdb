@@ -107,7 +107,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNode) {
                 auto* ms = df->cols().back()->as<ColumnNodeIDs>();
                 ASSERT_TRUE(ns);
                 ASSERT_TRUE(ms);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
                     actualRows.add({ns->at(rowPtr), ms->at(rowPtr)});
                 }
@@ -146,7 +146,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNode) {
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
                 ASSERT_TRUE(ns);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
                     queryRows.add({ns->at(rowPtr)});
                 }
@@ -185,7 +185,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodes) {
                 auto* ps = df->cols().back()->as<ColumnNodeIDs>();
                 ASSERT_TRUE(ns);
                 ASSERT_TRUE(ps);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
                     actualRows.add({ns->at(rowPtr), ms->at(rowPtr), ps->at(rowPtr)});
                 }
@@ -224,7 +224,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodes) {
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
                 ASSERT_TRUE(ns);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
                     queryRows.add({ns->at(rowPtr)});
                 }
@@ -273,7 +273,7 @@ TEST_F(WriteQueriesTest, createEdgeFromNewNode) {
                 ASSERT_TRUE(es);
                 auto* os = df->cols().at(3)->as<ColumnNodeIDs>();
                 ASSERT_TRUE(os);
-                size_t rows = df->getRowCount();
+                size_t rows = df->getLogicalRowCount();
                 EXPECT_EQ(totalNodesPrior, rows);
                 for (size_t r = 0; r < rows; r++) {
                     actualRows.add({ns->at(r), ms->at(r), es->at(r), os->at(r)});
@@ -300,7 +300,7 @@ TEST_F(WriteQueriesTest, createEdgeFromNewNode) {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
-                size_t rows = df->getRowCount();
+                size_t rows = df->getLogicalRowCount();
                 EXPECT_EQ(3 * totalNodesPrior, rows);
                 for (size_t r = 0; r < rows; r++) {
                     actualRows.add({ns->at(r)});
@@ -325,7 +325,7 @@ TEST_F(WriteQueriesTest, createEdgeFromNewNode) {
                 ASSERT_TRUE(df);
                 ASSERT_EQ(df->size(), 1);
                 auto* es = df->cols().front()->as<ColumnEdgeIDs>();
-                size_t rows = df->getRowCount();
+                size_t rows = df->getLogicalRowCount();
                 EXPECT_EQ(2 * totalEdgesPrior, rows);
                 for (size_t r = 0; r < rows; r++) {
                     actualRows.add({es->at(r)});
@@ -366,7 +366,7 @@ TEST_F(WriteQueriesTest, createEdgeFromExistingNodes) {
                 auto* es = df->cols().back()->as<ColumnEdgeIDs>();
                 ASSERT_TRUE(es);
 
-                size_t rows = df->getRowCount();
+                size_t rows = df->getLogicalRowCount();
                 EXPECT_EQ(rows, totalNodesPrior);
                 for (size_t r = 0; r < rows; r++) {
                     actual.add({ns->at(r), es->at(r)});
@@ -394,7 +394,7 @@ TEST_F(WriteQueriesTest, createEdgeFromExistingNodes) {
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
 
-                size_t rows = df->getRowCount();
+                size_t rows = df->getLogicalRowCount();
                 EXPECT_EQ(rows, totalNodesPrior);
                 for (size_t r = 0; r < rows; r++) {
                     actual.add({ns->at(r)});
@@ -420,7 +420,7 @@ TEST_F(WriteQueriesTest, createEdgeFromExistingNodes) {
                 ASSERT_EQ(df->size(), 1);
                 auto* es = df->cols().front()->as<ColumnEdgeIDs>();
 
-                size_t rows = df->getRowCount();
+                size_t rows = df->getLogicalRowCount();
                 EXPECT_EQ(rows, 2 * totalEdgesPrior);
                 for (size_t r = 0; r < rows; r++) {
                     actual.add({es->at(r)});
@@ -449,7 +449,7 @@ TEST_F(WriteQueriesTest, createEdgeFromExistingNodes) {
                 auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
                 auto* ms = df->cols().back()->as<ColumnNodeIDs>();
 
-                size_t rows = df->getRowCount();
+                size_t rows = df->getLogicalRowCount();
                 EXPECT_EQ(rows, 2 * totalEdgesPrior);
                 for (size_t r = 0; r < rows; r++) {
                     if (r < totalEdgesPrior) {
@@ -484,7 +484,7 @@ TEST_F(WriteQueriesTest, createNodeNoInput) {
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
                 ASSERT_TRUE(ns);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 ASSERT_EQ(1, rowCount);
                 actual.add({ns->front()});
             });
@@ -520,7 +520,7 @@ TEST_F(WriteQueriesTest, createNodeNoInput) {
                 ASSERT_EQ(df->size(), 1);
                 auto* ns = df->cols().front()->as<ColumnNodeIDs>();
                 ASSERT_TRUE(ns);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
                     actual.add({ns->at(rowPtr)});
                 }
@@ -557,7 +557,7 @@ TEST_F(WriteQueriesTest, createEdgeNoInput) {
                 ASSERT_TRUE(us);
                 ASSERT_TRUE(es);
                 ASSERT_TRUE(vs);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 ASSERT_EQ(1, rowCount);
                 actual.add({us->front(), es->front(), vs->front()});
             });
@@ -597,7 +597,7 @@ TEST_F(WriteQueriesTest, createEdgeNoInput) {
                 ASSERT_TRUE(us);
                 ASSERT_TRUE(es);
                 ASSERT_TRUE(vs);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 ASSERT_EQ(rowCount, totalEdgesPrior + 1);
                 actual.add({us->back(), es->back(), vs->back()});
             });
@@ -650,7 +650,7 @@ TEST_F(WriteQueriesTest, createEdgeSrcInput) {
                 ASSERT_TRUE(ns);
                 ASSERT_TRUE(es);
                 ASSERT_TRUE(vs);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 ASSERT_EQ(rowCount, totalEdgesPrior + 1);
                 actual.add({ns->back(), es->back(), vs->back()});
             });
@@ -686,7 +686,7 @@ TEST_F(WriteQueriesTest, createEdgeSrcInput) {
                 ASSERT_TRUE(us);
                 ASSERT_TRUE(es);
                 ASSERT_TRUE(vs);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 ASSERT_EQ(rowCount, totalEdgesPrior + 1);
                 actual.add({us->back(), es->back(), vs->back()});
             });
@@ -739,7 +739,7 @@ TEST_F(WriteQueriesTest, createEdgeTgtInput) {
                 ASSERT_TRUE(ns);
                 ASSERT_TRUE(es);
                 ASSERT_TRUE(vs);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 ASSERT_EQ(rowCount, totalEdgesPrior + 1);
                 actual.add({ns->back(), es->back(), vs->back()});
             });
@@ -775,7 +775,7 @@ TEST_F(WriteQueriesTest, createEdgeTgtInput) {
                 ASSERT_TRUE(us);
                 ASSERT_TRUE(es);
                 ASSERT_TRUE(vs);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 ASSERT_EQ(rowCount, totalEdgesPrior + 1);
                 actual.add({us->back(), es->back(), vs->back()});
             });
@@ -826,7 +826,7 @@ TEST_F(WriteQueriesTest, createFromTarget) {
                 ASSERT_TRUE(es);
                 ASSERT_TRUE(ps);
 
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 ASSERT_EQ(rowCount, totalEdgesPrior);
                 for (size_t row = 0; row < rowCount; row++) {
                     actual.add({ns->at(row), ms->at(row), es->at(row), ps->at(row)});
@@ -874,7 +874,7 @@ TEST_F(WriteQueriesTest, createFromTarget) {
                 ASSERT_TRUE(us);
                 ASSERT_TRUE(es);
 
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 ASSERT_EQ(rowCount, totalEdgesPrior * 2);
                 for (size_t row = 0; row < rowCount; row++) {
                     if (row < totalEdgesPrior) {
@@ -942,7 +942,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeConstProp) {
                 ASSERT_TRUE(names);
                 ASSERT_EQ(ns->size(), numNodesPrior * 2);
                 ASSERT_EQ(names->size(), numNodesPrior * 2);
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
                     ASSERT_TRUE(names->at(rowPtr)); // No node should have null name
                     actual.add({ns->at(rowPtr), *names->at(rowPtr)});
@@ -998,7 +998,7 @@ TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
                 ASSERT_EQ(ages->size(), numNodesPrior + 1);
                 ASSERT_EQ(news->size(), numNodesPrior + 1);
 
-                const size_t rowCount = df->getRowCount();
+                const size_t rowCount = df->getLogicalRowCount();
                 for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
                     ASSERT_TRUE(names->at(rowPtr)); // No node should have null props
                     ASSERT_TRUE(ages->at(rowPtr));
@@ -1062,7 +1062,7 @@ TEST_F(WriteQueriesTest, multipleCreateNodes) {
             ASSERT_EQ(heights->size(), NUM_CREATED_NODES);
             ASSERT_EQ(weights->size(), NUM_CREATED_NODES);
 
-            const size_t rowCount = df->getRowCount();
+            const size_t rowCount = df->getLogicalRowCount();
             for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
                 actual.add({names->at(rowPtr), heights->at(rowPtr), weights->at(rowPtr)});
             }
@@ -1115,7 +1115,7 @@ TEST_F(WriteQueriesTest, multipleCreates) {
             ASSERT_EQ(es->size(), 3);
             ASSERT_EQ(ms->size(), 3);
 
-            const size_t rowCount = df->getRowCount();
+            const size_t rowCount = df->getLogicalRowCount();
             for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
                 actual.add({ns->at(rowPtr), es->at(rowPtr), ms->at(rowPtr)});
             }
@@ -1222,7 +1222,7 @@ TEST_F(WriteQueriesTest, exceedChunk) {
         auto res = query(matchQuery, [&](const Dataframe* df) {
             chunks++;
             ASSERT_TRUE(df);
-            if (df->getRowCount() == 0) {
+            if (df->getLogicalRowCount() == 0) {
                 emptyChunks++;
                 return;
             }

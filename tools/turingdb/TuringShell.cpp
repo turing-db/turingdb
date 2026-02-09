@@ -420,7 +420,7 @@ void tabulateWrite(tabulate::RowStream& rs, const Change* change) {
     } break;
 
 void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table) {
-    const size_t rowCount = df->getRowCount();
+    const size_t rowCount = df->getLogicalRowCount();
 
     if (execCount == 0) {
         // Write header row
@@ -537,7 +537,7 @@ void TuringShell::processLine(std::string& line) {
         size_t execCount = 0;
 
         auto callback = [&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
-            rowCount += df->getRowCount();
+            rowCount += df->getLogicalRowCount();
 
             if (_quiet) {
                 return;

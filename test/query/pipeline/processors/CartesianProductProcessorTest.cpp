@@ -546,7 +546,7 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
         executed = true;
 
         numChunks++;
-        chunkSizes.push_back(df->getRowCount());
+        chunkSizes.push_back(df->getLogicalRowCount());
         {
             auto* fstCol = dynamic_cast<StringCol*>(df->cols().at(0)->getColumn());
             for (const std::string& actual : *fstCol) {
@@ -711,7 +711,7 @@ TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
         executed = true;
 
         numChunks++;
-        chunkSizes.push_back(df->getRowCount());
+        chunkSizes.push_back(df->getLogicalRowCount());
 
         {
             auto* fstCol = dynamic_cast<StringCol*>(df->cols().at(0)->getColumn());
@@ -806,7 +806,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
         const auto* lCol = df->cols().front()->as<ColumnNodeIDs>();
         const auto* rCol = df->cols().back()->as<ColumnNodeIDs>();
 
-        const size_t rowCount = df->getRowCount();
+        const size_t rowCount = df->getLogicalRowCount();
         for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
             const NodeID left = lCol->at(rowPtr);
             const NodeID right = rCol->at(rowPtr);
@@ -865,7 +865,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesXgetOutEdges) {
         executed = true;
 
         ASSERT_EQ(df->size(), expectedRows.lineSize());
-        size_t rowCount = df->getRowCount();
+        size_t rowCount = df->getLogicalRowCount();
 
         const auto* lhs = df->cols().at(0)->as<ColumnNodeIDs>();
         ASSERT_TRUE(lhs);
@@ -954,7 +954,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesx2ChunkSize3) {
         ASSERT_EQ(df->size(), 2);
         const auto* lhs = df->cols().front()->as<ColumnNodeIDs>();
         const auto* rhs = df->cols().back()->as<ColumnNodeIDs>();
-        const size_t rowCount = df->getRowCount();
+        const size_t rowCount = df->getLogicalRowCount();
 
         for (size_t row = 0; row < rowCount; row++) {
             actual.add({lhs->at(row), rhs->at(row)});
@@ -1032,7 +1032,7 @@ TEST_F(CartesianProductProcessorTest, x2xGetOutEdgesChunkSize5) {
         executed = true;
         ASSERT_EQ(df->size(), L_COLS + R_COLS);
 
-        const size_t rowCount = df->getRowCount();
+        const size_t rowCount = df->getLogicalRowCount();
         const auto* lhs = df->cols().at(0)->as<ColumnNodeIDs>();
         ASSERT_TRUE(lhs);
         const auto* rhsSrc = df->cols().at(1)->as<ColumnNodeIDs>();
@@ -1212,7 +1212,7 @@ TEST_F(CartesianProductProcessorTest, tenThousandRowDataframes) {
 
         executed = true;
         numChunks++;
-        numRows += df->getRowCount();
+        numRows += df->getLogicalRowCount();
 
         /*
         for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
@@ -1246,7 +1246,7 @@ TEST_F(CartesianProductProcessorTest, lhsEmpty) {
 
         // Empty DF
         ASSERT_EQ(df->size(), LHS_NUM_COLS);
-        ASSERT_EQ(df->getRowCount(), LHS_NUM_ROWS);
+        ASSERT_EQ(df->getLogicalRowCount(), LHS_NUM_ROWS);
         isFinished = true;
     };
 
@@ -1299,7 +1299,7 @@ TEST_F(CartesianProductProcessorTest, lhsEmpty) {
         ASSERT_EQ(df->size(), LHS_NUM_COLS + RHS_NUM_COLS);
         // Push back any rows we see, but we shouldn't have any
         for (size_t colPtr = 0; colPtr < df->size(); colPtr++) {
-            for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+            for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                 const auto* col = df->cols().at(colPtr)->as<ColumnNodeIDs>();
                 actualRow.push_back(col->at(rowPtr));
             }
@@ -1329,7 +1329,7 @@ TEST_F(CartesianProductProcessorTest, rhsEmpty) {
 
         // Empty DF
         ASSERT_EQ(df->size(), RHS_NUM_COLS);
-        ASSERT_EQ(df->getRowCount(), RHS_NUM_ROWS);
+        ASSERT_EQ(df->getLogicalRowCount(), RHS_NUM_ROWS);
         isFinished = true;
     };
 
@@ -1382,7 +1382,7 @@ TEST_F(CartesianProductProcessorTest, rhsEmpty) {
         ASSERT_EQ(df->size(), LHS_NUM_COLS + RHS_NUM_COLS);
         // Push back any rows we see, but we shouldn't have any
         for (size_t colPtr = 0; colPtr < df->size(); colPtr++) {
-            for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+            for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                 const auto* col = df->cols().at(colPtr)->as<ColumnNodeIDs>();
                 actualRow.push_back(col->at(rowPtr));
             }
@@ -1412,7 +1412,7 @@ TEST_F(CartesianProductProcessorTest, bothEmpty) {
 
         // Empty DF
         ASSERT_EQ(df->size(), RHS_NUM_COLS);
-        ASSERT_EQ(df->getRowCount(), RHS_NUM_ROWS);
+        ASSERT_EQ(df->getLogicalRowCount(), RHS_NUM_ROWS);
         isFinished = true;
     };
 
@@ -1425,7 +1425,7 @@ TEST_F(CartesianProductProcessorTest, bothEmpty) {
 
         // Empty DF
         ASSERT_EQ(df->size(), LHS_NUM_COLS);
-        ASSERT_EQ(df->getRowCount(), LHS_NUM_ROWS);
+        ASSERT_EQ(df->getLogicalRowCount(), LHS_NUM_ROWS);
         isFinished = true;
     };
 
@@ -1459,7 +1459,7 @@ TEST_F(CartesianProductProcessorTest, bothEmpty) {
         ASSERT_EQ(df->size(), LHS_NUM_COLS + RHS_NUM_COLS);
         // Push back any rows we see, but we shouldn't have any
         for (size_t colPtr = 0; colPtr < df->size(); colPtr++) {
-            for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+            for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                 const auto* col = df->cols().at(colPtr)->as<ColumnNodeIDs>();
                 actualRow.push_back(col->at(rowPtr));
             }

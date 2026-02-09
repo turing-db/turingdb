@@ -368,7 +368,7 @@ TEST_F(ChangeQueriesTest, commitThenRebase) {
                 ASSERT_TRUE(chids);
                 ASSERT_TRUE(cmts);
 
-                for (size_t row {0}; row < df->getRowCount(); row++) {
+                for (size_t row {0}; row < df->getLogicalRowCount(); row++) {
                     actual.add(
                         {ns->at(row), *ids->at(row), *chids->at(row), *cmts->at(row)});
                 }
@@ -411,7 +411,7 @@ TEST_F(ChangeQueriesTest, commitThenRebase) {
                 ASSERT_TRUE(chids);
                 ASSERT_TRUE(cmts);
 
-                for (size_t row {0}; row < df->getRowCount(); row++) {
+                for (size_t row {0}; row < df->getLogicalRowCount(); row++) {
                     actual.add(
                         {ns->at(row), *ids->at(row), *chids->at(row), *cmts->at(row)});
                 }
