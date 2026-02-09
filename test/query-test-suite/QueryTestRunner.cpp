@@ -319,7 +319,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
                 columnNames.emplace_back(col->getName());
             }
         }
-        const size_t rowCount = df->getRowCount();
+        const size_t rowCount = df->getLogicalRowCount();
         std::vector<std::string> values;
 
         for (size_t row = 0; row < rowCount; ++row) {

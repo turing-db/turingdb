@@ -40,7 +40,7 @@ void verifyAllColumnVectors(const Dataframe* df) {
 }
 
 void verifyRectangular(const Dataframe* df) {
-    const size_t rowCount = df->getRowCount();
+    const size_t rowCount = df->getLogicalRowCount();
 
     const bool rectangular = std::ranges::all_of(df->cols(), [rowCount](const NamedColumn* ncol) {
         return ncol->getColumn()->size() == rowCount;
@@ -131,8 +131,8 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left,
     size_t remainingSpace = spaceAvailable;
     size_t ourRowPtr = fromRow;
 
-    const size_t n = left->getRowCount();
-    const size_t m = right->getRowCount();
+    const size_t n = left->getLogicalRowCount();
+    const size_t m = right->getLogicalRowCount();
 
     // Keep local copies, because each column needs to reuse the global state
     size_t ourLhsPtr = _lhsPtr;
@@ -227,8 +227,8 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left,
     size_t remainingSpace = spaceAvailable;
     size_t ourRowPtr = fromRow;
 
-    const size_t n = left->getRowCount();
-    const size_t m = right->getRowCount();
+    const size_t n = left->getLogicalRowCount();
+    const size_t m = right->getLogicalRowCount();
     const size_t p = left->size();
 
     size_t ourLhsPtr = _lhsPtr;
@@ -323,11 +323,11 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left,
 
 size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) {
     // Left DF is n x p dimensional
-    const size_t n = left->getRowCount();
+    const size_t n = left->getLogicalRowCount();
     const size_t p = left->size();
 
     // Right DF is m x q dimensional
-    const size_t m = right->getRowCount();
+    const size_t m = right->getLogicalRowCount();
     const size_t q = right->size();
 
     const size_t chunkSize = _ctxt->getChunkSize();
@@ -419,7 +419,7 @@ void CartesianProductProcessor::emitFromPorts() {
     Dataframe* lDF = _lhs.getDataframe();
     Dataframe* rDF = _rhs.getDataframe();
 
-    if (lDF->getRowCount() == 0 || rDF->getRowCount() == 0) {
+    if (lDF->getLogicalRowCount() == 0 || rDF->getLogicalRowCount() == 0) {
         nextState();
         return;
     }
@@ -438,7 +438,7 @@ void CartesianProductProcessor::emitFromPorts() {
     _rowsWrittenSinceLastFinished += rowsWritten;
     _rowsWrittenThisCycle += rowsWritten;
 
-    const size_t rowsNeededToWrite = lDF->getRowCount() * rDF->getRowCount();
+    const size_t rowsNeededToWrite = lDF->getLogicalRowCount() * rDF->getLogicalRowCount();
 
     if (_rowsWrittenSinceLastFinished != rowsNeededToWrite) {
         // We could not write all we needed -> return, remaining in same state
@@ -456,7 +456,7 @@ void CartesianProductProcessor::emitFromRightMemory() {
     }
 
     // Nothing in memory => nothing to do
-    if (_rightMemory.getRowCount() == 0) {
+    if (_rightMemory.getLogicalRowCount() == 0) {
         nextState();
         return;
     }
@@ -470,7 +470,7 @@ void CartesianProductProcessor::emitFromRightMemory() {
     Dataframe* lDf = _lhs.getDataframe();
     Dataframe* rDf = &_rightMemory;
 
-    const size_t rowsNeedToWrite = lDf->getRowCount() * rDf->getRowCount();
+    const size_t rowsNeedToWrite = lDf->getLogicalRowCount() * rDf->getLogicalRowCount();
     
     // Emit port(L) x port-memory(R)
     const size_t rowsWritten = fillOutput(lDf, rDf);
@@ -496,7 +496,7 @@ void CartesianProductProcessor::emitFromLeftMemory() {
     }
 
     // Nothing in memory => nothing to do
-    if (_leftMemory.getRowCount() == 0) {
+    if (_leftMemory.getLogicalRowCount() == 0) {
         nextState();
         return;
     }
@@ -510,7 +510,7 @@ void CartesianProductProcessor::emitFromLeftMemory() {
     Dataframe* lDf = &_leftMemory;
     Dataframe* rDf = _rhs.getDataframe();
 
-    const size_t rowsNeedToWrite = lDf->getRowCount() * rDf->getRowCount();
+    const size_t rowsNeedToWrite = lDf->getLogicalRowCount() * rDf->getLogicalRowCount();
 
     // Emit port-memory(L) x port(R)
     const size_t rowsWritten = fillOutput(lDf, rDf);
@@ -534,15 +534,15 @@ void CartesianProductProcessor::init() {
     verifyRectangular(_lhs.getDataframe());
     verifyRectangular(_rhs.getDataframe());
 
-    const size_t n = _lhs.getPort()->hasData() ? _lhs.getDataframe()->getRowCount() : 0;
-    const size_t m = _rhs.getPort()->hasData() ? _rhs.getDataframe()->getRowCount() : 0;
+    const size_t n = _lhs.getPort()->hasData() ? _lhs.getDataframe()->getLogicalRowCount() : 0;
+    const size_t m = _rhs.getPort()->hasData() ? _rhs.getDataframe()->getLogicalRowCount() : 0;
 
     // LHS x RHS
     const size_t numRowsFromInputProd = n * m;
     // LHS x port-memory(R)
-    const size_t numRowsFromRightMem = n * _rightMemory.getRowCount();
+    const size_t numRowsFromRightMem = n * _rightMemory.getLogicalRowCount();
     // port-memory(L) x RHS
-    const size_t numRowsFromLeftMem = _leftMemory.getRowCount() * m;
+    const size_t numRowsFromLeftMem = _leftMemory.getLogicalRowCount() * m;
 
     _rowsToWriteBeforeFinished =
         numRowsFromInputProd + numRowsFromRightMem + numRowsFromLeftMem;

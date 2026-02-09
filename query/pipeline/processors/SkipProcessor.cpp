@@ -50,7 +50,7 @@ void SkipProcessor::execute() {
 
     if (_skipping) {
         const Dataframe* inputDf = _input.getDataframe();
-        const size_t blockRowCount = inputDf->getRowCount();
+        const size_t blockRowCount = inputDf->getLogicalRowCount();
         const size_t newRowCount = _currentRowCount + blockRowCount;
 
         if (newRowCount > _skipCount) {

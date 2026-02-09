@@ -110,7 +110,7 @@ TEST_F(MatchCreateTest, matchCreateBasicNode) {
         auto res = query(R"(MATCH (n:Person) RETURN n)", [&](const Dataframe* df) {
             auto* ns = df->cols().front()->as<ColumnNodeIDs>();
             ASSERT_TRUE(ns);
-            for (size_t i = 0; i < df->getRowCount(); ++i) {
+            for (size_t i = 0; i < df->getLogicalRowCount(); ++i) {
                 personNodes.push_back(ns->at(i));
             }
         });
@@ -131,7 +131,7 @@ TEST_F(MatchCreateTest, matchCreateBasicNode) {
         auto* ms = df->cols().at(1)->as<ColumnNodeIDs>();
         ASSERT_TRUE(ns);
         ASSERT_TRUE(ms);
-        for (size_t i = 0; i < df->getRowCount(); ++i) {
+        for (size_t i = 0; i < df->getLogicalRowCount(); ++i) {
             actualRows.add({ns->at(i), ms->at(i)});
             matchedPersons.push_back(ns->at(i));
             createdNodeIDs.push_back(ms->at(i));
@@ -170,7 +170,7 @@ TEST_F(MatchCreateTest, matchCreateWithProperty) {
     NodeID createdNodeID{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
         auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
         auto* ms = df->cols().at(1)->as<ColumnNodeIDs>();
         ASSERT_TRUE(ns);
@@ -204,7 +204,7 @@ TEST_F(MatchCreateTest, matchCreateMultipleNodes) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 4);  // n, a, b, c
-        ASSERT_EQ(df->getRowCount(), 1);  // One match
+        ASSERT_EQ(df->getLogicalRowCount(), 1);  // One match
         auto* as = df->cols().at(1)->as<ColumnNodeIDs>();
         auto* bs = df->cols().at(2)->as<ColumnNodeIDs>();
         auto* cs = df->cols().at(3)->as<ColumnNodeIDs>();
@@ -246,7 +246,7 @@ TEST_F(MatchCreateTest, matchCreateChain) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 4);  // n, a, e, b
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
         auto* as = df->cols().at(1)->as<ColumnNodeIDs>();
         auto* es = df->cols().at(2)->as<ColumnEdgeIDs>();
         auto* bs = df->cols().at(3)->as<ColumnNodeIDs>();
@@ -309,7 +309,7 @@ TEST_F(MatchCreateTest, matchCreateSelfLoop) {
     size_t interestCount = 0;
     {
         auto res = query(R"(MATCH (n:Interest) RETURN n)", [&](const Dataframe* df) {
-            interestCount = df->getRowCount();
+            interestCount = df->getLogicalRowCount();
         });
         ASSERT_TRUE(res);
     }
@@ -322,7 +322,7 @@ TEST_F(MatchCreateTest, matchCreateSelfLoop) {
         auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
         auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
         ASSERT_TRUE(ns && es);
-        for (size_t i = 0; i < df->getRowCount(); ++i) {
+        for (size_t i = 0; i < df->getLogicalRowCount(); ++i) {
             selfLoops.emplace_back(ns->at(i), es->at(i));
         }
     });
@@ -386,7 +386,7 @@ TEST_F(MatchCreateTest, matchCreateEdgeFromMatched) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 3);
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
         auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
         auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
         auto* ms = df->cols().at(2)->as<ColumnNodeIDs>();
@@ -440,7 +440,7 @@ TEST_F(MatchCreateTest, matchCreateEdgeToNew) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 3);
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
         auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
         auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
         auto* children = df->cols().at(2)->as<ColumnNodeIDs>();
@@ -495,7 +495,7 @@ TEST_F(MatchCreateTest, matchCreateEdgeFromNew) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 3);
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
         auto* parents = df->cols().at(0)->as<ColumnNodeIDs>();
         auto* es = df->cols().at(1)->as<ColumnEdgeIDs>();
         auto* ns = df->cols().at(2)->as<ColumnNodeIDs>();
@@ -549,7 +549,7 @@ TEST_F(MatchCreateTest, matchCreateBidirectional) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 4);
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
         auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
         auto* ms = df->cols().at(1)->as<ColumnNodeIDs>();
         auto* e1s = df->cols().at(2)->as<ColumnEdgeIDs>();
@@ -627,7 +627,7 @@ TEST_F(MatchCreateTest, matchPathCreateShortcut) {
     size_t pathCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        pathCount = df->getRowCount();
+        pathCount = df->getLogicalRowCount();
     });
     // This may or may not work depending on graph structure
     if (res) {
@@ -649,7 +649,7 @@ TEST_F(MatchCreateTest, matchPathCreateOnIntermediate) {
     size_t pathCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        pathCount = df->getRowCount();
+        pathCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -669,7 +669,7 @@ TEST_F(MatchCreateTest, matchEdgePatternCreate) {
     size_t knowsCount = 0;
     {
         auto res = query(R"(MATCH (a)-[r:KNOWS_WELL]->(b) RETURN r)", [&](const Dataframe* df) {
-            knowsCount = df->getRowCount();
+            knowsCount = df->getLogicalRowCount();
         });
         ASSERT_TRUE(res);
     }
@@ -678,7 +678,7 @@ TEST_F(MatchCreateTest, matchEdgePatternCreate) {
     size_t createdCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        createdCount = df->getRowCount();
+        createdCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -720,7 +720,7 @@ TEST_F(MatchCreateTest, matchFilteredEmptyCreate) {
     size_t resultCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        resultCount = df->getRowCount();
+        resultCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -760,7 +760,7 @@ TEST_F(MatchCreateTest, matchManyCreateMany) {
     size_t personCount = 0;
     {
         auto res = query(R"(MATCH (n:Person) RETURN n)", [&](const Dataframe* df) {
-            personCount = df->getRowCount();
+            personCount = df->getLogicalRowCount();
         });
         ASSERT_TRUE(res);
     }
@@ -769,7 +769,7 @@ TEST_F(MatchCreateTest, matchManyCreateMany) {
     size_t createCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        createCount = df->getRowCount();
+        createCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -788,11 +788,11 @@ TEST_F(MatchCreateTest, matchCartesianCreate) {
     size_t personCount = 0, interestCount = 0;
     {
         auto res = query(R"(MATCH (n:Person) RETURN n)", [&](const Dataframe* df) {
-            personCount = df->getRowCount();
+            personCount = df->getLogicalRowCount();
         });
         ASSERT_TRUE(res);
         res = query(R"(MATCH (n:Interest) RETURN n)", [&](const Dataframe* df) {
-            interestCount = df->getRowCount();
+            interestCount = df->getLogicalRowCount();
         });
         ASSERT_TRUE(res);
     }
@@ -801,7 +801,7 @@ TEST_F(MatchCreateTest, matchCartesianCreate) {
     size_t linkCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        linkCount = df->getRowCount();
+        linkCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -822,7 +822,7 @@ TEST_F(MatchCreateTest, matchSameNodeTwiceCreate) {
     size_t resultCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        resultCount = df->getRowCount();
+        resultCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -936,7 +936,7 @@ TEST_F(MatchCreateTest, matchWhereCreateFiltered) {
     size_t phdCount = 0;
     {
         auto res = query(R"(MATCH (n:Person) WHERE n.hasPhD = true RETURN n)", [&](const Dataframe* df) {
-            phdCount = df->getRowCount();
+            phdCount = df->getLogicalRowCount();
         });
         ASSERT_TRUE(res);
     }
@@ -945,7 +945,7 @@ TEST_F(MatchCreateTest, matchWhereCreateFiltered) {
     size_t createCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        createCount = df->getRowCount();
+        createCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -964,7 +964,7 @@ TEST_F(MatchCreateTest, matchMultiLabelCreate) {
     size_t founderCount = 0;
     {
         auto res = query(R"(MATCH (n:Person:Founder) RETURN n)", [&](const Dataframe* df) {
-            founderCount = df->getRowCount();
+            founderCount = df->getLogicalRowCount();
         });
         ASSERT_TRUE(res);
     }
@@ -973,7 +973,7 @@ TEST_F(MatchCreateTest, matchMultiLabelCreate) {
     size_t createCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        createCount = df->getRowCount();
+        createCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -990,7 +990,7 @@ TEST_F(MatchCreateTest, matchCreateWithReturn) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 2);  // n.name and m
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -1010,7 +1010,7 @@ TEST_F(MatchCreateTest, matchCreateMultiplePatterns) {
     size_t interestCount = 0;
     {
         auto res = query(R"(MATCH (n:Interest) RETURN n)", [&](const Dataframe* df) {
-            interestCount = df->getRowCount();
+            interestCount = df->getLogicalRowCount();
         });
         ASSERT_TRUE(res);
     }
@@ -1019,7 +1019,7 @@ TEST_F(MatchCreateTest, matchCreateMultiplePatterns) {
     size_t edgeCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        edgeCount = df->getRowCount();
+        edgeCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -1038,7 +1038,7 @@ TEST_F(MatchCreateTest, matchCreateBackwardEdge) {
     newChange();
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
     });
     ASSERT_TRUE(res);
     submitCurrentChange();
@@ -1059,7 +1059,7 @@ TEST_F(MatchCreateTest, matchCreateLongChain) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 8);  // n, a, e1, b, e2, c, e3, d
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
         auto* as = df->cols().at(1)->as<ColumnNodeIDs>();
         auto* e1s = df->cols().at(2)->as<ColumnEdgeIDs>();
         auto* bs = df->cols().at(3)->as<ColumnNodeIDs>();
@@ -1133,7 +1133,7 @@ TEST_F(MatchCreateTest, matchCreateTriangle) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 6);  // a, e1, b, e2, c, e3
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
         auto* as = df->cols().at(0)->as<ColumnNodeIDs>();
         auto* e1s = df->cols().at(1)->as<ColumnEdgeIDs>();
         auto* bs = df->cols().at(2)->as<ColumnNodeIDs>();
@@ -1207,7 +1207,7 @@ TEST_F(MatchCreateTest, matchCreateWithStaticProperties) {
     NodeID createdNode{0};
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
         auto* ms = df->cols().at(1)->as<ColumnNodeIDs>();
         ASSERT_TRUE(ms);
         createdNode = ms->at(0);

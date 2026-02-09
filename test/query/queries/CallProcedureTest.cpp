@@ -34,7 +34,7 @@ TEST_F(CallProcedureTest, Labels) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2);
-            ASSERT_EQ(df->getRowCount(), 9);
+            ASSERT_EQ(df->getLogicalRowCount(), 9);
 
             executed = true;
         });
@@ -50,7 +50,7 @@ TEST_F(CallProcedureTest, EdgeTypes) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2);
-            ASSERT_EQ(df->getRowCount(), 2);
+            ASSERT_EQ(df->getLogicalRowCount(), 2);
 
             executed = true;
         });
@@ -66,7 +66,7 @@ TEST_F(CallProcedureTest, PropertyTypes) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 3);
-            ASSERT_EQ(df->getRowCount(), 8);
+            ASSERT_EQ(df->getLogicalRowCount(), 8);
 
             executed = true;
         });
@@ -82,7 +82,7 @@ TEST_F(CallProcedureTest, History) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 3);
-            ASSERT_EQ(df->getRowCount(), 8);
+            ASSERT_EQ(df->getLogicalRowCount(), 8);
 
             executed = true;
         });
@@ -102,7 +102,7 @@ TEST_F(CallProcedureTest, DescribeCommit) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2);
-            ASSERT_EQ(df->getRowCount(), 8);
+            ASSERT_EQ(df->getLogicalRowCount(), 8);
 
             const auto& cols = df->cols();
 

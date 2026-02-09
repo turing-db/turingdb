@@ -45,7 +45,7 @@ TEST_F(LoadGraphTest, loadGraph) {
     const auto res = _db->query("LOAD GRAPH simpledb", "default", &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 1);
-        ASSERT_EQ(df->getRowCount(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
         const auto& cols = df->cols();
         const auto* colName = cols.at(0)->as<ColumnConst<types::String::Primitive>>();
         ASSERT_EQ(colName->getRaw(), "simpledb");
