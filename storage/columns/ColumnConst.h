@@ -36,6 +36,10 @@ public:
 
     explicit operator T() const { return _value; }
 
+    /// Subscript operators to match API of ColumnVector
+    const T& operator[](size_t /*unused*/) const { return _value; }
+    const T& at(size_t /*unused*/) const { return _value; }
+
     size_t size() const override { return 1; }
 
     void assign(const Column* other) override {
