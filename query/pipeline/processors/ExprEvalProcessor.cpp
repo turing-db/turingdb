@@ -1,11 +1,9 @@
 #include "ExprEvalProcessor.h"
 
-#include <iostream>
 #include <spdlog/fmt/fmt.h>
 
 #include "PipelineV2.h"
 #include "ExprProgram.h"
-#include "dataframe/Dataframe.h"
 #include "interfaces/PipelineBlockInputInterface.h"
 
 using namespace db;
@@ -45,7 +43,7 @@ ExprEvalProcessor* ExprEvalProcessor::create(PipelineV2* pipeline,
     return proc;
 }
 
-void ExprEvalProcessor::prepare(ExecutionContext* ctxt) {
+void ExprEvalProcessor::prepare(ExecutionContext*) {
     markAsPrepared();
 }
 
