@@ -48,6 +48,7 @@ Stage 2; executed at each call to `OrderByProcessor::execute` once input is clos
   - Elements of $K$ are produced by `memcpy` the values in a row for each $k_i$, and let $K_i$ be the normalised key
     for row $i$.
   - A merge-implemented sort can use `memcmp` on $K_i$ and $K_j$ as a total-ordering of rows
+
   \* Non-static sizes such as strings can have a fixed-size prefix be stored in $K$, and the ordering of two rows with
      exact prefixes can be resolved by examining the full strings
 (adapted from [^1])
