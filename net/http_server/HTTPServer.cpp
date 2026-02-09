@@ -23,6 +23,15 @@ HTTPServer::~HTTPServer() {
 }
 
 FlowStatus HTTPServer::initialize() {
+    // Install no-op handler for SIGUSR1. Used by terminate() to interrupt
+    // worker threads blocked in eventWait() without triggering the SIGTERM
+    // handler (which would deadlock by calling stop() from a worker thread).
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = [](int) {};
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGUSR1, &sa, nullptr);
+
     _serverSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
     if (_serverSocket == -1) {
@@ -133,9 +142,13 @@ void HTTPServer::terminate() {
     spdlog::info("Terminating server");
     _running.store(false);
 
-    // Terminate all threads
+    // Wake up worker threads so they check _running and exit.
+    // Uses SIGUSR1 (no-op handler) instead of SIGTERM to avoid
+    // triggering the SIGTERM signal handler which calls stop()
+    // and deadlocks (worker joins server thread, server thread
+    // joins worker).
     for (auto& thread : _threads) {
-        pthread_kill(thread.native_handle(), SIGTERM);
+        pthread_kill(thread.native_handle(), SIGUSR1);
     }
 }
 
@@ -155,9 +168,15 @@ void HTTPServer::runThread(size_t threadID, ServerContext& ctxt) {
 
     for (;;) {
         const int nfds = utils::eventWait(instance, events.data(), eventCount, -1);
+
+        if (!ctxt._running.load()) {
+            return;
+        }
+
         if (nfds <= 0) {
             utils::logError("EpollWait");
             ctxt._status.store(FlowStatus::WAIT_ERROR);
+            continue;
         }
 
         for (int i = 0; i < nfds; i++) {

@@ -86,13 +86,17 @@ void TuringServer::start() {
 }
 
 void TuringServer::wait() {
-    _serverThread.join();
+    if (_serverThread.joinable()) {
+        _serverThread.join();
+    }
     _server->terminate();
 }
 
 void TuringServer::stop() {
     _server->terminate();
-    _serverThread.join();
+    if (_serverThread.joinable()) {
+        _serverThread.join();
+    }
 }
 
 void TuringServer::setupSignals() {
@@ -105,5 +109,15 @@ void TuringServer::setupSignals() {
     sigemptyset(&sa.sa_mask);
     const int sigIntRes = sigaction(SIGINT, &sa, nullptr);
     const int sigTermRes = sigaction(SIGTERM, &sa, nullptr);
-    bioassert(sigIntRes >= 0 && sigTermRes >= 0, "Failed to setup signal handlers in TuringServer");
+    bioassert(sigIntRes >= 0 && sigTermRes >= 0,
+              "Failed to setup signal handlers in TuringServer");
+
+    // Unblock SIGTERM/SIGINT on the main thread so the sigaction handler
+    // fires for external signals (e.g. kill, Ctrl+C). Worker threads keep
+    // these signals blocked so they are delivered via signalfd/kqueue instead.
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGTERM);
+    sigaddset(&mask, SIGINT);
+    pthread_sigmask(SIG_UNBLOCK, &mask, nullptr);
 }
