@@ -10,7 +10,7 @@
 The algorithm is split into two stages.
 
 Stage 1; executed at each call to `OrderByProcessor::execute` whilst input is not closed:
-  1. Performs a subsort of a input chunk on all order keys
+  1. Performs a subsort (see below) of a input chunk on all order keys
   2. Stores the sorted chunk (which we may call a "sorted run") into a "memory store"
 
 Stage 2; executed at each call to `OrderByProcessor::execute` once input is closed:
@@ -28,9 +28,9 @@ Stage 2; executed at each call to `OrderByProcessor::execute` once input is clos
 
     for $2\le j < i$:
 
-      2. Check for rows in column $k_{j}$ where there are ties on the same value in $k_{j-1}$, call these runs $R$
+    2. Check for contiguous runs of rows in column $k_{j}$ where there are ties on the same value in $k_{j-1}$, call these runs $R$
 
-      3. Sort the rows in each run $r \in R$ with respect to $k_{j}$
+    3. Sort the rows in each run $r \in R$ with respect to $k_{j}$
 
 - Sort input chunks using a column-orientated subsort approach (as defined in [^1] page 4)
   - Column-orientated sorting: motivated by suspected negligible speedup of ~1.2x shown in
@@ -68,12 +68,12 @@ Stage 2; executed at each call to `OrderByProcessor::execute` once input is clos
 TODO: Expand on this
 
 
-[^1] [DuckDB Sorting Rows](https://duckdb.org/pdf/ICDE2023-kuiper-muehleisen-sorting.pdf)
+[^1]: [DuckDB Sorting Rows](https://duckdb.org/pdf/ICDE2023-kuiper-muehleisen-sorting.pdf)
 
-[^2] [New DuckDB sorting blog](https://duckdb.org/2025/09/24/sorting-again)
+[^2]: [New DuckDB sorting blog](https://duckdb.org/2025/09/24/sorting-again)
 
-[^3] [Vergesort](https://github.com/Morwenn/vergesort)
+[^3]: [Vergesort](https://github.com/Morwenn/vergesort)
 
-[^4] [CMU Sorting 2024](https://www.youtube.com/watch?v=mM3sFwSuGNY)
+[^4]: [CMU Sorting 2024](https://www.youtube.com/watch?v=mM3sFwSuGNY)
 
-[^5] [Remy's DISTINCT notes](https://www.notion.so/turingbio/DISTINCT-study-2f13aad664c880aaa97fd2d6dd5c4486)
+[^5]: [Remy's DISTINCT notes](https://www.notion.so/turingbio/DISTINCT-study-2f13aad664c880aaa97fd2d6dd5c4486)
