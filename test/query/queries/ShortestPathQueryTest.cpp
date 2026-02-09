@@ -137,7 +137,7 @@ TEST_F(ShortestPathQueryTest, sucessfullTest) {
     auto res = query(QUERY, _graphName, [&](const Dataframe* df) {
         callbackCalled = true;
         if (df) {
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
         }
     });
 
@@ -155,7 +155,7 @@ TEST_F(ShortestPathQueryTest, noPathInStarGraphTest) {
     auto res = query(QUERY, _starGraphName, [&](const Dataframe* df) {
         callbackCalled = true;
         if (df) {
-            ASSERT_EQ(df->getRowCount(), 0);
+            ASSERT_EQ(df->getLogicalRowCount(), 0);
         }
     });
 

@@ -301,7 +301,7 @@ TEST_F(JoinFeatureTest, emptyLeftSideJoin) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         callbackCalled = true;
         if (df) {
-            ASSERT_EQ(df->getRowCount(), 0);
+            ASSERT_EQ(df->getLogicalRowCount(), 0);
         }
     });
     // Unknown labels cause query errors - this is expected behavior
@@ -321,7 +321,7 @@ TEST_F(JoinFeatureTest, emptyRightSideJoin) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         callbackCalled = true;
         if (df) {
-            ASSERT_EQ(df->getRowCount(), 0);
+            ASSERT_EQ(df->getLogicalRowCount(), 0);
         }
     });
     // Unknown labels cause query errors - this is expected behavior
@@ -341,7 +341,7 @@ TEST_F(JoinFeatureTest, bothSidesEmptyJoin) {
     auto res = query(QUERY, [&](const Dataframe* df) {
         callbackCalled = true;
         if (df) {
-            ASSERT_EQ(df->getRowCount(), 0);
+            ASSERT_EQ(df->getLogicalRowCount(), 0);
         }
     });
     // Unknown labels cause query errors - this is expected behavior
@@ -360,7 +360,7 @@ TEST_F(JoinFeatureTest, joinOnOrphanNode) {
     size_t rowCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        rowCount = df->getRowCount();
+        rowCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     // Orphan has no incoming edges, so join should produce 0 rows
@@ -780,7 +780,7 @@ TEST_F(JoinFeatureTest, selfJoinWithEquality) {
     std::set<String> foundNames;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        rowCount += df->getRowCount();
+        rowCount += df->getLogicalRowCount();
         auto* aNames = findColumn(df, "a.name");
         if (aNames) {
             auto* aCol = aNames->as<ColumnOptVector<String>>();
@@ -938,7 +938,7 @@ TEST_F(JoinFeatureTest, contradictoryFilter) {
     size_t rowCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        rowCount = df->getRowCount();
+        rowCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     // Impossible condition, should return 0 rows
@@ -1063,7 +1063,7 @@ TEST_F(JoinFeatureTest, filterOnNullProperty) {
     size_t actualCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        actualCount += df->getRowCount();
+        actualCount += df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
 
@@ -1152,7 +1152,7 @@ TEST_F(JoinFeatureTest, emptyAfterChunkProcessing) {
     size_t rowCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        rowCount = df->getRowCount();
+        rowCount = df->getLogicalRowCount();
     });
     ASSERT_TRUE(res);
     // No interest named 'NonExistent'
@@ -1549,7 +1549,7 @@ TEST_F(JoinFeatureTest, multiJoin_interestCyclePattern) {
     size_t rowCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        rowCount += df->getRowCount();
+        rowCount += df->getLogicalRowCount();
     });
     // Loop pattern not supported - variable 'a' appears at both ends of chain
     ASSERT_FALSE(res);
@@ -2354,7 +2354,7 @@ TEST_F(JoinFeatureTest, DISABLED_multiJoin_symmetricInterestChain) {
     size_t rowCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        rowCount += df->getRowCount();
+        rowCount += df->getLogicalRowCount();
     });
     // Loop pattern not supported - variable 'i' appears twice in chain
     ASSERT_TRUE(res);
@@ -2568,7 +2568,7 @@ TEST_F(JoinFeatureTest, multiJoin_threeInterestsSameCategory) {
     size_t rowCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        rowCount += df->getRowCount();
+        rowCount += df->getLogicalRowCount();
     });
     // Loop pattern not supported - variable 'cat' appears twice in chain
     ASSERT_FALSE(res);
@@ -2587,7 +2587,7 @@ TEST_F(JoinFeatureTest, multiJoin_doublePersonTripleInterest) {
     size_t rowCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        rowCount += df->getRowCount();
+        rowCount += df->getLogicalRowCount();
     });
     // Loop pattern not supported - variables 'a' and 'b' appear multiple times in chain
     ASSERT_FALSE(res);
@@ -2723,7 +2723,7 @@ TEST_F(JoinFeatureTest, multiJoin_interestStarPattern) {
     size_t rowCount = 0;
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        rowCount += df->getRowCount();
+        rowCount += df->getLogicalRowCount();
     });
     // Loop pattern not supported - variable 'i' appears twice in chain
     ASSERT_FALSE(res);

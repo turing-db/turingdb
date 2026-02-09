@@ -1,5 +1,6 @@
 #include "Dataframe.h"
 
+#include <algorithm>
 #include <sstream>
 
 #include "NamedColumn.h"
@@ -7,6 +8,7 @@
 #include "columns/ColumnDispatcher.h"
 
 #include "FatalException.h"
+#include "columns/ContainerKind.h"
 
 using namespace db;
 
@@ -19,12 +21,53 @@ void Dataframe::addColumn(NamedColumn* column) {
     _tagToColumnMap.insert(column->getTag().getValue(), column);
 }
 
-size_t Dataframe::getRowCount() const {
-    if (_cols.empty()) {
-        return 0;
+size_t Dataframe::getLogicalRowCount() const {
+    size_t mostRows {0};
+    for (const NamedColumn* ncol : _cols) {
+        bioassert(ncol && ncol->getColumn(),
+                  "Attempted to get row count of dataframe with null column.");
+        mostRows = std::max(mostRows, ncol->getColumn()->size());
     }
 
-    return _cols[0]->getColumn()->size();
+    return mostRows;
+}
+
+bool Dataframe::isRectangular() const {
+    constexpr ContainerKind::Code colConstKind =
+        ColumnKind::extractContainerKind(ColumnConst<int>::staticKind());
+    constexpr ContainerKind::Code colVectorKind =
+        ColumnKind::extractContainerKind(ColumnVector<int>::staticKind());
+
+    std::optional<size_t> expectedRowCount {std::nullopt};
+
+    for (const NamedColumn* ncol : _cols) {
+        bioassert(ncol && ncol->getColumn(),
+                  "Attempted to check shape of dataframe with null column.");
+
+        const Column* col = ncol->getColumn();
+        auto containerKind = col->getContainerKind();
+
+        // ColumnConst can be any size, ignore it
+        if (containerKind == colConstKind) {
+            continue;
+        }
+
+        // All ColumnVectors must be the same size
+        if (containerKind == colVectorKind) {
+            const size_t actualSize = col->size();
+            // If we haven't encountered a ColumnVector yet, set the expected row count to
+            // be the size of this vector
+            if (!expectedRowCount.has_value()) {
+                expectedRowCount = actualSize;
+            }
+            // All vectors should be the same size as the expected size
+            if (actualSize != expectedRowCount) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 void Dataframe::dump(std::ostream& out) const {
@@ -90,8 +133,8 @@ void Dataframe::append(const Dataframe* other) {
             other->size(), this->size()));
     }
 
-    const size_t oldRows = this->getRowCount();
-    const size_t addRows = other->getRowCount();
+    const size_t oldRows = this->getLogicalRowCount();
+    const size_t addRows = other->getLogicalRowCount();
     const size_t newRows = oldRows + addRows;
 
     const NamedColumns& otherCols = other->cols();

@@ -384,7 +384,7 @@ TEST_F(QueriesTest, scanExpandIn) {
         ASSERT_TRUE(sourceIDs != nullptr);
         ASSERT_FALSE(sourceIDs->empty());
 
-        const size_t lineCount = df->getRowCount();
+        const size_t lineCount = df->getLogicalRowCount();
         for (size_t i = 0; i < lineCount; i++) {
             returned.add({sourceIDs->at(i), targetIDs->at(i)});
         }
@@ -448,7 +448,7 @@ TEST_F(QueriesTest, scanExpandIn2) {
         ASSERT_TRUE(targetIDs2 != nullptr);
         ASSERT_FALSE(targetIDs2->empty());
 
-        const size_t lineCount = df->getRowCount();
+        const size_t lineCount = df->getLogicalRowCount();
         for (size_t i = 0; i < lineCount; i++) {
             returnedLines.add({sourceIDs->at(i),
                                edgeIDs1->at(i), targetIDs1->at(i),
@@ -647,12 +647,12 @@ TEST_F(QueriesTest, scanNodesCartProd) {
                      [&](const Dataframe* df) -> void {
                          ASSERT_TRUE(df != nullptr);
                          ASSERT_EQ(df->size(), 2);
-                         ASSERT_EQ(df->getRowCount(), expectedLines.size());
+                         ASSERT_EQ(df->getLogicalRowCount(), expectedLines.size());
                          const auto& nCols = df->cols();
                          const auto* n = nCols.front()->as<ColumnNodeIDs>();
                          const auto* m = nCols.back()->as<ColumnNodeIDs>();
 
-                         for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                         for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                              returnedLines.add({n->at(rowPtr), m->at(rowPtr)});
                          }
                      });
@@ -711,7 +711,7 @@ TEST_F(QueriesTest, getOutSrcXgetOutTgt) {
                 const auto* m = nCols.back()->as<ColumnNodeIDs>();
                 ASSERT_TRUE(m);
 
-                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                     actualRows.add({n->at(rowPtr), m->at(rowPtr)});
                 }
             });
@@ -770,7 +770,7 @@ TEST_F(QueriesTest, twoHopXOneHop) {
                 const auto* p = nCols.at(3)->as<ColumnNodeIDs>();
                 const auto* q = nCols.at(4)->as<ColumnNodeIDs>();
 
-                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                     actualRows.add({n->at(rowPtr), m->at(rowPtr), o->at(rowPtr),
                                     p->at(rowPtr), q->at(rowPtr)});
                 }
@@ -819,7 +819,7 @@ TEST_F(QueriesTest, threeCascadingScanNodesCartProd) {
                 const auto* t = nCols.at(1)->as<ColumnNodeIDs>();
                 const auto* v = nCols.at(2)->as<ColumnNodeIDs>();
 
-                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                     actualRows.add({s->at(rowPtr), t->at(rowPtr), v->at(rowPtr)});
                 }
             });
@@ -873,7 +873,7 @@ TEST_F(QueriesTest, simpleAncestorJoinTest) {
                 const auto* b = nCols.at(1)->as<ColumnNodeIDs>();
                 const auto* c = nCols.at(2)->as<ColumnNodeIDs>();
 
-                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                     actualRows.add({a->at(rowPtr), b->at(rowPtr), c->at(rowPtr)});
                 }
             });
@@ -929,7 +929,7 @@ TEST_F(QueriesTest, doubleAncestorJoinTest) {
                 const auto* c = nCols.at(2)->as<ColumnNodeIDs>();
                 const auto* d = nCols.at(3)->as<ColumnNodeIDs>();
 
-                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                     actualRows.add({a->at(rowPtr), b->at(rowPtr), c->at(rowPtr), d->at(rowPtr)});
                 }
             });
@@ -982,7 +982,7 @@ TEST_F(QueriesTest, simpleSucessorJoinTest) {
                 const auto* b = nCols.at(1)->as<ColumnNodeIDs>();
                 const auto* c = nCols.at(2)->as<ColumnNodeIDs>();
 
-                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                     actualRows.add({a->at(rowPtr), b->at(rowPtr), c->at(rowPtr)});
                 }
             });
@@ -1040,7 +1040,7 @@ TEST_F(QueriesTest, doubleSucessorJoinTest) {
                 const auto* c = nCols.at(2)->as<ColumnNodeIDs>();
                 const auto* d = nCols.at(3)->as<ColumnNodeIDs>();
 
-                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                     actualRows.add({a->at(rowPtr), b->at(rowPtr), c->at(rowPtr), d->at(rowPtr)});
                 }
             });
@@ -1098,7 +1098,7 @@ TEST_F(QueriesTest, sucessorJoinToExpandEdgeTest) {
                 const auto* c = nCols.at(2)->as<ColumnNodeIDs>();
                 const auto* d = nCols.at(3)->as<ColumnNodeIDs>();
 
-                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                     actualRows.add({a->at(rowPtr), b->at(rowPtr), c->at(rowPtr), d->at(rowPtr)});
                 }
             });
@@ -1169,7 +1169,7 @@ TEST_F(QueriesTest, xShapedJoinTest) {
                 const auto* d = nCols.at(3)->as<ColumnNodeIDs>();
                 const auto* e = nCols.at(4)->as<ColumnNodeIDs>();
 
-                for (size_t rowPtr = 0; rowPtr < df->getRowCount(); rowPtr++) {
+                for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
                     actualRows.add({a->at(rowPtr),
                                     b->at(rowPtr),
                                     c->at(rowPtr),
@@ -1210,12 +1210,12 @@ TEST_F(QueriesTest, db_labels) {
     _db->query("CALL db.labels()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
-        ASSERT_EQ(df->getRowCount(), expectedRows.size());
+        ASSERT_EQ(df->getLogicalRowCount(), expectedRows.size());
         const auto& cols = df->cols();
         const auto* col1 = cols.at(0)->as<ColumnVector<LabelID>>();
         const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
 
-        for (size_t i = 0; i < df->getRowCount(); i++) {
+        for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
             actualRows.add({col1->at(i), col2->at(i)});
         }
     });
@@ -1227,12 +1227,12 @@ TEST_F(QueriesTest, db_labels) {
                  _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                      ASSERT_TRUE(df != nullptr);
                      ASSERT_EQ(df->cols().size(), 2);
-                     ASSERT_EQ(df->getRowCount(), expectedRows.size());
+                     ASSERT_EQ(df->getLogicalRowCount(), expectedRows.size());
                      const auto& cols = df->cols();
                      const auto* col1 = cols.at(0)->as<ColumnVector<LabelID>>();
                      const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
 
-                     for (size_t i = 0; i < df->getRowCount(); i++) {
+                     for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
                          actualRows.add({col1->at(i), col2->at(i)});
                      }
                  });
@@ -1260,12 +1260,12 @@ TEST_F(QueriesTest, db_edgeTypes) {
     _db->query("CALL db.edgeTypes()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
-        ASSERT_EQ(df->getRowCount(), expectedRows.size());
+        ASSERT_EQ(df->getLogicalRowCount(), expectedRows.size());
         const auto& cols = df->cols();
         const auto* col1 = cols.at(0)->as<ColumnVector<EdgeTypeID>>();
         const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
 
-        for (size_t i = 0; i < df->getRowCount(); i++) {
+        for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
             actualRows.add({col1->at(i), col2->at(i)});
         }
     });
@@ -1277,12 +1277,12 @@ TEST_F(QueriesTest, db_edgeTypes) {
                  _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                      ASSERT_TRUE(df != nullptr);
                      ASSERT_EQ(df->cols().size(), 2);
-                     ASSERT_EQ(df->getRowCount(), expectedRows.size());
+                     ASSERT_EQ(df->getLogicalRowCount(), expectedRows.size());
                      const auto& cols = df->cols();
                      const auto* col1 = cols.at(0)->as<ColumnVector<EdgeTypeID>>();
                      const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
 
-                     for (size_t i = 0; i < df->getRowCount(); i++) {
+                     for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
                          actualRows.add({col1->at(i), col2->at(i)});
                      }
                  });
@@ -1310,13 +1310,13 @@ TEST_F(QueriesTest, db_propertyTypes) {
     _db->query("CALL db.propertyTypes()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
-        ASSERT_EQ(df->getRowCount(), expectedRows.size());
+        ASSERT_EQ(df->getLogicalRowCount(), expectedRows.size());
         const auto& cols = df->cols();
         const auto* col1 = cols.at(0)->as<ColumnVector<PropertyTypeID>>();
         const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
         const auto* col3 = cols.at(2)->as<ColumnVector<ValueType>>();
 
-        for (size_t i = 0; i < df->getRowCount(); i++) {
+        for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
             actualRows.add({col1->at(i), col2->at(i), col3->at(i)});
         }
     });
@@ -1328,13 +1328,13 @@ TEST_F(QueriesTest, db_propertyTypes) {
                  _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                      ASSERT_TRUE(df != nullptr);
                      ASSERT_EQ(df->cols().size(), 3);
-                     ASSERT_EQ(df->getRowCount(), expectedRows.size());
+                     ASSERT_EQ(df->getLogicalRowCount(), expectedRows.size());
                      const auto& cols = df->cols();
                      const auto* col1 = cols.at(0)->as<ColumnVector<PropertyTypeID>>();
                      const auto* col2 = cols.at(1)->as<ColumnVector<std::string_view>>();
                      const auto* col3 = cols.at(2)->as<ColumnVector<ValueType>>();
 
-                     for (size_t i = 0; i < df->getRowCount(); i++) {
+                     for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
                          actualRows.add({col1->at(i), col2->at(i), col3->at(i)});
                      }
                  });
@@ -1380,14 +1380,14 @@ TEST_F(QueriesTest, db_history) {
     _db->query("CALL db.history()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), expectedRows.lineSize());
-        ASSERT_EQ(df->getRowCount(), expectedRows.size());
+        ASSERT_EQ(df->getLogicalRowCount(), expectedRows.size());
         const auto& cols = df->cols();
         const auto* col1 = cols.at(0)->as<ColumnVector<std::string>>();
         const auto* col2 = cols.at(1)->as<ColumnVector<uint64_t>>();
         const auto* col3 = cols.at(2)->as<ColumnVector<uint64_t>>();
         const auto* col4 = cols.at(3)->as<ColumnVector<uint64_t>>();
 
-        for (size_t i = 0; i < df->getRowCount(); i++) {
+        for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
             actualRows.add({col1->at(i), col2->at(i), col3->at(i), col4->at(i)});
         }
     });
@@ -1399,14 +1399,14 @@ TEST_F(QueriesTest, db_history) {
                  _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
                      ASSERT_TRUE(df != nullptr);
                      ASSERT_EQ(df->cols().size(), 4);
-                     ASSERT_EQ(df->getRowCount(), expectedRows.size());
+                     ASSERT_EQ(df->getLogicalRowCount(), expectedRows.size());
                      const auto& cols = df->cols();
                      const auto* col1 = cols.at(0)->as<ColumnVector<std::string>>();
                      const auto* col2 = cols.at(1)->as<ColumnVector<uint64_t>>();
                      const auto* col3 = cols.at(2)->as<ColumnVector<uint64_t>>();
                      const auto* col4 = cols.at(3)->as<ColumnVector<uint64_t>>();
 
-                     for (size_t i = 0; i < df->getRowCount(); i++) {
+                     for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
                          actualRows.add({col1->at(i), col2->at(i), col3->at(i), col4->at(i)});
                      }
                  });
@@ -1461,7 +1461,7 @@ TEST_F(QueriesTest, matchCrossProductWithDbHistory) {
     auto result = query("MATCH (n), (m) RETURN db.history()", [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 4);
-        ASSERT_EQ(df->getRowCount(), nodeCount * nodeCount);
+        ASSERT_EQ(df->getLogicalRowCount(), nodeCount * nodeCount);
 
         const auto& cols = df->cols();
         const auto* commitCol = cols.at(0)->as<ColumnVector<std::string>>();
@@ -1469,7 +1469,7 @@ TEST_F(QueriesTest, matchCrossProductWithDbHistory) {
         const auto* edgeCountCol = cols.at(2)->as<ColumnVector<uint64_t>>();
         const auto* partCountCol = cols.at(3)->as<ColumnVector<uint64_t>>();
 
-        for (size_t i = 0; i < df->getRowCount(); i++) {
+        for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
             actualRows.add({commitCol->at(i),
                             nodeCountCol->at(i),
                             edgeCountCol->at(i),
@@ -1704,7 +1704,7 @@ TEST_F(QueriesTest, db_listGraph) {
         callBackExecuted = true;
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 1);
-        ASSERT_EQ(df->getRowCount(), expectedGraphNames.size());
+        ASSERT_EQ(df->getLogicalRowCount(), expectedGraphNames.size());
         const auto& cols = df->cols();
         auto* actualGraphNames = cols.at(0)->as<ColumnVector<std::string_view>>();
 

@@ -130,7 +130,7 @@ TEST_F(CreateCommandTest, createNodeMatchByMultipleLabels) {
     {
         auto res = query(R"(MATCH (n:Employee) RETURN n, n.name)", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
             auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
             auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(ns);
@@ -146,7 +146,7 @@ TEST_F(CreateCommandTest, createNodeMatchByMultipleLabels) {
     {
         auto res = query(R"(MATCH (n:Manager) RETURN n, n.name)", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
             auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
             auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(ns);
@@ -162,7 +162,7 @@ TEST_F(CreateCommandTest, createNodeMatchByMultipleLabels) {
     {
         auto res = query(R"(MATCH (n:Mentor) RETURN n, n.name)", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
             auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
             auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(ns);
@@ -178,7 +178,7 @@ TEST_F(CreateCommandTest, createNodeMatchByMultipleLabels) {
     {
         auto res = query(R"(MATCH (n:Employee:Manager) RETURN n, n.name)", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
             auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
             auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(ns);
@@ -194,7 +194,7 @@ TEST_F(CreateCommandTest, createNodeMatchByMultipleLabels) {
     {
         auto res = query(R"(MATCH (n:Employee:Manager:Mentor) RETURN n, n.name)", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
             auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
             auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(ns);
@@ -210,7 +210,7 @@ TEST_F(CreateCommandTest, createNodeMatchByMultipleLabels) {
     {
         auto res = query(R"(MATCH (n:Mentor:Employee) RETURN n, n.name)", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
             auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
             auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(ns);
@@ -652,7 +652,7 @@ TEST_F(CreateCommandTest, createMultipleEdgesSameNodes) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 3);
-            ASSERT_EQ(df->getRowCount(), 2); // Two edges
+            ASSERT_EQ(df->getLogicalRowCount(), 2); // Two edges
         });
         ASSERT_TRUE(res);
     }
@@ -691,7 +691,7 @@ TEST_F(CreateCommandTest, createChainedPattern) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 3);
-            ASSERT_EQ(df->getRowCount(), 2);
+            ASSERT_EQ(df->getLogicalRowCount(), 2);
         });
         ASSERT_TRUE(res);
     }
@@ -719,7 +719,7 @@ TEST_F(CreateCommandTest, createMultiplePatternsWithSharedNode) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 3);
-            ASSERT_EQ(df->getRowCount(), 2); // Two edges from hub
+            ASSERT_EQ(df->getLogicalRowCount(), 2); // Two edges from hub
         });
         ASSERT_TRUE(res);
     }
@@ -747,7 +747,7 @@ TEST_F(CreateCommandTest, createLongChain) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 3);
-            ASSERT_EQ(df->getRowCount(), 3);
+            ASSERT_EQ(df->getLogicalRowCount(), 3);
         });
         ASSERT_TRUE(res);
     }
@@ -784,7 +784,7 @@ TEST_F(CreateCommandTest, createMixedNewAndExistingNodes) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 3);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
         });
         ASSERT_TRUE(res);
     }
@@ -802,7 +802,7 @@ TEST_F(CreateCommandTest, createWithLabelFilter) {
     {
         auto res = query("MATCH (p:Person) RETURN p", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            personCount = df->getRowCount();
+            personCount = df->getLogicalRowCount();
         });
         ASSERT_TRUE(res);
     }
@@ -813,7 +813,7 @@ TEST_F(CreateCommandTest, createWithLabelFilter) {
         auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 3);
-            ASSERT_EQ(df->getRowCount(), personCount);
+            ASSERT_EQ(df->getLogicalRowCount(), personCount);
         });
         ASSERT_TRUE(res);
         submitCurrentChange();
@@ -826,7 +826,7 @@ TEST_F(CreateCommandTest, createWithLabelFilter) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 3);
-            ASSERT_EQ(df->getRowCount(), personCount);
+            ASSERT_EQ(df->getLogicalRowCount(), personCount);
         });
         ASSERT_TRUE(res);
     }
@@ -864,7 +864,7 @@ TEST_F(CreateCommandTest, createEdgeWithBothNodeProperties) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 3);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
             auto* srcNames = df->cols().at(0)->as<ColumnOptVector<types::String::Primitive>>();
             auto* tgtNames = df->cols().at(2)->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(srcNames && tgtNames);
@@ -900,7 +900,7 @@ TEST_F(CreateCommandTest, createInterleavedNodesAndEdges) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 2);
-            ASSERT_EQ(df->getRowCount(), 2);
+            ASSERT_EQ(df->getLogicalRowCount(), 2);
         });
         ASSERT_TRUE(res);
     }
@@ -937,7 +937,7 @@ TEST_F(CreateCommandTest, createBidirectionalEdges) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 3);
-            ASSERT_EQ(df->getRowCount(), 2); // Two edges in opposite directions
+            ASSERT_EQ(df->getLogicalRowCount(), 2); // Two edges in opposite directions
         });
         ASSERT_TRUE(res);
     }
@@ -966,7 +966,7 @@ TEST_F(CreateCommandTest, createStarPatternEdgesFirst) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 2);
-            ASSERT_EQ(df->getRowCount(), 3); // 3 spokes
+            ASSERT_EQ(df->getLogicalRowCount(), 3); // 3 spokes
         });
         ASSERT_TRUE(res);
     }
@@ -995,7 +995,7 @@ TEST_F(CreateCommandTest, createTrianglePattern) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 2);
-            ASSERT_EQ(df->getRowCount(), 3); // 3 edges in triangle
+            ASSERT_EQ(df->getLogicalRowCount(), 3); // 3 edges in triangle
         });
         ASSERT_TRUE(res);
     }
@@ -1024,7 +1024,7 @@ TEST_F(CreateCommandTest, createEdgeWithBackwardThenForward) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 2);
-            ASSERT_EQ(df->getRowCount(), 2);
+            ASSERT_EQ(df->getLogicalRowCount(), 2);
         });
         ASSERT_TRUE(res);
     }
@@ -1053,7 +1053,7 @@ TEST_F(CreateCommandTest, createDisconnectedThenConnected) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 2);
-            ASSERT_EQ(df->getRowCount(), 2);
+            ASSERT_EQ(df->getLogicalRowCount(), 2);
         });
         ASSERT_TRUE(res);
     }
@@ -1082,7 +1082,7 @@ TEST_F(CreateCommandTest, createMultipleEdgesBetweenSameNodesDifferentTypes) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 2);
-            ASSERT_EQ(df->getRowCount(), 3); // 3 edges between same nodes
+            ASSERT_EQ(df->getLogicalRowCount(), 3); // 3 edges between same nodes
         });
         ASSERT_TRUE(res);
     }
@@ -1150,7 +1150,7 @@ TEST_F(CreateCommandTest, createTheLoveTriangleOfDoom) {
     {
         auto res = query(MATCH_ALL_EDGES, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 9);
+            ASSERT_EQ(df->getLogicalRowCount(), 9);
         });
         ASSERT_TRUE(res);
     }
@@ -1160,7 +1160,7 @@ TEST_F(CreateCommandTest, createTheLoveTriangleOfDoom) {
         auto res = query(MATCH_HATRED, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 3);
-            ASSERT_EQ(df->getRowCount(), 3); // 3 secret hatreds
+            ASSERT_EQ(df->getLogicalRowCount(), 3); // 3 secret hatreds
             auto* haters = df->cols().at(0)->as<ColumnOptVector<types::String::Primitive>>();
             auto* reasons = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
             auto* victims = df->cols().at(2)->as<ColumnOptVector<types::String::Primitive>>();
@@ -1204,7 +1204,7 @@ TEST_F(CreateCommandTest, createTheSpiderWeb) {
     {
         auto res = query(MATCH_SPIDER_VICTIMS, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 5); // 5 doomed flies
+            ASSERT_EQ(df->getLogicalRowCount(), 5); // 5 doomed flies
         });
         ASSERT_TRUE(res);
     }
@@ -1213,7 +1213,7 @@ TEST_F(CreateCommandTest, createTheSpiderWeb) {
     {
         auto res = query(MATCH_FLEE_CIRCLE, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 5); // 5 edges forming the pentagon
+            ASSERT_EQ(df->getLogicalRowCount(), 5); // 5 edges forming the pentagon
         });
         ASSERT_TRUE(res);
     }
@@ -1242,7 +1242,7 @@ TEST_F(CreateCommandTest, createSelfLoopNode) {
     {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
             auto* ns = df->cols().at(0)->as<ColumnNodeIDs>();
             auto* ms = df->cols().at(2)->as<ColumnNodeIDs>();
             ASSERT_TRUE(ns && ms);
@@ -1294,7 +1294,7 @@ TEST_F(CreateCommandTest, createKafkaesqueBureaucracy) {
     {
         auto res = query(MATCH_CIRCULAR_DEPS, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 3); // Perfect circular dependency
+            ASSERT_EQ(df->getLogicalRowCount(), 3); // Perfect circular dependency
         });
         ASSERT_TRUE(res);
     }
@@ -1303,7 +1303,7 @@ TEST_F(CreateCommandTest, createKafkaesqueBureaucracy) {
     {
         auto res = query(MATCH_ALL, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->getRowCount(), 6);
+            ASSERT_EQ(df->getLogicalRowCount(), 6);
         });
         ASSERT_TRUE(res);
     }
