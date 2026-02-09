@@ -89,9 +89,10 @@ jobs:
           uv venv .venv --python ${{ matrix.python_version }}
           for i in 1 2 3 4 5; do
             uv pip install turingdb==${{ needs.publish.outputs.version }} --prerelease allow --python .venv/bin/python && break
-            echo "Attempt $i failed, retrying in 30s..."
-            sleep 30
+            echo "Attempt $i failed, retrying in 60s..."
+            sleep 60
           done
+          .venv/bin/python -c "import turingdb" || { echo "ERROR: turingdb failed to install after 5 attempts"; exit 1; }
 
       - name: Verify installed version matches
         run: |
