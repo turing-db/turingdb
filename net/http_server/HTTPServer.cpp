@@ -11,6 +11,7 @@
 #include "TCPConnectionManager.h"
 #include "TCPConnectionStorage.h"
 #include "TCPListener.h"
+#include "Utils.h"
 
 using namespace net;
 
@@ -20,8 +21,13 @@ HTTPServer::HTTPServer(Functions&& functions)
 }
 
 HTTPServer::~HTTPServer() {
-    if (_shutdownPipe[0] != -1) ::close(_shutdownPipe[0]);
-    if (_shutdownPipe[1] != -1) ::close(_shutdownPipe[1]);
+    if (_shutdownPipe[0] != -1) {
+        ::close(_shutdownPipe[0]);
+    }
+
+    if (_shutdownPipe[1] != -1) {
+        ::close(_shutdownPipe[1]);
+    }
 }
 
 FlowStatus HTTPServer::initialize() {
@@ -90,12 +96,20 @@ FlowStatus HTTPServer::initialize() {
 #endif
 
     // Create shutdown pipe for reliable worker wakeup on terminate()
-    if (::pipe(_shutdownPipe) == -1) {
+    if (::pipe(_shutdownPipe) < 0) {
         utils::logError("ShutdownPipe");
         return FlowStatus::CREATE_ERROR;
     }
-    (void)utils::setNonBlock(_shutdownPipe[0]);
-    (void)utils::setNonBlock(_shutdownPipe[1]);
+
+    if (!utils::setNonBlock(_shutdownPipe[0])) {
+        utils::logError("setNonBlock pipe");
+        return FlowStatus::CREATE_ERROR;
+    }
+
+    if (!utils::setNonBlock(_shutdownPipe[1])) {
+        utils::logError("setNonBlock pipe");
+        return FlowStatus::CREATE_ERROR;
+    }
 
     event.events = utils::EVENT_IN;
     event.data = nullptr;
@@ -164,8 +178,10 @@ void HTTPServer::terminate() {
     // SIGUSR1 which can be consumed before the thread enters the
     // event wait.
     if (_shutdownPipe[1] != -1) {
-        char buf = 1;
-        (void)::write(_shutdownPipe[1], &buf, 1);
+        const char buf = 1;
+        if (::write(_shutdownPipe[1], &buf, 1) != sizeof(buf)) {
+            utils::logError("shutdownPipe write");
+        }
     }
 }
 
