@@ -105,7 +105,6 @@ OPENSSL_SRC_DIR=$BUILD_DIR/openssl-${OPENSSL_VERSION}
 if [[ ! -d "$OPENSSL_SRC_DIR" ]]; then
     echo "Extracting OpenSSL ${OPENSSL_VERSION}..."
     cd $BUILD_DIR
-    echo "looking for $SOURCE_DIR/external/$OPENSSL_TARBALL"
     tar xf "$SOURCE_DIR/external/$OPENSSL_TARBALL"
 fi
 
