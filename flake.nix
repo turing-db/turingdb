@@ -17,7 +17,7 @@
           darwin = pkgs.stdenv.isDarwin;
 
           # We use LLVM on macOS; gcc on Linux
-          compiler = if darwin then pkgs.llvmPackages20 else pkgs.gcc15;
+          compiler = if darwin then pkgs.llvmPackages_20 else pkgs.gcc15;
           turingstdenv = compiler.stdenv;
           
           # If using LLVM, we need to specify OpenMP explictly
