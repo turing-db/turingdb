@@ -52,6 +52,7 @@ private:
     utils::EpollInstance _epollInstance {};
     utils::StringAddress _actualAddress {};
     utils::EpollSignal _signalFd {};
+    int _shutdownPipe[2] {-1, -1};
     std::unique_ptr<TCPConnectionStorage> _connections;
     TCPConnection* _serverConnection {nullptr};
     std::atomic<FlowStatus> _status;
