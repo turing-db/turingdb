@@ -16,9 +16,6 @@
 [submodule "external/zlib"]
 	path = external/zlib
 	url = https://github.com/madler/zlib.git
-[submodule "external/OpenBLAS"]
-	path = external/OpenBLAS
-	url = https://github.com/OpenMathLib/OpenBLAS.git
 [submodule "external/curl"]
 	path = external/curl
 	url = https://github.com/curl/curl.git

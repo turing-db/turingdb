@@ -148,33 +148,6 @@ make -j $NUM_JOBS
 make install_sw
 
 # ============================================================
-# Build OpenBLAS from source
-# ============================================================
-echo "Building OpenBLAS..."
-mkdir -p $BUILD_DIR/OpenBLAS
-cd $BUILD_DIR/OpenBLAS
-
-OPENBLAS_CMAKE_ARGS=(
-    -DCMAKE_BUILD_TYPE=Release
-    -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
-    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-    -DBUILD_SHARED_LIBS=OFF
-    -DBUILD_TESTING=OFF
-    -DNOFORTRAN=1
-)
-
-if [[ "$(uname)" == "Darwin" ]]; then
-    OPENBLAS_CMAKE_ARGS+=(
-        "${MACOS_COMPILER_ARGS[@]}"
-    )
-fi
-
-cmake "${OPENBLAS_CMAKE_ARGS[@]}" $SOURCE_DIR/external/OpenBLAS
-cmake --build $BUILD_DIR/OpenBLAS -j $NUM_JOBS
-cmake --install $BUILD_DIR/OpenBLAS
-
-# ============================================================
 # Build libomp from source (macOS only — Linux uses libgomp)
 # ============================================================
 if [[ "$(uname)" == "Darwin" ]]; then
@@ -320,14 +293,11 @@ FAISS_CMAKE_ARGS=(
     -DCMAKE_PREFIX_PATH=$DEPENDENCIES_DIR
     -DBUILD_TESTING=OFF
     -DBUILD_SHARED_LIBS=OFF
-    -DFAISS_ENABLE_GPU=OFF
+    -DFAISS_ENABLE_GPU=ON
     -DFAISS_ENABLE_CUVS=OFF
     -DFAISS_ENABLE_MKL=OFF
     -DFAISS_ENABLE_PYTHON=OFF
     -DFAISS_ENABLE_EXTRAS=OFF
-    -DBLA_VENDOR=OpenBLAS
-    "-DBLAS_LIBRARIES=$DEPENDENCIES_DIR/lib/libopenblas.a"
-    "-DLAPACK_LIBRARIES=$DEPENDENCIES_DIR/lib/libopenblas.a"
 )
 
 if [[ "$(uname)" == "Darwin" ]]; then
