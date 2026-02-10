@@ -20,6 +20,8 @@ HTTPServer::HTTPServer(Functions&& functions)
 }
 
 HTTPServer::~HTTPServer() {
+    if (_shutdownPipe[0] != -1) ::close(_shutdownPipe[0]);
+    if (_shutdownPipe[1] != -1) ::close(_shutdownPipe[1]);
 }
 
 FlowStatus HTTPServer::initialize() {
@@ -87,6 +89,21 @@ FlowStatus HTTPServer::initialize() {
     }
 #endif
 
+    // Create shutdown pipe for reliable worker wakeup on terminate()
+    if (::pipe(_shutdownPipe) == -1) {
+        utils::logError("ShutdownPipe");
+        return FlowStatus::CREATE_ERROR;
+    }
+    (void)utils::setNonBlock(_shutdownPipe[0]);
+    (void)utils::setNonBlock(_shutdownPipe[1]);
+
+    event.events = utils::EVENT_IN;
+    event.data = nullptr;
+    if (!utils::epollAdd(_epollInstance, _shutdownPipe[0], event)) {
+        utils::logError("EpollAdd shutdown pipe");
+        return FlowStatus::CTL_ERROR;
+    }
+
     // Storing actual address
     sockaddr_in actualAddr {};
     socklen_t actualAddrLen = sizeof(actualAddr);
@@ -142,13 +159,13 @@ void HTTPServer::terminate() {
     spdlog::info("Terminating server");
     _running.store(false);
 
-    // Wake up worker threads so they check _running and exit.
-    // Uses SIGUSR1 (no-op handler) instead of SIGTERM to avoid
-    // triggering the SIGTERM signal handler which calls stop()
-    // and deadlocks (worker joins server thread, server thread
-    // joins worker).
-    for (auto& thread : _threads) {
-        pthread_kill(thread.native_handle(), SIGUSR1);
+    // Write to the shutdown pipe to wake all workers blocked in
+    // epoll_wait/kevent. This is reliable on all platforms, unlike
+    // SIGUSR1 which can be consumed before the thread enters the
+    // event wait.
+    if (_shutdownPipe[1] != -1) {
+        char buf = 1;
+        (void)::write(_shutdownPipe[1], &buf, 1);
     }
 }
 
@@ -184,8 +201,10 @@ void HTTPServer::runThread(size_t threadID, ServerContext& ctxt) {
         for (int i = 0; i < nfds; i++) {
             utils::EpollEvent& ev = events[i];
 
-            // On macOS, signals come with nullptr data; on Linux, they come with &signalFd
-            if (!ctxt._running.load() || ev.data == nullptr || ev.data == &ctxt._signalFd) {
+            // Shutdown pipe, signal fd, or macOS signal (nullptr data)
+            if (!ctxt._running.load()
+                || ev.data == nullptr
+                || ev.data == &ctxt._signalFd) {
                 return;
             }
 
