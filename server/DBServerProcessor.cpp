@@ -25,26 +25,6 @@
 
 using namespace db;
 
-namespace {
-
-void sanitizeJsonString(const std::string& input, std::string& res) {
-    res.reserve(input.size()*1.2);
-
-    for (char c : input) {
-        if (c == '"') {
-            res += "\\\"";
-        } else if (c == '\\') {
-            res += "\\\\";
-        } else if (c == '\n') {
-            res += "\\n";
-        } else {
-            res += c;
-        }
-    }
-}
-
-}
-
 DBServerProcessor::DBServerProcessor(TuringDB& db,
                                      net::TCPConnection& connection)
     : _writer(&connection.getWriter()),
@@ -163,53 +143,13 @@ const net::HTTP::Info& DBServerProcessor::getHttpInfo() const {
 }
 
 void DBServerProcessor::query() {
-    LocalMemory& mem = _threadContext->getLocalMemory();
-    const auto& httpInfo = getHttpInfo();
+    const net::HTTP::Info& httpInfo = getHttpInfo();
+    const TransactionInfo transactionInfo = getTransactionInfo();
 
-    const auto transactionInfo = getTransactionInfo();
-
-    const auto header = _writer.startHeader(net::HTTP::Status::OK,
-                                            !_connection.isCloseRequired());
-
-    net::NetWriter* writer = _writer.getWriter();
-    bioassert(writer, "Invalid writer");
-
-    QueryCallbacks queryCallbacks;
-    VJsonEncoder<net::NetWriter> encoder {*writer};
-
-    queryCallbacks.setOnBegin([&] {
-        encoder.start();
-    });
-
-    queryCallbacks.setOnOutputData([&] (const Dataframe* df) {
-        bioassert(df != nullptr, "Dataframe is null");
-        encoder.writeDataframe(*df);
-    });
-
-    queryCallbacks.setOnOutputHeader([&] (const Dataframe* df) {
-        bioassert(df != nullptr, "Dataframe is null");
-        encoder.writeDataframeHeader(*df);
-    });
-
-    queryCallbacks.setOnError([&] (const QueryStatus& status) {
-        bioassert(status.isOk(), "Query status is not ok");
-        encoder.encodeError(status.getStatus(), status.getError());
-    });
-
-    const auto res = _db.query(
-        httpInfo._payload,
-        transactionInfo.graphName,
-        &mem,
-        queryCallbacks,
-        transactionInfo.commit,
-        transactionInfo.change);
-
-    if (!res.isOk()) {
-        encoder.encodeError(res.getStatus(), res.getError());
-        return;
-    }
-
-    encoder.encodeTime(res.getTotalTime().count());
+    queryImpl(httpInfo._payload,
+              transactionInfo.graphName,
+              transactionInfo.commit,
+              transactionInfo.change);
 }
 
 void DBServerProcessor::load_graph() {
@@ -357,49 +297,7 @@ void DBServerProcessor::is_graph_loading() {
 }
 
 void DBServerProcessor::list_loaded_graphs() {
-    LocalMemory& mem = _threadContext->getLocalMemory();
-
-    const auto header = _writer.startHeader(net::HTTP::Status::OK,
-                                            !_connection.isCloseRequired());
-    PayloadWriter payload(_writer.getWriter());
-
-    payload.obj();
-
-    QueryCallbacks::OnOutputData queryCallback = [&](const Dataframe* df) {
-        JsonEncoder::writeDataframe(payload, *df);
-    };
-
-    QueryCallbacks::OnOutputHeader beginCallback = [&](const Dataframe* df) {
-            JsonEncoder::writeDataframeHeader(payload, *df);
-            payload.key("data");
-            payload.arr();
-    };
-
-    QueryCallbacks::OnError errorCallback = [&](const QueryStatus& status) {
-        while (payload.currentNestingLevel() > 1) {
-            payload.end();
-        }
-
-        payload.key("error");
-        const std::string errorType = std::string(QueryStatusDescription::value(status.getStatus()));
-        payload.value(errorType);
-
-        const std::string& errorMsg =
-            status.getError().empty() ? "No error message available." : status.getError();
-
-        payload.key("error_details");
-
-        std::string sanitizedString;
-        sanitizeJsonString(errorMsg, sanitizedString);
-        payload.value(sanitizedString);
-    };
-
-    const auto res = _db.query("LIST GRAPH",
-                               "",
-                               &mem,
-                               CommitHash::head(),
-                               ChangeID::head(),
-                               std::move(queryCallback));
+    queryImpl("LIST GRAPH");
 }
 
 void DBServerProcessor::list_avail_graphs() {
@@ -1510,4 +1408,47 @@ DBServerProcessor::TransactionInfo DBServerProcessor::getTransactionInfo() const
         .commit = commitHashRes.value(),
         .change = changeHashRes.value(),
     };
+}
+
+void DBServerProcessor::queryImpl(std::string_view query,
+                                  std::string_view graphName,
+                                  CommitHash commit,
+                                  ChangeID change) {
+    LocalMemory& mem = _threadContext->getLocalMemory();
+
+    const auto header = _writer.startHeader(net::HTTP::Status::OK,
+                                            !_connection.isCloseRequired());
+
+    net::NetWriter* writer = _writer.getWriter();
+    bioassert(writer, "Invalid writer");
+
+    QueryCallbacks queryCallbacks;
+    VJsonEncoder<net::NetWriter> encoder {*writer};
+
+    queryCallbacks.setOnBegin([&] {
+        encoder.start();
+    });
+
+    queryCallbacks.setOnOutputData([&] (const Dataframe* df) {
+        bioassert(df != nullptr, "Dataframe is null");
+        encoder.writeDataframe(*df);
+    });
+
+    queryCallbacks.setOnOutputHeader([&] (const Dataframe* df) {
+        bioassert(df != nullptr, "Dataframe is null");
+        encoder.writeDataframeHeader(*df);
+    });
+
+    queryCallbacks.setOnError([&] (const QueryStatus& status) {
+        encoder.encodeError(status.getStatus(), status.getError());
+    });
+
+    const auto res = _db.query(query, graphName, &mem, queryCallbacks, commit, change);
+
+    if (!res.isOk()) {
+        encoder.encodeError(res.getStatus(), res.getError());
+        return;
+    }
+
+    encoder.encodeTime(res.getTotalTime().count());
 }

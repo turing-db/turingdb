@@ -71,6 +71,11 @@ private:
     };
 
     TransactionInfo getTransactionInfo() const;
+
+    void queryImpl(std::string_view query,
+                   std::string_view graphName = "",
+                   CommitHash commit = CommitHash::head(),
+                   ChangeID change = ChangeID::head());
 };
 
 }
