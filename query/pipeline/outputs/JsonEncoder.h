@@ -39,9 +39,9 @@ struct ChunkJsonEncoder {
     void encodeValue(const T& value) {
         if (!value.has_value()) {
             _writer.write("null");
+        } else {
+            encodeValue(*value);
         }
-
-        encodeValue(*value);
     }
 
     template <IDLike T>
