@@ -106,9 +106,11 @@ jobs:
           fi
 
       - name: Verify turingdb launches
+        timeout-minutes: 3
         run: .venv/bin/turingdb --help
 
       - name: Test exception handling with incorrect query
+        timeout-minutes: 3
         run: |
           echo "THIS IS NOT VALID CYPHER;" | .venv/bin/turingdb
           EXIT_CODE=$?
