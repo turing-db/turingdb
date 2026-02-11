@@ -46,7 +46,6 @@ public:
                       LocalMemory* mem,
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
-                      
 
     SystemManager& getSystemManager() {
         return *_systemManager;

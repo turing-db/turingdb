@@ -414,7 +414,8 @@ void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table
 
 TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
     : _turingDB(turingDB),
-      _mem(mem) {
+    _mem(mem)
+{
     _localCommands.emplace("q", Command {quitCommand});
     _localCommands.emplace("quit", Command {quitCommand});
     _localCommands.emplace("exit", Command {quitCommand});
