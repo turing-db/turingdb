@@ -11,7 +11,6 @@
 
 using namespace db;
 
-
 template<std::ranges::forward_range Rg>
 void print_range(Rg&& range, std::string_view name) {
     std::cout << name << ": ";

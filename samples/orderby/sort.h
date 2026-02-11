@@ -13,7 +13,7 @@
 
 #include "BioAssert.h"
 
-using namespace db;
+namespace db {
 
 namespace rg = ranges;
 namespace rv = rg::views;
@@ -31,24 +31,6 @@ void sortCol(Column* col, std::vector<size_t>& indices) {
     bioassert(ccol, "Failed to cast column to sort.");
 
     rg::sort(rv::zip(indices, *ccol), [](auto&& zip1, auto&& zip2) {
-        const Int a = std::get<1>(zip1);
-        const Int b = std::get<1>(zip2);
-        return a < b;
-    });
-}
-
-void sortColRg(Column* col, size_t start, size_t end, std::vector<size_t>& indices) {
-    auto* ccol = dynamic_cast<ColumnInts*>(col);
-    bioassert(ccol, "Failed to cast column to sort.");
-    bioassert(end < ccol->size(), "End out of range.");
-
-    std::vector<Int>& data = ccol->getRaw();
-
-    auto dataRange = rg::subrange(begin(data) + start, begin(data) + end + 1);
-    auto indicesRange = rg::subrange(begin(indices) + start, begin(indices) + end + 1);
-
-    auto&& zipped = rv::zip(indicesRange, dataRange);
-    rg::sort(zipped, [](auto&& zip1, auto&& zip2) {
         const Int a = std::get<1>(zip1);
         const Int b = std::get<1>(zip2);
         return a < b;
@@ -99,13 +81,13 @@ void project(const ColRg& cols, IndxRg& indices) {
 }
 
 void sort(Dataframe* df) {
+    // Empty/singleton dataframe is trivially sorted
     if (df->getRowCount() <= 1) {
         return;
     }
 
     const size_t numCols = df->size();
     const size_t numRows = df->getRowCount();
-    assert(numCols == 2);
 
     std::vector<size_t> indices(numRows);
     std::iota(begin(indices), end(indices), 0);
@@ -145,4 +127,6 @@ void sort(Dataframe* df) {
         auto remainingCols = rg::subrange(begin(cols) + i + 1, end(cols));
         project(remainingCols, indices);
     }
+}
+
 }
