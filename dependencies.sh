@@ -79,13 +79,13 @@ if [[ "$(uname)" == "Darwin" ]]; then
 fi
 
 # Linux x86_64 architecture targeting for portable PyPI wheels.
-# Default: -march=x86-64-v3 (Haswell-level: AVX2, FMA, BMI1/2)
+# Default: -march=haswell (AVX2, FMA, BMI1/2)
 # Set TURING_NATIVE_BUILD=1 to use -march=native for local development.
 if [[ "$(uname)" == "Linux" ]]; then
     if [[ "${TURING_NATIVE_BUILD:-}" == "1" ]]; then
         ARCH_FLAG="-march=native"
     else
-        ARCH_FLAG="-march=x86-64-v3"
+        ARCH_FLAG="-march=haswell"
     fi
     LINUX_ARCH_ARGS=(
         "-DCMAKE_C_FLAGS=${ARCH_FLAG}"

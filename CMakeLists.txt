@@ -119,7 +119,7 @@ if(NOT APPLE)
        AND "$ENV{TURING_NATIVE_BUILD}" STREQUAL "1")
         set(OPTIMIZE_FLAGS "${OPTIMIZE_FLAGS} -march=native")
     else()
-        set(OPTIMIZE_FLAGS "${OPTIMIZE_FLAGS} -march=x86-64-v3")
+        set(OPTIMIZE_FLAGS "${OPTIMIZE_FLAGS} -march=haswell")
     endif()
 endif()
 
