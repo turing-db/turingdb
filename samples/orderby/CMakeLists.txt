@@ -1,5 +1,5 @@
 set(SAMPLE_NAME orderby)
-set(SOURCES main.cpp)
+set(SOURCES main.cpp sort.h)
 
 turing_sample(${SAMPLE_NAME} ${SOURCES})
 
