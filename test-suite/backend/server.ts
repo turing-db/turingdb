@@ -177,6 +177,7 @@ Bun.serve({
 			const body = await req.json().catch(() => null);
 			const hasPlan = typeof body?.plan === "string";
 			const hasResult = typeof body?.result === "string";
+			const hasResultJson = typeof body?.resultJson === "string";
 			const hasQuery = typeof body?.query === "string";
 			const hasNewName = typeof body?.newName === "string";
 			const hasTags = Array.isArray(body?.tags);
@@ -189,6 +190,7 @@ Bun.serve({
 				!targetName ||
 				(!hasPlan &&
 					!hasResult &&
+					!hasResultJson &&
 					!hasQuery &&
 					!hasNewName &&
 					!hasTags &&
@@ -211,6 +213,7 @@ Bun.serve({
 			const updatedSource = await updateTestFile(sourceTestsDir, targetName, {
 				plan: body.plan,
 				result: body.result,
+				resultJson: body.resultJson,
 				query: body.query,
 				newName: body.newName,
 				tags: body.tags,
@@ -223,6 +226,7 @@ Bun.serve({
 				updatedBuild = await updateTestFile(sourceTestsDir, targetName, {
 					plan: body.plan,
 					result: body.result,
+					resultJson: body.resultJson,
 					query: body.query,
 					newName: body.newName,
 					tags: body.tags,

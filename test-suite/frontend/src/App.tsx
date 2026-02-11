@@ -1,5 +1,7 @@
 import React from "react";
 import mermaid from "mermaid";
+import { JsonView, darkStyles } from "react-json-view-lite";
+import "react-json-view-lite/dist/index.css";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -37,7 +39,7 @@ type TestMeta = {
   disabledReason?: string;
   mainVersion?: {
     query?: string;
-    expect?: { plan?: string; result?: string };
+    expect?: { plan?: string; result?: string; resultJson?: string };
     tags?: string[];
     enabled?: boolean;
     ["write-required"]?: boolean;
@@ -51,6 +53,9 @@ type TestResult = {
   name: string;
   planOutput: string;
   resultOutput: string;
+  resultJsonOutput?: string;
+  resultJsonMatched?: boolean;
+  resultJsonValid?: boolean;
   planMatched: boolean;
   resultMatched: boolean;
   error?: string;
@@ -113,7 +118,7 @@ export default function App() {
   const [search, setSearch] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [confirmTarget, setConfirmTarget] = React.useState<"plan" | "result" | null>(null);
+  const [confirmTarget, setConfirmTarget] = React.useState<"plan" | "result" | "resultJson" | null>(null);
   const [nameDraft, setNameDraft] = React.useState("");
   const [queryDraft, setQueryDraft] = React.useState("");
   const [isEditingQuery, setIsEditingQuery] = React.useState(false);
@@ -142,10 +147,13 @@ export default function App() {
   const failTimerRef = React.useRef<number | null>(null);
   const [expectedPlan, setExpectedPlan] = React.useState<string>("");
   const [expectedResult, setExpectedResult] = React.useState<string>("");
+  const [expectedResultJson, setExpectedResultJson] = React.useState<string>("");
   const [mainPlan, setMainPlan] = React.useState<string>("");
   const [mainResult, setMainResult] = React.useState<string>("");
+  const [mainResultJson, setMainResultJson] = React.useState<string>("");
   const [resultTab, setResultTab] = React.useState<"actual" | "expected" | "main">("actual");
   const [planTab, setPlanTab] = React.useState<"actual" | "expected" | "main">("actual");
+  const [jsonTab, setJsonTab] = React.useState<"actual" | "expected" | "main">("actual");
 
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
@@ -194,14 +202,17 @@ export default function App() {
     setIsEditingQuery(false);
     setResultTab("actual");
     setPlanTab("actual");
+    setJsonTab("actual");
   }, [selected]);
 
   React.useEffect(() => {
     if (!selected) {
       setExpectedPlan("");
       setExpectedResult("");
+      setExpectedResultJson("");
       setMainPlan("");
       setMainResult("");
+      setMainResultJson("");
       return;
     }
     let active = true;
@@ -211,16 +222,19 @@ export default function App() {
         if (!active) return;
         setExpectedPlan(typeof data?.plan === "string" ? data.plan : "");
         setExpectedResult(typeof data?.result === "string" ? data.result : "");
+        setExpectedResultJson(typeof data?.resultJson === "string" ? data.resultJson : "");
       })
       .catch(() => {
         if (!active) return;
         setExpectedPlan("");
         setExpectedResult("");
+        setExpectedResultJson("");
       });
     const mainExpect = selected.mainVersion?.expect ?? {};
     if (typeof mainExpect.plan === "string" || typeof mainExpect.result === "string") {
       setMainPlan(typeof mainExpect.plan === "string" ? mainExpect.plan : "");
       setMainResult(typeof mainExpect.result === "string" ? mainExpect.result : "");
+      setMainResultJson(typeof mainExpect.resultJson === "string" ? mainExpect.resultJson : "");
     } else {
       fetch(`${API_BASE}/main?name=${encodeURIComponent(selected.name)}`)
         .then((res) => (res.ok ? res.json() : null))
@@ -228,11 +242,13 @@ export default function App() {
           if (!active) return;
           setMainPlan(typeof data?.plan === "string" ? data.plan : "");
           setMainResult(typeof data?.result === "string" ? data.result : "");
+          setMainResultJson(typeof data?.resultJson === "string" ? data.resultJson : "");
         })
         .catch(() => {
           if (!active) return;
           setMainPlan("");
           setMainResult("");
+          setMainResultJson("");
         });
     }
     return () => {
@@ -294,14 +310,15 @@ export default function App() {
     }
   };
 
-  const acceptOutputs = async (target: "plan" | "result") => {
+  const acceptOutputs = async (target: "plan" | "result" | "resultJson") => {
     if (!selected || !selectedResult) return;
     setLoading(true);
     setError(null);
     try {
-      const payload: { name: string; plan?: string; result?: string } = { name: selected.name };
+      const payload: { name: string; plan?: string; result?: string; resultJson?: string } = { name: selected.name };
       if (target === "plan") payload.plan = selectedResult.planOutput;
       if (target === "result") payload.result = selectedResult.resultOutput;
+      if (target === "resultJson") payload.resultJson = selectedResult.resultJsonOutput;
       const res = await fetch(`${API_BASE}/update`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -320,9 +337,13 @@ export default function App() {
         [selected.name]: {
           ...selectedResult,
           planMatched: target === "plan" ? true : selectedResult.planMatched,
-          resultMatched: target === "result" ? true : selectedResult.resultMatched
+          resultMatched: target === "result" ? true : selectedResult.resultMatched,
+          resultJsonMatched: target === "resultJson" ? true : selectedResult.resultJsonMatched
         }
       }));
+      if (target === "resultJson") {
+        setExpectedResultJson(selectedResult.resultJsonOutput ?? "");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to update test JSON.";
       setError(message);
@@ -1650,6 +1671,94 @@ export default function App() {
                   </pre>
                 )}
               </div>
+              <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs uppercase tracking-[0.2em] text-ink/60">JSON Result Output</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center rounded-full border border-white/10 bg-paper/60 p-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
+                      <button
+                        className={`rounded-full px-2 py-1 ${jsonTab === "actual" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setJsonTab("actual")}
+                      >
+                        Actual
+                      </button>
+                      <button
+                        className={`rounded-full px-2 py-1 ${jsonTab === "expected" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setJsonTab("expected")}
+                      >
+                        Expected
+                      </button>
+                      <button
+                        className={`rounded-full px-2 py-1 ${jsonTab === "main" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setJsonTab("main")}
+                        disabled={!selected?.changed}
+                      >
+                        Main
+                      </button>
+                    </div>
+                    {selectedResult.resultJsonValid != null && (
+                      <span
+                        className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
+                          selectedResult.resultJsonValid
+                            ? "bg-moss/15 text-moss"
+                            : "bg-accent/15 text-accent"
+                        }`}
+                      >
+                        {selectedResult.resultJsonValid ? "valid" : "invalid"}
+                      </span>
+                    )}
+                    {selectedResult.resultJsonMatched != null && (
+                      <span
+                        className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
+                          selectedResult.resultJsonMatched
+                            ? "bg-moss/15 text-moss"
+                            : "bg-accent/15 text-accent"
+                        }`}
+                      >
+                        {selectedResult.resultJsonMatched ? "match" : "mismatch"}
+                      </span>
+                    )}
+                    {selectedResult.resultJsonMatched === false && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmTarget("resultJson")}
+                        disabled={loading}
+                      >
+                        Accept
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {(() => {
+                  const raw = jsonTab === "actual"
+                    ? selectedResult.resultJsonOutput
+                    : jsonTab === "expected"
+                      ? expectedResultJson
+                      : mainResultJson;
+                  if (!raw) {
+                    return (
+                      <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
+                        (empty)
+                      </pre>
+                    );
+                  }
+                  try {
+                    const parsed = JSON.parse(raw);
+                    return (
+                      <div className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3 text-xs">
+                        <JsonView data={parsed} style={darkStyles} />
+                      </div>
+                    );
+                  } catch {
+                    return (
+                      <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
+                        {raw}
+                      </pre>
+                    );
+                  }
+                })()}
+              </div>
             </div>
           )}
 
@@ -1665,7 +1774,7 @@ export default function App() {
               <div className="surface w-full max-w-md rounded-3xl p-6">
                 <h3 className="text-lg font-semibold">Update test expectations?</h3>
               <p className="mt-2 text-sm text-ink/70">
-                This will overwrite the expected {confirmTarget} in the JSON file for{" "}
+                This will overwrite the expected {confirmTarget === "resultJson" ? "JSON result" : confirmTarget} in the JSON file for{" "}
                 <span className="font-semibold text-ink">{selected?.name}</span>.
               </p>
                 <div className="mt-6 flex items-center justify-end gap-3">
