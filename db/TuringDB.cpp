@@ -110,13 +110,26 @@ QueryStatus TuringDB::query(std::string_view query,
 QueryStatus TuringDB::query(std::string_view query,
                             std::string_view graphName,
                             LocalMemory* mem,
+                            QueryCallbacks::OnOutputData&& callback,
                             CommitHash hash,
-                            ChangeID change,
-                            QueryCallbacks::OnOutputData&& callback) {
+                            ChangeID change) {
     QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
 
     QueryCallbacks handler;
     handler.setOnOutputData(std::move(callback));
+
+    InterpreterContext ctxt(mem, handler, _procedures.get(), hash, change);
+    return interp.execute(ctxt, query, graphName);
+}
+
+QueryStatus TuringDB::query(std::string_view query,
+                            std::string_view graphName,
+                            LocalMemory* mem,
+                            CommitHash hash,
+                            ChangeID change) {
+    QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
+
+    QueryCallbacks handler;
 
     InterpreterContext ctxt(mem, handler, _procedures.get(), hash, change);
     return interp.execute(ctxt, query, graphName);

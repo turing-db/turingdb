@@ -50,9 +50,9 @@ protected:
         _currentChange = ChangeID::head();
     }
 
-    auto query(std::string_view query, QueryCallbacks::OnOutputData&& callback = QueryCallbacks::defaultOnOutputData()) {
-        auto res = _db->query(query, _graphName, &_env->getMem(),
-                              CommitHash::head(), _currentChange, std::move(callback));
+    auto query(std::string_view query, auto callback) {
+        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
+                              CommitHash::head(), _currentChange);
         return res;
     }
 };

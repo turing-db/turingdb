@@ -7,10 +7,12 @@
 #include "SystemManager.h"
 #include "dataframe/Dataframe.h"
 #include "versioning/Change.h"
+#include "versioning/Transaction.h"
 
 #include "spdlog/spdlog.h"
 
 #include "FileUtils.h"
+#include "TuringException.h"
 #include "TuringTestEnv.h"
 #include "TuringTest.h"
 
@@ -66,10 +68,12 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(TEST_GRAPH_CYPHER, _graphName, &_env->getMem(), CommitHash::head(), changeId);
+            auto status = _db->query(TEST_GRAPH_CYPHER, _graphName, &_env->getMem(),
+                                     [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create graph: " << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), CommitHash::head(), changeId);
+            auto submitStatus = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(),
+                                           [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit change: "
                                              << submitStatus.getError();
         }
@@ -83,10 +87,12 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(TEST_STAR_GRAPH_CYPHER, _starGraphName, &_env->getMem(), CommitHash::head(), changeId);
+            auto status = _db->query(TEST_STAR_GRAPH_CYPHER, _starGraphName, &_env->getMem(),
+                                     [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create graph: " << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _starGraphName, &_env->getMem(), CommitHash::head(), changeId);
+            auto submitStatus = _db->query("CHANGE SUBMIT", _starGraphName, &_env->getMem(),
+                                           [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit change: "
                                              << submitStatus.getError();
         }
@@ -112,9 +118,9 @@ protected:
     static inline Graph* _graph = nullptr;
     static inline Graph* _stargraph = nullptr;
 
-    auto query(std::string_view query, std::string_view graphName, QueryCallbacks::OnOutputData&& callback = QueryCallbacks::defaultOnOutputData()) {
-        auto res = _db->query(query, graphName, &_env->getMem(),
-                              CommitHash::head(), ChangeID::head(), std::move(callback));
+    auto query(std::string_view query, std::string_view graphName, auto callback) {
+        auto res = _db->query(query, graphName, &_env->getMem(), callback,
+                              CommitHash::head(), ChangeID::head());
         if (!res) {
             spdlog::error("Query failed: {}", res.getError());
         }

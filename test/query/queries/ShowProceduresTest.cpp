@@ -25,9 +25,8 @@ protected:
 
 TEST_F(ShowProceduresTest, showProcedures) {
     bool executed = false;
-
-    QueryCallbacks callback;
-    callback.setOnOutputData([&](const Dataframe* df) -> void {
+    const auto res = _db->query("SHOW PROCEDURES", "default", &_env->getMem(),
+                                [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 2);
         ASSERT_EQ(df->getLogicalRowCount(), 6);
@@ -61,8 +60,6 @@ TEST_F(ShowProceduresTest, showProcedures) {
 
         executed = true;
     });
-
-    const auto res = _db->query("SHOW PROCEDURES", "default", &_env->getMem(), callback);
 
     ASSERT_TRUE(res.isOk());
     ASSERT_TRUE(executed);
