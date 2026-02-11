@@ -27,8 +27,22 @@ public:
 
     size_t size() const { return _cols.size(); }
 
+    /**
+     * @brief Determines the logical length of a dataframe.
+     * @detail Uses the first non-ColumnConst column in @ref this to determine
+     * the logical row count of this dataframe.
+     * @warn Does not check for validity of pointers to columns.
+     */
     size_t getLogicalRowCount() const;
 
+    /**
+     * @brief Determines whether all columns in a dataframe of equal logical
+     * length (row count).
+     * @detail All @ref ColumnVector<T> must be of same size = SIZE. Any @ref
+     * ColumnConst<T> are treated as having a logical size of SIZE. Checks
+     * validity of all column pointers.
+     * @throws If any of @ref _cols or @ref _cols[i]::_column is null.
+     */
     bool isRectangular() const;
 
     const NamedColumns& cols() const { return _cols; }
