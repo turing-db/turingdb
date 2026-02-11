@@ -4,7 +4,8 @@
   "query": "MATCH (n:Person)-[e]->(m:Person)\nWHERE n.name = \"Remy\" AND n.name = \"Adam\"\nCREATE (n)-[e]->(m)\nRETURN n;",
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     2 | WHERE n.name = \"Remy\" AND n.name = \"Adam\"\n     3 | CREATE (n)-[e]->(m)\n       |           ^^^^^^\n-------* Edges cannot be inputs to write queries",
-    "result": "ANALYZE ERROR\n-------* Query error\n     2 | WHERE n.name = \"Remy\" AND n.name = \"Adam\"\n     3 | CREATE (n)-[e]->(m)\n       |           ^^^^^^\n-------* Edges cannot be inputs to write queries"
+    "result": "ANALYZE ERROR\n-------* Query error\n     2 | WHERE n.name = \"Remy\" AND n.name = \"Adam\"\n     3 | CREATE (n)-[e]->(m)\n       |           ^^^^^^\n-------* Edges cannot be inputs to write queries",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     2 | WHERE n.name = \\\"Remy\\\" AND n.name = \\\"Adam\\\"\\n     3 | CREATE (n)-[e]->(m)\\n       |           ^^^^^^\\n-------* Edges cannot be inputs to write queries\"}"
   },
   "tags": [
     "fail",

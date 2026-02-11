@@ -4,7 +4,8 @@
   "query": "CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e",
   "expect": {
     "plan": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e\n       |                                                  ^\n-------* Cannot delete pending edge",
-    "result": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e\n       |                                                  ^\n-------* Cannot delete pending edge"
+    "result": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e\n       |                                                  ^\n-------* Cannot delete pending edge",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e\\n       |                                                  ^\\n-------* Cannot delete pending edge\"}"
   },
   "tags": [
     "fail",

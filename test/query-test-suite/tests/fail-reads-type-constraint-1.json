@@ -4,7 +4,8 @@
   "query": "MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n",
   "expect": {
     "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n\n       |             ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Not implemented: EdgeType | EdgeType | ...",
-    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n\n       |             ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Not implemented: EdgeType | EdgeType | ..."
+    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n\n       |             ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Not implemented: EdgeType | EdgeType | ...",
+    "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n\\n       |             ^^^^^^^^^^^^^^^^^^^^^^^^^\\n-------* Not implemented: EdgeType | EdgeType | ...\"}"
   },
   "tags": [
     "fail",

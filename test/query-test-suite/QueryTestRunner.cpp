@@ -31,6 +31,8 @@
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
 #include "QueryStatus.h"
+#include "QueryCallback.h"
+#include "outputs/JsonEncoder.h"
 
 namespace db {
 class CommitBuilder;
@@ -227,6 +229,123 @@ void generatePlanGraph(std::string_view query,
     db::PlanGraphDebug::dumpMermaidContent(out, view, planGraph);
 }
 
+struct StringStreamWriter {
+    std::string& _output;
+
+    void write(std::string_view content) noexcept {
+        _output.append(content);
+    }
+
+    void write(char c) noexcept {
+        _output.push_back(c);
+    }
+};
+
+bool validateResultJson(std::string& error,
+                        std::string_view jsonStr) {
+    json doc;
+    try {
+        doc = json::parse(jsonStr);
+    } catch (const json::parse_error& e) {
+        error = fmt::format("Invalid JSON: {}", e.what());
+        return false;
+    }
+
+    if (!doc.is_object()) {
+        error = "Root is not an object";
+        return false;
+    }
+
+    if (doc.contains("error")) {
+        if (!doc["error"].is_string()) {
+            error = "\"error\" is not a string";
+            return false;
+        }
+        if (!doc.contains("error_details")
+            || !doc["error_details"].is_string()) {
+            error = "\"error_details\" missing or not a string";
+            return false;
+        }
+        return true;
+    }
+
+    if (!doc.contains("header") || !doc["header"].is_object()) {
+        error = "\"header\" missing or not an object";
+        return false;
+    }
+
+    const auto& header = doc["header"];
+
+    if (!header.contains("column_names")
+        || !header["column_names"].is_array()) {
+        error = "\"column_names\" missing or not an array";
+        return false;
+    }
+
+    if (!header.contains("column_types")
+        || !header["column_types"].is_array()) {
+        error = "\"column_types\" missing or not an array";
+        return false;
+    }
+
+    const size_t numCols = header["column_names"].size();
+
+    if (header["column_types"].size() != numCols) {
+        error = fmt::format(
+            "column_types size ({}) != column_names size ({})",
+            header["column_types"].size(), numCols);
+        return false;
+    }
+
+    if (!doc.contains("data") || !doc["data"].is_array()) {
+        error = "\"data\" missing or not an array";
+        return false;
+    }
+
+    const auto& data = doc["data"];
+
+    for (size_t ci = 0; ci < data.size(); ++ci) {
+        const auto& chunk = data[ci];
+
+        if (!chunk.is_array()) {
+            error = fmt::format(
+                "data[{}] is not an array", ci);
+            return false;
+        }
+
+        if (chunk.size() != numCols) {
+            error = fmt::format(
+                "data[{}] has {} columns, expected {}",
+                ci, chunk.size(), numCols);
+            return false;
+        }
+
+        size_t expectedRows = 0;
+
+        for (size_t col = 0; col < numCols; ++col) {
+            if (!chunk[col].is_array()) {
+                error = fmt::format(
+                    "data[{}][{}] is not an array",
+                    ci, col);
+                return false;
+            }
+
+            if (col == 0) {
+                expectedRows = chunk[col].size();
+            } else if (chunk[col].size() != expectedRows) {
+                error = fmt::format(
+                    "data[{}][{}] has {} rows, expected {} "
+                    "(from column 0)",
+                    ci, col, chunk[col].size(),
+                    expectedRows);
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 } // namespace
 
 void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs, const fs::Path& dir) {
@@ -285,6 +404,7 @@ void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs, const 
             const auto& expect = doc["expect"];
             spec.expectPlan = expect.value("plan", "");
             spec.expectResult = expect.value("result", "");
+            spec.expectResultJson = expect.value("resultJson", "");
         }
 
         specs.push_back(std::move(spec));
@@ -310,15 +430,32 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
     std::vector<std::vector<std::string>> rows;
     std::vector<std::string> columnNames;
 
-    auto callback = [&](const db::Dataframe* df) {
+    std::string jsonOutput;
+    StringStreamWriter jsonWriter {jsonOutput};
+    db::VJsonEncoder<StringStreamWriter> jsonEncoder {jsonWriter};
+    bool jsonErrorEncoded = false;
+
+    db::QueryCallbacks queryCallbacks;
+
+    queryCallbacks.setOnBegin([&] {
+        jsonEncoder.start();
+    });
+
+    queryCallbacks.setOnOutputHeader([&](const db::Dataframe* df) {
+        bioassert(df != nullptr, "Dataframe is null");
+        jsonEncoder.writeDataframeHeader(*df);
+        for (auto* col : df->cols()) {
+            columnNames.emplace_back(col->getName());
+        }
+    });
+
+    queryCallbacks.setOnOutputData([&](const db::Dataframe* df) {
         if (!df) {
             return;
         }
-        if (columnNames.empty()) {
-            for (auto* col : df->cols()) {
-                columnNames.emplace_back(col->getName());
-            }
-        }
+
+        jsonEncoder.writeDataframe(*df);
+
         const size_t rowCount = df->getLogicalRowCount();
         std::vector<std::string> values;
 
@@ -327,32 +464,49 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
             values.reserve(df->cols().size());
 
             for (auto* col : df->cols()) {
-                values.push_back(columnValueToString(col->getColumn(), row));
+                values.push_back(
+                    columnValueToString(col->getColumn(), row));
             }
 
             rows.push_back(std::move(values));
         }
-    };
+    });
+
+    queryCallbacks.setOnError([&](const db::QueryStatus& qs) {
+        jsonEncoder.encodeError(
+            qs.getStatus(), qs.getError());
+        jsonErrorEncoded = true;
+    });
 
     db::ChangeID changeID = db::ChangeID::head();
 
     if (spec.writeRequired) {
-        db->query("CHANGE NEW", spec.graphName, &env->getMem(), [&](const db::Dataframe* df) {
+        db->query("CHANGE NEW", spec.graphName, &env->getMem(),
+                  [&](const db::Dataframe* df) {
                       NamedColumn* col = df->getColumn(ColumnTag {0});
                       bioassert(col, "Column not found");
-                      auto& c = *static_cast<ColumnVector<ChangeID>*>(col->getColumn());
+                      auto& c = *static_cast<ColumnVector<ChangeID>*>(
+                          col->getColumn());
                       bioassert(c.size() == 1, "Expected 1 change");
-                      changeID = c[0]; }, CommitHash::head(), ChangeID::head());
+                      changeID = c[0];
+                  },
+                  CommitHash::head(), ChangeID::head());
     }
 
     const auto queryStart = std::chrono::steady_clock::now();
     const db::QueryStatus status = db->query(spec.query,
                                              spec.graphName,
                                              &env->getMem(),
-                                             std::move(callback),
+                                             queryCallbacks,
                                              db::CommitHash::head(),
                                              changeID);
     const auto queryEnd = std::chrono::steady_clock::now();
+
+    if (!status.isOk() && !jsonErrorEncoded) {
+        jsonEncoder.encodeError(
+            status.getStatus(), status.getError());
+    }
+    jsonEncoder.finish();
     result.timeUs = static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::microseconds>(queryEnd - queryStart).count());
 
@@ -388,12 +542,16 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
 
     normalizeOutput(result.planOutput, planOut.str());
     normalizeOutput(result.resultOutput, resultOut.str());
+    result.resultJsonOutput = jsonOutput;
 
     std::string expected;
     normalizeOutput(expected, spec.expectPlan);
     result.planMatched = expected == result.planOutput;
     normalizeOutput(expected, spec.expectResult);
     result.resultMatched = expected == result.resultOutput;
+
+    result.resultJsonValid = validateResultJson( result.resultJsonError, result.resultJsonOutput);
+    result.resultJsonMatched = spec.expectResultJson == result.resultJsonOutput;
 
     return result;
 }

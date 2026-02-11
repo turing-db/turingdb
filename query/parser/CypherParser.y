@@ -899,7 +899,7 @@ nodePattern
     ;
 
 opt_symbol
-    : name { $$ = $1; }
+    : symbol { $$ = $1; }
     | { $$ = nullptr; }
     ;
 

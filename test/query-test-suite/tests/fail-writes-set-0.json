@@ -4,7 +4,8 @@
   "query": "MATCH (n:Person) SET n.name = 5",
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) SET n.name = 5\n       |                      ^^^^^^^^^^\n-------* Cannot evaluate property: types 'String' and 'Integer' are incompatible",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) SET n.name = 5\n       |                      ^^^^^^^^^^\n-------* Cannot evaluate property: types 'String' and 'Integer' are incompatible"
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) SET n.name = 5\n       |                      ^^^^^^^^^^\n-------* Cannot evaluate property: types 'String' and 'Integer' are incompatible",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n:Person) SET n.name = 5\\n       |                      ^^^^^^^^^^\\n-------* Cannot evaluate property: types 'String' and 'Integer' are incompatible\"}"
   },
   "tags": [
     "fail",

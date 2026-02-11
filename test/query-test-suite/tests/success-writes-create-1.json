@@ -4,7 +4,8 @@
   "query": "CREATE (n:Person:Officer) RETURN n;",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __WRITE__\n        __node__ (0:Person:Officer)\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": "n\n18"
+    "result": "n\n18",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\"],\"column_types\":[\"UInt64\"]},\"data\":[[[18]]]}"
   },
   "tags": [
     "success",
