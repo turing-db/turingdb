@@ -112,6 +112,17 @@ else()
     endif()
 endif()
 
+# x86-64 architecture targeting for portable PyPI wheels (Linux only).
+# TURING_NATIVE_BUILD=1 uses -march=native for local development.
+if(NOT APPLE)
+    if(DEFINED ENV{TURING_NATIVE_BUILD}
+       AND "$ENV{TURING_NATIVE_BUILD}" STREQUAL "1")
+        set(OPTIMIZE_FLAGS "${OPTIMIZE_FLAGS} -march=native")
+    else()
+        set(OPTIMIZE_FLAGS "${OPTIMIZE_FLAGS} -march=x86-64-v3")
+    endif()
+endif()
+
 # C++ flags
 set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
