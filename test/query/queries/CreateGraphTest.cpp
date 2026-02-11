@@ -30,21 +30,15 @@ protected:
 TEST_F(CreateGraphTest, createGraph) {
     bool executed = false;
 
-    const QueryStatus res = _db->query(
-        "CREATE GRAPH testDB",
-        "default",
-        &_env->getMem(),
-        CommitHash::head(),
-        ChangeID::head(),
-        [&](const Dataframe* df) -> void {
-            ASSERT_TRUE(df != nullptr);
-            ASSERT_EQ(df->cols().size(), 1);
-            ASSERT_EQ(df->getLogicalRowCount(), 1);
-            const auto& cols = df->cols();
-            const auto* colName = cols.at(0)->as<ColumnConst<types::String::Primitive>>();
-            ASSERT_EQ(colName->getRaw(), "testDB");
-            executed = true;
-        });
+    const auto res = _db->query("CREATE GRAPH testDB", "default", &_env->getMem(), [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
+        const auto& cols = df->cols();
+        const auto* colName = cols.at(0)->as<ColumnConst<types::String::Primitive>>();
+        ASSERT_EQ(colName->getRaw(), "testDB");
+        executed = true;
+    });
 
     ASSERT_TRUE(res.isOk());
     ASSERT_TRUE(executed);

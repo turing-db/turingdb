@@ -337,21 +337,21 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
     db::ChangeID changeID = db::ChangeID::head();
 
     if (spec.writeRequired) {
-        db->query("CHANGE NEW", spec.graphName, &env->getMem(), CommitHash::head(), ChangeID::head(), [&](const db::Dataframe* df) {
+        db->query("CHANGE NEW", spec.graphName, &env->getMem(), [&](const db::Dataframe* df) {
                       NamedColumn* col = df->getColumn(ColumnTag {0});
                       bioassert(col, "Column not found");
                       auto& c = *static_cast<ColumnVector<ChangeID>*>(col->getColumn());
                       bioassert(c.size() == 1, "Expected 1 change");
-                      changeID = c[0]; });
+                      changeID = c[0]; }, CommitHash::head(), ChangeID::head());
     }
 
     const auto queryStart = std::chrono::steady_clock::now();
     const db::QueryStatus status = db->query(spec.query,
                                              spec.graphName,
                                              &env->getMem(),
+                                             std::move(callback),
                                              db::CommitHash::head(),
-                                             changeID,
-                                             std::move(callback));
+                                             changeID);
     const auto queryEnd = std::chrono::steady_clock::now();
     result.timeUs = static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::microseconds>(queryEnd - queryStart).count());
