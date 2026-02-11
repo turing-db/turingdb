@@ -95,7 +95,8 @@ template <IntegralType T, int tag>
     return std::to_string(value.getValue());
 }
 
-[[maybe_unused]] std::string valueToString(const ChangeID value) {
+template <int I>
+[[maybe_unused]] std::string valueToString(const TemplateCommitHash<I>& value) {
     return std::to_string(value.get());
 }
 

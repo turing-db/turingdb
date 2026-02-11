@@ -262,7 +262,9 @@ struct OutputtedTypes {
         EdgeTypeID,
         ValueType,
         PropertyTypeID,
+        CommitHash,
         ChangeID,
+        std::string,
         size_t
     >>;
 

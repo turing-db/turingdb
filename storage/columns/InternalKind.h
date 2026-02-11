@@ -58,6 +58,7 @@ public:
         PropertyTypeID,
         std::string,
         ValueType,
+        CommitHash,
         ChangeID,
         ColumnVector<EntityID>,
         ColumnMask,

@@ -40,7 +40,7 @@ class ColumnSingleDispatcher {
 
     static void unsupported(const Column* c, Functor&) {
         throw FatalException(fmt::format(
-            "Unsupported unary operation on column of type {}", c->getKind()));
+            "Unsupported unary operation on column of type {}", c->getTypeName()));
     }
 
 public:
@@ -112,7 +112,7 @@ class ColumnDoubleDispatcher {
     static void unsupported(const Column* c1, const Column* c2, Functor&) {
         throw FatalException(
             fmt::format("Unsupported binary operation of columns of kinds {} and {}.",
-                        c1->getKind(), c2->getKind()));
+                        c1->getTypeName(), c2->getTypeName()));
     }
 
 public:

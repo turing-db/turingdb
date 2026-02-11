@@ -6,6 +6,7 @@
 
 #include "DebugDump.h"
 #include "BioAssert.h"
+#include "NameOf.h"
 
 namespace db {
 
@@ -115,6 +116,8 @@ public:
 
     ContainerKind::Code getContainerKind() const override { return ContainerKind::code<ColumnSet<T>>(); }
     InternalKind::Code getInternalKind() const override { return InternalKind::code<T>(); }
+
+    std::string_view getTypeName() const override { return NameOf<ColumnSet<T>>::get(); }
 
 private:
     std::unordered_set<T> _data;

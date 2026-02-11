@@ -166,6 +166,8 @@ public:
     ContainerKind::Code getContainerKind() const override { return ContainerKind::code<ColumnMask>(); }
     InternalKind::Code getInternalKind() const override { return 0; }
 
+    std::string_view getTypeName() const override { return NameOf<ColumnMask>::get(); }
+
 private:
     std::vector<Bool_t> _data;
 
