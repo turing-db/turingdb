@@ -122,5 +122,4 @@ struct ColumnTypeGenerator {
     }
 };
 
-
 }
