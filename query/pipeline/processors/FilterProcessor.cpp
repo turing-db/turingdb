@@ -61,8 +61,8 @@ void applyMask(const Column* src,
         APPLY_MASK_CASE(ColumnVector<std::string>)
 
         default: {
-            throw PipelineException(fmt::format("Unsupported mask application for kind {}",
-                                                src->getKind()));
+            throw PipelineException(fmt::format("Unsupported mask application for column type {}",
+                                                src->getTypeName()));
         }
     }
 }
