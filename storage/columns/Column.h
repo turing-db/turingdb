@@ -35,6 +35,8 @@ public:
     template <typename T>
     T* cast() { return static_cast<T*>(this); }
 
+    virtual std::string_view getTypeName() const = 0;
+
 protected:
     explicit Column(ColumnKind::Code kind)
         : _kind(kind)

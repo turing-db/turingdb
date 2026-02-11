@@ -186,13 +186,12 @@ QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     execCtxt.setJobSystem(_jobSystem);
     execCtxt.setProcedures(ctxt.getProcedures());
 
-    const Dataframe* outDf = pipeline.getOutputDataframe();
-    if (outDf) {
-        callbacks.onOutputHeader(outDf);
-    }
-
     PipelineExecutor executor(&pipeline, &execCtxt);
     try {
+        const Dataframe* outDf = pipeline.getOutputDataframe();
+        if (outDf) {
+            callbacks.onOutputHeader(outDf);
+        }
         executor.execute();
     } catch (const PipelineException& e) {
         const QueryStatus status {QueryStatus::Status::EXEC_ERROR, e.what()};
