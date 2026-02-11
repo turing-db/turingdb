@@ -78,6 +78,21 @@ if [[ "$(uname)" == "Darwin" ]]; then
     echo "export CMAKE_ARGS=\"${QUOTED_ARGS[*]}\"" >> "$MACOS_SETENV"
 fi
 
+# Linux x86_64 architecture targeting for portable PyPI wheels.
+# Default: -march=x86-64-v3 (Haswell-level: AVX2, FMA, BMI1/2)
+# Set TURING_NATIVE_BUILD=1 to use -march=native for local development.
+if [[ "$(uname)" == "Linux" ]]; then
+    if [[ "${TURING_NATIVE_BUILD:-}" == "1" ]]; then
+        ARCH_FLAG="-march=native"
+    else
+        ARCH_FLAG="-march=x86-64-v3"
+    fi
+    LINUX_ARCH_ARGS=(
+        "-DCMAKE_C_FLAGS=${ARCH_FLAG}"
+        "-DCMAKE_CXX_FLAGS=${ARCH_FLAG}"
+    )
+fi
+
 # Skip building if cache was hit (set by CI)
 if [[ "$SKIP_BUILD_IF_CACHED" == "true" ]]; then
     echo "Dependencies cache hit, skipping build"
@@ -103,6 +118,10 @@ if [[ "$(uname)" == "Darwin" ]]; then
     ZLIB_CMAKE_ARGS+=(
         "${MACOS_COMPILER_ARGS[@]}"
     )
+fi
+
+if [[ "$(uname)" == "Linux" ]]; then
+    ZLIB_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
 fi
 
 cmake "${ZLIB_CMAKE_ARGS[@]}" $SOURCE_DIR/external/zlib
@@ -139,7 +158,7 @@ if [[ "$(uname)" == "Darwin" ]]; then
         ./Configure darwin64-arm64-cc no-shared no-module no-tests \
             --prefix=$DEPENDENCIES_DIR --openssldir=$DEPENDENCIES_DIR/ssl --libdir=lib
 else
-    CFLAGS="-fPIC" \
+    CFLAGS="-fPIC ${ARCH_FLAG}" \
         ./Configure linux-x86_64 no-shared no-module no-tests \
             --prefix=$DEPENDENCIES_DIR --openssldir=$DEPENDENCIES_DIR/ssl --libdir=lib
 fi
@@ -168,6 +187,13 @@ if [[ "$(uname)" == "Darwin" ]]; then
     OPENBLAS_CMAKE_ARGS+=(
         "${MACOS_COMPILER_ARGS[@]}"
     )
+fi
+
+if [[ "$(uname)" == "Linux" ]]; then
+    if [[ "${TURING_NATIVE_BUILD:-}" != "1" ]]; then
+        OPENBLAS_CMAKE_ARGS+=(-DTARGET=HASWELL)
+    fi
+    OPENBLAS_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
 fi
 
 cmake "${OPENBLAS_CMAKE_ARGS[@]}" $SOURCE_DIR/external/OpenBLAS
@@ -303,6 +329,10 @@ if [[ "$(uname)" == "Darwin" ]]; then
     )
 fi
 
+if [[ "$(uname)" == "Linux" ]]; then
+    CURL_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
+fi
+
 cmake "${CURL_CMAKE_ARGS[@]}" $SOURCE_DIR/external/curl
 cmake --build $BUILD_DIR/curl -j $NUM_JOBS
 cmake --install $BUILD_DIR/curl
@@ -339,6 +369,10 @@ if [[ "$(uname)" == "Darwin" ]]; then
     )
 fi
 
+if [[ "$(uname)" == "Linux" ]]; then
+    FAISS_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
+fi
+
 cmake "${FAISS_CMAKE_ARGS[@]}" $SOURCE_DIR/external/faiss-1.13.1
 cmake --build $BUILD_DIR/faiss -j $NUM_JOBS
 cmake --install $BUILD_DIR/faiss
@@ -360,6 +394,10 @@ if [[ "$(uname)" == "Darwin" ]]; then
     NLOHMANN_CMAKE_ARGS+=(
         "${MACOS_COMPILER_ARGS[@]}"
     )
+fi
+
+if [[ "$(uname)" == "Linux" ]]; then
+    NLOHMANN_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
 fi
 
 cmake "${NLOHMANN_CMAKE_ARGS[@]}" $SOURCE_DIR/external/nlohmann_json
@@ -386,6 +424,10 @@ if [[ "$(uname)" == "Darwin" ]]; then
     MINIO_CMAKE_ARGS+=(
         "${MACOS_COMPILER_ARGS[@]}"
     )
+fi
+
+if [[ "$(uname)" == "Linux" ]]; then
+    MINIO_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
 fi
 
 cmake "${MINIO_CMAKE_ARGS[@]}" -DCMAKE_VERBOSE_MAKEFILE=ON $SOURCE_DIR/external/minio-cpp
