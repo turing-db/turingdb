@@ -4,7 +4,8 @@
   "query": "MATCH (n:Person)-->(m:Person)\nWHERE n.name = \"Remy\" AND n.name = \"Adam\"\nCREATE (n)-[e:IS_FRIEND]->(m:Person)\nRETURN n;",
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     2 | WHERE n.name = \"Remy\" AND n.name = \"Adam\"\n     3 | CREATE (n)-[e:IS_FRIEND]->(m:Person)\n       |                           ^^^^^^^^^^\n-------* Variable already defined",
-    "result": "ANALYZE ERROR\n-------* Query error\n     2 | WHERE n.name = \"Remy\" AND n.name = \"Adam\"\n     3 | CREATE (n)-[e:IS_FRIEND]->(m:Person)\n       |                           ^^^^^^^^^^\n-------* Variable already defined"
+    "result": "ANALYZE ERROR\n-------* Query error\n     2 | WHERE n.name = \"Remy\" AND n.name = \"Adam\"\n     3 | CREATE (n)-[e:IS_FRIEND]->(m:Person)\n       |                           ^^^^^^^^^^\n-------* Variable already defined",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     2 | WHERE n.name = \\\"Remy\\\" AND n.name = \\\"Adam\\\"\\n     3 | CREATE (n)-[e:IS_FRIEND]->(m:Person)\\n       |                           ^^^^^^^^^^\\n-------* Variable already defined\"}"
   },
   "tags": [
     "fail",

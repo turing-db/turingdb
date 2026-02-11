@@ -4,7 +4,8 @@
   "query": "CALL db.propertyTypes() YIELD *",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.propertyTypes\n        __yield__: *all*\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": "id,propertyType,valueType\n0,name,String\n1,dob,String\n2,age,Int64\n3,isFrench,Bool\n4,hasPhD,Bool\n5,isReal,Bool\n6,duration,Int64\n7,proficiency,String"
+    "result": "id,propertyType,valueType\n0,name,String\n1,dob,String\n2,age,Int64\n3,isFrench,Bool\n4,hasPhD,Bool\n5,isReal,Bool\n6,duration,Int64\n7,proficiency,String",
+    "resultJson": "{\"header\":{\"column_names\":[\"id\",\"propertyType\",\"valueType\"],\"column_types\":[\"UInt64\",\"String\",\"String\"]},\"data\":[[[0,1,2,3,4,5,6,7],[\"name\",\"dob\",\"age\",\"isFrench\",\"hasPhD\",\"isReal\",\"duration\",\"proficiency\"],[\"String\",\"String\",\"Int64\",\"Bool\",\"Bool\",\"Bool\",\"Int64\",\"String\"]]]}"
   },
   "tags": [
     "call",

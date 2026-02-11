@@ -4,7 +4,8 @@
   "query": "MATCH (n) SET n += {name: \"Node\"}",
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) SET n += {name: \"Node\"}\n       |               ^^^^^^^^^^^^^^^^^^^\n-------* SET cannot dynamically mutate properties yet",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) SET n += {name: \"Node\"}\n       |               ^^^^^^^^^^^^^^^^^^^\n-------* SET cannot dynamically mutate properties yet"
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) SET n += {name: \"Node\"}\n       |               ^^^^^^^^^^^^^^^^^^^\n-------* SET cannot dynamically mutate properties yet",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) SET n += {name: \\\"Node\\\"}\\n       |               ^^^^^^^^^^^^^^^^^^^\\n-------* SET cannot dynamically mutate properties yet\"}"
   },
   "tags": [
     "fail",

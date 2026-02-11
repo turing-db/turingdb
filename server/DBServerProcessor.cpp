@@ -21,7 +21,6 @@
 #include "HTTP.h"
 #include "HTTPResponseWriter.h"
 #include "TCPConnection.h"
-#include "JsonEncoder.h"
 
 using namespace db;
 
@@ -78,7 +77,8 @@ void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
         case Endpoint::LIST_LABELS: {
              list_labels();
         }
-        break; case Endpoint::LIST_PROPERTY_TYPES: {
+        break;
+        case Endpoint::LIST_PROPERTY_TYPES: {
              list_property_types();
         }
         break;

@@ -4,7 +4,8 @@
   "query": "MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC",
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC\n       |                             ^^^^^\n-------* Property type 'nam' not found",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC\n       |                             ^^^^^\n-------* Property type 'nam' not found"
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC\n       |                             ^^^^^\n-------* Property type 'nam' not found",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC\\n       |                             ^^^^^\\n-------* Property type 'nam' not found\"}"
   },
   "tags": [
     "fail",

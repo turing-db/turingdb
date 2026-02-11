@@ -4,7 +4,8 @@
   "query": "CREATE (n) RETURN n;",
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n) RETURN n;\n       |        ^^^\n-------* Node pattern must have at least one label",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n) RETURN n;\n       |        ^^^\n-------* Node pattern must have at least one label"
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n) RETURN n;\n       |        ^^^\n-------* Node pattern must have at least one label",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n) RETURN n;\\n       |        ^^^\\n-------* Node pattern must have at least one label\"}"
   },
   "tags": [
     "fail",

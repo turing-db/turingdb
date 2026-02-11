@@ -4,7 +4,8 @@
   "query": "CALL db.labels()",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.labels\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": "id,label\n0,Person\n1,SoftwareEngineering\n2,Founder\n3,Bioinformatics\n4,Interest\n5,Exotic\n6,Supernatural\n7,SleepDisturber\n8,Sales"
+    "result": "id,label\n0,Person\n1,SoftwareEngineering\n2,Founder\n3,Bioinformatics\n4,Interest\n5,Exotic\n6,Supernatural\n7,SleepDisturber\n8,Sales",
+    "resultJson": "{\"header\":{\"column_names\":[\"id\",\"label\"],\"column_types\":[\"UInt64\",\"String\"]},\"data\":[[[0,1,2,3,4,5,6,7,8],[\"Person\",\"SoftwareEngineering\",\"Founder\",\"Bioinformatics\",\"Interest\",\"Exotic\",\"Supernatural\",\"SleepDisturber\",\"Sales\"]]]}"
   },
   "tags": [
     "call",

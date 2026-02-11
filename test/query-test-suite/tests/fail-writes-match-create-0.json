@@ -4,7 +4,8 @@
   "query": "MATCH (n:Person) CREATE (n:Officer) RETURN n;",
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) CREATE (n:Officer) RETURN n;\n       |                         ^^^^^^^^^^^\n-------* Variable already defined",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) CREATE (n:Officer) RETURN n;\n       |                         ^^^^^^^^^^^\n-------* Variable already defined"
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) CREATE (n:Officer) RETURN n;\n       |                         ^^^^^^^^^^^\n-------* Variable already defined",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n:Person) CREATE (n:Officer) RETURN n;\\n       |                         ^^^^^^^^^^^\\n-------* Variable already defined\"}"
   },
   "tags": [
     "fail",

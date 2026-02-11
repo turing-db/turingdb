@@ -25,7 +25,8 @@ using namespace db;
 QueryInterpreterV2::QueryInterpreterV2(db::SystemManager* sysMan,
                                        db::JobSystem* jobSystem)
     : _sysMan(sysMan),
-      _jobSystem(jobSystem) {
+    _jobSystem(jobSystem)
+{
 }
 
 QueryInterpreterV2::~QueryInterpreterV2() {

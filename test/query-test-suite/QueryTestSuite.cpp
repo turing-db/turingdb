@@ -45,6 +45,23 @@ TEST_F(QueryTestSuite, RunAll) {
             ADD_FAILURE() << "Actual result:\n"
                           << result.resultOutput;
         }
+
+        if (!result.resultJsonValid) {
+            ADD_FAILURE() << "Result JSON invalid for test: "
+                          << test.name << "\n"
+                          << result.resultJsonError;
+            ADD_FAILURE() << "JSON output:\n"
+                          << result.resultJsonOutput;
+        }
+
+        if (!result.resultJsonMatched) {
+            ADD_FAILURE() << "Result JSON mismatch for test: "
+                          << test.name;
+            ADD_FAILURE() << "Expected JSON:\n"
+                          << test.expectResultJson;
+            ADD_FAILURE() << "Actual JSON:\n"
+                          << result.resultJsonOutput;
+        }
     }
 
     EXPECT_GE(executed, 0u);

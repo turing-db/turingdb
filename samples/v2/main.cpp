@@ -147,13 +147,13 @@ int main(int argc, char** argv) {
         {
             fmt::print("\n=== Pipeline generation ===\n\n");
 
-            QueryCallbacks handler;
+            QueryCallbacks callbacks;
             PipelineGenerator pipelineGen(&planGraph,
                                           view,
                                           &pipeline,
                                           &mem,
                                           *procedures,
-                                          handler);
+                                          callbacks);
             try {
                 auto t0 = Clock::now();
                 pipelineGen.generate();

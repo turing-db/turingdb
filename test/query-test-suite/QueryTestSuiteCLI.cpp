@@ -51,12 +51,21 @@ std::string serializeTest(const QueryTestSpec& test) {
 
 std::string serializeResult(const QueryTestResult& result) {
     return fmt::format(
-        "{{\"name\":\"{}\",\"planOutput\":\"{}\",\"resultOutput\":\"{}\",\"planMatched\":{},\"resultMatched\":{},\"timeUs\":{}}}",
+        "{{\"name\":\"{}\",\"planOutput\":\"{}\","
+        "\"resultOutput\":\"{}\",\"resultJsonOutput\":\"{}\","
+        "\"resultJsonError\":\"{}\","
+        "\"planMatched\":{},\"resultMatched\":{},"
+        "\"resultJsonMatched\":{},\"resultJsonValid\":{},"
+        "\"timeUs\":{}}}",
         escapeJson(result.name),
         escapeJson(result.planOutput),
         escapeJson(result.resultOutput),
+        escapeJson(result.resultJsonOutput),
+        escapeJson(result.resultJsonError),
         result.planMatched ? "true" : "false",
         result.resultMatched ? "true" : "false",
+        result.resultJsonMatched ? "true" : "false",
+        result.resultJsonValid ? "true" : "false",
         result.timeUs);
 }
 
