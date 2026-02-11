@@ -72,15 +72,16 @@ void project(const ColRg& cols, IndxRg& indices) {
         temp = data;
 
         for (size_t i {0}; i < indices.size(); i++) {
-            assert(idx < data.size());
-            assert(idx < indices.size());
+            assert(i < data.size());
+            assert(i < indices.size());
             data[i] = temp[indices[i]];
         }
     }
+    // Reset the indices for future projections
     std::ranges::iota(indices, 0);
 }
 
-void sort(Dataframe* df) {
+void subsort(Dataframe* df) {
     // Empty/singleton dataframe is trivially sorted
     if (df->getRowCount() <= 1) {
         return;
@@ -89,41 +90,49 @@ void sort(Dataframe* df) {
     const size_t numCols = df->size();
     const size_t numRows = df->getRowCount();
 
+    // Sort a single column, project the new ordering onto the others
     std::vector<size_t> indices(numRows);
     std::iota(begin(indices), end(indices), 0);
 
     auto& cols = df->cols();
 
+    // Sort w.r.t the most dominant order key
     Column* dominantCol = cols.front()->getColumn();
     sortCol(dominantCol, indices);
 
-    {
-        auto colSubrange = rg::subrange(begin(cols) + 1, end(cols));
-        project(colSubrange, indices);
+    { // Project the new order onto the remaining columns
+        auto remainingCols = rg::subrange(begin(cols) + 1, end(cols));
+        project(remainingCols, indices);
     }
+
+    // Sort w.r.t the remaining order keys
     std::vector<TieRange> tieRanges;
     for (size_t i {1}; i < numCols; i++) {
-
+        // Find runs of contiguous identical values in the previous column; only sort
+        // those subruns
         auto* prevCol = cols[i - 1]->as<ColumnInts>();
         auto* thisCol = cols[i]->as<ColumnInts>();
 
         populateTieRanges(tieRanges, prevCol);
+        // No ties: nothing to sort
         if (tieRanges.empty()) {
             continue;
         }
 
         std::vector<Int>& data = thisCol->getRaw();
 
+        // For each tie run, r, sort only that run, keeping track of the new indices
         for (const auto& [start, size] : tieRanges) {
-            auto colSubrange = rg::subrange(begin(data) + start, begin(data) + start + size);
+            auto colTieRange = rg::subrange(begin(data) + start, begin(data) + start + size);
             auto idxSubrange = rg::subrange(begin(indices) + start, begin(indices) + start + size);
 
-            rg::sort(rv::zip(idxSubrange, colSubrange), [](auto&& zip1, auto&& zip2) {
+            rg::sort(rv::zip(idxSubrange, colTieRange), [](auto&& zip1, auto&& zip2) {
                 const Int a = std::get<1>(zip1);
                 const Int b = std::get<1>(zip2);
                 return a < b;
             });
         }
+        // For the remaining columns, project that new ordering
         auto remainingCols = rg::subrange(begin(cols) + i + 1, end(cols));
         project(remainingCols, indices);
     }
