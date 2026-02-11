@@ -22,21 +22,37 @@ void Dataframe::addColumn(NamedColumn* column) {
 }
 
 size_t Dataframe::getLogicalRowCount() const {
-    size_t mostRows {0};
-    for (const NamedColumn* ncol : _cols) {
-        bioassert(ncol && ncol->getColumn(),
-                  "Attempted to get row count of dataframe with null column.");
-        mostRows = std::max(mostRows, ncol->getColumn()->size());
+    if (_cols.size() == 0) {
+        return 0;
     }
 
-    return mostRows;
+    // Nullopt until we find a non-ColumnConst to take size of
+    std::optional<size_t> foundSize {std::nullopt};
+
+    constexpr ContainerKind::Code colConstKind =
+        ColumnKind::extractContainerKind(ColumnConst<int>::staticKind());
+
+    for (const NamedColumn* ncol : _cols) {
+        const Column* col = ncol->getColumn();
+        // Ignore ColumnConsts
+        if (col->getContainerKind() == colConstKind) {
+            continue;
+        }
+        foundSize = col->size();
+    }
+
+    // We have at least 1 column, but all were ColumnConst => optional not set
+    // => logical size = 1
+    if (!foundSize.has_value()) {
+        return 1;
+    }
+
+    return foundSize.value();
 }
 
 bool Dataframe::isRectangular() const {
     constexpr ContainerKind::Code colConstKind =
         ColumnKind::extractContainerKind(ColumnConst<int>::staticKind());
-    constexpr ContainerKind::Code colVectorKind =
-        ColumnKind::extractContainerKind(ColumnVector<int>::staticKind());
 
     std::optional<size_t> expectedRowCount {std::nullopt};
 
@@ -45,25 +61,23 @@ bool Dataframe::isRectangular() const {
                   "Attempted to check shape of dataframe with null column.");
 
         const Column* col = ncol->getColumn();
-        auto containerKind = col->getContainerKind();
+        ContainerKind::Code containerKind = col->getContainerKind();
 
         // ColumnConst can be any size, ignore it
         if (containerKind == colConstKind) {
             continue;
         }
 
-        // All ColumnVectors must be the same size
-        if (containerKind == colVectorKind) {
-            const size_t actualSize = col->size();
-            // If we haven't encountered a ColumnVector yet, set the expected row count to
-            // be the size of this vector
-            if (!expectedRowCount.has_value()) {
-                expectedRowCount = actualSize;
-            }
-            // All vectors should be the same size as the expected size
-            if (actualSize != expectedRowCount) {
-                return false;
-            }
+        // All other columns must be the same size
+        const size_t actualSize = col->size();
+        // If we haven't encountered a non-ColumnConst yet, set the expected row
+        // count to be the size of this column
+        if (!expectedRowCount.has_value()) {
+            expectedRowCount = actualSize;
+        }
+        // All sized columns should be the same size as the expected size
+        if (actualSize != expectedRowCount) {
+            return false;
         }
     }
 
