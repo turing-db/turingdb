@@ -2,6 +2,8 @@
 
 #include "TCPConnection.h"
 
+#include "BioAssert.h"
+
 namespace net {
 
 TCPConnectionStorage::TCPConnectionStorage(uint32_t maxConnections)

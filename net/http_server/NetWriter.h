@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string.h>
+#include <string>
 #include <string_view>
 #include <sys/socket.h>
 
@@ -9,12 +10,29 @@
 #include "Utils.h"
 #include "ConnectionHeader.h"
 
-#include "BioAssert.h"
-
 namespace net {
 
 class NetWriter {
 public:
+    enum class Status : uint8_t {
+        Ok = 0,
+        HeaderTooLarge,
+        ValueTooLarge,
+        AllocationFailed,
+        SendFailed,
+        SentZeroBytes,
+
+        _SIZE
+    };
+
+    using StatusStrings = EnumToString<Status>::Create<
+        EnumStringPair<Status::Ok, "Ok">,
+        EnumStringPair<Status::HeaderTooLarge, "Head does not fit in buffer">,
+        EnumStringPair<Status::ValueTooLarge, "Value does not fit in buffer">,
+        EnumStringPair<Status::AllocationFailed, "Could not allocate memory">,
+        EnumStringPair<Status::SendFailed, "Could not send data">,
+        EnumStringPair<Status::SendFailed, "Send zero bytes which is not supposed to happen">>;
+
     explicit NetWriter(utils::DataSocket socket)
         : _socket(socket)
     {
@@ -24,10 +42,17 @@ public:
     }
 
     void setFirstLine(net::HTTP::Status status) {
+        if (errorOccured()) {
+            return;
+        }
+
         static constexpr std::string_view version = "HTTP/1.1 ";
         const std::string_view statusStr = net::HTTP::StatusDescription::value(status);
 
-        bioassert(version.size() + statusStr.size() + 2 <= _header._remaining, "Header does not fit in buffer");
+        if (version.size() + statusStr.size() + 2 > _header._remaining) {
+            _status = Status::HeaderTooLarge;
+            return;
+        }
 
         memcpy(_header._content.data() + _header._position, version.data(), version.size());
         _header.increment(version.size());
@@ -39,10 +64,17 @@ public:
     }
 
     void addContentLength(size_t length) {
+        if (errorOccured()) {
+            return;
+        }
+
         static constexpr std::string_view contentLength = "Content-Length: ";
         const std::string lengthStr = std::to_string(length);
 
-        bioassert(contentLength.size() + lengthStr.size() + 2 <= _header._remaining, "Header does not fit in buffer");
+        if (contentLength.size() + lengthStr.size() + 2 > _header._remaining) {
+            _status = Status::HeaderTooLarge;
+            return;
+        }
 
         memcpy(_header._content.data() + _header._position, contentLength.data(), contentLength.size());
         _header.increment(contentLength.size());
@@ -54,74 +86,95 @@ public:
     }
 
     void addChunkedTransferEncoding() {
+        if (errorOccured()) {
+            return;
+        }
+
         static constexpr std::string_view encoding = "Transfer-Encoding: chunked\r\n";
 
-        bioassert(encoding.size() <= _header._remaining, "Header does not fit in buffer");
+        if (encoding.size() > _header._remaining) {
+            _status = Status::HeaderTooLarge;
+            return;
+        }
+
         memcpy(_header._content.data() + _header._position, encoding.data(), encoding.size());
         _header.increment(encoding.size());
     }
 
     void addContentType(ContentType contentType) {
-        static constexpr std::string_view text = "Content-type: text/plain\r\n";
-        static constexpr std::string_view json = "Content-type: application/json\r\n";
-
-        switch (contentType) {
-            case net::ContentType::TEXT: {
-                bioassert(text.size() <= _header._remaining, "Header does not fit in buffer");
-                memcpy(_header._content.data() + _header._position, text.data(), text.size());
-                _header.increment(text.size());
-                return;
-            }
-            case ContentType::JSON: {
-                bioassert(json.size() <= _header._remaining, "Header does not fit in buffer");
-                memcpy(_header._content.data() + _header._position, json.data(), json.size());
-                _header.increment(json.size());
-                return;
-            }
-        }
-    }
-
-    void addConnection(ConnectionHeader connection) {
-        static constexpr std::string_view keepAlive = "Connection: Keep-Alive\r\n";
-        static constexpr std::string_view close = "Connection: close\r\n";
-
-        switch (connection) {
-            case ConnectionHeader::KEEP_ALIVE: {
-                bioassert(keepAlive.size() <= _header._remaining, "Header does not fit in buffer");
-                memcpy(_header._content.data() + _header._position, keepAlive.data(), keepAlive.size());
-                _header.increment(keepAlive.size());
-                return;
-            }
-            case ConnectionHeader::CLOSE: {
-                bioassert(close.size() <= _header._remaining, "Header does not fit in buffer");
-                memcpy(_header._content.data() + _header._position, close.data(), close.size());
-                _header.increment(close.size());
-                return;
-            }
-        }
-    }
-
-    void endHeader() {
-        _header.endLine();
-    }
-
-    void flushHeader() {
-        if (_errorOccured) {
+        if (errorOccured()) {
             return;
         }
 
-        //_header.endLine();
+        static constexpr std::string_view text = "Content-type: text/plain\r\n";
+        static constexpr std::string_view json = "Content-type: application/json\r\n";
+
+        std::string_view data;
+
+        switch (contentType) {
+            case net::ContentType::TEXT: {
+                data = text;
+            } break;
+            case ContentType::JSON: {
+                data = json;
+            } break;
+        }
+
+        if (data.size() > _header._remaining) {
+            _status = Status::HeaderTooLarge;
+            return;
+        }
+
+        memcpy(_header._content.data() + _header._position, data.data(), data.size());
+        _header.increment(data.size());
+    }
+
+    void addConnection(ConnectionHeader connection) {
+        if (errorOccured()) {
+            return;
+        }
+
+        static constexpr std::string_view keepAlive = "Connection: Keep-Alive\r\n";
+        static constexpr std::string_view close = "Connection: close\r\n";
+
+        std::string_view data;
+
+        switch (connection) {
+            case ConnectionHeader::KEEP_ALIVE: {
+                data = keepAlive;
+            } break;
+            case ConnectionHeader::CLOSE: {
+                data = close;
+            } break;
+        }
+
+        if (data.size() > _header._remaining) {
+            _status = Status::HeaderTooLarge;
+            return;
+        }
+
+        memcpy(_header._content.data() + _header._position, data.data(), data.size());
+        _header.increment(data.size());
+    }
+
+    void flushHeader() {
+        if (errorOccured()) {
+            return;
+        }
+
+        _header.endLine();
         send(_header._content.data(), _header._size);
 
         _header.reset();
     }
 
     void flush() noexcept {
-        if (_errorOccured) {
+        if (errorOccured()) {
             return;
         }
 
         hexString(_chunk._size, _chunk._content.data());
+
         // Delimit ending of chunk
         memcpy(_chunk._content.data() + _chunk._position, "\r\n", 2);
         send(_chunk._content.data(), _chunk._size + 12);
@@ -134,7 +187,7 @@ public:
     }
 
     void write(std::string_view content) noexcept {
-        if (_errorOccured) {
+        if (errorOccured()) {
             return;
         }
 
@@ -143,8 +196,12 @@ public:
         }
 
         if (content.size() > _chunk._remaining) {
-            bioassert(content.size() <= _maxChunkSize, "String does not fit in buffer");
             flush();
+
+            if (content.size() > _maxChunkSize) {
+                _status = Status::ValueTooLarge;
+                return;
+            }
         }
 
         memcpy(_chunk._content.data() + _chunk._position, content.data(), content.size());
@@ -152,7 +209,7 @@ public:
     }
 
     void write(char c) {
-        if (_errorOccured) {
+        if (errorOccured()) {
             return;
         }
 
@@ -175,7 +232,7 @@ public:
     }
 
     void write(std::unsigned_integral auto value) {
-        if (_errorOccured) {
+        if (errorOccured()) {
             return;
         }
 
@@ -226,7 +283,7 @@ public:
         _chunk.reset();
         _header.reset();
         _wroteNonEmptyChunk = false;
-        _errorOccured = false;
+        _status = Status::Ok;
     }
 
     void setSocket(utils::DataSocket socket) {
@@ -242,7 +299,11 @@ public:
     }
 
     bool errorOccured() const {
-        return _errorOccured;
+        return _status != Status::Ok;
+    }
+
+    Status status() const {
+        return _status;
     }
 
 private:
@@ -251,8 +312,8 @@ private:
     static inline constexpr size_t _safety = 64; // Includes the size + opening/closing \r\n tokens
 
     utils::DataSocket _socket {};
+    Status _status {Status::Ok};
     bool _wroteNonEmptyChunk = false;
-    bool _errorOccured = false;
 
     struct Header {
         std::array<char, _maxHeaderSize> _content {};
@@ -337,9 +398,9 @@ private:
         }
     }
 
-    void send(const char* data, size_t size) {
-        std::string_view content {data, size};
+    void send(const char* data, size_t size) noexcept {
         size_t remainingBytes = size;
+
         while (remainingBytes > 0) {
             const auto sent = ::send(_socket, data, remainingBytes, MSG_NOSIGNAL);
             if (sent == -1) {
@@ -347,8 +408,15 @@ private:
                     continue; // Try again
                 }
 
-                _errorOccured = true;
-                break;
+                _status = Status::SendFailed;
+                return;
+            }
+
+            if (sent == 0) {
+                // This is never supposed to happen, unless we pass size == 0
+                //
+                _status = Status::SentZeroBytes;
+                return;
             }
 
             data += sent;

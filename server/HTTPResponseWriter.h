@@ -189,7 +189,6 @@ public:
         _writer->addConnection(net::getConnectionHeader(!keepAlive));
         _writer->addChunkedTransferEncoding();
         _writer->addContentType(net::ContentType::JSON);
-        _writer->endHeader();
         _writer->flushHeader();
         return *this;
     }

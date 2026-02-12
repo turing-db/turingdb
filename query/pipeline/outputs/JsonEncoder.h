@@ -79,21 +79,21 @@ struct ChunkJsonEncoder {
 };
 
 template <Writer W>
-class VJsonEncoder {
+class JsonEncoder {
 public:
-    VJsonEncoder() = delete;
+    JsonEncoder() = delete;
 
-    VJsonEncoder(const VJsonEncoder&) = delete;
-    VJsonEncoder(VJsonEncoder&&) = delete;
-    VJsonEncoder& operator=(const VJsonEncoder&) = delete;
-    VJsonEncoder& operator=(VJsonEncoder&&) = delete;
+    JsonEncoder(const JsonEncoder&) = delete;
+    JsonEncoder(JsonEncoder&&) = delete;
+    JsonEncoder& operator=(const JsonEncoder&) = delete;
+    JsonEncoder& operator=(JsonEncoder&&) = delete;
 
-    VJsonEncoder(W& writer)
+    JsonEncoder(W& writer)
         : _writer(writer)
     {
     }
 
-    ~VJsonEncoder() {
+    ~JsonEncoder() {
         finish();
     }
 

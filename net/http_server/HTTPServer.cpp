@@ -13,6 +13,8 @@
 #include "TCPListener.h"
 #include "Utils.h"
 
+#include "BioAssert.h"
+
 using namespace net;
 
 HTTPServer::HTTPServer(Functions&& functions)

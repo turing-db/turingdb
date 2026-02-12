@@ -1423,7 +1423,7 @@ void DBServerProcessor::queryImpl(std::string_view query,
     bioassert(writer, "Invalid writer");
 
     QueryCallbacks queryCallbacks;
-    VJsonEncoder<net::NetWriter> encoder {*writer};
+    JsonEncoder<net::NetWriter> encoder {*writer};
 
     queryCallbacks.setOnBegin([&] {
         encoder.start();
