@@ -1445,6 +1445,7 @@ void DBServerProcessor::queryImpl(std::string_view query,
 
     queryCallbacks.setOnEnd([&] (QueryCallbacks::ExecTimeMilliseconds milliseconds) {
         encoder.encodeTime(milliseconds);
+        encoder.finish();
     });
 
     const auto res = _db.query(query, graphName, &mem, queryCallbacks, commit, change);
