@@ -1,9 +1,15 @@
+#pragma once
+
 #include <algorithm>
+#include <iostream>
 #include <numeric>
 #include <ranges>
 
 #include <range/v3/action/sort.hpp>
+#include <range/v3/action/stable_sort.hpp>
 #include <range/v3/view/enumerate.hpp>
+#include "range/v3/view/subrange.hpp"
+#include "spdlog/spdlog.h"
 
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"
@@ -30,35 +36,46 @@ void sortCol(Column* col, std::vector<size_t>& indices) {
     auto* ccol = dynamic_cast<ColumnInts*>(col);
     bioassert(ccol, "Failed to cast column to sort.");
 
-    rg::sort(rv::zip(indices, *ccol), [](auto&& zip1, auto&& zip2) {
+    rg::stable_sort(rv::zip(indices, *ccol), [](auto&& zip1, auto&& zip2) {
         const Int a = std::get<1>(zip1);
         const Int b = std::get<1>(zip2);
         return a < b;
     });
 }
 
-void populateTieRanges(std::vector<TieRange>& tieRanges, Column* col) {
-    auto* ccol = dynamic_cast<ColumnInts*>(col);
-    bioassert(ccol, "Failed to cast column to sort.");
-
-    tieRanges.clear();
-
-    std::vector<Int>& data = ccol->getRaw();
-
+template <std::ranges::random_access_range Rg>
+void addTieRanges(std::vector<TieRange>& tieRanges, const Rg& rg, size_t start = 0) {
     // Find the first instance of a duplciated entry in the column
-    auto startIt = std::ranges::adjacent_find(data);
+    auto startIt = std::ranges::adjacent_find(rg);
 
-    while (startIt != end(data)) {
+    while (startIt != end(rg)) {
         // Find the interval [start, end) of duplicated entries in column
         auto endIt = startIt;
-        while (endIt != end(data) && *endIt == *startIt) {
+        while (endIt != end(rg) && *endIt == *startIt) {
             ++endIt;
         }
-        const size_t startIdx = std::distance(begin(data), startIt);
+        const size_t startIdx = std::distance(begin(rg), startIt) + start;
         const size_t size = std::distance(startIt, endIt);
         tieRanges.emplace_back(startIdx, size);
-        startIt = std::adjacent_find(endIt, end(data));
+        startIt = std::adjacent_find(endIt, end(rg));
     }
+}
+
+void narrowTieRanges(std::vector<TieRange>& tieRanges, Column* col) {
+    auto ccol = dynamic_cast<ColumnInts*>(col);
+    bioassert(ccol, "Failed to cast column to sort.");
+
+    // Temporary vector which will contain the new tie-ranges
+    std::vector<TieRange> temp;
+    auto& data = ccol->getRaw();
+
+    for (const auto& [start, size] : tieRanges) {
+        const size_t end = start + size;
+        auto subrange = rg::subrange(begin(data) + start, begin(data) + end);
+        addTieRanges(temp, subrange, start);
+    }
+
+    tieRanges.swap(temp);
 }
 
 template <std::ranges::forward_range IndxRg>
@@ -72,6 +89,44 @@ void project(Column* col, IndxRg& indices) {
         assert(i < data.size());
         assert(i < indices.size());
         data[i] = temp[indices[i]];
+    }
+}
+
+void rowsort(Dataframe* df) {
+    // Empty/singleton dataframe is trivially sorted
+    if (df->getRowCount() <= 1) {
+        return;
+    }
+
+    const size_t numRows = df->getRowCount();
+
+    std::vector<size_t> idx(numRows);
+    std::iota(idx.begin(), idx.end(), 0);
+
+    rg::sort(idx.begin(), idx.end(), [&](size_t i, size_t j) {
+        for (auto* ncol : df->cols()) {
+            auto* c = ncol->as<ColumnInts>();
+            Int a = (*c)[i];
+            Int b = (*c)[j];
+            if (a < b) {
+                return true;
+            }
+            if (a > b) {
+                return false;
+            }
+        }
+        return false;
+    });
+
+    // Materialise permutation
+    for (auto* ncol : df->cols()) {
+        auto* c = ncol->as<ColumnInts>();
+        auto& raw = c->getRaw();
+        std::vector<Int> tmp(raw.size());
+        for (size_t r = 0; r < numRows; ++r) {
+            tmp[r] = raw[idx[r]];
+        }
+        raw.swap(tmp);
     }
 }
 
@@ -94,17 +149,21 @@ void subsort(Dataframe* df) {
     Column* dominantCol = cols.front()->getColumn();
     sortCol(dominantCol, indices);
 
+    // Find runs of contiguous identical values in the previous column(s); only sort
+    // those subruns
     std::vector<TieRange> tieRanges;
+    {
+        std::vector<Int>& data = dominantCol->cast<ColumnInts>()->getRaw();
+        addTieRanges(tieRanges, data);
+    }
 
     // Sort w.r.t the remaining order keys
     for (size_t i {1}; i < numCols; i++) {
-        auto* prevCol = cols[i - 1]->as<ColumnInts>();
         auto* thisCol = cols[i]->as<ColumnInts>();
+        // Project the new order of indices - determined by the sort of the previous
+        // column - onto this column
         project(thisCol, indices);
 
-        // Find runs of contiguous identical values in the previous column; only sort
-        // those subruns
-        populateTieRanges(tieRanges, prevCol);
         // No ties: nothing to sort in this column
         if (tieRanges.empty()) {
             continue;
@@ -112,18 +171,23 @@ void subsort(Dataframe* df) {
 
         std::vector<Int>& data = thisCol->getRaw();
 
-        // For each tie run, r, sort only that run, keeping track of the new indices
+        // For each tie run, r, sort that run, keeping track of the new indices
         for (const auto& [start, size] : tieRanges) {
             const size_t end = start + size;
             auto colTieRange = rg::subrange(begin(data) + start, begin(data) + end);
             auto idxSubrange = rg::subrange(begin(indices) + start, begin(indices) + end);
 
-            rg::sort(rv::zip(idxSubrange, colTieRange), [](auto&& zip1, auto&& zip2) {
+            rg::stable_sort(rv::zip(idxSubrange, colTieRange), [](auto&& zip1, auto&& zip2) {
                 const Int a = std::get<1>(zip1);
                 const Int b = std::get<1>(zip2);
                 return a < b;
             });
         }
+
+        // Narrow the ties: for a contiguous range [l, r] in the previous column,
+        // constrict the range to [l', r'] such that l <= l' and r' <= r and a_i = x for
+        // l' <= i <= r', for some x, and for a_i \in @ref thisCol
+        narrowTieRanges(tieRanges, thisCol);
     }
 }
 

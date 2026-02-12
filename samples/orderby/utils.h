@@ -1,4 +1,14 @@
+#pragma once
+
+#include <iostream>
 #include <memory>
+#include <chrono>
+#include <random>
+
+#include <spdlog/spdlog.h>
+
+#include "FatalException.h"
+#include "sort.h"
 
 #include "LocalMemory.h"
 #include "columns/ColumnVector.h"
@@ -25,6 +35,24 @@ Df makeDataframe(LocalMemory& mem, DataframeManager& dfman, std::vector<std::vec
     }
     
     return df;
+}
+
+void duplicateDataframeShape(LocalMemory* mem,
+                             DataframeManager* dfMan,
+                             Dataframe* src,
+                             Dataframe* dest) {
+    for (const NamedColumn* col : src->cols()) {
+        Column* newCol = mem->allocSame(col->getColumn());
+        auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
+        dest->addColumn(newNamedCol);
+    }
+}
+
+Df copyDataframe(LocalMemory& mem, DataframeManager& dfman, const Df& toCopy) {
+    auto newDf = std::make_unique<Dataframe>();
+    duplicateDataframeShape(&mem, &dfman, toCopy.get(), newDf.get());
+    newDf->copyFrom(toCopy.get());
+    return newDf;
 }
 
 // check each column in the df to see if its sorted
@@ -56,37 +84,178 @@ bool isSorted(const Df& df) {
     return true;
 }
 
-// checks if a (presort) DF contains same elements as b (post sort)
 bool containSame(const Df& a, const Df& b) {
-    const auto& aCols = a->cols();
-    const auto& bCols = b->cols();
+    if (a->getRowCount() != b->getRowCount()) {
+        return false;
+    }
+    if (a->cols().size() != b->cols().size()) {
+        return false;
+    }
+
+    auto makeRows = [](const Df& df) {
+        const auto& cols = df->cols();
+        size_t rows = df->getRowCount();
+
+        std::vector<std::vector<Int>> out(rows);
+
+        for (auto* ncol : cols) {
+            auto* c = ncol->as<ColumnInts>();
+            bioassert(c, "Non-int column");
+
+            for (size_t r = 0; r < rows; ++r) {
+                out[r].push_back((*c)[r]);
+            }
+        }
+
+        std::ranges::sort(out);
+        return out;
+    };
+
+    return makeRows(a) == makeRows(b);
+}
+
+Df makeRandomDataframe(LocalMemory& mem, DataframeManager& dfman, 
+                       size_t numRows, size_t numCols,
+                       Int minVal = 0, Int maxVal = 100) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<Int> dist(minVal, maxVal);
     
-    // Must have same number of columns
-    if (aCols.size() != bCols.size()) return false;
+    std::vector<std::vector<Int>> cols;
+    cols.reserve(numCols);
     
-    // Must have same number of rows
-    if (a->getRowCount() != b->getRowCount()) return false;
+    for (size_t col = 0; col < numCols; col++) {
+        std::vector<Int> colData;
+        colData.reserve(numRows);
+        
+        for (size_t row = 0; row < numRows; row++) {
+            colData.push_back(dist(gen));
+        }
+        
+        cols.push_back(std::move(colData));
+    }
     
-    // Check each column contains same values (possibly in different order)
-    for (size_t i = 0; i < aCols.size(); i++) {
-        auto* aCol = aCols[i]->as<ColumnInts>();
-        auto* bCol = bCols[i]->as<ColumnInts>();
+    return makeDataframe<Int>(mem, dfman, std::move(cols));
+}
+
+// Overload with seed for reproducible tests
+Df makeRandomDataframe(LocalMemory& mem, DataframeManager& dfman, 
+                       size_t numRows, size_t numCols,
+                       unsigned int seed,
+                       Int minVal = 0, Int maxVal = 100) {
+    std::mt19937 gen(seed);
+    std::uniform_int_distribution<Int> dist(minVal, maxVal);
+    
+    std::vector<std::vector<Int>> cols;
+    cols.reserve(numCols);
+    
+    for (size_t col = 0; col < numCols; col++) {
+        std::vector<Int> colData;
+        colData.reserve(numRows);
         
-        // Copy the data from both columns
-        std::vector<Int> aData = aCol->getRaw();
-        std::vector<Int> bData = bCol->getRaw();
+        for (size_t row = 0; row < numRows; row++) {
+            colData.push_back(dist(gen));
+        }
         
-        // Sort both copies
-        std::ranges::sort(aData);
-        std::ranges::sort(bData);
+        cols.push_back(std::move(colData));
+    }
+    
+    return makeDataframe<Int>(mem, dfman, std::move(cols));
+}
+
+void benchmarkSort(LocalMemory& mem, DataframeManager& dfman,
+                   size_t numRows, size_t numCols, size_t iterations) {
+    // Create the original random dataframe once
+    auto original = makeRandomDataframe(mem, dfman, numRows, numCols);
+    
+    spdlog::info("Benchmarking sort on {}x{} dataframe over {} iterations", 
+                 numRows, numCols, iterations);
+    
+    std::vector<double> subsortTimings;
+    std::vector<double> rowsortTimings;
+    subsortTimings.reserve(iterations);
+    rowsortTimings.reserve(iterations);
+    
+    for (size_t i = 0; i < iterations; i++) {
+        // Benchmark subsort
+        {
+            auto sorted = copyDataframe(mem, dfman, original);
+            
+            auto start = std::chrono::high_resolution_clock::now();
+            subsort(sorted.get());
+            auto end = std::chrono::high_resolution_clock::now();
+            
+            std::chrono::duration<double, std::milli> duration = end - start;
+            subsortTimings.push_back(duration.count());
+            
+            // Verify correctness
+            if (!containSame(original, sorted)) {
+                original->dump(std::cout);
+                sorted->dump(std::cout);
+                throw FatalException("subsort: Not same.");
+            }
+            if (!isSorted(sorted)) {
+                original->dump(std::cout);
+                sorted->dump(std::cout);
+                throw FatalException("subsort: Not sorted.");
+            }
+        }
         
-        // They should be identical if they contain the same multiset
-        if (aData != bData) {
-            return false;
+        // Benchmark rowsort
+        {
+            auto sorted = copyDataframe(mem, dfman, original);
+            
+            auto start = std::chrono::high_resolution_clock::now();
+            rowsort(sorted.get());
+            auto end = std::chrono::high_resolution_clock::now();
+            
+            std::chrono::duration<double, std::milli> duration = end - start;
+            rowsortTimings.push_back(duration.count());
+            
+            // Verify correctness
+            if (!containSame(original, sorted)) {
+                original->dump(std::cout);
+                sorted->dump(std::cout);
+                throw FatalException("rowsort: Not same.");
+            }
+            if (!isSorted(sorted)) {
+                original->dump(std::cout);
+                sorted->dump(std::cout);
+                throw FatalException("rowsort: Not sorted.");
+            }
         }
     }
     
-    return true;
+    // Calculate statistics for subsort
+    double subsortAvg = std::accumulate(subsortTimings.begin(), subsortTimings.end(), 0.0) / iterations;
+    double subsortMin = *std::min_element(subsortTimings.begin(), subsortTimings.end());
+    double subsortMax = *std::max_element(subsortTimings.begin(), subsortTimings.end());
+    
+    // Calculate statistics for rowsort
+    double rowsortAvg = std::accumulate(rowsortTimings.begin(), rowsortTimings.end(), 0.0) / iterations;
+    double rowsortMin = *std::min_element(rowsortTimings.begin(), rowsortTimings.end());
+    double rowsortMax = *std::max_element(rowsortTimings.begin(), rowsortTimings.end());
+    
+    // Calculate speedup
+    double speedup = rowsortAvg / subsortAvg;
+    
+    fmt::print("\n=== BENCHMARK RESULTS ===\n");
+    fmt::print("Dimensions: {} rows × {} columns\n", numRows, numCols);
+    fmt::print("Iterations: {}\n\n", iterations);
+    
+    fmt::print("SUBSORT:\n");
+    fmt::print("  Average: {:.3f} ms\n", subsortAvg);
+    fmt::print("  Min:     {:.3f} ms\n", subsortMin);
+    fmt::print("  Max:     {:.3f} ms\n\n", subsortMax);
+    
+    fmt::print("ROWSORT:\n");
+    fmt::print("  Average: {:.3f} ms\n", rowsortAvg);
+    fmt::print("  Min:     {:.3f} ms\n", rowsortMin);
+    fmt::print("  Max:     {:.3f} ms\n\n", rowsortMax);
+    
+    fmt::print("SPEEDUP: {:.2f}x {}\n", 
+               std::abs(speedup),
+               speedup > 1.0 ? "(subsort faster)" : "(rowsort faster)");
 }
 
 }
