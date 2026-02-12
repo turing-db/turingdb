@@ -5,7 +5,7 @@ graph = "test_graph4"
 client.query(f"CREATE GRAPH {graph}")
 client.set_graph(graph)
 
-for i in range(11):
+for i in range(20):
     res = client.query("CHANGE NEW")
     change = res['changeID'][0]
 
