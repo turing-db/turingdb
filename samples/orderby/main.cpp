@@ -24,12 +24,13 @@ void print_range(Rg&& range, std::string_view name) {
 int main() {
     LocalMemory mem;
     DataframeManager dfman;
-    auto original = makeDataframe<Int>(mem,
-        dfman, {
-                   {2, 4, 1, 4, 6},
-                   {1, 9, 3, 4, 2},
-                   {8, 6, 9, 7, 5},
-                   {2, 4, 1, 3, 5}
+    auto original = makeDataframe<Int>(
+        mem, dfman,
+        {
+            {2, 4, 1, 4, 6},
+            {1, 9, 3, 4, 2},
+            {8, 6, 9, 7, 5},
+            {2, 4, 1, 3, 5}
     });
 
     auto sorted = makeDataframe<Int>(
@@ -43,6 +44,7 @@ int main() {
 
 
     subsort(sorted.get());
+    sorted->dump(std::cout);
     bioassert(isSorted(sorted), "Dataframe was not sorted.");
     bioassert(containSame(original, sorted),
               "Sorted dataframe was not set equivalent to original.");
