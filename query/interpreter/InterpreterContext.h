@@ -1,6 +1,6 @@
 #pragma once
 
-#include "QueryCallback.h"
+#include "QueryCallbacks.h"
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
 

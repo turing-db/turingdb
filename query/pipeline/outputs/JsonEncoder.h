@@ -264,7 +264,7 @@ public:
 private:
     W& _writer;
     std::string _closingTokens;
-    bool _comma = false;
+    bool _comma {false};
 };
 
 }

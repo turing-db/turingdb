@@ -17,7 +17,7 @@
 #include "PlanGraph.h"
 #include "PlanGraphDebug.h"
 #include "PlanGraphGenerator.h"
-#include "QueryCallback.h"
+#include "QueryCallbacks.h"
 #include "QueryStatus.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"

@@ -3,7 +3,7 @@
 #include <string_view>
 
 #include "QueryStatus.h"
-#include "QueryCallback.h"
+#include "QueryCallbacks.h"
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
 
