@@ -61,7 +61,7 @@ bool Dataframe::isRectangular() const {
                   "Attempted to check shape of dataframe with null column.");
 
         const Column* col = ncol->getColumn();
-        ContainerKind::Code containerKind = col->getContainerKind();
+        const ContainerKind::Code containerKind = col->getContainerKind();
 
         // ColumnConst can be any size, ignore it
         if (containerKind == colConstKind) {
