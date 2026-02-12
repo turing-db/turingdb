@@ -1449,9 +1449,4 @@ void DBServerProcessor::queryImpl(std::string_view query,
     });
 
     const auto res = _db.query(query, graphName, &mem, queryCallbacks, commit, change);
-
-    if (!res.isOk()) {
-        encoder.encodeError(res.getStatus(), res.getError());
-        return;
-    }
 }
