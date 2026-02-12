@@ -11,25 +11,32 @@ class QueryStatus;
 
 class QueryCallbacks {
 public:
+    using ExecTimeMilliseconds = float;
+
     /**
-     * @brief Callback for when the query processing begins (before the transaction is open)
+     * @brief Callback for when the query processing begins (before the transaction is open).
      * */
     using OnBegin = std::function<void()>;
 
     /**
-     * @brief Callback for when an error occurs during the query processing/execution
+     * @brief Callback for when an error occurs during the query processing/execution.
      * */
     using OnError = std::function<void(const QueryStatus&)>;
 
     /**
-     * @brief Callback for when the query outputs the header of the dataframe
+     * @brief Callback for when the query outputs the header of the dataframe.
      * */
     using OnOutputHeader = std::function<void(const Dataframe*)>;
 
     /**
-     * @brief Callback for when the query outputs data
+     * @brief Callback for when the query outputs data.
      * */
     using OnOutputData = std::function<void(const Dataframe*)>;
+
+    /**
+     * @brief Callback for when the query execution is finished .
+     * */
+    using OnEnd = std::function<void(ExecTimeMilliseconds)>;
 
     QueryCallbacks() = default;
     ~QueryCallbacks() = default;
@@ -75,10 +82,20 @@ public:
         _onOutputData = std::move(onOutputData);
     }
 
+    /**
+     * @brief Set the callback for when the query execution is finished
+     *
+     * @param onEnd The callback to set.
+     * */
+    void setOnEnd(OnEnd&& onEnd) {
+        _onEnd = std::move(onEnd);
+    }
+
     void onBegin();
     void onOutputData(const Dataframe* dataframe);
     void onError(const QueryStatus& status);
     void onOutputHeader(const Dataframe* dataframe);
+    void onEnd(ExecTimeMilliseconds time);
 
     static OnBegin defaultOnBegin() {
         return [] {};
@@ -96,11 +113,16 @@ public:
         return [](const Dataframe*) {};
     }
 
+    static OnEnd defaultOnEnd() {
+        return [](ExecTimeMilliseconds) {};
+    }
+
 private:
     OnBegin _onBegin = defaultOnBegin();
     OnOutputData _onOutputData = defaultOnOutputData();
     OnError _onError = defaultOnError();
     OnOutputHeader _onOutputHeader = defaultOnOutputHeader();
+    OnEnd _onEnd = defaultOnEnd();
 };
 
 }
