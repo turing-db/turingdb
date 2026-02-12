@@ -1,6 +1,6 @@
 #pragma once
 
-#include "procedures/Procedure.h"
+#include "Procedure.h"
 #include "ProcedureData.h"
 
 #include "BioAssert.h"

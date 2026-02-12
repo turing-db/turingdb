@@ -4,9 +4,9 @@
 
 #include "ExecutionContext.h"
 #include "FatalException.h"
-#include "procedures/ProcedureState.h"
-#include "procedures/Procedure.h"
-#include "procedures/ProcedureNamespace.h"
+#include "ProcedureState.h"
+#include "Procedure.h"
+#include "ProcedureNamespace.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "DataPart.h"

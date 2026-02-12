@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "ProcedureData.h"
-#include "procedures/ProcedureReturnValues.h"
+#include "ProcedureReturnValues.h"
 
 namespace db {
 
