@@ -36,6 +36,7 @@ add_subdirectory(neo4j_import)
 add_subdirectory(wine_ontology)
 add_subdirectory(bulk_create_crash)
 add_subdirectory(get_nodes_invalid_id)
+add_subdirectory(test_suite_queries)
 
 # write run_regress target
 # The script finds the wheel at runtime to avoid needing to re-run cmake after wheel build
