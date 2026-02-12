@@ -24,9 +24,17 @@ if [[ "$(uname)" == "Darwin" ]]; then
         echo "cmake is already installed"
     fi
 else
-    # Linux - use detected package manager
-    echo "Installing cmake via $PKG_MANAGER..."
-    sudo $PKG_MANAGER $PKG_INSTALL cmake
+    # Linux - detect package manager
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get install -y cmake
+    elif command -v dnf &> /dev/null; then
+        sudo dnf install -y cmake
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y cmake
+    else
+        echo "No supported package manager found (apt-get, dnf, yum)."
+        exit 1
+    fi
 fi
 
 # LLVM for macos
