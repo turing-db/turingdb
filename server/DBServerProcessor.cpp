@@ -1443,12 +1443,14 @@ void DBServerProcessor::queryImpl(std::string_view query,
         encoder.encodeError(status.getStatus(), status.getError());
     });
 
+    queryCallbacks.setOnEnd([&] (QueryCallbacks::ExecTimeMilliseconds milliseconds) {
+        encoder.encodeTime(milliseconds);
+    });
+
     const auto res = _db.query(query, graphName, &mem, queryCallbacks, commit, change);
 
     if (!res.isOk()) {
         encoder.encodeError(res.getStatus(), res.getError());
         return;
     }
-
-    encoder.encodeTime(res.getTotalTime().count());
 }

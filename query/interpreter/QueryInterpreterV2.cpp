@@ -217,5 +217,8 @@ QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
 
     auto res = QueryStatus(QueryStatus::Status::OK);
     res.setTotalTime(end - start);
+
+    callbacks.onEnd(res.getTotalTime().count());
+
     return res;
 }
