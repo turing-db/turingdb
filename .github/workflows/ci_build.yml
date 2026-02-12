@@ -43,9 +43,12 @@ jobs:
       uses: actions/cache@v4
       with:
         path: external/dependencies
-        key: ${{ matrix.os }}-dependencies-${{ hashFiles('dependencies.sh', '.gitmodules', 'build.sh') }}
+        key: ${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}
 
-    - name: Install dependencies
+    - name: Install build tools
+      run: ./install_build_tools.sh
+
+    - name: Build dependencies
       run: ./dependencies.sh
       env:
         SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies.outputs.cache-hit }}
