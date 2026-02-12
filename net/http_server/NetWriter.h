@@ -4,6 +4,7 @@
 #include <string>
 #include <string_view>
 #include <sys/socket.h>
+#include <errno.h>
 
 #include "ContentType.h"
 #include "HTTP.h"
