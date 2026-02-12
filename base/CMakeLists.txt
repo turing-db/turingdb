@@ -1,5 +1,5 @@
 
-add_library(turing_db_base_s INTERFACE)
-target_include_directories(turing_db_base_s INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(turing_db_base_s STATIC QueryCallbacks.cpp)
+target_include_directories(turing_db_base_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(turing_db_base_s INTERFACE turing_db_log_s)
+target_link_libraries(turing_db_base_s PUBLIC turing_db_log_s)

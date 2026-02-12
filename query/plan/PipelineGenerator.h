@@ -1,6 +1,6 @@
 #pragma once
 
-#include "QueryCallback.h"
+#include "QueryCallbacks.h"
 
 #include "PipelineBuilder.h"
 #include "views/GraphView.h"
