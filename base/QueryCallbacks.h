@@ -38,13 +38,13 @@ public:
      * */
     using OnEnd = std::function<void(ExecTimeMilliseconds)>;
 
-    QueryCallbacks() = default;
-    ~QueryCallbacks() = default;
+    QueryCallbacks();
+    ~QueryCallbacks();
 
-    QueryCallbacks(const QueryCallbacks&) = default;
-    QueryCallbacks(QueryCallbacks&&) = default;
-    QueryCallbacks& operator=(const QueryCallbacks&) = default;
-    QueryCallbacks& operator=(QueryCallbacks&&) = default;
+    QueryCallbacks(const QueryCallbacks&);
+    QueryCallbacks(QueryCallbacks&&) noexcept;
+    QueryCallbacks& operator=(const QueryCallbacks&);
+    QueryCallbacks& operator=(QueryCallbacks&&) noexcept;
 
     /**
      * @brief Set the callback for when the query processing begins (before the transaction is open).
@@ -91,38 +91,24 @@ public:
         _onEnd = std::move(onEnd);
     }
 
-    void onBegin();
-    void onOutputData(const Dataframe* dataframe);
-    void onError(const QueryStatus& status);
-    void onOutputHeader(const Dataframe* dataframe);
-    void onEnd(ExecTimeMilliseconds time);
+    void onBegin() const;
+    void onOutputData(const Dataframe* dataframe) const;
+    void onError(const QueryStatus& status) const;
+    void onOutputHeader(const Dataframe* dataframe) const;
+    void onEnd(ExecTimeMilliseconds time) const;
 
-    static OnBegin defaultOnBegin() {
-        return [] {};
-    }
-
-    static OnOutputData defaultOnOutputData() {
-        return [](const Dataframe*) {};
-    }
-
-    static OnError defaultOnError() {
-        return [](const QueryStatus&) {};
-    }
-
-    static OnOutputHeader defaultOnOutputHeader() {
-        return [](const Dataframe*) {};
-    }
-
-    static OnEnd defaultOnEnd() {
-        return [](ExecTimeMilliseconds) {};
-    }
+    static OnBegin defaultOnBegin();
+    static OnOutputData defaultOnOutputData();
+    static OnError defaultOnError();
+    static OnOutputHeader defaultOnOutputHeader();
+    static OnEnd defaultOnEnd();
 
 private:
-    OnBegin _onBegin = defaultOnBegin();
-    OnOutputData _onOutputData = defaultOnOutputData();
-    OnError _onError = defaultOnError();
-    OnOutputHeader _onOutputHeader = defaultOnOutputHeader();
-    OnEnd _onEnd = defaultOnEnd();
+    OnBegin _onBegin;
+    OnOutputData _onOutputData;
+    OnError _onError;
+    OnOutputHeader _onOutputHeader;
+    OnEnd _onEnd;
 };
 
 }

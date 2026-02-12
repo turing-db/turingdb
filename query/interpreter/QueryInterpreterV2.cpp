@@ -41,7 +41,7 @@ QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
 
     const auto start = Clock::now();
 
-    auto& callbacks = ctxt.getQueryCallbacks();
+    const auto& callbacks = ctxt.getQueryCallbacks();
     callbacks.onBegin();
 
     auto txRes = _sysMan->openTransaction(graphName,

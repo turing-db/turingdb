@@ -11,9 +11,9 @@
 
 namespace db {
 
-template <Writer W>
+template <Writer WriterT>
 struct ChunkJsonEncoder {
-    W& _writer;
+    WriterT& _writer;
     bool _first = true;
 
     template <typename T>
@@ -78,7 +78,7 @@ struct ChunkJsonEncoder {
     }
 };
 
-template <Writer W>
+template <Writer WriterT>
 class JsonEncoder {
 public:
     JsonEncoder() = delete;
@@ -88,13 +88,12 @@ public:
     JsonEncoder& operator=(const JsonEncoder&) = delete;
     JsonEncoder& operator=(JsonEncoder&&) = delete;
 
-    JsonEncoder(W& writer)
+    JsonEncoder(WriterT& writer)
         : _writer(writer)
     {
     }
 
     ~JsonEncoder() {
-        finish();
     }
 
     void finish() noexcept {
@@ -160,14 +159,14 @@ public:
     void writeDataframe(const Dataframe& df) {
         arr();
 
-        ChunkJsonEncoder<W> encoder {_writer};
+        ChunkJsonEncoder<WriterT> encoder {_writer};
 
         for (const NamedColumn* namedCol : df.cols()) {
             arr();
             const Column* col = namedCol->getColumn();
 
             using Types = OutputtedTypes;
-            ColumnSingleDispatcher<Types::Allowed, ChunkJsonEncoder<W>, Types::Excluded>::dispatch(col, encoder);
+            ColumnSingleDispatcher<Types::Allowed, ChunkJsonEncoder<WriterT>, Types::Excluded>::dispatch(col, encoder);
             end();
         }
 
@@ -262,7 +261,7 @@ public:
     }
 
 private:
-    W& _writer;
+    WriterT& _writer;
     std::string _closingTokens;
     bool _comma {false};
 };
