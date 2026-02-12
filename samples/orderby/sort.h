@@ -130,6 +130,39 @@ void rowsort(Dataframe* df) {
     }
 }
 
+void colsort(Dataframe* df) {
+    // Empty/singleton dataframe is trivially sorted
+    if (df->getRowCount() <= 1) {
+        return;
+    }
+
+    const size_t numRows = df->getRowCount();
+
+    std::vector<size_t> indices(numRows);
+    std::iota(indices.begin(), indices.end(), 0);
+
+    const auto& cols = df->cols();
+
+    // Sort by least dominant key -> most dominant key, stably.
+    // This ensures that the order is preserved
+    for (auto* nc : std::ranges::reverse_view(cols)) {
+        auto* c = nc->getColumn()->cast<ColumnInts>();
+        auto& data = c->getRaw();
+
+        rg::stable_sort(indices, [&](size_t i, size_t j) { return data[i] < data[j]; });
+    }
+
+    for (auto* ncol : cols) {
+        auto* c = ncol->as<ColumnInts>();
+        std::vector<Int>& raw = c->getRaw();
+        std::vector<Int> tmp(raw.size());
+        for (size_t r = 0; r < numRows; ++r) {
+            tmp[r] = raw[indices[r]];
+        }
+        raw.swap(tmp);
+    }
+}
+
 void subsort(Dataframe* df) {
     // Empty/singleton dataframe is trivially sorted
     if (df->getRowCount() <= 1) {
@@ -177,7 +210,7 @@ void subsort(Dataframe* df) {
             auto colTieRange = rg::subrange(begin(data) + start, begin(data) + end);
             auto idxSubrange = rg::subrange(begin(indices) + start, begin(indices) + end);
 
-            rg::stable_sort(rv::zip(idxSubrange, colTieRange), [](auto&& zip1, auto&& zip2) {
+            rg::sort(rv::zip(idxSubrange, colTieRange), [](auto&& zip1, auto&& zip2) {
                 const Int a = std::get<1>(zip1);
                 const Int b = std::get<1>(zip2);
                 return a < b;

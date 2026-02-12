@@ -26,12 +26,13 @@ void print_range(Rg&& range, std::string_view name) {
 }
 
 void bm(LocalMemory& mem, DataframeManager& dfman) {
-    benchmarkSort(mem, dfman, 10, 5, 10);
-    benchmarkSort(mem, dfman, 25, 10, 10);
-    benchmarkSort(mem, dfman, 100, 10, 10);
-    benchmarkSort(mem, dfman, 1000, 10, 10);
-    benchmarkSort(mem, dfman, 10000, 15, 5);
-    benchmarkSort(mem, dfman, ChunkConfig::CHUNK_SIZE, 20, 10);
+    compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 1, 5);
+    compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 2, 5);
+    compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 3, 5);
+    compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 4, 5);
+    compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 5, 5);
+    compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 10, 5);
+    compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 25, 5);
 }
 
 void test(LocalMemory& mem, DataframeManager& dfman) {
@@ -61,7 +62,8 @@ void test(LocalMemory& mem, DataframeManager& dfman) {
     });
 
     auto sorted = copyDataframe(mem, dfman, original);
-    subsort(sorted.get());
+    // subsort(sorted.get());
+    colsort(sorted.get());
     
     if (!containSame(original, sorted)) {
         original->dump(std::cout);
@@ -75,6 +77,7 @@ void test(LocalMemory& mem, DataframeManager& dfman) {
         sorted->dump(std::cout);
         throw FatalException("Not sorted.");
     }
+    spdlog::info("Tests pass");
 }
 
 int main() {
