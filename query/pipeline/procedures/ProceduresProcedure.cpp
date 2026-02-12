@@ -1,11 +1,11 @@
 #include "ProceduresProcedure.h"
 
 #include "ExecutionContext.h"
-#include "procedures/ProcedureState.h"
-#include "procedures/Procedure.h"
-#include "procedures/ProcedureNamespace.h"
-#include "procedures/ProcedureManager.h"
-#include "procedures/ProcedureReturnValues.h"
+#include "ProcedureState.h"
+#include "Procedure.h"
+#include "ProcedureNamespace.h"
+#include "ProcedureManager.h"
+#include "ProcedureReturnValues.h"
 #include "columns/ColumnVector.h"
 
 #include "PipelineException.h"

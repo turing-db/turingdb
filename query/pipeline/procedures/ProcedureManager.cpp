@@ -1,7 +1,7 @@
-#include "procedures/ProcedureManager.h"
+#include "ProcedureManager.h"
 
-#include "procedures/Procedure.h"
-#include "procedures/ProcedureNamespace.h"
+#include "Procedure.h"
+#include "ProcedureNamespace.h"
 #include "LabelsProcedure.h"
 #include "EdgeTypesProcedure.h"
 #include "PropertyTypesProcedure.h"

@@ -3,9 +3,9 @@
 #include <span>
 
 #include "ExecutionContext.h"
-#include "procedures/ProcedureState.h"
-#include "procedures/Procedure.h"
-#include "procedures/ProcedureNamespace.h"
+#include "ProcedureState.h"
+#include "Procedure.h"
+#include "ProcedureNamespace.h"
 #include "columns/ColumnVector.h"
 #include "DataPart.h"
 #include "views/GraphView.h"

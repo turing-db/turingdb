@@ -1,4 +1,4 @@
-#include "procedures/Procedure.h"
+#include "Procedure.h"
 
 #include "PipelineException.h"
 

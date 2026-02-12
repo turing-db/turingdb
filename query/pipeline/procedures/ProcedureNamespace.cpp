@@ -1,6 +1,6 @@
-#include "procedures/ProcedureNamespace.h"
+#include "ProcedureNamespace.h"
 
-#include "procedures/Procedure.h"
+#include "Procedure.h"
 
 using namespace db;
 
