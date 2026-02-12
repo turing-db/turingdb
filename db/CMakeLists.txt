@@ -10,4 +10,5 @@ target_link_libraries(turing_db_s PUBLIC
     turing_db_pipeline_s
     turing_db_interpreter_s
     turing_db_system_s
+    turing_db_query_outputs_s
     turing_common_s)
