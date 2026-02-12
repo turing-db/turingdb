@@ -4,7 +4,7 @@
 
 #include "TuringDB.h"
 #include "Graph.h"
-#include "outputs/JsonEncoder.h"
+#include "JsonEncoder.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "views/EdgeView.h"

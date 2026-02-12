@@ -27,7 +27,7 @@
 #include "columns/ColumnOperatorDispatcher.h"
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
-#include "outputs/JsonEncoder.h"
+#include "JsonEncoder.h"
 #include "procedures/ProcedureBlueprintMap.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"

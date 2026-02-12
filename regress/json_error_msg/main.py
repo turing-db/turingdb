@@ -10,4 +10,5 @@ try:
 except TuringDBException as e:
     sys.exit(0)
 except Exception as e:
+    print(f"Invalid exception caught {e}")
     sys.exit(1)
