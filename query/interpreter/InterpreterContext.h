@@ -31,7 +31,7 @@ public:
 
     LocalMemory* getLocalMemory() const { return _mem; }
     const ProcedureBlueprintMap* getProcedures() const { return _procedures; }
-    QueryCallbacks& getQueryCallbacks() const { return _callbacks; }
+    const QueryCallbacks& getQueryCallbacks() const { return _callbacks; }
     CommitHash getCommitHash() const { return _commitHash; }
     ChangeID getChangeID() const { return _changeID; }
 
