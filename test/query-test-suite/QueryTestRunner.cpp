@@ -1,43 +1,43 @@
 #include "QueryTestRunner.h"
 
 #include <algorithm>
-#include <chrono>
 #include <optional>
 #include <sstream>
 
 #include <nlohmann/json.hpp>
 #include <spdlog/fmt/bundled/format.h>
 
-#include "File.h"
-#include "ID.h"
-#include "TuringDB.h"
-#include "TuringTestEnv.h"
-#include "SystemManager.h"
-#include "SimpleGraph.h"
 #include "CompilerException.h"
-#include "PlanGraphDebug.h"
-#include "Graph.h"
-#include "columns/AllowedKinds.h"
-#include "columns/ColumnOperatorDispatcher.h"
-#include "versioning/Transaction.h"
-#include "views/GraphView.h"
-#include "procedures/ProcedureBlueprintMap.h"
-#include "PlanGraphGenerator.h"
-#include "PlanGraph.h"
+#include "CypherAST.h"
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
-#include "CypherAST.h"
-#include "columns/ColumnDispatcher.h"
+#include "File.h"
+#include "Graph.h"
+#include "ID.h"
+#include "PlanGraph.h"
+#include "PlanGraphDebug.h"
+#include "PlanGraphGenerator.h"
+#include "QueryCallback.h"
+#include "QueryStatus.h"
+#include "SimpleGraph.h"
+#include "SystemManager.h"
+#include "TuringDB.h"
+#include "TuringTestEnv.h"
+#include "columns/AllowedKinds.h"
+#include "columns/ColumnOperatorDispatcher.h"
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
-#include "QueryStatus.h"
-#include "QueryCallback.h"
 #include "outputs/JsonEncoder.h"
+#include "procedures/ProcedureBlueprintMap.h"
+#include "versioning/Transaction.h"
+#include "views/GraphView.h"
 
 namespace db {
+
 class CommitBuilder;
 class Change;
-}
+
+} // namespace db
 
 namespace turing::test {
 
@@ -60,7 +60,8 @@ void rtrim(std::string& trimmed, std::string_view value) {
     trimmed = std::string(value.substr(0, end));
 }
 
-void trimTrailingEmptyLines(std::string& trimmed, std::vector<std::string>& lines) {
+void trimTrailingEmptyLines(std::string& trimmed,
+                            std::vector<std::string>& lines) {
     trimmed.clear();
 
     while (!lines.empty() && lines.back().empty()) {
@@ -147,8 +148,12 @@ struct Stringify {
 std::string columnValueToString(const db::Column* column, size_t row) {
     std::string string;
     Stringify stringify(string, row);
+
     using Types = OutputtedTypes;
-    ColumnSingleDispatcher<Types::Allowed, Stringify, Types::Excluded>::dispatch(column, stringify);
+    using Dispatcher = ColumnSingleDispatcher<Types::Allowed, Stringify, Types::Excluded>;
+
+    Dispatcher::dispatch(column, stringify);
+
     return string;
 }
 
@@ -179,22 +184,24 @@ void escapeCsv(std::string& escaped, std::string_view value) {
     }
 }
 
-std::string formatStatusError(db::QueryStatus::Status status, std::string_view message) {
-    auto statusName = std::string(db::QueryStatusDescription::value(status));
-    for (auto& ch : statusName) {
+std::string formatStatusError(db::QueryStatus::Status status,
+                              std::string_view message) {
+    std::string statusName {db::QueryStatusDescription::value(status)};
+
+    for (char& ch : statusName) {
         if (ch == '_') {
             ch = ' ';
         }
     }
+
     if (message.empty()) {
         return statusName;
     }
+
     return fmt::format("{}\n{}", statusName, message);
 }
 
-void generatePlanGraph(std::string_view query,
-                       db::GraphView view,
-                       std::ostream& out) {
+void generatePlanGraph(std::string_view query, db::GraphView view, std::ostream& out) {
     auto procedures = db::ProcedureBlueprintMap::create();
 
     db::CypherAST ast(*procedures, query);
@@ -233,17 +240,11 @@ void generatePlanGraph(std::string_view query,
 struct StringStreamWriter {
     std::string& _output;
 
-    void write(std::string_view content) noexcept {
-        _output.append(content);
-    }
-
-    void write(char c) noexcept {
-        _output.push_back(c);
-    }
+    void write(std::string_view content) noexcept { _output.append(content); }
+    void write(char c) noexcept { _output.push_back(c); }
 };
 
-bool validateResultJson(std::string& error,
-                        std::string_view jsonStr) {
+bool validateResultJson(std::string& error, std::string_view jsonStr) {
     json doc;
     try {
         doc = json::parse(jsonStr);
@@ -262,8 +263,8 @@ bool validateResultJson(std::string& error,
             error = "\"error\" is not a string";
             return false;
         }
-        if (!doc.contains("error_details")
-            || !doc["error_details"].is_string()) {
+
+        if (!doc.contains("error_details") || !doc["error_details"].is_string()) {
             error = "\"error_details\" missing or not a string";
             return false;
         }
@@ -277,14 +278,12 @@ bool validateResultJson(std::string& error,
 
     const auto& header = doc["header"];
 
-    if (!header.contains("column_names")
-        || !header["column_names"].is_array()) {
+    if (!header.contains("column_names") || !header["column_names"].is_array()) {
         error = "\"column_names\" missing or not an array";
         return false;
     }
 
-    if (!header.contains("column_types")
-        || !header["column_types"].is_array()) {
+    if (!header.contains("column_types") || !header["column_types"].is_array()) {
         error = "\"column_types\" missing or not an array";
         return false;
     }
@@ -292,9 +291,8 @@ bool validateResultJson(std::string& error,
     const size_t numCols = header["column_names"].size();
 
     if (header["column_types"].size() != numCols) {
-        error = fmt::format(
-            "column_types size ({}) != column_names size ({})",
-            header["column_types"].size(), numCols);
+        error = fmt::format("column_types size ({}) != column_names size ({})",
+                            header["column_types"].size(), numCols);
         return false;
     }
 
@@ -309,15 +307,13 @@ bool validateResultJson(std::string& error,
         const auto& chunk = data[ci];
 
         if (!chunk.is_array()) {
-            error = fmt::format(
-                "data[{}] is not an array", ci);
+            error = fmt::format("data[{}] is not an array", ci);
             return false;
         }
 
         if (chunk.size() != numCols) {
-            error = fmt::format(
-                "data[{}] has {} columns, expected {}",
-                ci, chunk.size(), numCols);
+            error = fmt::format("data[{}] has {} columns, expected {}", ci,
+                                chunk.size(), numCols);
             return false;
         }
 
@@ -325,20 +321,16 @@ bool validateResultJson(std::string& error,
 
         for (size_t col = 0; col < numCols; ++col) {
             if (!chunk[col].is_array()) {
-                error = fmt::format(
-                    "data[{}][{}] is not an array",
-                    ci, col);
+                error = fmt::format("data[{}][{}] is not an array", ci, col);
                 return false;
             }
 
             if (col == 0) {
                 expectedRows = chunk[col].size();
             } else if (chunk[col].size() != expectedRows) {
-                error = fmt::format(
-                    "data[{}][{}] has {} rows, expected {} "
-                    "(from column 0)",
-                    ci, col, chunk[col].size(),
-                    expectedRows);
+                error = fmt::format("data[{}][{}] has {} rows, expected {} "
+                                    "(from column 0)",
+                                    ci, col, chunk[col].size(), expectedRows);
                 return false;
             }
         }
@@ -347,20 +339,22 @@ bool validateResultJson(std::string& error,
     return true;
 }
 
-} // namespace
+}
 
-void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs, const fs::Path& dir) {
+void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs,
+                                       const fs::Path& dir) {
     specs.clear();
 
     auto filesOpt = dir.listDir();
     if (!filesOpt) {
-        throw FatalException(fmt::format("Failed to list directory: {}", filesOpt.error().fmtMessage()));
+        throw FatalException(fmt::format("Failed to list directory: {}",
+                                         filesOpt.error().fmtMessage()));
     }
 
     std::vector<fs::Path> files = *filesOpt;
-    std::sort(files.begin(), files.end(), [](const fs::Path& a, const fs::Path& b) {
-        return a.get() < b.get();
-    });
+    std::sort(
+        files.begin(), files.end(),
+        [](const fs::Path& a, const fs::Path& b) { return a.get() < b.get(); });
 
     std::string content;
 
@@ -412,7 +406,8 @@ void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs, const 
     }
 }
 
-QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Path& outDir) {
+QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
+                                         const fs::Path& outDir) {
     QueryTestResult result;
     result.name = spec.name;
 
@@ -438,35 +433,38 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
 
     db::QueryCallbacks queryCallbacks;
 
-    queryCallbacks.setOnBegin([&] {
-        jsonEncoder.start();
-    });
+    queryCallbacks.setOnBegin([&] { jsonEncoder.start(); });
 
     queryCallbacks.setOnOutputHeader([&](const db::Dataframe* df) {
         bioassert(df != nullptr, "Dataframe is null");
+
+        // Write the header in the JSON output
         jsonEncoder.writeDataframeHeader(*df);
+
+        // Write the header in the CSV output
         for (auto* col : df->cols()) {
             columnNames.emplace_back(col->getName());
         }
     });
 
-    queryCallbacks.setOnOutputData([&](const db::Dataframe* df) {
-        if (!df) {
-            return;
-        }
+    std::vector<std::string> values;
 
+    queryCallbacks.setOnOutputData([&](const db::Dataframe* df) {
+        bioassert(df != nullptr, "Dataframe is null");
+
+        // Write the data in the JSON output
         jsonEncoder.writeDataframe(*df);
 
+        // Write the data in the CSV output
+        values.clear();
         const size_t rowCount = df->getLogicalRowCount();
-        std::vector<std::string> values;
 
         for (size_t row = 0; row < rowCount; ++row) {
             values.clear();
             values.reserve(df->cols().size());
 
             for (auto* col : df->cols()) {
-                values.push_back(
-                    columnValueToString(col->getColumn(), row));
+                values.push_back(columnValueToString(col->getColumn(), row));
             }
 
             rows.push_back(std::move(values));
@@ -474,45 +472,50 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
     });
 
     queryCallbacks.setOnError([&](const db::QueryStatus& qs) {
-        jsonEncoder.encodeError(
-            qs.getStatus(), qs.getError());
+        jsonEncoder.encodeError(qs.getStatus(), qs.getError());
         jsonErrorEncoded = true;
     });
 
     db::ChangeID changeID = db::ChangeID::head();
 
     if (spec.writeRequired) {
-        db->query("CHANGE NEW", spec.graphName, &env->getMem(),
-                  [&](const db::Dataframe* df) {
-                      NamedColumn* col = df->getColumn(ColumnTag {0});
-                      bioassert(col, "Column not found");
-                      auto& c = *static_cast<ColumnVector<ChangeID>*>(
-                          col->getColumn());
-                      bioassert(c.size() == 1, "Expected 1 change");
-                      changeID = c[0];
-                  },
-                  CommitHash::head(), ChangeID::head());
+        const auto callback = [&](const db::Dataframe* df) {
+            NamedColumn* col = df->getColumn(ColumnTag {0});
+            bioassert(col, "Column not found");
+
+            auto& c = *static_cast<ColumnVector<ChangeID>*>(col->getColumn());
+            bioassert(c.size() == 1, "Expected 1 change");
+
+            changeID = c[0];
+        };
+
+        db->query("CHANGE NEW",
+                  spec.graphName,
+                  &env->getMem(),
+                  callback,
+                  CommitHash::head(),
+                  ChangeID::head());
     }
 
-    const auto queryStart = std::chrono::steady_clock::now();
+    const auto queryStart = Clock::now();
     const db::QueryStatus status = db->query(spec.query,
                                              spec.graphName,
                                              &env->getMem(),
                                              queryCallbacks,
                                              db::CommitHash::head(),
                                              changeID);
-    const auto queryEnd = std::chrono::steady_clock::now();
+    const auto queryEnd = Clock::now();
 
     if (!status.isOk() && !jsonErrorEncoded) {
-        jsonEncoder.encodeError(
-            status.getStatus(), status.getError());
+        jsonEncoder.encodeError(status.getStatus(), status.getError());
     }
+
     jsonEncoder.finish();
-    result.timeUs = static_cast<uint64_t>(
-        std::chrono::duration_cast<std::chrono::microseconds>(queryEnd - queryStart).count());
+    result.timeUs = static_cast<uint64_t>(duration<Microseconds>(queryStart, queryEnd));
 
     std::stringstream resultOut;
     std::string escaped;
+
     if (!status.isOk()) {
         resultOut << formatStatusError(status.getStatus(), status.getError());
     } else {
@@ -538,7 +541,11 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
     }
 
     if (spec.writeRequired) {
-        db->query("CHANGE SUBMIT", spec.graphName, &env->getMem(), db::CommitHash::head(), changeID);
+        db->query("CHANGE SUBMIT",
+                  spec.graphName,
+                  &env->getMem(),
+                  db::CommitHash::head(),
+                  changeID);
     }
 
     normalizeOutput(result.planOutput, planOut.str());
@@ -546,18 +553,21 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
     result.resultJsonOutput = jsonOutput;
 
     std::string expected;
+
     normalizeOutput(expected, spec.expectPlan);
     result.planMatched = expected == result.planOutput;
+
     normalizeOutput(expected, spec.expectResult);
     result.resultMatched = expected == result.resultOutput;
 
-    result.resultJsonValid = validateResultJson( result.resultJsonError, result.resultJsonOutput);
+    result.resultJsonValid = validateResultJson(result.resultJsonError, result.resultJsonOutput);
     result.resultJsonMatched = spec.expectResultJson == result.resultJsonOutput;
 
     return result;
 }
 
-void QueryTestRunner::normalizeOutput(std::string& normalized, std::string_view output) {
+void QueryTestRunner::normalizeOutput(std::string& normalized,
+                                      std::string_view output) {
     normalized.clear();
     normalized.reserve(output.size());
 
@@ -584,8 +594,7 @@ void QueryTestRunner::readFile(std::string& content, const fs::Path& path) {
 
     const auto file = fs::File::open(path);
     if (!file) {
-        throw FatalException(fmt::format("Failed to open file '{}': {}",
-                                         path.get(),
+        throw FatalException(fmt::format("Failed to open file '{}': {}", path.get(),
                                          file.error().fmtMessage()));
     }
 
@@ -593,8 +602,7 @@ void QueryTestRunner::readFile(std::string& content, const fs::Path& path) {
     content.resize(fileSize);
 
     if (!file->read(content.data(), fileSize)) {
-        throw FatalException(fmt::format("Failed to read file '{}': {}",
-                                         path.get(),
+        throw FatalException(fmt::format("Failed to read file '{}': {}", path.get(),
                                          file.error().fmtMessage()));
     }
 }
