@@ -433,7 +433,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec, const fs::Pa
 
     std::string jsonOutput;
     StringStreamWriter jsonWriter {jsonOutput};
-    db::VJsonEncoder<StringStreamWriter> jsonEncoder {jsonWriter};
+    db::JsonEncoder<StringStreamWriter> jsonEncoder {jsonWriter};
     bool jsonErrorEncoded = false;
 
     db::QueryCallbacks queryCallbacks;

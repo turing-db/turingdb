@@ -74,7 +74,6 @@ void TCPConnectionManager::process(AbstractThreadContext* threadContext,
             writer.addConnection(net::getConnectionHeader(true));
             writer.addChunkedTransferEncoding();
             writer.addContentType(net::ContentType::JSON);
-            writer.endHeader();
             writer.flushHeader();
             writer.flush();
             writer.reset();
