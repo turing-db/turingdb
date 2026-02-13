@@ -184,11 +184,16 @@ jobs:
           <!-- claude-code-review -->
           ## Claude Code Review
 
+          <details>
+          <summary>Style violations found (click to expand)</summary>
+
           EOF
 
           echo "$review_body" >> /tmp/comment_body.md
 
           cat >> /tmp/comment_body.md << 'EOF'
+
+          </details>
 
           ---
           *Checked against [CODING_STYLE.md](../blob/${{ github.head_ref }}/CODING_STYLE.md) and [REVIEW.md](../blob/${{ github.head_ref }}/REVIEW.md).*
