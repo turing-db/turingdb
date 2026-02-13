@@ -8,6 +8,7 @@
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnCombinations.h"
 #include "columns/ColumnOperatorDispatcher.h"
+#include "columns/UnaryPredicates.h"
 #include "dataframe/ColumnTag.h"
 #include "decl/EvaluatedType.h"
 #include "expr/Operators.h"
@@ -34,7 +35,6 @@
 #include "dataframe/NamedColumn.h"
 #include "columns/ColumnOperator.h"
 
-#include "metadata/LabelSet.h"
 #include "LocalMemory.h"
 
 #include "PlannerException.h"
@@ -188,7 +188,7 @@ Column* ExprProgramGenerator::generateUnaryExpr(const UnaryExpr* unExpr) {
 
     const ColumnOperator colOp = unaryOperatorToColumnOperator(optor);
     Column* operandColumn = generateExpr(operand);
-    Column* resCol = allocUnaryResultCol(unExpr);
+    Column* resCol = allocUnaryResultCol(colOp, operandColumn);
 
     _exprProg->addInstr(colOp, resCol, operandColumn, nullptr);
 
@@ -400,33 +400,23 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
         return _gen->memory().alloc<ColumnOptVector<Type::Primitive>>();                 \
     break;
 
-Column* ExprProgramGenerator::allocUnaryResultCol(const Expr* expr) {
-    const EvaluatedType exprType = expr->getType();
 
-    switch (exprType) {
-        ALLOC_EVALTYPE_COL(EvaluatedType::Integer, types::Int64)
-        ALLOC_EVALTYPE_COL(EvaluatedType::Double, types::Double)
-        ALLOC_EVALTYPE_COL(EvaluatedType::String, types::String)
-        ALLOC_EVALTYPE_COL(EvaluatedType::Bool, types::Bool)
-
-        case EvaluatedType::Invalid:
-            throw PlannerException(
-                "ExprProgramGenerator: encountered expression of invalid type");
-        break;
-
-        default:
-            throw PlannerException(fmt::format(
-                "Expression of type {} not supported",
-                (size_t)exprType));
-        break;
-    }
-}
 
 template <ColumnOperator Op>
 struct ResultAllocator {
     Column*& _resultCol;
     PipelineGenerator* _gen {nullptr};
-    
+
+    template <typename T>
+    void operator()(const T* arg) {
+        bioassert(arg, "Attempted to allocate a result column with null unary argument.");
+
+        if constexpr (Op == OP_NOT) {
+            using ResultType = typename UnaryColumnCombination<Not, T>::ResultColumnType;
+            _resultCol = _gen->memory().alloc<ResultType>();
+        }
+    }
+
     template <typename T, typename U>
     void operator()(const T* lhs, const U* rhs) {
         bioassert(lhs && rhs,
@@ -513,8 +503,10 @@ Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
 
         case OP_MINUS:
         case OP_PLUS:
-        case OP_NOT: // TODO: Implement
-            throw PlannerException("Unsupported allocator: MINUS | PLUS | NOT.");
+        case OP_NOT:
+            throw PlannerException(
+                fmt::format("Attempted to allocate binary result for unary operator {}.",
+                            ColumnOperatorDescription::value(op)));
         break;
 
         case OP_NOOP:
@@ -524,6 +516,58 @@ Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
             throw FatalException("Attempted invalid operator result allocation.");
         break;
     }
+
+    bioassert(result, "Failed to allocate result column.");
+    return result;
+}
+
+// Uses Column dispatching to dispatch a functor which allocates the result column
+#define UNARY_DISPATCHER_CASE(Operator)                                                  \
+    case (Operator): {                                                                   \
+        using Types = TypeRestrictions<Operator>;                                        \
+        ResultAllocator<Operator> allocator(result, _gen);                               \
+        ColumnSingleDispatcher<typename Types::Allowed, ResultAllocator<Operator>,       \
+                               typename Types::Excluded>::dispatch(arg, allocator);      \
+    } break;
+
+Column* ExprProgramGenerator::allocUnaryResultCol(ColumnOperator op, const Column* arg) {
+    Column* result = nullptr;
+
+    switch (op) {
+        UNARY_DISPATCHER_CASE(OP_NOT)
+
+        case OP_MINUS:
+        case OP_PLUS:
+            throw PlannerException(
+                fmt::format("Unary operator {} is not yet supported (cannot allocate).",
+                            ColumnOperatorDescription::value(op)));
+        break;
+        
+        case OP_EQUAL:
+        case OP_NOT_EQUAL:
+        case OP_GREATER_THAN:
+        case OP_LESS_THAN:
+        case OP_GREATER_THAN_OR_EQUAL:
+        case OP_LESS_THAN_OR_EQUAL:
+        case OP_AND:
+        case OP_OR:
+        case OP_ADD:
+        case OP_SUB:
+        case OP_MUL:
+        case OP_DIV:
+        case OP_PROJECT:
+        case OP_IN:
+            throw PlannerException(
+                fmt::format("Attempted to allocate unary result for binary operator {}.",
+                            ColumnOperatorDescription::value(op)));
+        break;
+
+        case OP_NOOP:
+        case _SIZE:
+        default:
+            throw FatalException("Attempted invalid operator result allocation.");
+        break;
+    };
 
     bioassert(result, "Failed to allocate result column.");
     return result;

@@ -2,13 +2,13 @@
 
 #include <type_traits>
 
-#include "ColumnCombinations.h"
 #include "BinaryOperators.h"
 #include "BinaryPredicates.h"
 #include "UnaryPredicates.h"
 #include "MaskOperators.h"
 
 #include "TypeUtils.h"
+#include "ColumnCombinations.h"
 
 namespace db {
 
@@ -67,6 +67,28 @@ public:
         using InternalT = InnerTypeHelper<DecayColT>::type;
 
         UnaryPredicateExecutor<Op, InternalT>::apply(res, std::forward<ColT>(arg));
+    }
+
+    // Below specialisation is needed for expressions like NOT TRUE, NOT FALSE
+    // Both Bool and opt<Bool> are needed as there is no way to limit to
+    // ColumnConst<{Bool}> whilst also having ColumnVector<{Bool, optional<Bool>}
+    template <typename Op, typename T>
+    static inline void exec(ColumnConst<T>* res, const ColumnConst<T>* arg)
+        requires(std::is_same_v<T, types::Bool::Primitive>)
+             || (std::is_same_v<T, std::optional<types::Bool::Primitive>>)
+    {
+        UnaryPredicateExecutor<Op, T>::apply(res, arg);
+    }
+
+    // Below specialisation needed for type checker, but is never used, see above for why.
+    // The optional<Bool> case is handled by @ref exec(ColumnOptMask*, ...) because
+    // ColOptMask is a weak alias for ColumnVector<opt<Bool>>
+    template <typename Op, typename T>
+        requires(std::is_same_v<T, types::Bool::Primitive>)
+    static inline void exec(ColumnVector<T>* res, const ColumnVector<T>* arg)
+        requires(std::is_same_v<T, types::Bool::Primitive>)
+    {
+        UnaryPredicateExecutor<Op, T>::apply(res, arg);
     }
 
     template <typename Op, typename ColT>
