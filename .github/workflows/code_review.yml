@@ -74,6 +74,9 @@ jobs:
           - Only flag lines that were ADDED in the diff (lines starting with +).
           - Only flag CLEAR violations — do not speculate or flag ambiguous cases.
           - For each violation, cite the specific rule from CODING_STYLE.md or REVIEW.md.
+          - Also flag consistency issues: e.g. switch statements where cases mix
+            different termination styles (some use break, others return). These are
+            valid findings even if they are not purely formatting-related.
           - If there are NO violations, output exactly the word NO_VIOLATIONS and nothing else.
           - If there ARE violations, output a markdown table with these columns:
             | File | Line | Rule | Violation |
