@@ -209,6 +209,7 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
     const SourceManager* srcMan = _ast->getSourceManager();
 
+    std::unordered_set<std::string> seenNames;
     for (const Projection::ReturnItem& returnItem : projection->items()) {
         const auto* exprPtr = std::get_if<Expr*>(&returnItem);
         if (!exprPtr) {
@@ -234,9 +235,16 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
             name = item->getName();
         }
+        if (seenNames.contains(std::string {name})) {
+            throwError(
+                fmt::format(
+                    "Return items must have unique names; {} was already defined.", name),
+                item);
+        }
 
         _exprAnalyzer->analyzeRootExpr(item);
 
+        // XXX: when is this valid?
         if (name.empty()) {
             continue;
         }
@@ -246,6 +254,7 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         }
 
         projection->setName(item, name);
+        seenNames.emplace(name);
 
         isAggregate |= item->isAggregate();
         hasGroupingKeys |= !item->isAggregate();

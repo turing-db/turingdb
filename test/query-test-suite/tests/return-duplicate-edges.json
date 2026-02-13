@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH ()-[e]->() RETURN e, e, e",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH ()-[e]->() RETURN e, e, e\n       |                            ^\n-------* Return items must have unique names; e was already defined.",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH ()-[e]->() RETURN e, e, e\n       |                            ^\n-------* Return items must have unique names; e was already defined."
+  },
+  "tags": [
+    "error",
+    "return",
+    "projection"
+  ],
+  "write-required": false
+}
