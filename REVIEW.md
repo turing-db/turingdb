@@ -1,17 +1,18 @@
 ## Check that there are no spurious useless blanklines
 
 * No 2 or more consecutive blank lines
-* No blank line immediately following the definition of a function, class or method
+* No blank line immediately following the opening brace of a function, class or method
+* A trailing blank line at the end of a file is fine and not a violation
 
 Example:
 ```
 void myFunc() {
-
+                          <-- this blank line is a violation
     return 42;
 }
 
 class MyClass {
-
+                          <-- this blank line is a violation
 public:
     void hello();
 };
