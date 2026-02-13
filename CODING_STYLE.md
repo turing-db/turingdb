@@ -23,8 +23,8 @@ Remy Boutonnet as the main designer and maintainer of TuringDB provides the opin
 
 ### Line length
 
-We must have a maximum line length of 90 characters, with the objective to keep lines short and as readable as possible, with an ideal length around 80 characters. 
-This is quite convenient to have 80-90 characters lines when we want to display many files side-by-side in vim on a wide screen.
+The preferred maximum line length is around 90 characters, with the objective to keep lines short and as readable as possible. 
+IMPORTANT: do not overwrap lines just to satisfy the line length. Code esthetics always comes first.
 
 ### Indentation
 
