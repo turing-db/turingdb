@@ -820,7 +820,7 @@ TEST_F(HashJoinProcessorTest, thousandRowJoinCaseChunkedInputs) {
             ColumnNodeIDs* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[colPtr]->getColumn());
             ASSERT_TRUE(col != nullptr);
             col->resize(outPutSize);
-            std::iota(col->begin(), col->end(), (colPtr + 1) * 1000 + totalLeftOutput);
+            std::iota(col->begin(), col->end(), ((colPtr + 1) * 1000) + totalLeftOutput);
         }
 
         // Alloc Join Column
