@@ -75,6 +75,10 @@ If METRIC is omitted, the default is `INNER_PRODUCT`.
 
 The index name is a plain identifier (same rules as graph names).
 It is a hard error if an index with the same name already exists.
+`DIMENSION 0` is a hard error.
+
+The empty index is persisted to disk immediately on creation, so it
+survives a TuringDB restart even if no vectors have been loaded yet.
 
 This is a standalone QueryCommand (like CREATE GRAPH).
 
@@ -128,6 +132,9 @@ This is a standalone QueryCommand (like LOAD GRAPH).
 
 Get the numerical IDs and distances associated to the k nearest vectors
 for a given query vector. The query vector must be a list literal of float values.
+
+The `k` argument (after `FOR`) is parsed as an expression in the grammar
+but must resolve to an unsigned integer. This is validated at analysis time.
 
 VECTOR SEARCH produces **up to k rows**, one per nearest neighbor. Each row
 contains scalar values for the yielded columns — not lists. Results are
@@ -228,6 +235,37 @@ added in a future iteration:
 - Built-in embedding generation from AI providers
 - Procedure argument support (which would allow CALL-based vector search)
 - Query parameters for the search vector (e.g. `$queryVector`)
+
+## Implementation notes
+
+### Grammar
+
+The following are **reserved keywords** added to the lexer:
+`VECTOR`, `INDEX`, `INDEXES`, `DIMENSION`, `METRIC`, `EUCLID`,
+`INNER_PRODUCT`.
+
+These cannot be used as identifiers anywhere in queries.
+
+### YIELD validation
+
+The YIELD clause for VECTOR SEARCH supports the same AS aliasing as
+CALL YIELD (already implemented). The valid yield column names are
+`id` and `distance`. Yielding an unknown name (e.g., `YIELD foo`) is
+caught at analysis time as a hard error.
+
+### Processor model
+
+VECTOR SEARCH is implemented as a processor that produces rows, similar
+to `DatabaseProcedureProcessor`. The processor executes the vector search
+and emits up to k rows into the pipeline, each containing scalar values
+for the yielded columns.
+
+### ExecutionContext
+
+Processors access the `VectorDatabase` through `ExecutionContext`, which
+already holds references to `SystemManager`, `JobSystem`, and
+`ProcedureBlueprintMap`. A `VectorDatabase*` field is added to
+`ExecutionContext` so that vector processors can access it uniformly.
 
 ## Concurrency
 
