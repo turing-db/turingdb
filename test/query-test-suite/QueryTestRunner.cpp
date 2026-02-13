@@ -135,8 +135,7 @@ struct Stringify {
 
     template <typename T>
     void operator()(const ColumnConst<T>* typed) {
-        bioassert(row == 0, "Attempted to output row {} of ColumnConst.", row);
-        const T& value = typed->getRaw();
+        const T& value = typed->at(row);
         string = valueToString(value);
     }
 };
