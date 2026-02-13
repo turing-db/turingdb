@@ -13,203 +13,175 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # First job: Run code analysis in an isolated container (no secrets, no write access)
-  analyze:
+  # First job: Claude Code AI review (analysis phase)
+  claude-review:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     permissions:
       contents: read
-      # No pull-requests permission - this job cannot comment
-
-    # Run in a container for isolation when analyzing untrusted PR code
-    container:
-      image: python:3.12-slim
 
     outputs:
-      errors: ${{ steps.style_check.outputs.errors }}
-      warnings: ${{ steps.style_check.outputs.warnings }}
-      violations: ${{ steps.style_check.outputs.violations }}
+      has_violations: ${{ steps.parse.outputs.has_violations || steps.no_diff.outputs.has_violations || 'false' }}
+      review_body: ${{ steps.parse.outputs.review_body }}
 
     steps:
-      - name: Install dependencies
-        run: |
-          apt-get update && apt-get install -y git jq curl
-          pip install uv
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
 
       - name: Checkout PR code
         uses: actions/checkout@v4
         with:
-          # Checkout the PR head - this is untrusted code but runs in isolated container
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Fetch base branch for diff
+      - name: Fetch base branch
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git fetch origin ${{ github.base_ref }}
 
-      - name: Run codereview tests
-        working-directory: scripts/codereview
+      - name: Generate C++ diff
+        id: diff
         run: |
-          # Run pytest to validate the code review checkers before using them
-          uv run pytest tests/ -v
+          diff_output=$(git diff origin/${{ github.base_ref }}..HEAD -- '*.cpp' '*.h' '*.hpp')
+          if [ -z "$diff_output" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "No C++ file changes found in this PR."
+          else
+            echo "$diff_output" | head -c 153600 > /tmp/cpp_diff.patch
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Run code style check
-        id: style_check
+      - name: Read style guides from base branch
+        if: steps.diff.outputs.skip != 'true'
         run: |
-          # Run the style checker and capture output
-          set +e
-          uv run --project scripts/codereview codereview \
-            --diff origin/${{ github.base_ref }} \
-            --format json > violations.json
-          exit_code=$?
-          set -e
+          git show origin/${{ github.base_ref }}:CODING_STYLE.md > /tmp/CODING_STYLE.md 2>/dev/null || echo "No CODING_STYLE.md on base branch." > /tmp/CODING_STYLE.md
+          git show origin/${{ github.base_ref }}:REVIEW.md > /tmp/REVIEW.md 2>/dev/null || echo "No REVIEW.md on base branch." > /tmp/REVIEW.md
 
-          # Count violations
-          error_count=$(jq '[.[] | select(.severity == "error")] | length' violations.json)
-          warning_count=$(jq '[.[] | select(.severity == "warning")] | length' violations.json)
+      - name: Build review prompt
+        if: steps.diff.outputs.skip != 'true'
+        run: |
+          cat > /tmp/review_prompt.txt << 'PROMPT_HEADER'
+          You are an expert C++ code reviewer. Review the following diff against the
+          coding style guide and the review checklist provided below.
 
-          echo "errors=$error_count" >> $GITHUB_OUTPUT
-          echo "warnings=$warning_count" >> $GITHUB_OUTPUT
+          RULES:
+          - Only flag lines that were ADDED in the diff (lines starting with +).
+          - Only flag CLEAR violations — do not speculate or flag ambiguous cases.
+          - For each violation, cite the specific rule from CODING_STYLE.md or REVIEW.md.
+          - If there are NO violations, output exactly the word NO_VIOLATIONS and nothing else.
+          - If there ARE violations, output a markdown table with these columns:
+            | File | Line | Rule | Violation |
+          - Do NOT include any other text before or after the table (no preamble, no summary).
 
-          # Store violations as base64-encoded JSON for passing to next job
-          violations_b64=$(base64 -w0 violations.json)
-          echo "violations=$violations_b64" >> $GITHUB_OUTPUT
+          PROMPT_HEADER
 
-          # Also output as annotations for the Actions UI
-          uv run --project scripts/codereview codereview \
-            --diff origin/${{ github.base_ref }} \
-            --format github || true
+          echo "" >> /tmp/review_prompt.txt
+          echo "## CODING_STYLE.md" >> /tmp/review_prompt.txt
+          echo '```' >> /tmp/review_prompt.txt
+          cat /tmp/CODING_STYLE.md >> /tmp/review_prompt.txt
+          echo '```' >> /tmp/review_prompt.txt
 
-  # Second job: Post comments (has write access, but only runs trusted code from base branch)
-  comment:
+          echo "" >> /tmp/review_prompt.txt
+          echo "## REVIEW.md" >> /tmp/review_prompt.txt
+          echo '```' >> /tmp/review_prompt.txt
+          cat /tmp/REVIEW.md >> /tmp/review_prompt.txt
+          echo '```' >> /tmp/review_prompt.txt
+
+          echo "" >> /tmp/review_prompt.txt
+          echo "## Diff to review" >> /tmp/review_prompt.txt
+          echo '```diff' >> /tmp/review_prompt.txt
+          cat /tmp/cpp_diff.patch >> /tmp/review_prompt.txt
+          echo '```' >> /tmp/review_prompt.txt
+
+      - name: Run Claude Code review
+        if: steps.diff.outputs.skip != 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cd /tmp
+          claude -p --model opus < /tmp/review_prompt.txt > /tmp/claude_review_output.txt
+
+      - name: Parse Claude output
+        id: parse
+        if: steps.diff.outputs.skip != 'true'
+        run: |
+          output=$(cat /tmp/claude_review_output.txt)
+          if echo "$output" | grep -q "NO_VIOLATIONS"; then
+            echo "has_violations=false" >> $GITHUB_OUTPUT
+            echo "review_body=" >> $GITHUB_OUTPUT
+            echo "Claude found no violations."
+          else
+            encoded=$(echo "$output" | base64 -w0)
+            echo "has_violations=true" >> $GITHUB_OUTPUT
+            echo "review_body=$encoded" >> $GITHUB_OUTPUT
+            echo "Claude found violations."
+          fi
+
+      - name: Set no violations when diff is empty
+        id: no_diff
+        if: steps.diff.outputs.skip == 'true'
+        run: |
+          echo "has_violations=false" >> $GITHUB_OUTPUT
+          echo "review_body=" >> $GITHUB_OUTPUT
+
+  # Second job: Post Claude review comment (has write access, only runs trusted code)
+  claude-comment:
     runs-on: ubuntu-latest
-    needs: analyze
+    needs: claude-review
+    if: always() && needs.claude-review.result == 'success'
 
     permissions:
       contents: read
       pull-requests: write
 
     steps:
-      - name: Checkout base branch (trusted code only)
+      - name: Checkout base branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.base_ref }}
 
-      - name: Decode violations
-        id: decode
-        run: |
-          echo "${{ needs.analyze.outputs.violations }}" | base64 -d > violations.json
-          echo "errors=${{ needs.analyze.outputs.errors }}" >> $GITHUB_OUTPUT
-          echo "warnings=${{ needs.analyze.outputs.warnings }}" >> $GITHUB_OUTPUT
-
-      - name: Delete previous code review comments
+      - name: Delete previous Claude review comments
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Find and delete all previous code review comments from this workflow
           gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("Code Style Review Results"))) | .id' \
+            --paginate --jq '.[] | select(.body | contains("<!-- claude-code-review -->")) | .id' \
             | while read -r comment_id; do
-                echo "Deleting comment $comment_id"
+                echo "Deleting previous Claude review comment $comment_id"
                 gh api -X DELETE repos/${{ github.repository }}/issues/comments/$comment_id
               done
 
-      - name: Create PR review comment
-        if: steps.decode.outputs.errors != '0' || steps.decode.outputs.warnings != '0'
+      - name: Post Claude review comment
+        if: needs.claude-review.outputs.has_violations == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Build review body
-          error_count=${{ steps.decode.outputs.errors }}
-          warning_count=${{ steps.decode.outputs.warnings }}
+          review_body=$(echo "${{ needs.claude-review.outputs.review_body }}" | base64 -d)
 
-          # Add green check emoji if no errors
-          if [ "$error_count" -eq 0 ]; then
-            title="## &#x2705; Code Style Review Results"
-          else
-            title="## Code Style Review Results"
-          fi
+          cat > /tmp/comment_body.md << 'EOF'
+          <!-- claude-code-review -->
+          ## Claude Code Review
 
-          body="${title}
+          EOF
 
-          Found **${error_count} error(s)** and **${warning_count} warning(s)**.
+          echo "$review_body" >> /tmp/comment_body.md
 
-          <details>
-          <summary>Click to see all violations</summary>
-
-          | File | Line | Severity | Rule | Message |
-          |------|------|----------|------|---------|"
-
-          # Add each violation to the table
-          while IFS= read -r line; do
-            file=$(echo "$line" | jq -r '.filepath')
-            lineno=$(echo "$line" | jq -r '.line')
-            severity=$(echo "$line" | jq -r '.severity')
-            rule=$(echo "$line" | jq -r '.rule')
-            message=$(echo "$line" | jq -r '.message' | sed 's/|/\\|/g')
-            body="${body}
-          | \`${file}\` | ${lineno} | ${severity} | ${rule} | ${message} |"
-          done < <(jq -c '.[]' violations.json)
-
-          body="${body}
-
-          </details>"
-
-          # Only add footer with "Please fix errors" message if there are errors
-          if [ "$error_count" -gt 0 ]; then
-            body="${body}
+          cat >> /tmp/comment_body.md << 'EOF'
 
           ---
-          Please fix the errors before merging. See [CODING_STYLE.md](../blob/${{ github.head_ref }}/CODING_STYLE.md) for the style guide."
-          fi
+          *Checked against [CODING_STYLE.md](../blob/${{ github.head_ref }}/CODING_STYLE.md) and [REVIEW.md](../blob/${{ github.head_ref }}/REVIEW.md).*
+          EOF
 
-          # Post review comment
-          gh pr comment ${{ github.event.pull_request.number }} --body "$body"
+          gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/comment_body.md
 
-      - name: Check for manual override from authorized user
-        id: override_check
-        if: steps.decode.outputs.errors != '0'
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Fail if violations found
+        if: needs.claude-review.outputs.has_violations == 'true'
         run: |
-          # Check if there's a comment from rjb32 (Remy Boutonnet) that authorizes ignoring errors
-          # Look for phrases like "ignore errors", "override", "lgtm", "approved" in their comments
-
-          override_found="false"
-
-          # Get all comments on this PR from rjb32
-          comments=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
-            --jq '.[] | select(.user.login == "rjb32") | .body' 2>/dev/null || echo "")
-
-          # Also check review comments (comments on specific lines)
-          review_comments=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
-            --jq '.[] | select(.user.login == "rjb32") | .body' 2>/dev/null || echo "")
-
-          # Also check PR reviews (approve/request changes with body)
-          reviews=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews \
-            --jq '.[] | select(.user.login == "rjb32") | .body' 2>/dev/null || echo "")
-
-          all_comments="$comments $review_comments $reviews"
-
-          # Check for override phrases (case-insensitive)
-          # Phrases that indicate explicit approval to ignore style errors
-          if echo "$all_comments" | grep -iqE "(ignore\s+(style\s+)?errors?|override\s+(style\s+)?(check|errors?)|style\s+(errors?\s+)?approved|lgtm\s+style|style\s+lgtm|errors?\s+can\s+be\s+ignored|approved?\s+despite\s+(style\s+)?errors?|skip\s+style\s+check)"; then
-            override_found="true"
-            echo "::notice::Manual override found from authorized user rjb32"
-          fi
-
-          echo "override=$override_found" >> $GITHUB_OUTPUT
-
-      - name: Fail if errors found
-        if: steps.decode.outputs.errors != '0' && steps.override_check.outputs.override != 'true'
-        run: |
-          echo "::error::Found ${{ steps.decode.outputs.errors }} style error(s). Please fix them before merging."
-          echo "::notice::A maintainer (rjb32) can override by commenting 'ignore style errors' or similar phrase."
+          echo "::error::Claude Code review found style violations. Please fix them before merging."
           exit 1
-
-      - name: Report override applied
-        if: steps.decode.outputs.errors != '0' && steps.override_check.outputs.override == 'true'
-        run: |
-          echo "::warning::Found ${{ steps.decode.outputs.errors }} style error(s), but manual override from rjb32 is in effect."
-          echo "Style check passing due to maintainer override."
