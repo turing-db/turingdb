@@ -1042,7 +1042,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         inDf = prevOutput->getDataframe();
     }
 
-    for (size_t i {0}; const auto* argExpr : *argExprs) {
+    for (size_t i = 0; const auto* argExpr : *argExprs) {
         const Column* col = nullptr;
 
         const VarDecl* argDecl = argExpr->getExprVarDecl();
