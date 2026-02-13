@@ -38,8 +38,7 @@ int main(int argc, char** argv) {
     Graph* graph = sysMan.createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
 
-    ProcedureManager procedures;
-    procedures.init();
+    auto procedures = ProcedureManager::create();
 
     Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
@@ -73,7 +72,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    CypherAST ast(procedures, queryStr);
+    CypherAST ast(procedures.get(), queryStr);
 
     {
         CypherParser parser(&ast);
@@ -153,7 +152,7 @@ int main(int argc, char** argv) {
                                           view,
                                           &pipeline,
                                           &mem,
-                                          &procedures,
+                                          procedures.get(),
                                           &callbacks);
             try {
                 auto t0 = Clock::now();

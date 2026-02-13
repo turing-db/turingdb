@@ -41,20 +41,21 @@ using ProcedureTypeName = EnumToString<ProcedureType>::Create<
 
 struct NamedProcedureType {
     std::string_view _name;
-    ProcedureType _type {};
+    ProcedureType _type {ProcedureType::INVALID};
 };
 
 class ProcedureTypeVector {
 public:
     using Vector = std::vector<NamedProcedureType>;
 
-    ProcedureTypeVector() = default;
-    ~ProcedureTypeVector() = default;
+    ProcedureTypeVector();
 
     ProcedureTypeVector(std::initializer_list<NamedProcedureType> values)
-        : _returnValues(values)
+        : _values(values)
     {
     }
+
+    ~ProcedureTypeVector();
 
     ProcedureTypeVector(const ProcedureTypeVector&) = default;
     ProcedureTypeVector(ProcedureTypeVector&&) noexcept = default;
@@ -62,27 +63,27 @@ public:
     ProcedureTypeVector& operator=(ProcedureTypeVector&&) noexcept = default;
 
     void add(std::string_view name, ProcedureType type) {
-        _returnValues.emplace_back(name, type);
+        _values.emplace_back(name, type);
     }
 
     [[nodiscard]] size_t size() const {
-        return _returnValues.size();
+        return _values.size();
     }
 
     [[nodiscard]] const NamedProcedureType& operator[](size_t i) const {
-        return _returnValues[i];
+        return _values[i];
     }
 
     Vector::const_iterator begin() const {
-        return _returnValues.begin();
+        return _values.begin();
     }
 
     Vector::const_iterator end() const {
-        return _returnValues.end();
+        return _values.end();
     }
 
 private:
-    Vector _returnValues;
+    Vector _values;
 };
 
 }

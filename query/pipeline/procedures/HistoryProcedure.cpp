@@ -16,9 +16,55 @@ using namespace db;
 
 namespace {
 
+using UInt64Col = ColumnVector<types::UInt64::Primitive>;
+
 struct Data : public ProcedureData {
     std::span<const db::CommitView>::iterator _it;
 };
+
+void writeChunk(Data& data,
+                ProcedureState& proc,
+                const GraphView& view,
+                size_t chunkSize) {
+    auto* commitCol = static_cast<ColumnVector<std::string>*>(data.getReturnColumn(0));
+    auto* nodeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(1));
+    auto* edgeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(2));
+    auto* partCountCol = static_cast<UInt64Col*>(data.getReturnColumn(3));
+
+    size_t remaining = std::distance(data._it, view.commits().end());
+    remaining = std::min(remaining, chunkSize);
+
+    if (commitCol) commitCol->clear();
+    if (nodeCountCol) nodeCountCol->clear();
+    if (edgeCountCol) edgeCountCol->clear();
+    if (partCountCol) partCountCol->clear();
+
+    for (size_t i = 0; i < remaining; ++i) {
+        const CommitView& commit = *data._it;
+        const std::span parts = commit.dataparts();
+
+        if (commitCol) {
+            commitCol->push_back(fmt::format("{:x}", commit.hash().get()));
+        }
+
+        size_t nodeCount = 0;
+        size_t edgeCount = 0;
+        for (const auto& part : parts) {
+            nodeCount += part->getNodeContainerSize();
+            edgeCount += part->getEdgeContainerSize();
+        }
+
+        if (nodeCountCol) nodeCountCol->push_back(nodeCount);
+        if (edgeCountCol) edgeCountCol->push_back(edgeCount);
+        if (partCountCol) partCountCol->push_back(parts.size());
+
+        ++data._it;
+    }
+
+    if (data._it == view.commits().end()) {
+        proc.finish();
+    }
+}
 
 }
 
@@ -44,85 +90,20 @@ void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
 
 void HistoryProcedure::execute(ProcedureState& proc) {
     Data& data = proc.data<Data>();
-    const ExecutionContext* ctxt = proc.ctxt();
+    const ExecutionContext* ctxt = proc.getContext();
     const GraphView& view = ctxt->getGraphView();
 
-    Column* rawCommitCol = data.getReturnColumn(0);
-    Column* rawNodeCountCol = data.getReturnColumn(1);
-    Column* rawEdgeCountCol = data.getReturnColumn(2);
-    Column* rawPartCountCol = data.getReturnColumn(3);
-
-    auto* commitCol = static_cast<ColumnVector<std::string>*>(rawCommitCol);
-    auto* nodeCountCol = static_cast<ColumnVector<types::UInt64::Primitive>*>(rawNodeCountCol);
-    auto* edgeCountCol = static_cast<ColumnVector<types::UInt64::Primitive>*>(rawEdgeCountCol);
-    auto* partCountCol = static_cast<ColumnVector<types::UInt64::Primitive>*>(rawPartCountCol);
-
-    switch (proc.step()) {
+    switch (proc.getStep()) {
         case ProcedureState::Step::PREPARE: {
             data._it = view.commits().begin();
             return;
         }
 
-        case ProcedureState::Step::RESET: {
+        case ProcedureState::Step::RESET:
             return;
-        }
 
         case ProcedureState::Step::EXECUTE: {
-            size_t remaining = std::distance(data._it, view.commits().end());
-            remaining = std::min(remaining, ctxt->getChunkSize());
-
-            if (commitCol) {
-                commitCol->clear();
-            }
-
-            if (nodeCountCol) {
-                nodeCountCol->clear();
-            }
-
-            if (edgeCountCol) {
-                edgeCountCol->clear();
-            }
-
-            if (partCountCol) {
-                partCountCol->clear();
-            }
-
-            for (size_t i = 0; i < remaining; ++i) {
-                const CommitView& commit = *data._it;
-                const CommitHash& hash = commit.hash();
-                const std::span parts = commit.dataparts();
-
-                if (commitCol) {
-                    commitCol->push_back(fmt::format("{:x}", hash.get()));
-                }
-
-                if (nodeCountCol) {
-                    size_t nodeCount = 0;
-                    for (const auto& part : parts) {
-                        nodeCount += part->getNodeContainerSize();
-                    }
-                    nodeCountCol->push_back(nodeCount);
-                }
-
-                if (edgeCountCol) {
-                    size_t edgeCount = 0;
-                    for (const auto& part : parts) {
-                        edgeCount += part->getEdgeContainerSize();
-                    }
-                    edgeCountCol->push_back(edgeCount);
-                }
-
-                if (partCountCol) {
-                    partCountCol->push_back(parts.size());
-                }
-
-                ++data._it;
-            }
-
-            if (data._it == view.commits().end()) {
-                proc.finish();
-            }
-
+            writeChunk(data, proc, view, ctxt->getChunkSize());
             return;
         }
     }

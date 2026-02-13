@@ -58,6 +58,8 @@ set(processors_sources
 )
 
 set(procedures_sources
+    procedures/ProcedureData.cpp
+    procedures/ProcedureTypeVector.cpp
     procedures/Procedure.cpp
     procedures/ProcedureNamespace.cpp
     procedures/ProcedureManager.cpp

@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "ProcedureData.h"
-#include "ProcedureReturnValues.h"
+#include "ProcedureTypeVector.h"
 
 namespace db {
 
@@ -33,24 +33,22 @@ public:
     Procedure(std::string_view name);
     ~Procedure();
 
-    Procedure(const Procedure&) = delete;
-    Procedure& operator=(const Procedure&) = delete;
-    Procedure(Procedure&&) = delete;
-    Procedure& operator=(Procedure&&) = delete;
+    std::string_view getName() const { return _name; }
+    const std::string& getFullName() const { return _fullName; }
 
-    // Setters (used during registration)
+    // Get callbacks
+    ExecuteCallback getExecCallback() const { return _execCallback; }
+    AllocCallback getAllocCallback() const { return _allocCallback; }
+    DeallocCallback getDeallocCallback() const { return _deallocCallback; }
+
+    // Set callbacks
     void setExecuteCallback(ExecuteCallback cb);
     void setAllocCallback(AllocCallback cb);
     void setDeallocCallback(DeallocCallback cb);
     void addReturnValue(std::string_view name, ProcedureType type);
     void addArgument(std::string_view name, ProcedureType type);
 
-    // Getters
-    std::string_view getName() const { return _name; }
-    const std::string& getFullName() const { return _fullName; }
-    ExecuteCallback getExecCallback() const { return _execCallback; }
-    AllocCallback getAllocCallback() const { return _allocCallback; }
-    DeallocCallback getDeallocCallback() const { return _deallocCallback; }
+    // Arguments and rreturn values
     const ProcedureTypeVector& returnValues() const { return _returnValues; }
     const ProcedureTypeVector& argumentTypes() const { return _argumentTypes; }
 

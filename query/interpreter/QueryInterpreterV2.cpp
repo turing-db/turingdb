@@ -86,7 +86,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     const GraphView view = txRes->viewGraph();
 
     // Parsing query
-    CypherAST ast(*ctxt.getProcedures(), query);
+    CypherAST ast(ctxt.getProcedures(), query);
     CypherParser parser(&ast);
     try {
         parser.parse(query);

@@ -18,11 +18,82 @@ using namespace db;
 
 namespace {
 
+using UInt64Col = ColumnVector<types::UInt64::Primitive>;
+
 struct Data : public ProcedureData {
     size_t _i {0};
-    ContainerKind::Code _containerKind {ContainerKind::Invalid};
-    InternalKind::Code _internalKind {InternalKind::Invalid};
 };
+
+struct CommitStats {
+    size_t nodeCount {0};
+    size_t edgeCount {0};
+    size_t partCount {0};
+};
+
+void getCommitStats(CommitStats& stats,
+                    std::string_view inputHash,
+                    const GraphView& view) {
+
+    stats.nodeCount = 0;
+    stats.edgeCount = 0;
+    stats.partCount = 0;
+
+    std::string lower(inputHash);
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](char c) { return std::tolower(c); });
+
+    for (const auto& commit : view.commits()) {
+        const std::string hashStr = fmt::format("{:x}", commit.hash().get());
+
+        if (lower != hashStr) {
+            continue;
+        }
+
+        const std::span parts = commit.dataparts();
+        stats.partCount = parts.size();
+
+        for (const auto& part : parts) {
+            stats.nodeCount += part->getNodeContainerSize();
+            stats.edgeCount += part->getEdgeContainerSize();
+        }
+
+        return;
+    }
+}
+
+template <typename T>
+void extractString(std::string& result, const T& val) {
+    if constexpr (requires { val.has_value(); }) {
+        result = val.value_or("");
+    } else {
+        result = val;
+    }
+}
+
+template <template <typename> class ColType, typename F>
+void dispatchStringInternal(const Column* col, F&& fn) {
+    switch (col->getKind()) {
+        case ColType<std::string>::staticKind():
+            fn(*static_cast<const ColType<std::string>*>(col));
+        break;
+
+        case ColType<std::string_view>::staticKind():
+            fn(*static_cast<const ColType<std::string_view>*>(col));
+        break;
+
+        case ColType<std::optional<std::string>>::staticKind():
+            fn(*static_cast<const ColType<std::optional<std::string>>*>(col));
+        break;
+
+        case ColType<std::optional<std::string_view>>::staticKind():
+            fn(*static_cast<const ColType<std::optional<std::string_view>>*>(col));
+        break;
+
+        default:
+            throw FatalException(fmt::format(
+                "Unexpected column kind: {}", col->getKind()));
+    }
+}
 
 }
 
@@ -34,9 +105,7 @@ void DescribeCommitProcedure::deallocData(ProcedureData* data) {
     delete data;
 }
 
-void DescribeCommitProcedure::registerProcedure(
-    ProcedureNamespace* ns) {
-
+void DescribeCommitProcedure::registerProcedure(ProcedureNamespace* ns) {
     Procedure* proc = new Procedure("describeCommit");
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
@@ -50,46 +119,43 @@ void DescribeCommitProcedure::registerProcedure(
 
 void DescribeCommitProcedure::execute(ProcedureState& proc) {
     Data& data = proc.data<Data>();
-    const ExecutionContext* ctxt = proc.ctxt();
+    const ExecutionContext* ctxt = proc.getContext();
     const GraphView& view = ctxt->getGraphView();
 
     const Column* rawCommitCol = data.getInputColumn(0);
-    Column* rawNodeCountCol = data.getReturnColumn(0);
-    Column* rawEdgeCountCol = data.getReturnColumn(1);
-    Column* rawPartCountCol = data.getReturnColumn(2);
+    auto* nodeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(0));
+    auto* edgeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(1));
+    auto* partCountCol = static_cast<UInt64Col*>(data.getReturnColumn(2));
 
-    auto* nodeCountCol = static_cast<ColumnVector<types::UInt64::Primitive>*>(rawNodeCountCol);
-    auto* edgeCountCol = static_cast<ColumnVector<types::UInt64::Primitive>*>(rawEdgeCountCol);
-    auto* partCountCol = static_cast<ColumnVector<types::UInt64::Primitive>*>(rawPartCountCol);
-
-    switch (proc.step()) {
+    switch (proc.getStep()) {
         case ProcedureState::Step::PREPARE: {
             bioassert(rawCommitCol, "db.describeCommit: must be provided a commit hash");
 
-            data._containerKind = ColumnKind::extractContainerKind(rawCommitCol->getKind());
-            data._internalKind = ColumnKind::extractInternalKind(rawCommitCol->getKind());
+            const auto containerKind =
+                ColumnKind::extractContainerKind(rawCommitCol->getKind());
+            const auto internalKind =
+                ColumnKind::extractInternalKind(rawCommitCol->getKind());
 
-            bioassert(data._containerKind == ContainerKind::code<ColumnVector<void>>()
-                          || data._containerKind == ContainerKind::code<ColumnConst<void>>(),
-                      "db.describeCommit: must be provided a commit hash as a vector or const");
-            bioassert(data._internalKind == InternalKind::code<std::string_view>()
-                          || data._internalKind == InternalKind::code<std::string>()
-                          || data._internalKind == InternalKind::code<std::optional<std::string_view>>()
-                          || data._internalKind == InternalKind::code<std::optional<std::string>>(),
-                      "db.describeCommit: must be provided a commit hash as a string or string_view");
+            bioassert(containerKind == ContainerKind::code<ColumnVector<void>>()
+                       || containerKind == ContainerKind::code<ColumnConst<void>>(),
+                      "db.describeCommit: commit hash must be a vector or const column");
+            bioassert(internalKind == InternalKind::code<std::string_view>()
+                       || internalKind == InternalKind::code<std::string>()
+                       || internalKind == InternalKind::code<std::optional<std::string_view>>()
+                       || internalKind == InternalKind::code<std::optional<std::string>>(),
+                      "db.describeCommit: commit hash must be a string or string_view");
             return;
         }
 
-        case ProcedureState::Step::RESET: {
+        case ProcedureState::Step::RESET:
             return;
-        }
 
         case ProcedureState::Step::EXECUTE: {
             if (nodeCountCol) {
                 nodeCountCol->clear();
             }
 
-            if (edgeCountCol) {
+            if (edgeCountCol) { 
                 edgeCountCol->clear();
             }
 
@@ -97,154 +163,55 @@ void DescribeCommitProcedure::execute(ProcedureState& proc) {
                 partCountCol->clear();
             }
 
-            const auto writeCommit = [&](const CommitView& commit) {
-                const std::span parts = commit.dataparts();
-
+            const auto pushStats = [&](const CommitStats& s) {
                 if (nodeCountCol) {
-                    size_t nodeCount = 0;
-                    for (const auto& part : parts) {
-                        nodeCount += part->getNodeContainerSize();
-                    }
-                    nodeCountCol->push_back(nodeCount);
+                    nodeCountCol->push_back(s.nodeCount);
                 }
 
                 if (edgeCountCol) {
-                    size_t edgeCount = 0;
-                    for (const auto& part : parts) {
-                        edgeCount += part->getEdgeContainerSize();
-                    }
-                    edgeCountCol->push_back(edgeCount);
+                    edgeCountCol->push_back(s.edgeCount);
                 }
 
                 if (partCountCol) {
-                    partCountCol->push_back(parts.size());
+                    partCountCol->push_back(s.partCount);
                 }
             };
 
-            size_t remaining = rawCommitCol->size();
-            remaining = std::min(remaining, ctxt->getChunkSize());
+            const auto treatVector = [&]<typename T>(const ColumnVector<T>& col) {
+                const size_t remaining =
+                    std::min(rawCommitCol->size(), ctxt->getChunkSize());
 
-            const auto treatVector = [&]<typename T>(const ColumnVector<T>& vecCol) {
+                std::string input;
+                CommitStats stats;
                 for (size_t i = data._i; i < remaining + data._i; ++i) {
-                    std::string currentCommitStr;
-                    std::string inputCommitStr;
-
-                    if constexpr (requires { vecCol[i].has_value(); }) {
-                        inputCommitStr = vecCol[i].value_or("");
-                    } else {
-                        inputCommitStr = vecCol[i];
-                    }
-                    std::transform(inputCommitStr.begin(),
-                                   inputCommitStr.end(),
-                                   inputCommitStr.begin(),
-                                   [](char c) { return std::tolower(c); });
-
-                    bool found = false;
-                    for (const auto& commit : view.commits()) {
-                        currentCommitStr = fmt::format("{:x}", commit.hash().get());
-
-                        if (inputCommitStr == currentCommitStr) {
-                            writeCommit(commit);
-                            found = true;
-                            break;
-                        }
-                    }
-
-                    if (!found) {
-                        if (nodeCountCol) {
-                            nodeCountCol->push_back(0);
-                        }
-
-                        if (edgeCountCol) {
-                            edgeCountCol->push_back(0);
-                        }
-
-                        if (partCountCol) {
-                            partCountCol->push_back(0);
-                        }
-                    }
+                    extractString(input, col[i]);
+                    getCommitStats(stats, input, view);
+                    pushStats(stats);
                 }
 
                 data._i += remaining;
 
-                if (data._i == vecCol.size()) {
+                if (data._i == col.size()) {
                     proc.finish();
                 }
             };
 
-            const auto treatConst = [&]<typename T>(const ColumnConst<T>& constCol) {
-                std::string currentCommitStr;
-                std::string inputCommitStr;
-
-                if constexpr (requires { constCol.getRaw().has_value(); }) {
-                    inputCommitStr = constCol.getRaw().value_or("");
-                } else {
-                    inputCommitStr = constCol.getRaw();
-                }
-
-                std::transform(inputCommitStr.begin(),
-                               inputCommitStr.end(),
-                               inputCommitStr.begin(),
-                               [](char c) { return std::tolower(c); });
-
-                bool found = false;
-                for (const auto& commit : view.commits()) {
-                    currentCommitStr = fmt::format("{:x}", commit.hash().get());
-
-                    if (inputCommitStr == currentCommitStr) {
-                        writeCommit(commit);
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found) {
-                    if (nodeCountCol) {
-                        nodeCountCol->push_back(0);
-                    }
-
-                    if (edgeCountCol) {
-                        edgeCountCol->push_back(0);
-                    }
-
-                    if (partCountCol) {
-                        partCountCol->push_back(0);
-                    }
-                }
-
+            const auto treatConst = [&]<typename T>(const ColumnConst<T>& col) {
+                std::string input;
+                CommitStats stats;
+                extractString(input, col.getRaw());
+                getCommitStats(stats, input, view);
+                pushStats(stats);
                 proc.finish();
             };
 
-            switch (rawCommitCol->getKind()) {
-                case ColumnVector<std::string>::staticKind(): {
-                    treatVector(*static_cast<const ColumnVector<std::string>*>(rawCommitCol));
-                } break;
-                case ColumnVector<std::string_view>::staticKind(): {
-                    treatVector(*static_cast<const ColumnVector<std::string_view>*>(rawCommitCol));
-                } break;
-                case ColumnConst<std::string>::staticKind(): {
-                    treatConst(*static_cast<const ColumnConst<std::string>*>(rawCommitCol));
-                } break;
-                case ColumnConst<std::string_view>::staticKind(): {
-                    treatConst(*static_cast<const ColumnConst<std::string_view>*>(rawCommitCol));
-                } break;
+            const auto containerKind =
+                ColumnKind::extractContainerKind(rawCommitCol->getKind());
 
-                case ColumnVector<std::optional<std::string>>::staticKind(): {
-                    treatVector(*static_cast<const ColumnVector<std::optional<std::string>>*>(rawCommitCol));
-                } break;
-                case ColumnVector<std::optional<std::string_view>>::staticKind(): {
-                    treatVector(*static_cast<const ColumnVector<std::optional<std::string_view>>*>(rawCommitCol));
-                } break;
-                case ColumnConst<std::optional<std::string>>::staticKind(): {
-                    treatConst(*static_cast<const ColumnConst<std::optional<std::string>>*>(rawCommitCol));
-                } break;
-                case ColumnConst<std::optional<std::string_view>>::staticKind(): {
-                    treatConst(*static_cast<const ColumnConst<std::optional<std::string_view>>*>(rawCommitCol));
-                } break;
-
-                default: {
-                    throw FatalException(fmt::format("Unexpected column kind: {}", rawCommitCol->getKind()));
-                }
+            if (containerKind == ContainerKind::code<ColumnVector<void>>()) {
+                dispatchStringInternal<ColumnVector>(rawCommitCol, treatVector);
+            } else {
+                dispatchStringInternal<ColumnConst>(rawCommitCol, treatConst);
             }
 
             return;

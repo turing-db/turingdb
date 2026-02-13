@@ -147,7 +147,7 @@ public:
 
     using QueryCommands = std::vector<QueryCommand*>;
 
-    CypherAST(const ProcedureManager& procedures,
+    CypherAST(const ProcedureManager* procedures,
               std::string_view queryString);
     ~CypherAST();
 

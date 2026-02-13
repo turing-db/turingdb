@@ -63,13 +63,12 @@ void runPlan2(std::string_view query) {
     Graph* graph = db.getSystemManager().createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
     
-    ProcedureManager procedures;
-    procedures.init();
+    auto procedures = ProcedureManager::create();
 
     const Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    CypherAST ast(procedures, query);
+    CypherAST ast(procedures.get(), query);
     CypherParser parser(&ast);
 
     try {

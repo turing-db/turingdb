@@ -5,7 +5,7 @@
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
 #include "ProcedureManager.h"
-#include "ProcedureReturnValues.h"
+#include "ProcedureTypeVector.h"
 #include "columns/ColumnVector.h"
 
 #include "PipelineException.h"
@@ -19,13 +19,13 @@ struct Data : public ProcedureData {
     size_t _procIndex {0};
 };
 
-void buildSignature(std::string& result, const Procedure& proc) {
+void buildSignature(std::string& result, const Procedure* proc) {
     result.clear();
-    result += proc.getFullName();
+    result += proc->getFullName();
     result += "(";
 
     bool first = true;
-    for (const auto& arg : proc.argumentTypes()) {
+    for (const auto& arg : proc->argumentTypes()) {
         if (!first) {
             result += ", ";
         }
@@ -38,7 +38,7 @@ void buildSignature(std::string& result, const Procedure& proc) {
     result += ") :: (";
 
     first = true;
-    for (const auto& rv : proc.returnValues()) {
+    for (const auto& rv : proc->returnValues()) {
         if (!first) {
             result += ", ";
         }
@@ -86,7 +86,7 @@ void writeProcedures(Data& data,
             }
 
             if (signatureCol) {
-                buildSignature(signature, *p);
+                buildSignature(signature, p);
                 signatureCol->push_back(signature);
             }
 
@@ -127,7 +127,7 @@ void ProceduresProcedure::registerProcedure(ProcedureNamespace* ns) {
 
 void ProceduresProcedure::execute(ProcedureState& proc) {
     Data& data = proc.data<Data>();
-    const ExecutionContext* ctxt = proc.ctxt();
+    const ExecutionContext* ctxt = proc.getContext();
     const ProcedureManager* manager = ctxt->getProcedures();
 
     Column* rawNameCol = data.getReturnColumn(0);
@@ -136,18 +136,18 @@ void ProceduresProcedure::execute(ProcedureState& proc) {
     auto* nameCol = static_cast<ColumnVector<std::string>*>(rawNameCol);
     auto* signatureCol = static_cast<ColumnVector<std::string>*>(rawSignatureCol);
 
-    switch (proc.step()) {
+    switch (proc.getStep()) {
         case ProcedureState::Step::PREPARE: {
             data._nsIndex = 0;
             data._procIndex = 0;
-            return;
         }
+        break;
 
         case ProcedureState::Step::RESET: {
             data._nsIndex = 0;
             data._procIndex = 0;
-            return;
         }
+        break;
 
         case ProcedureState::Step::EXECUTE: {
             writeProcedures(data,
@@ -156,8 +156,8 @@ void ProceduresProcedure::execute(ProcedureState& proc) {
                             nameCol,
                             signatureCol,
                             ctxt->getChunkSize());
-            return;
         }
+        break;
     }
 
     throw PipelineException("Unknown procedure step");

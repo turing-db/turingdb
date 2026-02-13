@@ -18,7 +18,7 @@ TuringDB::TuringDB(const TuringConfig* config)
     : _config(config),
     _systemManager(std::make_unique<SystemManager>(config)),
     _jobSystem(JobSystem::create()),
-    _procedures(std::make_unique<ProcedureManager>())
+    _procedures(ProcedureManager::create())
 {
 }
 
@@ -93,7 +93,6 @@ void TuringDB::init() {
     }
 
     _systemManager->init();
-    _procedures->init();
 }
 
 QueryStatus TuringDB::query(std::string_view query,

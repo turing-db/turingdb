@@ -55,8 +55,8 @@ public:
         return *_jobSystem;
     }
 
-    const ProcedureManager& getProcedures() const {
-        return *_procedures;
+    const ProcedureManager* getProcedures() const {
+        return _procedures.get();
     }
 
 private:

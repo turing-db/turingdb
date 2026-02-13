@@ -12,6 +12,14 @@
 
 using namespace db;
 
+namespace {
+
+struct Data : public ProcedureData {
+    std::unique_ptr<ScanPropertyTypesChunkWriter> _it;
+};
+
+}
+
 ProcedureData* PropertyTypesProcedure::allocData() {
     return new Data();
 }
@@ -20,9 +28,7 @@ void PropertyTypesProcedure::deallocData(ProcedureData* data) {
     delete data;
 }
 
-void PropertyTypesProcedure::registerProcedure(
-    ProcedureNamespace* ns) {
-
+void PropertyTypesProcedure::registerProcedure(ProcedureNamespace* ns) {
     Procedure* proc = new Procedure("propertyTypes");
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
@@ -35,7 +41,7 @@ void PropertyTypesProcedure::registerProcedure(
 
 void PropertyTypesProcedure::execute(ProcedureState& proc) {
     Data& data = proc.data<Data>();
-    const ExecutionContext* ctxt = proc.ctxt();
+    const ExecutionContext* ctxt = proc.getContext();
     const GraphView& view = ctxt->getGraphView();
 
     Column* rawIdsCol = data.getReturnColumn(0);
@@ -46,30 +52,29 @@ void PropertyTypesProcedure::execute(ProcedureState& proc) {
     auto* namesCol = static_cast<ColumnVector<std::string_view>*>(rawNamesCol);
     auto* valueTypesCol = static_cast<ColumnVector<ValueType>*>(rawValueTypesCol);
 
-    switch (proc.step()) {
+    switch (proc.getStep()) {
         case ProcedureState::Step::PREPARE: {
             data._it = std::make_unique<ScanPropertyTypesChunkWriter>(
                 view.metadata().propTypes());
             data._it->setPropertyTypes(idsCol);
             data._it->setNames(namesCol);
             data._it->setValueTypes(valueTypesCol);
-            return;
         }
+        break;
 
         case ProcedureState::Step::RESET: {
             data._it->reset();
-            return;
         }
+        break;
 
         case ProcedureState::Step::EXECUTE: {
-            data._it->fill(proc.ctxt()->getChunkSize());
+            data._it->fill(proc.getContext()->getChunkSize());
 
             if (!data._it->isValid()) {
                 proc.finish();
             }
-
-            return;
         }
+        break;
     }
 
     throw PipelineException("Unknown procedure step");

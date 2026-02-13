@@ -6,20 +6,14 @@
 #include <vector>
 
 namespace db {
-class Column;
-}
 
-namespace db {
+class Column;
 
 class ProcedureData {
 public:
-    virtual ~ProcedureData() = default;
-    ProcedureData() = default;
+    ProcedureData();
 
-    ProcedureData(const ProcedureData&) = delete;
-    ProcedureData(ProcedureData&&) = delete;
-    ProcedureData& operator=(const ProcedureData&) = delete;
-    ProcedureData& operator=(ProcedureData&&) = delete;
+    virtual ~ProcedureData();
 
     void resizeInputColumns(size_t size) {
         _inputColumns.resize(size);

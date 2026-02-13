@@ -9,7 +9,7 @@
 #include "procedures/ProcedureManager.h"
 #include "procedures/ProcedureNamespace.h"
 #include "procedures/Procedure.h"
-#include "procedures/ProcedureReturnValues.h"
+#include "procedures/ProcedureTypeVector.h"
 
 using namespace db;
 
