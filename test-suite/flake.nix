@@ -1,5 +1,5 @@
 {
-  description = "TuringDB - the fastest in-memory graph database";
+  description = "TuringDB query test-suite";
 
   inputs = {
     nixpkgs.url =  "github:nixos/nixpkgs/nixpkgs-25.05-darwin";
