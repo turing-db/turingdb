@@ -94,6 +94,10 @@ jobs:
           - Pointers, bools, enums, and other POD/trivial types are NOT "non-trivial
             member variables" — classes with only these members do not need explicit
             constructors/destructors in a cpp file.
+          - Multi-line function arguments: both parenthesis-aligned and flat/uniform
+            indentation are acceptable, as long as each argument is on its own line
+            and consistently indented below the others. Do NOT flag flat indentation
+            as a violation of the alignment rule.
 
           OUTPUT FORMAT:
           - Your COMPLETE response must be ONLY the final table or NO_VIOLATIONS.
