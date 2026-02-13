@@ -167,11 +167,22 @@ public:
                               TypeUtils::decay_col_t<PColU>>::ResultColumnType;
 };
 
+// FIXME: This may need more complex logic in the future
+template <typename Op, typename PColT>
+class UnaryColumnCombination {
+public:
+    using ResultColumnType = TypeUtils::decay_col_t<PColT>;
+};
+
 template <typename Op, typename ColT, typename ColU, typename ColRes>
 concept is_result_column =
     std::is_same_v<TypeUtils::decay_col_t<ColRes>,
                    typename ColumnCombination<Op, TypeUtils::decay_col_t<ColT>,
                                               TypeUtils::decay_col_t<ColU>>::ResultColumnType>;
+
+// FIXME: This may need more complex logic in the future, tied to @ref UnaryColumnCombination
+template <typename Op, typename ColT, typename ColRes>
+concept is_unary_result_column = std::is_same_v<TypeUtils::decay_col_t<ColRes>, TypeUtils::decay_col_t<ColT>>;
 
 template <typename Op, typename T, typename U, typename Res>
 concept is_result_type =

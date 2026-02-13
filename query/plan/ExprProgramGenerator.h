@@ -55,7 +55,7 @@ private:
     Column* generateLiteralExpr(const LiteralExpr* literalExpr);
     Column* generateSymbolExpr(const SymbolExpr* symbolExpr);
 
-    Column* allocUnaryResultCol(const Expr* expr);
+    Column* allocUnaryResultCol(ColumnOperator op, const Column* arg);
     Column* allocBinaryResultCol(ColumnOperator op, const Column* lhs, const Column* rhs);
 
     static ColumnOperator unaryOperatorToColumnOperator(UnaryOperator op);

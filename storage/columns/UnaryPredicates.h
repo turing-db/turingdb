@@ -3,6 +3,7 @@
 #include "ColumnMask.h"
 #include "ColumnOptMask.h"
 #include "ColumnVector.h"
+#include "ColumnConst.h"
 
 #include "TypeUtils.h"
 #include "metadata/PropertyType.h"
@@ -66,6 +67,44 @@ struct UnaryPredicateExecutor {
         auto op = Op {};
         for (size_t i {0}; i < size; i++) {
             resd[i] = op(argd[i]);
+        }
+    }
+
+    // Required for RETURN NOT TRUE, etc.
+    static void apply(ColumnConst<T>* res, const ColumnConst<T>* arg)
+        requires OptionalPredicate<Op, T>
+    {
+        auto op = Op {};
+        if constexpr (TypeUtils::is_optional_v<T>) {
+            const std::optional<bool> result = op(arg->getRaw());
+            res->set(result);
+        } else {
+            const bool result = op(arg->getRaw());
+            res->set(result);
+        }
+    }
+
+    // Required by above
+    static void apply(ColumnVector<T>* res, const ColumnVector<T>* arg)
+        requires(std::is_same_v<T, types::Bool::Primitive>)
+    {
+        const size_t size = arg->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& argd = arg->getRaw();
+
+        auto op = Op {};
+        if constexpr (TypeUtils::is_optional_v<T>) {
+            for (size_t i {0}; i < size; i++) {
+                const std::optional<bool> result = op(argd[i]);
+                resd[i] = result;
+            }
+        } else {
+            for (size_t i {0}; i < size; i++) {
+                const bool result = op(argd[i]);
+                resd[i] = result;
+            }
         }
     }
 };
