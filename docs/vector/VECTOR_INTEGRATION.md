@@ -210,10 +210,80 @@ added in a future iteration:
 
 ## Concurrency
 
-Each vector index has its own lock (per-index locking), so operations on
-different indexes do not block each other. The existing `std::shared_mutex`
-on `VecLib` provides this.
+### Design principle
+
+Locks are never exposed directly to callers. All concurrent access is managed
+through **accessor objects** (RAII). An accessor acquires the appropriate lock
+in its constructor and releases it in its destructor. Callers only see the
+methods that are valid for the access mode they hold — the type system
+enforces correctness at compile time.
+
+### Two levels of locking
+
+There are two distinct resources to protect, each with its own mutex:
+
+**Database level** (`VectorDatabase::_mutex`) — protects the map of vector
+indexes. Operations that modify the set of indexes (CREATE, DELETE) need
+exclusive access. Operations that look up an existing index (VECTOR SEARCH,
+LOAD VECTOR INDEX, SHOW VECTOR INDEXES) need shared access.
+
+**Index level** (`VecLib::_mutex`) — protects the data within a single
+vector index. LOAD VECTOR INDEX needs exclusive access. VECTOR SEARCH
+needs shared access. Operations on different indexes do not block each
+other since each index has its own mutex.
+
+### Accessor types
+
+#### Database level
+
+`VectorDatabaseReadAccessor` — acquires a shared lock on `VectorDatabase`.
+Exposes read-only operations: looking up an index by name, listing indexes.
+
+`VectorDatabaseWriteAccessor` — acquires an exclusive lock on `VectorDatabase`.
+Exposes mutating operations: creating an index, deleting an index.
+
+#### Index level
+
+`VecLibReadAccessor` — acquires a shared lock on `VecLib`.
+Exposes: `search`.
+
+`VecLibWriteAccessor` — acquires an exclusive lock on `VecLib`.
+Exposes: `addEmbeddings`, `clear`.
+
+The existing `VecLibAccessor` class (which currently holds a shared lock
+but exposes both read and write methods) should be split into these two
+types.
+
+### Lock acquisition per operation
+
+**CREATE VECTOR INDEX:**
+Acquire `VectorDatabaseWriteAccessor` → create new VecLib → release.
+
+**DELETE VECTOR INDEX:**
+Acquire `VectorDatabaseWriteAccessor` → remove VecLib → release.
+
+**SHOW VECTOR INDEXES:**
+Acquire `VectorDatabaseReadAccessor` → iterate indexes → release.
+
+**LOAD VECTOR INDEX:**
+Acquire `VectorDatabaseReadAccessor` → find VecLib → acquire
+`VecLibWriteAccessor` → release database accessor → clear index →
+read file → parse JSON → add embeddings → release index accessor.
+On failure: the index is cleared before the write accessor is released,
+so the index is always left in a consistent state (fully loaded or empty).
+The exclusive index lock is held for the entire duration of the load,
+which may be long for large files. All searches on that index are
+blocked until the load completes or fails.
+
+**VECTOR SEARCH:**
+Acquire `VectorDatabaseReadAccessor` → find VecLib → acquire
+`VecLibReadAccessor` → release database accessor → search → release
+index accessor. Multiple concurrent searches on the same index are
+allowed (shared lock).
+
+### Summary
 
 For a given vector index:
-* One exclusive writer for the LOAD VECTOR INDEX query -> acquire unique lock
-* Many concurrent readers for VECTOR SEARCH -> acquire shared lock
+* One exclusive writer for LOAD VECTOR INDEX → `VecLibWriteAccessor`
+* Many concurrent readers for VECTOR SEARCH → `VecLibReadAccessor`
+* Searches are blocked for the full duration of a LOAD on the same index
