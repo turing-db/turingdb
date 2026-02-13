@@ -229,13 +229,14 @@ struct TypeRestrictions;
 
 template <>
 struct TypeRestrictions<OP_NOT> {
-    using Allowed = GenerateKindList<
-        std::tuple<std::optional<CustomBool>>
-    >;
+    using Allowed = GenerateKindList<std::tuple<
+        types::Bool::Primitive,
+        std::optional<types::Bool::Primitive>
+    >>;
 
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnConst>()
+        ContainerKind::code<ColumnMask>()
     >;
 };
 
@@ -254,6 +255,7 @@ struct OutputtedTypes {
         std::optional<types::Double::Primitive>,
         std::optional<types::String::Primitive>,
         std::optional<types::Bool::Primitive>,
+        PropertyNull,
 
         NodeID,
         EdgeID,
