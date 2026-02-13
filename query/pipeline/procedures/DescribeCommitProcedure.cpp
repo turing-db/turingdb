@@ -25,17 +25,17 @@ struct Data : public ProcedureData {
 };
 
 struct CommitStats {
-    size_t nodeCount {0};
-    size_t edgeCount {0};
-    size_t partCount {0};
+    size_t _nodeCount {0};
+    size_t _edgeCount {0};
+    size_t _partCount {0};
 };
 
 void getCommitStats(CommitStats* stats,
                     std::string_view inputHash,
                     const GraphView& view) {
-    stats->nodeCount = 0;
-    stats->edgeCount = 0;
-    stats->partCount = 0;
+    stats->_nodeCount = 0;
+    stats->_edgeCount = 0;
+    stats->_partCount = 0;
 
     std::string lower(inputHash);
     std::transform(lower.begin(), lower.end(), lower.begin(),
@@ -49,11 +49,11 @@ void getCommitStats(CommitStats* stats,
         }
 
         const std::span parts = commit.dataparts();
-        stats->partCount = parts.size();
+        stats->_partCount = parts.size();
 
         for (const auto& part : parts) {
-            stats->nodeCount += part->getNodeContainerSize();
-            stats->edgeCount += part->getEdgeContainerSize();
+            stats->_nodeCount += part->getNodeContainerSize();
+            stats->_edgeCount += part->getEdgeContainerSize();
         }
 
         return;
@@ -164,15 +164,15 @@ void DescribeCommitProcedure::execute(ProcedureState& proc) {
 
             const auto pushStats = [&](const CommitStats& s) {
                 if (nodeCountCol) {
-                    nodeCountCol->push_back(s.nodeCount);
+                    nodeCountCol->push_back(s._nodeCount);
                 }
 
                 if (edgeCountCol) {
-                    edgeCountCol->push_back(s.edgeCount);
+                    edgeCountCol->push_back(s._edgeCount);
                 }
 
                 if (partCountCol) {
-                    partCountCol->push_back(s.partCount);
+                    partCountCol->push_back(s._partCount);
                 }
             };
 
