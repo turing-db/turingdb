@@ -2,6 +2,7 @@
 
 #include <string_view>
 #include <vector>
+#include <stdint.h>
 
 #include "EnumToString.h"
 
