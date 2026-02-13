@@ -88,16 +88,17 @@ This writes the vector index on disk.
 LOAD VECTOR INDEX "myfilepath" IN vector1
 ```
 
-The file path is server-side, relative to the `~/.turing/data` directory.
+The file path is server-side and must be a relative path. It is resolved
+relative to the `~/.turing/data` directory. Absolute paths are not accepted.
 
 The vector index must already exist (created via CREATE VECTOR INDEX).
 It is a hard error if the index does not exist.
 
 Loading replaces the entire content of the index. The index is cleared
 before ingestion begins. If ingestion fails (e.g. dimension mismatch,
-malformed JSON), the index is cleared again — leaving it empty rather
-than partially loaded. This guarantees the index is always in a
-consistent state: either fully loaded with the new data, or empty.
+malformed JSON, duplicate IDs), the index is cleared again — leaving it
+empty rather than partially loaded. This guarantees the index is always
+in a consistent state: either fully loaded with the new data, or empty.
 
 The file format is JSON, matching the existing JSON importer:
 ```json
@@ -118,6 +119,9 @@ the dimension specified when the index was created; dimension mismatches
 are caught at execution time and cause the entire load to fail (and the
 index to be cleared).
 
+Duplicate `id` values within the same file are a hard error — the entire
+load is rejected and the index is cleared.
+
 This is a standalone QueryCommand (like LOAD GRAPH).
 
 ### 3. Vector search
@@ -125,8 +129,13 @@ This is a standalone QueryCommand (like LOAD GRAPH).
 Get the numerical IDs and distances associated to the k nearest vectors
 for a given query vector. The query vector must be a list literal of float values.
 
-VECTOR SEARCH produces **k rows**, one per nearest neighbor. Each row contains
-scalar values for the yielded columns — not lists.
+VECTOR SEARCH produces **up to k rows**, one per nearest neighbor. Each row
+contains scalar values for the yielded columns — not lists. Results are
+ordered by distance, nearest first.
+
+If the index contains fewer than k vectors, only the available results are
+returned (no error). If the index is empty, zero rows are returned.
+`FOR 0` is valid and returns zero rows.
 
 Return the numerical IDs and distances corresponding to the 10 nearest vectors
 to the query vector:
@@ -146,10 +155,15 @@ VECTOR SEARCH IN vector1 FOR 10 [0.256, 0.12, 0.12345, 0.89] YIELD id
 It is a hard error if the vector index does not exist.
 
 VECTOR SEARCH is a **read statement** in the sense of read statements in the analyzer
-(like MATCH and CALL), so it can be composed with MATCH commands in a single query.
-The variables declared in the YIELD clause can be referenced by subsequent MATCH
+(like MATCH and CALL), so it can be composed with other read statements in a single
+query. The variables declared in the YIELD clause can be referenced by subsequent
 statements, just like for CALL statements. Composition with MATCH uses a cartesian
 product with equality filtering.
+
+VECTOR SEARCH can appear in any position where a read statement is valid (like
+CALL), and multiple VECTOR SEARCH statements can appear in the same query.
+Dependencies between statements are managed by the analyzer, following the same
+rules as CALL YIELD.
 
 VECTOR SEARCH must always be followed by a RETURN clause (it cannot be used
 standalone without RETURN).
@@ -165,6 +179,13 @@ Example — chaining with MATCH:
 VECTOR SEARCH IN vector1 FOR 10 [0.1, 0.2, 0.3, 0.4] YIELD id, distance
 MATCH (n:Paper) WHERE n.id = id
 RETURN n.title, n.abstract, distance
+```
+
+Example — multiple VECTOR SEARCH statements:
+```
+VECTOR SEARCH IN titleIndex FOR 5 [0.1, 0.2, 0.3, 0.4] YIELD id AS titleId, distance AS titleDist
+VECTOR SEARCH IN abstractIndex FOR 5 [0.5, 0.6, 0.7, 0.8] YIELD id AS abstractId, distance AS abstractDist
+RETURN titleId, titleDist, abstractId, abstractDist
 ```
 
 Even though we don't support lists fully as values in columns today, we support
@@ -267,19 +288,25 @@ Acquire `VectorDatabaseReadAccessor` → iterate indexes → release.
 
 **LOAD VECTOR INDEX:**
 Acquire `VectorDatabaseReadAccessor` → find VecLib → acquire
-`VecLibWriteAccessor` → release database accessor → clear index →
-read file → parse JSON → add embeddings → release index accessor.
+`VecLibWriteAccessor` → clear index → read file → parse JSON →
+add embeddings → release `VecLibWriteAccessor` → release
+`VectorDatabaseReadAccessor`.
 On failure: the index is cleared before the write accessor is released,
 so the index is always left in a consistent state (fully loaded or empty).
 The exclusive index lock is held for the entire duration of the load,
 which may be long for large files. All searches on that index are
 blocked until the load completes or fails.
+The database read accessor is also held for the full duration. This
+prevents DELETE from removing the index while LOAD is in progress
+(DELETE needs exclusive database access, which is blocked by the
+shared read lock). Since the database lock is shared, other reads
+(SEARCH, SHOW, LOAD on other indexes) are not blocked.
 
 **VECTOR SEARCH:**
 Acquire `VectorDatabaseReadAccessor` → find VecLib → acquire
-`VecLibReadAccessor` → release database accessor → search → release
-index accessor. Multiple concurrent searches on the same index are
-allowed (shared lock).
+`VecLibReadAccessor` → search → release `VecLibReadAccessor` →
+release `VectorDatabaseReadAccessor`. Multiple concurrent searches
+on the same index are allowed (shared lock at both levels).
 
 ### Summary
 
