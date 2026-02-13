@@ -6,14 +6,12 @@ namespace db {
 
 class Expr;
 
-class ExprEvalNode : public PlanGraphNode {
+class ExprEvalNode final : public PlanGraphNode {
 public:
     using Expressions = std::vector<const Expr*>;
 
-    ExprEvalNode()
-        : PlanGraphNode(PlanGraphOpcode::EXPR_EVAL)
-    {
-    }
+    ExprEvalNode();
+    ~ExprEvalNode() final;
 
     void addExpr(const Expr* expr) { _exprs.push_back(expr); }
 

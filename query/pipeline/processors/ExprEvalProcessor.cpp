@@ -6,11 +6,20 @@
 #include "ExprProgram.h"
 #include "interfaces/PipelineBlockInputInterface.h"
 
+#include "FatalException.h"
+
 using namespace db;
 
 ExprEvalProcessor::ExprEvalProcessor(ExprProgram* exprProg)
     : _exprProg(exprProg)
 {
+}
+
+PipelineBlockInputInterface& ExprEvalProcessor::input() {
+    if (!_input) {
+        throw FatalException("Attempted to get null input of ExprEvalProcessor.");
+    }
+    return *_input;
 }
 
 std::string ExprEvalProcessor::describe() const {

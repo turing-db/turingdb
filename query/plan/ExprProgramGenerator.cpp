@@ -301,8 +301,6 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
         return _gen->memory().alloc<ColumnOptVector<Type::Primitive>>();                 \
     break;
 
-
-
 template <ColumnOperator Op>
 struct ResultAllocator {
     Column*& _resultCol;
