@@ -22,25 +22,33 @@ struct Data : public ProcedureData {
     std::span<const db::CommitView>::iterator _it;
 };
 
-void writeChunk(Data& data,
-                ProcedureState& proc,
+void writeChunk(Data* data,
+                ProcedureState* proc,
                 const GraphView& view,
                 size_t chunkSize) {
-    auto* commitCol = static_cast<ColumnVector<std::string>*>(data.getReturnColumn(0));
-    auto* nodeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(1));
-    auto* edgeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(2));
-    auto* partCountCol = static_cast<UInt64Col*>(data.getReturnColumn(3));
+    auto* commitCol = static_cast<ColumnVector<std::string>*>(data->getReturnColumn(0));
+    auto* nodeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(1));
+    auto* edgeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(2));
+    auto* partCountCol = static_cast<UInt64Col*>(data->getReturnColumn(3));
 
-    size_t remaining = std::distance(data._it, view.commits().end());
+    size_t remaining = std::distance(data->_it, view.commits().end());
     remaining = std::min(remaining, chunkSize);
 
-    if (commitCol) commitCol->clear();
-    if (nodeCountCol) nodeCountCol->clear();
-    if (edgeCountCol) edgeCountCol->clear();
-    if (partCountCol) partCountCol->clear();
+    if (commitCol) {
+        commitCol->clear();
+    }
+    if (nodeCountCol) {
+        nodeCountCol->clear();
+    }
+    if (edgeCountCol) {
+        edgeCountCol->clear();
+    }
+    if (partCountCol) {
+        partCountCol->clear();
+    }
 
     for (size_t i = 0; i < remaining; ++i) {
-        const CommitView& commit = *data._it;
+        const CommitView& commit = *data->_it;
         const std::span parts = commit.dataparts();
 
         if (commitCol) {
@@ -54,15 +62,21 @@ void writeChunk(Data& data,
             edgeCount += part->getEdgeContainerSize();
         }
 
-        if (nodeCountCol) nodeCountCol->push_back(nodeCount);
-        if (edgeCountCol) edgeCountCol->push_back(edgeCount);
-        if (partCountCol) partCountCol->push_back(parts.size());
+        if (nodeCountCol) {
+            nodeCountCol->push_back(nodeCount);
+        }
+        if (edgeCountCol) {
+            edgeCountCol->push_back(edgeCount);
+        }
+        if (partCountCol) {
+            partCountCol->push_back(parts.size());
+        }
 
-        ++data._it;
+        ++data->_it;
     }
 
-    if (data._it == view.commits().end()) {
-        proc.finish();
+    if (data->_it == view.commits().end()) {
+        proc->finish();
     }
 }
 
@@ -103,7 +117,7 @@ void HistoryProcedure::execute(ProcedureState& proc) {
             return;
 
         case ProcedureState::Step::EXECUTE: {
-            writeChunk(data, proc, view, ctxt->getChunkSize());
+            writeChunk(&data, &proc, view, ctxt->getChunkSize());
             return;
         }
     }

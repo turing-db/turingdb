@@ -50,13 +50,12 @@ void buildSignature(std::string& result, const Procedure* proc) {
     result += ")";
 }
 
-void writeProcedures(Data& data,
-                     ProcedureState& proc,
+void writeProcedures(Data* data,
+                     ProcedureState* proc,
                      const ProcedureManager* manager,
                      ColumnVector<std::string>* nameCol,
                      ColumnVector<std::string>* signatureCol,
                      size_t chunkSize) {
-
     const auto& namespaces = manager->namespaces();
 
     if (nameCol) {
@@ -71,15 +70,15 @@ void writeProcedures(Data& data,
     std::string signature;
 
     while (remaining > 0
-           && data._nsIndex < namespaces.size()) {
+           && data->_nsIndex < namespaces.size()) {
 
-        const ProcedureNamespace* ns = namespaces[data._nsIndex];
+        const ProcedureNamespace* ns = namespaces[data->_nsIndex];
         const auto& procs = ns->procedures();
 
         while (remaining > 0
-               && data._procIndex < procs.size()) {
+               && data->_procIndex < procs.size()) {
 
-            const Procedure* p = procs[data._procIndex];
+            const Procedure* p = procs[data->_procIndex];
 
             if (nameCol) {
                 nameCol->push_back(p->getFullName());
@@ -90,18 +89,18 @@ void writeProcedures(Data& data,
                 signatureCol->push_back(signature);
             }
 
-            ++data._procIndex;
+            ++data->_procIndex;
             --remaining;
         }
 
-        if (data._procIndex >= procs.size()) {
-            ++data._nsIndex;
-            data._procIndex = 0;
+        if (data->_procIndex >= procs.size()) {
+            ++data->_nsIndex;
+            data->_procIndex = 0;
         }
     }
 
-    if (data._nsIndex >= namespaces.size()) {
-        proc.finish();
+    if (data->_nsIndex >= namespaces.size()) {
+        proc->finish();
     }
 }
 
@@ -140,24 +139,24 @@ void ProceduresProcedure::execute(ProcedureState& proc) {
         case ProcedureState::Step::PREPARE: {
             data._nsIndex = 0;
             data._procIndex = 0;
+            return;
         }
-        break;
 
         case ProcedureState::Step::RESET: {
             data._nsIndex = 0;
             data._procIndex = 0;
+            return;
         }
-        break;
 
         case ProcedureState::Step::EXECUTE: {
-            writeProcedures(data,
-                            proc,
+            writeProcedures(&data,
+                            &proc,
                             manager,
                             nameCol,
                             signatureCol,
                             ctxt->getChunkSize());
+            return;
         }
-        break;
     }
 
     throw PipelineException("Unknown procedure step");

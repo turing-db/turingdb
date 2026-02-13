@@ -142,4 +142,5 @@ if the code is more beautiful.
 
 Do not pass any class or struct as reference unless it is an STL data structure or a callable type such as `std::function`.
 Small, lightweight status or result structs may also be passed by const reference when it is the natural style.
+STL data structures include `std::string`, `std::string_view`, `std::vector`, `std::map`, `std::optional` and other standard library types.
 Good old pointers are the primary passing mechanism.
