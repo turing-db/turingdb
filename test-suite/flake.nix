@@ -17,41 +17,18 @@
           darwin = pkgs.stdenv.isDarwin;
 
           # We use LLVM on macOS; gcc on Linux
-          compiler = if darwin then pkgs.llvmPackages_20 else pkgs.gcc15;
+          compiler = if darwin then pkgs.llvmPackages20 else pkgs.gcc15;
           turingstdenv = compiler.stdenv;
           
-          # If using LLVM, we need to specify OpenMP explictly
-          darwinInputs = if darwin then [
-            compiler.openmp
-          ] else [];
-
-          # If on Linux, add gcc15 as an input explicitly
-          linuxInputs = if !darwin then [
-            compiler
-          ] else [];
-
           sharedNativeBuildInputs = with pkgs; [];
 
           sharedBuildInputs = with pkgs; [
-            # Build tools
-            cmake
-            git-lfs
-            gnum4
-
-            # clangd, clang-format, etc.
-            clang-tools
-
-            # Debugging utilities
-            gdb
-            valgrind
-
-            # Performance analysis tools
-            linuxPackages_latest.perf
-          ] ++ darwinInputs ++ linuxInputs;
+            # Bun is required to run the test-suite web UI
+            bun
+          ];
 
         in
         {
-          # Development shell: facilitates manual building and development of TuringDB
           devShells.default = pkgs.mkShell.override { stdenv = turingstdenv; } {
             nativeBuildInputs = sharedNativeBuildInputs;
             buildInputs = sharedBuildInputs;
