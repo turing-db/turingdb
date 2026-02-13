@@ -77,7 +77,14 @@ jobs:
           - If there are NO violations, output exactly the word NO_VIOLATIONS and nothing else.
           - If there ARE violations, output a markdown table with these columns:
             | File | Line | Rule | Violation |
-          - Do NOT include any other text before or after the table (no preamble, no summary).
+
+          OUTPUT FORMAT:
+          - Your COMPLETE response must be ONLY the final table or NO_VIOLATIONS.
+          - Do NOT include any reasoning, analysis, commentary, or intermediate work.
+          - Do NOT retract or revise findings in the output — do all analysis internally
+            before producing your single final answer.
+          - Do NOT output multiple tables. Output exactly ONE table with your final results.
+          - No preamble, no summary, no "Final table:", no "Let me review" — just the table.
 
           PROMPT_HEADER
 
@@ -133,7 +140,36 @@ jobs:
             echo "review_body=" >> $GITHUB_OUTPUT
             echo "Claude found no violations."
           else
-            encoded=$(echo "$output" | base64 -w0)
+            # Extract only the last markdown table from the output.
+            # The model may produce intermediate tables during reasoning;
+            # we only want the final one.
+            python3 - << 'PYEOF'
+          import re, sys, base64
+
+          with open("/tmp/claude_review_output.txt") as f:
+              text = f.read()
+
+          # Find all markdown tables (header + separator + data rows)
+          table_pattern = re.compile(
+              r'(\|[^\n]+\|\n'        # header row
+              r'\|[-| :]+\|\n'        # separator row
+              r'(?:\|[^\n]+\|\n?)+)', # one or more data rows
+              re.MULTILINE
+          )
+          tables = table_pattern.findall(text)
+
+          if tables:
+              last_table = tables[-1].strip()
+              with open("/tmp/claude_review_clean.txt", "w") as f:
+                  f.write(last_table)
+          else:
+              # No table found — pass through raw output
+              with open("/tmp/claude_review_clean.txt", "w") as f:
+                  f.write(text.strip())
+          PYEOF
+
+            cleaned=$(cat /tmp/claude_review_clean.txt)
+            encoded=$(echo "$cleaned" | base64 -w0)
             echo "has_violations=true" >> $GITHUB_OUTPUT
             echo "review_body=$encoded" >> $GITHUB_OUTPUT
             echo "Claude found violations."
