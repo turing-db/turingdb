@@ -22,11 +22,14 @@ to make users observe and rely too much on TuringDB entity IDs as they are not g
 * The numerical ID could also be a foreign key which is referencing data in an external database as well,
 such as documents or other records.
 
--> Thus we don't know the ID to be used is the user's choice. It may be an arbitrary property.
+* The numerical ID must always be an unsigned integer type (uint64_t), matching the format
+expected by the existing JSON embedding loader.
+
+-> Thus the ID to be used is the user's choice. It may be an arbitrary numerical property.
 
 -> Users may want to come with their own embeddings
 
--> We obviously to generate embeddings at each commit
+-> We obviously need to generate embeddings at each commit
 
 So that seems to point us for now to having vector indexes at the TuringDB root level,
 not per commit or per graph.
@@ -35,6 +38,15 @@ We could totally have a layered graph model where there is a base graph and the 
 on top of the base graph to show other networks such as electrical networks, heating networks..etc. We could also
 have a base graph and various subgraphs or extraction/analysis graphs out of the base graph. We would like all
 of these graphs to be searchable through potentially the same vector store.
+
+## Storage
+
+Vector indexes are stored at the TuringDB root level, independent of any particular graph or commit.
+They are persisted in the `~/.turing/data` directory. The VectorDatabase instance is a single
+top-level resource managed by TuringDB, shared across all graphs.
+
+When TuringDB starts, it loads all existing vector indexes from the storage directory.
+The loading and dumping of vector indexes is already implemented in the vector/ module.
 
 ## First flow
 
@@ -46,65 +58,126 @@ of these graphs to be searchable through potentially the same vector store.
 
 The query commands that we want can be possibly decomposed into several steps:
 
-1. Create a vector index at the TuringDB root level
+### 1. Create a vector index
+
+Create a vector index at the TuringDB root level.
 This is independent of versioning.
 
 ```
 CREATE VECTOR INDEX vector1 WITH DIMENSION 4 METRIC EUCLID
 ```
 
-2. Load embeddings vectors inside a vector index from a file. A numerical ID is associated to each embedding vector.
+Supported metrics:
+- `EUCLID` — Euclidean distance
+- `INNER_PRODUCT` — Inner product (cosine similarity with normalized vectors)
+
+If METRIC is omitted, the default is `INNER_PRODUCT`.
+
+This is a standalone QueryCommand (like CREATE GRAPH).
+
+### 2. Load embeddings
+
+Load embedding vectors into an existing vector index from a file.
+A numerical ID (uint64_t) is associated to each embedding vector.
 This writes the vector index on disk.
 
 ```
-LOAD VECTOR FROM "myfilepath" IN vector1
+LOAD VECTOR "myfilepath" IN vector1
 ```
 
-4. Get a column of the numerical values associated to the n nearest vectors for a given query vector
-The query vector must be a list literal of float values.
+The file path is server-side, relative to the `~/.turing/data` directory.
 
-Return the numerical IDs corresponding to the 10 nearest vectors to the query vector:
+The vector index must already exist (created via CREATE VECTOR INDEX).
+Loading replaces the entire content of the index — any previously loaded
+vectors are discarded.
+
+The file format is JSON, matching the existing JSON importer:
+```json
+[
+    {
+        "id": 1,
+        "vector": [0.1, 0.2, 0.3, 0.4]
+    },
+    {
+        "id": 2,
+        "vector": [0.5, 0.6, 0.7, 0.8]
+    }
+]
 ```
-VECTOR SEARCH IN vector1 FOR 10 [0.256, 0.12, 0.12345, 0.89] YIELD ids
+
+The `id` field must be an unsigned integer. The `vector` array must match
+the dimension specified when the index was created; dimension mismatches
+are caught at execution time.
+
+This is a standalone QueryCommand (like LOAD GRAPH).
+
+### 3. Vector search
+
+Get the numerical IDs and distances associated to the k nearest vectors
+for a given query vector. The query vector must be a list literal of float values.
+
+Return the numerical IDs and distances corresponding to the 10 nearest vectors
+to the query vector:
 ```
-The variable introduced in the YIELD clause is the result IDs.
+VECTOR SEARCH IN vector1 FOR 10 [0.256, 0.12, 0.12345, 0.89] YIELD ids, distances
+```
 
-Alternative 2: if we used a procedure with the CALL..YIELD syntax we could choose if we wanted to return just the IDs
-or also the associated vectors as well and the integration with match statements would be easier. We don't support
-the lists fully as values today and we don't support arguments in procedures.
+The variables introduced in the YIELD clause are:
+- `ids` — the numerical IDs of the nearest neighbors
+- `distances` — the distance of each result to the query vector
 
-Even if we don't support lists as values in columns now, we support lists in the cypher parser. So at plan/generation
-time we can take the list literal in the AST for the query to give directly the query vector
-to the vector search processor.
+VECTOR SEARCH is a **read statement** in the sense of read statements in the analyzer
+(like MATCH and CALL), so it can be composed with MATCH commands in a single query.
+The variables declared in the YIELD clause can be referenced by subsequent MATCH
+statements, just like for CALL statements.
 
-IMPORTANT: We want the vector search query to be a read statement, in the sense of read statements in the analyzer,
-to be able to mix it with a MATCH commands. The variable declared in the YIELD clause could be referenced by
-MATCH statements just like for CALL statements.
+Example of chaining with MATCH:
+```
+VECTOR SEARCH IN vector1 FOR 10 [0.1, 0.2, 0.3, 0.4] YIELD ids, distances
+MATCH (n:Paper) WHERE n.id IN ids
+RETURN n.title, n.abstract, distances
+```
 
-5. Delete vector index
+Even though we don't support lists fully as values in columns today, we support
+lists in the cypher parser. So at plan/generation time we can take the list literal
+in the AST for the query vector and give it directly to the vector search processor.
+
+Dimension mismatches between the query vector and the index dimension are caught
+at execution time.
+
+### 4. Delete vector index
 
 ```
 DELETE VECTOR INDEX vector1
 ```
 
-6. List vector indexes
+This is a standalone QueryCommand. Deletes the vector index and all its data from disk.
+
+### 5. List vector indexes
 
 ```
 SHOW VECTOR INDEXES
 ```
 
+This is a standalone QueryCommand (like SHOW PROCEDURES).
 
-## Load and save
+## Intentionally deferred features
 
-When we load a graph we will need to load as well any vector index that may have been created in this graph.
+The following features are out of scope for the first implementation and may be
+added in a future iteration:
 
-Vector index folder: in the directory storing a graph, we could have a folder with a well-known name indicated the presence of a vector index to load.
-The loading and dumping itself is already implemented.
+- Removing individual vectors from an index
+- Updating a vector for a given ID
+- Querying metadata about a specific index (dimension, metric, vector count)
+- Built-in embedding generation from AI providers
+- Procedure argument support (which would allow CALL-based vector search)
 
 ## Concurrency
 
-Concurrency: the vector index would need to be properly guarded for concurrent access.
+Each vector index has its own lock (per-index locking), so operations on
+different indexes do not block each other. The existing `std::shared_mutex`
+on `VecLib` provides this.
 
-It makes sense to support:
-* One exclusive writer for the LOAD EMBEDDINGS query -> acquire unique lock
-* Many concurrent reader for VECTOR SEARCH -> acquire shared lock
+For a given vector index:
+* One exclusive writer for the LOAD VECTOR query -> acquire unique lock
+* Many concurrent readers for VECTOR SEARCH -> acquire shared lock
