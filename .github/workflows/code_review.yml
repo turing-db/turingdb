@@ -138,7 +138,7 @@ jobs:
           fi
           cd /tmp
           set +e
-          claude -p --verbose --model claude-opus-4-6 \
+          claude -p --verbose --model claude-sonnet-4-5-20250929 \
             < /tmp/review_prompt.txt \
             > /tmp/claude_review_output.txt 2>&1
           exit_code=$?
