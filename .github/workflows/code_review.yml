@@ -78,6 +78,14 @@ jobs:
           - If there ARE violations, output a markdown table with these columns:
             | File | Line | Rule | Violation |
 
+          VERIFICATION:
+          - Before reporting any violation, re-read the exact diff lines to confirm it.
+          - Pay special attention to multi-line constructs (constructors, function
+            signatures, initializer lists). A brace '{' on the NEXT line in the diff
+            is on a separate line — do not confuse consecutive diff lines with being
+            on the same source line.
+          - If you are not certain a violation exists after re-reading, do NOT include it.
+
           OUTPUT FORMAT:
           - Your COMPLETE response must be ONLY the final table or NO_VIOLATIONS.
           - Do NOT include any reasoning, analysis, commentary, or intermediate work.
