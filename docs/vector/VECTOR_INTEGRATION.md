@@ -75,7 +75,10 @@ If METRIC is omitted, the default is `INNER_PRODUCT`.
 
 The index name is a plain identifier (same rules as graph names).
 It is a hard error if an index with the same name already exists.
-`DIMENSION 0` is a hard error.
+
+The `DIMENSION` argument is parsed as an expression in the grammar but
+must resolve to an unsigned integer greater than zero. This is validated
+at analysis time. `DIMENSION 0` is a hard error.
 
 The empty index is persisted to disk immediately on creation, so it
 survives a TuringDB restart even if no vectors have been loaded yet.
@@ -126,6 +129,8 @@ index to be cleared).
 Duplicate `id` values within the same file are a hard error — the entire
 load is rejected and the index is cleared.
 
+An empty JSON array `[]` is valid — the index is left empty after clearing.
+
 This is a standalone QueryCommand (like LOAD GRAPH).
 
 ### 3. Vector search
@@ -151,8 +156,8 @@ VECTOR SEARCH IN vector1 FOR 10 [0.256, 0.12, 0.12345, 0.89] YIELD id, distance
 ```
 
 The variables introduced in the YIELD clause are:
-- `id` — the numerical ID of a nearest neighbor (uint64_t, one per row)
-- `distance` — the distance of that neighbor to the query vector (float, one per row)
+- `id` — the numerical ID of a nearest neighbor (UInt64 column type, one per row)
+- `distance` — the distance of that neighbor to the query vector (Double column type, one per row)
 
 The user may yield a subset of these columns. For example, yielding only `id`:
 ```
@@ -173,7 +178,10 @@ Dependencies between statements are managed by the analyzer, following the same
 rules as CALL YIELD.
 
 VECTOR SEARCH must always be followed by a RETURN clause (it cannot be used
-standalone without RETURN).
+standalone without RETURN). Standard Cypher clauses like ORDER BY and LIMIT
+on RETURN work as expected with VECTOR SEARCH results.
+
+WITH clauses cannot be used between VECTOR SEARCH and subsequent statements.
 
 Example — standalone search with RETURN:
 ```
@@ -241,10 +249,16 @@ added in a future iteration:
 ### Grammar
 
 The following are **reserved keywords** added to the lexer:
-`VECTOR`, `INDEX`, `INDEXES`, `DIMENSION`, `METRIC`, `EUCLID`,
+`VECTOR`, `SEARCH`, `INDEX`, `INDEXES`, `DIMENSION`, `METRIC`, `EUCLID`,
 `INNER_PRODUCT`.
 
 These cannot be used as identifiers anywhere in queries.
+
+The keywords `WITH`, `FOR`, `IN`, `AS`, `YIELD`, `CREATE`, `DELETE`,
+`SHOW`, `LOAD`, `RETURN` already exist in the grammar.
+
+The lexer is case-insensitive (`%option caseless`), so all keywords
+and identifiers (including vector index names) are case-insensitive.
 
 ### YIELD validation
 
@@ -252,6 +266,14 @@ The YIELD clause for VECTOR SEARCH supports the same AS aliasing as
 CALL YIELD (already implemented). The valid yield column names are
 `id` and `distance`. Yielding an unknown name (e.g., `YIELD foo`) is
 caught at analysis time as a hard error.
+
+### Column types
+
+The `id` yield column uses `UInt64` (matching the external ID type).
+The `distance` yield column uses `Double`. The Faiss search results
+return `float` distances, which are widened to `double` for storage
+in the pipeline since TuringDB's column system does not have a `Float`
+type.
 
 ### Processor model
 
