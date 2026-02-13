@@ -227,12 +227,6 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
         isAggregate |= item->isAggregate();
         hasGroupingKeys |= !item->isAggregate();
-
-        const bool isUnary = item->getKind() == Expr::Kind::UNARY;
-        if (isUnary) {
-            throw AnalyzeException(
-                "Unary expressions in RETURN clauses are not yet supported.");
-        }
     }
 
     if (projection->isReturningAll()) {

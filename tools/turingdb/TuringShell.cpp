@@ -25,6 +25,7 @@
 #include "dataframe/NamedColumn.h"
 #include "GraphPath.h"
 
+#include "metadata/PropertyNull.h"
 #include "spdlog/fmt/bundled/ranges.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
@@ -407,16 +408,14 @@ void tabulateWrite(tabulate::RowStream& rs, const Change* change) {
     rs << fmt::format("{:x}", change->id().get());
 }
 
+void tabulateWrite(tabulate::RowStream& rs, const PropertyNull&) {
+    rs << "null";
+}
+
 #define TABULATE_COL_CASE(Type, i)                        \
     case Type::staticKind(): {                            \
         const Type& src = *static_cast<const Type*>(col); \
         tabulateWrite(rs, src[i]);                        \
-    } break;
-
-#define TABULATE_COL_CONST_CASE(Type)                     \
-    case Type::staticKind(): {                            \
-        const Type& src = *static_cast<const Type*>(col); \
-        tabulateWrite(rs, src.getRaw());                  \
     } break;
 
 void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table) {
@@ -467,14 +466,15 @@ void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table
                 TABULATE_COL_CASE(ColumnVector<std::string>, i)
                 TABULATE_COL_CASE(ColumnVector<const CommitBuilder*>, i)
                 TABULATE_COL_CASE(ColumnVector<const Change*>, i)
-                TABULATE_COL_CONST_CASE(ColumnConst<EntityID>)
-                TABULATE_COL_CONST_CASE(ColumnConst<NodeID>)
-                TABULATE_COL_CONST_CASE(ColumnConst<EdgeID>)
-                TABULATE_COL_CONST_CASE(ColumnConst<types::UInt64::Primitive>)
-                TABULATE_COL_CONST_CASE(ColumnConst<types::Int64::Primitive>)
-                TABULATE_COL_CONST_CASE(ColumnConst<types::Double::Primitive>)
-                TABULATE_COL_CONST_CASE(ColumnConst<types::String::Primitive>)
-                TABULATE_COL_CONST_CASE(ColumnConst<types::Bool::Primitive>)
+                TABULATE_COL_CASE(ColumnConst<EntityID>, i)
+                TABULATE_COL_CASE(ColumnConst<NodeID>, i)
+                TABULATE_COL_CASE(ColumnConst<EdgeID>, i)
+                TABULATE_COL_CASE(ColumnConst<types::UInt64::Primitive>, i)
+                TABULATE_COL_CASE(ColumnConst<types::Int64::Primitive>, i)
+                TABULATE_COL_CASE(ColumnConst<types::Double::Primitive>, i)
+                TABULATE_COL_CASE(ColumnConst<types::String::Primitive>, i)
+                TABULATE_COL_CASE(ColumnConst<types::Bool::Primitive>, i)
+                TABULATE_COL_CASE(ColumnConst<PropertyNull>, i)
 
                 default: {
                     panic("can not print columns of kind {}", col->getKind());
