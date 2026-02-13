@@ -67,11 +67,11 @@ public:
         _values.emplace_back(name, type);
     }
 
-    [[nodiscard]] size_t size() const {
+    size_t size() const {
         return _values.size();
     }
 
-    [[nodiscard]] const NamedProcedureType& operator[](size_t i) const {
+    const NamedProcedureType& operator[](size_t i) const {
         return _values[i];
     }
 
