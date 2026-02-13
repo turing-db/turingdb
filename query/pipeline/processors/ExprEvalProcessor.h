@@ -7,8 +7,6 @@
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
 
-#include "FatalException.h"
-
 namespace db {
 
 class ExecutionContext;
@@ -26,12 +24,7 @@ public:
     void reset() final;
     void execute() final;
 
-    PipelineBlockInputInterface& input() {
-        if (!_input) {
-            throw FatalException("Attempted to get null input of ExprEvalProcessor.");
-        }
-        return *_input;
-    }
+    PipelineBlockInputInterface& input();
 
     PipelineBlockOutputInterface& output() { return _output; }
 

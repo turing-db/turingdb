@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (n) WHERE NOT TRUE RETURN NOT FALSE",
+  "expect": {
+    "plan": "",
+    "result": ""
+  },
+  "tags": [
+    "operators",
+    "where",
+    "filters",
+    "return",
+    "projection"
+  ],
+  "write-required": false
+}
