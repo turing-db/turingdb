@@ -20,88 +20,88 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureManag
 
     // Metadata
     for (const auto* ns : procedures->namespaces()) {
-    for (const auto* proc : ns->procedures()) {
-        auto declBuilder = decls->create(proc->getFullName());
-        declBuilder.setIsDatabaseProcedure(true);
+        for (const auto* proc : ns->procedures()) {
+            auto declBuilder = decls->create(proc->getFullName());
+            declBuilder.setIsDatabaseProcedure(true);
 
-        for (const auto& returnItem : proc->returnValues()) {
-            switch (returnItem._type) {
-                case ProcedureType::INVALID:
-                    throw FatalException("Invalid procedure return type");
-                    break;
+            for (const auto& returnItem : proc->returnValues()) {
+                switch (returnItem._type) {
+                    case ProcedureType::INVALID:
+                        throw FatalException("Invalid procedure return type");
+                        break;
 
-                case ProcedureType::NODE:
-                    declBuilder.addReturnType(EvaluatedType::NodePattern, returnItem._name);
-                    break;
-                case ProcedureType::EDGE:
-                    declBuilder.addReturnType(EvaluatedType::EdgePattern, returnItem._name);
-                    break;
-                case ProcedureType::VALUE_TYPE:
-                    declBuilder.addReturnType(EvaluatedType::ValueType, returnItem._name);
-                    break;
-                case ProcedureType::LABEL_ID:
-                case ProcedureType::EDGE_TYPE_ID:
-                case ProcedureType::PROPERTY_TYPE_ID:
-                case ProcedureType::UINT_64:
-                case ProcedureType::INT64:
-                    declBuilder.addReturnType(EvaluatedType::Integer, returnItem._name);
-                    break;
-                case ProcedureType::DOUBLE:
-                    declBuilder.addReturnType(EvaluatedType::Double, returnItem._name);
-                    break;
-                case ProcedureType::BOOL:
-                    declBuilder.addReturnType(EvaluatedType::Bool, returnItem._name);
-                    break;
-                case ProcedureType::STRING_VIEW:
-                case ProcedureType::STRING:
-                    declBuilder.addReturnType(EvaluatedType::String, returnItem._name);
-                    break;
+                    case ProcedureType::NODE:
+                        declBuilder.addReturnType(EvaluatedType::NodePattern, returnItem._name);
+                        break;
+                    case ProcedureType::EDGE:
+                        declBuilder.addReturnType(EvaluatedType::EdgePattern, returnItem._name);
+                        break;
+                    case ProcedureType::VALUE_TYPE:
+                        declBuilder.addReturnType(EvaluatedType::ValueType, returnItem._name);
+                        break;
+                    case ProcedureType::LABEL_ID:
+                    case ProcedureType::EDGE_TYPE_ID:
+                    case ProcedureType::PROPERTY_TYPE_ID:
+                    case ProcedureType::UINT_64:
+                    case ProcedureType::INT64:
+                        declBuilder.addReturnType(EvaluatedType::Integer, returnItem._name);
+                        break;
+                    case ProcedureType::DOUBLE:
+                        declBuilder.addReturnType(EvaluatedType::Double, returnItem._name);
+                        break;
+                    case ProcedureType::BOOL:
+                        declBuilder.addReturnType(EvaluatedType::Bool, returnItem._name);
+                        break;
+                    case ProcedureType::STRING_VIEW:
+                    case ProcedureType::STRING:
+                        declBuilder.addReturnType(EvaluatedType::String, returnItem._name);
+                        break;
 
-                case ProcedureType::_SIZE:
-                    throw FatalException("Invalid procedure return type: _SIZE");
-                break;
+                    case ProcedureType::_SIZE:
+                        throw FatalException("Invalid procedure return type: _SIZE");
+                    break;
+                }
+            }
+
+            for (const auto& arg : proc->argumentTypes()) {
+                switch (arg._type) {
+                    case ProcedureType::INVALID:
+                        throw FatalException("Invalid procedure return type");
+                        break;
+
+                    case ProcedureType::NODE:
+                        declBuilder.addArgument(EvaluatedType::NodePattern);
+                        break;
+                    case ProcedureType::EDGE:
+                        declBuilder.addArgument(EvaluatedType::EdgePattern);
+                        break;
+                    case ProcedureType::VALUE_TYPE:
+                        declBuilder.addArgument(EvaluatedType::ValueType);
+                        break;
+                    case ProcedureType::LABEL_ID:
+                    case ProcedureType::EDGE_TYPE_ID:
+                    case ProcedureType::PROPERTY_TYPE_ID:
+                    case ProcedureType::UINT_64:
+                    case ProcedureType::INT64:
+                        declBuilder.addArgument(EvaluatedType::Integer);
+                        break;
+                    case ProcedureType::DOUBLE:
+                        declBuilder.addArgument(EvaluatedType::Double);
+                        break;
+                    case ProcedureType::BOOL:
+                        declBuilder.addArgument(EvaluatedType::Bool);
+                        break;
+                    case ProcedureType::STRING_VIEW:
+                    case ProcedureType::STRING:
+                        declBuilder.addArgument(EvaluatedType::String);
+                        break;
+
+                    case ProcedureType::_SIZE:
+                        throw FatalException("Invalid procedure return type: _SIZE");
+                    break;
+                }
             }
         }
-
-        for (const auto& arg : proc->argumentTypes()) {
-            switch (arg._type) {
-                case ProcedureType::INVALID:
-                    throw FatalException("Invalid procedure return type");
-                    break;
-
-                case ProcedureType::NODE:
-                    declBuilder.addArgument(EvaluatedType::NodePattern);
-                    break;
-                case ProcedureType::EDGE:
-                    declBuilder.addArgument(EvaluatedType::EdgePattern);
-                    break;
-                case ProcedureType::VALUE_TYPE:
-                    declBuilder.addArgument(EvaluatedType::ValueType);
-                    break;
-                case ProcedureType::LABEL_ID:
-                case ProcedureType::EDGE_TYPE_ID:
-                case ProcedureType::PROPERTY_TYPE_ID:
-                case ProcedureType::UINT_64:
-                case ProcedureType::INT64:
-                    declBuilder.addArgument(EvaluatedType::Integer);
-                    break;
-                case ProcedureType::DOUBLE:
-                    declBuilder.addArgument(EvaluatedType::Double);
-                    break;
-                case ProcedureType::BOOL:
-                    declBuilder.addArgument(EvaluatedType::Bool);
-                    break;
-                case ProcedureType::STRING_VIEW:
-                case ProcedureType::STRING:
-                    declBuilder.addArgument(EvaluatedType::String);
-                    break;
-
-                case ProcedureType::_SIZE:
-                    throw FatalException("Invalid procedure return type: _SIZE");
-                break;
-            }
-        }
-    }
     }
 
     // Entity patterns

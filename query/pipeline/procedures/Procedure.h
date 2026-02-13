@@ -48,7 +48,7 @@ public:
     void addReturnValue(std::string_view name, ProcedureType type);
     void addArgument(std::string_view name, ProcedureType type);
 
-    // Arguments and rreturn values
+    // Arguments and return values
     const ProcedureTypeVector& returnValues() const { return _returnValues; }
     const ProcedureTypeVector& argumentTypes() const { return _argumentTypes; }
 

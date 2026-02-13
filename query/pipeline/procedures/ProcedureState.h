@@ -20,17 +20,18 @@ public:
     template <ProcedureDataType T>
     T& data() {
         bioassert(_data != nullptr, "Procedure data is not initialized");
-        bioassert(dynamic_cast<T*>(_data) != nullptr, "Procedure data is not of the expected type");
+        bioassert(dynamic_cast<T*>(_data) != nullptr,
+                 "Procedure data is not of the expected type");
         return *static_cast<T*>(_data);
     }
 
     const ProcedureData& getData() const { return *_data; }
 
-    [[nodiscard]] const ExecutionContext* getContext() const { return _ctxt; }
+    const ExecutionContext* getContext() const { return _ctxt; }
 
-    [[nodiscard]] bool isFinished() const { return _finished; }
+    bool isFinished() const { return _finished; }
 
-    [[nodiscard]] Step getStep() const { return _step; }
+    Step getStep() const { return _step; }
 
     void finish() { _finished = true; }
 

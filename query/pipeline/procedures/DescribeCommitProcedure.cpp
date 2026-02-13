@@ -30,13 +30,12 @@ struct CommitStats {
     size_t partCount {0};
 };
 
-void getCommitStats(CommitStats& stats,
+void getCommitStats(CommitStats* stats,
                     std::string_view inputHash,
                     const GraphView& view) {
-
-    stats.nodeCount = 0;
-    stats.edgeCount = 0;
-    stats.partCount = 0;
+    stats->nodeCount = 0;
+    stats->edgeCount = 0;
+    stats->partCount = 0;
 
     std::string lower(inputHash);
     std::transform(lower.begin(), lower.end(), lower.begin(),
@@ -50,11 +49,11 @@ void getCommitStats(CommitStats& stats,
         }
 
         const std::span parts = commit.dataparts();
-        stats.partCount = parts.size();
+        stats->partCount = parts.size();
 
         for (const auto& part : parts) {
-            stats.nodeCount += part->getNodeContainerSize();
-            stats.edgeCount += part->getEdgeContainerSize();
+            stats->nodeCount += part->getNodeContainerSize();
+            stats->edgeCount += part->getEdgeContainerSize();
         }
 
         return;
@@ -155,7 +154,7 @@ void DescribeCommitProcedure::execute(ProcedureState& proc) {
                 nodeCountCol->clear();
             }
 
-            if (edgeCountCol) { 
+            if (edgeCountCol) {
                 edgeCountCol->clear();
             }
 
@@ -185,7 +184,7 @@ void DescribeCommitProcedure::execute(ProcedureState& proc) {
                 CommitStats stats;
                 for (size_t i = data._i; i < remaining + data._i; ++i) {
                     extractString(input, col[i]);
-                    getCommitStats(stats, input, view);
+                    getCommitStats(&stats, input, view);
                     pushStats(stats);
                 }
 
@@ -200,7 +199,7 @@ void DescribeCommitProcedure::execute(ProcedureState& proc) {
                 std::string input;
                 CommitStats stats;
                 extractString(input, col.getRaw());
-                getCommitStats(stats, input, view);
+                getCommitStats(&stats, input, view);
                 pushStats(stats);
                 proc.finish();
             };
