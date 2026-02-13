@@ -24,7 +24,7 @@
 
           sharedBuildInputs = with pkgs; [
             bun
-          ] ++ darwinInputs ++ linuxInputs;
+          ];
 
         in
         {
