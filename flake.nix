@@ -2,7 +2,7 @@
   description = "TuringDB - the fastest in-memory graph database";
 
   inputs = {
-    nixpkgs.url =  "github:nixos/nixpkgs/nixpkgs-25.05-darwin";
+    nixpkgs.url =  "github:nixos/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -17,7 +17,7 @@
           darwin = pkgs.stdenv.isDarwin;
 
           # We use LLVM on macOS; gcc on Linux
-          compiler = if darwin then pkgs.llvmPackages_20 else pkgs.gcc15;
+          compiler = if darwin then pkgs.llvmPackages_21 else pkgs.gcc15;
           turingstdenv = compiler.stdenv;
           
           # If using LLVM, we need to specify OpenMP explictly
@@ -26,7 +26,7 @@
             compiler.libcxx
 
             # macOS-specific debugging utilities
-            lldb_20
+            lldb_21
           ] else [];
 
           # If on Linux, add gcc15 as an input explicitly
@@ -48,6 +48,7 @@
             cmake
             git-lfs
             gnum4
+            python3
 
             # clangd, clang-format, etc.
             clang-tools
