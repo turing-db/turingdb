@@ -73,6 +73,9 @@ Supported metrics:
 
 If METRIC is omitted, the default is `INNER_PRODUCT`.
 
+The index name is a plain identifier (same rules as graph names).
+It is a hard error if an index with the same name already exists.
+
 This is a standalone QueryCommand (like CREATE GRAPH).
 
 ### 2. Load embeddings
@@ -82,14 +85,19 @@ A numerical ID (uint64_t) is associated to each embedding vector.
 This writes the vector index on disk.
 
 ```
-LOAD VECTOR "myfilepath" IN vector1
+LOAD VECTOR INDEX "myfilepath" IN vector1
 ```
 
 The file path is server-side, relative to the `~/.turing/data` directory.
 
 The vector index must already exist (created via CREATE VECTOR INDEX).
-Loading replaces the entire content of the index — any previously loaded
-vectors are discarded.
+It is a hard error if the index does not exist.
+
+Loading replaces the entire content of the index. The index is cleared
+before ingestion begins. If ingestion fails (e.g. dimension mismatch,
+malformed JSON), the index is cleared again — leaving it empty rather
+than partially loaded. This guarantees the index is always in a
+consistent state: either fully loaded with the new data, or empty.
 
 The file format is JSON, matching the existing JSON importer:
 ```json
@@ -107,7 +115,8 @@ The file format is JSON, matching the existing JSON importer:
 
 The `id` field must be an unsigned integer. The `vector` array must match
 the dimension specified when the index was created; dimension mismatches
-are caught at execution time.
+are caught at execution time and cause the entire load to fail (and the
+index to be cleared).
 
 This is a standalone QueryCommand (like LOAD GRAPH).
 
@@ -116,26 +125,46 @@ This is a standalone QueryCommand (like LOAD GRAPH).
 Get the numerical IDs and distances associated to the k nearest vectors
 for a given query vector. The query vector must be a list literal of float values.
 
+VECTOR SEARCH produces **k rows**, one per nearest neighbor. Each row contains
+scalar values for the yielded columns — not lists.
+
 Return the numerical IDs and distances corresponding to the 10 nearest vectors
 to the query vector:
 ```
-VECTOR SEARCH IN vector1 FOR 10 [0.256, 0.12, 0.12345, 0.89] YIELD ids, distances
+VECTOR SEARCH IN vector1 FOR 10 [0.256, 0.12, 0.12345, 0.89] YIELD id, distance
 ```
 
 The variables introduced in the YIELD clause are:
-- `ids` — the numerical IDs of the nearest neighbors
-- `distances` — the distance of each result to the query vector
+- `id` — the numerical ID of a nearest neighbor (uint64_t, one per row)
+- `distance` — the distance of that neighbor to the query vector (float, one per row)
+
+The user may yield a subset of these columns. For example, yielding only `id`:
+```
+VECTOR SEARCH IN vector1 FOR 10 [0.256, 0.12, 0.12345, 0.89] YIELD id
+```
+
+It is a hard error if the vector index does not exist.
 
 VECTOR SEARCH is a **read statement** in the sense of read statements in the analyzer
 (like MATCH and CALL), so it can be composed with MATCH commands in a single query.
 The variables declared in the YIELD clause can be referenced by subsequent MATCH
-statements, just like for CALL statements.
+statements, just like for CALL statements. Composition with MATCH uses a cartesian
+product with equality filtering.
 
-Example of chaining with MATCH:
+VECTOR SEARCH must always be followed by a RETURN clause (it cannot be used
+standalone without RETURN).
+
+Example — standalone search with RETURN:
 ```
-VECTOR SEARCH IN vector1 FOR 10 [0.1, 0.2, 0.3, 0.4] YIELD ids, distances
-MATCH (n:Paper) WHERE n.id IN ids
-RETURN n.title, n.abstract, distances
+VECTOR SEARCH IN vector1 FOR 10 [0.1, 0.2, 0.3, 0.4] YIELD id, distance
+RETURN id, distance
+```
+
+Example — chaining with MATCH:
+```
+VECTOR SEARCH IN vector1 FOR 10 [0.1, 0.2, 0.3, 0.4] YIELD id, distance
+MATCH (n:Paper) WHERE n.id = id
+RETURN n.title, n.abstract, distance
 ```
 
 Even though we don't support lists fully as values in columns today, we support
@@ -152,6 +181,7 @@ DELETE VECTOR INDEX vector1
 ```
 
 This is a standalone QueryCommand. Deletes the vector index and all its data from disk.
+It is a hard error if the index does not exist.
 
 ### 5. List vector indexes
 
@@ -161,6 +191,12 @@ SHOW VECTOR INDEXES
 
 This is a standalone QueryCommand (like SHOW PROCEDURES).
 
+Output columns:
+- `name` — the index name (string)
+- `dimension` — the vector dimension (integer)
+- `metric` — the distance metric (`EUCLID` or `INNER_PRODUCT`)
+- `vectorCount` — the number of vectors currently stored in the index (integer)
+
 ## Intentionally deferred features
 
 The following features are out of scope for the first implementation and may be
@@ -168,9 +204,9 @@ added in a future iteration:
 
 - Removing individual vectors from an index
 - Updating a vector for a given ID
-- Querying metadata about a specific index (dimension, metric, vector count)
 - Built-in embedding generation from AI providers
 - Procedure argument support (which would allow CALL-based vector search)
+- Query parameters for the search vector (e.g. `$queryVector`)
 
 ## Concurrency
 
@@ -179,5 +215,5 @@ different indexes do not block each other. The existing `std::shared_mutex`
 on `VecLib` provides this.
 
 For a given vector index:
-* One exclusive writer for the LOAD VECTOR query -> acquire unique lock
+* One exclusive writer for the LOAD VECTOR INDEX query -> acquire unique lock
 * Many concurrent readers for VECTOR SEARCH -> acquire shared lock
