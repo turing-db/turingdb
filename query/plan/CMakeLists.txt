@@ -11,6 +11,8 @@ set(plan_sources
     ExprProgramGenerator.cpp
     PredicateProgramGenerator.cpp
     PlannerException.cpp
+
+    nodes/ExprEvalNode.cpp
 )
 
 add_library(turing_db_plan_s STATIC ${plan_sources})
