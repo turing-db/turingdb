@@ -16,8 +16,8 @@ using namespace db;
 class ExpressionTest : public turing::test::TuringTest {
 public:
     ExpressionTest()
-        : _procedures(std::make_unique<ProcedureManager>()),
-        _ast(*_procedures, "")
+        : _procedures(ProcedureManager::create()),
+        _ast(_procedures.get(), "")
     {
     }
 

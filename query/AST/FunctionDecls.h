@@ -60,7 +60,7 @@ public:
     FunctionDecls& operator=(const FunctionDecls&) = delete;
     FunctionDecls& operator=(FunctionDecls&&) = delete;
 
-    static std::unique_ptr<FunctionDecls> createDefault(const ProcedureManager& procedures);
+    static std::unique_ptr<FunctionDecls> createDefault(const ProcedureManager* procedures);
 
     FunctionSignatureBuilder create(std::string_view fullName);
 

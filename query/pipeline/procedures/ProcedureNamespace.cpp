@@ -26,9 +26,7 @@ void ProcedureNamespace::addProcedure(Procedure* procedure) {
     _procedureMap[procedure->getName()] = procedure;
 }
 
-const Procedure* ProcedureNamespace::getProcedure(
-    std::string_view name) const {
-
+const Procedure* ProcedureNamespace::getProcedure(std::string_view name) const {
     const auto it = _procedureMap.find(name);
     if (it == _procedureMap.end()) {
         return nullptr;

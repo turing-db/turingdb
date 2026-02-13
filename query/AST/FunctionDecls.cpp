@@ -15,11 +15,11 @@ FunctionDecls::FunctionDecls()
 FunctionDecls::~FunctionDecls() {
 }
 
-std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureManager& procedures) {
+std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureManager* procedures) {
     auto decls = std::make_unique<FunctionDecls>();
 
     // Metadata
-    for (const auto* ns : procedures.namespaces()) {
+    for (const auto* ns : procedures->namespaces()) {
     for (const auto* proc : ns->procedures()) {
         auto declBuilder = decls->create(proc->getFullName());
         declBuilder.setIsDatabaseProcedure(true);

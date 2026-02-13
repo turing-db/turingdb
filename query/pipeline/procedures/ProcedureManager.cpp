@@ -21,6 +21,12 @@ ProcedureManager::~ProcedureManager() {
     }
 }
 
+std::unique_ptr<ProcedureManager> ProcedureManager::create() {
+    auto manager = std::make_unique<ProcedureManager>();
+    manager->init();
+    return manager;
+}
+
 void ProcedureManager::init() {
     ProcedureNamespace* db = createNamespace("db");
 
@@ -32,9 +38,7 @@ void ProcedureManager::init() {
     ProceduresProcedure::registerProcedure(db);
 }
 
-const Procedure* ProcedureManager::getProcedure(
-    std::string_view fullName) const {
-
+const Procedure* ProcedureManager::getProcedure(std::string_view fullName) const {
     const size_t dot = fullName.find('.');
     if (dot == std::string_view::npos) {
         return nullptr;
@@ -51,9 +55,7 @@ const Procedure* ProcedureManager::getProcedure(
     return ns->getProcedure(procName);
 }
 
-ProcedureNamespace* ProcedureManager::getNamespace(
-    std::string_view name) const {
-
+ProcedureNamespace* ProcedureManager::getNamespace(std::string_view name) const {
     const auto it = _namespaceMap.find(name);
     if (it == _namespaceMap.end()) {
         return nullptr;
@@ -62,9 +64,7 @@ ProcedureNamespace* ProcedureManager::getNamespace(
     return it->second;
 }
 
-ProcedureNamespace* ProcedureManager::createNamespace(
-    std::string_view name) {
-
+ProcedureNamespace* ProcedureManager::createNamespace(std::string_view name) {
     ProcedureNamespace* ns = new ProcedureNamespace(name);
     _namespaces.push_back(ns);
     _namespaceMap[name] = ns;

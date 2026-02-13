@@ -1,9 +1,8 @@
 #pragma once
 
-#include "ProcedureData.h"
-
 namespace db {
 
+class ProcedureData;
 class ProcedureState;
 class ProcedureNamespace;
 

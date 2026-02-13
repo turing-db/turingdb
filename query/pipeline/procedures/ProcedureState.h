@@ -24,11 +24,13 @@ public:
         return *static_cast<T*>(_data);
     }
 
-    const ProcedureData& data() const { return *_data; }
+    const ProcedureData& getData() const { return *_data; }
+
+    [[nodiscard]] const ExecutionContext* getContext() const { return _ctxt; }
 
     [[nodiscard]] bool isFinished() const { return _finished; }
-    [[nodiscard]] Step step() const { return _step; }
-    [[nodiscard]] const ExecutionContext* ctxt() const { return _ctxt; }
+
+    [[nodiscard]] Step getStep() const { return _step; }
 
     void finish() { _finished = true; }
 
@@ -39,7 +41,7 @@ private:
     const Procedure* _procedure {nullptr};
     const ExecutionContext* _ctxt {nullptr};
     bool _finished {false};
-    Step _step {};
+    Step _step {Step::PREPARE};
 };
 
 }

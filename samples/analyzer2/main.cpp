@@ -21,8 +21,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<Graph> graph = Graph::create();
     SimpleGraph::createSimpleGraph(graph.get());
 
-    ProcedureManager procedures;
-    procedures.init();
+    auto procedures = ProcedureManager::create();
 
     const Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
@@ -44,7 +43,7 @@ int main(int argc, char** argv) {
         queryStr = it.get<char>(file.getInfo()._size);
     }
 
-    CypherAST ast(procedures, queryStr);
+    CypherAST ast(procedures.get(), queryStr);
 
     {
         CypherParser parser(&ast);

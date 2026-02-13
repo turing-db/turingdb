@@ -204,10 +204,9 @@ std::string formatStatusError(db::QueryStatus::Status status,
 void generatePlanGraph(std::string_view query,
                        db::GraphView view,
                        std::ostream& out) {
-    db::ProcedureManager procedures;
-    procedures.init();
+    auto procedures = db::ProcedureManager::create();
 
-    db::CypherAST ast(procedures, query);
+    db::CypherAST ast(procedures.get(), query);
     db::CypherParser parser(&ast);
     db::CypherAnalyzer analyzer(&ast, view);
     db::PlanGraphGenerator planGen(ast, view);

@@ -15,16 +15,13 @@ public:
     ProcedureNamespace(std::string_view name);
     ~ProcedureNamespace();
 
-    ProcedureNamespace(const ProcedureNamespace&) = delete;
-    ProcedureNamespace& operator=(const ProcedureNamespace&) = delete;
-    ProcedureNamespace(ProcedureNamespace&&) = delete;
-    ProcedureNamespace& operator=(ProcedureNamespace&&) = delete;
+    std::string_view getName() const { return _name; }
 
-    void addProcedure(Procedure* procedure);
     const Procedure* getProcedure(std::string_view name) const;
 
-    std::string_view getName() const { return _name; }
     const Procedures& procedures() const { return _procedures; }
+
+    void addProcedure(Procedure* procedure);
 
 private:
     std::string_view _name;

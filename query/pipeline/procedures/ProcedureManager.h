@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -16,23 +17,21 @@ public:
     ProcedureManager();
     ~ProcedureManager();
 
-    ProcedureManager(const ProcedureManager&) = delete;
-    ProcedureManager& operator=(const ProcedureManager&) = delete;
-    ProcedureManager(ProcedureManager&&) = delete;
-    ProcedureManager& operator=(ProcedureManager&&) = delete;
-
-    void init();
-
-    const Procedure* getProcedure(std::string_view fullName) const;
-    ProcedureNamespace* getNamespace(std::string_view name) const;
-    ProcedureNamespace* createNamespace(std::string_view name);
+    static std::unique_ptr<ProcedureManager> create();
 
     const Namespaces& namespaces() const { return _namespaces; }
 
+    const Procedure* getProcedure(std::string_view fullName) const;
+
+    ProcedureNamespace* getNamespace(std::string_view name) const;
+
+    ProcedureNamespace* createNamespace(std::string_view name);
+
 private:
     Namespaces _namespaces;
-    std::unordered_map<std::string_view, ProcedureNamespace*>
-        _namespaceMap;
+    std::unordered_map<std::string_view, ProcedureNamespace*> _namespaceMap;
+
+    void init();
 };
 
 }

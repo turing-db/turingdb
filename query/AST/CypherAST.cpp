@@ -29,7 +29,7 @@
 
 using namespace db;
 
-CypherAST::CypherAST(const ProcedureManager& procedures,
+CypherAST::CypherAST(const ProcedureManager* procedures,
                      std::string_view queryString)
     : _sourceManager(new SourceManager(queryString)),
     _diagnosticsManager(new DiagnosticsManager(_sourceManager)),

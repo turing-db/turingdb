@@ -11,8 +11,7 @@
 using namespace db;
 
 int main(int argc, char** argv) {
-    ProcedureManager procedures;
-    procedures.init();
+    auto procedures = ProcedureManager::create();
 
     std::string queryStr;
 
@@ -33,7 +32,7 @@ int main(int argc, char** argv) {
         queryStr = it.get<char>(file.getInfo()._size);
     }
 
-    CypherAST ast(procedures, queryStr);
+    CypherAST ast(procedures.get(), queryStr);
 
     {
         // Try but allow not implemented to test the parser
