@@ -118,6 +118,10 @@ template <typename T>
     return fmt::format("{}", value);
 }
 
+[[maybe_unused]] std::string valueToString(const PropertyNull&) {
+    return "null";
+}
+
 template <typename T>
 [[maybe_unused]] std::string valueToString(const std::optional<T>& value) {
     if (!value.has_value()) {

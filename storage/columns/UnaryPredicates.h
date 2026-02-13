@@ -5,6 +5,7 @@
 #include "ColumnVector.h"
 
 #include "TypeUtils.h"
+#include "metadata/PropertyType.h"
 
 namespace db {
 
