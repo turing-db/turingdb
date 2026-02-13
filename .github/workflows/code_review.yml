@@ -156,6 +156,14 @@ jobs:
         if: steps.diff.outputs.skip != 'true'
         run: |
           output=$(cat /tmp/claude_review_output.txt)
+
+          # Fail fast on API errors (credit exhaustion, auth failure, rate limits)
+          if echo "$output" | grep -qiE "credit|billing|quota|rate.limit|unauthorized|authentication|forbidden|insufficient_funds|overloaded|payment required"; then
+            echo "::error::Claude API error detected (possible credit/billing issue):"
+            echo "$output"
+            exit 1
+          fi
+
           if echo "$output" | grep -q "NO_VIOLATIONS"; then
             echo "has_violations=false" >> $GITHUB_OUTPUT
             echo "review_body=" >> $GITHUB_OUTPUT
