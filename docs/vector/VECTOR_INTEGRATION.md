@@ -64,7 +64,7 @@ Create a vector index at the TuringDB root level.
 This is independent of versioning.
 
 ```
-CREATE VECTOR INDEX vector1 WITH DIMENSION 4 METRIC EUCLID
+CREATE VECTOR INDEX vector1 WITH DIMENSION 4 METRIC EUCLID TYPE HNSW
 ```
 
 Supported metrics:
@@ -72,6 +72,12 @@ Supported metrics:
 - `INNER_PRODUCT` — Inner product (cosine similarity with normalized vectors)
 
 If METRIC is omitted, the default is `INNER_PRODUCT`.
+
+Supported index types:
+- `BRUTE_FORCE` — Exact nearest neighbor search (linear scan)
+- `HNSW` — Approximate nearest neighbor search (Hierarchical Navigable Small World)
+
+If TYPE is omitted, the default is `BRUTE_FORCE`.
 
 The index name is a plain identifier (same rules as graph names).
 It is a hard error if an index with the same name already exists.
@@ -131,12 +137,19 @@ load is rejected and the index is cleared.
 
 An empty JSON array `[]` is valid — the index is left empty after clearing.
 
+For large files, vectors are processed in batches using the SAX-based
+streaming parser. The parser accumulates vectors into a `BatchVectorCreate`,
+calls `addEmbeddings` when the batch is full, then starts a new batch.
+This keeps memory usage bounded regardless of file size.
+
 This is a standalone QueryCommand (like LOAD GRAPH).
 
 ### 3. Vector search
 
 Get the numerical IDs and distances associated to the k nearest vectors
-for a given query vector. The query vector must be a list literal of float values.
+for a given query vector. The query vector must be a list literal of float
+values. All values must be float literals (e.g., `0.5`, `1.0`); integer
+literals (e.g., `1`, `2`) are not accepted and are a hard error.
 
 The `k` argument (after `FOR`) is parsed as an expression in the grammar
 but must resolve to an unsigned integer. This is validated at analysis time.
@@ -231,6 +244,7 @@ Output columns:
 - `name` — the index name (string)
 - `dimension` — the vector dimension (integer)
 - `metric` — the distance metric (`EUCLID` or `INNER_PRODUCT`)
+- `type` — the index type (`BRUTE_FORCE` or `HNSW`)
 - `vectorCount` — the number of vectors currently stored in the index (integer)
 
 ## Intentionally deferred features
@@ -250,7 +264,7 @@ added in a future iteration:
 
 The following are **reserved keywords** added to the lexer:
 `VECTOR`, `SEARCH`, `INDEX`, `INDEXES`, `DIMENSION`, `METRIC`, `EUCLID`,
-`INNER_PRODUCT`.
+`INNER_PRODUCT`, `TYPE`, `BRUTE_FORCE`, `HNSW`.
 
 These cannot be used as identifiers anywhere in queries.
 
@@ -274,6 +288,20 @@ The `distance` yield column uses `Double`. The Faiss search results
 return `float` distances, which are widened to `double` for storage
 in the pipeline since TuringDB's column system does not have a `Float`
 type.
+
+### VecLib::clear()
+
+The existing `VecLib` class does not have a `clear()` method. This must
+be added to support the LOAD semantics (clear before ingestion, clear
+again on failure). The `clear()` method is exposed through the
+`VecLibWriteAccessor`.
+
+### DELETE grammar
+
+`DELETE VECTOR INDEX` is a standalone QueryCommand, while regular Cypher
+`DELETE` is a clause inside a query (e.g., `MATCH (n) DELETE n`). Since
+`VECTOR` is a reserved keyword and cannot be a variable name, the parser
+can unambiguously distinguish the two forms by the token following `DELETE`.
 
 ### Processor model
 
@@ -348,9 +376,9 @@ Acquire `VectorDatabaseReadAccessor` → iterate indexes → release.
 
 **LOAD VECTOR INDEX:**
 Acquire `VectorDatabaseReadAccessor` → find VecLib → acquire
-`VecLibWriteAccessor` → clear index → read file → parse JSON →
-add embeddings → release `VecLibWriteAccessor` → release
-`VectorDatabaseReadAccessor`.
+`VecLibWriteAccessor` → clear index → stream file → parse JSON in
+batches → add embeddings per batch → release `VecLibWriteAccessor` →
+release `VectorDatabaseReadAccessor`.
 On failure: the index is cleared before the write accessor is released,
 so the index is always left in a consistent state (fully loaded or empty).
 The exclusive index lock is held for the entire duration of the load,
@@ -374,3 +402,57 @@ For a given vector index:
 * One exclusive writer for LOAD VECTOR INDEX → `VecLibWriteAccessor`
 * Many concurrent readers for VECTOR SEARCH → `VecLibReadAccessor`
 * Searches are blocked for the full duration of a LOAD on the same index
+
+## Testing strategy
+
+### Grammar tests
+
+Test that each command parses successfully and that invalid syntax is
+rejected:
+- CREATE VECTOR INDEX with all clause combinations (METRIC omitted,
+  TYPE omitted, both omitted, both present)
+- LOAD VECTOR INDEX
+- VECTOR SEARCH with YIELD (single column, both columns, with AS aliases)
+- DELETE VECTOR INDEX
+- SHOW VECTOR INDEXES
+- Invalid: missing DIMENSION, missing index name, integer in query vector
+
+### Analyzer tests
+
+Validate semantic checks:
+- YIELD column names: `id` and `distance` accepted, unknown names rejected
+- DIMENSION must be unsigned integer > 0
+- k must be unsigned integer
+- Query vector values must be float literals (not integers)
+- Variable scoping: YIELD variables visible in subsequent MATCH
+
+### Plan tests
+
+Verify correct plan nodes are generated:
+- Standalone commands (CREATE, DELETE, LOAD, SHOW) produce the expected
+  plan node
+- VECTOR SEARCH produces a read statement plan node
+- VECTOR SEARCH + MATCH produces the correct plan graph with cartesian
+  product
+
+### Pipeline / processor tests
+
+Unit tests for processor execution:
+- VectorSearchProcessor produces correct rows (id, distance) for a
+  known index
+- Correct result count (up to k, fewer if index is smaller)
+- Result ordering (nearest first)
+- Empty index returns zero rows
+- Dimension mismatch at execution time raises error
+
+### Regression tests
+
+End-to-end Python-based tests through the HTTP API:
+- Full flow: CREATE → LOAD → VECTOR SEARCH → RETURN
+- VECTOR SEARCH + MATCH chaining
+- Multiple VECTOR SEARCH statements in one query
+- SHOW VECTOR INDEXES returns correct metadata
+- DELETE removes index and subsequent operations fail
+- Error cases: duplicate index name, non-existent index, dimension
+  mismatch, duplicate IDs in file, integer in query vector
+- ORDER BY distance / LIMIT on VECTOR SEARCH results
