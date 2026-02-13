@@ -104,8 +104,24 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY secret is not set"
+            exit 1
+          fi
           cd /tmp
-          claude -p --model opus < /tmp/review_prompt.txt > /tmp/claude_review_output.txt
+          set +e
+          claude -p --verbose --model claude-opus-4-6 \
+            < /tmp/review_prompt.txt \
+            > /tmp/claude_review_output.txt 2>&1
+          exit_code=$?
+          set -e
+          if [ $exit_code -ne 0 ]; then
+            echo "::error::Claude Code exited with code $exit_code"
+            echo "--- Claude output ---"
+            cat /tmp/claude_review_output.txt
+            echo "--- End output ---"
+            exit $exit_code
+          fi
 
       - name: Parse Claude output
         id: parse
