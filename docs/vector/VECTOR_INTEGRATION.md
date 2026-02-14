@@ -25,11 +25,11 @@ such as documents or other records.
 * The numerical ID must always be an unsigned integer type (uint64_t), matching the format
 expected by the existing JSON embedding loader.
 
--> Thus the ID to be used is the user's choice. It may be an arbitrary numerical property.
+* Thus the ID to be used is the user's choice. It may be an arbitrary numerical property.
 
--> Users may want to come with their own embeddings
+* Users may want to come with their own embeddings.
 
--> We obviously need to generate embeddings at each commit
+* We obviously need to generate embeddings at each commit.
 
 So that seems to point us for now to having vector indexes at the TuringDB root level,
 not per commit or per graph.
@@ -71,7 +71,10 @@ Supported metrics:
 - `EUCLID` — Euclidean distance
 - `INNER_PRODUCT` — Inner product (cosine similarity with normalized vectors)
 
-If METRIC is omitted, the default is `INNER_PRODUCT`.
+If METRIC is omitted, the default is `INNER_PRODUCT`. Note: the
+`VecLibMetadata` struct initializes `_metric` to `EUCLIDEAN_DIST`, but
+the grammar-level default is `INNER_PRODUCT`. The parser/analyzer must
+always pass an explicit metric value to `createLibrary()`.
 
 Supported index types:
 - `BRUTE_FORCE` — Exact nearest neighbor search (linear scan)
@@ -133,14 +136,27 @@ are caught at execution time and cause the entire load to fail (and the
 index to be cleared).
 
 Duplicate `id` values within the same file are a hard error — the entire
-load is rejected and the index is cleared.
+load is rejected and the index is cleared. The existing `JsonSaxParser`
+does not check for duplicate IDs; this validation must be added (e.g.
+a `std::unordered_set<uint64_t>` of seen IDs in the parser or in the
+load processor).
 
-An empty JSON array `[]` is valid — the index is left empty after clearing.
+An empty JSON array `[]` is currently rejected by the JSON importer
+(`ImportErrorCode::NoVectors`). This behavior is preserved: an empty
+file is a hard error.
 
-For large files, vectors are processed in batches using the SAX-based
-streaming parser. The parser accumulates vectors into a `BatchVectorCreate`,
-calls `addEmbeddings` when the batch is full, then starts a new batch.
-This keeps memory usage bounded regardless of file size.
+The existing `JsonImporter::import()` takes a `const std::string&`,
+so the full file content is read into memory before SAX parsing begins.
+The SAX parser (`JsonSaxParser`) streams over this in-memory string and
+accumulates all points into a single `BatchVectorCreate` — it does not
+flush intermediate batches. To bound memory usage on the parsed-vector
+side for large files, the load processor should be modified to parse
+in batches: read and parse a chunk of vectors, call `addEmbeddings`,
+clear the batch, and repeat. This requires either modifying
+`JsonSaxParser` to accept a flush callback and a batch size threshold,
+or splitting the file into chunks at a higher level. The file-content
+side remains unbounded under the current `const std::string&` interface;
+true file-stream-level chunking is deferred.
 
 This is a standalone QueryCommand (like LOAD GRAPH).
 
@@ -195,6 +211,10 @@ standalone without RETURN). Standard Cypher clauses like ORDER BY and LIMIT
 on RETURN work as expected with VECTOR SEARCH results.
 
 WITH clauses cannot be used between VECTOR SEARCH and subsequent statements.
+This is an implementation simplification for the first version — WITH requires
+its own pipeline stage for projection and filtering, and the current plan
+generator does not support WITH between non-MATCH read statements. This
+restriction may be lifted in a future iteration.
 
 Example — standalone search with RETURN:
 ```
@@ -216,9 +236,11 @@ VECTOR SEARCH IN abstractIndex FOR 5 [0.5, 0.6, 0.7, 0.8] YIELD id AS abstractId
 RETURN titleId, titleDist, abstractId, abstractDist
 ```
 
-Even though we don't support lists fully as values in columns today, we support
-lists in the cypher parser. So at plan/generation time we can take the list literal
-in the AST for the query vector and give it directly to the vector search processor.
+The query vector is a list literal in the grammar. Although TuringDB does not
+support list values in pipeline columns, the parser already handles list
+literals in the AST. At plan/generation time, the list literal is extracted
+from the AST node and passed directly to the vector search processor as a
+`std::vector<float>` — it never needs to flow through the column system.
 
 Dimension mismatches between the query vector and the index dimension are caught
 at execution time.
@@ -271,8 +293,15 @@ These cannot be used as identifiers anywhere in queries.
 The keywords `WITH`, `FOR`, `IN`, `AS`, `YIELD`, `CREATE`, `DELETE`,
 `SHOW`, `LOAD`, `RETURN` already exist in the grammar.
 
-The lexer is case-insensitive (`%option caseless`), so all keywords
-and identifiers (including vector index names) are case-insensitive.
+The lexer uses `%option caseless`, so all keyword patterns are matched
+case-insensitively. However, identifiers (the `ID` token) preserve their
+original casing — `STORE_STRING` captures the text as-is from the input.
+This means vector index names are **case-preserved at parse time**.
+
+To make index names case-insensitive at the semantic level, the parser
+(or analyzer) must normalize the index name to lowercase before passing
+it to `VectorDatabase`. This ensures that `CREATE VECTOR INDEX Foo` and
+`VECTOR SEARCH IN foo` refer to the same index.
 
 ### YIELD validation
 
@@ -295,6 +324,33 @@ The existing `VecLib` class does not have a `clear()` method. This must
 be added to support the LOAD semantics (clear before ingestion, clear
 again on failure). The `clear()` method is exposed through the
 `VecLibWriteAccessor`.
+
+### VectorDatabase::createLibrary() — missing IndexType parameter
+
+The existing `VectorDatabase::createLibrary()` signature is:
+```cpp
+VectorResult<VecLibID> createLibrary(std::string_view libName,
+                                     Dimension dim,
+                                     DistanceMetric metric = DistanceMetric::INNER_PRODUCT);
+```
+It does not accept an `IndexType` parameter, and `VecLib::Builder` has
+no `setIndexType()` method. Both must be extended to support the `TYPE`
+clause in `CREATE VECTOR INDEX`. The default `IndexType` is
+`BRUTE_FORCE` (matching `VecLibMetadata`'s initializer).
+
+### VecLib vector count
+
+`VecLib` has no method to return the total number of stored vectors.
+Vectors are distributed across shards in the `ShardCache`, with no
+aggregated count. A `vectorCount()` method (or a running counter
+updated by `addEmbeddings` and `clear`) must be added to support the
+`vectorCount` column in `SHOW VECTOR INDEXES`.
+
+### EUCLID keyword mapping
+
+The grammar keyword `EUCLID` maps to `DistanceMetric::EUCLIDEAN_DIST`
+in the C++ enum. The string representation in `SHOW VECTOR INDEXES`
+output uses the grammar-level name `EUCLID`, not the enum name.
 
 ### DELETE grammar
 
@@ -359,9 +415,36 @@ Exposes: `search`.
 `VecLibWriteAccessor` — acquires an exclusive lock on `VecLib`.
 Exposes: `addEmbeddings`, `clear`.
 
-The existing `VecLibAccessor` class (which currently holds a shared lock
-but exposes both read and write methods) should be split into these two
-types.
+The existing `VecLibAccessor` class holds a `std::shared_lock` but
+exposes both read methods (`search`) and write methods
+(`addEmbeddings`, `prepareCreateBatch`). This is a concurrency bug:
+concurrent writes through shared-lock accessors are not serialized.
+The class must be split into `VecLibReadAccessor` (shared lock, read
+methods only) and `VecLibWriteAccessor` (exclusive lock, write methods
+only).
+
+#### VectorDatabase API changes
+
+Currently `VectorDatabase::getLibrary()` acquires a `shared_lock` as a
+local variable and returns a `VecLibAccessor`. The database-level lock
+is released when `getLibrary()` returns — only the VecLib-level lock
+survives in the returned accessor.
+
+For the proposed LOAD locking pattern (hold database read lock for the
+full duration of the load), `VectorDatabase` must expose accessor
+objects that keep the database lock alive:
+
+- `VectorDatabaseReadAccessor` holds a `shared_lock` on
+  `VectorDatabase::_mutex` and exposes `getLibraryRead()` (returns
+  `VecLibReadAccessor`), `getLibraryWrite()` (returns
+  `VecLibWriteAccessor`), and `listLibraries()`.
+
+- `VectorDatabaseWriteAccessor` holds a `unique_lock` on
+  `VectorDatabase::_mutex` and exposes `createLibrary()` and
+  `deleteLibrary()`.
+
+`VectorDatabase` gains two methods: `readAccess()` and `writeAccess()`,
+replacing the current pattern of inline locks in each method.
 
 ### Lock acquisition per operation
 
