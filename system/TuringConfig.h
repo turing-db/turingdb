@@ -20,6 +20,8 @@ public:
     const fs::Path& getVectorDir() const { return _vectorDir; }
     const fs::Path& getUserExtensionsDir() const { return _userExtensionsDir; }
     const fs::Path& getInstallExtensionsDir() const { return _installExtensionsDir; }
+    const fs::Path& getLogsDir() const { return _logsDir; }
+    const fs::Path& getLockFilePath() const { return _lockFilePath; }
 
     bool isSyncedOnDisk() const { return _syncedOnDisk; }
     void setTuringDirectory(const fs::Path& turingDir);
@@ -32,6 +34,8 @@ private:
     fs::Path _vectorDir;
     fs::Path _userExtensionsDir;
     fs::Path _installExtensionsDir;
+    fs::Path _logsDir;
+    fs::Path _lockFilePath;
 
     bool _syncedOnDisk {true};
 };
