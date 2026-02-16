@@ -9,7 +9,7 @@
 #include <range/v3/action/stable_sort.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/transform.hpp>
-#include "range/v3/view/subrange.hpp"
+#include <range/v3/view/subrange.hpp>
 
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"
@@ -61,6 +61,23 @@ void addTieRanges(std::vector<TieRange>& tieRanges, const Rg& rg, size_t start =
     }
 }
 
+void addTieRanges(std::vector<TieRange>& tieRanges, const auto& bgn, const auto& nd, size_t start = 0) {
+    // Find the first instance of a duplciated entry in the column
+    auto startIt = std::adjacent_find(bgn, nd);
+
+    while (startIt != nd) {
+        // Find the interval [start, end) of duplicated entries in column
+        auto endIt = startIt;
+        while (endIt != nd && *endIt == *startIt) {
+            ++endIt;
+        }
+        const size_t startIdx = std::distance(bgn, startIt) + start;
+        const size_t size = std::distance(startIt, endIt);
+        tieRanges.emplace_back(startIdx, size);
+        startIt = std::adjacent_find(endIt, nd);
+    }
+}
+
 void narrowTieRanges(std::vector<TieRange>& tieRanges, Column* col,
                      std::vector<size_t>& indices) {
     auto ccol = dynamic_cast<ColumnInts*>(col);
@@ -76,8 +93,11 @@ void narrowTieRanges(std::vector<TieRange>& tieRanges, Column* col,
 
     for (const auto& [start, size] : tieRanges) {
         const size_t end = start + size;
-        auto subrange = rg::subrange(begin(reordered) + start, begin(reordered) + end);
-        addTieRanges(temp, subrange, start);
+
+        const auto beginIt = begin(reordered) + start;
+        const auto endIt = begin(reordered) + end;
+
+        addTieRanges(temp, beginIt, endIt, start);
     }
 
     tieRanges.swap(temp);
@@ -212,8 +232,12 @@ void subsort(Dataframe* df) {
         // For each tie run, r, sort that run, keeping track of the new indices
         for (const auto& [start, size] : tieRanges) {
             const size_t end = start + size;
-            auto idxSubrange = rg::subrange(begin(indices) + start, begin(indices) + end);
-            rg::stable_sort(idxSubrange, [&data](size_t i, size_t j) { return data[i] < data[j]; });
+            // auto idxSubrange = rg::subrange(begin(indices) + start, begin(indices) + end);
+            // rg::sort(idxSubrange, [&data](size_t i, size_t j) { return data[i] < data[j]; });
+            const auto beginIt = begin(indices) + start;
+            const auto endIt = begin(indices) + end;
+            std::sort(beginIt, endIt,
+                      [&data](size_t i, size_t j) { return data[i] < data[j]; });
         }
 
         // Narrow the ties: for a contiguous range [l, r] in the previous column,
