@@ -33,8 +33,10 @@ void PlanGraph::removeIsolatedNodes() {
 
     for (auto& node : _nodes) {
         const PlanGraphOpcode opc = node->getOpcode();
+
         const bool disconnected = node->inputs().empty() && node->outputs().empty();
-        const bool canBeStandalone = opc == PlanGraphOpcode::WRITE || opc == PlanGraphOpcode::PRODUCE_RESULTS;
+        // Write statements with no return clause; e.g. CREATE (n:Person)
+        const bool canBeStandalone = opc == PlanGraphOpcode::WRITE;
 
         if (disconnected && !canBeStandalone) {
             continue;

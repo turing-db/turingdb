@@ -282,9 +282,6 @@ void PlanGraphGenerator::generateShowProceduresQuery(const ShowProceduresQuery* 
 }
 
 PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {
-    // A "standalone return" is a sole return clause, e.g. `RETURN 4 + 5`
-    const bool isStandaloneReturn = prevNode == nullptr;
-
     const Projection* proj = stmt->getProjection();
 
     if (proj->isDistinct()) {
@@ -412,48 +409,55 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
         }
     }
 
-    if (isStandaloneReturn) {
-        ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
-        exprEval->connectOut(results);
-        // FIXME: Connect up functions here too, they can also input a standalone return
-        results->setProjection(proj);
-        return results;
-    }
+    ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
 
     if (!exprEval->getExprs().empty()) {
-        prevNode->connectOut(exprEval);
+        if (prevNode) {
+            prevNode->connectOut(exprEval);
+        }
         prevNode = exprEval;
     }
 
     if (!funcEval->getFuncs().empty()) {
-        prevNode->connectOut(funcEval);
+        if (prevNode) {
+            prevNode->connectOut(funcEval);
+        }
         prevNode = funcEval;
     }
 
     if (!aggregateEval->getFuncs().empty()) {
-        prevNode->connectOut(aggregateEval);
+        if (prevNode) {
+            prevNode->connectOut(aggregateEval);
+        }
         prevNode = aggregateEval;
     }
 
     if (proj->hasOrderBy()) {
-        OrderByNode* orderBy = _tree.newOut<OrderByNode>(prevNode);
-        orderBy->setItems(proj->getOrderBy()->getItems());
-        prevNode = orderBy;
+        if (prevNode) {
+            OrderByNode* orderBy = _tree.newOut<OrderByNode>(prevNode);
+            orderBy->setItems(proj->getOrderBy()->getItems());
+            prevNode = orderBy;
+        }
     }
 
     if (proj->hasSkip()) {
-        SkipNode* skip = _tree.newOut<SkipNode>(prevNode);
-        skip->setExpr(proj->getSkip()->getExpr());
-        prevNode = skip;
+        if (prevNode) {
+            SkipNode* skip = _tree.newOut<SkipNode>(prevNode);
+            skip->setExpr(proj->getSkip()->getExpr());
+            prevNode = skip;
+        }
     }
 
     if (proj->hasLimit()) {
-        LimitNode* limit = _tree.newOut<LimitNode>(prevNode);
-        limit->setExpr(proj->getLimit()->getExpr());
-        prevNode = limit;
+        if (prevNode) {
+            LimitNode* limit = _tree.newOut<LimitNode>(prevNode);
+            limit->setExpr(proj->getLimit()->getExpr());
+            prevNode = limit;
+        }
     }
 
-    ProduceResultsNode* results = _tree.newOut<ProduceResultsNode>(prevNode);
+    prevNode->connectOut(results);
+
     results->setProjection(proj);
 
     return results;

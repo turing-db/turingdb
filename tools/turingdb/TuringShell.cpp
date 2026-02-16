@@ -25,10 +25,9 @@
 #include "dataframe/NamedColumn.h"
 #include "GraphPath.h"
 
-#include "metadata/PropertyNull.h"
-#include "spdlog/fmt/bundled/ranges.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
+#include "metadata/PropertyNull.h"
 
 #include "FileUtils.h"
 
