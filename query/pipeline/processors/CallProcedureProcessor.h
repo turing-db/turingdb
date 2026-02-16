@@ -31,8 +31,8 @@ public:
     bool hasInput() const { return _input.has_value(); }
 
     void setInputValues(std::span<const Procedure::Argument> args);
-    void allocReturnValues(LocalMemory&,
-                           DataframeManager&,
+    void allocReturnValues(LocalMemory* mem,
+                           DataframeManager* dfMan,
                            std::span<Procedure::YieldItem> yieldItems);
 
     PipelineBlockInputInterface& input();
