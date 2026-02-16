@@ -51,10 +51,7 @@ public:
 
     ProcedureTypeVector();
 
-    ProcedureTypeVector(std::initializer_list<NamedProcedureType> values)
-        : _values(values)
-    {
-    }
+    ProcedureTypeVector(std::initializer_list<NamedProcedureType> values);
 
     ~ProcedureTypeVector();
 
