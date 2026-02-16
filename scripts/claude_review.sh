@@ -61,10 +61,32 @@ RULES:
 - Only flag lines that were ADDED in the diff (lines starting with +).
 - Only flag CLEAR violations — do not speculate or flag ambiguous cases.
 - For each violation, cite the specific rule from CODING_STYLE.md or REVIEW.md.
-- If there are NO violations, output exactly the word NO_VIOLATIONS and nothing else.
-- If there ARE violations, output a markdown table with these columns:
-  | File | Line | Rule | Violation |
-- Do NOT include any other text before or after the table (no preamble, no summary).
+- The bracket initialization rule for member variables applies to types that
+  would otherwise be left uninitialized (primitives, pointers, enums). Class
+  and struct types with default constructors (e.g. std::string, std::vector)
+  are self-initializing and do NOT require explicit {} initialization.
+
+OUTPUT FORMAT (follow these three phases in order):
+
+1. <analysis> — Analyze the diff. Reason freely, identify candidate
+   violations, and discard false positives.
+
+2. <review> — Re-examine every candidate from the analysis. For each one,
+   verify that (a) the line was actually ADDED in the diff (starts with +),
+   and (b) the cited rule exists in CODING_STYLE.md or REVIEW.md.
+   Only drop a candidate if it is clearly a false positive — i.e. the rule
+   does not actually apply to the flagged code. When in doubt, keep it.
+
+3. <answer> — Output only the surviving violations:
+   - If none survive, write exactly: <answer>NO_VIOLATIONS</answer>
+   - Otherwise, write a markdown table:
+     <answer>
+     | File | Line | Rule | Violation |
+     |------|------|------|-----------|
+     | ...  | ...  | ...  | ...       |
+     </answer>
+
+Do NOT include any text outside of these three tags.
 
 PROMPT_HEADER
 
@@ -93,18 +115,20 @@ if [ "$USE_CLAUDE_CODE" != "1" ]; then
 fi
 (cd /tmp && claude "${claude_args[@]}" < /tmp/review_prompt.txt > /tmp/claude_review_output.txt)
 
-# ── 5. Parse Claude output ─────────────────────────────────────────
-output=$(cat /tmp/claude_review_output.txt)
+# ── 5. Extract <answer> and parse ────────────────────────────────────
+raw=$(cat /tmp/claude_review_output.txt)
+answer=$(sed -n '/<answer>/,/<\/answer>/p' /tmp/claude_review_output.txt \
+    | sed '1s/.*<answer>//; $s/<\/answer>.*//')
 
-if echo "$output" | grep -q "NO_VIOLATIONS"; then
+if [ -z "$answer" ] || echo "$answer" | grep -q "NO_VIOLATIONS"; then
     gh_output "has_violations=false"
     gh_output "review_body="
     echo "No violations found."
 else
-    encoded=$(echo "$output" | base64 -w0 2>/dev/null || echo "$output" | base64)
+    encoded=$(echo "$answer" | base64 -w0 2>/dev/null || echo "$answer" | base64)
     gh_output "has_violations=true"
     gh_output "review_body=$encoded"
     echo "Violations found:"
     echo ""
-    echo "$output"
+    echo "$answer"
 fi
