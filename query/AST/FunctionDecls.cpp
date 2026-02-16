@@ -28,34 +28,40 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureManag
                 switch (returnItem._type) {
                     case ProcedureType::INVALID:
                         throw FatalException("Invalid procedure return type");
-                        break;
+                    break;
 
                     case ProcedureType::NODE:
                         declBuilder.addReturnType(EvaluatedType::NodePattern, returnItem._name);
-                        break;
+                    break;
+
                     case ProcedureType::EDGE:
                         declBuilder.addReturnType(EvaluatedType::EdgePattern, returnItem._name);
-                        break;
+                    break;
+
                     case ProcedureType::VALUE_TYPE:
                         declBuilder.addReturnType(EvaluatedType::ValueType, returnItem._name);
-                        break;
+                    break;
+
                     case ProcedureType::LABEL_ID:
                     case ProcedureType::EDGE_TYPE_ID:
                     case ProcedureType::PROPERTY_TYPE_ID:
                     case ProcedureType::UINT_64:
                     case ProcedureType::INT64:
                         declBuilder.addReturnType(EvaluatedType::Integer, returnItem._name);
-                        break;
+                    break;
+
                     case ProcedureType::DOUBLE:
                         declBuilder.addReturnType(EvaluatedType::Double, returnItem._name);
-                        break;
+                    break;
+
                     case ProcedureType::BOOL:
                         declBuilder.addReturnType(EvaluatedType::Bool, returnItem._name);
-                        break;
+                    break;
+
                     case ProcedureType::STRING_VIEW:
                     case ProcedureType::STRING:
                         declBuilder.addReturnType(EvaluatedType::String, returnItem._name);
-                        break;
+                    break;
 
                     case ProcedureType::_SIZE:
                         throw FatalException("Invalid procedure return type: _SIZE");
@@ -67,34 +73,40 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureManag
                 switch (arg._type) {
                     case ProcedureType::INVALID:
                         throw FatalException("Invalid procedure return type");
-                        break;
+                    break;
 
                     case ProcedureType::NODE:
                         declBuilder.addArgument(EvaluatedType::NodePattern);
-                        break;
+                    break;
+
                     case ProcedureType::EDGE:
                         declBuilder.addArgument(EvaluatedType::EdgePattern);
-                        break;
+                    break;
+
                     case ProcedureType::VALUE_TYPE:
                         declBuilder.addArgument(EvaluatedType::ValueType);
-                        break;
+                    break;
+
                     case ProcedureType::LABEL_ID:
                     case ProcedureType::EDGE_TYPE_ID:
                     case ProcedureType::PROPERTY_TYPE_ID:
                     case ProcedureType::UINT_64:
                     case ProcedureType::INT64:
                         declBuilder.addArgument(EvaluatedType::Integer);
-                        break;
+                    break;
+
                     case ProcedureType::DOUBLE:
                         declBuilder.addArgument(EvaluatedType::Double);
                         break;
+
                     case ProcedureType::BOOL:
                         declBuilder.addArgument(EvaluatedType::Bool);
-                        break;
+                    break;
+
                     case ProcedureType::STRING_VIEW:
                     case ProcedureType::STRING:
                         declBuilder.addArgument(EvaluatedType::String);
-                        break;
+                    break;
 
                     case ProcedureType::_SIZE:
                         throw FatalException("Invalid procedure return type: _SIZE");
