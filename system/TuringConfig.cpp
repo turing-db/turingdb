@@ -56,6 +56,8 @@ TuringConfig::TuringConfig()
     _dataDir = _turingDir / "data";
     _vectorDir = _turingDir / "vector";
     _userExtensionsDir = _turingDir / "extensions";
+    _logsDir = _turingDir / "logs";
+    _lockFilePath = _turingDir / "lock";
     resolveInstallExtensionsDir(_installExtensionsDir);
 }
 
@@ -76,4 +78,6 @@ void TuringConfig::setTuringDirectory(const fs::Path& turingDir) {
     _dataDir = _turingDir / "data";
     _vectorDir = _turingDir / "vector";
     _userExtensionsDir = _turingDir / "extensions";
+    _logsDir = _turingDir / "logs";
+    _lockFilePath = _turingDir / "lock";
 }

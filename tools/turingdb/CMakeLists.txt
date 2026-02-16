@@ -1,7 +1,9 @@
 
 set(turingdb_sources
     TuringDBTool.cpp
-    TuringShell.cpp)
+    TuringShell.cpp
+    StartCmd.cpp
+    StopCmd.cpp)
 
 add_executable(turingdb ${turingdb_sources})
 set_target_properties(turingdb PROPERTIES ENABLE_EXPORTS TRUE)

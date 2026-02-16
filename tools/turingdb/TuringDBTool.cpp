@@ -1,163 +1,60 @@
 #include <stdlib.h>
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
+#include <string>
+#include <unordered_set>
 
-#include "TuringDB.h"
-#include "LocalMemory.h"
-#include "TuringShell.h"
-#include "TuringServer.h"
-#include "DBServerConfig.h"
-#include "TuringConfig.h"
-#include "Demonology.h"
-#include "BannerDisplay.h"
-#include "BuildInfo.h"
-#include "DateTimeFmt.h"
+#include "StartCmd.h"
+#include "StopCmd.h"
 
-#include "ToolInit.h"
-#include "TuringException.h"
-
-#define STRINGIFY(x) #x
-#define TOSTRING(x) STRINGIFY(x)
-
-namespace {
-    void TuringDBCommitInfo() {
-            std::cout<< "TuringDB - " << TOSTRING(HEAD_COMMIT_HASH) 
-                << " - " << formatUnixTime(BUILD_TIMESTAMP) << "\n\n";
-    }
-}
+#include "FatalException.h"
 
 using namespace db;
 
 int main(int argc, const char** argv) {
-    ToolInit toolInit("turingdb");
+    const std::unordered_set<std::string_view> subcommands {
+        "start",
+        "stop",
+    };
 
-    auto& argParser = toolInit.getArgParser();
+    const std::unordered_set<std::string_view> passthrough {
+        "-h", "--help",
+        "-v", "--version",
+    };
 
-    bool demonize = false;
-    bool inMemory = false;
-    bool resetDefault = false;
-    unsigned port = 6666;
-    std::string address("127.0.0.1");
-    std::string turingDir;
-    std::vector<std::string> graphsToLoad;
+    std::vector<const char*> args(argv, argv + argc);
 
-    argParser.add_argument("-p")
-             .metavar("port")
-             .help("Server listen port")
-             .store_into(port);
-    argParser.add_argument("-i")
-             .metavar("addr")
-             .help("Server listen address (localhost by default)") 
-             .store_into(address);
-    argParser.add_argument("-demon")
-             .help("Launch TuringDB as a daemon in the background")
-             .store_into(demonize);
-    argParser.add_argument("-reset-default")
-             .help("Reset the content of the default graph")
-             .store_into(resetDefault);
-    argParser.add_argument("-load")
-             .metavar("graph_name")
-             .help("Load a graph at startup")
-             .store_into(graphsToLoad);
-    argParser.add_argument("-in-memory")
-             .help("Run turingdb in-memory only without writing graphs on disk")
-             .store_into(inMemory);
-    argParser.add_argument("-turing-dir")
-             .metavar("path")
-             .store_into(turingDir)
-             .help("Root Turing directory");
+    // If no explicit subcommand or help/version flag was given, fallback to "start"
+    const bool skipInject = argc >= 2 && passthrough.contains(argv[1]);
 
-    argParser.add_argument("-v", "--version")
-              .action([&](const auto & /*unused*/) {
-                  TuringDBCommitInfo();
-                  std::exit(0);
-              })
-              .default_value(false)
-              .help("prints version information and exits")
-              .implicit_value(true)
-              .nargs(0);
-
-    toolInit.init(argc, argv);
-
-    // Config
-    TuringConfig config;
-    config.setSyncedOnDisk(!inMemory);
-
-    if (!turingDir.empty()) {
-        fs::Path absTuringDir(turingDir);
-        if (!absTuringDir.toAbsolute()) {
-            spdlog::error("Failed to get absolute path of turing directory {}",
-                          turingDir);
-            return EXIT_FAILURE;
-        }
-        config.setTuringDirectory(absTuringDir);
+    if (!skipInject && (argc < 2 || !subcommands.contains(argv[1]))) {
+        args.insert(args.begin() + 1, "start");
     }
 
-    spdlog::info("TuringDB path: {}", config.getTuringDir().get());
+    argparse::ArgumentParser rootParser("turingdb");
 
-    // Delete existing `default` graph if requested
-    if (resetDefault) {
-        spdlog::info("Resetting default graph.");
+    StartCmd startCmd;
+    StopCmd stopCmd;
 
-        spdlog::info("Searching for default in {}.", config.getGraphsDir().get());
-        const fs::Path defaultGraphPath = config.getGraphsDir() / "default";
-        if (defaultGraphPath.exists()) {
-            defaultGraphPath.rm();
-            spdlog::info("Default graph deleted.");
-        } else {
-            spdlog::warn("Default graph not found.");
-        }
-    }
-
-    if (demonize) {
-        Demonology::demonize();
-    }
+    rootParser.add_subparser(startCmd.getArgParser());
+    rootParser.add_subparser(stopCmd.getArgParser());
 
     try {
-        BannerDisplay::printBanner();
-        TuringDBCommitInfo();
+        rootParser.parse_args(args.size(), args.data());
 
-        // Run TuringDB
-        LocalMemory mem;
-        TuringDB turingDB(&config);
-        turingDB.init();
-
-        // Load graphs
-        for (const auto& graphName : graphsToLoad) {
-            const auto res = turingDB.query("load graph " + graphName, "", &mem);
-            if (!res.isOk()) {
-                spdlog::error("Failed to load graph {}: {}", graphName, res.getError());
-                return EXIT_FAILURE;
-            }
-        }
-
-        // Server
-        DBServerConfig serverConfig;
-        serverConfig.setPort(port);
-        serverConfig.setAddress(address);
-
-        TuringServer server(serverConfig, turingDB);
-        server.start();
-
-        // CLI Shell
-        if (demonize) {
-            server.wait();
-            server.stop();
+        if (rootParser.is_subcommand_used("start")) {
+            return startCmd.execute();
+        } else if (rootParser.is_subcommand_used("stop")) {
+            return stopCmd.execute();
         } else {
-            TuringShell shell(turingDB, &mem);
-
-            if (!graphsToLoad.empty()) {
-                shell.setGraphName(graphsToLoad.front());
-            }
-
-            shell.startLoop();
-            server.stop();
+            // Should never happen since at least 'start' is present
+            throw FatalException("No subcommand given.");
         }
-    } catch (TuringException& e) {
-        spdlog::error("{}", e.what());
+    } catch (const std::exception& err) {
+        std::cerr << err.what() << std::endl;
+        std::cerr << rootParser;
         return EXIT_FAILURE;
     }
 
-    return EXIT_SUCCESS;
+    return EXIT_FAILURE;
 }
-
