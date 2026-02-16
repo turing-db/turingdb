@@ -463,7 +463,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addCallProcedure(const Procedure*
     _pendingOutput.updateInterface(&output);
 
     proc->setInputValues(args);
-    proc->allocReturnValues(*_mem, *_dfMan, yield);
+    proc->allocReturnValues(_mem, _dfMan, yield);
 
     return output;
 }

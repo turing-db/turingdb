@@ -70,7 +70,7 @@ void extractString(std::string& result, const T& val) {
 }
 
 template <template <typename> class ColType, typename F>
-void dispatchStringInternal(const Column* col, F&& fn) {
+void dispatchStringInternal(const Column* col, const F& fn) {
     switch (col->getKind()) {
         case ColType<std::string>::staticKind():
             fn(*static_cast<const ColType<std::string>*>(col));
@@ -91,6 +91,7 @@ void dispatchStringInternal(const Column* col, F&& fn) {
         default:
             throw FatalException(fmt::format(
                 "Unexpected column kind: {}", col->getKind()));
+        break;
     }
 }
 
