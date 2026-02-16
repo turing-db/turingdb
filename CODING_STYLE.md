@@ -23,8 +23,9 @@ Remy Boutonnet as the main designer and maintainer of TuringDB provides the opin
 
 ### Line length
 
-The preferred maximum line length is around 90 characters, with the objective to keep lines short and as readable as possible. 
+The preferred maximum line length is around 90 characters, with the objective to keep lines short and as readable as possible.
 IMPORTANT: do not overwrap lines just to satisfy the line length. Code esthetics always comes first.
+Never split a single simple statement across multiple lines just to stay under the limit. A slightly long but readable line is always better than an ugly wrapped one.
 
 ### Indentation
 
@@ -221,7 +222,7 @@ void MyClass::myFunction(Arg1* arg1, Arg2* arg2, Arg3* arg3) {
 }
 ```
 
-References are reserved for passing STL containers:
+References are reserved for passing STL data structures such as `std::string`, `std::string_view`, `std::vector`, `std::map`, `std::optional` and other standard library types:
 ```cpp
 void MyClass::myFunction(Arg1* arg1, const std::string& myStr) {
 	// Do something
