@@ -132,9 +132,7 @@ PROMPT_HEADER
 
 # ── 4. Run Claude review ──────────────────────────────────────────
 claude_args=(-p --model claude-opus-4-6)
-if [ "$USE_CLAUDE_CODE" != "1" ]; then
-    claude_args+=(--api-key "$ANTHROPIC_API_KEY")
-fi
+
 (cd /tmp && claude "${claude_args[@]}" < /tmp/review_prompt.txt > /tmp/claude_review_output.txt)
 
 # ── 5. Extract <answer> and parse ────────────────────────────────────
