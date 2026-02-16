@@ -11,3 +11,4 @@ node_modules
 python/turingdb/_version.py
 *.whl
 wheel/
+dist

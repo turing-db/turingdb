@@ -37,13 +37,13 @@ QueryInterpreterV2::~QueryInterpreterV2() {
 QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
                                         std::string_view query,
                                         std::string_view graphName) {
-    Profile profile {"QueryInterpreterV2::execute"};
+    const Profile profile {"QueryInterpreterV2::execute"};
 
-    const auto& callbacks = ctxt.getQueryCallbacks();
+    const QueryCallbacks& callbacks = ctxt.getQueryCallbacks();
 
-    const auto start = Clock::now();
+    const TimePoint start = Clock::now();
     QueryStatus status = executeImpl(ctxt, query, graphName);
-    const auto end = Clock::now();
+    const TimePoint end = Clock::now();
 
     status.setTotalTime(end - start);
 
@@ -60,7 +60,7 @@ QueryStatus QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
                                             std::string_view query,
                                             std::string_view graphName) {
 
-    const auto& callbacks = ctxt.getQueryCallbacks();
+    const QueryCallbacks& callbacks = ctxt.getQueryCallbacks();
     callbacks.onBegin();
 
     auto txRes = _sysMan->openTransaction(graphName,

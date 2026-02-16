@@ -155,7 +155,7 @@ void DBServerProcessor::query() {
 void DBServerProcessor::load_graph() {
     auto& sys = _db.getSystemManager();
 
-    const auto transactionInfo = getTransactionInfo();
+    const TransactionInfo transactionInfo = getTransactionInfo();
 
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
                                             !_connection.isCloseRequired());
@@ -1430,12 +1430,12 @@ void DBServerProcessor::queryImpl(std::string_view query,
     });
 
     queryCallbacks.setOnOutputData([&] (const Dataframe* df) {
-        bioassert(df != nullptr, "Dataframe is null");
+        bioassert(df != nullptr, "Cannot output data of a null dataframe");
         encoder.writeDataframe(*df);
     });
 
     queryCallbacks.setOnOutputHeader([&] (const Dataframe* df) {
-        bioassert(df != nullptr, "Dataframe is null");
+        bioassert(df != nullptr, "Cannot output header of a null dataframe");
         encoder.writeDataframeHeader(*df);
     });
 
@@ -1448,5 +1448,5 @@ void DBServerProcessor::queryImpl(std::string_view query,
         encoder.finish();
     });
 
-    const auto res = _db.query(query, graphName, &mem, queryCallbacks, commit, change);
+    _db.query(query, graphName, &mem, queryCallbacks, commit, change);
 }
