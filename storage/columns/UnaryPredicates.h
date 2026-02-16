@@ -8,6 +8,8 @@
 #include "TypeUtils.h"
 #include "metadata/PropertyType.h"
 
+#include "FatalException.h"
+
 namespace db {
 
 namespace {
@@ -75,12 +77,13 @@ struct UnaryPredicateExecutor {
         requires OptionalPredicate<Op, T>
     {
         auto op = Op {};
-        if constexpr (TypeUtils::is_optional_v<T>) {
-            const std::optional<bool> result = op(arg->getRaw());
-            res->set(result);
-        } else {
+        if constexpr (!TypeUtils::is_optional_v<T>) {
             const bool result = op(arg->getRaw());
             res->set(result);
+        } else {
+            // Should not occur. Optional T implies property, which will fill a mask.
+            // Implementation is purely to satsify compiler when expanding templates.
+            throw FatalException("Invalid unary-predicate operation on ColumnConst.");
         }
     }
 
@@ -95,16 +98,15 @@ struct UnaryPredicateExecutor {
         const auto& argd = arg->getRaw();
 
         auto op = Op {};
-        if constexpr (TypeUtils::is_optional_v<T>) {
-            for (size_t i {0}; i < size; i++) {
-                const std::optional<bool> result = op(argd[i]);
-                resd[i] = result;
-            }
-        } else {
+        if constexpr (!TypeUtils::is_optional_v<T>) {
             for (size_t i {0}; i < size; i++) {
                 const bool result = op(argd[i]);
                 resd[i] = result;
             }
+        } else {
+            // Should not occur. Optional T implies property, which will fill a mask.
+            // Implementation is purely to satsify compiler when expanding templates.
+            throw FatalException("Invalid unary-predicate operation on ColumnVector.");
         }
     }
 };
