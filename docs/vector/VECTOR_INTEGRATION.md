@@ -280,98 +280,1720 @@ added in a future iteration:
 - Procedure argument support (which would allow CALL-based vector search)
 - Query parameters for the search vector (e.g. `$queryVector`)
 
-## Implementation notes
+## Implementation
 
-### Grammar
+This section specifies every file to create or modify, every class and
+method signature, every enum value, and every wiring change. The goal is
+to remove all ambiguity before coding begins.
 
-The following are **reserved keywords** added to the lexer:
-`VECTOR`, `SEARCH`, `INDEX`, `INDEXES`, `DIMENSION`, `METRIC`, `EUCLID`,
-`INNER_PRODUCT`, `TYPE`, `BRUTE_FORCE`, `HNSW`.
+### 1. Vector module changes (`vector/`)
 
-These cannot be used as identifiers anywhere in queries.
+#### 1.1 `VecLib::Builder` — add `setIndexType()`
 
-The keywords `WITH`, `FOR`, `IN`, `AS`, `YIELD`, `CREATE`, `DELETE`,
-`SHOW`, `LOAD`, `RETURN` already exist in the grammar.
+File: `vector/VecLib.h`
 
-The lexer uses `%option caseless`, so all keyword patterns are matched
-case-insensitively. However, identifiers (the `ID` token) preserve their
-original casing — `STORE_STRING` captures the text as-is from the input.
-This means vector index names are **case-preserved at parse time**.
+Add to the `Builder` class:
+```cpp
+Builder& setIndexType(IndexType indexType);
+```
+The builder stores the value in `VecLibMetadata::_indexType`. `build()`
+already uses `_metadata` to construct the `VecLib`.
 
-To make index names case-insensitive at the semantic level, the parser
-(or analyzer) must normalize the index name to lowercase before passing
-it to `VectorDatabase`. This ensures that `CREATE VECTOR INDEX Foo` and
-`VECTOR SEARCH IN foo` refer to the same index.
+#### 1.2 `VectorDatabase::createLibrary()` — add `IndexType` parameter
 
-### YIELD validation
+File: `vector/VectorDatabase.h`
 
-The YIELD clause for VECTOR SEARCH supports the same AS aliasing as
-CALL YIELD (already implemented). The valid yield column names are
-`id` and `distance`. Yielding an unknown name (e.g., `YIELD foo`) is
-caught at analysis time as a hard error.
-
-### Column types
-
-The `id` yield column uses `UInt64` (matching the external ID type).
-The `distance` yield column uses `Double`. The Faiss search results
-return `float` distances, which are widened to `double` for storage
-in the pipeline since TuringDB's column system does not have a `Float`
-type.
-
-### VecLib::clear()
-
-The existing `VecLib` class does not have a `clear()` method. This must
-be added to support the LOAD semantics (clear before ingestion, clear
-again on failure). The `clear()` method is exposed through the
-`VecLibWriteAccessor`.
-
-### VectorDatabase::createLibrary() — missing IndexType parameter
-
-The existing `VectorDatabase::createLibrary()` signature is:
+Change the signature from:
 ```cpp
 VectorResult<VecLibID> createLibrary(std::string_view libName,
                                      Dimension dim,
                                      DistanceMetric metric = DistanceMetric::INNER_PRODUCT);
 ```
-It does not accept an `IndexType` parameter, and `VecLib::Builder` has
-no `setIndexType()` method. Both must be extended to support the `TYPE`
-clause in `CREATE VECTOR INDEX`. The default `IndexType` is
-`BRUTE_FORCE` (matching `VecLibMetadata`'s initializer).
+to:
+```cpp
+VectorResult<VecLibID> createLibrary(std::string_view libName,
+                                     Dimension dim,
+                                     DistanceMetric metric,
+                                     IndexType indexType);
+```
+Remove the default for `metric` — all callers (the sample and the new
+processors) will pass explicit values. The implementation calls
+`builder.setIndexType(indexType)` before `build()`.
 
-### VecLib vector count
+#### 1.3 `VecLib::clear()`
 
-`VecLib` has no method to return the total number of stored vectors.
-Vectors are distributed across shards in the `ShardCache`, with no
-aggregated count. A `vectorCount()` method (or a running counter
-updated by `addEmbeddings` and `clear`) must be added to support the
-`vectorCount` column in `SHOW VECTOR INDEXES`.
+File: `vector/VecLib.h` and `vector/VecLib.cpp`
 
-### EUCLID keyword mapping
+Add a public method:
+```cpp
+void clear();
+```
+Implementation: iterates all shards in `_shardCache` for this library's
+`_metadata._id`, clears each shard's `_ids` vector and resets its Faiss
+index (call `faiss::Index::reset()`), then calls
+`ShardCache::evictLibraryShards()` to flush to disk. Resets
+`_vectorCount` to 0 (see 1.4). Does **not** delete the library's
+storage directory — the library still exists, it is just empty.
 
-The grammar keyword `EUCLID` maps to `DistanceMetric::EUCLIDEAN_DIST`
-in the C++ enum. The string representation in `SHOW VECTOR INDEXES`
-output uses the grammar-level name `EUCLID`, not the enum name.
+#### 1.4 `VecLib::vectorCount()`
 
-### DELETE grammar
+File: `vector/VecLib.h`
 
-`DELETE VECTOR INDEX` is a standalone QueryCommand, while regular Cypher
-`DELETE` is a clause inside a query (e.g., `MATCH (n) DELETE n`). Since
-`VECTOR` is a reserved keyword and cannot be a variable name, the parser
-can unambiguously distinguish the two forms by the token following `DELETE`.
+Add a private field:
+```cpp
+std::atomic<uint64_t> _vectorCount {0};
+```
+Add a public accessor:
+```cpp
+uint64_t vectorCount() const { return _vectorCount.load(); }
+```
+Update `addEmbeddings()` to increment `_vectorCount` by
+`batch.count()` after a successful add. Update `clear()` to
+store 0.
 
-### Processor model
+On load from disk (`VecLib::Loader::load()`), count is recovered
+by summing `shard._ids.size()` across all loaded shards, and stored
+in `_vectorCount`.
 
-VECTOR SEARCH is implemented as a processor that produces rows, similar
-to `DatabaseProcedureProcessor`. The processor executes the vector search
-and emits up to k rows into the pipeline, each containing scalar values
-for the yielded columns.
+#### 1.5 Split `VecLibAccessor` into read/write accessors
 
-### ExecutionContext
+File: `vector/VecLibAccessor.h` (rewrite)
 
-Processors access the `VectorDatabase` through `ExecutionContext`, which
-already holds references to `SystemManager`, `JobSystem`, and
-`ProcedureBlueprintMap`. A `VectorDatabase*` field is added to
-`ExecutionContext` so that vector processors can access it uniformly.
+Replace the single `VecLibAccessor` class with two classes:
+
+```cpp
+class VecLibReadAccessor {
+public:
+    VecLibReadAccessor();  // default: invalid
+    VecLibReadAccessor(std::shared_mutex& mutex, VecLib& vecLib);
+    // Move-only (same delete pattern as current VecLibAccessor)
+    VecLibReadAccessor(VecLibReadAccessor&&) = default;
+    VecLibReadAccessor& operator=(VecLibReadAccessor&&) = default;
+    VecLibReadAccessor(const VecLibReadAccessor&) = delete;
+    VecLibReadAccessor& operator=(const VecLibReadAccessor&) = delete;
+
+    [[nodiscard]] bool isValid() const;
+    [[nodiscard]] VectorResult<void> search(
+        const VectorSearchQuery& query,
+        VectorSearchResult& results);
+    const VecLibMetadata& metadata() const;
+private:
+    std::shared_lock<std::shared_mutex> _lock;
+    VecLib* _vecLib {nullptr};
+};
+
+class VecLibWriteAccessor {
+public:
+    VecLibWriteAccessor();  // default: invalid
+    VecLibWriteAccessor(std::shared_mutex& mutex, VecLib& vecLib);
+    VecLibWriteAccessor(VecLibWriteAccessor&&) = default;
+    VecLibWriteAccessor& operator=(VecLibWriteAccessor&&) = default;
+    VecLibWriteAccessor(const VecLibWriteAccessor&) = delete;
+    VecLibWriteAccessor& operator=(const VecLibWriteAccessor&) = delete;
+
+    [[nodiscard]] bool isValid() const;
+    [[nodiscard]] BatchVectorCreate prepareCreateBatch();
+    [[nodiscard]] VectorResult<void> addEmbeddings(
+        const BatchVectorCreate& batch);
+    void clear();
+private:
+    std::unique_lock<std::shared_mutex> _lock;
+    VecLib* _vecLib {nullptr};
+};
+```
+
+`VecLib::access()` is replaced with two methods:
+```cpp
+VecLibReadAccessor readAccess();    // shared_lock on _mutex
+VecLibWriteAccessor writeAccess();  // unique_lock on _mutex
+```
+
+The old `VecLibAccessor` class and `VecLib::access()` method are
+deleted. The sample in `samples/vector-db/main.cpp` is updated to
+use `writeAccess()` for `addEmbeddings` and `readAccess()` for
+`search`.
+
+#### 1.6 `VectorDatabase` accessor objects
+
+File: `vector/VectorDatabase.h` (new classes + new methods)
+
+```cpp
+class VectorDatabaseReadAccessor {
+public:
+    VectorDatabaseReadAccessor(std::shared_mutex& mutex,
+                               VectorDatabase& db);
+    // Move-only
+    VecLibReadAccessor getLibraryRead(std::string_view name);
+    VecLibWriteAccessor getLibraryWrite(std::string_view name);
+    void listLibraries(std::vector<VecLibID>& out);
+    bool libraryExists(std::string_view name) const;
+    // Iterate all libraries (for SHOW VECTOR INDEXES)
+    VecLib* getLibraryRaw(std::string_view name);
+private:
+    std::shared_lock<std::shared_mutex> _lock;
+    VectorDatabase* _db;
+};
+
+class VectorDatabaseWriteAccessor {
+public:
+    VectorDatabaseWriteAccessor(std::shared_mutex& mutex,
+                                VectorDatabase& db);
+    // Move-only
+    VectorResult<VecLibID> createLibrary(std::string_view name,
+                                         Dimension dim,
+                                         DistanceMetric metric,
+                                         IndexType indexType);
+    VectorResult<void> deleteLibrary(std::string_view name);
+private:
+    std::unique_lock<std::shared_mutex> _lock;
+    VectorDatabase* _db;
+};
+```
+
+`VectorDatabase` gains:
+```cpp
+VectorDatabaseReadAccessor readAccess();
+VectorDatabaseWriteAccessor writeAccess();
+```
+
+The existing public methods (`getLibrary()`, `createLibrary()`,
+`deleteLibrary()`, `listLibraries()`, `libraryExists()`) become
+private helpers called by the accessor classes (which are `friend`).
+
+`VectorDatabaseReadAccessor::getLibraryRaw()` returns `VecLib*` to
+let the caller read metadata without acquiring the VecLib-level
+lock. This is used by `SHOW VECTOR INDEXES` to read
+`metadata()` and `vectorCount()` — both are atomic or immutable,
+so they can be read safely under the database-level shared lock
+alone.
+
+#### 1.7 Duplicate ID detection in `JsonSaxParser`
+
+File: `vector/import/JsonSaxParser.h`
+
+Add a private field:
+```cpp
+std::unordered_set<uint64_t> _seenIDs;
+```
+
+In `number_unsigned()`, after saving the ID, check:
+```cpp
+if (!_seenIDs.insert(currentID).second) {
+    throw ImportException(ImportErrorCode::JSONInvalidValue,
+        "Duplicate ID in vector file");
+}
+```
+
+#### 1.8 Batched loading in `JsonSaxParser`
+
+File: `vector/import/JsonSaxParser.h`
+
+Add a flush callback and batch threshold:
+```cpp
+using FlushCallback = std::function<void(BatchVectorCreate&)>;
+```
+Add to the constructor a `FlushCallback` and a `size_t batchSize`
+parameter (default 10000). In `end_object()`, after calling
+`_batch.addPoint()`, check if `_batch.count() >= batchSize`. If
+so, call the flush callback with `_batch`, then call
+`_batch.clear(_dimension)` to reset the batch for the next chunk.
+
+`JsonImporter::import()` gains a new overload:
+```cpp
+static ImportResult<void> import(BatchVectorCreate& batch,
+                                 const std::string& data,
+                                 FlushCallback flush,
+                                 size_t batchSize = 10000);
+```
+
+The load processor uses this overload: the flush callback calls
+`vecLibWriteAccessor.addEmbeddings(batch)`. After `import()`
+returns successfully, the processor flushes the remaining batch.
+
+---
+
+### 2. Lexer changes (`query/parser/CypherLexer.l`)
+
+Add 11 new keyword rules, following the existing `KEYWORD` macro
+pattern. Each line is a case-insensitive pattern (the lexer has
+`%option caseless`):
+
+```flex
+"VECTOR"         { KEYWORD(VECTOR) }
+"SEARCH"         { KEYWORD(SEARCH) }
+"INDEX"          { KEYWORD(INDEX) }
+"INDEXES"        { KEYWORD(INDEXES) }
+"DIMENSION"      { KEYWORD(DIMENSION) }
+"METRIC"         { KEYWORD(METRIC) }
+"EUCLID"         { KEYWORD(EUCLID) }
+"INNER_PRODUCT"  { KEYWORD(INNER_PRODUCT) }
+"TYPE"           { KEYWORD(TYPE) }
+"BRUTE_FORCE"    { KEYWORD(BRUTE_FORCE) }
+"HNSW"           { KEYWORD(HNSW) }
+```
+
+These are reserved keywords — they shadow identifiers. Placed in the
+keyword section before the `ID` rule.
+
+---
+
+### 3. Grammar changes (`query/parser/CypherParser.y`)
+
+#### 3.1 Token declarations
+
+Add to the `%token<std::string_view>` section:
+
+```bison
+%token<std::string_view> VECTOR SEARCH INDEX INDEXES DIMENSION
+%token<std::string_view> METRIC EUCLID INNER_PRODUCT TYPE BRUTE_FORCE HNSW
+```
+
+#### 3.2 Type declarations
+
+Add to the `%type` section:
+
+```bison
+%type<db::QueryCommand*> createVectorIndexQuery
+%type<db::QueryCommand*> loadVectorIndexQuery
+%type<db::QueryCommand*> deleteVectorIndexQuery
+%type<db::QueryCommand*> showVectorIndexesQuery
+%type<db::Stmt*> vectorSearchStmt
+%type<db::Expr*> vectorSearchKExpr
+%type<db::Expr*> vectorSearchListLiteral
+```
+
+For optional clauses that produce C++ enum values, use an integer
+or dedicated type. The simplest approach:
+
+```bison
+%type<int> optVectorMetric
+%type<int> optVectorType
+```
+
+Where `0` = EUCLID/BRUTE_FORCE, `1` = INNER_PRODUCT/HNSW, and
+`-1` = omitted (use default). The parser action converts to the
+appropriate enum. (Alternatively, use a `std::string_view` and
+compare in the AST factory — either works.)
+
+#### 3.3 Grammar rules — standalone commands
+
+Add `createVectorIndexQuery`, `loadVectorIndexQuery`,
+`deleteVectorIndexQuery`, and `showVectorIndexesQuery` as
+alternatives in `singleQuery`:
+
+```bison
+singleQuery
+    : singlePartQuery
+    | ...existing alternatives...
+    | createVectorIndexQuery
+    | loadVectorIndexQuery
+    | deleteVectorIndexQuery
+    | showVectorIndexesQuery
+    ;
+```
+
+Rules:
+
+```bison
+createVectorIndexQuery
+    : CREATE VECTOR INDEX ID WITH DIMENSION expression
+      optVectorMetric optVectorType
+      {
+          $$ = CreateVectorIndexQuery::create(
+              ast, $4, $7, $8, $9);
+          LOC($$, @$);
+      }
+    ;
+
+optVectorMetric
+    : /* empty */      { $$ = -1; }
+    | METRIC EUCLID    { $$ = 0; }
+    | METRIC INNER_PRODUCT { $$ = 1; }
+    ;
+
+optVectorType
+    : /* empty */       { $$ = -1; }
+    | TYPE BRUTE_FORCE  { $$ = 0; }
+    | TYPE HNSW         { $$ = 1; }
+    ;
+
+loadVectorIndexQuery
+    : LOAD VECTOR INDEX STRING_LITERAL IN ID
+      {
+          $$ = LoadVectorIndexQuery::create(ast, $4, $6);
+          LOC($$, @$);
+      }
+    ;
+
+deleteVectorIndexQuery
+    : DELETE VECTOR INDEX ID
+      {
+          $$ = DeleteVectorIndexQuery::create(ast, $4);
+          LOC($$, @$);
+      }
+    ;
+
+showVectorIndexesQuery
+    : SHOW VECTOR INDEXES
+      {
+          $$ = ShowVectorIndexesQuery::create(ast);
+          LOC($$, @$);
+      }
+    ;
+```
+
+**DELETE disambiguation:** `DELETE` followed by `VECTOR` (a reserved
+keyword that can never be a variable name) triggers
+`deleteVectorIndexQuery`. `DELETE` followed by an `ID` or `(` triggers
+the existing Cypher `DELETE` clause inside `updateStmt`. Bison resolves
+this with a 1-token lookahead — no conflicts.
+
+#### 3.4 Grammar rules — VECTOR SEARCH as read statement
+
+`vectorSearchStmt` is added as an alternative in `readStmt`
+alongside `matchStmt` and `callStmt`:
+
+```bison
+readStmt
+    : matchStmt
+    | callStmt
+    | vectorSearchStmt
+    ;
+
+vectorSearchStmt
+    : VECTOR SEARCH IN ID FOR expression listLit
+      YIELD yieldItems
+      {
+          $$ = VectorSearchStmt::create(ast, $4, $6, $7, $9);
+          LOC($$, @$);
+      }
+    ;
+```
+
+The `listLit` rule already exists in the grammar and produces an
+`Expr*` (a `LiteralExpr` wrapping a list of expressions). The `ID`
+after `IN` is the index name. The `expression` after `FOR` is the
+k value. The `yieldItems` rule already exists (used by CALL YIELD).
+
+---
+
+### 4. AST nodes (`query/AST/`)
+
+#### 4.1 `QueryCommand::Kind` — new enum values
+
+File: `query/AST/QueryCommand.h`
+
+Add to the `Kind` enum:
+```cpp
+enum class Kind {
+    ...existing values...,
+    SHOW_PROCEDURES_QUERY,
+    CREATE_VECTOR_INDEX_QUERY,
+    LOAD_VECTOR_INDEX_QUERY,
+    DELETE_VECTOR_INDEX_QUERY,
+    SHOW_VECTOR_INDEXES_QUERY,
+};
+```
+
+#### 4.2 `CreateVectorIndexQuery`
+
+New file: `query/AST/CreateVectorIndexQuery.h`
+
+```cpp
+class CreateVectorIndexQuery : public QueryCommand {
+public:
+    static CreateVectorIndexQuery* create(
+        CypherAST* ast,
+        std::string_view indexName,
+        Expr* dimensionExpr,
+        int metricCode,    // -1=default, 0=EUCLID, 1=INNER_PRODUCT
+        int typeCode);     // -1=default, 0=BRUTE_FORCE, 1=HNSW
+
+    Kind getKind() const override {
+        return Kind::CREATE_VECTOR_INDEX_QUERY;
+    }
+
+    std::string_view getIndexName() const { return _indexName; }
+    Expr* getDimensionExpr() const { return _dimensionExpr; }
+    int getMetricCode() const { return _metricCode; }
+    int getTypeCode() const { return _typeCode; }
+
+private:
+    std::string_view _indexName;
+    Expr* _dimensionExpr;
+    int _metricCode;
+    int _typeCode;
+
+    CreateVectorIndexQuery(DeclContext*, std::string_view,
+                           Expr*, int, int);
+    ~CreateVectorIndexQuery() override;
+};
+```
+
+Pattern follows `CreateGraphQuery` exactly: private constructor,
+static `create()` factory that allocates from `CypherAST`'s arena.
+
+#### 4.3 `LoadVectorIndexQuery`
+
+New file: `query/AST/LoadVectorIndexQuery.h`
+
+```cpp
+class LoadVectorIndexQuery : public QueryCommand {
+public:
+    static LoadVectorIndexQuery* create(
+        CypherAST* ast,
+        std::string_view filePath,
+        std::string_view indexName);
+
+    Kind getKind() const override {
+        return Kind::LOAD_VECTOR_INDEX_QUERY;
+    }
+
+    std::string_view getFilePath() const { return _filePath; }
+    std::string_view getIndexName() const { return _indexName; }
+
+private:
+    std::string_view _filePath;
+    std::string_view _indexName;
+
+    LoadVectorIndexQuery(DeclContext*, std::string_view,
+                         std::string_view);
+    ~LoadVectorIndexQuery() override;
+};
+```
+
+#### 4.4 `DeleteVectorIndexQuery`
+
+New file: `query/AST/DeleteVectorIndexQuery.h`
+
+```cpp
+class DeleteVectorIndexQuery : public QueryCommand {
+public:
+    static DeleteVectorIndexQuery* create(
+        CypherAST* ast, std::string_view indexName);
+
+    Kind getKind() const override {
+        return Kind::DELETE_VECTOR_INDEX_QUERY;
+    }
+
+    std::string_view getIndexName() const { return _indexName; }
+
+private:
+    std::string_view _indexName;
+
+    DeleteVectorIndexQuery(DeclContext*, std::string_view);
+    ~DeleteVectorIndexQuery() override;
+};
+```
+
+#### 4.5 `ShowVectorIndexesQuery`
+
+New file: `query/AST/ShowVectorIndexesQuery.h`
+
+```cpp
+class ShowVectorIndexesQuery : public QueryCommand {
+public:
+    static ShowVectorIndexesQuery* create(CypherAST* ast);
+
+    Kind getKind() const override {
+        return Kind::SHOW_VECTOR_INDEXES_QUERY;
+    }
+
+private:
+    ShowVectorIndexesQuery(DeclContext*);
+    ~ShowVectorIndexesQuery() override;
+};
+```
+
+#### 4.6 `Stmt::Kind` — new enum value
+
+File: `query/AST/stmt/Stmt.h`
+
+Add:
+```cpp
+enum class Kind {
+    MATCH = 0,
+    CALL,
+    ...existing...,
+    VECTOR_SEARCH,
+};
+```
+
+#### 4.7 `VectorSearchStmt`
+
+New file: `query/AST/stmt/VectorSearchStmt.h`
+
+```cpp
+class VectorSearchStmt : public Stmt {
+public:
+    static VectorSearchStmt* create(
+        CypherAST* ast,
+        std::string_view indexName,
+        Expr* kExpr,
+        Expr* queryVectorExpr,     // LiteralExpr wrapping list
+        YieldItems* yieldItems);
+
+    Kind getKind() const override {
+        return Kind::VECTOR_SEARCH;
+    }
+
+    std::string_view getIndexName() const { return _indexName; }
+    Expr* getKExpr() const { return _kExpr; }
+    Expr* getQueryVectorExpr() const { return _queryVectorExpr; }
+    YieldItems* getYieldItems() const { return _yieldItems; }
+
+private:
+    std::string_view _indexName;
+    Expr* _kExpr;
+    Expr* _queryVectorExpr;
+    YieldItems* _yieldItems;
+
+    VectorSearchStmt(std::string_view, Expr*, Expr*,
+                     YieldItems*);
+    ~VectorSearchStmt() override;
+};
+```
+
+---
+
+### 5. Analyzer changes (`query/analyzer/`)
+
+#### 5.1 `CypherAnalyzer::analyze()` — dispatch new command kinds
+
+File: `query/analyzer/CypherAnalyzer.cpp`
+
+Add cases to the switch in `analyze()`:
+
+```cpp
+case QueryCommand::Kind::CREATE_VECTOR_INDEX_QUERY:
+    analyze(static_cast<const CreateVectorIndexQuery*>(query));
+    break;
+case QueryCommand::Kind::LOAD_VECTOR_INDEX_QUERY:
+    // No semantic analysis needed (runtime checks only)
+    break;
+case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
+    // No semantic analysis needed (runtime checks only)
+    break;
+case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
+    // No semantic analysis needed
+    break;
+```
+
+#### 5.2 `CypherAnalyzer::analyze(const CreateVectorIndexQuery*)`
+
+New method in `CypherAnalyzer`:
+
+```cpp
+void CypherAnalyzer::analyze(
+    const CreateVectorIndexQuery* query)
+{
+    // Validate index name: alphanumeric + underscore
+    // (same validation as CREATE GRAPH)
+    const std::string_view name = query->getIndexName();
+    if (name.empty()) {
+        throwError("CREATE VECTOR INDEX: index name is empty");
+    }
+    for (char c : name) {
+        if (!(isalnum(c) || c == '_')) {
+            throwError("Index name must only contain "
+                       "alphanumeric characters or '_'");
+        }
+    }
+
+    // Validate DIMENSION expression is a positive integer literal
+    const Expr* dimExpr = query->getDimensionExpr();
+    if (dimExpr->getKind() != Expr::Kind::LITERAL) {
+        throwError("DIMENSION must be an integer literal");
+    }
+    auto* litExpr = static_cast<const LiteralExpr*>(dimExpr);
+    auto* lit = litExpr->getLiteral();
+    if (lit->getKind() != Literal::Kind::INTEGER) {
+        throwError("DIMENSION must be an integer literal");
+    }
+    int64_t dimVal = static_cast<const IntegerLiteral*>(lit)
+                         ->getValue();
+    if (dimVal <= 0) {
+        throwError("DIMENSION must be greater than zero");
+    }
+}
+```
+
+#### 5.3 `ReadStmtAnalyzer::analyze()` — dispatch VECTOR_SEARCH
+
+File: `query/analyzer/ReadStmtAnalyzer.cpp`
+
+In the `analyze(const Stmt* stmt)` dispatcher, add:
+
+```cpp
+case Stmt::Kind::VECTOR_SEARCH:
+    analyze(static_cast<const VectorSearchStmt*>(stmt));
+    break;
+```
+
+New method:
+```cpp
+void ReadStmtAnalyzer::analyze(
+    const VectorSearchStmt* stmt)
+{
+    // Validate k expression is a non-negative integer literal
+    const Expr* kExpr = stmt->getKExpr();
+    if (kExpr->getKind() != Expr::Kind::LITERAL) {
+        throwError("VECTOR SEARCH FOR value must be "
+                   "an integer literal", kExpr);
+    }
+    auto* kLit = static_cast<const LiteralExpr*>(kExpr)
+                     ->getLiteral();
+    if (kLit->getKind() != Literal::Kind::INTEGER) {
+        throwError("VECTOR SEARCH FOR value must be "
+                   "an integer literal", kExpr);
+    }
+    int64_t kVal = static_cast<const IntegerLiteral*>(kLit)
+                       ->getValue();
+    if (kVal < 0) {
+        throwError("VECTOR SEARCH FOR value must be "
+                   "non-negative", kExpr);
+    }
+
+    // Validate query vector: must be a list literal of
+    // DoubleLiterals (not IntegerLiterals)
+    const Expr* vecExpr = stmt->getQueryVectorExpr();
+    // vecExpr is a LiteralExpr wrapping a list of expressions
+    // from the listLit grammar rule. Validate each element:
+    // must be DoubleLiteral or a UnaryExpr(Minus, DoubleLiteral).
+    // IntegerLiteral is rejected.
+    validateQueryVectorLiteral(vecExpr);
+
+    // Validate YIELD column names and register variables
+    // Valid names: "id", "distance"
+    YieldItems* items = stmt->getYieldItems();
+    for (SymbolExpr* item : items->getItems()) {
+        const std::string_view origName =
+            item->getSymbol()->getOriginalName();
+        if (origName != "id" && origName != "distance") {
+            throwError(fmt::format(
+                "VECTOR SEARCH does not return item '{}'",
+                origName), item);
+        }
+
+        // Determine type
+        EvaluatedType type;
+        if (origName == "id") {
+            type = EvaluatedType::UINT64;
+        } else {
+            type = EvaluatedType::DOUBLE;
+        }
+
+        // Register variable in scope (same pattern as CALL YIELD)
+        const std::string_view asName =
+            item->getSymbol()->getName();
+        VarDecl* decl = _ctxt->getOrCreateNamedVariable(
+            _ast, type, asName);
+        item->setDecl(decl);
+    }
+}
+```
+
+The `validateQueryVectorLiteral()` helper traverses the list literal's
+elements and checks each is a `DoubleLiteral` (or negative double via
+`UnaryExpr`). If any element is an `IntegerLiteral`, it calls
+`throwError("Query vector values must be float literals")`.
+
+---
+
+### 6. Plan graph changes (`query/plan/`)
+
+#### 6.1 `PlanGraphOpcode` — new enum values
+
+File: `query/plan/nodes/PlanGraphNode.h`
+
+Add before `_SIZE`:
+```cpp
+CREATE_VECTOR_INDEX,
+LOAD_VECTOR_INDEX,
+DELETE_VECTOR_INDEX,
+SHOW_VECTOR_INDEXES,
+VECTOR_SEARCH,
+```
+
+Add corresponding `EnumStringPair` entries in
+`PlanGraphOpcodeDescription`.
+
+#### 6.2 New plan node classes
+
+All in `query/plan/nodes/`, following the exact pattern of
+`CreateGraphNode`, `ShowProceduresNode`, etc.
+
+**`CreateVectorIndexNode`** — stores `indexName` (string_view),
+`dimension` (uint32_t, extracted from the integer literal at plan
+time), `metric` (DistanceMetric), `indexType` (IndexType).
+Opcode: `CREATE_VECTOR_INDEX`.
+
+```cpp
+class CreateVectorIndexNode : public PlanGraphNode {
+public:
+    CreateVectorIndexNode(std::string_view indexName,
+                          uint32_t dimension,
+                          vec::DistanceMetric metric,
+                          vec::IndexType indexType);
+    std::string_view getIndexName() const;
+    uint32_t getDimension() const;
+    vec::DistanceMetric getMetric() const;
+    vec::IndexType getIndexType() const;
+private:
+    std::string_view _indexName;
+    uint32_t _dimension;
+    vec::DistanceMetric _metric;
+    vec::IndexType _indexType;
+};
+```
+
+**`LoadVectorIndexNode`** — stores `filePath` (string_view),
+`indexName` (string_view). Opcode: `LOAD_VECTOR_INDEX`.
+
+**`DeleteVectorIndexNode`** — stores `indexName` (string_view).
+Opcode: `DELETE_VECTOR_INDEX`.
+
+**`ShowVectorIndexesNode`** — no fields.
+Opcode: `SHOW_VECTOR_INDEXES`.
+
+**`VectorSearchNode`** — stores `indexName` (string_view),
+`k` (uint64_t, extracted from integer literal at plan time),
+`queryVector` (std::vector<float>, extracted from list literal at
+plan time), `yieldItems` (YieldItems*).
+Opcode: `VECTOR_SEARCH`.
+
+```cpp
+class VectorSearchNode : public PlanGraphNode {
+public:
+    VectorSearchNode(std::string_view indexName,
+                     uint64_t k,
+                     std::vector<float>&& queryVector,
+                     YieldItems* yieldItems);
+    std::string_view getIndexName() const;
+    uint64_t getK() const;
+    const std::vector<float>& getQueryVector() const;
+    YieldItems* getYieldItems() const;
+private:
+    std::string_view _indexName;
+    uint64_t _k;
+    std::vector<float> _queryVector;
+    YieldItems* _yieldItems;
+};
+```
+
+#### 6.3 `PlanGraphGenerator` — new generate methods
+
+File: `query/plan/PlanGraphGenerator.cpp`
+
+Add cases to `generate()`:
+```cpp
+case QueryCommand::Kind::CREATE_VECTOR_INDEX_QUERY:
+    generateCreateVectorIndexQuery(
+        static_cast<const CreateVectorIndexQuery*>(query));
+    break;
+case QueryCommand::Kind::LOAD_VECTOR_INDEX_QUERY:
+    generateLoadVectorIndexQuery(
+        static_cast<const LoadVectorIndexQuery*>(query));
+    break;
+case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
+    generateDeleteVectorIndexQuery(
+        static_cast<const DeleteVectorIndexQuery*>(query));
+    break;
+case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
+    generateShowVectorIndexesQuery(
+        static_cast<const ShowVectorIndexesQuery*>(query));
+    break;
+```
+
+Implementations (follow the `CreateGraphNode` pattern exactly):
+
+```cpp
+void PlanGraphGenerator::generateCreateVectorIndexQuery(
+    const CreateVectorIndexQuery* query)
+{
+    // Extract dimension from the integer literal
+    // (already validated by analyzer)
+    auto* litExpr = static_cast<const LiteralExpr*>(
+        query->getDimensionExpr());
+    auto* intLit = static_cast<const IntegerLiteral*>(
+        litExpr->getLiteral());
+    uint32_t dim = static_cast<uint32_t>(intLit->getValue());
+
+    // Convert metric/type codes to enums
+    // -1 = use default
+    vec::DistanceMetric metric =
+        query->getMetricCode() == 0
+            ? vec::DistanceMetric::EUCLIDEAN_DIST
+            : vec::DistanceMetric::INNER_PRODUCT;
+    // Default when omitted (-1): INNER_PRODUCT
+    if (query->getMetricCode() == -1) {
+        metric = vec::DistanceMetric::INNER_PRODUCT;
+    }
+
+    vec::IndexType indexType =
+        query->getTypeCode() == 1
+            ? vec::IndexType::HNSW
+            : vec::IndexType::BRUTE_FORCE;
+    // Default when omitted (-1): BRUTE_FORCE
+
+    // Normalize index name to lowercase
+    // (index names are case-insensitive)
+    std::string lowerName = toLower(query->getIndexName());
+
+    auto* node = _tree.create<CreateVectorIndexNode>(
+        lowerName, dim, metric, indexType);
+    _tree.newOut<ProduceResultsNode>(node);
+}
+```
+
+The other three standalone commands follow the same pattern:
+create node, connect to `ProduceResultsNode`.
+
+`toLower()` is a local helper (or utility function) that returns
+a `std::string` with lowercased chars. The plan node stores a
+`std::string` (not `string_view`) because the lowercased name
+does not exist in the original query text. Adjust the plan node
+field to `std::string _indexName` for all vector plan nodes.
+
+#### 6.4 `ReadStmtGenerator` — VECTOR SEARCH
+
+File: `query/plan/ReadStmtGenerator.cpp`
+
+Add to `generateStmt()`:
+```cpp
+case Stmt::Kind::VECTOR_SEARCH:
+    generateVectorSearchStmt(
+        static_cast<const VectorSearchStmt*>(stmt));
+    break;
+```
+
+New method:
+```cpp
+void ReadStmtGenerator::generateVectorSearchStmt(
+    const VectorSearchStmt* stmt)
+{
+    // Extract k from integer literal
+    auto* kLitExpr = static_cast<const LiteralExpr*>(
+        stmt->getKExpr());
+    uint64_t k = static_cast<uint64_t>(
+        static_cast<const IntegerLiteral*>(
+            kLitExpr->getLiteral())->getValue());
+
+    // Extract query vector from list literal
+    std::vector<float> queryVector =
+        extractFloatVector(stmt->getQueryVectorExpr());
+
+    // Normalize index name to lowercase
+    std::string lowerName = toLower(stmt->getIndexName());
+
+    // Create VectorSearchNode
+    auto* searchNode = _tree->create<VectorSearchNode>(
+        lowerName, k, std::move(queryVector),
+        stmt->getYieldItems());
+
+    // Register yield variables as produced by this node
+    // (same pattern as generateCallStmt)
+    for (SymbolExpr* item : stmt->getYieldItems()->getItems()) {
+        _variables->setProducer(item->getDecl(), searchNode);
+    }
+}
+```
+
+`extractFloatVector()` is a helper that walks the list literal
+AST node, extracts each `DoubleLiteral` value, casts to `float`,
+and returns a `std::vector<float>`.
+
+The existing `placeJoinsOnVars()` and cartesian product logic
+already handles disconnected read statement branches. When
+VECTOR SEARCH is followed by a MATCH, the yield variables
+have no graph-pattern connection to the MATCH variables, so the
+topology analysis finds `NoPath` and creates a
+`CartesianProductNode`. The WHERE clause (`WHERE n.id = id`)
+then becomes a predicate join, exactly like existing CALL +
+MATCH composition.
+
+---
+
+### 7. Pipeline generation (`query/plan/PipelineGenerator.cpp`)
+
+#### 7.1 Standalone command translation
+
+Add translation methods and dispatch them in the main translator:
+
+```cpp
+case PlanGraphOpcode::CREATE_VECTOR_INDEX:
+    return translateCreateVectorIndexNode(
+        static_cast<CreateVectorIndexNode*>(node));
+case PlanGraphOpcode::LOAD_VECTOR_INDEX:
+    return translateLoadVectorIndexNode(
+        static_cast<LoadVectorIndexNode*>(node));
+case PlanGraphOpcode::DELETE_VECTOR_INDEX:
+    return translateDeleteVectorIndexNode(
+        static_cast<DeleteVectorIndexNode*>(node));
+case PlanGraphOpcode::SHOW_VECTOR_INDEXES:
+    return translateShowVectorIndexesNode(
+        static_cast<ShowVectorIndexesNode*>(node));
+case PlanGraphOpcode::VECTOR_SEARCH:
+    return translateVectorSearchNode(
+        static_cast<VectorSearchNode*>(node));
+```
+
+**`translateCreateVectorIndexNode()`:**
+```cpp
+PipelineOutputInterface*
+PipelineGenerator::translateCreateVectorIndexNode(
+    CreateVectorIndexNode* node)
+{
+    _builder.addCreateVectorIndex(
+        node->getIndexName(),
+        node->getDimension(),
+        node->getMetric(),
+        node->getIndexType());
+    return _builder.getPendingOutputInterface();
+}
+```
+
+Similarly for Load, Delete, Show — each delegates to a new
+`PipelineBuilder` method.
+
+**`translateVectorSearchNode()`:**
+
+This follows the same pattern as `translateProcedureEvalNode()`,
+but simplified (no arguments, no blueprint lookup):
+
+```cpp
+PipelineOutputInterface*
+PipelineGenerator::translateVectorSearchNode(
+    VectorSearchNode* node)
+{
+    if (!_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    // Determine which columns to yield
+    std::vector<VectorSearchYieldItem> yieldItems;
+    std::vector<const VarDecl*> yieldDecls;
+
+    for (const auto* item : *node->getYieldItems()) {
+        const Symbol* sym = item->getSymbol();
+        yieldItems.push_back({
+            sym->getOriginalName(),  // "id" or "distance"
+            sym->getName()           // alias or original
+        });
+        yieldDecls.push_back(item->getExprVarDecl());
+    }
+
+    // Create processor via builder
+    auto& output = _builder.addVectorSearch(
+        node->getIndexName(),
+        node->getK(),
+        node->getQueryVector(),
+        yieldItems);
+
+    // Map yield variables to column tags
+    // (same pattern as translateProcedureEvalNode)
+    for (size_t i = 0; i < yieldItems.size(); i++) {
+        if (yieldItems[i]._col && i < yieldDecls.size()) {
+            _declToColumn[yieldDecls[i]] =
+                yieldItems[i]._col->getTag();
+        }
+    }
+
+    return _builder.getPendingOutputInterface();
+}
+```
+
+`VectorSearchYieldItem` is a simple struct:
+```cpp
+struct VectorSearchYieldItem {
+    std::string_view _baseName;  // "id" or "distance"
+    std::string_view _asName;    // alias
+    NamedColumn* _col {nullptr}; // set by processor
+};
+```
+
+---
+
+### 8. Pipeline builder (`query/pipeline/PipelineBuilder.h/.cpp`)
+
+#### 8.1 Standalone command methods
+
+Follow the exact pattern of `addCreateGraph()`, `addLoadGraph()`,
+`addShowProcedures()`:
+
+**`addCreateVectorIndex()`:**
+```cpp
+PipelineValueOutputInterface&
+PipelineBuilder::addCreateVectorIndex(
+    std::string_view indexName,
+    uint32_t dimension,
+    vec::DistanceMetric metric,
+    vec::IndexType indexType)
+{
+    auto* proc = CreateVectorIndexProcessor::create(
+        _pipeline, indexName, dimension, metric, indexType);
+    auto& output = proc->output();
+    Dataframe* df = output.getDataframe();
+    NamedColumn* col =
+        allocColumn<ColumnConst<types::String::Primitive>>(df);
+    col->rename("indexName");
+    output.setValue(col);
+    _pendingOutput.setInterface(&output);
+    return output;
+}
+```
+
+**`addLoadVectorIndex()`:** Same pattern, creates
+`LoadVectorIndexProcessor`, output column "indexName".
+
+**`addDeleteVectorIndex()`:** Same pattern, creates
+`DeleteVectorIndexProcessor`, output column "indexName".
+
+**`addShowVectorIndexes()`:**
+```cpp
+PipelineBlockOutputInterface&
+PipelineBuilder::addShowVectorIndexes()
+{
+    auto* proc = ShowVectorIndexesProcessor::create(_pipeline);
+    auto& output = proc->output();
+    Dataframe* df = output.getDataframe();
+
+    NamedColumn* nameCol =
+        allocColumn<ColumnVector<types::String::Primitive>>(df);
+    nameCol->rename("name");
+    proc->setNameColumn(nameCol);
+
+    NamedColumn* dimCol =
+        allocColumn<ColumnVector<types::UInt64::Primitive>>(df);
+    dimCol->rename("dimension");
+    proc->setDimensionColumn(dimCol);
+
+    NamedColumn* metricCol =
+        allocColumn<ColumnVector<types::String::Primitive>>(df);
+    metricCol->rename("metric");
+    proc->setMetricColumn(metricCol);
+
+    NamedColumn* typeCol =
+        allocColumn<ColumnVector<types::String::Primitive>>(df);
+    typeCol->rename("type");
+    proc->setTypeColumn(typeCol);
+
+    NamedColumn* countCol =
+        allocColumn<ColumnVector<types::UInt64::Primitive>>(df);
+    countCol->rename("vectorCount");
+    proc->setVectorCountColumn(countCol);
+
+    _pendingOutput.setInterface(&output);
+    return output;
+}
+```
+
+#### 8.2 Vector search method
+
+**`addVectorSearch()`:**
+```cpp
+PipelineBlockOutputInterface&
+PipelineBuilder::addVectorSearch(
+    std::string_view indexName,
+    uint64_t k,
+    const std::vector<float>& queryVector,
+    std::span<VectorSearchYieldItem> yieldItems)
+{
+    const bool hasInput =
+        _pendingOutput.getInterface() != nullptr;
+
+    auto* proc = VectorSearchProcessor::create(
+        _pipeline, indexName, k, queryVector, hasInput);
+    auto& output = proc->output();
+
+    if (hasInput) {
+        auto& input = proc->input();
+        _pendingOutput.connectTo(input);
+        input.propagateColumns(output);
+    }
+
+    _pendingOutput.updateInterface(&output);
+
+    // Allocate output columns for yielded items
+    Dataframe* df = output.getDataframe();
+    for (auto& item : yieldItems) {
+        NamedColumn* col = nullptr;
+        if (item._baseName == "id") {
+            col = allocColumn<
+                ColumnVector<types::UInt64::Primitive>>(df);
+        } else {  // "distance"
+            col = allocColumn<
+                ColumnVector<types::Double::Primitive>>(df);
+        }
+
+        if (item._asName.empty()) {
+            col->rename(item._baseName);
+        } else {
+            col->rename(item._asName);
+        }
+
+        df->addColumn(col);
+        item._col = col;  // back-reference for PipelineGenerator
+    }
+
+    // Pass column pointers to processor
+    proc->setYieldColumns(yieldItems);
+
+    return output;
+}
+```
+
+---
+
+### 9. Processors (`query/pipeline/processors/`)
+
+#### 9.1 `CreateVectorIndexProcessor`
+
+New file: `query/pipeline/processors/CreateVectorIndexProcessor.h`
+
+```cpp
+class CreateVectorIndexProcessor final : public Processor {
+public:
+    static CreateVectorIndexProcessor* create(
+        PipelineV2* pipeline,
+        std::string_view indexName,
+        uint32_t dimension,
+        vec::DistanceMetric metric,
+        vec::IndexType indexType);
+
+    std::string describe() const override;
+    void prepare(ExecutionContext* ctxt) override;
+    void reset() override;
+    void execute() override;
+
+    PipelineValueOutputInterface& output() {
+        return _output;
+    }
+
+private:
+    std::string _indexName;
+    uint32_t _dimension;
+    vec::DistanceMetric _metric;
+    vec::IndexType _indexType;
+    PipelineValueOutputInterface _output;
+};
+```
+
+**`execute()` implementation:**
+```cpp
+void CreateVectorIndexProcessor::execute() {
+    vec::VectorDatabase* vecDb =
+        _ctxt->getVectorDatabase();
+    auto writeAccess = vecDb->writeAccess();
+    auto res = writeAccess.createLibrary(
+        _indexName, _dimension, _metric, _indexType);
+    if (!res) {
+        throw PipelineException(fmt::format(
+            "Failed to create vector index '{}': {}",
+            _indexName, res.error().fmtMessage()));
+    }
+
+    auto* col = _output.getValue()
+        ->as<ColumnConst<types::String::Primitive>>();
+    col->set(std::string_view(_indexName));
+
+    _output.getPort()->writeData();
+    finish();
+}
+```
+
+#### 9.2 `LoadVectorIndexProcessor`
+
+New file: `query/pipeline/processors/LoadVectorIndexProcessor.h`
+
+```cpp
+class LoadVectorIndexProcessor final : public Processor {
+public:
+    static LoadVectorIndexProcessor* create(
+        PipelineV2* pipeline,
+        std::string_view filePath,
+        std::string_view indexName);
+
+    std::string describe() const override;
+    void prepare(ExecutionContext* ctxt) override;
+    void reset() override;
+    void execute() override;
+
+    PipelineValueOutputInterface& output() {
+        return _output;
+    }
+
+private:
+    std::string _filePath;
+    std::string _indexName;
+    PipelineValueOutputInterface _output;
+};
+```
+
+**`execute()` implementation:**
+```cpp
+void LoadVectorIndexProcessor::execute() {
+    // Validate path is relative (no leading '/')
+    if (_filePath.empty() || _filePath[0] == '/') {
+        throw PipelineException(
+            "File path must be relative");
+    }
+
+    // Resolve path relative to ~/.turing/data
+    fs::Path fullPath = fs::Path(dataDir) / _filePath;
+
+    // Read file content into string
+    std::string content = readFileToString(fullPath);
+
+    // Acquire database read lock, then index write lock
+    vec::VectorDatabase* vecDb =
+        _ctxt->getVectorDatabase();
+    auto dbAccess = vecDb->readAccess();
+    auto libAccess = dbAccess.getLibraryWrite(_indexName);
+    if (!libAccess.isValid()) {
+        throw PipelineException(fmt::format(
+            "Vector index '{}' does not exist",
+            _indexName));
+    }
+
+    // Clear the index before loading
+    libAccess.clear();
+
+    // Parse and load in batches
+    auto batch = libAccess.prepareCreateBatch();
+
+    auto flushCallback =
+        [&libAccess](vec::BatchVectorCreate& b) {
+            auto res = libAccess.addEmbeddings(b);
+            if (!res) {
+                throw PipelineException(fmt::format(
+                    "Failed to add embeddings: {}",
+                    res.error().fmtMessage()));
+            }
+        };
+
+    auto importRes = vec::JsonImporter::import(
+        batch, content, flushCallback);
+
+    if (!importRes) {
+        // On failure: clear the index (leave empty)
+        libAccess.clear();
+        throw PipelineException(fmt::format(
+            "Failed to load vector index '{}': {}",
+            _indexName,
+            importRes.error().fmtMessage()));
+    }
+
+    // Flush remaining batch
+    if (batch.count() > 0) {
+        flushCallback(batch);
+    }
+
+    auto* col = _output.getValue()
+        ->as<ColumnConst<types::String::Primitive>>();
+    col->set(std::string_view(_indexName));
+
+    _output.getPort()->writeData();
+    finish();
+}
+```
+
+#### 9.3 `DeleteVectorIndexProcessor`
+
+Same pattern as `CreateVectorIndexProcessor`. In `execute()`:
+```cpp
+auto writeAccess = vecDb->writeAccess();
+auto res = writeAccess.deleteLibrary(_indexName);
+if (!res) {
+    throw PipelineException(...);
+}
+```
+
+#### 9.4 `ShowVectorIndexesProcessor`
+
+New file: `query/pipeline/processors/ShowVectorIndexesProcessor.h`
+
+Follows the `ShowProceduresProcessor` pattern exactly:
+```cpp
+class ShowVectorIndexesProcessor final : public Processor {
+public:
+    static ShowVectorIndexesProcessor* create(
+        PipelineV2* pipeline);
+
+    void execute() override;
+    PipelineBlockOutputInterface& output();
+
+    void setNameColumn(NamedColumn*);
+    void setDimensionColumn(NamedColumn*);
+    void setMetricColumn(NamedColumn*);
+    void setTypeColumn(NamedColumn*);
+    void setVectorCountColumn(NamedColumn*);
+
+private:
+    PipelineBlockOutputInterface _output;
+    NamedColumn* _nameCol {nullptr};
+    NamedColumn* _dimCol {nullptr};
+    NamedColumn* _metricCol {nullptr};
+    NamedColumn* _typeCol {nullptr};
+    NamedColumn* _countCol {nullptr};
+};
+```
+
+**`execute()` implementation:**
+```cpp
+void ShowVectorIndexesProcessor::execute() {
+    vec::VectorDatabase* vecDb =
+        _ctxt->getVectorDatabase();
+    auto dbAccess = vecDb->readAccess();
+
+    auto* nameVec = _nameCol
+        ->as<ColumnVector<types::String::Primitive>>();
+    auto* dimVec = _dimCol
+        ->as<ColumnVector<types::UInt64::Primitive>>();
+    auto* metricVec = _metricCol
+        ->as<ColumnVector<types::String::Primitive>>();
+    auto* typeVec = _typeCol
+        ->as<ColumnVector<types::String::Primitive>>();
+    auto* countVec = _countCol
+        ->as<ColumnVector<types::UInt64::Primitive>>();
+
+    std::vector<vec::VecLibID> ids;
+    dbAccess.listLibraries(ids);
+
+    for (vec::VecLibID id : ids) {
+        vec::VecLib* lib = dbAccess.getLibraryRaw(id);
+        const auto& meta = lib->metadata();
+
+        nameVec->push_back(meta._name);
+        dimVec->push_back(
+            static_cast<uint64_t>(meta._dimension));
+
+        // Map enum to grammar-level name
+        metricVec->push_back(
+            meta._metric ==
+                vec::DistanceMetric::EUCLIDEAN_DIST
+                ? "EUCLID" : "INNER_PRODUCT");
+        typeVec->push_back(
+            meta._indexType == vec::IndexType::BRUTE_FORCE
+                ? "BRUTE_FORCE" : "HNSW");
+
+        countVec->push_back(lib->vectorCount());
+    }
+
+    _output.getPort()->writeData();
+    finish();
+}
+```
+
+#### 9.5 `VectorSearchProcessor`
+
+New file: `query/pipeline/processors/VectorSearchProcessor.h`
+
+```cpp
+class VectorSearchProcessor final : public Processor {
+public:
+    static VectorSearchProcessor* create(
+        PipelineV2* pipeline,
+        std::string_view indexName,
+        uint64_t k,
+        const std::vector<float>& queryVector,
+        bool hasInput);
+
+    std::string describe() const override;
+    void prepare(ExecutionContext* ctxt) override;
+    void reset() override;
+    void execute() override;
+
+    PipelineBlockOutputInterface& output();
+    PipelineBlockInputInterface& input();
+
+    void setYieldColumns(
+        std::span<const VectorSearchYieldItem> items);
+
+private:
+    std::string _indexName;
+    uint64_t _k;
+    std::vector<float> _queryVector;
+
+    // Column pointers set by setYieldColumns()
+    NamedColumn* _idCol {nullptr};
+    NamedColumn* _distCol {nullptr};
+
+    std::optional<PipelineBlockInputInterface> _input;
+    PipelineBlockOutputInterface _output;
+};
+```
+
+**`execute()` implementation:**
+```cpp
+void VectorSearchProcessor::execute() {
+    vec::VectorDatabase* vecDb =
+        _ctxt->getVectorDatabase();
+
+    // Acquire shared locks at both levels
+    auto dbAccess = vecDb->readAccess();
+    auto libAccess = dbAccess.getLibraryRead(_indexName);
+    if (!libAccess.isValid()) {
+        throw PipelineException(fmt::format(
+            "Vector index '{}' does not exist",
+            _indexName));
+    }
+
+    // Build query
+    vec::VectorSearchQuery query {
+        libAccess.metadata()._dimension};
+    query.setMaxResultCount(static_cast<size_t>(_k));
+    query.setVector(std::span<const float>(
+        _queryVector.data(), _queryVector.size()));
+
+    // Dimension mismatch check
+    if (_queryVector.size() !=
+        libAccess.metadata()._dimension) {
+        throw PipelineException(fmt::format(
+            "Query vector dimension {} does not match "
+            "index dimension {}",
+            _queryVector.size(),
+            libAccess.metadata()._dimension));
+    }
+
+    // Execute search
+    vec::VectorSearchResult results;
+    auto res = libAccess.search(query, results);
+    if (!res) {
+        throw PipelineException(fmt::format(
+            "Vector search failed: {}",
+            res.error().fmtMessage()));
+    }
+
+    // Write results to output columns
+    // Results are already sorted by distance (nearest first)
+    // by VectorSearchResult::finishSearch()
+    if (_idCol) {
+        auto* idVec = _idCol
+            ->as<ColumnVector<types::UInt64::Primitive>>();
+        for (size_t i = 0; i < results.count(); i++) {
+            idVec->push_back(results.ids()[i]);
+        }
+    }
+    if (_distCol) {
+        auto* distVec = _distCol
+            ->as<ColumnVector<types::Double::Primitive>>();
+        for (size_t i = 0; i < results.count(); i++) {
+            // Widen float → double
+            distVec->push_back(
+                static_cast<double>(results.distances()[i]));
+        }
+    }
+
+    _output.getPort()->writeData();
+    finish();
+}
+```
+
+**`setYieldColumns()` implementation:**
+```cpp
+void VectorSearchProcessor::setYieldColumns(
+    std::span<const VectorSearchYieldItem> items)
+{
+    for (const auto& item : items) {
+        if (item._baseName == "id") {
+            _idCol = item._col;
+        } else if (item._baseName == "distance") {
+            _distCol = item._col;
+        }
+    }
+}
+```
+
+---
+
+### 10. `ExecutionContext` — VectorDatabase pointer
+
+File: `query/pipeline/ExecutionContext.h`
+
+Add forward declaration:
+```cpp
+namespace vec {
+class VectorDatabase;
+}
+```
+
+Add to the class:
+```cpp
+vec::VectorDatabase* getVectorDatabase() const {
+    return _vectorDatabase;
+}
+void setVectorDatabase(vec::VectorDatabase* db) {
+    _vectorDatabase = db;
+}
+```
+
+Add private field:
+```cpp
+vec::VectorDatabase* _vectorDatabase {nullptr};
+```
+
+---
+
+### 11. Threading the VectorDatabase pointer
+
+The `VectorDatabase*` must be passed from `TuringDB` (which owns
+it) through to `ExecutionContext`. The path:
+
+#### 11.1 `QueryInterpreterV2` — add `VectorDatabase*`
+
+File: `query/interpreter/QueryInterpreterV2.h`
+
+Change constructor:
+```cpp
+QueryInterpreterV2(SystemManager* sysMan,
+                   JobSystem* jobSystem,
+                   vec::VectorDatabase* vectorDatabase);
+```
+
+Add private field:
+```cpp
+vec::VectorDatabase* _vectorDatabase {nullptr};
+```
+
+In `execute()` (file: `QueryInterpreterV2.cpp`), after creating
+`ExecutionContext`, add:
+```cpp
+execCtxt.setVectorDatabase(_vectorDatabase);
+```
+
+#### 11.2 `TuringDB::query()` — pass VectorDatabase
+
+File: `db/TuringDB.cpp`
+
+Change the `QueryInterpreterV2` construction from:
+```cpp
+QueryInterpreterV2 interp(_systemManager.get(),
+                           _jobSystem.get());
+```
+to:
+```cpp
+QueryInterpreterV2 interp(_systemManager.get(),
+                           _jobSystem.get(),
+                           _vectorDatabase.get());
+```
+
+Both `query()` overloads must be updated.
+
+---
+
+### 12. Index name normalization
+
+All plan nodes for vector commands store a `std::string` (not
+`std::string_view`) containing the lowercased index name. The
+normalization happens in the plan generator, not the analyzer,
+because `std::string_view` fields in AST nodes point into the
+original query string and must not be modified.
+
+The `toLower()` utility:
+```cpp
+static std::string toLower(std::string_view sv) {
+    std::string result(sv);
+    for (char& c : result) {
+        c = static_cast<char>(::tolower(
+            static_cast<unsigned char>(c)));
+    }
+    return result;
+}
+```
+
+This is a file-local helper in `PlanGraphGenerator.cpp` and
+`ReadStmtGenerator.cpp`.
+
+---
+
+### 13. Error handling summary
+
+| Error | Stage | Mechanism |
+|-------|-------|-----------|
+| Invalid syntax | Parse | Bison parse error → `CompilerException` → `PARSE_ERROR` |
+| Empty index name | Analyze | `CypherAnalyzer::throwError()` → `CompilerException` → `ANALYZE_ERROR` |
+| Invalid name chars | Analyze | `CypherAnalyzer::throwError()` → `CompilerException` → `ANALYZE_ERROR` |
+| DIMENSION not positive int | Analyze | `CypherAnalyzer::throwError()` → `CompilerException` → `ANALYZE_ERROR` |
+| k not non-negative int | Analyze | `ReadStmtAnalyzer::throwError()` → `CompilerException` → `ANALYZE_ERROR` |
+| Invalid YIELD column name | Analyze | `ReadStmtAnalyzer::throwError()` → `CompilerException` → `ANALYZE_ERROR` |
+| Integer in query vector | Analyze | `ReadStmtAnalyzer::throwError()` → `CompilerException` → `ANALYZE_ERROR` |
+| Index already exists | Execute | `PipelineException` → `EXEC_ERROR` |
+| Index does not exist | Execute | `PipelineException` → `EXEC_ERROR` |
+| Dimension mismatch (search) | Execute | `PipelineException` → `EXEC_ERROR` |
+| Dimension mismatch (load) | Execute | `PipelineException` → `EXEC_ERROR` |
+| Malformed JSON | Execute | `PipelineException` → `EXEC_ERROR` |
+| Duplicate IDs in file | Execute | `PipelineException` → `EXEC_ERROR` |
+| Absolute file path | Execute | `PipelineException` → `EXEC_ERROR` |
+| File not found | Execute | `PipelineException` → `EXEC_ERROR` |
+
+---
+
+### 14. Files created (new)
+
+| File | Purpose |
+|------|---------|
+| `query/AST/CreateVectorIndexQuery.h` | AST node |
+| `query/AST/CreateVectorIndexQuery.cpp` | AST node impl |
+| `query/AST/LoadVectorIndexQuery.h` | AST node |
+| `query/AST/LoadVectorIndexQuery.cpp` | AST node impl |
+| `query/AST/DeleteVectorIndexQuery.h` | AST node |
+| `query/AST/DeleteVectorIndexQuery.cpp` | AST node impl |
+| `query/AST/ShowVectorIndexesQuery.h` | AST node |
+| `query/AST/ShowVectorIndexesQuery.cpp` | AST node impl |
+| `query/AST/stmt/VectorSearchStmt.h` | AST statement node |
+| `query/AST/stmt/VectorSearchStmt.cpp` | AST statement node impl |
+| `query/plan/nodes/CreateVectorIndexNode.h` | Plan node |
+| `query/plan/nodes/LoadVectorIndexNode.h` | Plan node |
+| `query/plan/nodes/DeleteVectorIndexNode.h` | Plan node |
+| `query/plan/nodes/ShowVectorIndexesNode.h` | Plan node |
+| `query/plan/nodes/VectorSearchNode.h` | Plan node |
+| `query/pipeline/processors/CreateVectorIndexProcessor.h` | Processor |
+| `query/pipeline/processors/CreateVectorIndexProcessor.cpp` | Processor impl |
+| `query/pipeline/processors/LoadVectorIndexProcessor.h` | Processor |
+| `query/pipeline/processors/LoadVectorIndexProcessor.cpp` | Processor impl |
+| `query/pipeline/processors/DeleteVectorIndexProcessor.h` | Processor |
+| `query/pipeline/processors/DeleteVectorIndexProcessor.cpp` | Processor impl |
+| `query/pipeline/processors/ShowVectorIndexesProcessor.h` | Processor |
+| `query/pipeline/processors/ShowVectorIndexesProcessor.cpp` | Processor impl |
+| `query/pipeline/processors/VectorSearchProcessor.h` | Processor |
+| `query/pipeline/processors/VectorSearchProcessor.cpp` | Processor impl |
+
+### 15. Files modified (existing)
+
+| File | Change |
+|------|--------|
+| `vector/VecLib.h` | Add `clear()`, `vectorCount()`, `_vectorCount`, `readAccess()`, `writeAccess()` |
+| `vector/VecLib.cpp` | Implement `clear()`, update `addEmbeddings()` count |
+| `vector/VecLibAccessor.h` | Replace `VecLibAccessor` with `VecLibReadAccessor` + `VecLibWriteAccessor` |
+| `vector/VecLibAccessor.cpp` | Implement new accessors |
+| `vector/VectorDatabase.h` | Add `VectorDatabaseReadAccessor`, `VectorDatabaseWriteAccessor`, `readAccess()`, `writeAccess()` |
+| `vector/VectorDatabase.cpp` | Implement accessor classes, make old methods private |
+| `vector/import/JsonSaxParser.h` | Add `_seenIDs` set, flush callback, batch threshold |
+| `vector/import/JsonImporter.h` | Add new `import()` overload with flush callback |
+| `vector/import/JsonImporter.cpp` | Implement new overload |
+| `query/parser/CypherLexer.l` | Add 11 keyword rules |
+| `query/parser/CypherParser.y` | Add token declarations, type declarations, grammar rules for 5 commands |
+| `query/AST/QueryCommand.h` | Add 4 enum values to `Kind` |
+| `query/AST/stmt/Stmt.h` | Add `VECTOR_SEARCH` to `Kind` |
+| `query/analyzer/CypherAnalyzer.h` | Declare new `analyze()` overloads |
+| `query/analyzer/CypherAnalyzer.cpp` | Add dispatch cases and `analyze(CreateVectorIndexQuery*)` |
+| `query/analyzer/ReadStmtAnalyzer.h` | Declare `analyze(VectorSearchStmt*)` |
+| `query/analyzer/ReadStmtAnalyzer.cpp` | Implement VECTOR_SEARCH analysis and dispatch |
+| `query/plan/nodes/PlanGraphNode.h` | Add 5 opcodes and string descriptions |
+| `query/plan/PlanGraphGenerator.h` | Declare 4 generate methods |
+| `query/plan/PlanGraphGenerator.cpp` | Add dispatch cases and generate methods |
+| `query/plan/ReadStmtGenerator.h` | Declare `generateVectorSearchStmt()` |
+| `query/plan/ReadStmtGenerator.cpp` | Implement `generateVectorSearchStmt()` |
+| `query/plan/PipelineGenerator.h` | Declare 5 translate methods |
+| `query/plan/PipelineGenerator.cpp` | Add dispatch cases and translate methods |
+| `query/pipeline/PipelineBuilder.h` | Declare `addCreateVectorIndex()`, `addLoadVectorIndex()`, `addDeleteVectorIndex()`, `addShowVectorIndexes()`, `addVectorSearch()` |
+| `query/pipeline/PipelineBuilder.cpp` | Implement 5 builder methods |
+| `query/pipeline/ExecutionContext.h` | Add `VectorDatabase*` field, getter, setter |
+| `query/interpreter/QueryInterpreterV2.h` | Add `VectorDatabase*` to constructor and field |
+| `query/interpreter/QueryInterpreterV2.cpp` | Pass `VectorDatabase*` to `ExecutionContext` |
+| `db/TuringDB.cpp` | Pass `_vectorDatabase.get()` to `QueryInterpreterV2` |
+| `samples/vector-db/main.cpp` | Update to use new `readAccess()`/`writeAccess()` API |
 
 ## Concurrency
 
