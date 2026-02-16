@@ -19,7 +19,7 @@ namespace {
 using UInt64Col = ColumnVector<types::UInt64::Primitive>;
 
 struct Data : public ProcedureData {
-    std::span<const db::CommitView>::iterator _it;
+    std::span<const db::CommitView>::iterator _it {};
 };
 
 void writeChunk(Data* data,

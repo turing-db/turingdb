@@ -97,7 +97,7 @@ std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureManag
 
                     case ProcedureType::DOUBLE:
                         declBuilder.addArgument(EvaluatedType::Double);
-                        break;
+                    break;
 
                     case ProcedureType::BOOL:
                         declBuilder.addArgument(EvaluatedType::Bool);
