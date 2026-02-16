@@ -59,12 +59,34 @@ coding style guide and the review checklist provided below.
 
 RULES:
 - Only flag lines that were ADDED in the diff (lines starting with +).
-- Only flag CLEAR violations — do not speculate or flag ambiguous cases.
 - For each violation, cite the specific rule from CODING_STYLE.md or REVIEW.md.
+- Also flag consistency issues: e.g. switch statements where cases mix
+different termination styles (some use break, others return). These are
+valid findings even if they are not purely formatting-related.
 - The bracket initialization rule for member variables applies to types that
   would otherwise be left uninitialized (primitives, pointers, enums). Class
   and struct types with default constructors (e.g. std::string, std::vector)
   are self-initializing and do NOT require explicit {} initialization.
+
+VERIFICATION:
+- Before reporting any violation, re-read the exact diff lines to confirm it.
+- Pay special attention to multi-line constructs (constructors, function
+signatures, initializer lists). A brace '{' on the NEXT line in the diff
+is on a separate line — do not confuse consecutive diff lines with being
+on the same source line.
+
+COMMON FALSE POSITIVES TO AVOID:
+- Template methods MUST be defined in headers (C++ language requirement) — do
+not flag them as "big implementation code in headers."
+- One-liner getters, setters, and accessors in headers are NOT "big
+implementation code."
+- Pointers, bools, enums, and other POD/trivial types are NOT "non-trivial
+member variables" — classes with only these members do not need explicit
+constructors/destructors in a cpp file.
+- Multi-line function arguments: both parenthesis-aligned and flat/uniform
+indentation are acceptable, as long as each argument is on its own line
+and consistently indented below the others. Do NOT flag flat indentation
+as a violation of the alignment rule.
 
 OUTPUT FORMAT (follow these three phases in order):
 
