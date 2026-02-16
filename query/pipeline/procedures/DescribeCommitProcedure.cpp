@@ -37,7 +37,7 @@ void getCommitStats(CommitStats* stats,
     stats->_edgeCount = 0;
     stats->_partCount = 0;
 
-    std::string lower = inputHash;
+    std::string lower(inputHash);
     std::transform(lower.begin(), lower.end(), lower.begin(),
                    [](char c) { return std::tolower(c); });
 
