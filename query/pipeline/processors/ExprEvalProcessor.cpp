@@ -55,7 +55,7 @@ ExprEvalProcessor* ExprEvalProcessor::create(PipelineV2* pipeline,
     return proc;
 }
 
-void ExprEvalProcessor::prepare(ExecutionContext*) {
+void ExprEvalProcessor::prepare(ExecutionContext* /*ctxt*/) {
     markAsPrepared();
 }
 
