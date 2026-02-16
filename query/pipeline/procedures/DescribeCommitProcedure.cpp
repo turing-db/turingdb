@@ -37,7 +37,7 @@ void getCommitStats(CommitStats* stats,
     stats->_edgeCount = 0;
     stats->_partCount = 0;
 
-    std::string lower(inputHash);
+    const std::string lower = inputHash;
     std::transform(lower.begin(), lower.end(), lower.begin(),
                    [](char c) { return std::tolower(c); });
 
@@ -73,19 +73,19 @@ template <template <typename> class ColType, typename F>
 void dispatchStringInternal(const Column* col, const F& fn) {
     switch (col->getKind()) {
         case ColType<std::string>::staticKind():
-            fn(*static_cast<const ColType<std::string>*>(col));
+            fn(static_cast<const ColType<std::string>*>(col));
         break;
 
         case ColType<std::string_view>::staticKind():
-            fn(*static_cast<const ColType<std::string_view>*>(col));
+            fn(static_cast<const ColType<std::string_view>*>(col));
         break;
 
         case ColType<std::optional<std::string>>::staticKind():
-            fn(*static_cast<const ColType<std::optional<std::string>>*>(col));
+            fn(static_cast<const ColType<std::optional<std::string>>*>(col));
         break;
 
         case ColType<std::optional<std::string_view>>::staticKind():
-            fn(*static_cast<const ColType<std::optional<std::string_view>>*>(col));
+            fn(static_cast<const ColType<std::optional<std::string_view>>*>(col));
         break;
 
         default:
@@ -177,29 +177,30 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                 }
             };
 
-            const auto treatVector = [&]<typename T>(const ColumnVector<T>& col) {
+            const auto treatVector = [&]<typename T>(const ColumnVector<T>* col) {
+                const auto& colVec = *col;
                 const size_t remaining =
                     std::min(rawCommitCol->size(), ctxt->getChunkSize());
 
                 std::string input;
                 CommitStats stats;
                 for (size_t i = data._i; i < remaining + data._i; ++i) {
-                    extractString(input, col[i]);
+                    extractString(input, colVec[i]);
                     getCommitStats(&stats, input, &view);
                     pushStats(stats);
                 }
 
                 data._i += remaining;
 
-                if (data._i == col.size()) {
+                if (data._i == colVec.size()) {
                     proc->finish();
                 }
             };
 
-            const auto treatConst = [&]<typename T>(const ColumnConst<T>& col) {
+            const auto treatConst = [&]<typename T>(const ColumnConst<T>* col) {
                 std::string input;
                 CommitStats stats;
-                extractString(input, col.getRaw());
+                extractString(input, col->getRaw());
                 getCommitStats(&stats, input, &view);
                 pushStats(stats);
                 proc->finish();
