@@ -257,6 +257,8 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
                 continue;
             }
 
+            // If the projection already contains this variable's name, it means it was
+            // added explicitly above. Skip: do not again again as part of the wildcard
             const std::string_view declName = decl->getName();
             if (projection->hasName(declName)) {
                 continue;
