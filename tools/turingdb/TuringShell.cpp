@@ -433,7 +433,7 @@ TuringShell::~TuringShell() {
 }
 
 void TuringShell::startLoop() {
-    char* line = NULL;
+    char* line = nullptr;
     std::string lineStr;
     std::string shellPrompt = composePrompt();
 
