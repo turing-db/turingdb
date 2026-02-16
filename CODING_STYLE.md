@@ -222,9 +222,16 @@ void MyClass::myFunction(Arg1* arg1, Arg2* arg2, Arg3* arg3) {
 }
 ```
 
-References are reserved for passing STL data structures such as `std::string`, `std::string_view`, `std::vector`, `std::map`, `std::optional` and other standard library types:
+References are reserved for passing STL data structures such as `std::string`, `std::vector`, `std::map`, `std::optional` and other standard library types:
 ```cpp
 void MyClass::myFunction(Arg1* arg1, const std::string& myStr) {
+	// Do something
+}
+```
+
+The exception is `std::string_view`, which should be passed **by value** since it is already a lightweight non-owning view (just a pointer and a size):
+```cpp
+void MyClass::myFunction(Arg1* arg1, std::string_view myStr) {
 	// Do something
 }
 ```
