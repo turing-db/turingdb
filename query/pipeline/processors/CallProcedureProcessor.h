@@ -13,18 +13,13 @@ namespace db {
 
 class LocalMemory;
 class DataframeManager;
-
-}
-
-namespace db {
-
 class PipelineV2;
 class Procedure;
 
 class CallProcedureProcessor : public Processor {
 public:
     static CallProcedureProcessor* create(PipelineV2* pipeline,
-                                          const Procedure& procedure,
+                                          const Procedure* procedure,
                                           bool hasInput);
 
     std::string describe() const override;
@@ -43,9 +38,7 @@ public:
     PipelineBlockInputInterface& input();
     PipelineBlockOutputInterface& output() { return _output; }
 
-    const ProcedureState& procedureState() const {
-        return _procedureState;
-    }
+    const ProcedureState& getProcedureState() const { return _procedureState; }
 
 private:
     const Procedure* _procedure {nullptr};

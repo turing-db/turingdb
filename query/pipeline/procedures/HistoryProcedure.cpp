@@ -24,15 +24,15 @@ struct Data : public ProcedureData {
 
 void writeChunk(Data* data,
                 ProcedureState* proc,
-                const GraphView& view,
+                const GraphView* view,
                 size_t chunkSize) {
     auto* commitCol = static_cast<ColumnVector<std::string>*>(data->getReturnColumn(0));
     auto* nodeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(1));
     auto* edgeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(2));
     auto* partCountCol = static_cast<UInt64Col*>(data->getReturnColumn(3));
 
-    size_t remaining = std::distance(data->_it, view.commits().end());
-    remaining = std::min(remaining, chunkSize);
+    const size_t dist = std::distance(data->_it, view->commits().end());
+    const size_t remaining = std::min(dist, chunkSize);
 
     if (commitCol) {
         commitCol->clear();
@@ -75,7 +75,7 @@ void writeChunk(Data* data,
         ++data->_it;
     }
 
-    if (data->_it == view.commits().end()) {
+    if (data->_it == view->commits().end()) {
         proc->finish();
     }
 }
@@ -117,7 +117,7 @@ void HistoryProcedure::execute(ProcedureState& proc) {
             return;
 
         case ProcedureState::Step::EXECUTE: {
-            writeChunk(&data, &proc, view, ctxt->getChunkSize());
+            writeChunk(&data, &proc, &view, ctxt->getChunkSize());
             return;
         }
     }

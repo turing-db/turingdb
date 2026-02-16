@@ -59,7 +59,7 @@ public:
     PipelineNodeOutputInterface& addScanNodes();
     PipelineNodeOutputInterface& addScanNodesByLabel(const LabelSet* labelset);
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
-    PipelineBlockOutputInterface& addCallProcedure(const Procedure& procedure,
+    PipelineBlockOutputInterface& addCallProcedure(const Procedure* procedure,
                                                    std::span<const Procedure::Argument> args,
                                                    std::span<Procedure::YieldItem> yield);
     PipelineBlockOutputInterface& addChangeOp(ChangeOp op);

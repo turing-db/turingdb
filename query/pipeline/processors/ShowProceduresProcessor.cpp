@@ -15,13 +15,13 @@ using namespace db;
 
 namespace {
 
-void buildSignature(std::string& result, const Procedure& proc) {
+void buildSignature(std::string& result, const Procedure* proc) {
     result.clear();
-    result += proc.getFullName();
+    result += proc->getFullName();
     result += "(";
 
     bool first = true;
-    for (const auto& arg : proc.argumentTypes()) {
+    for (const auto& arg : proc->argumentTypes()) {
         if (!first) {
             result += ", ";
         }
@@ -34,7 +34,7 @@ void buildSignature(std::string& result, const Procedure& proc) {
     result += ") :: (";
 
     first = true;
-    for (const auto& rv : proc.returnValues()) {
+    for (const auto& rv : proc->returnValues()) {
         if (!first) {
             result += ", ";
         }
@@ -90,7 +90,7 @@ void ShowProceduresProcessor::execute() {
     for (const auto* ns : manager->namespaces()) {
         for (const auto* proc : ns->procedures()) {
             colName->push_back(proc->getFullName());
-            buildSignature(signature, *proc);
+            buildSignature(signature, proc);
             colSignature->push_back(signature);
         }
     }
