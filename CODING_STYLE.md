@@ -345,6 +345,10 @@ Prefer to leave a comma at the end of the last alternative of an enum or enum cl
 
 Use assertions in turingdb to ensure that a critical property of the code is valid at a given point,
 to check conditions without which the code can not absolutely proceed.
+This includes self-consistency checks for invariants guaranteed by earlier pipeline stages
+(e.g., the parser ensures variables have names, so asserting `!name.empty()` in the analyzer is valid).
+Use exceptions rather than assertions only when the condition can be triggered by user input
+that has not already been validated by a prior stage.
 
 Use only the bioassert API defined in BioAssert.h for assertions in turingdb.
 We decided that bioassert raises an exception if the assertion is not valid.
