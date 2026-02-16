@@ -26,7 +26,7 @@ public:
         NamedColumn* _col {nullptr};
     };
 
-    using ExecuteCallback = void (*)(ProcedureState&);
+    using ExecuteCallback = void (*)(ProcedureState*);
     using AllocCallback = ProcedureData* (*)();
     using DeallocCallback = void (*)(ProcedureData*);
 

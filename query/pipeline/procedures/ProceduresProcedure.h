@@ -9,7 +9,7 @@ class ProcedureNamespace;
 struct ProceduresProcedure {
     static ProcedureData* allocData();
     static void deallocData(ProcedureData* data);
-    static void execute(ProcedureState& proc);
+    static void execute(ProcedureState* proc);
     static void registerProcedure(ProcedureNamespace* ns);
 };
 

@@ -116,9 +116,9 @@ void DescribeCommitProcedure::registerProcedure(ProcedureNamespace* ns) {
     ns->addProcedure(proc);
 }
 
-void DescribeCommitProcedure::execute(ProcedureState& proc) {
-    Data& data = proc.data<Data>();
-    const ExecutionContext* ctxt = proc.getContext();
+void DescribeCommitProcedure::execute(ProcedureState* proc) {
+    Data& data = proc->data<Data>();
+    const ExecutionContext* ctxt = proc->getContext();
     const GraphView& view = ctxt->getGraphView();
 
     const Column* rawCommitCol = data.getInputColumn(0);
@@ -126,7 +126,7 @@ void DescribeCommitProcedure::execute(ProcedureState& proc) {
     auto* edgeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(1));
     auto* partCountCol = static_cast<UInt64Col*>(data.getReturnColumn(2));
 
-    switch (proc.getStep()) {
+    switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
             bioassert(rawCommitCol, "db.describeCommit: must be provided a commit hash");
 
@@ -191,7 +191,7 @@ void DescribeCommitProcedure::execute(ProcedureState& proc) {
                 data._i += remaining;
 
                 if (data._i == col.size()) {
-                    proc.finish();
+                    proc->finish();
                 }
             };
 
@@ -199,9 +199,9 @@ void DescribeCommitProcedure::execute(ProcedureState& proc) {
                 std::string input;
                 CommitStats stats;
                 extractString(input, col.getRaw());
-                getCommitStats(&stats, input, view);
+                getCommitStats(&stats, input, &view);
                 pushStats(stats);
-                proc.finish();
+                proc->finish();
             };
 
             const auto containerKind =

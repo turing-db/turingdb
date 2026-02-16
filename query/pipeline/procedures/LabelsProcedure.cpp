@@ -38,9 +38,9 @@ void LabelsProcedure::registerProcedure(ProcedureNamespace* ns) {
     ns->addProcedure(proc);
 }
 
-void LabelsProcedure::execute(ProcedureState& proc) {
-    Data& data = proc.data<Data>();
-    const ExecutionContext* ctxt = proc.getContext();
+void LabelsProcedure::execute(ProcedureState* proc) {
+    Data& data = proc->data<Data>();
+    const ExecutionContext* ctxt = proc->getContext();
     const GraphView& view = ctxt->getGraphView();
 
     Column* rawIdsCol = data.getReturnColumn(0);
@@ -49,7 +49,7 @@ void LabelsProcedure::execute(ProcedureState& proc) {
     auto* idsCol = static_cast<ColumnVector<LabelID>*>(rawIdsCol);
     auto* namesCol = static_cast<ColumnVector<std::string_view>*>(rawNamesCol);
 
-    switch (proc.getStep()) {
+    switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
             data._it = std::make_unique<ScanLabelsChunkWriter>(
                 view.metadata().labels());
@@ -64,10 +64,10 @@ void LabelsProcedure::execute(ProcedureState& proc) {
         }
 
         case ProcedureState::Step::EXECUTE: {
-            data._it->fill(proc.getContext()->getChunkSize());
+            data._it->fill(proc->getContext()->getChunkSize());
 
             if (!data._it->isValid()) {
-                proc.finish();
+                proc->finish();
             }
 
             return;

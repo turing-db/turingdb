@@ -12,11 +12,9 @@
 
 using namespace db;
 
-CallProcedureProcessor* CallProcedureProcessor::create(
-    PipelineV2* pipeline,
-    const Procedure* procedure,
-    bool hasInput) {
-
+CallProcedureProcessor* CallProcedureProcessor::create(PipelineV2* pipeline,
+                                                       const Procedure* procedure,
+                                                       bool hasInput) {
     CallProcedureProcessor* processor = new CallProcedureProcessor();
     processor->_procedure = procedure;
 
@@ -51,7 +49,7 @@ std::string CallProcedureProcessor::describe() const {
 void CallProcedureProcessor::prepare(ExecutionContext* ctxt) {
     _procedureState._ctxt = ctxt;
     _procedureState._step = ProcedureState::Step::PREPARE;
-    _procedure->getExecCallback()(_procedureState);
+    _procedure->getExecCallback()(&_procedureState);
 
     if (_procedureState.isFinished()) [[unlikely]] {
         throw PipelineException("Cannot finish a procedure in the prepare phase");
@@ -62,7 +60,7 @@ void CallProcedureProcessor::prepare(ExecutionContext* ctxt) {
 
 void CallProcedureProcessor::reset() {
     _procedureState._step = ProcedureState::Step::RESET;
-    _procedure->getExecCallback()(_procedureState);
+    _procedure->getExecCallback()(&_procedureState);
 
     if (_procedureState.isFinished()) [[unlikely]] {
         throw PipelineException("Cannot finish a procedure in the reset phase");
@@ -73,7 +71,7 @@ void CallProcedureProcessor::reset() {
 
 void CallProcedureProcessor::execute() {
     _procedureState._step = ProcedureState::Step::EXECUTE;
-    _procedure->getExecCallback()(_procedureState);
+    _procedure->getExecCallback()(&_procedureState);
     _output.getPort()->writeData();
 
     if (_procedureState.isFinished()) {
