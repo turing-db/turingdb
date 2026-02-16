@@ -66,19 +66,6 @@ private:
 
 ## Check that there are no using namespace in header files
 
-## Check that there are no concept definitions not wrapped in a class
-
-We don't want naked concept definitions that are just defined in a header file directly in the db namespace.
-Concept definitions should always be wrapped inside some class.
-
-Example:
-```
-class MyConcepts {
-public:
-    concept MyConcept = ...;
-};
-```
-
 ## Any class with non-trivial member variables should have constructors and destructors in cpp file
 
 Any class or struct with member variables that are non-POD types or considered as non-trivial,
