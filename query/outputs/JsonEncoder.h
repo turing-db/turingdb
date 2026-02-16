@@ -14,7 +14,7 @@ namespace db {
 template <Writer WriterT>
 struct ChunkJsonEncoder {
     WriterT& _writer;
-    bool _first = true;
+    bool _first {true};
 
     template <typename T>
     void operator()(const ColumnVector<T>* col) {
@@ -174,18 +174,22 @@ public:
     }
 
     void obj() {
-        _comma
-            ? _writer.write(",{")
-            : _writer.write("{");
+        if (_comma) {
+            _writer.write(",{");
+        } else {
+            _writer.write("{");
+        }
 
         _closingTokens.push_back('}');
         _comma = false;
     }
 
     void arr() {
-        _comma
-            ? _writer.write(",[")
-            : _writer.write("[");
+        if (_comma) {
+            _writer.write(",[");
+        } else {
+            _writer.write("[");
+        }
 
         _closingTokens.push_back(']');
         _comma = false;
@@ -202,9 +206,11 @@ public:
     }
 
     void key(std::string_view k) {
-        _comma
-            ? _writer.write(fmt::format(",\"{}\":", k))
-            : _writer.write(fmt::format("\"{}\":", k));
+        if (_comma) {
+            _writer.write(fmt::format(",\"{}\":", k));
+        } else {
+            _writer.write(fmt::format("\"{}\":", k));
+        }
 
         _comma = false;
     }
@@ -214,7 +220,7 @@ public:
             end();
         }
 
-        std::string_view errstr = QueryStatusDescription::value(status);
+        const std::string_view errstr = QueryStatusDescription::value(status);
         std::string sanitizedDetails;
         sanitizeJsonString(details.empty()
                                ? "No error message available."
@@ -238,16 +244,19 @@ public:
     }
 
     void value(std::string_view v) {
-        _comma
-            ? _writer.write(fmt::format(",\"{}\"", v))
-            : _writer.write(fmt::format("\"{}\"", v));
+        if (_comma) {
+            _writer.write(fmt::format(",\"{}\"", v));
+        } else {
+            _writer.write(fmt::format("\"{}\"", v));
+        }
+
         _comma = true;
     }
 
     static void sanitizeJsonString(std::string_view input, std::string& res) {
         res.reserve(input.size() * 1.2);
 
-        for (char c : input) {
+        for (const char c : input) {
             if (c == '"') {
                 res += "\\\"";
             } else if (c == '\\') {

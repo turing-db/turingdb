@@ -415,7 +415,6 @@ private:
 
             if (sent == 0) {
                 // This is never supposed to happen, unless we pass size == 0
-                //
                 _status = Status::SentZeroBytes;
                 return;
             }
