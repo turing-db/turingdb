@@ -28,9 +28,14 @@ if [ "$HAS_VIOLATIONS" = "true" ]; then
 <!-- claude-code-review -->
 ## Claude Code Review
 
+<details>
+<summary>Violations found (click to expand)</summary>
+
 EOF
 
     echo "$review_body" >> /tmp/comment_body.md
+    echo "" >> /tmp/comment_body.md
+    echo "</details>" >> /tmp/comment_body.md
 
     cat >> /tmp/comment_body.md << EOF
 
