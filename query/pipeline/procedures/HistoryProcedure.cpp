@@ -112,6 +112,7 @@ void HistoryProcedure::execute(ProcedureState* proc) {
             data._it = view.commits().begin();
             return;
         }
+        break;
 
         case ProcedureState::Step::RESET: {
             return;
@@ -122,6 +123,7 @@ void HistoryProcedure::execute(ProcedureState* proc) {
             writeChunk(&data, proc, &view, ctxt->getChunkSize());
             return;
         }
+        break;
     }
 
     throw PipelineException("Unknown procedure step");
