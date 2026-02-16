@@ -236,33 +236,33 @@ void compareSorts(LocalMemory& mem, DataframeManager& dfman,
     spdlog::info("Benchmarking sort on {}x{} dataframe over {} iterations", 
                  numRows, numCols, iterations);
     
-    std::vector<double> colsortTimings;
+    std::vector<double> subsortTimings;
     std::vector<double> rowsortTimings;
-    colsortTimings.reserve(iterations);
+    subsortTimings.reserve(iterations);
     rowsortTimings.reserve(iterations);
     
     for (size_t i = 0; i < iterations; i++) {
-        // Benchmark colsort
+        // Benchmark subsort
         {
             auto sorted = copyDataframe(mem, dfman, original);
             
             auto start = std::chrono::high_resolution_clock::now();
-            colsort(sorted.get());
+            subsort(sorted.get());
             auto end = std::chrono::high_resolution_clock::now();
             
             std::chrono::duration<double, std::milli> duration = end - start;
-            colsortTimings.push_back(duration.count());
+            subsortTimings.push_back(duration.count());
             
             // Verify correctness
             if (!containSame(original, sorted)) {
                 original->dump(std::cout);
                 sorted->dump(std::cout);
-                throw FatalException("colsort: Not same.");
+                throw FatalException("subsort: Not same.");
             }
             if (!isSorted(sorted)) {
                 original->dump(std::cout);
                 sorted->dump(std::cout);
-                throw FatalException("colsort: Not sorted.");
+                throw FatalException("subsort: Not sorted.");
             }
         }
         
@@ -291,10 +291,10 @@ void compareSorts(LocalMemory& mem, DataframeManager& dfman,
         }
     }
     
-    // Calculate statistics for colsort
-    double colsortAvg = std::accumulate(colsortTimings.begin(), colsortTimings.end(), 0.0) / iterations;
-    double colsortMin = *std::min_element(colsortTimings.begin(), colsortTimings.end());
-    double colsortMax = *std::max_element(colsortTimings.begin(), colsortTimings.end());
+    // Calculate statistics for subsort
+    double subsortAvg = std::accumulate(subsortTimings.begin(), subsortTimings.end(), 0.0) / iterations;
+    double subsortMin = *std::min_element(subsortTimings.begin(), subsortTimings.end());
+    double subsortMax = *std::max_element(subsortTimings.begin(), subsortTimings.end());
     
     // Calculate statistics for rowsort
     double rowsortAvg = std::accumulate(rowsortTimings.begin(), rowsortTimings.end(), 0.0) / iterations;
@@ -302,16 +302,16 @@ void compareSorts(LocalMemory& mem, DataframeManager& dfman,
     double rowsortMax = *std::max_element(rowsortTimings.begin(), rowsortTimings.end());
     
     // Calculate speedup
-    double speedup = rowsortAvg / colsortAvg;
+    double speedup = rowsortAvg / subsortAvg;
     
     fmt::print("\n=== BENCHMARK RESULTS ===\n");
     fmt::print("Dimensions: {} rows × {} columns\n", numRows, numCols);
     fmt::print("Iterations: {}\n\n", iterations);
     
-    fmt::print("colsort:\n");
-    fmt::print("  Average: {:.3f} ms\n", colsortAvg);
-    fmt::print("  Min:     {:.3f} ms\n", colsortMin);
-    fmt::print("  Max:     {:.3f} ms\n\n", colsortMax);
+    fmt::print("subsort:\n");
+    fmt::print("  Average: {:.3f} ms\n", subsortAvg);
+    fmt::print("  Min:     {:.3f} ms\n", subsortMin);
+    fmt::print("  Max:     {:.3f} ms\n\n", subsortMax);
     
     fmt::print("ROWSORT:\n");
     fmt::print("  Average: {:.3f} ms\n", rowsortAvg);
@@ -320,7 +320,7 @@ void compareSorts(LocalMemory& mem, DataframeManager& dfman,
     
     fmt::print("SPEEDUP: {:.2f}x {}\n", 
                std::abs(speedup),
-               speedup > 1.0 ? "(colsort faster)" : "(rowsort faster)");
+               speedup > 1.0 ? "(subsort faster)" : "(rowsort faster)");
 }
 
 }

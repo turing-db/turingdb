@@ -8,8 +8,8 @@
 #include <range/v3/action/sort.hpp>
 #include <range/v3/action/stable_sort.hpp>
 #include <range/v3/view/enumerate.hpp>
+#include <range/v3/view/transform.hpp>
 #include "range/v3/view/subrange.hpp"
-#include "spdlog/spdlog.h"
 
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"
@@ -61,17 +61,22 @@ void addTieRanges(std::vector<TieRange>& tieRanges, const Rg& rg, size_t start =
     }
 }
 
-void narrowTieRanges(std::vector<TieRange>& tieRanges, Column* col) {
+void narrowTieRanges(std::vector<TieRange>& tieRanges, Column* col,
+                     std::vector<size_t>& indices) {
     auto ccol = dynamic_cast<ColumnInts*>(col);
     bioassert(ccol, "Failed to cast column to sort.");
 
+    std::vector<Int>& data = ccol->getRaw();
+
+    auto reordered =
+        indices | rv::transform([&](std::size_t i) -> auto& { return data[i]; });
+
     // Temporary vector which will contain the new tie-ranges
     std::vector<TieRange> temp;
-    auto& data = ccol->getRaw();
 
     for (const auto& [start, size] : tieRanges) {
         const size_t end = start + size;
-        auto subrange = rg::subrange(begin(data) + start, begin(data) + end);
+        auto subrange = rg::subrange(begin(reordered) + start, begin(reordered) + end);
         addTieRanges(temp, subrange, start);
     }
 
@@ -180,26 +185,26 @@ void subsort(Dataframe* df) {
 
     // Sort w.r.t the most dominant order key
     Column* dominantCol = cols.front()->getColumn();
-    sortCol(dominantCol, indices);
 
     // Find runs of contiguous identical values in the previous column(s); only sort
     // those subruns
     std::vector<TieRange> tieRanges;
     {
         std::vector<Int>& data = dominantCol->cast<ColumnInts>()->getRaw();
-        addTieRanges(tieRanges, data);
+        rg::sort(indices, [&](size_t i, size_t j) { return data[i] < data[j]; });
+        auto reordered =
+            indices | rv::transform([&](std::size_t i) -> auto& { return data[i]; });
+
+        addTieRanges(tieRanges, reordered);
     }
 
     // Sort w.r.t the remaining order keys
     for (size_t i {1}; i < numCols; i++) {
         auto* thisCol = cols[i]->as<ColumnInts>();
-        // Project the new order of indices - determined by the sort of the previous
-        // column - onto this column
-        project(thisCol, indices);
 
         // No ties: nothing to sort in this column
         if (tieRanges.empty()) {
-            continue;
+            break;
         }
 
         std::vector<Int>& data = thisCol->getRaw();
@@ -207,20 +212,19 @@ void subsort(Dataframe* df) {
         // For each tie run, r, sort that run, keeping track of the new indices
         for (const auto& [start, size] : tieRanges) {
             const size_t end = start + size;
-            auto colTieRange = rg::subrange(begin(data) + start, begin(data) + end);
             auto idxSubrange = rg::subrange(begin(indices) + start, begin(indices) + end);
-
-            rg::sort(rv::zip(idxSubrange, colTieRange), [](auto&& zip1, auto&& zip2) {
-                const Int a = std::get<1>(zip1);
-                const Int b = std::get<1>(zip2);
-                return a < b;
-            });
+            rg::stable_sort(idxSubrange, [&data](size_t i, size_t j) { return data[i] < data[j]; });
         }
 
         // Narrow the ties: for a contiguous range [l, r] in the previous column,
         // constrict the range to [l', r'] such that l <= l' and r' <= r and a_i = x for
         // l' <= i <= r', for some x, and for a_i \in @ref thisCol
-        narrowTieRanges(tieRanges, thisCol);
+        narrowTieRanges(tieRanges, thisCol, indices);
+    }
+
+    for (size_t i {0}; i < numCols; i++) {
+        auto* thisCol = cols[i]->as<ColumnInts>();
+        project(thisCol, indices);
     }
 }
 

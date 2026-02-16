@@ -61,9 +61,16 @@ void test(LocalMemory& mem, DataframeManager& dfman) {
                                 21, 43, 56, 11, 48, 0,   39, 35, 61, 57, 95, 8 }
     });
 
+    /* auto original =
+        makeDataframe<Int>(mem, dfman,
+                           {
+                               {2, 4, 1, 4, 6},
+                               {1, 9, 3, 4, 2},
+                               {8, 6, 9, 7, 5}
+    }); */
+
     auto sorted = copyDataframe(mem, dfman, original);
-    // subsort(sorted.get());
-    colsort(sorted.get());
+    subsort(sorted.get());
     
     if (!containSame(original, sorted)) {
         original->dump(std::cout);
