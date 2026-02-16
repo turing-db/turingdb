@@ -66,6 +66,7 @@
 #include "nodes/ShowProceduresNode.h"
 #include "nodes/ShortestPathNode.h"
 #include "nodes/LoadCSVNode.h"
+#include "nodes/ExprEvalNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -1117,7 +1118,7 @@ PipelineOutputInterface* PipelineGenerator::translateExprEvalNode(ExprEvalNode* 
         // Tree walk the expression to allocate result columns as raw @ref Column*s
         Column* resultantColumn = progGen.generateExpr(expr);
         // Create a @ref NamedColumn which wraps the result @ref Column* produced by the
-        // @ref ExprProgramGenerator, and add that wraped NamedCol to output of the newly
+        // @ref ExprProgramGenerator, and add that wrapped NamedCol to output of the newly
         // added @ref ExprEvalProcessor.
         NamedColumn* resultNCol = _builder.addColumnToOutput(resultantColumn);
 

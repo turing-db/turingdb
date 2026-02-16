@@ -71,7 +71,7 @@ public:
 
     // Below specialisation is needed for expressions like NOT TRUE, NOT FALSE
     // Both Bool and opt<Bool> are needed as there is no way to limit to
-    // ColumnConst<{Bool}> whilst also having ColumnVector<{Bool, optional<Bool>}
+    // ColumnConst<{Bool}> whilst also having ColumnVector<{Bool, optional<Bool>}>
     template <typename Op, typename T>
     static inline void exec(ColumnConst<T>* res, const ColumnConst<T>* arg)
         requires(std::is_same_v<T, types::Bool::Primitive>)
