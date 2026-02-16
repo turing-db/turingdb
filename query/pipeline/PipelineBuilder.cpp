@@ -446,7 +446,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourc
     return source->output();
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addCallProcedure(const Procedure& procedure,
+PipelineBlockOutputInterface& PipelineBuilder::addCallProcedure(const Procedure* procedure,
                                                                 std::span<const Procedure::Argument> args,
                                                                 std::span<Procedure::YieldItem> yield) {
     const bool hasInput = _pendingOutput.getInterface() != nullptr;

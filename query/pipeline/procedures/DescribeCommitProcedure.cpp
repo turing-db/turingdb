@@ -32,7 +32,7 @@ struct CommitStats {
 
 void getCommitStats(CommitStats* stats,
                     std::string_view inputHash,
-                    const GraphView& view) {
+                    const GraphView* view) {
     stats->_nodeCount = 0;
     stats->_edgeCount = 0;
     stats->_partCount = 0;
@@ -41,7 +41,7 @@ void getCommitStats(CommitStats* stats,
     std::transform(lower.begin(), lower.end(), lower.begin(),
                    [](char c) { return std::tolower(c); });
 
-    for (const auto& commit : view.commits()) {
+    for (const auto& commit : view->commits()) {
         const std::string hashStr = fmt::format("{:x}", commit.hash().get());
 
         if (lower != hashStr) {
@@ -184,7 +184,7 @@ void DescribeCommitProcedure::execute(ProcedureState& proc) {
                 CommitStats stats;
                 for (size_t i = data._i; i < remaining + data._i; ++i) {
                     extractString(input, col[i]);
-                    getCommitStats(&stats, input, view);
+                    getCommitStats(&stats, input, &view);
                     pushStats(stats);
                 }
 

@@ -14,11 +14,11 @@ using namespace db;
 
 CallProcedureProcessor* CallProcedureProcessor::create(
     PipelineV2* pipeline,
-    const Procedure& procedure,
+    const Procedure* procedure,
     bool hasInput) {
 
     CallProcedureProcessor* processor = new CallProcedureProcessor();
-    processor->_procedure = &procedure;
+    processor->_procedure = procedure;
 
     if (hasInput) {
         processor->_input = std::make_optional<PipelineBlockInputInterface>();
@@ -33,12 +33,12 @@ CallProcedureProcessor* CallProcedureProcessor::create(
     processor->_output.setPort(output);
     processor->addOutput(output);
 
-    const Procedure::AllocCallback alloc = procedure.getAllocCallback();
+    const Procedure::AllocCallback alloc = procedure->getAllocCallback();
     if (alloc) {
         processor->_procedureState._data = alloc();
     }
 
-    processor->_procedureState._procedure = &procedure;
+    processor->_procedureState._procedure = procedure;
 
     processor->postCreate(pipeline);
     return processor;
