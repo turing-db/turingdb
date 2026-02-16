@@ -12,6 +12,11 @@ namespace db {
 class ExecutionContext;
 class ExprProgram;
 
+/**
+ * @brief Standalone processor taking an @ref ExprProgram to execute.
+ * @detail Used in RETURN projections. NOTE: Not used in @ref FilterProcessor, which
+ * instead evaluates expressions itself.
+ */
 class ExprEvalProcessor final : public Processor {
 public:
     static ExprEvalProcessor* create(PipelineV2* pipeline,
