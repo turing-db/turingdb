@@ -3,11 +3,11 @@
 using namespace db;
 
 QueryCallbacks::QueryCallbacks()
-    : _onBegin {defaultOnBegin()},
-    _onOutputData {defaultOnOutputData()},
-    _onError {defaultOnError()},
-    _onOutputHeader {defaultOnOutputHeader()},
-    _onEnd {defaultOnEnd()}
+    : _onBegin(defaultOnBegin()),
+    _onOutputData(defaultOnOutputData()),
+    _onError(defaultOnError()),
+    _onOutputHeader(defaultOnOutputHeader()),
+    _onEnd(defaultOnEnd())
 {
 }
 
