@@ -23,15 +23,14 @@ public:
 
     DeclContext* getParent() const { return _parent; }
 
+    const Decls& decls() const { return _decls; }
+
     bool hasDecl(std::string_view name) const;
+
     VarDecl* getDecl(std::string_view name) const;
+
     VarDecl* getOrCreateNamedVariable(CypherAST* ast, EvaluatedType type, std::string_view name);
     VarDecl* createUnnamedVariable(CypherAST* ast, EvaluatedType type);
-
-    Decls::const_iterator begin() const { return _decls.begin(); }
-    Decls::const_iterator end() const { return _decls.end(); }
-    Decls::const_reverse_iterator rbegin() const { return _decls.rbegin(); }
-    Decls::const_reverse_iterator rend() const { return _decls.rend(); }
 
 private:
     DeclContext* _parent {nullptr};

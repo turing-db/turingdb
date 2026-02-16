@@ -252,7 +252,7 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         // - After first `pushFrontDecl()`: ['c', 'a.name'];
         // - After second `pushFrontDecl()`: ['b', 'c', 'a.name'];
         // - After third `pushFrontDecl()`: ['a', 'b', 'c', 'a.name'];
-        for (VarDecl* decl : std::views::reverse(*_ctxt)) {
+        for (VarDecl* decl : std::views::reverse(_ctxt->decls())) {
             if (decl->isUnnamed()) {
                 continue;
             }
