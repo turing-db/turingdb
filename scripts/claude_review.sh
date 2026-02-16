@@ -45,12 +45,12 @@ fi
 echo "$diff_output" | head -c 153600 > /tmp/cpp_diff.patch
 gh_output "skip=false"
 
-# ── 2. Read style guides from the base branch ──────────────────────
-git show "origin/${BASE_REF}:CODING_STYLE.md" > /tmp/CODING_STYLE.md 2>/dev/null \
-    || echo "No CODING_STYLE.md on base branch." > /tmp/CODING_STYLE.md
+# ── 2. Read style guides from HEAD (the branch being reviewed) ─────
+git show "HEAD:CODING_STYLE.md" > /tmp/CODING_STYLE.md 2>/dev/null \
+    || echo "No CODING_STYLE.md found." > /tmp/CODING_STYLE.md
 
-git show "origin/${BASE_REF}:REVIEW.md" > /tmp/REVIEW.md 2>/dev/null \
-    || echo "No REVIEW.md on base branch." > /tmp/REVIEW.md
+git show "HEAD:REVIEW.md" > /tmp/REVIEW.md 2>/dev/null \
+    || echo "No REVIEW.md found." > /tmp/REVIEW.md
 
 # ── 3. Build review prompt ──────────────────────────────────────────
 cat > /tmp/review_prompt.txt << 'PROMPT_HEADER'
