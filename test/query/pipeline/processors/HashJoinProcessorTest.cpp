@@ -908,7 +908,7 @@ TEST_F(HashJoinProcessorTest, thousandRowJoinCaseChunkedInputs) {
      */
 
     const auto& expectedFirstCol = std::views::iota(1000, 2000);
-    const auto& expectedSecondCol = std::views::iota(2000, 300);
+    const auto& expectedSecondCol = std::views::iota(2000, 3000);
     const auto& expectedThirdCol = std::views::iota(3000, 4000);
     const auto& expectedFourthCol = std::views::iota(4000, 5000);
     const auto& expectedJoinCol = std::views::iota(0, 1000);
