@@ -38,9 +38,9 @@ void EdgeTypesProcedure::registerProcedure(ProcedureNamespace* ns) {
     ns->addProcedure(proc);
 }
 
-void EdgeTypesProcedure::execute(ProcedureState& proc) {
-    Data& data = proc.data<Data>();
-    const ExecutionContext* ctxt = proc.getContext();
+void EdgeTypesProcedure::execute(ProcedureState* proc) {
+    Data& data = proc->data<Data>();
+    const ExecutionContext* ctxt = proc->getContext();
     const GraphView& view = ctxt->getGraphView();
 
     Column* rawIdsCol = data.getReturnColumn(0);
@@ -49,7 +49,7 @@ void EdgeTypesProcedure::execute(ProcedureState& proc) {
     auto* idsCol = static_cast<ColumnVector<EdgeTypeID>*>(rawIdsCol);
     auto* namesCol = static_cast<ColumnVector<std::string_view>*>(rawNamesCol);
 
-    switch (proc.getStep()) {
+    switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
             data._it = std::make_unique<ScanEdgeTypesChunkWriter>(
                 view.metadata().edgeTypes());
@@ -64,10 +64,10 @@ void EdgeTypesProcedure::execute(ProcedureState& proc) {
         }
 
         case ProcedureState::Step::EXECUTE: {
-            data._it->fill(proc.getContext()->getChunkSize());
+            data._it->fill(proc->getContext()->getChunkSize());
 
             if (!data._it->isValid()) {
-                proc.finish();
+                proc->finish();
             }
 
             return;

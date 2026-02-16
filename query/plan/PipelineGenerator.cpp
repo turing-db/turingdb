@@ -1014,7 +1014,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         inputItems.emplace_back(i++, col);
     }
 
-    _builder.addCallProcedure(*procedure, inputItems, yieldItems);
+    _builder.addCallProcedure(procedure, inputItems, yieldItems);
 
     for (size_t i = 0; i < yieldItems.size(); i++) {
         const auto& item = yieldItems[i];

@@ -102,12 +102,12 @@ void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
     ns->addProcedure(proc);
 }
 
-void HistoryProcedure::execute(ProcedureState& proc) {
-    Data& data = proc.data<Data>();
-    const ExecutionContext* ctxt = proc.getContext();
+void HistoryProcedure::execute(ProcedureState* proc) {
+    Data& data = proc->data<Data>();
+    const ExecutionContext* ctxt = proc->getContext();
     const GraphView& view = ctxt->getGraphView();
 
-    switch (proc.getStep()) {
+    switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
             data._it = view.commits().begin();
             return;
@@ -117,7 +117,7 @@ void HistoryProcedure::execute(ProcedureState& proc) {
             return;
 
         case ProcedureState::Step::EXECUTE: {
-            writeChunk(&data, &proc, &view, ctxt->getChunkSize());
+            writeChunk(&data, proc, &view, ctxt->getChunkSize());
             return;
         }
     }

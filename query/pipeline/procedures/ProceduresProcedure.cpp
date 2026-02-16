@@ -124,9 +124,9 @@ void ProceduresProcedure::registerProcedure(ProcedureNamespace* ns) {
     ns->addProcedure(proc);
 }
 
-void ProceduresProcedure::execute(ProcedureState& proc) {
-    Data& data = proc.data<Data>();
-    const ExecutionContext* ctxt = proc.getContext();
+void ProceduresProcedure::execute(ProcedureState* proc) {
+    Data& data = proc->data<Data>();
+    const ExecutionContext* ctxt = proc->getContext();
     const ProcedureManager* manager = ctxt->getProcedures();
 
     Column* rawNameCol = data.getReturnColumn(0);
@@ -135,7 +135,7 @@ void ProceduresProcedure::execute(ProcedureState& proc) {
     auto* nameCol = static_cast<ColumnVector<std::string>*>(rawNameCol);
     auto* signatureCol = static_cast<ColumnVector<std::string>*>(rawSignatureCol);
 
-    switch (proc.getStep()) {
+    switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
             data._nsIndex = 0;
             data._procIndex = 0;
@@ -150,7 +150,7 @@ void ProceduresProcedure::execute(ProcedureState& proc) {
 
         case ProcedureState::Step::EXECUTE: {
             writeProcedures(&data,
-                            &proc,
+                            proc,
                             manager,
                             nameCol,
                             signatureCol,
