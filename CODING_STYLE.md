@@ -339,6 +339,13 @@ void myFunc() {
 }
 ```
 
+Constructor-style initialisation is acceptable when it avoids an implicit conversion
+that would trigger a compiler warning, such as constructing a `std::string` from a
+`std::string_view`:
+```cpp
+std::string lower(inputHash);  // inputHash is a std::string_view
+```
+
 The preferred style for new is with an assignment:
 ```cpp
 MyData* data = new MyData();
