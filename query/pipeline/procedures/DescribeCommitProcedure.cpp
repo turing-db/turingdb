@@ -144,13 +144,10 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                        || internalKind == InternalKind::code<std::optional<std::string_view>>()
                        || internalKind == InternalKind::code<std::optional<std::string>>(),
                       "db.describeCommit: commit hash must be a string or string_view");
-            return;
         }
         break;
 
-        case ProcedureState::Step::RESET: {
-            return;
-        }
+        case ProcedureState::Step::RESET:
         break;
 
         case ProcedureState::Step::EXECUTE: {
@@ -217,8 +214,6 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
             } else {
                 dispatchStringInternal<ColumnConst>(rawCommitCol, treatConst);
             }
-
-            return;
         }
         break;
     }
