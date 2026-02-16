@@ -147,8 +147,10 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
             return;
         }
 
-        case ProcedureState::Step::RESET:
+        case ProcedureState::Step::RESET: {
             return;
+        }
+        break;
 
         case ProcedureState::Step::EXECUTE: {
             if (nodeCountCol) {
