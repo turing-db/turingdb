@@ -35,7 +35,7 @@ private:
     ExprProgram* _exprProg {nullptr};
 
     ExprEvalProcessor(ExprProgram* exprProg);
-    ~ExprEvalProcessor() final = default;
+    ~ExprEvalProcessor() final;
     void evalProgram();
 };
 
