@@ -37,7 +37,7 @@ void getCommitStats(CommitStats* stats,
     stats->_edgeCount = 0;
     stats->_partCount = 0;
 
-    const std::string lower = inputHash;
+    std::string lower = inputHash;
     std::transform(lower.begin(), lower.end(), lower.begin(),
                    [](char c) { return std::tolower(c); });
 
@@ -146,6 +146,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                       "db.describeCommit: commit hash must be a string or string_view");
             return;
         }
+        break;
 
         case ProcedureState::Step::RESET: {
             return;
@@ -219,6 +220,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
 
             return;
         }
+        break;
     }
 
     throw PipelineException("Unknown procedure step");
