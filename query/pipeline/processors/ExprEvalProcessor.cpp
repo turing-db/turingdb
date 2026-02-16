@@ -15,6 +15,9 @@ ExprEvalProcessor::ExprEvalProcessor(ExprProgram* exprProg)
 {
 }
 
+ExprEvalProcessor::~ExprEvalProcessor() {
+}
+
 PipelineBlockInputInterface& ExprEvalProcessor::input() {
     if (!_input) {
         throw FatalException("Attempted to get null input of ExprEvalProcessor.");

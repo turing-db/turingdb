@@ -7,6 +7,5 @@ ExprEvalNode::ExprEvalNode()
 {
 }
 
-ExprEvalNode::~ExprEvalNode()
-{
+ExprEvalNode::~ExprEvalNode() {
 }
