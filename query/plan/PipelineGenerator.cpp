@@ -26,6 +26,7 @@
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
 #include "procedures/ProcedureManager.h"
+#include "processors/OrderByProcessor.h"
 #include "processors/PredicateProgram.h"
 #include "processors/WriteProcessor.h"
 #include "processors/WriteProcessorTypes.h"
@@ -92,6 +93,7 @@
 #include "PlannerException.h"
 #include "FatalException.h"
 #include "BioAssert.h"
+#include "stmt/OrderByItem.h"
 
 #include "processors/CSVSourceProcessor.h"
 #include "columns/ColumnStringTable.h"
@@ -1472,5 +1474,47 @@ PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowV
 }
 
 PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* node) {
-    throw FatalException("ORDER BY is not yet implemented.");
+    if (!_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    const OrderByNode::ItemVector& keys = node->items();
+
+    if (keys.empty()) {
+        return _builder.getPendingOutputInterface();
+    }
+
+    OrderByProcessor::OrderByKeys orderbyKeyTags;
+    orderbyKeyTags.reserve(keys.size());
+
+    for (const OrderByItem* key : keys) {
+        bioassert(key, "Found null OrderByItem.");
+
+        const Expr* keyExpr = key->getExpr();
+        bioassert(keyExpr, "OrderByItem had null expression.");
+
+        const VarDecl* keyDecl = keyExpr->getExprVarDecl();
+        bioassert(keyDecl, "OrderByItem had null variable declaration.");
+
+        const auto foundIt = _declToColumn.find(keyDecl);
+        if (foundIt == end(_declToColumn)) {
+            throw PlannerException(
+                fmt::format("Variable {} had no associated column.", keyDecl->getName()));
+        }
+
+        const ColumnTag keyTag = foundIt->second;
+        const Dataframe* incomingDf = _builder.getPendingOutput().getDataframe();
+
+        const NamedColumn* orderedNamedColumn = incomingDf->getColumn(keyTag);
+        bioassert(orderedNamedColumn,
+                  "Dataframe did not have column required by ORDER BY.");
+        Column* keyCol = orderedNamedColumn->getColumn();
+
+        const bool asc = key->getType() == OrderByType::ASC;
+        orderbyKeyTags.emplace_back(keyCol, asc);
+    }
+
+    _builder.addOrderBy(orderbyKeyTags);
+
+    return _builder.getPendingOutputInterface();
 }

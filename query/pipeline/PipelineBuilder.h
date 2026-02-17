@@ -24,6 +24,7 @@
 #include "processors/LambdaSourceProcessor.h"
 #include "processors/LambdaTransformProcessor.h"
 #include "processors/WriteProcessor.h"
+#include "processors/OrderByProcessor.h"
 
 #include "metadata/SupportedType.h"
 #include "metadata/LabelSet.h"
@@ -135,6 +136,7 @@ public:
     PipelineBlockOutputInterface& addLimit(size_t count);
     PipelineValueOutputInterface& addCount(ColumnTag colTag = ColumnTag {});
     PipelineBlockOutputInterface& addProjection(std::span<ProjectionItem> items);
+    PipelineBlockOutputInterface& addOrderBy(std::span<OrderByProcessor::OrderByKey> keys);
 
     // Lambda transform
     PipelineBlockOutputInterface& addLambdaTransform(const LambdaTransformProcessor::Callback& callback);
