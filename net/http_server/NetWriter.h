@@ -23,7 +23,7 @@ public:
         SendFailed,
         SentZeroBytes,
 
-        _SIZE
+        _SIZE,
     };
 
     using StatusStrings = EnumToString<Status>::Create<
@@ -32,7 +32,7 @@ public:
         EnumStringPair<Status::ValueTooLarge, "Value does not fit in buffer">,
         EnumStringPair<Status::AllocationFailed, "Could not allocate memory">,
         EnumStringPair<Status::SendFailed, "Could not send data">,
-        EnumStringPair<Status::SendFailed, "Send zero bytes which is not supposed to happen">>;
+        EnumStringPair<Status::SentZeroBytes, "Send zero bytes which is not supposed to happen">>;
 
     explicit NetWriter(utils::DataSocket socket)
         : _socket(socket)
@@ -115,10 +115,12 @@ public:
         switch (contentType) {
             case net::ContentType::TEXT: {
                 data = text;
-            } break;
+            }
+            break;
             case ContentType::JSON: {
                 data = json;
-            } break;
+            }
+            break;
         }
 
         if (data.size() > _header._remaining) {
@@ -169,7 +171,7 @@ public:
         _header.reset();
     }
 
-    void flush() noexcept {
+    void flush() {
         if (errorOccured()) {
             return;
         }
@@ -187,7 +189,7 @@ public:
         _chunk.reset();
     }
 
-    void write(std::string_view content) noexcept {
+    void write(std::string_view content) {
         if (errorOccured()) {
             return;
         }
@@ -399,11 +401,12 @@ private:
         }
     }
 
-    void send(const char* data, size_t size) noexcept {
+    void send(const char* data, size_t size) {
         size_t remainingBytes = size;
 
         while (remainingBytes > 0) {
-            const auto sent = ::send(_socket, data, remainingBytes, MSG_NOSIGNAL);
+            const ssize_t sent = ::send(_socket, data, remainingBytes, MSG_NOSIGNAL);
+
             if (sent == -1) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     continue; // Try again

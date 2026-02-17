@@ -35,17 +35,17 @@ std::string argParserUsage(const argparse::ArgumentParser& parser) {
 std::string serializeTest(const QueryTestSpec& test) {
     std::string out = fmt::format(
         "{{\"name\":\"{}\",\"query\":\"{}\",\"writeRequired\":{},\"disabledReason\":\"{}\",\"tags\":[",
-        escapeJson(test.name),
-        escapeJson(test.query),
-        test.writeRequired ? "true" : "false",
-        escapeJson(test.disabledReason));
-    for (size_t i = 0; i < test.tags.size(); ++i) {
+        escapeJson(test._name),
+        escapeJson(test._query),
+        test._writeRequired ? "true" : "false",
+        escapeJson(test._disabledReason));
+    for (size_t i = 0; i < test._tags.size(); ++i) {
         if (i > 0) {
             out += ",";
         }
-        out += fmt::format("\"{}\"", escapeJson(test.tags[i]));
+        out += fmt::format("\"{}\"", escapeJson(test._tags[i]));
     }
-    out += fmt::format("],\"enabled\":{}}}", test.enabled ? "true" : "false");
+    out += fmt::format("],\"enabled\":{}}}", test._enabled ? "true" : "false");
     return out;
 }
 
@@ -57,16 +57,16 @@ std::string serializeResult(const QueryTestResult& result) {
         "\"planMatched\":{},\"resultMatched\":{},"
         "\"resultJsonMatched\":{},\"resultJsonValid\":{},"
         "\"timeUs\":{}}}",
-        escapeJson(result.name),
-        escapeJson(result.planOutput),
-        escapeJson(result.resultOutput),
-        escapeJson(result.resultJsonOutput),
-        escapeJson(result.resultJsonError),
-        result.planMatched ? "true" : "false",
-        result.resultMatched ? "true" : "false",
-        result.resultJsonMatched ? "true" : "false",
-        result.resultJsonValid ? "true" : "false",
-        result.timeUs);
+        escapeJson(result._name),
+        escapeJson(result._planOutput),
+        escapeJson(result._resultOutput),
+        escapeJson(result._resultJsonOutput),
+        escapeJson(result._resultJsonError),
+        result._planMatched ? "true" : "false",
+        result._resultMatched ? "true" : "false",
+        result._resultJsonMatched ? "true" : "false",
+        result._resultJsonValid ? "true" : "false",
+        result._timeUs);
 }
 
 }
@@ -133,10 +133,10 @@ int main(int argc, char** argv) {
     if (doRun) {
         const std::string name = program.get<std::string>("--run");
         for (const auto& test : tests) {
-            if (test.name != name) {
+            if (test._name != name) {
                 continue;
             }
-            const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test.name;
+            const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test._name;
             const QueryTestResult result = runner.runTest(test, outDir);
             fmt::println("{}", serializeResult(result));
             return 0;
@@ -148,10 +148,10 @@ int main(int argc, char** argv) {
     fmt::print("[");
     bool first = true;
     for (const auto& test : tests) {
-        if (!test.enabled) {
+        if (!test._enabled) {
             continue;
         }
-        const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test.name;
+        const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test._name;
         const QueryTestResult result = runner.runTest(test, outDir);
         if (!first) {
             fmt::print(",");

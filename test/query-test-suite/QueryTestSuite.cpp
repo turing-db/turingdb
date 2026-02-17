@@ -20,47 +20,47 @@ TEST_F(QueryTestSuite, RunAll) {
     std::string normalized;
 
     for (const auto& test : _tests) {
-        if (!test.enabled) {
+        if (!test._enabled) {
             continue;
         }
 
         ++executed;
-        const fs::Path outDir = fs::Path {_outDir} / test.name;
+        const fs::Path outDir = fs::Path {_outDir} / test._name;
         const QueryTestResult result = runner.runTest(test, outDir);
 
-        if (!result.planMatched) {
-            QueryTestRunner::normalizeOutput(normalized, test.expectPlan);
-            ADD_FAILURE() << "Plan output mismatch for test: " << test.name;
+        if (!result._planMatched) {
+            QueryTestRunner::normalizeOutput(normalized, test._expectPlan);
+            ADD_FAILURE() << "Plan output mismatch for test: " << test._name;
             ADD_FAILURE() << "Expected plan:\n"
                           << normalized;
             ADD_FAILURE() << "Actual plan:\n"
-                          << result.planOutput;
+                          << result._planOutput;
         }
 
-        if (!result.resultMatched) {
-            QueryTestRunner::normalizeOutput(normalized, test.expectResult);
-            ADD_FAILURE() << "Result output mismatch for test: " << test.name;
+        if (!result._resultMatched) {
+            QueryTestRunner::normalizeOutput(normalized, test._expectResult);
+            ADD_FAILURE() << "Result output mismatch for test: " << test._name;
             ADD_FAILURE() << "Expected result:\n"
                           << normalized;
             ADD_FAILURE() << "Actual result:\n"
-                          << result.resultOutput;
+                          << result._resultOutput;
         }
 
-        if (!result.resultJsonValid) {
+        if (!result._resultJsonValid) {
             ADD_FAILURE() << "Result JSON invalid for test: "
-                          << test.name << "\n"
-                          << result.resultJsonError;
+                          << test._name << "\n"
+                          << result._resultJsonError;
             ADD_FAILURE() << "JSON output:\n"
-                          << result.resultJsonOutput;
+                          << result._resultJsonOutput;
         }
 
-        if (!result.resultJsonMatched) {
+        if (!result._resultJsonMatched) {
             ADD_FAILURE() << "Result JSON mismatch for test: "
-                          << test.name;
+                          << test._name;
             ADD_FAILURE() << "Expected JSON:\n"
-                          << test.expectResultJson;
+                          << test._expectResultJson;
             ADD_FAILURE() << "Actual JSON:\n"
-                          << result.resultJsonOutput;
+                          << result._resultJsonOutput;
         }
     }
 

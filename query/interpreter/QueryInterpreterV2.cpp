@@ -71,12 +71,15 @@ QueryStatus QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
             case ChangeErrorType::GRAPH_NOT_FOUND: {
                 return QueryStatus(QueryStatus::Status::GRAPH_NOT_FOUND);
             }
+            break;
             case ChangeErrorType::CHANGE_NOT_FOUND: {
                 return QueryStatus(QueryStatus::Status::CHANGE_NOT_FOUND);
             }
+            break;
             default: {
                 return QueryStatus(QueryStatus::Status::COMMIT_NOT_FOUND);
             }
+            break;
         }
     }
 
