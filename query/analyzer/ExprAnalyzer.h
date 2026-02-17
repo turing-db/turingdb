@@ -15,6 +15,7 @@ namespace db {
 
 class CypherAST;
 class DeclContext;
+class FunctionResolver;
 class Expr;
 class BinaryExpr;
 class UnaryExpr;
@@ -48,7 +49,7 @@ public:
     void analyzeLiteralExpr(LiteralExpr* expr);
     void analyzeStringExpr(StringExpr* expr);
     void analyzeEntityTypeExpr(EntityTypeExpr* expr);
-    void analyzeFuncInvocExpr(FunctionInvocationExpr* expr);
+    void analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver);
     void analyzePathExpr(PathExpr* expr);
 
     ValueType analyzePropertyExpr(PropertyExpr* expr,

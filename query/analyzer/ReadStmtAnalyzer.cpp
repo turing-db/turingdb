@@ -37,6 +37,8 @@
 #include "expr/UnaryExpr.h"
 #include "expr/FunctionInvocationExpr.h"
 
+#include "ProcedureLookup.h"
+
 #include "BioAssert.h"
 
 using namespace db;
@@ -104,7 +106,7 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
         throwError("CALL statement must have a function invocation", callStmt);
     }
 
-    _exprAnalyzer->analyzeFuncInvocExpr(funcExpr);
+    _exprAnalyzer->analyzeFuncInvocExpr(funcExpr, _ast->getProcedureLookup());
 
     const FunctionInvocation* func = funcExpr->getFunctionInvocation();
     const FunctionSignature* signature = func->getSignature();

@@ -70,6 +70,7 @@ class YCypherParser;
 class ListGraphQuery;
 class CreateGraphQuery;
 class FunctionDecls;
+class ProcedureLookup;
 class ProcedureManager;
 class LoadGraphQuery;
 class LoadGMLQuery;
@@ -173,6 +174,9 @@ public:
     FunctionDecls* getFunctionDecls() { return _functionDecls.get(); }
     const FunctionDecls* getFunctionDecls() const { return _functionDecls.get(); }
 
+    ProcedureLookup* getProcedureLookup() { return _procedureLookup.get(); }
+    const ProcedureLookup* getProcedureLookup() const { return _procedureLookup.get(); }
+
 private:
     SourceManager* _sourceManager {nullptr};
     DiagnosticsManager* _diagnosticsManager {nullptr};
@@ -205,6 +209,7 @@ private:
     std::vector<std::string*> _unnamedVarIdentifiers;
 
     std::unique_ptr<FunctionDecls> _functionDecls;
+    std::unique_ptr<ProcedureLookup> _procedureLookup;
 
     void addSymbol(Symbol* symbol);
     void addSymbolChain(SymbolChain* symbol);

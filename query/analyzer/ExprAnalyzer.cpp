@@ -4,6 +4,7 @@
 #include "AnalyzeException.h"
 #include "CypherAST.h"
 #include "FunctionDecls.h"
+#include "FunctionResolver.h"
 #include "FunctionInvocation.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
@@ -61,7 +62,8 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
             analyzeLiteralExpr(static_cast<LiteralExpr*>(expr));
             break;
         case Expr::Kind::FUNCTION_INVOCATION:
-            analyzeFuncInvocExpr(static_cast<FunctionInvocationExpr*>(expr));
+            analyzeFuncInvocExpr(static_cast<FunctionInvocationExpr*>(expr),
+                                _ast->getFunctionDecls());
             break;
     }
 }
@@ -467,8 +469,7 @@ void ExprAnalyzer::analyzePathExpr(PathExpr* expr) {
     throwError("Path expressions not supported", expr);
 }
 
-void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr) {
-    const FunctionDecls* funcs = _ast->getFunctionDecls();
+void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver) {
     const FunctionInvocation* invoc = expr->getFunctionInvocation();
     const std::vector<Symbol*>& names = invoc->getName()->names();
 
@@ -483,10 +484,10 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr) {
         }
     }
 
-    const auto signatures = funcs->get(name);
+    const auto signatures = resolver->lookup(name);
 
     // Check if there is at least one overload matching the function name
-    if (signatures.first == signatures.second) {
+    if (signatures.empty()) {
         throwError(fmt::format("Function '{}' does not exist", name), expr);
     }
 
@@ -514,10 +515,10 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr) {
     }
 
     // For each overload, check if the argument types match
-    for (auto it = signatures.first; it != signatures.second; it++) {
-        FunctionSignature& signature = *it->second;
+    for (auto it = signatures.begin(); it != signatures.end(); it++) {
+        FunctionSignature* signature = *it;
 
-        const auto& expectedArgs = signature.argumentTypes();
+        const auto& expectedArgs = signature->argumentTypes();
 
         if (requestedArgs.size() != expectedArgs.size()) {
             // Number of arguments does not match
@@ -536,17 +537,17 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr) {
         }
 
         // Found a valid signature
-        if (signature.returnTypes().size() == 1) {
-            expr->setType(signature.returnTypes().front().getType());
+        if (signature->returnTypes().size() == 1) {
+            expr->setType(signature->returnTypes().front().getType());
         } else {
             expr->setType(EvaluatedType::Tuple);
         }
 
-        if (signature.isAggregate()) {
+        if (signature->isAggregate()) {
             expr->setAggregate();
         }
 
-        expr->setSignature(&signature);
+        expr->setSignature(signature);
 
         return;
     }

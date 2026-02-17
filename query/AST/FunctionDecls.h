@@ -2,16 +2,20 @@
 
 #include <string_view>
 #include <memory>
-#include <map>
+#include <unordered_map>
+#include <vector>
 
+#include "FunctionResolver.h"
 #include "FunctionSignature.h"
 
 namespace db {
 
-class FunctionDecls {
+class FunctionDecls : public FunctionResolver {
 public:
+    using FunctionSignatures = std::vector<FunctionSignature*>;
+
     FunctionDecls();
-    ~FunctionDecls();
+    ~FunctionDecls() override;
 
     FunctionDecls(const FunctionDecls&) = delete;
     FunctionDecls(FunctionDecls&&) = delete;
@@ -22,12 +26,11 @@ public:
 
     FunctionSignature* createFunction(std::string_view fullName);
 
-    auto get(std::string_view fullName) const {
-        return _decls.equal_range(fullName);
-    }
+    FunctionSignatureRange lookup(std::string_view fullName) override;
 
 private:
-    std::multimap<std::string_view, std::unique_ptr<FunctionSignature>> _decls;
+    std::vector<std::unique_ptr<FunctionSignature>> _owned;
+    std::unordered_map<std::string_view, FunctionSignatures> _nameMap;
 };
 
 }
