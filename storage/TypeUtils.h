@@ -69,6 +69,13 @@ struct TypeUtils {
 
 };
 
+namespace TypeConcepts {
+
+template <typename T>
+concept OptionalType = TypeUtils::is_optional_v<T>;
+
+}
+
 /**
  * @brief Function that can be invoked, but one or both arguments may be wrapped in
  * optional.
