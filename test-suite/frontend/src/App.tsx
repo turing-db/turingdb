@@ -274,7 +274,7 @@ export default function App() {
       }
       const data = (await res.json()) as TestResult;
       setResults((prev) => ({ ...prev, [data.name]: data }));
-      if (!data.planMatched || !data.resultMatched) {
+      if (!data.planMatched || !data.resultMatched || !data.resultJsonMatched) {
         showFailToast(1);
       }
     } catch (err) {
@@ -299,7 +299,7 @@ export default function App() {
         next[entry.name] = entry;
       }
       setResults(next);
-      const failed = data.filter((entry) => !entry.planMatched || !entry.resultMatched).length;
+      const failed = data.filter((entry) => !entry.planMatched || !entry.resultMatched || !entry.resultJsonMatched).length;
       if (failed > 0) {
         showFailToast(failed);
       }
@@ -766,6 +766,7 @@ export default function App() {
         "## Last Run",
         `- Plan matched: ${selectedResult.planMatched ? "true" : "false"}`,
         `- Result matched: ${selectedResult.resultMatched ? "true" : "false"}`,
+        `- Result JSON matched: ${selectedResult.resultJsonMatched ? "true" : "false"}`,
         typeof selectedResult.timeUs === "number"
           ? `- Time: ${selectedResult.timeUs} μs`
           : "- Time: (not available)"
@@ -809,7 +810,7 @@ export default function App() {
       if (!test.enabled) return showDisabled;
       const testResult = results[test.name];
       if (!testResult) return showNotRun;
-      const isPass = testResult.planMatched && testResult.resultMatched;
+      const isPass = testResult.planMatched && testResult.resultMatched && testResult.resultJsonMatched;
       return isPass ? showPassing : showFailing;
     });
   }, [filteredTests, tagFilters, results, showDisabled, showFailing, showNotRun, showPassing]);
@@ -829,7 +830,7 @@ export default function App() {
         notRun += 1;
         continue;
       }
-      const isPass = result.planMatched && result.resultMatched;
+      const isPass = result.planMatched && result.resultMatched && result.resultJsonMatched;
       if (isPass) {
         passed += 1;
       } else {
@@ -1115,7 +1116,7 @@ export default function App() {
                   const testResult = results[test.name];
                   const isPending = !testResult;
                   const isDisabled = !test.enabled;
-                  const isPass = !!testResult && testResult.planMatched && testResult.resultMatched;
+                  const isPass = !!testResult && testResult.planMatched && testResult.resultMatched && testResult.resultJsonMatched;
                   const statusClass = isDisabled
                     ? "text-amber-400"
                     : isPass

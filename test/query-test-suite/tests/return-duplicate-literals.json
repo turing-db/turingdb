@@ -4,7 +4,8 @@
   "query": "RETURN 5, 5",
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN 5, 5\n       |           ^\n-------* Return items must have unique names; 5 was already defined.",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN 5, 5\n       |           ^\n-------* Return items must have unique names; 5 was already defined."
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN 5, 5\n       |           ^\n-------* Return items must have unique names; 5 was already defined.",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | RETURN 5, 5\\n       |           ^\\n-------* Return items must have unique names; 5 was already defined.\"}"
   },
   "tags": [
     "error",
