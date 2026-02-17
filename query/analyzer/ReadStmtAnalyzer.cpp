@@ -109,8 +109,8 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
     const FunctionInvocation* func = funcExpr->getFunctionInvocation();
     const FunctionSignature* signature = func->getSignature();
 
-    if (!signature->_isDatabaseProcedure) {
-        throwError(fmt::format("Function '{} is not a database procedure'", signature->_fullName), callStmt);
+    if (!signature->isProcedure()) {
+        throwError(fmt::format("Function '{} is not a database procedure'", signature->getFullName()), callStmt);
     }
 
     // Step 3. Analyze YIELD clause
@@ -147,10 +147,10 @@ void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause
         VarDecl* decl = nullptr;
 
         // Step 3. Find the item in the return values of the function
-        for (const FunctionReturnType& returnItem : signature->_returnTypes) {
-            if (returnItem._name == yieldItem->getOriginalName()) {
-                bioassert(!returnItem._name.empty(), "Procedure return item has empty name");
-                decl = _ctxt->getOrCreateNamedVariable(_ast, returnItem._type, yieldItem->getName());
+        for (const FunctionReturnType& returnItem : signature->returnTypes()) {
+            if (returnItem.getName() == yieldItem->getOriginalName()) {
+                bioassert(!returnItem.getName().empty(), "Procedure return item has empty name");
+                decl = _ctxt->getOrCreateNamedVariable(_ast, returnItem.getType(), yieldItem->getName());
                 yieldItemExpr->setDecl(decl);
                 break;
             }
@@ -158,7 +158,7 @@ void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause
 
         if (decl == nullptr) {
             throwError(fmt::format("Procedure '{}' does not return item '{}'",
-                                   signature->_fullName, yieldItem->getOriginalName()),
+                                   signature->getFullName(), yieldItem->getOriginalName()),
                        yieldItemExpr);
         }
 

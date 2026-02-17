@@ -517,7 +517,7 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr) {
     for (auto it = signatures.first; it != signatures.second; it++) {
         FunctionSignature& signature = *it->second;
 
-        const auto& expectedArgs = signature._argumentTypes;
+        const auto& expectedArgs = signature.argumentTypes();
 
         if (requestedArgs.size() != expectedArgs.size()) {
             // Number of arguments does not match
@@ -536,13 +536,13 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr) {
         }
 
         // Found a valid signature
-        if (signature._returnTypes.size() == 1) {
-            expr->setType(signature._returnTypes[0]._type);
+        if (signature.returnTypes().size() == 1) {
+            expr->setType(signature.returnTypes().front().getType());
         } else {
             expr->setType(EvaluatedType::Tuple);
         }
 
-        if (signature._isAggregate) {
+        if (signature.isAggregate()) {
             expr->setAggregate();
         }
 
