@@ -110,18 +110,14 @@ void HistoryProcedure::execute(ProcedureState* proc) {
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
             data._it = view.commits().begin();
-            return;
         }
         break;
 
-        case ProcedureState::Step::RESET: {
-            return;
-        }
+        case ProcedureState::Step::RESET:
         break;
 
         case ProcedureState::Step::EXECUTE: {
             writeChunk(&data, proc, &view, ctxt->getChunkSize());
-            return;
         }
         break;
     }
