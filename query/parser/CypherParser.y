@@ -1068,11 +1068,6 @@ opt_edgeTypes
     | { $$ = nullptr; }
     ;
 
-opt_rangeLit
-    : rangeLit
-    | /* empty */
-    ;
-
 //lhs
 //    : symbol ASSIGN
 //    ;
@@ -1088,7 +1083,7 @@ edgePattern
     ;
 
 edgeDetail
-    : opt_symbol opt_edgeTypes opt_rangeLit opt_properties { 
+    : opt_symbol opt_edgeTypes opt_properties { 
         $$ = EdgePattern::create(ast, EdgePattern::Direction::Undirected);
         $$->setSymbol($1);
         $$->setTypes($2);
@@ -1300,15 +1295,6 @@ literal
     | stringLit { $$ = $1; }
     | listLit { scanner.notImplemented(@$, "Lists"); }
     | mapLit { $$ = $1; }
-    ;
-
-rangeLit
-    : MULT { scanner.notImplemented(@$, "Ranges"); }
-    | MULT numLit { scanner.notImplemented(@$, "Ranges"); }
-    | MULT RANGE { scanner.notImplemented(@$, "Ranges"); }
-    | MULT RANGE numLit { scanner.notImplemented(@$, "Ranges"); }
-    | MULT numLit RANGE { scanner.notImplemented(@$, "Ranges"); }
-    | MULT numLit RANGE numLit { scanner.notImplemented(@$, "Ranges"); }
     ;
 
 boolLit
