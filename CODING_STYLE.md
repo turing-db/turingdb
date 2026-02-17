@@ -234,7 +234,7 @@ void MyClass::myFunction(Arg1* arg1, Arg2* arg2, Arg3* arg3) {
 }
 ```
 
-References are reserved for passing STL data structures such as `std::string`, `std::vector`, `std::map`, `std::optional` and other standard library types:
+References are reserved for passing STL data structures such as `std::string`, `std::string_view`, `std::vector`, `std::map`, `std::optional` and other standard library types, as well as lambdas and callable types in templates:
 ```cpp
 void MyClass::myFunction(Arg1* arg1, const std::string& myStr) {
 	// Do something
