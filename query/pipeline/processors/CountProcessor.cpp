@@ -89,7 +89,7 @@ struct Counter {
     // e.g. COUNT(n.name) : count only non-null valued rows
     template <TypeConcepts::OptionalType T>
     void operator()(const ColumnVector<T>* typed) {
-        CountProcessor::CountType localCount {0};
+        CountProcessor::CountType localCount = 0;
         for (const T& item : *typed) {
             localCount += item.has_value();
         }
