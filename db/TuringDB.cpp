@@ -108,6 +108,13 @@ void TuringDB::init() {
         panic("Could not create vector database: {}", res.error().fmtMessage());
     }
 
+    // Acquire lock file
+    _lockFile.setPath(fs::Path(_config->getLockFilePath()));
+    auto lockRes = _lockFile.tryLock();
+    if (!lockRes) {
+        panic("Could not acquire lock file: {}", lockRes.error().fmtMessage());
+    }
+
     // Init system manager
     _systemManager->init();
 

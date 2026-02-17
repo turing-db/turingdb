@@ -6,14 +6,23 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "BioAssert.h"
-
 using namespace fs;
 
 File::~File() {
     if (_fd != -1) {
         ::close(_fd);
     }
+}
+
+Result<File> File::fromFd(const Path& path, int fd) {
+    File file;
+    file._fd = fd;
+
+    if (const Result res = file.refreshInfo(); !res) {
+        return res.get_unexpected();
+    }
+
+    return std::move(file);
 }
 
 Result<File> File::createAndOpen(const Path& path) {
