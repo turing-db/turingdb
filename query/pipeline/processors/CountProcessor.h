@@ -35,10 +35,11 @@ private:
 
     CountProcessor();
     ~CountProcessor();
+
+    // Methods such as @ref Dataframe::getLogicalRowCount return a size_t; ensure types are
+    // compatible.
+    static_assert(std::numeric_limits<size_t>::max()
+                  == std::numeric_limits<CountProcessor::CountType>::max());
 };
 
-// Methods such as @ref Dataframe::getLogicalRowCount return a size_t; ensure types are
-// compatible.
-static_assert(std::numeric_limits<size_t>::max()
-              == std::numeric_limits<CountProcessor::CountType>::max());
 }
