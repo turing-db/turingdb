@@ -889,11 +889,11 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
             throw PlannerException("FunctionInvocation does not have a FunctionSignature");
         }
 
-        if (!signature->_isAggregate) [[unlikely]] {
+        if (!signature->isAggregate()) [[unlikely]] {
             throw PlannerException("FunctionInvocation is not an aggregate function");
         }
 
-        if (signature->_fullName == "count") {
+        if (signature->getFullName() == "count") {
             PipelineValueOutputInterface* output = nullptr;
             if (args->empty()) {
                 // e.g. count() Not supported yet
@@ -923,7 +923,7 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
 
             _declToColumn[exprDecl] = output->getValue()->getTag();
         } else {
-            throw PlannerException(fmt::format("Aggregate function '{}' is not implemented yet", signature->_fullName));
+            throw PlannerException(fmt::format("Aggregate function '{}' is not implemented yet", signature->getFullName()));
         }
     }
     return _builder.getPendingOutputInterface();
@@ -957,9 +957,9 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
     std::vector<Procedure::Argument> inputItems;
     std::vector<Procedure::YieldItem> yieldItems;
 
-    const Procedure* procedure = _procedures->getProcedure(signature->_fullName);
+    const Procedure* procedure = _procedures->getProcedure(signature->getFullName());
     if (!procedure) {
-        throw PlannerException(fmt::format("Procedure '{}' does not exist", signature->_fullName));
+        throw PlannerException(fmt::format("Procedure '{}' does not exist", signature->getFullName()));
     }
 
     if (!yield || !yield->getItems()) {

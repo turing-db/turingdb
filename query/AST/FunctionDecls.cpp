@@ -1,11 +1,5 @@
 #include "FunctionDecls.h"
 
-#include "procedures/Procedure.h"
-#include "procedures/ProcedureManager.h"
-#include "procedures/ProcedureNamespace.h"
-
-#include "FatalException.h"
-
 using namespace db;
 
 FunctionDecls::FunctionDecls()
@@ -15,189 +9,100 @@ FunctionDecls::FunctionDecls()
 FunctionDecls::~FunctionDecls() {
 }
 
-std::unique_ptr<FunctionDecls> FunctionDecls::createDefault(const ProcedureManager* procedures) {
-    auto decls = std::make_unique<FunctionDecls>();
-
-    // Metadata
-    for (const auto* ns : procedures->namespaces()) {
-        for (const auto* proc : ns->procedures()) {
-            auto declBuilder = decls->create(proc->getFullName());
-            declBuilder.setIsDatabaseProcedure(true);
-
-            for (const auto& returnItem : proc->returnValues()) {
-                switch (returnItem._type) {
-                    case ProcedureType::INVALID:
-                        throw FatalException("Invalid procedure return type");
-                    break;
-
-                    case ProcedureType::NODE:
-                        declBuilder.addReturnType(EvaluatedType::NodePattern, returnItem._name);
-                    break;
-
-                    case ProcedureType::EDGE:
-                        declBuilder.addReturnType(EvaluatedType::EdgePattern, returnItem._name);
-                    break;
-
-                    case ProcedureType::VALUE_TYPE:
-                        declBuilder.addReturnType(EvaluatedType::ValueType, returnItem._name);
-                    break;
-
-                    case ProcedureType::LABEL_ID:
-                    case ProcedureType::EDGE_TYPE_ID:
-                    case ProcedureType::PROPERTY_TYPE_ID:
-                    case ProcedureType::UINT_64:
-                    case ProcedureType::INT64:
-                        declBuilder.addReturnType(EvaluatedType::Integer, returnItem._name);
-                    break;
-
-                    case ProcedureType::DOUBLE:
-                        declBuilder.addReturnType(EvaluatedType::Double, returnItem._name);
-                    break;
-
-                    case ProcedureType::BOOL:
-                        declBuilder.addReturnType(EvaluatedType::Bool, returnItem._name);
-                    break;
-
-                    case ProcedureType::STRING_VIEW:
-                    case ProcedureType::STRING:
-                        declBuilder.addReturnType(EvaluatedType::String, returnItem._name);
-                    break;
-
-                    case ProcedureType::_SIZE:
-                        throw FatalException("Invalid procedure return type: _SIZE");
-                    break;
-                }
-            }
-
-            for (const auto& arg : proc->argumentTypes()) {
-                switch (arg._type) {
-                    case ProcedureType::INVALID:
-                        throw FatalException("Invalid procedure return type");
-                    break;
-
-                    case ProcedureType::NODE:
-                        declBuilder.addArgument(EvaluatedType::NodePattern);
-                    break;
-
-                    case ProcedureType::EDGE:
-                        declBuilder.addArgument(EvaluatedType::EdgePattern);
-                    break;
-
-                    case ProcedureType::VALUE_TYPE:
-                        declBuilder.addArgument(EvaluatedType::ValueType);
-                    break;
-
-                    case ProcedureType::LABEL_ID:
-                    case ProcedureType::EDGE_TYPE_ID:
-                    case ProcedureType::PROPERTY_TYPE_ID:
-                    case ProcedureType::UINT_64:
-                    case ProcedureType::INT64:
-                        declBuilder.addArgument(EvaluatedType::Integer);
-                    break;
-
-                    case ProcedureType::DOUBLE:
-                        declBuilder.addArgument(EvaluatedType::Double);
-                    break;
-
-                    case ProcedureType::BOOL:
-                        declBuilder.addArgument(EvaluatedType::Bool);
-                    break;
-
-                    case ProcedureType::STRING_VIEW:
-                    case ProcedureType::STRING:
-                        declBuilder.addArgument(EvaluatedType::String);
-                    break;
-
-                    case ProcedureType::_SIZE:
-                        throw FatalException("Invalid procedure return type: _SIZE");
-                    break;
-                }
-            }
-        }
-    }
-
+void FunctionDecls::initDefault() {
     // Entity patterns
-    decls->create("edgeTypes")
-        .setArguments({EvaluatedType::EdgePattern})
-        .setReturnTypes({{EvaluatedType::String}});
-    decls->create("labels")
-        .setArguments({EvaluatedType::NodePattern})
-        .setReturnTypes({{EvaluatedType::String}});
-    decls->create("keys")
-        .setArguments({EvaluatedType::NodePattern})
-        .setReturnTypes({{EvaluatedType::String}});
-    decls->create("keys")
-        .setArguments({EvaluatedType::EdgePattern})
-        .setReturnTypes({{EvaluatedType::String}});
+    FunctionSignature* edgeTypes = createFunction("edgeTypes");
+    edgeTypes->setArguments({EvaluatedType::EdgePattern});
+    edgeTypes->setReturnTypes({{EvaluatedType::String}});
+
+    FunctionSignature* labels = createFunction("labels");
+    labels->setArguments({EvaluatedType::NodePattern});
+    labels->setReturnTypes({{EvaluatedType::String}});
+
+    FunctionSignature* keysNodes = createFunction("keys");
+    keysNodes->setArguments({EvaluatedType::NodePattern});
+    keysNodes->setReturnTypes({{EvaluatedType::String}});
+
+    FunctionSignature* keysEdges = createFunction("keys");
+    keysEdges->setArguments({EvaluatedType::EdgePattern});
+    keysEdges->setReturnTypes({{EvaluatedType::String}});
 
     // Aggregate functions
-    decls->create("count")
-        .setArguments({EvaluatedType::NodePattern})
-        .setReturnTypes({{EvaluatedType::Integer}})
-        .setIsAggregate(true);
-    decls->create("count")
-        .setArguments({EvaluatedType::EdgePattern})
-        .setReturnTypes({{EvaluatedType::Integer}})
-        .setIsAggregate(true);
-    decls->create("count")
-        .setArguments({EvaluatedType::Integer})
-        .setReturnTypes({{EvaluatedType::Integer}})
-        .setIsAggregate(true);
-    decls->create("count")
-        .setArguments({EvaluatedType::Double})
-        .setReturnTypes({{EvaluatedType::Integer}})
-        .setIsAggregate(true);
-    decls->create("count")
-        .setArguments({EvaluatedType::String})
-        .setReturnTypes({{EvaluatedType::Integer}})
-        .setIsAggregate(true);
-    decls->create("count")
-        .setArguments({EvaluatedType::Char})
-        .setReturnTypes({{EvaluatedType::Integer}})
-        .setIsAggregate(true);
-    decls->create("count")
-        .setArguments({EvaluatedType::Bool})
-        .setReturnTypes({{EvaluatedType::Integer}})
-        .setIsAggregate(true);
-    decls->create("count")
-        .setArguments({EvaluatedType::Wildcard})
-        .setReturnTypes({{EvaluatedType::Integer}})
-        .setIsAggregate(true);
+    FunctionSignature* countNodes = createFunction("count");
+    countNodes->setArguments({EvaluatedType::NodePattern});
+    countNodes->setReturnTypes({{EvaluatedType::Integer}});
+    countNodes->setIsAggregate(true);
 
-    decls->create("min")
-        .setArguments({EvaluatedType::Integer})
-        .setReturnTypes({{EvaluatedType::Integer}})
-        .setIsAggregate(true);
-    decls->create("min")
-        .setArguments({EvaluatedType::Double})
-        .setReturnTypes({{EvaluatedType::Double}})
-        .setIsAggregate(true);
+    FunctionSignature* countEdges = createFunction("count");
+    countEdges->setArguments({EvaluatedType::EdgePattern});
+    countEdges->setReturnTypes({{EvaluatedType::Integer}});
+    countEdges->setIsAggregate(true);
 
-    decls->create("max")
-        .setArguments({EvaluatedType::Integer})
-        .setReturnTypes({{EvaluatedType::Integer}})
-        .setIsAggregate(true);
-    decls->create("max")
-        .setArguments({EvaluatedType::Double})
-        .setReturnTypes({{EvaluatedType::Double}})
-        .setIsAggregate(true);
+    FunctionSignature* countIntegers = createFunction("count");
+    countIntegers->setArguments({EvaluatedType::Integer});
+    countIntegers->setReturnTypes({{EvaluatedType::Integer}});
+    countIntegers->setIsAggregate(true);
 
-    decls->create("avg")
-        .setArguments({EvaluatedType::Integer})
-        .setReturnTypes({{EvaluatedType::Double}})
-        .setIsAggregate(true);
-    decls->create("avg")
-        .setArguments({EvaluatedType::Double})
-        .setReturnTypes({{EvaluatedType::Double}})
-        .setIsAggregate(true);
+    FunctionSignature* countDoubles = createFunction("count");
+    countDoubles->setArguments({EvaluatedType::Double});
+    countDoubles->setReturnTypes({{EvaluatedType::Integer}});
+    countDoubles->setIsAggregate(true);
 
-    return decls;
+    FunctionSignature* countStrings = createFunction("count");
+    countStrings->setArguments({EvaluatedType::String});
+    countStrings->setReturnTypes({{EvaluatedType::Integer}});
+    countStrings->setIsAggregate(true);
+
+    FunctionSignature* countChars = createFunction("count");
+    countChars->setArguments({EvaluatedType::Char});
+    countChars->setReturnTypes({{EvaluatedType::Integer}});
+    countChars->setIsAggregate(true);
+
+    FunctionSignature* countBools = createFunction("count");  
+    countBools->setArguments({EvaluatedType::Bool});
+    countBools->setReturnTypes({{EvaluatedType::Integer}});
+    countBools->setIsAggregate(true);
+
+    FunctionSignature* countWildcard = createFunction("count");
+    countWildcard->setArguments({EvaluatedType::Wildcard});
+    countWildcard->setReturnTypes({{EvaluatedType::Integer}});
+    countWildcard->setIsAggregate(true);
+
+    FunctionSignature* minInt = createFunction("min");
+    minInt->setArguments({EvaluatedType::Integer});
+    minInt->setReturnTypes({{EvaluatedType::Integer}});
+    minInt->setIsAggregate(true);
+
+    FunctionSignature* minDouble = createFunction("min");
+    minDouble->setArguments({EvaluatedType::Double});
+    minDouble->setReturnTypes({{EvaluatedType::Double}});
+    minDouble->setIsAggregate(true);
+
+    FunctionSignature* maxInt = createFunction("max");
+    maxInt->setArguments({EvaluatedType::Integer});
+    maxInt->setReturnTypes({{EvaluatedType::Integer}});
+    maxInt->setIsAggregate(true);
+
+    FunctionSignature* maxDouble = createFunction("max");
+    maxDouble->setArguments({EvaluatedType::Double});
+    maxDouble->setReturnTypes({{EvaluatedType::Double}});
+    maxDouble->setIsAggregate(true);
+
+    FunctionSignature* avgInt = createFunction("avg");
+    avgInt->setArguments({EvaluatedType::Integer});
+    avgInt->setReturnTypes({{EvaluatedType::Double}});
+    avgInt->setIsAggregate(true);
+
+    FunctionSignature* avgDouble = createFunction("avg");
+    avgDouble->setArguments({EvaluatedType::Double});
+    avgDouble->setReturnTypes({{EvaluatedType::Double}});
+    avgDouble->setIsAggregate(true);
 }
 
-FunctionDecls::FunctionSignatureBuilder FunctionDecls::create(std::string_view fullName) {
+FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {
     auto func = std::make_unique<FunctionSignature>(fullName);
     FunctionSignature* ptr = func.get();
     _decls.emplace(fullName, std::move(func));
 
-    return FunctionSignatureBuilder(ptr);
+    return ptr;
 }

@@ -179,7 +179,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 const auto* n = dynamic_cast<AggregateEvalNode*>(node.get());
                 for (const auto& func : n->getFuncs()) {
                     const FunctionSignature* signature = func->getFunctionInvocation()->getSignature();
-                    output << "        __aggregate_func__: " << signature->_fullName << "\n";
+                    output << "        __aggregate_func__: " << signature->getFullName() << "\n";
                 }
                 if (!n->getGroupByKeys().empty()) {
                     output << "        __has grouping keys__: " << n->getGroupByKeys().size() << "\n";
@@ -190,7 +190,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 const auto* n = dynamic_cast<FuncEvalNode*>(node.get());
                 for (const auto& func : n->getFuncs()) {
                     const FunctionSignature* signature = func->getFunctionInvocation()->getSignature();
-                    output << "        __func__: " << signature->_fullName << "\n";
+                    output << "        __func__: " << signature->getFullName() << "\n";
                 }
             } break;
 
@@ -312,7 +312,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 const auto* n = dynamic_cast<ProcedureEvalNode*>(node.get());
                 const auto* invocation = n->getFuncExpr()->getFunctionInvocation();
                 const auto* signature = invocation->getSignature();
-                output << "        __func__ " << signature->_fullName << "\n";
+                output << "        __func__ " << signature->getFullName() << "\n";
 
                 const auto* yield = n->getYield();
                 if (!yield) {

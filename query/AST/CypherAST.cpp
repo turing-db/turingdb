@@ -33,8 +33,9 @@ CypherAST::CypherAST(const ProcedureManager* procedures,
                      std::string_view queryString)
     : _sourceManager(new SourceManager(queryString)),
     _diagnosticsManager(new DiagnosticsManager(_sourceManager)),
-    _functionDecls(FunctionDecls::createDefault(procedures))
+    _functionDecls(std::make_unique<FunctionDecls>())
 {
+    _functionDecls->initDefault();
 }
 
 CypherAST::~CypherAST() {

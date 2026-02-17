@@ -149,6 +149,7 @@ public:
 
     CypherAST(const ProcedureManager* procedures,
               std::string_view queryString);
+
     ~CypherAST();
 
     CypherAST(const CypherAST&) = delete;
