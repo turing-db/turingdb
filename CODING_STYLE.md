@@ -175,6 +175,56 @@ MyClass::MyClass(ArgType* arg1, ArgType* arg2)
 - The constructor body is ideally empty
 - Each new member initialisation is aligned with the ":" character
 
+## Struct vs Class
+
+Use `struct` only for small, trivial aggregates of plain data with no logic — things like a 2D point, a 3D point, or a simple pair of values. Structs used for template metaprogramming (traits, tag types) or functors are also acceptable.
+
+For anything beyond that, use a `class` with proper encapsulation: private members, accessors, and a constructor. A type that carries multiple fields, has non-trivial members such as STL containers, or represents a meaningful domain concept must be a class.
+
+A struct like this is wrong:
+```cpp
+// Bad: non-trivial type with STL containers masquerading as a struct
+struct FunctionSignature {
+    std::string_view _fullName;
+    std::vector<EvaluatedType> _argumentTypes;
+    std::vector<FunctionReturnType> _returnTypes;
+    bool _isAggregate {false};
+    bool _isDatabaseProcedure {false};
+};
+```
+
+It should be a class, with `using` directives to name the container types so that both the member declarations and the accessor return types share the same type alias:
+```cpp
+// Good: proper encapsulation with using directives
+class FunctionSignature {
+public:
+    using ArgumentTypes = std::vector<EvaluatedType>;
+    using ReturnTypes = std::vector<FunctionReturnType>;
+
+    FunctionSignature(std::string_view fullName);
+
+    std::string_view fullName() const { return _fullName; }
+    const ArgumentTypes& argumentTypes() const {
+        return _argumentTypes;
+    }
+    const ReturnTypes& returnTypes() const {
+        return _returnTypes;
+    }
+    bool isAggregate() const { return _isAggregate; }
+
+private:
+    std::string_view _fullName;
+    ArgumentTypes _argumentTypes;
+    ReturnTypes _returnTypes;
+    bool _isAggregate {false};
+    bool _isDatabaseProcedure {false};
+};
+```
+
+In summary:
+- `struct`: trivial POD aggregates (points, pairs), template traits, functors
+- `class`: everything else — if it has STL containers, multiple fields with logic, or represents a domain concept, it must be a class
+
 ## Function arguments
 
 When a function has few arguments and they fit well on one line, they can be put one after the other on the same line:
