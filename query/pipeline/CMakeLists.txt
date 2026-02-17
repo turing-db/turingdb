@@ -60,6 +60,7 @@ set(processors_sources
     processors/VectorSearchProcessor.cpp
     processors/DeleteVectorIndexProcessor.cpp
     processors/ShowVectorIndexesProcessor.cpp
+    processors/OrderByProcessor.cpp
 )
 
 set(procedures_sources

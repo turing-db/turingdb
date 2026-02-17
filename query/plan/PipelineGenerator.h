@@ -54,6 +54,7 @@ class LoadVectorNode;
 class VectorSearchNode;
 class DeleteVectorIndexNode;
 class ShowVectorIndexesNode;
+class OrderByNode;
 
 class PipelineGenerator {
 public:
@@ -151,6 +152,7 @@ private:
 
     std::vector<std::string> _csvHeaders;
     size_t _csvFieldCount {0};
+    PipelineOutputInterface* translateOrderByNode(OrderByNode* node);
 };
 
 }
