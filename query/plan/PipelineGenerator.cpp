@@ -21,6 +21,7 @@
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/SymbolExpr.h"
+#include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
@@ -69,6 +70,7 @@
 #include "nodes/VectorSearchNode.h"
 #include "nodes/DeleteVectorIndexNode.h"
 #include "nodes/ShowVectorIndexesNode.h"
+#include "nodes/OrderByNode.h"
 
 #include "processors/CreateVectorIndexProcessor.h"
 #include "processors/LoadVectorProcessor.h"
@@ -367,11 +369,14 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::SHOW_PROCEDURES:
             return translateShowProceduresNode(static_cast<ShowProceduresNode*>(node));
-            break;
+        break;
 
         case PlanGraphOpcode::SHORTEST_PATH:
             return translateShortestPathNode(static_cast<ShortestPathNode*>(node));
-            break;
+        break;
+        case PlanGraphOpcode::ORDER_BY:
+            return translateOrderByNode(static_cast<OrderByNode*>(node));
+        break;
 
         case PlanGraphOpcode::LOAD_CSV:
             return translateLoadCSVNode(static_cast<LoadCSVNode*>(node));
@@ -400,7 +405,6 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::FUNC_EVAL:
-        case PlanGraphOpcode::ORDER_BY:
         case PlanGraphOpcode::UNKNOWN:
         case PlanGraphOpcode::_SIZE:
             throw PlannerException(fmt::format("PipelineGenerator does not support PlanGraphNode: {}",
@@ -1465,4 +1469,8 @@ PipelineOutputInterface* PipelineGenerator::translateDeleteVectorIndexNode(Delet
 PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowVectorIndexesNode* node) {
     _builder.addShowVectorIndexes();
     return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* node) {
+    throw FatalException("ORDER BY is not yet implemented.");
 }
