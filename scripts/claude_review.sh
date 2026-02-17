@@ -87,6 +87,15 @@ constructors/destructors in a cpp file.
 indentation are acceptable, as long as each argument is on its own line
 and consistently indented below the others. Do NOT flag flat indentation
 as a violation of the alignment rule.
+- Constructor brace placement: a constructor whose opening brace '{' appears
+on its own line is correctly formatted, even when the constructor is defined
+inline inside a class body. Do not confuse an inline constructor definition
+with a regular method — the constructor brace rule always applies.
+- Const correctness for pointers: before flagging a non-const pointer variable,
+verify that ALL functions it is passed to accept a const pointer. If any
+callee takes a non-const pointer (e.g. `void foo(Expr* e)`), the variable
+CANNOT be declared const. Only flag when the variable is truly never passed
+to a non-const parameter and is never modified.
 
 OUTPUT FORMAT (follow these three phases in order):
 
