@@ -217,6 +217,4 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
         }
         break;
     }
-
-    throw PipelineException("Unknown procedure step");
 }
