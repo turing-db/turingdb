@@ -4,7 +4,8 @@
   "query": "MATCH ()-[e]->() RETURN e, e, e",
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH ()-[e]->() RETURN e, e, e\n       |                            ^\n-------* Return items must have unique names; e was already defined.",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH ()-[e]->() RETURN e, e, e\n       |                            ^\n-------* Return items must have unique names; e was already defined."
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH ()-[e]->() RETURN e, e, e\n       |                            ^\n-------* Return items must have unique names; e was already defined.",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH ()-[e]->() RETURN e, e, e\\n       |                            ^\\n-------* Return items must have unique names; e was already defined.\"}"
   },
   "tags": [
     "error",
