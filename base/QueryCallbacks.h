@@ -42,17 +42,17 @@ public:
     ~QueryCallbacks();
 
     QueryCallbacks(const QueryCallbacks&);
-    QueryCallbacks(QueryCallbacks&&) noexcept;
+    QueryCallbacks(QueryCallbacks&&);
     QueryCallbacks& operator=(const QueryCallbacks&);
-    QueryCallbacks& operator=(QueryCallbacks&&) noexcept;
+    QueryCallbacks& operator=(QueryCallbacks&&);
 
     /**
      * @brief Set the callback for when the query processing begins (before the transaction is open).
      *
      * @param onBegin The callback to set.
      * */
-    void setOnBegin(OnBegin&& onBegin) {
-        _onBegin = std::move(onBegin);
+    void setOnBegin(const OnBegin& onBegin) {
+        _onBegin = onBegin;
     }
 
     /**
@@ -60,8 +60,8 @@ public:
      *
      * @param onError The callback to set.
      * */
-    void setOnError(OnError&& onError) {
-        _onError = std::move(onError);
+    void setOnError(const OnError& onError) {
+        _onError = onError;
     }
 
     /**
@@ -69,8 +69,8 @@ public:
      *
      * @param onOutputHeader The callback to set.
      * */
-    void setOnOutputHeader(OnOutputHeader&& onOutputHeader) {
-        _onOutputHeader = std::move(onOutputHeader);
+    void setOnOutputHeader(const OnOutputHeader& onOutputHeader) {
+        _onOutputHeader = onOutputHeader;
     }
 
     /**
@@ -78,8 +78,8 @@ public:
      *
      * @param onOutputData The callback to set.
      * */
-    void setOnOutputData(OnOutputData&& onOutputData) {
-        _onOutputData = std::move(onOutputData);
+    void setOnOutputData(const OnOutputData& onOutputData) {
+        _onOutputData = onOutputData;
     }
 
     /**
@@ -87,8 +87,8 @@ public:
      *
      * @param onEnd The callback to set.
      * */
-    void setOnEnd(OnEnd&& onEnd) {
-        _onEnd = std::move(onEnd);
+    void setOnEnd(const OnEnd& onEnd) {
+        _onEnd = onEnd;
     }
 
     void onBegin() const;

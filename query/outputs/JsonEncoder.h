@@ -96,7 +96,7 @@ public:
     ~JsonEncoder() {
     }
 
-    void finish() noexcept {
+    void finish() {
         while (!_closingTokens.empty()) {
             end();
         }
@@ -195,7 +195,7 @@ public:
         _comma = false;
     }
 
-    void end() noexcept {
+    void end() {
         if (_closingTokens.empty()) {
             return;
         }

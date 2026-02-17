@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
         queryStr = argv[1];
         pipelineGenEnabled = true;
     } else {
-        fs::Path path(SAMPLE_DIR "/queries.txt");
+        const fs::Path path(SAMPLE_DIR "/queries.txt");
         fmt::print("Reading query from file: {}\n", path.get());
         fs::File file = fs::File::open(path).value();
         fs::FileReader reader;
@@ -147,13 +147,13 @@ int main(int argc, char** argv) {
         {
             fmt::print("\n=== Pipeline generation ===\n\n");
 
-            QueryCallbacks callbacks;
+            const QueryCallbacks callbacks;
             PipelineGenerator pipelineGen(&planGraph,
                                           view,
                                           &pipeline,
                                           &mem,
-                                          *procedures,
-                                          callbacks);
+                                          procedures.get(),
+                                          &callbacks);
             try {
                 auto t0 = Clock::now();
                 pipelineGen.generate();

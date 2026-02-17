@@ -15,7 +15,7 @@ class ProcedureBlueprintMap;
 class InterpreterContext {
 public:
     InterpreterContext(LocalMemory* mem,
-                       QueryCallbacks& callbacks,
+                       const QueryCallbacks* callbacks,
                        const ProcedureBlueprintMap* procedures,
                        CommitHash commitHash = CommitHash::head(),
                        ChangeID changeID = ChangeID::head())
@@ -31,13 +31,13 @@ public:
 
     LocalMemory* getLocalMemory() const { return _mem; }
     const ProcedureBlueprintMap* getProcedures() const { return _procedures; }
-    const QueryCallbacks& getQueryCallbacks() const { return _callbacks; }
+    const QueryCallbacks* getQueryCallbacks() const { return _callbacks; }
     CommitHash getCommitHash() const { return _commitHash; }
     ChangeID getChangeID() const { return _changeID; }
 
 private:
     LocalMemory* _mem {nullptr};
-    QueryCallbacks& _callbacks;
+    const QueryCallbacks* _callbacks {nullptr};
     const ProcedureBlueprintMap* _procedures {nullptr};
     CommitHash _commitHash;
     ChangeID _changeID;

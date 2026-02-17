@@ -717,7 +717,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
             return;
         }
 
-        _callbacks.onOutputData(df);
+        _callbacks->onOutputData(df);
     };
 
     const Dataframe* df = _builder.getPendingOutputInterface()->getDataframe();
