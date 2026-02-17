@@ -51,14 +51,7 @@ TuringConfig::TuringConfig()
     const char* homeEnv = getenv("HOME");
     bioassert(homeEnv && *homeEnv, "$HOME is undefined");
 
-    _turingDir = fs::Path(homeEnv) / ".turing";
-    _graphsDir = _turingDir / "graphs";
-    _dataDir = _turingDir / "data";
-    _vectorDir = _turingDir / "vector";
-    _userExtensionsDir = _turingDir / "extensions";
-    _logsDir = _turingDir / "logs";
-    _lockFilePath = _turingDir / "lock";
-    resolveInstallExtensionsDir(_installExtensionsDir);
+    setTuringDirectory(fs::Path(homeEnv) / ".turing");
 }
 
 TuringConfig::~TuringConfig() {
@@ -79,5 +72,6 @@ void TuringConfig::setTuringDirectory(const fs::Path& turingDir) {
     _vectorDir = _turingDir / "vector";
     _userExtensionsDir = _turingDir / "extensions";
     _logsDir = _turingDir / "logs";
-    _lockFilePath = _turingDir / "lock";
+    _lockFilePath = _turingDir / "turingdb.lock";
+    resolveInstallExtensionsDir(_installExtensionsDir);
 }
