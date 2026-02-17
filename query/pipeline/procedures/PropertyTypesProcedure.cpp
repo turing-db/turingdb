@@ -59,13 +59,13 @@ void PropertyTypesProcedure::execute(ProcedureState* proc) {
             data._it->setPropertyTypes(idsCol);
             data._it->setNames(namesCol);
             data._it->setValueTypes(valueTypesCol);
-            return;
         }
+        break;
 
         case ProcedureState::Step::RESET: {
             data._it->reset();
-            return;
         }
+        break;
 
         case ProcedureState::Step::EXECUTE: {
             data._it->fill(proc->getContext()->getChunkSize());
@@ -73,9 +73,8 @@ void PropertyTypesProcedure::execute(ProcedureState* proc) {
             if (!data._it->isValid()) {
                 proc->finish();
             }
-
-            return;
         }
+        break;
     }
 
     throw PipelineException("Unknown procedure step");

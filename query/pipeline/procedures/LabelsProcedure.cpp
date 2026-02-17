@@ -55,13 +55,13 @@ void LabelsProcedure::execute(ProcedureState* proc) {
                 view.metadata().labels());
             data._it->setIDs(idsCol);
             data._it->setNames(namesCol);
-            return;
         }
+        break;
 
         case ProcedureState::Step::RESET: {
             data._it->reset();
-            return;
         }
+        break;
 
         case ProcedureState::Step::EXECUTE: {
             data._it->fill(proc->getContext()->getChunkSize());
@@ -69,9 +69,8 @@ void LabelsProcedure::execute(ProcedureState* proc) {
             if (!data._it->isValid()) {
                 proc->finish();
             }
-
-            return;
         }
+        break;
     }
 
     throw PipelineException("Unknown procedure step");

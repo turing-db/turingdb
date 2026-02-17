@@ -139,14 +139,14 @@ void ProceduresProcedure::execute(ProcedureState* proc) {
         case ProcedureState::Step::PREPARE: {
             data._nsIndex = 0;
             data._procIndex = 0;
-            return;
         }
+        break;
 
         case ProcedureState::Step::RESET: {
             data._nsIndex = 0;
             data._procIndex = 0;
-            return;
         }
+        break;
 
         case ProcedureState::Step::EXECUTE: {
             writeProcedures(&data,
@@ -155,8 +155,8 @@ void ProceduresProcedure::execute(ProcedureState* proc) {
                             nameCol,
                             signatureCol,
                             ctxt->getChunkSize());
-            return;
         }
+        break;
     }
 
     throw PipelineException("Unknown procedure step");

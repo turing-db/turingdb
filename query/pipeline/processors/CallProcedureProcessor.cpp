@@ -79,9 +79,7 @@ void CallProcedureProcessor::execute() {
     }
 }
 
-void CallProcedureProcessor::setInputValues(
-    std::span<const Procedure::Argument> args) {
-
+void CallProcedureProcessor::setInputValues(std::span<const Procedure::Argument> args) {
     ProcedureData& data = *_procedureState._data;
 
     data.resizeInputColumns(_procedure->argumentTypes().size());
@@ -94,7 +92,6 @@ void CallProcedureProcessor::setInputValues(
 void CallProcedureProcessor::allocReturnValues(LocalMemory* mem,
                                                DataframeManager* dfMan,
                                                std::span<Procedure::YieldItem> yieldItems) {
-
     ProcedureData& data = *_procedureState._data;
 
     PipelineBlockOutputInterface& output = _output;
