@@ -32,9 +32,11 @@ public:
     File(const File&) = default;
     File& operator=(const File&) = default;
 
+    [[nodiscard]] static Result<File> fromFd(const Path& path, int fd);
     [[nodiscard]] static Result<File> createAndOpen(const Path& path);
     [[nodiscard]] static Result<File> open(const Path& path);
     [[nodiscard]] Result<FileRegion> map(size_t size, size_t offset = 0);
+
     Result<void> seek(size_t offset);
     Result<void> seekEnd(off_t offset) const;
     Result<void> read(void* buf, size_t size) const;

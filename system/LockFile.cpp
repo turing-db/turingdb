@@ -10,19 +10,33 @@
 
 using namespace db;
 
-LockFile::LockFile(const fs::Path& p)
-    : _path(p) {
+LockFile::LockFile() {
 }
 
-LockFile::~LockFile() = default;
+LockFile::~LockFile() {
+    unlock();
+}
+
+void LockFile::setPath(const fs::Path& p) {
+    bioassert(!_locked, "Lock file is already locked");
+    _path = p;
+}
 
 LockFileResult<void> LockFile::tryLock() {
+    bioassert(!_path.empty(), "Path is empty");
+
     _locked = false;
 
     const int lock_fd = ::open(_path.c_str(), O_CREAT | O_RDWR, 0644);
 
     if (lock_fd < 0) {
         return LockFileError::result(LockFileErrorType::PERMISSION_DENIED);
+    }
+
+    if (auto res = fs::File::fromFd(_path, lock_fd); !res) {
+        return LockFileError::result(LockFileErrorType::UNKNOWN);
+    } else {
+        _file = std::move(res.value());
     }
 
     const int lock_res = flock(lock_fd, LOCK_EX | LOCK_NB);
@@ -91,8 +105,11 @@ LockFileResult<void> LockFile::writeMetadata() {
         return LockFileError::result(LockFileErrorType::PERMISSION_DENIED);
     }
 
+    _file = std::move(f.value());
+    _file.clearContent();
+
     fs::FileWriter writer;
-    writer.setFile(&f.value());
+    writer.setFile(&_file);
 
     writer.write(std::to_string(pid));
     writer.write('\n');
@@ -103,4 +120,14 @@ LockFileResult<void> LockFile::writeMetadata() {
     }
 
     return {};
+}
+
+void LockFile::unlock() {
+    if (!_locked) {
+        return;
+    }
+
+    _file.close();
+    _path.rm();
+    _locked = false;
 }
