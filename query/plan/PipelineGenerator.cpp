@@ -967,9 +967,10 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
                 const Expr* arg = args->front();
                 const VarDecl* argDecl = arg->getExprVarDecl();
                 if (arg->getType() == EvaluatedType::Wildcard) {
+                    // count(*)
                     output = &_builder.addCount();
                 } else {
-                    // count(*)
+                    // count(<some var>)
                     const auto findIt = _declToColumn.find(argDecl);
                     if (findIt == _declToColumn.end()) {
                         throw FatalException(fmt::format(

@@ -445,7 +445,10 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
         prevNode = aggregateEval;
     }
 
-    // ORDER BY, SKIP, LIMIT
+    // ORDER BY, SKIP, LIMIT require a previous input, `LIMIT 10` is not a valid query,
+    // but `MATCH (n) LIMIT 10` is (because it has SCAN NODES as a previous input), and so
+    // is `RETURN 5 LIMIT 10` (it has EXPR EVAL as a previous input). Therefore, we can
+    // only add thse projection properties if @ref prevNode is valid.
     if (prevNode && proj->hasOrderBy()) {
         OrderByNode* orderBy = _tree.newOut<OrderByNode>(prevNode);
         orderBy->setItems(proj->getOrderBy()->getItems());
