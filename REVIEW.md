@@ -51,6 +51,7 @@ void myFunc() {
 * Every argument or variable of pointer or reference type that can be const has to be const
 * Every local variable of pointer or reference type that can be const has to be const
 * Every local variable that is never modified and can not be modified inside a function has to be const
+* This rule does not apply to the return type of functions or methods
 
 ## Member variables names
 
