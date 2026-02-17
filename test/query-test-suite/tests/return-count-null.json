@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN COUNT(NULL)",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN COUNT(NULL)\n       |        ^^^^^^^^^^^\n-------* Invalid arguments for function 'count'",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN COUNT(NULL)\n       |        ^^^^^^^^^^^\n-------* Invalid arguments for function 'count'"
+  },
+  "tags": [
+    "count",
+    "aggregate",
+    "return",
+    "projection",
+    "literal",
+    "expressions",
+    "null"
+  ],
+  "write-required": false
+}
