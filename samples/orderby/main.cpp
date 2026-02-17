@@ -1,3 +1,4 @@
+#include <limits>
 #include <memory>
 #include <ranges>
 #include <iostream>
@@ -27,24 +28,24 @@ void print_range(Rg&& range, std::string_view name) {
 }
 
 void bm(LocalMemory& mem, DataframeManager& dfman) {
-    Int minV = 10000;
-    Int maxV = 10000;
-    benchmarkSort(mem, dfman, ChunkConfig::CHUNK_SIZE, 1, 5, minV, maxV);
+    Int minV = std::numeric_limits<Int>::min();
+    Int maxV = std::numeric_limits<Int>::max();
+    /* benchmarkSort(mem, dfman, ChunkConfig::CHUNK_SIZE, 1, 5, minV, maxV);
     benchmarkSort(mem, dfman, ChunkConfig::CHUNK_SIZE, 2, 5, minV, maxV);
     benchmarkSort(mem, dfman, ChunkConfig::CHUNK_SIZE, 3, 5, minV, maxV);
     benchmarkSort(mem, dfman, ChunkConfig::CHUNK_SIZE, 4, 5, minV, maxV);
     benchmarkSort(mem, dfman, ChunkConfig::CHUNK_SIZE, 5, 5, minV, maxV);
     benchmarkSort(mem, dfman, ChunkConfig::CHUNK_SIZE, 10, 5, minV, maxV);
-    benchmarkSort(mem, dfman, ChunkConfig::CHUNK_SIZE, 25, 5, minV, maxV);
+    benchmarkSort(mem, dfman, ChunkConfig::CHUNK_SIZE, 25, 5, minV, maxV); */
 
-    /*
+
     compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 1, 5, minV, maxV);
     compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 2, 5, minV, maxV);
     compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 3, 5, minV, maxV);
     compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 4, 5, minV, maxV);
     compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 5, 5, minV, maxV);
     compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 10, 5, minV, maxV);
-    compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 25, 5, minV, maxV); */
+    compareSorts(mem, dfman, ChunkConfig::CHUNK_SIZE, 25, 5, minV, maxV);
 }
 
 void test(LocalMemory& mem, DataframeManager& dfman) {

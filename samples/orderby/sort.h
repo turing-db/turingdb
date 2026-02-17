@@ -32,17 +32,6 @@ struct TieRange {
     const size_t size {0};
 };
 
-void sortCol(Column* col, std::vector<size_t>& indices) {
-    auto* ccol = dynamic_cast<ColumnInts*>(col);
-    bioassert(ccol, "Failed to cast column to sort.");
-
-    rg::stable_sort(rv::zip(indices, *ccol), [](auto&& zip1, auto&& zip2) {
-        const Int a = std::get<1>(zip1);
-        const Int b = std::get<1>(zip2);
-        return a < b;
-    });
-}
-
 template <std::ranges::random_access_range Rg>
 void addTieRanges(std::vector<TieRange>& tieRanges, const Rg& rg, size_t start = 0) {
     // Find the first instance of a duplciated entry in the column
@@ -119,11 +108,11 @@ void project(Column* col, IndxRg& indices) {
 
 void rowsort(Dataframe* df) {
     // Empty/singleton dataframe is trivially sorted
-    if (df->getRowCount() <= 1) {
+    if (df->getLogicalRowCount() <= 1) {
         return;
     }
 
-    const size_t numRows = df->getRowCount();
+    const size_t numRows = df->getLogicalRowCount();
 
     std::vector<size_t> idx(numRows);
     std::iota(idx.begin(), idx.end(), 0);
@@ -157,11 +146,11 @@ void rowsort(Dataframe* df) {
 
 void colsort(Dataframe* df) {
     // Empty/singleton dataframe is trivially sorted
-    if (df->getRowCount() <= 1) {
+    if (df->getLogicalRowCount() <= 1) {
         return;
     }
 
-    const size_t numRows = df->getRowCount();
+    const size_t numRows = df->getLogicalRowCount();
 
     std::vector<size_t> indices(numRows);
     std::iota(indices.begin(), indices.end(), 0);
@@ -190,12 +179,12 @@ void colsort(Dataframe* df) {
 
 void subsort(Dataframe* df) {
     // Empty/singleton dataframe is trivially sorted
-    if (df->getRowCount() <= 1) {
+    if (df->getLogicalRowCount() <= 1) {
         return;
     }
 
     const size_t numCols = df->size();
-    const size_t numRows = df->getRowCount();
+    const size_t numRows = df->getLogicalRowCount();
 
     // Whenever sorting, track the row indexes to materialise post-sort
     std::vector<size_t> indices(numRows);

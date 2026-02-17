@@ -57,7 +57,7 @@ Df copyDataframe(LocalMemory& mem, DataframeManager& dfman, const Df& toCopy) {
 
 // check each column in the df to see if its sorted
 bool isSorted(const Df& df) {
-    const size_t numRows = df->getRowCount();
+    const size_t numRows = df->getLogicalRowCount();
     if (numRows <= 1) return true;
     
     const auto& cols = df->cols();
@@ -85,7 +85,7 @@ bool isSorted(const Df& df) {
 }
 
 bool containSame(const Df& a, const Df& b) {
-    if (a->getRowCount() != b->getRowCount()) {
+    if (a->getLogicalRowCount() != b->getLogicalRowCount()) {
         return false;
     }
     if (a->cols().size() != b->cols().size()) {
@@ -94,7 +94,7 @@ bool containSame(const Df& a, const Df& b) {
 
     auto makeRows = [](const Df& df) {
         const auto& cols = df->cols();
-        size_t rows = df->getRowCount();
+        size_t rows = df->getLogicalRowCount();
 
         std::vector<std::vector<Int>> out(rows);
 
