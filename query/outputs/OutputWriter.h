@@ -9,7 +9,7 @@ class Dataframe;
 
 template <typename T>
 concept Writer = requires(T writer) {
-    { writer.write(std::string_view {}) } noexcept -> std::same_as<void>;
+    { writer.write(std::string_view {}) } -> std::same_as<void>;
 };
 
 }

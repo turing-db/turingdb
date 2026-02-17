@@ -9,29 +9,29 @@
 namespace turing::test {
 
 struct QueryTestSpec {
-    std::string name;
-    std::string graphName {"simpledb"};
-    std::string query;
-    std::string expectPlan;
-    std::string expectResult;
-    std::string expectResultJson;
-    std::vector<std::string> tags;
-    bool enabled {true};
-    bool writeRequired {false};
-    std::string disabledReason;
+    std::string _name;
+    std::string _graphName {"simpledb"};
+    std::string _query;
+    std::string _expectPlan;
+    std::string _expectResult;
+    std::string _expectResultJson;
+    std::vector<std::string> _tags;
+    bool _enabled {true};
+    bool _writeRequired {false};
+    std::string _disabledReason;
 };
 
 struct QueryTestResult {
-    std::string name;
-    std::string planOutput;
-    std::string resultOutput;
-    std::string resultJsonOutput;
-    std::string resultJsonError;
-    bool planMatched {false};
-    bool resultMatched {false};
-    bool resultJsonMatched {false};
-    bool resultJsonValid {false};
-    uint64_t timeUs {0};
+    std::string _name;
+    std::string _planOutput;
+    std::string _resultOutput;
+    std::string _resultJsonOutput;
+    std::string _resultJsonError;
+    bool _planMatched {false};
+    bool _resultMatched {false};
+    bool _resultJsonMatched {false};
+    bool _resultJsonValid {false};
+    uint64_t _timeUs {0};
 };
 
 class QueryTestRunner {

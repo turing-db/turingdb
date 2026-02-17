@@ -240,8 +240,8 @@ void generatePlanGraph(std::string_view query, db::GraphView view, std::ostream&
 struct StringStreamWriter {
     std::string& _output;
 
-    void write(std::string_view content) noexcept { _output.append(content); }
-    void write(char c) noexcept { _output.push_back(c); }
+    void write(std::string_view content) { _output.append(content); }
+    void write(char c) { _output.push_back(c); }
 };
 
 bool validateResultJson(std::string& error, std::string_view jsonStr) {
@@ -380,26 +380,26 @@ void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs,
         json doc = json::parse(content, nullptr, true, true);
 
         QueryTestSpec spec;
-        spec.name = filename;
-        spec.graphName = doc.value("graph", spec.graphName);
-        spec.query = doc.value("query", "");
-        spec.enabled = doc.value("enabled", true);
-        spec.writeRequired = doc.value("write-required", false);
-        spec.disabledReason = doc.value("disabled-reason", "");
+        spec._name = filename;
+        spec._graphName = doc.value("graph", spec._graphName);
+        spec._query = doc.value("query", "");
+        spec._enabled = doc.value("enabled", true);
+        spec._writeRequired = doc.value("write-required", false);
+        spec._disabledReason = doc.value("disabled-reason", "");
 
         if (doc.contains("tags") && doc["tags"].is_array()) {
             for (const auto& tag : doc["tags"]) {
                 if (tag.is_string()) {
-                    spec.tags.push_back(tag.get<std::string>());
+                    spec._tags.push_back(tag.get<std::string>());
                 }
             }
         }
 
         if (doc.contains("expect")) {
             const auto& expect = doc["expect"];
-            spec.expectPlan = expect.value("plan", "");
-            spec.expectResult = expect.value("result", "");
-            spec.expectResultJson = expect.value("resultJson", "");
+            spec._expectPlan = expect.value("plan", "");
+            spec._expectResult = expect.value("result", "");
+            spec._expectResultJson = expect.value("resultJson", "");
         }
 
         specs.push_back(std::move(spec));
@@ -409,10 +409,10 @@ void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs,
 QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
                                          const fs::Path& outDir) {
     QueryTestResult result;
-    result.name = spec.name;
+    result._name = spec._name;
 
     auto env = turing::test::TuringTestEnv::create(outDir);
-    db::Graph* graph = env->getSystemManager().createGraph(spec.graphName);
+    db::Graph* graph = env->getSystemManager().createGraph(spec._graphName);
     db::SimpleGraph::createSimpleGraph(graph);
     db::TuringDB* db = &env->getDB();
 
@@ -420,7 +420,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     {
         const db::Transaction tx = graph->openTransaction();
         const db::GraphView view = tx.viewGraph();
-        generatePlanGraph(spec.query, view, planOut);
+        generatePlanGraph(spec._query, view, planOut);
     }
 
     std::vector<std::vector<std::string>> rows;
@@ -478,7 +478,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
 
     db::ChangeID changeID = db::ChangeID::head();
 
-    if (spec.writeRequired) {
+    if (spec._writeRequired) {
         const auto callback = [&](const db::Dataframe* df) {
             NamedColumn* col = df->getColumn(ColumnTag {0});
             bioassert(col, "Column not found");
@@ -490,7 +490,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
         };
 
         db->query("CHANGE NEW",
-                  spec.graphName,
+                  spec._graphName,
                   &env->getMem(),
                   callback,
                   CommitHash::head(),
@@ -498,8 +498,8 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     }
 
     const auto queryStart = Clock::now();
-    const db::QueryStatus status = db->query(spec.query,
-                                             spec.graphName,
+    const db::QueryStatus status = db->query(spec._query,
+                                             spec._graphName,
                                              &env->getMem(),
                                              queryCallbacks,
                                              db::CommitHash::head(),
@@ -511,7 +511,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     }
 
     jsonEncoder.finish();
-    result.timeUs = static_cast<uint64_t>(duration<Microseconds>(queryStart, queryEnd));
+    result._timeUs = static_cast<uint64_t>(duration<Microseconds>(queryStart, queryEnd));
 
     std::stringstream resultOut;
     std::string escaped;
@@ -540,28 +540,28 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
         }
     }
 
-    if (spec.writeRequired) {
+    if (spec._writeRequired) {
         db->query("CHANGE SUBMIT",
-                  spec.graphName,
+                  spec._graphName,
                   &env->getMem(),
                   db::CommitHash::head(),
                   changeID);
     }
 
-    normalizeOutput(result.planOutput, planOut.str());
-    normalizeOutput(result.resultOutput, resultOut.str());
-    result.resultJsonOutput = jsonOutput;
+    normalizeOutput(result._planOutput, planOut.str());
+    normalizeOutput(result._resultOutput, resultOut.str());
+    result._resultJsonOutput = jsonOutput;
 
     std::string expected;
 
-    normalizeOutput(expected, spec.expectPlan);
-    result.planMatched = expected == result.planOutput;
+    normalizeOutput(expected, spec._expectPlan);
+    result._planMatched = expected == result._planOutput;
 
-    normalizeOutput(expected, spec.expectResult);
-    result.resultMatched = expected == result.resultOutput;
+    normalizeOutput(expected, spec._expectResult);
+    result._resultMatched = expected == result._resultOutput;
 
-    result.resultJsonValid = validateResultJson(result.resultJsonError, result.resultJsonOutput);
-    result.resultJsonMatched = spec.expectResultJson == result.resultJsonOutput;
+    result._resultJsonValid = validateResultJson(result._resultJsonError, result._resultJsonOutput);
+    result._resultJsonMatched = spec._expectResultJson == result._resultJsonOutput;
 
     return result;
 }
