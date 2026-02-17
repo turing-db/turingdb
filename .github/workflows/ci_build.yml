@@ -71,7 +71,7 @@ jobs:
     - name: Run unit tests
       run: |
         cd build
-        make test
+        make test ARGS="--output-on-failure"
 
     - name: Verify wheel installation
       run: |
