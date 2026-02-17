@@ -194,6 +194,18 @@ void MyClass::myFunction(Arg1* arg1,
 }
 ```
 
+Never break a single argument onto the next line separately from the function name. If a function has only one argument, it must stay on the same line as the function name, even if the line is slightly longer than usual:
+```cpp
+// Good:
+void MyClass::myFunction(SomeVeryLongArgumentType* arg) {
+}
+
+// Bad:
+void MyClass::myFunction(
+    SomeVeryLongArgumentType* arg) {
+}
+```
+
 ## Function result type
 
 Do not return non-trivial classes as a function return value. Do not return STL containers.
