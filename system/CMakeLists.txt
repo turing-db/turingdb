@@ -2,6 +2,8 @@ set(system_sources
     TuringConfig.cpp
     GraphLoadStatus.cpp
     ChangeManager.cpp
+    LockFile.cpp
+    LockFileResult.cpp
     SystemManager.cpp)
 
 add_library(turing_db_system_s STATIC ${system_sources})
