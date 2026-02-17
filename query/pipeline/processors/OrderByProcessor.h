@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <span>
 
 #include "Processor.h"
@@ -33,6 +34,13 @@ public:
     PipelineBlockOutputInterface& output() { return _output; }
 
 private:
+    enum class State {
+        SORT_INCOMING = 0,
+        MERGE_SORTED_RUNS,
+
+        STATE_SPACE_SIZE
+    };
+
     PipelineBlockInputInterface _input;
     PipelineBlockOutputInterface _output;
 
@@ -40,8 +48,10 @@ private:
 
     Indices _indices;
 
+    State _state {State::SORT_INCOMING};
+
     OrderByProcessor();
-    ~OrderByProcessor();
+    ~OrderByProcessor() final;
 };
 
 }
