@@ -158,6 +158,4 @@ void ProceduresProcedure::execute(ProcedureState* proc) {
         }
         break;
     }
-
-    throw PipelineException("Unknown procedure step");
 }
