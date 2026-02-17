@@ -17,6 +17,9 @@ public:
 
     const Expressions& getExprs() const { return _exprs; }
 
+    /// Determines whether @ref expr needs evaluation by @ref ExprProgram
+    static bool needsEvaluation(const Expr* expr);
+
 private:
     Expressions _exprs;
 };
