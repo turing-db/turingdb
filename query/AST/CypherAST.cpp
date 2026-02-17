@@ -17,6 +17,7 @@
 #include "YieldClause.h"
 #include "YieldItems.h"
 #include "FunctionDecls.h"
+#include "ProcedureLookup.h"
 #include "stmt/Stmt.h"
 #include "stmt/SubStmt.h"
 #include "stmt/StmtContainer.h"
@@ -33,7 +34,8 @@ CypherAST::CypherAST(const ProcedureManager* procedures,
                      std::string_view queryString)
     : _sourceManager(new SourceManager(queryString)),
     _diagnosticsManager(new DiagnosticsManager(_sourceManager)),
-    _functionDecls(std::make_unique<FunctionDecls>())
+    _functionDecls(std::make_unique<FunctionDecls>()),
+    _procedureLookup(std::make_unique<ProcedureLookup>(procedures))
 {
     _functionDecls->initDefault();
 }

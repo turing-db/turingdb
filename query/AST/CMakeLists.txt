@@ -6,6 +6,7 @@ set(ast_sources
     DiagnosticsManager.cpp
     FunctionDecls.cpp
     FunctionSignature.cpp
+    ProcedureLookup.cpp
 
     decl/DeclContext.cpp
     decl/PatternData.cpp

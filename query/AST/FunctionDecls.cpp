@@ -58,7 +58,7 @@ void FunctionDecls::initDefault() {
     countChars->setReturnTypes({{EvaluatedType::Integer}});
     countChars->setIsAggregate(true);
 
-    FunctionSignature* countBools = createFunction("count");  
+    FunctionSignature* countBools = createFunction("count");
     countBools->setArguments({EvaluatedType::Bool});
     countBools->setReturnTypes({{EvaluatedType::Integer}});
     countBools->setIsAggregate(true);
@@ -102,7 +102,18 @@ void FunctionDecls::initDefault() {
 FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {
     auto func = std::make_unique<FunctionSignature>(fullName);
     FunctionSignature* ptr = func.get();
-    _decls.emplace(fullName, std::move(func));
+    _owned.push_back(std::move(func));
+    _nameMap[fullName].push_back(ptr);
 
     return ptr;
+}
+
+FunctionResolver::FunctionSignatureRange FunctionDecls::lookup(std::string_view fullName) {
+    const auto it = _nameMap.find(fullName);
+    if (it == _nameMap.end()) {
+        return FunctionSignatureRange();
+    }
+
+    FunctionSignatures& sigs = it->second;
+    return FunctionSignatureRange(sigs.data(), sigs.data() + sigs.size());
 }
