@@ -78,14 +78,14 @@ void writeProcedures(Data* data,
         while (remaining > 0
                && data->_procIndex < procs.size()) {
 
-            const Procedure* proc = procs[data->_procIndex];
+            const Procedure* procedure = procs[data->_procIndex];
 
             if (nameCol) {
-                nameCol->push_back(proc->getFullName());
+                nameCol->push_back(procedure->getFullName());
             }
 
             if (signatureCol) {
-                buildSignature(signature, proc);
+                buildSignature(signature, procedure);
                 signatureCol->push_back(signature);
             }
 
