@@ -6,6 +6,8 @@
 #include "processors/CallProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
 #include "processors/HashJoinProcessor.h"
+#include "processors/ExprProgram.h"
+#include "processors/OrderByProcessor.h"
 #include "processors/ScanNodesProcessor.h"
 #include "processors/ScanNodesByLabelProcessor.h"
 #include "processors/GetInEdgesProcessor.h"
@@ -429,6 +431,22 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
     _pendingOutput.updateInterface(&output);
 
     return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addOrderBy(std::span<OrderByProcessor::OrderByKey> keys) {
+    OrderByProcessor* orderby = OrderByProcessor::create(_pipeline, keys);
+
+    PipelineBlockInputInterface& input = orderby->input();
+    PipelineBlockOutputInterface& output = orderby->output();
+
+    _pendingOutput.connectTo(input);
+
+    // XXX: This means that we do not copy the input columns, and we sort in place
+    input.propagateColumns(output);
+
+    _pendingOutput.updateInterface(&output);
+
+    return orderby->output();
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterface* rhs,
