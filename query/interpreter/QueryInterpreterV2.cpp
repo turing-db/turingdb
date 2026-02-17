@@ -39,7 +39,7 @@ QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
                                         std::string_view graphName) {
     const Profile profile {"QueryInterpreterV2::execute"};
 
-    const QueryCallbacks& callbacks = ctxt.getQueryCallbacks();
+    const QueryCallbacks* callbacks = ctxt.getQueryCallbacks();
 
     const TimePoint start = Clock::now();
     QueryStatus status = executeImpl(ctxt, query, graphName);
@@ -48,10 +48,10 @@ QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
     status.setTotalTime(end - start);
 
     if (!status.isOk()) {
-        callbacks.onError(status);
+        callbacks->onError(status);
     }
 
-    callbacks.onEnd(status.getTotalTime().count());
+    callbacks->onEnd(status.getTotalTime().count());
 
     return status;
 }
@@ -59,9 +59,8 @@ QueryStatus QueryInterpreterV2::execute(const InterpreterContext& ctxt,
 QueryStatus QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
                                             std::string_view query,
                                             std::string_view graphName) {
-
-    const QueryCallbacks& callbacks = ctxt.getQueryCallbacks();
-    callbacks.onBegin();
+    const QueryCallbacks* callbacks = ctxt.getQueryCallbacks();
+    callbacks->onBegin();
 
     auto txRes = _sysMan->openTransaction(graphName,
                                           ctxt.getCommitHash(),
@@ -151,7 +150,7 @@ QueryStatus QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
                                   view,
                                   &pipeline,
                                   mem,
-                                  *ctxt.getProcedures(),
+                                  ctxt.getProcedures(),
                                   ctxt.getQueryCallbacks());
     try {
         pipelineGen.generate();
@@ -176,7 +175,7 @@ QueryStatus QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     try {
         const Dataframe* outDf = pipeline.getOutputDataframe();
         if (outDf) {
-            callbacks.onOutputHeader(outDf);
+            callbacks->onOutputHeader(outDf);
         }
         executor.execute();
     } catch (const PipelineException& e) {

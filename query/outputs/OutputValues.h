@@ -48,20 +48,20 @@ concept IsBool = std::is_convertible_v<T, bool>
               || OptionalBool<T>;
 
 struct ColumnTypeGenerator {
-    std::string& name;
+    std::string& _name;
 
     template <template <typename> typename U, typename T>
     void operator()(const U<T>* typed) {
         if constexpr (IsUInt64<T>) {
-            name = fmt::format("UInt64");
+            _name = fmt::format("UInt64");
         } else if constexpr (IsInt64<T>) {
-            name = fmt::format("Int64");
+            _name = fmt::format("Int64");
         } else if constexpr (IsFloat64<T>) {
-            name = fmt::format("Double");
+            _name = fmt::format("Double");
         } else if constexpr (IsString<T>) {
-            name = fmt::format("String");
+            _name = fmt::format("String");
         } else if constexpr (IsBool<T>) {
-            name = fmt::format("Bool");
+            _name = fmt::format("Bool");
         } else {
             COMPILE_ERROR("Unexpected column type");
         }

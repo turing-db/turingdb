@@ -30,14 +30,14 @@ public:
     QueryStatus query(std::string_view query,
                       std::string_view graphName,
                       LocalMemory* mem,
-                      QueryCallbacks& callbacks,
+                      const QueryCallbacks& callbacks,
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
 
     QueryStatus query(std::string_view query,
                       std::string_view graphName,
                       LocalMemory* mem,
-                      QueryCallbacks::OnOutputData&& callback,
+                      const QueryCallbacks::OnOutputData& callback,
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
 

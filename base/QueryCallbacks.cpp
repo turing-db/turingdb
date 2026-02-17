@@ -14,9 +14,9 @@ QueryCallbacks::QueryCallbacks()
 QueryCallbacks::~QueryCallbacks() = default;
 
 QueryCallbacks::QueryCallbacks(const QueryCallbacks&) = default;
-QueryCallbacks::QueryCallbacks(QueryCallbacks&&) noexcept = default;
+QueryCallbacks::QueryCallbacks(QueryCallbacks&&) = default;
 QueryCallbacks& QueryCallbacks::operator=(const QueryCallbacks&) = default;
-QueryCallbacks& QueryCallbacks::operator=(QueryCallbacks&&) noexcept = default;
+QueryCallbacks& QueryCallbacks::operator=(QueryCallbacks&&) = default;
 
 void QueryCallbacks::onBegin() const {
     _onBegin();

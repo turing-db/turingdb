@@ -54,10 +54,10 @@ public:
                       const GraphView& view,
                       PipelineV2* pipeline,
                       LocalMemory* mem,
-                      const ProcedureBlueprintMap& blueprints,
-                      const QueryCallbacks& callbacks)
+                      const ProcedureBlueprintMap* blueprints,
+                      const QueryCallbacks* callbacks)
         : _graph(graph),
-        _blueprints(&blueprints),
+        _blueprints(blueprints),
         _view(view),
         _pipeline(pipeline),
         _mem(mem),
@@ -90,7 +90,7 @@ private:
     GraphView _view;
     PipelineV2* _pipeline {nullptr};
     LocalMemory* _mem {nullptr};
-    const QueryCallbacks& _callbacks;
+    const QueryCallbacks* _callbacks {nullptr};
     PipelineBuilder _builder;
 
     VarColumnMap _declToColumn;

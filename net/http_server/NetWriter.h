@@ -145,10 +145,12 @@ public:
         switch (connection) {
             case ConnectionHeader::KEEP_ALIVE: {
                 data = keepAlive;
-            } break;
+            }
+            break;
             case ConnectionHeader::CLOSE: {
                 data = close;
-            } break;
+            }
+            break;
         }
 
         if (data.size() > _header._remaining) {
