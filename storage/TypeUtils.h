@@ -70,10 +70,8 @@ struct TypeUtils {
 };
 
 namespace TypeConcepts {
-
 template <typename T>
 concept OptionalType = TypeUtils::is_optional_v<T>;
-
 }
 
 /**

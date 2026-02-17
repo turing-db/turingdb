@@ -919,7 +919,13 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
                     output = &_builder.addCount();
                 } else {
                     // count(*)
-                    output = &_builder.addCount(_declToColumn.at(argDecl));
+                    const auto findIt = _declToColumn.find(argDecl);
+                    if (findIt == _declToColumn.end()) {
+                        throw FatalException(fmt::format(
+                            "Failed to get column for variable {}.", argDecl->getName()));
+                    }
+                    const ColumnTag argTag = findIt->second;
+                    output = &_builder.addCount(argTag);
                 }
 
             } else [[unlikely]] {

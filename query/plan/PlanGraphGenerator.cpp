@@ -302,13 +302,8 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
         }
 
         Expr* item = *exprPtr;
-        const Expr::Kind itemKind = item->getKind();
-        // Literals that appear only on the RHS of a return, e.g. `RETURN 5`, need a
-        // column allocated for them, otherwise they will not exist
-        const bool needsEvaluation = itemKind == Expr::Kind::BINARY
-                                  || itemKind == Expr::Kind::UNARY
-                                  || itemKind == Expr::Kind::LITERAL;
-        if (needsEvaluation) {
+
+        if (ExprEvalNode::needsEvaluation(item)) {
             exprEval->addExpr(item);
         }
 
@@ -384,9 +379,19 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
             }
         }
 
+        // Functions may have expressions which need be evaluated prior to the functions
+        // evaluation, e.g. COUNT(5 + 5).
         for (const ExprDependencies::FuncDependency& dep : deps.getFuncDeps()) {
-            const FunctionInvocation* func = dep._expr->getFunctionInvocation();
-            const FunctionSignature* signature = func->getSignature();
+            const FunctionInvocationExpr* funcExpr = dep._expr;
+            const FunctionInvocation* funcInvok = funcExpr->getFunctionInvocation();
+            const FunctionSignature* signature = funcInvok->getSignature();
+
+            const ExprChain* arguments = funcInvok->getArguments();
+            for (const Expr* argument : *arguments) {
+                if (ExprEvalNode::needsEvaluation(argument)) {
+                    exprEval->addExpr(argument);
+                }
+            }
 
             if (signature->_isAggregate) {
                 aggregateEval->addFunc(dep._expr);
@@ -411,6 +416,14 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
 
     ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
 
+    // Expressions, functions and aggregates do not require a previous input.
+    // e.g. RETURN sum(sqrt(5))
+    // @ref prevNode will be nullptr in the above, but still requires evaluation
+    // FIXME: There is a limitation which prevents queries such as
+    // MATCH (n) RETURN 5 + COUNT(n)
+    // because this requires the @ref aggregateEval node to be placed before the @ref
+    // exprEval node. However this is currently guarded by an exception raised when
+    // @ref Expr::Kind::FUNCTION_INVOCATION is an argument of @ref ExprProgram
     if (!exprEval->getExprs().empty()) {
         if (prevNode) {
             prevNode->connectOut(exprEval);
@@ -432,28 +445,23 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
         prevNode = aggregateEval;
     }
 
-    if (proj->hasOrderBy()) {
-        if (prevNode) {
-            OrderByNode* orderBy = _tree.newOut<OrderByNode>(prevNode);
-            orderBy->setItems(proj->getOrderBy()->getItems());
-            prevNode = orderBy;
-        }
+    // ORDER BY, SKIP, LIMIT
+    if (prevNode && proj->hasOrderBy()) {
+        OrderByNode* orderBy = _tree.newOut<OrderByNode>(prevNode);
+        orderBy->setItems(proj->getOrderBy()->getItems());
+        prevNode = orderBy;
     }
 
-    if (proj->hasSkip()) {
-        if (prevNode) {
-            SkipNode* skip = _tree.newOut<SkipNode>(prevNode);
-            skip->setExpr(proj->getSkip()->getExpr());
-            prevNode = skip;
-        }
+    if (prevNode && proj->hasSkip()) {
+        SkipNode* skip = _tree.newOut<SkipNode>(prevNode);
+        skip->setExpr(proj->getSkip()->getExpr());
+        prevNode = skip;
     }
 
-    if (proj->hasLimit()) {
-        if (prevNode) {
-            LimitNode* limit = _tree.newOut<LimitNode>(prevNode);
-            limit->setExpr(proj->getLimit()->getExpr());
-            prevNode = limit;
-        }
+    if (prevNode && proj->hasLimit()) {
+        LimitNode* limit = _tree.newOut<LimitNode>(prevNode);
+        limit->setExpr(proj->getLimit()->getExpr());
+        prevNode = limit;
     }
 
     prevNode->connectOut(results);

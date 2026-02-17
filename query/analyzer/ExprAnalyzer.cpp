@@ -223,6 +223,10 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
     if (lhs->isAggregate() || rhs->isAggregate()) {
         expr->setAggregate();
     }
+
+    // Create a variable declaration for the binary expression so that it can be retrieved
+    // later (for projection or in an expression / filter), e.g. RETURN COUNT(5 + 5)
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 }
 
 void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
