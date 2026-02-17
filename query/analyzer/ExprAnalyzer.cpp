@@ -231,7 +231,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 
     // Create a variable declaration for the binary expression so that it can be retrieved
     // later (for projection or in an expression / filter), e.g. RETURN COUNT(5 + 5)
-    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
+    const VarDecl* decl = _ctxt->createUnnamedVariable(_ast, expr->getType());
+    expr->setExprVarDecl(decl);
 }
 
 void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {

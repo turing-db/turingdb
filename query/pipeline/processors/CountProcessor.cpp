@@ -43,7 +43,7 @@ CountProcessor* CountProcessor::create(PipelineV2* pipeline, ColumnTag colTag) {
     return count;
 }
 
-void CountProcessor::prepare(ExecutionContext* /*ctxt*/) {
+void CountProcessor::prepare(ExecutionContext* ctxt) {
     auto* countColumn = dynamic_cast<ColumnConst<types::UInt64::Primitive>*>(_output.getValue()->getColumn());
     if (!countColumn) {
         throw PipelineException("CountProcessor: count column is not a ColumnConst<UInt64>");
@@ -83,8 +83,14 @@ template <typename T, template<typename...> class Template>
 inline constexpr bool is_template_t = is_template<T, Template>::value;
 
 /// Functor to pass to column dispatcher to count rows
-struct Counter {
-    CountProcessor::CountType& _count;
+class Counter {
+public:
+    Counter(CountProcessor::CountType& count)
+    : _count{count}
+    {
+    }
+
+    ~Counter() = default;
 
     // e.g. COUNT(n.name) : count only non-null valued rows
     template <TypeConcepts::OptionalType T>
@@ -119,6 +125,9 @@ struct Counter {
     constexpr void operator()(const ColumnConst<PropertyNull>*  /*unused*/) {
         _count = 0;
     }
+
+private:
+    CountProcessor::CountType& _count;
 };
 
 void CountProcessor::execute() {

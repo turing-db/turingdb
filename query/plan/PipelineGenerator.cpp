@@ -746,9 +746,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                 const ColumnTag tag = findColIt->second;
 
                 items.push_back({tag, *name});
-
-            } else if (const auto* declPtr =
-                           std::get_if<VarDecl*>(&item)) {
+            } else if (const auto* declPtr = std::get_if<VarDecl*>(&item)) {
                 const VarDecl* decl = *declPtr;
 
                 const std::optional<std::string_view> name = projNode->getName(decl);
