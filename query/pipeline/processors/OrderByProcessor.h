@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <ranges>
 #include <span>
 
 #include "Processor.h"
@@ -11,6 +12,7 @@
 namespace db {
 
 class Column;
+class Dataframe;
 
 class OrderByProcessor final : public Processor {
 public:
@@ -19,8 +21,14 @@ public:
         bool _asc {true};
     };
 
+    struct TieRange {
+        size_t start {0};
+        size_t size {0};
+    };
+
     using OrderByKeys = std::vector<OrderByKey>;
     using Indices = std::vector<size_t>;
+    using TieRanges = std::vector<TieRange>;
 
     static OrderByProcessor* create(PipelineV2* pipeline, std::span<OrderByKey> keys);
 
@@ -34,7 +42,10 @@ public:
     PipelineBlockOutputInterface& output() { return _output; }
 
 private:
-    enum class State {
+    OrderByProcessor();
+    ~OrderByProcessor() final;
+
+    enum class State : uint8_t {
         SORT_INCOMING = 0,
         MERGE_SORTED_RUNS,
 
@@ -48,10 +59,14 @@ private:
 
     Indices _indices;
 
+    TieRanges _tieRanges;
+
     State _state {State::SORT_INCOMING};
 
-    OrderByProcessor();
-    ~OrderByProcessor() final;
+    void subsort();
+
+    template <std::ranges::random_access_range Rg>
+    static void addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t start = 0);
 };
 
 }
