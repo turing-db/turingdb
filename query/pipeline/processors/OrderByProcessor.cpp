@@ -52,5 +52,12 @@ void OrderByProcessor::reset() {
 // TODO:
 // - Handle ColumnConst as order key
 void OrderByProcessor::execute() {
+    if (_state == State::SORT_INCOMING) {
+        return;
+    }
+
+    if (_state == State::MERGE_SORTED_RUNS) {
+        return;
+    }
 }
 
