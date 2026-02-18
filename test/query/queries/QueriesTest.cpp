@@ -1458,7 +1458,7 @@ TEST_F(QueriesTest, matchCrossProductWithDbHistory) {
         }
     }
 
-    auto result = query("MATCH (n), (m) RETURN db.history()", [&](const Dataframe* df) -> void {
+    auto result = query("MATCH (n), (m) RETURN labels(n)", [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 4);
         ASSERT_EQ(df->getLogicalRowCount(), nodeCount * nodeCount);
@@ -1478,6 +1478,24 @@ TEST_F(QueriesTest, matchCrossProductWithDbHistory) {
     });
 
     EXPECT_EQ(result.getStatus(), QueryStatus::Status::PLAN_ERROR);
+}
+
+TEST_F(QueriesTest, matchCrossProductWithCountStar) {
+    const size_t nodeCount = read().getNodeCount();
+    const size_t expectedCount = nodeCount * nodeCount;
+
+    uint64_t actualCount = 0;
+    auto result = query("MATCH (n), (m) RETURN count(*)", [&](const Dataframe* df) {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
+
+        const auto* col = df->cols().at(0)->as<ColumnConst<uint64_t>>();
+        actualCount = col->at(0);
+    });
+
+    EXPECT_TRUE(result.isOk());
+    EXPECT_EQ(actualCount, expectedCount);
 }
 
 TEST_F(QueriesTest, scanByLabelOutEdges) {

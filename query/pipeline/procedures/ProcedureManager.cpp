@@ -22,12 +22,11 @@ ProcedureManager::~ProcedureManager() {
 }
 
 std::unique_ptr<ProcedureManager> ProcedureManager::create() {
-    auto manager = std::make_unique<ProcedureManager>();
-    manager->init();
-    return manager;
+    return std::make_unique<ProcedureManager>();
 }
 
 void ProcedureManager::init() {
+    // Namespace db
     ProcedureNamespace* db = createNamespace("db");
 
     LabelsProcedure::registerProcedure(db);

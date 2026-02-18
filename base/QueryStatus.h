@@ -9,8 +9,8 @@ namespace db {
 
 class QueryStatus {
 public:
-    enum class Status {
-        OK,
+    enum class Status : uint8_t {
+        OK = 0,
         GRAPH_NOT_FOUND,
         PARSE_ERROR,
         ANALYZE_ERROR,
