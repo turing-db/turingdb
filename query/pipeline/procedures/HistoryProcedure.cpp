@@ -108,17 +108,15 @@ void HistoryProcedure::execute(ProcedureState* proc) {
     const GraphView& view = ctxt->getGraphView();
 
     switch (proc->getStep()) {
-        case ProcedureState::Step::PREPARE: {
+        case ProcedureState::Step::PREPARE:
             data._it = view.commits().begin();
-        }
         break;
 
         case ProcedureState::Step::RESET:
         break;
 
-        case ProcedureState::Step::EXECUTE: {
+        case ProcedureState::Step::EXECUTE:
             writeChunk(&data, proc, &view, ctxt->getChunkSize());
-        }
         break;
     }
 }

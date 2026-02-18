@@ -71,7 +71,6 @@ void writeProcedures(Data* data,
 
     while (remaining > 0
            && data->_nsIndex < namespaces.size()) {
-
         const ProcedureNamespace* ns = namespaces[data->_nsIndex];
         const auto& procs = ns->procedures();
 

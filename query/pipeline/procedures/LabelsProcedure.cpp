@@ -58,9 +58,8 @@ void LabelsProcedure::execute(ProcedureState* proc) {
         }
         break;
 
-        case ProcedureState::Step::RESET: {
+        case ProcedureState::Step::RESET:
             data._it->reset();
-        }
         break;
 
         case ProcedureState::Step::EXECUTE: {
