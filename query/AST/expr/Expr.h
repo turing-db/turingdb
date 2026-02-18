@@ -29,8 +29,8 @@ public:
 
     enum class Flags : uint8_t {
         NONE = 0,
-        AGGREGATE = 1 << 0,
-        DYNAMIC = 1 << 1,
+        AGGREGATE = 1U << 0U,
+        DYNAMIC = 1U << 1U
     };
 
     Kind getKind() const { return _exprKind; }
