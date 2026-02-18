@@ -12,6 +12,7 @@ using namespace db;
 
 int main(int argc, char** argv) {
     auto procedures = ProcedureManager::create();
+    procedures->init();
 
     std::string queryStr;
 
