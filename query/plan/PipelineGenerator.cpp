@@ -644,13 +644,14 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
 
     // Then add a filter processor, taking the built expression program to execute
     const auto& output = _builder.addFilter(predProg);
+    Dataframe* outputDf = output.getDataframe();
 
     // Explictly create a new @ref MaterializeProcessor which uses the output columns of
     // this filter as its base. This then overrides the behaviour in @ref
     // PipelineGenerator::generate which would otherwise create a MatProc pointing to the
     // input of this filter processor.
-    _builder.setMaterializeProc(
-        MaterializeProcessor::createFromDf(_pipeline, _mem, output.getDataframe()));
+    auto* newMatProc = MaterializeProcessor::createFromDf(_pipeline, _mem, outputDf);
+    _builder.setMaterializeProc(newMatProc);
 
     return _builder.getPendingOutputInterface();
 }
