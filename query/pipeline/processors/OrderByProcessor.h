@@ -41,6 +41,9 @@ public:
     PipelineBlockInputInterface& input() { return _input; }
     PipelineBlockOutputInterface& output() { return _output; }
 
+    template <std::ranges::random_access_range Rg>
+    static void addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t start = 0);
+
 private:
     OrderByProcessor();
     ~OrderByProcessor() final;
@@ -64,9 +67,6 @@ private:
     State _state {State::SORT_INCOMING};
 
     void subsort();
-
-    template <std::ranges::random_access_range Rg>
-    static void addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t start = 0);
 };
 
 }

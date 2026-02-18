@@ -276,4 +276,17 @@ struct OutputtedTypes {
     >;
 };
 
+/// Totally ordered types, e.g. sorted in ORDER BY
+struct OrderedTypes {
+    using Allowed = GenerateKindList<std::tuple<
+        EdgeID
+    >>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>(),
+        ContainerKind::code<ColumnConst>()
+    >;
+};
+
 }
