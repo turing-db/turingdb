@@ -18,6 +18,7 @@ public:
     ~ProcedureManager();
 
     static std::unique_ptr<ProcedureManager> create();
+    void init();
 
     const Namespaces& namespaces() const { return _namespaces; }
 
@@ -30,8 +31,6 @@ public:
 private:
     Namespaces _namespaces;
     std::unordered_map<std::string_view, ProcedureNamespace*> _namespaceMap;
-
-    void init();
 };
 
 }

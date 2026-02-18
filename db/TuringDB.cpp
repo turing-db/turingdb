@@ -86,13 +86,18 @@ void TuringDB::init() {
         }
     }
 
+    // Create vector database
     if (auto res = vec::VectorDatabase::create(vectorDir)) {
         _vectorDatabase = std::move(res.value());
     } else {
         panic("Could not create vector database: {}", res.error().fmtMessage());
     }
 
+    // Init system manager
     _systemManager->init();
+
+    // Init procedures
+    _procedures->init();
 }
 
 QueryStatus TuringDB::query(std::string_view query,
