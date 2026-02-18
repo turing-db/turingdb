@@ -51,7 +51,6 @@ private:
     utils::ServerSocket _serverSocket {0};
     utils::EpollInstance _epollInstance {0};
     utils::StringAddress _actualAddress {};
-    utils::EpollSignal _signalFd {0};
     int _shutdownPipe[2] {-1, -1};
     std::unique_ptr<TCPConnectionStorage> _connections;
     TCPConnection* _serverConnection {nullptr};

@@ -1,5 +1,7 @@
 #include "StartCmd.h"
 
+#include <sys/eventfd.h>
+#include <sys/poll.h>
 #include <spdlog/spdlog.h>
 #include <argparse.hpp>
 
@@ -15,15 +17,6 @@
 #include "TuringException.h"
 
 using namespace db;
-
-namespace {
-
-void atexitHandler() {
-    LogSetup::logFlush();
-    std::cout << "\n";
-}
-
-}
 
 StartCmd::StartCmd()
     : _argParser(std::make_unique<argparse::ArgumentParser>("start"))
@@ -83,12 +76,6 @@ int StartCmd::execute() {
     const fs::Path& logsDir = config.getLogsDir();
 
     LogSetup::setupLogFileBacked((logsDir / "turingdb.log").get(), false);
-    const int atexitRes = atexit(atexitHandler);
-
-    if (atexitRes != 0) {
-        spdlog::error("Failed to register atexit handler: {}", strerror(atexitRes));
-        return EXIT_FAILURE;
-    }
 
     spdlog::info("TuringDB path: {}", turingDir.get());
 
@@ -112,9 +99,24 @@ int StartCmd::execute() {
     }
 
     try {
+        std::unique_ptr<TuringServer> server;
+        std::unique_ptr<TuringShell> shell;
+
         // Run TuringDB
         LocalMemory mem;
         TuringDB turingDB(&config);
+
+        config.setOnStopRequest([&] {
+            if (shell) {
+                shell->stop();
+            }
+
+            else if (server) {
+                server->stop();
+                server->wait();
+            }
+        });
+
         turingDB.init();
 
         // Load graphs
@@ -126,28 +128,33 @@ int StartCmd::execute() {
             }
         }
 
-        // Server
+        // Server config
         DBServerConfig serverConfig;
         serverConfig.setPort(_port);
         serverConfig.setAddress(_address);
 
-        TuringServer server(serverConfig, turingDB);
-        server.start();
+        server = std::make_unique<TuringServer>(serverConfig, turingDB);
+        server->start();
 
-        // CLI Shell
         if (_demonize) {
-            server.wait();
-            server.stop();
+            server->wait();
+            server.reset();
         } else {
-            TuringShell shell(turingDB, &mem);
+            shell = std::make_unique<TuringShell>(turingDB, &mem);
 
             if (!_graphsToLoad.empty()) {
-                shell.setGraphName(_graphsToLoad.front());
+                shell->setGraphName(_graphsToLoad.front());
             }
 
-            shell.startLoop();
-            server.stop();
+            shell->startLoop();
+            shell.reset();
+            server->stop();
+            server.reset();
+
+            turingDB.stop();
+            server.reset();
         }
+
     } catch (TuringException& e) {
         spdlog::error("{}", e.what());
         return EXIT_FAILURE;

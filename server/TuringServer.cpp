@@ -1,6 +1,5 @@
 #include "TuringServer.h"
 
-#include <signal.h>
 #include <unistd.h>
 
 #include <spdlog/spdlog.h>
@@ -13,19 +12,6 @@
 #include "DBServerConfig.h"
 
 using namespace db;
-
-namespace {
-
-static TuringServer* _turingServerInstance = nullptr;
-
-void signalHandler(int signum) {
-    spdlog::info("Signal {} received", signum);
-    if (_turingServerInstance) {
-        _turingServerInstance->stop();
-    }
-}
-
-}
 
 TuringServer::TuringServer(const DBServerConfig& config, TuringDB& db)
     : _config(config),
@@ -76,8 +62,8 @@ void TuringServer::start() {
     };
 
     _serverThread = std::thread(serverFunc);
-    
-    setupSignals();
+
+    pthread_setname_np(_serverThread.native_handle(), "tdb.main-server");
 
     spdlog::info("Server listening on address: {}:{}",
                  _server->getAddress(),
@@ -96,27 +82,4 @@ void TuringServer::stop() {
     if (_serverThread.joinable()) {
         _serverThread.join();
     }
-}
-
-void TuringServer::setupSignals() {
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-
-    sa.sa_handler = &signalHandler;
-    _turingServerInstance = this;
-
-    sigemptyset(&sa.sa_mask);
-    const int sigIntRes = sigaction(SIGINT, &sa, nullptr);
-    const int sigTermRes = sigaction(SIGTERM, &sa, nullptr);
-    bioassert(sigIntRes >= 0 && sigTermRes >= 0,
-              "Failed to setup signal handlers in TuringServer");
-
-    // Unblock SIGTERM/SIGINT on the main thread so the sigaction handler
-    // fires for external signals (e.g. kill, Ctrl+C). Worker threads keep
-    // these signals blocked so they are delivered via signalfd/kqueue instead.
-    sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGTERM);
-    sigaddset(&mask, SIGINT);
-    pthread_sigmask(SIG_UNBLOCK, &mask, nullptr);
 }

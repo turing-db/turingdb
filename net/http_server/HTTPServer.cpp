@@ -1,8 +1,6 @@
 #include "HTTPServer.h"
 
 #include <thread>
-#include <string.h>
-#include <signal.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <spdlog/spdlog.h>
@@ -34,15 +32,6 @@ HTTPServer::~HTTPServer() {
 }
 
 FlowStatus HTTPServer::initialize() {
-    // Install no-op handler for SIGUSR1. Used by terminate() to interrupt
-    // worker threads blocked in eventWait() without triggering the SIGTERM
-    // handler (which would deadlock by calling stop() from a worker thread).
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = [](int) {};
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGUSR1, &sa, nullptr);
-
     _serverSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
     if (_serverSocket == -1) {
@@ -85,19 +74,6 @@ FlowStatus HTTPServer::initialize() {
         return FlowStatus::CTL_ERROR;
     }
 
-    // Registering sigint and sigterm as signals to listen to in the event loop
-    _signalFd = utils::createSignalFd(_epollInstance);
-
-#ifndef __APPLE__
-    // On Linux, signalfd returns a real fd that needs to be registered
-    event._events = utils::EVENT_IN;
-    event._data = &_signalFd;
-    if (!utils::epollAdd(_epollInstance, _signalFd, event)) {
-        utils::logError("EpollAdd server terminate");
-        _status.store(FlowStatus::CTL_ERROR);
-    }
-#endif
-
     // Create shutdown pipe for reliable worker wakeup on terminate()
     if (::pipe(_shutdownPipe) < 0) {
         utils::logError("ShutdownPipe");
@@ -122,7 +98,7 @@ FlowStatus HTTPServer::initialize() {
     }
 
     // Storing actual address
-    sockaddr_in actualAddr;
+    sockaddr_in actualAddr {};
     memset(&actualAddr, 0, sizeof(actualAddr));
     socklen_t actualAddrLen = sizeof(actualAddr);
 
@@ -138,24 +114,25 @@ FlowStatus HTTPServer::initialize() {
 FlowStatus HTTPServer::start() {
     _running.store(true);
 
-    ServerContext ctxt(
-        _serverSocket,
-        _epollInstance,
-        _signalFd,
-        *_connections,
-        *_serverConnection,
-        _status,
-        _running,
-        _functions._processor,
-        _functions._createThreadContext
-    );
+    ServerContext ctxt {
+        ._socket = _serverSocket,
+        ._instance = _epollInstance,
+        ._connections = *_connections,
+        ._serverConnection = *_serverConnection,
+        ._status = _status,
+        ._running = _running,
+        ._process = _functions._processor,
+        ._createThreadContext = _functions._createThreadContext,
+    };
 
     _threads.reserve(_workerCount);
 
     for (size_t i = 0; i < _workerCount; i++) {
-        _threads.emplace_back([&ctxt, i] {
+        auto& t = _threads.emplace_back([&ctxt, i] {
             runThread(i + 1, ctxt);
         });
+
+        pthread_setname_np(t.native_handle(), "tdb.http-worker");
     }
 
     for (auto& thread : _threads) {
@@ -221,10 +198,8 @@ void HTTPServer::runThread(size_t threadID, ServerContext& ctxt) {
         for (int i = 0; i < nfds; i++) {
             utils::EpollEvent& ev = events[i];
 
-            // Shutdown pipe, signal fd, or macOS signal (nullptr data)
-            if (!ctxt._running.load()
-                || ev._data == nullptr
-                || ev._data == &ctxt._signalFd) {
+            // Shutdown pipe
+            if (!ctxt._running.load()) {
                 return;
             }
 

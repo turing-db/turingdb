@@ -27,8 +27,6 @@ private:
     TuringDB& _db;
     std::unique_ptr<net::HTTPServer> _server;
     std::thread _serverThread;
-
-    void setupSignals();
 };
 
 }
