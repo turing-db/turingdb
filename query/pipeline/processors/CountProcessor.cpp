@@ -1,6 +1,5 @@
 #include "CountProcessor.h"
 
-#include <limits>
 #include <spdlog/fmt/fmt.h>
 
 #include "metadata/PropertyType.h"
@@ -85,7 +84,7 @@ inline constexpr bool is_template_t = is_template<T, Template>::value;
 /// Functor to pass to column dispatcher to count rows
 class Counter {
 public:
-    Counter(CountProcessor::CountType& count)
+    explicit Counter(CountProcessor::CountType& count)
         : _count(count)
     {
     }
