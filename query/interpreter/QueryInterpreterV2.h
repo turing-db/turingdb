@@ -22,17 +22,19 @@ public:
 
     ~QueryInterpreterV2();
 
-    QueryStatus execute(const InterpreterContext& ctxt,
-                        std::string_view query,
-                        std::string_view graphName);
+    void execute(const InterpreterContext& ctxt,
+                 QueryStatus& status,
+                 std::string_view query,
+                 std::string_view graphName);
 
 private:
     SystemManager* _sysMan {nullptr};
     JobSystem* _jobSystem {nullptr};
 
-    QueryStatus executeImpl(const InterpreterContext& ctxt,
-                            std::string_view query,
-                            std::string_view graphName);
+    void executeImpl(const InterpreterContext& ctxt,
+                     QueryStatus& status,
+                     std::string_view query,
+                     std::string_view graphName);
 };
 
 }

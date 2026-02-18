@@ -43,6 +43,9 @@ public:
     void setTotalTime(Milliseconds totalTime) { _totalTime = totalTime; }
     Milliseconds getTotalTime() const { return _totalTime; }
 
+    void setStatus(Status status) { _status = status; }
+    void setMessage(std::string_view error) { _errorMsg = error; }
+
 private:
     Status _status {Status::OK};
     std::string _errorMsg;

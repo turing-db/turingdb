@@ -103,8 +103,16 @@ QueryStatus TuringDB::query(std::string_view query,
                             ChangeID change) {
     QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
 
-    InterpreterContext ctxt(mem, &callbacks, _procedures.get(), hash, change);
-    return interp.execute(ctxt, query, graphName);
+    // TODO: This is still using NRVO
+    //       We should pass the QueryStatus& as argument to the function
+    //       however, the function is becoming quite complex. We should
+    //       probably refactor it to take in a QueryContext& instead, 
+    //       that would contain everything needed to execute the query.
+    QueryStatus status;
+    const InterpreterContext ctxt(mem, &callbacks, _procedures.get(), hash, change);
+    interp.execute(ctxt, status, query, graphName);
+
+    return status;
 }
 
 QueryStatus TuringDB::query(std::string_view query,
@@ -124,7 +132,7 @@ QueryStatus TuringDB::query(std::string_view query,
                             LocalMemory* mem,
                             CommitHash hash,
                             ChangeID change) {
-    QueryCallbacks handler;
+    const QueryCallbacks handler;
 
     return this->query(query, graphName, mem, handler, hash, change);
 }
