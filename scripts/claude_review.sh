@@ -91,6 +91,10 @@ as a violation of the alignment rule.
 on its own line is correctly formatted, even when the constructor is defined
 inline inside a class body. Do not confuse an inline constructor definition
 with a regular method — the constructor brace rule always applies.
+- Constructors and destructors have DIFFERENT brace rules. Constructors put
+the opening brace on the NEXT line. Destructors put it on the SAME line,
+like any other method: `MyClass::~MyClass() {`. Do NOT confuse a correctly
+formatted destructor with a constructor violation or vice versa.
 - Const correctness for pointers: before flagging a non-const pointer variable,
 verify that ALL functions it is passed to accept a const pointer. If any
 callee takes a non-const pointer (e.g. `void foo(Expr* e)`), the variable
