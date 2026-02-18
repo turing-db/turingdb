@@ -32,6 +32,8 @@
 #include "stmt/CallStmt.h"
 #include "stmt/Limit.h"
 
+#include "FunctionDecls.h"
+
 #include "AnalyzeException.h"
 
 using namespace db;
@@ -52,6 +54,8 @@ CypherAnalyzer::~CypherAnalyzer() {
 }
 
 void CypherAnalyzer::analyze() {
+    _ast->getFunctionDecls()->initDefault();
+
     for (QueryCommand* query : _ast->queries()) {
         _ctxt = query->getDeclContext();
 
