@@ -19,10 +19,10 @@ public:
         : _procedures(ProcedureManager::create()),
         _ast(_procedures.get(), "")
     {
-        _procedures->init();
     }
 
     void initialize() override {
+        _procedures->init();
         _graph = Graph::create();
         SimpleGraph::createSimpleGraph(_graph.get());
 
