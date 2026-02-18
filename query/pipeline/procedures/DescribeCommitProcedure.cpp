@@ -163,17 +163,17 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                 partCountCol->clear();
             }
 
-            const auto pushStats = [&](const CommitStats& s) {
+            const auto pushStats = [&](const CommitStats* stats) {
                 if (nodeCountCol) {
-                    nodeCountCol->push_back(s._nodeCount);
+                    nodeCountCol->push_back(stats->_nodeCount);
                 }
 
                 if (edgeCountCol) {
-                    edgeCountCol->push_back(s._edgeCount);
+                    edgeCountCol->push_back(stats->_edgeCount);
                 }
 
                 if (partCountCol) {
-                    partCountCol->push_back(s._partCount);
+                    partCountCol->push_back(stats->_partCount);
                 }
             };
 
@@ -187,7 +187,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                 for (size_t i = data._i; i < remaining + data._i; ++i) {
                     extractString(input, colVec[i]);
                     getCommitStats(&stats, input, &view);
-                    pushStats(stats);
+                    pushStats(&stats);
                 }
 
                 data._i += remaining;
@@ -202,7 +202,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                 CommitStats stats;
                 extractString(input, col->getRaw());
                 getCommitStats(&stats, input, &view);
-                pushStats(stats);
+                pushStats(&stats);
                 proc->finish();
             };
 

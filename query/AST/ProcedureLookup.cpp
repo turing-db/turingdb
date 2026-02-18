@@ -91,7 +91,7 @@ FunctionResolver::FunctionSignatureRange ProcedureLookup::lookup(std::string_vie
     std::vector<FunctionReturnType> retTypes;
     retTypes.reserve(rets.size());
     for (const auto& ret : rets) {
-        const FunctionReturnType retType = toEvaluatedType(ret._type);
+        FunctionReturnType retType = toEvaluatedType(ret._type);
         retType.setName(ret._name);
         retTypes.push_back(retType);
     }
