@@ -19,6 +19,7 @@ public:
         _graph = Graph::create();
         SimpleGraph::createSimpleGraph(_graph.get());
         _procedures = ProcedureManager::create();
+        _procedures->init();
     }
 
 protected:

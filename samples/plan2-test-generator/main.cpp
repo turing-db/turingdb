@@ -64,6 +64,7 @@ void runPlan2(std::string_view query) {
     SimpleGraph::createSimpleGraph(graph);
     
     auto procedures = ProcedureManager::create();
+    procedures->init();
 
     const Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();

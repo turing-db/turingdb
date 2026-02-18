@@ -205,6 +205,7 @@ void generatePlanGraph(std::string_view query,
                        db::GraphView view,
                        std::ostream& out) {
     auto procedures = db::ProcedureManager::create();
+    procedures->init();
 
     db::CypherAST ast(procedures.get(), query);
     db::CypherParser parser(&ast);

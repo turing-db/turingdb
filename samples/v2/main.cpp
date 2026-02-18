@@ -39,6 +39,7 @@ int main(int argc, char** argv) {
     SimpleGraph::createSimpleGraph(graph);
 
     auto procedures = ProcedureManager::create();
+    procedures->init();
 
     Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
