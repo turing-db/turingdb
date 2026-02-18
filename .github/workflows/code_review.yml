@@ -16,7 +16,6 @@ jobs:
   # First job: Claude Code AI review (analysis phase)
   claude-review:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
 
     permissions:
       contents: read
