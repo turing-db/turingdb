@@ -21,7 +21,7 @@ public:
     void setName(std::string_view name) { _name = name; }
 
 private:
-    EvaluatedType _type;
+    EvaluatedType _type {EvaluatedType::Invalid};
     std::string_view _name;
 };
 

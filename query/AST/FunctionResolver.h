@@ -15,7 +15,8 @@ public:
         FunctionSignatureRange() = default;
 
         FunctionSignatureRange(Iterator begin, Iterator end)
-            : _begin(begin), _end(end)
+            : _begin(begin),
+            _end(end)
         {
         }
 
