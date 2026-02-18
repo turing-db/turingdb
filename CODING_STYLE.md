@@ -452,6 +452,15 @@ You can use C++ concepts in turingdb but please use them parsimoniously. The ove
 Pass data by pointer or reference, const reference or result reference, for consistency sake.
 Please do not use RVO, move semantics or anything relying on rvalue references and other related mechanisms in C++.
 
+**Exception — setters that take ownership of a container:**
+When a setter transfers an entire STL container (e.g. `std::vector`) into a private member, accepting it by rvalue reference and using `std::move` is allowed to avoid an unnecessary copy:
+```cpp
+void setArguments(std::vector<EvaluatedType>&& args) {
+    _argumentTypes = std::move(args);
+}
+```
+This exception applies only to simple setters whose sole purpose is to store the container. Do not use rvalue references or `std::move` in general algorithmic code or function chains.
+
 ## Switch formatting
 
 Switch and cases are formatted as follows:
