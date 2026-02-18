@@ -41,7 +41,6 @@ private:
 
     ExprEvalProcessor(ExprProgram* exprProg);
     ~ExprEvalProcessor() final;
-    void evalProgram();
 };
 
 }
