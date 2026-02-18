@@ -238,10 +238,10 @@ void generatePlanGraph(std::string_view query, db::GraphView view, std::ostream&
 }
 
 struct StringStreamWriter {
-    std::string& _output;
+    std::string* _output {nullptr};
 
-    void write(std::string_view content) { _output.append(content); }
-    void write(char c) { _output.push_back(c); }
+    void write(std::string_view content) { _output->append(content); }
+    void write(char c) { _output->push_back(c); }
 };
 
 bool validateResultJson(std::string& error, std::string_view jsonStr) {
@@ -427,8 +427,8 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     std::vector<std::string> columnNames;
 
     std::string jsonOutput;
-    StringStreamWriter jsonWriter {jsonOutput};
-    db::JsonEncoder<StringStreamWriter> jsonEncoder {jsonWriter};
+    StringStreamWriter jsonWriter(&jsonOutput);
+    db::JsonEncoder<StringStreamWriter> jsonEncoder(jsonWriter);
     bool jsonErrorEncoded = false;
 
     db::QueryCallbacks queryCallbacks;
