@@ -8,6 +8,7 @@ set(plan_sources
     ReadStmtGenerator.cpp
     WriteStmtGenerator.cpp
     ExprDependencies.cpp
+    ReturnStmtGenerator.cpp
     PipelineGenerator.cpp
     ExprProgramGenerator.cpp
     PredicateProgramGenerator.cpp

@@ -20,10 +20,16 @@ class Projection;
  */
 class ReturnStmtGenerator {
 public:
-    ReturnStmtGenerator(ReturnStmt* rtnStmt, PlanGraph* tree, PlanGraphNode* prevNode,
-                        PlanGraphVariables* vars, GetPropertyCache& propCache,
-                        GetEntityTypeCache& entCache);
+    ReturnStmtGenerator(const ReturnStmt* rtnStmt, PlanGraph* tree,
+                        PlanGraphNode* prevNode, PlanGraphVariables* vars,
+                        GetPropertyCache& propCache, GetEntityTypeCache& entCache);
 
+    ~ReturnStmtGenerator() = default;
+
+    ReturnStmtGenerator(const ReturnStmtGenerator&) = delete;
+    ReturnStmtGenerator(ReturnStmtGenerator&&) = delete;
+    ReturnStmtGenerator& operator=(const ReturnStmtGenerator&) = delete;
+    ReturnStmtGenerator& operator=(ReturnStmtGenerator&&) = delete;
 
     PlanGraphNode* generateReturnStmt();
 

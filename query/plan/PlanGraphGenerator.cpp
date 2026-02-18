@@ -4,6 +4,7 @@
 #include "FunctionInvocation.h"
 #include "Projection.h"
 #include "QualifiedName.h"
+#include "ReturnStmtGenerator.h"
 #include "Symbol.h"
 #include "decl/DeclContext.h"
 #include "expr/BinaryExpr.h"
@@ -324,196 +325,15 @@ void PlanGraphGenerator::generateShowVectorIndexesQuery(const ShowVectorIndexesQ
 }
 
 PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {
-    const Projection* proj = stmt->getProjection();
+    GetPropertyCache& propCache = _tree.getGetPropertyCache();
+    GetEntityTypeCache& entCache = _tree.getGetEntityTypeCache();
 
-    if (proj->isDistinct()) {
-        throwError("DISTINCT not supported", stmt);
-    }
+    ReturnStmtGenerator stmtGen(stmt, &_tree, prevNode, _variables.get(), propCache,
+                                entCache);
 
-    FuncEvalNode* funcEval = _tree.create<FuncEvalNode>();
-    AggregateEvalNode* aggregateEval = _tree.create<AggregateEvalNode>();
-    ExprEvalNode* exprEval = _tree.create<ExprEvalNode>();
+    PlanGraphNode* returnProjectionNode = stmtGen.generateReturnStmt();
 
-    GetPropertyCache& getPropertyCache = _tree.getGetPropertyCache();
-    GetEntityTypeCache& getEntityTypeCache = _tree.getGetEntityTypeCache();
-
-    for (const Projection::ReturnItem& returnItem : proj->items()) {
-        const auto* exprPtr = std::get_if<Expr*>(&returnItem);
-        if (!exprPtr) {
-            continue;
-        }
-
-        Expr* item = *exprPtr;
-
-        if (ExprEvalNode::needsEvaluation(item)) {
-            exprEval->addExpr(item);
-        }
-
-        ExprDependencies deps;
-        deps.genExprDependencies(*_variables, item);
-
-        for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
-            bioassert(prevNode, "Expression had dependencies, but no previous node to provide them.");
-
-            if (auto* expr = dynamic_cast<PropertyExpr*>(dep._expr)) {
-                const VarDecl* entityDecl = expr->getEntityVarDecl();
-                const VarDecl* exprDecl = expr->getExprVarDecl();
-
-                if (!exprDecl) [[unlikely]] {
-                    throwError("Property expression does not have an expression variable declaration", expr);
-                }
-
-                if (!entityDecl) [[unlikely]] {
-                    throwError("Property expression does not have an entity variable declaration", expr);
-                }
-
-                const auto* cached = getPropertyCache.cacheOrRetrieve(entityDecl, exprDecl, expr->getPropName());
-
-                if (cached) {
-                    // GetProperty is already present in the cache. Map the existing expr to the current one
-                    if (!cached->_exprDecl) [[unlikely]] {
-                        throwError("GetProperty expression does not have an expression variable declaration", expr);
-                    }
-
-                    expr->setExprVarDecl(cached->_exprDecl);
-                    continue;
-                }
-
-                GetPropertyWithNullNode* n = _tree.newOut<GetPropertyWithNullNode>(prevNode, expr->getPropName());
-                n->setExpr(expr);
-                n->setEntityVarDecl(entityDecl);
-                prevNode = n;
-
-            } else if (auto* expr = dynamic_cast<EntityTypeExpr*>(dep._expr)) {
-                const VarDecl* entityDecl = expr->getEntityVarDecl();
-                const VarDecl* exprDecl = expr->getExprVarDecl();
-
-                if (!exprDecl) [[unlikely]] {
-                    throwError("Entity type expression does not have an expression variable declaration", expr);
-                }
-
-                if (!entityDecl) [[unlikely]] {
-                    throwError("Entity type expression does not have an entity variable declaration", expr);
-                }
-
-                const auto* cached = getEntityTypeCache.cacheOrRetrieve(entityDecl, exprDecl);
-
-                if (cached) {
-                    // GetEntityType is already present in the cache. Map the existing expr to the current one
-
-                    if (!cached->_exprDecl) [[unlikely]] {
-                        throwError("GetEntityType expression does not have an expression variable declaration", expr);
-                    }
-
-                    expr->setExprVarDecl(cached->_exprDecl);
-                    continue;
-                }
-
-                GetEntityTypeNode* n = _tree.newOut<GetEntityTypeNode>(prevNode);
-                n->setExpr(expr);
-                n->setEntityVarDecl(entityDecl);
-                prevNode = n;
-
-            } else if (dynamic_cast<const SymbolExpr*>(dep._expr)) {
-                // Symbol value should already be in a column in a block, no need to change anything
-            } else {
-                throwError("Expression dependency could not be handled in the predicate evaluation");
-            }
-        }
-
-        // Functions may have expressions which need be evaluated prior to the functions
-        // evaluation, e.g. COUNT(5 + 5).
-        for (const ExprDependencies::FuncDependency& dep : deps.getFuncDeps()) {
-            const FunctionInvocationExpr* funcExpr = dep._expr;
-            const FunctionInvocation* funcInvok = funcExpr->getFunctionInvocation();
-            const FunctionSignature* signature = funcInvok->getSignature();
-
-            const ExprChain* arguments = funcInvok->getArguments();
-            for (const Expr* argument : *arguments) {
-                if (ExprEvalNode::needsEvaluation(argument)) {
-                    exprEval->addExpr(argument);
-                }
-            }
-
-            if (signature->isAggregate()) {
-                aggregateEval->addFunc(dep._expr);
-            } else {
-                funcEval->addFunc(dep._expr);
-            }
-        }
-
-        if (proj->isAggregate() && !item->isAggregate()) {
-            const Expr::Kind kind = item->getKind();
-
-            if (kind != Expr::Kind::SYMBOL
-                && kind != Expr::Kind::PROPERTY) {
-                throwError("Complex grouping keys are not supported yet. Only variables (e.g. n), "
-                           "or property expression (e.g. n.name) are allowed",
-                           proj);
-            }
-
-            aggregateEval->addGroupByKey(item);
-        }
-    }
-
-    ProduceResultsNode* results = _tree.create<ProduceResultsNode>();
-
-    // Expressions, functions and aggregates do not require a previous input.
-    // e.g. RETURN sum(sqrt(5))
-    // @ref prevNode will be nullptr in the above, but still requires evaluation
-    // FIXME: There is a limitation which prevents queries such as
-    // MATCH (n) RETURN 5 + COUNT(n)
-    // because this requires the @ref aggregateEval node to be placed before the @ref
-    // exprEval node. However this is currently guarded by an exception raised when
-    // @ref Expr::Kind::FUNCTION_INVOCATION is an argument of @ref ExprProgram
-    if (!exprEval->getExprs().empty()) {
-        if (prevNode) {
-            prevNode->connectOut(exprEval);
-        }
-        prevNode = exprEval;
-    }
-
-    if (!funcEval->getFuncs().empty()) {
-        if (prevNode) {
-            prevNode->connectOut(funcEval);
-        }
-        prevNode = funcEval;
-    }
-
-    if (!aggregateEval->getFuncs().empty()) {
-        if (prevNode) {
-            prevNode->connectOut(aggregateEval);
-        }
-        prevNode = aggregateEval;
-    }
-
-    // ORDER BY, SKIP, LIMIT require a previous input, `LIMIT 10` is not a valid query,
-    // but `MATCH (n) LIMIT 10` is (because it has SCAN NODES as a previous input), and so
-    // is `RETURN 5 LIMIT 10` (it has EXPR EVAL as a previous input). Therefore, we can
-    // only add thse projection properties if @ref prevNode is valid.
-    if (prevNode && proj->hasOrderBy()) {
-        OrderByNode* orderBy = _tree.newOut<OrderByNode>(prevNode);
-        orderBy->setItems(proj->getOrderBy()->getItems());
-        prevNode = orderBy;
-    }
-
-    if (prevNode && proj->hasSkip()) {
-        SkipNode* skip = _tree.newOut<SkipNode>(prevNode);
-        skip->setExpr(proj->getSkip()->getExpr());
-        prevNode = skip;
-    }
-
-    if (prevNode && proj->hasLimit()) {
-        LimitNode* limit = _tree.newOut<LimitNode>(prevNode);
-        limit->setExpr(proj->getLimit()->getExpr());
-        prevNode = limit;
-    }
-
-    prevNode->connectOut(results);
-
-    results->setProjection(proj);
-
-    return results;
+    return returnProjectionNode;
 }
 
 PlanGraphNode* PlanGraphGenerator::generateReturnNone(PlanGraphNode* prevNode) {
