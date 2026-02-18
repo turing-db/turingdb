@@ -118,7 +118,7 @@ template <typename T>
     return fmt::format("{}", value);
 }
 
-[[maybe_unused]] std::string valueToString(const PropertyNull&) {
+[[maybe_unused]] std::string valueToString(const PropertyNull) {
     return "null";
 }
 

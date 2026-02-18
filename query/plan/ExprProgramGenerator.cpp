@@ -526,7 +526,8 @@ Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
         ResultAllocator<Operator> allocator(result, _gen);                               \
         ColumnSingleDispatcher<typename Types::Allowed, ResultAllocator<Operator>,       \
                                typename Types::Excluded>::dispatch(arg, allocator);      \
-    } break;
+    }                                                                                    \
+    break;
 
 Column* ExprProgramGenerator::allocUnaryResultCol(ColumnOperator op, const Column* arg) {
     Column* result = nullptr;

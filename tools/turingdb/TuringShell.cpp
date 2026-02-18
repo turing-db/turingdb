@@ -332,7 +332,7 @@ void tabulateWrite(tabulate::RowStream& rs, const Change* change) {
     rs << fmt::format("{:x}", change->id().get());
 }
 
-void tabulateWrite(tabulate::RowStream& rs, const PropertyNull&) {
+void tabulateWrite(tabulate::RowStream& rs, const PropertyNull) {
     rs << "null";
 }
 
