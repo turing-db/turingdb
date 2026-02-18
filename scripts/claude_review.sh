@@ -158,17 +158,9 @@ PROMPT_HEADER
 } >> /tmp/review_prompt.txt
 
 # ── 4. Run Claude review ──────────────────────────────────────────
-CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-4-5-20250929}"
-claude_args=(-p --model "$CLAUDE_MODEL")
+claude_args=(-p --model claude-opus-4-6)
 
-echo "Running claude with model: $CLAUDE_MODEL"
-if ! (cd /tmp && claude "${claude_args[@]}" < /tmp/review_prompt.txt > /tmp/claude_review_output.txt 2>&1) ; then
-    echo "Claude command failed." >&2
-    echo "--- claude output ---" >&2
-    cat /tmp/claude_review_output.txt >&2 2>/dev/null || true
-    echo "--- end claude output ---" >&2
-    exit 1
-fi
+(cd /tmp && claude "${claude_args[@]}" < /tmp/review_prompt.txt > /tmp/claude_review_output.txt)
 
 # ── 5. Extract <answer> and parse ────────────────────────────────────
 raw=$(cat /tmp/claude_review_output.txt)
