@@ -4,15 +4,26 @@
 #include "PlanGraph.h"
 
 #include "Projection.h"
+
+#include "nodes/ProduceResultsNode.h"
+#include "stmt/Limit.h"
+#include "stmt/OrderBy.h"
+#include "stmt/OrderByItem.h"
+#include "stmt/ReturnStmt.h"
+#include "stmt/Skip.h"
+
 #include "nodes/AggregateEvalNode.h"
 #include "nodes/FuncEvalNode.h"
 #include "nodes/GetEntityTypeNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
-#include "stmt/ReturnStmt.h"
+#include "nodes/LimitNode.h"
+#include "nodes/OrderByNode.h"
+#include "nodes/SkipNode.h"
 
 using namespace db;
 
-ReturnStmtGenerator::ReturnStmtGenerator(ReturnStmt* rtnStmt, PlanGraph* tree,
+ReturnStmtGenerator::ReturnStmtGenerator(const ReturnStmt* rtnStmt,
+                                         PlanGraph* tree,
                                          PlanGraphNode* prevNode,
                                          PlanGraphVariables* vars,
                                          GetPropertyCache& propCache,
@@ -33,7 +44,61 @@ void ReturnStmtGenerator::prepare() {
 }
 
 PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
-    return nullptr;
+    if (_proj->isDistinct()) {
+        throwError("DISTINCT not supported", _stmt);
+    }
+
+    for (const Projection::ReturnItem& returnItem : _proj->items()) {
+        Expr* const* exprPtr = std::get_if<Expr*>(&returnItem);
+        if (!exprPtr) {
+            continue;
+        }
+
+        handleExprDependencies(*exprPtr);
+    }
+
+    if (!_funcEvalNode->getFuncs().empty()) {
+        _prevNode->connectOut(_funcEvalNode);
+        _prevNode = _funcEvalNode;
+    }
+
+    if (!_aggrEvalNode->getFuncs().empty()) {
+        _prevNode->connectOut(_aggrEvalNode);
+        _prevNode = _aggrEvalNode;
+    }
+
+    if (_proj->hasOrderBy()) {
+        auto* orderBy = _tree->newOut<OrderByNode>(_prevNode);
+        const auto& projOrderItems = _proj->getOrderBy()->getItems();
+
+        // Get dependencies that we require to order, e.g.
+        // MATCH (n) RETURN n ORDER BY n.name
+        // requires inserting a plan node to get n.name
+        for (const OrderByItem* item : projOrderItems) {
+            Expr* itemExpr = item->getExpr();
+            handleExprDependencies(itemExpr);
+        }
+        
+        orderBy->setItems(_proj->getOrderBy()->getItems());
+        _prevNode = orderBy;
+    }
+
+    if (_proj->hasSkip()) {
+        auto* skip = _tree->newOut<SkipNode>(_prevNode);
+        skip->setExpr(_proj->getSkip()->getExpr());
+        _prevNode = skip;
+    }
+
+    if (_proj->hasLimit()) {
+        auto* limit = _tree->newOut<LimitNode>(_prevNode);
+        limit->setExpr(_proj->getLimit()->getExpr());
+        _prevNode = limit;
+    }
+
+    auto* results = _tree->newOut<ProduceResultsNode>(_prevNode);
+    results->setProjection(_proj);
+
+    return results;
 }
 
 void ReturnStmtGenerator::handleExprDependencies(Expr* expr) {
