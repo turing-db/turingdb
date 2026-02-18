@@ -30,8 +30,7 @@ std::unique_ptr<SystemEventHandler> SystemEventHandler::_instance = nullptr;
 
 SystemEventHandler::SystemEventHandler(const fs::Path& socketPath)
     : _socketPath(socketPath),
-    _onStop([] {})
-{
+      _onStop([] {}) {
 }
 
 SystemEventHandler::~SystemEventHandler() {
@@ -91,6 +90,51 @@ void SystemEventHandler::setOnStop(const std::function<void()>& onStop) {
     _instance->_onStop = onStop;
 }
 
+bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
+    if (!socketPath.exists()) {
+        return false;
+    }
+
+    const int sockFd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sockFd < 0) {
+        return false;
+    }
+
+    sockaddr_un addr {};
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, socketPath.c_str(), sizeof(addr.sun_path) - 1);
+
+    const int res = ::connect(sockFd, (sockaddr*)&addr, sizeof(addr));
+    if (res < 0) {
+        ::close(sockFd);
+        return false;
+    }
+
+    constexpr std::string_view stop = "STOP";
+    const ssize_t nwrite = ::write(sockFd, stop.data(), stop.size());
+
+    if (nwrite != stop.size()) {
+        ::close(sockFd);
+        return false;
+    }
+
+    // read 'OK'
+    char buf[3] {};
+    const ssize_t nread = ::read(sockFd, buf, sizeof(buf) - 1);
+
+    if (nread != 2) {
+        fmt::println("Failed to read 'OK' {}", nread);
+        ::close(sockFd);
+        return false;
+    }
+
+    ::close(sockFd);
+
+    const std::string_view response {buf, (size_t)nread};
+
+    return response == "OK";
+}
+
 bool SystemEventHandler::initializeImpl() {
     // Creating signal event fd (for SIGINT/SIGTERM)
     _signalFd = ::eventfd(0, EFD_NONBLOCK);
@@ -123,7 +167,7 @@ bool SystemEventHandler::initializeImpl() {
     }
 
     // Setting up signal handler
-    struct sigaction sa{};
+    struct sigaction sa {};
     sa.sa_handler = sigHandler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
