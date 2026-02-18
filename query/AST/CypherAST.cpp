@@ -37,7 +37,6 @@ CypherAST::CypherAST(const ProcedureManager* procedures,
     _functionDecls(std::make_unique<FunctionDecls>()),
     _procedureLookup(std::make_unique<ProcedureLookup>(procedures))
 {
-    _functionDecls->initDefault();
 }
 
 CypherAST::~CypherAST() {
