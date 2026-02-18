@@ -441,8 +441,9 @@ PipelineBlockOutputInterface& PipelineBuilder::addOrderBy(std::span<OrderByProce
 
     _pendingOutput.connectTo(input);
 
-    // XXX: This means that we do not copy the input columns, and we sort in place
-    input.propagateColumns(output);
+    // Do not sort in place: input remains immutable, copy sorted columns into output of
+    // same shape
+    duplicateDataframeShape(_mem, _dfMan, input.getDataframe(), output.getDataframe());
 
     _pendingOutput.updateInterface(&output);
 

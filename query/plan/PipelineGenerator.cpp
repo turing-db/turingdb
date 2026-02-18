@@ -1480,12 +1480,13 @@ PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* no
 
     const OrderByNode::ItemVector& keys = node->items();
 
+    // Nothing to sort by: skip
     if (keys.empty()) {
         return _builder.getPendingOutputInterface();
     }
 
-    OrderByProcessor::OrderByKeys orderbyKeyTags;
-    orderbyKeyTags.reserve(keys.size());
+    OrderByProcessor::OrderByKeys orderbyKeys;
+    orderbyKeys.reserve(keys.size());
 
     for (const OrderByItem* key : keys) {
         bioassert(key, "Found null OrderByItem.");
@@ -1511,10 +1512,18 @@ PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* no
         Column* keyCol = orderedNamedColumn->getColumn();
 
         const bool asc = key->getType() == OrderByType::ASC;
-        orderbyKeyTags.emplace_back(keyCol, asc);
+        orderbyKeys.emplace_back(keyCol, asc);
     }
 
-    _builder.addOrderBy(orderbyKeyTags);
+    const PipelineBlockOutputInterface& output = _builder.addOrderBy(orderbyKeys);
+    Dataframe* outputDf = output.getDataframe();
+
+    // Explictly create a new @ref MaterializeProcessor which uses the sorted output
+    // columns of this ORDER BY as its base. This then overrides the behaviour in @ref
+    // PipelineGenerator::generate which would otherwise create a MatProc pointing to the
+    // input of this processor.
+    auto* newMatProc = MaterializeProcessor::createFromDf(_pipeline, _mem, outputDf);
+    _builder.setMaterializeProc(newMatProc);
 
     return _builder.getPendingOutputInterface();
 }
