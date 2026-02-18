@@ -73,5 +73,6 @@ void TuringConfig::setTuringDirectory(const fs::Path& turingDir) {
     _userExtensionsDir = _turingDir / "extensions";
     _logsDir = _turingDir / "logs";
     _lockFilePath = _turingDir / "turingdb.lock";
+    _socketPath = _turingDir / "turingdb.sock";
     resolveInstallExtensionsDir(_installExtensionsDir);
 }

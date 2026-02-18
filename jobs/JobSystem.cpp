@@ -30,7 +30,7 @@ JobSystem::~JobSystem() {
 
 void JobSystem::initialize() {
     for (size_t i = 0; i < _nThreads; i++) {
-        _workers.emplace_back([&] {
+        auto& t = _workers.emplace_back([&] {
             while (true) {
                 std::optional<Job> j = _jobs.waitJob([&] {
                     return _stopRequested.load();
@@ -47,6 +47,8 @@ void JobSystem::initialize() {
                 _jobs.incrementFinished();
             }
         });
+
+        pthread_setname_np(t.native_handle(), "tdb.worker");
     }
 }
 

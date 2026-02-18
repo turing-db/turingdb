@@ -5,6 +5,7 @@
 #include <string_view>
 #include <functional>
 #include <vector>
+#include <atomic>
 
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
@@ -31,6 +32,7 @@ public:
     void startLoop();
 
     void printHelp() const;
+    void stop();
 
     [[nodiscard]] CommitHash getCommitHash() const { return _hash; }
     [[nodiscard]] ChangeID getChangeID() const { return _changeID; }
@@ -42,6 +44,8 @@ private:
     CommitHash _hash {CommitHash::head()};
     ChangeID _changeID {ChangeID::head()};
     bool _quiet {false};
+    size_t _threadID {0};
+    std::atomic<bool> _running {true};
     std::unordered_map<std::string_view, Command> _localCommands;
 
     void processLine(std::string& line);

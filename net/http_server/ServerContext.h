@@ -16,9 +16,8 @@ using ServerProcessor = std::function<void(AbstractThreadContext*, TCPConnection
 using CreateThreadContext = std::function<std::unique_ptr<AbstractThreadContext>()>;
 
 struct ServerContext {
-    utils::ServerSocket _socket {0};
-    utils::EpollInstance _instance {0};
-    utils::EpollSignal& _signalFd;
+    utils::ServerSocket _socket {};
+    utils::EpollInstance _instance {};
     TCPConnectionStorage& _connections;
     TCPConnection& _serverConnection;
     std::atomic<FlowStatus>& _status;

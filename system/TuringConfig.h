@@ -22,10 +22,16 @@ public:
     const fs::Path& getInstallExtensionsDir() const { return _installExtensionsDir; }
     const fs::Path& getLogsDir() const { return _logsDir; }
     const fs::Path& getLockFilePath() const { return _lockFilePath; }
+    const fs::Path& getSocketPath() const { return _socketPath; }
+    const std::function<void()>& getOnStopRequest() const { return _onStopRequest; }
 
     bool isSyncedOnDisk() const { return _syncedOnDisk; }
     void setTuringDirectory(const fs::Path& turingDir);
     void setSyncedOnDisk(bool syncedOnDisk) { _syncedOnDisk = syncedOnDisk; }
+
+    void setOnStopRequest(const std::function<void()>& onStopRequest) {
+        _onStopRequest = onStopRequest;
+    }
 
 private:
     fs::Path _turingDir;
@@ -36,6 +42,9 @@ private:
     fs::Path _installExtensionsDir;
     fs::Path _logsDir;
     fs::Path _lockFilePath;
+    fs::Path _socketPath;
+
+    std::function<void()> _onStopRequest;
 
     bool _syncedOnDisk {true};
 };

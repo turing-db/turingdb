@@ -9,6 +9,7 @@
 #include "InterpreterContext.h"
 #include "procedures/ProcedureManager.h"
 #include "ExtensionManager.h"
+#include "SystemEventHandler.h"
 
 #include "Panic.h"
 #include "TuringConfig.h"
@@ -115,8 +116,18 @@ void TuringDB::init() {
         panic("Could not acquire lock file: {}", lockRes.error().fmtMessage());
     }
 
+    // Initialize socket/signal communication system
+    if (!SystemEventHandler::initialize(_config->getSocketPath())) {
+        panic("Could not initialize system event handler");
+    }
+
     // Init system manager
     _systemManager->init();
+
+    // Set on stop callback
+    SystemEventHandler::setOnStop([this] {
+        _config->getOnStopRequest()();
+    });
 
     // Init procedures
     _procedures->init();
