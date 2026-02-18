@@ -7,7 +7,7 @@ namespace db {
 class CypherAST;
 class FunctionInvocation;
 class VarDecl;
-struct FunctionSignature;
+class FunctionSignature;
 
 class FunctionInvocationExpr : public Expr {
 public:
