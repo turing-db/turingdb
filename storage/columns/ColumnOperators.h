@@ -73,10 +73,9 @@ public:
     // Both Bool and opt<Bool> are needed as there is no way to limit to
     // ColumnConst<{Bool}> whilst also having ColumnVector<{Bool, optional<Bool>}>
     template <typename Op, typename T>
-    static inline void exec(ColumnConst<T>* res, const ColumnConst<T>* arg)
         requires(std::is_same_v<T, types::Bool::Primitive>)
              || (std::is_same_v<T, std::optional<types::Bool::Primitive>>)
-    {
+    static inline void exec(ColumnConst<T>* res, const ColumnConst<T>* arg) {
         UnaryPredicateExecutor<Op, T>::apply(res, arg);
     }
 
@@ -85,9 +84,7 @@ public:
     // ColOptMask is a weak alias for ColumnVector<opt<Bool>>
     template <typename Op, typename T>
         requires(std::is_same_v<T, types::Bool::Primitive>)
-    static inline void exec(ColumnVector<T>* res, const ColumnVector<T>* arg)
-        requires(std::is_same_v<T, types::Bool::Primitive>)
-    {
+    static inline void exec(ColumnVector<T>* res, const ColumnVector<T>* arg) {
         UnaryPredicateExecutor<Op, T>::apply(res, arg);
     }
 
