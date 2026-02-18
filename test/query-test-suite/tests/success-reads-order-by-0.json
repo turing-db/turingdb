@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n ORDER BY n.name",
   "expect": {
