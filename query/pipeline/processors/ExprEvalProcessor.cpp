@@ -64,12 +64,13 @@ void ExprEvalProcessor::reset() {
 }
 
 void ExprEvalProcessor::execute() {
+    _exprProg->evaluateInstructions();
+
     if (_input) {
         _input->getPort()->consume();
     }
-    _output.getPort()->writeData();
 
-    _exprProg->evaluateInstructions();
+    _output.getPort()->writeData();
 
     finish();
 }
