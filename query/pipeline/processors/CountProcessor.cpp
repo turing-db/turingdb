@@ -86,7 +86,7 @@ inline constexpr bool is_template_t = is_template<T, Template>::value;
 class Counter {
 public:
     Counter(CountProcessor::CountType& count)
-        : _count {count}
+        : _count(count)
     {
     }
 
