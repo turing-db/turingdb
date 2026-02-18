@@ -143,7 +143,7 @@ void CountProcessor::execute() {
         const size_t blockRowCount = inputDf->getLogicalRowCount();
         _countRunning += blockRowCount;
     } else { // Otherwise, query such as COUNT(n.name)
-        CountProcessor::CountType localCount {0};
+        CountProcessor::CountType localCount = 0;
 
         Counter counter(localCount);
         using Types = OutputtedTypes;
