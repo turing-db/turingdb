@@ -370,6 +370,8 @@ void myAlgorithm(std::vector<NodeID>& result, const std:::vector<NodeID>& seed, 
 
 Always initialize local variables to a default value if necessary.
 Always initialize class members to a default value, especially pointers.
+STL iterators are exempt from this rule as they are value-initialized
+by their default constructor.
 
 Class member initialisation style:
 ```cpp

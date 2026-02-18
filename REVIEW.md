@@ -21,7 +21,8 @@ public:
 ## Check initialization style
 
 * Classes and struct member variables must be initialized with the bracket {defaultValue}
-initialisation style
+initialisation style. STL iterators are exempt from this rule as they are value-initialized
+by their default constructor
 
 ```
 class MyClass {
