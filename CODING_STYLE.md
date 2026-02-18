@@ -221,8 +221,30 @@ private:
 };
 ```
 
+Structs are also the natural choice for small callable types whose instances will be taken as function pointers or passed as template callable arguments:
+```cpp
+// Good: struct used as a callable / function-pointer target
+struct CompareByScore {
+    bool operator()(const Entry* a, const Entry* b) const {
+        return a->score() < b->score();
+    }
+};
+```
+
+File-local structs in anonymous namespaces that extend a base class with just one or two data members are also acceptable as structs. These are lightweight internal data carriers where adding private members and accessors would be pointless noise:
+```cpp
+// Good: file-local data carrier extending a framework base
+namespace {
+
+struct Data : public ProcedureData {
+    std::unique_ptr<ScanLabelsChunkWriter> _it;
+};
+
+}
+```
+
 In summary:
-- `struct`: trivial POD aggregates (points, pairs), template traits, functors
+- `struct`: trivial POD aggregates (points, pairs), template traits, functors, small callable types used as function pointers, and file-local lightweight base class extensions
 - `class`: everything else — if it has STL containers, multiple fields with logic, or represents a domain concept, it must be a class
 
 ## Function arguments
