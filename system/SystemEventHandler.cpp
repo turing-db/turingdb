@@ -216,7 +216,6 @@ bool SystemEventHandler::initializeImpl() {
                     continue;
                 }
 
-                _running = false;
                 _onStop();
                 break;
             }
@@ -225,7 +224,6 @@ bool SystemEventHandler::initializeImpl() {
             if (pfds[1].revents & POLLIN) {
                 uint64_t val = 0;
                 [[maybe_unused]] const int res = ::read(_signalFd._read, &val, sizeof(val));
-                _running = false;
                 _onStop();
                 break;
             }
@@ -251,7 +249,6 @@ bool SystemEventHandler::initializeImpl() {
                 } else if (cmd == "STOP") {
                     [[maybe_unused]] const int res = ::write(client, "OK", 2);
                     ::close(client);
-                    _running = false;
                     _onStop();
                     break;
                 }
