@@ -49,25 +49,7 @@ SystemEventHandler::SystemEventHandler(const fs::Path& socketPath)
 }
 
 SystemEventHandler::~SystemEventHandler() {
-    _running.store(false);
-
-    if (_thread.joinable()) {
-        _thread.join();
-    }
-
-    if (_signalFd._read != -1) {
-        ::close(_signalFd._read);
-    }
-
-    if (_signalFd._write != -1) {
-        ::close(_signalFd._write);
-    }
-
-    if (_sockFd != -1) {
-        ::close(_sockFd);
-    }
-
-    _instance = nullptr;
+    terminate();
 }
 
 bool SystemEventHandler::initialize(const fs::Path& socketPath) {
@@ -100,7 +82,18 @@ void SystemEventHandler::terminate() {
     }
 
     _instance->_thread.join();
-    _instance.reset();
+
+    if (_signalFd._read != -1) {
+        ::close(_signalFd._read);
+    }
+
+    if (_signalFd._write != -1) {
+        ::close(_signalFd._write);
+    }
+
+    if (_sockFd != -1) {
+        ::close(_sockFd);
+    }
 }
 
 void SystemEventHandler::setOnStop(const std::function<void()>& onStop) {
