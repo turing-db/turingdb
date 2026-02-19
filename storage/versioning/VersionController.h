@@ -14,7 +14,6 @@
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "DataPart.h"
-#include "versioning/WriteSet.h"
 
 namespace db {
 
@@ -49,7 +48,8 @@ public:
     [[nodiscard]] CommitHash getHeadHash() const;
     [[nodiscard]] const Graph* getGraph() const { return _graph; }
 
-    ssize_t getCommitIndex(CommitHash hash) const;
+    /// Gets the offset for a given commit hash, or nullopt if not found
+    std::optional<size_t> getCommitIndex(CommitHash hash) const;
 
     WeakArc<CommitData> createCommitData(CommitHash hash) {
         Profile profile("VersionController::createCommitData");

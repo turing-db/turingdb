@@ -1,5 +1,7 @@
 #include "VersionController.h"
 
+#include <optional>
+
 #include <range/v3/view/enumerate.hpp>
 
 #include "JobSystem.h"
@@ -139,11 +141,11 @@ void VersionController::addCommit(std::unique_ptr<Commit> commit) {
     _head.store(ptr);
 }
 
-ssize_t VersionController::getCommitIndex(CommitHash hash) const {
+std::optional<size_t> VersionController::getCommitIndex(CommitHash hash) const {
     auto it = _offsets.find(hash);
 
     if (it == _offsets.end()) {
-        return -1;
+        return std::nullopt;
     }
 
     return it->second;
@@ -154,8 +156,10 @@ Commit::CommitSpan VersionController::getCommitsSinceCommitHash(CommitHash from)
     // Should not be trying to check conflicts if we are not rebasing
     bioassert(from != CommitHash::head(), "should not be checking conflicts if not rebasing");
 
-    const ssize_t startIndex = getCommitIndex(from);
-    bioassert(startIndex != -1, "Could not find Commit with hash {:x}", from.get());
+    const std::optional<size_t> startIndexOpt = getCommitIndex(from);
+    bioassert(startIndexOpt, "Could not find Commit with hash {:x}", from.get());
+
+    const size_t startIndex = *startIndexOpt;
     bioassert(static_cast<size_t>(startIndex) + 1 <= _commits.size(), "invalid startIndex");
 
     // +1 to skip the commit we branched from
