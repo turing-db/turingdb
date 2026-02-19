@@ -85,7 +85,7 @@ LockFileResult<uint64_t> LockFile::getPid() {
         return LockFileError::result(LockFileErrorType::NO_PID);
     }
 
-    uint64_t id {0};
+    uint64_t id = 0;
     const auto res = std::from_chars(pidStr.begin(), pidStr.end(), id);
 
     if (res.ec == std::errc::result_out_of_range
