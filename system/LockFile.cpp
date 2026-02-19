@@ -10,7 +10,8 @@
 
 using namespace db;
 
-LockFile::LockFile() {
+LockFile::LockFile()
+{
 }
 
 LockFile::~LockFile() {

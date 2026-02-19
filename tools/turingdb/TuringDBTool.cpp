@@ -12,12 +12,12 @@
 using namespace db;
 
 int main(int argc, const char** argv) {
-    const std::unordered_set<std::string_view> subcommands {
+    const std::unordered_set<std::string_view> subcommands = {
         "start",
         "stop",
     };
 
-    const std::unordered_set<std::string_view> passthrough {
+    const std::unordered_set<std::string_view> passthrough = {
         "-h", "--help",
         "-v", "--version",
     };
@@ -33,19 +33,19 @@ int main(int argc, const char** argv) {
 
     argparse::ArgumentParser rootParser("turingdb");
 
-    StartCmd startCmd;
-    StopCmd stopCmd;
+    std::unique_ptr<StartCmd> startCmd = StartCmd::create();
+    std::unique_ptr<StopCmd> stopCmd = StopCmd::create();
 
-    rootParser.add_subparser(startCmd.getArgParser());
-    rootParser.add_subparser(stopCmd.getArgParser());
+    rootParser.add_subparser(startCmd->getArgParser());
+    rootParser.add_subparser(stopCmd->getArgParser());
 
     try {
         rootParser.parse_args(args.size(), args.data());
 
         if (rootParser.is_subcommand_used("start")) {
-            return startCmd.execute();
+            return startCmd->execute();
         } else if (rootParser.is_subcommand_used("stop")) {
-            return stopCmd.execute();
+            return stopCmd->execute();
         } else {
             // Should never happen since at least 'start' is present
             throw FatalException("No subcommand given.");

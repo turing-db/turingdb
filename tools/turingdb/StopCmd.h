@@ -2,15 +2,12 @@
 
 #include <memory>
 
-namespace argparse {
-class ArgumentParser;
-}
+#include <argparse.hpp>
 
 namespace db {
 
 class StopCmd {
 public:
-    StopCmd();
     ~StopCmd();
 
     StopCmd(const StopCmd&) = delete;
@@ -18,13 +15,19 @@ public:
     StopCmd& operator=(const StopCmd&) = delete;
     StopCmd& operator=(StopCmd&&) = delete;
 
-    argparse::ArgumentParser& getArgParser() { return *_argParser; }
+    static std::unique_ptr<StopCmd> create();
+
+    argparse::ArgumentParser& getArgParser() { return _argParser; }
 
     int execute();
 
 private:
-    std::unique_ptr<argparse::ArgumentParser> _argParser;
+    argparse::ArgumentParser _argParser;
     std::string _turingDir;
+
+    StopCmd();
+
+    void initialize();
 };
 
 }

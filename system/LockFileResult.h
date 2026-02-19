@@ -25,11 +25,7 @@ using LockFileErrorTypeDescription = EnumToString<LockFileErrorType>::Create<
 class LockFileError {
 public:
     explicit LockFileError(LockFileErrorType type,
-                           const std::string& msg = "")
-        : _type(type),
-        _message(msg)
-    {
-    }
+                           const std::string& msg = "");
 
     LockFileErrorType getType() const { return _type; }
     std::string fmtMessage() const;

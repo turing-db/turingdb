@@ -5,17 +5,13 @@
 
 #include "TuringConfig.h"
 #include "SystemEventHandler.h"
+#include "LogSetup.h"
 
 using namespace db;
 
 StopCmd::StopCmd()
+    : _argParser("stop")
 {
-    _argParser = std::make_unique<argparse::ArgumentParser>("stop");
-    _argParser->add_description("Stops the TuringDB server");
-    _argParser->add_argument("-turing-dir")
-        .metavar("path")
-        .help("Root Turing directory")
-        .store_into(_turingDir);
 }
 
 StopCmd::~StopCmd() = default;
@@ -28,6 +24,8 @@ int StopCmd::execute() {
     }
 
     _turingDir = config.getTuringDir().get();
+
+    LogSetup::setupLogConsole();
 
     const fs::Path socketPath = config.getSocketPath();
     if (!socketPath.exists()) {
@@ -43,4 +41,21 @@ int StopCmd::execute() {
     spdlog::info("Stopped TuringDB instance at {}", _turingDir);
 
     return EXIT_SUCCESS;
+}
+
+std::unique_ptr<StopCmd> StopCmd::create() {
+    std::unique_ptr<StopCmd> cmd {new StopCmd()};
+
+    cmd->initialize();
+
+    return cmd;
+}
+
+void StopCmd::initialize() {
+    _argParser.add_description("Stops the TuringDB server");
+
+    _argParser.add_argument("-turing-dir")
+        .metavar("path")
+        .help("Root Turing directory")
+        .store_into(_turingDir);
 }
