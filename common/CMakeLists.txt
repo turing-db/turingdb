@@ -18,6 +18,7 @@ set(common_sources
         Command.cpp
         StringUtils.cpp
         Profiler.cpp
+        ThreadName.cpp
 
         log/LogSetup.cpp
         log/LogUtils.cpp)

@@ -10,6 +10,7 @@
 #include "DBServerProcessor.h"
 #include "DBURIParser.h"
 #include "DBServerConfig.h"
+#include "ThreadName.h"
 
 using namespace db;
 
@@ -54,6 +55,8 @@ void TuringServer::start() {
     }
 
     const auto serverFunc = [&]() {
+        ThreadName::set("tdb.main-server");
+
         const auto startRes = _server->start();
         if (startRes != net::FlowStatus::OK) {
             _server->terminate();
@@ -62,8 +65,6 @@ void TuringServer::start() {
     };
 
     _serverThread = std::thread(serverFunc);
-
-    pthread_setname_np(_serverThread.native_handle(), "tdb.main-server");
 
     spdlog::info("Server listening on address: {}:{}",
                  _server->getAddress(),
