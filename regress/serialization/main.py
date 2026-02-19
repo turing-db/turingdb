@@ -15,17 +15,20 @@ NC = "\033[0m"
 
 def spawn_turingdb():
     print(f"- {GREEN}Starting turingdb{NC}")
-    return subprocess.Popen("exec uv run turingdb -demon -turing-dir .turing", shell=True)
+    return subprocess.Popen(
+        "exec uv run turingdb -demon -turing-dir .turing", shell=True
+    )
 
 
 def stop_turingdb(proc):
     print(f"- {GREEN}Stopping turingdb{NC}")
-    subprocess.call('pkill -9 turingdb', shell=True)
+    subprocess.call("uv run turingdb stop", shell=True)
     # Wait for port to be released
     import socket
+
     for _ in range(100):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(('127.0.0.1', 6666)) != 0:
+            if s.connect_ex(("127.0.0.1", 6666)) != 0:
                 break
         time.sleep(0.1)
 
@@ -39,7 +42,7 @@ def wait_ready(client):
         except:
             time.sleep(1)
 
-    raise RuntimeError('Failed to connect to turingdb')
+    raise RuntimeError("Failed to connect to turingdb")
 
 
 if __name__ == "__main__":
@@ -61,7 +64,7 @@ if __name__ == "__main__":
 
         # Make changes
         print(f"- {BLUE}Making changes{NC}")
-        change = client.query("CHANGE NEW")['changeID'][0]
+        change = client.query("CHANGE NEW")["changeID"][0]
         client.checkout(change=str(change))
 
         create_query = "CREATE (a:Person {name: 'Alice'}), (j:Person {name: 'John'}), (a)-[:KNOWS]->(j)"
