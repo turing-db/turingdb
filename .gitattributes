@@ -1,3 +1,4 @@
 *.tar.gz filter=lfs diff=lfs merge=lfs -text
 *.cypher filter=lfs diff=lfs merge=lfs -text
 test/query-test-suite/tests/**/*.json linguist-generated
+examples/stops.csv filter=lfs diff=lfs merge=lfs -text
