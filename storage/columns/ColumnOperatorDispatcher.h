@@ -62,6 +62,19 @@ public:
     }
 
 private:
+
+    // Unwraps the tuple of types
+    // This is to avoid having to instantiate a std::tuple<...>
+    // which would require all its members to have constexpr 
+    // constructor/destructor
+    template <typename T>
+    struct UnwrappedTypes {};
+
+    template <typename ...Ts>
+    struct UnwrappedTypes<std::tuple<Ts...>> {
+        using Tuple = std::tuple<Ts...>;
+    };
+
     template <class OperandRaw>
     static void dispatchInternal(const Column* operand, Functor& fn) {
         using Container = OuterTypeHelper<OperandRaw>::type;
@@ -71,7 +84,7 @@ private:
         } else {
             const auto i = ColumnKind::extractInternalKind(operand->getKind());
 
-            static constexpr auto table = makeTable<Container::template type>(AllowedInternalTypes {});
+            static constexpr auto table = makeTable<Container::template type>(UnwrappedTypes<AllowedInternalTypes>{});
             table[i](operand, fn);
         }
     }
@@ -93,7 +106,7 @@ private:
     }
 
     template <template <typename> class Container, typename... Types>
-    static consteval auto makeTable(std::tuple<Types...>) {
+    static consteval auto makeTable(UnwrappedTypes<std::tuple<Types...>>) {
         std::array<Fn, N + 1> t {};
 
         for (std::size_t i = 0; i <= N; ++i) {
