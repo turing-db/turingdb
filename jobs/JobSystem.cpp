@@ -5,6 +5,7 @@
 #include <spdlog/spdlog.h>
 
 #include "JobGroup.h"
+#include "ThreadName.h"
 
 using namespace db;
 
@@ -30,7 +31,9 @@ JobSystem::~JobSystem() {
 
 void JobSystem::initialize() {
     for (size_t i = 0; i < _nThreads; i++) {
-        auto& t = _workers.emplace_back([&] {
+        _workers.emplace_back([&] {
+            ThreadName::set("tdb.worker");
+
             while (true) {
                 std::optional<Job> j = _jobs.waitJob([&] {
                     return _stopRequested.load();
@@ -47,8 +50,6 @@ void JobSystem::initialize() {
                 _jobs.incrementFinished();
             }
         });
-
-        pthread_setname_np(t.native_handle(), "tdb.worker");
     }
 }
 

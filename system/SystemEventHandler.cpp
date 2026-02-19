@@ -6,6 +6,8 @@
 #include <sys/un.h>
 #include <sys/poll.h>
 
+#include "ThreadName.h"
+
 using namespace db;
 
 namespace {
@@ -183,6 +185,8 @@ bool SystemEventHandler::initializeImpl() {
     _running.store(true);
 
     _thread = std::thread([this]() {
+        ThreadName::set("tdb.com");
+
         std::string cmd;
 
         while (_running) {
@@ -242,8 +246,6 @@ bool SystemEventHandler::initializeImpl() {
             }
         }
     });
-
-    pthread_setname_np(_thread.native_handle(), "tdb.com");
 
     return true;
 }

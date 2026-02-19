@@ -13,6 +13,7 @@
 #include "Utils.h"
 
 #include "BioAssert.h"
+#include "ThreadName.h"
 
 using namespace net;
 
@@ -128,11 +129,10 @@ FlowStatus HTTPServer::start() {
     _threads.reserve(_workerCount);
 
     for (size_t i = 0; i < _workerCount; i++) {
-        auto& t = _threads.emplace_back([&ctxt, i] {
+        _threads.emplace_back([&ctxt, i] {
+            db::ThreadName::set("tdb.http-worker");
             runThread(i + 1, ctxt);
         });
-
-        pthread_setname_np(t.native_handle(), "tdb.http-worker");
     }
 
     for (auto& thread : _threads) {
