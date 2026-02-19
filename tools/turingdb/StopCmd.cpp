@@ -34,7 +34,7 @@ int StopCmd::execute() {
     }
 
     if (!SystemEventHandler::requestStop(socketPath)) {
-        spdlog::error("Could not stop the TuringDB instance at ", _turingDir);
+        spdlog::error("Could not stop the TuringDB instance at {}", _turingDir);
         return EXIT_FAILURE;
     }
 
