@@ -328,7 +328,7 @@ PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, Pl
     GetPropertyCache& propCache = _tree.getGetPropertyCache();
     GetEntityTypeCache& entCache = _tree.getGetEntityTypeCache();
 
-    ReturnStmtGenerator stmtGen(stmt, &_tree, prevNode, _variables.get(), propCache,
+    ReturnStmtGenerator stmtGen(_ast, stmt, &_tree, prevNode, _variables.get(), propCache,
                                 entCache);
 
     PlanGraphNode* returnProjectionNode = stmtGen.generateReturnStmt();

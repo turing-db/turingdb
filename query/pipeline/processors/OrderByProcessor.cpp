@@ -241,6 +241,8 @@ void OrderByProcessor::subsort() {
 
 // TODO: Handle ColumnConst as order key
 void OrderByProcessor::execute() {
+    finish();
+    return;
     if (_state == State::SORT_INCOMING) {
         return;
     }

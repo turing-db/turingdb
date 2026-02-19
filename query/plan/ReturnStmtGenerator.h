@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string_view>
+
 namespace db {
 
 class PlanGraph;
@@ -13,6 +14,7 @@ class GetPropertyCache;
 class GetEntityTypeCache;
 class Expr;
 class Projection;
+class CypherAST;
 
 /**
  * @brief Helper class to wrap logic for generating the plan graph structure from a
@@ -20,7 +22,7 @@ class Projection;
  */
 class ReturnStmtGenerator {
 public:
-    ReturnStmtGenerator(const ReturnStmt* rtnStmt, PlanGraph* tree,
+    ReturnStmtGenerator(const CypherAST* ast, const ReturnStmt* rtnStmt, PlanGraph* tree,
                         PlanGraphNode* prevNode, PlanGraphVariables* vars,
                         GetPropertyCache& propCache, GetEntityTypeCache& entCache);
 
@@ -34,7 +36,9 @@ public:
     PlanGraphNode* generateReturnStmt();
 
 private:
-    ReturnStmt* _stmt {nullptr};
+    const CypherAST* _ast {nullptr};
+
+    const ReturnStmt* _stmt {nullptr};
     Projection* _proj {nullptr};
 
     PlanGraph* _tree {nullptr};

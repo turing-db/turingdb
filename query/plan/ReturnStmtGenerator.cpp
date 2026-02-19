@@ -1,11 +1,10 @@
 #include "ReturnStmtGenerator.h"
 
+#include "CypherAST.h"
 #include "ExprDependencies.h"
 #include "PlanGraph.h"
-
 #include "Projection.h"
 
-#include "nodes/ProduceResultsNode.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
@@ -18,17 +17,22 @@
 #include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/LimitNode.h"
 #include "nodes/OrderByNode.h"
+#include "nodes/ProduceResultsNode.h"
 #include "nodes/SkipNode.h"
+
+#include "DiagnosticsManager.h"
 
 using namespace db;
 
-ReturnStmtGenerator::ReturnStmtGenerator(const ReturnStmt* rtnStmt,
+ReturnStmtGenerator::ReturnStmtGenerator(const CypherAST* ast,
+                                         const ReturnStmt* rtnStmt,
                                          PlanGraph* tree,
                                          PlanGraphNode* prevNode,
                                          PlanGraphVariables* vars,
                                          GetPropertyCache& propCache,
                                          GetEntityTypeCache& entCache)
-    : _stmt(rtnStmt),
+    : _ast(ast),
+      _stmt(rtnStmt),
       _tree(tree),
       _prevNode(prevNode),
       _variables(vars),
@@ -41,11 +45,14 @@ void ReturnStmtGenerator::prepare() {
     _aggrEvalNode = _tree->create<AggregateEvalNode>();
     _funcEvalNode = _tree->create<FuncEvalNode>();
     _proj = _stmt->getProjection();
+    bioassert(_proj, "Failed to get projection for RETURN statement.");
 }
 
 PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
+    prepare();
+
     if (_proj->isDistinct()) {
-        throwError("DISTINCT not supported", _stmt);
+        throwError("DISTINCT not yet supported.", _stmt);
     }
 
     for (const Projection::ReturnItem& returnItem : _proj->items()) {
@@ -68,9 +75,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
     }
 
     if (_proj->hasOrderBy()) {
-        auto* orderBy = _tree->newOut<OrderByNode>(_prevNode);
         const auto& projOrderItems = _proj->getOrderBy()->getItems();
-
         // Get dependencies that we require to order, e.g.
         // MATCH (n) RETURN n ORDER BY n.name
         // requires inserting a plan node to get n.name
@@ -78,7 +83,9 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
             Expr* itemExpr = item->getExpr();
             handleExprDependencies(itemExpr);
         }
-        
+
+        auto* orderBy = _tree->newOut<OrderByNode>(_prevNode);
+
         orderBy->setItems(_proj->getOrderBy()->getItems());
         _prevNode = orderBy;
     }
@@ -212,4 +219,10 @@ void ReturnStmtGenerator::handleExprDependencies(Expr* expr) {
 
         _aggrEvalNode->addGroupByKey(expr);
     }
+}
+
+void ReturnStmtGenerator::throwError(std::string_view msg, const void* obj) const {
+    std::string errorStr;
+    _ast->getDiagnosticsManager()->createErrorString(msg, obj, errorStr);
+    throw PlannerException(std::move(errorStr));
 }
