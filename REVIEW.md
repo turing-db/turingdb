@@ -105,6 +105,7 @@ but these are few and well-known. We should not have chains of function calls pa
 
 * Do not return stl data structures, pass them by result reference
 * In particular do not return string, unless it is a small string constant
+* Small, lightweight result or status types (status codes, error wrappers, expected-style results) may be returned by value
 
 ## Do not use noexcept
 
@@ -139,5 +140,6 @@ if the code is more beautiful.
 
 ## Check that the primary passing mechanism is good old pointers
 
-Do not pass any class or struct as reference unless it is an STL data structure.
+Do not pass any class or struct as reference unless it is an STL data structure or a callable type such as `std::function`.
+Small, lightweight status or result structs may also be passed by const reference when it is the natural style.
 Good old pointers are the primary passing mechanism.

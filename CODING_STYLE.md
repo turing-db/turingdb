@@ -285,6 +285,8 @@ Do not count on RVO (Return Value Optimisation), assume that it does not exist.
 Prefer to fill or pass results of functions by a modifiable reference in case of an STL container
 or my passing a pointer to your class.
 
+Small, lightweight result or status types (such as status codes, error wrappers, or `std::expected`-style results) may be returned by value when it is the natural and clean way to express the function's contract.
+
 Do not return strings, this is very ugly.
 
 ## Pointers and references
@@ -306,7 +308,7 @@ void MyClass::myFunction(Arg1* arg1, Arg2* arg2, Arg3* arg3) {
 }
 ```
 
-References are reserved for passing STL data structures such as `std::string`, `std::string_view`, `std::vector`, `std::map`, `std::optional` and other standard library types, as well as lambdas and callable types in templates:
+References are reserved for passing STL data structures such as `std::string`, `std::string_view`, `std::vector`, `std::map`, `std::optional`, `std::function` and other standard library types, as well as lambdas and callable types in templates:
 ```cpp
 void MyClass::myFunction(Arg1* arg1, const std::string& myStr) {
 	// Do something
@@ -501,7 +503,7 @@ switch (myCond) {
 ```
 
 The break statements are aligned with the case statements.
-Each case must have a break statement.
+Each case must have a break statement, even after a return statement, for consistency and coherence across all cases.
 Be careful of using a default case as it can hide future cases that will need to be handled, such that for switch on an enum value.
 
 Use a scoped block of statements with brackets if you start to have more than one statement in each case or if you need to declare variables

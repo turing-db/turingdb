@@ -100,6 +100,18 @@ verify that ALL functions it is passed to accept a const pointer. If any
 callee takes a non-const pointer (e.g. `void foo(Expr* e)`), the variable
 CANNOT be declared const. Only flag when the variable is truly never passed
 to a non-const parameter and is never modified.
+- std::function parameters: `std::function` is a standard library callable type
+and MAY be passed by (const) reference, just like other STL types. Do NOT flag
+`const std::function<...>&` as a violation of the pointer-passing rule.
+- Small status/result structs by reference: small, lightweight status or result
+structs (e.g. status codes, error wrappers, expected-style results) MAY be
+passed by const reference. Do NOT flag these as pointer-passing violations.
+- Break after return in switch cases: a `break;` statement after a `return;`
+inside a switch case is NOT unnecessary clutter — it is intentional for
+coherence and consistency across all cases. Do NOT flag it.
+- Returning small result/status types: small, lightweight result or status types
+(status codes, error wrappers, expected-style results) MAY be returned by
+value. Do NOT flag these as "returning non-trivial objects."
 
 OUTPUT FORMAT (follow these three phases in order):
 
