@@ -3,11 +3,9 @@
 review_consensus.py - Find consensus violations across multiple review passes.
 
 Only outputs violations that appear in at least --threshold passes.
-Two violations "match" when they refer to the same file, nearby lines (+-3),
-and similar rule descriptions.
+Two violations "match" when they refer to the same file and nearby lines (+-5).
 """
 
-import sys
 import re
 import argparse
 
@@ -37,23 +35,19 @@ def parse_table(text):
     return violations
 
 
-def rule_words(rule):
-    """Extract normalized keyword set from a rule description."""
-    return set(re.findall(r'[a-z]+', rule.lower()))
-
-
 def violations_match(a, b):
-    """Check if two violations refer to the same issue."""
+    """Check if two violations refer to the same issue.
+
+    Matching is based on file name and line proximity (+-5).
+    Rule text is intentionally NOT compared because different passes
+    phrase the same rule very differently, causing false negatives.
+    The file+line combination is the reliable consensus signal.
+    """
     if a['file'] != b['file']:
         return False
-    if abs(a['line'] - b['line']) > 3:
+    if abs(a['line'] - b['line']) > 5:
         return False
-    wa = rule_words(a['rule'])
-    wb = rule_words(b['rule'])
-    if not wa or not wb:
-        return True
-    jaccard = len(wa & wb) / len(wa | wb)
-    return jaccard > 0.3
+    return True
 
 
 def find_consensus(all_pass_violations, threshold):
