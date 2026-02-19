@@ -9,6 +9,8 @@
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
 
+#include "columns/ColumnVector.h"
+
 namespace db {
 
 class Column;
@@ -22,12 +24,12 @@ public:
     };
 
     struct TieRange {
-        size_t start {0};
-        size_t size {0};
+        size_t _start {0};
+        size_t _size {0};
     };
 
     using OrderByKeys = std::vector<OrderByKey>;
-    using Indices = std::vector<size_t>;
+    using Indices = ColumnVector<size_t>; // TODO Change to ColumnVector<size_t>*
     using TieRanges = std::vector<TieRange>;
 
     OrderByProcessor(const OrderByProcessor&) = delete;
@@ -49,6 +51,8 @@ public:
     template <std::ranges::random_access_range Rg>
     static void addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t start = 0);
 
+    void setIndicesCol(ColumnVector<size_t>* indices) { _indices = indices; }
+
 private:
     OrderByProcessor();
     ~OrderByProcessor() final;
@@ -65,13 +69,15 @@ private:
 
     OrderByKeys _orderedKeys;
 
-    Indices _indices;
+    Indices* _indices;
 
     TieRanges _tieRanges;
 
     State _state {State::SORT_INCOMING};
 
     void subsort();
+
+    void project();
 };
 
 }

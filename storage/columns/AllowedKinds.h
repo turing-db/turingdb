@@ -279,7 +279,10 @@ struct OutputtedTypes {
 /// Totally ordered types, e.g. sorted in ORDER BY
 struct OrderedTypes {
     using Allowed = GenerateKindList<std::tuple<
-        EdgeID
+        std::optional<types::Int64::Primitive>,
+        std::optional<types::String::Primitive>,
+        EdgeID,
+        NodeID
     >>;
 
     using Excluded = ExcludedContainers<

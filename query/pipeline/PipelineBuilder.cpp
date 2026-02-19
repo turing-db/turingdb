@@ -441,9 +441,16 @@ PipelineBlockOutputInterface& PipelineBuilder::addOrderBy(std::span<OrderByProce
 
     _pendingOutput.connectTo(input);
 
+    Dataframe* inputDf = input.getDataframe();
+    Dataframe* outputDf = output.getDataframe();
+
     // Do not sort in place: input remains immutable, copy sorted columns into output of
     // same shape
-    duplicateDataframeShape(_mem, _dfMan, input.getDataframe(), output.getDataframe());
+    duplicateDataframeShape(_mem, _dfMan, inputDf, outputDf);
+
+    // Allocate a column to store the indices for sort projection
+    auto* indicesCol = _mem->alloc<ColumnVector<size_t>>();
+    orderby->setIndicesCol(indicesCol);
 
     _pendingOutput.updateInterface(&output);
 
