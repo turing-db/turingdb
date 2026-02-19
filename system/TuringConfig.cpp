@@ -46,6 +46,7 @@ void resolveInstallExtensionsDir(fs::Path& result) {
 } // namespace
 
 TuringConfig::TuringConfig()
+    : _onStopRequest([] {})
 {
     // Create turing directory if it does not exist
     const char* homeEnv = getenv("HOME");
