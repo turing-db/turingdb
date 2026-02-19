@@ -212,7 +212,6 @@ void OrderByProcessor::project() {
 }
 
 void OrderByProcessor::subsort() {
-    // spdlog::info("OrderBy::subsort");
     // Ensure all columns are equal size
     const auto sizeIt = std::ranges::adjacent_find(_orderedKeys,
                                [](const OrderByKey& a, const OrderByKey& b) {
@@ -292,7 +291,11 @@ void OrderByProcessor::execute() {
         subsort();
     }
 
-    // Always finish in one cycle
+    // TODO: Implement storing to memory
+    // TODO: Merge sorted runs
+    // TODO: Output total ordering in chunks
+
+    // NOTE: Temporary, for testing; Always finish in one cycle
     _input.getPort()->consume();
     _output.getPort()->writeData();
 
