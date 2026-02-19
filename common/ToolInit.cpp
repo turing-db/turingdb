@@ -8,7 +8,7 @@
 
 #include "FileUtils.h"
 #include "PerfStat.h"
-#include "log/LogSetup.h"
+#include "LogSetup.h"
 
 namespace {
 

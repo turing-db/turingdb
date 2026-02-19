@@ -75,12 +75,8 @@ void TuringServer::wait() {
     if (_serverThread.joinable()) {
         _serverThread.join();
     }
-    _server->terminate();
 }
 
 void TuringServer::stop() {
     _server->terminate();
-    if (_serverThread.joinable()) {
-        _serverThread.join();
-    }
 }

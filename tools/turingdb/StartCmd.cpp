@@ -79,7 +79,6 @@ int StartCmd::execute() {
                 shell->stop();
             } else if (server) {
                 server->stop();
-                server->wait();
             }
         });
 
@@ -89,7 +88,6 @@ int StartCmd::execute() {
         for (const auto& graphName : _graphsToLoad) {
             const QueryStatus res = turingDB.query("load graph " + graphName, "", &mem);
             if (!res.isOk()) {
-                spdlog::error("Failed to load graph {}: {}", graphName, res.getError());
                 return EXIT_FAILURE;
             }
         }
@@ -105,6 +103,8 @@ int StartCmd::execute() {
         if (_demonize) {
             server->wait();
             server.reset();
+
+            turingDB.stop();
         } else {
             shell = std::make_unique<TuringShell>(turingDB, &mem);
 
@@ -114,11 +114,12 @@ int StartCmd::execute() {
 
             shell->startLoop();
             shell.reset();
+
             server->stop();
+            server->wait();
             server.reset();
 
             turingDB.stop();
-            server.reset();
         }
 
     } catch (TuringException& e) {

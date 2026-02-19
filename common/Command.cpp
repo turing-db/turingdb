@@ -1,10 +1,9 @@
 #include "Command.h"
 
-#include <ranges>
 #include <spdlog/spdlog.h>
 
 #include "FileUtils.h"
-#include "log/LogUtils.h"
+#include "LogUtils.h"
 #include "Process.h"
 
 Command::Command(const std::string& cmd)

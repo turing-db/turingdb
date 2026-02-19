@@ -28,7 +28,8 @@ if (${DEBUG_BUILD})
     target_compile_definitions(turing_common_s PUBLIC TURING_ASSERT=1)
 endif()
 
-target_include_directories(turing_common_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(turing_common_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+                                                  ${CMAKE_CURRENT_SOURCE_DIR}/log)
 
 target_compile_definitions(turing_common_s PUBLIC -DTURING_PROFILE=${TURING_PROFILE})
 
