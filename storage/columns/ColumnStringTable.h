@@ -4,6 +4,7 @@
 
 #include "Column.h"
 #include "ColumnVector.h"
+#include "NameOf.h"
 
 namespace db {
 
@@ -33,6 +34,7 @@ public:
     }
 
     InternalKind::Code getInternalKind() const override { return 0; }
+    std::string_view getTypeName() const override { return NameOf<ColumnStringTable>::get(); }
 
     static consteval auto staticKind() { return _staticKind; }
 
