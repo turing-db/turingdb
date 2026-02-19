@@ -18,7 +18,7 @@ Result<File> File::fromFd(const Path& path, int fd) {
     File file;
     file._fd = fd;
 
-    if (const Result res = file.refreshInfo(); !res) {
+    if (const Result<void> res = file.refreshInfo(); !res) {
         return res.get_unexpected();
     }
 

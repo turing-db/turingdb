@@ -124,14 +124,17 @@ void TuringDB::init() {
     // Init system manager
     _systemManager->init();
 
+    // Init procedures
+    _procedures->init();
+
     // Set on stop callback
     SystemEventHandler::setOnStop([this] {
         _config->getOnStopRequest()();
     });
+}
 
-    // Init procedures
-    _procedures->init();
-
+void TuringDB::stop() {
+    SystemEventHandler::terminate();
 }
 
 QueryStatus TuringDB::query(std::string_view query,

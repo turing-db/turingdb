@@ -1,7 +1,5 @@
 #include "StartCmd.h"
 
-#include <sys/eventfd.h>
-#include <sys/poll.h>
 #include <spdlog/spdlog.h>
 #include <argparse.hpp>
 
@@ -19,38 +17,8 @@
 using namespace db;
 
 StartCmd::StartCmd()
-    : _argParser(std::make_unique<argparse::ArgumentParser>("start"))
+    : _argParser("start")
 {
-    _argParser->add_description("Starts the TuringDB server");
-    _argParser->add_argument("-turing-dir")
-        .metavar("path")
-        .help("Root Turing directory")
-        .store_into(_turingDir);
-    _argParser->add_argument("-p")
-        .metavar("port")
-        .help("Server listen port")
-        .store_into(_port);
-    _argParser->add_argument("-i")
-        .metavar("addr")
-        .help("Server listen address (localhost by default)")
-        .store_into(_address);
-    _argParser->add_argument("-demon")
-        .help("Launch TuringDB as a daemon in the background")
-        .store_into(_demonize);
-    _argParser->add_argument("-reset-default")
-        .help("Reset the content of the default graph")
-        .store_into(_resetDefault);
-    _argParser->add_argument("-load")
-        .metavar("graph_name")
-        .help("Load a graph at startup")
-        .store_into(_graphsToLoad);
-    _argParser->add_argument("-in-memory")
-        .help("Run turingdb in-memory only without writing graphs on disk")
-        .store_into(_inMemory);
-    _argParser->add_argument("-turing-dir")
-        .metavar("path")
-        .store_into(_turingDir)
-        .help("Root Turing directory");
 }
 
 StartCmd::~StartCmd() = default;
@@ -109,9 +77,7 @@ int StartCmd::execute() {
         config.setOnStopRequest([&] {
             if (shell) {
                 shell->stop();
-            }
-
-            else if (server) {
+            } else if (server) {
                 server->stop();
                 server->wait();
             }
@@ -161,4 +127,42 @@ int StartCmd::execute() {
     }
 
     return EXIT_SUCCESS;
+}
+
+std::unique_ptr<StartCmd> StartCmd::create() {
+    std::unique_ptr<StartCmd> cmd {new StartCmd()};
+
+    cmd->initialize();
+
+    return cmd;
+}
+
+void StartCmd::initialize() {
+    _argParser.add_description("Starts the TuringDB server");
+
+    _argParser.add_argument("-turing-dir")
+        .metavar("path")
+        .help("Root Turing directory")
+        .store_into(_turingDir);
+    _argParser.add_argument("-p")
+        .metavar("port")
+        .help("Server listen port")
+        .store_into(_port);
+    _argParser.add_argument("-i")
+        .metavar("addr")
+        .help("Server listen address (localhost by default)")
+        .store_into(_address);
+    _argParser.add_argument("-demon")
+        .help("Launch TuringDB as a daemon in the background")
+        .store_into(_demonize);
+    _argParser.add_argument("-reset-default")
+        .help("Reset the content of the default graph")
+        .store_into(_resetDefault);
+    _argParser.add_argument("-load")
+        .metavar("graph_name")
+        .help("Load a graph at startup")
+        .store_into(_graphsToLoad);
+    _argParser.add_argument("-in-memory")
+        .help("Run turingdb in-memory only without writing graphs on disk")
+        .store_into(_inMemory);
 }

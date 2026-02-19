@@ -6,6 +6,8 @@
 #include <sys/un.h>
 #include <sys/poll.h>
 
+#include <spdlog/spdlog.h>
+
 #include "ThreadName.h"
 
 using namespace db;
@@ -32,7 +34,8 @@ std::unique_ptr<SystemEventHandler> SystemEventHandler::_instance = nullptr;
 
 SystemEventHandler::SystemEventHandler(const fs::Path& socketPath)
     : _socketPath(socketPath),
-      _onStop([] {}) {
+    _onStop([] {})
+{
 }
 
 SystemEventHandler::~SystemEventHandler() {
@@ -77,7 +80,7 @@ void SystemEventHandler::terminate() {
 
     uint64_t value = 1;
     if (::write(_signalFd, &value, sizeof(value)) != sizeof(value)) {
-        fmt::println("Failed to wake signalling thread: {}", strerror(errno));
+        spdlog::error("Failed to wake signalling thread: {}", strerror(errno));
     }
 
     _instance->_thread.join();
@@ -210,7 +213,7 @@ bool SystemEventHandler::initializeImpl() {
             // Signal received
             if (pfds[1].revents & POLLIN) {
                 uint64_t val = 0;
-                ::read(_signalFd, &val, sizeof(val));
+                [[maybe_unused]] const int res = ::read(_signalFd, &val, sizeof(val));
                 _running = false;
                 _onStop();
                 break;
