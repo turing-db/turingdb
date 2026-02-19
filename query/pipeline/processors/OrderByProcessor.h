@@ -30,6 +30,11 @@ public:
     using Indices = std::vector<size_t>;
     using TieRanges = std::vector<TieRange>;
 
+    OrderByProcessor(const OrderByProcessor&) = delete;
+    OrderByProcessor(OrderByProcessor&&) = delete;
+    OrderByProcessor& operator=(const OrderByProcessor&) = delete;
+    OrderByProcessor& operator=(OrderByProcessor&&) = delete;
+
     static OrderByProcessor* create(PipelineV2* pipeline, std::span<OrderByKey> keys);
 
     void prepare(ExecutionContext* ctxt) final;
