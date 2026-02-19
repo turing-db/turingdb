@@ -42,7 +42,9 @@ if [ -z "$diff_output" ]; then
     exit 0
 fi
 
-echo "$diff_output" | head -c 153600 > /tmp/cpp_diff.patch
+echo "$diff_output" > /tmp/cpp_diff_full.patch
+head -c 153600 /tmp/cpp_diff_full.patch > /tmp/cpp_diff.patch
+rm -f /tmp/cpp_diff_full.patch
 gh_output "skip=false"
 
 # ── 2. Read style guides from HEAD (the branch being reviewed) ─────
