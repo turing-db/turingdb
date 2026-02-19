@@ -3,12 +3,17 @@
 #include <stdint.h>
 
 #include "columns/ColumnOperator.h"
+#include "columns/ColumnOptVector.h"
 #include "EvalBinaryExpr.h"
 #include "EvalUnaryExpr.h"
+#include "metadata/SupportedType.h"
 
 #include "PipelineV2.h"
 
 #include "FatalException.h"
+#include "PipelineException.h"
+
+#include <spdlog/fmt/fmt.h>
 
 using namespace db;
 
@@ -108,6 +113,9 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:
+        case OP_TO_INTEGER:
+        case OP_TO_FLOAT:
+        case OP_TO_BOOLEAN:
             throw FatalException(
                 fmt::format("Attempted to evaluate {} as binary operator.",
                             ColumnOperatorDescription::value(op)));
@@ -145,6 +153,65 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
             throw FatalException("Plus operator is not supported.");
         break;
 
+        case OP_TO_INTEGER: {
+            using StringCol = ColumnVector<std::string>;
+            using IntCol = ColumnOptVector<types::Int64::Primitive>;
+            const auto* src = static_cast<const StringCol*>(input);
+            auto* dst = static_cast<IntCol*>(res);
+            dst->resize(src->size());
+            for (size_t i = 0; i < src->size(); i++) {
+                const auto& val = (*src)[i];
+                try {
+                    (*dst)[i] = std::stoll(val);
+                } catch (...) {
+                    throw PipelineException(
+                        fmt::format("toInteger: cannot convert '{}' to integer", val));
+                }
+            }
+        } break;
+
+        case OP_TO_FLOAT: {
+            using StringCol = ColumnVector<std::string>;
+            using DblCol = ColumnOptVector<types::Double::Primitive>;
+            const auto* src = static_cast<const StringCol*>(input);
+            auto* dst = static_cast<DblCol*>(res);
+            dst->resize(src->size());
+            for (size_t i = 0; i < src->size(); i++) {
+                const auto& val = (*src)[i];
+                try {
+                    (*dst)[i] = std::stod(val);
+                } catch (...) {
+                    throw PipelineException(
+                        fmt::format("toFloat: cannot convert '{}' to float", val));
+                }
+            }
+        } break;
+
+        case OP_TO_BOOLEAN: {
+            using StringCol = ColumnVector<std::string>;
+            using BoolCol = ColumnOptVector<types::Bool::Primitive>;
+            const auto* src = static_cast<const StringCol*>(input);
+            auto* dst = static_cast<BoolCol*>(res);
+            dst->resize(src->size());
+            std::string lower;
+            for (size_t i = 0; i < src->size(); i++) {
+                const auto& val = (*src)[i];
+                lower.clear();
+                lower.reserve(val.size());
+                for (char c : val) {
+                    lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                }
+                if (lower == "true") {
+                    (*dst)[i] = CustomBool(true);
+                } else if (lower == "false") {
+                    (*dst)[i] = CustomBool(false);
+                } else {
+                    throw PipelineException(
+                        fmt::format("toBoolean: cannot convert '{}' to boolean", val));
+                }
+            }
+        } break;
+
         case OP_EQUAL:
         case OP_NOT_EQUAL:
         case OP_GREATER_THAN:
@@ -159,13 +226,15 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         case OP_DIV:
         case OP_PROJECT:
         case OP_IN:
-            throw FatalException(fmt::format("Attempted to evalute {} as unary operator.",
-                                             ColumnOperatorDescription::value(op)));
+            throw FatalException(fmt::format(
+                "Attempted to evalute {} as unary operator.",
+                ColumnOperatorDescription::value(op)));
         break;
 
         case OP_NOOP:
         case _SIZE:
-            throw FatalException("Attempted to evaluate invalid ColumnOperator.");
+            throw FatalException(
+                "Attempted to evaluate invalid ColumnOperator.");
         break;
     }
 }

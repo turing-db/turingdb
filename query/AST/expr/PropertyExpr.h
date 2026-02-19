@@ -22,10 +22,16 @@ public:
 
     void setPropertyName(std::string_view propName) { _propName = propName; }
 
+    bool isCSVHeaderAccess() const { return _csvHeaderAccess; }
+    void setCSVHeaderAccess(bool csvHeaderAccess) {
+        _csvHeaderAccess = csvHeaderAccess;
+    }
+
 private:
     QualifiedName* _fullName {nullptr};
     VarDecl* _entityDecl {nullptr};
     std::string_view _propName;
+    bool _csvHeaderAccess {false};
 
     PropertyExpr(QualifiedName* name)
         : Expr(Kind::PROPERTY),

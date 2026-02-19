@@ -23,6 +23,7 @@ public:
         SYMBOL,
         LITERAL,
         FUNCTION_INVOCATION,
+        INDEX,
     };
 
     enum class Flags : uint8_t {

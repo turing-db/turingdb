@@ -97,6 +97,19 @@ void FunctionDecls::initDefault() {
     avgDouble->setArguments({EvaluatedType::Double});
     avgDouble->setReturnTypes({{EvaluatedType::Double}});
     avgDouble->setIsAggregate(true);
+
+    // Conversion functions
+    FunctionSignature* toInteger = createFunction("toInteger");
+    toInteger->setArguments({EvaluatedType::String});
+    toInteger->setReturnTypes({{EvaluatedType::Integer}});
+
+    FunctionSignature* toFloat = createFunction("toFloat");
+    toFloat->setArguments({EvaluatedType::String});
+    toFloat->setReturnTypes({{EvaluatedType::Double}});
+
+    FunctionSignature* toBoolean = createFunction("toBoolean");
+    toBoolean->setArguments({EvaluatedType::String});
+    toBoolean->setReturnTypes({{EvaluatedType::Bool}});
 }
 
 FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {

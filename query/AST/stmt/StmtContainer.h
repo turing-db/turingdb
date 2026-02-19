@@ -11,11 +11,11 @@ class CypherAST;
 class StmtContainer {
 public:
     friend CypherAST;
-    using Stmts = std::vector<const Stmt*>;
+    using Stmts = std::vector<Stmt*>;
 
     static StmtContainer* create(CypherAST* ast);
 
-    void add(const Stmt* stmt);
+    void add(Stmt* stmt);
 
     const Stmts& stmts() const { return _stmts; }
 

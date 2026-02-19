@@ -24,6 +24,7 @@ class PatternElement;
 class NodePattern;
 class EdgePattern;
 class FunctionInvocation;
+class LoadCSVStmt;
 
 class ReadStmtAnalyzer {
 public:
@@ -39,9 +40,10 @@ public:
     void setExprAnalyzer(ExprAnalyzer* exprAnalyzer) { _exprAnalyzer = exprAnalyzer; }
 
     // Statements
-    void analyze(const Stmt* stmt);
+    void analyze(Stmt* stmt);
     void analyze(const MatchStmt* matchSt);
     void analyze(const CallStmt* callSt);
+    void analyze(LoadCSVStmt* loadCSVSt);
     void analyze(const FunctionInvocation& func, const YieldClause* yieldSt);
     void analyze(OrderBy* orderBySt);
     void analyze(Skip* skipSt);

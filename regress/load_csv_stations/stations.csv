@@ -1,0 +1,480 @@
+FID,OBJECTID,NAME,EASTING,NORTHING,LINES,NETWORK,Zone,x,y
+0,78,Temple,530959,180803,"District, Circle",London Underground,1,-0.112643564,51.5104742
+1,79,Blackfriars,531694,180893,"District, Circle",London Underground,1,-0.102020251,51.51111447
+2,80,Mansion House,532354,180932,"District, Circle",London Underground,1,-0.092495313,51.51130597
+3,81,Cannon Street,532611,180900,"District, Circle",London Underground,1,-0.088801035,51.51096254
+4,82,Monument,532912,180824,"District, Circle",London Underground,1,-0.084502291,51.51020898
+5,83,Tower Hill,533579,180755,"District, Circle",London Underground,1,-0.074913869,51.50943419
+6,84,Aldgate,533613,181262,"Metropolitan, Circle",London Underground,1,-0.0742363,51.51398203
+7,85,Liverpool Street,533094,181567,"Metropolitan, Central, Circle, Hammersmith & City",London Underground,1,-0.081601363,51.5168424
+8,86,Moorgate,532668,181668,"Metropolitan, Northern, Circle, Hammersmith & City",London Underground,1,-0.087700241,51.5178533
+9,87,Barbican,532004,181856,"Metropolitan, Circle, Hammersmith & City",London Underground,1,-0.097189673,51.51969921
+10,88,Farringdon,531560,181874,"Metropolitan, Circle, Hammersmith & City",London Underground,1,-0.103582415,51.51996102
+11,89,King's Cross St. Pancras,530175,182875,"Metropolitan, Northern, Piccadilly, Circle, Victoria, Hammersmith & City",London Underground,1,-0.123168404,51.52927728
+12,90,Euston Square,529417,182393,"Metropolitan, Circle, Hammersmith & City",London Underground,1,-0.134270582,51.52512499
+13,91,Great Portland Street,528838,182180,"Metropolitan, Circle, Hammersmith & City",London Underground,1,-0.142685711,51.52333822
+14,92,Baker Street,527955,182064,"Metropolitan, Bakerloo, Circle, Jubilee, Hammersmith & City",London Underground,1,-0.155454387,51.52249387
+15,93,Edgware Road (Circle Line),527220,181697,Circle,London Underground,1,-0.166170742,51.51936413
+16,94,Paddington,526704,181198,"Hammersmith & City, District, Circle, Bakerloo",London Underground,1,-0.173789485,51.51499491
+17,95,Bayswater,525843,180823,"District, Circle",London Underground,1,-0.186322701,51.51181507
+18,96,High Street Kensington,525578,179494,"District, Circle",London Underground,1,-0.190607248,51.49993492
+19,97,Gloucester Road,526183,178846,"District, Piccadilly, Circle",London Underground,1,-0.182135121,51.49397763
+20,98,South Kensington,526918,178820,"District, Piccadilly, Circle",London Underground,1,-0.171564291,51.49357736
+21,110,Victoria,528999,179130,"District, Circle, Victoria",London Underground,1,-0.141485017,51.49588954
+22,112,Pimlico,529671,178333,Victoria,London Underground,1,-0.132103672,51.48856954
+23,114,Warren Street,529249,182266,"Northern, Victoria",London Underground,1,-0.136735811,51.52401887
+24,119,Queensway,525903,180594,Central,London Underground,1,-0.185538472,51.50974305
+25,14,Hyde Park Corner,528213,179817,Piccadilly,London Underground,1,-0.152546395,51.50224103
+26,15,Knightsbridge,527710,179636,Piccadilly,London Underground,1,-0.159863737,51.50073061
+27,16,Leicester Square,529980,180824,"Piccadilly, Northern",London Underground,1,-0.126725567,51.51089472
+28,17,Covent Garden,530251,181025,Piccadilly,London Underground,1,-0.122759938,51.51263471
+29,18,Russell Square,530229,182128,Piccadilly,London Underground,1,-0.122662273,51.52255053
+30,37,Earl's Court,525534,178552,"District, Piccadilly",London Underground,1,-0.19157701,51.4914734
+31,39,Notting Hill Gate,525285,180456,"District, Central, Circle",London Underground,1,-0.194491212,51.5086469
+32,40,Lancaster Gate,526711,180773,Central,London Underground,1,-0.173843886,51.51117805
+33,41,Marble Arch,527960,181017,Central,London Underground,1,-0.155755638,51.51309055
+34,42,Bond Street,528491,181118,"Central, Jubilee",London Underground,1,-0.148076884,51.51387033
+35,47,Bank,532710,181120,"Waterloo & City, Northern, Central",London Underground,1,-0.08729695,51.51291511
+36,48,Oxford Circus,529047,181236,"Central, Bakerloo, Victoria",London Underground,1,-0.140025246,51.51481046
+37,49,Holborn,530512,181525,"Central, Piccadilly",London Underground,1,-0.1188087,51.51706879
+38,50,Chancery Lane,531124,181615,Central,London Underground,1,-0.109960547,51.5177395
+39,51,St. Paul's,532108,181274,Central,London Underground,1,-0.095907533,51.51444286
+40,67,Paddington,526659,181314,"Hammersmith & City, District, Circle, Bakerloo",London Underground,1,-0.174388339,51.51605291
+41,77,Embankment,530419,180396,"District, Bakerloo, Northern, Circle",London Underground,1,-0.120562428,51.50694137
+42,195,Westminster,530196,179668,"District, Circle, Jubilee",London Underground,1,-0.124052209,51.50045311
+43,197,Euston,529498,182668,"Northern, Victoria",London Underground,1,-0.132992071,51.52757668
+44,198,Waterloo,530968,179962,"Waterloo & City, Bakerloo, Northern, Jubilee",London Underground,1,-0.112818812,51.50291418
+45,206,Green Park,529007,180295,"Piccadilly, Victoria, Jubilee",London Underground,1,-0.140937126,51.50635747
+46,224,Paddington (H&C Line),526459,181527,Hammersmith & City,London Underground,1,-0.17719615,51.51800497
+47,228,Piccadilly Circus,529613,180666,"Bakerloo, Piccadilly",London Underground,1,-0.132081484,51.50955061
+48,229,Charing Cross,530058,180378,"Bakerloo, Northern",London Underground,1,-0.125777173,51.50686754
+49,231,Lambeth North,531134,179456,Bakerloo,London Underground,1,-0.110624882,51.49833058
+50,233,Edgware Road (Bakerloo),527047,181759,Bakerloo,London Underground,1,-0.168645951,51.51996099
+51,236,Marylebone,527459,181957,Bakerloo,London Underground,1,-0.162637346,51.52165079
+52,237,Regent's Park,528699,182113,Bakerloo,London Underground,1,-0.144708117,51.52277011
+53,238,Sloane Square,528091,178655,"District, Circle",London Underground,1,-0.15473274,51.49182524
+54,239,St. James's Park,529647,179498,"District, Circle",London Underground,1,-0.132021543,51.49905006
+55,308,Goodge Street,529537,181837,Northern,London Underground,1,-0.132736642,51.52009307
+56,309,Tottenham Court Road,529815,181382,"Central, Northern",London Underground,1,-0.128897348,51.51594793
+57,329,Borough,532440,179751,Northern,London Underground,1,-0.091702818,51.50067969
+58,330,Old Street,532764,182419,Northern,London Underground,1,-0.086025441,51.52457628
+59,331,Angel,531561,183100,Northern,London Underground,1,-0.103116359,51.5309796
+60,339,Shoreditch High Street,533555,182248,n/a,London Overground,1,-0.074700292,51.52285471
+61,249,Aldgate East,533936,181375,"Hammersmith & City, District",London Underground,1,-0.069540402,51.51491653
+62,288,Southwark,531592,180074,Jubilee,London Underground,1,-0.103788452,51.50377646
+63,289,London Bridge,532683,180189,"Northern, Jubilee",London Underground,1,-0.088037808,51.50455372
+64,144,Liverpool Street,533202,181646,n/a,London Overground,1,-0.080013644,51.51752768
+65,395,Liverpool Street,533094,181567,n/a,TfL Rail,1,-0.081601363,51.5168424
+66,470,TOWER GATEWAY - DLR,533706,180834,n/a,DLR,1,-0.073061976,51.51011047
+67,473,BANK - DLR,532709,181114,n/a,DLR,1,-0.087316571,51.51286207
+68,377,Euston,529608,182690,n/a,London Overground,1,-0.131403702,51.52774704
+69,102,East Putney,524382,174870,District,London Underground,2,-0.209468663,51.45863492
+70,103,Putney Bridge,524519,175887,District,London Underground,2,-0.207131382,51.46774182
+71,104,Parsons Green,524985,176647,District,London Underground,2,-0.200166803,51.47447238
+72,105,White City,523308,180748,Central,London Underground,2,-0.222866489,51.51170695
+73,106,Shepherd's Bush,523720,179884,Central,London Underground,2,-0.217238899,51.50384346
+74,107,Holland Park,524626,180217,Central,London Underground,2,-0.204062863,51.50664438
+75,111,Brixton,531052,175429,Victoria,London Underground,2,-0.113288835,51.46215131
+76,113,Vauxhall,530337,177973,Victoria,London Underground,2,-0.122646146,51.48518446
+77,115,Highbury & Islington,531583,184874,Victoria,London Underground,2,-0.102125867,51.54691824
+78,19,Caledonian Road,530558,184970,Piccadilly,London Underground,2,-0.116864262,51.54801774
+79,20,Holloway Road,530907,185450,Piccadilly,London Underground,2,-0.111653531,51.55225038
+80,21,Arsenal,531305,186112,Piccadilly,London Underground,2,-0.105674399,51.55811105
+81,26,Manor House,532048,187482,Piccadilly,London Underground,2,-0.094452148,51.57024769
+82,31,Shepherd's Bush Market,523197,180064,"Hammersmith & City, Circle",London Underground,2,-0.224700725,51.50558155
+83,32,Goldhawk Road,523184,179608,"Hammersmith & City, Circle",London Underground,2,-0.225049873,51.50148234
+84,33,Latimer Road,523763,180898,"Hammersmith & City, Circle",London Underground,2,-0.216257476,51.51295039
+85,34,Ladbroke Grove,524235,181339,"Hammersmith & City, Circle",London Underground,2,-0.209304449,51.51681261
+86,35,Royal Oak,525834,181571,"Hammersmith & City, Circle",London Underground,2,-0.186186162,51.51854003
+87,36,Westbourne Park,524901,181756,"Hammersmith & City, Circle",London Underground,2,-0.199554267,51.52041239
+88,38,Queen's Park,524547,183200,Bakerloo,London Underground,2,-0.204142926,51.53347212
+89,52,Mile End,536501,182534,"District, Hammersmith & City, Central",London Underground,2,-0.032150165,51.52472507
+90,53,Bethnal Green,535044,182718,Central,London Underground,2,-0.053074702,51.52672839
+91,191,Rotherhithe,535299,179811,n/a,London Overground,2,-0.050510094,51.50053752
+92,196,Kensington (Olympia),524342,179162,District,London Underground,2,-0.208533266,51.49722528
+93,207,Finsbury Park,531330,186775,"Piccadilly, Victoria",London Underground,2,-0.105068129,51.56406609
+94,208,Stockwell,530460,176433,"Northern, Victoria",London Underground,2,-0.121436641,51.47131386
+95,211,Hammersmith (H&C Line),523325,178698,Hammersmith & City,London Underground,2,-0.223334507,51.49327356
+96,220,Kensal Green,523257,182790,Bakerloo,London Underground,2,-0.222882378,51.5300656
+97,230,Elephant & Castle,531909,179142,"Northern, Bakerloo",London Underground,2,-0.099577259,51.4953253
+98,232,Warwick Avenue,526112,182039,Bakerloo,London Underground,2,-0.182005998,51.52269118
+99,234,Maida Vale,525940,182762,Bakerloo,London Underground,2,-0.184228557,51.52922219
+100,235,Kilburn Park,525358,183328,Bakerloo,London Underground,2,-0.192420271,51.53444139
+101,240,Ravenscourt Park,522571,178722,District,London Underground,2,-0.234181724,51.49365752
+102,241,Hammersmith (Dist&Picc Line),523461,178503,"District, Piccadilly",London Underground,2,-0.22144689,51.49148885
+103,295,Kilburn,524583,184645,Jubilee,London Underground,2,-0.203115567,51.54644842
+104,297,West Hampstead,525592,184653,Jubilee,London Underground,2,-0.188568627,51.54629707
+105,298,Swiss Cottage,526664,184335,Jubilee,London Underground,2,-0.173237239,51.54319998
+106,299,Finchley Road,526220,184716,"Metropolitan, Jubilee",London Underground,2,-0.179489511,51.54672589
+107,301,Archway,529364,186721,Northern,London Underground,2,-0.13344404,51.56403452
+108,305,Clapham South,528834,174323,Northern,London Underground,2,-0.145610374,51.45272059
+109,306,Clapham Common,529505,175338,Northern,London Underground,2,-0.135588991,51.46169503
+110,307,Clapham North,530039,175743,Northern,London Underground,2,-0.127754372,51.4652144
+111,310,Belsize Park,527354,185089,Northern,London Underground,2,-0.163016956,51.54982085
+112,311,Hampstead,526373,185761,Northern,London Underground,2,-0.17692039,51.55608598
+113,312,Mornington Crescent,529192,183397,Northern,London Underground,2,-0.137143461,51.53419787
+114,313,Chalk Farm,528202,184391,Northern,London Underground,2,-0.151037017,51.54335257
+115,314,Camden Town,528910,183894,Northern,London Underground,2,-0.141016888,51.53872412
+116,315,Kentish Town,529009,185127,Northern,London Underground,2,-0.13914119,51.54978865
+117,316,Tufnell Park,529149,185860,Northern,London Underground,2,-0.136858377,51.5563398
+118,317,Oval,531170,177565,Northern,London Underground,2,-0.110799082,51.48132384
+119,318,Kennington,531599,178300,Northern,London Underground,2,-0.104357247,51.48782707
+120,319,East Acton,521721,181198,Central,London Underground,2,-0.245569272,51.51609001
+121,334,Wood Lane,523374,180519,"Hammersmith & City, Circle",London Underground,2,-0.221994162,51.50963208
+122,336,Canada Water,535475,179472,n/a,London Overground,2,-0.048105945,51.49744864
+123,337,Shadwell,534932,180932,n/a,London Overground,2,-0.055365921,51.51070004
+124,338,Whitechapel,534698,181851,n/a,London Overground,2,-0.05838503,51.51901529
+125,340,Hoxton,533576,183148,n/a,London Overground,2,-0.074056385,51.53093841
+126,341,Haggerston,533560,183992,n/a,London Overground,2,-0.073966769,51.53852752
+127,342,Dalston Junction,533578,184692,n/a,London Overground,2,-0.07344152,51.5448144
+128,343,New Cross,536751,177109,n/a,London Overground,2,-0.030648703,51.47590464
+129,344,Brockley,536431,175789,n/a,London Overground,2,-0.035763775,51.46411871
+130,242,West Kensington,524685,178398,District,London Underground,2,-0.203860054,51.49027946
+131,243,Barons Court,524046,178328,"District, Piccadilly",London Underground,2,-0.213088174,51.48978737
+132,244,Fulham Broadway,525455,177302,District,London Underground,2,-0.193168686,51.48025536
+133,245,West Brompton,525381,178024,District,London Underground,2,-0.193973832,51.48676791
+134,246,Stamford Brook,521859,178789,District,London Underground,2,-0.244408726,51.49440814
+135,248,Stepney Green,535621,182136,"District, Hammersmith & City",London Underground,2,-0.044974603,51.52135166
+136,250,Whitechapel,534645,181850,"District, Hammersmith & City",London Underground,2,-0.059154123,51.51902202
+137,251,Bow Road,537090,182736,"District, Hammersmith & City",London Underground,2,-0.02358427,51.52639287
+138,287,St. John's Wood,526735,183391,Jubilee,London Underground,2,-0.172545248,51.53469852
+139,290,Canada Water,535457,179467,Jubilee,London Underground,2,-0.048372238,51.49740822
+140,291,Bermondsey,534460,179416,Jubilee,London Underground,2,-0.062745893,51.49718984
+141,292,Canary Wharf,537677,180140,Jubilee,London Underground,2,-0.016134819,51.50291749
+142,130,Bethnal Green,534721,182351,n/a,London Overground,2,-0.057862441,51.52350343
+143,133,Cambridge Heath,534856,183270,n/a,London Overground,2,-0.055565622,51.53173049
+144,136,Clapham High Street,529804,175717,n/a,London Overground,2,-0.131145084,51.46503062
+145,138,Denmark Hill,532792,176078,n/a,London Overground,2,-0.088015106,51.46758176
+146,142,Hackney Downs,534551,185122,n/a,London Overground,2,-0.059252378,51.54844772
+147,145,London Fields,534775,184246,n/a,London Overground,2,-0.056359095,51.54052142
+148,146,Peckham Rye,534222,176360,n/a,London Overground,2,-0.067330906,51.46977879
+149,147,Queens Road Peckham,535011,176751,n/a,London Overground,2,-0.055827609,51.47310519
+150,148,Rectory Road,534011,186171,n/a,London Overground,2,-0.066636749,51.55800392
+151,157,Wandsworth Road,529390,176196,n/a,London Overground,2,-0.136926893,51.46943062
+152,161,Stoke Newington,533723,186850,n/a,London Overground,2,-0.070536111,51.56417453
+153,164,Brondesbury,524760,184467,n/a,London Overground,2,-0.200631035,51.5448108
+154,165,Brondesbury Park,524227,183953,n/a,London Overground,2,-0.208495753,51.54030862
+155,166,Caledonian Road & Barnsbury,530765,184374,n/a,London Overground,2,-0.114106929,51.54261531
+156,167,Camden Road,529171,184178,n/a,London Overground,2,-0.137154414,51.54122083
+157,168,Canonbury,532384,185035,n/a,London Overground,2,-0.090522836,51.54817851
+158,171,Dalston Kingsland,533528,185027,n/a,London Overground,2,-0.074035153,51.54783695
+159,172,Finchley Road & Frognal,526063,185057,n/a,London Overground,2,-0.181637018,51.54982406
+160,173,Gospel Oak,528277,185673,n/a,London Overground,2,-0.149494861,51.55486145
+161,174,Hackney Central,534837,184916,n/a,London Overground,2,-0.055208719,51.54652805
+162,175,Hackney Wick,537166,184589,n/a,London Overground,2,-0.021765777,51.54302792
+163,176,Hampstead Heath,527265,185636,n/a,London Overground,2,-0.164099101,51.55475816
+164,181,Homerton,535848,184939,n/a,London Overground,2,-0.040627028,51.54649227
+165,182,Kensal Green,523241,182784,n/a,London Overground,2,-0.223116997,51.53001765
+166,183,Kensal Rise,523578,183250,n/a,London Overground,2,-0.218097094,51.53413249
+167,184,Kentish Town West,528597,184691,n/a,London Overground,2,-0.145240267,51.54596266
+168,187,Kilburn High Road,525475,183594,n/a,London Overground,2,-0.190635722,51.53680577
+169,189,New Cross Gate,536195,176937,n/a,London Overground,2,-0.038716887,51.47449297
+170,448,ALL SAINTS - DLR,537979,180993,n/a,DLR,2,-0.011456278,51.51051157
+171,449,BLACKWALL - DLR,538398,180664,n/a,DLR,2,-0.005550544,51.50745237
+172,450,BOW CHURCH - DLR,537393,182829,n/a,DLR,2,-0.01918061,51.52715522
+173,451,CANARY WHARF - DLR,537450,180322,n/a,DLR,2,-0.019337121,51.50461022
+174,453,CROSSHARBOUR - DLR,537927,179309,n/a,DLR,2,-0.012863868,51.49538997
+175,454,CUTTY SARK - DLR,538206,177733,n/a,DLR,2,-0.009463903,51.48115778
+176,455,DEPTFORD BRIDGE - DLR,537438,176892,n/a,DLR,2,-0.020845808,51.47378671
+177,456,DEVONS ROAD - DLR,537639,182257,n/a,DLR,2,-0.015859691,51.52195436
+178,458,ELVERSON ROAD - DLR,537877,176280,n/a,DLR,2,-0.014766759,51.46817948
+179,460,HERON QUAYS - DLR,537421,180122,n/a,DLR,2,-0.019832666,51.50281981
+180,461,ISLAND GARDENS - DLR,538227,178444,n/a,DLR,2,-0.008883221,51.48754261
+181,462,LANGDON PARK - DLR,537894,181442,n/a,DLR,2,-0.012505001,51.51456754
+182,463,LEWISHAM - DLR,538046,175946,n/a,DLR,2,-0.012465383,51.46513641
+183,464,LIMEHOUSE - DLR,536127,181086,n/a,DLR,2,-0.038095069,51.51179704
+184,465,MUDCHUTE - DLR,537904,178750,n/a,DLR,2,-0.013413578,51.49037168
+185,466,POPLAR - DLR,537701,180617,n/a,DLR,2,-0.015607274,51.50720026
+186,468,SHADWELL - DLR,534947,180986,n/a,DLR,2,-0.05512963,51.51118155
+187,469,SOUTH QUAY - DLR,537597,179824,n/a,DLR,2,-0.017414424,51.50009877
+188,471,WEST INDIA QUAY - DLR,537495,180586,n/a,DLR,2,-0.018586106,51.50697183
+189,472,WESTFERRY - DLR,537023,180798,n/a,DLR,2,-0.025301528,51.50899182
+190,351,South Hampstead,526369,184096,n/a,London Overground,2,-0.177570816,51.54111829
+191,355,Surrey Quays,535631,178962,n/a,London Overground,2,-0.046055836,51.49282777
+192,356,Upper Holloway,529776,186621,n/a,London Overground,2,-0.127532858,51.56303879
+193,359,Wapping,535023,180174,n/a,London Overground,2,-0.054345515,51.50386599
+194,362,West Hampstead,525579,184651,n/a,London Overground,2,-0.188759559,51.54628297
+195,371,Shepherds Bush,523720,179920,n/a,London Overground,2,-0.217219888,51.50417089
+196,372,Kensington Olympia,524351,179167,n/a,London Overground,2,-0.208397635,51.49726439
+197,373,Westompton,525397,178008,n/a,London Overground,2,-0.193747112,51.48661615
+198,374,Clapham Junction,527211,175416,n/a,London Overground,2,-0.16856542,51.4629141
+199,375,Imperial Wharf,526291,176691,n/a,London Overground,2,-0.181347614,51.47457995
+200,376,Queens Park,524619,183223,n/a,London Overground,2,-0.203104045,51.53366092
+201,378,Highbury & Islington,531589,184732,n/a,London Overground,2,-0.10209637,51.54564126
+202,99,Chiswick Park,520293,178724,District,London Underground,3,-0.266981606,51.49415785
+203,100,Wimbledon Park,525282,172100,District,London Underground,3,-0.19749098,51.43353749
+204,101,Southfields,524726,173313,District,London Underground,3,-0.205058529,51.4445635
+205,116,Seven Sisters,533643,188931,Victoria,London Underground,3,-0.070894139,51.58289546
+206,117,Blackhorse Road,535761,189370,Victoria,London Underground,3,-0.040174342,51.58633801
+207,118,Tottenham Hale,534484,189471,Victoria,London Underground,3,-0.058547162,51.58754655
+208,1,Brent Cross,523874,187934,Northern,London Underground,3,-0.212185251,51.57616797
+209,6,Golders Green,525255,187480,Northern,London Underground,3,-0.192420671,51.57178437
+210,10,South Ealing,517575,179354,Piccadilly,London Underground,3,-0.305919519,51.50039136
+211,11,North Ealing,518828,181228,Piccadilly,London Underground,3,-0.287236576,51.51697561
+212,12,Park Royal,519142,182236,Piccadilly,London Underground,3,-0.282378071,51.52597425
+213,45,Hanger Lane,518527,182634,Central,London Underground,3,-0.291095909,51.52968038
+214,46,North Acton,520828,181957,Central,London Underground,3,-0.258167978,51.52310534
+215,54,Leyton,538367,186076,Central,London Underground,3,-0.00386474,51.55609689
+216,68,Bromley-by-Bow,538050,182524,"District, Hammersmith & City",London Underground,3,-0.009841042,51.52424987
+217,69,Plaistow,540003,183297,"District, Hammersmith & City",London Underground,3,0.018612643,51.53072137
+218,70,Upton Park,541254,183793,"District, Hammersmith & City",London Underground,3,0.036836325,51.53487026
+219,192,Turnpike Lane,531513,189638,Piccadilly,London Underground,3,-0.101359413,51.58975112
+220,193,Wood Green,531015,190428,Piccadilly,London Underground,3,-0.108246806,51.5969712
+221,194,Bounds Green,529984,191469,Piccadilly,London Underground,3,-0.122731021,51.60656487
+222,201,West Ham,539131,182945,"District, Hammersmith & City, Jubilee",London Underground,3,0.00590508,51.52776913
+223,202,Walthamstow Central,537176,188994,Victoria,London Underground,3,-0.019895332,51.58261626
+224,203,Ealing Broadway,517989,180933,"District, Central",London Underground,3,-0.299418497,51.51449777
+225,204,Acton Town,519478,179592,"District, Piccadilly",London Underground,3,-0.278432824,51.50213702
+226,205,Ealing Common,518896,180346,"District, Piccadilly",London Underground,3,-0.286555479,51.50903565
+227,209,South Wimbledon,525736,169989,Northern,London Underground,3,-0.191711278,51.41446924
+228,218,Northfields,517197,179206,Piccadilly,London Underground,3,-0.311409865,51.49914634
+229,221,Harlesden,520875,183414,Bakerloo,London Underground,3,-0.256997378,51.53619355
+230,226,Kew Gardens,519196,176732,District,London Underground,3,-0.283453589,51.47648632
+231,227,Gunnersbury,519845,178388,District,London Underground,3,-0.273547129,51.49123204
+232,293,North Greenwich,539216,179859,Jubilee,London Underground,3,0.005908784,51.50002099
+233,294,Canning Town,539428,181377,Jubilee,London Underground,3,0.009568884,51.51360991
+234,296,Willesden Green,523329,184883,Jubilee,London Underground,3,-0.221119357,51.54886838
+235,300,Colliers Wood,526788,170368,Northern,London Underground,3,-0.176460893,51.41763979
+236,302,Tooting Broadway,527434,171443,Northern,London Underground,3,-0.166791248,51.42715702
+237,303,Tooting Bec,528047,172374,Northern,London Underground,3,-0.15763366,51.4353811
+238,304,Balham,528480,173244,Northern,London Underground,3,-0.151090206,51.44310998
+239,332,Hendon Central,522986,188636,Northern,London Underground,3,-0.224748399,51.58267136
+240,333,Wimbledon,524800,170684,District,London Underground,3,-0.204921053,51.42091587
+241,345,Honor Oak Park,535896,174137,n/a,London Overground,3,-0.044096334,51.44940041
+242,346,Forest Hill,535400,172936,n/a,London Overground,3,-0.051690278,51.43872534
+243,347,Sydenham,535369,171585,n/a,London Overground,3,-0.052652564,51.42659082
+244,247,Turnham Green,521266,178779,"District, Piccadilly",London Underground,3,-0.252958803,51.494448
+245,253,Neasden,521342,185398,Jubilee,London Underground,3,-0.24957656,51.5539234
+246,254,Dollis Hill,522190,185144,Jubilee,London Underground,3,-0.237445148,51.55145847
+247,260,Stonebridge Park,519616,184218,Bakerloo,London Underground,3,-0.27487576,51.54368887
+248,261,Willesden Junction,521858,182960,Bakerloo,London Underground,3,-0.242978972,51.5318981
+249,262,East Finchley,527222,189184,Northern,London Underground,3,-0.163438627,51.58665344
+250,263,Highgate,528535,188181,Northern,London Underground,3,-0.144860652,51.577342
+251,269,West Acton,519373,181296,Central,London Underground,3,-0.279364414,51.51747345
+252,270,Stratford,538530,184395,"Central, Jubilee",London Underground,3,-0.002182514,51.54094802
+253,131,Bruce Grove,533800,190100,n/a,London Overground,3,-0.068182034,51.59336509
+254,150,Seven Sisters,533458,189004,n/a,London Overground,3,-0.073533739,51.58359611
+255,155,Walthamstow St James Street,536388,188733,n/a,London Overground,3,-0.031370968,51.58045909
+256,158,White Hart Lane,533693,191333,n/a,London Overground,3,-0.069256013,51.60447174
+257,160,Stamford Hill,533392,187955,n/a,London Overground,3,-0.074878256,51.57418005
+258,162,Acton Central,520632,180296,n/a,London Overground,3,-0.261566477,51.50821824
+259,163,Blackhorse Road,535796,189387,n/a,London Overground,3,-0.039657577,51.58647957
+260,170,Crouch Hill,530590,187513,n/a,London Overground,3,-0.115463356,51.57086778
+261,177,Harlesden,520952,183367,n/a,London Overground,3,-0.255902699,51.53575292
+262,178,Harringay Green Lanes,531874,188183,n/a,London Overground,3,-0.096693484,51.57659043
+263,186,Kew Gardens,519195,176741,n/a,London Overground,3,-0.283465911,51.47656919
+264,188,Leyton Midland Road,538191,187523,n/a,London Overground,3,-0.00583941,51.56914561
+265,380,Leytonstone High Road,539245,186921,n/a,London Overground,3,0.009121703,51.56347619
+266,382,Stratford,538530,184395,n/a,TfL Rail,3,-0.002182514,51.54094802
+267,383,Maryland,539190,184924,n/a,TfL Rail,3,0.007539167,51.54554249
+268,384,Forest Gate,540470,185339,n/a,TfL Rail,3,0.02615387,51.54895648
+269,396,Wimbledon (Tramlink),524838,170637,n/a,Tramlink,3,-0.204395752,51.42048966
+270,397,Dundonald Road,524728,170256,n/a,Tramlink,3,-0.206116509,51.41708633
+271,398,Merton Park,525179,169835,n/a,Tramlink,3,-0.199772348,51.41320626
+272,435,BECKTON - DLR,543165,181514,n/a,DLR,3,0.063442568,51.51390419
+273,436,BECKTON PARK - DLR,542705,180873,n/a,DLR,3,0.056557435,51.50826026
+274,437,CUSTOM HOUSE - DLR,540731,180925,n/a,DLR,3,0.028149357,51.50922299
+275,438,CYPRUS - DLR,543331,180860,n/a,DLR,3,0.065567428,51.50798477
+276,439,GALLIONS REACH - DLR,543872,180929,n/a,DLR,3,0.073386821,51.50846722
+277,440,KING GEORGE V - DLR,543237,180137,n/a,DLR,3,0.063920007,51.50151128
+278,441,LONDON CITY AIRPORT - DLR,542250,180292,n/a,DLR,3,0.04977043,51.50315378
+279,442,PONTOON DOCK - DLR,541219,180109,n/a,DLR,3,0.03485088,51.50176796
+280,443,PRINCE REGENT - DLR,541264,180899,n/a,DLR,3,0.035815177,51.50885626
+281,444,ROYAL ALBERT - DLR,542077,180815,n/a,DLR,3,0.047489859,51.50789742
+282,445,ROYAL VICTORIA - DLR,540122,180852,n/a,DLR,3,0.019349595,51.50871834
+283,446,WEST SILVERTOWN - DLR,540460,180156,n/a,DLR,3,0.023940282,51.50237959
+284,452,CANNING TOWN - DLR,539443,181354,n/a,DLR,3,0.009772469,51.51339633
+285,457,EAST INDIA - DLR,538732,180831,n/a,DLR,3,-0.000674542,51.50887121
+286,459,GREENWICH - DLR,538052,177334,n/a,DLR,3,-0.011836627,51.47760944
+287,467,PUDDING MILL LANE - DLR,537847,183568,n/a,DLR,3,-0.012349897,51.53368602
+288,474,WEST HAM - DLR,539182,182943,n/a,DLR,3,0.006640951,51.52774122
+289,475,STRATFORD - DLR,538571,184387,n/a,DLR,3,-0.001594174,51.54086921
+290,476,STAR LANE - DLR,539145,182115,n/a,DLR,3,0.005780604,51.52030887
+291,477,ABBEY ROAD - DLR,539077,183399,n/a,DLR,3,0.005308217,51.5318653
+292,478,STRATFORD HIGH STREET - DLR,538752,184020,n/a,DLR,3,0.000869889,51.53752645
+293,479,STRATFORD INTERNATIONAL - DLR,538128,184761,n/a,DLR,3,-0.007832275,51.54433906
+294,350,South Acton,520148,179250,n/a,London Overground,3,-0.268894276,51.49891951
+295,353,South Tottenham,533687,188621,n/a,London Overground,3,-0.070375895,51.58009969
+296,354,Stonebridge Park,519687,184195,n/a,London Overground,3,-0.273853212,51.54346498
+297,357,Walthamstow Queens Road,537018,188807,n/a,London Overground,3,-0.022254511,51.58097129
+298,358,Wanstead Park,540570,185590,n/a,London Overground,3,0.027694662,51.55118604
+299,370,Gunnersbury,519813,178341,n/a,London Overground,3,-0.274027392,51.49082016
+300,379,Stratford,538521,184409,n/a,London Overground,3,-0.002307264,51.54107928
+301,122,Hainault,545080,191498,Central,London Underground,4,0.095143844,51.60313737
+302,123,Grange Hill,544967,192559,Central,London Underground,4,0.093957755,51.61269646
+303,2,Colindale,521319,189962,Northern,London Underground,4,-0.248341905,51.59494713
+304,3,Burnt Oak,520326,190760,Northern,London Underground,4,-0.262398845,51.60233699
+305,5,Mill Hill East,524046,191450,Northern,London Underground,4,-0.208460194,51.60773582
+306,7,Finchley Central,525278,190668,Northern,London Underground,4,-0.190951925,51.60043321
+307,8,Sudbury Hill,515412,185542,Piccadilly,London Underground,4,-0.335039246,51.55646384
+308,9,Sudbury Town,516875,184890,Piccadilly,London Underground,4,-0.314159662,51.55030341
+309,13,Alperton,517996,183795,Piccadilly,London Underground,4,-0.298361133,51.54022715
+310,22,Arnos Grove,529355,192498,Piccadilly,London Underground,4,-0.131434823,51.61595478
+311,23,Southgate,529676,194265,Piccadilly,London Underground,4,-0.126150933,51.6317626
+312,43,Perivale,516378,183315,Central,London Underground,4,-0.32183979,51.53624702
+313,44,Greenford,514763,183928,Central,London Underground,4,-0.34492109,51.54208841
+314,55,Snaresbrook,540157,188804,Central,London Underground,4,0.023019902,51.58017276
+315,56,Leytonstone,539279,187405,Central,London Underground,4,0.009807678,51.56781496
+316,57,Wanstead,540673,188254,Central,London Underground,4,0.030247766,51.57509659
+317,58,Redbridge,541834,188358,Central,London Underground,4,0.047039301,51.5757446
+318,59,Gants Hill,543274,188430,Central,London Underground,4,0.067825538,51.57602949
+319,60,South Woodford,540536,190063,Central,London Underground,4,0.028990141,51.59138934
+320,61,Newbury Park,544920,188385,Central,London Underground,4,0.091554903,51.57519974
+321,62,Barkingside,544799,189494,Central,London Underground,4,0.090259547,51.58519895
+322,63,Fairlop,544936,190595,Central,London Underground,4,0.092688126,51.59505439
+323,64,Woodford,540950,191740,Central,London Underground,4,0.035640856,51.60635963
+324,65,Roding Valley,541590,192895,Central,London Underground,4,0.045340184,51.61657815
+325,66,Chigwell,543795,193021,Central,London Underground,4,0.077229167,51.61715195
+326,71,East Ham,542463,184275,"District, Hammersmith & City",London Underground,4,0.054454908,51.5388975
+327,76,Upney,545846,184254,District,London Underground,4,0.103187503,51.53784406
+328,200,Barking,544359,184382,"District, Hammersmith & City",London Underground,4,0.081813552,51.53937511
+329,210,Morden,525670,168602,Northern,London Underground,4,-0.193160282,51.40201673
+330,214,Hounslow Central,513568,175971,Piccadilly,London Underground,4,-0.364716069,51.470809
+331,215,Hounslow East,514255,176203,Piccadilly,London Underground,4,-0.3547554,51.47275219
+332,216,Osterley,514520,177097,Piccadilly,London Underground,4,-0.350640896,51.48073359
+333,217,Boston Manor,516334,178693,Piccadilly,London Underground,4,-0.32401176,51.494711
+334,222,Wembley Central,518183,185085,Bakerloo,London Underground,4,-0.295237517,51.55177912
+335,223,North Wembley,517668,186198,Bakerloo,London Underground,4,-0.302293996,51.56189247
+336,225,Richmond,518077,175161,District,London Underground,4,-0.300084253,51.46260595
+337,328,Preston Road,518249,187282,Metropolitan,London Underground,4,-0.293539223,51.57151381
+338,252,Wembley Park,519316,186388,"Metropolitan, Jubilee",London Underground,4,-0.278458638,51.56325938
+339,255,Kingsbury,519359,188713,Jubilee,London Underground,4,-0.277052309,51.58414203
+340,256,Queensbury,518809,189763,Jubilee,London Underground,4,-0.284629817,51.59369962
+341,257,South Kenton,517336,187060,Bakerloo,London Underground,4,-0.306785037,51.56971265
+342,259,Kenton,516728,188314,Bakerloo,London Underground,4,-0.315140189,51.58111281
+343,264,Woodside Park,525718,192588,Northern,London Underground,4,-0.183907004,51.61758971
+344,265,West Finchley,525546,191627,Northern,London Underground,4,-0.186738929,51.60898928
+345,266,Totteridge & Whetstone,526120,193989,Northern,London Underground,4,-0.177599794,51.63009248
+346,283,Northwick Park,516643,187964,Metropolitan,London Underground,4,-0.316478653,51.57797585
+347,128,Norwood Junction,534012,168233,n/a,London Overground,4,-0.073428759,51.39678711
+348,139,Edmondton Green,534318,193573,n/a,London Overground,4,-0.059376907,51.62445425
+349,143,Highams Park,538582,191843,n/a,London Overground,4,0.00150512,51.607873
+350,156,Walthamstow Wood Street,538493,189407,n/a,London Overground,4,-0.000741221,51.58600285
+351,159,Silver Street,533922,192445,n/a,London Overground,4,-0.065526104,51.61440848
+352,185,Kenton,516698,188340,n/a,London Overground,4,-0.315564441,51.58134846
+353,190,North Wembley,517641,186239,n/a,London Overground,4,-0.302663046,51.56226767
+354,385,Manor Park,541951,185707,n/a,TfL Rail,4,0.047651015,51.55189321
+355,386,Ilford,543535,186486,n/a,TfL Rail,4,0.07080065,51.55848898
+356,387,Seven Kings,545454,187093,n/a,TfL Rail,4,0.098722803,51.5634541
+357,388,Goodmayes,546398,187292,n/a,TfL Rail,4,0.112414564,51.56500163
+358,399,Morden Road,525779,169309,n/a,Tramlink,4,-0.191339995,51.408346
+359,400,Phipps Bridge,526529,168725,n/a,Tramlink,4,-0.180769806,51.40292944
+360,401,Belgrave Walk,526809,168456,n/a,Tramlink,4,-0.176840028,51.40044481
+361,402,Mitcham,527331,168086,n/a,Tramlink,4,-0.16947597,51.39700089
+362,403,Mitcham Junction (Tramlink),528300,167568,n/a,Tramlink,4,-0.155733719,51.39213248
+363,404,Beddington Lane,529316,167236,n/a,Tramlink,4,-0.141260885,51.38891199
+364,405,Therapia Lane,530283,166842,n/a,Tramlink,4,-0.127515047,51.38515495
+365,406,Ampere Way,530664,166485,n/a,Tramlink,4,-0.122172554,51.3818536
+366,428,Arena,535194,167627,n/a,Tramlink,4,-0.056679487,51.39105665
+367,429,Elmers End (Tramlink),535779,168391,n/a,Tramlink,4,-0.047979561,51.39779044
+368,430,Harrington Road,535017,168522,n/a,Tramlink,4,-0.058885135,51.3991503
+369,431,Birkbeck (Tramlink),535305,168963,n/a,Tramlink,4,-0.054580141,51.40304289
+370,432,Avenue Road,535745,169322,n/a,Tramlink,4,-0.048118188,51.40615963
+371,433,Beckenham Road,536190,169660,n/a,Tramlink,4,-0.04159356,51.40909636
+372,434,Beckenham Junction (Tramlink),537365,169843,n/a,Tramlink,4,-0.024636241,51.41045194
+373,447,WOOLWICH ARSENAL - DLR,543731,178811,n/a,DLR,4,0.070492592,51.48946942
+374,348,Penge West,534942,170503,n/a,London Overground,4,-0.059203378,51.41696823
+375,349,Anerley,534617,169899,n/a,London Overground,4,-0.06410424,51.411617
+376,352,South Kenton,517316,187081,n/a,London Overground,4,-0.307068904,51.56990367
+377,361,Wembley Central,518184,185126,n/a,London Overground,4,-0.295206549,51.55214998
+378,368,Barking,544422,184332,n/a,London Overground,4,0.082703641,51.53890805
+379,369,Richmond,518072,175174,n/a,London Overground,4,-0.30015416,51.46271961
+380,108,Becontree,547628,184527,District,London Underground,5,0.128978641,51.53983401
+381,109,Dagenham Heathway,549023,184710,District,London Underground,5,0.149158377,51.54110645
+382,120,Buckhurst Hill,541778,193891,Central,London Underground,5,0.048455336,51.62548342
+383,4,Edgware,519550,191940,Northern,London Underground,5,-0.273183711,51.61311251
+384,24,Cockfosters,528141,196370,Piccadilly,London Underground,5,-0.147553187,51.65103526
+385,25,Oakwood,529390,195935,Piccadilly,London Underground,5,-0.129657109,51.64683948
+386,72,Ruislip Gardens,510266,185852,Central,London Underground,5,-0.409140537,51.56027575
+387,73,South Ruislip,511097,185434,Central,London Underground,5,-0.39728854,51.55635983
+388,74,Northolt,513213,184524,Central,London Underground,5,-0.367069735,51.54775741
+389,213,Hounslow West,512208,176197,Piccadilly,London Underground,5,-0.384218262,51.47310845
+390,219,South Harrow,514321,186361,Piccadilly,London Underground,5,-0.350509518,51.56404932
+391,258,Harrow & Wealdstone,515443,189446,Bakerloo,London Underground,5,-0.333300136,51.59154651
+392,267,High Barnet,525030,196180,Northern,London Underground,5,-0.192561468,51.65002914
+393,276,Eastcote,511153,187622,"Metropolitan, Piccadilly",London Underground,5,-0.39578946,51.57601384
+394,278,West Harrow,514200,188029,Metropolitan,London Underground,5,-0.351706569,51.57906815
+395,279,Rayners Lane,512953,187515,"Metropolitan, Piccadilly",London Underground,5,-0.369864752,51.57469667
+396,280,North Harrow,513541,188613,Metropolitan,London Underground,5,-0.361021834,51.58444941
+397,281,Pinner,512236,189461,Metropolitan,London Underground,5,-0.379580851,51.59232907
+398,282,Harrow-on-the-Hill,515346,188038,Metropolitan,London Underground,5,-0.33516664,51.57891586
+399,285,Stanmore,517563,192573,Jubilee,London Underground,5,-0.30167142,51.61921632
+400,286,Canons Park,518187,191252,Jubilee,London Underground,5,-0.293102561,51.60721294
+401,127,Dagenham East,550294,185030,District,London Underground,5,0.167617456,51.54364955
+402,129,West Croydon,532133,166072,n/a,London Overground,5,-0.101229704,51.37780543
+403,132,Bush Hill Park,533690,195389,n/a,London Overground,5,-0.067751096,51.64092455
+404,135,Chingford,539210,194632,n/a,London Overground,5,0.011677573,51.63278212
+405,141,Enfield Town,532968,196562,n/a,London Overground,5,-0.077733958,51.65163779
+406,151,Southbury,534904,196237,n/a,London Overground,5,-0.049888718,51.64825562
+407,180,Headstone Lane,513869,190584,n/a,London Overground,5,-0.355651952,51.60209779
+408,389,Chadwell Heath,547676,187607,n/a,TfL Rail,5,0.130973337,51.56749975
+409,407,Waddon Marsh,531090,165897,n/a,Tramlink,5,-0.116278811,51.37647839
+410,408,Wandle Park,531414,165512,n/a,Tramlink,5,-0.111770014,51.37293871
+411,409,Reeves Corner,531903,165672,n/a,Tramlink,5,-0.104688108,51.37426316
+412,410,Centrale,532066,165786,n/a,Tramlink,5,-0.102295527,51.37525458
+413,411,West Croydon (Tramlink),532210,166142,n/a,Tramlink,5,-0.100095218,51.37841469
+414,412,Wellesley Road,532506,165769,n/a,Tramlink,5,-0.095978591,51.37499854
+415,413,Church Street,532037,165557,n/a,Tramlink,5,-0.102795537,51.37319514
+416,414,George Street,532408,165587,n/a,Tramlink,5,-0.097458992,51.37338118
+417,415,East Croydon (Tramlink),532851,165702,n/a,Tramlink,5,-0.09106147,51.37431604
+418,416,Lebanon Road,533348,165756,n/a,Tramlink,5,-0.08389645,51.37468254
+419,417,Sandilands,533890,165741,n/a,Tramlink,5,-0.07612476,51.37441486
+420,418,Lloyd Park,533715,164541,n/a,Tramlink,5,-0.079087981,51.36367068
+421,419,Coombe Lane,535159,164090,n/a,Tramlink,5,-0.058520648,51.35927821
+422,425,Addiscombe,534188,166297,n/a,Tramlink,5,-0.07162576,51.37934189
+423,426,Blackhorse Lane,534377,166865,n/a,Tramlink,5,-0.06870387,51.3844061
+424,427,Woodside,534701,167101,n/a,Tramlink,5,-0.063965962,51.38645328
+425,367,Harrow & Wealdstone,515420,189470,n/a,London Overground,5,-0.333631214,51.59176883
+426,121,Loughton,542319,195612,Central,London Underground,6,0.056970973,51.6408144
+427,124,Debden,544273,196122,Central,London Underground,6,0.085403181,51.64489405
+428,125,Theydon Bois,545542,199101,Central,London Underground,6,0.104967288,51.67133739
+429,126,Epping,546209,201538,Central,London Underground,6,0.115641374,51.69306818
+430,27,Elm Park,552542,185716,District,London Underground,6,0.200311564,51.54920911
+431,28,Hornchurch,553944,186240,District,London Underground,6,0.220754707,51.55353835
+432,29,Heathrow Terminals 1-2-3,507586,175840,Piccadilly,London Underground,6,-0.450857772,51.47079421
+433,30,Upminster Bridge,555088,186770,District,London Underground,6,0.237476635,51.55798569
+434,75,West Ruislip,508379,186796,Central,London Underground,6,-0.436073394,51.56913097
+435,199,Upminster,556146,186868,District,London Underground,6,0.252767235,51.55857711
+436,212,Hatton Cross,509608,175363,Piccadilly,London Underground,6,-0.42189306,51.4661174
+437,325,Northwood,509230,191419,Metropolitan,London Underground,6,-0.422358538,51.61052039
+438,335,Heathrow Terminal 5,505109,175924,Piccadilly,London Underground,6,-0.486475608,51.47201647
+439,268,Heathrow Terminal 4,508082,174430,Piccadilly,London Underground,6,-0.444145672,51.45802947
+440,271,Uxbridge,505661,184161,"Metropolitan, Piccadilly",London Underground,6,-0.4760666,51.54596187
+441,272,Hillingdon,507602,185035,"Metropolitan, Piccadilly",London Underground,6,-0.447812239,51.55344939
+442,273,Ickenham,508092,185938,"Metropolitan, Piccadilly",London Underground,6,-0.440467266,51.56146986
+443,274,Ruislip,509474,187004,"Metropolitan, Piccadilly",London Underground,6,-0.420215108,51.57079343
+444,275,Ruislip Manor,510160,187262,"Metropolitan, Piccadilly",London Underground,6,-0.410235646,51.57297789
+445,277,Northwood Hills,510308,190238,Metropolitan,London Underground,6,-0.407168137,51.59969703
+446,140,Emerson Park,553962,187871,n/a,London Overground,6,0.221721192,51.56818654
+447,149,Romford,551387,188501,n/a,London Overground,6,0.184863954,51.57454494
+448,153,Turkey Street,535121,198870,n/a,London Overground,6,-0.045735795,51.67186641
+449,154,Upminster,556108,186859,n/a,London Overground,6,0.25221358,51.55850315
+450,179,Hatch End,513054,191323,n/a,London Overground,6,-0.367177631,51.60890473
+451,390,Romford,551350,188463,n/a,TfL Rail,6,0.184308898,51.57421472
+452,391,Gidea Park,552906,189285,n/a,TfL Rail,6,0.2071101,51.58117713
+453,392,Harold Wood,554777,190568,n/a,TfL Rail,6,0.234666819,51.59219909
+454,420,Gravel Hill,536373,163537,n/a,Tramlink,6,-0.041304236,51.35401751
+455,421,Addington Village,537066,163744,n/a,Tramlink,6,-0.031284121,51.35570988
+456,422,New Addington,538198,162244,n/a,Tramlink,6,-0.015617483,51.34195708
+457,423,King Henry's Drive,537977,162560,n/a,Tramlink,6,-0.018665196,51.3448509
+458,424,Fieldway,537684,163173,n/a,Tramlink,6,-0.022640017,51.3504305
+459,321,Chorleywood,502581,196095,Metropolitan,London Underground,7,-0.516985176,51.65380677
+460,323,Rickmansworth,505716,194601,Metropolitan,London Underground,7,-0.472133393,51.63979883
+461,324,Moor Park,508606,193503,Metropolitan,London Underground,7,-0.430710233,51.6293749
+462,326,Croxley,507909,195403,Metropolitan,London Underground,7,-0.44019171,51.64658792
+463,327,Watford,509569,196596,Metropolitan,London Underground,7,-0.415832512,51.65699167
+464,152,Theobalds Grove,535936,201110,n/a,London Overground,7,-0.033083485,51.69180047
+465,169,Carpenders Park,511833,193398,n/a,London Overground,7,-0.384142381,51.62780024
+466,320,Chalfont & Latimer,499634,197564,Metropolitan,London Underground,8,-0.559159868,51.66754646
+467,134,Cheshunt,536644,202316,n/a,London Overground,8,-0.022373213,51.70246665
+468,360,Watford High Street,511326,196075,n/a,London Overground,8,-0.390612987,51.6519637
+469,365,Watford Junction,511021,197351,n/a,London Overground,8,-0.394615064,51.6634936
+470,366,Bushey,511823,195237,n/a,London Overground,8,-0.38369919,51.64433251
+471,322,Chesham,496079,201633,Metropolitan,London Underground,9,-0.609421076,51.70474175
+472,284,Amersham,496372,198181,Metropolitan,London Underground,9,-0.606146762,51.67366188
+473,137,Clapton,534775,186528,n/a,London Overground,0,-0.055484597,51.56103029
+474,381,Crystal Palace,534111,170555,n/a,London Overground,0,-0.071128264,51.41763277
+475,393,Brentwood,559339,193033,n/a,TfL Rail,0,0.301589064,51.61307149
+476,394,Shenfield,561361,194981,n/a,TfL Rail,0,0.331671253,51.6300009
+477,363,Woodgrange Park,541821,185350,n/a,London Overground,0,0.045631091,51.54871611
+478,364,Willesden Junction,521879,182944,n/a,London Overground,0,-0.242688895,51.5317515

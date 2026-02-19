@@ -15,6 +15,7 @@
 #include "expr/StringExpr.h"
 #include "expr/UnaryExpr.h"
 #include "expr/FunctionInvocationExpr.h"
+#include "expr/IndexExpr.h"
 
 #include "BioAssert.h"
 
@@ -84,6 +85,12 @@ public:
 
             case Expr::Kind::PROPERTY: {
                 const PropertyExpr* prop = static_cast<PropertyExpr*>(expr);
+
+                if (prop->isCSVHeaderAccess()) {
+                    // CSV header access is resolved directly in PipelineGenerator
+                    break;
+                }
+
                 PlanGraphNode* producer = variables.getProducer(prop->getEntityVarDecl());
                 bioassert(producer, "VarDecl not found");
 
@@ -119,6 +126,12 @@ public:
                 // TODO Find a way to get access to throwError
                 throw PlannerException("Path expression not supported yet");
                 break;
+
+            case Expr::Kind::INDEX: {
+                const IndexExpr* indexExpr = static_cast<IndexExpr*>(expr);
+                genExprDependencies(variables, indexExpr->getBase());
+                genExprDependencies(variables, indexExpr->getIndexExpr());
+            } break;
 
             case Expr::Kind::LITERAL:
                 // Reached end

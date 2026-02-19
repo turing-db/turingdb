@@ -22,6 +22,7 @@ set(ast_sources
     expr/SymbolExpr.cpp
     expr/UnaryExpr.cpp
     expr/FunctionInvocationExpr.cpp
+    expr/IndexExpr.cpp
 
     stmt/Stmt.cpp
     stmt/StmtContainer.cpp
@@ -33,6 +34,7 @@ set(ast_sources
     stmt/DeleteStmt.cpp
     stmt/ReturnStmt.cpp
     stmt/ShortestPathStmt.cpp
+    stmt/LoadCSVStmt.cpp
     stmt/OrderByItem.cpp
     stmt/OrderBy.cpp
     stmt/Limit.cpp

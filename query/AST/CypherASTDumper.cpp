@@ -197,6 +197,14 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
                     dump(out, shortestPathStmt);
                 }
                 break;
+
+                case Stmt::Kind::LOAD_CSV: {
+                    out << "    _" << std::hex << stmt << " {\n";
+                    out << "        ASTType LoadCSVStmt\n";
+                    out << "    }\n";
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << stmt << " : \"\"\n";
+                }
+                break;
             }
         }
     };
@@ -705,6 +713,11 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
         case Expr::Kind::FUNCTION_INVOCATION:
             dump(out, dynamic_cast<const FunctionInvocationExpr*>(expr));
             break;
+        case Expr::Kind::INDEX: {
+            out << "    _" << std::hex << expr << " {\n";
+            out << "        ASTType IndexExpr\n";
+            out << "    }\n";
+        } break;
     }
 }
 

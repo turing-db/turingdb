@@ -11,4 +11,5 @@
 #include "expr/PathExpr.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
+#include "expr/IndexExpr.h"
 
