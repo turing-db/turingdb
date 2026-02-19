@@ -1,5 +1,6 @@
 #include "TuringShell.h"
 
+#include <signal.h>
 #include <regex>
 #include <stdlib.h>
 #include <sys/wait.h>
@@ -298,7 +299,7 @@ TuringShell::~TuringShell() {
 }
 
 void TuringShell::startLoop() {
-    _threadID = pthread_self();
+    _threadID = ::pthread_self();
 
     // Ignore SIGUSR1 signal (used to interrupt ::read())
     struct sigaction sa {};
@@ -679,7 +680,7 @@ void TuringShell::printHelp() const {
 
 void TuringShell::stop() {
     _running.store(false);
-    pthread_kill(_threadID, SIGUSR1);
+    ::pthread_kill(_threadID, SIGUSR1);
 }
 
 void TuringShell::checkShellContext() {

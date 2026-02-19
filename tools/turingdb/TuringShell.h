@@ -44,7 +44,7 @@ private:
     CommitHash _hash {CommitHash::head()};
     ChangeID _changeID {ChangeID::head()};
     bool _quiet {false};
-    size_t _threadID {0};
+    pthread_t _threadID;
     std::atomic<bool> _running {true};
     std::unordered_map<std::string_view, Command> _localCommands;
 

@@ -1,6 +1,8 @@
 #include "SystemEventHandler.h"
 
-#include <sys/eventfd.h>
+#include <signal.h>
+#include <unistd.h>
+#include <sys/fcntl.h>
 #include <sys/socket.h>
 #include <sys/signal.h>
 #include <sys/un.h>
@@ -14,16 +16,24 @@ using namespace db;
 
 namespace {
 
-int _signalFd {-1};
-int _sockFd {-1};
+struct SignalPipes {
+    int _read {-1};
+    int _write {-1};
+
+    int* data() {
+        return &_read;
+    }
+} _signalFd {};
+
+int _sockFd = -1;
 
 void sigHandler(int signal) {
-    if (_signalFd == -1) {
+    if (_signalFd._write == -1) {
         return;
     }
 
     uint64_t value = 1;
-    if (::write(_signalFd, &value, sizeof(value)) != sizeof(value)) {
+    if (::write(_signalFd._write, &value, sizeof(value)) != sizeof(value)) {
         // Error, but cannot be checked in signal handler
     }
 }
@@ -45,8 +55,12 @@ SystemEventHandler::~SystemEventHandler() {
         _thread.join();
     }
 
-    if (_signalFd != -1) {
-        ::close(_signalFd);
+    if (_signalFd._read != -1) {
+        ::close(_signalFd._read);
+    }
+
+    if (_signalFd._write != -1) {
+        ::close(_signalFd._write);
     }
 
     if (_sockFd != -1) {
@@ -76,10 +90,12 @@ void SystemEventHandler::terminate() {
         return;
     }
 
-    _instance->_running.store(false);
+    if (!_instance->_running.exchange(false)) {
+        return;
+    }
 
     uint64_t value = 1;
-    if (::write(_signalFd, &value, sizeof(value)) != sizeof(value)) {
+    if (::write(_signalFd._write, &value, sizeof(value)) != sizeof(value)) {
         spdlog::error("Failed to wake signalling thread: {}", strerror(errno));
     }
 
@@ -142,10 +158,12 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
 
 bool SystemEventHandler::initializeImpl() {
     // Creating signal event fd (for SIGINT/SIGTERM)
-    _signalFd = ::eventfd(0, EFD_NONBLOCK);
-    if (_signalFd < 0) {
+    if (::pipe(_signalFd.data()) < 0) {
         return false;
     }
+    // Set non-blocking on both ends
+    ::fcntl(_signalFd._read, F_SETFL, O_NONBLOCK);
+    ::fcntl(_signalFd._write, F_SETFL, O_NONBLOCK);
 
     // Creating communication socket (for PING/STOP)
     _sockFd = ::socket(AF_UNIX, SOCK_STREAM, 0);
@@ -195,7 +213,7 @@ bool SystemEventHandler::initializeImpl() {
         while (_running) {
             ::pollfd pfds[2] = {
                 {_sockFd,   POLLIN, 0},
-                {_signalFd, POLLIN, 0},
+                {_signalFd._read, POLLIN, 0},
             };
 
             const int ret = ::poll(pfds, 2, -1);
@@ -213,7 +231,7 @@ bool SystemEventHandler::initializeImpl() {
             // Signal received
             if (pfds[1].revents & POLLIN) {
                 uint64_t val = 0;
-                [[maybe_unused]] const int res = ::read(_signalFd, &val, sizeof(val));
+                [[maybe_unused]] const int res = ::read(_signalFd._read, &val, sizeof(val));
                 _running = false;
                 _onStop();
                 break;
@@ -236,9 +254,9 @@ bool SystemEventHandler::initializeImpl() {
                 cmd.assign(buf, n);
 
                 if (cmd == "PING") {
-                    ::write(client, "PONG", 4);
+                    [[maybe_unused]] const int res = ::write(client, "PONG", 4);
                 } else if (cmd == "STOP") {
-                    ::write(client, "OK", 2);
+                    [[maybe_unused]] const int res = ::write(client, "OK", 2);
                     ::close(client);
                     _running = false;
                     _onStop();

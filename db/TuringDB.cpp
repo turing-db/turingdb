@@ -28,6 +28,7 @@ TuringDB::TuringDB(const TuringConfig* config)
 }
 
 TuringDB::~TuringDB() {
+    stop();
 }
 
 void TuringDB::init() {

@@ -254,7 +254,6 @@ find_package(miniocpp REQUIRED)
 
 add_subdirectory(common)
 add_subdirectory(base)
-add_subdirectory(log)
 add_subdirectory(jobs)
 add_subdirectory(io)
 add_subdirectory(memory)

@@ -15,5 +15,4 @@ target_include_directories(turing_db_http_server_s
 target_link_libraries(turing_db_http_server_s
   PUBLIC  turing_db_http_common_s
           turing_db_http_parser_s
-          turing_db_log_s
           turing_common_s)
