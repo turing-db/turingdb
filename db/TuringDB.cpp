@@ -112,14 +112,16 @@ void TuringDB::init() {
 
     // Acquire lock file
     _lockFile.setPath(fs::Path(_config->getLockFilePath()));
-    auto lockRes = _lockFile.tryLock();
+    const auto lockRes = _lockFile.tryLock();
     if (!lockRes) {
         panic("Could not acquire lock file: {}", lockRes.error().fmtMessage());
     }
 
     // Initialize socket/signal communication system
-    if (!SystemEventHandler::initialize(_config->getSocketPath())) {
-        panic("Could not initialize system event handler");
+    if (_config->usingSystemEvents()) {
+        if (!SystemEventHandler::initialize(_config->getSocketPath())) {
+            panic("Could not initialize system event handler");
+        }
     }
 
     // Init system manager

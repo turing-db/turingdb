@@ -26,8 +26,11 @@ public:
     const std::function<void()>& getOnStopRequest() const { return _onStopRequest; }
 
     bool isSyncedOnDisk() const { return _syncedOnDisk; }
+    bool usingSystemEvents() const { return _systemEvents; }
+
     void setTuringDirectory(const fs::Path& turingDir);
     void setSyncedOnDisk(bool syncedOnDisk) { _syncedOnDisk = syncedOnDisk; }
+    void useSystemEvents(bool systemEvents) { _systemEvents = systemEvents; }
 
     void setOnStopRequest(const std::function<void()>& onStopRequest) {
         _onStopRequest = onStopRequest;
@@ -47,6 +50,7 @@ private:
     std::function<void()> _onStopRequest;
 
     bool _syncedOnDisk {true};
+    bool _systemEvents {true};
 };
 
 }
