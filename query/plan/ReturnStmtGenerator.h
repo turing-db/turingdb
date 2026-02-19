@@ -54,7 +54,7 @@ private:
     void prepare();
     void handleExprDependencies(Expr* expr);
 
-    [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
+    [[noreturn]] void throwError(std::string_view msg, const void* obj = nullptr) const;
 };
 
 }
