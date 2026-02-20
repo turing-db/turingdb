@@ -455,6 +455,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addOrderBy(std::span<OrderByProce
     orderby->setIndicesCol(indicesCol);
 
     // Duplicate the shape of the output dataframe to the processors "memory"
+    // TODO: Can we only store the returned/needed columns in memory?
     duplicateDataframeShape(_mem, _dfMan, outputDf, &orderby->memory());
 
     // Stream does not change when adding ORDER BY

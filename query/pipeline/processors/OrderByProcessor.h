@@ -67,6 +67,7 @@ private:
     enum class State : uint8_t {
         SORT_INCOMING = 0,
         MERGE_SORTED_RUNS,
+        OUTPUT_FROM_MEMORY,
 
         STATE_SPACE_SIZE
     };

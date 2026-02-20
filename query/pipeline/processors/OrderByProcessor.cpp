@@ -15,12 +15,10 @@
 #include "columns/AllowedKinds.h"
 #include "columns/Column.h"
 #include "columns/ColumnOperatorDispatcher.h"
-#include "columns/ColumnOperators.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
 
 #include "BioAssert.h"
-#include "FatalException.h"
 
 using namespace db;
 
@@ -307,6 +305,7 @@ void OrderByProcessor::memorise() {
         const Column* inputCol = inputCols.at(col)->getColumn();
         Column* memoryCol = memoryCols.at(col)->getColumn();
         // TODO: Project sorted from input into memory
+        // TODO: Can we only store the returned columns in memory?
         project(inputCol, memoryCol, runStart);
     }
 
@@ -337,10 +336,6 @@ void OrderByProcessor::execute() {
         memorise();
     }
 
-    // TODO: Implement storing to memory
-    // TODO: Merge sorted runs
-    // TODO: Output total ordering in chunks
-
     if (inputPort->isClosed()) {
         _state = State::MERGE_SORTED_RUNS;
 
@@ -353,6 +348,12 @@ void OrderByProcessor::execute() {
     }
 
     if (_state == State::MERGE_SORTED_RUNS) {
+        // TODO: Merge sorted runs
+        // TODO: Output total ordering in chunks
+        return;
+    }
+
+    if (_state == State::OUTPUT_FROM_MEMORY) {
         return;
     }
 }
