@@ -1747,7 +1747,7 @@ export default function App() {
                   try {
                     const parsed = JSON.parse(raw);
                     return (
-                      <div className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3 text-xs">
+                      <div className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3 text-xs font-mono">
                         <JsonView data={parsed} style={darkStyles} />
                       </div>
                     );
