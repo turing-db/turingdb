@@ -86,7 +86,7 @@ public:
             case Expr::Kind::PROPERTY: {
                 const PropertyExpr* prop = static_cast<PropertyExpr*>(expr);
 
-                if (prop->isCSVHeaderAccess()) {
+                if (prop->isStringTableHeaderAccess()) {
                     // CSV header access is resolved directly in PipelineGenerator
                     break;
                 }

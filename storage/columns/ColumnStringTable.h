@@ -38,9 +38,8 @@ public:
 
     static consteval auto staticKind() { return _staticKind; }
 
-    static constexpr auto _staticKind = ColumnKind::code<ColumnStringTable>();
-
 private:
+    static constexpr auto _staticKind = ColumnKind::code<ColumnStringTable>();
     std::vector<StringColumn*> _columns;
 };
 

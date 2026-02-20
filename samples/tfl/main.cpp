@@ -38,16 +38,16 @@ int main(int argc, const char** argv) {
     const std::string graphName = "tfl";
     db.getSystemManager().createGraph(graphName);
 
-    fs::Path csvPath = fs::Path(SAMPLE_DIR) / "stations.csv";
+    fs::Path csvPath = fs::Path(SAMPLE_DIR) / "tfl" / "stations.csv";
 
-    std::string query =
+    const std::string query =
         "LOAD CSV '" + std::string(csvPath.get()) + "' WITH HEADERS AS row "
         "RETURN row.NAME AS name, row.LINES AS lines";
 
     std::vector<std::string> names;
     std::vector<std::string> lines;
 
-    auto status = db.query(query, graphName, &mem,
+    const auto status = db.query(query, graphName, &mem,
         [&](const Dataframe* df) {
             using StringCol = ColumnVector<std::string>;
 

@@ -1,5 +1,6 @@
 #include "CSVParser.h"
 
+#include <string.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -12,70 +13,6 @@
 #include "TuringException.h"
 
 using namespace db;
-
-// ---------------------------------------------------------------
-// Static field parser (RFC 4180)
-// ---------------------------------------------------------------
-
-bool CSVParser::parseCSVLine(const std::string& line, std::vector<std::string>& fields) {
-    fields.clear();
-
-    const char* pos = line.data();
-    const char* end = pos + line.size();
-
-    while (pos <= end) {
-        std::string field;
-
-        if (pos < end && *pos == '"') {
-            // Quoted field -- scan for closing quote, using bulk append
-            pos++;
-            const char* segStart = pos;
-
-            bool terminated = false;
-            while (pos < end) {
-                if (*pos == '"') {
-                    field.append(segStart, pos - segStart);
-                    pos++;
-                    if (pos < end && *pos == '"') {
-                        // Escaped quote: ""
-                        field += '"';
-                        pos++;
-                        segStart = pos;
-                    } else {
-                        terminated = true;
-                        break;
-                    }
-                } else {
-                    pos++;
-                }
-            }
-
-            if (!terminated) return false;
-        } else {
-            // Unquoted field -- find comma and bulk append
-            const char* segStart = pos;
-            while (pos < end && *pos != ',') pos++;
-            field.append(segStart, pos - segStart);
-        }
-
-        fields.push_back(std::move(field));
-
-        if (pos < end && *pos == ',') {
-            pos++;
-            if (pos == end) {
-                fields.emplace_back();
-            }
-        } else {
-            break;
-        }
-    }
-
-    return true;
-}
-
-// ---------------------------------------------------------------
-// Standalone peek function
-// ---------------------------------------------------------------
 
 namespace {
 
@@ -128,13 +65,87 @@ void skipBOMInline(const char*& cursor, const char* end) {
 
 } // anonymous namespace
 
-void db::peekCSVFileStructure(const fs::Path& path, bool hasHeaders, CSVFileInfo& info) {
+// ---------------------------------------------------------------
+// Static field parser (RFC 4180)
+// ---------------------------------------------------------------
+
+bool CSVParser::parseCSVLine(const std::string& line,
+                             std::vector<std::string>& fields) {
+    fields.clear();
+
+    const char* pos = line.data();
+    const char* end = pos + line.size();
+
+    std::string field;
+
+    while (pos <= end) {
+        field.clear();
+
+        if (pos < end && *pos == '"') {
+            // Quoted field -- scan for closing quote, using bulk append
+            pos++;
+            const char* segStart = pos;
+
+            bool terminated = false;
+            while (pos < end) {
+                if (*pos == '"') {
+                    field.append(segStart, pos - segStart);
+                    pos++;
+                    if (pos < end && *pos == '"') {
+                        // Escaped quote: ""
+                        field += '"';
+                        pos++;
+                        segStart = pos;
+                    } else {
+                        terminated = true;
+                        break;
+                    }
+                } else {
+                    pos++;
+                }
+            }
+
+            if (!terminated) {
+                return false;
+            }
+        } else {
+            // Unquoted field -- find comma and bulk append
+            const char* segStart = pos;
+            while (pos < end && *pos != ',') {
+                pos++;
+            }
+            field.append(segStart, pos - segStart);
+        }
+
+        fields.push_back(std::move(field));
+
+        if (pos < end && *pos == ',') {
+            pos++;
+            if (pos == end) {
+                fields.emplace_back();
+            }
+        } else {
+            break;
+        }
+    }
+
+    return true;
+}
+
+// ---------------------------------------------------------------
+// Peek file structure
+// ---------------------------------------------------------------
+
+void CSVParser::peekFileStructure(const fs::Path& path,
+                                  bool hasHeaders,
+                                  CSVFileInfo& info) {
     const int fd = ::open(path.c_str(), O_RDONLY);
     if (fd < 0) {
         throw TuringException(fmt::format("Cannot open CSV file: {}", path.get()));
     }
 
     struct stat st;
+    memset(&st, 0, sizeof(st));
     if (::fstat(fd, &st) != 0) {
         ::close(fd);
         throw TuringException(fmt::format("Cannot stat CSV file: {}", path.get()));
@@ -172,8 +183,8 @@ void db::peekCSVFileStructure(const fs::Path& path, bool hasHeaders, CSVFileInfo
                 cleanup();
                 throw TuringException("Malformed CSV header line");
             }
-            info.headers = fields;
-            info.fieldCount = fields.size();
+            info._headers = fields;
+            info._fieldCount = fields.size();
         }
     } else {
         if (readOneLine(cursor, end, line)) {
@@ -181,7 +192,7 @@ void db::peekCSVFileStructure(const fs::Path& path, bool hasHeaders, CSVFileInfo
                 cleanup();
                 throw TuringException("Malformed first CSV line");
             }
-            info.fieldCount = fields.size();
+            info._fieldCount = fields.size();
         }
     }
 
@@ -192,8 +203,11 @@ void db::peekCSVFileStructure(const fs::Path& path, bool hasHeaders, CSVFileInfo
 // CSVParser
 // ---------------------------------------------------------------
 
-CSVParser::CSVParser(const fs::Path& path, bool hasHeaders, CSVErrorMode errorMode,
-                     size_t expectedFieldCount, size_t mmapChunkSize)
+CSVParser::CSVParser(const fs::Path& path,
+                     bool hasHeaders,
+                     CSVErrorMode errorMode,
+                     size_t expectedFieldCount,
+                     size_t mmapChunkSize)
     : _path(path),
     _hasHeaders(hasHeaders),
     _errorMode(errorMode),
@@ -211,7 +225,9 @@ CSVParser::~CSVParser() {
 }
 
 void CSVParser::openFile() {
-    if (_opened) return;
+    if (_opened) {
+        return;
+    }
     _opened = true;
 
     _fd = ::open(_path.c_str(), O_RDONLY);
@@ -220,6 +236,7 @@ void CSVParser::openFile() {
     }
 
     struct stat st;
+    memset(&st, 0, sizeof(st));
     if (::fstat(_fd, &st) != 0) {
         ::close(_fd);
         _fd = -1;
@@ -342,15 +359,21 @@ bool CSVParser::readLine() {
 }
 
 size_t CSVParser::readChunk(size_t maxRows, ColumnStringTable* output) {
-    if (!_opened) openFile();
-    if (_finished) return 0;
+    if (!_opened) {
+        openFile();
+    }
+    if (_finished) {
+        return 0;
+    }
 
     output->clear();
 
     size_t rowsRead = 0;
 
     while (rowsRead < maxRows) {
-        if (!readLine()) break;
+        if (!readLine()) {
+            break;
+        }
         _linesRead++;
 
         if (!parseCSVLine(_lineBuffer, _fields)) {

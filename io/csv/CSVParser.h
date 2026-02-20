@@ -11,16 +11,15 @@ namespace db {
 
 class ColumnStringTable;
 
-// Peek at a CSV file to discover its structure (field count, headers).
-// Opens the file, reads the first line(s), and closes.
-void peekCSVFileStructure(const fs::Path& path, bool hasHeaders, CSVFileInfo& info);
-
 class CSVParser {
 public:
     static constexpr size_t DEFAULT_MMAP_CHUNK_SIZE = 512 * 1024 * 1024;
 
-    CSVParser(const fs::Path& path, bool hasHeaders, CSVErrorMode errorMode,
-              size_t expectedFieldCount, size_t mmapChunkSize = DEFAULT_MMAP_CHUNK_SIZE);
+    CSVParser(const fs::Path& path,
+              bool hasHeaders,
+              CSVErrorMode errorMode,
+              size_t expectedFieldCount,
+              size_t mmapChunkSize = DEFAULT_MMAP_CHUNK_SIZE);
     ~CSVParser();
 
     CSVParser(const CSVParser&) = delete;
@@ -34,14 +33,20 @@ public:
 
     // Parse a single CSV line into fields per RFC 4180.
     // Returns false on malformed input (unterminated quote).
-    static bool parseCSVLine(const std::string& line, std::vector<std::string>& fields);
+    static bool parseCSVLine(const std::string& line,
+                              std::vector<std::string>& fields);
+
+    // Peek at a CSV file to discover its structure (field count, headers).
+    static void peekFileStructure(const fs::Path& path,
+                                  bool hasHeaders,
+                                  CSVFileInfo& info);
 
 private:
     fs::Path _path;
-    bool _hasHeaders;
-    CSVErrorMode _errorMode;
-    size_t _expectedFieldCount;
-    size_t _mmapChunkSize;
+    bool _hasHeaders {false};
+    CSVErrorMode _errorMode {CSVErrorMode::Fail};
+    size_t _expectedFieldCount {0};
+    size_t _mmapChunkSize {0};
 
     int _fd {-1};
     size_t _fileSize {0};

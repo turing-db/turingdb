@@ -57,7 +57,7 @@ namespace {
 void populateStringTableShape(LocalMemory* mem,
                               Column* dest,
                               const Column* src) {
-    if (dest->getKind() != ColumnStringTable::_staticKind) {
+    if (dest->getKind() != ColumnStringTable::staticKind()) {
         return;
     }
     const auto* srcTable = static_cast<const ColumnStringTable*>(src);

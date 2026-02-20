@@ -1324,10 +1324,10 @@ PipelineOutputInterface* PipelineGenerator::translateShortestPathNode(ShortestPa
 PipelineOutputInterface* PipelineGenerator::translateLoadCSVNode(LoadCSVNode* node) {
     // Peek at file structure to discover field count and headers
     CSVFileInfo fileInfo;
-    peekCSVFileStructure(node->getFilePath(), node->hasHeaders(), fileInfo);
+    CSVParser::peekFileStructure(node->getFilePath(), node->hasHeaders(), fileInfo);
 
-    _csvHeaders = fileInfo.headers;
-    _csvFieldCount = fileInfo.fieldCount;
+    _csvHeaders = fileInfo._headers;
+    _csvFieldCount = fileInfo._fieldCount;
 
     // Allocate ColumnStringTable with field columns
     auto* table = _mem->alloc<ColumnStringTable>();

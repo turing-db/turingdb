@@ -207,7 +207,7 @@ Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
 }
 
 Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr) {
-    if (propExpr->isCSVHeaderAccess()) {
+    if (propExpr->isStringTableHeaderAccess()) {
         const VarDecl* entityDecl = propExpr->getEntityVarDecl();
         const auto it = _gen->varColMap().find(entityDecl);
         if (it == _gen->varColMap().end()) {

@@ -348,11 +348,11 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         // CSV header access: row.columnName
         expr->setEntityVarDecl(varDecl);
         expr->setPropertyName(propName->getName());
-        expr->setCSVHeaderAccess(true);
+        expr->setStringTableHeaderAccess(true);
         expr->setType(EvaluatedType::String);
         expr->setDynamic();
-        expr->setExprVarDecl(
-            _ctxt->createUnnamedVariable(_ast, EvaluatedType::String));
+        auto* varDecl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::String);
+        expr->setExprVarDecl(varDecl);
         return ValueType::String;
     }
 
@@ -459,8 +459,8 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
 
     expr->setType(EvaluatedType::String);
     expr->setDynamic();
-    expr->setExprVarDecl(
-        _ctxt->createUnnamedVariable(_ast, EvaluatedType::String));
+    auto* varDecl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::String);
+    expr->setExprVarDecl(varDecl);
 }
 
 void ExprAnalyzer::analyzeStringExpr(StringExpr* expr) {
