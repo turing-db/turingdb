@@ -60,7 +60,6 @@
     #include "stmt/SetItem.h"
     #include "LoadGraphQuery.h"
     #include "LoadGMLQuery.h"
-    #include "LoadNeo4jQuery.h"
     #include "LoadJsonlQuery.h"
     #include "ShowProceduresQuery.h"
     #include "stmt/LoadCSVStmt.h"
@@ -159,7 +158,6 @@
 %token<std::string_view> FALSE
 %token<std::string_view> COUNT
 %token<std::string_view> GRAPH
-%token<std::string_view> NEO4J
 %token<std::string_view> HEADERS
 %token<std::string_view> JSONL
 %token<std::string_view> LIST
@@ -293,7 +291,6 @@
 %type<db::QueryCommand*> query
 %type<db::LoadGraphQuery*> loadGraph
 %type<db::LoadGMLQuery*> loadGML
-%type<db::LoadNeo4jQuery*> loadNeo4j
 %type<db::LoadJsonlQuery*> loadJsonl
 %type<db::Stmt*> readingStatement
 %type<db::Stmt*> updatingStatement
@@ -355,7 +352,6 @@ singleQuery
     | listGraphQuery { $$ = $1; }
     | createGraphQuery { $$ = $1; }
     | loadGML { $$ = $1; }
-    | loadNeo4j { $$ = $1; }
     | loadJsonl { $$ = $1; }
     | s3ConnectQuery { $$ = $1; }
     | s3TransferQuery { $$ = $1; }
@@ -364,15 +360,6 @@ singleQuery
 
 loadGraph
     : LOAD GRAPH ID { $$ = LoadGraphQuery::create(ast, $3); LOC($$, @$); }
-    ;
-
-loadNeo4j
-    : LOAD NEO4J STRING_LITERAL { $$ = LoadNeo4jQuery::create(ast, fs::Path(std::string($3))); LOC($$, @$); }
-    | LOAD NEO4J STRING_LITERAL AS ID {
-        $$ = LoadNeo4jQuery::create(ast, fs::Path(std::string($3)));
-        $$->setGraphName($5);
-        LOC($$, @$);
-      }
     ;
 
 loadJsonl
@@ -1322,7 +1309,6 @@ reservedWord
     | UNION { $$ = Symbol::create(ast, $1); }
     | FALSE { $$ = Symbol::create(ast, $1); }
     | COUNT { $$ = Symbol::create(ast, $1); }
-    | NEO4J { $$ = Symbol::create(ast, $1); }
     | HEADERS { $$ = Symbol::create(ast, $1); }
     | JSONL { $$ = Symbol::create(ast, $1); }
     | CSV { $$ = Symbol::create(ast, $1); }

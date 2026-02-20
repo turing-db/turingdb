@@ -41,7 +41,6 @@ class LoadGraphQuery;
 class ListGraphQuery;
 class CreateGraphQuery;
 class LoadGMLQuery;
-class LoadNeo4jQuery;
 class LoadJsonlQuery;
 class S3ConnectQuery;
 class S3TransferQuery;
@@ -71,7 +70,6 @@ private:
 
     void dump(std::ostream& out, const SinglePartQuery* query);
     void dump(std::ostream& out, const LoadGraphQuery* query);
-    void dump(std::ostream& out, const LoadNeo4jQuery* query);
     void dump(std::ostream& out, const LoadJsonlQuery* query);
     void dump(std::ostream& out, const ChangeQuery* query);
     void dump(std::ostream& out, const CommitQuery* query);

@@ -14,7 +14,6 @@
 #include "LoadGraphQuery.h"
 #include "CreateGraphQuery.h"
 #include "LoadGMLQuery.h"
-#include "LoadNeo4jQuery.h"
 #include "LoadJsonlQuery.h"
 #include "S3ConnectQuery.h"
 #include "S3TransferQuery.h"
@@ -78,10 +77,6 @@ void CypherAnalyzer::analyze() {
 
             case QueryCommand::Kind::CREATE_GRAPH_QUERY:
                 analyze(static_cast<const CreateGraphQuery*>(query));
-            break;
-
-            case QueryCommand::Kind::LOAD_NEO4J_QUERY:
-                analyze(static_cast<LoadNeo4jQuery*>(query));
             break;
 
             case QueryCommand::Kind::LOAD_JSONL_QUERY:
@@ -331,25 +326,6 @@ void CypherAnalyzer::analyze(const CreateGraphQuery* createGraph) {
                                        c),
                            createGraph);
             }
-        }
-    }
-}
-
-void CypherAnalyzer::analyze(LoadNeo4jQuery* loadNeo4j) {
-    std::string_view graphName = loadNeo4j->getGraphName();
-    if (graphName.empty()) {
-        graphName = loadNeo4j->getFilePath().basename();
-    }
-
-    loadNeo4j->setGraphName(graphName);
-
-    // Check that the graph name is only [A-Z0-9_]+
-    for (char c : graphName) {
-        if (!(isalnum(c) || c == '_')) {
-            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': "
-                                   "character '{}' not allowed.",
-                                   c),
-                       loadNeo4j);
         }
     }
 }

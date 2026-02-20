@@ -74,7 +74,7 @@ Regression tests are Python-based and located in `regress/`. Each test has a `ru
 - `db/` - TuringDB main class
 - `common/` - Shared utilities and external libraries (spdlog, nlohmann_json, crow)
 - `io/` - File I/O and S3 integration
-- `import/` - Data import (Neo4j, GML formats)
+- `import/` - Data import (JSONL, GML formats)
 - `jobs/` - Job/task system
 - `memory/` - Memory management
 - `vector/` - Vector search with Faiss

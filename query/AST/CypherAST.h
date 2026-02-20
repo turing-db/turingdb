@@ -75,7 +75,6 @@ class ProcedureLookup;
 class ProcedureManager;
 class LoadGraphQuery;
 class LoadGMLQuery;
-class LoadNeo4jQuery;
 class LoadJsonlQuery;
 class S3ConnectQuery;
 class S3TransferQuery;
@@ -141,7 +140,6 @@ public:
     friend ListGraphQuery;
     friend CreateGraphQuery;
     friend LoadGMLQuery;
-    friend LoadNeo4jQuery;
     friend LoadJsonlQuery;
     friend S3ConnectQuery;
     friend S3TransferQuery;

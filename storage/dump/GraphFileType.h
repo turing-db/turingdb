@@ -1,19 +1,19 @@
 #pragma once
 
+#include <stdint.h>
+
 #include "EnumToString.h"
 
 namespace db {
 
-enum class GraphFileType {
-    GML,
-    NEO4J_JSON,
+enum class GraphFileType : uint8_t {
+    GML = 0,
     BINARY,
     _SIZE
 };
 
 using GraphFileTypeDescription = EnumToString<GraphFileType>::Create<
     EnumStringPair<GraphFileType::GML, "GML">,
-    EnumStringPair<GraphFileType::NEO4J_JSON, "NEO4J">,
     EnumStringPair<GraphFileType::BINARY, "BINARY">
 >;
 

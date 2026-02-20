@@ -57,7 +57,6 @@
 #include "nodes/ListGraphNode.h"
 #include "nodes/CreateGraphNode.h"
 #include "nodes/LoadGMLNode.h"
-#include "nodes/LoadNeo4jNode.h"
 #include "nodes/LoadJsonlNode.h"
 #include "nodes/S3ConnectNode.h"
 #include "nodes/S3TransferNode.h"
@@ -321,10 +320,6 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::LOAD_GRAPH:
             return translateLoadGraph(static_cast<LoadGraphNode*>(node));
-        break;
-
-        case PlanGraphOpcode::LOAD_NEO4J:
-            return translateLoadNeo4j(static_cast<LoadNeo4jNode*>(node));
         break;
 
         case PlanGraphOpcode::LOAD_JSONL:
@@ -1266,11 +1261,6 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
 
 PipelineOutputInterface* PipelineGenerator::translateLoadGraph(LoadGraphNode* loadGraph) {
     _builder.addLoadGraph(loadGraph->getGraphName());
-    return _builder.getPendingOutputInterface();
-}
-
-PipelineOutputInterface* PipelineGenerator::translateLoadNeo4j(LoadNeo4jNode* node) {
-    _builder.addLoadNeo4j(node->getGraphName(), node->getFilePath());
     return _builder.getPendingOutputInterface();
 }
 
