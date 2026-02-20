@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <algorithm>
 #include <map>
 #include <set>
 #include <string>
@@ -16,6 +17,8 @@
 #include "dataframe/Dataframe.h"
 #include "columns/ColumnVector.h"
 #include "versioning/Change.h"
+#include "versioning/Transaction.h"
+#include "reader/GraphReader.h"
 #include "GraphPath.h"
 
 #include "ToolInit.h"
@@ -183,7 +186,7 @@ int main(int argc, const char** argv) {
         "RETURN dist, path";
 
     double distance = 0;
-    size_t numStops = 0;
+    Path pathResult;
 
     status = db.query(spQuery, graphName, &mem,
         [&](const Dataframe* df) {
@@ -196,7 +199,7 @@ int main(int argc, const char** argv) {
                 distance = (*distCol)[0];
             }
             if (pathCol && pathCol->size() > 0) {
-                numStops = ((*pathCol)[0].size() + 1) / 2;
+                pathResult = (*pathCol)[0];
             }
         });
 
@@ -205,9 +208,48 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
+    // Resolve node IDs in the path to station names
+    auto txRes = db.getSystemManager().openTransaction(
+        graphName, CommitHash::head(), ChangeID::head());
+    if (!txRes) {
+        spdlog::error("Failed to open transaction");
+        return EXIT_FAILURE;
+    }
+    Transaction& tx = txRes.value();
+    GraphReader reader = tx.readGraph();
+
+    auto namePropOpt = reader.getMetadata().propTypes().get("name");
+    if (!namePropOpt) {
+        spdlog::error("Property 'name' not found");
+        return EXIT_FAILURE;
+    }
+    PropertyTypeID namePropID = namePropOpt.value()._id;
+
+    // Path is [target, edge, node, edge, node, ...] reversed
+    // Even indices are nodes, odd indices are edges
+    std::vector<std::string> stops;
+    for (size_t i = 0; i < pathResult.size(); i += 2) {
+        NodeID nodeID(pathResult[i].getValue());
+        const auto* name =
+            reader.tryGetNodeProperty<types::String>(
+                namePropID, nodeID);
+        if (name) {
+            stops.emplace_back(*name);
+        }
+    }
+
+    // Reverse: path goes target->source, we want source->target
+    std::reverse(stops.begin(), stops.end());
+
     fmt::print("\nShortest path: {} -> {}\n", fromStation, toStation);
     fmt::print("  Distance: {} minutes\n", distance);
-    fmt::print("  Stops: {}\n", numStops);
+    fmt::print("  Stops: {}\n", stops.size());
+    fmt::print("  Route: ");
+    for (size_t i = 0; i < stops.size(); i++) {
+        if (i > 0) fmt::print(" -> ");
+        fmt::print("{}", stops[i]);
+    }
+    fmt::print("\n");
 
     return EXIT_SUCCESS;
 }
