@@ -24,6 +24,7 @@ public:
 private:
     argparse::ArgumentParser _argParser;
     std::string _turingDir;
+    size_t _timeout {3000};
 
     StopCmd();
 

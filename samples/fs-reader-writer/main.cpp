@@ -12,7 +12,7 @@
     }
 
 int main() {
-    fs::Path p(SAMPLE_DIR "/test");
+    const fs::Path p {SAMPLE_DIR "/test"};
 
     fmt::print("## FileInfo struct\n");
     fmt::print("- File: {}\n", p.get());
@@ -47,7 +47,7 @@ int main() {
     writer.write(std::span {integers});
 
     // Write Hello world
-    std::string str = "Hello world!";
+    const std::string str = "Hello world!";
     writer.write(str);
     writer.flush();
 
@@ -59,7 +59,7 @@ int main() {
         return 1;
     }
 
-    file = reopenRes.value();
+    file = std::move(reopenRes.value());
 
     // Store whole content of file into buffer
     reader.read();
