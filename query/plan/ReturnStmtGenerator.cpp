@@ -200,7 +200,7 @@ void ReturnStmtGenerator::handleExprDependencies(Expr* expr) {
         const FunctionInvocation* func = dep._expr->getFunctionInvocation();
         const FunctionSignature* signature = func->getSignature();
 
-        if (signature->_isAggregate) {
+        if (signature->isAggregate()) {
             _aggrEvalNode->addFunc(dep._expr);
         } else {
             _funcEvalNode->addFunc(dep._expr);
