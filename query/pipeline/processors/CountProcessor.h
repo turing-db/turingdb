@@ -29,8 +29,12 @@ private:
     PipelineBlockInputInterface _input;
     PipelineValueOutputInterface _output;
     CountType _countRunning {0};
+
+    /// Column tag and pointer which we count values in
     ColumnTag _colTag;
     const Column* _col {nullptr};
+
+    /// Column to store the numeric value of the count
     ColumnConst<CountType>* _countColumn {nullptr};
 
     CountProcessor();
