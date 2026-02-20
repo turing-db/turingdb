@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN n ORDER BY n.name DESC",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    4[\"`\n        __ORDER_BY__\n        __item__: DESC\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4\n    4-->5",
+    "result": "n\n14\n12\n0\n7\n8\n11\n9\n16\n13\n6\n3\n17\n15\n5\n2\n4\n10\n1",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\"],\"column_types\":[\"UInt64\"]},\"data\":[[[14,12,0,7,8,11,9,16,13,6,3,17,15,5,2,4,10,1]]]}"
+  },
+  "tags": [
+    "orderby",
+    "desc",
+    "properties"
+  ],
+  "write-required": false
+}
