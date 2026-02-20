@@ -69,11 +69,12 @@ int main(int argc, const char** argv) {
         "LOAD CSV '" + std::string(csvPath.get())
         + "' WITH HEADERS AS row "
         "RETURN row.station1 AS s1, row.station2 AS s2, "
-        "row.time AS time";
+        "row.line AS line, row.time AS time";
 
     struct Connection {
         std::string station1;
         std::string station2;
+        std::string line;
         double time;
     };
 
@@ -86,12 +87,14 @@ int main(int argc, const char** argv) {
 
             auto* s1Col = df->cols()[0]->as<StringCol>();
             auto* s2Col = df->cols()[1]->as<StringCol>();
-            auto* timeCol = df->cols()[2]->as<StringCol>();
+            auto* lineCol = df->cols()[2]->as<StringCol>();
+            auto* timeCol = df->cols()[3]->as<StringCol>();
 
             for (size_t i = 0; i < s1Col->size(); i++) {
                 connections.push_back({
                     std::string((*s1Col)[i]),
                     std::string((*s2Col)[i]),
+                    std::string((*lineCol)[i]),
                     std::stod(std::string((*timeCol)[i])),
                 });
                 stationSet.insert(std::string((*s1Col)[i]));
@@ -132,12 +135,14 @@ int main(int argc, const char** argv) {
     // Use .1f to ensure double literal (not integer) in Cypher
     for (const auto& conn : connections) {
         createQuery += fmt::format(
-            ",\n({})-[:CONNECTED_TO {{time: {:.1f}}}]->({})"
-            ",\n({})-[:CONNECTED_TO {{time: {:.1f}}}]->({})",
+            ",\n({})-[:CONNECTED_TO {{time: {:.1f},"
+            " line: \"{}\"}}]->({})"
+            ",\n({})-[:CONNECTED_TO {{time: {:.1f},"
+            " line: \"{}\"}}]->({})",
             stationVar[conn.station1], conn.time,
-            stationVar[conn.station2],
+            conn.line, stationVar[conn.station2],
             stationVar[conn.station2], conn.time,
-            stationVar[conn.station1]);
+            conn.line, stationVar[conn.station1]);
     }
 
     // ---------------------------------------------------------------
@@ -225,31 +230,55 @@ int main(int argc, const char** argv) {
     }
     PropertyTypeID namePropID = namePropOpt.value()._id;
 
+    auto linePropOpt = reader.getMetadata().propTypes().get("line");
+    if (!linePropOpt) {
+        spdlog::error("Property 'line' not found");
+        return EXIT_FAILURE;
+    }
+    PropertyTypeID linePropID = linePropOpt.value()._id;
+
     // Path is [target, edge, node, edge, node, ...] reversed
     // Even indices are nodes, odd indices are edges
     std::vector<std::string> stops;
-    for (size_t i = 0; i < pathResult.size(); i += 2) {
-        NodeID nodeID(pathResult[i].getValue());
-        const auto* name =
-            reader.tryGetNodeProperty<types::String>(
-                namePropID, nodeID);
-        if (name) {
-            stops.emplace_back(*name);
+    std::vector<std::string> edgeLines;
+    for (size_t i = 0; i < pathResult.size(); i++) {
+        if (i % 2 == 0) {
+            NodeID nodeID(pathResult[i].getValue());
+            const auto* name =
+                reader.tryGetNodeProperty<types::String>(
+                    namePropID, nodeID);
+            if (name) {
+                stops.emplace_back(*name);
+            }
+        } else {
+            EdgeID edgeID(pathResult[i].getValue());
+            const auto* line =
+                reader.tryGetEdgeProperty<types::String>(
+                    linePropID, edgeID);
+            if (line) {
+                edgeLines.emplace_back(*line);
+            }
         }
     }
 
     // Reverse: path goes target->source, we want source->target
     std::reverse(stops.begin(), stops.end());
+    std::reverse(edgeLines.begin(), edgeLines.end());
 
     fmt::print("\nShortest path: {} -> {}\n", fromStation, toStation);
     fmt::print("  Distance: {} minutes\n", distance);
     fmt::print("  Stops: {}\n", stops.size());
-    fmt::print("  Route: ");
+    fmt::print("  Route:\n");
+
+    // edgeLines[i] is the line between stops[i] and stops[i+1]
     for (size_t i = 0; i < stops.size(); i++) {
-        if (i > 0) fmt::print(" -> ");
-        fmt::print("{}", stops[i]);
+        bool lineChange = (i < edgeLines.size())
+            && (i == 0 || edgeLines[i] != edgeLines[i - 1]);
+        if (lineChange) {
+            fmt::print("    [{}]\n", edgeLines[i]);
+        }
+        fmt::print("      {}\n", stops[i]);
     }
-    fmt::print("\n");
 
     return EXIT_SUCCESS;
 }

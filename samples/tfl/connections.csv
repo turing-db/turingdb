@@ -373,3 +373,166 @@ Bank,Monument,Interchange,1.0
 Paddington,Paddington (H&C Line),Interchange,3.0
 Edgware Road (Bakerloo),Edgware Road (Circle Line),Interchange,3.0
 Hammersmith (Dist&Picc Line),Hammersmith (H&C Line),Interchange,5.0
+BANK - DLR,SHADWELL - DLR,DLR,3.0
+TOWER GATEWAY - DLR,SHADWELL - DLR,DLR,2.0
+SHADWELL - DLR,LIMEHOUSE - DLR,DLR,2.0
+LIMEHOUSE - DLR,WESTFERRY - DLR,DLR,1.0
+WESTFERRY - DLR,CANARY WHARF - DLR,DLR,3.0
+WESTFERRY - DLR,POPLAR - DLR,DLR,2.0
+CANARY WHARF - DLR,HERON QUAYS - DLR,DLR,1.0
+HERON QUAYS - DLR,SOUTH QUAY - DLR,DLR,1.0
+SOUTH QUAY - DLR,CROSSHARBOUR - DLR,DLR,1.0
+CROSSHARBOUR - DLR,MUDCHUTE - DLR,DLR,2.0
+MUDCHUTE - DLR,ISLAND GARDENS - DLR,DLR,1.0
+ISLAND GARDENS - DLR,CUTTY SARK - DLR,DLR,2.0
+CUTTY SARK - DLR,GREENWICH - DLR,DLR,2.0
+GREENWICH - DLR,DEPTFORD BRIDGE - DLR,DLR,1.0
+DEPTFORD BRIDGE - DLR,ELVERSON ROAD - DLR,DLR,1.0
+ELVERSON ROAD - DLR,LEWISHAM - DLR,DLR,1.0
+POPLAR - DLR,BLACKWALL - DLR,DLR,2.0
+BLACKWALL - DLR,EAST INDIA - DLR,DLR,1.0
+EAST INDIA - DLR,CANNING TOWN - DLR,DLR,2.0
+POPLAR - DLR,ALL SAINTS - DLR,DLR,2.0
+POPLAR - DLR,WEST INDIA QUAY - DLR,DLR,2.0
+WEST INDIA QUAY - DLR,CANARY WHARF - DLR,DLR,1.0
+ALL SAINTS - DLR,LANGDON PARK - DLR,DLR,1.0
+LANGDON PARK - DLR,DEVONS ROAD - DLR,DLR,2.0
+DEVONS ROAD - DLR,BOW CHURCH - DLR,DLR,1.0
+BOW CHURCH - DLR,PUDDING MILL LANE - DLR,DLR,2.0
+PUDDING MILL LANE - DLR,STRATFORD - DLR,DLR,1.0
+CANNING TOWN - DLR,ROYAL VICTORIA - DLR,DLR,2.0
+ROYAL VICTORIA - DLR,CUSTOM HOUSE - DLR,DLR,1.0
+CUSTOM HOUSE - DLR,PRINCE REGENT - DLR,DLR,1.0
+PRINCE REGENT - DLR,ROYAL ALBERT - DLR,DLR,1.0
+ROYAL ALBERT - DLR,BECKTON PARK - DLR,DLR,2.0
+BECKTON PARK - DLR,CYPRUS - DLR,DLR,1.0
+CYPRUS - DLR,GALLIONS REACH - DLR,DLR,1.0
+GALLIONS REACH - DLR,BECKTON - DLR,DLR,3.0
+CANNING TOWN - DLR,WEST SILVERTOWN - DLR,DLR,3.0
+WEST SILVERTOWN - DLR,PONTOON DOCK - DLR,DLR,2.0
+PONTOON DOCK - DLR,LONDON CITY AIRPORT - DLR,DLR,3.0
+LONDON CITY AIRPORT - DLR,KING GEORGE V - DLR,DLR,2.0
+KING GEORGE V - DLR,WOOLWICH ARSENAL - DLR,DLR,3.0
+STRATFORD INTERNATIONAL - DLR,STRATFORD - DLR,DLR,2.0
+STRATFORD - DLR,STRATFORD HIGH STREET - DLR,DLR,1.0
+STRATFORD HIGH STREET - DLR,ABBEY ROAD - DLR,DLR,1.0
+ABBEY ROAD - DLR,WEST HAM - DLR,DLR,1.0
+WEST HAM - DLR,STAR LANE - DLR,DLR,2.0
+STAR LANE - DLR,CANNING TOWN - DLR,DLR,1.0
+BANK - DLR,Bank,Interchange,3.0
+TOWER GATEWAY - DLR,Tower Hill,Interchange,5.0
+CANARY WHARF - DLR,Canary Wharf,Interchange,5.0
+CANNING TOWN - DLR,Canning Town,Interchange,2.0
+WEST HAM - DLR,West Ham,Interchange,2.0
+STRATFORD - DLR,Stratford,Interchange,3.0
+SHADWELL - DLR,Shadwell,Interchange,2.0
+Euston,South Hampstead,London Overground,6.0
+South Hampstead,Kilburn High Road,London Overground,2.0
+Kilburn High Road,Queens Park,London Overground,2.0
+Queens Park,Kensal Green,London Overground,3.0
+Kensal Green,Willesden Junction,London Overground,2.0
+Willesden Junction,Harlesden,London Overground,2.0
+Harlesden,Stonebridge Park,London Overground,3.0
+Stonebridge Park,Wembley Central,London Overground,3.0
+Wembley Central,North Wembley,London Overground,2.0
+North Wembley,South Kenton,London Overground,2.0
+South Kenton,Kenton,London Overground,2.0
+Kenton,Harrow & Wealdstone,London Overground,3.0
+Harrow & Wealdstone,Headstone Lane,London Overground,3.0
+Headstone Lane,Hatch End,London Overground,2.0
+Hatch End,Carpenders Park,London Overground,4.0
+Carpenders Park,Bushey,London Overground,3.0
+Bushey,Watford High Street,London Overground,2.0
+Watford High Street,Watford Junction,London Overground,2.0
+Stratford,Hackney Wick,London Overground,3.0
+Hackney Wick,Homerton,London Overground,3.0
+Homerton,Hackney Central,London Overground,2.0
+Hackney Central,Dalston Kingsland,London Overground,3.0
+Dalston Kingsland,Canonbury,London Overground,3.0
+Canonbury,Highbury & Islington,London Overground,2.0
+Highbury & Islington,Caledonian Road & Barnsbury,London Overground,2.0
+Caledonian Road & Barnsbury,Camden Road,London Overground,4.0
+Camden Road,Kentish Town West,London Overground,2.0
+Kentish Town West,Gospel Oak,London Overground,2.0
+Gospel Oak,Hampstead Heath,London Overground,2.0
+Hampstead Heath,Finchley Road & Frognal,London Overground,3.0
+Finchley Road & Frognal,West Hampstead,London Overground,1.0
+West Hampstead,Brondesbury,London Overground,2.0
+Brondesbury,Brondesbury Park,London Overground,2.0
+Brondesbury Park,Kensal Rise,London Overground,2.0
+Kensal Rise,Willesden Junction,London Overground,4.0
+Willesden Junction,Acton Central,London Overground,6.0
+Acton Central,South Acton,London Overground,2.0
+South Acton,Gunnersbury,London Overground,2.0
+Gunnersbury,Kew Gardens,London Overground,4.0
+Kew Gardens,Richmond,London Overground,4.0
+Willesden Junction,Shepherds Bush,London Overground,8.0
+Shepherds Bush,Kensington Olympia,London Overground,2.0
+Kensington Olympia,Westompton,London Overground,4.0
+Westompton,Imperial Wharf,London Overground,4.0
+Imperial Wharf,Clapham Junction,London Overground,4.0
+Gospel Oak,Upper Holloway,London Overground,3.0
+Upper Holloway,Crouch Hill,London Overground,2.0
+Crouch Hill,Harringay Green Lanes,London Overground,3.0
+Harringay Green Lanes,South Tottenham,London Overground,3.0
+South Tottenham,Blackhorse Road,London Overground,4.0
+Blackhorse Road,Walthamstow Queens Road,London Overground,2.0
+Walthamstow Queens Road,Leyton Midland Road,London Overground,3.0
+Leyton Midland Road,Leytonstone High Road,London Overground,2.0
+Leytonstone High Road,Wanstead Park,London Overground,3.0
+Wanstead Park,Woodgrange Park,London Overground,2.0
+Woodgrange Park,Barking,London Overground,5.0
+Liverpool Street,Bethnal Green,London Overground,3.0
+Bethnal Green,Cambridge Heath,London Overground,2.0
+Cambridge Heath,London Fields,London Overground,2.0
+London Fields,Hackney Downs,London Overground,2.0
+Hackney Downs,Rectory Road,London Overground,2.0
+Rectory Road,Stoke Newington,London Overground,2.0
+Stoke Newington,Stamford Hill,London Overground,2.0
+Stamford Hill,Seven Sisters,London Overground,2.0
+Seven Sisters,Bruce Grove,London Overground,3.0
+Bruce Grove,White Hart Lane,London Overground,2.0
+White Hart Lane,Silver Street,London Overground,2.0
+Silver Street,Edmondton Green,London Overground,2.0
+Edmondton Green,Southbury,London Overground,4.0
+Southbury,Turkey Street,London Overground,4.0
+Turkey Street,Theobalds Grove,London Overground,3.0
+Theobalds Grove,Cheshunt,London Overground,2.0
+Edmondton Green,Bush Hill Park,London Overground,4.0
+Bush Hill Park,Enfield Town,London Overground,3.0
+Hackney Downs,Clapton,London Overground,3.0
+Clapton,Walthamstow St James Street,London Overground,4.0
+Walthamstow St James Street,Walthamstow Central,London Overground,2.0
+Walthamstow Central,Walthamstow Wood Street,London Overground,2.0
+Walthamstow Wood Street,Highams Park,London Overground,5.0
+Highams Park,Chingford,London Overground,4.0
+Canonbury,Dalston Junction,London Overground,3.0
+Dalston Junction,Haggerston,London Overground,2.0
+Haggerston,Hoxton,London Overground,2.0
+Hoxton,Shoreditch High Street,London Overground,3.0
+Shoreditch High Street,Whitechapel,London Overground,3.0
+Whitechapel,Shadwell,London Overground,3.0
+Shadwell,Wapping,London Overground,2.0
+Wapping,Rotherhithe,London Overground,1.0
+Rotherhithe,Canada Water,London Overground,1.0
+Canada Water,Surrey Quays,London Overground,1.0
+Surrey Quays,New Cross Gate,London Overground,4.0
+Surrey Quays,New Cross,London Overground,4.0
+New Cross Gate,Brockley,London Overground,3.0
+Brockley,Honor Oak Park,London Overground,3.0
+Honor Oak Park,Forest Hill,London Overground,2.0
+Forest Hill,Sydenham,London Overground,2.0
+Sydenham,Penge West,London Overground,2.0
+Penge West,Anerley,London Overground,1.0
+Anerley,Norwood Junction,London Overground,4.0
+Norwood Junction,West Croydon,London Overground,6.0
+Sydenham,Crystal Palace,London Overground,4.0
+Surrey Quays,Queens Road Peckham,London Overground,5.0
+Queens Road Peckham,Peckham Rye,London Overground,2.0
+Peckham Rye,Denmark Hill,London Overground,4.0
+Denmark Hill,Clapham High Street,London Overground,4.0
+Clapham High Street,Wandsworth Road,London Overground,2.0
+Wandsworth Road,Clapham Junction,London Overground,6.0
+Romford,Emerson Park,London Overground,5.0
+Emerson Park,Upminster,London Overground,4.0
+Barking,Barking Riverside,London Overground,7.0
