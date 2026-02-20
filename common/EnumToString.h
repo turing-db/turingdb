@@ -11,7 +11,8 @@
  */
 template <std::size_t N>
 struct EnumStringLiteral {
-    constexpr EnumStringLiteral(const char (&str)[N]) {
+    constexpr EnumStringLiteral(const char (&str)[N])
+    {
         std::copy(str, str + N, value);
     }
 

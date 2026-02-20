@@ -10,7 +10,8 @@ namespace db {
 template <SupportedType T>
 ScanEdgePropertiesIterator<T>::ScanEdgePropertiesIterator(const GraphView& view, PropertyTypeID propTypeID)
     : Iterator(view),
-      _propTypeID(propTypeID) {
+    _propTypeID(propTypeID)
+{
     for (; _partIt.isNotEnd(); _partIt.next()) {
         const PropertyManager& properties = _partIt.get()->edgeProperties();
         if (properties.hasPropertyType(_propTypeID)) {
