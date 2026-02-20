@@ -50,14 +50,14 @@ void CountProcessor::prepare(ExecutionContext* ctxt) {
 
     _countColumn = countColumn;
 
+    // If column tag is not set, we are just counting the number of rows in the block.
+    // In Cypher this is done with count(*). In this case, @ref _col remains nullptr
     if (!_colTag.isValid()) {
-        // If column tag is not set, we are just counting the number of rows in the block
-        // In cypher this is done with count(*)
         return;
     }
 
-    // Otherwise, we are counting the number of non-null values in the column
-    // e.g. in cypher count(n.name)
+    // Otherwise, we are counting the number of values in the specific column with tag
+    // @ref _colTag.
     const NamedColumn* inputCol = _input.getDataframe()->getColumn(_colTag);
     if (!inputCol) [[unlikely]] {
         throw PipelineException("CountProcessor: input column does not exist");
