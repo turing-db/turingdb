@@ -17,7 +17,6 @@
 
 namespace db {
 
-class Neo4jImporter;
 class TuringConfig;
 class Graph;
 class ChangeManager;
@@ -58,7 +57,7 @@ public:
 
     void setGraphsDir(const fs::Path& dir);
 
-    /// @brief Load a graph from a file (gml, neo4j)
+    /// @brief Load a graph from a file (gml, jsonl)
     bool importGraph(const std::string& graphName, const fs::Path& filePath, JobSystem& jobSystem);
 
     DumpResult<void> dumpGraph(const std::string& graphName);
@@ -94,11 +93,8 @@ private:
     std::unique_ptr<S3::TuringS3Client<S3::MinioS3ClientWrapper>> _s3Client {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
     std::unique_ptr<ChangeManager> _changes;
-    std::unique_ptr<Neo4jImporter> _neo4JImporter;
     GraphLoadStatus _graphLoadStatus;
 
-    bool loadNeo4jJsonDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
-    bool loadNeo4jDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadJsonlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadGmlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadBinaryDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);

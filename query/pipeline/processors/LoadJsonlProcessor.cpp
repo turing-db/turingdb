@@ -57,7 +57,7 @@ void LoadJsonlProcessor::execute() {
 
     const bool res = sysMan->importGraph(std::string(_graphName), _path, *jobSystem);
     if (!res) {
-        throw PipelineException(fmt::format("Failed to load neo4j graph {}", _path.get()));
+        throw PipelineException(fmt::format("Failed to load JSONL graph {}", _path.get()));
     }
 
     using ColumnString = ColumnConst<types::String::Primitive>;

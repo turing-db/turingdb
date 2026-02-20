@@ -6,8 +6,6 @@
 
 #include "ChangeManager.h"
 #include "Graph.h"
-#include "Neo4j/Neo4JParserConfig.h"
-#include "Neo4jImporter.h"
 #include "JsonlParser.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
@@ -23,8 +21,7 @@ using namespace db;
 
 SystemManager::SystemManager(const TuringConfig* config)
     : _config(config),
-    _changes(std::make_unique<ChangeManager>()),
-    _neo4JImporter(std::make_unique<Neo4jImporter>())
+    _changes(std::make_unique<ChangeManager>())
 {
 }
 
@@ -171,20 +168,16 @@ bool SystemManager::importGraph(const std::string& graphName, const fs::Path& fi
 
     // Step 4. Load the graph
     if (!fileType) {
-        // If we can not determine the file type, assume it is a Neo4j JSON graph
+        // If we can not determine the file type, assume it is a JSONL graph
         // to be changed in the future
-        return loadNeo4jJsonDB(graphName, absolute, jobSystem);
+        return loadJsonlDB(graphName, absolute, jobSystem);
     }
 
     switch (*fileType) {
         case GraphFileType::GML:
             return loadGmlDB(graphName, absolute, jobSystem);
-        case GraphFileType::NEO4J:
-            return loadNeo4jDB(graphName, absolute, jobSystem);
         case GraphFileType::JSONL:
             return loadJsonlDB(graphName, absolute, jobSystem);
-        case GraphFileType::NEO4J_JSON:
-            return loadNeo4jJsonDB(graphName, absolute, jobSystem);
         case GraphFileType::BINARY:
             return loadBinaryDB(graphName, absolute, jobSystem);
         case GraphFileType::_SIZE:
@@ -215,10 +208,6 @@ std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& gra
         return GraphFileType::GML;
     }
 
-    if (graphPath.extension() == ".dump") {
-        return GraphFileType::NEO4J;
-    }
-
     if (graphPath.extension() == ".json" || graphPath.extension() == ".jsonl") {
         return GraphFileType::JSONL;
     }
@@ -229,9 +218,7 @@ std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& gra
         return {};
     }
 
-    if (typeName == GraphFileTypeDescription::value(GraphFileType::NEO4J_JSON)) {
-        return GraphFileType::NEO4J_JSON;
-    } else if (typeName == GraphFileTypeDescription::value(GraphFileType::BINARY)) {
+    if (typeName == GraphFileTypeDescription::value(GraphFileType::BINARY)) {
         return GraphFileType::BINARY;
     } else if (typeName == GraphFileTypeDescription::value(GraphFileType::JSONL)) {
         return GraphFileType::JSONL;
@@ -268,103 +255,6 @@ bool SystemManager::loadBinaryDB(const std::string& graphName,
 
 bool SystemManager::isGraphLoading(const std::string& graphName) const {
     return _graphLoadStatus.isGraphLoading(graphName);
-}
-
-bool SystemManager::loadNeo4jJsonDB(const std::string& graphName,
-                                    const fs::Path& dbPath,
-                                    JobSystem& jobsystem) {
-    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return false;
-    }
-
-    const auto& graphPath = _config->getGraphsDir() / graphName;
-    if (graphPath == dbPath) {
-        return false;
-    }
-
-    auto graph = Graph::create(graphName, graphPath);
-
-    Neo4jImporter::ImportJsonDirArgs args;
-    args._jsonDir = FileUtils::Path {dbPath.c_str()};
-
-    if (!_neo4JImporter->importJsonDir(jobsystem,
-                                       graph.get(),
-                                       db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                       db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                       args)) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
-
-    if (_config->isSyncedOnDisk()) {
-        if (!graph->getSerializer().dump()) {
-            _graphLoadStatus.removeLoadingGraph(graphName);
-            return false;
-        }
-    }
-
-    if (!addGraph(std::move(graph))) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
-
-    _graphLoadStatus.removeLoadingGraph(graphName);
-    return true;
-}
-
-bool SystemManager::loadNeo4jDB(const std::string& graphName,
-                                const fs::Path& dbPath,
-                                JobSystem& jobsystem) {
-    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return false;
-    }
-
-    const auto& graphPath = _config->getGraphsDir() / graphName;
-    if (graphPath == dbPath) {
-        return false;
-    }
-
-    auto graph = Graph::create(graphName, graphPath);
-
-    Neo4jImporter::DumpFileToJsonDirArgs dumpArgs;
-    dumpArgs._workDir = "/tmp";
-    dumpArgs._dumpFilePath = dbPath.c_str();
-
-    if (!_neo4JImporter->fromDumpFileToJsonDir(jobsystem,
-                                               graph.get(),
-                                               db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                               db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                               dumpArgs)) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
-
-    Neo4jImporter::ImportJsonDirArgs args;
-    args._jsonDir = FileUtils::Path {dumpArgs._workDir / "json"};
-
-    if (!_neo4JImporter->importJsonDir(jobsystem,
-                                       graph.get(),
-                                       db::json::neo4j::Neo4JParserConfig::nodeCountLimit,
-                                       db::json::neo4j::Neo4JParserConfig::edgeCountLimit,
-                                       args)) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
-
-    if (_config->isSyncedOnDisk()) {
-        if (!graph->getSerializer().dump()) {
-            _graphLoadStatus.removeLoadingGraph(graphName);
-            return false;
-        }
-    }
-
-    if (!addGraph(std::move(graph))) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
-
-    _graphLoadStatus.removeLoadingGraph(graphName);
-    return true;
 }
 
 bool SystemManager::loadJsonlDB(const std::string& graphName,

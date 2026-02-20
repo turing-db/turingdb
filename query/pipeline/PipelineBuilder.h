@@ -163,7 +163,6 @@ public:
     // Load graph
     PipelineValueOutputInterface& addLoadGraph(std::string_view graphName);
     PipelineValueOutputInterface& addLoadGML(std::string_view graphName, const fs::Path& filePath);
-    PipelineValueOutputInterface& addLoadNeo4j(std::string_view graphName, const fs::Path& filePath);
     PipelineValueOutputInterface& addLoadJsonl(std::string_view graphName, const fs::Path& filePath);
 
     // List Graph
