@@ -50,7 +50,7 @@ void addTieRanges(std::vector<TieRange>& tieRanges, const Rg& rg, size_t start =
     }
 }
 
-void addTieRanges(std::vector<TieRange>& tieRanges, const auto& bgn, const auto& nd, size_t start = 0) {
+inline void addTieRanges(std::vector<TieRange>& tieRanges, const auto& bgn, const auto& nd, size_t start = 0) {
     // Find the first instance of a duplciated entry in the column
     auto startIt = std::adjacent_find(bgn, nd);
 
@@ -67,7 +67,7 @@ void addTieRanges(std::vector<TieRange>& tieRanges, const auto& bgn, const auto&
     }
 }
 
-void narrowTieRanges(std::vector<TieRange>& tieRanges, Column* col,
+inline void narrowTieRanges(std::vector<TieRange>& tieRanges, Column* col,
                      std::vector<size_t>& indices) {
     auto ccol = dynamic_cast<ColumnInts*>(col);
     bioassert(ccol, "Failed to cast column to sort.");
@@ -106,7 +106,7 @@ void project(Column* col, IndxRg& indices) {
     }
 }
 
-void rowsort(Dataframe* df) {
+inline void rowsort(Dataframe* df) {
     // Empty/singleton dataframe is trivially sorted
     if (df->getLogicalRowCount() <= 1) {
         return;
@@ -115,13 +115,13 @@ void rowsort(Dataframe* df) {
     const size_t numRows = df->getLogicalRowCount();
 
     std::vector<size_t> idx(numRows);
-    std::iota(idx.begin(), idx.end(), 0);
+    std::ranges::iota(idx, 0);
 
     rg::sort(idx.begin(), idx.end(), [&](size_t i, size_t j) {
         for (auto* ncol : df->cols()) {
             auto* c = ncol->as<ColumnInts>();
-            Int a = (*c)[i];
-            Int b = (*c)[j];
+            const Int a = (*c)[i];
+            const Int b = (*c)[j];
             if (a < b) {
                 return true;
             }
@@ -144,7 +144,7 @@ void rowsort(Dataframe* df) {
     }
 }
 
-void colsort(Dataframe* df) {
+inline void colsort(Dataframe* df) {
     // Empty/singleton dataframe is trivially sorted
     if (df->getLogicalRowCount() <= 1) {
         return;
@@ -153,7 +153,7 @@ void colsort(Dataframe* df) {
     const size_t numRows = df->getLogicalRowCount();
 
     std::vector<size_t> indices(numRows);
-    std::iota(indices.begin(), indices.end(), 0);
+    std::ranges::iota(indices, 0);
 
     const auto& cols = df->cols();
 
@@ -177,7 +177,7 @@ void colsort(Dataframe* df) {
     }
 }
 
-void subsort(Dataframe* df) {
+inline void subsort(Dataframe* df) {
     // Empty/singleton dataframe is trivially sorted
     if (df->getLogicalRowCount() <= 1) {
         return;
@@ -188,7 +188,7 @@ void subsort(Dataframe* df) {
 
     // Whenever sorting, track the row indexes to materialise post-sort
     std::vector<size_t> indices(numRows);
-    std::iota(begin(indices), end(indices), 0);
+    std::ranges::iota(indices, 0);
 
     const auto& cols = df->cols();
 

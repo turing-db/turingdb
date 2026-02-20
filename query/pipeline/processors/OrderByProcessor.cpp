@@ -309,6 +309,7 @@ void OrderByProcessor::memorise() {
         project(inputCol, memoryCol, runStart);
     }
 
+    _sortedRuns.emplace_back(runStart, runLength);
     _nextMemoryStart = runEnd;
 }
 

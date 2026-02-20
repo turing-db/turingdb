@@ -37,7 +37,7 @@ Df makeDataframe(LocalMemory& mem, DataframeManager& dfman, std::vector<std::vec
     return df;
 }
 
-void duplicateDataframeShape(LocalMemory* mem,
+inline void duplicateDataframeShape(LocalMemory* mem,
                              DataframeManager* dfMan,
                              Dataframe* src,
                              Dataframe* dest) {
@@ -48,7 +48,7 @@ void duplicateDataframeShape(LocalMemory* mem,
     }
 }
 
-Df copyDataframe(LocalMemory& mem, DataframeManager& dfman, const Df& toCopy) {
+inline Df copyDataframe(LocalMemory& mem, DataframeManager& dfman, const Df& toCopy) {
     auto newDf = std::make_unique<Dataframe>();
     duplicateDataframeShape(&mem, &dfman, toCopy.get(), newDf.get());
     newDf->copyFrom(toCopy.get());
@@ -56,7 +56,7 @@ Df copyDataframe(LocalMemory& mem, DataframeManager& dfman, const Df& toCopy) {
 }
 
 // check each column in the df to see if its sorted
-bool isSorted(const Df& df) {
+inline bool isSorted(const Df& df) {
     const size_t numRows = df->getLogicalRowCount();
     if (numRows <= 1) return true;
     
@@ -84,7 +84,7 @@ bool isSorted(const Df& df) {
     return true;
 }
 
-bool containSame(const Df& a, const Df& b) {
+inline bool containSame(const Df& a, const Df& b) {
     if (a->getLogicalRowCount() != b->getLogicalRowCount()) {
         return false;
     }
@@ -114,7 +114,7 @@ bool containSame(const Df& a, const Df& b) {
     return makeRows(a) == makeRows(b);
 }
 
-Df makeRandomDataframe(LocalMemory& mem, DataframeManager& dfman, 
+inline Df makeRandomDataframe(LocalMemory& mem, DataframeManager& dfman, 
                        size_t numRows, size_t numCols,
                        Int minVal = 0, Int maxVal = 100) {
     std::random_device rd;
@@ -139,7 +139,7 @@ Df makeRandomDataframe(LocalMemory& mem, DataframeManager& dfman,
 }
 
 // Overload with seed for reproducible tests
-Df makeRandomDataframe(LocalMemory& mem, DataframeManager& dfman, 
+inline Df makeRandomDataframe(LocalMemory& mem, DataframeManager& dfman, 
                        size_t numRows, size_t numCols,
                        unsigned int seed,
                        Int minVal = 0, Int maxVal = 100) {
