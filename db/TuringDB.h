@@ -69,7 +69,6 @@ private:
     const TuringConfig* _config {nullptr};
     LockFile _lockFile;
 
-    std::unique_ptr<SystemEventHandler> _eventHandler;
     std::unique_ptr<SystemManager> _systemManager;
     std::unique_ptr<JobSystem> _jobSystem;
     std::unique_ptr<ProcedureManager> _procedures;

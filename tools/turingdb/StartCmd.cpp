@@ -43,25 +43,6 @@ int StartCmd::execute() {
     const fs::Path& graphsDir = config.getGraphsDir();
     const fs::Path& logsDir = config.getLogsDir();
 
-    LogSetup::setupLogFileBacked((logsDir / "turingdb.log").get(), false);
-
-    spdlog::info("TuringDB path: {}", turingDir.get());
-
-    // Delete existing `default` graph if requested
-    if (_resetDefault) {
-        spdlog::info("Resetting default graph.");
-        spdlog::info("Searching for default in {}.", graphsDir.get());
-
-        const fs::Path defaultGraphPath = config.getGraphsDir() / "default";
-
-        if (defaultGraphPath.exists()) {
-            defaultGraphPath.rm();
-            spdlog::info("Default graph deleted.");
-        } else {
-            spdlog::warn("Default graph not found.");
-        }
-    }
-
     if (_demonize) {
         Demonology::demonize();
     }
@@ -83,6 +64,23 @@ int StartCmd::execute() {
         });
 
         turingDB.init();
+        LogSetup::setupLogFileBacked((logsDir / "turingdb.log").get(), false);
+        spdlog::info("TuringDB path: {}", turingDir.get());
+
+        // Delete existing `default` graph if requested
+        if (_resetDefault) {
+            spdlog::info("Resetting default graph.");
+            spdlog::info("Searching for default in {}.", graphsDir.get());
+
+            const fs::Path defaultGraphPath = config.getGraphsDir() / "default";
+
+            if (defaultGraphPath.exists()) {
+                defaultGraphPath.rm();
+                spdlog::info("Default graph deleted.");
+            } else {
+                spdlog::warn("Default graph not found.");
+            }
+        }
 
         // Load graphs
         for (const auto& graphName : _graphsToLoad) {
