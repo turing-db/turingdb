@@ -38,7 +38,7 @@ public:
     void setS3File(std::string_view file) { _s3File = file; }
 
 private:
-    Direction _direction;
+    Direction _direction {Direction::PULL};
 
     std::string_view _s3Url;
     std::string_view _localPath;

@@ -73,8 +73,8 @@ public:
 
 private:
     char* _map {nullptr};
-    size_t _size {};
-    size_t _alignmentOffset {};
+    size_t _size {0};
+    size_t _alignmentOffset {0};
 };
 
 }

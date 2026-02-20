@@ -93,7 +93,7 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
         LiteralExpr* rhs = LiteralExpr::create(&_ast, BoolLiteral::create(&_ast, true));
         _analyzer->analyzeRootExpr(lhs);
         _analyzer->analyzeRootExpr(rhs);
-        TypePairBitset pair {lhs->getType(), rhs->getType()};
+        TypePairBitset pair(lhs->getType(), rhs->getType());
         ASSERT_EQ(pair, TypePairBitset(EvaluatedType::String, EvaluatedType::Bool));
         ASSERT_EQ(pair, TypePairBitset(EvaluatedType::Bool, EvaluatedType::String));
         ASSERT_NE(pair, TypePairBitset(EvaluatedType::Bool, EvaluatedType::Integer));

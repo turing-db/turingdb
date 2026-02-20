@@ -40,7 +40,7 @@ private:
     std::vector<TCPConnection> _connections;
     std::vector<size_t> _free;
     uint32_t _maxConnections {1024};
-    uint32_t _aliveThreshold {};
+    uint32_t _aliveThreshold {0};
     bool _initialized {false};
 };
 

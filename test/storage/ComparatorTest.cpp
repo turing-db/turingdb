@@ -28,7 +28,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createDB1() {
         auto graph = Graph::create();
-        GraphWriter writer {graph.get()};
+        GraphWriter writer(graph.get());
 
         auto p1 = writer.addNode({"Person"});
         auto p2 = writer.addNode({ "Person", "Officer" });
@@ -57,7 +57,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createDB2() {
         auto graph = Graph::create();
-        GraphWriter writer {graph.get()};
+        GraphWriter writer(graph.get());
 
         auto p1 = writer.addNode({"Person"});
         auto p2 = writer.addNode({ "Person", "Officer" });

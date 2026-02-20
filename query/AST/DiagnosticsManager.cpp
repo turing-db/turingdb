@@ -19,7 +19,7 @@ void DiagnosticsManager::createErrorString(std::string_view msg,
                                            std::string& result) const {
     const SourceLocation* location = _sourceManager->getLocation((uintptr_t)obj);
 
-    CypherError err {_sourceManager->getQueryString()};
+    CypherError err(_sourceManager->getQueryString());
     err.setTitle("Query error");
     err.setErrorMsg(msg);
 

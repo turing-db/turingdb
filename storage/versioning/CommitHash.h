@@ -87,7 +87,7 @@ public:
     }
 
 private:
-    ValueType _value = std::numeric_limits<ValueType>::max();
+    ValueType _value {std::numeric_limits<ValueType>::max()};
 };
 
 using CommitHash = TemplateCommitHash<0>;

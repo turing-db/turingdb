@@ -55,7 +55,7 @@ protected:
     IDs _ids;
 
 private:
-    ValueType _valueType;
+    ValueType _valueType {ValueType::Invalid};
 };
 
 template <SupportedType T>

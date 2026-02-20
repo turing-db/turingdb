@@ -42,7 +42,7 @@ void validateDeletions(const GraphReader reader, const ColumnVector<IDT>* col) {
     constexpr bool isNode = std::is_same_v<IDT, NodeID>;
 
     for (const IDT id : *col) {
-        bool existsAndNotDeleted {false};
+        bool existsAndNotDeleted = false;
 
         if constexpr (isNode) {
             existsAndNotDeleted = reader.graphHasNode(id);

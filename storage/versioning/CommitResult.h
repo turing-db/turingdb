@@ -44,7 +44,7 @@ public:
     }
 
 private:
-    CommitErrorType _type {};
+    CommitErrorType _type {CommitErrorType::COMMIT_INVALID};
 };
 
 template <typename T>

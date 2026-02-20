@@ -77,7 +77,7 @@ public:
     }
 
 private:
-    size_t _nesting = 0;
+    size_t _nesting {0};
     MetadataBuilder* _metadata {nullptr};
 };
 

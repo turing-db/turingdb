@@ -11,12 +11,12 @@ public:
     using Response = std::optional<std::string>;
 
     struct Query {
-        std::unique_ptr<Neo4JHttpRequest> _request = nullptr;
+        std::unique_ptr<Neo4JHttpRequest> _request {nullptr};
         SharedFuture<Response> _future;
         std::string _response;
         std::mutex _mutex;
-        bool _ready = false;
-        bool _success = false;
+        bool _ready {false};
+        bool _success {false};
 
         Query()
         {
@@ -80,11 +80,11 @@ public:
     void setPort(uint64_t port) { _port = port; }
 
 private:
-    std::string _url = "localhost";
-    std::string _urlSuffix = "/db/data/transaction/commit";
-    std::string _username = "neo4j";
-    std::string _password = "turing";
-    uint64_t _port = 7474;
+    std::string _url {"localhost"};
+    std::string _urlSuffix {"/db/data/transaction/commit"};
+    std::string _username {"neo4j"};
+    std::string _password {"turing"};
+    uint64_t _port {7474};
 };
 
 }

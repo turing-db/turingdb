@@ -52,8 +52,8 @@ private:
 };
 
 struct RowOffset {
-    Slab* slab {nullptr};
-    size_t slabOffset {0};
+    Slab* _slab {nullptr};
+    size_t _slabOffset {0};
 };
 
 class RowStore {

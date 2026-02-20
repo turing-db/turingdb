@@ -25,9 +25,9 @@ protected:
 
 TEST_F(S3Test, SucessfulListOperations) {
     S3::MockListResult listResult;
-    listResult.success = true;
-    listResult.keys = {"dir0/dir1/file1", "dir0/file2", "file3"};
-    listResult.commonPrefixes = {"dir0/dir0.5/dir1/", "dir0/dir0.5/dir2/", "dir0/dir0.5/dir3/"};
+    listResult._success = true;
+    listResult._keys = {"dir0/dir1/file1", "dir0/file2", "file3"};
+    listResult._commonPrefixes = {"dir0/dir0.5/dir1/", "dir0/dir0.5/dir2/", "dir0/dir0.5/dir3/"};
 
     std::vector<std::string> keyNames = {"dir0/dir1/file1", "dir0/file2", "file3"};
     std::vector<std::string> fileNames = {"file1", "file2", "file3"};
@@ -58,8 +58,8 @@ TEST_F(S3Test, SucessfulListOperations) {
 TEST_F(S3Test, UnsucessfulListOperations) {
     {
         S3::MockListResult listResult;
-        listResult.success = false;
-        listResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        listResult._success = false;
+        listResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockUploadResult uploadResult;
         S3::MockDownloadResult downloadResult;
@@ -86,8 +86,8 @@ TEST_F(S3Test, UnsucessfulListOperations) {
 
     {
         S3::MockListResult listResult;
-        listResult.success = false;
-        listResult.errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
+        listResult._success = false;
+        listResult._errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
 
         S3::MockUploadResult uploadResult;
         S3::MockDownloadResult downloadResult;
@@ -114,8 +114,8 @@ TEST_F(S3Test, UnsucessfulListOperations) {
 
     {
         S3::MockListResult listResult;
-        listResult.success = false;
-        listResult.errorType = S3::S3ClientErrorType::CANNOT_LIST_KEYS;
+        listResult._success = false;
+        listResult._errorType = S3::S3ClientErrorType::CANNOT_LIST_KEYS;
 
         S3::MockUploadResult uploadResult;
         S3::MockDownloadResult downloadResult;
@@ -131,7 +131,7 @@ TEST_F(S3Test, UnsucessfulListOperations) {
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::S3ClientErrorType::CANNOT_LIST_KEYS);
 
-        listResult.errorType = S3::S3ClientErrorType::CANNOT_LIST_FILES;
+        listResult._errorType = S3::S3ClientErrorType::CANNOT_LIST_FILES;
         S3::MockS3Client mockClient2(uploadResult, downloadResult, listResult);
         S3::TuringS3Client<S3::MockS3Client> turingS3Client2(std::move(mockClient2));
 
@@ -139,7 +139,7 @@ TEST_F(S3Test, UnsucessfulListOperations) {
         ASSERT_FALSE(res);
         EXPECT_EQ(res.error().getType(), S3::S3ClientErrorType::CANNOT_LIST_FILES);
 
-        listResult.errorType = S3::S3ClientErrorType::CANNOT_LIST_FOLDERS;
+        listResult._errorType = S3::S3ClientErrorType::CANNOT_LIST_FOLDERS;
         S3::MockS3Client mockClient3(uploadResult, downloadResult, listResult);
         S3::TuringS3Client<S3::MockS3Client> turingS3Client3(std::move(mockClient3));
 
@@ -151,7 +151,7 @@ TEST_F(S3Test, UnsucessfulListOperations) {
 
 TEST_F(S3Test, SuccesfulFileUpload) {
     S3::MockUploadResult uploadResult;
-    uploadResult.success = true;
+    uploadResult._success = true;
 
     S3::MockDownloadResult downloadResult;
     S3::MockListResult listResult;
@@ -166,7 +166,7 @@ TEST_F(S3Test, SuccesfulFileUpload) {
 TEST_F(S3Test, UnsuccesfulFileUpload) {
     {
         S3::MockUploadResult uploadResult;
-        uploadResult.success = true;
+        uploadResult._success = true;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -181,8 +181,8 @@ TEST_F(S3Test, UnsuccesfulFileUpload) {
 
     {
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        uploadResult._success = false;
+        uploadResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -197,8 +197,8 @@ TEST_F(S3Test, UnsuccesfulFileUpload) {
 
     {
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
+        uploadResult._success = false;
+        uploadResult._errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -213,8 +213,8 @@ TEST_F(S3Test, UnsuccesfulFileUpload) {
 
     {
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.statusCode = 412;
+        uploadResult._success = false;
+        uploadResult._statusCode = 412;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -229,8 +229,8 @@ TEST_F(S3Test, UnsuccesfulFileUpload) {
 
     {
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.errorType = S3::S3ClientErrorType::CANNOT_UPLOAD_FILE;
+        uploadResult._success = false;
+        uploadResult._errorType = S3::S3ClientErrorType::CANNOT_UPLOAD_FILE;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -246,8 +246,8 @@ TEST_F(S3Test, UnsuccesfulFileUpload) {
 
 TEST_F(S3Test, SuccesfulFileDownload) {
     S3::MockDownloadResult downloadResult;
-    downloadResult.success = true;
-    downloadResult.content = "";
+    downloadResult._success = true;
+    downloadResult._content = "";
 
     S3::MockUploadResult uploadResult;
     S3::MockListResult listResult;
@@ -262,8 +262,8 @@ TEST_F(S3Test, SuccesfulFileDownload) {
 TEST_F(S3Test, UnsuccesfulFileDownload) {
     {
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = true;
-        downloadResult.content = "";
+        downloadResult._success = true;
+        downloadResult._content = "";
 
         S3::MockUploadResult uploadResult;
         S3::MockListResult listResult;
@@ -278,8 +278,8 @@ TEST_F(S3Test, UnsuccesfulFileDownload) {
 
     {
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = false;
-        downloadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        downloadResult._success = false;
+        downloadResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockUploadResult uploadResult;
         S3::MockListResult listResult;
@@ -294,8 +294,8 @@ TEST_F(S3Test, UnsuccesfulFileDownload) {
 
     {
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = false;
-        downloadResult.errorType = S3::S3ClientErrorType::INVALID_KEY_NAME;
+        downloadResult._success = false;
+        downloadResult._errorType = S3::S3ClientErrorType::INVALID_KEY_NAME;
 
         S3::MockUploadResult uploadResult;
         S3::MockListResult listResult;
@@ -310,8 +310,8 @@ TEST_F(S3Test, UnsuccesfulFileDownload) {
 
     {
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = false;
-        downloadResult.errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
+        downloadResult._success = false;
+        downloadResult._errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
 
         S3::MockUploadResult uploadResult;
         S3::MockListResult listResult;
@@ -326,8 +326,8 @@ TEST_F(S3Test, UnsuccesfulFileDownload) {
 
     {
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = false;
-        downloadResult.errorType = S3::S3ClientErrorType::CANNOT_DOWNLOAD_FILE;
+        downloadResult._success = false;
+        downloadResult._errorType = S3::S3ClientErrorType::CANNOT_DOWNLOAD_FILE;
 
         S3::MockUploadResult uploadResult;
         S3::MockListResult listResult;
@@ -345,7 +345,7 @@ TEST_F(S3Test, SuccesfulDirectoryUpload) {
     DummyDirectory dir(_tempTestDir, "turingS3DirTest");
 
     S3::MockUploadResult uploadResult;
-    uploadResult.success = true;
+    uploadResult._success = true;
 
     S3::MockDownloadResult downloadResult;
     S3::MockListResult listResult;
@@ -360,7 +360,7 @@ TEST_F(S3Test, SuccesfulDirectoryUpload) {
 TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
     {
         S3::MockUploadResult uploadResult;
-        uploadResult.success = true;
+        uploadResult._success = true;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -377,8 +377,8 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
         DummyDirectory dir(_tempTestDir, "turingS3DirTest");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        uploadResult._success = false;
+        uploadResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -395,8 +395,8 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
         DummyDirectory dir(_tempTestDir, "turingS3DirTest");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
+        uploadResult._success = false;
+        uploadResult._errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -413,8 +413,8 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
         DummyDirectory dir(_tempTestDir, "turingS3DirTest");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.statusCode = 412;
+        uploadResult._success = false;
+        uploadResult._statusCode = 412;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -431,8 +431,8 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
         DummyDirectory dir(_tempTestDir, "turingS3DirTest");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.errorType = S3::S3ClientErrorType::CANNOT_UPLOAD_FILE;
+        uploadResult._success = false;
+        uploadResult._errorType = S3::S3ClientErrorType::CANNOT_UPLOAD_FILE;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -448,12 +448,12 @@ TEST_F(S3Test, UnsuccesfulDirectoryUpload) {
 
 TEST_F(S3Test, SuccesfulDirectoryDownload) {
     S3::MockListResult listResult;
-    listResult.success = true;
-    listResult.keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
+    listResult._success = true;
+    listResult._keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
 
     S3::MockDownloadResult downloadResult;
-    downloadResult.success = true;
-    downloadResult.content = "";
+    downloadResult._success = true;
+    downloadResult._content = "";
 
     S3::MockUploadResult uploadResult;
 
@@ -467,11 +467,11 @@ TEST_F(S3Test, SuccesfulDirectoryDownload) {
 TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
     {
         S3::MockListResult listResult;
-        listResult.success = true;
-        listResult.keys = {};
+        listResult._success = true;
+        listResult._keys = {};
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = true;
+        downloadResult._success = true;
 
         S3::MockUploadResult uploadResult;
 
@@ -485,12 +485,12 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
 
     {
         S3::MockListResult listResult;
-        listResult.success = true;
-        listResult.keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
+        listResult._success = true;
+        listResult._keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = false;
-        downloadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        downloadResult._success = false;
+        downloadResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockUploadResult uploadResult;
 
@@ -504,12 +504,12 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
 
     {
         S3::MockListResult listResult;
-        listResult.success = true;
-        listResult.keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
+        listResult._success = true;
+        listResult._keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = false;
-        downloadResult.errorType = S3::S3ClientErrorType::INVALID_KEY_NAME;
+        downloadResult._success = false;
+        downloadResult._errorType = S3::S3ClientErrorType::INVALID_KEY_NAME;
 
         S3::MockUploadResult uploadResult;
 
@@ -523,12 +523,12 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
 
     {
         S3::MockListResult listResult;
-        listResult.success = true;
-        listResult.keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
+        listResult._success = true;
+        listResult._keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = false;
-        downloadResult.errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
+        downloadResult._success = false;
+        downloadResult._errorType = S3::S3ClientErrorType::INVALID_BUCKET_NAME;
 
         S3::MockUploadResult uploadResult;
 
@@ -542,12 +542,12 @@ TEST_F(S3Test, UnsuccesfulDirectoryDownload) {
 
     {
         S3::MockListResult listResult;
-        listResult.success = true;
-        listResult.keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
+        listResult._success = true;
+        listResult._keys = {"prefix/dir0/dir1/file1", "prefix/dir0/file2", "prefix/file3"};
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = false;
-        downloadResult.errorType = S3::S3ClientErrorType::CANNOT_DOWNLOAD_FILE;
+        downloadResult._success = false;
+        downloadResult._errorType = S3::S3ClientErrorType::CANNOT_DOWNLOAD_FILE;
 
         S3::MockUploadResult uploadResult;
 

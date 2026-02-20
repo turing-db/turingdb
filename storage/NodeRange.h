@@ -5,8 +5,8 @@
 namespace db {
 
 struct NodeRange {
-    NodeID _first = 0;
-    size_t _count = 0;
+    NodeID _first {0};
+    size_t _count {0};
 
     bool hasEntity(NodeID entityID) const {
         return (entityID - _first) < _count;
@@ -47,8 +47,8 @@ struct NodeRange {
         }
 
     private:
-        NodeID _current = 0;
-        size_t _left = 0;
+        NodeID _current {0};
+        size_t _left {0};
     };
 
     Iterator begin() const { return Iterator(_first, _count); }

@@ -48,7 +48,7 @@ struct UnaryPredicateExecutor {
         const auto& argd = arg->getRaw();
 
         auto op = Op {};
-        for (size_t i {0}; i < size; i++) {
+        for (size_t i = 0; i < size; i++) {
             resd[i] = op(argd[i]);
         }
     }
@@ -63,7 +63,7 @@ struct UnaryPredicateExecutor {
         const auto& argd = arg->getRaw();
 
         auto op = Op {};
-        for (size_t i {0}; i < size; i++) {
+        for (size_t i = 0; i < size; i++) {
             resd[i] = op(argd[i]);
         }
     }

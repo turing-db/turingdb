@@ -578,7 +578,7 @@ TEST_F(WriteQueriesTest, createEdgeNoInput) {
 
         Rows scanEdges;
         { // Ensure ScanOutEdges returns the expected results
-            for (size_t i {0}; const EdgeRecord e : read().scanOutEdges()) {
+            for (size_t i = 0; const EdgeRecord e : read().scanOutEdges()) {
                 if (i++ < totalEdgesPrior) {
                     continue;
                 }
@@ -901,7 +901,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeConstProp) {
     const size_t numNodesPrior = read().getTotalNodesAllocated();
 
     using Rows = LineContainer<NodeID, types::String::Primitive>;
-    PropertyTypeID NAME_PROP_ID {0}; // TODO: find way to do dynamically
+    PropertyTypeID NAME_PROP_ID(0); // TODO: find way to do dynamically
 
     Rows expected;
     {
@@ -1144,7 +1144,7 @@ TEST_F(WriteQueriesTest, exceedChunk) {
         std::string createQuery = "CREATE ";
         createQuery += createNodePattern(0);
 
-        for (NodeID n {1}; n < nodeCount; n++) {
+        for (NodeID n(1); n < nodeCount; n++) {
             createQuery += ", ";
             createQuery += createNodePattern(n);
         }
@@ -1170,9 +1170,9 @@ TEST_F(WriteQueriesTest, exceedChunk) {
     // Now match against those nodes (more than 1 chunk) and create edges between them
 
     {
-        for (size_t e {0}; e < edgeCount; e++) {
-            size_t chunks {0};
-            size_t emptyChunks {0};
+        for (size_t e = 0; e < edgeCount; e++) {
+            size_t chunks = 0;
+            size_t emptyChunks = 0;
             std::string query_str = fmt::format(
                 R"(MATCH (n:Node), (m:Node) WHERE n.id = {} AND m.id = {} CREATE (n)-[e:Edge]->(m) RETURN e)",
                 e, e + 1);
@@ -1217,8 +1217,8 @@ TEST_F(WriteQueriesTest, exceedChunk) {
     { // Verify edges have correct IDs
         std::string_view matchQuery = "MATCH (n)-[e]->(m) RETURN e";
 
-        size_t chunks {0};
-        size_t emptyChunks {0};
+        size_t chunks = 0;
+        size_t emptyChunks = 0;
         auto res = query(matchQuery, [&](const Dataframe* df) {
             chunks++;
             ASSERT_TRUE(df);
@@ -1262,7 +1262,7 @@ TEST_F(WriteQueriesTest, exceedChunkThenFilter) {
         std::string createQuery = "CREATE ";
         createQuery += createNodePattern(0);
 
-        for (NodeID n {1}; n < nodeCount; n++) {
+        for (NodeID n(1); n < nodeCount; n++) {
             createQuery += ", ";
             createQuery += createNodePattern(n);
         }

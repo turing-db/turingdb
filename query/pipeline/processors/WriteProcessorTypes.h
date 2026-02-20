@@ -25,7 +25,7 @@ public:
 
     struct PropertyConstraint {
         std::string_view _propName;
-        ValueType _type;
+        ValueType _type {ValueType::Invalid};
         Column* _col {nullptr}; // Column where the values of this property may be found
     };
 

@@ -1117,10 +1117,10 @@ TEST_F(QueriesTest, xShapedJoinTest) {
     using Rows = LineContainer<NodeID, NodeID, NodeID, NodeID, NodeID>;
 
     Rows expectedRows;
-    ColumnNodeIDs* col1;
-    ColumnNodeIDs* col2;
-    ColumnNodeIDs* col3;
-    ColumnNodeIDs* col4;
+    ColumnNodeIDs* col1 = nullptr;
+    ColumnNodeIDs* col2 = nullptr;
+    ColumnNodeIDs* col3 = nullptr;
+    ColumnNodeIDs* col4 = nullptr;
 
     // std::unordered_map<std::tuple<NodeID,NodeID,NodeID>,std::vector<NodeID>,TupleHash> tupleToColMap;
     std::unordered_map<NodeID, std::vector<std::tuple<NodeID, NodeID, NodeID>>> colToTupleMap;

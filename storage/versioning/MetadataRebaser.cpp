@@ -10,7 +10,7 @@ using namespace db;
 bool MetadataRebaser::rebase(const GraphMetadata& theirs,
                              MetadataBuilder& ours,
                              CommitWriteBuffer& cwb) {
-    Profile profile {"MetadataRebaser::rebase"};
+    Profile profile("MetadataRebaser::rebase");
 
     const auto& theirLabels = theirs.labels();
     const auto& theirLabelSets = theirs.labelsets();

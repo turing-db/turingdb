@@ -49,9 +49,9 @@ public:
     ParserT& getParser() { return *static_cast<ParserT*>(_parser.get()); }
 
 private:
-    utils::DataSocket _socket {};
+    utils::DataSocket _socket {0};
     TCPConnectionStorage* _storage {nullptr};
-    size_t _storageIndex {};
+    size_t _storageIndex {0};
     NetBuffer _inputBuffer;
     NetWriter _writer {_socket};
     std::unique_ptr<AbstractHTTPParser> _parser {nullptr};

@@ -34,7 +34,7 @@ using IndexTypeName = EnumToString<IndexType>::Create<
     EnumStringPair<IndexType::HNSW, "HNSW">>;
 
 struct VecLibMetadata {
-    VecLibID _id;
+    VecLibID _id {0};
     std::string _name;
     Dimension _dimension {0};
     DistanceMetric _metric {DistanceMetric::EUCLIDEAN_DIST};

@@ -78,9 +78,9 @@ LabelSetHandle LabelSetMap::getOrCreate(const LabelSet& labelset) {
     }
 
     const size_t count = _valueMap.size();
-    const LabelSetID nextID {static_cast<LabelSetID::Type>(count)};
+    const LabelSetID nextID(static_cast<LabelSetID::Type>(count));
     auto& pair = _container.emplace_back(nextID, std::make_unique<LabelSet>(labelset));
-    const LabelSetHandle& ref = _valueMap.emplace(LabelSetHandle {nextID, *pair._value}, count).first->first;
+    const LabelSetHandle& ref = _valueMap.emplace(LabelSetHandle(nextID, *pair._value), count).first->first;
     _idMap.emplace(nextID, count);
 
     return ref;

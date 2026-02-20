@@ -156,7 +156,7 @@ public:
         const size_t sz = optMask.size();
         this->resize(sz);
         std::vector<Bool_t>& raw = getRaw();
-        for (size_t i {0}; i < sz; i++) {
+        for (size_t i = 0; i < sz; i++) {
             raw[i] = optMask[i].value_or(false);
         }
     }

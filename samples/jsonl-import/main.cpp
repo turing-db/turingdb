@@ -15,7 +15,7 @@
 using namespace db;
 
 int main(int argc, const char** argv) {
-    std::stringstream input {R"(
+    std::stringstream input(R"(
         {"type":"node","id":"0","labels":["Founder","Person","SoftwareEngineering"],"properties":{"isFrench":true,"dob":"18/01","hasPhD":true,"name":"Remy","age":32}}
         {"type":"node","id":"1","labels":["Bioinformatics","Founder","Person"],"properties":{"isFrench":true,"dob":"18/08","hasPhD":true,"name":"Adam","age":"32"}}
         {"type":"node","id":"2","labels":["Person","SoftwareEngineering"],"properties":{"isFrench":true,"dob":"28/05","hasPhD":true,"name":"Luc"}}
@@ -42,11 +42,11 @@ int main(int argc, const char** argv) {
         {"type":"relationship","id":"10","label":"INTERESTED_IN","properties":{"name":"Maxime -> Bio"},"start":{"id":"3","labels":["Bioinformatics","Person"],"properties":{"isFrench": true,"dob":"24/07","hasPhD":false,"name":"Maxime"}},"end":{"id":"7","labels":["Interest"],"properties":{"name":"Bio"}}}
         {"type":"relationship","id":"11","label":"INTERESTED_IN","properties":{"name":"Maxime -> Padel","proficiency":"expert"},"start":{"id":"3","labels":["Bioinformatics","Person"] ,"properties":{"isFrench":true,"dob":"24/07","hasPhD":false,"name":"Maxime"}},"end":{"id":"9","labels":["Interest"],"properties":{"name":"Padel"}}}
         {"type":"relationship","id":"12","label":"INTERESTED_IN","properties":{"duration":10,"name":"Martina -> Cooking"},"start":{"id":"4","labels":["Bioinformatics","Person"],"prope rties":{"isFrench":false,"hasPhD":true,"name":"Martina"}},"end":{"id":"8","labels":["Interest"],"properties":{"name":"Cooking"}}}
-    )"};
+    )");
 
     std::unique_ptr<JobSystem> js = JobSystem::create();
 
-    const fs::Path turingDir {SAMPLE_DIR "/.turing"};
+    const fs::Path turingDir(SAMPLE_DIR "/.turing");
     if (turingDir.exists()) {
         fmt::println("Turing directory already exists: {}", turingDir.get());
         fmt::println("Removing it...");
@@ -59,7 +59,7 @@ int main(int argc, const char** argv) {
 
     TuringConfig config;
     config.setTuringDirectory(turingDir);
-    TuringDB db {&config};
+    TuringDB db(&config);
 
     SystemManager& sysMan = db.getSystemManager();
     Graph* graph = sysMan.createGraph("test");

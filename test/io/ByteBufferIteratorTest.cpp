@@ -52,7 +52,7 @@ TEST_F(ByteBufferIteratorTest, General) {
     appendBytes(buf, "Hello world"sv);
 
     // Reading
-    fs::ByteBufferIterator it {buf};
+    fs::ByteBufferIterator it(buf);
     std::span<const uint16_t> v1 = it.get<uint16_t>(3);
     ASSERT_EQ(v1[0], 0);
     ASSERT_EQ(v1[1], 1);

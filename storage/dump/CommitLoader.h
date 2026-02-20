@@ -33,7 +33,7 @@ public:
                                                                   Graph& graph,
                                                                   CommitHash hash,
                                                                   const CommitHistory* prevHistory) {
-        Profile profile {"CommitLoader::load"};
+        Profile profile("CommitLoader::load");
 
         // Listing files in the folder
         auto files = path.listDir();
@@ -64,13 +64,13 @@ public:
 
         commit->_data->_history.pushCommit(commit->view());
 
-        CommitHistoryBuilder historyBuilder {commit->_data->_history};
+        CommitHistoryBuilder historyBuilder(commit->_data->_history);
 
         auto& metadata = commit->_data->_metadata;
 
         // Loading metadata
         {
-            Profile profile {"CommitLoader::load <metadata>"};
+            Profile profile("CommitLoader::load <metadata>");
 
             const fs::Path metadataPath = path / "metadata";
             auto res = GraphMetadataLoader::load(path, metadata);

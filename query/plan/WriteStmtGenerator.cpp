@@ -101,17 +101,17 @@ void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* pre
         const auto visitor = Overloaded {
             // PropertyExprAssign case
             [this](const SetItem::PropertyExprAssign& v) {
-                const VarDecl* decl = v.propTypeExpr->getEntityVarDecl();
+                const VarDecl* decl = v._propTypeExpr->getEntityVarDecl();
 
                 if (decl->getType() == EvaluatedType::NodePattern) {
-                    _currentNode->addNodeUpdate(v.propTypeExpr->getEntityVarDecl(),
-                                                v.propTypeExpr->getPropName(),
-                                                v.propValueExpr);
+                    _currentNode->addNodeUpdate(v._propTypeExpr->getEntityVarDecl(),
+                                                v._propTypeExpr->getPropName(),
+                                                v._propValueExpr);
 
                 } else if (decl->getType() == EvaluatedType::EdgePattern) {
-                    _currentNode->addEdgeUpdate(v.propTypeExpr->getEntityVarDecl(),
-                                                v.propTypeExpr->getPropName(),
-                                                v.propValueExpr);
+                    _currentNode->addEdgeUpdate(v._propTypeExpr->getEntityVarDecl(),
+                                                v._propTypeExpr->getPropName(),
+                                                v._propValueExpr);
                 }
             },
 

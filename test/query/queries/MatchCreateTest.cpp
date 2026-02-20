@@ -166,8 +166,8 @@ TEST_F(MatchCreateTest, matchCreateWithProperty) {
     const size_t nodesBefore = read().getTotalNodesAllocated();
 
     newChange();
-    NodeID matchedNodeID{0};
-    NodeID createdNodeID{0};
+    NodeID matchedNodeID(0);
+    NodeID createdNodeID(0);
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->getLogicalRowCount(), 1);
@@ -200,7 +200,7 @@ TEST_F(MatchCreateTest, matchCreateMultipleNodes) {
     const size_t nodesBefore = read().getTotalNodesAllocated();
 
     newChange();
-    NodeID nodeA{0}, nodeB{0}, nodeC{0};
+    NodeID nodeA(0), nodeB(0), nodeC(0);
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 4);  // n, a, b, c
@@ -241,8 +241,8 @@ TEST_F(MatchCreateTest, matchCreateChain) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
-    NodeID nodeA{0}, nodeB{0};
-    EdgeID edgeE{0};
+    NodeID nodeA(0), nodeB(0);
+    EdgeID edgeE(0);
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 4);  // n, a, e, b
@@ -381,8 +381,8 @@ TEST_F(MatchCreateTest, matchCreateEdgeFromMatched) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
-    NodeID nodeN{0}, nodeM{0};
-    EdgeID edgeE{0};
+    NodeID nodeN(0), nodeM(0);
+    EdgeID edgeE(0);
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 3);
@@ -435,8 +435,8 @@ TEST_F(MatchCreateTest, matchCreateEdgeToNew) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
-    NodeID nodeN{0}, childNode{0};
-    EdgeID edgeE{0};
+    NodeID nodeN(0), childNode(0);
+    EdgeID edgeE(0);
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 3);
@@ -490,8 +490,8 @@ TEST_F(MatchCreateTest, matchCreateEdgeFromNew) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
-    NodeID parentNode{0}, nodeN{0};
-    EdgeID edgeE{0};
+    NodeID parentNode(0), nodeN(0);
+    EdgeID edgeE(0);
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 3);
@@ -544,8 +544,8 @@ TEST_F(MatchCreateTest, matchCreateBidirectional) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
-    NodeID nodeN{0}, nodeM{0};
-    EdgeID edge1{0}, edge2{0};
+    NodeID nodeN(0), nodeM(0);
+    EdgeID edge1(0), edge2(0);
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 4);
@@ -1054,8 +1054,8 @@ TEST_F(MatchCreateTest, matchCreateLongChain) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
-    NodeID nodeA{0}, nodeB{0}, nodeC{0}, nodeD{0};
-    EdgeID edgeE1{0}, edgeE2{0}, edgeE3{0};
+    NodeID nodeA(0), nodeB(0), nodeC(0), nodeD(0);
+    EdgeID edgeE1(0), edgeE2(0), edgeE3(0);
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 8);  // n, a, e1, b, e2, c, e3, d
@@ -1128,8 +1128,8 @@ TEST_F(MatchCreateTest, matchCreateTriangle) {
     const size_t edgesBefore = read().getTotalEdgesAllocated();
 
     newChange();
-    NodeID nodeA{0}, nodeB{0}, nodeC{0};
-    EdgeID edgeE1{0}, edgeE2{0}, edgeE3{0};
+    NodeID nodeA(0), nodeB(0), nodeC(0);
+    EdgeID edgeE1(0), edgeE2(0), edgeE3(0);
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->size(), 6);  // a, e1, b, e2, c, e3
@@ -1204,7 +1204,7 @@ TEST_F(MatchCreateTest, matchCreateWithStaticProperties) {
     const size_t nodesBefore = read().getTotalNodesAllocated();
 
     newChange();
-    NodeID createdNode{0};
+    NodeID createdNode(0);
     auto res = query(QUERY, [&](const Dataframe* df) {
         ASSERT_TRUE(df);
         ASSERT_EQ(df->getLogicalRowCount(), 1);

@@ -23,7 +23,7 @@ public:
 private:
     Expr* _lhs {nullptr};
     Expr* _rhs {nullptr};
-    StringOperator _operator;
+    StringOperator _operator {StringOperator::StartsWith};
 
     StringExpr(StringOperator op, Expr* lhs, Expr* rhs)
         : Expr(Kind::STRING),

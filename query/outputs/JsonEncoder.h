@@ -139,7 +139,7 @@ public:
         arr();
 
         std::string columnName;
-        ColumnTypeGenerator generator {columnName};
+        ColumnTypeGenerator generator(columnName);
 
         for (const NamedColumn* namedCol : df.cols()) {
             const Column* col = namedCol->getColumn();

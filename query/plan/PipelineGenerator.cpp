@@ -87,15 +87,15 @@ namespace rv = rg::views;
 namespace {
 
 struct TranslateNodeToken {
-    PlanGraphNode* node {nullptr};
-    PipelineOutputInterface* previousInterface {nullptr};
-    MaterializeProcessor* matProc {nullptr};
+    PlanGraphNode* _node {nullptr};
+    PipelineOutputInterface* _previousInterface {nullptr};
+    MaterializeProcessor* _matProc {nullptr};
 };
 
 using TranslateTokenStack = std::stack<TranslateNodeToken>;
 
 struct PropertyTypeDispatcher {
-    db::ValueType _valueType;
+    db::ValueType _valueType {db::ValueType::Invalid};
 
     void execute(const auto& executor) const {
         switch (_valueType) {
@@ -203,7 +203,7 @@ void PipelineGenerator::generate() {
                 const PlanGraphNode::Nodes& binaryNodeInputs = nextNode->inputs();
                 const bool isLhs = (node == binaryNodeInputs.front());
 
-                const BinaryNodeVisitInformation info {pendingOutput.getInterface(), isLhs};
+                const BinaryNodeVisitInformation info(pendingOutput.getInterface(), isLhs);
                 _binaryVisitedMap.emplace(nextNode, info);
             }
         };
@@ -441,7 +441,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
         throw PlannerException("GetPropertyNode does not have an entity variable declaration");
     }
 
-    const std::string propName {node->getPropName()};
+    const std::string propName(node->getPropName());
 
     PipelineValuesOutputInterface* output = nullptr;
 
@@ -504,7 +504,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
         throw PlannerException("GetPropertyWithNullNode does not have an entity variable declaration");
     }
 
-    ColumnTag entityTag {};
+    ColumnTag entityTag;
     const auto foundDeclIt = _declToColumn.find(entityDecl);
     if (foundDeclIt != end(_declToColumn)) { // if the decl is registered, use that column
         entityTag = foundDeclIt->second;
@@ -520,7 +520,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
         }
     }
 
-    const std::string propName {node->getPropName()};
+    const std::string propName(node->getPropName());
 
     PipelineValuesOutputInterface* output = nullptr;
 
@@ -1134,7 +1134,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
 
             // Initialise with invalid column tag, then later update after @ref addWrite
             // allocs the column
-            const ColumnTag edgeTag {};
+            const ColumnTag edgeTag;
             penEdges.emplace_back(std::move(props), edgeType, edgeVarName, srcName,
                                   tgtName, edgeTag, srcTag, tgtTag);
         }
@@ -1242,8 +1242,8 @@ PipelineOutputInterface* PipelineGenerator::translateShortestPathNode(ShortestPa
     // LHS is implicit in @ref _pendingOutput
     _builder.getPendingOutput().updateInterface(lhs);
 
-    NamedColumn* distCol {nullptr};
-    NamedColumn* pathCol {nullptr};
+    NamedColumn* distCol = nullptr;
+    NamedColumn* pathCol = nullptr;
 
     PipelineBlockOutputInterface* output = nullptr;
 

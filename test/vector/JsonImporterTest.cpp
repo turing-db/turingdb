@@ -180,7 +180,7 @@ TEST_F(JsonImporterTest, ValidJson) {
     {
         constexpr std::array<float, 8> v {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
         VectorSearchResult results;
-        VectorSearchQuery query {8};
+        VectorSearchQuery query(8);
         query.setVector(v);
         query.setMaxResultCount(10);
 

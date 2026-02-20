@@ -29,7 +29,7 @@ private:
     PipelineBlockOutputInterface _output;
 
     ExecutionContext* _ctxt {nullptr};
-    ChangeOp _op {};
+    ChangeOp _op {ChangeOp::NEW};
     ColumnVector<ChangeID>* _changeIDCol {nullptr};
 
     explicit ChangeProcessor(ChangeOp op);

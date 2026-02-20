@@ -87,8 +87,8 @@ PropertyType PropertyTypeMap::getOrCreate(std::string_view name, ValueType value
     }
 
     const size_t count = _nameMap.size();
-    const PropertyTypeID nextID {static_cast<PropertyTypeID::Type>(count)};
-    const PropertyType pt {._id = nextID, ._valueType = valueType};
+    const PropertyTypeID nextID(static_cast<PropertyTypeID::Type>(count));
+    const PropertyType pt(nextID, valueType);
     auto& pair = _container.emplace_back(pt, std::make_unique<std::string>(name));
     _nameMap.emplace(std::string_view {*pair._name}, count);
     _idMap.emplace(nextID, count);

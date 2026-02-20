@@ -6,8 +6,8 @@
 namespace db {
 
 struct NonDeletedRange {
-    size_t start;
-    size_t size;
+    size_t _start {0};
+    size_t _size {0};
 };
 
 using NonDeletedRanges = std::vector<NonDeletedRange>;

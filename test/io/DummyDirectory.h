@@ -47,5 +47,5 @@ private:
     }
 
     std::string _path;
-    int _numFolders;
+    int _numFolders {0};
 };

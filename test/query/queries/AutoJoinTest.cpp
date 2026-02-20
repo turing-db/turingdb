@@ -39,7 +39,7 @@ namespace {
 class JoinTestGraph {
 public:
     static void createJoinTestGraph(Graph* graph) {
-        GraphWriter writer{graph};
+        GraphWriter writer(graph);
         writer.setName("jointest");
 
         // =====================================================================

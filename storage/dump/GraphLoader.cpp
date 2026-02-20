@@ -10,7 +10,7 @@
 using namespace db;
 
 DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
-    Profile profile {"GraphLoader::load"};
+    Profile profile("GraphLoader::load");
 
     const auto pathInfo = path.getFileInfo();
     if (!pathInfo) {
@@ -23,14 +23,14 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
 
     // Loading info
     {
-        Profile profile {"GraphLoader::load <info>"};
+        Profile profile("GraphLoader::load <info>");
         const fs::Path infoPath = path / "info";
         auto reader = fs::FilePageReader::open(infoPath, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_GRAPH_INFO, reader.error());
         }
 
-        GraphInfoLoader loader {reader.value()};
+        GraphInfoLoader loader(reader.value());
 
         auto res = loader.load(*graph);
         if (!res) {

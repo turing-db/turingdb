@@ -31,7 +31,7 @@ public:
     }
 
 private:
-    DataPartMergeErrorType _type {};
+    DataPartMergeErrorType _type {DataPartMergeErrorType::MERGE_GRAPH_FAILED};
 };
 
 template <typename T>

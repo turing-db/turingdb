@@ -210,11 +210,11 @@ private:
     MetadataBuilder* _metadata {nullptr};
     IDMapper* _nodeIDMapper {nullptr};
     LabelSet _labelset;
-    size_t _nesting = 0;
-    NodeID _currentNodeID = 0;
+    size_t _nesting {0};
+    NodeID _currentNodeID {0};
     std::string _currentPropName;
-    bool _parsingLabels = false;
-    bool _parsingNode = false;
+    bool _parsingLabels {false};
+    bool _parsingNode {false};
 };
 
 }

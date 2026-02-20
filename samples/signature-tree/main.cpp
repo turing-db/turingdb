@@ -15,11 +15,11 @@ static constexpr size_t QueryCount = 24;
 using Signature = std::bitset<BitCount>;
 
 struct SignatureNode {
-    size_t bit = 0;
-    rc<SignatureNode> left = nullptr;
-    rc<SignatureNode> right = nullptr;
+    size_t _bit {0};
+    rc<SignatureNode> _left {nullptr};
+    rc<SignatureNode> _right {nullptr};
 
-    const Signature* signature = nullptr;
+    const Signature* _signature {nullptr};
 };
 
 static bool insertSignature(rc<SignatureNode>& root, const Signature& signature) {
@@ -40,14 +40,14 @@ static bool insertSignature(rc<SignatureNode>& root, const Signature& signature)
         const rc<SignatureNode> v = stack.top();
         stack.pop();
 
-        if (v->signature == nullptr) {
+        if (v->_signature == nullptr) {
             // Not a leaf
-            stack.push(signature.test(v->bit)
-                           ? v->right
-                           : v->left);
+            stack.push(signature.test(v->_bit)
+                           ? v->_right
+                           : v->_left);
         } else {
             // Leaf
-            const Signature* w = v->signature;
+            const Signature* w = v->_signature;
 
             const size_t k = getDisagreement(signature, *w);
 
@@ -56,18 +56,18 @@ static bool insertSignature(rc<SignatureNode>& root, const Signature& signature)
                 return false;
             }
 
-            v->bit = k;
-            v->signature = nullptr;
+            v->_bit = k;
+            v->_signature = nullptr;
 
-            v->left = std::make_shared<SignatureNode>();
-            v->right = std::make_shared<SignatureNode>();
+            v->_left = std::make_shared<SignatureNode>();
+            v->_right = std::make_shared<SignatureNode>();
 
             if (!signature.test(k)) {
-                v->left->signature = &signature;
-                v->right->signature = w;
+                v->_left->_signature = &signature;
+                v->_right->_signature = w;
             } else {
-                v->left->signature = w;
-                v->right->signature = &signature;
+                v->_left->_signature = w;
+                v->_right->_signature = &signature;
             }
         }
     }
@@ -83,14 +83,14 @@ static bool insertSignature(rc<SignatureNode>& root, const Signature& signature)
         const auto [i, v] = stack.top();
         stack.pop();
 
-        if (v->signature == nullptr) {
+        if (v->_signature == nullptr) {
             // Not a leaf
-            fmt::print("{}{}\n", std::string(i, '|'), v->bit);
+            fmt::print("{}{}\n", std::string(i, '|'), v->_bit);
 
-            stack.push({i + 1, v->right});
-            stack.push({i + 1, v->left});
+            stack.push({i + 1, v->_right});
+            stack.push({i + 1, v->_left});
         } else {
-            fmt::print("{} -{}\n", std::string(i, '|'), v->signature->to_string());
+            fmt::print("{} -{}\n", std::string(i, '|'), v->_signature->to_string());
         }
     }
 }
@@ -110,11 +110,11 @@ public:
             rc<SignatureNode> node = _stack.top();
             _stack.pop();
 
-            if (node->signature != nullptr) {
+            if (node->_signature != nullptr) {
                 // Checking if leaf bits are a match to the signature
                 _bitCompareCount += BitCount;
-                if ((_signature & *node->signature) == _signature) {
-                    _current = node->signature;
+                if ((_signature & *node->_signature) == _signature) {
+                    _current = node->_signature;
                     return;
                 }
                 continue;
@@ -122,11 +122,11 @@ public:
 
             // Not a leaf
             _bitCompareCount++;
-            if (_signature.test(node->bit)) {
-                _stack.push(node->right);
+            if (_signature.test(node->_bit)) {
+                _stack.push(node->_right);
             } else {
-                _stack.push(node->left);
-                _stack.push(node->right);
+                _stack.push(node->_left);
+                _stack.push(node->_right);
             }
         }
     }
@@ -146,8 +146,8 @@ public:
 private:
     std::stack<rc<SignatureNode>> _stack;
     const Signature& _signature;
-    const Signature* _current = nullptr;
-    size_t _bitCompareCount = 0;
+    const Signature* _current {nullptr};
+    size_t _bitCompareCount {0};
 };
 
 int main(int argc, const char** argv) {
@@ -166,8 +166,8 @@ int main(int argc, const char** argv) {
     // Initialize tree to be a single leaf pointing to first element
     auto root = std::make_shared<SignatureNode>();
     auto& signature = signatures.front();
-    root->signature = &signature;
-    root->bit = 1;
+    root->_signature = &signature;
+    root->_bit = 1;
     fmt::print("- Inserted {}\n", signature.to_string());
 
     // Add the rest of the bitsets to the tree
@@ -193,7 +193,7 @@ int main(int argc, const char** argv) {
         }
 
         for (auto& query : queries) {
-            SignatureTreeIterator it {root, query};
+            SignatureTreeIterator it(root, query);
             fmt::print("- Query: {}\n", query.to_string());
             while (it.isValid()) {
                 fmt::print("   * {} matches\n", it.get().to_string());

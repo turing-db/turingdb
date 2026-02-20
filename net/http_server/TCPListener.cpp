@@ -20,7 +20,7 @@ TCPListener::TCPListener(ServerContext& context)
 }
 
 void TCPListener::accept(utils::EpollEvent& ev) {
-    utils::DataSocket s {};
+    utils::DataSocket s = 0;
 
     while ((s = ::accept(_ctxt._socket, nullptr, nullptr)) > 0) {
         if (!utils::setNonBlock(s)) {
@@ -38,16 +38,16 @@ void TCPListener::accept(utils::EpollEvent& ev) {
             _ctxt.encounteredError(FlowStatus::OPT_NODELAY_ERR);
         }
 
-        ev.events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT | utils::EVENT_RDHUP | utils::EVENT_HUP;
-        ev.data = _ctxt._connections.alloc(s);
+        ev._events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT | utils::EVENT_RDHUP | utils::EVENT_HUP;
+        ev._data = _ctxt._connections.alloc(s);
 
-        if (!ev.data) {
+        if (!ev._data) {
             ::send(s, busyResponse.data(), busyResponse.size(), 0);
             ::shutdown(s, SHUT_RDWR);
             ::close(s);
 
-            ev.events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
-            ev.data = &_ctxt._serverConnection;
+            ev._events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
+            ev._data = &_ctxt._serverConnection;
             if (!utils::epollMod(_ctxt._instance, _ctxt._socket, ev)) {
                 utils::logError("EpollMod server accept");
                 _ctxt.encounteredError(FlowStatus::CTL_ERROR);
@@ -61,8 +61,8 @@ void TCPListener::accept(utils::EpollEvent& ev) {
             _ctxt.encounteredError(FlowStatus::CTL_ERROR);
         }
 
-        ev.events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
-        ev.data = &_ctxt._serverConnection;
+        ev._events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
+        ev._data = &_ctxt._serverConnection;
         if (!utils::epollMod(_ctxt._instance, _ctxt._socket, ev)) {
             utils::logError("EpollMod server accept");
             _ctxt.encounteredError(FlowStatus::CTL_ERROR);

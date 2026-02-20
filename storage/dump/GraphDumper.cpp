@@ -18,7 +18,7 @@ namespace rg = ranges;
 namespace rv = rg::views;
 
 DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
-    Profile profile {"GraphDumper::dump"};
+    Profile profile("GraphDumper::dump");
 
     auto lock = graph._versionController->lock();
 
@@ -31,7 +31,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
 
     // Dumping graph info
     {
-        Profile profile {"GraphDumper::dump <graph info>"};
+        Profile profile("GraphDumper::dump <graph info>");
         const fs::Path infoPath = path / "info";
 
         if (infoPath.exists()) {
@@ -40,7 +40,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_GRAPH_INFO, reader.error());
             }
 
-            const GraphInfoLoader loader {reader.value()};
+            const GraphInfoLoader loader(reader.value());
 
             auto res = loader.isSameGraph(graph);
             if (!res) {
@@ -60,7 +60,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_GRAPH_INFO, writer.error());
         }
 
-        GraphInfoDumper dumper {writer.value()};
+        GraphInfoDumper dumper(writer.value());
 
         if (auto res = dumper.dump(graph); !res) {
             return res;
@@ -69,7 +69,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& path) {
 
     // Dump graph type
     {
-        Profile profile {"GraphDumper::dump <graph type>"};
+        Profile profile("GraphDumper::dump <graph type>");
         const fs::Path graphTypePath = path / "type";
 
         if (graphTypePath.exists()) {

@@ -72,9 +72,9 @@ public:
 
     struct BinaryNodeVisitInformation {
         // The OUTPUT of the INPUT to the binary node which is being tracked
-        PipelineOutputInterface* visitedInput {nullptr};
-        // Whether @ref visitedInput is the LEFT or RIGHT input to the binary node
-        bool isLhs {true};
+        PipelineOutputInterface* _visitedInput {nullptr};
+        // Whether @ref _visitedInput is the LEFT or RIGHT input to the binary node
+        bool _isLhs {true};
     };
 
     using BinaryNodeVisitedMap = std::unordered_map<PlanGraphNode*, BinaryNodeVisitInformation>;

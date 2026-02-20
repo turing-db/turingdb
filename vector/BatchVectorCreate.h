@@ -87,7 +87,7 @@ public:
     }
 
 private:
-    Dimension _dimension;
+    Dimension _dimension {0};
     LSHShardRouter* _router {nullptr};
 
     std::vector<Data> _data;

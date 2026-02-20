@@ -27,7 +27,7 @@ namespace {
 class StringFilterTestGraph {
 public:
     static void createGraph(Graph* graph) {
-        GraphWriter writer{graph};
+        GraphWriter writer(graph);
         writer.setName("stringfiltertest");
 
         // =====================================================================

@@ -15,7 +15,7 @@ protected:
 
 TEST_F(PathTest, GetFileInfo) {
     { // Non existing
-        fs::Path p {"/path/to/non/existing"};
+        fs::Path p("/path/to/non/existing");
         auto fmtMessage = fmt::format("Filesystem error: "
                                       "Does not exist (No such file or directory)");
 
@@ -28,7 +28,7 @@ TEST_F(PathTest, GetFileInfo) {
     }
 
     { // Directory
-        fs::Path p {_outDir};
+        fs::Path p(_outDir);
         auto res = p.getFileInfo();
         ASSERT_TRUE(res.has_value());
         const auto& info = res.value();
@@ -38,7 +38,7 @@ TEST_F(PathTest, GetFileInfo) {
     }
 
     { // File
-        fs::Path p {_logPath};
+        fs::Path p(_logPath);
         auto res = p.getFileInfo();
         ASSERT_TRUE(res.has_value());
         const auto& info = res.value();
@@ -49,7 +49,7 @@ TEST_F(PathTest, GetFileInfo) {
 }
 
 TEST_F(PathTest, Mkdir) {
-    fs::Path p {_outDir};
+    fs::Path p(_outDir);
     p /= "path";
     p /= "to";
     p /= "sub";

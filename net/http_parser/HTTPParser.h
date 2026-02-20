@@ -69,8 +69,8 @@ private:
     NetBuffer::Reader _reader;
     char* _currentPtr {nullptr};
     char* _payloadBegin {nullptr};
-    uint64_t _payloadSize {};
-    bool _parsedHeader = false;
+    uint64_t _payloadSize {0};
+    bool _parsedHeader {false};
 
     size_t getSize() { return getEndPtr() - _currentPtr; }
     char* getEndPtr() { return _reader.getData() + _reader.getSize(); }

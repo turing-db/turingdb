@@ -7,7 +7,7 @@
     }
 
 int main() {
-    fs::Path p {SAMPLE_DIR "/test"};
+    fs::Path p(SAMPLE_DIR "/test");
 
     auto file = fs::File::createAndOpen(p);
     if (!file) {

@@ -23,8 +23,8 @@ using UserData = void*;
 
 // Cross-platform event structure
 struct EpollEvent {
-    uint32_t events;
-    void* data {nullptr};
+    uint32_t _events {0};
+    void* _data {nullptr};
 };
 
 // Cross-platform event flags

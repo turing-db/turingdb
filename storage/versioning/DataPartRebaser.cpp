@@ -18,7 +18,7 @@ using namespace db;
 bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
                              const DataPart& prevPart,
                              DataPart& part) {
-    Profile profile {"DataPartRebaser::rebase"};
+    Profile profile("DataPartRebaser::rebase");
 
     bioassert(_idRebaser, "invalid _idRebaser");
 

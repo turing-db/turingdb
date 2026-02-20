@@ -25,7 +25,7 @@ VectorResult<void> VecLibMetadataLoader::load(VecLibMetadata& metadata) {
     }
 
     const fs::ByteBuffer& buffer = _reader.getBuffer();
-    const std::string_view jsonText {reinterpret_cast<const char*>(buffer.data()), buffer.size()};
+    const std::string_view jsonText(reinterpret_cast<const char*>(buffer.data()), buffer.size());
 
     try {
         const nlohmann::json json = nlohmann::json::parse(jsonText);

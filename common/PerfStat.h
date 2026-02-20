@@ -27,8 +27,8 @@ private:
     void reportTotalMem();
 
     struct MemInfo {
-        size_t reserved {0};
-        size_t rss {0};
+        size_t _reserved {0};
+        size_t _rss {0};
     };
 
     MemInfo getMemInMegabytes() const;

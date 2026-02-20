@@ -74,7 +74,7 @@ public:
     }
 
 private:
-    S3ClientErrorType _type {};
+    S3ClientErrorType _type {S3ClientErrorType::UNKNOWN};
 };
 
 template <typename T>

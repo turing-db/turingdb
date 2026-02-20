@@ -22,7 +22,7 @@ public:
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELS, reader.error());
             }
 
-            LabelMapLoader loader {reader.value()};
+            LabelMapLoader loader(reader.value());
 
             if (auto res = loader.load(metadata._labelMap); !res) {
                 return res.get_unexpected();
@@ -36,7 +36,7 @@ public:
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_EDGE_TYPES, reader.error());
             }
 
-            EdgeTypeMapLoader loader {reader.value()};
+            EdgeTypeMapLoader loader(reader.value());
 
             if (auto res = loader.load(metadata._edgeTypeMap); !res) {
                 return res.get_unexpected();
@@ -51,7 +51,7 @@ public:
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_PROPERTY_TYPES, reader.error());
             }
 
-            PropertyTypeMapLoader loader {reader.value()};
+            PropertyTypeMapLoader loader(reader.value());
 
             if (auto res = loader.load(metadata._propTypeMap); !res) {
                 return res.get_unexpected();
@@ -66,7 +66,7 @@ public:
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELSETS, reader.error());
             }
 
-            LabelSetMapLoader loader {reader.value()};
+            LabelSetMapLoader loader(reader.value());
 
             if (auto res = loader.load(metadata._labelsetMap); !res) {
                 return res.get_unexpected();

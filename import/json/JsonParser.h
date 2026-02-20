@@ -14,8 +14,8 @@ class JobSystem;
 class ChangeAccessor;
 
 struct GraphStats {
-    size_t nodeCount = 0;
-    size_t edgeCount = 0;
+    size_t _nodeCount {0};
+    size_t _edgeCount {0};
 };
 
 class JsonParser {

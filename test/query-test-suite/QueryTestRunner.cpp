@@ -128,20 +128,20 @@ template <typename T>
 }
 
 struct Stringify {
-    std::string& string;
-    size_t row;
+    std::string& _string;
+    size_t _row {0};
 
     template <typename T>
     void operator()(const ColumnVector<T>* typed) {
-        const T& value = typed->at(row);
-        string = valueToString(value);
+        const T& value = typed->at(_row);
+        _string = valueToString(value);
     }
 
     template <typename T>
     void operator()(const ColumnConst<T>* typed) {
-        bioassert(row == 0, "Attempted to output row {} of ColumnConst.", row);
+        bioassert(_row == 0, "Attempted to output row {} of ColumnConst.", _row);
         const T& value = typed->getRaw();
-        string = valueToString(value);
+        _string = valueToString(value);
     }
 };
 
@@ -186,7 +186,7 @@ void escapeCsv(std::string& escaped, std::string_view value) {
 
 std::string formatStatusError(db::QueryStatus::Status status,
                               std::string_view message) {
-    std::string statusName {db::QueryStatusDescription::value(status)};
+    std::string statusName(db::QueryStatusDescription::value(status));
 
     for (char& ch : statusName) {
         if (ch == '_') {

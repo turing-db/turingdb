@@ -43,15 +43,15 @@ public:
     uint32_t getPort() const { return _port; };
 
 private:
-    const char* _address = "127.0.0.1";
-    uint32_t _port = 6666;
-    uint32_t _workerCount = 8;
-    uint32_t _maxConnections = 1024;
+    const char* _address {"127.0.0.1"};
+    uint32_t _port {6666};
+    uint32_t _workerCount {8};
+    uint32_t _maxConnections {1024};
 
-    utils::ServerSocket _serverSocket {};
-    utils::EpollInstance _epollInstance {};
+    utils::ServerSocket _serverSocket {0};
+    utils::EpollInstance _epollInstance {0};
     utils::StringAddress _actualAddress {};
-    utils::EpollSignal _signalFd {};
+    utils::EpollSignal _signalFd {0};
     int _shutdownPipe[2] {-1, -1};
     std::unique_ptr<TCPConnectionStorage> _connections;
     TCPConnection* _serverConnection {nullptr};

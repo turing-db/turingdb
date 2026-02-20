@@ -101,7 +101,7 @@ protected:
 
     // Helper to check the output of a db.propertyTypes()
     bool ensureProperties(std::initializer_list<std::string_view> props) {
-        bool allPropsFound {true};
+        bool allPropsFound = true;
 
         auto res = query(GET_PROPERTIES_QUERY, [&](const Dataframe* df) {
             ASSERT_TRUE(df);
@@ -114,7 +114,7 @@ protected:
             ASSERT_TRUE(castedProps);
 
             for (const auto& desired : props) {
-                bool found {false};
+                bool found = false;
                 for (const auto& prop : *castedProps) {
                     if (prop == desired) {
                         found = true;
@@ -291,7 +291,7 @@ TEST_F(ChangeQueriesTest, threeChangeRebase) {
                 ASSERT_TRUE(es);
                 ASSERT_TRUE(ms);
 
-                for (size_t row {0}; row < ns->size(); row++) {
+                for (size_t row = 0; row < ns->size(); row++) {
                     actual.add({ns->at(row), es->at(row), ms->at(row)});
                 }
             });
@@ -368,7 +368,7 @@ TEST_F(ChangeQueriesTest, commitThenRebase) {
                 ASSERT_TRUE(chids);
                 ASSERT_TRUE(cmts);
 
-                for (size_t row {0}; row < df->getLogicalRowCount(); row++) {
+                for (size_t row = 0; row < df->getLogicalRowCount(); row++) {
                     actual.add(
                         {ns->at(row), *ids->at(row), *chids->at(row), *cmts->at(row)});
                 }
@@ -411,7 +411,7 @@ TEST_F(ChangeQueriesTest, commitThenRebase) {
                 ASSERT_TRUE(chids);
                 ASSERT_TRUE(cmts);
 
-                for (size_t row {0}; row < df->getLogicalRowCount(); row++) {
+                for (size_t row = 0; row < df->getLogicalRowCount(); row++) {
                     actual.add(
                         {ns->at(row), *ids->at(row), *chids->at(row), *cmts->at(row)});
                 }
@@ -783,7 +783,7 @@ TEST_F(ChangeQueriesTest, rebasedTombstones) {
             ASSERT_TRUE(names);
 
             const size_t numRows = names->size();
-            for (size_t row {0}; row < numRows; row++) {
+            for (size_t row = 0; row < numRows; row++) {
                 actual.add({*names->at(row)});
             }
         });
@@ -860,7 +860,7 @@ TEST_F(ChangeQueriesTest, rebasedTombstonesWithCommit) {
             ASSERT_TRUE(names);
 
             const size_t numRows = names->size();
-            for (size_t row {0}; row < numRows; row++) {
+            for (size_t row = 0; row < numRows; row++) {
                 actual.add({*names->at(row)});
             }
         });
@@ -899,7 +899,7 @@ TEST_F(ChangeQueriesTest, concurrentWritesSmall) {
 
         Rows expected;
         {
-            for (size_t node {0}; node < change0Nodes + change1Nodes; node++) {
+            for (size_t node = 0; node < change0Nodes + change1Nodes; node++) {
                 expected.add({node});
             }
         }
@@ -938,7 +938,7 @@ TEST_F(ChangeQueriesTest, concurrentWritesSmall) {
                 ASSERT_TRUE(ms);
 
                 const size_t numRows = ns->size();
-                for (size_t row {0}; row < numRows; row++) {
+                for (size_t row = 0; row < numRows; row++) {
                     actual.add({ns->at(row), es->at(row), ms->at(row)});
                 }
             });
@@ -962,13 +962,13 @@ TEST_F(ChangeQueriesTest, concurrentWritesLarge) {
     {
         newChange(), change0 = _currentChange;
 
-        for (size_t i {0}; i < change0SingleNodes; i++) {
+        for (size_t i = 0; i < change0SingleNodes; i++) {
             ASSERT_TRUE(query("CREATE (:NODE)", emptyCallback));
         }
 
         ASSERT_TRUE(query("COMMIT", emptyCallback));
 
-        for (size_t i {0}; i < change0EdgePairs; i++) {
+        for (size_t i = 0; i < change0EdgePairs; i++) {
             ASSERT_TRUE(query("CREATE (:NODE)-[:EDGE]->(:NODE)", emptyCallback));
         }
     }
@@ -976,13 +976,13 @@ TEST_F(ChangeQueriesTest, concurrentWritesLarge) {
     {
         newChange(), change1 = _currentChange;
 
-        for (size_t i {0}; i < change1SingleNodes; i++) {
+        for (size_t i = 0; i < change1SingleNodes; i++) {
             ASSERT_TRUE(query("CREATE (:NODE)", emptyCallback));
         }
 
         ASSERT_TRUE(query("COMMIT", emptyCallback));
 
-        for (size_t i {0}; i < change1EdgePairs; i++) {
+        for (size_t i = 0; i < change1EdgePairs; i++) {
             ASSERT_TRUE(query("CREATE (:NODE)-[:EDGE]->(:NODE)", emptyCallback));
         }
     }
@@ -997,7 +997,7 @@ TEST_F(ChangeQueriesTest, concurrentWritesLarge) {
         using Rows = LineContainer<NodeID>;
 
         Rows expected;
-        for (NodeID n {0}; n < expectedNodes; n++) {
+        for (NodeID n(0); n < expectedNodes; n++) {
             expected.add({n});
         }
 
@@ -1020,16 +1020,16 @@ TEST_F(ChangeQueriesTest, concurrentWritesLarge) {
 
         Rows expected;
         {
-            EdgeID e {0};
-            NodeID n {change0SingleNodes};
-            for (size_t i {0}; i < change0EdgePairs; i++) {
+            EdgeID e(0);
+            NodeID n(change0SingleNodes);
+            for (size_t i = 0; i < change0EdgePairs; i++) {
                 NodeID src = n;
                 NodeID tgt = n + 1;
                 expected.add({src, e++, tgt});
                 n = tgt + 1;
             }
             n += change1SingleNodes;
-            for (size_t i {change1SingleNodes}; i < change1SingleNodes + change1EdgePairs;
+            for (size_t i = change1SingleNodes; i < change1SingleNodes + change1EdgePairs;
                  i++) {
                 NodeID src = n;
                 NodeID tgt = n + 1;
@@ -1047,7 +1047,7 @@ TEST_F(ChangeQueriesTest, concurrentWritesLarge) {
                 ASSERT_TRUE(ns);
                 ASSERT_TRUE(es);
                 ASSERT_TRUE(ms);
-                for (size_t i {0}; i < ns->size(); i++) {
+                for (size_t i = 0; i < ns->size(); i++) {
                     actual.add({ns->at(i), es->at(i), ms->at(i)});
                 }
             });
@@ -1062,11 +1062,11 @@ TEST_F(ChangeQueriesTest, historyWithDeletions) {
 
     setWorkingGraph("default");
 
-    const size_t numNodes {4};
+    const size_t numNodes = 4;
 
     {
         newChange();
-        for (size_t _ {0}; _ < numNodes; _++) {
+        for (size_t i = 0; i < numNodes; i++) {
             ASSERT_TRUE(query("CREATE (n:Node)", emptyCallback));
         }
         submitCurrentChange();
@@ -1086,7 +1086,7 @@ TEST_F(ChangeQueriesTest, historyWithDeletions) {
         ASSERT_TRUE(nodes && edges && parts);
 
         {
-            HistoryCountColumn expectedNodeCounts {0, 4, 0};
+            HistoryCountColumn expectedNodeCounts = {0, 4, 0};
             ASSERT_EQ(expectedNodeCounts.size(), nodes->size());
             for (auto [exp, act] : rv::zip(expectedNodeCounts, *nodes)) {
                 EXPECT_EQ(exp, act);
@@ -1094,7 +1094,7 @@ TEST_F(ChangeQueriesTest, historyWithDeletions) {
         }
 
         {
-            HistoryCountColumn expectedEdgeCounts {0, 0, 0};
+            HistoryCountColumn expectedEdgeCounts = {0, 0, 0};
             ASSERT_EQ(expectedEdgeCounts.size(), edges->size());
             for (auto [exp, act] : rv::zip(expectedEdgeCounts, *edges)) {
                 EXPECT_EQ(exp, act);
@@ -1102,7 +1102,7 @@ TEST_F(ChangeQueriesTest, historyWithDeletions) {
         }
 
         {
-            HistoryCountColumn expectedPartCounts {0, 1, 0};
+            HistoryCountColumn expectedPartCounts = {0, 1, 0};
             ASSERT_EQ(expectedPartCounts.size(), parts->size());
             for (auto [exp, act] : rv::zip(expectedPartCounts, *parts)) {
                 EXPECT_EQ(exp, act);

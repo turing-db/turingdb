@@ -31,8 +31,8 @@ void ignoreLines(std::string_view& str, size_t count) {
 }
 
 struct LinePatternLocation {
-    size_t beginLine {};
-    size_t count {};
+    size_t _beginLine {0};
+    size_t _count {0};
 };
 
 template <char16_t Char>
@@ -43,11 +43,11 @@ std::string errorBars(const LinePatternLocation& loc) {
 
     errBar += EMPTY_PREFIX;
 
-    for (size_t i = 0; i < loc.beginLine; i++) {
+    for (size_t i = 0; i < loc._beginLine; i++) {
         errBar += ' ';
     }
 
-    for (size_t i = 0; i < loc.count; i++) {
+    for (size_t i = 0; i < loc._count; i++) {
         errBar += charStr;
     }
 
@@ -79,8 +79,8 @@ void CypherError::generate(std::string& errorOutput) {
         return;
     }
 
-    const size_t firstLineNo = _loc->beginLine;
-    const size_t lastLineNo = _loc->endLine;
+    const size_t firstLineNo = _loc->_beginLine;
+    const size_t lastLineNo = _loc->_endLine;
 
     if (firstLineNo != lastLineNo) {
         return generateMultiLine(errorOutput);
@@ -90,7 +90,7 @@ void CypherError::generate(std::string& errorOutput) {
 }
 
 void CypherError::generateSingleLine(std::string& errorOutput) {
-    const size_t firstLineNo = _loc->beginLine;
+    const size_t firstLineNo = _loc->_beginLine;
     const size_t errLineNo = firstLineNo;
 
     if (errLineNo != 1) {
@@ -111,8 +111,8 @@ void CypherError::generateSingleLine(std::string& errorOutput) {
     errorOutput += "\n";
 
     const LinePatternLocation errLineLoc = {
-        .beginLine = _loc->beginColumn - 1,
-        .count = _loc->endColumn - _loc->beginColumn,
+        ._beginLine = _loc->_beginColumn - 1,
+        ._count = _loc->_endColumn - _loc->_beginColumn,
     };
 
     errorOutput += errorBars<UP_ERR_CHAR>(errLineLoc);
@@ -122,16 +122,16 @@ void CypherError::generateSingleLine(std::string& errorOutput) {
 
 void CypherError::generateMultiLine(std::string& errorOutput) {
     // Multi-line error
-    const size_t firstLineNo = _loc->beginLine;
-    const size_t lastLineNo = _loc->endLine;
+    const size_t firstLineNo = _loc->_beginLine;
+    const size_t lastLineNo = _loc->_endLine;
 
     ignoreLines(_query, firstLineNo - 1);
 
     std::string_view line = nextLine(_query);
 
     const LinePatternLocation firstLineLoc = {
-        .beginLine = _loc->beginColumn - 1,
-        .count = line.size() - _loc->beginColumn + 1,
+        ._beginLine = _loc->_beginColumn - 1,
+        ._count = line.size() - _loc->_beginColumn + 1,
     };
 
     errorOutput += errorBars<DOWN_ERR_CHAR>(firstLineLoc);
@@ -147,8 +147,8 @@ void CypherError::generateMultiLine(std::string& errorOutput) {
     }
 
     const LinePatternLocation lastLineLoc = {
-        .beginLine = 0,
-        .count = _loc->endColumn + 1,
+        ._beginLine = 0,
+        ._count = _loc->_endColumn + 1,
     };
 
     errorOutput += errorBars<UP_ERR_CHAR>(lastLineLoc);

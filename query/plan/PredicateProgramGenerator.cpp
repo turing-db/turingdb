@@ -58,7 +58,7 @@ void PredicateProgramGenerator::addLabelConstraint(Column* lblsetCol,
     }
 
     // Fold over all label constraints with OR
-    Column* finalLabelMask {nullptr};
+    Column* finalLabelMask = nullptr;
     for (const LabelSetID lsID : matchingLblSets) {
         ColumnConst<LabelSetID>* constCol =
             _gen->memory().alloc<ColumnConst<LabelSetID>>();

@@ -67,7 +67,7 @@ protected:
     }
 
     static void createPublicationGraph(Graph* graph) {
-        GraphWriter writer {graph};
+        GraphWriter writer(graph);
         writer.setName("publicationdb");
 
         // Publication 1: US publication with institution

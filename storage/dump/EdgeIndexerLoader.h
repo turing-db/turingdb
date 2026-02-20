@@ -23,7 +23,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<std::unique_ptr<EdgeIndexer>> load(const GraphMetadata& metadata, const EdgeContainer& edges) {
-        Profile profile {"EdgeIndexerLoader::load"};
+        Profile profile("EdgeIndexerLoader::load");
         _reader.nextPage();
 
         if (_reader.errorOccured()) {

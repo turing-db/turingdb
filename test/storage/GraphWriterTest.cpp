@@ -22,7 +22,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> create1Graph() {
         auto graph = Graph::create();
-        GraphWriter writer {graph.get()};
+        GraphWriter writer(graph.get());
 
         auto node = writer.addNode({"Object"});
         writer.addNodeProperty<types::String>(node, "Value", "1");

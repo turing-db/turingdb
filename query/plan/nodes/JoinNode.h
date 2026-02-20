@@ -33,7 +33,7 @@ private:
     const VarDecl* _leftJoinKeyVar {nullptr};
     const VarDecl* _rightJoinKeyVar {nullptr};
 
-    JoinType _type;
+    JoinType _type {JoinType::COMMON_ANCESTOR};
 };
 
 }

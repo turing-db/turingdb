@@ -21,7 +21,7 @@ NodeContainer::~NodeContainer() {
 
 std::unique_ptr<NodeContainer> NodeContainer::create(NodeID firstID,
                                                      const std::vector<LabelSetHandle>& nodeLabelSets) {
-    Profile profile {"NodeContainer::create"};
+    Profile profile("NodeContainer::create");
 
     auto* ptr = new NodeContainer(firstID, nodeLabelSets.size());
     std::unique_ptr<NodeContainer> container(ptr);

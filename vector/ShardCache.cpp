@@ -20,7 +20,7 @@ ShardCache::ShardCache(StorageManager& storageManager)
 ShardCache::~ShardCache() noexcept {
     for (auto& [id, it] : _accessedMap) {
         try {
-            it->second.shard->save();
+            it->second._shard->save();
         } catch (...) {
             fmt::println("Error writing shard {}", id._signature);
         }
@@ -28,16 +28,16 @@ ShardCache::~ShardCache() noexcept {
 }
 
 VecLibShard& ShardCache::getShard(const VecLibMetadata& meta, LSHSignature signature) {
-    std::unique_lock lock {_mutex};
+    std::unique_lock lock(_mutex);
 
-    const ShardIdentifier id {meta._id, signature};
+    const ShardIdentifier id(meta._id, signature);
 
     auto it = _accessedMap.find(id);
 
     // If already in cache, increment access count and return
     if (it != _accessedMap.end()) {
-        it->second->second.accessCount++;
-        return *it->second->second.shard;
+        it->second->second._accessCount++;
+        return *it->second->second._shard;
     }
 
     // If not in cache, load/create the shard
@@ -68,8 +68,8 @@ VecLibShard& ShardCache::getShard(const VecLibMetadata& meta, LSHSignature signa
     _memUsage += memUsage;
 
     ShardEntry entry;
-    entry.shard = std::move(shard);
-    entry.accessCount = 1;
+    entry._shard = std::move(shard);
+    entry._accessCount = 1;
 
     _accessed.emplace_front(id, std::move(entry));
     _accessedMap[id] = _accessed.begin();
@@ -78,16 +78,16 @@ VecLibShard& ShardCache::getShard(const VecLibMetadata& meta, LSHSignature signa
         _memUsage -= evictOne();
     }
 
-    return *_accessed.front().second.shard;
+    return *_accessed.front().second._shard;
 }
 
 void ShardCache::updateMemUsage() {
-    std::unique_lock lock {_mutex};
+    std::unique_lock lock(_mutex);
 
     ssize_t memUsage = 0;
 
     for (auto& [id, it] : _accessedMap) {
-        memUsage += it->second.shard->getUsedMem();
+        memUsage += it->second._shard->getUsedMem();
     }
 
     while (memUsage > _memLimit && _accessed.size() > 1) {
@@ -100,11 +100,11 @@ void ShardCache::updateMemUsage() {
 }
 
 void ShardCache::evictLibraryShards(VecLibID libID) {
-    std::unique_lock lock {_mutex};
+    std::unique_lock lock(_mutex);
 
     for (auto it = _accessedMap.begin(); it != _accessedMap.end();) {
         if (it->first._libID == libID) {
-            it->second->second.shard->save();
+            it->second->second._shard->save();
             it = _accessedMap.erase(it);
         } else {
             ++it;
@@ -117,18 +117,18 @@ ssize_t ShardCache::evictOne() {
 
     // Find shard with lowest access count
     auto victim = _accessed.begin();
-    size_t minAccessCount = victim->second.accessCount;
+    size_t minAccessCount = victim->second._accessCount;
 
     for (auto it = _accessed.begin(); it != _accessed.end(); ++it) {
-        if (it->second.accessCount < minAccessCount) {
-            minAccessCount = it->second.accessCount;
+        if (it->second._accessCount < minAccessCount) {
+            minAccessCount = it->second._accessCount;
             victim = it;
         }
     }
 
-    victim->second.shard->save();
+    victim->second._shard->save();
 
-    const ssize_t freedMem = victim->second.shard->getUsedMem();
+    const ssize_t freedMem = victim->second._shard->getUsedMem();
     _accessedMap.erase(victim->first);
     _accessed.erase(victim);
 

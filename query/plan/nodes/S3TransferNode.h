@@ -32,7 +32,7 @@ public:
     std::string_view getLocalPath() const { return _localPath; }
 
 private:
-    Direction _direction;
+    Direction _direction {Direction::PULL};
     std::string_view _s3Bucket;
     std::string_view _s3Prefix;
     std::string_view _s3File;

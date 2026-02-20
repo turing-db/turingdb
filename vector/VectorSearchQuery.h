@@ -47,7 +47,7 @@ public:
     }
 
 private:
-    const Dimension _dimension;
+    const Dimension _dimension {0};
     std::vector<float> _embeddings;
     size_t _maxResultCount {1};
 };

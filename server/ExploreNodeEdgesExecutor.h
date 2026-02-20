@@ -123,8 +123,8 @@ private:
     size_t _skip {0};
     size_t _limit {DEFAULT_LIMIT};
 
-    bool _excludeOutgoing = false;
-    bool _excludeincoming = false;
+    bool _excludeOutgoing {false};
+    bool _excludeincoming {false};
 
     ColumnVector<NodeID> _nodeID;
     std::vector<PropertyFilter> _nodeProperties;

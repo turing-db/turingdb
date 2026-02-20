@@ -56,12 +56,12 @@ TEST_F(PerfStatTest, MeasurePerfs) {
     std::array<float, 3> durations = { 0.050f, 0.070f, 0.020f };
     size_t i = 0;
     for (std::string line; std::getline(logFile, line);) {
-        std::stringstream linestream{line};
+        std::stringstream linestream(line);
 
         size_t j = 0;
         for (std::string word; std::getline(linestream, word, ' '); ) {
             if (j == 7) {
-                std::stringstream wordstream{word};
+                std::stringstream wordstream(word);
                 float duration = 0.f;
                 wordstream >> duration;
                 ASSERT_GE(duration, durations[i]);

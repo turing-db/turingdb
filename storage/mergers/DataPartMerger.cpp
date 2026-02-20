@@ -18,7 +18,7 @@ namespace rg = ranges;
 namespace rv = rg::views;
 
 struct PropertyTypeDispatcher {
-    ValueType _valueType;
+    ValueType _valueType {ValueType::Invalid};
 
     auto execute(const auto& executor) const {
         switch (_valueType) {
@@ -65,7 +65,7 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
     // we can use this to check the tombstones as well as build the custom
     // tmpNodeIDs vector we will pass to datapart::load()
     std::vector<NodeID>& nodeVector = datapartBuilder->getTmpNodeIDs();
-    NodeID nodeIDVal {0};
+    NodeID nodeIDVal(0);
 
     nodeVector.reserve(nodeCount);
     labelSets.reserve(nodeCount);
@@ -76,8 +76,8 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
     std::unordered_map<PropertyTypeID, size_t> _edgePropertiesCount;
 
     // Maps to store the ranges of the property container to keep in every datapart
-    std::vector<std::unordered_map<PropertyTypeID, TombstoneRanges>> nodeRangesPerPart {dataParts.size()};
-    std::vector<std::unordered_map<PropertyTypeID, TombstoneRanges>> edgeRangesPerPart {dataParts.size()};
+    std::vector<std::unordered_map<PropertyTypeID, TombstoneRanges>> nodeRangesPerPart(dataParts.size());
+    std::vector<std::unordered_map<PropertyTypeID, TombstoneRanges>> edgeRangesPerPart(dataParts.size());
 
     // We keep a set emptyProperties to skip if they do not have values left
     // after deletion
@@ -124,7 +124,7 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
 
         // Copy Edges as-is (using the tombstone ranges), (as mentioned above)the nodeIDs referred to by the edges
         // follow the insertion order of the labelSets above - so these can be sorted by dataPart::load().
-        TombstoneRanges deletedEdges {tombstones};
+        TombstoneRanges deletedEdges(tombstones);
         deletedEdges.populateRanges(dataPart->edges()._outEdges);
         for (const auto& [start, size] : deletedEdges) {
             std::memcpy(edges.data() + edgeContainerOffset, dataPart->edges()._outEdges.data() + start, size * sizeof(EdgeRecord));

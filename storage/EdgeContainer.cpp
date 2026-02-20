@@ -20,7 +20,7 @@ std::unique_ptr<EdgeContainer> EdgeContainer::create(NodeID firstNodeID,
                                                      EdgeID firstEdgeID,
                                                      std::vector<EdgeRecord>&& outs,
                                                      std::unordered_map<EdgeID, EdgeID>& tmpToFinalEdgeIDs) {
-    Profile profile {"EdgeContainer::create"};
+    Profile profile("EdgeContainer::create");
 
     // Sort out edges based on the source node
     rg::sort(outs, [&](const EdgeRecord& a, const EdgeRecord& b) {

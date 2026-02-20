@@ -8,8 +8,8 @@ namespace db {
 class LabelSetMapDumper {
 private:
     struct PageMetadata {
-        uint64_t labelsetCount {0};
-        uint64_t charCount {0};
+        uint64_t _labelsetCount {0};
+        uint64_t _charCount {0};
     };
 
 public:

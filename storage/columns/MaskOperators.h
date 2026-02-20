@@ -53,7 +53,7 @@ struct MaskOpExecutor {
         const auto& rhsd = rhs->getRaw();
 
         auto op = Op {};
-        for (size_t i {0}; i < size; i++) {
+        for (size_t i = 0; i < size; i++) {
             resd[i] = op(lhsd[i], rhsd[i]);
        }
     }
@@ -67,7 +67,7 @@ struct MaskOpExecutor {
         const auto& argd = arg->getRaw();
 
         auto op = Op {};
-        for (size_t i {0}; i < size; i++) {
+        for (size_t i = 0; i < size; i++) {
             resd[i] = op(argd[i]);
         }
     }

@@ -51,7 +51,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesProduct) {
     const ColumnTag lhsNodes = cartProd.getDataframe()->cols().front()->getTag();
     const ColumnTag rhsNodes = cartProd.getDataframe()->cols().back()->getTag();
 
-    bool executed {false};
+    bool executed = false;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df,
                               LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
@@ -125,7 +125,7 @@ TEST_F(CartesianProductProcessorTest, remyProdRest) {
     const ColumnTag lhsNodes = cartProd.getDataframe()->cols().front()->getTag();
     const ColumnTag rhsNodes = cartProd.getDataframe()->cols().back()->getTag();
 
-    bool executed {false};
+    bool executed = false;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
@@ -226,7 +226,7 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
-    bool executed {false};
+    bool executed = false;
      // Output Dataframe should be looking like:
      // 1 2 101 102
      // 1 2 102 103
@@ -242,22 +242,22 @@ TEST_F(CartesianProductProcessorTest, twoByTwo) {
 
         auto* fstCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(0)->getColumn());
         ASSERT_EQ(fstCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
-        for (size_t i {0}; NodeID expected : {1, 1, 2, 2}) {
+        for (size_t i = 0; NodeID expected : {1, 1, 2, 2}) {
             EXPECT_EQ(fstCol->at(i++), expected);
         }
         auto* sndCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(1)->getColumn());
         ASSERT_EQ(sndCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
-        for (size_t i {0}; NodeID expected : {2, 2, 3, 3}) {
+        for (size_t i = 0; NodeID expected : {2, 2, 3, 3}) {
             EXPECT_EQ(sndCol->at(i++), expected);
         }
         auto* thdCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(2)->getColumn());
         ASSERT_EQ(thdCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
-        for (size_t i {0}; NodeID expected : {101, 102, 101, 102}) {
+        for (size_t i = 0; NodeID expected : {101, 102, 101, 102}) {
             EXPECT_EQ(thdCol->at(i++), expected);
         }
         auto* fthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
         ASSERT_EQ(fthCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
-        for (size_t i {0}; NodeID expected : {102, 103, 102, 103}) {
+        for (size_t i = 0; NodeID expected : {102, 103, 102, 103}) {
             EXPECT_EQ(fthCol->at(i++), expected);
         }
     };
@@ -369,7 +369,7 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
     //  105 110 2  6  10
     //  105 110 3  7  11
     //  105 110 4  8  12
-    bool executed {false};
+    bool executed = false;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df,
                                      LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
@@ -382,9 +382,9 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
         {
             auto* fstCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(0)->getColumn());
             ASSERT_EQ(fstCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
-            const ColumnNodeIDs expected {101, 101, 101, 101, 102, 102, 102,
-                                          102, 103, 103, 103, 103, 104, 104,
-                                          104, 104, 105, 105, 105, 105};
+            const ColumnNodeIDs expected = {101, 101, 101, 101, 102, 102, 102,
+                                           102, 103, 103, 103, 103, 104, 104,
+                                           104, 104, 105, 105, 105, 105};
             for (const auto& [exp, actual] : rv::zip(expected, *fstCol)) {
                 EXPECT_EQ(exp, actual);
             }
@@ -394,9 +394,9 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
             auto* sndCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(1)->getColumn());
             ASSERT_EQ(sndCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
 
-            const ColumnNodeIDs expected {106, 106, 106, 106, 107, 107, 107,
-                                          107, 108, 108, 108, 108, 109, 109,
-                                          109, 109, 110, 110, 110, 110};
+            const ColumnNodeIDs expected = {106, 106, 106, 106, 107, 107, 107,
+                                           107, 108, 108, 108, 108, 109, 109,
+                                           109, 109, 110, 110, 110, 110};
             for (const auto& [exp, actual] : rv::zip(expected, *sndCol)) {
                 EXPECT_EQ(exp, actual);
             }
@@ -406,7 +406,7 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
             auto* thdCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(2)->getColumn());
             ASSERT_EQ(thdCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
 
-            const ColumnNodeIDs expected {
+            const ColumnNodeIDs expected = {
                 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4,
             };
             for (const auto& [exp, actual] : rv::zip(expected, *thdCol)) {
@@ -418,7 +418,7 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
             auto* frtCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
             ASSERT_EQ(frtCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
 
-            const ColumnNodeIDs expected {
+            const ColumnNodeIDs expected = {
                 5, 6, 7, 8, 5, 6, 7, 8, 5, 6, 7, 8, 5, 6, 7, 8, 5, 6, 7, 8,
             };
             for (const auto& [exp, actual] : rv::zip(expected, *frtCol)) {
@@ -430,7 +430,7 @@ TEST_F(CartesianProductProcessorTest, nonSymmetric) {
             auto* fthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(4)->getColumn());
             ASSERT_EQ(fthCol->size(), LHS_NUM_ROWS * RHS_NUM_ROWS);
 
-            const ColumnNodeIDs expected {
+            const ColumnNodeIDs expected = {
                 9, 10, 11, 12, 9, 10, 11, 12, 9, 10, 11, 12, 9, 10, 11, 12, 9, 10, 11, 12,
             };
             for (const auto& [exp, actual] : rv::zip(expected, *fthCol)) {
@@ -530,15 +530,15 @@ TEST_F(CartesianProductProcessorTest, spanningChunksSimple) {
 
     size_t numChunks = 0;
     std::vector<size_t> chunkSizes;
-    StringCol expectedFstCol {
+    StringCol expectedFstCol = {
         "a", "a", "a", "a", "a", "b", "b", "b", "b", "b", "c", "c", "c", "c", "c",
     };
-    StringCol expectedSndCol {
+    StringCol expectedSndCol = {
         "v", "w", "x", "y", "z", "v", "w", "x", "y", "z", "v", "w", "x", "y", "z",
     };
     auto expFstColIt = begin(expectedFstCol);
     auto expSndColIt = begin(expectedSndCol);
-    bool executed {false};
+    bool executed = false;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, auto operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
@@ -682,19 +682,19 @@ TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
 
     size_t numChunks = 0;
     std::vector<size_t> chunkSizes;
-    const StringCol expectedFstCol {
+    const StringCol expectedFstCol = {
         "a", "a", "a", "a", "b", "b", "b", "b","c", "c", "c", "c",
     };
-    const StringCol expectedSndCol {
+    const StringCol expectedSndCol = {
         "x", "x", "x", "x", "y", "y", "y", "y", "z", "z", "z", "z",
     };
-    const StringCol expectedThdCol {
+    const StringCol expectedThdCol = {
         "p", "p", "p", "p", "q", "q", "q", "q", "r", "r", "r", "r",
     };
-    const ColumnNodeIDs expectedFrtCol {
+    const ColumnNodeIDs expectedFrtCol = {
         1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4,
     };
-    const ColumnNodeIDs expectedFthCol {
+    const ColumnNodeIDs expectedFthCol = {
         5, 6, 7, 8, 5, 6, 7, 8, 5, 6, 7, 8,
     };
 
@@ -703,7 +703,7 @@ TEST_F(CartesianProductProcessorTest, spanningChunksMultiCol) {
     auto expThdColIt = begin(expectedThdCol);
     auto expFrtColIt = std::begin(expectedFrtCol);
     auto expFthColIt = std::begin(expectedFthCol);
-    bool executed {false};
+    bool executed = false;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, auto operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
@@ -794,8 +794,8 @@ TEST_F(CartesianProductProcessorTest, scanNodesChunkSize3) {
         }
     }
 
-    bool executed {false};
-    size_t numChunks {0};
+    bool executed = false;
+    size_t numChunks = 0;
     std::set<NodeIDTuple> actualTuples;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
@@ -857,7 +857,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesXgetOutEdges) {
     }
 
     Rows actualRows;
-    bool executed {false};
+    bool executed = false;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
@@ -944,7 +944,7 @@ TEST_F(CartesianProductProcessorTest, scanNodesx2ChunkSize3) {
     }
 
     Rows actual;
-    bool executed {false};
+    bool executed = false;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
@@ -1024,7 +1024,7 @@ TEST_F(CartesianProductProcessorTest, x2xGetOutEdgesChunkSize5) {
     }
 
     Rows actual;
-    bool executed {false};
+    bool executed = false;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
@@ -1120,7 +1120,7 @@ TEST_F(CartesianProductProcessorTest, bothOneRow) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
-    bool executed {false};
+    bool executed = false;
     // Output Dataframe should be looking like:
     std::vector<NodeID> expectedRow = {1, 2, 3, 4, 5, 101, 102, 103, 104, 105, 106};
     std::vector<NodeID> actualRow;
@@ -1200,9 +1200,9 @@ TEST_F(CartesianProductProcessorTest, tenThousandRowDataframes) {
     }
     */
 
-    bool executed {false};
-    size_t numChunks {0};
-    size_t numRows {0};
+    bool executed = false;
+    size_t numChunks = 0;
+    size_t numRows = 0;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df,
                                      LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
@@ -1286,7 +1286,7 @@ TEST_F(CartesianProductProcessorTest, lhsEmpty) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
-    bool executed {false};
+    bool executed = false;
     // Output Dataframe should be looking like:
     std::vector<NodeID> actualRow;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df,
@@ -1369,7 +1369,7 @@ TEST_F(CartesianProductProcessorTest, rhsEmpty) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
-    bool executed {false};
+    bool executed = false;
     // Output Dataframe should be looking like:
     std::vector<NodeID> actualRow;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df,
@@ -1446,7 +1446,7 @@ TEST_F(CartesianProductProcessorTest, bothEmpty) {
         ASSERT_EQ(cartProd.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS);
     }
 
-    bool executed {false};
+    bool executed = false;
     // Output Dataframe should be looking like:
     std::vector<NodeID> actualRow;
     const auto VERIFY_CALLBACK = [&](const Dataframe* df,

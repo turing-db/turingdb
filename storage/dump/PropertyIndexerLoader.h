@@ -21,7 +21,7 @@ public:
 
     [[nodiscard]] DumpResult<void> load(const GraphMetadata& metadata,
                                         PropertyIndexer& indexer) {
-        Profile profile {"PropertyIndexerLoader::load"};
+        Profile profile("PropertyIndexerLoader::load");
 
         _reader.nextPage();
 

@@ -147,7 +147,7 @@ bool Neo4jImporter::fromUrlToJsonDirImpl(JobSystem& jobSystem,
     }
 
     const auto stats = parser.parseStats(statsQuery._response);
-    spdlog::info("Database has {} nodes and {} edges", stats.nodeCount, stats.edgeCount);
+    spdlog::info("Database has {} nodes and {} edges", stats._nodeCount, stats._edgeCount);
 
     // Write node metadata json files
     writeJsonFile(jsonDir / "stats.json", statsQuery);
@@ -166,7 +166,7 @@ bool Neo4jImporter::fromUrlToJsonDirImpl(JobSystem& jobSystem,
 
     // Query nodes and write json files
     std::vector<QueryManager::Query> nodeQueries;
-    manager.nodesQueries(stats.nodeCount, nodeCountPerQuery, nodeQueries);
+    manager.nodesQueries(stats._nodeCount, nodeCountPerQuery, nodeQueries);
 
     for (auto& nodeQuery : nodeQueries) {
         submitQuery(nodeQuery);
@@ -180,7 +180,7 @@ bool Neo4jImporter::fromUrlToJsonDirImpl(JobSystem& jobSystem,
 
     // Query edges and write json files
     std::vector<QueryManager::Query> edgeQueries;
-    manager.edgesQueries(stats.edgeCount, edgeCountPerQuery, edgeQueries);
+    manager.edgesQueries(stats._edgeCount, edgeCountPerQuery, edgeQueries);
 
     for (auto& edgeQuery : edgeQueries) {
         submitQuery(edgeQuery);
@@ -238,7 +238,7 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
         spdlog::info("Parsing database info");
         stats = parser.parseStats(statsData);
 
-        spdlog::info("Database has {} nodes and {} edges", stats.nodeCount, stats.edgeCount);
+        spdlog::info("Database has {} nodes and {} edges", stats._nodeCount, stats._edgeCount);
 
         ChangeAccessor changeAccessor = change->access();
 
@@ -304,8 +304,8 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
     }
 
     // Query and parse nodes
-    const size_t nodeSteps = stats.nodeCount / nodeCountPerFile
-                           + (size_t)((stats.nodeCount % nodeCountPerFile) != 0);
+    const size_t nodeSteps = stats._nodeCount / nodeCountPerFile
+                           + (size_t)((stats._nodeCount % nodeCountPerFile) != 0);
 
     std::vector<SharedFuture<bool>> nodeResults(nodeSteps);
 
@@ -321,7 +321,7 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
                     return;
                 }
 
-                const size_t remainder = (stats.nodeCount % nodeCountPerFile);
+                const size_t remainder = (stats._nodeCount % nodeCountPerFile);
                 const bool isLast = (i == nodeSteps - 1);
                 const size_t currentCount = isLast
                                               ? (remainder == 0 ? nodeCountPerFile : remainder)
@@ -353,8 +353,8 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
     }
 
     // Query and parse edges
-    const size_t edgeSteps = stats.edgeCount / edgeCountPerFile
-                           + (size_t)((stats.edgeCount % edgeCountPerFile) != 0);
+    const size_t edgeSteps = stats._edgeCount / edgeCountPerFile
+                           + (size_t)((stats._edgeCount % edgeCountPerFile) != 0);
 
     std::vector<SharedFuture<bool>> edgeResults(edgeSteps);
 
@@ -370,7 +370,7 @@ bool Neo4jImporter::importJsonDirImpl(JobSystem& jobSystem,
                     return;
                 }
 
-                const size_t remainder = (stats.edgeCount % edgeCountPerFile);
+                const size_t remainder = (stats._edgeCount % edgeCountPerFile);
                 const bool isLast = (i == edgeSteps - 1);
                 const size_t currentCount = isLast
                                               ? (remainder == 0 ? edgeCountPerFile : remainder)
@@ -443,14 +443,13 @@ bool Neo4jImporter::fromDumpFileToJsonDirImpl(JobSystem& jobSystem,
         }
     }
 
-    UrlToJsonDirArgs urlArgs {
-        ._url = "localhost",
-        ._urlSuffix = "/db/data/transaction/commit",
-        ._username = "neo4j",
-        ._password = "turing",
-        ._port = 7474,
-        ._workDir = args._workDir,
-    };
+    UrlToJsonDirArgs urlArgs;
+    urlArgs._url = "localhost";
+    urlArgs._urlSuffix = "/db/data/transaction/commit";
+    urlArgs._username = "neo4j";
+    urlArgs._password = "turing";
+    urlArgs._port = 7474;
+    urlArgs._workDir = args._workDir;
 
     return Neo4jImporter::fromUrlToJsonDirImpl(jobSystem, graph, nodeCountPerQuery, edgeCountPerQuery, urlArgs);
 }

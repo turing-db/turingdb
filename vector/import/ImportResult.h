@@ -56,7 +56,7 @@ public:
     }
 
 private:
-    ImportErrorCode _type {};
+    ImportErrorCode _type {ImportErrorCode::Unknown};
     std::string _message;
 };
 

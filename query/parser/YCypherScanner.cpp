@@ -9,7 +9,7 @@ void YCypherScanner::syntaxError(const SourceLocation& loc,
                                  const std::string& msg) {
     std::string errorMsg;
 
-    CypherError err {_query};
+    CypherError err(_query);
     err.setTitle("Cypher parser");
     err.setErrorMsg(msg);
     err.setLocation(loc);
@@ -23,7 +23,7 @@ void YCypherScanner::notImplemented(const SourceLocation& loc,
     std::string msg = fmt::format("Not implemented: {}", rawMsg);
     std::string errorMsg;
 
-    CypherError err {_query};
+    CypherError err(_query);
     err.setTitle("Cypher parser");
     err.setErrorMsg(msg);
     err.setLocation(loc);

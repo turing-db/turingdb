@@ -60,7 +60,7 @@ struct CustomBool {
 
 struct PropertyType {
     PropertyTypeID _id;
-    ValueType _valueType {};
+    ValueType _valueType {ValueType::Invalid};
 
     bool isValid() const { return _id.isValid(); }
 
@@ -117,8 +117,8 @@ enum class PropertyImportance : uint8_t {
 };
 
 struct PropertyTypeInfo {
-    ValueType _type {};
-    size_t _count = 0;
+    ValueType _type {ValueType::Invalid};
+    size_t _count {0};
 };
 
 using PropertyTypeInfos = std::map<PropertyTypeID, PropertyTypeInfo>;

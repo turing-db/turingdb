@@ -28,8 +28,8 @@ TEST_F(FileCacheTest, SuccesfulListGraphs) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockListResult listResult;
-        listResult.success = true;
-        listResult.commonPrefixes = {"dir0/dir0.5/graph1/", "dir0/dir0.5/graph2/", "dir0/dir0.5/graph3/"};
+        listResult._success = true;
+        listResult._commonPrefixes = {"dir0/dir0.5/graph1/", "dir0/dir0.5/graph2/", "dir0/dir0.5/graph3/"};
         std::vector<std::string> expectedGraphs = {"graph1", "graph2", "graph3"};
 
         S3::MockUploadResult uploadResult;
@@ -56,8 +56,8 @@ TEST_F(FileCacheTest, UnsuccesfulListGraphs) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockListResult listResult;
-        listResult.success = false;
-        listResult.errorType = S3::S3ClientErrorType::CANNOT_LIST_FOLDERS;
+        listResult._success = false;
+        listResult._errorType = S3::S3ClientErrorType::CANNOT_LIST_FOLDERS;
 
         S3::MockUploadResult uploadResult;
         S3::MockDownloadResult downloadResult;
@@ -135,12 +135,12 @@ TEST_F(FileCacheTest, SuccesfulLoadGraphs) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockListResult listResult;
-        listResult.success = true;
-        listResult.keys = {"testUser1/graphs/graph1/obj1", "testUser1/graphs/graph1/obj2", "testUser1/graphs/graph1/obj3"};
+        listResult._success = true;
+        listResult._keys = {"testUser1/graphs/graph1/obj1", "testUser1/graphs/graph1/obj2", "testUser1/graphs/graph1/obj3"};
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = true;
-        downloadResult.content = "";
+        downloadResult._success = true;
+        downloadResult._content = "";
 
         S3::MockUploadResult uploadResult;
 
@@ -164,12 +164,12 @@ TEST_F(FileCacheTest, UnsuccesfulLoadGraphs) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockListResult listResult;
-        listResult.success = true;
-        listResult.keys = {"testUser1/graphs/graph1/obj1", "testUser1/graphs/graph1/obj2", "testUser1/graphs/graph1/obj3"};
+        listResult._success = true;
+        listResult._keys = {"testUser1/graphs/graph1/obj1", "testUser1/graphs/graph1/obj2", "testUser1/graphs/graph1/obj3"};
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = false;
-        downloadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        downloadResult._success = false;
+        downloadResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockUploadResult uploadResult;
 
@@ -200,7 +200,7 @@ TEST_F(FileCacheTest, SuccesfulSaveGraphs) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = true;
+        uploadResult._success = true;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -227,8 +227,8 @@ TEST_F(FileCacheTest, UnsuccesfulSaveGraphs) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        uploadResult._success = false;
+        uploadResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -258,8 +258,8 @@ TEST_F(FileCacheTest, UnsuccesfulSaveGraphs) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        uploadResult._success = false;
+        uploadResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -285,9 +285,9 @@ TEST_F(FileCacheTest, SuccesfulListData) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockListResult listResult;
-        listResult.success = true;
-        listResult.commonPrefixes = {"dir0/dir0.5/folder1/", "dir0/dir0.5/folder2/", "dir0/dir0.5/folder3/"};
-        listResult.keys = {"dir0/dir1/file1", "dir0/file2", "file3"};
+        listResult._success = true;
+        listResult._commonPrefixes = {"dir0/dir0.5/folder1/", "dir0/dir0.5/folder2/", "dir0/dir0.5/folder3/"};
+        listResult._keys = {"dir0/dir1/file1", "dir0/file2", "file3"};
 
         std::vector<std::string> folderNames = {"folder1", "folder2", "folder3"};
         std::vector<std::string> fileNames = {"file1", "file2", "file3"};
@@ -318,8 +318,8 @@ TEST_F(FileCacheTest, UnsuccesfulListData) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockListResult listResult;
-        listResult.success = false;
-        listResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        listResult._success = false;
+        listResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockUploadResult uploadResult;
         S3::MockDownloadResult downloadResult;
@@ -413,7 +413,7 @@ TEST_F(FileCacheTest, SuccesfulSaveDataFile) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = true;
+        uploadResult._success = true;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -438,7 +438,7 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataFile) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = true;
+        uploadResult._success = true;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -463,7 +463,7 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataFile) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = true;
+        uploadResult._success = true;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -486,8 +486,8 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataFile) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        uploadResult._success = false;
+        uploadResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -534,8 +534,8 @@ TEST_F(FileCacheTest, SuccesfulLoadDataFile) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = true;
-        downloadResult.content = "";
+        downloadResult._success = true;
+        downloadResult._content = "";
 
         S3::MockListResult listResult;
         S3::MockUploadResult uploadResult;
@@ -561,8 +561,8 @@ TEST_F(FileCacheTest, UnsuccesfulLoadDataFile) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = true;
-        downloadResult.content = "";
+        downloadResult._success = true;
+        downloadResult._content = "";
 
         S3::MockListResult listResult;
         S3::MockUploadResult uploadResult;
@@ -585,8 +585,8 @@ TEST_F(FileCacheTest, UnsuccesfulLoadDataFile) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = false;
-        downloadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        downloadResult._success = false;
+        downloadResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockListResult listResult;
         S3::MockUploadResult uploadResult;
@@ -613,7 +613,7 @@ TEST_F(FileCacheTest, SuccesfulSaveDataDirectory) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = true;
+        uploadResult._success = true;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -639,7 +639,7 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataDirectory) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = true;
+        uploadResult._success = true;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -664,7 +664,7 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataDirectory) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = true;
+        uploadResult._success = true;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -689,8 +689,8 @@ TEST_F(FileCacheTest, UnsuccesfulSaveDataDirectory) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockUploadResult uploadResult;
-        uploadResult.success = false;
-        uploadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        uploadResult._success = false;
+        uploadResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockDownloadResult downloadResult;
         S3::MockListResult listResult;
@@ -739,12 +739,12 @@ TEST_F(FileCacheTest, SuccesfulLoadDataDirectory) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockListResult listResult;
-        listResult.success = true;
-        listResult.keys = {"testUser1/data/dir2/obj1", "testUser1/data/dir2/obj2", "testUser1/data/dir2/obj3"};
+        listResult._success = true;
+        listResult._keys = {"testUser1/data/dir2/obj1", "testUser1/data/dir2/obj2", "testUser1/data/dir2/obj3"};
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = true;
-        downloadResult.content = "";
+        downloadResult._success = true;
+        downloadResult._content = "";
 
         S3::MockUploadResult uploadResult;
 
@@ -770,8 +770,8 @@ TEST_F(FileCacheTest, UnsuccesfulLoadDataDirectory) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = true;
-        downloadResult.content = "";
+        downloadResult._success = true;
+        downloadResult._content = "";
 
         S3::MockListResult listResult;
         S3::MockUploadResult uploadResult;
@@ -796,12 +796,12 @@ TEST_F(FileCacheTest, UnsuccesfulLoadDataDirectory) {
         fs::Path dataPath = fs::Path(dir.getPath() + "data");
 
         S3::MockListResult listResult;
-        listResult.success = true;
-        listResult.keys = {"testUser1/data/dir2/obj1", "testUser1/data/dir2/obj2", "testUser1/data/dir2/obj3"};
+        listResult._success = true;
+        listResult._keys = {"testUser1/data/dir2/obj1", "testUser1/data/dir2/obj2", "testUser1/data/dir2/obj3"};
 
         S3::MockDownloadResult downloadResult;
-        downloadResult.success = false;
-        downloadResult.errorType = S3::S3ClientErrorType::ACCESS_DENIED;
+        downloadResult._success = false;
+        downloadResult._errorType = S3::S3ClientErrorType::ACCESS_DENIED;
 
         S3::MockUploadResult uploadResult;
 

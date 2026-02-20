@@ -17,7 +17,7 @@ public:
 
 private:
     Expr* _subExpr {nullptr};
-    UnaryOperator _operator;
+    UnaryOperator _operator {UnaryOperator::Not};
 
     UnaryExpr(UnaryOperator op, Expr* subExpr)
         : Expr(Kind::UNARY),

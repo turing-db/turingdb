@@ -134,7 +134,7 @@ public:
     }
 
 private:
-    VectorErrorCode _type;
+    VectorErrorCode _type {VectorErrorCode::Unknown};
     std::optional<fs::Error> _fileError;
 };
 

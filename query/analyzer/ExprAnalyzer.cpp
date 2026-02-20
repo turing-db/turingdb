@@ -80,7 +80,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 
     EvaluatedType type = EvaluatedType::Invalid;
 
-    const TypePairBitset pair {a, b};
+    const TypePairBitset pair(a, b);
 
     switch (expr->getOperator()) {
         case BinaryOperator::Or:
@@ -352,7 +352,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
 
     const auto propTypeFound = _graphMetadata.propTypes().get(propName->getName());
 
-    ValueType vt {};
+    ValueType vt = ValueType::Invalid;
 
     if (!propTypeFound) {
         // Property does not exist yet

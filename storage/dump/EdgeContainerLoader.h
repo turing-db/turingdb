@@ -21,7 +21,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<std::unique_ptr<EdgeContainer>> load() {
-        Profile profile {"EdgeContainerLoader::load"};
+        Profile profile("EdgeContainerLoader::load");
 
         _reader.nextPage();
 

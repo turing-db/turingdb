@@ -11,7 +11,7 @@ int main() {
 
     // FileInfo
     {
-        fs::Path p {SAMPLE_DIR "/test"};
+        fs::Path p(SAMPLE_DIR "/test");
         const auto info = p.getFileInfo();
 
         fmt::print("## FileInfo struct\n");
@@ -33,7 +33,7 @@ int main() {
     }
 
     {
-        fs::Path p {SAMPLE_DIR "/testbinary"};
+        fs::Path p(SAMPLE_DIR "/testbinary");
         fmt::print("## Read/Write binary values to file\n");
 
         {

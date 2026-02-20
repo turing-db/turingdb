@@ -35,19 +35,19 @@ private:
 
     /// Cache of the common successors
     struct NodePair {
-        PlanGraphNode* a {nullptr};
-        PlanGraphNode* b {nullptr};
+        PlanGraphNode* _a {nullptr};
+        PlanGraphNode* _b {nullptr};
 
         struct Hasher {
             std::size_t operator()(const NodePair& pair) const {
-                return std::hash<PlanGraphNode*>()(pair.a)
-                     ^ std::hash<PlanGraphNode*>()(pair.b);
+                return std::hash<PlanGraphNode*>()(pair._a)
+                     ^ std::hash<PlanGraphNode*>()(pair._b);
             }
         };
 
         struct Equal {
             bool operator()(const NodePair& a, const NodePair& b) const {
-                return a.a == b.a && a.b == b.b;
+                return a._a == b._a && a._b == b._b;
             }
         };
     };

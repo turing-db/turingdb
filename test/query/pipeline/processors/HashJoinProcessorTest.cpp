@@ -101,7 +101,7 @@ TEST_F(HashJoinProcessorTest, simpleJoinCase) {
         ASSERT_EQ(df->size(), RHS_NUM_COLS);
         isFinished = true;
     };
-    ColumnTag joinKey {0};
+    ColumnTag joinKey(0);
     { // Wire up the hash join to the two inputs
         auto& rhsIF = _builder->addLambdaSource(genRDF);
         for (size_t i = 0; i < RHS_NUM_COLS; i++) {
@@ -141,30 +141,30 @@ TEST_F(HashJoinProcessorTest, simpleJoinCase) {
 
         auto* fstCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(0)->getColumn());
         ASSERT_EQ(fstCol->size(), NUM_MATCHES);
-        for (size_t i {0}; NodeID expected : {101, 102, 103, 104, 105}) {
+        for (size_t i = 0; NodeID expected : {101, 102, 103, 104, 105}) {
             EXPECT_EQ(fstCol->at(i++), expected);
         }
         auto* sndCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(1)->getColumn());
         ASSERT_EQ(sndCol->size(), NUM_MATCHES);
-        for (size_t i {0}; NodeID expected : {201, 202, 203, 204, 205}) {
+        for (size_t i = 0; NodeID expected : {201, 202, 203, 204, 205}) {
             EXPECT_EQ(sndCol->at(i++), expected);
         }
 
         auto* thirdCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(2)->getColumn());
         ASSERT_EQ(thirdCol->size(), NUM_MATCHES);
-        for (size_t i {0}; NodeID expected : {301, 302, 303, 304, 305}) {
+        for (size_t i = 0; NodeID expected : {301, 302, 303, 304, 305}) {
             EXPECT_EQ(thirdCol->at(i++), expected);
         }
 
         auto* fourthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
         ASSERT_EQ(fourthCol->size(), NUM_MATCHES);
-        for (size_t i {0}; NodeID expected : {401, 402, 403, 404, 405}) {
+        for (size_t i = 0; NodeID expected : {401, 402, 403, 404, 405}) {
             EXPECT_EQ(fourthCol->at(i++), expected);
         }
 
         auto* joinCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(4)->getColumn());
         ASSERT_EQ(joinCol->size(), NUM_MATCHES);
-        for (size_t i {0}; NodeID expected : {1, 2, 3, 4, 5}) {
+        for (size_t i = 0; NodeID expected : {1, 2, 3, 4, 5}) {
             EXPECT_EQ(joinCol->at(i++), expected);
         }
     };
@@ -253,7 +253,7 @@ TEST_F(HashJoinProcessorTest, emptyJoinCase) {
         ASSERT_EQ(df->size(), RHS_NUM_COLS);
         isFinished = true;
     };
-    ColumnTag joinKey {0};
+    ColumnTag joinKey(0);
     { // Wire up the hash join to the two inputs
         auto& rhsIF = _builder->addLambdaSource(genRDF);
         for (size_t i = 0; i < RHS_NUM_COLS; i++) {
@@ -386,7 +386,7 @@ TEST_F(HashJoinProcessorTest, multipleValuesPerJoinKey) {
         ASSERT_EQ(df->size(), LHS_NUM_COLS);
         isFinished = true;
     };
-    ColumnTag joinKey {0};
+    ColumnTag joinKey(0);
     { // Wire up the hash join to the two inputs
         auto& rhsIF = _builder->addLambdaSource(genRDF);
         for (size_t i = 0; i < RHS_NUM_COLS; i++) {
@@ -406,7 +406,7 @@ TEST_F(HashJoinProcessorTest, multipleValuesPerJoinKey) {
         ASSERT_EQ(hashJoin.getDataframe()->cols().size(), LHS_NUM_COLS + RHS_NUM_COLS - 1);
     }
 
-    const std::vector<uint64_t> expectedFirstCol {31, 31, 32, 32, 33, 33, 34, 34, 35, 35};
+    const std::vector<uint64_t> expectedFirstCol = {31, 31, 32, 32, 33, 33, 34, 34, 35, 35};
     const std::vector<uint64_t> expectedSecondCol = {41, 41, 42, 42, 43, 43, 44, 44, 45, 45};
     const auto& expectedThirdCol = std::views::iota(11, 21);
     const auto& expectedFourthCol = std::views::iota(21, 31);
@@ -544,7 +544,7 @@ TEST_F(HashJoinProcessorTest, joinEveryOtherValue) {
         ASSERT_EQ(df->size(), RHS_NUM_COLS);
         isFinished = true;
     };
-    ColumnTag joinKey {0};
+    ColumnTag joinKey(0);
     { // Wire up the hash join to the two inputs
         auto& rhsIF = _builder->addLambdaSource(genRDF);
         for (size_t i = 0; i < RHS_NUM_COLS; i++) {
@@ -584,27 +584,27 @@ TEST_F(HashJoinProcessorTest, joinEveryOtherValue) {
 
         auto* firstCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(0)->getColumn());
         ASSERT_EQ(firstCol->size(), NUM_MATCHES);
-        for (size_t i {0}; NodeID expected : {102, 104, 106, 108}) {
+        for (size_t i = 0; NodeID expected : {102, 104, 106, 108}) {
             EXPECT_EQ(firstCol->at(i++), expected);
         }
         auto* secondCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(1)->getColumn());
         ASSERT_EQ(secondCol->size(), NUM_MATCHES);
-        for (size_t i {0}; NodeID expected : {202, 204, 206, 208}) {
+        for (size_t i = 0; NodeID expected : {202, 204, 206, 208}) {
             EXPECT_EQ(secondCol->at(i++), expected);
         }
         auto* thirdCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(2)->getColumn());
         ASSERT_EQ(thirdCol->size(), NUM_MATCHES);
-        for (size_t i {0}; NodeID expected : {302, 304, 306, 308}) {
+        for (size_t i = 0; NodeID expected : {302, 304, 306, 308}) {
             EXPECT_EQ(thirdCol->at(i++), expected);
         }
         auto* fourthCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
         ASSERT_EQ(fourthCol->size(), NUM_MATCHES);
-        for (size_t i {0}; NodeID expected : {402, 404, 406, 408}) {
+        for (size_t i = 0; NodeID expected : {402, 404, 406, 408}) {
             EXPECT_EQ(fourthCol->at(i++), expected);
         }
         auto* joinCol = dynamic_cast<ColumnNodeIDs*>(df->cols().at(4)->getColumn());
         ASSERT_EQ(joinCol->size(), NUM_MATCHES);
-        for (size_t i {0}; NodeID expected : {2, 4, 6, 8}) {
+        for (size_t i = 0; NodeID expected : {2, 4, 6, 8}) {
             EXPECT_EQ(joinCol->at(i++), expected);
         }
     };
@@ -702,7 +702,7 @@ TEST_F(HashJoinProcessorTest, millionRowJoinCase) {
         isFinished = true;
     };
 
-    ColumnTag joinKey {0};
+    ColumnTag joinKey(0);
     { // Wire up the hash join to the two inputs
         auto& rhsIF = _builder->addLambdaSource(genRDF);
         for (size_t i = 0; i < RHS_NUM_COLS; i++) {
@@ -877,7 +877,7 @@ TEST_F(HashJoinProcessorTest, thousandRowJoinCaseChunkedInputs) {
         }
     };
 
-    ColumnTag joinKey {0};
+    ColumnTag joinKey(0);
     { // Wire up the hash join to the two inputs
         auto& rhsIF = _builder->addLambdaSource(genRDF);
         for (size_t i = 0; i < RHS_NUM_COLS; i++) {
@@ -1058,7 +1058,7 @@ TEST_F(HashJoinProcessorTest, finishPausedStreamTest) {
         }
     };
 
-    ColumnTag joinKey {0};
+    ColumnTag joinKey(0);
     { // Wire up the hash join to the two inputs
         auto& rhsIF = _builder->addLambdaSource(genRDF);
         for (size_t i = 0; i < RHS_NUM_COLS; i++) {
@@ -1250,7 +1250,7 @@ TEST_F(HashJoinProcessorTest, finishPausedStreamAndContinueToProcessTest) {
         }
     };
 
-    ColumnTag joinKey {0};
+    ColumnTag joinKey(0);
     { // Wire up the hash join to the two inputs
         auto& rhsIF = _builder->addLambdaSource(genRDF);
         for (size_t i = 0; i < RHS_NUM_COLS; i++) {
@@ -1438,7 +1438,7 @@ TEST_F(HashJoinProcessorTest, multipleValuesPerKeyWithChunkedInputs) {
         }
     };
 
-    ColumnTag joinKey {0};
+    ColumnTag joinKey(0);
     { // Wire up the hash join to the two inputs
         auto& rhsIF = _builder->addLambdaSource(genRDF);
         for (size_t i = 0; i < RHS_NUM_COLS; i++) {

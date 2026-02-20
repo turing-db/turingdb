@@ -10,7 +10,7 @@
 #include "TuringTime.h"
 
 int main(int argc, char** argv) {
-    const fs::Path rootPath {SAMPLE_DIR "/storage"};
+    const fs::Path rootPath(SAMPLE_DIR "/storage");
     vec::RandomGenerator::initialize(1);
 
     std::string_view libName = "test2";
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    vec::VectorSearchQuery query {dim};
+    vec::VectorSearchQuery query(dim);
     query.setMaxResultCount(20);
     query.setVector(queryData);
 
