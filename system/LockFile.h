@@ -20,6 +20,7 @@ public:
 
     LockFileResult<void> tryLock();
     void unlock();
+    bool waitUnlock(size_t milliseconds);
 
 private:
     fs::Path _path;

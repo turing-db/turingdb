@@ -38,9 +38,6 @@ Should acquire an exclusive advisory lock on `turingdb.lock` using `flock(LOCK_E
 - The lock file stores only one piece of data: the PID on a single line. No port, timestamp,
   or hostname is needed.
 
-Error types should be defined in `LockFileErrorType`: `UNKNOWN`, `PERMISSION_DENIED`,
-`ALREADY_LOCKED`, `NO_PID`.
-
 `TuringDB::init()` should call `_lockFile.tryLock()` and panic if the lock cannot be acquired.
 
 ### `SystemEventHandler` (`system/SystemEventHandler.h`)

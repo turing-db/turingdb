@@ -24,6 +24,8 @@ StartCmd::StartCmd()
 StartCmd::~StartCmd() = default;
 
 int StartCmd::execute() {
+    LogSetup::setupLogConsole();
+
     // Config
     TuringConfig config;
     config.setSyncedOnDisk(!_inMemory);
@@ -65,7 +67,6 @@ int StartCmd::execute() {
 
         turingDB.init();
         LogSetup::setupLogFileBacked((logsDir / "turingdb.log").get(), false);
-        spdlog::info("TuringDB path: {}", turingDir.get());
 
         // Delete existing `default` graph if requested
         if (_resetDefault) {
@@ -94,6 +95,9 @@ int StartCmd::execute() {
         DBServerConfig serverConfig;
         serverConfig.setPort(_port);
         serverConfig.setAddress(_address);
+
+        spdlog::info("TuringDB started");
+        spdlog::info("  - Home directory: {}", turingDir.get());
 
         server = std::make_unique<TuringServer>(serverConfig, turingDB);
         server->start();

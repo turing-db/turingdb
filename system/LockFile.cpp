@@ -3,7 +3,10 @@
 #include <unistd.h>
 #include <sys/file.h>
 #include <charconv>
+#include <chrono>
+#include <thread>
 
+#include "TuringTime.h"
 #include "BioAssert.h"
 #include "File.h"
 #include "FileReader.h"
@@ -102,13 +105,9 @@ LockFileResult<void> LockFile::writeMetadata() {
 
     const int pid = ::getpid();
 
-    fs::Result<fs::File> f = fs::File::open(_path);
-    if (!f) {
+    if (const fs::Result<void> res = _file.clearContent(); !res) {
         return LockFileError::result(LockFileErrorType::PERMISSION_DENIED);
     }
-
-    _file = std::move(f.value());
-    _file.clearContent();
 
     fs::FileWriter writer;
     writer.setFile(&_file);
@@ -122,6 +121,40 @@ LockFileResult<void> LockFile::writeMetadata() {
     }
 
     return {};
+}
+
+bool LockFile::waitUnlock(size_t milliseconds) {
+    bioassert(!_path.empty(), "Path is empty");
+
+    const auto deadline = std::chrono::steady_clock::now()
+                          + std::chrono::milliseconds(milliseconds);
+
+    constexpr size_t interval = 10;
+
+    while (true) {
+        if (!_path.exists()) {
+            return true;
+        }
+
+        const int fd = ::open(_path.c_str(), O_RDWR, 0644);
+        if (fd < 0) {
+            // File disappeared between exists() and open()
+            return true;
+        }
+
+        const int res = ::flock(fd, LOCK_EX | LOCK_NB);
+        ::close(fd);
+
+        if (res == 0) {
+            return true;
+        }
+
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
+    }
 }
 
 void LockFile::unlock() {

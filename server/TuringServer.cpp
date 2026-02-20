@@ -66,7 +66,7 @@ void TuringServer::start() {
 
     _serverThread = std::thread(serverFunc);
 
-    spdlog::info("Server listening on address: {}:{}",
+    spdlog::info("  - Server listening on address: {}:{}",
                  _server->getAddress(),
                  _server->getPort());
 }

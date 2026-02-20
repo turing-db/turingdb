@@ -13,7 +13,10 @@ public:
     File(File&& other) noexcept
         : _info(other._info)
     {
-        close();
+        if (_fd != other._fd) {
+            close();
+        }
+
         _fd = other._fd;
         other._fd = -1;
     }
@@ -23,7 +26,9 @@ public:
             return *this;
         }
 
-        close();
+        if (_fd != other._fd) {
+            close();
+        }
 
         _info = other._info;
         _fd = other._fd;
@@ -32,8 +37,8 @@ public:
         return *this;
     }
 
-    File(const File&) = default;
-    File& operator=(const File&) = default;
+    File(const File&) = delete;
+    File& operator=(const File&) = delete;
 
     [[nodiscard]] static Result<File> fromFd(const Path& path, int fd);
     [[nodiscard]] static Result<File> createAndOpen(const Path& path);

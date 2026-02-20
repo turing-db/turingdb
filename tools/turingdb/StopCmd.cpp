@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 
 #include "TuringConfig.h"
+#include "LockFile.h"
 #include "SystemEventHandler.h"
 #include "LogSetup.h"
 
@@ -17,6 +18,8 @@ StopCmd::StopCmd()
 StopCmd::~StopCmd() = default;
 
 int StopCmd::execute() {
+    LogSetup::setupLogConsole();
+
     TuringConfig config;
 
     if (!_turingDir.empty()) {
@@ -24,8 +27,6 @@ int StopCmd::execute() {
     }
 
     _turingDir = config.getTuringDir().get();
-
-    LogSetup::setupLogConsole();
 
     const fs::Path socketPath = config.getSocketPath();
     if (!socketPath.exists()) {
@@ -35,6 +36,14 @@ int StopCmd::execute() {
 
     if (!SystemEventHandler::requestStop(socketPath)) {
         spdlog::error("Could not stop the TuringDB instance at {}", _turingDir);
+        return EXIT_FAILURE;
+    }
+
+    LockFile lockFile;
+    lockFile.setPath(config.getLockFilePath());
+
+    if (!lockFile.waitUnlock(_timeout)) {
+        spdlog::error("TuringDB at {} did not stop within {} ms", _turingDir, _timeout);
         return EXIT_FAILURE;
     }
 
@@ -58,4 +67,8 @@ void StopCmd::initialize() {
         .metavar("path")
         .help("Root Turing directory")
         .store_into(_turingDir);
+    _argParser.add_argument("-timeout", "-t")
+        .metavar("ms")
+        .help("Milliseconds to wait for the process to release its lock (default: 3000)")
+        .store_into(_timeout);
 }

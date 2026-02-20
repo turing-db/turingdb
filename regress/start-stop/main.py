@@ -14,10 +14,9 @@ NC = "\033[0m"
 
 
 def spawn_turingdb_process():
-    print(f"- {GREEN}Starting turingdb{NC}")
-    return subprocess.Popen(
-        "exec uv run turingdb -demon -turing-dir .turing", shell=True
-    )
+    cmd = "turingdb -demon -turing-dir .turing"
+    print(f"- {GREEN}Starting turingdb with `{BLUE}{cmd}{NC}`{NC}")
+    return subprocess.Popen(cmd, shell=True)
 
 
 def wait_port(port):
@@ -33,14 +32,16 @@ def wait_port(port):
 
 
 def stop_with_signal(proc):
-    print(f"- {GREEN}Stopping turingdb with `pkill -2`{NC}")
-    subprocess.call("pkill -2 turingdb", shell=True)
+    cmd = "pkill -2 turingdb"
+    print(f"- {GREEN}Stopping turingdb with `{BLUE}{cmd}{NC}`{NC}")
+    subprocess.call(cmd, shell=True)
     assert wait_port(6666)
 
 
 def stop_with_cmd(proc):
-    print(f"- {GREEN}Stopping turingdb with `turingdb stop`{NC}")
-    subprocess.call("exec uv run turingdb stop", shell=True)
+    cmd = "turingdb stop -turing-dir .turing"
+    print(f"- {GREEN}Stopping turingdb with `{BLUE}{cmd}{NC}`{NC}")
+    subprocess.call(cmd, shell=True)
     assert wait_port(6666)
 
 
