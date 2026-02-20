@@ -14,16 +14,19 @@ namespace db {
 template <Writer WriterT>
 struct ChunkJsonEncoder {
     WriterT& _writer;
+    const size_t _logicalRowCount {0};
     bool _first {true};
 
     template <typename T>
     void operator()(const ColumnVector<T>* col) {
         _first = true;
 
-        for (const T& value : *col) {
+        for (size_t row = 0; row < _logicalRowCount; row++) {
             if (!_first) {
                 _writer.write(",");
             }
+
+            const T& value = col->at(row);
 
             encodeValue(value);
             _first = false;
@@ -32,7 +35,18 @@ struct ChunkJsonEncoder {
 
     template <typename T>
     void operator()(const ColumnConst<T>* col) {
-        encodeValue(col->getRaw());
+        _first = true;
+
+        for (size_t row = 0; row < _logicalRowCount; row++) {
+            if (!_first) {
+                _writer.write(",");
+            }
+
+            const T& value = col->at(row);
+
+            encodeValue(value);
+            _first = false;
+        }
     }
 
     template <Optional T>
@@ -159,7 +173,9 @@ public:
     void writeDataframe(const Dataframe& df) {
         arr();
 
-        ChunkJsonEncoder<WriterT> encoder {_writer};
+        const size_t logicalRowCount = df.getLogicalRowCount();
+        ChunkJsonEncoder<WriterT> encoder {._writer = _writer,
+                                           ._logicalRowCount = logicalRowCount};
 
         for (const NamedColumn* namedCol : df.cols()) {
             arr();
