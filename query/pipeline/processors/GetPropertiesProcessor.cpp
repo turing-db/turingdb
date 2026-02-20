@@ -89,7 +89,8 @@ void GetPropertiesProcessor<Entity, T>::execute() {
 
 template <EntityType Entity, SupportedType T>
 GetPropertiesProcessor<Entity, T>::GetPropertiesProcessor(PropertyType propType)
-    : _propType(propType) {
+    : _propType(propType)
+{
 }
 
 template class GetPropertiesProcessor<EntityType::Node, types::Int64>;
