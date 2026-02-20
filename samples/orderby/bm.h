@@ -4,7 +4,7 @@
 
 namespace db {
 
-void benchmarkSort(LocalMemory& mem, DataframeManager& dfman, size_t numRows,
+inline void benchmarkSort(LocalMemory& mem, DataframeManager& dfman, size_t numRows,
                    size_t numCols, size_t iterations, Int minV = 0, Int maxV = 1000) {
     constexpr bool quiet = true;
     // Create the original random dataframe once
@@ -69,7 +69,7 @@ void benchmarkSort(LocalMemory& mem, DataframeManager& dfman, size_t numRows,
     }
 }
 
-void compareSorts(LocalMemory& mem, DataframeManager& dfman, size_t numRows,
+inline void compareSorts(LocalMemory& mem, DataframeManager& dfman, size_t numRows,
                   size_t numCols, size_t iterations, Int minV = 0, Int maxV = 100) {
     // Create the original random dataframe once
     auto original = makeRandomDataframe(mem, dfman, numRows, numCols, minV, maxV);

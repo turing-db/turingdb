@@ -61,9 +61,6 @@ private:
 
     using SortedRuns = std::vector<SortedRun>;
 
-    OrderByProcessor();
-    ~OrderByProcessor() final;
-
     enum class State : uint8_t {
         SORT_INCOMING = 0,
         MERGE_SORTED_RUNS,
@@ -72,10 +69,14 @@ private:
         STATE_SPACE_SIZE
     };
 
+    /// Defines a sorted run over indexes [_start, _start + _size)
     struct SortedRun {
         size_t _start {0};
         size_t _size {0};
     };
+
+    OrderByProcessor();
+    ~OrderByProcessor() final;
 
     PipelineBlockInputInterface _input;
     PipelineBlockOutputInterface _output;

@@ -277,6 +277,7 @@ struct OutputtedTypes {
 };
 
 /// Totally ordered types, e.g. sorted in ORDER BY
+// TODO: Add all types
 struct OrderedTypes {
     using Allowed = GenerateKindList<std::tuple<
         std::optional<types::Int64::Primitive>,
