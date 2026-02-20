@@ -280,6 +280,7 @@ struct OutputtedTypes {
 // TODO: Add all types
 struct OrderedTypes {
     using Allowed = GenerateKindList<std::tuple<
+        types::Int64::Primitive,
         std::optional<types::Int64::Primitive>,
         std::optional<types::String::Primitive>,
         EdgeID,
