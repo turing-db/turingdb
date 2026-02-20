@@ -10,6 +10,7 @@
 #include "interfaces/PipelineBlockOutputInterface.h"
 
 #include "columns/ColumnVector.h"
+#include "dataframe/Dataframe.h"
 
 namespace db {
 
@@ -48,12 +49,18 @@ public:
     PipelineBlockInputInterface& input() { return _input; }
     PipelineBlockOutputInterface& output() { return _output; }
 
+    Dataframe& memory() { return _memory; }
+
     template <std::ranges::random_access_range Rg>
     static void addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t start = 0);
 
     void setIndicesCol(ColumnVector<size_t>* indices) { _indices = indices; }
 
 private:
+    struct SortedRun;
+
+    using SortedRuns = std::vector<SortedRun>;
+
     OrderByProcessor();
     ~OrderByProcessor() final;
 
@@ -64,20 +71,31 @@ private:
         STATE_SPACE_SIZE
     };
 
+    struct SortedRun {
+        size_t _start {0};
+        size_t _size {0};
+    };
+
     PipelineBlockInputInterface _input;
     PipelineBlockOutputInterface _output;
 
     OrderByKeys _orderedKeys;
 
-    Indices* _indices;
+    Indices* _indices {nullptr};
 
     TieRanges _tieRanges;
+
+    Dataframe _memory;
+
+    SortedRuns _sortedRuns;
 
     State _state {State::SORT_INCOMING};
 
     void subsort();
 
     void project();
+
+    void memorise();
 };
 
 }

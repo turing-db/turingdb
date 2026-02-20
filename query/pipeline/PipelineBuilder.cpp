@@ -448,10 +448,17 @@ PipelineBlockOutputInterface& PipelineBuilder::addOrderBy(std::span<OrderByProce
     // same shape
     duplicateDataframeShape(_mem, _dfMan, inputDf, outputDf);
 
-    // Allocate a column to store the indices for sort projection
+
+    // Allocate a column to store the indices for sort projection. No need to store it in
+    // any dataframe.
     auto* indicesCol = _mem->alloc<ColumnVector<size_t>>();
     orderby->setIndicesCol(indicesCol);
 
+    // Duplicate the shape of the output dataframe to the processors "memory"
+    duplicateDataframeShape(_mem, _dfMan, outputDf, &orderby->memory());
+
+    // Stream does not change when adding ORDER BY
+    output.setStream(_pendingOutput.getInterface()->getStream());
     _pendingOutput.updateInterface(&output);
 
     return orderby->output();
