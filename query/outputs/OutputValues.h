@@ -5,6 +5,7 @@
 
 #include "ID.h"
 #include "OptionalLike.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitHash.h"
 
@@ -47,11 +48,14 @@ template <typename T>
 concept IsBool = std::is_convertible_v<T, bool>
               || OptionalBool<T>;
 
+template <typename T>
+concept IsNull = std::is_same_v<T, PropertyNull>;
+
 struct ColumnTypeGenerator {
     std::string& _name;
 
     template <template <typename> typename U, typename T>
-    void operator()(const U<T>* typed) {
+    void operator()(const U<T>*) {
         if constexpr (IsUInt64<T>) {
             _name = fmt::format("UInt64");
         } else if constexpr (IsInt64<T>) {
@@ -62,6 +66,8 @@ struct ColumnTypeGenerator {
             _name = fmt::format("String");
         } else if constexpr (IsBool<T>) {
             _name = fmt::format("Bool");
+        } else if constexpr (IsNull<T>) {
+            _name = fmt::format("NULL");
         } else {
             COMPILE_ERROR("Unexpected column type");
         }

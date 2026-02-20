@@ -25,7 +25,6 @@
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
 #include "procedures/ProcedureManager.h"
-#include "nodes/ExprEvalNode.h"
 #include "processors/PredicateProgram.h"
 #include "processors/WriteProcessor.h"
 #include "processors/WriteProcessorTypes.h"
