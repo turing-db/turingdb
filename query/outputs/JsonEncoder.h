@@ -99,6 +99,10 @@ private:
         _writer.write(fmt::format("\"{}\"", ValueTypeName::value(value)));
     }
 
+    void encodeValue(PropertyNull) {
+        _writer.write("null");
+    }
+
     template <std::convertible_to<std::string_view> T>
     void encodeValue(const T& value) {
         _writer.write(fmt::format("\"{}\"", value));
