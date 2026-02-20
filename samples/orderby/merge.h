@@ -11,7 +11,6 @@
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/NamedColumn.h"
-#include "range/v3/algorithm/sort.hpp"
 
 namespace db {
 
@@ -29,25 +28,26 @@ struct CompareInner {
     int& _res;
 
     template <typename T>
-    void operator()(ColumnVector<T>* col) {
+    void operator()(const ColumnVector<T>* col) {
         auto cmp = col->operator[](_i) <=> col->operator[](_j);
         if (cmp < 0) {
             _res = -1;
-        }
-        if (cmp > 0) {
+        } else if (cmp > 0) {
             _res = 1;
+        } else {
+            _res = 0;
         }
-        _res = 0;
     }
 };
 
-using Compare = ColumnSingleDispatcher<OrderedTypes::Allowed, CompareInner>;
+using Compare = ColumnSingleDispatcher<OrderedTypes::Allowed, CompareInner, OrderedTypes::Excluded>;
 
 using NamedCols = std::vector<NamedColumn*>;
 
-inline void merge(std::vector<size_t>& indices, NamedCols& ncols, SortedRun& run1, SortedRun& run2) {
+inline void merge(std::vector<size_t>& indices, const NamedCols& ncols, const SortedRun& run1,
+                  const SortedRun& run2) {
     bioassert(run1._start == 0, "run1 did not start from start.");
-    bioassert(run1._start + run1._size == run2._size,
+    bioassert(run1._start + run1._size == run2._start,
               "run2 did not start from end of run1");
 
     auto cols = ncols
@@ -59,10 +59,10 @@ inline void merge(std::vector<size_t>& indices, NamedCols& ncols, SortedRun& run
         for (Column* col : cols) {
             Compare::dispatch(col, cmp);
 
-            const bool equalInThisCol = comparisonResult != 0;
-            if (!equalInThisCol) {
+            if (comparisonResult != 0) {
                 return comparisonResult < 0;
             }
+            // If equal, check next column
         }
         // All rows equal
         return false;
@@ -76,5 +76,4 @@ inline void merge(std::vector<size_t>& indices, NamedCols& ncols, SortedRun& run
 
     std::inplace_merge(run1Start, run1End, run2End, rowLess);
 }
-
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <compare>
 #include <stdint.h>
 #include <functional>
 #include <limits>
@@ -26,6 +27,17 @@ public:
     ID& operator=(T id) {
         _id = id;
         return *this;
+    }
+
+    std::strong_ordering operator<=>(const ID& other) const {
+        if (_id < other._id) {
+            return std::strong_ordering::less;
+        }
+        if (_id == other._id) {
+            return std::strong_ordering::equivalent;
+        }
+
+        return std::strong_ordering::greater;
     }
 
     bool operator==(const ID& other) const {
