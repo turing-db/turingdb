@@ -88,12 +88,13 @@ private:
     Dataframe _memory;
 
     SortedRuns _sortedRuns;
+    size_t _nextMemoryStart {0};
 
     State _state {State::SORT_INCOMING};
 
     void subsort();
 
-    void project();
+    void project(const Column* src, Column* dst, size_t fromRow = 0);
 
     void memorise();
 };

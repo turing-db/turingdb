@@ -117,7 +117,17 @@ struct ProjectOrder {
         auto* casted = dynamic_cast<ColumnVector<T>*>(_res);
         bioassert(casted, "Incorrect cast for projected result column.");
 
-        ColumnOperators::copyTransformedChunk(_indices, source, casted);
+        const auto& srcd = source->getRaw();
+        const auto& indicesd = _indices->getRaw();
+        const size_t incomingRows = _indices->size();
+        const size_t curSize = casted->size();
+
+        casted->resize(curSize + incomingRows);
+
+        auto& resd = casted->getRaw();
+        for (size_t i = 0; i < incomingRows; i++) {
+            resd[i] = srcd[indicesd[i]];
+        }
     }
 };
 
@@ -191,28 +201,9 @@ void OrderByProcessor::addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t s
     }
 }
 
-void OrderByProcessor::project() {
-    const Dataframe* inputDf = _input.getDataframe();
-    const auto& inputCols = inputDf->cols();
-    const Dataframe* outputDf = _output.getDataframe();
-
-    // Project indices onto the output
-    for (const NamedColumn* ncol : inputCols) {
-        const ColumnTag inTag = ncol->getTag();
-
-        NamedColumn* outNcol = outputDf->getColumn(inTag);
-
-        if (!outNcol) {
-            throw FatalException(fmt::format(
-                "Failed to get output column for sorting column {}.", inTag.getValue()));
-        }
-
-        const Column* inCol = ncol->getColumn();
-        Column* outCol = outNcol->getColumn();
-
-        ProjectOrder project {._res = outCol, ._indices = _indices};
-        Projection::dispatch(inCol, project);
-    }
+void OrderByProcessor::project(const Column* src, Column* dst, size_t fromRow) {
+    ProjectOrder project {._res = dst, ._indices = _indices};
+    Projection::dispatch(src, project);
 }
 
 void OrderByProcessor::subsort() {
@@ -242,7 +233,18 @@ void OrderByProcessor::subsort() {
     // If the ordering is completely determined by the first key (no tied-values), then
     // nothing else to sort.
     if (_tieRanges.empty()) {
-        project();
+        { // TODO: Remove when outputting from memory
+            const Dataframe* inDf = _input.getDataframe();
+            const auto& inCols = inDf->cols();
+            Dataframe* outDf = _output.getDataframe();
+            const auto& outCols = outDf->cols();
+            for (size_t col = 0; col < inDf->size(); col++) {
+                const Column* src = inCols[col]->getColumn();
+                Column* dest = outCols[col]->getColumn();
+                project(src, dest);
+            }
+        }
+
         return;
     }
 
@@ -273,13 +275,23 @@ void OrderByProcessor::subsort() {
         NarrowRanges::dispatch(column, narrowTieRanges);
     }
 
-    project();
+    { // TODO: Remove when outputting from memory
+        const Dataframe* inDf = _input.getDataframe();
+        const auto& inCols = inDf->cols();
+        Dataframe* outDf = _output.getDataframe();
+        const auto& outCols = outDf->cols();
+        for (size_t col = 0; col < inDf->size(); col++) {
+            const Column* src = inCols[col]->getColumn();
+            Column* dest = outCols[col]->getColumn();
+            project(src, dest);
+        }
+    }
 }
 
 void OrderByProcessor::memorise() {
     const Dataframe* curInput = _input.getDataframe();
 
-    const size_t runStart = _memory.getLogicalRowCount();
+    const size_t runStart = _nextMemoryStart;
     const size_t runLength = curInput->getLogicalRowCount();
     const size_t runEnd = runStart + runLength;
 
@@ -295,7 +307,10 @@ void OrderByProcessor::memorise() {
         const Column* inputCol = inputCols.at(col)->getColumn();
         Column* memoryCol = memoryCols.at(col)->getColumn();
         // TODO: Project sorted from input into memory
+        project(inputCol, memoryCol, runStart);
     }
+
+    _nextMemoryStart = runEnd;
 }
 
 void OrderByProcessor::prepare(ExecutionContext*) {

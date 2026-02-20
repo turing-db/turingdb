@@ -8,9 +8,9 @@
     "resultJson": "{\"header\":{\"column_names\":[\"n\"],\"column_types\":[\"UInt64\"]},\"data\":[[[14,12,0,7,8,11,9,16,13,6,3,17,15,5,2,4,10,1]]]}"
   },
   "tags": [
-    "orderby",
     "desc",
-    "properties"
+    "properties",
+    "order"
   ],
   "write-required": false
 }
