@@ -270,14 +270,18 @@ int main(int argc, const char** argv) {
     fmt::print("  Stops: {}\n", stops.size());
     fmt::print("  Route:\n");
 
-    // edgeLines[i] is the line between stops[i] and stops[i+1]
+    // edgeLines[i] is the line between stops[i] and stops[i+1].
+    // Show each station under the line used to reach it, then
+    // print the next line header after the transfer station.
     for (size_t i = 0; i < stops.size(); i++) {
-        bool lineChange = (i < edgeLines.size())
-            && (i == 0 || edgeLines[i] != edgeLines[i - 1]);
-        if (lineChange) {
-            fmt::print("    [{}]\n", edgeLines[i]);
+        if (i == 0 && !edgeLines.empty()) {
+            fmt::print("    [{}]\n", edgeLines[0]);
         }
         fmt::print("      {}\n", stops[i]);
+        if (i > 0 && i < edgeLines.size()
+            && edgeLines[i] != edgeLines[i - 1]) {
+            fmt::print("    [{}]\n", edgeLines[i]);
+        }
     }
 
     return EXIT_SUCCESS;

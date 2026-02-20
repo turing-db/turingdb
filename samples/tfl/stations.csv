@@ -480,3 +480,262 @@ FID,OBJECTID,NAME,EASTING,NORTHING,LINES,NETWORK,Zone,x,y
 478,364,Willesden Junction,521879,182944,n/a,London Overground,0,-0.242688895,51.5317515
 479,481,Walthamstow Central,537176,188994,n/a,London Overground,3,-0.019895332,51.58261626
 480,482,Barking Riverside,546790,182244,n/a,London Overground,4,0.11596,51.51953
+481,483,Abbey Wood,547259,179089,"Southeastern, Thameslink",National Rail,4,0.121394000,51.49106200
+482,484,Acton Main Line,520248,181284,Great Western Railway,National Rail,3,-0.266756000,51.51718000
+483,485,Addlestone,505477,164922,South Western Railway,National Rail,0,-0.484457000,51.37304600
+484,486,Albany Park,547740,172915,Southeastern,National Rail,5,0.125737000,51.43545300
+485,487,Alexandra Palace,530182,190513,"Great Northern, Thameslink",National Rail,3,-0.120235000,51.59792400
+486,488,Ashford (Surrey),506470,172002,South Western Railway,National Rail,0,-0.468071000,51.43650700
+487,489,Ashtead,517929,159057,"South Western Railway, Southern",National Rail,0,-0.307572000,51.31787400
+488,490,Banstead,524476,160488,Southern,National Rail,6,-0.213159000,51.32934900
+489,491,Barnehurst,550000,176265,"Southeastern, Thameslink",National Rail,6,0.159646000,51.46495900
+490,492,Barnes,522088,175755,South Western Railway,National Rail,3,-0.242164000,51.46708600
+491,493,Barnes Bridge,521348,176285,South Western Railway,National Rail,3,-0.252630000,51.47200900
+492,494,Bat & Ball,552984,156857,Thameslink,National Rail,0,0.194228000,51.28976100
+493,495,Battersea Park,528632,177015,Southern,National Rail,2,-0.147533000,51.47696000
+494,496,Beckenham Hill,537926,171430,"Southeastern, Thameslink",National Rail,4,-0.015951000,51.42458300
+495,497,Beckenham Junction,537281,169905,"Southeastern, Southern, Thameslink",National Rail,4,-0.025813000,51.41103500
+496,498,Bellingham,537666,172350,"Southeastern, Thameslink",National Rail,3,-0.019331000,51.43291300
+497,499,Belmont,525433,162121,Southern,National Rail,5,-0.198855000,51.34381500
+498,500,Belvedere,549400,179269,Southeastern,National Rail,5,0.152286000,51.49211800
+499,501,Berrylands,519588,168125,South Western Railway,National Rail,5,-0.280714000,51.39904500
+500,502,Bexley,549265,173490,Southeastern,National Rail,6,0.147903000,51.44021900
+501,503,Bexleyheath,548205,176050,"Southeastern, Thameslink",National Rail,5,0.133735000,51.46350000
+502,504,Bickley,542256,168825,"Southeastern, Thameslink",National Rail,5,0.045241000,51.40010400
+503,505,Birkbeck,535221,169055,Southern,National Rail,4,-0.055739000,51.40389200
+504,506,Blackheath,539526,176060,"Southeastern, Thameslink",National Rail,3,0.008872000,51.46579600
+505,507,Bookham,512673,155697,South Western Railway,National Rail,0,-0.384021000,51.28873900
+506,508,Borough Green & Wrotham,560781,157481,Southeastern,National Rail,0,0.306245000,51.29321900
+507,509,Bowes Park,530132,191523,Great Northern,National Rail,3+4,-0.120582000,51.60701200
+508,510,Brent Cross West,522973,187051,Thameslink,National Rail,3,-0.225488000,51.56842900
+509,511,Brentford,517349,177919,South Western Railway,National Rail,4,-0.309651000,51.48754700
+510,512,Brimsdown,536201,197087,Greater Anglia,National Rail,5,-0.030817000,51.65558300
+511,513,Bromley North,540266,169685,Southeastern,National Rail,4,0.016993000,51.40832800
+512,514,Bromley South,540316,168757,"Southeastern, Thameslink",National Rail,5,0.017344000,51.39997600
+513,515,Byfleet & New Haw,505744,162341,South Western Railway,National Rail,0,-0.481390000,51.34979700
+514,516,Carshalton,527626,164917,"Southern, Thameslink",National Rail,5,-0.166368000,51.36845400
+515,517,Carshalton Beeches,527418,163683,Southern,National Rail,5,-0.169797000,51.35741100
+516,518,Castle Bar Park,515739,181819,Great Western Railway,National Rail,4,-0.331549000,51.52293100
+517,519,Caterham,534007,155477,Southern,National Rail,6,-0.078307000,51.28214100
+518,520,Catford,537146,173615,"Southeastern, Thameslink",National Rail,3,-0.026317000,51.44440700
+519,521,Catford Bridge,537251,173655,Southeastern,National Rail,3,-0.024791000,51.44474100
+520,522,Chafford Hundred,558803,178824,c2c,National Rail,0,0.287447000,51.48555700
+521,523,Charlton,541016,178439,"Southeastern, Thameslink",National Rail,3,0.031258000,51.48681300
+522,524,Cheam,524335,163392,Southern,National Rail,5,-0.214167000,51.35547900
+523,525,Chelsfield,546835,164076,Southeastern,National Rail,6,0.109070000,51.35625600
+524,526,Chertsey,503715,166446,South Western Railway,National Rail,0,-0.509317000,51.38706900
+525,527,Chessington North,518289,164201,South Western Railway,National Rail,6,-0.300699000,51.36404100
+526,528,Chessington South,517789,163356,South Western Railway,National Rail,6,-0.308157000,51.35655000
+527,529,Chipstead,527572,158332,Southern,National Rail,6,-0.169503000,51.30927700
+528,530,Chislehurst,543085,169455,Southeastern,National Rail,5,0.057418000,51.40555700
+529,531,Chiswick,520268,177274,South Western Railway,National Rail,3,-0.267835000,51.48113700
+530,532,City Thameslink,531577,181204,Thameslink,National Rail,1,-0.103590000,51.51393600
+531,533,Claygate,514986,163811,South Western Railway,National Rail,0,-0.348248000,51.36121400
+532,534,Clock House,536256,169605,Southeastern,National Rail,4,-0.040657000,51.40858600
+533,535,Cobham & Stoke d'Abernon,512230,158954,South Western Railway,National Rail,0,-0.389346000,51.31810100
+534,536,Coulsdon South,529757,159117,"Southern, Thameslink",National Rail,6,-0.137887000,51.31583800
+535,537,Coulsdon Town,529978,159813,Southern,National Rail,6,-0.134464000,51.32204300
+536,538,Crayford,551394,174450,Southeastern,National Rail,6,0.178936000,51.44828000
+537,539,Crews Hill,530857,200162,Great Northern,National Rail,6,-0.106887000,51.68448600
+538,540,Cricklewood,523888,185963,Thameslink,National Rail,3,-0.212677000,51.55845300
+539,541,Crofton Park,536406,174795,"Southeastern, Thameslink",National Rail,3,-0.036503000,51.45518900
+540,542,Cuffley,530587,202852,"Great Northern, Thameslink",National Rail,9,-0.109783000,51.70872200
+541,543,Dagenham Dock,548898,183052,c2c,National Rail,5,0.146660000,51.52624000
+542,544,Dartford,554198,174433,"Southeastern, Thameslink",National Rail,8,0.219248000,51.44737100
+543,545,Denham,504104,187786,Chiltern Railways,National Rail,0,-0.497437000,51.57883700
+544,546,Denham Golf Club,502690,187953,Chiltern Railways,National Rail,0,-0.517787000,51.58059800
+545,547,Deptford,537046,177444,"Southeastern, Thameslink",National Rail,2,-0.026270000,51.47884800
+546,548,Drayton Green,515849,181119,Great Western Railway,National Rail,4,-0.330194000,51.51661700
+547,549,Drayton Park,531332,185519,Great Northern,National Rail,2,-0.105509000,51.55277000
+548,550,Dunton Green,551338,157557,Southeastern,National Rail,0,0.170937000,51.29649000
+549,551,Earlsfield,525938,173095,South Western Railway,National Rail,3,-0.187715000,51.44233700
+550,552,East Croydon,532728,165826,"Southeastern, Southern, Thameslink",National Rail,5,-0.092780000,51.37545400
+551,553,East Dulwich,533327,175415,Southern,National Rail,2,-0.080572000,51.46149400
+552,554,Ebbsfleet International,561277,174163,Southeastern,National Rail,0,0.320921000,51.44297300
+553,555,Eden Park,537306,167576,Southeastern,National Rail,5,-0.026355000,51.39009100
+554,556,Edmonton Green,534197,193623,Greater Anglia,National Rail,4,-0.061112000,51.62492900
+555,557,Effingham Junction,510161,155949,South Western Railway,National Rail,0,-0.419965000,51.29149500
+556,558,Elmers End,535666,168466,Southeastern,National Rail,4,-0.049570000,51.39849200
+557,559,Elmstead Woods,542136,170715,Southeastern,National Rail,4,0.044274000,51.41711800
+558,560,Elstree & Borehamwood,518968,196372,Thameslink,National Rail,6,-0.280081000,51.65306900
+559,561,Eltham,542585,175015,"Southeastern, Thameslink",National Rail,4,0.052472000,51.45564400
+560,562,Enfield Chase,532067,196718,"Great Northern, Thameslink",National Rail,5,-0.090696000,51.65325400
+561,563,Enfield Lock,536313,198797,Greater Anglia,National Rail,6,-0.028532000,51.67092200
+562,564,Epsom,520588,160956,"South Western Railway, Southern",National Rail,9,-0.268778000,51.33439300
+563,565,Epsom Downs,522694,159816,Southern,National Rail,6,-0.238955000,51.32368800
+564,566,Erith,551014,178154,Southeastern,National Rail,6,0.175055000,51.48167100
+565,567,Esher,514585,165880,South Western Railway,National Rail,0,-0.353338000,51.37989100
+566,568,Essex Road,532007,184194,Great Northern,National Rail,2,-0.096276000,51.54070500
+567,569,Ewell East,522457,162214,Southern,National Rail,6,-0.241530000,51.34530000
+568,570,Ewell West,521368,162716,South Western Railway,National Rail,6,-0.256987000,51.35004500
+569,571,Eynsford,553449,164990,"Southeastern, Thameslink",National Rail,0,0.204393000,51.36272000
+570,572,Falconwood,544438,175458,Southeastern,National Rail,4,0.079305000,51.45915400
+571,573,Farningham Road,555479,169386,Southeastern,National Rail,0,0.235452000,51.40166600
+572,574,Feltham,510490,173355,South Western Railway,National Rail,6,-0.409838000,51.44789800
+573,575,Fenchurch Street,533297,180994,c2c,National Rail,1,-0.078897000,51.51164600
+574,576,Fulwell,514719,171895,South Western Railway,National Rail,6,-0.349468000,51.43393500
+575,577,Gipsy Hill,533208,171290,Southern,National Rail,3,-0.083836000,51.42445300
+576,578,Gordon Hill,531767,197832,"Great Northern, Thameslink",National Rail,5,-0.094610000,51.66333500
+577,579,Grange Park,531637,195522,Great Northern,National Rail,5,-0.097358000,51.64260700
+578,580,Grays,561223,177865,c2c,National Rail,0,0.321832000,51.47624800
+579,581,Greenhithe for Bluewater,558429,174897,"Southeastern, Thameslink",National Rail,0,0.280290000,51.45037200
+580,582,Greenwich,537946,177389,"Southeastern, Thameslink",National Rail,2+3,-0.013340000,51.47813500
+581,583,Grove Park,540526,172200,Southeastern,National Rail,4,0.021726000,51.43086300
+582,584,Hackbridge,528467,165986,"Southern, Thameslink",National Rail,4,-0.153907000,51.37787200
+583,585,Hadley Wood,526113,198262,"Great Northern, Thameslink",National Rail,6,-0.176172000,51.66849700
+584,586,Hampton,513189,169858,South Western Railway,National Rail,6,-0.372119000,51.41593400
+585,587,Hampton Court,515265,168416,South Western Railway,National Rail,6,-0.342748000,51.40255600
+586,588,Hampton Wick,517339,169795,South Western Railway,National Rail,6,-0.312489000,51.41452400
+587,589,Harringay,531287,188253,"Great Northern, Thameslink",National Rail,3,-0.105136000,51.57735800
+588,590,Haydons Road,525908,171215,Thameslink,National Rail,3,-0.188815000,51.42544800
+589,591,Hayes & Harlington,509604,179476,Great Western Railway,National Rail,5,-0.420683000,51.50309600
+590,592,Hayes (Kent),539916,166116,Southeastern,National Rail,5,0.010557000,51.37633400
+591,593,Hendon,522028,188323,Thameslink,National Rail,3+4,-0.238674000,51.58006800
+592,594,Herne Hill,531842,174465,"Southeastern, Thameslink",National Rail,2+3,-0.102289000,51.45330500
+593,595,Hersham,512044,165481,South Western Railway,National Rail,0,-0.389959000,51.37681200
+594,596,Hinchley Wood,515489,165356,South Western Railway,National Rail,0,-0.340524000,51.37499800
+595,597,Hither Green,538886,174510,Southeastern,National Rail,3,-0.000944000,51.45202500
+596,598,Hornsey,530787,189253,Great Northern,National Rail,3,-0.111975000,51.58646100
+597,599,Hounslow,513759,174990,South Western Railway,National Rail,5,-0.362277000,51.46194600
+598,600,Isleworth,515489,176455,South Western Railway,National Rail,4,-0.336907000,51.47476300
+599,601,Iver,503620,179952,Great Western Railway,National Rail,0,-0.506726000,51.50850300
+600,602,Kempton Park,510561,170362,South Western Railway,National Rail,0,-0.409751000,51.42098300
+601,603,Kemsing,556668,157795,Southeastern,National Rail,0,0.247428000,51.29718700
+602,604,Kenley,532307,160176,Southern,National Rail,6,-0.100925000,51.32477700
+603,605,Kent House,535926,170000,Southeastern,National Rail,4,-0.045247000,51.41221500
+604,606,Kew Bridge,518908,178174,South Western Railway,National Rail,3,-0.287108000,51.48951300
+605,607,Kidbrooke,540831,175687,Southeastern,National Rail,3,0.027498000,51.46212100
+606,608,Kingston,518131,169616,South Western Railway,National Rail,6,-0.301166000,51.41275100
+607,609,Kingswood,524703,156642,Southern,National Rail,6,-0.211247000,51.29472500
+608,610,Knockholt,548385,162956,Southeastern,National Rail,6,0.130847000,51.34579000
+609,611,Ladywell,537616,174945,Southeastern,National Rail,3,-0.019041000,51.45624400
+610,612,Lea Bridge,536062,187176,Greater Anglia,National Rail,3,-0.036673000,51.56654800
+611,613,Leatherhead,516189,156897,"South Western Railway, Southern",National Rail,0,-0.333232000,51.29881800
+612,614,Lee,539896,174285,Southeastern,National Rail,3,0.013493000,51.44975500
+613,615,Lewisham,537936,176005,"Southeastern, Thameslink",National Rail,2+3,-0.014024000,51.46569200
+614,616,Limehouse,536006,181165,c2c,National Rail,2,-0.039803000,51.51253700
+615,617,Longfield,560012,168913,Southeastern,National Rail,0,0.300364000,51.39615500
+616,618,Loughborough Junction,531812,175910,"Southeastern, Thameslink",National Rail,2,-0.102182000,51.46629800
+617,619,Lower Sydenham,536716,171425,Southeastern,National Rail,4,-0.033345000,51.42483100
+618,620,Malden Manor,520978,166566,South Western Railway,National Rail,4,-0.261274000,51.38473000
+619,621,Maze Hill,539061,177919,"Southeastern, Thameslink",National Rail,3,0.002914000,51.48262500
+620,622,Meridian Water,534947,191993,Greater Anglia,National Rail,4,-0.050898000,51.61010200
+621,623,Mill Hill Broadway,521208,191978,Thameslink,National Rail,4,-0.249240000,51.61309300
+622,624,Mitcham Eastfields,528332,169305,"Southern, Thameslink",National Rail,3,-0.154646000,51.40773900
+623,625,Mitcham Junction,528157,167656,"Southern, Thameslink",National Rail,4,-0.157757000,51.39295000
+624,626,Morden South,525248,167935,Thameslink,National Rail,4,-0.199461000,51.39611600
+625,627,Mortlake,520353,175825,South Western Railway,National Rail,3,-0.267106000,51.46808700
+626,628,Motspur Park,522463,167765,South Western Railway,National Rail,4,-0.239531000,51.39519600
+627,629,Mottingham,542466,173295,Southeastern,National Rail,4,0.050054000,51.44021800
+628,630,New Barnet,526387,196052,"Great Northern, Thameslink",National Rail,5,-0.172997000,51.64857500
+629,631,New Beckenham,536606,170525,Southeastern,National Rail,4,-0.035273000,51.41677000
+630,632,New Cross ELL,536625,177155,Southeastern,National Rail,2,-0.032441000,51.47634400
+631,633,New Eltham,543895,173095,Southeastern,National Rail,4,0.070533000,51.43806000
+632,634,New Malden,521298,168725,South Western Railway,National Rail,4,-0.255940000,51.40407500
+633,635,New Southgate,528557,192273,"Great Northern, Thameslink",National Rail,4,-0.143038000,51.61411400
+634,636,Norbiton,519323,169600,South Western Railway,National Rail,5,-0.284025000,51.41235800
+635,637,Norbury,530597,169775,Southern,National Rail,3,-0.121926000,51.41144600
+636,638,North Dulwich,532837,174625,Southern,National Rail,2+3,-0.087917000,51.45451000
+637,639,North Sheen,518918,175465,South Western Railway,National Rail,3,-0.287876000,51.46515500
+638,640,Northfleet,561504,174490,"Southeastern, Thameslink",National Rail,0,0.324334000,51.44584600
+639,641,Northolt Park,513716,185623,Chiltern Railways,National Rail,5,-0.359466000,51.55754000
+640,642,Northumberland Park,534761,191083,Greater Anglia,National Rail,3,-0.053932000,51.60196900
+641,643,Nunhead,535276,176060,"Southeastern, Thameslink",National Rail,2,-0.052273000,51.46682800
+642,644,Oakleigh Park,526887,194852,"Great Northern, Thameslink",National Rail,4,-0.166209000,51.63767800
+643,645,Ockendon,558886,182882,c2c,National Rail,0,0.290469000,51.52199200
+644,646,Orpington,545390,165931,"Southeastern, Thameslink",National Rail,6,0.089091000,51.37329600
+645,647,Otford,553084,159464,"Southeastern, Thameslink",National Rail,0,0.196779000,51.31315800
+646,648,Oxshott,514061,161029,South Western Railway,National Rail,0,-0.362419000,51.33639600
+647,649,Palmers Green,530802,192798,"Great Northern, Thameslink",National Rail,4,-0.110437000,51.61831400
+648,650,Penge East,535281,170775,Southeastern,National Rail,4,-0.054220000,51.41933400
+649,651,Petts Wood,544325,167606,"Southeastern, Thameslink",National Rail,5,0.074481000,51.38861900
+650,652,Plumstead,544685,178874,"Southeastern, Thameslink",National Rail,4,0.084257000,51.48979500
+651,653,Ponders End,535946,195597,Greater Anglia,National Rail,5,-0.035080000,51.64225600
+652,654,Potters Bar,524898,201411,"Great Northern, Thameslink",National Rail,0,-0.192605000,51.69706700
+653,655,Purfleet,555301,178210,c2c,National Rail,0,0.236767000,51.48101300
+654,656,Purley,531357,161576,"Southern, Thameslink",National Rail,6,-0.114035000,51.33757900
+655,657,Purley Oaks,532387,162656,Southern,National Rail,6,-0.098856000,51.34704600
+656,658,Putney,523888,175155,South Western Railway,National Rail,2+3,-0.216475000,51.46130300
+657,659,Queenstown Road (Battersea),528697,176795,South Western Railway,National Rail,2,-0.146678000,51.47496800
+658,660,Radlett,516316,199884,Thameslink,National Rail,0,-0.317244000,51.68518800
+659,661,Rainham,551979,182084,c2c,National Rail,6,0.190634000,51.51672300
+660,662,Ravensbourne,538541,170290,"Southeastern, Thameslink",National Rail,4,-0.007557000,51.41418800
+661,663,Raynes Park,523078,169335,South Western Railway,National Rail,4,-0.230151000,51.40917300
+662,664,Reedham (Surrey),530722,160841,Southern,National Rail,6,-0.123416000,51.33112000
+663,665,Riddlesdown,532392,161036,Thameslink,National Rail,6,-0.099387000,51.33248600
+664,666,Sanderstead,532744,162803,Thameslink,National Rail,6,-0.093678000,51.34828300
+665,667,Selhurst,532992,167666,Southern,National Rail,4,-0.088300000,51.39192700
+666,668,Shepperton,508043,167619,South Western Railway,National Rail,0,-0.446786000,51.39680500
+667,669,Shoreham (Kent),552471,161566,"Southeastern, Thameslink",National Rail,0,0.188890000,51.33221900
+668,670,Shortlands,539216,169375,"Southeastern, Thameslink",National Rail,4,0.001784000,51.40580100
+669,671,Sidcup,546220,172695,Southeastern,National Rail,5,0.103795000,51.43387000
+670,672,Slade Green,552132,176643,"Southeastern, Thameslink",National Rail,6,0.190491000,51.46778600
+671,673,South Bermondsey,535046,178424,Southern,National Rail,2,-0.054678000,51.48813600
+672,674,South Croydon,532717,164436,"Southern, Thameslink",National Rail,5,-0.093457000,51.36296500
+673,675,South Greenford,515354,183014,Great Western Railway,National Rail,4,-0.336704000,51.53374900
+674,676,South Merton,524833,168690,Thameslink,National Rail,4,-0.205157000,51.40299300
+675,677,Southall,512516,179858,Great Western Railway,National Rail,4,-0.378610000,51.50595700
+676,678,St Helier,525313,167246,Thameslink,National Rail,4,-0.198771000,51.38990100
+677,679,St Johns,537321,176400,Southeastern,National Rail,2,-0.022719000,51.46939100
+678,680,St Margarets,516699,174310,South Western Railway,National Rail,4,-0.320200000,51.45523600
+679,681,St Mary Cray,546525,168351,"Southeastern, Thameslink",National Rail,6,0.106384000,51.39474900
+680,682,St Pancras International LL,529877,183189,Thameslink,National Rail,1,-0.127343000,51.53216800
+681,683,Staines,504040,171501,South Western Railway,National Rail,0,-0.503164000,51.43245500
+682,684,Stone Crossing,557278,174968,"Southeastern, Thameslink",National Rail,0,0.263771000,51.45133000
+683,685,Stoneleigh,521912,164215,South Western Railway,National Rail,5,-0.248665000,51.36340100
+684,686,Stratford International,538061,184814,Southeastern,National Rail,NA,-0.008778000,51.54482800
+685,687,Strawberry Hill,515409,172470,South Western Railway,National Rail,5,-0.339358000,51.43896300
+686,688,Streatham,529887,171355,"Southern, Thameslink",National Rail,3,-0.131550000,51.42580800
+687,689,Streatham Common,529597,170560,Southern,National Rail,3,-0.136010000,51.41873000
+688,690,Streatham Hill,530157,172740,Southern,National Rail,3,-0.127160000,51.43819300
+689,691,Sudbury & Harrow Road,516774,185343,Chiltern Railways,National Rail,4,-0.315468000,51.55439800
+690,692,Sudbury Hill Harrow,515354,185763,Chiltern Railways,National Rail,4,-0.335803000,51.55846500
+691,693,Sunbury,510009,170053,South Western Railway,National Rail,0,-0.417783000,51.41831300
+692,694,Sundridge Park,540559,170300,Southeastern,National Rail,4,0.021446000,51.41378200
+693,695,Surbiton,517989,167356,South Western Railway,National Rail,6,-0.303958000,51.39246000
+694,696,Sutton,525922,163882,"Southern, Thameslink",National Rail,5,-0.191215000,51.35953300
+695,697,Sutton Common,525523,165581,Thameslink,National Rail,4,-0.196343000,51.37489100
+696,698,Swanley,550900,168327,"Southeastern, Thameslink",National Rail,8,0.169225000,51.39338700
+697,699,Swanscombe,560465,174816,"Southeastern, Thameslink",National Rail,0,0.309543000,51.44907100
+698,700,Sydenham Hill,533427,172215,Southeastern,National Rail,3,-0.080339000,51.43271400
+699,701,Syon Lane,516309,177254,South Western Railway,National Rail,4,-0.324842000,51.48178500
+700,702,Tadworth,522988,156257,Southern,National Rail,6,-0.235965000,51.29163800
+701,703,Tattenham Corner,522478,158197,Southern,National Rail,6,-0.242609000,51.30918300
+702,704,Teddington,515908,170870,South Western Railway,National Rail,6,-0.332706000,51.42448100
+703,705,Thames Ditton,515549,166926,South Western Railway,National Rail,6,-0.339152000,51.38909700
+704,706,Thornton Heath,532137,168405,Southern,National Rail,4,-0.100306000,51.39877700
+705,707,Tolworth,519733,165661,South Western Railway,National Rail,5,-0.279461000,51.37686000
+706,708,Tooting,527837,170640,Thameslink,National Rail,3,-0.161278000,51.41984800
+707,709,Tulse Hill,531687,172965,"Southern, Thameslink",National Rail,3,-0.105077000,51.43986100
+708,710,Twickenham,516004,173715,South Western Railway,National Rail,5,-0.330394000,51.45003100
+709,711,Upper Halliford,509109,169450,South Western Railway,National Rail,0,-0.430906000,51.41306700
+710,712,Upper Warlingham,533955,158410,Thameslink,National Rail,6,-0.077952000,51.30851200
+711,713,Waddon,531042,164886,Southern,National Rail,5,-0.117336000,51.36739800
+712,714,Wallington,528730,164047,Southern,National Rail,5,-0.150833000,51.36038600
+713,715,Waltham Cross,536407,200373,Greater Anglia,National Rail,7,-0.026558000,51.68506100
+714,716,Walton-on-Thames,510337,165012,South Western Railway,National Rail,0,-0.414635000,51.37293100
+715,717,Wandsworth Common,527617,173565,Southern,National Rail,3,-0.163386000,51.44618500
+716,718,Wandsworth Town,525858,175175,South Western Railway,National Rail,2,-0.188125000,51.46104800
+717,719,Waterloo East,531237,180098,Southeastern,National Rail,1,-0.108898000,51.50407600
+718,720,Welling,545975,176130,Southeastern,National Rail,4,0.101690000,51.46479800
+719,721,Wembley Stadium,518843,185394,Chiltern Railways,National Rail,4,-0.285608000,51.55441600
+720,722,West Byfleet,504090,161131,South Western Railway,National Rail,0,-0.505485000,51.33922600
+721,723,West Drayton,506010,180174,Great Western Railway,National Rail,6,-0.472234000,51.51005500
+722,724,West Dulwich,532637,173085,Southeastern,National Rail,3,-0.091371000,51.44071800
+723,725,West Ealing,516555,180789,Great Western Railway,National Rail,3,-0.320133000,51.51350600
+724,726,West Hampstead Thameslink,525360,184890,Thameslink,National Rail,2,-0.191837000,51.54847600
+725,727,West Norwood,531797,172065,Southern,National Rail,3,-0.103830000,51.43174800
+726,728,West Sutton,524933,164561,Thameslink,National Rail,5,-0.205173000,51.36585400
+727,729,West Wickham,538162,166621,Southeastern,National Rail,5,-0.014432000,51.38130100
+728,730,Westcombe Park,540131,178124,"Southeastern, Thameslink",National Rail,3,0.018395000,51.48420300
+729,731,Weybridge,507363,163707,South Western Railway,National Rail,0,-0.457739000,51.36177100
+730,732,Whitton,514109,173625,South Western Railway,National Rail,5,-0.357681000,51.44960700
+731,733,Whyteleafe,533728,158565,"Southern, Thameslink",National Rail,6,-0.081148000,51.30995800
+732,734,Whyteleafe South,534042,157842,Southern,National Rail,6,-0.076918000,51.30338700
+733,735,Wimbledon Chase,524198,169405,Thameslink,National Rail,3,-0.214031000,51.40955800
+734,736,Winchmore Hill,531417,194552,"Great Northern, Thameslink",National Rail,4,-0.100900000,51.63394200
+735,737,Woldingham,535826,156417,Thameslink,National Rail,0,-0.051870000,51.29015800
+736,738,Woodmansterne,528607,159442,Southern,National Rail,6,-0.154262000,51.31902000
+737,739,Woolwich Arsenal,543639,178857,"Southeastern, Thameslink",National Rail,4,0.069194000,51.48990900
+738,740,Woolwich Dockyard,542625,178964,Southeastern,National Rail,3,0.054642000,51.49112700
+739,741,Worcester Park,522108,166206,South Western Railway,National Rail,4,-0.245167000,51.38125300
