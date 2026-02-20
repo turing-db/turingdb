@@ -17,6 +17,7 @@
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnOperators.h"
 #include "dataframe/Dataframe.h"
+#include "dataframe/NamedColumn.h"
 
 #include "BioAssert.h"
 #include "FatalException.h"
@@ -39,6 +40,7 @@ struct OrderColumn {
         const std::vector<T>& data = typed->getRaw();
 
         // Sort the indices by indexing the column
+        // TODO: Handle NULLs
         if (_ascending) {
             rg::sort(_indices, [&](size_t i, size_t j) { return data[i] < data[j]; });
         } else {
@@ -171,14 +173,6 @@ OrderByProcessor* OrderByProcessor::create(PipelineV2* pipeline,
     return proc;
 }
 
-void OrderByProcessor::prepare(ExecutionContext*) {
-    markAsPrepared();
-}
-
-void OrderByProcessor::reset() {
-    markAsReset();
-}
-
 template <std::ranges::random_access_range Rg>
 void OrderByProcessor::addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t start) {
     // Find the first instance of a duplciated entry in the column
@@ -282,24 +276,66 @@ void OrderByProcessor::subsort() {
     project();
 }
 
+void OrderByProcessor::memorise() {
+    const Dataframe* curInput = _input.getDataframe();
+
+    const size_t runStart = _memory.getLogicalRowCount();
+    const size_t runLength = curInput->getLogicalRowCount();
+    const size_t runEnd = runStart + runLength;
+
+    bioassert(curInput->size() == _memory.size(),
+              "OrderByProcessor memory and input of differing sizes.");
+
+    const size_t numCols = _memory.size();
+
+    const Dataframe::NamedColumns& inputCols = curInput->cols();
+    const Dataframe::NamedColumns& memoryCols = _memory.cols();
+
+    for (size_t col = 0; col < numCols; col++) {
+        const Column* inputCol = inputCols.at(col)->getColumn();
+        Column* memoryCol = memoryCols.at(col)->getColumn();
+        // TODO: Project sorted from input into memory
+    }
+}
+
+void OrderByProcessor::prepare(ExecutionContext*) {
+    bioassert(_indices, "Null indices on prepare of OrderByProcessor.");
+    bioassert(_memory.hasSameShape(_output.getDataframe()),
+              "Memory and output mismatch in OrderByProcessor.");
+
+    markAsPrepared();
+}
+
+void OrderByProcessor::reset() {
+    markAsReset();
+}
+
 // TODO: Handle ColumnConst as order key
 void OrderByProcessor::execute() {
     bioassert(_indices, "Null indices in OrderByProcessor.");
 
+    PipelineInputPort* inputPort = _input.getPort();
+    PipelineOutputPort* outputPort = _output.getPort();
+
     if (_state == State::SORT_INCOMING) {
         subsort();
+        memorise();
     }
 
     // TODO: Implement storing to memory
     // TODO: Merge sorted runs
     // TODO: Output total ordering in chunks
 
-    // NOTE: Temporary, for testing; Always finish in one cycle
-    _input.getPort()->consume();
-    _output.getPort()->writeData();
+    if (inputPort->isClosed()) {
+        _state = State::MERGE_SORTED_RUNS;
 
-    finish();
-    return;
+        // XXX: Temporary, for testing: Always finish in one cycle
+        inputPort->consume();
+        outputPort->writeData();
+
+        finish();
+        return;
+    }
 
     if (_state == State::MERGE_SORTED_RUNS) {
         return;
