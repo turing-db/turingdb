@@ -54,6 +54,8 @@ SystemEventHandler::~SystemEventHandler() {
 
 bool SystemEventHandler::initialize(const fs::Path& socketPath) {
     if (_instance) {
+        terminate();
+        _instance.reset();
         return false;
     }
 
@@ -94,6 +96,11 @@ void SystemEventHandler::terminate() {
     if (_sockFd != -1) {
         ::close(_sockFd);
     }
+
+    _signalFd._read = -1;
+    _signalFd._write = -1;
+    _sockFd = -1;
+    _instance->_socketPath.rm();
 }
 
 void SystemEventHandler::setOnStop(const std::function<void()>& onStop) {

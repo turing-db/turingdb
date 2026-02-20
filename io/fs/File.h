@@ -11,9 +11,10 @@ public:
     ~File();
 
     File(File&& other) noexcept
-        : _info(other._info),
-        _fd(other._fd)
+        : _info(other._info)
     {
+        close();
+        _fd = other._fd;
         other._fd = -1;
     }
 
@@ -21,6 +22,8 @@ public:
         if (&other == this) {
             return *this;
         }
+
+        close();
 
         _info = other._info;
         _fd = other._fd;

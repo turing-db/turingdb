@@ -23,7 +23,6 @@ public:
     static void setOnStop(const std::function<void()>& onStop);
 
     static bool requestStop(const fs::Path& socketPath);
-    static bool requestPing(const fs::Path& socketPath);
 
 private:
     static std::unique_ptr<SystemEventHandler> _instance;

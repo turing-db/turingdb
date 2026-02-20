@@ -14,15 +14,17 @@ NC = "\033[0m"
 
 
 def spawn_turingdb():
-    print(f"- {GREEN}Starting turingdb{NC}")
+    cmd = "uv run turingdb -demon -turing-dir .turing"
+    print(f"- {GREEN}Starting turingdb with `{BLUE}{cmd}{NC}`{NC}")
     return subprocess.Popen(
         "exec uv run turingdb -demon -turing-dir .turing", shell=True
     )
 
 
 def stop_turingdb(proc):
-    print(f"- {GREEN}Stopping turingdb{NC}")
-    subprocess.call("uv run turingdb stop", shell=True)
+    cmd = "uv run turingdb stop -turing-dir .turing"
+    print(f"- {GREEN}Stopping turingdb with `{BLUE}{cmd}{NC}`{NC}")
+    subprocess.call("uv run turingdb stop -turing-dir .turing", shell=True)
     # Wait for port to be released
     import socket
 
@@ -65,7 +67,7 @@ if __name__ == "__main__":
         # Make changes
         print(f"- {BLUE}Making changes{NC}")
         change = client.query("CHANGE NEW")["changeID"][0]
-        client.checkout(change=str(change))
+        client.checkout(change=change)
 
         create_query = "CREATE (a:Person {name: 'Alice'}), (j:Person {name: 'John'}), (a)-[:KNOWS]->(j)"
         print(client.query(create_query))
