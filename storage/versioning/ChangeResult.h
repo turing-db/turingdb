@@ -56,7 +56,7 @@ public:
 
 private:
     std::optional<CommitError> _commitError;
-    ChangeErrorType _type {};
+    ChangeErrorType _type {ChangeErrorType::GRAPH_NOT_FOUND};
 };
 
 template <typename T>

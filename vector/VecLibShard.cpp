@@ -13,7 +13,7 @@
 using namespace vec;
 
 VectorResult<void> VecLibShard::save() {
-    std::unique_lock lock {_mutex};
+    std::unique_lock lock(_mutex);
 
     faiss::write_index(_index.get(), _indexPath.c_str());
 
@@ -32,7 +32,7 @@ VectorResult<void> VecLibShard::save() {
 }
 
 VectorResult<void> VecLibShard::load(const VecLibMetadata& meta) {
-    std::unique_lock lock {_mutex};
+    std::unique_lock lock(_mutex);
 
     switch (meta._metric) {
         case DistanceMetric::EUCLIDEAN_DIST:

@@ -52,7 +52,7 @@ namespace {
 namespace db {
 
 JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream& stream) {
-    Profile profile {"JsonlParser::parse"};
+    Profile profile("JsonlParser::parse");
 
     std::string line;
     json obj;
@@ -115,7 +115,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                 if (properties != obj.end()) {
                     for (const auto& [key, value] : properties->items()) {
                         ptName = key;
-                        ValueType vt {};
+                        ValueType vt = ValueType::Invalid;
 
                         if (value.is_number_float()) {
                             vt = ValueType::Double;
@@ -199,7 +199,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                 if (properties != obj.end()) {
                     for (const auto& [key, value] : properties->items()) {
                         ptName = key;
-                        ValueType vt {};
+                        ValueType vt = ValueType::Invalid;
 
                         if (value.is_number_float()) {
                             vt = ValueType::Double;

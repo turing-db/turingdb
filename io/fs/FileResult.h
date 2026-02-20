@@ -75,7 +75,7 @@ public:
 
 private:
     int _errno {-1};
-    ErrorType _type {};
+    ErrorType _type {ErrorType::UNKNOWN};
 };
 
 template <typename T>

@@ -94,7 +94,7 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
     Tombstones& commitTombstones = commitBuilder._commitData->_tombstones;
     rebaseTombstones(commitTombstones);
 
-    CommitHistoryRebaser historyRebaser {history};
+    CommitHistoryRebaser historyRebaser(history);
 
     _metadataRebaser.clear();
     _metadataRebaser.rebase(_currentHeadCommitData->metadata(),

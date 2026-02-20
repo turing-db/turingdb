@@ -64,7 +64,7 @@ void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
     }
 
     { // Add the out edges of all deleted nodes
-        const GetOutEdgesRange outEdgesRg {view, &deletedNodesCol};
+        const GetOutEdgesRange outEdgesRg(view, &deletedNodesCol);
         for (const EdgeRecord& record : outEdgesRg) {
             // Only add edges which are not already deleted
             if (!view.tombstones().containsEdge(record._edgeID)) {
@@ -74,7 +74,7 @@ void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
     }
 
     { // Add the in edges of all deleted nodes
-        const GetInEdgesRange inEdgesRg {view, &deletedNodesCol};
+        const GetInEdgesRange inEdgesRg(view, &deletedNodesCol);
         for (const EdgeRecord& record : inEdgesRg) {
             // Only add edges which are not already deleted
             if (!view.tombstones().containsEdge(record._edgeID)) {

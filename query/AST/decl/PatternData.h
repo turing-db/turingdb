@@ -11,7 +11,7 @@ class Expr;
 
 struct EntityPropertyConstraint {
     std::string_view _propTypeName;
-    ValueType _valueType;
+    ValueType _valueType {ValueType::Invalid};
     Expr* _expr {nullptr};
 };
 

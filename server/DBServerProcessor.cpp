@@ -1170,7 +1170,7 @@ void DBServerProcessor::explore_node_edges() {
 
     payload.setMetadata(&metadata);
 
-    ExploreNodeEdgesExecutor executor {reader, payload};
+    ExploreNodeEdgesExecutor executor(reader, payload);
 
     try {
         const auto json = nlohmann::json::parse(httpInfo._payload);

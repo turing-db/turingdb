@@ -207,7 +207,7 @@ private:
     net::NetWriter* _writer {nullptr};
     const GraphMetadata* _metadata {nullptr};
     std::vector<char> _closingTokens;
-    bool _comma = false;
+    bool _comma {false};
 
     void write(std::signed_integral auto v) {
         _writer->write(v);

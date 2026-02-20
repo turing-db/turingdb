@@ -442,20 +442,20 @@ void CypherASTDumper::dump(std::ostream& out, const SetItem* setItem) {
 
     const auto visitor = Overloaded {
         [&](const SetItem::PropertyExprAssign& assign) {
-            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign.propTypeExpr << " : \"\"\n";
-            dump(out, assign.propTypeExpr);
-            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign.propValueExpr << " : \"\"\n";
-            dump(out, assign.propValueExpr);
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign._propTypeExpr << " : \"\"\n";
+            dump(out, assign._propTypeExpr);
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign._propValueExpr << " : \"\"\n";
+            dump(out, assign._propValueExpr);
         },
         [&](const SetItem::SymbolAddAssign& symbolAdd) {
-            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolAdd.symbol << " : \"\"\n";
-            dump(out, symbolAdd.symbol);
-            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolAdd.value << " : \"\"\n";
-            dump(out, symbolAdd.value);
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolAdd._symbol << " : \"\"\n";
+            dump(out, symbolAdd._symbol);
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolAdd._value << " : \"\"\n";
+            dump(out, symbolAdd._value);
         },
         [&](const SetItem::SymbolEntityTypes& symbolEntityTypes) {
-            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolEntityTypes.value << " : \"\"\n";
-            dump(out, symbolEntityTypes.value);
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolEntityTypes._value << " : \"\"\n";
+            dump(out, symbolEntityTypes._value);
         }
     };
 

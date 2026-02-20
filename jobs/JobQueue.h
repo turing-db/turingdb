@@ -20,7 +20,7 @@ public:
     }
 
     void submit(Job job) {
-        std::unique_lock lock {_mutex};
+        std::unique_lock lock(_mutex);
         _submitted++;
 
         if (_runningCount >= _threadCount) {
@@ -42,7 +42,7 @@ public:
     }
 
     std::optional<Job> pop() {
-        std::scoped_lock lock {_mutex};
+        std::scoped_lock lock(_mutex);
         if (_jobs.empty()) {
             return std::nullopt;
         }
@@ -54,17 +54,17 @@ public:
     }
 
     size_t size() const {
-        std::scoped_lock lock {_mutex};
+        std::scoped_lock lock(_mutex);
         return _jobs.size();
     }
 
     bool empty() const {
-        std::scoped_lock lock {_mutex};
+        std::scoped_lock lock(_mutex);
         return _jobs.empty();
     }
 
     std::optional<Job> waitJob(std::invocable auto extraCondition) {
-        std::unique_lock lock {_mutex};
+        std::unique_lock lock(_mutex);
 
         _wakeCondition.wait(lock, [&] {
             return !_jobs.empty() || extraCondition();
@@ -81,13 +81,13 @@ public:
     }
 
     void incrementFinished() {
-        std::scoped_lock lock {_mutex};
+        std::scoped_lock lock(_mutex);
         _finished++;
         _runningCount--;
     }
 
     void wait() {
-        std::unique_lock lock {_mutex};
+        std::unique_lock lock(_mutex);
 
         while (_finished != _submitted) {
             lock.unlock();

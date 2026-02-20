@@ -81,7 +81,7 @@ public:
     }
 
 private:
-    FileCacheErrorType _type {};
+    FileCacheErrorType _type {FileCacheErrorType::UNKNOWN};
     S3::S3ClientError _s3Error;
 };
 

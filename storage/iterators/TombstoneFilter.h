@@ -91,8 +91,8 @@ void TombstoneFilter::filter(ColumnVector<T>* col) {
     size_t writePtr = 0;
     for (const NonDeletedRange& rg : *_nonDeletedRanges) {
         // Shift the non-deleted range left, to the current write position
-        std::memmove(data + writePtr, data + rg.start, sizeof(T) * rg.size);
-        writePtr += rg.size;
+        std::memmove(data + writePtr, data + rg._start, sizeof(T) * rg._size);
+        writePtr += rg._size;
     }
 
     // Truncate the end of the column: anything remaining is either deleted or has already

@@ -16,8 +16,8 @@ class StorageManager;
 class ShardCache {
 public:
     struct ShardIdentifier {
-        VecLibID _libID {};
-        LSHSignature _signature {};
+        VecLibID _libID {0};
+        LSHSignature _signature {0};
 
         struct Hash {
             std::size_t operator()(const ShardIdentifier& id) const {
@@ -59,8 +59,8 @@ private:
     StorageManager* _storageManager {nullptr};
 
     struct ShardEntry {
-        std::unique_ptr<VecLibShard> shard;
-        size_t accessCount {0};
+        std::unique_ptr<VecLibShard> _shard;
+        size_t _accessCount {0};
     };
 
     using AccessedList = std::list<std::pair<ShardIdentifier, ShardEntry>>;

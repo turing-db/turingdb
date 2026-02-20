@@ -28,7 +28,7 @@ JsonParser::JsonParser()
 JsonParser::~JsonParser() = default;
 
 GraphStats JsonParser::parseStats(const std::string& data) {
-    Profile profile {"JsonParser::parseStats"};
+    Profile profile("JsonParser::parseStats");
     auto parser = json::neo4j::StatParser();
     nlohmann::json::sax_parse(data,
                               &parser,
@@ -40,7 +40,7 @@ GraphStats JsonParser::parseStats(const std::string& data) {
 }
 
 bool JsonParser::parseNodeLabels(ChangeAccessor& change, const std::string& data) {
-    Profile profile {"JsonParser::parseNodeLabels"};
+    Profile profile("JsonParser::parseNodeLabels");
     CommitBuilder* tip = change.getTip();
     auto parser = json::neo4j::NodeLabelParser(&tip->metadata());
     return nlohmann::json::sax_parse(data,
@@ -51,7 +51,7 @@ bool JsonParser::parseNodeLabels(ChangeAccessor& change, const std::string& data
 }
 
 bool JsonParser::parseNodeLabelSets(ChangeAccessor& change, const std::string& data) {
-    Profile profile {"JsonParser::parseNodeLabelSets"};
+    Profile profile("JsonParser::parseNodeLabelSets");
     CommitBuilder* tip = change.getTip();
     auto parser = json::neo4j::NodeLabelSetParser(&tip->metadata());
     return nlohmann::json::sax_parse(data,
@@ -62,7 +62,7 @@ bool JsonParser::parseNodeLabelSets(ChangeAccessor& change, const std::string& d
 }
 
 bool JsonParser::parseEdgeTypes(ChangeAccessor& change, const std::string& data) {
-    Profile profile {"JsonParser::parseEdgeTypes"};
+    Profile profile("JsonParser::parseEdgeTypes");
     CommitBuilder* tip = change.getTip();
     auto parser = json::neo4j::EdgeTypeParser(&tip->metadata());
     return nlohmann::json::sax_parse(data,
@@ -73,7 +73,7 @@ bool JsonParser::parseEdgeTypes(ChangeAccessor& change, const std::string& data)
 }
 
 bool JsonParser::parseNodeProperties(ChangeAccessor& change, const std::string& data) {
-    Profile profile {"JsonParser::parseNodeProperties"};
+    Profile profile("JsonParser::parseNodeProperties");
     CommitBuilder* tip = change.getTip();
     auto parser = json::neo4j::NodePropertyParser(&tip->metadata());
     return nlohmann::json::sax_parse(data,
@@ -84,7 +84,7 @@ bool JsonParser::parseNodeProperties(ChangeAccessor& change, const std::string& 
 }
 
 bool JsonParser::parseEdgeProperties(ChangeAccessor& change, const std::string& data) {
-    Profile profile {"JsonParser::parseEdgeProperties"};
+    Profile profile("JsonParser::parseEdgeProperties");
     CommitBuilder* tip = change.getTip();
     auto parser = json::neo4j::EdgePropertyParser(&tip->metadata());
     return nlohmann::json::sax_parse(data,
@@ -95,7 +95,7 @@ bool JsonParser::parseEdgeProperties(ChangeAccessor& change, const std::string& 
 }
 
 bool JsonParser::parseNodes(ChangeAccessor& change, const std::string& data) {
-    Profile profile {"JsonParser::parseNodes"};
+    Profile profile("JsonParser::parseNodes");
     CommitBuilder* tip = change.getTip();
     auto parser = json::neo4j::NodeParser(&tip->metadata(),
                                           &tip->getCurrentBuilder(),
@@ -106,7 +106,7 @@ bool JsonParser::parseNodes(ChangeAccessor& change, const std::string& data) {
 }
 
 bool JsonParser::parseEdges(ChangeAccessor& change, const std::string& data) {
-    Profile profile {"JsonParser::parseEdges"};
+    Profile profile("JsonParser::parseEdges");
     CommitBuilder* tip = change.getTip();
     auto parser = json::neo4j::EdgeParser(&tip->metadata(),
                                           &tip->getCurrentBuilder(),

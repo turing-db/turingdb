@@ -31,12 +31,12 @@ public:
     template <typename T>
     Future<T> submit(JobOperation&& operation) {
         TypedPromise<T>* promise = new TypedPromise<T>();
-        Future<T> future {promise->get_future()};
+        Future<T> future(promise->get_future());
 
-        Job job {
+        Job job(
             std::move(operation),
-            std::unique_ptr<Promise>(static_cast<Promise*>(promise)),
-        };
+            std::unique_ptr<Promise>(static_cast<Promise*>(promise))
+        );
 
         _jobs.submit(std::move(job));
 
@@ -51,12 +51,12 @@ public:
     template <typename T>
     SharedFuture<T> submitShared(JobOperation&& operation) {
         TypedPromise<T>* promise = new TypedPromise<T>;
-        SharedFuture<T> future {promise->get_future().share()};
+        SharedFuture<T> future(promise->get_future().share());
 
-        Job job {
+        Job job(
             std::move(operation),
-            std::unique_ptr<Promise>(static_cast<Promise*>(promise)),
-        };
+            std::unique_ptr<Promise>(static_cast<Promise*>(promise))
+        );
 
         _jobs.submit(std::move(job));
 

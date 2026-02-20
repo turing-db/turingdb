@@ -209,7 +209,7 @@ EdgeView GraphReader::getEdgeView(EdgeID id) const {
     EdgeView view;
     PartIterator partIt(_view);
     LabelSetHandle labelset;
-    const EdgeRecord* edge {nullptr};
+    const EdgeRecord* edge = nullptr;
 
     // Find definition of the edge
     for (; partIt.isNotEnd(); partIt.next()) {

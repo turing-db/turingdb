@@ -24,7 +24,7 @@ int main(int argc, const char** argv) {
     bool inMemory = false;
     bool resetDefault = false;
     unsigned port = 6666;
-    std::string address {"127.0.0.1"};
+    std::string address("127.0.0.1");
     std::string turingDir;
     std::vector<std::string> graphsToLoad;
 

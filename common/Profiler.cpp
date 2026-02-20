@@ -11,12 +11,12 @@
 #include "TuringTime.h"
 
 struct ProfileData {
-    Profiler::ProfileID _id;
+    Profiler::ProfileID _id {0};
     std::string_view _message;
     TimePoint _startTime;
     TimePoint _endTime;
-    bool _finished = false;
-    size_t _nesting = 0;
+    bool _finished {false};
+    size_t _nesting {0};
 };
 
 class ProfilerInstance {
@@ -92,7 +92,7 @@ public:
 
 private:
     mutable std::mutex _mutex;
-    Profiler::ProfileID _nextID = 0;
+    Profiler::ProfileID _nextID {0};
     size_t _nesting {0};
     std::map<Profiler::ProfileID, ProfileData> _profilers;
     std::unordered_map<std::string_view, float> _timings;

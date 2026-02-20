@@ -21,7 +21,7 @@ public:
     ChangeOp getOp() const { return _op; }
 
 private:
-    ChangeOp _op;
+    ChangeOp _op {ChangeOp::NEW};
 
     ChangeQuery(DeclContext* declContext, ChangeOp op);
     ~ChangeQuery() override;

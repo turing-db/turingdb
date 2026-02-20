@@ -51,7 +51,7 @@ int writeFileContent(const fs::Path& path) {
 }
 
 int main() {
-    fs::Path p {SAMPLE_DIR "/test"};
+    fs::Path p(SAMPLE_DIR "/test");
 
     if (int res = writeFileContent(p); res != 0) {
         return res;

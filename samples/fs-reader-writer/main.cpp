@@ -12,7 +12,7 @@
     }
 
 int main() {
-    fs::Path p {SAMPLE_DIR "/test"};
+    fs::Path p(SAMPLE_DIR "/test");
 
     fmt::print("## FileInfo struct\n");
     fmt::print("- File: {}\n", p.get());

@@ -7,7 +7,7 @@
 
 struct EVector {
     static constexpr size_t DIM = 128;
-    float _data[DIM];
+    float _data[DIM] {0.0f};
 };
 
 float getDistance(const EVector& lhs, const EVector& rhs) {

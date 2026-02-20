@@ -32,7 +32,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createDB1() {
         auto graph = Graph::create();
-        GraphWriter writer {graph.get()};
+        GraphWriter writer(graph.get());
 
         auto p1 = writer.addNode({"Person"});
         writer.addNodeProperty<types::String>(p1, "Name", "Cyrus");
@@ -52,7 +52,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createBioGraph() {
         auto graph = Graph::create();
-        GraphWriter writer {graph.get()};
+        GraphWriter writer(graph.get());
 
         auto node1 = writer.addNode({"Chemical"});
         writer.addNodeProperty<types::String>(node1, "name", "APOE-4 [extracellular]");
@@ -70,7 +70,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createMultiDatapartGraph() {
         auto graph = Graph::create();
-        GraphWriter writer {graph.get()};
+        GraphWriter writer(graph.get());
 
         auto poliwag = writer.addNode({"Pokemon"});
         writer.addNodeProperty<types::String>(poliwag, "name", "Poliwag");
@@ -103,7 +103,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createPrefixTestDB() {
         auto graph = Graph::create();
-        GraphWriter writer {graph.get()};
+        GraphWriter writer(graph.get());
 
         auto node1 = writer.addNode({"Word"});
         writer.addNodeProperty<types::String>(node1, "name", "playful");
@@ -114,7 +114,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createEdgeCaseGraph() {
         auto graph = Graph::create();
-        GraphWriter writer {graph.get()};
+        GraphWriter writer(graph.get());
 
         auto node1 = writer.addNode({"LastLetter"});
         writer.addNodeProperty<types::String>(node1, "name", "Zebraz");
@@ -153,7 +153,7 @@ TEST_F(StringIndexTest, prefixSemanticsTest) {
     const std::string PLAYFUL = "playful";
     const std::string PLAY = "play";
 
-    std::vector<NodeID> owners {};
+    std::vector<NodeID> owners;
     nameIdx->query(owners, PLAYFUL);
     EXPECT_THAT(owners, UnorderedElementsAre(0)) << "Query for 'playful' failed";
 
@@ -193,21 +193,21 @@ TEST_F(StringIndexTest, simpleIndex) {
     // Get the prefix trie corresponding to the "name" property
     auto& [prop, nameIdx] = *nodePropIdx.begin();
 
-    std::vector<NodeID> owners1 {};
+    std::vector<NodeID> owners1;
     nameIdx->query(owners1, "Cyrus");
     ASSERT_EQ(1, owners1.size());
     EXPECT_EQ(FIRSTNODEID, owners1.at(0));
 
-    std::vector<NodeID> owners2 {};
+    std::vector<NodeID> owners2;
     nameIdx->query(owners2, "Suhas");
     ASSERT_EQ(1, owners2.size());
     EXPECT_EQ(SECONDNODEID, owners2.at(0));
 
-    std::vector<NodeID> owners3 {};
+    std::vector<NodeID> owners3;
     nameIdx->query(owners3, "Remy");
     EXPECT_EQ(0, owners3.size());
 
-    std::vector<NodeID> owners4 {};
+    std::vector<NodeID> owners4;
     nameIdx->query(owners4, "Cy");
     ASSERT_EQ(1, owners4.size());
     EXPECT_EQ(FIRSTNODEID, owners4.at(0));
@@ -218,31 +218,31 @@ TEST_F(StringIndexTest, simpleIndex) {
     // Get the prefix trie corresponding to the "For" property
     auto& [eprop, forIdx] = *edgePropIdx.begin();
 
-    std::vector<EdgeID> owners5 {};
+    std::vector<EdgeID> owners5;
     forIdx->query(owners5, "2 weeks");
     ASSERT_EQ(1, owners5.size());
     EXPECT_EQ(FIRSTEDGEID, owners5.at(0));
 
-    std::vector<EdgeID> owners6 {};
+    std::vector<EdgeID> owners6;
     forIdx->query(owners6, "2");
     ASSERT_EQ(1, owners6.size());
     EXPECT_EQ(FIRSTEDGEID, owners6.at(0));
 
-    std::vector<EdgeID> owners7 {};
+    std::vector<EdgeID> owners7;
     forIdx->query(owners7, "weeks");
     ASSERT_EQ(1, owners7.size());
     EXPECT_EQ(FIRSTEDGEID, owners7.at(0));
 
-    std::vector<EdgeID> owners8 {};
+    std::vector<EdgeID> owners8;
     forIdx->query(owners8, "we");
     ASSERT_EQ(1, owners8.size());
     EXPECT_EQ(FIRSTEDGEID, owners8.at(0));
 
-    std::vector<EdgeID> owners9 {};
+    std::vector<EdgeID> owners9;
     forIdx->query(owners9, "eeks");
     EXPECT_EQ(0, owners9.size());
 
-    std::vector<EdgeID> owners10 {};
+    std::vector<EdgeID> owners10;
     forIdx->query(owners10, "10 years");
     EXPECT_EQ(0, owners10.size());
 }
@@ -324,14 +324,14 @@ TEST_F(StringIndexTest, multiDataPartTest) {
     auto& fstPropertyIndex = firstStageIndex.at(NAMEPROPERTYOFFSET);
 
     {
-        std::vector<NodeID> owners {};
+        std::vector<NodeID> owners;
         fstPropertyIndex->query<NodeID>(owners, "poli");
         EXPECT_THAT(owners, UnorderedElementsAre(PWAGNODEID))
             << "Query for 'poli' failed";
     }
 
     {
-        std::vector<NodeID> owners {};
+        std::vector<NodeID> owners;
         fstPropertyIndex->query<NodeID>(owners, "sand");
         EXPECT_THAT(owners, UnorderedElementsAre(SANDSHREWNODEID))
             << "Query for 'sand' failed";
@@ -345,14 +345,14 @@ TEST_F(StringIndexTest, multiDataPartTest) {
 
 
     {
-        std::vector<NodeID> owners {};
+        std::vector<NodeID> owners;
         sndPropertyIndex->query<NodeID>(owners, "poli");
         EXPECT_THAT(owners, UnorderedElementsAre(PWHIRLNODEID))
             << "Query for 'poli' failed";
     }
 
     {
-        std::vector<NodeID> owners {};
+        std::vector<NodeID> owners;
         sndPropertyIndex->query<NodeID>(owners, "sand");
         EXPECT_THAT(owners, UnorderedElementsAre(SANDSLASHNODEID))
             << "Query for 'poli' failed";
@@ -365,7 +365,7 @@ TEST_F(StringIndexTest, multiDataPartTest) {
     auto& thdPropertyIndex = thirdStageIndex.at(NAMEPROPERTYOFFSET);
 
     {
-        std::vector<NodeID> owners {};
+        std::vector<NodeID> owners;
         thdPropertyIndex->query<NodeID>(owners, "poli");
         EXPECT_THAT(owners, UnorderedElementsAre(PWRATHNODEID))
             << "Query for 'poli' failed";

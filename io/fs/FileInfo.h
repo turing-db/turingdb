@@ -17,9 +17,9 @@ enum class AccessRights : uint8_t {
 };
 
 struct FileInfo {
-    uint64_t _size {};
-    FileType _type {};
-    AccessRights _access {};
+    uint64_t _size {0};
+    FileType _type {FileType::File};
+    AccessRights _access {AccessRights::None};
 
     [[nodiscard]] bool readable() const {
         return ((uint8_t)_access & (uint8_t)AccessRights::Read) != 0;

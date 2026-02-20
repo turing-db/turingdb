@@ -15,12 +15,12 @@ protected:
 };
 
 struct MyObject {
-    size_t a {0};
-    size_t b {0};
+    size_t _a {0};
+    size_t _b {0};
 };
 
 TEST_F(ArcManagerTest, empty) {
-    ArcManager<MyObject> manager {};
+    ArcManager<MyObject> manager;
     EXPECT_EQ(manager.size(), 0);
 
     const size_t deletedCount = manager.cleanUp();
@@ -28,7 +28,7 @@ TEST_F(ArcManagerTest, empty) {
 }
 
 TEST_F(ArcManagerTest, deleteAll) {
-    ArcManager<MyObject> manager {};
+    ArcManager<MyObject> manager;
 
     {
         WeakArc<MyObject> ref1 = manager.create(1, 2);
@@ -48,7 +48,7 @@ TEST_F(ArcManagerTest, deleteAll) {
 }
 
 TEST_F(ArcManagerTest, deleteSome) {
-    ArcManager<MyObject> manager {};
+    ArcManager<MyObject> manager;
 
     WeakArc<MyObject> ref1 = manager.create(1, 2);
 

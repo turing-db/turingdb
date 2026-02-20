@@ -48,18 +48,18 @@ std::string_view SourceManager::getStringRepr(uintptr_t obj) const {
 
     std::string_view repr = _queryString;
 
-    const size_t firstLineNo = loc->beginLine;
-    const size_t lastLineNo = loc->endLine;
-    size_t lastCol = loc->endColumn;
+    const size_t firstLineNo = loc->_beginLine;
+    const size_t lastLineNo = loc->_endLine;
+    size_t lastCol = loc->_endColumn;
 
     ignoreLines(repr, firstLineNo - 1);
-    repr = repr.substr(loc->beginColumn - 1);
+    repr = repr.substr(loc->_beginColumn - 1);
 
     if (firstLineNo != lastLineNo) {
         ignoreLines(repr, lastLineNo - firstLineNo);
         nextLine(repr);
     } else {
-        lastCol = loc->endColumn - loc->beginColumn;
+        lastCol = loc->_endColumn - loc->_beginColumn;
     }
 
     repr = repr.substr(0, lastCol);

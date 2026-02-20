@@ -19,7 +19,7 @@ public:
     size_t getThreadID() const { return _threadID; }
 
 private:
-    size_t _threadID {};
+    size_t _threadID {0};
 
     friend HTTPServer;
     void setThreadID(size_t threadID) { _threadID = threadID; }

@@ -64,7 +64,7 @@ struct BinaryOpExecutor {
         auto& resd = res->getRaw();
 
         auto op = Op {};
-        for (size_t i {0}; i < size; i++) {
+        for (size_t i = 0; i < size; i++) {
             resd[i] = op(lhsd[i], rhsd[i]);
         }
     }
@@ -80,7 +80,7 @@ struct BinaryOpExecutor {
        const auto& val = rhs->getRaw();
 
        auto op = Op {};
-       for (size_t i {0}; i < size; i++) {
+       for (size_t i = 0; i < size; i++) {
            resd[i] = op(lhsd[i], val);
        }
     }
@@ -96,7 +96,7 @@ struct BinaryOpExecutor {
        const auto& rhsd = rhs->getRaw();
 
        auto op = Op {};
-       for (size_t i {0}; i < size; i++) {
+       for (size_t i = 0; i < size; i++) {
            resd[i] = op(val, rhsd[i]);
        }
     }

@@ -12,11 +12,11 @@ class Graph;
 class Neo4jImporter {
 public:
     struct UrlToJsonDirArgs {
-        std::string _url = "localhost";
-        std::string _urlSuffix = "/db/data/transaction/commit";
-        std::string _username = "neo4j";
-        std::string _password = "turing";
-        uint64_t _port = 7474;
+        std::string _url {"localhost"};
+        std::string _urlSuffix {"/db/data/transaction/commit"};
+        std::string _username {"neo4j"};
+        std::string _password {"turing"};
+        uint64_t _port {7474};
         FileUtils::Path _workDir;
     };
     bool fromUrlToJsonDir(JobSystem& jobSystem,

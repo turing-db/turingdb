@@ -46,8 +46,8 @@ private:
 
     std::vector<std::span<const EdgeRecord>> _outEdgeSpans;
     std::vector<std::span<const EdgeRecord>> _inEdgeSpans;
-    size_t _outCount = 0;
-    size_t _inCount = 0;
+    size_t _outCount {0};
+    size_t _inCount {0};
 
     NodeEdgeView() = default;
 

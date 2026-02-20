@@ -36,7 +36,7 @@ void QueryInterpreterV2::execute(const InterpreterContext& ctxt,
                                  QueryStatus& status,
                                  std::string_view query,
                                  std::string_view graphName) {
-    const Profile profile {"QueryInterpreterV2::execute"};
+    const Profile profile("QueryInterpreterV2::execute");
 
     const QueryCallbacks* callbacks = ctxt.getQueryCallbacks();
 

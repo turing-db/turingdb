@@ -27,7 +27,7 @@ using namespace db;
 DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
                                                    const GraphMetadata& metadata,
                                                    VersionController& versionController) {
-    Profile profile {"DataPartLoader::load"};
+    Profile profile("DataPartLoader::load");
 
     if (!path.exists()) {
         return DumpError::result(DumpErrorType::DATAPART_DOES_NOT_EXIST);
@@ -37,7 +37,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
 
     // Loading info
     {
-        Profile profile {"DataPartLoader::load <info>"};
+        Profile profile("DataPartLoader::load <info>");
 
         const fs::Path infoPath = path / "info";
         auto reader = fs::FilePageReader::open(infoPath, DumpConfig::PAGE_SIZE);
@@ -45,7 +45,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_INFO, reader.error());
         }
 
-        DataPartInfoLoader loader {reader.value()};
+        DataPartInfoLoader loader(reader.value());
 
         auto res = loader.load(*part);
         if (!res) {
@@ -61,7 +61,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_NODES, reader.error());
         }
 
-        NodeContainerLoader loader {reader.value()};
+        NodeContainerLoader loader(reader.value());
 
         auto res = loader.load(metadata);
         if (!res) {
@@ -82,7 +82,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGES, reader.error());
         }
 
-        EdgeContainerLoader loader {reader.value()};
+        EdgeContainerLoader loader(reader.value());
 
         auto res = loader.load();
         if (!res) {
@@ -104,7 +104,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_INDEXER, reader.error());
         }
 
-        EdgeIndexerLoader loader {reader.value()};
+        EdgeIndexerLoader loader(reader.value());
 
         auto res = loader.load(metadata, *part->_edges);
         if (!res) {
@@ -144,7 +144,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
 
         // Lambda to store trivial properties
         const auto storeTrivialContainer = [&]<TrivialSupportedType T>(PropertyManager& manager) -> DumpResult<void> {
-            TrivialPropertyContainerLoader<T> loader {reader.value()};
+            TrivialPropertyContainerLoader<T> loader(reader.value());
 
             auto props = loader.load();
             if (!props) {
@@ -173,7 +173,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
         const auto storeStringContainer =
             [&](PropertyManager& manager,
                 StringPropertyIndexer& idxer) -> DumpResult<void> {
-            StringPropertyContainerLoader loader {reader.value()};
+            StringPropertyContainerLoader loader(reader.value());
 
             auto props = loader.load();
             if (!props) {
@@ -231,14 +231,14 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     const fs::Path nodePropertyIndexerPath = path / "node-prop-indexer";
 
     if (nodePropertyIndexerPath.exists()) {
-        Profile profile {"DataPartLoader::load <node-prop-indexer>"};
+        Profile profile("DataPartLoader::load <node-prop-indexer>");
 
         auto reader = fs::FilePageReader::open(nodePropertyIndexerPath, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, reader.error());
         }
 
-        PropertyIndexerLoader loader {reader.value()};
+        PropertyIndexerLoader loader(reader.value());
 
         auto res = loader.load(metadata, part->_nodeProperties->_indexers);
         if (!res) {
@@ -250,14 +250,14 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     const fs::Path edgePropertyIndexerPath = path / "edge-prop-indexer";
 
     if (edgePropertyIndexerPath.exists()) {
-        Profile profile {"DataPartLoader::load <edge-prop-indexer>"};
+        Profile profile("DataPartLoader::load <edge-prop-indexer>");
 
         auto reader = fs::FilePageReader::open(edgePropertyIndexerPath, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, reader.error());
         }
 
-        PropertyIndexerLoader loader {reader.value()};
+        PropertyIndexerLoader loader(reader.value());
 
         auto res = loader.load(metadata, part->_edgeProperties->_indexers);
         if (!res) {
@@ -269,14 +269,14 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
         const auto& childStr = child.filename();
 
         if (childStr.find(NODE_PROPS_PREFIX) != std::string::npos) {
-            Profile profile {"DataPartLoader::load <node-props>"};
+            Profile profile("DataPartLoader::load <node-props>");
 
             // node properties
             if (auto res = loadProperties(*part->_nodeProperties, *part->_nodeStrPropIdx, childStr); !res) {
                 return res.get_unexpected();
             }
         } else if (childStr.find(EDGE_PROPS_PREFIX) != std::string::npos) {
-            Profile profile {"DataPartLoader::load <edge-props>"};
+            Profile profile("DataPartLoader::load <edge-props>");
             // edge properties
             if (auto res = loadProperties(*part->_edgeProperties, *part->_edgeStrPropIdx, childStr); !res) {
                 return res.get_unexpected();

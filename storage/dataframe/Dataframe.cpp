@@ -27,7 +27,7 @@ size_t Dataframe::getLogicalRowCount() const {
     }
 
     // Nullopt until we find a non-ColumnConst to take size of
-    std::optional<size_t> foundSize {std::nullopt};
+    std::optional<size_t> foundSize(std::nullopt);
 
     constexpr ContainerKind::Code colConstKind =
         ColumnKind::extractContainerKind(ColumnConst<int>::staticKind());
@@ -54,7 +54,7 @@ bool Dataframe::isRectangular() const {
     constexpr ContainerKind::Code colConstKind =
         ColumnKind::extractContainerKind(ColumnConst<int>::staticKind());
 
-    std::optional<size_t> expectedRowCount {std::nullopt};
+    std::optional<size_t> expectedRowCount(std::nullopt);
 
     for (const NamedColumn* ncol : _cols) {
         bioassert(ncol && ncol->getColumn(),

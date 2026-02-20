@@ -78,5 +78,5 @@ public:
     }
 
 private:
-    Profiler::ProfileID _id = UINT64_MAX;
+    Profiler::ProfileID _id {UINT64_MAX};
 };

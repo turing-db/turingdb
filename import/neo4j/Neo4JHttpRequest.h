@@ -41,11 +41,11 @@ private:
     std::string _response;
     std::string _url = "localhost";
     std::string _urlSuffix = "/db/data/transaction/commmit";
-    std::string _username = "neo4j";
-    std::string _password = "turing";
-    std::string _method = "POST";
+    std::string _username {"neo4j"};
+    std::string _password {"turing"};
+    std::string _method {"POST"};
     std::string _statement;
-    uint64_t _port = 7474;
+    uint64_t _port {7474};
 };
 
 }

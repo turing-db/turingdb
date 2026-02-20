@@ -68,7 +68,7 @@ private:
     AlignedBuffer _buffer;
     std::optional<Error> _error;
     int _fd {-1};
-    bool _reachedEnd = false;
+    bool _reachedEnd {false};
 
     explicit FilePageReader(int fd, size_t pageSize)
         : _buffer(pageSize),

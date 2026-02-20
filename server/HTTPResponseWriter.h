@@ -87,7 +87,7 @@ public:
 
     private:
         HTTPResponseWriter& _w;
-        bool _destroyed = false;
+        bool _destroyed {false};
     };
 
     class Array {
@@ -121,7 +121,7 @@ public:
 
     private:
         HTTPResponseWriter& _w;
-        bool _destroyed = false;
+        bool _destroyed {false};
     };
 
     class Object {
@@ -155,7 +155,7 @@ public:
 
     private:
         HTTPResponseWriter& _w;
-        bool _destroyed = false;
+        bool _destroyed {false};
     };
 
     class Error {

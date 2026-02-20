@@ -301,7 +301,7 @@ protected:
 TEST_F(IteratorsTest, ScanEdgesIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
-    std::vector<TestEdgeRecord> compareSet {
+    std::vector<TestEdgeRecord> compareSet = {
         {0, 0, 1},
         {1, 0, 2},
         {2, 3, 4},
@@ -331,7 +331,7 @@ TEST_F(IteratorsTest, ScanEdgesIteratorTest) {
 TEST_F(IteratorsTest, ScanNodesIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
-    std::vector<NodeID> compareSet {0, 1, 2, 3, 4, 5, 6, 7, 8};
+    std::vector<NodeID> compareSet = {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
     auto it = compareSet.begin();
     size_t count = 0;
@@ -365,7 +365,7 @@ TEST_F(IteratorsTest, goToPartGetOutEdgesTest) {
     };
 
     { // Skip the first datapart, check out edges on 0
-        std::vector<TestEdgeRecord> compareSet {}; // Should be no edges
+        std::vector<TestEdgeRecord> compareSet; // Should be no edges
         nodes.clear();
         nodes.push_back(0);
         GetOutEdgesRange rg = reader.getOutEdges(&nodes);
@@ -376,7 +376,7 @@ TEST_F(IteratorsTest, goToPartGetOutEdgesTest) {
 
     { // Skip the first two dataparts - ends up pointing at empty DP : check that we
       // advance again to a valid part. Check out edges of Node 2
-        std::vector<TestEdgeRecord> compareSet {
+        std::vector<TestEdgeRecord> compareSet = {
             // {0, 0, 1},
             // {1, 0, 2},
             // {2, 3, 4},
@@ -398,7 +398,7 @@ TEST_F(IteratorsTest, goToPartGetOutEdgesTest) {
     }
 
     { // Skip all four dataparts, check all nodes
-        std::vector<TestEdgeRecord> compareSet {};
+        std::vector<TestEdgeRecord> compareSet;
         nodes.clear();
         nodes.push_back(0);
         nodes.push_back(1);
@@ -417,7 +417,7 @@ TEST_F(IteratorsTest, goToPartGetOutEdgesTest) {
     }
 
     { // Attempt to GOTO a part index which is greater than the number of parts that exist
-        std::vector<TestEdgeRecord> compareSet {};
+        std::vector<TestEdgeRecord> compareSet;
         nodes.clear();
         nodes.push_back(0);
         nodes.push_back(1);
@@ -457,7 +457,7 @@ TEST_F(IteratorsTest, goToPartGetInEdgesTest) {
     };
 
     { // Skip the first datapart, check in edges on 0
-        std::vector<TestEdgeRecord> compareSet {}; // Should be no edges
+        std::vector<TestEdgeRecord> compareSet; // Should be no edges
         nodes.clear();
         nodes.push_back(0);
         GetInEdgesRange rg = reader.getInEdges(&nodes);
@@ -468,7 +468,7 @@ TEST_F(IteratorsTest, goToPartGetInEdgesTest) {
 
     { // Skip the first two dataparts - ends up pointing at empty DP : check that we
       // advance again to a valid part. Check in edges of Node 8
-        std::vector<TestEdgeRecord> compareSet {
+        std::vector<TestEdgeRecord> compareSet = {
             // {0, 1, 0},
             // {1, 2, 0},
             // {3, 3, 4},
@@ -490,7 +490,7 @@ TEST_F(IteratorsTest, goToPartGetInEdgesTest) {
     }
 
     { // Skip all four dataparts, check all nodes
-        std::vector<TestEdgeRecord> compareSet {};
+        std::vector<TestEdgeRecord> compareSet;
         nodes.clear();
         nodes.push_back(0);
         nodes.push_back(1);
@@ -509,7 +509,7 @@ TEST_F(IteratorsTest, goToPartGetInEdgesTest) {
     }
 
     { // Attempt to GOTO a part index which is greater than the number of parts that exist
-        std::vector<TestEdgeRecord> compareSet {};
+        std::vector<TestEdgeRecord> compareSet;
         nodes.clear();
         nodes.push_back(0);
         nodes.push_back(1);
@@ -532,7 +532,7 @@ TEST_F(IteratorsTest, goToPartGetInEdgesTest) {
 TEST_F(IteratorsTest, ScanNodesByLabelIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
-    std::vector<NodeID> compareSet {2, 3, 4, 6, 7, 8};
+    std::vector<NodeID> compareSet = {2, 3, 4, 6, 7, 8};
 
     auto it = compareSet.begin();
     size_t count = 0;
@@ -633,7 +633,7 @@ TEST_F(IteratorsTest, GetEdgesIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     ColumnNodeIDs inputNodeIDs = {1, 2, 3, 8};
-    std::vector<TestEdgeRecord> compareSet {
+    std::vector<TestEdgeRecord> compareSet = {
         {2, 3, 4},
         {5, 2, 8},
     };
@@ -702,7 +702,7 @@ TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
     const GraphReader reader = transaction.readGraph();
 
     {
-        std::vector<uint64_t> compareSet {0, 1, 2, 4, 3, 6, 7, 8, 5};
+        std::vector<uint64_t> compareSet = {0, 1, 2, 4, 3, 6, 7, 8, 5};
         auto it = compareSet.begin();
         size_t count = 0;
         for (const uint64_t v : reader.scanNodeProperties<types::UInt64>(0)) {
@@ -714,7 +714,7 @@ TEST_F(IteratorsTest, ScanNodePropertiesIteratorTest) {
     }
 
     {
-        std::vector<std::string_view> compareSet {
+        std::vector<std::string_view> compareSet = {
             "TmpID0",
             "TmpID1",
             // "TmpID4", This property is not set for this node
@@ -741,7 +741,7 @@ TEST_F(IteratorsTest, ScanEdgePropertiesIteratorTest) {
     const GraphReader reader = transaction.readGraph();
 
     {
-        std::vector<uint64_t> compareSet {0, 1, 4, 2, 3, 8, 5, 6, 7};
+        std::vector<uint64_t> compareSet = {0, 1, 4, 2, 3, 8, 5, 6, 7};
         auto it = compareSet.begin();
         size_t count = 0;
         for (const uint64_t v : reader.scanEdgeProperties<types::UInt64>(0)) {
@@ -754,7 +754,7 @@ TEST_F(IteratorsTest, ScanEdgePropertiesIteratorTest) {
     }
 
     {
-        std::vector<std::string_view> compareSet {
+        std::vector<std::string_view> compareSet = {
             "TmpEdgeID0",
             "TmpEdgeID1",
             "TmpEdgeID2 patch",
@@ -781,10 +781,10 @@ TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     const auto labelset = LabelSet::fromList({1});
-    const LabelSetHandle ref {labelset};
+    const LabelSetHandle ref(labelset);
 
     {
-        std::vector<uint64_t> compareSet {2, 4, 3, 7, 8, 5};
+        std::vector<uint64_t> compareSet = {2, 4, 3, 7, 8, 5};
         auto it = compareSet.begin();
         size_t count = 0;
         for (const uint64_t v : reader.scanNodePropertiesByLabel<types::UInt64>(0, ref)) {
@@ -796,7 +796,7 @@ TEST_F(IteratorsTest, ScanNodePropertiesByLabelIteratorTest) {
     }
 
     {
-        std::vector<std::string_view> compareSet {
+        std::vector<std::string_view> compareSet = {
             "TmpID2 patch",
             "TmpID3",
             // "TmpID4", This property is not set for this node
@@ -823,9 +823,9 @@ TEST_F(IteratorsTest, GetNodeViewsIteratorTest) {
     {
         struct NodeInfo {
             NodeID _tmpID;
-            size_t _props = 0;
-            size_t _outs = 0;
-            size_t _ins = 0;
+            size_t _props {0};
+            size_t _outs {0};
+            size_t _ins {0};
         };
 
         std::map<uint64_t, NodeInfo> compareSet = {
@@ -872,7 +872,7 @@ TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
     ColumnNodeIDs inputNodeIDs = {1, 3, 8};
 
     {
-        std::vector<uint64_t> compareSet {1, 4, 5};
+        std::vector<uint64_t> compareSet = {1, 4, 5};
         auto it = compareSet.begin();
         size_t count = 0;
         for (const uint64_t v : reader.getNodeProperties<types::UInt64>(0, &inputNodeIDs)) {
@@ -885,7 +885,7 @@ TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
     }
 
     {
-        std::vector<std::string_view> compareSet {
+        std::vector<std::string_view> compareSet = {
             "TmpID1",
             "TmpID5",
         };

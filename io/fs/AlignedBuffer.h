@@ -98,7 +98,7 @@ private:
     size_t _capacity {DEFAULT_BUFFER_CAPACITY};
 
     void allocate() {
-        void* ptr {nullptr};
+        void* ptr = nullptr;
         if (posix_memalign(&ptr, ALIGNMENT, _capacity) != 0) {
             throw std::runtime_error("AlignedBuffer error: Failed to allocate aligned memory");
         }
@@ -219,7 +219,7 @@ public:
     }
 
     AlignedBufferIterator operator++(int) {
-        AlignedBufferIterator duplicate {*this};
+        AlignedBufferIterator duplicate(*this);
         _data++;
         return duplicate;
     }

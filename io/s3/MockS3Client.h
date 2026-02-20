@@ -9,22 +9,22 @@
 namespace S3 {
 
 struct MockListResult {
-    bool success = true;
-    S3ClientErrorType errorType = S3ClientErrorType::UNKNOWN;
-    std::vector<std::string> keys;
-    std::vector<std::string> commonPrefixes;
+    bool _success {true};
+    S3ClientErrorType _errorType {S3ClientErrorType::UNKNOWN};
+    std::vector<std::string> _keys;
+    std::vector<std::string> _commonPrefixes;
 };
 
 struct MockUploadResult {
-    bool success = true;
-    S3ClientErrorType errorType = S3ClientErrorType::UNKNOWN;
-    int statusCode = 200;
+    bool _success {true};
+    S3ClientErrorType _errorType {S3ClientErrorType::UNKNOWN};
+    int _statusCode {200};
 };
 
 struct MockDownloadResult {
-    bool success = true;
-    S3ClientErrorType errorType = S3ClientErrorType::UNKNOWN;
-    std::string content;
+    bool _success {true};
+    S3ClientErrorType _errorType {S3ClientErrorType::UNKNOWN};
+    std::string _content;
 };
 
 class MockS3Client {

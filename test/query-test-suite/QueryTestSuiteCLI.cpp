@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    const fs::Path testsDir {QUERY_TEST_SUITE_DIR};
+    const fs::Path testsDir(QUERY_TEST_SUITE_DIR);
     std::vector<QueryTestSpec> tests;
 
     try {

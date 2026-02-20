@@ -14,36 +14,36 @@ class PropertyContainerDumperTest : public TuringTest {
 };
 
 TEST_F(PropertyContainerDumperTest, emptyStrings) {
-    fs::Path outDir {_outDir.c_str()};
+    fs::Path outDir(_outDir.c_str());
 
     auto writer = fs::FilePageWriter::open(outDir / "strings");
     ASSERT_TRUE(writer);
 
-    StringPropertyContainerDumper dumper {writer.value()};
+    StringPropertyContainerDumper dumper(writer.value());
 
     TypedPropertyContainer<types::String> container;
     ASSERT_TRUE(dumper.dump(container));
 }
 
 TEST_F(PropertyContainerDumperTest, emptyInts) {
-    fs::Path outDir {_outDir.c_str()};
+    fs::Path outDir(_outDir.c_str());
 
     auto writer = fs::FilePageWriter::open(outDir / "ints");
     ASSERT_TRUE(writer);
 
-    TrivialPropertyContainerDumper<types::Int64> dumper {writer.value()};
+    TrivialPropertyContainerDumper<types::Int64> dumper(writer.value());
 
     TypedPropertyContainer<types::Int64> container;
     ASSERT_TRUE(dumper.dump(container));
 }
 
 TEST_F(PropertyContainerDumperTest, manyStrings) {
-    fs::Path outDir {_outDir.c_str()};
+    fs::Path outDir(_outDir.c_str());
 
     auto writer = fs::FilePageWriter::open(outDir / "strings");
     ASSERT_TRUE(writer);
 
-    StringPropertyContainerDumper dumper {writer.value()};
+    StringPropertyContainerDumper dumper(writer.value());
 
     TypedPropertyContainer<types::String> container;
 
@@ -56,12 +56,12 @@ TEST_F(PropertyContainerDumperTest, manyStrings) {
 }
 
 TEST_F(PropertyContainerDumperTest, manyInts) {
-    fs::Path outDir {_outDir.c_str()};
+    fs::Path outDir(_outDir.c_str());
 
     auto writer = fs::FilePageWriter::open(outDir / "ints");
     ASSERT_TRUE(writer);
 
-    TrivialPropertyContainerDumper<types::Int64> dumper {writer.value()};
+    TrivialPropertyContainerDumper<types::Int64> dumper(writer.value());
 
     TypedPropertyContainer<types::Int64> container;
 

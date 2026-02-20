@@ -40,21 +40,20 @@ TuringServer::~TuringServer() {
 }
 
 void TuringServer::start() {
-    net::HTTPServer::Functions functions {
-        ._processor =
+    net::HTTPServer::Functions functions;
+    functions._processor =
             [&](net::AbstractThreadContext* threadContext, net::TCPConnection& connection) {
                 DBServerProcessor processor(_db, connection);
                 processor.process(threadContext);
-            },
-        ._createThreadContext =
+            };
+    functions._createThreadContext =
             [] {
                 return std::unique_ptr<net::AbstractThreadContext>(new DBThreadContext());
-            },
-        ._createHttpParser =
+            };
+    functions._createHttpParser =
             [](net::NetBuffer* inputBuffer) {
                 return std::unique_ptr<net::AbstractHTTPParser>(new net::HTTPParser<DBURIParser>(inputBuffer));
-            },
-    };
+            };
 
     _server = std::make_unique<net::HTTPServer>(std::move(functions));
     _server->setAddress(_config.getAddress().c_str());

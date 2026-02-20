@@ -17,7 +17,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<void> dump(const NodeContainer& nodes) {
-        Profile profile {"NodeContainerDumper::dump"};
+        Profile profile("NodeContainerDumper::dump");
 
         GraphDumpHelper::writeFileHeader(_writer);
 

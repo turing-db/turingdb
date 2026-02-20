@@ -679,9 +679,9 @@ protected:
 
     // Helper to run shortest path and get results
     struct ShortestPathResult {
-        bool processorHasRun {false};
-        double distance {0.0};
-        Path path;
+        bool _processorHasRun {false};
+        double _distance {0.0};
+        Path _path;
     };
 
     using ResultCallback = std::function<void(const Dataframe*, LambdaProcessor::Operation, ShortestPathResult&)>;
@@ -838,10 +838,10 @@ TEST_F(ShortestPathProcessorTest, directEdgePath) {
 
     auto result = runShortestPath(sourceCol, targetCol);
 
-    ASSERT_TRUE(result.processorHasRun);
-    EXPECT_NEAR(result.distance, 48.5, 0.1) << "Expected direct path via Route 18";
+    ASSERT_TRUE(result._processorHasRun);
+    EXPECT_NEAR(result._distance, 48.5, 0.1) << "Expected direct path via Route 18";
 
-    std::cout << "Distance from Springfield (0) to Cleveland (99): " << result.distance << std::endl;
+    std::cout << "Distance from Springfield (0) to Cleveland (99): " << result._distance << std::endl;
 }
 
 TEST_F(ShortestPathProcessorTest, sameSourceAndTarget) {
@@ -856,10 +856,10 @@ TEST_F(ShortestPathProcessorTest, sameSourceAndTarget) {
 
     auto result = runShortestPath(sourceCol, targetCol);
 
-    ASSERT_TRUE(result.processorHasRun);
-    ASSERT_DOUBLE_EQ(result.distance, 0.0);
+    ASSERT_TRUE(result._processorHasRun);
+    ASSERT_DOUBLE_EQ(result._distance, 0.0);
 
-    std::cout << "Distance from Springfield (0) to itself: " << result.distance << std::endl;
+    std::cout << "Distance from Springfield (0) to itself: " << result._distance << std::endl;
 }
 
 
@@ -881,21 +881,21 @@ TEST_F(ShortestPathProcessorTest, uniquePathVerification) {
 
     auto result = runShortestPath(sourceCol, targetCol);
 
-    ASSERT_TRUE(result.processorHasRun);
-    EXPECT_NEAR(result.distance, 646.0, 0.1) << "NetworkX verified distance";
+    ASSERT_TRUE(result._processorHasRun);
+    EXPECT_NEAR(result._distance, 646.0, 0.1) << "NetworkX verified distance";
 
     // Since this is the unique shortest path, we can verify the exact path length
-    EXPECT_EQ((result.path.size() + 1) / 2, 14) << "NetworkX verified: exactly 14 nodes in unique path";
+    EXPECT_EQ((result._path.size() + 1) / 2, 14) << "NetworkX verified: exactly 14 nodes in unique path";
 
     // Verify path endpoints (path is target->source order)
     // First element should be target (78), last should be source (28)
     // Path is [node, edge, node, edge, ...] so front and back are nodes
-    ASSERT_GE(result.path.size(), 2);
-    EXPECT_EQ(result.path.front().getValue(), city78.getValue()) << "Path should start at target";
-    EXPECT_EQ(result.path.back().getValue(), city28.getValue()) << "Path should end at source";
+    ASSERT_GE(result._path.size(), 2);
+    EXPECT_EQ(result._path.front().getValue(), city78.getValue()) << "Path should start at target";
+    EXPECT_EQ(result._path.back().getValue(), city28.getValue()) << "Path should end at source";
 
-    std::cout << "Distance from Troy (28) to Jackson (78): " << result.distance << std::endl;
-    std::cout << "Path contains " << (result.path.size() + 1) / 2 << " nodes (unique path)" << std::endl;
+    std::cout << "Distance from Troy (28) to Jackson (78): " << result._distance << std::endl;
+    std::cout << "Path contains " << (result._path.size() + 1) / 2 << " nodes (unique path)" << std::endl;
 }
 
 TEST_F(ShortestPathProcessorTest, noPath) {
@@ -930,7 +930,7 @@ TEST_F(ShortestPathProcessorTest, noPath) {
 
     auto result = runShortestPath(sourceCol, targetCol, _disjGraph, "weight", resultCallback);
 
-    ASSERT_FALSE(result.processorHasRun);
+    ASSERT_FALSE(result._processorHasRun);
 }
 
 TEST_F(ShortestPathProcessorTest, throwsOnNegativeWeight) {

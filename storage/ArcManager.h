@@ -319,7 +319,7 @@ public:
      * */
     template <typename... Args>
     [[nodiscard]] WeakArc<T> create(Args&&... args) {
-        std::scoped_lock guard {_mutex};
+        std::scoped_lock guard(_mutex);
 
         auto& arc = _arcs.emplace_back(new T(std::forward<Args>(args)...));
 
@@ -331,7 +331,7 @@ public:
      * The object will be deleted when the last reference is released.
      * */
     [[nodiscard]] WeakArc<T> takeOwnership(T* ptr) {
-        std::scoped_lock guard {_mutex};
+        std::scoped_lock guard(_mutex);
 
         auto& arc = _arcs.emplace_back(ptr);
 
@@ -341,7 +341,7 @@ public:
     /** @brief Cleans up all objects referenced only by the manager.
      * */
     size_t cleanUp() {
-        std::scoped_lock guard {_mutex};
+        std::scoped_lock guard(_mutex);
 
         size_t count = 0;
 
@@ -359,7 +359,7 @@ public:
     }
 
     [[nodiscard]] size_t size() const {
-        std::scoped_lock guard {_mutex};
+        std::scoped_lock guard(_mutex);
         return _arcs.size();
     }
 

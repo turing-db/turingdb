@@ -18,7 +18,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<void> dump(const EdgeIndexer& indexer) {
-        Profile profile {"EdgeIndexerDumper::dump"};
+        Profile profile("EdgeIndexerDumper::dump");
 
         const auto& outLabelsetIndexer = indexer.getOutsByLabelSet();
         const auto& inLabelsetIndexer = indexer.getInsByLabelSet();

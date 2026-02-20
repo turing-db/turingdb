@@ -42,7 +42,7 @@ DataPart::DataPart(NodeID firstNodeID,
 DataPart::~DataPart() = default;
 
 bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder& builder) {
-    Profile profile {"DataPart::load"};
+    Profile profile("DataPart::load");
 
     JobGroup jobs = jobSystem.newGroup();
     const auto reader = view.read();
@@ -90,7 +90,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
 
     // nodeID Mapping
     for (const auto& [i, tmpID] : tmpNodeIDs | rv::enumerate) {
-        const NodeID id {_firstNodeID + i};
+        const NodeID id(_firstNodeID + i);
         tmpToFinalNodeIDs[tmpID] = id;
     }
 
@@ -106,7 +106,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
 
     // Node properties: Add index*ers* and note properties to *index*
     _nodeProperties = std::move(nodeProperties);
-    std::vector<std::pair<PropertyTypeID, PropertyContainer*>> nodesToIndex {};
+    std::vector<std::pair<PropertyTypeID, PropertyContainer*>> nodesToIndex;
     for (const auto& [ptID, props] : *_nodeProperties) {
         _nodeProperties->addIndexer(ptID);
 

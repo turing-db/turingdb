@@ -24,7 +24,7 @@ namespace rg = ranges;
 namespace rv = rg::views;
 
 DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) {
-    Profile profile {"CommitDumper::dump"};
+    Profile profile("CommitDumper::dump");
     if (path.exists()) {
         return DumpError::result(DumpErrorType::COMMIT_ALREADY_EXISTS);
     }
@@ -37,7 +37,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
 
     // Dumping labels
     {
-        Profile profile {"CommitDumper::dump <labels>"};
+        Profile profile("CommitDumper::dump <labels>");
         const fs::Path labelsPath = path / "labels";
 
         auto writer = fs::FilePageWriter::open(labelsPath, DumpConfig::PAGE_SIZE);
@@ -45,7 +45,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
             return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELS, writer.error());
         }
 
-        LabelMapDumper dumper {writer.value()};
+        LabelMapDumper dumper(writer.value());
 
         if (auto res = dumper.dump(metadata.labels()); !res) {
             return res;
@@ -54,7 +54,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
 
     // Dumping edge types
     {
-        Profile profile {"CommitDumper::dump <edge types>"};
+        Profile profile("CommitDumper::dump <edge types>");
         const fs::Path edgetypesPath = path / "edge-types";
 
         auto writer = fs::FilePageWriter::open(edgetypesPath, DumpConfig::PAGE_SIZE);
@@ -62,7 +62,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
             return DumpError::result(DumpErrorType::CANNOT_OPEN_EDGE_TYPES, writer.error());
         }
 
-        EdgeTypeMapDumper dumper {writer.value()};
+        EdgeTypeMapDumper dumper(writer.value());
 
         if (auto res = dumper.dump(metadata.edgeTypes()); !res) {
             return res;
@@ -71,7 +71,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
 
     // Dumping property types
     {
-        Profile profile {"CommitDumper::dump <property types>"};
+        Profile profile("CommitDumper::dump <property types>");
         const fs::Path proptypesPath = path / "property-types";
 
         auto writer = fs::FilePageWriter::open(proptypesPath, DumpConfig::PAGE_SIZE);
@@ -79,7 +79,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
             return DumpError::result(DumpErrorType::CANNOT_OPEN_PROPERTY_TYPES, writer.error());
         }
 
-        PropertyTypeMapDumper dumper {writer.value()};
+        PropertyTypeMapDumper dumper(writer.value());
 
         if (auto res = dumper.dump(metadata.propTypes()); !res) {
             return res;
@@ -88,7 +88,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
 
     // Dumping labelsets
     {
-        Profile profile {"CommitDumper::dump <labelsets>"};
+        Profile profile("CommitDumper::dump <labelsets>");
         const fs::Path labelsetsPath = path / "labelsets";
 
         auto writer = fs::FilePageWriter::open(labelsetsPath, DumpConfig::PAGE_SIZE);
@@ -96,7 +96,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
             return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELSETS, writer.error());
         }
 
-        LabelSetMapDumper dumper {writer.value()};
+        LabelSetMapDumper dumper(writer.value());
 
         if (auto res = dumper.dump(metadata.labelsets()); !res) {
             return res;
@@ -105,7 +105,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
 
     // Dumping Journal
     {
-        Profile profile {"CommitDumper::dump <journal>"};
+        Profile profile("CommitDumper::dump <journal>");
         const fs::Path journalPath = path / "journal";
 
         auto writerRes = fs::FilePageWriter::open(journalPath, DumpConfig::PAGE_SIZE);
@@ -123,7 +123,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
 
     // Dumping tombstones
     {
-        Profile profile {"CommitDumper::dump <tombstones>"};
+        Profile profile("CommitDumper::dump <tombstones>");
         const fs::Path tombstonesPath = path / "tombstones";
 
         auto writerRes = fs::FilePageWriter::open(tombstonesPath, DumpConfig::PAGE_SIZE);
@@ -142,7 +142,7 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& path) 
     // Dumping Merge File
     // Existence Of File Confirms If We Have A Merge Commit
     {
-        Profile profile {"CommitDumper::dump <merge>"};
+        Profile profile("CommitDumper::dump <merge>");
         if (commit.isMergeCommit()) {
             const fs::Path mergePath = path / "merge";
             auto writerRes = fs::FilePageWriter::open(mergePath, DumpConfig::PAGE_SIZE);

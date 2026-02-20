@@ -254,13 +254,13 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
         // PropertyExprAssign case
         [this, item](const SetItem::PropertyExprAssign& v) {
             // Analyzing rhs
-            const EvaluatedType rhsType = v.propValueExpr->getType();
+            const EvaluatedType rhsType = v._propValueExpr->getType();
 
             // Analyzing lhs
-            const ValueType lhsEvaluatedVt = _exprAnalyzer->analyzePropertyExpr(v.propTypeExpr,
+            const ValueType lhsEvaluatedVt = _exprAnalyzer->analyzePropertyExpr(v._propTypeExpr,
                                                                                 true,
                                                                                 evaluatedToValueType(rhsType));
-            _exprAnalyzer->analyzeRootExpr(v.propValueExpr);
+            _exprAnalyzer->analyzeRootExpr(v._propValueExpr);
 
             // Checking property compatibility
             if (!ExprAnalyzer::propTypeCompatible(lhsEvaluatedVt, rhsType)) {

@@ -95,7 +95,7 @@ void StringIndex::alphaNumericise(std::string_view in, std::string& out) {
         return;
     }
 
-    std::locale loc {"C"};  // NOTE: Only support ASCII, remove all else
+    std::locale loc("C");  // NOTE: Only support ASCII, remove all else
     auto ppxChar = [&loc](char c) {
         if (!std::isalnum(c, loc)) {
             return ' ';
@@ -115,7 +115,7 @@ void StringIndex::split(std::vector<std::string>& res, std::string_view str,
     if (str.empty()) {
         return;
     }
-    size_t l {0};
+    size_t l = 0;
     size_t r = str.find(delim);
 
     while (r != std::string::npos) {
@@ -232,7 +232,7 @@ PrefixTreeNode* StringIndex::getPrefixThreshold(std::string_view query) const {
 
     // Calculate the minimum length property string we consider a match
     const size_t minPrefixLength = _prefixThreshold * query.size();
-    PrefixTreeNode* thresholdPoint {nullptr};
+    PrefixTreeNode* thresholdPoint = nullptr;
 
     for (size_t i = 0; const char c : query) {
         const size_t idx = PrefixTreeNode::charToIndex(c);

@@ -364,11 +364,11 @@ S3ClientResult<void> TuringS3Client<MockS3Client>::listKeys(
     }
 
     const auto& listResult = _client.getListResult();
-    if (!listResult.success) {
-        return S3ClientError::result(listResult.errorType);
+    if (!listResult._success) {
+        return S3ClientError::result(listResult._errorType);
     }
 
-    for (const auto& key : listResult.keys) {
+    for (const auto& key : listResult._keys) {
         keyResults.push_back(key);
     }
 
@@ -386,11 +386,11 @@ S3ClientResult<void> TuringS3Client<MockS3Client>::listFiles(
     }
 
     const auto& listResult = _client.getListResult();
-    if (!listResult.success) {
-        return S3ClientError::result(listResult.errorType);
+    if (!listResult._success) {
+        return S3ClientError::result(listResult._errorType);
     }
 
-    for (const auto& key : listResult.keys) {
+    for (const auto& key : listResult._keys) {
         keyResults.push_back(extractFileNameFromKey(key));
     }
 
@@ -408,11 +408,11 @@ S3ClientResult<void> TuringS3Client<MockS3Client>::listFolders(
     }
 
     const auto& listResult = _client.getListResult();
-    if (!listResult.success) {
-        return S3ClientError::result(listResult.errorType);
+    if (!listResult._success) {
+        return S3ClientError::result(listResult._errorType);
     }
 
-    for (const auto& commonPrefix : listResult.commonPrefixes) {
+    for (const auto& commonPrefix : listResult._commonPrefixes) {
         folderResults.push_back(commonPrefixToFolderName(commonPrefix));
     }
 
@@ -439,11 +439,11 @@ S3ClientResult<void> TuringS3Client<MockS3Client>::uploadFile(
     }
 
     const auto& uploadResult = _client.getUploadResult();
-    if (!uploadResult.success) {
-        if (uploadResult.statusCode == 412) {
+    if (!uploadResult._success) {
+        if (uploadResult._statusCode == 412) {
             return S3ClientError::result(S3ClientErrorType::FILE_EXISTS);
         }
-        return S3ClientError::result(uploadResult.errorType);
+        return S3ClientError::result(uploadResult._errorType);
     }
 
     return {};
@@ -456,8 +456,8 @@ S3ClientResult<void> TuringS3Client<MockS3Client>::downloadFile(
     const std::string& keyName) {
 
     const auto& downloadResult = _client.getDownloadResult();
-    if (!downloadResult.success) {
-        return S3ClientError::result(downloadResult.errorType);
+    if (!downloadResult._success) {
+        return S3ClientError::result(downloadResult._errorType);
     }
 
     std::ofstream outputFileStream(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
@@ -469,7 +469,7 @@ S3ClientResult<void> TuringS3Client<MockS3Client>::downloadFile(
         }
         return S3ClientError::result(S3ClientErrorType::CANNOT_OPEN_FILE);
     }
-    outputFileStream << downloadResult.content;
+    outputFileStream << downloadResult._content;
     outputFileStream.flush();
     outputFileStream.close();
 
@@ -640,8 +640,8 @@ S3ClientResult<bool> TuringS3Client<MockS3Client>::bucketExists(
     const std::string& bucketName) {
 
     const auto& listResult = _client.getListResult();
-    if (!listResult.success) {
-        return S3ClientError::result(listResult.errorType);
+    if (!listResult._success) {
+        return S3ClientError::result(listResult._errorType);
     }
     return true;
 }
@@ -656,8 +656,8 @@ S3ClientResult<void> TuringS3Client<MockS3Client>::createDirectoryMarker(
     }
 
     const auto& uploadResult = _client.getUploadResult();
-    if (!uploadResult.success) {
-        return S3ClientError::result(uploadResult.errorType);
+    if (!uploadResult._success) {
+        return S3ClientError::result(uploadResult._errorType);
     }
     return {};
 }

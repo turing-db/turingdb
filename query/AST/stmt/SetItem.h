@@ -15,20 +15,20 @@ public:
     struct PropertyExprAssign {
         PropertyExprAssign() {}
         PropertyExprAssign(PropertyExpr* type, Expr* val)
-            : propTypeExpr(type), propValueExpr(val)
+            : _propTypeExpr(type), _propValueExpr(val)
         {
         }
-        PropertyExpr* propTypeExpr {nullptr};
-        Expr* propValueExpr {nullptr};
+        PropertyExpr* _propTypeExpr {nullptr};
+        Expr* _propValueExpr {nullptr};
     };
 
     struct SymbolAddAssign {
-        Symbol* symbol {nullptr};
-        Expr* value {nullptr};
+        Symbol* _symbol {nullptr};
+        Expr* _value {nullptr};
     };
 
     struct SymbolEntityTypes {
-        EntityTypeExpr* value {nullptr};
+        EntityTypeExpr* _value {nullptr};
     };
 
     using Variant = std::variant<PropertyExprAssign,

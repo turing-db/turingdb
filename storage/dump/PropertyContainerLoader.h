@@ -22,7 +22,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<std::unique_ptr<PropertyContainer>> load() {
-        Profile profile {"TrivialPropertyContainerLoader::load"};
+        Profile profile("TrivialPropertyContainerLoader::load");
 
         _reader.nextPage();
 
@@ -121,7 +121,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<std::unique_ptr<PropertyContainer>> load() {
-        Profile profile {"StringPropertyContainerLoader::load"};
+        Profile profile("StringPropertyContainerLoader::load");
 
         _reader.nextPage();
 

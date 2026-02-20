@@ -39,11 +39,11 @@ enum class Method {
 };
 
 struct Info {
-    Method _method;
+    Method _method {Method::UNKNOWN};
     Uri _uri;
     Path _path;
     Payload _payload;
-    EndpointIndex _endpoint = -1;
+    EndpointIndex _endpoint {-1};
     Params _params;
 
     void reset() {

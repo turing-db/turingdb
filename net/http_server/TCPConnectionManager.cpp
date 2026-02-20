@@ -16,8 +16,8 @@ TCPConnectionManager::TCPConnectionManager(ServerContext& ctxt)
 
 void TCPConnectionManager::process(AbstractThreadContext* threadContext,
                                    utils::EpollEvent& ev) {
-    const uint32_t eventType = ev.events;
-    auto& connection = *static_cast<TCPConnection*>(ev.data);
+    const uint32_t eventType = ev._events;
+    auto& connection = *static_cast<TCPConnection*>(ev._data);
     const utils::Socket s = connection.getSocket();
 
     // Process Connection
@@ -117,8 +117,8 @@ void TCPConnectionManager::process(AbstractThreadContext* threadContext,
         }
     }
 
-    ev.events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
-    ev.data = &connection;
+    ev._events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
+    ev._data = &connection;
     if (!utils::epollMod(_ctxt._instance, s, ev)) {
         utils::logError("EpollMod existing connection");
         _ctxt.encounteredError(FlowStatus::CTL_ERROR);

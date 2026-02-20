@@ -24,8 +24,8 @@ void splitString(std::string& string, std::vector<std::string>& result) {
 }
 
 struct TreeNode {
-    std::map<std::string, TreeNode> children;
-    bool isFile = false;
+    std::map<std::string, TreeNode> _children;
+    bool _isFile {false};
 };
 
 void buildTree(TreeNode& root, const std::vector<std::string>& keys) {
@@ -38,31 +38,31 @@ void buildTree(TreeNode& root, const std::vector<std::string>& keys) {
             if (part.empty()) {
                 continue;
             }
-            current = &current->children[part];
+            current = &current->_children[part];
         }
         if (!key.empty() && key.back() != '/') {
-            current->isFile = true;
+            current->_isFile = true;
         }
     }
 }
 
 void printTree(const TreeNode& node, const std::string& prefix, bool isLast) {
-    auto it = node.children.begin();
+    auto it = node._children.begin();
     size_t count = 0;
-    const size_t total = node.children.size();
+    const size_t total = node._children.size();
 
-    for (; it != node.children.end(); ++it, ++count) {
+    for (; it != node._children.end(); ++it, ++count) {
         const bool lastChild = (count == total - 1);
         const std::string connector = lastChild ? "└── " : "├── ";
         const std::string extension = lastChild ? "    " : "│   ";
 
         std::cout << prefix << connector << it->first;
-        if (!it->second.isFile && !it->second.children.empty()) {
+        if (!it->second._isFile && !it->second._children.empty()) {
             std::cout << "/";
         }
         std::cout << std::endl;
 
-        if (!it->second.children.empty()) {
+        if (!it->second._children.empty()) {
             printTree(it->second, prefix + extension, lastChild);
         }
     }

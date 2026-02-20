@@ -1,5 +1,6 @@
 #include "File.h"
 
+#include <string.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -131,7 +132,8 @@ Result<void> File::clearContent() {
 }
 
 Result<void> File::refreshInfo() {
-    struct ::stat s {};
+    struct ::stat s;
+    memset(&s, 0, sizeof(s));
     if (::fstat(_fd, &s) != 0) {
         return Error::result(ErrorType::NOT_EXISTS, errno);
     }
@@ -139,7 +141,7 @@ Result<void> File::refreshInfo() {
     const uid_t euid = geteuid();
     const gid_t egid = getegid();
 
-    uint8_t access {};
+    uint8_t access = 0;
 
     if (euid == s.st_uid) {
         // If file belongs to user
@@ -170,7 +172,7 @@ Result<void> File::refreshInfo() {
         }
     }
 
-    FileType type {};
+    FileType type = FileType::File;
     if (S_ISREG(s.st_mode)) {
         type = FileType::File;
     } else if (S_ISDIR(s.st_mode)) {

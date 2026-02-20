@@ -80,7 +80,7 @@ protected:
 
 private:
     const VarDecl* _exprVarDecl {nullptr};
-    Kind _exprKind;
+    Kind _exprKind {Kind::BINARY};
     EvaluatedType _type {EvaluatedType::Invalid};
     Flags _flags {Flags::NONE};
     std::string_view _name;

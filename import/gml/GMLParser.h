@@ -461,9 +461,9 @@ private:
     size_t _line {0};
     std::string_view _rem;
     std::string _currentKey;
-    uint64_t _nodeID = std::numeric_limits<uint64_t>::max();
-    uint64_t _sourceID = std::numeric_limits<uint64_t>::max();
-    uint64_t _targetID = std::numeric_limits<uint64_t>::max();
+    uint64_t _nodeID {std::numeric_limits<uint64_t>::max()};
+    uint64_t _sourceID {std::numeric_limits<uint64_t>::max()};
+    uint64_t _targetID {std::numeric_limits<uint64_t>::max()};
     size_t _propNesting {0};
     std::vector<size_t> _propPrefixSizes = {0};
 
@@ -588,7 +588,7 @@ private:
         }
 
         std::string_view word = wordRes.value();
-        uint64_t id {0};
+        uint64_t id = 0;
         const auto res = std::from_chars(word.begin(), word.end(), id);
 
         if (res.ec == std::errc::result_out_of_range) {

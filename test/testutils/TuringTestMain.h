@@ -54,7 +54,7 @@ public:
 
 private:
     TimePoint _t0;
-    std::time_t _today {};
+    std::time_t _today {0};
 };
 
 

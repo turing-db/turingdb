@@ -8,8 +8,8 @@ namespace db {
 class EdgeTypeMapDumper {
 private:
     struct PageMetadata {
-        uint64_t edgeTypeCount {0};
-        uint64_t charCount {0};
+        uint64_t _edgeTypeCount {0};
+        uint64_t _charCount {0};
     };
 
 public:

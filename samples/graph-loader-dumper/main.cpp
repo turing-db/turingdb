@@ -71,7 +71,7 @@ bool testGraph(const Graph& graph, const fs::Path& path) {
 int main() {
     {
         // Load & dump simple graph
-        const fs::Path path {SAMPLE_DIR "/simple-graph"};
+        const fs::Path path(SAMPLE_DIR "/simple-graph");
 
         auto graph = Graph::create();
         SimpleGraph::createSimpleGraph(graph.get());
@@ -91,7 +91,7 @@ int main() {
 
     {
         // Dump pole
-        const fs::Path path {SAMPLE_DIR "/pole"};
+        const fs::Path path(SAMPLE_DIR "/pole");
 
         const auto jobSystem = JobSystem::create();
 

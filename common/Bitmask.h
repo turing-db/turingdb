@@ -11,7 +11,7 @@ concept testable = std::is_integral_v<T>
                 || std::is_pointer_v<T>;
 
 struct bitmask {
-    uint64_t v = 0;
+    uint64_t _v {0};
 
     template <testable... Flags>
     static constexpr auto create(Flags... flags) {

@@ -138,7 +138,7 @@ bool ProcessUtils::searchProcess(const std::string& exe, std::vector<pid_t>& pid
 
     std::string procExe;
     std::error_code error;
-    const std::regex brokenSymlinkRegex {" \\(deleted\\)"};
+    const std::regex brokenSymlinkRegex(" \\(deleted\\)");
     for (const auto& procFile : procList) {
         procExe.clear();
 

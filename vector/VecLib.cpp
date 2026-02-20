@@ -94,7 +94,7 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate& batch) {
         auto& shard = _shardCache->getShard(_metadata, signature++);
 
         {
-            std::unique_lock lock {shard._mutex};
+            std::unique_lock lock(shard._mutex);
 
             // Add all ids to the shard
             shard._ids.insert(shard._ids.end(),
@@ -129,7 +129,7 @@ VectorResult<void> VecLib::search(const VectorSearchQuery& query, VectorSearchRe
 
     for (const LSHSignature& signature : searchSignatures) {
         auto& shard = _shardCache->getShard(_metadata, signature);
-        std::unique_lock lock {shard._mutex};
+        std::unique_lock lock(shard._mutex);
 
         if (shard._index->ntotal == 0) {
             continue;

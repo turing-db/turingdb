@@ -79,9 +79,9 @@ public:
     size_t getEdgeCount() const { return _edgeCount; }
 
 private:
-    bool _nodeCountParsed = false;
-    bool _edgeCountParsed = false;
-    size_t _nodeCount = 0;
-    size_t _edgeCount = 0;
+    bool _nodeCountParsed {false};
+    bool _edgeCountParsed {false};
+    size_t _nodeCount {0};
+    size_t _edgeCount {0};
 };
 }

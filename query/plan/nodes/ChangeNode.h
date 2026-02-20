@@ -19,7 +19,7 @@ public:
     ChangeOp getOp() const { return _op; }
 
 private:
-    ChangeOp _op;
+    ChangeOp _op {ChangeOp::NEW};
 };
 
 }

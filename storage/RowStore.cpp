@@ -85,8 +85,8 @@ RowOffset RowStore::insertRow(const Dataframe* frame,
 }
 
 uint8_t* RowStore::getRow(RowOffset row) {
-    const auto& slab = row.slab;
-    const size_t slabOffset = row.slabOffset;
+    const auto& slab = row._slab;
+    const size_t slabOffset = row._slabOffset;
 
     return slab->_data.data() + slabOffset;
 }

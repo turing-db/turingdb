@@ -70,7 +70,7 @@ public:
     }
 
     ByteBufferIterator operator++(int) {
-        ByteBufferIterator duplicate {*this};
+        ByteBufferIterator duplicate(*this);
         _data++;
         return duplicate;
     }

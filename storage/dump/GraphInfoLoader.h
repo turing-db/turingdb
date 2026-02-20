@@ -32,7 +32,7 @@ public:
             return res.get_unexpected();
         }
 
-        const GraphID graphID {it.get<GraphID::ValueType>()};
+        const GraphID graphID(it.get<GraphID::ValueType>());
 
         if (graphID != graph.getID()) {
             return false;
@@ -67,7 +67,7 @@ public:
             return res.get_unexpected();
         }
 
-        const GraphID graphID {it.get<GraphID::ValueType>()};
+        const GraphID graphID(it.get<GraphID::ValueType>());
         const uint64_t nameSize = it.get<uint64_t>();
         const std::string_view name = it.get<char>(nameSize);
 

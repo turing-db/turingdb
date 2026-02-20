@@ -83,11 +83,11 @@ bool setNonBlock(Socket s, bool enable) {
 inline constexpr socklen_t socketAddrLen = sizeof(struct sockaddr_in);
 
 bool bind(ServerSocket s, const char* address, uint32_t port) {
-    sockaddr_in socketAddr {
-        .sin_family = AF_INET,
-        .sin_port = htons(port),
-        .sin_addr = {.s_addr = inet_addr(address)},
-    };
+    sockaddr_in socketAddr;
+    memset(&socketAddr, 0, sizeof(socketAddr));
+    socketAddr.sin_family = AF_INET;
+    socketAddr.sin_port = htons(port);
+    socketAddr.sin_addr.s_addr = inet_addr(address);
 
     return bind(s, (struct sockaddr*)(&socketAddr), socketAddrLen) != -1;
 }
@@ -100,12 +100,15 @@ bool epollAdd(EpollInstance instance, Socket fd, EpollEvent& event) {
 #ifdef __APPLE__
     struct kevent kev;
     uint16_t flags = EV_ADD;
-    if (event.events & EVENT_ET) flags |= EV_CLEAR;
-    if (event.events & EVENT_ONESHOT) flags |= EV_ONESHOT;
-    EV_SET(&kev, fd, EVFILT_READ, flags, 0, 0, event.data);
+    if (event._events & EVENT_ET) flags |= EV_CLEAR;
+    if (event._events & EVENT_ONESHOT) flags |= EV_ONESHOT;
+    EV_SET(&kev, fd, EVFILT_READ, flags, 0, 0, event._data);
     return kevent(instance, &kev, 1, nullptr, 0, nullptr) != -1;
 #else
-    epoll_event ev { .events = event.events, .data = {.ptr = event.data} };
+    epoll_event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.events = event._events;
+    ev.data.ptr = event._data;
     return epoll_ctl(instance, EPOLL_CTL_ADD, fd, &ev) != -1;
 #endif
 }
@@ -117,7 +120,10 @@ bool epollMod(EpollInstance instance, Socket fd, EpollEvent& event) {
     kevent(instance, &kev, 1, nullptr, 0, nullptr);
     return epollAdd(instance, fd, event);
 #else
-    epoll_event ev { .events = event.events, .data = {.ptr = event.data} };
+    epoll_event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.events = event._events;
+    ev.data.ptr = event._data;
     return epoll_ctl(instance, EPOLL_CTL_MOD, fd, &ev) != -1;
 #endif
 }
@@ -130,7 +136,10 @@ bool epollDel(EpollInstance instance, Socket fd, EpollEvent& event) {
     kevent(instance, &kev, 1, nullptr, 0, nullptr);
     return true;
 #else
-    epoll_event ev { .events = event.events, .data = {.ptr = event.data} };
+    epoll_event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.events = event._events;
+    ev.data.ptr = event._data;
     return epoll_ctl(instance, EPOLL_CTL_DEL, fd, &ev) != -1;
 #endif
 }
@@ -158,12 +167,12 @@ int eventWait(EpollInstance instance, EpollEvent* events, int maxEvents, int tim
     }
     int n = kevent(instance, nullptr, 0, kevents, maxEvents, ts);
     for (int i = 0; i < n; i++) {
-        events[i].events = 0;
-        events[i].data = kevents[i].udata;
+        events[i]._events = 0;
+        events[i]._data = kevents[i].udata;
         if (kevents[i].filter == EVFILT_READ || kevents[i].filter == EVFILT_SIGNAL)
-            events[i].events |= EVENT_IN;
+            events[i]._events |= EVENT_IN;
         if (kevents[i].flags & EV_EOF)
-            events[i].events |= EVENT_RDHUP | EVENT_HUP;
+            events[i]._events |= EVENT_RDHUP | EVENT_HUP;
     }
     return n;
 #else
@@ -171,8 +180,8 @@ int eventWait(EpollInstance instance, EpollEvent* events, int maxEvents, int tim
     epoll_event epollEvents[MAX_EVENTS];
     int n = epoll_wait(instance, epollEvents, maxEvents, timeout);
     for (int i = 0; i < n; i++) {
-        events[i].events = epollEvents[i].events;
-        events[i].data = epollEvents[i].data.ptr;
+        events[i]._events = epollEvents[i].events;
+        events[i]._data = epollEvents[i].data.ptr;
     }
     return n;
 #endif
@@ -201,7 +210,7 @@ void logError(const char* title) {
 }
 
 StringAddress getStringAddress(uint32_t intAddr) {
-    StringAddress addr {};
+    StringAddress addr;
     inet_ntop(AF_INET, &intAddr, addr.data(), INET_ADDRSTRLEN);
     return addr;
 }

@@ -41,7 +41,7 @@ public:
             return DumpError::result(DumpErrorType::UNKNOWN);
         }
 
-        uint64_t integer {0};
+        uint64_t integer = 0;
         const auto matchRes = std::from_chars(integerStr.begin(), integerStr.end(), integer);
         const size_t matchSize = std::distance(integerStr.data(), matchRes.ptr);
 
@@ -64,7 +64,7 @@ public:
         // File name has the form commit-<offset>-<hash>
 
         // Parsing offset
-        uint64_t offset {0};
+        uint64_t offset = 0;
         const auto offsetRes = std::from_chars(offsetStr.begin(), offsetStr.end(), offset);
         const size_t offsetSize = std::distance(offsetStr.data(), offsetRes.ptr);
 
@@ -76,7 +76,7 @@ public:
         }
 
         // Parsing hash
-        uint64_t hash {0};
+        uint64_t hash = 0;
         const std::string_view hashStr = str.substr(prefixSize + offsetSize + 1);
         const auto hashRes = std::from_chars(hashStr.begin(), hashStr.end(), hash);
         const size_t hashSize = std::distance(hashStr.data(), hashRes.ptr);

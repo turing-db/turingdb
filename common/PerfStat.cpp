@@ -77,8 +77,8 @@ PerfStat::MemInfo PerfStat::getMemInMegabytes() const {
     bioassert(result == KERN_SUCCESS, "Failed to get task info");
 
     return {
-        .reserved = info.virtual_size / (1024 * 1024),
-        .rss = info.resident_size / (1024 * 1024),
+        ._reserved = info.virtual_size / (1024 * 1024),
+        ._rss = info.resident_size / (1024 * 1024),
     };
 #else
     // Linux: read from /proc/self/status
@@ -99,8 +99,8 @@ PerfStat::MemInfo PerfStat::getMemInMegabytes() const {
             bioassert(!str.empty(), "VmRSS empty");
             const size_t memKB = std::stoull(str);
             return {
-                .reserved = reserved,
-                .rss = memKB / 1024,
+                ._reserved = reserved,
+                ._rss = memKB / 1024,
             };
         }
     }

@@ -43,7 +43,7 @@ protected:
     {
     }
 
-    ColumnKind::Code _kind = 0;
+    ColumnKind::Code _kind {0};
 };
 
 }

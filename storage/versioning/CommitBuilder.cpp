@@ -55,13 +55,13 @@ GraphReader CommitBuilder::readGraph() const {
 }
 
 void CommitBuilder::appendBuilder(std::unique_ptr<DataPartBuilder> builder) {
-    std::unique_lock<std::mutex> lock {_mutex};
+    std::unique_lock<std::mutex> lock(_mutex);
     _builders.emplace_back(std::move(builder));
 }
 
 DataPartBuilder& CommitBuilder::newBuilder() {
-    std::unique_lock<std::mutex> lock {_mutex};
-    GraphView view {*_commitData};
+    std::unique_lock<std::mutex> lock(_mutex);
+    GraphView view(*_commitData);
     const size_t partIndex = view.dataparts().size() + _builders.size();
     auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_metadataBuilder,
                                                                     view.read().getTotalNodesAllocated(),
@@ -72,13 +72,13 @@ DataPartBuilder& CommitBuilder::newBuilder() {
 }
 
 CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
-    Profile profile {"CommitBuilder::buildAllPending"};
+    Profile profile("CommitBuilder::buildAllPending");
 
-    std::unique_lock<std::mutex> lock {_mutex};
+    std::unique_lock<std::mutex> lock(_mutex);
 
-    const GraphView view {*_commitData};
+    const GraphView view(*_commitData);
 
-    CommitHistoryBuilder historyBuilder {_commitData->_history};
+    CommitHistoryBuilder historyBuilder(_commitData->_history);
     for (const auto& builder : _builders) {
         auto part = _controller->createDataPart(builder->_firstNodeID, builder->_firstEdgeID);
 
@@ -137,7 +137,7 @@ CommitBuilder::CommitBuilder(VersionController& controller, Change* change, cons
 }
 
 void CommitBuilder::initialize() {
-    Profile profile {"CommitBuilder::initialize"};
+    Profile profile("CommitBuilder::initialize");
 
     const auto reader = _view.read();
 
@@ -170,7 +170,7 @@ void CommitBuilder::initialize() {
 }
 
 void CommitBuilder::initializeMerge() {
-    Profile profile {"CommitBuilder::initialize"};
+    Profile profile("CommitBuilder::initialize");
 
     const auto reader = _view.read();
 

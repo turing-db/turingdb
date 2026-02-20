@@ -43,7 +43,7 @@ void VersionController::createFirstCommit() {
 }
 
 DataPartMergeResult<void> VersionController::mergeDataParts(JobSystem& jobSystem) {
-    Profile profile {"VersionController::mergeDataParts"};
+    Profile profile("VersionController::mergeDataParts");
     Commit* mainState = _head.load();
 
     auto newTip = CommitBuilder::prepareMerge(*this,
@@ -69,11 +69,11 @@ FrozenCommitTx VersionController::openTransaction(CommitHash hash) const {
         return _head.load()->openTransaction();
     }
 
-    std::scoped_lock lock {_mutex};
+    std::scoped_lock lock(_mutex);
 
     auto it = _offsets.find(hash);
     if (it == _offsets.end()) {
-        return FrozenCommitTx {}; // Invalid hash
+        return FrozenCommitTx(); // Invalid hash
     }
 
     return _commits[it->second]->openTransaction();
@@ -89,7 +89,7 @@ CommitHash VersionController::getHeadHash() const {
 }
 
 CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jobSystem) {
-    Profile profile {"VersionController::submitChange"};
+    Profile profile("VersionController::submitChange");
 
     std::scoped_lock lock(_mutex);
 

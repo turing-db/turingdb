@@ -22,7 +22,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<std::unique_ptr<NodeContainer>> load(const GraphMetadata& metadata) {
-        Profile profile {"NodeContainerLoader::load"};
+        Profile profile("NodeContainerLoader::load");
 
         _reader.nextPage();
 

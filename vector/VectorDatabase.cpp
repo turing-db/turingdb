@@ -22,7 +22,7 @@ VectorResult<std::unique_ptr<VectorDatabase>> VectorDatabase::create(const fs::P
         RandomGenerator::initialize();
     }
 
-    std::unique_ptr<VectorDatabase> database {new VectorDatabase};
+    std::unique_ptr<VectorDatabase> database(new VectorDatabase);
 
     auto storage = StorageManager::create(rootPath);
     if (!storage) {
@@ -47,7 +47,7 @@ VectorResult<VecLibID> VectorDatabase::createLibrary(std::string_view libName,
         return VectorError::result(VectorErrorCode::EmptyLibName);
     }
 
-    std::unique_lock lock {_mutex};
+    std::unique_lock lock(_mutex);
 
     if (_vecLibIDs.contains(libName)) {
         return VectorError::result(VectorErrorCode::LibraryAlreadyExists);
@@ -77,7 +77,7 @@ VectorResult<VecLibID> VectorDatabase::createLibrary(std::string_view libName,
 }
 
 VectorResult<void> VectorDatabase::deleteLibrary(std::string_view libName) {
-    std::unique_lock lock {_mutex};
+    std::unique_lock lock(_mutex);
 
     const auto itID = _vecLibIDs.find(libName);
 
@@ -95,7 +95,7 @@ VectorResult<void> VectorDatabase::deleteLibrary(std::string_view libName) {
     // Extract the library
     std::unique_ptr<VecLib> lib = std::move(it->second);
     {
-        std::unique_lock libLock {lib->_mutex};
+        std::unique_lock libLock(lib->_mutex);
 
         // Perform the deletion
 
@@ -115,7 +115,7 @@ VectorResult<void> VectorDatabase::deleteLibrary(std::string_view libName) {
 }
 
 void VectorDatabase::listLibraries(std::vector<VecLibID>& out) const {
-    std::shared_lock lock {_mutex};
+    std::shared_lock lock(_mutex);
 
     for (const auto& [id, lib] : _vecLibs) {
         out.push_back(id);
@@ -123,34 +123,34 @@ void VectorDatabase::listLibraries(std::vector<VecLibID>& out) const {
 }
 
 bool VectorDatabase::libraryExists(const VecLibID& libID) const {
-    std::shared_lock lock {_mutex};
+    std::shared_lock lock(_mutex);
 
     return _vecLibs.contains(libID);
 }
 
 bool VectorDatabase::libraryExists(std::string_view libName) const {
-    std::shared_lock lock {_mutex};
+    std::shared_lock lock(_mutex);
 
     return _vecLibIDs.contains(libName);
 }
 
 VecLibAccessor VectorDatabase::getLibrary(const VecLibID& libID) {
-    std::shared_lock lock {_mutex};
+    std::shared_lock lock(_mutex);
 
     auto it = _vecLibs.find(libID);
     if (it == _vecLibs.end()) {
-        return VecLibAccessor {};
+        return VecLibAccessor();
     }
 
     return it->second->access();
 }
 
 VecLibAccessor VectorDatabase::getLibrary(std::string_view libName) {
-    std::shared_lock lock {_mutex};
+    std::shared_lock lock(_mutex);
 
     auto it = _vecLibIDs.find(libName);
     if (it == _vecLibIDs.end()) {
-        return VecLibAccessor {};
+        return VecLibAccessor();
     }
 
     return getLibrary(it->second);

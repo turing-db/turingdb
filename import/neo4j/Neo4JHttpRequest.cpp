@@ -19,7 +19,7 @@ size_t writeCallback(char* contents, size_t size, size_t nmemb,
 namespace db {
 
 bool Neo4JHttpRequest::exec() {
-    TimerStat timer {"Neo4j HTTP Request: " + _statement};
+    TimerStat timer("Neo4j HTTP Request: " + _statement);
     CURL* curl = curl_easy_init();
 
     if (!curl) {
@@ -74,7 +74,7 @@ bool Neo4JHttpRequest::execStatic(std::string* response,
                              uint64_t port,
                              std::string_view method,
                              const std::string& statement) {
-    TimerStat timer {"Neo4j HTTP Request: " + statement};
+    TimerStat timer("Neo4j HTTP Request: " + statement);
     CURL* curl = curl_easy_init();
 
     if (!curl) {

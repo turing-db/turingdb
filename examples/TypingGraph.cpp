@@ -6,7 +6,7 @@
 using namespace db;
 
 void TypingGraph::createTypingGraph(Graph* graph) {
-    GraphWriter writer {graph};
+    GraphWriter writer(graph);
     
     const auto typeHolder = writer.addNode({"Typer"});
     writer.addNodeProperty<types::Int64>(typeHolder, "pos_int", 256);

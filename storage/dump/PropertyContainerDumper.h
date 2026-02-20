@@ -19,7 +19,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<void> dump(const TypedPropertyContainer<T>& props) {
-        Profile profile {"TrivialPropertyContainerDumper::dump"};
+        Profile profile("TrivialPropertyContainerDumper::dump");
         GraphDumpHelper::writeFileHeader(_writer);
 
         const uint64_t propCount = props.size();
@@ -111,7 +111,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<void> dump(const TypedPropertyContainer<types::String>& props) {
-        Profile profile {"StringPropertyContainerDumper::dump"};
+        Profile profile("StringPropertyContainerDumper::dump");
         const auto& buckets = props.getRawContainer();
         const uint64_t propCount = props.size();
         const uint64_t bucketCount = buckets.bucketCount();
@@ -130,7 +130,7 @@ public:
         {
             // IDs
             const size_t remainder = propCount % Constants::ID_COUNT_PER_PAGE;
-            std::span ids {props.ids()};
+            std::span ids(props.ids());
 
             size_t offset = 0;
             for (size_t i = 0; i < idPageCount; i++) {

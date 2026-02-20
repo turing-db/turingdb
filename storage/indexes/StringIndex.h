@@ -191,7 +191,7 @@ void StringIndex::query(std::vector<IDT>& result, std::string_view queryString) 
         }
 
         // Otherwise: match or partial match
-        std::deque<PrefixTreeNode*> q {prefixThreshold};
+        std::deque<PrefixTreeNode*> q({prefixThreshold});
         // BFS, collecting owners
         // TODO: Depth limit
         while (!q.empty()) {

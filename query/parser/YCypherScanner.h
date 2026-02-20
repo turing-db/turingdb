@@ -38,8 +38,8 @@ public:
                         std::string_view rawMsg);
 
 private:
-    size_t _nextOffset = 0;
-    size_t _offset = 0;
+    size_t _nextOffset {0};
+    size_t _offset {0};
     std::string_view _query;
 
     std::string_view getStringView(size_t offset, size_t length) const {

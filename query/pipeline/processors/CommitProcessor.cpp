@@ -43,7 +43,7 @@ void CommitProcessor::reset() {
 }
 
 void CommitProcessor::execute() {
-    Profile profile {"CommitProcessor::execute"};
+    Profile profile("CommitProcessor::execute");
 
     Transaction* tx = _ctxt->getTransaction();
     bioassert(tx, "CommitProcessor: Transaction must be set");

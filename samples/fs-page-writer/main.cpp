@@ -21,7 +21,7 @@ inline constexpr size_t NPAGES = NBYTES / fs::DEFAULT_PAGE_SIZE
 }
 
 int main() {
-    fs::Path p {SAMPLE_DIR "/test"};
+    fs::Path p(SAMPLE_DIR "/test");
 
     {
         fmt::print("- Opening file for write\n");

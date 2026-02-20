@@ -1,6 +1,7 @@
 #include "HTTPServer.h"
 
 #include <thread>
+#include <string.h>
 #include <signal.h>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -76,8 +77,8 @@ FlowStatus HTTPServer::initialize() {
 
     // Registering server socket in epoll list
     utils::EpollEvent event;
-    event.events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
-    event.data = _serverConnection;
+    event._events = utils::EVENT_IN | utils::EVENT_ET | utils::EVENT_ONESHOT;
+    event._data = _serverConnection;
 
     if (!utils::epollAdd(_epollInstance, _serverSocket, event)) {
         utils::logError("EpollAdd root");
@@ -89,8 +90,8 @@ FlowStatus HTTPServer::initialize() {
 
 #ifndef __APPLE__
     // On Linux, signalfd returns a real fd that needs to be registered
-    event.events = utils::EVENT_IN;
-    event.data = &_signalFd;
+    event._events = utils::EVENT_IN;
+    event._data = &_signalFd;
     if (!utils::epollAdd(_epollInstance, _signalFd, event)) {
         utils::logError("EpollAdd server terminate");
         _status.store(FlowStatus::CTL_ERROR);
@@ -113,15 +114,16 @@ FlowStatus HTTPServer::initialize() {
         return FlowStatus::CREATE_ERROR;
     }
 
-    event.events = utils::EVENT_IN;
-    event.data = nullptr;
+    event._events = utils::EVENT_IN;
+    event._data = nullptr;
     if (!utils::epollAdd(_epollInstance, _shutdownPipe[0], event)) {
         utils::logError("EpollAdd shutdown pipe");
         return FlowStatus::CTL_ERROR;
     }
 
     // Storing actual address
-    sockaddr_in actualAddr {};
+    sockaddr_in actualAddr;
+    memset(&actualAddr, 0, sizeof(actualAddr));
     socklen_t actualAddrLen = sizeof(actualAddr);
 
     if (getsockname(_serverSocket, (struct sockaddr*)&actualAddr, &actualAddrLen) == -1) {
@@ -136,17 +138,17 @@ FlowStatus HTTPServer::initialize() {
 FlowStatus HTTPServer::start() {
     _running.store(true);
 
-    ServerContext ctxt {
-        ._socket = _serverSocket,
-        ._instance = _epollInstance,
-        ._signalFd = _signalFd,
-        ._connections = *_connections,
-        ._serverConnection = *_serverConnection,
-        ._status = _status,
-        ._running = _running,
-        ._process = _functions._processor,
-        ._createThreadContext = _functions._createThreadContext,
-    };
+    ServerContext ctxt(
+        _serverSocket,
+        _epollInstance,
+        _signalFd,
+        *_connections,
+        *_serverConnection,
+        _status,
+        _running,
+        _functions._processor,
+        _functions._createThreadContext
+    );
 
     _threads.reserve(_workerCount);
 
@@ -221,12 +223,12 @@ void HTTPServer::runThread(size_t threadID, ServerContext& ctxt) {
 
             // Shutdown pipe, signal fd, or macOS signal (nullptr data)
             if (!ctxt._running.load()
-                || ev.data == nullptr
-                || ev.data == &ctxt._signalFd) {
+                || ev._data == nullptr
+                || ev._data == &ctxt._signalFd) {
                 return;
             }
 
-            auto* connection = static_cast<TCPConnection*>(ev.data);
+            auto* connection = static_cast<TCPConnection*>(ev._data);
 
             if (!connection) {
                 // Terminate requested, re-trigger the event to stop other threads

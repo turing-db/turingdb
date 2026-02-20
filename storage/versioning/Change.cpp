@@ -53,7 +53,7 @@ PendingCommitReadTx Change::openReadTransaction(CommitHash commitHash) {
 }
 
 CommitResult<void> Change::commit(JobSystem& jobsystem) {
-    Profile profile {"Change::commit"};
+    Profile profile("Change::commit");
 
     _tip->flushWriteBuffer(jobsystem);
 
@@ -84,7 +84,7 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
  * in order to be in sync with main.
  */
 CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
-    Profile profile {"Change::rebase"};
+    Profile profile("Change::rebase");
 
     // Get the state of main at time of rebase
     const WeakArc<const CommitData> currentMainHead =

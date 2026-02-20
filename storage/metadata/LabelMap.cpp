@@ -82,7 +82,7 @@ LabelID LabelMap::getOrCreate(std::string_view name) {
             "Attempted to create LabelID {}, which exceeds graph label capacity.",
             offset));
     }
-    const LabelID nextID {static_cast<LabelID::Type>(offset)};
+    const LabelID nextID(static_cast<LabelID::Type>(offset));
     auto& pair = _container.emplace_back(nextID, std::make_unique<std::string>(name));
     _nameMap.emplace(std::string_view {*pair._name}, offset);
     _idMap.emplace(nextID, offset);

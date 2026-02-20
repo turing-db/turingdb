@@ -17,7 +17,7 @@ public:
     }
 
     [[nodiscard]] DumpResult<void> dump(const EdgeContainer& edges) {
-        Profile profile {"EdgeContainerDumper::dump"};
+        Profile profile("EdgeContainerDumper::dump");
         GraphDumpHelper::writeFileHeader(_writer);
 
         const uint64_t edgeCount = edges.size();

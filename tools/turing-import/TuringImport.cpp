@@ -30,12 +30,12 @@ enum class ImportType {
 };
 
 struct ImportData {
-    ImportType type;
+    ImportType _type {ImportType::NEO4J};
     std::string path;
     std::string primaryKey;
     std::string url = "localhost";
     std::string urlSuffix = "/db/data/transaction/commit";
-    uint64_t port = 7474;
+    uint64_t _port {7474};
     std::string username = "neo4j";
     std::string password = "turing";
 };
@@ -79,7 +79,7 @@ int main(int argc, const char** argv) {
                 exit(EXIT_FAILURE);
             }
             importData.emplace_back(ImportData {
-                .type = ImportType::GML,
+                ._type = ImportType::GML,
                 .path = value,
             });
         });
@@ -94,7 +94,7 @@ int main(int argc, const char** argv) {
                 exit(EXIT_FAILURE);
             }
             importData.emplace_back(ImportData {
-                .type = ImportType::BIN,
+                ._type = ImportType::BIN,
                 .path = value,
             });
         });
@@ -109,7 +109,7 @@ int main(int argc, const char** argv) {
                 exit(EXIT_FAILURE);
             }
             importData.emplace_back(ImportData {
-                .type = ImportType::NEO4J,
+                ._type = ImportType::NEO4J,
                 .path = value,
             });
         });
@@ -125,7 +125,7 @@ int main(int argc, const char** argv) {
                 exit(EXIT_FAILURE);
             }
             importData.emplace_back(ImportData {
-                .type = ImportType::JSON_NEO4J,
+                ._type = ImportType::JSON_NEO4J,
                 .path = value,
             });
         });
@@ -135,7 +135,7 @@ int main(int argc, const char** argv) {
         .metavar("localhost")
         .action([&](const std::string& value) {
             importData.emplace_back(ImportData {
-                .type = ImportType::NEO4J_URL,
+                ._type = ImportType::NEO4J_URL,
                 .url = value,
             });
         });
@@ -149,7 +149,7 @@ int main(int argc, const char** argv) {
                 exit(EXIT_FAILURE);
             }
             auto& cmd = importData.back();
-            cmd.port = std::stoi(value);
+            cmd._port = std::stoi(value);
         });
 
     argParser.add_argument("-user")
@@ -197,7 +197,7 @@ int main(int argc, const char** argv) {
                 exit(EXIT_FAILURE);
             }
             importData.emplace_back(ImportData {
-                .type = ImportType::NEO4J_TO_JSON,
+                ._type = ImportType::NEO4J_TO_JSON,
                 .path = value,
             });
         });
@@ -227,7 +227,7 @@ int main(int argc, const char** argv) {
     }
 
     if (!cmpEnabled) {
-        const fs::Path binDumpPath {folderPath};
+        const fs::Path binDumpPath(folderPath);
         if (!binDumpPath.exists()) {
             if (auto res = binDumpPath.mkdir(); !res) {
                 spdlog::error("Failed To create bindump directory err: {}", res.error().fmtMessage());
@@ -268,7 +268,7 @@ int main(int argc, const char** argv) {
         // Compute output path using sanitized graph name
         filePath = folderPath + "/" + graphName;
 
-        switch (dataIt->type) {
+        switch (dataIt->_type) {
             case ImportType::BIN: {
                 graph = Graph::create(graphName, fs::Path(filePath));
                 if (auto res = GraphLoader::load(graph.get(), fs::Path(dataIt->path)); !res) {
@@ -347,7 +347,7 @@ int main(int argc, const char** argv) {
                     args._urlSuffix = std::move(dataIt->urlSuffix);
                     args._username = std::move(dataIt->username);
                     args._password = std::move(dataIt->password);
-                    args._port = dataIt->port;
+                    args._port = dataIt->_port;
                     args._workDir = toolInit.getOutputsDir();
 
                     graph = Graph::create(graphName, fs::Path(filePath));
@@ -399,7 +399,7 @@ int main(int argc, const char** argv) {
         }
 
         if (!cmpEnabled) {
-            const fs::Path path {filePath};
+            const fs::Path path(filePath);
             if (path.exists()) {
                 FileUtils::removeDirectory(filePath);
             }

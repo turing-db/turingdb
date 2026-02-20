@@ -25,7 +25,7 @@ template <typename EntityType>
 class EntityMap {
 public:
     struct EntityMapping {
-        int64_t _propertyID {};
+        int64_t _propertyID {0};
         EntityType _oldID;
         EntityType _newID;
 
@@ -480,7 +480,7 @@ protected:
 
 TEST_F(DataPartMergerTest, MergeTest) {
     auto graph = Graph::create();
-    GraphWriter writer {graph.get()};
+    GraphWriter writer(graph.get());
 
     createBasicGraph(writer);
 
@@ -621,7 +621,7 @@ TEST_F(DataPartMergerTest, MergeTest) {
 
 TEST_F(DataPartMergerTest, DeleteNodeAndMerge) {
     auto graph = Graph::create();
-    GraphWriter writer {graph.get()};
+    GraphWriter writer(graph.get());
 
     createBasicGraph(writer);
 
@@ -728,7 +728,7 @@ TEST_F(DataPartMergerTest, DeleteNodeAndMerge) {
 
 TEST_F(DataPartMergerTest, DeleteEdgeAndMerge) {
     auto graph = Graph::create();
-    GraphWriter writer {graph.get()};
+    GraphWriter writer(graph.get());
 
     createBasicGraph(writer);
 
@@ -815,7 +815,7 @@ TEST_F(DataPartMergerTest, DeleteEdgeAndMerge) {
 
 TEST_F(DataPartMergerTest, DeleteAllNodePropertiesAndMerge) {
     auto graph = Graph::create();
-    GraphWriter writer {graph.get()};
+    GraphWriter writer(graph.get());
 
     createBasicGraph(writer);
 
@@ -846,7 +846,7 @@ TEST_F(DataPartMergerTest, DeleteAllNodePropertiesAndMerge) {
 
 TEST_F(DataPartMergerTest, DeleteAllEdgePropertiesAndMerge) {
     auto graph = Graph::create();
-    GraphWriter writer {graph.get()};
+    GraphWriter writer(graph.get());
 
     createBasicGraph(writer);
 

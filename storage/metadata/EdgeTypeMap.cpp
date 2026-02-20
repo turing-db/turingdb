@@ -72,7 +72,7 @@ EdgeTypeID EdgeTypeMap::getOrCreate(std::string_view name) {
     }
 
     const size_t count = _nameMap.size();
-    const EdgeTypeID nextID {static_cast<EdgeTypeID::Type>(count)};
+    const EdgeTypeID nextID(static_cast<EdgeTypeID::Type>(count));
     auto& pair = _container.emplace_back(nextID, std::make_unique<std::string>(name));
     _nameMap.emplace(std::string_view {*pair._name}, count);
     _idMap.emplace(nextID, count);

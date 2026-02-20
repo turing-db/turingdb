@@ -74,9 +74,9 @@ void ChangeProcessor::execute() {
 }
 
 void ChangeProcessor::createChange() const {
-    Profile profile {"ChangeProcessor::createChange"};
+    Profile profile("ChangeProcessor::createChange");
 
-    std::string graphName {_ctxt->getGraphName()};
+    std::string graphName(_ctxt->getGraphName());
     SystemManager* sysMan = _ctxt->getSystemManager();
 
     auto res = sysMan->newChange(graphName);
@@ -89,7 +89,7 @@ void ChangeProcessor::createChange() const {
 }
 
 void ChangeProcessor::submitChange() const {
-    Profile profile {"ChangeProcessor::submitChange"};
+    Profile profile("ChangeProcessor::submitChange");
 
     Transaction* abstractTx = _ctxt->getTransaction();
     bioassert(abstractTx, "ChangeProcessor: Transaction must be set");
@@ -114,7 +114,7 @@ void ChangeProcessor::submitChange() const {
         throw PipelineException(fmt::format("Failed to submit change: {}", res.error().fmtMessage()));
     }
 
-    const std::string graphName {_ctxt->getGraphName()};
+    const std::string graphName(_ctxt->getGraphName());
 
     // Step 2: Dump newly created commits
     if (const auto res = sysMan->dumpGraph(graphName); !res) {
@@ -126,7 +126,7 @@ void ChangeProcessor::submitChange() const {
 }
 
 void ChangeProcessor::deleteChange() const {
-    Profile profile {"ChangeProcessor::deleteChange"};
+    Profile profile("ChangeProcessor::deleteChange");
 
     Transaction* abstractTx = _ctxt->getTransaction();
     bioassert(abstractTx, "ChangeProcessor: Transaction must be set");
@@ -154,12 +154,12 @@ void ChangeProcessor::deleteChange() const {
 }
 
 void ChangeProcessor::listChanges() const {
-    Profile profile {"ChangeProcessor::listChanges"};
+    Profile profile("ChangeProcessor::listChanges");
 
     SystemManager* sysMan = _ctxt->getSystemManager();
 
     std::vector<const Change*> changes;
-    const std::string graphName {_ctxt->getGraphName()};
+    const std::string graphName(_ctxt->getGraphName());
 
     const Graph* graph = sysMan->getGraph(graphName);
     bioassert(graph, "ChangeProcessor: Graph must exist");

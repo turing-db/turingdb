@@ -15,7 +15,7 @@ protected:
 };
 
 TEST_F(FileResultTest, NotExists) {
-    fs::Path p {"/path/to/non/existing"};
+    fs::Path p("/path/to/non/existing");
     auto fmtMessage = fmt::format("Filesystem error: "
                                   "Does not exist (No such file or directory)");
 
@@ -39,7 +39,7 @@ TEST_F(FileResultTest, NotExists) {
 }
 
 TEST_F(FileResultTest, OpenFile) {
-    fs::Path p {"/path/to/non/existing"};
+    fs::Path p("/path/to/non/existing");
     auto fmtMessage = fmt::format("Filesystem error: "
                                   "Could not open file (No such file or directory)");
 
@@ -54,7 +54,7 @@ TEST_F(FileResultTest, OpenFile) {
 }
 
 TEST_F(FileResultTest, NotDirectory) {
-    fs::Path p {"/dev/null"};
+    fs::Path p("/dev/null");
     auto fmtMessage = fmt::format("Filesystem error: "
                                   "Not a directory");
 
@@ -69,7 +69,7 @@ TEST_F(FileResultTest, NotDirectory) {
 }
 
 TEST_F(FileResultTest, AlreadyExists) {
-    fs::Path p {_outDir};
+    fs::Path p(_outDir);
     auto fmtMessage = fmt::format("Filesystem error: "
                                   "Already exists",
                                   _outDir);
@@ -85,7 +85,7 @@ TEST_F(FileResultTest, AlreadyExists) {
 }
 
 TEST_F(FileResultTest, CannotMkdir) {
-    fs::Path p {"/path/to/non/existing"};
+    fs::Path p("/path/to/non/existing");
 
     {
         auto res = p.mkdir();

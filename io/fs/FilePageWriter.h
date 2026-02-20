@@ -93,8 +93,8 @@ private:
     std::optional<Error> _error;
     AlignedBuffer _buffer;
     int _fd {-1};
-    bool _reachedEnd = false;
-    size_t _written {};
+    bool _reachedEnd {false};
+    size_t _written {0};
 
     explicit FilePageWriter(int fd, size_t pageSize)
         : _buffer(pageSize),

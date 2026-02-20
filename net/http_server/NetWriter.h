@@ -316,15 +316,15 @@ private:
     static inline constexpr size_t _maxChunkSize = 1024ul * 32ul;
     static inline constexpr size_t _safety = 64; // Includes the size + opening/closing \r\n tokens
 
-    utils::DataSocket _socket {};
+    utils::DataSocket _socket {0};
     Status _status {Status::Ok};
-    bool _wroteNonEmptyChunk = false;
+    bool _wroteNonEmptyChunk {false};
 
     struct Header {
         std::array<char, _maxHeaderSize> _content {};
-        size_t _size = 0;
-        size_t _position = 0;
-        size_t _remaining = _maxHeaderSize;
+        size_t _size {0};
+        size_t _position {0};
+        size_t _remaining {_maxHeaderSize};
 
         void increment(size_t count) {
             _size += count;
@@ -351,9 +351,9 @@ private:
 
     struct Chunk {
         std::array<char, _maxChunkSize + _safety> _content {};
-        size_t _size = 0;
-        size_t _position = 10; // First 10 bytes are size + \r\n
-        size_t _remaining = _maxChunkSize;
+        size_t _size {0};
+        size_t _position {10}; // First 10 bytes are size + \r\n
+        size_t _remaining {_maxChunkSize};
 
         void increment(size_t count) {
             _size += count;

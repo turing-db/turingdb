@@ -95,7 +95,7 @@ void GetEdgeTypeIDProcessor::execute() {
     
     edgeTypeIDs.resize(edgeIDs.size());
 
-    for (size_t i {0}; EdgeID edge : edgeIDs) {
+    for (size_t i = 0; EdgeID edge : edgeIDs) {
         edgeTypeIDs.set(i++, reader.getEdgeTypeID(edge));
     }
 

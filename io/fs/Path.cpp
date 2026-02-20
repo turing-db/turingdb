@@ -1,5 +1,6 @@
 #include "Path.h"
 
+#include <string.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -26,7 +27,8 @@ Path::Path(std::string&& path)
 }
 
 Result<FileInfo> Path::getFileInfo() const {
-    struct ::stat s {};
+    struct ::stat s;
+    memset(&s, 0, sizeof(s));
     if (::stat(_path.c_str(), &s) != 0) {
         return Error::result(ErrorType::NOT_EXISTS, errno);
     }
@@ -34,7 +36,7 @@ Result<FileInfo> Path::getFileInfo() const {
     const uid_t euid = geteuid();
     const gid_t egid = getegid();
 
-    uint8_t access {};
+    uint8_t access = 0;
 
     if (euid == s.st_uid) {
         // If file belongs to user
@@ -65,7 +67,7 @@ Result<FileInfo> Path::getFileInfo() const {
         }
     }
 
-    FileType type {};
+    FileType type = FileType::File;
     if (S_ISREG(s.st_mode)) {
         type = FileType::File;
     } else if (S_ISDIR(s.st_mode)) {
@@ -210,7 +212,7 @@ Result<void> Path::mkdir() const {
 }
 
 Result<void> Path::rm() const {
-    std::error_code err {};
+    std::error_code err;
     std::filesystem::remove_all(_path, err);
     if (err) {
         return Error::result(ErrorType::CANNOT_REMOVE, err.value());
