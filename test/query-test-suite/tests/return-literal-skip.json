@@ -4,7 +4,8 @@
   "query": "RETURN 5 SKIP 10",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n __expr__: v1\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    2[\"`\n        __SKIP__\n    `\"]\n    0-->2\n    2-->1",
-    "result": ""
+    "result": "5",
+    "resultJson": "{\"header\":{\"column_names\":[\"5\"],\"column_types\":[\"Int64\"]},\"data\":[]}"
   },
   "tags": [
     "projection",
