@@ -119,6 +119,20 @@ struct ProjectOrder {
     }
 };
 
+using NarrowRanges = ColumnSingleDispatcher<OrderedTypes::Allowed,
+                                            NarrowTieRanges,
+                                            OrderedTypes::Excluded>;
+
+using SubrangeSort = ColumnSingleDispatcher<OrderedTypes::Allowed,
+                                            OrderColumnSubrange,
+                                            OrderedTypes::Excluded>;
+
+using Sort = ColumnSingleDispatcher<OrderedTypes::Allowed, OrderColumn,
+                                            OrderedTypes::Excluded>;
+
+using Projection = ColumnSingleDispatcher<OrderedTypes::Allowed,
+                                          ProjectOrder,
+                                          OrderedTypes::Excluded>;
 }
 
 OrderByProcessor::OrderByProcessor()
@@ -157,7 +171,7 @@ OrderByProcessor* OrderByProcessor::create(PipelineV2* pipeline,
     return proc;
 }
 
-void OrderByProcessor::prepare(ExecutionContext* ctxt) {
+void OrderByProcessor::prepare(ExecutionContext*) {
     markAsPrepared();
 }
 
@@ -202,11 +216,7 @@ void OrderByProcessor::project() {
         const Column* inCol = ncol->getColumn();
         Column* outCol = outNcol->getColumn();
 
-        using Types = OrderedTypes;
         ProjectOrder project {._res = outCol, ._indices = _indices};
-        using Projection =
-            ColumnSingleDispatcher<Types::Allowed, ProjectOrder, Types::Excluded>;
-
         Projection::dispatch(inCol, project);
     }
 }
@@ -231,9 +241,6 @@ void OrderByProcessor::subsort() {
 
         OrderColumn sorter {
             ._indices = *_indices, ._ranges = _tieRanges, ._ascending = asc};
-
-        using Sort = ColumnSingleDispatcher<OrderedTypes::Allowed, OrderColumn,
-                                            OrderedTypes::Excluded>;
 
         Sort::dispatch(dominantCol, sorter);
     }
@@ -263,18 +270,10 @@ void OrderByProcessor::subsort() {
             subrangeSorter._subrangeStart = start;
             subrangeSorter._subrangeEnd = end;
 
-            using SubrangeSort = ColumnSingleDispatcher<OrderedTypes::Allowed,
-                                                        OrderColumnSubrange,
-                                                        OrderedTypes::Excluded>;
-
             SubrangeSort::dispatch(column, subrangeSorter);
         }
 
         NarrowTieRanges narrowTieRanges {._indices = *_indices, ._ranges = _tieRanges};
-
-        using NarrowRanges = ColumnSingleDispatcher<OrderedTypes::Allowed,
-                                                    NarrowTieRanges,
-                                                    OrderedTypes::Excluded>;
 
         // Shrink tie ranges
         NarrowRanges::dispatch(column, narrowTieRanges);
