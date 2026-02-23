@@ -10,28 +10,22 @@ This document specifies the design and architecture for CSV loading functionalit
 4. [Syntax](#syntax)
 5. [Architecture](#architecture)
 6. [Implementation Details](#implementation-details)
-   - [AST Nodes](#ast-nodes)
-   - [Type System Additions](#type-system-additions)
-   - [ColumnStringTable Storage](#columnstringtable-storage)
+   - [AST Layer](#ast-layer)
+   - [Analyzer Layer](#analyzer-layer)
+   - [Plan Layer](#plan-layer)
+   - [Pipeline Layer](#pipeline-layer)
+   - [Storage Layer](#storage-layer)
    - [CSV Parser](#csv-parser)
-   - [CSV Source Processor](#csv-source-processor)
-   - [Memory Management](#memory-management)
-   - [Analyzer Changes](#analyzer-changes)
-   - [Pipeline Generator](#pipeline-generator)
-   - [Expression Lowering](#expression-lowering-exprprogramgenerator)
-   - [Conversion Functions](#conversion-functions)
+   - [Expression Lowering](#expression-lowering)
+   - [Memory Registration](#memory-registration)
+   - [Dataframe Shape Propagation](#dataframe-shape-propagation)
    - [Error Handling](#error-handling)
-   - [Edge Cases](#edge-cases)
-   - [File Path Handling](#file-path-handling)
-   - [Encoding](#encoding)
-   - [Concurrency](#concurrency)
-   - [Restrictions (Phase 1)](#restrictions-phase-1)
-   - [Stmt Type Registration](#stmt-type-registration)
-   - [Progress and Statistics](#progress-and-statistics)
+   - [Restrictions](#restrictions)
 7. [LOAD EMBEDDING CSV](#load-embedding-csv)
 8. [Examples](#examples)
 9. [Future Work](#future-work)
-10. [Appendix: RFC 4180 CSV Format](#appendix-rfc-4180-csv-format)
+10. [Implementation State](#implementation-state)
+11. [Appendix: RFC 4180 CSV Format](#appendix-rfc-4180-csv-format)
 
 ---
 
@@ -295,726 +289,489 @@ MODIFIED FILES:
 
 ## Implementation Details
 
-### AST Nodes
+### AST Layer
 
-#### LoadCSVStmt
+#### LoadCSVStmt (`query/AST/stmt/LoadCSVStmt.h`)
 
 ```cpp
-// query/AST/stmt/LoadCSVStmt.h
-#pragma once
-
-#include "stmt/Stmt.h"
-#include "io/Path.h"
-
-namespace db {
-
-class CypherAST;
-class Symbol;
-
-// Error handling mode for malformed CSV lines
-enum class CSVErrorMode : uint8_t {
-    Fail,   // Default: abort query on malformed line
-    Skip,   // Skip malformed lines and continue
-};
-
 class LoadCSVStmt : public Stmt {
 public:
-    friend CypherAST;
-
     static LoadCSVStmt* create(CypherAST* ast,
-                                std::string_view filePath,
-                                Symbol* alias);
+                               std::string_view filePath,
+                               Symbol* alias);
 
-    const fs::Path& getFilePath() const { return _filePath; }
-    Symbol* getAlias() const { return _alias; }
+    const fs::Path& getFilePath() const;
+    Symbol* getAlias() const;
+    bool hasHeaders() const;
+    bool skipOnError() const;
+    VarDecl* getAliasDecl() const;
 
-    bool hasHeaders() const { return _hasHeaders; }
-    void setHasHeaders(bool v) { _hasHeaders = v; }
+    void setHasHeaders(bool v);
+    void setSkipOnError(bool v);
+    void setAliasDecl(VarDecl* decl);
 
-    CSVErrorMode getErrorMode() const { return _errorMode; }
-    void setErrorMode(CSVErrorMode mode) { _errorMode = mode; }
+    Kind getKind() const override { return Kind::LOAD_CSV; }
 
 private:
-    LoadCSVStmt(std::string_view filePath, Symbol* alias);
-    ~LoadCSVStmt() = default;
-
     fs::Path _filePath;
-    Symbol* _alias;
+    Symbol* _alias {nullptr};
+    VarDecl* _aliasDecl {nullptr};
     bool _hasHeaders {false};
-    CSVErrorMode _errorMode {CSVErrorMode::Fail};
+    bool _skipOnError {false};
 };
-
-}
 ```
 
-#### IndexExpr
+The AST and plan layers use `bool skipOnError` rather than a `CSVErrorMode` enum. This keeps the parser/AST/plan layers free of `CSVErrorMode.h`. The bool-to-enum conversion happens at the boundary in `PipelineGenerator::translateLoadCSVNode`.
+
+#### IndexExpr (`query/AST/expr/IndexExpr.h`)
 
 ```cpp
-// query/AST/expr/IndexExpr.h
-#pragma once
-
-#include "expr/Expr.h"
-
-namespace db {
-
-class CypherAST;
-
 class IndexExpr : public Expr {
 public:
-    friend CypherAST;
-
     static IndexExpr* create(CypherAST* ast, Expr* base, Expr* indexExpr);
 
-    Expr* getBase() const { return _base; }
-    Expr* getIndexExpr() const { return _indexExpr; }
-
-    // Returns true if the index expression is a literal integer
-    bool hasLiteralIndex() const { return _hasLiteralIndex; }
-
-    // Returns the literal index value (only valid if hasLiteralIndex() is true)
-    size_t getLiteralIndex() const { return _literalIndex; }
-
-    // Called by analyzer when the index is a literal
-    void setLiteralIndex(size_t index) { _hasLiteralIndex = true; _literalIndex = index; }
+    Expr* getBase() const;
+    Expr* getIndexExpr() const;
+    bool hasLiteralIndex() const;
+    size_t getLiteralIndex() const;
+    void setLiteralIndex(size_t index);
 
     Kind getKind() const override { return Kind::INDEX; }
 
 private:
-    IndexExpr(Expr* base, Expr* indexExpr);
-    ~IndexExpr() = default;
-
-    Expr* _base;
-    Expr* _indexExpr;
+    Expr* _base {nullptr};
+    Expr* _indexExpr {nullptr};
     bool _hasLiteralIndex {false};
     size_t _literalIndex {0};
 };
+```
 
+When the analyzer detects a literal integer index (e.g. `row[0]`), it calls `setLiteralIndex()` so the expression lowering can resolve the field column at compile time.
+
+#### PropertyExpr — CSV Header Access
+
+`PropertyExpr` (`query/AST/expr/PropertyExpr.h`) gained a flag for CSV header access:
+
+```cpp
+bool _stringTableHeaderAccess {false};
+
+bool isStringTableHeaderAccess() const;
+void setStringTableHeaderAccess(bool v);
+```
+
+When the analyzer sees `row.name` where `row` is typed `StringTable`, it sets this flag. The expression lowering then resolves the header name to a field column index.
+
+#### Type System
+
+`EvaluatedType::StringTable` was added to `query/AST/decl/EvaluatedType.h`. This is the type of the `row` variable introduced by `LOAD CSV ... AS row`. Expressions on it yield `String`:
+
+- `row[i]` → `String`
+- `row.name` → `String`
+
+### Analyzer Layer
+
+#### ReadStmtAnalyzer (`query/analyzer/ReadStmtAnalyzer.cpp`)
+
+Creates a `VarDecl` of type `StringTable` for the alias:
+
+```cpp
+void ReadStmtAnalyzer::analyze(LoadCSVStmt* loadCSV) {
+    Symbol* alias = loadCSV->getAlias();
+    // validate alias exists and not already declared
+    VarDecl* decl = _ctxt->getOrCreateNamedVariable(
+        _ast, EvaluatedType::StringTable, alias->getName());
+    loadCSV->setAliasDecl(decl);
 }
 ```
 
-**Note**: Add `INDEX` to `Expr::Kind` enum.
+#### ExprAnalyzer — IndexExpr (`query/analyzer/ExprAnalyzer.cpp`)
 
-### Type System Additions
+Validates that `[]` is applied to a `StringTable` with an `Integer` index. Detects literal indices for compile-time optimization. Rejects negative literals.
 
 ```cpp
-// query/AST/decl/EvaluatedType.h
-enum class EvaluatedType : uint8_t {
-    Invalid = 0,
-
-    NodePattern,
-    EdgePattern,
-    GraphPath,
-
-    Null,
-    Integer,
-    Double,
-    String,
-    Char,
-    Bool,
-    List,
-    Map,
-    Wildcard,
-    Tuple,
-    ValueType,
-
-    StringTable,       // NEW: CSV row, supports [int] and .columnName
-    DenseVector,       // NEW: Dense float vector for embeddings
-
-    _SIZE,
-};
+void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
+    analyzeExpr(expr->getBase());
+    analyzeExpr(expr->getIndexExpr());
+    // validate base is StringTable, index is Integer
+    // if index is a literal integer >= 0, call expr->setLiteralIndex()
+    expr->setType(EvaluatedType::String);
+}
 ```
 
-**Type relationships**:
-- `StringTable`: Type of the `row` variable from `LOAD CSV ... AS row`
-- `row[i]` expression returns `String` type, extracting the `ColumnString*` from the `ColumnStringTable`
+#### ExprAnalyzer — PropertyExpr on StringTable
 
-Update `EvaluatedTypeName` accordingly.
-
-### ColumnStringTable Storage
+When the base of a `PropertyExpr` is `StringTable`, the analyzer sets the `StringTableHeaderAccess` flag and types the result as `String`:
 
 ```cpp
-// storage/columns/ColumnStringTable.h
-#pragma once
+if (varDecl->getType() == EvaluatedType::StringTable) {
+    expr->setEntityVarDecl(varDecl);
+    expr->setStringTableHeaderAccess(true);
+    expr->setType(EvaluatedType::String);
+    return ValueType::String;
+}
+```
 
-#include "storage/columns/Column.h"
-#include "storage/columns/ColumnString.h"
+### Plan Layer
 
-namespace db {
+#### LoadCSVNode (`query/plan/nodes/LoadCSVNode.h`)
 
-// Container column holding multiple ColumnString instances (one per CSV field).
-// Fields are already parsed and split during CSV reading.
-class ColumnStringTable : public Column {
+```cpp
+class LoadCSVNode : public PlanGraphNode {
 public:
-    ColumnStringTable();
-    ~ColumnStringTable() override;
+    LoadCSVNode(const fs::Path& path, bool hasHeaders,
+                bool skipOnError, const VarDecl* aliasDecl);
 
-    // Number of CSV columns (fields per row)
-    size_t getFieldCount() const { return _columns.size(); }
-
-    // Number of rows
-    size_t getRowCount() const;
-
-    // Access a specific field column
-    ColumnString* getFieldColumn(size_t fieldIndex);
-    const ColumnString* getFieldColumn(size_t fieldIndex) const;
-
-    // Add a new field column (called during parsing as columns are discovered)
-    void addFieldColumn(ColumnString* column);
-
-    // Clear all data for reuse
-    void clear();
+    const fs::Path& getFilePath() const;
+    bool hasHeaders() const;
+    bool skipOnError() const;
+    const VarDecl* getAliasDecl() const;
 
 private:
-    std::vector<ColumnString*> _columns;  // One per CSV field
+    fs::Path _path;
+    bool _hasHeaders {false};
+    bool _skipOnError {false};
+    const VarDecl* _aliasDecl {nullptr};
 };
+```
 
+Opcode: `PlanGraphOpcode::LOAD_CSV`.
+
+#### ReadStmtGenerator (`query/plan/ReadStmtGenerator.cpp`)
+
+Converts `LoadCSVStmt` → `LoadCSVNode` and registers the alias as a producer:
+
+```cpp
+void ReadStmtGenerator::generateLoadCSVStmt(const LoadCSVStmt* stmt) {
+    const VarDecl* aliasDecl = stmt->getAliasDecl();
+    LoadCSVNode* loadCSVNode = _tree->create<LoadCSVNode>(
+        stmt->getFilePath(), stmt->hasHeaders(),
+        stmt->skipOnError(), aliasDecl);
+    _variables->setProducer(aliasDecl, loadCSVNode);
 }
 ```
 
-**Design notes**:
-- `ColumnStringTable` owns the field columns and manages their lifecycle
-- `row[i]` extracts the `ColumnString*` pointer at index `i` from the table
-- Field columns are allocated via `LocalMemory` by CSVSourceProcessor
-- Header names (for `WITH HEADERS`) are stored separately in the processor, not in the column
+### Pipeline Layer
 
-### CSV Parser
+#### PipelineGenerator — translateLoadCSVNode (`query/plan/PipelineGenerator.cpp`)
 
-The CSV parser uses memory-mapped I/O (mmap) for efficient reading of large files. The file is mapped in large chunks (512MB) to balance memory usage with I/O efficiency.
-
-**Design Rationale**:
-- mmap avoids double-buffering (kernel buffer → user buffer)
-- Large chunk sizes minimize system call overhead
-- Sequential access pattern benefits from kernel read-ahead
-- Memory can be released incrementally as chunks are processed
+This is where the CSV pipeline is assembled:
 
 ```cpp
-// io/CSVParser.h
-#pragma once
+PipelineOutputInterface* PipelineGenerator::translateLoadCSVNode(
+        LoadCSVNode* node) {
+    // 1. Peek at file to discover field count and headers
+    CSVFileInfo fileInfo;
+    CSVParser::peekFileStructure(
+        node->getFilePath(), node->hasHeaders(), fileInfo);
+    _csvHeaders = fileInfo._headers;
+    _csvFieldCount = fileInfo._fieldCount;
 
-#include <string>
-#include <string_view>
-#include <vector>
+    // 2. Allocate ColumnStringTable with empty field columns
+    auto* table = _mem->alloc<ColumnStringTable>();
+    for (size_t i = 0; i < _csvFieldCount; i++) {
+        table->addFieldColumn(
+            _mem->alloc<ColumnStringTable::StringColumn>());
+    }
 
-#include "io/Path.h"
-#include "storage/columns/ColumnStringTable.h"
+    // 3. Convert bool → CSVErrorMode at the boundary
+    const CSVErrorMode errorMode =
+        node->skipOnError() ? CSVErrorMode::Skip : CSVErrorMode::Fail;
 
-namespace db {
+    // 4. Create CSVSourceProcessor
+    auto* csvSource = CSVSourceProcessor::create(
+        _pipeline, node->getFilePath(), node->hasHeaders(),
+        errorMode, _csvFieldCount, table);
 
-class LocalMemory;
+    // 5. Register ColumnStringTable in output dataframe
+    PipelineBlockOutputInterface& output = csvSource->output();
+    Dataframe* outDf = output.getDataframe();
+    DataframeManager* dfMan = _pipeline->getDataframeManager();
+    const ColumnTag tag = dfMan->allocTag();
+    NamedColumn* namedCol = NamedColumn::create(dfMan, table, tag);
+    outDf->addColumn(namedCol);
 
-class CSVParser {
-public:
-    // Default mmap chunk size: 512MB
-    static constexpr size_t DEFAULT_MMAP_CHUNK_SIZE = 512 * 1024 * 1024;
+    // 6. Map alias VarDecl → ColumnTag
+    _declToColumn[node->getAliasDecl()] = tag;
 
-    CSVParser(const fs::Path& path,
-              bool hasHeaders,
-              CSVErrorMode errorMode,
-              LocalMemory* memory,
-              size_t mmapChunkSize = DEFAULT_MMAP_CHUNK_SIZE);
-    ~CSVParser();
-
-    CSVParser(const CSVParser&) = delete;
-    CSVParser& operator=(const CSVParser&) = delete;
-
-    // Read up to maxRows into the output ColumnStringTable
-    // Returns number of rows read (0 at EOF)
-    // On malformed lines: throws if errorMode is Fail, skips if Skip
-    // Field columns are allocated dynamically via LocalMemory
-    size_t readChunk(size_t maxRows, ColumnStringTable* output);
-
-    // Header access (only valid after first readChunk if hasHeaders was true)
-    const std::vector<std::string>& getHeaders() const { return _headers; }
-    size_t getHeaderIndex(std::string_view name) const;
-
-    size_t getLinesRead() const { return _linesRead; }
-    size_t getLinesSkipped() const { return _linesSkipped; }  // Only incremented in Skip mode
-
-private:
-    int _fd {-1};                          // File descriptor
-    size_t _fileSize {0};                  // Total file size
-    size_t _fileOffset {0};                // Current position in file
-    size_t _mmapChunkSize;                 // Size of each mmap region
-
-    void* _mappedRegion {nullptr};         // Current mmap region
-    size_t _mappedOffset {0};              // File offset of mapped region
-    size_t _mappedSize {0};                // Size of mapped region
-
-    std::string_view _remaining;           // Unparsed data in current region
-    bool _hasHeaders;
-    CSVErrorMode _errorMode;
-    std::vector<std::string> _headers;     // Populated from first line if hasHeaders
-    size_t _fieldCount {0};                // Discovered from first data row
-
-    LocalMemory* _memory;                  // For allocating field columns
-    size_t _linesRead {0};
-    size_t _linesSkipped {0};              // Lines skipped due to errors (Skip mode only)
-
-    // Memory mapping
-    bool mapNextChunk();
-    void unmapCurrentChunk();
-
-    // RFC 4180 parsing
-    bool parseLine(std::string_view& input, std::vector<std::string>& fields);
-    bool parseField(std::string_view& input, std::string& output);
-
-    // Handle line that spans mmap chunk boundary
-    bool handlePartialLine(std::string& lineBuffer);
-
-    // Ensure output has enough field columns, allocating if needed
-    void ensureFieldColumns(ColumnStringTable* output, size_t fieldCount);
-};
-
+    _builder.getPendingOutput().setInterface(&output);
+    return _builder.getPendingOutputInterface();
 }
 ```
 
-### CSV Source Processor
+`PipelineGenerator` stores `_csvHeaders` and `_csvFieldCount` as member state, exposed via `getCSVHeaders()` for use by `ExprProgramGenerator`.
+
+#### CSVSourceProcessor (`query/pipeline/processors/CSVSourceProcessor.h`)
 
 ```cpp
-// query/pipeline/processors/CSVSourceProcessor.h
-#pragma once
-
-#include "Processor.h"
-#include "io/CSVParser.h"
-#include "io/Path.h"
-#include "dataframe/ColumnTag.h"
-#include "interfaces/PipelineBlockOutputInterface.h"
-#include "storage/columns/ColumnStringTable.h"
-
-namespace db {
-
-class LocalMemory;
-
 class CSVSourceProcessor : public Processor {
 public:
-    // Factory method - all processors are created via PipelineV2
-    static CSVSourceProcessor* create(PipelineV2* pipeline,
-                                       const fs::Path& path,
-                                       bool hasHeaders,
-                                       CSVErrorMode errorMode,
-                                       ColumnTag outputTag);
+    static CSVSourceProcessor* create(
+        PipelineV2* pipeline, const fs::Path& path,
+        bool hasHeaders, CSVErrorMode errorMode,
+        size_t expectedFieldCount, ColumnStringTable* outputTable);
 
-    // Processor interface
-    std::string describe() const override;
     void prepare(ExecutionContext* ctxt) override;
     void reset() override;
     void execute() override;
 
-    // Output interface - produces a single ColumnStringTable
-    PipelineBlockOutputInterface& output() { return _output; }
-
-    // Header access (only valid after first execute() if hasHeaders)
-    const std::vector<std::string>& getHeaders() const;
-    size_t getHeaderIndex(std::string_view name) const;
+    PipelineBlockOutputInterface& output();
 
 private:
     fs::Path _path;
     bool _hasHeaders;
     CSVErrorMode _errorMode;
-    ColumnTag _outputTag;          // Tag for the ColumnStringTable output
-
-    LocalMemory* _memory {nullptr};       // From ExecutionContext
-    CSVParser* _parser {nullptr};         // Owned, created in prepare()
-    ColumnStringTable* _outputTable {nullptr};  // Allocated via LocalMemory
+    size_t _expectedFieldCount;
     PipelineBlockOutputInterface _output;
-
-    CSVSourceProcessor(const fs::Path& path,
-                       bool hasHeaders,
-                       CSVErrorMode errorMode,
-                       ColumnTag outputTag);
-    ~CSVSourceProcessor() override;
+    ColumnStringTable* _outputTable {nullptr};
+    CSVParser* _parser {nullptr};
 };
-
-}
 ```
 
-#### Processor Lifecycle
+**Lifecycle**:
 
-1. **create()**: Called by `PipelineGenerator` to instantiate the processor and register it with the pipeline
-2. **prepare()**: Called once before execution starts; gets `LocalMemory` from context, opens file, creates `CSVParser`, allocates `ColumnStringTable`
-3. **execute()**: Called repeatedly by the pipeline executor; reads one chunk of rows into `ColumnStringTable` and writes to output
-4. **reset()**: Called to reset state for re-execution (e.g., if pipeline needs to restart)
+1. **create()**: Instantiated by `PipelineGenerator`, registered with pipeline
+2. **prepare()**: Opens file, creates `CSVParser`
+3. **execute()**: Reads one chunk via `_parser->readChunk()`. On EOF (0 rows returned), calls `finish()` and returns without calling `writeData()`. Otherwise calls `_output.getPort()->writeData()`.
+4. **reset()**: Resets state for re-execution
 
-#### Output Interface
-
-The processor uses `PipelineBlockOutputInterface` which:
-- Produces a `Dataframe` with a single `NamedColumn` containing the `ColumnStringTable`
-- The `ColumnStringTable` internally holds N `ColumnString` instances (one per CSV field)
-- Column is identified by the single pre-allocated `ColumnTag`
-- Downstream processors access individual `ColumnString*` fields via `row[i]` indexing
-
-### Memory Management
-
-#### LocalMemory Allocation
-
-`CSVSourceProcessor` obtains a `LocalMemory` instance from the `ExecutionContext` during `prepare()`. All column allocations go through `LocalMemory`:
-
-- `ColumnStringTable` is allocated via `LocalMemory`
-- Each `ColumnString` within the table is allocated via `LocalMemory`
-- Memory is released when the pipeline execution completes
-
-#### String Ownership
-
-Strings parsed from CSV are **copied** into `ColumnString` storage, not referenced via `string_view`. This is necessary because:
-
-1. The mmap region is unmapped after each chunk is processed
-2. Strings may span mmap chunk boundaries and require assembly
-3. Quoted fields require unescaping (removing doubled quotes)
-
-The copy overhead is acceptable because:
-- String data is typically small relative to the file size
-- Memory is bounded by `ChunkConfig::CHUNK_SIZE`
-- Columnar string storage uses efficient arena allocation via `LocalMemory`
-
-### Analyzer Changes
-
-#### ReadStmtAnalyzer
+The `execute()` method is critical — it must `return` after `finish()` to avoid writing stale data downstream:
 
 ```cpp
-// In ReadStmtAnalyzer.cpp
-
-void ReadStmtAnalyzer::analyze(const LoadCSVStmt* stmt) {
-    // Create variable declaration for the alias (e.g., "row")
-    Symbol* alias = stmt->getAlias();
-
-    if (_ctxt->hasDecl(alias->getName())) {
-        throwError("Variable already declared", alias);
-    }
-
-    // Type the alias as StringTable
-    VarDecl* varDecl = _ctxt->getOrCreateNamedVariable(
-        _ast,
-        EvaluatedType::StringTable,
-        alias->getName()
-    );
-
-    alias->setVarDecl(varDecl);
-
-    // Note: Schema validation (column count, header names) happens
-    // at pipeline generation time, not here
-}
-```
-
-#### ExprAnalyzer
-
-```cpp
-// In ExprAnalyzer.cpp
-
-void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
-    analyzeExpr(expr->getBase());
-    analyzeExpr(expr->getIndexExpr());
-
-    EvaluatedType baseType = expr->getBase()->getType();
-
-    if (baseType != EvaluatedType::StringTable) {
-        throwError("Index operator [] only supported on CSV row variables", expr);
-    }
-
-    // Index expression must be integer-typed
-    EvaluatedType indexType = expr->getIndexExpr()->getType();
-    if (indexType != EvaluatedType::Integer) {
-        throwError("Index expression must be of type Integer", expr->getIndexExpr());
-    }
-
-    // Check if the index is a literal integer for compile-time optimization
-    if (expr->getIndexExpr()->getKind() == Expr::Kind::LITERAL) {
-        const LiteralExpr* lit = static_cast<const LiteralExpr*>(expr->getIndexExpr());
-        int64_t value = lit->getIntegerValue();
-        if (value < 0) {
-            throwError("Index must be non-negative", expr->getIndexExpr());
-        }
-        expr->setLiteralIndex(static_cast<size_t>(value));
-    }
-
-    // Result type is String (extracts ColumnString* from ColumnStringTable)
-    expr->setType(EvaluatedType::String);
-}
-
-// For row.columnName (in analyzePropertyExpr)
-ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, ...) {
-    // ... existing code ...
-
-    // Check if base is StringTable (CSV row with headers)
-    if (baseType == EvaluatedType::StringTable) {
-        // This is a header-based column access: row.columnName
-        // Store the column name; actual index resolution happens at runtime
-        expr->setType(EvaluatedType::String);
-        expr->setCSVHeaderAccess(true);  // New flag
-        return ValueType::String;  // Underlying value type
-    }
-
-    // ... existing property access code ...
-}
-```
-
-### Pipeline Generator
-
-```cpp
-// In PipelineGenerator.cpp
-
-void PipelineGenerator::generate(const LoadCSVStmt* stmt) {
-    // 1. Allocate a single ColumnTag for the ColumnStringTable output
-    ColumnTag csvTag = _dataframeManager->allocTag();
-
-    // 2. Create source processor (no schema reading needed upfront)
-    auto csvSource = CSVSourceProcessor::create(
-        _pipeline,
-        stmt->getFilePath(),
-        stmt->hasHeaders(),
-        stmt->getErrorMode(),
-        csvTag
-    );
-
-    // 3. Register the alias variable with its ColumnTag in PipelineBuilder
-    // Uses existing variable registration mechanism
-    VarDecl* aliasDecl = stmt->getAlias()->getVarDecl();
-    _pipelineBuilder->registerVariable(aliasDecl, csvTag);
-
-    // 4. Add to pipeline
-    _pipeline->setSource(csvSource);
-}
-```
-
-**Note**: Schema discovery (column count, headers) happens at runtime during `CSVParser::readChunk()`. Header name validation for `row.columnName` access is deferred to runtime - if the header doesn't exist, a runtime error is raised.
-
-### Expression Lowering (ExprProgramGenerator)
-
-This section describes how `row[i]` and `row.columnName` are lowered to executable form by `ExprProgramGenerator`.
-
-#### Column Tag Allocation
-
-During pipeline generation, a single `ColumnTag` is allocated for the `ColumnStringTable` and registered via the standard `PipelineBuilder::registerVariable()` mechanism.
-
-#### ExprProgramGenerator Handling
-
-`ExprProgramGenerator` is extended to handle `IndexExpr`:
-
-```cpp
-// In ExprProgramGenerator.cpp
-
-void ExprProgramGenerator::generate(const IndexExpr* expr) {
-    // Get the VarDecl from the base SymbolExpr
-    const SymbolExpr* baseExpr = static_cast<const SymbolExpr*>(expr->getBase());
-    VarDecl* varDecl = baseExpr->getSymbol()->getVarDecl();
-
-    // Look up the ColumnTag via standard variable lookup
-    ColumnTag tableTag = _pipelineBuilder->getVariableTag(varDecl);
-
-    if (expr->hasLiteralIndex()) {
-        // Compile-time optimization: index is known at compile time
-        size_t fieldIndex = expr->getLiteralIndex();
-
-        // Emit instruction to extract the ColumnString* at fieldIndex
-        // from the ColumnStringTable (no runtime bounds check needed if
-        // schema is validated at prepare time)
-        emitStringTableIndexLiteral(tableTag, fieldIndex);
-    } else {
-        // Runtime indexing: generate code to evaluate the index expression
-        generate(expr->getIndexExpr());
-
-        // Emit instruction to extract the ColumnString* at runtime index
-        // from the ColumnStringTable (includes bounds checking)
-        emitStringTableIndexDynamic(tableTag);
-    }
-}
-
-void ExprProgramGenerator::generate(const PropertyExpr* expr) {
-    if (expr->isCSVHeaderAccess()) {
-        // Get VarDecl and column name
-        VarDecl* varDecl = /* from base SymbolExpr */;
-        std::string_view columnName = expr->getPropertyName();
-
-        // Look up the ColumnTag via standard variable lookup
-        ColumnTag tableTag = _pipelineBuilder->getVariableTag(varDecl);
-
-        // Emit instruction to extract the ColumnString* by header name
-        // Header name -> field index resolution happens at runtime
-        emitStringTableIndexByHeader(tableTag, columnName);
+void CSVSourceProcessor::execute() {
+    const size_t rowsRead =
+        _parser->readChunk(_ctxt->getChunkSize(), _outputTable);
+    if (rowsRead == 0) {
+        // log statistics
+        finish();
         return;
     }
-
-    // ... existing property access logic ...
+    _output.getPort()->writeData();
 }
 ```
 
-**Runtime behavior**:
-- `emitStringTableIndexLiteral(tag, index)`: Extracts the `ColumnString*` at compile-time known `index` from the `ColumnStringTable`. Bounds can optionally be validated at prepare time if schema is known.
-- `emitStringTableIndexDynamic(tag)`: Pops the index from the evaluation stack and extracts the `ColumnString*` at that index from the `ColumnStringTable`. Includes runtime bounds checking; raises a runtime error if index is out of bounds or negative.
-- `emitStringTableIndexByHeader(tag, name)`: Looks up header name in `CSVParser::getHeaders()`, then extracts the corresponding `ColumnString*`
-- If index is out of bounds or header not found, a runtime error is raised
+### Storage Layer
 
-### Conversion Functions
-
-Add to `FunctionDecls`:
+#### ColumnStringTable (`storage/columns/ColumnStringTable.h`)
 
 ```cpp
-// query/plan/FunctionDecls.h
+class ColumnStringTable : public Column {
+public:
+    using StringColumn = ColumnVector<std::string>;
 
-// Type conversion functions for CSV data
-struct ToIntegerFunc {
-    static constexpr const char* name = "toInteger";
-    static EvaluatedType returnType() { return EvaluatedType::Integer; }
-    static void validate(const ExprChain* args);  // Expects 1 String arg
-};
+    ColumnStringTable();
+    ~ColumnStringTable() override;
 
-struct ToFloatFunc {
-    static constexpr const char* name = "toFloat";
-    static EvaluatedType returnType() { return EvaluatedType::Double; }
-    static void validate(const ExprChain* args);  // Expects 1 String arg
-};
+    size_t getFieldCount() const { return _columns.size(); }
+    size_t getRowCount() const;
+    size_t size() const override { return getRowCount(); }
 
-struct ToBooleanFunc {
-    static constexpr const char* name = "toBoolean";
-    static EvaluatedType returnType() { return EvaluatedType::Bool; }
-    static void validate(const ExprChain* args);  // Expects 1 String arg
-};
+    StringColumn* getFieldColumn(size_t index) const;
+    void addFieldColumn(StringColumn* col);
+    void clear();
 
-struct ToStringFunc {
-    static constexpr const char* name = "toString";
-    static EvaluatedType returnType() { return EvaluatedType::String; }
-    static void validate(const ExprChain* args);  // Expects 1 numeric/bool arg
+    void assign(const Column* other) override;
+    void assignFromLine(const Column* other,
+                        size_t startLine, size_t rowCount) override;
+
+    static consteval auto staticKind() { return _staticKind; }
+
+private:
+    static constexpr auto _staticKind =
+        ColumnKind::code<ColumnStringTable>();
+    std::vector<StringColumn*> _columns;
 };
 ```
 
-Implementation in `FuncEvalNode`:
+Key design points:
+- Field columns are `ColumnVector<std::string>` (owned strings, not views — views would dangle after mmap unmap)
+- Field columns are allocated externally from `LocalMemory` and added via `addFieldColumn()`
+- Header names are **not** stored in the column — they live in `PipelineGenerator::_csvHeaders`
+- `assign()` and `assignFromLine()` delegate to each field column, asserting field count match
 
-| Function | Input | Output | Error Behavior |
-|----------|-------|--------|----------------|
-| `toInteger(s)` | String | Integer (int64_t) | Runtime error if unparseable |
-| `toFloat(s)` | String | Double | Runtime error if unparseable |
-| `toBoolean(s)` | String | Bool | "true"/"false" case-insensitive; error otherwise |
-| `toString(v)` | Integer/Double/Bool | String | Format as string |
+### CSV Parser
+
+#### CSVParser (`io/csv/CSVParser.h`)
+
+```cpp
+class CSVParser {
+public:
+    static constexpr size_t DEFAULT_MMAP_CHUNK_SIZE =
+        512 * 1024 * 1024;
+
+    CSVParser(const fs::Path& path, bool hasHeaders,
+              CSVErrorMode errorMode, size_t expectedFieldCount,
+              size_t mmapChunkSize = DEFAULT_MMAP_CHUNK_SIZE);
+    ~CSVParser();
+
+    size_t readChunk(size_t maxRows, ColumnStringTable* output);
+
+    size_t getLinesRead() const;
+    size_t getLinesSkipped() const;
+
+    // RFC 4180 line parser (static, used by peekFileStructure too)
+    static bool parseCSVLine(const std::string& line,
+                             std::vector<std::string>& fields);
+
+    // Discover field count and headers without full parse
+    static void peekFileStructure(const fs::Path& path,
+                                  bool hasHeaders,
+                                  CSVFileInfo& info);
+};
+```
+
+#### CSVErrorMode (`io/csv/CSVErrorMode.h`)
+
+```cpp
+enum class CSVErrorMode : uint8_t {
+    Fail,
+    Skip,
+};
+```
+
+#### CSVFileInfo (`io/csv/CSVFileInfo.h`)
+
+```cpp
+struct CSVFileInfo {
+    std::vector<std::string> _headers;
+    size_t _fieldCount {0};
+};
+```
+
+#### Parsing details
+
+- **mmap-based I/O**: File mapped in 512MB chunks. Handles lines spanning chunk boundaries via a line buffer.
+- **RFC 4180**: Quoted fields, escaped quotes (`""`), empty fields, CRLF/LF line endings.
+- **BOM handling**: UTF-8 BOM (0xEF 0xBB 0xBF) skipped at file start.
+- **peekFileStructure()**: mmaps a small region (64KB), parses the first one or two lines to discover field count and headers. Used by `PipelineGenerator` before creating the processor.
+- **Error handling**: `CSVErrorMode::Fail` throws on malformed lines. `CSVErrorMode::Skip` logs a warning and continues. Statistics tracked via `_linesRead` / `_linesSkipped`.
+
+### Expression Lowering
+
+#### ExprProgramGenerator (`query/plan/ExprProgramGenerator.cpp`)
+
+**IndexExpr** — `row[i]`:
+
+Looks up the `ColumnStringTable` via the alias `VarDecl` → `ColumnTag` mapping, then returns the field column at the literal index. Dynamic (non-literal) indices throw at plan time.
+
+```cpp
+Column* ExprProgramGenerator::generateIndexExpr(
+        const IndexExpr* indexExpr) {
+    if (!indexExpr->hasLiteralIndex()) {
+        throw PlannerException(
+            "Dynamic CSV row indexing not yet supported");
+    }
+    // look up ColumnStringTable via VarDecl → ColumnTag
+    auto* table = static_cast<ColumnStringTable*>(...);
+    const size_t fieldIdx = indexExpr->getLiteralIndex();
+    // bounds check against table->getFieldCount()
+    return table->getFieldColumn(fieldIdx);
+}
+```
+
+**PropertyExpr** — `row.name`:
+
+Searches `PipelineGenerator::getCSVHeaders()` for the header name, then returns the corresponding field column.
+
+```cpp
+Column* ExprProgramGenerator::generatePropertyExpr(
+        const PropertyExpr* propExpr) {
+    if (propExpr->isStringTableHeaderAccess()) {
+        // look up ColumnStringTable via VarDecl → ColumnTag
+        auto* table = static_cast<ColumnStringTable*>(...);
+        const auto& headers = _gen->getCSVHeaders();
+        // linear search for header name → field index
+        return table->getFieldColumn(i);
+    }
+    // ... normal property handling ...
+}
+```
+
+**Type conversion functions** — `toInteger()`, `toFloat()`, `toBoolean()`:
+
+Each takes a single `String` argument column and produces an optional result column via a conversion operator:
+
+```cpp
+if (funcName == "toInteger") {
+    resCol = _gen->memory()
+        .alloc<ColumnOptVector<types::Int64::Primitive>>();
+    _exprProg->addInstr(OP_TO_INTEGER, resCol, argCol, nullptr);
+}
+// analogous for toFloat (OP_TO_FLOAT) and toBoolean (OP_TO_BOOLEAN)
+```
+
+The result is `ColumnOptVector<T>` (nullable) because the conversion can fail on unparseable values.
+
+### Memory Registration
+
+#### ContainerKind (`storage/columns/ContainerKind.h`)
+
+`ColumnStringTable` is registered as a non-template type:
+
+```cpp
+using Types = KindTypes<
+    TemplateKind<ColumnVector>,
+    TemplateKind<ColumnConst>,
+    TemplateKind<ColumnSet>,
+    ColumnMask,
+    ColumnStringTable>;
+```
+
+#### LocalMemory (`memory/LocalMemory.h`)
+
+A memory pool is registered for `ColumnStringTable`:
+
+```cpp
+MakeMemoryPool<ColumnStringTable>::type
+```
+
+This enables `_mem->alloc<ColumnStringTable>()` and `_mem->allocSame(col)` for ColumnStringTable instances.
+
+### Dataframe Shape Propagation
+
+`ColumnStringTable` is a composite column — `allocSame()` creates an empty shell with no field columns. The `populateStringTableShape()` helper in `PipelineBuilder.cpp` handles this:
+
+```cpp
+void populateStringTableShape(LocalMemory* mem,
+                              Column* dest, const Column* src) {
+    if (dest->getKind() != ColumnStringTable::staticKind()) return;
+    const auto* srcTable =
+        static_cast<const ColumnStringTable*>(src);
+    auto* dstTable = static_cast<ColumnStringTable*>(dest);
+    for (size_t i = 0; i < srcTable->getFieldCount(); i++) {
+        dstTable->addFieldColumn(
+            mem->alloc<ColumnStringTable::StringColumn>());
+    }
+}
+```
+
+This is called from `duplicateDataframeShape()` after each `allocSame()` to ensure downstream dataframes have the right number of field columns.
 
 ### Error Handling
 
-#### CSV Parsing Errors
+**CSV parsing errors** (depend on error mode):
+- Wrong field count, unterminated quotes, invalid UTF-8
+- `ON ERROR FAIL` (default): throws `TuringException`, aborts query
+- `ON ERROR SKIP`: logs warning, increments `_linesSkipped`, continues
 
-These errors occur when a line cannot be parsed:
-- Wrong number of columns in a line
-- Unterminated quoted field
-- Invalid UTF-8 encoding
+**Plan-time errors** (always abort):
+- `row[i]` where `i >= fieldCount`: index out of range
+- `row.name` where `name` not in headers: header not found
+- `row[expr]` where `expr` is not a literal: not yet supported
 
-**Behavior depends on error mode**:
-- `ON ERROR FAIL` (default): Abort query with runtime error
-- `ON ERROR SKIP`: Skip the malformed line, log a warning, and continue
+**File errors** (always abort):
+- File not found at `CSVSourceProcessor::prepare()` time
 
-#### Runtime Errors (Always Abort Query)
+**Logging**: On completion, `CSVSourceProcessor` logs lines read and lines skipped (if any).
 
-These errors always abort the query regardless of error mode:
+### Restrictions
 
-**Expression evaluation errors**:
-- `row[e]` where `e >= fieldCount`: Index out of bounds
-- `row[e]` where `e < 0`: Negative index
-- `row.columnName` where `columnName` not in headers: Unknown header
-- `toInteger("abc")`: Cannot parse value
-
-**File errors**:
-- File not found: Error at `CSVSourceProcessor::prepare()` time
-
-### Edge Cases
-
-#### Empty File
-An empty CSV file (0 bytes) produces an empty result set with 0 columns. This is not an error.
-
-#### Header-Only File
-A file with only a header line (when using `WITH HEADERS`) produces an empty result set with the schema defined by the headers. This is not an error.
-
-#### Duplicate Column Names in Headers
-If a CSV file has duplicate column names in the header row, this is a runtime error when the first chunk is read. Users must fix the CSV or use index-based access without `WITH HEADERS`.
-
-#### Maximum Line Length
-No explicit limit on line length. Lines are bounded only by available memory for the line buffer (used when a line spans mmap chunk boundaries). Extremely long lines (>1GB) may cause memory issues.
-
-#### Empty Fields
-Empty fields (e.g., `a,,b`) are valid and produce empty strings (`""`).
-
-### File Path Handling
-
-- **Absolute paths**: Used as-is
-- **Relative paths**: Resolved relative to the current working directory of the TuringDB server process
-- **Path validation**: Paths are validated at `CSVSourceProcessor::prepare()` time; file must exist and be readable
-- **Symlinks**: Followed (standard filesystem behavior)
-
-### Encoding
-
-- **Required encoding**: UTF-8
-- **BOM handling**: UTF-8 BOM (0xEF 0xBB 0xBF) at file start is skipped if present
-- **Invalid UTF-8**: Lines with invalid UTF-8 sequences cause a runtime error
-- **Other encodings**: Not supported. Users must convert files to UTF-8 before import.
-
-### Concurrency
-
-#### Thread Safety
-- Each `CSVParser` instance operates on its own file descriptor and mmap regions
-- Multiple concurrent `LOAD CSV` queries can run simultaneously without interference
-- No shared mutable state between parser instances
-
-#### Concurrent File Access
-- The CSV file should not be modified during import
-- If the file is modified, behavior is undefined (may read partial data or fail)
-- Consider using file locking at the application level if concurrent writes are possible
-
-### Restrictions (Phase 1)
-
-#### Single LOAD CSV Per Query
-Multiple `LOAD CSV` statements in a single query are **not supported** in Phase 1:
-
-```cypher
--- NOT SUPPORTED in Phase 1
-LOAD CSV 'a.csv' AS a
-LOAD CSV 'b.csv' AS b
-MATCH ...
-```
-
-**Rationale**: Multiple CSV sources would require Cartesian product or explicit join semantics, significantly complicating the implementation. Users should use separate queries.
-
-#### RETURN Without CREATE/MATCH
-Using `LOAD CSV` with only `RETURN` is **supported** and useful for debugging/preview:
-
-```cypher
-LOAD CSV 'file.csv' AS row
-RETURN row[0], row[1], toInteger(row[2])
-LIMIT 10
-```
-
-This streams the first 10 rows without creating any graph data.
-
-### Stmt Type Registration
-
-Add `LOAD_CSV` to the `Stmt::Kind` enum:
-
-```cpp
-// In Stmt.h or equivalent
-enum class Kind {
-    // ... existing ...
-    LOAD_CSV,        // NEW
-    LOAD_EMBEDDING_CSV,  // NEW (Phase 2)
-};
-```
-
-### Progress and Statistics
-
-#### Statistics Collection
-`CSVParser` tracks and exposes:
-- `getLinesRead()`: Total lines successfully parsed
-- `getLinesSkipped()`: Lines skipped due to errors (only incremented in `ON ERROR SKIP` mode)
-
-#### Logging
-
-At the end of import, log a summary:
-```
-[INFO] LOAD CSV completed: 1,234,567 lines read
-```
-
-When using `ON ERROR SKIP` and lines were skipped:
-```
-[INFO] LOAD CSV completed: 1,234,567 lines read, 42 lines skipped
-[WARN] LOAD CSV: skipped line 12345 (wrong column count: expected 5, got 3)
-[WARN] LOAD CSV: skipped line 67890 (invalid UTF-8 sequence)
-```
-
-#### Progress Indication (Future)
-Progress reporting during import is deferred to future work. For now, users can monitor file read progress via OS-level tools if needed.
+**Phase 1 restrictions:**
+- Single `LOAD CSV` per query (no Cartesian product / join semantics)
+- Dynamic index expressions (`row[i]` where `i` is not a literal) throw at plan time
+- Local files only (no S3/HTTP)
+- Comma delimiter only (RFC 4180)
+- No `WITH` clause filtering
+- UTF-8 only (BOM handled)
 
 ---
 
@@ -1162,6 +919,58 @@ CREATE (a)-[:RELATED]->(b)
    ```
 
 5. **Parallel CSV Parsing**: Split file for parallel processing
+
+---
+
+## Implementation State
+
+Phase 1 status as of the `load-csv` branch.
+
+### What's Implemented
+
+The full pipeline is wired across all layers:
+
+- **Parser/Grammar**: `LOAD CSV` as a `readingStatement` — all syntax variants (`WITH HEADERS`, `ON ERROR SKIP/FAIL`)
+- **AST**: `LoadCSVStmt`, `IndexExpr` (with literal index optimization)
+- **Analyzer**: `ReadStmtAnalyzer` types alias as `StringTable`; `ExprAnalyzer` handles `row[i]` and `row.name`
+- **Plan**: `LoadCSVNode` produced by `ReadStmtGenerator`
+- **Pipeline**: `CSVSourceProcessor` (mmap chunked reading), `CSVParser` (RFC 4180), `ColumnStringTable` storage
+- **Expressions**: `ExprProgramGenerator` resolves `row[i]` to field columns and `row.name` via header lookup
+- **Type conversions**: `toInteger()`, `toFloat()`, `toBoolean()`
+
+### What's Tested
+
+Only standalone `LOAD CSV + RETURN` queries (two regression test suites):
+
+- `regress/load_csv/` — index access, header access, LIMIT
+- `regress/load_csv_stations/` — real-world 42KB CSV, all cells validated against Python `csv.reader`
+
+### Feature Matrix
+
+| Feature | Spec | Implemented | Tested |
+|---------|------|-------------|--------|
+| `LOAD CSV ... RETURN` | Yes | Yes | Yes |
+| `WITH HEADERS` | Yes | Yes | Yes |
+| `ON ERROR SKIP/FAIL` | Yes | Yes | No |
+| `row[i]` (literal index) | Yes | Yes | Yes |
+| `row[expr]` (dynamic index) | Yes | No (throws) | — |
+| `row.name` (header access) | Yes | Yes | Yes |
+| `toInteger/toFloat/toBoolean` | Yes | Yes | No |
+| `LOAD CSV + CREATE` | Yes | Untested | No |
+| `LOAD CSV + MATCH` | Yes | Untested | No |
+| `LOAD CSV + MATCH + CREATE` | Yes | Untested | No |
+| `LIMIT` | Implicit | Yes | Yes |
+| Multiple `LOAD CSV` per query | Phase 2 | No | — |
+| `WITH` clause filtering | Phase 2 | No | — |
+| Remote sources (S3/HTTP) | Phase 2 | No | — |
+| Custom delimiters | Phase 2 | No | — |
+| `LOAD EMBEDDING CSV` | Phase 2 | No | — |
+
+### Key Gaps
+
+1. **Graph composability untested**: `LOAD CSV` parses as a `readingStatement` and should compose with `MATCH`/`CREATE`, but no regression test exercises this path.
+2. **Dynamic indexing**: `row[expr]` where `expr` is not a literal integer throws at plan time.
+3. **Error mode and type conversions**: Implemented but not covered by regression tests.
 
 ---
 
