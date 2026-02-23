@@ -149,14 +149,55 @@ struct CompareInner {
 
 using Compare = ColumnSingleDispatcher<OrderedTypes::Allowed, CompareInner, OrderedTypes::Excluded>;
 
-/* void mergeAdjacent(OrderByProcessor::Indices& indices,
+void mergeAdjacent(OrderByProcessor::Indices& indices,
+                   const Dataframe* srcDf,
                    const OrderByProcessor::OrderByKeys& keys,
                    const OrderByProcessor::SortedRun& run1,
                    const OrderByProcessor::SortedRun& run2) {
     bioassert(run1._start == 0, "First run did not start from 0.");
     bioassert(run1._start + run1._size == run2._start,
               "Second run did not start from the end of the first.");
-} */
+
+    // Do one pass through all Ordered keys to ensure columns are valid
+    for (const auto& [tag, _] : keys) {
+        const NamedColumn* ncol = srcDf->getColumn(tag);
+        bioassert(ncol,
+                  "Attempted to merge adjacent runs, but could not find Column {}.",
+                  tag.getValue());
+
+        bioassert(ncol->getColumn(),
+                  "Attempted to merge adjacent runs, but Column {} was invalid.",
+                  tag.getValue());
+    }
+
+    auto cmp = [&](size_t i, size_t j) {
+        int comparisonResult = 0;
+        CompareInner cmp {._i = i, ._j = j, ._res = comparisonResult};
+
+        for (const auto& [tag, asc] : keys) {
+            // Validity of columns checked above
+            Column* col = srcDf->getColumn(tag)->getColumn();
+
+            Compare::dispatch(col, cmp);
+
+            // Values are not equal; return according to direction of ordering
+            if (comparisonResult != 0) {
+                return asc ? comparisonResult < 0 : comparisonResult > 0;
+            }
+            // Values are equal, check next column
+        }
+        // All rows equal
+        return false;
+    };
+
+    auto run1Start = std::begin(indices) + run1._start;
+    auto run1End = run1Start + run1._size;
+
+    auto run2Start = std::begin(indices) + run2._start;
+    auto run2End = run2Start + run2._size;
+
+    std::inplace_merge(run1Start, run1End, run2End, cmp);
+}
 
 using NarrowRanges = ColumnSingleDispatcher<OrderedTypes::Allowed,
                                             NarrowTieRanges,
@@ -353,6 +394,30 @@ void OrderByProcessor::memorise() {
 }
 
 void OrderByProcessor::merge() {
+    if (_sortedRuns.empty()) {
+        return;
+    }
+
+    const size_t memRowCount = _memory.getLogicalRowCount();
+
+    if (memRowCount == 0) {
+        return;
+    }
+
+    // Reset @ref _indices, we now need to determine the correct order of all rows from
+    // each sorted run in memory
+    _indices->resize(memRowCount);
+    std::ranges::iota(*_indices, 0);
+
+    SortedRun mergedRun = _sortedRuns.front();
+
+    for (const SortedRun& run : _sortedRuns | rv::drop(1)) {
+        const size_t thisRunsSize = run._size;
+
+        mergeAdjacent(*_indices, &_memory, _orderedKeys, mergedRun, run);
+
+        mergedRun._size += thisRunsSize;
+    }
 }
 
 void OrderByProcessor::prepare(ExecutionContext*) {
@@ -392,12 +457,13 @@ void OrderByProcessor::execute() {
     }
 
     if (_state == State::MERGE_SORTED_RUNS) {
-        // TODO: Merge sorted runs
-        // TODO: Output total ordering in chunks
+        merge();
+        // @ref _indices now contains total order of all rows from memory
         return;
     }
 
     if (_state == State::OUTPUT_FROM_MEMORY) {
+        // TODO: Output total ordering in chunks
         return;
     }
 }
