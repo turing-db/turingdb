@@ -149,14 +149,14 @@ struct CompareInner {
 
 using Compare = ColumnSingleDispatcher<OrderedTypes::Allowed, CompareInner, OrderedTypes::Excluded>;
 
-void mergeAdjacent(OrderByProcessor::Indices& indices,
+/* void mergeAdjacent(OrderByProcessor::Indices& indices,
                    const OrderByProcessor::OrderByKeys& keys,
                    const OrderByProcessor::SortedRun& run1,
                    const OrderByProcessor::SortedRun& run2) {
     bioassert(run1._start == 0, "First run did not start from 0.");
     bioassert(run1._start + run1._size == run2._start,
               "Second run did not start from the end of the first.");
-}
+} */
 
 using NarrowRanges = ColumnSingleDispatcher<OrderedTypes::Allowed,
                                             NarrowTieRanges,
@@ -234,17 +234,27 @@ void OrderByProcessor::project(const Column* src, Column* dst, size_t fromRow) {
 }
 
 void OrderByProcessor::subsort() {
-    // Ensure all columns are equal size
-    const auto sizeIt = std::ranges::adjacent_find(_orderedKeys,
-                               [](const OrderByKey& a, const OrderByKey& b) {
-                                   return a._col->size() != b._col->size();
-                               });
-    bioassert(sizeIt == end(_orderedKeys),
-              "Attempted to sort non-equal length columns in ORDER BY");
+    const Dataframe* input = _input.getDataframe();
+
+    const auto getOrderedColumn = [input](const OrderByKey& key) -> Column* {
+        return input->getColumn(key._col)->getColumn();
+    };
+
+    { // Ensure all columns are equal size
+        const auto orderCols = _orderedKeys | rv::transform(getOrderedColumn);
+
+        const auto sizeIt =
+            std::ranges::adjacent_find(orderCols, [](const Column* a, const Column* b) {
+                return a->size() != b->size();
+            });
+
+        bioassert(sizeIt == end(orderCols),
+                  "Attempted to sort non-equal length columns in ORDER BY");
+    }
 
     { // Sort the entirety of the first column
         const OrderByKey& dominantKey = _orderedKeys.front();
-        Column* dominantCol = dominantKey._col;
+        Column* dominantCol = getOrderedColumn(dominantKey);
         const bool asc = dominantKey._asc;
         const size_t size = dominantCol->size();
 
@@ -260,7 +270,7 @@ void OrderByProcessor::subsort() {
     // If the ordering is completely determined by the first key (no tied-values), then
     // nothing else to sort.
     if (_tieRanges.empty()) {
-        // TODO: Remove when outputting from memory
+        // TODO: Emit straight into memory, not outcols
         const Dataframe* inDf = _input.getDataframe();
         const auto& inCols = inDf->cols();
         Dataframe* outDf = _output.getDataframe();
@@ -277,13 +287,15 @@ void OrderByProcessor::subsort() {
     // Sort only the subspans of tied values (stored in @ref _tiedRanges) in the remaining
     // columns
     const auto& remainingKeys = _orderedKeys | rv::drop(1);
-    for (auto& [column, asc] : remainingKeys) {
+    for (const OrderByKey& key : remainingKeys) {
         // No ties: nothing left to sort
         if (_tieRanges.empty()) {
             break;
         }
 
-        OrderColumnSubrange subrangeSorter {._indices = *_indices, ._asc = asc};
+        Column* column = getOrderedColumn(key);
+
+        OrderColumnSubrange subrangeSorter {._indices = *_indices, ._asc = key._asc};
 
         // Sort each individual range
         for (const auto& [start, size] : _tieRanges) {

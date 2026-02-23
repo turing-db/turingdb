@@ -1510,10 +1510,9 @@ PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* no
         const NamedColumn* orderedNamedColumn = incomingDf->getColumn(keyTag);
         bioassert(orderedNamedColumn,
                   "Dataframe did not have column required by ORDER BY.");
-        Column* keyCol = orderedNamedColumn->getColumn();
 
         const bool asc = key->getType() == OrderByType::ASC;
-        orderbyKeys.emplace_back(keyCol, asc);
+        orderbyKeys.emplace_back(keyTag, asc);
     }
 
     const PipelineBlockOutputInterface& output = _builder.addOrderBy(orderbyKeys);
