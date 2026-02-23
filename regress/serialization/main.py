@@ -7,8 +7,6 @@ import os
 import shutil
 import time
 
-print("Beginning of main.py file")
-
 GREEN = "\033[0;32m"
 BLUE = "\033[0;34m"
 NC = "\033[0m"
