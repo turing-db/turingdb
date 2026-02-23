@@ -19,6 +19,7 @@
 #include "dataframe/NamedColumn.h"
 
 #include "BioAssert.h"
+#include "iterators/ChunkConfig.h"
 
 using namespace db;
 
@@ -109,6 +110,8 @@ struct NarrowTieRanges {
 struct ProjectOrder {
     Column* _res {nullptr};
     ColumnVector<size_t>* _indices {nullptr};
+    size_t _fromRow {0};
+    size_t _numRows {0};
 
     template <typename T>
     void operator()(const ColumnVector<T>* source) {
@@ -121,9 +124,12 @@ struct ProjectOrder {
         const size_t curSize = casted->size();
 
         casted->resize(curSize + incomingRows);
+        bioassert(casted->size() >= _fromRow + _numRows,
+                  "Attempted to write indexes [{}, {}) in Column of size {}.", _fromRow,
+                  _fromRow + _numRows, casted->size());
 
         auto& resd = casted->getRaw();
-        for (size_t i = 0; i < incomingRows; i++) {
+        for (size_t i = _fromRow; i < _fromRow + _numRows; i++) {
             resd[i] = srcd[indicesd[i]];
         }
     }
@@ -269,8 +275,9 @@ void OrderByProcessor::addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t s
     }
 }
 
-void OrderByProcessor::project(const Column* src, Column* dst, size_t fromRow) {
-    ProjectOrder project {._res = dst, ._indices = _indices};
+void OrderByProcessor::project(const Column* src, Column* dst, size_t numRows, size_t fromRow) {
+    ProjectOrder project {
+        ._res = dst, ._indices = _indices, ._fromRow = fromRow, ._numRows = numRows};
     Projection::dispatch(src, project);
 }
 
@@ -311,17 +318,6 @@ void OrderByProcessor::subsort() {
     // If the ordering is completely determined by the first key (no tied-values), then
     // nothing else to sort.
     if (_tieRanges.empty()) {
-        // TODO: Emit straight into memory, not outcols
-        const Dataframe* inDf = _input.getDataframe();
-        const auto& inCols = inDf->cols();
-        Dataframe* outDf = _output.getDataframe();
-        const auto& outCols = outDf->cols();
-        for (size_t col = 0; col < inDf->size(); col++) {
-            const Column* src = inCols[col]->getColumn();
-            Column* dest = outCols[col]->getColumn();
-            project(src, dest);
-        }
-
         return;
     }
 
@@ -353,17 +349,6 @@ void OrderByProcessor::subsort() {
         // Shrink tie ranges
         NarrowRanges::dispatch(column, narrowTieRanges);
     }
-
-    // TODO: Remove when outputting from memory
-    const Dataframe* inDf = _input.getDataframe();
-    const auto& inCols = inDf->cols();
-    Dataframe* outDf = _output.getDataframe();
-    const auto& outCols = outDf->cols();
-    for (size_t col = 0; col < inDf->size(); col++) {
-        const Column* src = inCols[col]->getColumn();
-        Column* dest = outCols[col]->getColumn();
-        project(src, dest);
-    }
 }
 
 void OrderByProcessor::memorise() {
@@ -384,7 +369,7 @@ void OrderByProcessor::memorise() {
     for (size_t col = 0; col < numCols; col++) {
         const Column* inputCol = inputCols.at(col)->getColumn();
         Column* memoryCol = memoryCols.at(col)->getColumn();
-        project(inputCol, memoryCol, runStart);
+        project(inputCol, memoryCol, runLength, runStart);
     }
 
     // Log this run
@@ -448,23 +433,49 @@ void OrderByProcessor::execute() {
         }
 
         inputPort->consume();
-
-        // XXX: Temporary, for testing: Always finish in one cycle
-        outputPort->writeData();
-
-        finish();
         return;
     }
 
     if (_state == State::MERGE_SORTED_RUNS) {
         merge();
         // @ref _indices now contains total order of all rows from memory
+
+        _state = State::OUTPUT_FROM_MEMORY;
+
+         // Reuse this member as a pointer to how far through memory we have emitted
+         _nextMemoryStart = 0;
         return;
     }
 
     if (_state == State::OUTPUT_FROM_MEMORY) {
-        // TODO: Output total ordering in chunks
-        return;
+         const size_t memoryRowCount = _memory.getLogicalRowCount();
+         const size_t remainingToWrite = memoryRowCount - _nextMemoryStart;
+
+         if (remainingToWrite == 0) {
+             outputPort->close();
+             finish();
+             return;
+         }
+
+         const size_t rowsToWrite = std::min(remainingToWrite, ChunkConfig::CHUNK_SIZE);
+
+         const Dataframe* outDf = _output.getDataframe();
+
+         for (size_t i = 0; i < outDf->size(); i++) {
+             const Column* memoryCol = _memory.cols()[i]->getColumn();
+             Column* outCol = outDf->cols()[i]->getColumn();
+
+             project(memoryCol, outCol, rowsToWrite, _nextMemoryStart);
+         }
+
+         outputPort->writeData();
+
+         _nextMemoryStart += rowsToWrite;
+
+         if (_nextMemoryStart == memoryRowCount) {
+             outputPort->close();
+             finish();
+         }
     }
 }
 
