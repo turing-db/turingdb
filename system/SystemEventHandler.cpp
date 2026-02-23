@@ -2,6 +2,7 @@
 
 #include <signal.h>
 #include <unistd.h>
+#include <limits.h>
 #include <sys/fcntl.h>
 #include <sys/socket.h>
 #include <sys/signal.h>
@@ -121,11 +122,24 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
         return false;
     }
 
+    char savedCwd[PATH_MAX];
+    if (::getcwd(savedCwd, sizeof(savedCwd)) == nullptr) {
+        ::close(sockFd);
+        return false;
+    }
+
+    if (::chdir(socketPath.parent().c_str()) != 0) {
+        ::close(sockFd);
+        return false;
+    }
+
     sockaddr_un addr {};
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, socketPath.c_str(), sizeof(addr.sun_path) - 1);
+    const std::string& sockName = socketPath.get();
+    strncpy(addr.sun_path, sockName.c_str(), sizeof(addr.sun_path) - 1);
 
     const int res = ::connect(sockFd, (sockaddr*)&addr, sizeof(addr));
+    ::chdir(savedCwd);
     if (res < 0) {
         ::close(sockFd);
         return false;
@@ -179,12 +193,24 @@ bool SystemEventHandler::initializeImpl() {
         }
     }
 
-    // Binding socket to file
+    // Bind using the bare filename to stay within the 104/108 char sun_path
+    // limit. chdir into the socket directory, bind, then restore the cwd.
+    char savedCwd[PATH_MAX];
+    if (::getcwd(savedCwd, sizeof(savedCwd)) == nullptr) {
+        return false;
+    }
+
+    if (::chdir(_socketPath.parent().c_str()) != 0) {
+        return false;
+    }
+
     ::sockaddr_un addr {};
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, _socketPath.c_str(), sizeof(addr.sun_path) - 1);
+    const std::string_view sockName = _socketPath.filename();
+    strncpy(addr.sun_path, sockName.data(), sizeof(addr.sun_path) - 1);
 
     const int bindRes = ::bind(_sockFd, (sockaddr*)&addr, sizeof(addr));
+    ::chdir(savedCwd);
 
     if (bindRes < 0 || ::listen(_sockFd, 4) < 0) {
         return false;
