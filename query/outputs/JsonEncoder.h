@@ -15,37 +15,40 @@ template <Writer WriterT>
 struct ChunkJsonEncoder {
     WriterT& _writer;
     const size_t _logicalRowCount {0};
-    bool _first {true};
 
     template <typename T>
     void operator()(const ColumnVector<T>* col) {
-        _first = true;
+        if (_logicalRowCount == 0) {
+            return;
+        }
 
-        for (size_t row = 0; row < _logicalRowCount; row++) {
-            if (!_first) {
-                _writer.write(",");
-            }
+        const T& firstValue = col->operator[](0);
+        encodeValue(firstValue);
 
-            const T& value = col->at(row);
+        for (size_t row = 1; row < _logicalRowCount; row++) {
+            _writer.write(",");
+
+            const T& value = col->operator[](row);
 
             encodeValue(value);
-            _first = false;
         }
     }
 
     template <typename T>
     void operator()(const ColumnConst<T>* col) {
-        _first = true;
+        if (_logicalRowCount == 0) {
+            return;
+        }
 
-        for (size_t row = 0; row < _logicalRowCount; row++) {
-            if (!_first) {
-                _writer.write(",");
-            }
+        const T& firstValue = col->operator[](0);
+        encodeValue(firstValue);
 
-            const T& value = col->at(row);
+        for (size_t row = 1; row < _logicalRowCount; row++) {
+            _writer.write(",");
+
+            const T& value = col->operator[](row);
 
             encodeValue(value);
-            _first = false;
         }
     }
 
@@ -182,7 +185,12 @@ public:
             const Column* col = namedCol->getColumn();
 
             using Types = OutputtedTypes;
-            ColumnSingleDispatcher<Types::Allowed, ChunkJsonEncoder<WriterT>, Types::Excluded>::dispatch(col, encoder);
+            using Encoder = ColumnSingleDispatcher<Types::Allowed,
+                                                   ChunkJsonEncoder<WriterT>,
+                                                   Types::Excluded>;
+
+            Encoder::dispatch(col, encoder);
+
             end();
         }
 
