@@ -122,24 +122,33 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
         return false;
     }
 
+    // Save current working directory
     char savedCwd[PATH_MAX];
     if (::getcwd(savedCwd, sizeof(savedCwd)) == nullptr) {
         ::close(sockFd);
         return false;
     }
 
+    // Change working directory to socket directory
+    // This is needed to ensure the socket path is below the 
+    // sun_path length limit (108 chars unix limitation )
     if (::chdir(socketPath.parent().c_str()) != 0) {
         ::close(sockFd);
         return false;
     }
 
+    // Connect to the socket
     sockaddr_un addr {};
     addr.sun_family = AF_UNIX;
-    const std::string& sockName = socketPath.get();
+    const std::string sockName {socketPath.filename()};
     strncpy(addr.sun_path, sockName.c_str(), sizeof(addr.sun_path) - 1);
 
     const int res = ::connect(sockFd, (sockaddr*)&addr, sizeof(addr));
-    ::chdir(savedCwd);
+
+    // Restore working directory
+    [[maybe_unused]] const int res2 = ::chdir(savedCwd);
+
+    // Check connection
     if (res < 0) {
         ::close(sockFd);
         return false;
@@ -158,7 +167,7 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
     const ssize_t nread = ::read(sockFd, buf, sizeof(buf) - 1);
 
     if (nread != 2) {
-        fmt::println("Failed to read 'OK' {}", nread);
+        spdlog::error("Failed to read 'OK' {}", nread);
         ::close(sockFd);
         return false;
     }
@@ -204,14 +213,18 @@ bool SystemEventHandler::initializeImpl() {
         return false;
     }
 
+    // Bind the socket
     ::sockaddr_un addr {};
     addr.sun_family = AF_UNIX;
-    const std::string_view sockName = _socketPath.filename();
+    const std::string sockName {_socketPath.filename()};
     strncpy(addr.sun_path, sockName.data(), sizeof(addr.sun_path) - 1);
 
     const int bindRes = ::bind(_sockFd, (sockaddr*)&addr, sizeof(addr));
-    ::chdir(savedCwd);
 
+    // Restore the working directory
+    [[maybe_unused]] const int res2 = ::chdir(savedCwd);
+
+    // Bind the socket
     if (bindRes < 0 || ::listen(_sockFd, 4) < 0) {
         return false;
     }
