@@ -48,8 +48,6 @@ public:
 
     void listLibraryNames(std::vector<std::string>& out) const;
 
-    std::shared_mutex& getMutex() { return _mutex; }
-
 private:
     mutable std::shared_mutex _mutex;
     std::unique_ptr<StorageManager> _storageManager;
