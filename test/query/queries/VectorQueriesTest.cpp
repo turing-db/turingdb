@@ -84,7 +84,7 @@ TEST_F(VectorQueriesTest, createVectorIndex) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
 
             const auto& cols = df->cols();
 
@@ -109,7 +109,7 @@ TEST_F(VectorQueriesTest, createVectorIndex) {
         "default", &_env->getMem(),
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
-            ASSERT_GE(df->getRowCount(), 1);
+            ASSERT_GE(df->getLogicalRowCount(), 1);
 
             // Check that "embeddings" is in the list
             const auto& cols = df->cols();
@@ -120,7 +120,7 @@ TEST_F(VectorQueriesTest, createVectorIndex) {
             ASSERT_TRUE(nameCol != nullptr);
 
             bool found = false;
-            for (size_t i = 0; i < df->getRowCount(); ++i) {
+            for (size_t i = 0; i < df->getLogicalRowCount(); ++i) {
                 if (nameCol->at(i) == "embeddings") {
                     found = true;
                     break;
@@ -150,7 +150,7 @@ TEST_F(VectorQueriesTest, showVectorIndexes) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2);  // name and dimension columns
-            ASSERT_GE(df->getRowCount(), 1);
+            ASSERT_GE(df->getLogicalRowCount(), 1);
 
             const auto& cols = df->cols();
 
@@ -166,7 +166,7 @@ TEST_F(VectorQueriesTest, showVectorIndexes) {
 
             // Find "test_index" and verify its dimension
             bool found = false;
-            for (size_t i = 0; i < df->getRowCount(); ++i) {
+            for (size_t i = 0; i < df->getLogicalRowCount(); ++i) {
                 if (nameCol->at(i) == "test_index") {
                     ASSERT_EQ(dimCol->at(i), 64) << "Dimension mismatch for test_index";
                     found = true;
@@ -197,7 +197,7 @@ TEST_F(VectorQueriesTest, deleteVectorIndex) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
 
             const auto& cols = df->cols();
 
@@ -224,12 +224,12 @@ TEST_F(VectorQueriesTest, deleteVectorIndex) {
             ASSERT_TRUE(df != nullptr);
 
             // Check that "to_delete" is NOT in the list
-            if (df->getRowCount() > 0) {
+            if (df->getLogicalRowCount() > 0) {
                 const auto& cols = df->cols();
                 const auto* nameCol = cols.at(0)->as<ColumnVector<types::String::Primitive>>();
                 ASSERT_TRUE(nameCol != nullptr);
 
-                for (size_t i = 0; i < df->getRowCount(); ++i) {
+                for (size_t i = 0; i < df->getLogicalRowCount(); ++i) {
                     ASSERT_NE(nameCol->at(i), "to_delete")
                         << "Index 'to_delete' should have been deleted";
                 }
@@ -250,7 +250,7 @@ TEST_F(VectorQueriesTest, createVectorIndexWithCosineMetric) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
 
             const auto& cols = df->cols();
 
@@ -283,7 +283,7 @@ TEST_F(VectorQueriesTest, createVectorIndexWithCosineMetric) {
             ASSERT_TRUE(dimCol != nullptr);
 
             bool found = false;
-            for (size_t i = 0; i < df->getRowCount(); ++i) {
+            for (size_t i = 0; i < df->getLogicalRowCount(); ++i) {
                 if (nameCol->at(i) == "cosine_index") {
                     ASSERT_EQ(dimCol->at(i), 256) << "Dimension mismatch for cosine_index";
                     found = true;
@@ -327,7 +327,7 @@ TEST_F(VectorQueriesTest, loadVectorFromFile) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
-            ASSERT_EQ(df->getRowCount(), 1);
+            ASSERT_EQ(df->getLogicalRowCount(), 1);
 
             const auto& cols = df->cols();
 
@@ -394,7 +394,7 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
-            ASSERT_EQ(df->getRowCount(), k);
+            ASSERT_EQ(df->getLogicalRowCount(), k);
 
             const auto& cols = df->cols();
             const auto* colIds = cols.at(0)->as<ColumnVector<types::UInt64::Primitive>>();
@@ -461,7 +461,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
         "default", &_env->getMem(),
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
-            ASSERT_EQ(df->getRowCount(), k);
+            ASSERT_EQ(df->getLogicalRowCount(), k);
 
             const auto& cols = df->cols();
             const auto* colIds = cols.at(0)->as<ColumnVector<types::UInt64::Primitive>>();
@@ -531,7 +531,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
-            ASSERT_EQ(df->getRowCount(), k);
+            ASSERT_EQ(df->getLogicalRowCount(), k);
 
             const auto& cols = df->cols();
             const auto* colIds = cols.at(0)->as<ColumnVector<types::UInt64::Primitive>>();
@@ -585,7 +585,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
             "default", &_env->getMem(),
             [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
-                nodeCount = df->getRowCount();
+                nodeCount = df->getLogicalRowCount();
             });
         ASSERT_TRUE(matchRes.isOk()) << "MATCH query failed: " << matchRes.getError();
         ASSERT_EQ(nodeCount, 5) << "Expected 5 Document nodes";
@@ -639,7 +639,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
             "default", &_env->getMem(),
             [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
-                ASSERT_EQ(df->getRowCount(), 3) << "Expected 3 vector search results";
+                ASSERT_EQ(df->getLogicalRowCount(), 3) << "Expected 3 vector search results";
             });
         ASSERT_TRUE(searchRes.isOk()) << "Vector search failed: " << searchRes.getError();
     }
@@ -664,7 +664,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2) << "Expected 2 columns (n.id, n.title)";
-            ASSERT_EQ(df->getRowCount(), k) << "Expected " << k << " rows";
+            ASSERT_EQ(df->getLogicalRowCount(), k) << "Expected " << k << " rows";
 
             const auto& cols = df->cols();
 
