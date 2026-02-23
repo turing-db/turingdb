@@ -149,10 +149,9 @@ void ReadStmtAnalyzer::analyze(LoadCSVStmt* loadCSV) {
                    loadCSV);
     }
 
-    VarDecl* decl = _ctxt->getOrCreateNamedVariable(
-                        _ast,
-                        EvaluatedType::StringTable,
-                        alias->getName());
+    VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast,
+                                                     EvaluatedType::StringTable,
+                                                     alias->getName());
 
     loadCSV->setAliasDecl(decl);
 }

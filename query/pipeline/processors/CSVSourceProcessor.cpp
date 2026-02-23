@@ -33,8 +33,11 @@ CSVSourceProcessor* CSVSourceProcessor::create(PipelineV2* pipeline,
                                                CSVErrorMode errorMode,
                                                size_t expectedFieldCount,
                                                ColumnStringTable* outputTable) {
-    auto* proc = new CSVSourceProcessor(path, hasHeaders, errorMode,
-                                        expectedFieldCount, outputTable);
+    auto* proc = new CSVSourceProcessor(path,
+                                        hasHeaders,
+                                        errorMode,
+                                        expectedFieldCount,
+                                        outputTable);
 
     PipelineOutputPort* outPort = PipelineOutputPort::create(pipeline, proc);
     proc->_output.setPort(outPort);
@@ -51,15 +54,13 @@ std::string CSVSourceProcessor::describe() const {
 void CSVSourceProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
-    delete _parser;
+    bioassert(!_parser, "CSVSourceProcessor: parser already exists");
     _parser = new CSVParser(_path, _hasHeaders, _errorMode, _expectedFieldCount);
 
     markAsPrepared();
 }
 
 void CSVSourceProcessor::reset() {
-    delete _parser;
-    _parser = new CSVParser(_path, _hasHeaders, _errorMode, _expectedFieldCount);
 }
 
 void CSVSourceProcessor::execute() {

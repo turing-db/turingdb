@@ -351,8 +351,8 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         expr->setStringTableHeaderAccess(true);
         expr->setType(EvaluatedType::String);
         expr->setDynamic();
-        auto* varDecl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::String);
-        expr->setExprVarDecl(varDecl);
+        auto* exprDecl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::String);
+        expr->setExprVarDecl(exprDecl);
         return ValueType::String;
     }
 

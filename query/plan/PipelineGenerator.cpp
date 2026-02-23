@@ -684,14 +684,14 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
     if (projNode) {
         // Resolve expressions not yet registered in _declToColumn
         // (e.g., CSV field access, type conversions on CSV data)
-        Dataframe* df =
-            _builder.getPendingOutputInterface()->getDataframe();
+        Dataframe* df = _builder.getPendingOutputInterface()->getDataframe();
         DataframeManager* dfMan = _pipeline->getDataframeManager();
 
         ExprProgram* exprProg = ExprProgram::create(_pipeline);
-        ExprProgramGenerator exprGen(
-            this, exprProg, _builder.getPendingOutput());
+        ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
 
+        // Generate columns for projection expressions not yet registered
+        // (e.g. CSV field access, type conversions on CSV data)
         for (const Projection::ReturnItem& item : projNode->items()) {
             const auto* exprPtr = std::get_if<Expr*>(&item);
             if (!exprPtr) {
@@ -706,8 +706,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
             Column* col = exprGen.generateExpr(expr);
             ColumnTag tag = dfMan->allocTag();
-            NamedColumn* namedCol =
-                NamedColumn::create(dfMan, col, tag);
+            NamedColumn* namedCol = NamedColumn::create(dfMan, col, tag);
             df->addColumn(namedCol);
             _declToColumn[decl] = tag;
         }

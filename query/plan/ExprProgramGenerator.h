@@ -57,8 +57,7 @@ private:
     Column* generateLiteralExpr(const LiteralExpr* literalExpr);
     Column* generateSymbolExpr(const SymbolExpr* symbolExpr);
     Column* generateIndexExpr(const IndexExpr* indexExpr);
-    Column* generateFuncInvocationExpr(
-        const FunctionInvocationExpr* funcExpr);
+    Column* generateFuncInvocationExpr(const FunctionInvocationExpr* funcExpr);
 
     Column* allocUnaryResultCol(const Expr* expr);
     Column* allocBinaryResultCol(ColumnOperator op, const Column* lhs, const Column* rhs);

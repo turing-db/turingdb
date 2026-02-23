@@ -30,9 +30,9 @@ public:
 
 private:
     fs::Path _path;
-    bool _hasHeaders;
-    CSVErrorMode _errorMode;
-    size_t _expectedFieldCount;
+    bool _hasHeaders {false};
+    CSVErrorMode _errorMode {CSVErrorMode::Fail};
+    size_t _expectedFieldCount {0};
     PipelineBlockOutputInterface _output;
 
     ColumnStringTable* _outputTable {nullptr};

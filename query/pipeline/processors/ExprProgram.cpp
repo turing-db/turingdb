@@ -153,64 +153,17 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
             throw FatalException("Plus operator is not supported.");
         break;
 
-        case OP_TO_INTEGER: {
-            using StringCol = ColumnVector<std::string>;
-            using IntCol = ColumnOptVector<types::Int64::Primitive>;
-            const auto* src = static_cast<const StringCol*>(input);
-            auto* dst = static_cast<IntCol*>(res);
-            dst->resize(src->size());
-            for (size_t i = 0; i < src->size(); i++) {
-                const auto& val = (*src)[i];
-                try {
-                    (*dst)[i] = std::stoll(val);
-                } catch (...) {
-                    throw PipelineException(
-                        fmt::format("toInteger: cannot convert '{}' to integer", val));
-                }
-            }
-        } break;
+        case OP_TO_INTEGER:
+            EvalUnaryExpr::eval<OP_TO_INTEGER>(res, input);
+        break;
 
-        case OP_TO_FLOAT: {
-            using StringCol = ColumnVector<std::string>;
-            using DblCol = ColumnOptVector<types::Double::Primitive>;
-            const auto* src = static_cast<const StringCol*>(input);
-            auto* dst = static_cast<DblCol*>(res);
-            dst->resize(src->size());
-            for (size_t i = 0; i < src->size(); i++) {
-                const auto& val = (*src)[i];
-                try {
-                    (*dst)[i] = std::stod(val);
-                } catch (...) {
-                    throw PipelineException(
-                        fmt::format("toFloat: cannot convert '{}' to float", val));
-                }
-            }
-        } break;
+        case OP_TO_FLOAT:
+            EvalUnaryExpr::eval<OP_TO_FLOAT>(res, input);
+        break;
 
-        case OP_TO_BOOLEAN: {
-            using StringCol = ColumnVector<std::string>;
-            using BoolCol = ColumnOptVector<types::Bool::Primitive>;
-            const auto* src = static_cast<const StringCol*>(input);
-            auto* dst = static_cast<BoolCol*>(res);
-            dst->resize(src->size());
-            std::string lower;
-            for (size_t i = 0; i < src->size(); i++) {
-                const auto& val = (*src)[i];
-                lower.clear();
-                lower.reserve(val.size());
-                for (char c : val) {
-                    lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-                }
-                if (lower == "true") {
-                    (*dst)[i] = CustomBool(true);
-                } else if (lower == "false") {
-                    (*dst)[i] = CustomBool(false);
-                } else {
-                    throw PipelineException(
-                        fmt::format("toBoolean: cannot convert '{}' to boolean", val));
-                }
-            }
-        } break;
+        case OP_TO_BOOLEAN:
+            EvalUnaryExpr::eval<OP_TO_BOOLEAN>(res, input);
+        break;
 
         case OP_EQUAL:
         case OP_NOT_EQUAL:

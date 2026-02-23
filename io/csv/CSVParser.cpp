@@ -23,13 +23,17 @@ bool readOneLine(const char*& cursor, const char* end, std::string& line) {
     while (cursor < end && (*cursor == '\n' || *cursor == '\r')) {
         if (*cursor == '\r') {
             cursor++;
-            if (cursor < end && *cursor == '\n') cursor++;
+            if (cursor < end && *cursor == '\n') {
+                cursor++;
+            }
         } else {
             cursor++;
         }
     }
 
-    if (cursor >= end) return false;
+    if (cursor >= end) {
+        return false;
+    }
 
     bool inQuotes = false;
     const char* start = cursor;
@@ -43,7 +47,9 @@ bool readOneLine(const char*& cursor, const char* end, std::string& line) {
         } else if (!inQuotes && (ch == '\n' || ch == '\r')) {
             line.append(start, cursor - start);
             cursor++;
-            if (ch == '\r' && cursor < end && *cursor == '\n') cursor++;
+            if (ch == '\r' && cursor < end && *cursor == '\n') {
+                cursor++;
+            }
             return true;
         } else {
             cursor++;
@@ -283,7 +289,9 @@ void CSVParser::mapNextChunk() {
 }
 
 void CSVParser::unmapCurrentChunk() {
-    if (!_mappedPtr) return;
+    if (!_mappedPtr) {
+        return;
+    }
 
     ::munmap(_mappedPtr, _mappedSize);
     _mappedPtr = nullptr;
@@ -314,10 +322,14 @@ bool CSVParser::readLine() {
             mapNextChunk();
             continue;
         }
-        if (*_cursor != '\n' && *_cursor != '\r') break;
+        if (*_cursor != '\n' && *_cursor != '\r') {
+            break;
+        }
         if (*_cursor == '\r') {
             _cursor++;
-            if (_cursor < _end && *_cursor == '\n') _cursor++;
+            if (_cursor < _end && *_cursor == '\n') {
+                _cursor++;
+            }
         } else {
             _cursor++;
         }
@@ -339,7 +351,9 @@ bool CSVParser::readLine() {
             } else if (!inQuotes && (ch == '\n' || ch == '\r')) {
                 _lineBuffer.append(start, _cursor - start);
                 _cursor++;
-                if (ch == '\r' && _cursor < _end && *_cursor == '\n') _cursor++;
+                if (ch == '\r' && _cursor < _end && *_cursor == '\n') {
+                    _cursor++;
+                }
                 return true;
             } else {
                 _cursor++;

@@ -354,8 +354,7 @@ Column* ExprProgramGenerator::generateIndexExpr(const IndexExpr* indexExpr) {
     return table->getFieldColumn(fieldIdx);
 }
 
-Column* ExprProgramGenerator::generateFuncInvocationExpr(
-        const FunctionInvocationExpr* funcExpr) {
+Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocationExpr* funcExpr) {
     const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
     const FunctionSignature* signature = invocation->getSignature();
 
