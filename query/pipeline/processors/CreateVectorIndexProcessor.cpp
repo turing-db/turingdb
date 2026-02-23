@@ -58,8 +58,10 @@ void CreateVectorIndexProcessor::execute() {
         throw PipelineException("VectorDatabase not available");
     }
 
-    const vec::VectorResult<vec::VecLibID> result = vectorDb->createLibrary(
-        std::string(_indexName), _dimension, _metric);
+    const vec::VectorResult<vec::VecLibID> result =
+        vectorDb->createLibrary(std::string(_indexName),
+                                _dimension,
+                                _metric);
 
     if (!result.has_value()) {
         throw PipelineException(fmt::format("Failed to create vector index '{}': {}",

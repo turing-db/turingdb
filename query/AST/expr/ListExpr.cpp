@@ -4,6 +4,10 @@
 
 using namespace db;
 
+void ListExpr::addItem(Expr* expr) {
+    _elements.push_back(expr);
+}
+
 ListExpr::~ListExpr() {
 }
 

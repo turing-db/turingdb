@@ -906,8 +906,11 @@ PipelineBlockOutputInterface& PipelineBuilder::addShowProcedures() {
 PipelineValueOutputInterface& PipelineBuilder::addCreateVectorIndex(std::string_view indexName,
                                                                     vec::Dimension dimension,
                                                                     vec::DistanceMetric metric) {
-    CreateVectorIndexProcessor* proc = CreateVectorIndexProcessor::create(
-        _pipeline, indexName, dimension, metric);
+    CreateVectorIndexProcessor* proc =
+        CreateVectorIndexProcessor::create(_pipeline,
+                                           indexName,
+                                           dimension,
+                                           metric);
 
     PipelineValueOutputInterface& output = proc->output();
     Dataframe* df = output.getDataframe();

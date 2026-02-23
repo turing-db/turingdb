@@ -12,7 +12,7 @@ class ListExpr : public Expr {
 public:
     using Elements = std::vector<Expr*>;
 
-    void addItem(Expr* expr) { _elements.push_back(expr); }
+    void addItem(Expr* expr);
 
     const Elements& getElements() const { return _elements; }
     size_t size() const { return _elements.size(); }
