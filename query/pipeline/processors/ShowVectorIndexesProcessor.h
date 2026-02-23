@@ -2,6 +2,9 @@
 
 #include "Processor.h"
 
+#include <string>
+#include <vector>
+
 #include "interfaces/PipelineValuesOutputInterface.h"
 
 namespace db {
@@ -22,6 +25,7 @@ public:
 protected:
     PipelineValuesOutputInterface _outNames;
     PipelineValuesOutputInterface _outDimensions;
+    std::vector<std::string> _indexNames;
 
     ShowVectorIndexesProcessor();
     ~ShowVectorIndexesProcessor();
