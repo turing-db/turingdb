@@ -5,14 +5,13 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <fcntl.h>
-#include <signal.h>
 
 #include <spdlog/spdlog.h>
 
-void Demonology::demonize() {
+DemonResult Demonology::demonize() {
     // We are already a demon
     if (getppid() == 1) {
-        return;
+        return DemonResult::Daemon;
     }
 
     // Fork from parent process
@@ -23,8 +22,8 @@ void Demonology::demonize() {
     }
 
     if (pid > 0) {
-        // We are in the parent process, kill ourselves
-        exit(EXIT_SUCCESS);
+        // Original parent: let the caller wait for server readiness
+        return DemonResult::Parent;
     }
 
     // Enter new session to escape from the controlling terminal
@@ -42,9 +41,9 @@ void Demonology::demonize() {
     }
 
     if (pid > 0) {
-        // We are in the parent process, kill ourselves
+        // Intermediate session-leader child: superseded by second fork
         spdlog::info("Spawned process {}", pid);
-        exit(EXIT_SUCCESS);
+        return DemonResult::Intermediate;
     }
 
     // Change current directory to filesystem root
@@ -54,10 +53,7 @@ void Demonology::demonize() {
     }
 
     // Reset umask
-    if (umask(027) < 0) {
-        spdlog::error("Demonize error, failed to change umask");
-        exit(EXIT_FAILURE);
-    }
+    umask(027);
 
     // Open standard descriptors to /dev/null
     const int devNullFd = open("/dev/null", O_RDWR, 0);
@@ -69,4 +65,6 @@ void Demonology::demonize() {
     dup2(devNullFd, STDIN_FILENO);
     dup2(devNullFd, STDOUT_FILENO);
     dup2(devNullFd, STDERR_FILENO);
+
+    return DemonResult::Daemon;
 }

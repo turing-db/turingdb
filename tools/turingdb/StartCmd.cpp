@@ -3,6 +3,13 @@
 #include <spdlog/spdlog.h>
 #include <argparse.hpp>
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <chrono>
+#include <thread>
+
 #include "TuringConfig.h"
 #include "TuringDB.h"
 #include "LocalMemory.h"
@@ -22,6 +29,36 @@ StartCmd::StartCmd()
 }
 
 StartCmd::~StartCmd() = default;
+
+static bool waitForPort(const std::string& address, unsigned port, size_t timeoutMs) {
+    const auto deadline = std::chrono::steady_clock::now()
+                          + std::chrono::seconds(timeoutMs);
+
+    constexpr size_t intervalMs = 100;
+
+    while (std::chrono::steady_clock::now() < deadline) {
+        const int sockFd = ::socket(AF_INET, SOCK_STREAM, 0);
+        if (sockFd < 0) {
+            break;
+        }
+
+        sockaddr_in addr {};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        ::inet_pton(AF_INET, address.c_str(), &addr.sin_addr);
+
+        const int res = ::connect(sockFd, (sockaddr*)&addr, sizeof(addr));
+        ::close(sockFd);
+
+        if (res == 0) {
+            return true;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
+    }
+
+    return false;
+}
 
 int StartCmd::execute() {
     LogSetup::setupLogConsole();
@@ -46,7 +83,20 @@ int StartCmd::execute() {
     const fs::Path& logsDir = config.getLogsDir();
 
     if (_demonize) {
-        Demonology::demonize();
+        const DemonResult demonResult = Demonology::demonize();
+
+        if (demonResult == DemonResult::Intermediate) {
+            return EXIT_SUCCESS;
+        }
+
+        if (demonResult == DemonResult::Parent) {
+            if (!waitForPort(_address, _port, _startTimeout)) {
+                spdlog::error("TuringDB did not start within {} s", _startTimeout);
+                return EXIT_FAILURE;
+            }
+            spdlog::info("TuringDB is ready on port {}", _port);
+            return EXIT_SUCCESS;
+        }
     }
 
     try {
@@ -164,4 +214,8 @@ void StartCmd::initialize() {
     _argParser.add_argument("-in-memory")
         .help("Run turingdb in-memory only without writing graphs on disk")
         .store_into(_inMemory);
+    _argParser.add_argument("-start-timeout")
+        .metavar("seconds")
+        .help("Milliseconds to wait for the HTTP server to become ready when daemonizing (default: 30)")
+        .store_into(_startTimeout);
 }
