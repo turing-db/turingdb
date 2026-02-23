@@ -12,9 +12,15 @@
 namespace db {
 
 template <Writer WriterT>
-struct ChunkJsonEncoder {
-    WriterT& _writer;
-    const size_t _logicalRowCount {0};
+class ChunkJsonEncoder {
+public:
+    ChunkJsonEncoder(WriterT& writer, size_t rowcnt)
+        : _writer(writer),
+        _logicalRowCount(rowcnt)
+    {
+    }
+
+    ~ChunkJsonEncoder() = default;
 
     template <typename T>
     void operator()(const ColumnVector<T>* col) {
@@ -93,6 +99,10 @@ struct ChunkJsonEncoder {
     void encodeValue(const T& value) {
         _writer.write(fmt::format("\"{}\"", value));
     }
+
+private:
+    WriterT& _writer;
+    const size_t _logicalRowCount {0};
 };
 
 template <Writer WriterT>
@@ -158,11 +168,13 @@ public:
         std::string columnName;
         ColumnTypeGenerator generator(columnName);
 
+        using Types = OutputtedTypes;
+        using ColTypeGen = ColumnSingleDispatcher<Types::Allowed, ColumnTypeGenerator, Types::Excluded>;
+
         for (const NamedColumn* namedCol : df.cols()) {
             const Column* col = namedCol->getColumn();
 
-            using Types = OutputtedTypes;
-            ColumnSingleDispatcher<Types::Allowed, ColumnTypeGenerator, Types::Excluded>::dispatch(col, generator);
+            ColTypeGen::dispatch(col, generator);
 
             value(columnName);
         }
@@ -177,17 +189,16 @@ public:
         arr();
 
         const size_t logicalRowCount = df.getLogicalRowCount();
-        ChunkJsonEncoder<WriterT> encoder {._writer = _writer,
-                                           ._logicalRowCount = logicalRowCount};
 
+        using JsonWriter = ChunkJsonEncoder<WriterT>;
+        using Types = OutputtedTypes;
+        using Encoder = ColumnSingleDispatcher<Types::Allowed, JsonWriter, Types::Excluded>;
+
+        JsonWriter encoder(_writer, logicalRowCount);
         for (const NamedColumn* namedCol : df.cols()) {
             arr();
-            const Column* col = namedCol->getColumn();
 
-            using Types = OutputtedTypes;
-            using Encoder = ColumnSingleDispatcher<Types::Allowed,
-                                                   ChunkJsonEncoder<WriterT>,
-                                                   Types::Excluded>;
+            const Column* col = namedCol->getColumn();
 
             Encoder::dispatch(col, encoder);
 
