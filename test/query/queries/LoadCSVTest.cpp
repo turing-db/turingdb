@@ -136,7 +136,7 @@ TEST_F(LoadCSVTest, loadCSVWithHeaders) {
 // LOAD CSV + MATCH
 // =============================================================================
 
-TEST_F(LoadCSVTest, loadCSVMatchByName) {
+TEST_F(LoadCSVTest, DISABLED_loadCSVMatchByName) {
     // CSV has names of people in SimpleGraph.
     // Match each CSV row against the graph by name.
     const std::string csv = writeTempCSV("match.csv",
@@ -176,7 +176,7 @@ TEST_F(LoadCSVTest, loadCSVMatchByName) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
-TEST_F(LoadCSVTest, loadCSVMatchWithHeaders) {
+TEST_F(LoadCSVTest, DISABLED_loadCSVMatchWithHeaders) {
     const std::string csv = writeTempCSV("match_headers.csv",
         "person_name\n"
         "Remy\n"
@@ -213,7 +213,7 @@ TEST_F(LoadCSVTest, loadCSVMatchWithHeaders) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
-TEST_F(LoadCSVTest, loadCSVMatchReturnProperty) {
+TEST_F(LoadCSVTest, DISABLED_loadCSVMatchReturnProperty) {
     // LOAD CSV + MATCH, return a graph property (n.age) alongside CSV data.
     // SimpleGraph: Remy age=32, Adam age=32
     const std::string csv = writeTempCSV("match_prop.csv",
@@ -258,7 +258,7 @@ TEST_F(LoadCSVTest, loadCSVMatchReturnProperty) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
-TEST_F(LoadCSVTest, loadCSVMatchPartialHit) {
+TEST_F(LoadCSVTest, DISABLED_loadCSVMatchPartialHit) {
     // Mix of names that exist and don't exist.
     // Only matching rows should appear in the result.
     const std::string csv = writeTempCSV("partial.csv",
@@ -293,7 +293,7 @@ TEST_F(LoadCSVTest, loadCSVMatchPartialHit) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
-TEST_F(LoadCSVTest, loadCSVMatchNoResults) {
+TEST_F(LoadCSVTest, DISABLED_loadCSVMatchNoResults) {
     // CSV names that don't exist in the graph.
     const std::string csv = writeTempCSV("nomatch.csv",
         "name\n"

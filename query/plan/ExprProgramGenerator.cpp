@@ -363,7 +363,7 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(
         throw PlannerException("Function invocation does not have a signature");
     }
 
-    const std::string_view funcName = signature->_fullName;
+    const std::string_view funcName = signature->getFullName();
     const ExprChain* args = invocation->getArguments();
 
     if (funcName == "toInteger" || funcName == "toFloat" || funcName == "toBoolean") {
