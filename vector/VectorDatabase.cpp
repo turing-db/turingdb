@@ -19,8 +19,10 @@ VectorDatabase::~VectorDatabase() {
 }
 
 VectorResult<std::unique_ptr<VectorDatabase>> VectorDatabase::create(const fs::Path& rootPath) {
+    static constexpr uint64_t RANDOM_SEED = 982451653;
+
     if (!RandomGenerator::initialized()) {
-        RandomGenerator::initialize();
+        RandomGenerator::initialize(RANDOM_SEED);
     }
 
     std::unique_ptr<VectorDatabase> database(new VectorDatabase);
