@@ -289,27 +289,28 @@ void OrderByProcessor::subsort() {
 void OrderByProcessor::memorise() {
     const Dataframe* curInput = _input.getDataframe();
 
+    // Determine the size of the dimensions of the sorted run to memorise, and where in
+    // @ref _memory it will reside
     const size_t runStart = _nextMemoryStart;
     const size_t runLength = curInput->getLogicalRowCount();
     const size_t runEnd = runStart + runLength;
 
-    bioassert(curInput->size() == _memory.size(),
-              "OrderByProcessor memory and input of differing sizes.");
-
+    // Both input and memory have same shape; verified in @ref prepare
     const size_t numCols = _memory.size();
 
     const Dataframe::NamedColumns& inputCols = curInput->cols();
     const Dataframe::NamedColumns& memoryCols = _memory.cols();
 
+    // TODO: Can we optimise to only store the returned columns in memory?
     for (size_t col = 0; col < numCols; col++) {
         const Column* inputCol = inputCols.at(col)->getColumn();
         Column* memoryCol = memoryCols.at(col)->getColumn();
-        // TODO: Project sorted from input into memory
-        // TODO: Can we only store the returned columns in memory?
         project(inputCol, memoryCol, runStart);
     }
 
+    // Log this run
     _sortedRuns.emplace_back(runStart, runLength);
+    // Ensure the next sorted run starts after this one
     _nextMemoryStart = runEnd;
 }
 
@@ -335,13 +336,14 @@ void OrderByProcessor::execute() {
     if (_state == State::SORT_INCOMING) {
         subsort();
         memorise();
-    }
 
-    if (inputPort->isClosed()) {
-        _state = State::MERGE_SORTED_RUNS;
+        if (inputPort->isClosed()) {
+            _state = State::MERGE_SORTED_RUNS;
+        }
+
+        inputPort->consume();
 
         // XXX: Temporary, for testing: Always finish in one cycle
-        inputPort->consume();
         outputPort->writeData();
 
         finish();
