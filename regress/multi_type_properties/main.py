@@ -5,6 +5,7 @@ GRAPH_NAME = "simpledb"
 
 def main() -> None:
     client = turingdb.TuringDB(instance_id='', auth_token='', host='http://localhost:6666')
+    client.try_reach()
     print("Connected to DB")
 
     client.query(f"LOAD GRAPH {GRAPH_NAME}")
