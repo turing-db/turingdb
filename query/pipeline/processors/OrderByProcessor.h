@@ -96,7 +96,7 @@ private:
 
     void subsort();
 
-    void project(const Column* src, Column* dst, size_t fromRow = 0);
+    void project(const Column* src, Column* dst, size_t numRows, size_t fromRow = 0);
 
     void memorise();
 
