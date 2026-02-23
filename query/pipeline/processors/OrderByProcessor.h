@@ -90,6 +90,7 @@ private:
     Dataframe _memory;
 
     SortedRuns _sortedRuns;
+
     size_t _nextMemoryStart {0};
 
     State _state {State::SORT_INCOMING};
