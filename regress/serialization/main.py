@@ -39,7 +39,6 @@ def wait_ready(client):
 
 
 if __name__ == "__main__":
-    print(f"- {BLUE}Running regression test `serialization`{NC}")
     if os.path.exists(".turing"):
         shutil.rmtree(".turing")
 

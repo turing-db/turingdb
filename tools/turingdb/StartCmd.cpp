@@ -105,8 +105,6 @@ int StartCmd::execute() {
         if (_demonize) {
             server->wait();
             server.reset();
-
-            turingDB.stop();
         } else {
             shell = std::make_unique<TuringShell>(turingDB, &mem);
 
@@ -120,8 +118,6 @@ int StartCmd::execute() {
             server->stop();
             server->wait();
             server.reset();
-
-            turingDB.stop();
         }
 
     } catch (TuringException& e) {
