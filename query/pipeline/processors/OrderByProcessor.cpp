@@ -129,6 +129,35 @@ struct ProjectOrder {
     }
 };
 
+struct CompareInner {
+    size_t _i {0};
+    size_t _j {0};
+    int& _res;
+
+    template <typename T>
+    void operator()(const ColumnVector<T>* col) {
+        const auto cmp = col->operator[](_i) <=> col->operator[](_j);
+        if (cmp < 0) {
+            _res = -1;
+        } else if (cmp > 0) {
+            _res = 1;
+        } else {
+            _res = 0;
+        }
+    }
+};
+
+using Compare = ColumnSingleDispatcher<OrderedTypes::Allowed, CompareInner, OrderedTypes::Excluded>;
+
+void mergeAdjacent(OrderByProcessor::Indices& indices,
+                   const OrderByProcessor::OrderByKeys& keys,
+                   const OrderByProcessor::SortedRun& run1,
+                   const OrderByProcessor::SortedRun& run2) {
+    bioassert(run1._start == 0, "First run did not start from 0.");
+    bioassert(run1._start + run1._size == run2._start,
+              "Second run did not start from the end of the first.");
+}
+
 using NarrowRanges = ColumnSingleDispatcher<OrderedTypes::Allowed,
                                             NarrowTieRanges,
                                             OrderedTypes::Excluded>;
@@ -231,16 +260,15 @@ void OrderByProcessor::subsort() {
     // If the ordering is completely determined by the first key (no tied-values), then
     // nothing else to sort.
     if (_tieRanges.empty()) {
-        { // TODO: Remove when outputting from memory
-            const Dataframe* inDf = _input.getDataframe();
-            const auto& inCols = inDf->cols();
-            Dataframe* outDf = _output.getDataframe();
-            const auto& outCols = outDf->cols();
-            for (size_t col = 0; col < inDf->size(); col++) {
-                const Column* src = inCols[col]->getColumn();
-                Column* dest = outCols[col]->getColumn();
-                project(src, dest);
-            }
+        // TODO: Remove when outputting from memory
+        const Dataframe* inDf = _input.getDataframe();
+        const auto& inCols = inDf->cols();
+        Dataframe* outDf = _output.getDataframe();
+        const auto& outCols = outDf->cols();
+        for (size_t col = 0; col < inDf->size(); col++) {
+            const Column* src = inCols[col]->getColumn();
+            Column* dest = outCols[col]->getColumn();
+            project(src, dest);
         }
 
         return;
@@ -273,16 +301,15 @@ void OrderByProcessor::subsort() {
         NarrowRanges::dispatch(column, narrowTieRanges);
     }
 
-    { // TODO: Remove when outputting from memory
-        const Dataframe* inDf = _input.getDataframe();
-        const auto& inCols = inDf->cols();
-        Dataframe* outDf = _output.getDataframe();
-        const auto& outCols = outDf->cols();
-        for (size_t col = 0; col < inDf->size(); col++) {
-            const Column* src = inCols[col]->getColumn();
-            Column* dest = outCols[col]->getColumn();
-            project(src, dest);
-        }
+    // TODO: Remove when outputting from memory
+    const Dataframe* inDf = _input.getDataframe();
+    const auto& inCols = inDf->cols();
+    Dataframe* outDf = _output.getDataframe();
+    const auto& outCols = outDf->cols();
+    for (size_t col = 0; col < inDf->size(); col++) {
+        const Column* src = inCols[col]->getColumn();
+        Column* dest = outCols[col]->getColumn();
+        project(src, dest);
     }
 }
 
@@ -301,7 +328,6 @@ void OrderByProcessor::memorise() {
     const Dataframe::NamedColumns& inputCols = curInput->cols();
     const Dataframe::NamedColumns& memoryCols = _memory.cols();
 
-    // TODO: Can we optimise to only store the returned columns in memory?
     for (size_t col = 0; col < numCols; col++) {
         const Column* inputCol = inputCols.at(col)->getColumn();
         Column* memoryCol = memoryCols.at(col)->getColumn();
@@ -312,6 +338,9 @@ void OrderByProcessor::memorise() {
     _sortedRuns.emplace_back(runStart, runLength);
     // Ensure the next sorted run starts after this one
     _nextMemoryStart = runEnd;
+}
+
+void OrderByProcessor::merge() {
 }
 
 void OrderByProcessor::prepare(ExecutionContext*) {

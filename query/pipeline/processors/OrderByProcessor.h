@@ -19,19 +19,28 @@ class Dataframe;
 
 class OrderByProcessor final : public Processor {
 public:
+    /// Defines a column and sortig order which is to be sorted
     struct OrderByKey {
         Column* _col {nullptr};
         bool _asc {true};
     };
 
+    /// Defines a subrange [_start, _start + _size) which contains the same value
     struct TieRange {
         size_t _start {0};
         size_t _size {0};
     };
 
+    /// Defines a sorted run over indexes [_start, _start + _size)
+    struct SortedRun {
+        size_t _start {0};
+        size_t _size {0};
+    };
+
     using OrderByKeys = std::vector<OrderByKey>;
-    using Indices = ColumnVector<size_t>; // TODO Change to ColumnVector<size_t>*
+    using Indices = ColumnVector<size_t>;
     using TieRanges = std::vector<TieRange>;
+    using SortedRuns = std::vector<SortedRun>;
 
     OrderByProcessor(const OrderByProcessor&) = delete;
     OrderByProcessor(OrderByProcessor&&) = delete;
@@ -57,22 +66,12 @@ public:
     void setIndicesCol(ColumnVector<size_t>* indices) { _indices = indices; }
 
 private:
-    struct SortedRun;
-
-    using SortedRuns = std::vector<SortedRun>;
-
     enum class State : uint8_t {
         SORT_INCOMING = 0,
         MERGE_SORTED_RUNS,
         OUTPUT_FROM_MEMORY,
 
         STATE_SPACE_SIZE
-    };
-
-    /// Defines a sorted run over indexes [_start, _start + _size)
-    struct SortedRun {
-        size_t _start {0};
-        size_t _size {0};
     };
 
     OrderByProcessor();
@@ -100,6 +99,8 @@ private:
     void project(const Column* src, Column* dst, size_t fromRow = 0);
 
     void memorise();
+
+    void merge();
 };
 
 }
