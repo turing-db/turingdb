@@ -58,6 +58,10 @@ public:
         }
     }
 
+private:
+    WriterT& _writer;
+    const size_t _logicalRowCount {0};
+
     template <Optional T>
     void encodeValue(const T& value) {
         if (!value.has_value()) {
@@ -99,10 +103,6 @@ public:
     void encodeValue(const T& value) {
         _writer.write(fmt::format("\"{}\"", value));
     }
-
-private:
-    WriterT& _writer;
-    const size_t _logicalRowCount {0};
 };
 
 template <Writer WriterT>
