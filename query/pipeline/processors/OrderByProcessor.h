@@ -21,7 +21,7 @@ class OrderByProcessor final : public Processor {
 public:
     /// Defines a column and sortig order which is to be sorted
     struct OrderByKey {
-        Column* _col {nullptr};
+        ColumnTag _col;
         bool _asc {true};
     };
 
