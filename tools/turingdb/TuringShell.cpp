@@ -306,10 +306,10 @@ void TuringShell::startLoop() {
     sa.sa_handler = [](int) {};
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
-    sigaction(SIGUSR1, &sa, NULL);
+    sigaction(SIGUSR1, &sa, nullptr);
 
     // Prepare prompt
-    char* line = NULL;
+    char* line = nullptr;
     std::string lineStr;
     std::string shellPrompt = composePrompt();
 
@@ -337,9 +337,10 @@ void TuringShell::startLoop() {
         errno = 0;
         line = linenoise(shellPrompt.c_str());
 
-        if (line == NULL) {
+        if (line == nullptr) {
             if (errno == EAGAIN) {
                 // Ctrl+C -> Just redisplay the prompt
+                fmt::println("If you meant to exit the shell, use 'Ctrl+D' instead.");
                 shellPrompt = composePrompt();
                 continue;
             }

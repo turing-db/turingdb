@@ -28,7 +28,7 @@ TuringDB::TuringDB(const TuringConfig* config)
 }
 
 TuringDB::~TuringDB() {
-    stop();
+    SystemEventHandler::terminate();
 }
 
 void TuringDB::init() {
@@ -134,10 +134,6 @@ void TuringDB::init() {
     SystemEventHandler::setOnStop([this] {
         _config->getOnStopRequest()();
     });
-}
-
-void TuringDB::stop() {
-    SystemEventHandler::terminate();
 }
 
 QueryStatus TuringDB::query(std::string_view query,

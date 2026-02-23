@@ -105,7 +105,7 @@ Startup sequence:
 5. Register `onStopRequest` callback: stop the active `TuringShell` (interactive mode) or
    call `TuringServer::stop()` (daemon mode).
 6. Start `TuringServer`; enter the shell loop (interactive) or `server->wait()` (daemon).
-7. On exit, `TuringDB::stop()` should call `SystemEventHandler::terminate()` — joining the
+7. On exit, `TuringDB::~TuringDB()` should call `SystemEventHandler::terminate()` — joining the
    event thread and closing all fds. The `LockFile` destructor should then release the lock
    and delete the file.
 
@@ -137,7 +137,8 @@ turingdb stop [-turing-dir <path>]
    - Send the string `"STOP"`.
    - Read `"OK"` back.
    - Return `true` on success.
-4. Log success or failure to the console (console-only logging, no file).
+4. Wait for the lock file to be released (3000ms default timeout).
+5. Log success or failure to the console (console-only logging, no file).
 
 **Flags:**
 
@@ -182,8 +183,8 @@ A regression test in `regress/start-stop/` should cover:
 
 ## Future Work
 
-- **Stop timeout / force kill.** `turingdb stop` should optionally wait for the process to
-  fully exit and issue `SIGKILL` if a configurable timeout is exceeded.
+- **Stop timeout / force kill.** `turingdb stop` should optionally 
+  issue `SIGKILL` if the timeout exceeds.
 
 - **`-all` flag.** Stopping all running instances would require tracking per-instance metadata
   (e.g. in `/tmp`). A background job would be needed to maintain that directory in case the OS

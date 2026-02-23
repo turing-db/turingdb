@@ -161,6 +161,7 @@ bool SystemEventHandler::initializeImpl() {
     if (::pipe(_signalFd.data()) < 0) {
         return false;
     }
+
     // Set non-blocking on both ends
     ::fcntl(_signalFd._read, F_SETFL, O_NONBLOCK);
     ::fcntl(_signalFd._write, F_SETFL, O_NONBLOCK);
