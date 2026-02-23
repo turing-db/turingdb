@@ -3,6 +3,7 @@ import rebased_tombstones_test as rebase_test
 
 def main() -> None:
   client = TuringDB(host="http://localhost:6666")
+  client.try_reach()
   print("Connected to DB")
 
   print("Running Tombstone rebase tests")

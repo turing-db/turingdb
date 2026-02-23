@@ -10,6 +10,7 @@ EXPECTED_HAS_SKILL_COUNT = 4
 
 def main() -> None:
     client = turingdb.TuringDB(instance_id='', auth_token='', host='http://localhost:6666')
+    client.try_reach()
     print("Connected to DB")
 
     # Load and set the graph that was created by the read command

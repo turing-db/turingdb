@@ -65,6 +65,7 @@ def main() -> None:
         sys.exit(1)
 
     client = TuringDB(host="http://localhost:6666")
+    client.try_reach()
     print("Connected to DB")
 
     client.query(f"LOAD GRAPH {GRAPH_NAME}")
