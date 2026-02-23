@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <ranges>
@@ -5,6 +6,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "dataframe/NamedColumn.h"
 #include "merge.h"
 #include "sort.h"
 #include "utils.h"
@@ -101,35 +103,11 @@ void test(LocalMemory& mem, DataframeManager& dfman) {
     spdlog::info("Tests pass");
 }
 
-void mergeTest(LocalMemory& mem, DataframeManager& dfman) {
-    auto original = makeDataframe<Int>(mem, dfman,
-                                       {
-                                           {4, 5, 6, 1, 2, 3}
-    });
-
-    const size_t size = original->cols().front()->getColumn()->size();
-    std::vector<size_t> indices(size);
-    std::ranges::iota(indices, 0);
-
-    const SortedRun run1{._start = 0, ._size = 3};
-    const SortedRun run2{._start = 3, ._size = 3};
-
-    merge(indices, original->cols(), run1, run2);
-
-    for (size_t x : indices) {
-        std::cout << x << ' ';
-    } std::cout << '\n';
-}
-
 int main() {
     LocalMemory mem;
     DataframeManager dfman;
 
     // test(mem, dfman);
     // bm(mem, dfman);
-    try {
-        mergeTest(mem, dfman);
-    } catch (FatalException& e) {
-        spdlog::error(e.what());
-    }
+    benchmarkMerge(mem, dfman);
 }
