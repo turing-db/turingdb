@@ -22,3 +22,10 @@ reactome/edges_1.json filter=lfs diff=lfs merge=lfs -text
 reactome/nodes_4.json filter=lfs diff=lfs merge=lfs -text
 reactome/nodes_5.json filter=lfs diff=lfs merge=lfs -text
 reactome/nodes_6.json filter=lfs diff=lfs merge=lfs -text
+network-management.jsonl filter=lfs diff=lfs merge=lfs -text
+openstreetmap.jsonl filter=lfs diff=lfs merge=lfs -text
+poledb.jsonl filter=lfs diff=lfs merge=lfs -text
+recommendations.jsonl filter=lfs diff=lfs merge=lfs -text
+cyber-security-ad.jsonl filter=lfs diff=lfs merge=lfs -text
+healthcare-analytics.jsonl filter=lfs diff=lfs merge=lfs -text
+movies.jsonl filter=lfs diff=lfs merge=lfs -text
