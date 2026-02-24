@@ -13,6 +13,7 @@
 
 #include "ExecutionContext.h"
 #include "PipelinePort.h"
+
 #include "columns/AllowedKinds.h"
 #include "columns/Column.h"
 #include "columns/ColumnOperatorDispatcher.h"
@@ -20,7 +21,6 @@
 #include "dataframe/NamedColumn.h"
 
 #include "BioAssert.h"
-#include "iterators/ChunkConfig.h"
 
 using namespace db;
 
@@ -241,8 +241,9 @@ OrderByProcessor* OrderByProcessor::create(PipelineV2* pipeline,
         PipelineInputPort* inputPort = PipelineInputPort::create(pipeline, proc);
         proc->_input.setPort(inputPort);
         proc->addInput(inputPort);
-        // Needs data in @ref State::SORT_INCOMING, but not in any others
-        inputPort->setNeedsData(false);
+        // Needs data in @ref State::SORT_INCOMING, but not in any others. Initially set
+        // to true, set to false in @ref OrderByProcessor::execute
+        inputPort->setNeedsData(true);
     }
 
     {
@@ -414,11 +415,12 @@ void OrderByProcessor::merge() {
     }
 }
 
-void OrderByProcessor::prepare(ExecutionContext*) {
+void OrderByProcessor::prepare(ExecutionContext* ctxt) {
     bioassert(_indices, "Null indices on prepare of OrderByProcessor.");
     bioassert(_memory.hasSameShape(_output.getDataframe()),
               "Memory and output mismatch in OrderByProcessor.");
 
+    _ctxt = ctxt;
     markAsPrepared();
 }
 
@@ -434,19 +436,17 @@ void OrderByProcessor::execute() {
     PipelineOutputPort* outputPort = _output.getPort();
 
     if (_state == State::SORT_INCOMING) {
-        if (inputPort->isClosed()) {
-            _state = State::MERGE_SORTED_RUNS;
-            return;
-        }
-
-        if (!inputPort->hasData()) {
-            return;
-        }
-
+        // Input guaranteed to have data via @ref _needsData of input
         subsort();
         memorise();
-
         inputPort->consume();
+
+        // All input runs have been sorted and memorised
+        if (inputPort->isClosed()) {
+            _state = State::MERGE_SORTED_RUNS;
+            // No longer need data to execute
+            inputPort->setNeedsData(false);
+        }
 
         return;
     }
@@ -458,7 +458,7 @@ void OrderByProcessor::execute() {
         _state = State::OUTPUT_FROM_MEMORY;
 
          // Reuse this member as a pointer to how far through memory we have emitted
-         _nextMemoryStart = 0;
+        _nextMemoryStart = 0;
         return;
     }
 
@@ -472,8 +472,7 @@ void OrderByProcessor::execute() {
              return;
          }
 
-         const size_t chunkSize = _ctxt->getChunkSize();
-         const size_t rowsToWrite = std::min(remainingToWrite, chunkSize);
+         const size_t rowsToWrite = std::min(remainingToWrite, _ctxt->getChunkSize());
 
          const Dataframe* outDf = _output.getDataframe();
 
