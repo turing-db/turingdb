@@ -5,7 +5,6 @@ import pandas as pd
 import subprocess
 import os
 import shutil
-import time
 
 GREEN = "\033[0;32m"
 BLUE = "\033[0;34m"
@@ -24,18 +23,6 @@ def stop_turingdb():
     return subprocess.call(cmd, shell=True) == 0
 
 
-def wait_ready(client):
-    t0 = time.time()
-    while time.time() - t0 < 6:
-        try:
-            client.try_reach(timeout=1)
-            return
-        except:
-            time.sleep(1)
-
-    raise RuntimeError("Failed to connect to turingdb")
-
-
 if __name__ == "__main__":
     if os.path.exists(".turing"):
         shutil.rmtree(".turing")
@@ -44,7 +31,6 @@ if __name__ == "__main__":
 
     # Connect to turingdb
     client = TuringDB(host="http://localhost:6666")
-    wait_ready(client)
 
     print(f"- {BLUE}Creating graph{NC}")
     print(client.query("CREATE GRAPH mygraph"))
@@ -53,7 +39,7 @@ if __name__ == "__main__":
 
     # Make changes
     print(f"- {BLUE}Making changes{NC}")
-    change = client.query("CHANGE NEW")["changeID"][0]
+    change = client.new_change()
     client.checkout(change=change)
 
     create_query = "CREATE (a:Person {name: 'Alice'}), (j:Person {name: 'John'}), (a)-[:KNOWS]->(j)"
@@ -83,7 +69,6 @@ if __name__ == "__main__":
     assert stop_turingdb()
 
     assert spawn_turingdb()
-    wait_ready(client)
 
     # Test after reload
     client.load_graph("mygraph")

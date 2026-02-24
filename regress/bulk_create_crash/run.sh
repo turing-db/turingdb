@@ -21,7 +21,6 @@ cd $SCRIPT_DIR
 
 # Kill any existing turingdb processes
 pkill -9 turingdb 2>/dev/null || true
-sleep 0.5
 # Wait for port 6666 to be free
 for i in $(seq 1 100); do nc -z localhost 6666 2>/dev/null || break; sleep 0.1; done
 

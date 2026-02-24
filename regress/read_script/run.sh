@@ -28,25 +28,21 @@ CHANGE SUBMIT
 quit
 EOF
 
-# Now start daemon to verify results via Python SDK
-turingdb -demon -turing-dir $SCRIPT_DIR/.turing
-# Wait for turingdb to be ready
-for i in $(seq 1 100); do nc -z localhost 6666 2>/dev/null && break; sleep 0.1; done
-
-# Setup Python environment and verify results
-rm -f pyproject.toml
-uv init
-
 # Set PYTURINGDB if not already set (for running outside CMake)
 if [ -z "$PYTURINGDB" ]; then
     export PYTURINGDB="turingdb"
 fi
 
+turingdb -demon -turing-dir $SCRIPT_DIR/.turing
+
+rm -f pyproject.toml
+uv init
 uv add $PYTURINGDB
 
 uv run main.py
 testres=$?
 
-pkill -9 turingdb 2>/dev/null || true
+turingdb stop -turing-dir $SCRIPT_DIR/.turing
+
 
 exit $testres

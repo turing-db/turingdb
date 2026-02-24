@@ -14,11 +14,11 @@ Expected: Once fixed, the server should return an error or skip invalid nodes.
 """
 
 import sys
-import time
 import httpx
 from turingdb import TuringDB
 
 HOST = "http://localhost:6666"
+
 
 def main():
     print("=== get_nodes_invalid_id regression test ===")
@@ -30,8 +30,8 @@ def main():
     print("1. Creating test graph with one node...")
     client.query("CREATE GRAPH testgraph")
     client.set_graph("testgraph")
-    change = client.query("CHANGE NEW")["changeID"][0]
-    client.checkout(change=str(change))
+    change = client.new_change()
+    client.checkout(change=change)
     client.query("CREATE (:Person {name: 'Alice'})")
     client.query("COMMIT")
     client.query("CHANGE SUBMIT")
@@ -45,12 +45,12 @@ def main():
         "Content-Type": "application/json",
         "X-TuringDB-Graph": "testgraph",
     }
-    payload = {
-        "nodeIDs": [999999]
-    }
+    payload = {"nodeIDs": [999999]}
 
     try:
-        response = httpx.post(f"{HOST}/get_nodes", json=payload, headers=headers, timeout=5)
+        response = httpx.post(
+            f"{HOST}/get_nodes", json=payload, headers=headers, timeout=5
+        )
         print(f"   Response status: {response.status_code}")
         print(f"   Response body: {response.text[:200]}")
         print()
@@ -91,3 +91,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

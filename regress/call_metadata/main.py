@@ -8,17 +8,17 @@ print(res)
 
 # Create a change
 t.set_graph("mygraph")
-change = t.query("CHANGE NEW")["changeID"][0]
+change = t.new_change()
 
-t.checkout(change=str(change))
+t.checkout(change=change)
 t.query("CREATE (:Person {name: 'Alice'})")
 t.query("CREATE (:Person {name: 'Bob'})")
 t.query("CREATE (:Person {name: 'Charlie'})")
 t.query("CHANGE SUBMIT")
-t.checkout("main")
+t.checkout()
 
-change = t.query("CHANGE NEW")["changeID"][0]
-t.checkout(change=str(change))
+change = t.new_change()
+t.checkout(change=change)
 t.query("CREATE (:Person :Employee {name: 'Dave'})")
 t.query("CREATE (:Person :Employee {name: 'Eve', age: 19})")
 t.query("CREATE (:Person :Employee {name: 'Mallory', age: 31})")
@@ -34,7 +34,7 @@ t.query("COMMIT")
 t.query("CHANGE SUBMIT")
 
 # Go on to main
-t.checkout("main")
+t.checkout()
 df = t.query("CALL db.labels()")
 print(df)
 assert df.shape == (3, 2)
