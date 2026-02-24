@@ -14,6 +14,7 @@
 #include "expr/StringExpr.h"
 #include "expr/UnaryExpr.h"
 #include "expr/FunctionInvocationExpr.h"
+#include "expr/IndexExpr.h"
 #include "expr/ListExpr.h"
 
 #include "BioAssert.h"
@@ -100,6 +101,12 @@ void ExprDependencies::genExprDependencies(PlanGraphVariables& variables, Expr* 
         case Expr::Kind::LITERAL:
             // Reached end
             break;
+
+        case Expr::Kind::INDEX: {
+            const IndexExpr* index = static_cast<IndexExpr*>(expr);
+            genExprDependencies(variables, index->getBase());
+            genExprDependencies(variables, index->getIndexExpr());
+        } break;
 
         case Expr::Kind::LIST: {
             const ListExpr* list = static_cast<const ListExpr*>(expr);
