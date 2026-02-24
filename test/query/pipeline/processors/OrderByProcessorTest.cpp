@@ -71,6 +71,7 @@ TEST_F(OrderByProcessorTest, simpleOrder) {
             const auto* casted =
                 nnames->getColumn()->cast<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(casted);
+            ASSERT_TRUE(casted->size() <= chunkSize);
 
             // Ensure the names are sorted
             const auto& data = casted->getRaw();
@@ -90,17 +91,12 @@ TEST_F(OrderByProcessorTest, simpleOrder) {
         EXECUTE(view, chunkSize);
         ASSERT_TRUE(executed);
         EXPECT_TRUE(expected.equals(actual));
-        fmt::println("exp:");
-        expected.print();
-        fmt::println("acc:");
-        actual.print();
     };
 
-    runTest(true, ChunkConfig::CHUNK_SIZE);
-    /* for (const bool asc : {true, false}) {
-        for (const size_t chunkSize : {1UL, 3UL, 16UL, ChunkConfig::CHUNK_SIZE}) {
+    for (const bool asc : {true, false}) {
+        for (const size_t chunkSize : {1UL, 3UL, 9UL, 16UL, ChunkConfig::CHUNK_SIZE}) {
             runTest(asc, chunkSize);
         }
-    } */
+    }
 }
 
