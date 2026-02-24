@@ -269,6 +269,9 @@ bool SystemEventHandler::initializeImpl() {
                 {_signalFd._read, POLLIN, 0},
             };
 
+            // Wait for either a signal or a new connection
+            // No timeout is used, the thread sleeps until a signal or
+            // a new connection is received
             const int ret = ::poll(pfds, 2, -1);
 
             if (ret < 0) {
@@ -307,11 +310,18 @@ bool SystemEventHandler::initializeImpl() {
                 cmd.assign(buf, n);
 
                 if (cmd == "PING") {
+                    // Reply with PONG if the server is ready
+                    // or with INIT if the server is still initializing
+                    // NOTE: The server might be in an INIT state for a
+                    // while if it needs to load a big graph at startup
                     const bool ready = _ready.load();
                     const std::string_view reply = ready ? "PONG" : "INIT";
+
                     [[maybe_unused]] const int res = ::write(client, reply.data(), reply.size());
                 } else if (cmd == "STOP") {
+                    // Reply with OK and stop the server
                     [[maybe_unused]] const int res = ::write(client, "OK", 2);
+
                     ::close(client);
                     _onStop();
                     break;

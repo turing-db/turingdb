@@ -161,6 +161,11 @@ int StartCmd::execute() {
     if (_demonize) {
         const DemonResult demonResult = Demonology::demonize();
 
+        // Process was forked, we are now the parent
+        // We need to wait for the server to be ready
+        // before exiting. This ensures that the HTTP server
+        // is ready to accept connections.
+
         if (demonResult == DemonResult::Intermediate) {
             return EXIT_SUCCESS;
         }
@@ -170,6 +175,9 @@ int StartCmd::execute() {
                 spdlog::error("TuringDB did not respond within {} ms", _startTimeout);
                 return EXIT_FAILURE;
             }
+
+            // Server replied "PONG" -> ready
+
             spdlog::info("TuringDB is ready");
             return EXIT_SUCCESS;
         }

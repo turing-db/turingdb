@@ -18,7 +18,9 @@ StopCmd::StopCmd()
 StopCmd::~StopCmd() = default;
 
 int StopCmd::execute() {
-    LogSetup::setupLogConsole();
+    LogSetup::setupLogConsole(); // Only initialize the console log
+                                 // Since the logfile is not owned by this process
+                                 // (not owning lock file)
 
     TuringConfig config;
 
@@ -34,6 +36,7 @@ int StopCmd::execute() {
         return EXIT_FAILURE;
     }
 
+    // Issue a STOP request to the server through the Unix socket
     if (!SystemEventHandler::requestStop(socketPath)) {
         spdlog::error("Could not stop the TuringDB instance at {}", _turingDir);
         return EXIT_FAILURE;
@@ -42,6 +45,9 @@ int StopCmd::execute() {
     LockFile lockFile;
     lockFile.setPath(config.getLockFilePath());
 
+    // Wait for the lock file to be released
+    // It can take a while if the server was using a load of RAM, or was
+    // running long queries
     if (!lockFile.waitUnlock(_timeout)) {
         spdlog::error("TuringDB at {} did not stop within {} ms", _turingDir, _timeout);
         return EXIT_FAILURE;
