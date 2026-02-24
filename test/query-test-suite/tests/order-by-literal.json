@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN 5, 1 ORDER BY 5",
+  "expect": {
+    "plan": "",
+    "result": ""
+  },
+  "tags": [
+  ],
+  "write-required": false
+}
