@@ -12,6 +12,7 @@ class DiagnosticsManager;
 class Symbol;
 class SymbolChain;
 class QualifiedName;
+class QuantifiedPath;
 class FunctionInvocation;
 class Literal;
 class NullLiteral;
@@ -96,6 +97,7 @@ public:
     friend Symbol;
     friend SymbolChain;
     friend QualifiedName;
+    friend QuantifiedPath;
     friend FunctionInvocation;
     friend Literal;
     friend NullLiteral;
@@ -204,6 +206,7 @@ private:
     std::vector<Symbol*> _symbols;
     std::vector<SymbolChain*> _symbolChains;
     std::vector<QualifiedName*> _qualifiedNames;
+    std::vector<QuantifiedPath*> _quantifiedPaths;
     std::vector<FunctionInvocation*> _functionInvocations;
     std::vector<Literal*> _literals;
     std::vector<Expr*> _expressions;
@@ -234,6 +237,7 @@ private:
     void addSymbol(Symbol* symbol);
     void addSymbolChain(SymbolChain* symbol);
     void addQualifiedName(QualifiedName* name);
+    void addQuantifiedPath(QuantifiedPath* path);
     void addLiteral(Literal* literal);
     void addExprChain(ExprChain* exprChain);
     void addExpr(Expr* expr);

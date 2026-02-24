@@ -12,7 +12,7 @@ EdgePattern::EdgePattern(Direction direction)
 EdgePattern::~EdgePattern() {
 }
 
-EdgePattern* EdgePattern::create(CypherAST* ast, Direction direction) {
+EdgePattern* EdgePattern::create(CypherAST* ast, QuantifiedPath* quantified, Direction direction) {
     EdgePattern* pattern = new EdgePattern(direction);
     ast->addEntityPattern(pattern);
     return pattern;

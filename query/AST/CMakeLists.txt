@@ -71,6 +71,7 @@ set(ast_sources
     SymbolChain.cpp
     Literal.cpp
     QualifiedName.cpp
+    QuantifiedPath.cpp
     FunctionInvocation.cpp
     WhereClause.cpp
     YieldClause.cpp
