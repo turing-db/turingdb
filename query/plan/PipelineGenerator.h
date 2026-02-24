@@ -149,10 +149,10 @@ private:
     PipelineOutputInterface* translateVectorSearchNode(VectorSearchNode* node);
     PipelineOutputInterface* translateDeleteVectorIndexNode(DeleteVectorIndexNode* node);
     PipelineOutputInterface* translateShowVectorIndexesNode(ShowVectorIndexesNode* node);
+    PipelineOutputInterface* translateOrderByNode(OrderByNode* node);
 
     std::vector<std::string> _csvHeaders;
     size_t _csvFieldCount {0};
-    PipelineOutputInterface* translateOrderByNode(OrderByNode* node);
 };
 
 }
