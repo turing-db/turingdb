@@ -61,6 +61,7 @@ public:
 private:
     WriterT& _writer;
     const size_t _logicalRowCount {0};
+    std::string _escaped;
 
     template <Optional T>
     void encodeValue(const T& value) {
@@ -105,7 +106,31 @@ private:
 
     template <std::convertible_to<std::string_view> T>
     void encodeValue(const T& value) {
-        _writer.write(fmt::format("\"{}\"", value));
+        sanitizeJsonString(value);
+        _writer.write(_escaped);
+    }
+
+    void sanitizeJsonString(std::string_view input) {
+        constexpr std::string_view escapedQuotes = "\\\"";
+        constexpr std::string_view escapedBackslash = "\\\\";
+        constexpr std::string_view escapedNewline = "\\n";
+
+        _escaped.clear();
+        _escaped.push_back('\"');
+
+        for (const char c : input) {
+            if (c == '"') {
+                _escaped += escapedQuotes;
+            } else if (c == '\\') {
+                _escaped += escapedBackslash;
+            } else if (c == '\n') {
+                _escaped += escapedNewline;
+            } else {
+                _escaped += c;
+            }
+        }
+
+        _escaped.push_back('\"');
     }
 };
 
