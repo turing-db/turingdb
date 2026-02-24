@@ -143,8 +143,8 @@ struct Stringify {
 
     template <typename T>
     void operator()(const ColumnConst<T>* typed) {
-        const T& value = typed->at(row);
-        string = valueToString(value);
+        const T& value = typed->at(_row);
+        _string = valueToString(value);
     }
 };
 
