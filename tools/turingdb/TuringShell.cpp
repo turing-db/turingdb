@@ -329,11 +329,7 @@ void TuringShell::startLoop() {
         spdlog::error("Can not restore history from file {}", historyFilePath);
     }
 
-    while (true) {
-        if (!_running.load()) {
-            break;
-        }
-
+    while (_running.load()) {
         errno = 0;
         line = linenoise(shellPrompt.c_str());
 
