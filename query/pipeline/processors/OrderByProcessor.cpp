@@ -111,27 +111,46 @@ struct NarrowTieRanges {
 struct ProjectOrder {
     Column* _res {nullptr};
     ColumnVector<size_t>* _indices {nullptr};
-    size_t _fromRow {0};
     size_t _numRows {0};
+    size_t _fromSrcRow {0};
+    size_t _fromDstRow {0};
 
     template <typename T>
     void operator()(const ColumnVector<T>* source) {
         auto* casted = dynamic_cast<ColumnVector<T>*>(_res);
         bioassert(casted, "Incorrect cast for projected result column.");
 
+        // If we are writing more rows than can fit, resize to expand
+        // NOTE: Used when writing a new sorted run to memory
+        if (_fromDstRow + _numRows > casted->size()) {
+            casted->resize(_fromDstRow + _numRows);
+        }
+
+        // If we are writing fewer rows than we currently hold, resize to shrink
+        // NOTE: Used when writing a full chunk to output
+        if (_fromDstRow == 0 && _numRows < casted->size()) {
+            casted->resize(_numRows);
+        }
+
+        const size_t dstSize = casted->size();
+
+        bioassert(
+            _fromSrcRow + _numRows <= _indices->size(),
+            "Attempted to project rows from {} to {}, but only provided {} indices.",
+            _fromSrcRow, _fromSrcRow + _numRows, _indices->size()
+        );
+
+        bioassert(dstSize >= _fromDstRow + _numRows,
+                  "Attempted to write indexes [{}, {}) in Column of size {}.",
+                  _fromSrcRow, _fromSrcRow + _numRows, dstSize
+        );
+
         const auto& srcd = source->getRaw();
         const auto& indicesd = _indices->getRaw();
-        const size_t incomingRows = _indices->size();
-        const size_t curSize = casted->size();
-
-        casted->resize(curSize + incomingRows);
-        bioassert(casted->size() >= _fromRow + _numRows,
-                  "Attempted to write indexes [{}, {}) in Column of size {}.", _fromRow,
-                  _fromRow + _numRows, casted->size());
-
         auto& resd = casted->getRaw();
-        for (size_t i = _fromRow; i < _fromRow + _numRows; i++) {
-            resd[i] = srcd[indicesd[i]];
+
+        for (size_t i = 0; i < _numRows; i++) {
+            resd[i + _fromDstRow] = srcd[indicesd[i + _fromSrcRow]];
         }
     }
 };
@@ -279,9 +298,14 @@ void OrderByProcessor::addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t s
     }
 }
 
-void OrderByProcessor::project(const Column* src, Column* dst, size_t numRows, size_t fromRow) {
-    ProjectOrder project {
-        ._res = dst, ._indices = _indices, ._fromRow = fromRow, ._numRows = numRows};
+void OrderByProcessor::project(const Column* src, Column* dst, size_t numRows,
+                               size_t fromSrcRow, size_t fromDstRow) {
+    ProjectOrder project {._res = dst,
+                          ._indices = _indices,
+                          ._numRows = numRows,
+                          ._fromSrcRow = fromSrcRow,
+                          ._fromDstRow = fromDstRow};
+
     Projection::dispatch(src, project);
 }
 
@@ -379,7 +403,7 @@ void OrderByProcessor::memorise() {
     for (size_t col = 0; col < numCols; col++) {
         const Column* inputCol = inputCols.at(col)->getColumn();
         Column* memoryCol = memoryCols.at(col)->getColumn();
-        project(inputCol, memoryCol, runLength, runStart);
+        project(inputCol, memoryCol, runLength, 0, runStart);
     }
 
     // Log this run
@@ -480,7 +504,8 @@ void OrderByProcessor::execute() {
              const Column* memoryCol = _memory.cols()[i]->getColumn();
              Column* outCol = outDf->cols()[i]->getColumn();
 
-             project(memoryCol, outCol, rowsToWrite, _nextMemoryStart);
+             static constexpr size_t OUTPUT_START = 0;
+             project(memoryCol, outCol, rowsToWrite, _nextMemoryStart, OUTPUT_START);
          }
 
          outputPort->writeData();
