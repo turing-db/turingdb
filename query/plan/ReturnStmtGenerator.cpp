@@ -12,6 +12,7 @@
 #include "stmt/Skip.h"
 
 #include "nodes/AggregateEvalNode.h"
+#include "nodes/ExprEvalNode.h"
 #include "nodes/FuncEvalNode.h"
 #include "nodes/GetEntityTypeNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
@@ -44,6 +45,7 @@ ReturnStmtGenerator::ReturnStmtGenerator(const CypherAST* ast,
 void ReturnStmtGenerator::prepare() {
     _aggrEvalNode = _tree->create<AggregateEvalNode>();
     _funcEvalNode = _tree->create<FuncEvalNode>();
+    _exprEvalNode = _tree->create<ExprEvalNode>();
     _proj = _stmt->getProjection();
     bioassert(_proj, "Failed to get projection for RETURN statement.");
 }
@@ -64,55 +66,83 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         handleExprDependencies(*exprPtr);
     }
 
+    if (!_exprEvalNode->getExprs().empty()) {
+        if (_prevNode) {
+            _prevNode->connectOut(_exprEvalNode);
+        }
+        _prevNode = _exprEvalNode;
+    }
+
     if (!_funcEvalNode->getFuncs().empty()) {
-        _prevNode->connectOut(_funcEvalNode);
+        if (_prevNode) {
+            _prevNode->connectOut(_funcEvalNode);
+        }
         _prevNode = _funcEvalNode;
     }
 
     if (!_aggrEvalNode->getFuncs().empty()) {
-        _prevNode->connectOut(_aggrEvalNode);
+        if (_prevNode) {
+            _prevNode->connectOut(_aggrEvalNode);
+        }
         _prevNode = _aggrEvalNode;
     }
 
+    // ORDER BY, SKIP, LIMIT require a previous input, `LIMIT 10` is not a valid query,
+    // but `MATCH (n) LIMIT 10` is (because it has SCAN NODES as a previous input), and so
+    // is `RETURN 5 LIMIT 10` (it has EXPR EVAL as a previous input). Therefore, we can
+    // only add thse projection properties if @ref prevNode is valid.
     if (_proj->hasOrderBy()) {
         const auto& projOrderItems = _proj->getOrderBy()->getItems();
         // Get dependencies that we require to order, e.g.
-        // MATCH (n) RETURN n ORDER BY n.name
+        // `MATCH (n) RETURN n ORDER BY n.name`
         // requires inserting a plan node to get n.name
         for (const OrderByItem* item : projOrderItems) {
             Expr* itemExpr = item->getExpr();
             handleExprDependencies(itemExpr);
         }
 
-        auto* orderBy = _tree->newOut<OrderByNode>(_prevNode);
+        if (_prevNode) { // If the above didn't add a node, nothing to order
+            auto* orderBy = _tree->newOut<OrderByNode>(_prevNode);
 
-        orderBy->setItems(_proj->getOrderBy()->getItems());
-        _prevNode = orderBy;
+            orderBy->setItems(_proj->getOrderBy()->getItems());
+            _prevNode = orderBy;
+        }
     }
 
-    if (_proj->hasSkip()) {
+    if (_prevNode && _proj->hasSkip()) {
         auto* skip = _tree->newOut<SkipNode>(_prevNode);
         skip->setExpr(_proj->getSkip()->getExpr());
         _prevNode = skip;
     }
 
-    if (_proj->hasLimit()) {
+    if (_prevNode && _proj->hasLimit()) {
         auto* limit = _tree->newOut<LimitNode>(_prevNode);
         limit->setExpr(_proj->getLimit()->getExpr());
         _prevNode = limit;
     }
 
     auto* results = _tree->newOut<ProduceResultsNode>(_prevNode);
+
     results->setProjection(_proj);
 
     return results;
 }
 
 void ReturnStmtGenerator::handleExprDependencies(Expr* expr) {
+    if (ExprEvalNode::needsEvaluation(expr)) {
+        _exprEvalNode->addExpr(expr);
+    }
+
     ExprDependencies deps;
     deps.genExprDependencies(*_variables, expr);
 
     for (const ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
+        if (!_prevNode) {
+            throwError(
+                "Expression had dependencies, but no previous node to provide them.",
+                expr);
+        }
+
         if (auto* propExpr = dynamic_cast<PropertyExpr*>(dep._expr)) {
             const VarDecl* entityDecl = propExpr->getEntityVarDecl();
             const VarDecl* propExprDecl = propExpr->getExprVarDecl();
@@ -196,9 +226,19 @@ void ReturnStmtGenerator::handleExprDependencies(Expr* expr) {
         }
     }
 
+    // Functions may have expressions which need be evaluated prior to the functions
+    // evaluation, e.g. COUNT(5 + 5).
     for (const ExprDependencies::FuncDependency& dep : deps.getFuncDeps()) {
-        const FunctionInvocation* func = dep._expr->getFunctionInvocation();
-        const FunctionSignature* signature = func->getSignature();
+        const FunctionInvocationExpr* funcExpr = dep._expr;
+        const FunctionInvocation* funcInvok = funcExpr->getFunctionInvocation();
+        const FunctionSignature* signature = funcInvok->getSignature();
+
+        const ExprChain* arguments = funcInvok->getArguments();
+        for (const Expr* argument : *arguments) {
+            if (ExprEvalNode::needsEvaluation(argument)) {
+                _exprEvalNode->addExpr(argument);
+            }
+        }
 
         if (signature->isAggregate()) {
             _aggrEvalNode->addFunc(dep._expr);

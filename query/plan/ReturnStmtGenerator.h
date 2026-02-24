@@ -9,6 +9,7 @@ class PlanGraphNode;
 class PlanGraphVariables;
 class ReturnStmt;
 class FuncEvalNode;
+class ExprEvalNode;
 class AggregateEvalNode;
 class GetPropertyCache;
 class GetEntityTypeCache;
@@ -45,6 +46,7 @@ private:
     PlanGraphNode* _prevNode {nullptr};
     PlanGraphVariables* _variables {nullptr};
 
+    ExprEvalNode* _exprEvalNode {nullptr};
     AggregateEvalNode* _aggrEvalNode {nullptr};
     FuncEvalNode* _funcEvalNode {nullptr};
 
