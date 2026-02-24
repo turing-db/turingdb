@@ -6,9 +6,12 @@ add_subdirectory(range-v3)
 add_subdirectory(spdlog)
 add_subdirectory(termcolor)
 
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/neo4j/neo4j-4.3.23.tar.gz DESTINATION neo4j)
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/neo4j/cyber-security-db DESTINATION neo4j)
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/neo4j/network-db DESTINATION neo4j)
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/neo4j/pole-db DESTINATION neo4j)
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/neo4j/stackoverflow-db DESTINATION neo4j)
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/neo4j/recommendations-db DESTINATION neo4j)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/datasets/cyber-security-ad.jsonl
+              ${CMAKE_CURRENT_SOURCE_DIR}/datasets/healthcare-analytics.jsonl
+              ${CMAKE_CURRENT_SOURCE_DIR}/datasets/movies.jsonl
+              ${CMAKE_CURRENT_SOURCE_DIR}/datasets/network-management.jsonl
+              ${CMAKE_CURRENT_SOURCE_DIR}/datasets/openstreetmap.jsonl
+              ${CMAKE_CURRENT_SOURCE_DIR}/datasets/poledb.jsonl
+              ${CMAKE_CURRENT_SOURCE_DIR}/datasets/reactome.jsonl
+              ${CMAKE_CURRENT_SOURCE_DIR}/datasets/recommendations.jsonl
+        DESTINATION datasets)
