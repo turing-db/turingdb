@@ -301,7 +301,9 @@ TuringShell::~TuringShell() {
 void TuringShell::startLoop() {
     _threadID = ::pthread_self();
 
-    // Ignore SIGUSR1 signal (used to interrupt ::read())
+    // Setup SIGUSR1 signal
+    // Doesn't do anything by default, it only
+    // interrupts ::read() (default unix behaviour)
     struct sigaction sa {};
     sa.sa_handler = [](int) {};
     sigemptyset(&sa.sa_mask);
