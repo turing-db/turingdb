@@ -31,7 +31,7 @@ private:
     bool _inMemory {false};
     bool _resetDefault {false};
     unsigned _port {6666};
-    size_t _startTimeout {30};
+    size_t _startTimeout {500};
 
     StartCmd();
 
