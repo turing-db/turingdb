@@ -11,6 +11,7 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include "ExecutionContext.h"
 #include "PipelinePort.h"
 #include "columns/AllowedKinds.h"
 #include "columns/Column.h"
@@ -233,7 +234,7 @@ std::string OrderByProcessor::describe() const {
 }
 
 OrderByProcessor* OrderByProcessor::create(PipelineV2* pipeline,
-                                           std::span<OrderByKey> keys) {
+                                           std::span<const OrderByKey> keys) {
     OrderByProcessor* proc = new OrderByProcessor;
 
     {
@@ -433,6 +434,11 @@ void OrderByProcessor::execute() {
     PipelineOutputPort* outputPort = _output.getPort();
 
     if (_state == State::SORT_INCOMING) {
+        if (inputPort->isClosed()) {
+            _state = State::MERGE_SORTED_RUNS;
+            return;
+        }
+
         if (!inputPort->hasData()) {
             return;
         }
@@ -441,10 +447,6 @@ void OrderByProcessor::execute() {
         memorise();
 
         inputPort->consume();
-
-        if (inputPort->isClosed()) {
-            _state = State::MERGE_SORTED_RUNS;
-        }
 
         return;
     }
@@ -470,7 +472,8 @@ void OrderByProcessor::execute() {
              return;
          }
 
-         const size_t rowsToWrite = std::min(remainingToWrite, ChunkConfig::CHUNK_SIZE);
+         const size_t chunkSize = _ctxt->getChunkSize();
+         const size_t rowsToWrite = std::min(remainingToWrite, chunkSize);
 
          const Dataframe* outDf = _output.getDataframe();
 
