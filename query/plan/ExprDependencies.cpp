@@ -62,6 +62,11 @@ void ExprDependencies::genExprDependencies(PlanGraphVariables& variables, Expr* 
 
         case Expr::Kind::PROPERTY: {
             const PropertyExpr* prop = static_cast<PropertyExpr*>(expr);
+
+            if (prop->isStringTableHeaderAccess()) {
+                break;
+            }
+
             PlanGraphNode* producer = variables.getProducer(prop->getEntityVarDecl());
             bioassert(producer, "VarDecl not found");
 
