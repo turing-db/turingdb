@@ -112,6 +112,14 @@ void SystemEventHandler::setOnStop(const std::function<void()>& onStop) {
     _instance->_onStop = onStop;
 }
 
+void SystemEventHandler::setReady() {
+    if (!_instance) {
+        return;
+    }
+
+    _instance->_ready.store(true);
+}
+
 bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
     if (!socketPath.exists()) {
         return false;
@@ -145,8 +153,11 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
 
     const int res = ::connect(sockFd, (sockaddr*)&addr, sizeof(addr));
 
-    // Restore working directory
-    [[maybe_unused]] const int res2 = ::chdir(savedCwd);
+    // Restore working directory. If this fails the caller's process is left in
+    // the socket directory, but since requestStop is only called from the stop
+    // command process (which exits right after), this is harmless. We must not
+    // abort here: STOP must still be sent even if the restore fails.
+    [[maybe_unused]] const int cwdRes = ::chdir(savedCwd);
 
     // Check connection
     if (res < 0) {
@@ -222,7 +233,9 @@ bool SystemEventHandler::initializeImpl() {
     const int bindRes = ::bind(_sockFd, (sockaddr*)&addr, sizeof(addr));
 
     // Restore the working directory
-    [[maybe_unused]] const int res2 = ::chdir(savedCwd);
+    if (const int res = ::chdir(savedCwd); res < 0) {
+        return false;
+    }
 
     // Bind the socket
     if (bindRes < 0 || ::listen(_sockFd, 4) < 0) {
@@ -270,7 +283,9 @@ bool SystemEventHandler::initializeImpl() {
             // Signal received
             if (pfds[1].revents & POLLIN) {
                 uint64_t val = 0;
-                [[maybe_unused]] const int res = ::read(_signalFd._read, &val, sizeof(val));
+                const int res = ::read(_signalFd._read, &val, sizeof(val));
+                (void)res; // Can safely ignore the result of the read
+
                 _onStop();
                 break;
             }
@@ -292,7 +307,9 @@ bool SystemEventHandler::initializeImpl() {
                 cmd.assign(buf, n);
 
                 if (cmd == "PING") {
-                    [[maybe_unused]] const int res = ::write(client, "PONG", 4);
+                    const bool ready = _ready.load();
+                    const std::string_view reply = ready ? "PONG" : "INIT";
+                    [[maybe_unused]] const int res = ::write(client, reply.data(), reply.size());
                 } else if (cmd == "STOP") {
                     [[maybe_unused]] const int res = ::write(client, "OK", 2);
                     ::close(client);

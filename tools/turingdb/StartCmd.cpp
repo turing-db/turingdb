@@ -4,8 +4,8 @@
 #include <argparse.hpp>
 
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <sys/un.h>
+#include <limits.h>
 #include <unistd.h>
 #include <chrono>
 #include <thread>
@@ -18,10 +18,116 @@
 #include "DBServerConfig.h"
 #include "Demonology.h"
 #include "LogSetup.h"
+#include "SystemEventHandler.h"
 
 #include "TuringException.h"
 
 using namespace db;
+
+namespace {
+
+enum class PingResult {
+    Pong,
+    Init,
+    NoResponse,
+};
+
+PingResult pingServer(const fs::Path& socketPath) {
+    // Socket file not created yet, or does not exist
+    if (!socketPath.exists()) {
+        return PingResult::NoResponse;
+    }
+
+    // Could not create socket
+    const int sockFd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sockFd < 0) {
+        return PingResult::NoResponse;
+    }
+
+    // chdir to socket directory to stay within the sun_path length limit
+    char savedCwd[PATH_MAX];
+    if (::getcwd(savedCwd, sizeof(savedCwd)) == nullptr) {
+        ::close(sockFd);
+        return PingResult::NoResponse;
+    }
+
+    if (::chdir(socketPath.parent().c_str()) != 0) {
+        ::close(sockFd);
+        return PingResult::NoResponse;
+    }
+
+    sockaddr_un addr {};
+    addr.sun_family = AF_UNIX;
+    const std::string sockName {socketPath.filename()};
+    strncpy(addr.sun_path, sockName.c_str(), sizeof(addr.sun_path) - 1);
+
+    const int res = ::connect(sockFd, (sockaddr*)&addr, sizeof(addr));
+
+    [[maybe_unused]] const int cwdRes = ::chdir(savedCwd);
+
+    // Could not connect to the socket
+    if (res < 0) {
+        ::close(sockFd);
+        return PingResult::NoResponse;
+    }
+
+    constexpr std::string_view ping = "PING";
+    if (::write(sockFd, ping.data(), ping.size()) != (ssize_t)ping.size()) {
+        ::close(sockFd);
+        return PingResult::NoResponse;
+    }
+
+    char buf[5] {};
+    const ssize_t nread = ::read(sockFd, buf, sizeof(buf) - 1);
+    ::close(sockFd);
+
+    if (nread <= 0) {
+        return PingResult::NoResponse;
+    }
+
+    const std::string_view response {buf, (size_t)nread};
+
+    if (response == "PONG") {
+        return PingResult::Pong;
+    }
+
+    if (response == "INIT") {
+        return PingResult::Init;
+    }
+
+    return PingResult::NoResponse;
+}
+
+// Waits for the server to signal readiness via PING/INIT/PONG.
+// initTimeoutMs: max time to wait for at least an INIT response.
+// Once INIT is received, waits indefinitely for PONG.
+bool waitForReady(const fs::Path& socketPath, size_t initTimeoutMs) {
+    const auto initDeadline = std::chrono::steady_clock::now()
+                            + std::chrono::milliseconds(initTimeoutMs);
+
+    constexpr size_t intervalMs = 50;
+
+    bool initReceived = false;
+
+    while (true) {
+        const PingResult result = pingServer(socketPath);
+
+        if (result == PingResult::Pong) {
+            return true;
+        }
+        if (result == PingResult::Init) {
+            initReceived = true;
+        }
+
+        if (!initReceived && std::chrono::steady_clock::now() >= initDeadline) {
+            return false;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
+    }
+}
+
+}
 
 StartCmd::StartCmd()
     : _argParser("start")
@@ -29,36 +135,6 @@ StartCmd::StartCmd()
 }
 
 StartCmd::~StartCmd() = default;
-
-static bool waitForPort(const std::string& address, unsigned port, size_t timeoutMs) {
-    const auto deadline = std::chrono::steady_clock::now()
-                          + std::chrono::seconds(timeoutMs);
-
-    constexpr size_t intervalMs = 100;
-
-    while (std::chrono::steady_clock::now() < deadline) {
-        const int sockFd = ::socket(AF_INET, SOCK_STREAM, 0);
-        if (sockFd < 0) {
-            break;
-        }
-
-        sockaddr_in addr {};
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(port);
-        ::inet_pton(AF_INET, address.c_str(), &addr.sin_addr);
-
-        const int res = ::connect(sockFd, (sockaddr*)&addr, sizeof(addr));
-        ::close(sockFd);
-
-        if (res == 0) {
-            return true;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
-    }
-
-    return false;
-}
 
 int StartCmd::execute() {
     LogSetup::setupLogConsole();
@@ -90,11 +166,11 @@ int StartCmd::execute() {
         }
 
         if (demonResult == DemonResult::Parent) {
-            if (!waitForPort(_address, _port, _startTimeout)) {
-                spdlog::error("TuringDB did not start within {} s", _startTimeout);
+            if (!waitForReady(config.getSocketPath(), _startTimeout)) {
+                spdlog::error("TuringDB did not respond within {} ms", _startTimeout);
                 return EXIT_FAILURE;
             }
-            spdlog::info("TuringDB is ready on port {}", _port);
+            spdlog::info("TuringDB is ready");
             return EXIT_SUCCESS;
         }
     }
@@ -153,6 +229,7 @@ int StartCmd::execute() {
         server->start();
 
         if (_demonize) {
+            SystemEventHandler::setReady();
             server->wait();
             server.reset();
         } else {
@@ -216,6 +293,6 @@ void StartCmd::initialize() {
         .store_into(_inMemory);
     _argParser.add_argument("-start-timeout")
         .metavar("seconds")
-        .help("Milliseconds to wait for the HTTP server to become ready when daemonizing (default: 30)")
+        .help("Milliseconds to wait for the first INIT response when daemonizing (default: 500)")
         .store_into(_startTimeout);
 }
