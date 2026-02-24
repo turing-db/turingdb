@@ -74,7 +74,7 @@ void VectorSearchProcessor::execute() {
     vec::VectorSearchResult result;
     vec::VectorResult<void> searchResult = accessor.search(query, result);
 
-    if (!searchResult.has_value()) {
+    if (!searchResult) {
         throw PipelineException(
             fmt::format("Vector search failed: {}", searchResult.error().fmtMessage()));
     }

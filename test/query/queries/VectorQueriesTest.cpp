@@ -306,9 +306,10 @@ TEST_F(VectorQueriesTest, loadVectorFromFile) {
         "default", &_env->getMem(), [](const Dataframe*) {});
     ASSERT_TRUE(createRes.isOk()) << "Create failed: " << createRes.getError();
 
-    // Create a temporary CSV file with test vectors
+    // Create a temporary CSV file with test vectors in the data directory
     // Format: id,dim1,dim2,dim3,dim4
-    std::string vectorFile = _outDir + "/test_vectors.csv";
+    std::string dataDir = _outDir + "/turing/data";
+    std::string vectorFile = dataDir + "/test_vectors.csv";
     {
         std::ofstream out(vectorFile);
         out << "1,1.0,0.0,0.0,0.0\n";
@@ -318,9 +319,9 @@ TEST_F(VectorQueriesTest, loadVectorFromFile) {
         out << "5,0.5,0.5,0.0,0.0\n";
     }
 
-    // Load vectors from file
+    // Load vectors from file (path relative to data directory)
     bool executed = false;
-    std::string loadQuery = "LOAD VECTOR FROM \"" + vectorFile + "\" IN load_test";
+    std::string loadQuery = "LOAD VECTOR FROM \"test_vectors.csv\" IN load_test";
     const auto res = _db->query(
         loadQuery,
         "default", &_env->getMem(),
@@ -362,8 +363,9 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
         {5, {0.8f, 0.2f, 0.0f, 0.0f}},   // also close to vector 1
     };
 
-    // Write vectors to CSV file
-    std::string vectorFile = _outDir + "/search_vectors.csv";
+    // Write vectors to CSV file in the data directory
+    std::string dataDir = _outDir + "/turing/data";
+    std::string vectorFile = dataDir + "/search_vectors.csv";
     {
         std::ofstream out(vectorFile);
         for (const auto& vec : testVectors) {
@@ -375,8 +377,8 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
         }
     }
 
-    // Load vectors
-    std::string loadQuery = "LOAD VECTOR FROM \"" + vectorFile + "\" IN search_test";
+    // Load vectors (path relative to data directory)
+    std::string loadQuery = "LOAD VECTOR FROM \"search_vectors.csv\" IN search_test";
     auto loadRes = _db->query(loadQuery, "default", &_env->getMem(), [](const Dataframe*) {});
     ASSERT_TRUE(loadRes.isOk()) << "Load failed: " << loadRes.getError();
 
@@ -430,8 +432,9 @@ TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
         {50, {0.6f, 0.4f, 0.0f, 0.0f}},
     };
 
-    // Write vectors to CSV file
-    std::string vectorFile = _outDir + "/k_test_vectors.csv";
+    // Write vectors to CSV file in the data directory
+    std::string dataDir = _outDir + "/turing/data";
+    std::string vectorFile = dataDir + "/k_test_vectors.csv";
     {
         std::ofstream out(vectorFile);
         for (const auto& vec : testVectors) {
@@ -443,8 +446,8 @@ TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
         }
     }
 
-    // Load vectors
-    std::string loadQuery = "LOAD VECTOR FROM \"" + vectorFile + "\" IN k_test";
+    // Load vectors (path relative to data directory)
+    std::string loadQuery = "LOAD VECTOR FROM \"k_test_vectors.csv\" IN k_test";
     auto loadRes = _db->query(loadQuery, "default", &_env->getMem(), [](const Dataframe*) {});
     ASSERT_TRUE(loadRes.isOk()) << "Load failed: " << loadRes.getError();
 
@@ -497,8 +500,9 @@ TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
         {500, {0.543210f, 0.098765f, 0.333333f, 0.444444f}},  // medium distance
     };
 
-    // Write vectors to CSV file with high precision
-    std::string vectorFile = _outDir + "/precision_vectors.csv";
+    // Write vectors to CSV file with high precision in the data directory
+    std::string dataDir = _outDir + "/turing/data";
+    std::string vectorFile = dataDir + "/precision_vectors.csv";
     {
         std::ofstream out(vectorFile);
         out << std::fixed << std::setprecision(6);
@@ -511,8 +515,8 @@ TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
         }
     }
 
-    // Load vectors
-    std::string loadQuery = "LOAD VECTOR FROM \"" + vectorFile + "\" IN precision_test";
+    // Load vectors (path relative to data directory)
+    std::string loadQuery = "LOAD VECTOR FROM \"precision_vectors.csv\" IN precision_test";
     auto loadRes = _db->query(loadQuery, "default", &_env->getMem(), [](const Dataframe*) {});
     ASSERT_TRUE(loadRes.isOk()) << "Load failed: " << loadRes.getError();
 
@@ -615,7 +619,8 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
         {5, {0.0f, 0.0f, 1.0f, 0.0f}},
     };
 
-    const std::string vectorFile = _outDir + "/doc_vectors.csv";
+    const std::string dataDir = _outDir + "/turing/data";
+    const std::string vectorFile = dataDir + "/doc_vectors.csv";
     {
         std::ofstream out(vectorFile);
         for (const auto& vec : testVectors) {
@@ -627,7 +632,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
         }
     }
 
-    const std::string loadQuery = "LOAD VECTOR FROM \"" + vectorFile + "\" IN doc_vectors";
+    const std::string loadQuery = "LOAD VECTOR FROM \"doc_vectors.csv\" IN doc_vectors";
     const auto loadRes =
         _db->query(loadQuery, "default", &_env->getMem(), [](const Dataframe*) {});
     ASSERT_TRUE(loadRes.isOk()) << "Load vectors failed: " << loadRes.getError();

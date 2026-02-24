@@ -15,9 +15,7 @@ VECTORS_FILE = os.path.join(SCRIPT_DIR, "vectors.csv")
 
 def spawn_turingdb():
     print(f"- {GREEN}Starting turingdb{NC}")
-    turing_home = os.environ.get('TURING_HOME', '')
-    turingdb_bin = os.path.join(turing_home, 'bin', 'turingdb') if turing_home else 'turingdb'
-    return subprocess.Popen(f"exec {turingdb_bin} -demon -turing-dir .turing", shell=True)
+    return subprocess.Popen("exec turingdb -demon -turing-dir .turing", shell=True)
 
 
 def stop_turingdb(proc):
@@ -102,9 +100,14 @@ if __name__ == "__main__":
         if dimensions[idx] != 8:
             raise Exception(f"Expected dimension 8, got {dimensions[idx]}")
 
-        # Load vectors from file
+        # Copy vectors file into the data directory
+        data_dir = os.path.join(".turing", "data")
+        os.makedirs(data_dir, exist_ok=True)
+        shutil.copy(VECTORS_FILE, data_dir)
+
+        # Load vectors from file (path relative to .turing/data)
         print(f"- {BLUE}Loading vectors from file{NC}")
-        client.query(f'LOAD VECTOR FROM "{VECTORS_FILE}" IN test_vectors')
+        client.query('LOAD VECTOR FROM "vectors.csv" IN test_vectors')
         print("  Vectors loaded successfully")
 
         # Test vector search before restart
