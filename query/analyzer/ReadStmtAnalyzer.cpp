@@ -431,7 +431,7 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
     }
 
     // Analyze each element in the query vector
-    for (Expr* const elem : queryVector->getElements()) {
+    for (Expr* elem : queryVector->getElements()) {
         _exprAnalyzer->analyzeRootExpr(elem);
 
         const EvaluatedType elemType = elem->getType();

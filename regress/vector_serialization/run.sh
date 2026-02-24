@@ -2,9 +2,6 @@
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-# Set TURING_HOME to the install root (two levels up from regress/test_name/)
-export TURING_HOME=$(cd "$SCRIPT_DIR/../.." && pwd)
-
 SCRATCH_DIR=$SCRIPT_DIR/scratch
 if [ -d $SCRATCH_DIR ]; then
     rm -rf $SCRATCH_DIR

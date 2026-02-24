@@ -10,6 +10,8 @@
 #include "dataframe/NamedColumn.h"
 
 #include "ExecutionContext.h"
+#include "SystemManager.h"
+#include "TuringConfig.h"
 #include "VectorDatabase.h"
 #include "VecLibWriteAccessor.h"
 #include "BatchVectorCreate.h"
@@ -66,12 +68,22 @@ void LoadVectorProcessor::execute() {
         throw PipelineException(fmt::format("Vector index '{}' not found", _indexName));
     }
 
+    // Resolve file path relative to the data directory
+    const SystemManager* sysMan = _ctxt->getSystemManager();
+    const fs::Path& dataDir = sysMan->getConfig()->getDataDir();
+    const fs::Path filePath = dataDir / std::string(_filePath);
+
+    if (!filePath.isSubDirectory(dataDir)) {
+        throw PipelineException(fmt::format(
+            "Invalid file path: path must be relative to '{}'",
+            dataDir.get()));
+    }
+
     // Parse file and load embeddings
     // Expected format: CSV with id,dim1,dim2,...,dimN
-    const std::string filePath{_filePath};
-    std::ifstream file{filePath};
+    std::ifstream file(filePath.get());
     if (!file.is_open()) {
-        throw PipelineException(fmt::format("Failed to open file '{}'", _filePath));
+        throw PipelineException(fmt::format("Failed to open file '{}'", filePath.get()));
     }
 
     vec::Dimension dimension = accessor.metadata()._dimension;
