@@ -433,7 +433,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
     return output;
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addOrderBy(std::span<OrderByProcessor::OrderByKey> keys) {
+PipelineBlockOutputInterface& PipelineBuilder::addOrderBy(std::span<const OrderByProcessor::OrderByKey> keys) {
     OrderByProcessor* orderby = OrderByProcessor::create(_pipeline, keys);
 
     PipelineBlockInputInterface& input = orderby->input();

@@ -47,7 +47,7 @@ public:
     OrderByProcessor& operator=(const OrderByProcessor&) = delete;
     OrderByProcessor& operator=(OrderByProcessor&&) = delete;
 
-    static OrderByProcessor* create(PipelineV2* pipeline, std::span<OrderByKey> keys);
+    static OrderByProcessor* create(PipelineV2* pipeline, std::span<const OrderByKey> keys);
 
     void prepare(ExecutionContext* ctxt) final;
     void reset() final;
