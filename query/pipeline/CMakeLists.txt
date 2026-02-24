@@ -55,6 +55,7 @@ set(processors_sources
     processors/ExprProgram.cpp
     processors/EvalBinaryExpr.cpp
     processors/EvalUnaryExpr.cpp
+    processors/CSVSourceProcessor.cpp
 )
 
 set(procedures_sources
@@ -83,4 +84,5 @@ target_link_libraries(turing_db_pipeline_s PUBLIC
 
 target_link_libraries(turing_db_pipeline_s PRIVATE
     turing_db_storage_s
-    turing_db_system_s)
+    turing_db_system_s
+    turing_db_io_csv_s)

@@ -34,6 +34,7 @@ class StringExpr;
 class SymbolExpr;
 class UnaryExpr;
 class FunctionInvocationExpr;
+class IndexExpr;
 class Pattern;
 class PatternElement;
 class EntityPattern;
@@ -80,6 +81,7 @@ class S3ConnectQuery;
 class S3TransferQuery;
 class CommitQuery;
 class ShowProceduresQuery;
+class LoadCSVStmt;
 
 class CypherAST {
 public:
@@ -107,6 +109,7 @@ public:
     friend SymbolExpr;
     friend UnaryExpr;
     friend FunctionInvocationExpr;
+    friend IndexExpr;
     friend Pattern;
     friend PatternElement;
     friend NodePattern;
@@ -144,6 +147,7 @@ public:
     friend S3TransferQuery;
     friend CommitQuery;
     friend ShowProceduresQuery;
+    friend LoadCSVStmt;
     friend YCypherParser;
 
     using QueryCommands = std::vector<QueryCommand*>;

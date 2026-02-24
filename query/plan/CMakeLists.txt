@@ -11,6 +11,7 @@ set(plan_sources
     ExprProgramGenerator.cpp
     PredicateProgramGenerator.cpp
     PlannerException.cpp
+    nodes/LoadCSVNode.cpp
 )
 
 add_library(turing_db_plan_s STATIC ${plan_sources})
@@ -20,6 +21,7 @@ target_include_directories(turing_db_plan_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(turing_db_plan_s PRIVATE
     turing_db_pipeline_s
     turing_db_ast_s
+    turing_db_io_csv_s
     turing_db_query_common_s
     turing_db_storage_s
     turing_db_base_s

@@ -2,6 +2,9 @@
 
 #include "QueryCallbacks.h"
 
+#include <string>
+#include <vector>
+
 #include "PipelineBuilder.h"
 #include "views/GraphView.h"
 
@@ -47,6 +50,7 @@ class S3TransferNode;
 class ShowProceduresNode;
 class ShortestPathNode;
 class CommitNode;
+class LoadCSVNode;
 
 class PipelineGenerator {
 public:
@@ -83,6 +87,9 @@ public:
     const VarColumnMap& varColMap() const { return _declToColumn; }
     LocalMemory& memory() { return *_mem; }
     GraphView view() { return _view; }
+    const std::vector<std::string>& getCSVHeaders() const {
+        return _csvHeaders;
+    }
 
 private:
     const PlanGraph* _graph {nullptr};
@@ -132,6 +139,10 @@ private:
     PipelineOutputInterface* translateS3TransferNode(S3TransferNode* node);
     PipelineOutputInterface* translateShowProceduresNode(ShowProceduresNode* node);
     PipelineOutputInterface* translateShortestPathNode(ShortestPathNode* node);
+    PipelineOutputInterface* translateLoadCSVNode(LoadCSVNode* node);
+
+    std::vector<std::string> _csvHeaders;
+    size_t _csvFieldCount {0};
 };
 
 }

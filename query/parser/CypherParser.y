@@ -63,6 +63,7 @@
     #include "LoadNeo4jQuery.h"
     #include "LoadJsonlQuery.h"
     #include "ShowProceduresQuery.h"
+    #include "stmt/LoadCSVStmt.h"
 
     namespace db {
         class YCypherScanner;
@@ -159,6 +160,7 @@
 %token<std::string_view> COUNT
 %token<std::string_view> GRAPH
 %token<std::string_view> NEO4J
+%token<std::string_view> HEADERS
 %token<std::string_view> JSONL
 %token<std::string_view> LIST
 %token<std::string_view> DESC
@@ -170,6 +172,7 @@
 %token<std::string_view> THEN
 %token<std::string_view> ELSE
 %token<std::string_view> CASE
+%token<std::string_view> ERROR_
 %token<std::string_view> ENDS
 %token<std::string_view> DROP
 %token<std::string_view> SHOW
@@ -179,6 +182,8 @@
 %token<std::string_view> PUSH
 %token<std::string_view> PULL
 %token<std::string_view> NEW
+%token<std::string_view> FAIL
+%token<std::string_view> CSV
 %token<std::string_view> GML
 %token<std::string_view> ANY
 %token<std::string_view> SET
@@ -244,7 +249,6 @@
 %type<db::Expr*> powerExpr
 %type<db::Expr*> unaryAddSubExpr
 %type<db::Expr*> atomicExpr
-%type<db::Expr*> listExpr
 %type<db::Expr*> stringExpr
 %type<db::Expr*> entityTypeExpr
 %type<db::Expr*> propertyOrLabelExpr
@@ -302,6 +306,7 @@
 %type<db::CreateStmt*> createSt
 %type<db::SetStmt*> setSt
 %type<db::SetItem*> setItem
+%type<db::LoadCSVStmt*> loadCSVSt
 %type<db::DeleteStmt*> deleteSt
 %type<db::ReturnStmt*> returnSt
 %type<db::Skip*> skipSSt
@@ -573,10 +578,39 @@ unwindSt
     : UNWIND expr AS symbol { scanner.notImplemented(@$, "UNWIND"); }
     ;
 
+loadCSVSt
+    : LOAD CSV STRING_LITERAL AS symbol {
+        $$ = LoadCSVStmt::create(ast, $3, $5); LOC($$, @$);
+      }
+    | LOAD CSV STRING_LITERAL WITH HEADERS AS symbol {
+        $$ = LoadCSVStmt::create(ast, $3, $7);
+        $$->setHasHeaders(true); LOC($$, @$);
+      }
+    | LOAD CSV STRING_LITERAL ON ERROR_ SKIP AS symbol {
+        $$ = LoadCSVStmt::create(ast, $3, $8);
+        $$->setSkipOnError(true); LOC($$, @$);
+      }
+    | LOAD CSV STRING_LITERAL WITH HEADERS ON ERROR_ SKIP AS symbol {
+        $$ = LoadCSVStmt::create(ast, $3, $10);
+        $$->setHasHeaders(true);
+        $$->setSkipOnError(true); LOC($$, @$);
+      }
+    | LOAD CSV STRING_LITERAL ON ERROR_ FAIL AS symbol {
+        $$ = LoadCSVStmt::create(ast, $3, $8);
+        LOC($$, @$);
+      }
+    | LOAD CSV STRING_LITERAL WITH HEADERS ON ERROR_ FAIL AS symbol {
+        $$ = LoadCSVStmt::create(ast, $3, $10);
+        $$->setHasHeaders(true);
+        LOC($$, @$);
+      }
+    ;
+
 readingStatement
     : matchSt { $$ = $1; }
     | unwindSt { scanner.notImplemented(@$, "UNWIND"); }
     | callSt { $$ = $1; }
+    | loadCSVSt { $$ = $1; }
     ;
 
 updatingStatement
@@ -815,15 +849,9 @@ unaryAddSubExpr
 
 atomicExpr
     : propertyOrLabelExpr { $$ = $1; }
-    | atomicExpr listExpr { $$ = nullptr; scanner.notImplemented(@$, "List Exprs"); }
-    ;
-
-listExpr
-    : OBRACK expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expr CBRACK"); }
-    | OBRACK expr RANGE expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expr RANGE expr CBRACK"); }
-    | OBRACK RANGE expr CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK RANGE expr CBRACK"); }
-    | OBRACK expr RANGE CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK expr RANGE CBRACK"); }
-    | OBRACK RANGE CBRACK { $$ = nullptr; scanner.notImplemented(@$, "OBRACK RANGE CBRACK"); }
+    | atomicExpr OBRACK expr CBRACK {
+        $$ = IndexExpr::create(ast, $1, $3); LOC($$, @$);
+      }
     ;
 
 propertyOrLabelExpr
@@ -1295,7 +1323,11 @@ reservedWord
     | FALSE { $$ = Symbol::create(ast, $1); }
     | COUNT { $$ = Symbol::create(ast, $1); }
     | NEO4J { $$ = Symbol::create(ast, $1); }
+    | HEADERS { $$ = Symbol::create(ast, $1); }
     | JSONL { $$ = Symbol::create(ast, $1); }
+    | CSV { $$ = Symbol::create(ast, $1); }
+    | FAIL { $$ = Symbol::create(ast, $1); }
+    | ERROR_ { $$ = Symbol::create(ast, $1); }
     | LIST { $$ = Symbol::create(ast, $1); }
     | DESC { $$ = Symbol::create(ast, $1); }
     | CALL { $$ = Symbol::create(ast, $1); }

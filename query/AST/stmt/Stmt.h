@@ -16,6 +16,7 @@ public:
         DELETE,
         RETURN,
         SHORTESTPATH,
+        LOAD_CSV,
     };
 
     virtual Kind getKind() const = 0;

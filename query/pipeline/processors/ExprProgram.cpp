@@ -3,12 +3,17 @@
 #include <stdint.h>
 
 #include "columns/ColumnOperator.h"
+#include "columns/ColumnOptVector.h"
 #include "EvalBinaryExpr.h"
 #include "EvalUnaryExpr.h"
+#include "metadata/SupportedType.h"
 
 #include "PipelineV2.h"
 
 #include "FatalException.h"
+#include "PipelineException.h"
+
+#include <spdlog/fmt/fmt.h>
 
 using namespace db;
 
@@ -108,6 +113,9 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:
+        case OP_TO_INTEGER:
+        case OP_TO_FLOAT:
+        case OP_TO_BOOLEAN:
             throw FatalException(
                 fmt::format("Attempted to evaluate {} as binary operator.",
                             ColumnOperatorDescription::value(op)));
@@ -145,6 +153,18 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
             throw FatalException("Plus operator is not supported.");
         break;
 
+        case OP_TO_INTEGER:
+            EvalUnaryExpr::eval<OP_TO_INTEGER>(res, input);
+        break;
+
+        case OP_TO_FLOAT:
+            EvalUnaryExpr::eval<OP_TO_FLOAT>(res, input);
+        break;
+
+        case OP_TO_BOOLEAN:
+            EvalUnaryExpr::eval<OP_TO_BOOLEAN>(res, input);
+        break;
+
         case OP_EQUAL:
         case OP_NOT_EQUAL:
         case OP_GREATER_THAN:
@@ -159,13 +179,15 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         case OP_DIV:
         case OP_PROJECT:
         case OP_IN:
-            throw FatalException(fmt::format("Attempted to evalute {} as unary operator.",
-                                             ColumnOperatorDescription::value(op)));
+            throw FatalException(fmt::format(
+                "Attempted to evalute {} as unary operator.",
+                ColumnOperatorDescription::value(op)));
         break;
 
         case OP_NOOP:
         case _SIZE:
-            throw FatalException("Attempted to evaluate invalid ColumnOperator.");
+            throw FatalException(
+                "Attempted to evaluate invalid ColumnOperator.");
         break;
     }
 }

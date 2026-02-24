@@ -19,6 +19,7 @@
 #include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
+#include "stmt/LoadCSVStmt.h"
 #include "QualifiedName.h"
 #include "Pattern.h"
 #include "PatternElement.h"
@@ -53,7 +54,7 @@ ReadStmtAnalyzer::ReadStmtAnalyzer(CypherAST* ast, GraphView graphView)
 ReadStmtAnalyzer::~ReadStmtAnalyzer() {
 }
 
-void ReadStmtAnalyzer::analyze(const Stmt* stmt) {
+void ReadStmtAnalyzer::analyze(Stmt* stmt) {
     switch (stmt->getKind()) {
         case Stmt::Kind::MATCH:
             analyze(static_cast<const MatchStmt*>(stmt));
@@ -61,6 +62,10 @@ void ReadStmtAnalyzer::analyze(const Stmt* stmt) {
 
         case Stmt::Kind::CALL:
             analyze(static_cast<const CallStmt*>(stmt));
+            break;
+
+        case Stmt::Kind::LOAD_CSV:
+            analyze(static_cast<LoadCSVStmt*>(stmt));
             break;
 
         default:
@@ -130,6 +135,25 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
     }
 
     analyze(*func, yield);
+}
+
+void ReadStmtAnalyzer::analyze(LoadCSVStmt* loadCSV) {
+    Symbol* alias = loadCSV->getAlias();
+    if (!alias) {
+        throwError("LOAD CSV must have an alias", loadCSV);
+    }
+
+    if (_ctxt->hasDecl(alias->getName())) {
+        throwError(fmt::format("Variable '{}' already declared",
+                               alias->getName()),
+                   loadCSV);
+    }
+
+    VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast,
+                                                     EvaluatedType::StringTable,
+                                                     alias->getName());
+
+    loadCSV->setAliasDecl(decl);
 }
 
 void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause* yield) {

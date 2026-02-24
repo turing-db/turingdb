@@ -39,6 +39,8 @@
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
+#include "stmt/LoadCSVStmt.h"
+#include "nodes/LoadCSVNode.h"
 
 #include "BioAssert.h"
 
@@ -68,6 +70,10 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
 
         case Stmt::Kind::CALL:
             generateCallStmt(static_cast<const CallStmt*>(stmt));
+            break;
+
+        case Stmt::Kind::LOAD_CSV:
+            generateLoadCSVStmt(static_cast<const LoadCSVStmt*>(stmt));
             break;
 
         default:
@@ -134,6 +140,19 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
     } else {
         bioassert(yield, "Procedure call without YIELD must be a standalone CALL");
     }
+}
+
+void ReadStmtGenerator::generateLoadCSVStmt(const LoadCSVStmt* stmt) {
+    const VarDecl* aliasDecl = stmt->getAliasDecl();
+    bioassert(aliasDecl, "LoadCSVStmt alias does not have a VarDecl");
+
+    LoadCSVNode* loadCSVNode = _tree->create<LoadCSVNode>(
+        stmt->getFilePath(),
+        stmt->hasHeaders(),
+        stmt->skipOnError(),
+        aliasDecl);
+
+    _variables->setProducer(aliasDecl, loadCSVNode);
 }
 
 void ReadStmtGenerator::generateWhereClause(const WhereClause* where) {

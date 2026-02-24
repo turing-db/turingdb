@@ -122,7 +122,7 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
 
     // Generate read statements (optional)
     if (readStmts) {
-        for (const Stmt* stmt : readStmts->stmts()) {
+        for (Stmt* stmt : readStmts->stmts()) {
             if (stmt->getKind() == Stmt::Kind::CALL) {
                 if (static_cast<const CallStmt*>(stmt)->isStandaloneCall()) {
                     returnMandatory = false;

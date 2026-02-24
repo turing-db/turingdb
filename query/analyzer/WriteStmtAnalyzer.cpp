@@ -304,6 +304,7 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
         case EvaluatedType::Null:
         case EvaluatedType::NodePattern:
         case EvaluatedType::EdgePattern:
+        case EvaluatedType::StringTable:
         case EvaluatedType::List:
         case EvaluatedType::Map:
         case EvaluatedType::Invalid:

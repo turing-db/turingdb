@@ -63,6 +63,7 @@
 #include "nodes/S3TransferNode.h"
 #include "nodes/ShowProceduresNode.h"
 #include "nodes/ShortestPathNode.h"
+#include "nodes/LoadCSVNode.h"
 
 #include "Projection.h"
 #include "decl/VarDecl.h"
@@ -78,6 +79,10 @@
 #include "PlannerException.h"
 #include "FatalException.h"
 #include "BioAssert.h"
+
+#include "processors/CSVSourceProcessor.h"
+#include "columns/ColumnStringTable.h"
+#include "CSVParser.h"
 
 using namespace db;
 
@@ -355,6 +360,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::SHORTEST_PATH:
             return translateShortestPathNode(static_cast<ShortestPathNode*>(node));
+            break;
+
+        case PlanGraphOpcode::LOAD_CSV:
+            return translateLoadCSVNode(static_cast<LoadCSVNode*>(node));
             break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
@@ -673,28 +682,66 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
     // No projection can happen in the case of a Standalone call
     // in which case, we can simply output the whole dataframe
     if (projNode) {
+        // Resolve expressions not yet registered in _declToColumn
+        // (e.g., CSV field access, type conversions on CSV data)
+        Dataframe* df = _builder.getPendingOutputInterface()->getDataframe();
+        DataframeManager* dfMan = _pipeline->getDataframeManager();
+
+        ExprProgram* exprProg = ExprProgram::create(_pipeline);
+        ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
+
+        // Generate columns for projection expressions not yet registered
+        // (e.g. CSV field access, type conversions on CSV data)
+        for (const Projection::ReturnItem& item : projNode->items()) {
+            const auto* exprPtr = std::get_if<Expr*>(&item);
+            if (!exprPtr) {
+                continue;
+            }
+
+            const Expr* expr = *exprPtr;
+            const VarDecl* decl = expr->getExprVarDecl();
+            if (!decl || _declToColumn.contains(decl)) {
+                continue;
+            }
+
+            Column* col = exprGen.generateExpr(expr);
+            ColumnTag tag = dfMan->allocTag();
+            NamedColumn* namedCol = NamedColumn::create(dfMan, col, tag);
+            df->addColumn(namedCol);
+            _declToColumn[decl] = tag;
+        }
+
+        if (!exprProg->instrs().empty()) {
+            _builder.addComputeExpr(exprProg);
+        }
+
         std::vector<ProjectionItem> items;
         for (const Projection::ReturnItem& item : projNode->items()) {
             if (const auto* exprPtr = std::get_if<Expr*>(&item)) {
-                const Expr* item = *exprPtr;
-                const VarDecl* decl = item->getExprVarDecl();
+                const Expr* expr = *exprPtr;
+                const VarDecl* decl = expr->getExprVarDecl();
 
                 if (!decl) {
-                    throw PlannerException("Projection item does not have a variable declaration");
+                    throw PlannerException(
+                        "Projection item does not have "
+                        "a variable declaration");
                 }
 
                 const ColumnTag tag = _declToColumn.at(decl);
-                const std::optional<std::string_view> name = projNode->getName(item);
+                const std::optional<std::string_view> name =
+                    projNode->getName(expr);
                 if (!name) {
                     continue;
                 }
 
                 items.push_back({tag, *name});
 
-            } else if (const auto* declPtr = std::get_if<VarDecl*>(&item)) {
+            } else if (const auto* declPtr =
+                           std::get_if<VarDecl*>(&item)) {
                 const VarDecl* decl = *declPtr;
                 const ColumnTag tag = _declToColumn.at(decl);
-                const std::optional<std::string_view> name = projNode->getName(decl);
+                const std::optional<std::string_view> name =
+                    projNode->getName(decl);
 
                 if (!name) {
                     continue;
@@ -1272,3 +1319,39 @@ PipelineOutputInterface* PipelineGenerator::translateShortestPathNode(ShortestPa
                                                                    output->getDataframe()));
     return _builder.getPendingOutputInterface();
 }
+
+PipelineOutputInterface* PipelineGenerator::translateLoadCSVNode(LoadCSVNode* node) {
+    // Peek at file structure to discover field count and headers
+    CSVFileInfo fileInfo;
+    CSVParser::peekFileStructure(node->getFilePath(), node->hasHeaders(), fileInfo);
+
+    _csvHeaders = fileInfo._headers;
+    _csvFieldCount = fileInfo._fieldCount;
+
+    // Allocate ColumnStringTable with field columns
+    auto* table = _mem->alloc<ColumnStringTable>();
+    for (size_t i = 0; i < _csvFieldCount; i++) {
+        table->addFieldColumn(_mem->alloc<ColumnStringTable::StringColumn>());
+    }
+
+    const CSVErrorMode errorMode =
+        node->skipOnError() ? CSVErrorMode::Skip : CSVErrorMode::Fail;
+
+    auto* csvSource = CSVSourceProcessor::create(
+        _pipeline, node->getFilePath(), node->hasHeaders(),
+        errorMode, _csvFieldCount, table);
+
+    // Register the ColumnStringTable in the output dataframe
+    PipelineBlockOutputInterface& output = csvSource->output();
+    Dataframe* outDf = output.getDataframe();
+    DataframeManager* dfMan = _pipeline->getDataframeManager();
+    const ColumnTag tag = dfMan->allocTag();
+    NamedColumn* namedCol = NamedColumn::create(dfMan, table, tag);
+    outDf->addColumn(namedCol);
+
+    _declToColumn[node->getAliasDecl()] = tag;
+
+    _builder.getPendingOutput().setInterface(&output);
+    return _builder.getPendingOutputInterface();
+}
+

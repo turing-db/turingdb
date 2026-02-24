@@ -21,10 +21,15 @@
 
 #include "expr/Expr.h"
 #include "expr/BinaryExpr.h"
+#include "expr/FunctionInvocationExpr.h"
+#include "expr/IndexExpr.h"
 #include "expr/LiteralExpr.h"
+#include "FunctionInvocation.h"
+#include "expr/ExprChain.h"
 #include "decl/VarDecl.h"
 #include "Literal.h"
 #include "metadata/PropertyType.h"
+#include "columns/ColumnStringTable.h"
 
 #include "dataframe/NamedColumn.h"
 #include "columns/ColumnOperator.h"
@@ -34,7 +39,6 @@
 
 #include "PlannerException.h"
 #include "FatalException.h"
-#include "spdlog/fmt/bundled/base.h"
 
 using namespace db;
 
@@ -144,9 +148,9 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
             throw PlannerException("Path expressions are currently not supported.");
         break;
 
-        // TODO
         case Expr::Kind::FUNCTION_INVOCATION:
-            throw PlannerException("Function expressions are currently not supported.");
+            return generateFuncInvocationExpr(
+                static_cast<const FunctionInvocationExpr*>(expr));
         break;
 
         // TODO
@@ -164,6 +168,10 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
 
         case Expr::Kind::PROPERTY:
             return generatePropertyExpr(static_cast<const PropertyExpr*>(expr));
+        break;
+
+        case Expr::Kind::INDEX:
+            return generateIndexExpr(static_cast<const IndexExpr*>(expr));
         break;
 
         case Expr::Kind::LITERAL:
@@ -199,6 +207,28 @@ Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
 }
 
 Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr) {
+    if (propExpr->isStringTableHeaderAccess()) {
+        const VarDecl* entityDecl = propExpr->getEntityVarDecl();
+        const auto it = _gen->varColMap().find(entityDecl);
+        if (it == _gen->varColMap().end()) {
+            throw FatalException("Could not find column for CSV row variable");
+        }
+
+        const NamedColumn* tableCol = _pendingOut.getDataframe()->getColumn(it->second);
+        auto* table = static_cast<ColumnStringTable*>(tableCol->getColumn());
+
+        const std::string_view headerName = propExpr->getPropName();
+        const auto& headers = _gen->getCSVHeaders();
+
+        for (size_t i = 0; i < headers.size(); i++) {
+            if (headers[i] == headerName) {
+                return table->getFieldColumn(i);
+            }
+        }
+
+        throw PlannerException(fmt::format("CSV header '{}' not found", headerName));
+    }
+
     const VarDecl* exprVarDecl = propExpr->getExprVarDecl();
 
     // Search exprVarDecl in column map
@@ -294,6 +324,75 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
     const NamedColumn* streamedCol =
         _pendingOut.getDataframe()->getColumn(streamedVarTag);
     return streamedCol->getColumn();
+}
+
+Column* ExprProgramGenerator::generateIndexExpr(const IndexExpr* indexExpr) {
+    if (!indexExpr->hasLiteralIndex()) {
+        throw PlannerException("Dynamic CSV row indexing not yet supported");
+    }
+
+    const Expr* base = indexExpr->getBase();
+    const VarDecl* baseDecl = base->getExprVarDecl();
+    if (!baseDecl) {
+        throw PlannerException("CSV index base does not have a variable");
+    }
+
+    const auto it = _gen->varColMap().find(baseDecl);
+    if (it == _gen->varColMap().end()) {
+        throw PlannerException("Could not find column for CSV row variable");
+    }
+
+    const NamedColumn* tableCol = _pendingOut.getDataframe()->getColumn(it->second);
+    auto* table = static_cast<ColumnStringTable*>(tableCol->getColumn());
+
+    const size_t fieldIdx = indexExpr->getLiteralIndex();
+    if (fieldIdx >= table->getFieldCount()) {
+        throw PlannerException(fmt::format("CSV column index {} out of range (max {})",
+                                           fieldIdx, table->getFieldCount() - 1));
+    }
+
+    return table->getFieldColumn(fieldIdx);
+}
+
+Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocationExpr* funcExpr) {
+    const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
+    const FunctionSignature* signature = invocation->getSignature();
+
+    if (!signature) {
+        throw PlannerException("Function invocation does not have a signature");
+    }
+
+    const std::string_view funcName = signature->getFullName();
+    const ExprChain* args = invocation->getArguments();
+
+    if (funcName == "toInteger" || funcName == "toFloat" || funcName == "toBoolean") {
+        if (args->size() != 1) {
+            throw PlannerException(
+                fmt::format("{}() expects 1 argument, got {}", funcName, args->size()));
+        }
+
+        Column* argCol = generateExpr(args->front());
+
+        ColumnOperator convOp;
+        Column* resCol = nullptr;
+
+        if (funcName == "toInteger") {
+            convOp = OP_TO_INTEGER;
+            resCol = _gen->memory().alloc<ColumnOptVector<types::Int64::Primitive>>();
+        } else if (funcName == "toFloat") {
+            convOp = OP_TO_FLOAT;
+            resCol = _gen->memory().alloc<ColumnOptVector<types::Double::Primitive>>();
+        } else {
+            convOp = OP_TO_BOOLEAN;
+            resCol = _gen->memory().alloc<ColumnOptVector<types::Bool::Primitive>>();
+        }
+
+        _exprProg->addInstr(convOp, resCol, argCol, nullptr);
+        return resCol;
+    }
+
+    throw PlannerException(
+        fmt::format("Function '{}' is not supported in expressions", funcName));
 }
 
 #define ALLOC_EVALTYPE_COL(EvalType, Type)                                               \

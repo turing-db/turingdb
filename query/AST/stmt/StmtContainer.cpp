@@ -17,6 +17,6 @@ StmtContainer* StmtContainer::create(CypherAST* ast) {
     return container;
 }
 
-void StmtContainer::add(const Stmt* stmt) {
+void StmtContainer::add(Stmt* stmt) {
     _stmts.push_back(stmt);
 }

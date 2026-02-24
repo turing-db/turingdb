@@ -54,12 +54,27 @@ using namespace db;
 
 namespace {
 
+void populateStringTableShape(LocalMemory* mem,
+                              Column* dest,
+                              const Column* src) {
+    if (dest->getKind() != ColumnStringTable::staticKind()) {
+        return;
+    }
+    const auto* srcTable = static_cast<const ColumnStringTable*>(src);
+    auto* dstTable = static_cast<ColumnStringTable*>(dest);
+    for (size_t i = 0; i < srcTable->getFieldCount(); i++) {
+        dstTable->addFieldColumn(
+            mem->alloc<ColumnStringTable::StringColumn>());
+    }
+}
+
 void duplicateDataframeShape(LocalMemory* mem,
                              DataframeManager* dfMan,
                              db::Dataframe* src,
                              db::Dataframe* dest) {
     for (const NamedColumn* col : src->cols()) {
         Column* newCol = mem->allocSame(col->getColumn());
+        populateStringTableShape(mem, newCol, col->getColumn());
         auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
         dest->addColumn(newNamedCol);
     }
@@ -74,6 +89,7 @@ void concatDataframeShape(LocalMemory* mem,
                           db::Dataframe* dest) {
     for (const NamedColumn* col : src->cols()) {
         Column* newCol = mem->allocSame(col->getColumn());
+        populateStringTableShape(mem, newCol, col->getColumn());
         auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
         dest->addColumn(newNamedCol);
     }
@@ -93,6 +109,7 @@ void createHashJoinDataFrameShape(LocalMemory* mem,
         }
 
         Column* newCol = mem->allocSame(col->getColumn());
+        populateStringTableShape(mem, newCol, col->getColumn());
         auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
         dest->addColumn(newNamedCol);
     }
@@ -105,6 +122,7 @@ void createHashJoinDataFrameShape(LocalMemory* mem,
         }
 
         Column* newCol = mem->allocSame(col->getColumn());
+        populateStringTableShape(mem, newCol, col->getColumn());
         auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
         dest->addColumn(newNamedCol);
     }
@@ -112,7 +130,9 @@ void createHashJoinDataFrameShape(LocalMemory* mem,
     // allocate a join-key column tag in the output with a new column tag if the left
     // and right join column tags aren't the same
     const ColumnTag joinColTag = leftJoinKeyTag == rightJoinKeyTag ? leftJoinKeyTag : dfMan->allocTag();
-    Column* newCol = mem->allocSame(leftSrc->getColumn(leftJoinKeyTag)->getColumn());
+    const Column* joinSrcCol = leftSrc->getColumn(leftJoinKeyTag)->getColumn();
+    Column* newCol = mem->allocSame(joinSrcCol);
+    populateStringTableShape(mem, newCol, joinSrcCol);
     auto* newNamedCol = NamedColumn::create(dfMan, newCol, joinColTag);
     dest->addColumn(newNamedCol);
 }

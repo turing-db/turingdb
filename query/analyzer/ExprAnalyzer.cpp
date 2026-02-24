@@ -65,6 +65,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
             analyzeFuncInvocExpr(static_cast<FunctionInvocationExpr*>(expr),
                                 _ast->getFunctionDecls());
             break;
+        case Expr::Kind::INDEX:
+            analyzeIndexExpr(static_cast<IndexExpr*>(expr));
+            break;
     }
 }
 
@@ -341,6 +344,18 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         throwError(fmt::format("Variable '{}' not found", varName->getName()), expr);
     }
 
+    if (varDecl->getType() == EvaluatedType::StringTable) {
+        // CSV header access: row.columnName
+        expr->setEntityVarDecl(varDecl);
+        expr->setPropertyName(propName->getName());
+        expr->setStringTableHeaderAccess(true);
+        expr->setType(EvaluatedType::String);
+        expr->setDynamic();
+        auto* exprDecl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::String);
+        expr->setExprVarDecl(exprDecl);
+        return ValueType::String;
+    }
+
     if (varDecl->getType() != EvaluatedType::NodePattern
         && varDecl->getType() != EvaluatedType::EdgePattern) {
         const std::string error = fmt::format(
@@ -410,6 +425,42 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 
     return vt;
+}
+
+void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
+    Expr* base = expr->getBase();
+    Expr* indexExpr = expr->getIndexExpr();
+
+    analyzeExpr(base);
+    analyzeExpr(indexExpr);
+
+    if (base->getType() != EvaluatedType::StringTable) {
+        throwError(fmt::format("Index operator [] can only be applied to StringTable, not '{}'",
+                               EvaluatedTypeName::value(base->getType())), expr);
+    }
+
+    if (indexExpr->getType() != EvaluatedType::Integer) {
+        throwError(fmt::format("Index expression must be an integer, not '{}'",
+                               EvaluatedTypeName::value(indexExpr->getType())), expr);
+    }
+
+    // Detect literal index for compile-time optimization
+    if (indexExpr->getKind() == Expr::Kind::LITERAL) {
+        const LiteralExpr* lit = static_cast<const LiteralExpr*>(indexExpr);
+        if (lit->getLiteral()->getKind() == Literal::Kind::INTEGER) {
+            const int64_t val = static_cast<const IntegerLiteral*>(lit->getLiteral())->getValue();
+            if (val >= 0) {
+                expr->setLiteralIndex(static_cast<size_t>(val));
+            } else {
+                throwError("CSV row index must be non-negative", expr);
+            }
+        }
+    }
+
+    expr->setType(EvaluatedType::String);
+    expr->setDynamic();
+    auto* varDecl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::String);
+    expr->setExprVarDecl(varDecl);
 }
 
 void ExprAnalyzer::analyzeStringExpr(StringExpr* expr) {
@@ -582,6 +633,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::Null:
         case EvaluatedType::NodePattern:
         case EvaluatedType::EdgePattern:
+        case EvaluatedType::StringTable:
             return false;
         case EvaluatedType::Integer:
             return vt == ValueType::Int64 || vt == ValueType::UInt64 || vt == ValueType::Double;

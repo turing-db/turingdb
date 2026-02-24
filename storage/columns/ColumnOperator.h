@@ -36,6 +36,11 @@ enum ColumnOperator : uint8_t {
 
     OP_NOOP,
 
+    // Conversion operators (unary)
+    OP_TO_INTEGER,
+    OP_TO_FLOAT,
+    OP_TO_BOOLEAN,
+
     _SIZE
 };
 
@@ -71,6 +76,9 @@ constexpr inline ColumnOperatorType getOperatorType(ColumnOperator op) {
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:
+        case OP_TO_INTEGER:
+        case OP_TO_FLOAT:
+        case OP_TO_BOOLEAN:
             return ColumnOperatorType::OPTYPE_UNARY;
         break;
 
@@ -112,5 +120,9 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
     EnumStringPair<ColumnOperator::OP_PLUS, "PLUS">,
     EnumStringPair<ColumnOperator::OP_NOT, "NOT">,
 
-    EnumStringPair<ColumnOperator::OP_NOOP, "NOOP">>;
+    EnumStringPair<ColumnOperator::OP_NOOP, "NOOP">,
+
+    EnumStringPair<ColumnOperator::OP_TO_INTEGER, "TO_INTEGER">,
+    EnumStringPair<ColumnOperator::OP_TO_FLOAT, "TO_FLOAT">,
+    EnumStringPair<ColumnOperator::OP_TO_BOOLEAN, "TO_BOOLEAN">>;
 }

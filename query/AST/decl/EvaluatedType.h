@@ -25,6 +25,7 @@ enum class EvaluatedType : uint8_t {
     Wildcard,
     Tuple,
     ValueType,
+    StringTable,
 
     _SIZE,
 };
@@ -66,5 +67,6 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::Map, "Map">,
     EnumStringPair<EvaluatedType::Wildcard, "Wildcard">,
     EnumStringPair<EvaluatedType::Tuple, "Tuple">,
-    EnumStringPair<EvaluatedType::ValueType, "ValueType">>;
+    EnumStringPair<EvaluatedType::ValueType, "ValueType">,
+    EnumStringPair<EvaluatedType::StringTable, "StringTable">>;
 }
