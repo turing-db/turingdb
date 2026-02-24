@@ -717,7 +717,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
         }
 
         if (!exprProg->instrs().empty()) {
-            _builder.addComputeExpr(exprProg);
+            _builder.addExprEval(exprProg);
         }
 
         std::vector<ProjectionItem> items;
@@ -726,7 +726,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                 const Expr* expr = *exprPtr;
                 const VarDecl* decl = expr->getExprVarDecl();
 
-                const std::optional<std::string_view> name = projNode->getName(item);
+                const std::optional<std::string_view> name = projNode->getName(expr);
                 if (!name) {
                     continue;
                 }
