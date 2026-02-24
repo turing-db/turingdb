@@ -9,6 +9,7 @@
 #include "expr/BinaryExpr.h"
 #include "expr/EntityTypeExpr.h"
 #include "expr/Expr.h"
+#include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"

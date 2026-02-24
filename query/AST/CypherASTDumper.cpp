@@ -725,11 +725,11 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
         case Expr::Kind::FUNCTION_INVOCATION:
             dump(out, dynamic_cast<const FunctionInvocationExpr*>(expr));
             break;
-        case Expr::Kind::INDEX: {
+        case Expr::Kind::INDEX:
             out << "    _" << std::hex << expr << " {\n";
             out << "        ASTType IndexExpr\n";
             out << "    }\n";
-        } break;
+            break;
         case Expr::Kind::LIST:
             out << "    _" << std::hex << expr << " {\n";
             out << "        ASTType ListExpr\n";
