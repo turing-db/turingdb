@@ -46,7 +46,6 @@ add_subdirectory(v2)
 add_subdirectory(vector-db)
 add_subdirectory(jsonl-import)
 add_subdirectory(tfl)
-add_subdirectory(orderby)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)
