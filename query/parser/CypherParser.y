@@ -37,6 +37,7 @@
     #include "Literal.h"
     #include "Symbol.h"
     #include "SymbolChain.h"
+    #include "QuantifiedPath.h"
     #include "FunctionInvocation.h"
     #include "WhereClause.h"
     #include "YieldClause.h"
@@ -300,7 +301,9 @@
 %type<db::YieldItems*> yieldItemChain
 %type<db::YieldItems*> yieldItems
 %type<db::SymbolExpr*> yieldItem
-
+%type<db::QuantifiedPath*> quantifiedPath
+%type<db::QuantifiedPath*> opt_quantifiedPath
+%type<db::QuantifiedPath*> quantifiedPathRange
 
 %type<db::SinglePartQuery*> singlePartQuery
 %type<db::ChangeQuery*> changeQuery
@@ -1031,7 +1034,26 @@ patternElem
     ;
 
 patternElemChain
-    : edgePattern nodePattern { $$ = std::make_pair($1, $2); }
+    : edgePattern opt_quantifiedPath nodePattern { $$ = std::make_pair($1, $3); }
+    ;
+
+opt_quantifiedPath
+    : /* empty */ { $$ = nullptr; }
+    | quantifiedPath { $$ = $1; LOC($$, @$); }
+    ;
+
+quantifiedPath
+    : PLUS { $$ = QuantifiedPath::create(ast); $$->setLhs(1); LOC($$, @$); }
+    | MULT { $$ = nullptr; LOC($$, @$); }
+    | quantifiedPathRange { $$ = $1; }
+    ;
+
+quantifiedPathRange
+    : OBRACE COMMA CBRACE { $$ = QuantifiedPath::create(ast); LOC($$, @$); }
+    | OBRACE DIGIT CBRACE { $$ = QuantifiedPath::create(ast); $$->setLhs($2); $$->setRhs($2); LOC($$, @$); }
+    | OBRACE DIGIT COMMA CBRACE { $$ = QuantifiedPath::create(ast); $$->setLhs($2); LOC($$, @$); }
+    | OBRACE COMMA DIGIT CBRACE { $$ = QuantifiedPath::create(ast); $$->setRhs($3); LOC($$, @$); }
+    | OBRACE DIGIT COMMA DIGIT CBRACE { $$ = QuantifiedPath::create(ast); $$->setLhs($2); $$->setRhs($4); LOC($$, @$); }
     ;
 
 properties
@@ -1087,7 +1109,7 @@ edgeDetail
         $$ = EdgePattern::create(ast, EdgePattern::Direction::Undirected);
         $$->setSymbol($1);
         $$->setTypes($2);
-        $$->setProperties($4);
+        $$->setProperties($3);
         LOC($$, @$); 
       }
     ;
