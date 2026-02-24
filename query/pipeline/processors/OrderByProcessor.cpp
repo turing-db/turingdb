@@ -29,6 +29,10 @@ namespace rv = rg::views;
 
 namespace {
 
+/**
+ * @brief Functor to sort @ref _indices by values in a column, and populate @ref _ranges
+ * as tieranges.
+ */
 struct OrderColumn {
     OrderByProcessor::Indices& _indices;
     OrderByProcessor::TieRanges& _ranges;
@@ -40,7 +44,6 @@ struct OrderColumn {
         const std::vector<T>& data = typed->getRaw();
 
         // Sort the indices by indexing the column
-        // TODO: Handle NULLs
         if (_ascending) {
             rg::sort(_indices, [&](size_t i, size_t j) { return data[i] < data[j]; });
         } else {
@@ -55,6 +58,7 @@ struct OrderColumn {
     }
 };
 
+/// Functor to sort @ref _indices by subranges in a column.
 struct OrderColumnSubrange {
     OrderByProcessor::Indices& _indices;
     size_t _subrangeStart {0};
@@ -79,6 +83,15 @@ struct OrderColumnSubrange {
     }
 };
 
+/**
+ * @brief Shrinks the tieranges in @ref _ranges according to the values contained in
+ * @ref _typed.
+ * @detail For an ordered pair of order-keys $k_1, k_2$, and an array of tieranges, R, for
+ * $k_1$, shrinks each range r = [l, r) in R to r' = [l', r') such that l <= l', r' <= r,
+ * $k_2$[i] = $k_2$[j] for l' <= i <= j < r', $k_2$[l' - 1] != $k_2$[l'], and
+ * $k_2$[r] != $k_2$[r + 1].
+ *
+ */
 struct NarrowTieRanges {
     OrderByProcessor::Indices& _indices;
     OrderByProcessor::TieRanges& _ranges;
@@ -88,12 +101,14 @@ struct NarrowTieRanges {
     void operator()(const ColumnVector<T>* typed) {
         const std::vector<T>& data = typed->getRaw();
 
+        // Get a view of the sorted column
         auto reordered = _indices
                          | rv::transform([&](std::size_t i) -> auto& { return data[i]; });
 
         // Temporary vector which will contain the new tie-ranges
         OrderByProcessor::TieRanges temp;
 
+        // Add subranges of the subranges in @ref _ranges that are still tied
         for (const auto& [start, size] : _ranges) {
             const size_t end = start + size;
 
@@ -104,10 +119,12 @@ struct NarrowTieRanges {
             OrderByProcessor::addTieRanges(temp, tiedRange, start);
         }
 
+        // Replace the new subranges with the old
         _ranges.swap(temp);
     }
 };
 
+/// Functor to project a new ordering defined by @ref _indices on to @ref _res
 struct ProjectOrder {
     Column* _res {nullptr};
     ColumnVector<size_t>* _indices {nullptr};
@@ -155,6 +172,7 @@ struct ProjectOrder {
     }
 };
 
+/// Functor to dispatch a comparison operator on a type-erased column
 struct CompareInner {
     size_t _i {0};
     size_t _j {0};
@@ -162,7 +180,7 @@ struct CompareInner {
 
     template <typename T>
     void operator()(const ColumnVector<T>* col) {
-        const auto cmp = col->operator[](_i) <=> col->operator[](_j);
+        const std::strong_ordering cmp = col->operator[](_i) <=> col->operator[](_j);
         if (cmp < 0) {
             _res = -1;
         } else if (cmp > 0) {
@@ -175,6 +193,7 @@ struct CompareInner {
 
 using Compare = ColumnSingleDispatcher<OrderedTypes::Allowed, CompareInner, OrderedTypes::Excluded>;
 
+/// Helper function to sort @param indices according to two adjacent sorted runs
 void mergeAdjacent(OrderByProcessor::Indices& indices,
                    const Dataframe* srcDf,
                    const OrderByProcessor::OrderByKeys& keys,
@@ -196,7 +215,7 @@ void mergeAdjacent(OrderByProcessor::Indices& indices,
                   tag.getValue());
     }
 
-    auto cmp = [&](size_t i, size_t j) {
+    auto rowCmp = [&](size_t i, size_t j) {
         int comparisonResult = 0;
         CompareInner cmp {._i = i, ._j = j, ._res = comparisonResult};
 
@@ -222,7 +241,7 @@ void mergeAdjacent(OrderByProcessor::Indices& indices,
     auto run2Start = std::begin(indices) + run2._start;
     auto run2End = run2Start + run2._size;
 
-    std::inplace_merge(run1Start, run1End, run2End, cmp);
+    std::inplace_merge(run1Start, run1End, run2End, rowCmp);
 }
 
 using NarrowRanges = ColumnSingleDispatcher<OrderedTypes::Allowed,
@@ -479,14 +498,14 @@ void OrderByProcessor::execute() {
         merge();
         // @ref _indices now contains total order of all rows from memory
 
-        _state = State::OUTPUT_FROM_MEMORY;
+        _state = State::EMIT_FROM_MEMORY;
 
          // Reuse this member as a pointer to how far through memory we have emitted
         _nextMemoryStart = 0;
         return;
     }
 
-    if (_state == State::OUTPUT_FROM_MEMORY) {
+    if (_state == State::EMIT_FROM_MEMORY) {
          const size_t memoryRowCount = _memory.getLogicalRowCount();
          const size_t remainingToWrite = memoryRowCount - _nextMemoryStart;
 
