@@ -23,8 +23,6 @@ mkdir -p "$SCRIPT_GRAPHS_DIR/default"
 echo "UNLOADABLE" >> "$SCRIPT_GRAPHS_DIR/default/graph"
 
 turingdb -demon -turing-dir $SCRIPT_DIR/.turing &> /dev/null
-# Give it time to try to start (should fail with invalid graph)
-sleep 1
 uv run check_db_status.py &> /dev/null
 startres=$?
 if [ "$startres" -eq 0 ]; then # turingdb should fail to start
