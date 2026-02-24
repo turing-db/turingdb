@@ -240,6 +240,8 @@ OrderByProcessor* OrderByProcessor::create(PipelineV2* pipeline,
         PipelineInputPort* inputPort = PipelineInputPort::create(pipeline, proc);
         proc->_input.setPort(inputPort);
         proc->addInput(inputPort);
+        // Needs data in @ref State::SORT_INCOMING, but not in any others
+        inputPort->setNeedsData(false);
     }
 
     {
@@ -283,6 +285,9 @@ void OrderByProcessor::project(const Column* src, Column* dst, size_t numRows, s
 
 void OrderByProcessor::subsort() {
     const Dataframe* input = _input.getDataframe();
+    if (input->getLogicalRowCount() == 0) {
+        return;
+    }
 
     const auto getOrderedColumn = [input](const OrderByKey& key) -> Column* {
         return input->getColumn(key._col)->getColumn();
@@ -353,6 +358,9 @@ void OrderByProcessor::subsort() {
 
 void OrderByProcessor::memorise() {
     const Dataframe* curInput = _input.getDataframe();
+    if (curInput->getLogicalRowCount() == 0) {
+        return;
+    }
 
     // Determine the size of the dimensions of the sorted run to memorise, and where in
     // @ref _memory it will reside
@@ -425,14 +433,19 @@ void OrderByProcessor::execute() {
     PipelineOutputPort* outputPort = _output.getPort();
 
     if (_state == State::SORT_INCOMING) {
+        if (!inputPort->hasData()) {
+            return;
+        }
+
         subsort();
         memorise();
+
+        inputPort->consume();
 
         if (inputPort->isClosed()) {
             _state = State::MERGE_SORTED_RUNS;
         }
 
-        inputPort->consume();
         return;
     }
 
