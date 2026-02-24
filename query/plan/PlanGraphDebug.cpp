@@ -146,7 +146,10 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 for (const auto& item : n->items()) {
                     output << "        __item__: ";
                     const OrderByType type = item->getType();
-                    output << (type == OrderByType::ASC ? "ASC\n" : "DESC\n");
+                    const std::string_view varName =
+                        item->getExpr()->getExprVarDecl()->getName();
+                    const std::string_view ord = (type == OrderByType::ASC ? "ASC" : "DESC");
+                    output << varName << ", " << ord << '\n';
                 }
             } break;
 

@@ -91,7 +91,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
     // but `MATCH (n) LIMIT 10` is (because it has SCAN NODES as a previous input), and so
     // is `RETURN 5 LIMIT 10` (it has EXPR EVAL as a previous input). Therefore, we can
     // only add thse projection properties if @ref prevNode is valid.
-    if (_proj->hasOrderBy()) {
+    if (_prevNode && _proj->hasOrderBy()) {
         const auto& projOrderItems = _proj->getOrderBy()->getItems();
         // Get dependencies that we require to order, e.g.
         // `MATCH (n) RETURN n ORDER BY n.name`
@@ -101,12 +101,9 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
             handleExprDependencies(itemExpr);
         }
 
-        if (_prevNode) { // If the above didn't add a node, nothing to order
-            auto* orderBy = _tree->newOut<OrderByNode>(_prevNode);
-
-            orderBy->setItems(_proj->getOrderBy()->getItems());
-            _prevNode = orderBy;
-        }
+        auto* orderBy = _tree->newOut<OrderByNode>(_prevNode);
+        orderBy->setItems(_proj->getOrderBy()->getItems());
+        _prevNode = orderBy;
     }
 
     if (_prevNode && _proj->hasSkip()) {
