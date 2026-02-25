@@ -1,13 +1,21 @@
-#include <algorithm>
 #include <gtest/gtest.h>
+
+#include <algorithm>
+#include <random>
+#include <ranges>
+#include <vector>
 
 #include "EntityType.h"
 #include "LineContainer.h"
 #include "ProcessorTester.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
+#include "columns/ColumnIDs.h"
+#include "columns/ColumnVector.h"
 #include "dataframe/NamedColumn.h"
 #include "iterators/ChunkConfig.h"
+#include "metadata/PropertyType.h"
+#include "processors/LambdaProcessor.h"
 #include "processors/MaterializeProcessor.h"
 
 #include "processors/OrderByProcessor.h"
@@ -68,8 +76,7 @@ TEST_F(OrderByProcessorTest, simpleOrder) {
 
             const NamedColumn* nnames = df->getColumn(nameTag);
             ASSERT_TRUE(nnames);
-            const auto* casted =
-                nnames->getColumn()->cast<ColumnOptVector<types::String::Primitive>>();
+            const auto* casted = nnames->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(casted);
             ASSERT_TRUE(casted->size() <= chunkSize);
 
@@ -100,3 +107,117 @@ TEST_F(OrderByProcessorTest, simpleOrder) {
     }
 }
 
+TEST_F(OrderByProcessorTest, millionRandomInts) {
+    constexpr types::Int64::Primitive ONE_MILLION = 1'000'000;
+    constexpr size_t NUM_COLS = 2;
+    using ColumnInts = ColumnVector<types::Int64::Primitive>;
+
+    std::mt19937 rng(333); // Seeded; deterministic over test runs
+    std::uniform_int_distribution<types::Int64::Primitive> dist(-ONE_MILLION, ONE_MILLION);
+
+    size_t rowsWritten = 0;
+    const auto genInputChunk = [&](Dataframe* df,
+                                   bool& isFinished,
+                                   auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), NUM_COLS);
+
+        auto* lhs = df->cols().front()->as<ColumnInts>();
+        auto* rhs = df->cols().back()->as<ColumnInts>();
+        ASSERT_TRUE(lhs && rhs);
+
+        const size_t rowsRemaining = ONE_MILLION - rowsWritten;
+        const size_t rowsToWrite = std::min(ChunkConfig::CHUNK_SIZE, rowsRemaining);
+
+        lhs->resize(rowsToWrite);
+        rhs->resize(rowsToWrite);
+
+        auto& ld = lhs->getRaw();
+        auto& rd = rhs->getRaw();
+
+        // If we then sort by lhs, rhs should be sorted in the reverse order
+        for (size_t i = 0; i < rowsToWrite; i++) {
+            const types::Int64::Primitive randomNumber = dist(rng);
+            ld[i] = randomNumber;
+            rd[i] = -randomNumber;
+        }
+
+        rowsWritten += rowsToWrite;
+
+        if (rowsWritten == ONE_MILLION) {
+            isFinished = true;
+        }
+    };
+
+    [[maybe_unused]] const auto& rngEmitter = _builder->addLambdaSource(genInputChunk);
+    const ColumnTag orderByTag = _pipeline.getDataframeManager()->allocTag();
+    const ColumnTag otherTag = _pipeline.getDataframeManager()->allocTag();
+    _builder->addColumnToOutput<ColumnInts>(orderByTag);
+    _builder->addColumnToOutput<ColumnInts>(otherTag);
+
+    OrderByProcessor::OrderByKeys keys = {
+        {._col = orderByTag, ._asc = true}
+    };
+
+    const auto& orderBy = _builder->addOrderBy(keys);
+    ASSERT_EQ(orderBy.getDataframe()->size(), 2);
+
+    std::vector<types::Int64::Primitive> lhsRes;
+    std::vector<types::Int64::Primitive> rhsRes;
+    lhsRes.reserve(ONE_MILLION);
+    rhsRes.reserve(ONE_MILLION);
+    size_t seenRows = 0;
+
+    const auto COLLECT_RESULTS = [&](const Dataframe* df,
+                                     LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), NUM_COLS);
+
+        {
+            const NamedColumn* lhsNCol = df->getColumn(orderByTag);
+            ASSERT_TRUE(lhsNCol);
+            const auto* casted = lhsNCol->as<ColumnInts>();
+            ASSERT_TRUE(casted);
+            ASSERT_TRUE(casted->size() <= ChunkConfig::CHUNK_SIZE);
+            const auto& lhsd = casted->getRaw();
+
+            lhsRes.insert(end(lhsRes), begin(lhsd), end(lhsd));
+        }
+
+        {
+            const NamedColumn* rhsNCol = df->getColumn(otherTag);
+            ASSERT_TRUE(rhsNCol);
+            const auto* casted = rhsNCol->as<ColumnInts>();
+            ASSERT_TRUE(casted);
+            ASSERT_TRUE(casted->size() <= ChunkConfig::CHUNK_SIZE);
+            const auto& rhsd = casted->getRaw();
+
+            rhsRes.insert(end(rhsRes), begin(rhsd), end(rhsd));
+        }
+
+        seenRows += df->getLogicalRowCount();
+    };
+
+    auto [transaction, view, reader] = readGraph();
+    _builder->addLambda(COLLECT_RESULTS);
+    EXECUTE(view, ChunkConfig::CHUNK_SIZE);
+
+    ASSERT_EQ(seenRows, ONE_MILLION);
+    ASSERT_EQ(lhsRes.size(), rhsRes.size());
+    // We sort by lhs, but since rhs[i] = -lhs[i], rhsRes should also be sorted, in the
+    // opposite direction
+    ASSERT_TRUE(std::ranges::is_sorted(lhsRes));
+    ASSERT_TRUE(std::ranges::is_sorted(rhsRes, std::greater<> {}));
+}
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 10;
+    });
+}

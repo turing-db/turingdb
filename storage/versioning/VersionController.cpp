@@ -3,6 +3,7 @@
 #include <optional>
 
 #include <range/v3/view/enumerate.hpp>
+#include <sys/types.h>
 
 #include "JobSystem.h"
 #include "Graph.h"

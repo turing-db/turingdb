@@ -127,7 +127,7 @@ public:
         const std::string ptr = fmt::format("@{}", fmt::ptr(this));
         DebugDump::dumpString(out, str);
         DebugDump::dumpString(out, ptr);
-        for (const auto& elem : _data) {
+        for (const T& elem : _data) {
             DebugDump::dump(out, elem);
         }
     }
