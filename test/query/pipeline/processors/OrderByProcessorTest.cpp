@@ -212,7 +212,7 @@ TEST_F(OrderByProcessorTest, millionRandomInts) {
     ASSERT_EQ(lhsRes.size(), rhsRes.size());
     // We sort by lhs, but since rhs[i] = -lhs[i], rhsRes should also be sorted, in the
     // opposite direction
-    ASSERT_TRUE(std::ranges::is_sorted(lhsRes));
+    ASSERT_TRUE(std::ranges::is_sorted(lhsRes, std::less <> {}));
     ASSERT_TRUE(std::ranges::is_sorted(rhsRes, std::greater<> {}));
 }
 
