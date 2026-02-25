@@ -56,6 +56,10 @@ struct OrderColumn {
 
         OrderByProcessor::addTieRanges(_ranges, reordered);
     }
+
+    // ColumnConst is vacuously sorted
+    template <typename T>
+    void operator()(const ColumnConst<T>*) {}
 };
 
 /// Functor to sort @ref _indices by subranges in a column.
@@ -81,6 +85,10 @@ struct OrderColumnSubrange {
                       [&data](size_t i, size_t j) { return data[i] > data[j]; });
         }
     }
+
+    // ColumnConst is vacuously sorted
+    template <typename T>
+    void operator()(const ColumnConst<T>*) {}
 };
 
 /**
@@ -122,6 +130,10 @@ struct NarrowTieRanges {
         // Replace the new subranges with the old
         _ranges.swap(temp);
     }
+
+    // ColumnConst does not change tie ranges
+    template <typename T>
+    void operator()(const ColumnConst<T>*) {}
 };
 
 /// Functor to project a new ordering defined by @ref _indices on to @ref _res
@@ -170,6 +182,17 @@ struct ProjectOrder {
             resd[i + _fromDstRow] = srcd[indicesd[i + _fromSrcRow]];
         }
     }
+
+    // Any projection onto a ColumnConst is still the same columnConst
+    template <typename T>
+    void operator()(const ColumnConst<T>* source) {
+        auto* casted = dynamic_cast<ColumnConst<T>*>(_res);
+        bioassert(casted, "Incorrect cast for projected result column.");
+
+        const T& value = source->getRaw();
+
+        casted->set(value);
+    }
 };
 
 /// Functor to dispatch a comparison operator on a type-erased column
@@ -189,6 +212,10 @@ struct CompareInner {
             _res = 0;
         }
     }
+
+    // Any two positions in a ColumnConst are equal
+    template <typename T>
+    void operator()(const ColumnConst<T>*) { _res = 0; }
 };
 
 using Compare = ColumnSingleDispatcher<OrderedTypes::Allowed, CompareInner, OrderedTypes::Excluded>;
@@ -252,8 +279,9 @@ using SubrangeSort = ColumnSingleDispatcher<OrderedTypes::Allowed,
                                             OrderColumnSubrange,
                                             OrderedTypes::Excluded>;
 
-using Sort = ColumnSingleDispatcher<OrderedTypes::Allowed, OrderColumn,
-                                            OrderedTypes::Excluded>;
+using Sort = ColumnSingleDispatcher<OrderedTypes::Allowed,
+                                    OrderColumn,
+                                    OrderedTypes::Excluded>;
 
 using Projection = ColumnSingleDispatcher<OrderedTypes::Allowed,
                                           ProjectOrder,
