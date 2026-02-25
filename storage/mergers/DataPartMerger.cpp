@@ -42,7 +42,7 @@ struct PropertyTypeDispatcher {
 
 DataPartMerger::DataPartMerger(const CommitData* commitData,
                                MetadataBuilder& metadataBuilder)
-    : _graphView(*commitData),
+    : _graphView(commitData),
     _metadataBuilder(metadataBuilder)
 {
 }

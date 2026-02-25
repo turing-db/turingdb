@@ -32,11 +32,11 @@ public:
 
     [[nodiscard]] static std::unique_ptr<CommitBuilder> prepare(VersionController& controller,
                                                                 Change* change,
-                                                                const GraphView& view);
+                                                                const Commit* prevCommit);
 
     [[nodiscard]] static std::unique_ptr<CommitBuilder> prepareMerge(VersionController& controller,
                                                                      Change* change,
-                                                                     const GraphView& view);
+                                                                     const Commit* prevCommit);
 
     [[nodiscard]] CommitHash hash() const;
     [[nodiscard]] GraphView viewGraph() const;
@@ -47,6 +47,7 @@ public:
     [[nodiscard]] CommitData& commitData() { return *_commitData; }
     [[nodiscard]] CommitWriteBuffer& writeBuffer() { return *_writeBuffer; }
     [[nodiscard]] const CommitData& commitData() const { return *_commitData; }
+    [[nodiscard]] const Commit* commit() const { return _commit.get(); }
     [[nodiscard]] MetadataBuilder& metadata() { return *_metadataBuilder; }
     [[nodiscard]] DataPartBuilder& getCurrentBuilder() {
         return _builders.empty() ? newBuilder() : *_builders.back();
@@ -99,7 +100,7 @@ private:
 
     explicit CommitBuilder(VersionController&, Change* change, const GraphView&);
 
-    void initialize();
-    void initializeMerge();
+    void initialize(const Commit* prevCommit);
+    void initializeMerge(const Commit* prevCommit);
 };
 }

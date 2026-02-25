@@ -33,7 +33,6 @@ public:
     [[nodiscard]] auto end() const;
 
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
-    [[nodiscard]] CommitResult<void> rebase(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> submit(JobSystem& jobsystem);
 
     [[nodiscard]] ChangeID getID() const;

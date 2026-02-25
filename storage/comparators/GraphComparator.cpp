@@ -6,6 +6,7 @@
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "comparators/CommitViewComparator.h"
+#include "versioning/VersionController.h"
 #include "DataPartComparator.h"
 #include "GraphMetadataComparator.h"
 
@@ -26,11 +27,11 @@ bool GraphComparator::same(const Graph& a, const Graph& b) {
     }
 
     { // Verifiying commits are the same
-        const auto& commitsA = readerA.commits();
-        const auto& commitsB = readerB.commits();
+        const auto& controllerA = a.getVersionController();
+        const auto& controllerB = b.getVersionController();
 
-        const size_t szA = commitsA.size();
-        const size_t szB = commitsB.size();
+        const size_t szA = controllerA.getNumCommits();
+        const size_t szB = controllerB.getNumCommits();
 
         if (szA != szB) {
             spdlog::error("Graph A has {} commits whilst Graph B has {} commits.", szA,
@@ -38,18 +39,22 @@ bool GraphComparator::same(const Graph& a, const Graph& b) {
             return false;
         }
 
-        auto itA = commitsA.begin();
-        auto itB = commitsB.begin();
+        const Commit* commitA = controllerA.getCommitSafe(controllerA.getHeadHash());
+        bioassert(commitA, "headHash of Graph A not found");
+
+        const Commit* commitB = controllerB.getCommitSafe(controllerB.getHeadHash());
+        bioassert(commitB, "headHash of Graph B not found");
+
         size_t index = 0;
-        while (itA != commitsA.end() && itB != commitsB.end()) {
-            if (!CommitViewComparator::same(*itA, *itB)) {
+        while (commitA != nullptr && commitB != nullptr) {
+            if (!CommitComparator::same(commitA, commitB)) {
                 spdlog::error("Graph A commit at index {} differs from Graph B commit.",
                               index);
                 return false;
             }
 
-            itA++;
-            itB++;
+            commitA = commitA->getPreviousCommit();
+            commitB = commitB->getPreviousCommit();
             index++;
         }
 

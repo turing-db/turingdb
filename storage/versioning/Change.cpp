@@ -14,14 +14,16 @@ using namespace db;
 
 Change::~Change() = default;
 
-Change::Change(VersionController* versionController, ChangeID id, CommitHash base)
+Change::Change(VersionController* versionController,
+               ChangeID id,
+               const Commit* prevCommit)
     : _id(id),
     _versionController(versionController),
-    _base(versionController->openTransaction(base).commitData())
+    _base(_versionController->openTransaction(prevCommit->hash()).commitData())
 {
     auto tip = CommitBuilder::prepare(*_versionController,
                                       this,
-                                      GraphView {*_base});
+                                      prevCommit);
     _tip = tip.get();
     _commitOffsets.emplace(_tip->hash(), _commits.size());
     _commits.emplace_back(std::move(tip));
@@ -30,7 +32,10 @@ Change::Change(VersionController* versionController, ChangeID id, CommitHash bas
 std::unique_ptr<Change> Change::create(VersionController* versionController,
                                        ChangeID id,
                                        CommitHash base) {
-    auto* ptr = new Change(versionController, id, base);
+    const Commit* prevCommit = versionController->getCommitSafe(base);
+    bioassert(prevCommit, "base commit for change not found");
+
+    auto* ptr = new Change(versionController, id, prevCommit);
 
     return std::unique_ptr<Change> {ptr};
 }
@@ -63,7 +68,7 @@ CommitResult<void> Change::commit(JobSystem& jobsystem) {
 
     auto newTip = CommitBuilder::prepare(*_versionController,
                                          this,
-                                         _commits.back()->viewGraph());
+                                         _commits.back()->commit());
     _tip = newTip.get();
     _commitOffsets.emplace(_tip->hash(), _commits.size());
     _commits.emplace_back(std::move(newTip));
@@ -95,11 +100,9 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     const CommitHistory* currentHeadHistory = &currentMainHead->history();
 
     // Read the graph as it was when this change was created
-    const GraphReader branchTimeReader =
-        _base->commits().back().openTransaction().readGraph();
+    const GraphReader branchTimeReader(_base.get());
     // Read the graph as it is now on main
-    const GraphReader mainReader =
-        currentMainHead->commits().back().openTransaction().readGraph();
+    const GraphReader mainReader(currentMainHead.get());
 
     ChangeRebaser rebaser(*this, currentHeadCommitData, currentHeadHistory);
     rebaser.init(mainReader, branchTimeReader);
@@ -118,6 +121,11 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     for (auto& commitBuilder : _commits) {
         rebaser.rebaseCommitBuilder(*commitBuilder);
     }
+
+    // The previous commit of the first commit needs to be changed to
+    // the new base.
+    const Commit* prevCommit = _versionController->getCommitUnsafe(currentMainHead->_hash);
+    _commits.front()->_commit->setPreviousCommit(prevCommit);
 
     // Update the base commit to be main
     _base = currentMainHead;

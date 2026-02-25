@@ -114,10 +114,6 @@ void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
              explore_node_edges();
         }
         break;
-        case Endpoint::HISTORY: {
-             history();
-        }
-        break;
         default: {
             _writer.writeHttpError(net::HTTP::Status::NOT_FOUND);
         }
@@ -199,59 +195,6 @@ void DBServerProcessor::get_graph_status() {
         payload.value(reader.getNodeCount());
         payload.key("edgeCount");
         payload.value(reader.getEdgeCount());
-    }
-}
-
-void DBServerProcessor::history() {
-    const auto& httpInfo = getHttpInfo();
-
-    const auto graphNameView = httpInfo._params[(size_t)DBHTTPParams::graph];
-    if (graphNameView.empty()) {
-        _writer.writeHttpError(net::HTTP::Status::BAD_REQUEST);
-        return;
-    }
-
-    const auto header = _writer.startHeader(net::HTTP::Status::OK,
-                                            !_connection.isCloseRequired());
-
-    PayloadWriter payload(_writer.getWriter());
-    payload.obj();
-
-    const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
-    if (!transaction) {
-        const auto txError = transaction.error().fmtMessage();
-        payload.key("error");
-        payload.value(txError);
-        return;
-    }
-
-    payload.key("data");
-    payload.obj();
-
-    static constexpr auto formatCommitLog = [](PayloadWriter& payload, const CommitView& commit) {
-        std::string str = fmt::format("Commit: {:x}", commit.hash().get());
-        if (commit.isHead()) {
-            str += " (HEAD)";
-        }
-        str += "\\n";
-
-        size_t i = 0;
-        for (const auto& part : commit.dataparts()) {
-            str += fmt::format(" - Part {}: {} nodes, {} edges\\n",
-                               i + 1, part->getNodeContainerSize(), part->getEdgeContainerSize());
-            i++;
-        }
-        payload.value(str);
-    };
-
-    payload.key("commits");
-    payload.arr();
-
-    for (const auto& commit : transaction.value().viewGraph().commits()) {
-        formatCommitLog(payload, commit);
     }
 }
 

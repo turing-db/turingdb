@@ -47,6 +47,7 @@ public:
     [[nodiscard]] GraphID getID() const { return _graphID; }
     [[nodiscard]] CommitHash getHeadHash() const;
     [[nodiscard]] const GraphSerializer& getSerializer() const { return *_serializer; }
+    [[nodiscard]] const VersionController& getVersionController() const { return *_versionController; }
 
     [[nodiscard]] static std::unique_ptr<Graph> create();
     [[nodiscard]] static std::unique_ptr<Graph> create(const std::string& name, const fs::Path& path);

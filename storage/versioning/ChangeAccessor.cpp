@@ -21,10 +21,6 @@ CommitResult<void> ChangeAccessor::commit(JobSystem& jobsystem) {
     return _change->commit(jobsystem);
 }
 
-CommitResult<void> ChangeAccessor::rebase(JobSystem& jobsystem) {
-    return _change->rebase(jobsystem);
-}
-
 CommitResult<void> ChangeAccessor::submit(JobSystem& jobsystem) {
     return _change->submit(jobsystem);
 }

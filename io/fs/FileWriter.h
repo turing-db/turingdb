@@ -41,6 +41,27 @@ public:
         std::memcpy(ptr + prevSize, &v, size);
     }
 
+    // To ensure that size_t gets written as a standard
+    // 64bits.
+    void write(size_t v) {
+        static constexpr size_t size = sizeof(uint64_t);
+
+        if (_buffer.size() + size > BUFFER_SIZE) {
+            flush();
+        }
+
+        if (_error.has_value()) {
+            return;
+        }
+
+        const uint64_t value = static_cast<uint64_t>(v);
+
+        const size_t prevSize = _buffer.size();
+        _buffer.resize(_buffer.size() + size);
+        uint8_t* ptr = _buffer.data();
+        std::memcpy(ptr + prevSize, &value, size);
+    }
+
     template <TrivialPrimitive T, size_t SpanSizeT>
     void write(std::span<T, SpanSizeT> span) {
         flush();

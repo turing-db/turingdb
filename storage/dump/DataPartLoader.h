@@ -13,7 +13,7 @@ class GraphMetadata;
 
 class DataPartLoader {
 public:
-    [[nodiscard]] static DumpResult<WeakArc<DataPart>> load(const fs::Path& path,
+    [[nodiscard]] static DumpResult<WeakArc<DataPart>> load(const fs::Path& dataPartDir,
                                                             const GraphMetadata& metadata,
                                                             VersionController& versionController);
 
@@ -23,5 +23,4 @@ private:
     static constexpr size_t PREFIX_SIZE = NODE_PROPS_PREFIX.size();
     static_assert(PREFIX_SIZE == EDGE_PROPS_PREFIX.size());
 };
-
 }

@@ -2,11 +2,11 @@
 
 namespace db {
 
-class CommitView;
+class Commit;
 
-class CommitViewComparator {
+class CommitComparator {
 public:
-    [[nodiscard]] static bool same(const CommitView& a, const CommitView& b);
+    [[nodiscard]] static bool same(const Commit* a, const Commit* b);
 };
 
 }

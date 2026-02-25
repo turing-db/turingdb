@@ -40,7 +40,7 @@ Result<File> File::createAndOpen(const Path& path) {
 }
 
 Result<File> File::open(const Path& path) {
-    const int access = O_RDWR | O_APPEND;
+    const int access = O_RDWR;
     const int permissions = S_IRUSR | S_IWUSR;
 
     const int fd = ::open(path.c_str(), access, permissions);
@@ -81,6 +81,14 @@ Result<FileRegion> File::map(size_t size, size_t offset) {
 
 Result<void> File::seek(size_t offset) {
     if (::lseek(_fd, offset, SEEK_SET) < 0) {
+        return Error::result(ErrorType::COULD_NOT_SEEK, errno);
+    }
+
+    return {};
+}
+
+Result<void> File::seekEnd(off_t offset) const {
+    if (::lseek(_fd, offset, SEEK_END) < 0) {
         return Error::result(ErrorType::COULD_NOT_SEEK, errno);
     }
 

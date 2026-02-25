@@ -14,6 +14,7 @@
 #include "EdgeContainerDumper.h"
 #include "PropertyContainerDumper.h"
 #include "PropertyIndexerDumper.h"
+
 #include "Panic.h"
 
 using namespace db;
@@ -68,22 +69,22 @@ DumpResult<void> dumpProperties(fs::FilePageWriter& writer, PropertyContainer* c
 
 }
 
-DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path) {
+DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& partDir) {
     Profile profile("DataPartDumper::dump");
-    if (path.exists()) {
+    if (partDir.exists()) {
         return DumpError::result(DumpErrorType::DATAPART_ALREADY_EXISTS);
     }
 
-    if (auto res = path.mkdir(); !res) {
+    if (auto res = partDir.mkdir(); !res) {
         return DumpError::result(DumpErrorType::CANNOT_MKDIR_DATAPART, res.get_unexpected().error());
     }
 
     {
         // Dumping info
         Profile profile("DataPartDumper::dump <info>");
-        const fs::Path infoPath = path / "info";
+        const fs::Path infoFile = partDir / "info";
 
-        auto writer = fs::FilePageWriter::open(infoPath, DumpConfig::PAGE_SIZE);
+        auto writer = fs::FilePageWriter::open(infoFile, DumpConfig::PAGE_SIZE);
         if (!writer) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_INFO, writer.error());
         }
@@ -98,9 +99,9 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
     // Dumping nodes
     const auto& nodes = part.nodes();
     if (nodes.size() != 0) {
-        const fs::Path nodesPath = path / "nodes";
+        const fs::Path nodesFile = partDir / "nodes";
 
-        auto writer = fs::FilePageWriter::open(nodesPath, DumpConfig::PAGE_SIZE);
+        auto writer = fs::FilePageWriter::open(nodesFile, DumpConfig::PAGE_SIZE);
         if (!writer) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_NODES, writer.error());
         }
@@ -115,9 +116,9 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
     // Dumping edges
     const auto& edges = part.edges();
     if (edges.size() != 0) {
-        const fs::Path edgesPath = path / "edges";
+        const fs::Path edgesFile = partDir / "edges";
 
-        auto writer = fs::FilePageWriter::open(edgesPath, DumpConfig::PAGE_SIZE);
+        auto writer = fs::FilePageWriter::open(edgesFile, DumpConfig::PAGE_SIZE);
         if (!writer) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGES, writer.error());
         }
@@ -131,9 +132,9 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
 
     // Dumping edge indexer
     const auto& edgeIndexer = part.edgeIndexer();
-    const fs::Path edgeIndexerPath = path / "edge-indexer";
+    const fs::Path edgeIndexerFile = partDir / "edge-indexer";
 
-    auto writer = fs::FilePageWriter::open(edgeIndexerPath, DumpConfig::PAGE_SIZE);
+    auto writer = fs::FilePageWriter::open(edgeIndexerFile, DumpConfig::PAGE_SIZE);
     if (!writer) {
         return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_INDEXER, writer.error());
     }
@@ -151,9 +152,9 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
 
         // Dumping indexer
         {
-            const fs::Path indexerPath = path / "node-prop-indexer";
+            const fs::Path indexerFile = partDir / "node-prop-indexer";
 
-            auto writer = fs::FilePageWriter::open(indexerPath, DumpConfig::PAGE_SIZE);
+            auto writer = fs::FilePageWriter::open(indexerFile, DumpConfig::PAGE_SIZE);
             if (!writer) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, writer.error());
             }
@@ -167,9 +168,9 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
 
         // Dumping containers
         for (const auto& [ptID, container] : nodeProperties) {
-            const fs::Path propsPath = path / "node-props-" + std::to_string(ptID);
+            const fs::Path propsFile = partDir / "node-props-" + std::to_string(ptID);
 
-            auto writer = fs::FilePageWriter::open(propsPath, DumpConfig::PAGE_SIZE);
+            auto writer = fs::FilePageWriter::open(propsFile, DumpConfig::PAGE_SIZE);
             if (!writer) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROPS, writer.error());
             }
@@ -187,9 +188,9 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
 
         // Dumping indexer
         {
-            const fs::Path indexerPath = path / "edge-prop-indexer";
+            const fs::Path indexerFile = partDir / "edge-prop-indexer";
 
-            auto writer = fs::FilePageWriter::open(indexerPath, DumpConfig::PAGE_SIZE);
+            auto writer = fs::FilePageWriter::open(indexerFile, DumpConfig::PAGE_SIZE);
             if (!writer) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, writer.error());
             }
@@ -202,9 +203,9 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
         }
 
         for (const auto& [ptID, container] : edgeProperties) {
-            const fs::Path propsPath = path / "edge-props-" + std::to_string(ptID);
+            const fs::Path propsFile = partDir / "edge-props-" + std::to_string(ptID);
 
-            auto writer = fs::FilePageWriter::open(propsPath, DumpConfig::PAGE_SIZE);
+            auto writer = fs::FilePageWriter::open(propsFile, DumpConfig::PAGE_SIZE);
             if (!writer) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROPS, writer.error());
             }
@@ -221,10 +222,10 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
         const auto& index = part.getNodeStrPropIndexer();
 
         {
-            const fs::Path strIndexerPath = path / "node-string-prop-indexer";
-            const fs::Path strIndexerPathAlt = path / "node-string-prop-indexer-owners";
-            auto writer = fs::FilePageWriter::open(strIndexerPath, DumpConfig::PAGE_SIZE);
-            auto auxWriter = fs::FilePageWriter::open(strIndexerPathAlt, DumpConfig::PAGE_SIZE);
+            const fs::Path strIndexerFile = partDir / "node-string-prop-indexer";
+            const fs::Path strIndexerFileAlt = partDir / "node-string-prop-indexer-owners";
+            auto writer = fs::FilePageWriter::open(strIndexerFile, DumpConfig::PAGE_SIZE);
+            auto auxWriter = fs::FilePageWriter::open(strIndexerFileAlt, DumpConfig::PAGE_SIZE);
             if (!writer || !auxWriter) {
                 return DumpError::result(
                     DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER,
@@ -245,10 +246,10 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& path
         const auto& index = part.getEdgeStrPropIndexer();
 
         {
-            const fs::Path strIndexerPath = path / "edge-string-prop-indexer";
-            const fs::Path strIndexerPathAlt = path / "edge-string-prop-indexer-owners";
-            auto writer = fs::FilePageWriter::open(strIndexerPath, DumpConfig::PAGE_SIZE);
-            auto auxWriter = fs::FilePageWriter::open(strIndexerPathAlt, DumpConfig::PAGE_SIZE);
+            const fs::Path strIndexerFile = partDir / "edge-string-prop-indexer";
+            const fs::Path strIndexerFileAlt = partDir / "edge-string-prop-indexer-owners";
+            auto writer = fs::FilePageWriter::open(strIndexerFile, DumpConfig::PAGE_SIZE);
+            auto auxWriter = fs::FilePageWriter::open(strIndexerFileAlt, DumpConfig::PAGE_SIZE);
             if (!writer || !auxWriter) {
                 return DumpError::result(
                     DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER,

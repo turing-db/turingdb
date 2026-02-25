@@ -30,6 +30,7 @@ enum class DumpErrorType : uint8_t {
     CANNOT_WRITE_GRAPH_TYPE,
 
     CANNOT_OPEN_GRAPH_INFO,
+    CANNOT_OPEN_COMMIT_LOG,
     CANNOT_OPEN_LABELS,
     CANNOT_OPEN_LABELSETS,
     CANNOT_OPEN_EDGE_TYPES,
@@ -58,7 +59,10 @@ enum class DumpErrorType : uint8_t {
 
     INCORRECT_PROPERTY_TYPE_ID,
 
+    COULD_NOT_SEEK_COMMIT_LOG,
+
     COULD_NOT_WRITE_GRAPH_INFO,
+    COULD_NOT_WRITE_COMMIT_LOG,
     COULD_NOT_WRITE_DATAPART_INFO,
     COULD_NOT_WRITE_PROP_TYPES,
     COULD_NOT_WRITE_LABELS,
@@ -71,6 +75,7 @@ enum class DumpErrorType : uint8_t {
     COULD_NOT_WRITE_PROP_INDEXER,
 
     COULD_NOT_READ_GRAPH_INFO,
+    COULD_NOT_READ_COMMIT_LOG,
     COULD_NOT_READ_DATAPART_INFO,
     COULD_NOT_READ_PROP_TYPES,
     COULD_NOT_READ_LABELS,
@@ -107,6 +112,7 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::CANNOT_MKDIR_DATAPART, "Cannot create datapart directory">,
     EnumStringPair<DumpErrorType::CANNOT_WRITE_GRAPH_TYPE, "Cannot write graph type">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_GRAPH_INFO, "Cannot open graph info">,
+    EnumStringPair<DumpErrorType::CANNOT_OPEN_COMMIT_LOG, "Cannot open commit log">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_LABELS, "Cannot open graph labels">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_LABELSETS, "Cannot open graph labelsets">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_EDGE_TYPES, "Cannot open graph edge types">,
@@ -129,7 +135,9 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER, "Cannot open datapart node string property indexer">,
     EnumStringPair<DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER, "Cannot open datapart edge string property indexer">,
     EnumStringPair<DumpErrorType::INCORRECT_PROPERTY_TYPE_ID, "Incorrect property type id">,
+    EnumStringPair<DumpErrorType::COULD_NOT_SEEK_COMMIT_LOG, "Could not seek commit log">,
     EnumStringPair<DumpErrorType::COULD_NOT_WRITE_GRAPH_INFO, "Could not write graph info">,
+    EnumStringPair<DumpErrorType::COULD_NOT_WRITE_COMMIT_LOG, "Could not write commit log">,
     EnumStringPair<DumpErrorType::COULD_NOT_WRITE_DATAPART_INFO, "Could not write datapart info">,
     EnumStringPair<DumpErrorType::COULD_NOT_WRITE_PROP_TYPES, "Could not write property types">,
     EnumStringPair<DumpErrorType::COULD_NOT_WRITE_LABELS, "Could not write labels">,
@@ -141,6 +149,7 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::COULD_NOT_WRITE_PROPS, "Could not write entity properties">,
     EnumStringPair<DumpErrorType::COULD_NOT_WRITE_PROP_INDEXER, "Could not write entity property indexer">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_GRAPH_INFO, "Could not read graph info">,
+    EnumStringPair<DumpErrorType::COULD_NOT_READ_COMMIT_LOG, "Could not read commit log">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_DATAPART_INFO, "Could not read datapart info">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_PROP_TYPES, "Could not read property types">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_LABELS, "Could not read labels">,

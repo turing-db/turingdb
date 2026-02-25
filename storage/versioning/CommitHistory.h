@@ -25,17 +25,6 @@ public:
     DataPartSpan allDataparts() const { return _allDataparts; }
     DataPartSpan commitDataparts() const { return _commitDataparts; }
     DataPartSpan commitDataparts() { return _commitDataparts; }
-    CommitViewSpan commits() const;
-
-    void pushPreviousCommits(std::span<const CommitView> commits) {
-        const size_t prevSize = _commits.size();
-        _commits.resize(prevSize + commits.size());
-        std::copy(commits.begin(), commits.end(), _commits.begin() + prevSize);
-    }
-
-    void pushCommit(const CommitView& commit) {
-        _commits.push_back(commit);
-    }
 
     void newCommitHistoryFromPrevious(const CommitHistory& previous);
     void newMergeCommitHistory(const CommitHistory& previous);
@@ -53,9 +42,6 @@ private:
 
     /// Stores the data parts that belong to the last commit.
     std::span<WeakArc<DataPart>> _commitDataparts;
-
-    /// Stores the whole history up to (including) this commit.
-    std::vector<CommitView> _commits;
 
     /// Stores the write information of this commit
     std::unique_ptr<CommitJournal> _journal {CommitJournal::emptyJournal()};

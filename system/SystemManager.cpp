@@ -16,6 +16,7 @@
 #include "FileUtils.h"
 #include "TuringConfig.h"
 #include "TuringException.h"
+#include "versioning/VersionController.h"
 
 using namespace db;
 

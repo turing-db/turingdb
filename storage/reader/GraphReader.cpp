@@ -278,17 +278,11 @@ bool GraphReader::graphHasEdge(EdgeID edgeID) const {
 }
 
 bool GraphReader::nodeIsDeleted(NodeID nodeID) const {
-    if (_view.commits().empty()) {
-        return false;
-    }
-    return _view.commits().back().tombstones().containsNode(nodeID);
+    return _view.tombstones().containsNode(nodeID);
 }
 
 bool GraphReader::edgeIsDeleted(EdgeID edgeID) const {
-    if (_view.commits().empty()) {
-        return false;
-    }
-    return _view.commits().back().tombstones().containsEdge(edgeID);
+    return _view.tombstones().containsEdge(edgeID);
 }
 
 template <SupportedType T>

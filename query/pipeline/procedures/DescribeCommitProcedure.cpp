@@ -1,16 +1,16 @@
 #include "DescribeCommitProcedure.h"
 
-#include <span>
-
 #include "ExecutionContext.h"
 #include "FatalException.h"
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "Graph.h"
+#include "SystemManager.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
-#include "DataPart.h"
-#include "views/GraphView.h"
+#include "versioning/Commit.h"
+#include "versioning/VersionController.h"
 
 #include "PipelineException.h"
 
@@ -22,6 +22,7 @@ using UInt64Col = ColumnVector<types::UInt64::Primitive>;
 
 struct Data : public ProcedureData {
     size_t _i {0};
+    const Commit* _headCommit {nullptr};
 };
 
 struct CommitStats {
@@ -32,7 +33,7 @@ struct CommitStats {
 
 void getCommitStats(CommitStats* stats,
                     std::string_view inputHash,
-                    const GraphView* view) {
+                    const Commit* headCommit) {
     stats->_nodeCount = 0;
     stats->_edgeCount = 0;
     stats->_partCount = 0;
@@ -41,22 +42,20 @@ void getCommitStats(CommitStats* stats,
     std::transform(lower.begin(), lower.end(), lower.begin(),
                    [](char c) { return std::tolower(c); });
 
-    for (const auto& commit : view->commits()) {
-        const std::string hashStr = fmt::format("{:x}", commit.hash().get());
+    const Commit* commit = headCommit;
 
-        if (lower != hashStr) {
-            continue;
+    // Traverse the commit history chain to find the relevant commit
+    while (commit) {
+        const std::string hashStr = fmt::format("{:x}", commit->hash().get());
+
+        if (lower == hashStr) {
+            stats->_nodeCount = commit->getNumNodes();
+            stats->_edgeCount = commit->getNumEdges();
+            stats->_partCount = commit->getNumDataParts();
+            return;
         }
 
-        const std::span parts = commit.dataparts();
-        stats->_partCount = parts.size();
-
-        for (const auto& part : parts) {
-            stats->_nodeCount += part->getNodeContainerSize();
-            stats->_edgeCount += part->getEdgeContainerSize();
-        }
-
-        return;
+        commit = commit->getPreviousCommit();
     }
 }
 
@@ -120,7 +119,6 @@ void DescribeCommitProcedure::registerProcedure(ProcedureNamespace* ns) {
 void DescribeCommitProcedure::execute(ProcedureState* proc) {
     Data& data = proc->data<Data>();
     const ExecutionContext* ctxt = proc->getContext();
-    const GraphView& view = ctxt->getGraphView();
 
     const Column* rawCommitCol = data.getInputColumn(0);
     auto* nodeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(0));
@@ -130,6 +128,12 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
             bioassert(rawCommitCol, "db.describeCommit: must be provided a commit hash");
+
+            const Graph* graph =
+                ctxt->getSystemManager()->getGraph(ctxt->getGraphName().data());
+            data._headCommit =
+                graph->getVersionController().getCommitSafe(ctxt->getGraphView().headCommitHash());
+            bioassert(data._headCommit, "headCommitHash not found");
 
             const auto containerKind =
                 ColumnKind::extractContainerKind(rawCommitCol->getKind());
@@ -186,7 +190,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                 CommitStats stats;
                 for (size_t i = data._i; i < remaining + data._i; ++i) {
                     extractString(input, colVec[i]);
-                    getCommitStats(&stats, input, &view);
+                    getCommitStats(&stats, input, data._headCommit);
                     pushStats(&stats);
                 }
 
@@ -201,7 +205,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                 std::string input;
                 CommitStats stats;
                 extractString(input, col->getRaw());
-                getCommitStats(&stats, input, &view);
+                getCommitStats(&stats, input, data._headCommit);
                 pushStats(&stats);
                 proc->finish();
             };

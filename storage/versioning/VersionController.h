@@ -31,7 +31,6 @@ struct EntityIDPair {
 class VersionController {
 public:
     using CommitMap = std::unordered_map<CommitHash, size_t>;
-
     explicit VersionController(Graph* graph);
     ~VersionController();
 
@@ -47,6 +46,10 @@ public:
     [[nodiscard]] FrozenCommitTx openTransaction(CommitHash hash = CommitHash::head()) const;
     [[nodiscard]] CommitHash getHeadHash() const;
     [[nodiscard]] const Graph* getGraph() const { return _graph; }
+    [[nodiscard]] const Commit* getCommitSafe(CommitHash hash) const;
+    [[nodiscard]] const Commit* getCommitUnsafe(CommitHash hash) const;
+
+    size_t getNumCommits() const { return _commits.size(); }
 
     /// Gets the offset for a given commit hash, or nullopt if not found
     std::optional<size_t> getCommitIndex(CommitHash hash) const;
@@ -86,5 +89,4 @@ private:
 
     [[nodiscard]] Commit::CommitSpan getCommitsSinceCommitHash(CommitHash from) const;
 };
-
 }

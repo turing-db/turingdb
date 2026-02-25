@@ -13,6 +13,7 @@ class VersionController;
 class CommitLoader;
 class GraphLoader;
 class FrozenCommitTx;
+class GraphView;
 
 class Commit {
 public:
@@ -20,7 +21,10 @@ public:
     using CommitSpan = std::span<const std::unique_ptr<Commit>>;
 
     Commit();
-    Commit(VersionController* controller, const WeakArc<CommitData>& data, bool isMergeCommit = false);
+    Commit(VersionController* controller,
+           const WeakArc<CommitData>& data,
+           const Commit* prevCommit,
+           bool isMergeCommit = false);
     ~Commit();
 
     Commit(const Commit&) = delete;
@@ -43,11 +47,22 @@ public:
 
     [[nodiscard]] static std::unique_ptr<Commit> createNextCommit(VersionController* controller,
                                                                   const WeakArc<CommitData>& data,
-                                                                  const CommitView& prevCommit);
+                                                                  const Commit* commit);
 
     [[nodiscard]] static std::unique_ptr<Commit> createMergeCommit(VersionController* controller,
                                                                    const WeakArc<CommitData>& data,
-                                                                   const CommitView& prevCommit);
+                                                                   const Commit* commit);
+
+    void setNumNodes(size_t numNodes) { _numNodes = numNodes; }
+    void setNumEdges(size_t numEdges) { _numEdges = numEdges; }
+    void setNumDataParts(size_t numDataParts) { _numDataParts = numDataParts; }
+
+    size_t getNumNodes() const { return _numNodes; }
+    size_t getNumEdges() const { return _numEdges; }
+    size_t getNumDataParts() const { return _numDataParts; }
+
+    const Commit* getPreviousCommit() const { return _prevCommit; }
+    void setPreviousCommit(const Commit* commit) { _prevCommit = commit; }
 
 private:
     friend CommitLoader;
@@ -56,7 +71,11 @@ private:
     VersionController* _controller {nullptr};
     CommitHash _hash = CommitHash::create();
     WeakArc<CommitData> _data;
-    bool _mergeCommit {false};
-};
+    const Commit* _prevCommit {nullptr};
 
+    bool _mergeCommit {false};
+    size_t _numNodes {0};
+    size_t _numEdges {0};
+    size_t _numDataParts {0};
+};
 }

@@ -6,6 +6,7 @@
 namespace db {
 
 class Commit;
+class GraphDumper;
 class CommitHistory;
 class CommitData;
 class VersionController;
@@ -47,6 +48,10 @@ public:
 
     bool operator!=(const CommitView& other) const {
         return !(*this == other);
+    }
+
+    const Commit* commit() const {
+        return _commit;
     }
 
 private:

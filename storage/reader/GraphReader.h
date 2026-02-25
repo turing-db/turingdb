@@ -26,6 +26,11 @@ public:
     {
     }
 
+    explicit GraphReader(const CommitData* data)
+        : _view(data)
+    {
+    }
+
     bool isValid() const {
         return _view.isValid();
     }
@@ -62,7 +67,6 @@ public:
 
     [[nodiscard]] const GraphView& getView() const { return _view; }
     [[nodiscard]] DataPartSpan dataparts() const { return _view.dataparts(); }
-    [[nodiscard]] std::span<const CommitView> commits() const { return _view.commits(); }
     [[nodiscard]] const EdgeRecord* getEdge(EdgeID edgeID) const;
     [[nodiscard]] LabelSetHandle getNodeLabelSet(NodeID nodeID) const;
     [[nodiscard]] size_t getNodeCountMatchingLabelset(const LabelSetHandle& labelset) const;

@@ -9,6 +9,7 @@
 #include "CommitView.h"
 #include "mergers/DataPartMerger.h"
 #include "writers/DataPartBuilder.h"
+#include "reader/GraphReader.h"
 #include "versioning/Change.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/CommitHash.h"
@@ -36,25 +37,26 @@ VersionController::~VersionController() {
 
 void VersionController::createFirstCommit() {
     auto commitData = _dataManager->create(CommitHash::create());
-    auto commit = std::make_unique<Commit>(this, commitData);
-
-    // Register itself in the history
-    commit->history().pushCommit(CommitView {commit.get()});
+    // initialise the previous Commit* of the first commit to nullptr
+    auto commit = std::make_unique<Commit>(this, commitData, nullptr);
 
     this->addCommit(std::move(commit));
 }
 
 DataPartMergeResult<void> VersionController::mergeDataParts(JobSystem& jobSystem) {
     Profile profile("VersionController::mergeDataParts");
-    Commit* mainState = _head.load();
+
+    std::scoped_lock lock(_mutex);
+
+    Commit* headCommit = _head.load();
 
     auto newTip = CommitBuilder::prepareMerge(*this,
                                               nullptr,
-                                              GraphView {mainState->data()});
+                                              headCommit);
 
-    const auto merger = DataPartMerger(&mainState->data(), newTip->metadata());
+    const auto merger = DataPartMerger(&headCommit->data(), newTip->metadata());
 
-    newTip->appendBuilder(merger.merge(mainState->data().allDataparts()));
+    newTip->appendBuilder(merger.merge(headCommit->data().allDataparts()));
 
     auto buildRes = newTip->build(jobSystem);
     if (!buildRes) {
@@ -96,10 +98,10 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
     std::scoped_lock lock(_mutex);
 
     // atomic load main
-    Commit* mainState = _head.load();
+    Commit* headCommit = _head.load();
 
     // rebase if main has changed under us
-    if (mainState->hash() != change->baseHash()) {
+    if (headCommit->hash() != change->baseHash()) {
         if (auto res = change->rebase(jobSystem); !res) {
             return res;
         }
@@ -133,6 +135,7 @@ std::unique_lock<std::mutex> VersionController::lock() {
     return std::unique_lock<std::mutex> {_mutex};
 }
 
+// Needs to be called in a locked context
 void VersionController::addCommit(std::unique_ptr<Commit> commit) {
     auto* ptr = commit.get();
 
@@ -149,6 +152,36 @@ std::optional<size_t> VersionController::getCommitIndex(CommitHash hash) const {
     }
 
     return it->second;
+}
+
+const Commit* VersionController::getCommitUnsafe(CommitHash hash) const {
+    if (hash == CommitHash::head()) {
+        return _head.load();
+    }
+
+    const std::optional<size_t> offset = getCommitIndex(hash);
+
+    if (!offset.has_value()) {
+        return nullptr;
+    }
+
+    return _commits[*offset].get();
+}
+
+const Commit* VersionController::getCommitSafe(CommitHash hash) const {
+    std::scoped_lock lock(_mutex);
+
+    if (hash == CommitHash::head()) {
+        return _head.load();
+    }
+
+    const std::optional<size_t> offset = getCommitIndex(hash);
+
+    if (!offset.has_value()) {
+        return nullptr;
+    }
+
+    return _commits[*offset].get();
 }
 
 // NOTE: Called within locked-context

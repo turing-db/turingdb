@@ -28,6 +28,7 @@ public:
     }
 
     void read();
+    void read(size_t size);
     fs::File& file() const { return *_file; }
     bool hasFile() const { return _file != nullptr; }
     const ByteBuffer& getBuffer() const { return _buffer; }

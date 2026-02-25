@@ -50,7 +50,7 @@ void ChangeRebaser::checkConflicts(const Commit::CommitSpan commits) {
 }
 
 void ChangeRebaser::rebaseTombstones(Tombstones& tombstones) {
-    bioassert(!_newMainReader->commits().empty(),
+    bioassert(!_change->_commits.empty(),
               "Attempted to rebase tombstones without any commits on main.");
 
     Tombstones::NodeTombstones& nodeTombstones = tombstones._nodeTombstones;
@@ -73,7 +73,7 @@ void ChangeRebaser::rebaseTombstones(Tombstones& tombstones) {
     }
 
     // We want all the tombstones on main unioned with the rebased tombstones we created
-    const Tombstones& mainTombstones = _newMainReader->commits().back().tombstones();
+    const Tombstones& mainTombstones = _newMainReader->getView().tombstones();
 
     const Tombstones::NodeTombstones& mainNodeTombstones =
         mainTombstones.nodeTombstones();

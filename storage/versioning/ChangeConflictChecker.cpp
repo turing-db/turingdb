@@ -60,7 +60,7 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
         return;
     }
 
-    const GraphView mostRecentView(latestCommitData);
+    const GraphView mostRecentView(&latestCommitData);
     // We only care about dataparts that have been created since we branched.
     // Work out how many dataparts are on the tip of main.
     const size_t totalDPsOnMain = latestCommitData.allDataparts().size();

@@ -5,6 +5,9 @@
 #include "DumpResult.h"
 #include "FilePageWriter.h"
 #include "DumpConfig.h"
+#include "FileReader.h"
+#include "FileWriter.h"
+#include "ByteBufferIterator.h"
 
 namespace db {
 
@@ -19,9 +22,29 @@ public:
         writer.writeToCurrentPage(DumpConfig::VERSION);
     }
 
+    static void writeFileHeader(fs::FileWriter<>* writer) {
+        writer->write(DumpConfig::ONE_BAD_CAFE);
+        writer->write(DumpConfig::VERSION);
+    }
+
     static DumpResult<void> checkFileHeader(fs::AlignedBufferIterator& it) {
         const auto badcafe = it.get<decltype(DumpConfig::ONE_BAD_CAFE)>();
         const auto version = it.get<decltype(DumpConfig::VERSION)>();
+
+        if (badcafe != DumpConfig::ONE_BAD_CAFE) {
+            return DumpError::result(DumpErrorType::NOT_TURING_FILE);
+        }
+
+        if (version < DumpConfig::UP_TO_DATE_VERSION) {
+            return DumpError::result(DumpErrorType::OUTDATED);
+        }
+
+        return {};
+    }
+
+    static DumpResult<void> checkFileHeader(fs::ByteBufferIterator* it) {
+        const auto badcafe = it->get<decltype(DumpConfig::ONE_BAD_CAFE)>();
+        const auto version = it->get<decltype(DumpConfig::VERSION)>();
 
         if (badcafe != DumpConfig::ONE_BAD_CAFE) {
             return DumpError::result(DumpErrorType::NOT_TURING_FILE);

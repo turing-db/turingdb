@@ -29,14 +29,14 @@ class PropertyManager;
 
 class CommitLoader {
 public:
-    [[nodiscard]] static DumpResult<std::unique_ptr<Commit>> load(const fs::Path& path,
+    [[nodiscard]] static DumpResult<std::unique_ptr<Commit>> load(const fs::Path& commitDir,
                                                                   Graph& graph,
                                                                   CommitHash hash,
-                                                                  const CommitHistory* prevHistory) {
+                                                                  const Commit* prevCommit) {
         Profile profile("CommitLoader::load");
 
         // Listing files in the folder
-        auto files = path.listDir();
+        auto files = commitDir.listDir();
         if (!files) {
             return DumpError::result(DumpErrorType::CANNOT_LIST_DATAPARTS, files.error());
         }
@@ -47,24 +47,23 @@ public:
 
         auto commit = std::make_unique<Commit>(
             graph._versionController.get(),
-            versionController->createCommitData(hash));
+            versionController->createCommitData(hash),
+            prevCommit);
 
-        if (prevHistory) {
-            commit->_data->_history.newCommitHistoryFromPrevious(*prevHistory);
+        if (prevCommit) {
+            commit->_data->_history.newCommitHistoryFromPrevious(prevCommit->history());
         }
 
         const auto it = std::ranges::find_if(files.value(),
-                                             [&](const fs::Path& path) {
-                                                 return path.filename() == "merge";
+                                             [&](const fs::Path& file) {
+                                                 return file.filename() == "merge";
                                              });
 
         if (it != files->end()) {
             commit->_data->_history._allDataparts = {};
         }
 
-        commit->_data->_history.pushCommit(commit->view());
-
-        CommitHistoryBuilder historyBuilder(commit->_data->_history);
+        CommitHistoryBuilder historyBuilder = CommitHistoryBuilder(commit->_data->_history);
 
         auto& metadata = commit->_data->_metadata;
 
@@ -72,8 +71,7 @@ public:
         {
             Profile profile("CommitLoader::load <metadata>");
 
-            const fs::Path metadataPath = path / "metadata";
-            auto res = GraphMetadataLoader::load(path, metadata);
+            auto res = GraphMetadataLoader::load(commitDir, metadata);
 
             if (!res) {
                 return res.get_unexpected();
@@ -85,9 +83,9 @@ public:
             CommitJournal* journal = commit->_data->_history._journal.get();
             bioassert(journal, "invalid journal"); // Should be initialised in commit constructor
 
-            const fs::Path journalPath = path / "journal";
+            const fs::Path journalFile = commitDir / "journal";
 
-            auto readerRes = fs::FilePageReader::open(journalPath, DumpConfig::PAGE_SIZE);
+            auto readerRes = fs::FilePageReader::open(journalFile, DumpConfig::PAGE_SIZE);
             if (!readerRes) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_JOURNAL,
                                          readerRes.error());
@@ -103,10 +101,10 @@ public:
         {
             Tombstones& tombstones = commit->_data->_tombstones;
 
-            const fs::Path tombstonesPath = path / "tombstones";
+            const fs::Path tombstonesFile = commitDir / "tombstones";
 
             auto readerRes =
-                fs::FilePageReader::open(tombstonesPath, DumpConfig::PAGE_SIZE);
+                fs::FilePageReader::open(tombstonesFile, DumpConfig::PAGE_SIZE);
             if (!readerRes) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_TOMBSTONES,
                                          readerRes.error());
@@ -118,7 +116,7 @@ public:
             }
         }
 
-        std::map<uint64_t, fs::Path> datapartPaths;
+        std::map<uint64_t, fs::Path> datapartDirs;
         for (auto& child : files.value()) {
             const auto& childStr = child.filename();
 
@@ -135,11 +133,11 @@ public:
                 return partIndex.get_unexpected();
             }
 
-            datapartPaths.emplace(partIndex.value(), child);
+            datapartDirs.emplace(partIndex.value(), child);
         }
 
-        for (auto& [partIndex, path] : datapartPaths) {
-            auto res = DataPartLoader::load(path, metadata, *versionController);
+        for (auto& [partIndex, dir] : datapartDirs) {
+            auto res = DataPartLoader::load(dir, metadata, *versionController);
 
             if (!res) {
                 return res.get_unexpected();
@@ -148,10 +146,28 @@ public:
             historyBuilder.addDatapart(res.value());
         }
 
-        historyBuilder.setCommitDatapartCount(datapartPaths.size());
+        historyBuilder.setCommitDatapartCount(datapartDirs.size());
+
+        // Add Commit Metadata
+        {
+            const size_t numCommitDataParts = commit->data().commitDataparts().size();
+            size_t numNodesAdded = 0;
+            size_t numEdgesAdded = 0;
+
+            for (size_t i = 0; i < numCommitDataParts; ++i) {
+                const DataPart* part = commit->data().commitDataparts()[i].get();
+                numNodesAdded += part->getNodeContainerSize();
+                numEdgesAdded += part->getEdgeContainerSize();
+            }
+
+            commit->setNumDataParts(numCommitDataParts);
+            commit->setNumNodes(numNodesAdded);
+            commit->setNumEdges(numEdgesAdded);
+
+            commit->_prevCommit = prevCommit;
+        }
 
         return std::move(commit);
     }
 };
-
 }

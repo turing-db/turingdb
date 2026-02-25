@@ -12,11 +12,6 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
     // Clear the journal: WriteSets may change on reflush after rebase
     _history.journal().clear();
 
-    // Commits
-    const CommitView tip = _history._commits.back();
-    _history._commits = prevHistory._commits;
-    _history._commits.push_back(tip);
-
     // Dataparts
     auto newDataparts = prevHistory._allDataparts;
 

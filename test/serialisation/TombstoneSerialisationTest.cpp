@@ -137,7 +137,7 @@ TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
     ASSERT_TRUE(res);
 
     const Tombstones& tombstones =
-        _loadedGraph->openTransaction().viewGraph().commits().back().tombstones();
+        _loadedGraph->openTransaction().viewGraph().tombstones();
 
     const Tombstones::NodeTombstones& nodeTombstones = tombstones.nodeTombstones();
     const Tombstones::EdgeTombstones& edgeTombstones = tombstones.edgeTombstones();

@@ -36,6 +36,7 @@ public:
     [[nodiscard]] static Result<File> open(const Path& path);
     [[nodiscard]] Result<FileRegion> map(size_t size, size_t offset = 0);
     Result<void> seek(size_t offset);
+    Result<void> seekEnd(off_t offset) const;
     Result<void> read(void* buf, size_t size) const;
     Result<void> write(void* data, size_t size);
     Result<void> clearContent();
