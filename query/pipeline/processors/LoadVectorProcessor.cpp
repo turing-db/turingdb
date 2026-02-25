@@ -95,11 +95,7 @@ void LoadVectorProcessor::execute() {
     std::vector<float> values;
     values.reserve(dimension);
 
-    for (;;) {
-        const bool hasLine = static_cast<bool>(std::getline(file, line));
-        if (!hasLine) {
-            break;
-        }
+    while (std::getline(file, line)) {
         if (line.empty()) {
             continue;
         }
