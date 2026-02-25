@@ -200,17 +200,19 @@ public:
             return;
         }
 
-        if (content.size() > _chunk._remaining) {
-            flush();
-
-            if (content.size() > _maxChunkSize) {
-                _status = Status::ValueTooLarge;
-                return;
+        while (!content.empty()) {
+            if (_chunk._remaining == 0) {
+                flush();
             }
-        }
 
-        memcpy(_chunk._content.data() + _chunk._position, content.data(), content.size());
-        _chunk.increment(content.size());
+            const size_t copySize = std::min(content.size(), _chunk._remaining);
+            memcpy(_chunk._content.data() + _chunk._position, content.data(), copySize);
+            _chunk.increment(copySize);
+
+            // If string was too large to fit in chunk, send the remaining parts
+            // in subsequent chunks
+            content.remove_prefix(copySize);
+        }
     }
 
     void write(char c) {

@@ -112,13 +112,14 @@ class TuringDB:
             raise TuringDBException("Cannot create a new change while working on one")
 
         if self._params.get("commit") is not None:
-            raise TuringDBException("Cannot create a new change while working on a commit")
+            raise TuringDBException(
+                "Cannot create a new change while working on a commit"
+            )
 
         res = self.query("CHANGE NEW")
         change_id = int(res.loc[0, "changeID"])
         self.set_change(change_id)
         return change_id
-
 
     def set_graph(self, graph_name: str):
         self._params["graph"] = graph_name
@@ -174,7 +175,20 @@ class TuringDB:
             )
         response.raise_for_status()
 
-        json = orjson.loads(response.text)
+        try:
+            json = orjson.loads(response.text)
+        except orjson.JSONDecodeError as e:
+            # Grab a window around the error position
+            start = max(0, e.pos - 40)
+            end = min(len(e.doc), e.pos + 40)
+            snippet = e.doc[start:end]
+            pointer = " " * (e.pos - start) + "^"
+            raise TuringDBException(
+                f"Invalid response from the server: {e}.\n"
+                f"Context (line {e.lineno}, col {e.colno}):\n"
+                f"  {snippet}\n"
+                f"  {pointer}"
+            )
 
         if isinstance(json, dict):
             err = json.get("error")
@@ -212,10 +226,14 @@ class TuringDB:
         df = pd.DataFrame()
 
         for chunk in json["data"]:
-            df_chunk = pd.DataFrame({
-                cname: pd.Series(col, dtype=dtype_map.get(ctype, "object"))
-                for (cname, ctype), col in zip(zip(column_names, column_types), chunk)
-            })
+            df_chunk = pd.DataFrame(
+                {
+                    cname: pd.Series(col, dtype=dtype_map.get(ctype, "object"))
+                    for (cname, ctype), col in zip(
+                        zip(column_names, column_types), chunk
+                    )
+                }
+            )
             df = pd.concat([df, df_chunk], ignore_index=True)
 
         self._t1 = time.time()
