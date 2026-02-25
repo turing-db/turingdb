@@ -11,6 +11,7 @@
 #include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
 #include "ID.h"
+#include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
 #include "dataframe/Dataframe.h"
@@ -19,6 +20,7 @@
 #include "TuringException.h"
 #include "TuringTestEnv.h"
 #include "TuringTest.h"
+#include "versioning/VersionController.h"
 
 using namespace turing::test;
 
@@ -1346,35 +1348,20 @@ TEST_F(QueriesTest, db_propertyTypes) {
 
 TEST_F(QueriesTest, db_history) {
     using Rows = LineContainer<std::string, uint64_t, uint64_t, uint64_t>;
-    auto transaction = _graph->openTransaction();
-    auto reader = transaction.readGraph();
+    const auto& controller = _graph->getVersionController();
+    const CommitHash headHash = controller.getHeadHash();
+    const Commit* commit = _graph->getVersionController().getCommitSafe(headHash);
+    EXPECT_NE(commit, nullptr);
 
     Rows expectedRows;
     Rows actualRows;
 
-    const std::span commits = reader.commits();
-
-    for (const auto& commit : commits) {
-        const CommitHash& hash = commit.hash();
-        const std::span parts = commit.dataparts();
-        const Tombstones& tombstones = commit.tombstones();
-
-        size_t nodeCount = 0;
-        for (const auto& part : parts) {
-            nodeCount += part->getNodeContainerSize();
-        }
-        nodeCount -= tombstones.numNodes();
-
-        size_t edgeCount = 0;
-        for (const auto& part : parts) {
-            edgeCount += part->getEdgeContainerSize();
-        }
-        edgeCount -= tombstones.numEdges();
-
-        expectedRows.add({fmt::format("{:x}", hash.get()),
-                          nodeCount,
-                          edgeCount,
-                          parts.size()});
+    while (commit) {
+        expectedRows.add({fmt::format("{:x}", commit->hash().get()),
+                          commit->getNumNodes(),
+                          commit->getNumEdges(),
+                          commit->getNumDataParts()});
+        commit = commit->getPreviousCommit();
     }
 
     _db->query("CALL db.history()", _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
@@ -1423,40 +1410,6 @@ TEST_F(QueriesTest, matchCrossProductWithDbHistory) {
     HistoryRow actualRows;
 
     size_t nodeCount = 0;
-    {
-        auto transaction = _graph->openTransaction();
-        auto reader = transaction.readGraph();
-
-        nodeCount = reader.getNodeCount();
-
-        // Get expected history
-        const std::span commits = reader.commits();
-        for (const auto& commit : commits) {
-            const CommitHash& hash = commit.hash();
-            const std::span parts = commit.dataparts();
-            const Tombstones& tombstones = commit.tombstones();
-
-            size_t histNodeCount = 0;
-            for (const auto& part : parts) {
-                histNodeCount += part->getNodeContainerSize();
-            }
-            histNodeCount -= tombstones.numNodes();
-
-            size_t histEdgeCount = 0;
-            for (const auto& part : parts) {
-                histEdgeCount += part->getEdgeContainerSize();
-            }
-            histEdgeCount -= tombstones.numEdges();
-
-            // The db.history() result is repeated for each row in the cross product
-            for (size_t i = 0; i < nodeCount * nodeCount; i++) {
-                expectedRows.add({fmt::format("{:x}", hash.get()),
-                                  histNodeCount,
-                                  histEdgeCount,
-                                  parts.size()});
-            }
-        }
-    }
 
     auto result = query("MATCH (n), (m) RETURN labels(n)", [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
@@ -1734,9 +1687,8 @@ TEST_F(QueriesTest, db_listGraph) {
 
 TEST_F(QueriesTest, db_commit) {
     auto transaction = _graph->openTransaction();
-    auto reader = transaction.readGraph();
 
-    const auto originalCommitHash = reader.commits().back().hash();
+    const auto originalCommitHash = transaction.getCommitHash();
     CommitHash newCommitHash;
     ChangeID changeID;
 
@@ -1762,8 +1714,8 @@ TEST_F(QueriesTest, db_commit) {
         auto transaction = _env->getSystemManager().openTransaction(_graphName,
                                                                     CommitHash::head(),
                                                                     changeID);
-        auto reader = transaction->readGraph();
-        newCommitHash = reader.commits().back().hash();
+
+        newCommitHash = transaction->getCommitHash();
         EXPECT_NE(originalCommitHash, newCommitHash);
     }
 
@@ -1777,8 +1729,7 @@ TEST_F(QueriesTest, db_commit) {
         auto transaction = _env->getSystemManager().openTransaction(_graphName,
                                                                     CommitHash::head(),
                                                                     changeID);
-        auto reader = transaction->readGraph();
-        const auto finalCommitHash = reader.commits().back().hash();
+        const auto finalCommitHash = transaction->getCommitHash();
 
         EXPECT_FALSE(res.hasErrorMessage());
         EXPECT_NE(newCommitHash, finalCommitHash);

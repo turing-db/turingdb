@@ -1,16 +1,13 @@
 #include "HistoryProcedure.h"
 
-#include <span>
-
 #include "ExecutionContext.h"
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "Graph.h"
+#include "SystemManager.h"
+#include "versioning/VersionController.h"
 #include "columns/ColumnVector.h"
-#include "DataPart.h"
-#include "views/GraphView.h"
-
-#include "PipelineException.h"
 
 using namespace db;
 
@@ -19,20 +16,19 @@ namespace {
 using UInt64Col = ColumnVector<types::UInt64::Primitive>;
 
 struct Data : public ProcedureData {
-    std::span<const db::CommitView>::iterator _it {};
+    const Commit* _commit {nullptr};
 };
 
 void writeChunk(Data* data,
                 ProcedureState* proc,
-                const GraphView* view,
                 size_t chunkSize) {
+    size_t count = 0;
+
     auto* commitCol = static_cast<ColumnVector<std::string>*>(data->getReturnColumn(0));
     auto* nodeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(1));
     auto* edgeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(2));
     auto* partCountCol = static_cast<UInt64Col*>(data->getReturnColumn(3));
 
-    const size_t dist = std::distance(data->_it, view->commits().end());
-    const size_t remaining = std::min(dist, chunkSize);
 
     if (commitCol) {
         commitCol->clear();
@@ -47,39 +43,38 @@ void writeChunk(Data* data,
         partCountCol->clear();
     }
 
-    for (size_t i = 0; i < remaining; ++i) {
-        const CommitView& commit = *data->_it;
-        const std::span parts = commit.dataparts();
+    // Traverse through the commit history chain until we reach the root commit or
+    // we have outputed a chunksize worth of commits.
+    while (count < chunkSize) {
+        const Commit* commit = data->_commit;
 
         if (commitCol) {
-            commitCol->push_back(fmt::format("{:x}", commit.hash().get()));
-        }
-
-        size_t nodeCount = 0;
-        size_t edgeCount = 0;
-        for (const auto& part : parts) {
-            nodeCount += part->getNodeContainerSize();
-            edgeCount += part->getEdgeContainerSize();
+            commitCol->push_back(fmt::format("{:x}", commit->hash().get()));
         }
 
         if (nodeCountCol) {
-            nodeCountCol->push_back(nodeCount);
+            nodeCountCol->push_back(commit->getNumNodes());
         }
         if (edgeCountCol) {
-            edgeCountCol->push_back(edgeCount);
+            edgeCountCol->push_back(commit->getNumEdges());
         }
         if (partCountCol) {
-            partCountCol->push_back(parts.size());
+            partCountCol->push_back(commit->getNumDataParts());
         }
 
-        ++data->_it;
+        ++count;
+        data->_commit = data->_commit->getPreviousCommit();
+
+        // If we have reached the root commit, stop.
+        if (!data->_commit) {
+            break;
+        }
     }
 
-    if (data->_it == view->commits().end()) {
+    if (!data->_commit) {
         proc->finish();
     }
 }
-
 }
 
 ProcedureData* HistoryProcedure::allocData() {
@@ -105,18 +100,22 @@ void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
 void HistoryProcedure::execute(ProcedureState* proc) {
     Data& data = proc->data<Data>();
     const ExecutionContext* ctxt = proc->getContext();
-    const GraphView& view = ctxt->getGraphView();
+    const std::string& graphName = ctxt->getGraphName().data();
+    const VersionController& controller = ctxt->getSystemManager()->getGraph(graphName)->getVersionController();
+
+    const size_t chunkSize = ctxt->getChunkSize();
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE:
-            data._it = view.commits().begin();
+            data._commit = controller.getCommitSafe(ctxt->getGraphView().headCommitHash());
+            bioassert(data._commit, "headCommitHash not found");
         break;
 
         case ProcedureState::Step::RESET:
         break;
 
         case ProcedureState::Step::EXECUTE:
-            writeChunk(&data, proc, &view, ctxt->getChunkSize());
+            writeChunk(&data, proc, chunkSize);
         break;
     }
 }

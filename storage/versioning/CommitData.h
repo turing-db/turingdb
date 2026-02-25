@@ -32,7 +32,6 @@ public:
     [[nodiscard]] DataPartSpan allDataparts() const { return _history.allDataparts(); }
     [[nodiscard]] DataPartSpan commitDataparts() const { return _history.commitDataparts(); }
     [[nodiscard]] const GraphMetadata& metadata() const { return _metadata; }
-    [[nodiscard]] std::span<const CommitView> commits() const { return _history.commits(); }
     [[nodiscard]] const CommitHistory& history() const { return _history; }
     [[nodiscard]] CommitHistory& history() { return _history; }
     [[nodiscard]] CommitHash hash() const { return _hash; }

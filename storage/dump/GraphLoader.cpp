@@ -9,23 +9,23 @@
 
 using namespace db;
 
-DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
+DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& graphDir) {
     Profile profile("GraphLoader::load");
 
-    const auto pathInfo = path.getFileInfo();
-    if (!pathInfo) {
+    const auto dirInfo = graphDir.getFileInfo();
+    if (!dirInfo) {
         return DumpError::result(DumpErrorType::GRAPH_DOES_NOT_EXIST);
     }
 
-    if (pathInfo->_type != fs::FileType::Directory) {
+    if (dirInfo->_type != fs::FileType::Directory) {
         return DumpError::result(DumpErrorType::NOT_DIRECTORY);
     }
 
     // Loading info
     {
         Profile profile("GraphLoader::load <info>");
-        const fs::Path infoPath = path / "info";
-        auto reader = fs::FilePageReader::open(infoPath, DumpConfig::PAGE_SIZE);
+        const fs::Path infoFile = graphDir / "info";
+        auto reader = fs::FilePageReader::open(infoFile, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_GRAPH_INFO, reader.error());
         }
@@ -38,55 +38,42 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& path) {
         }
     }
 
-    // Listing files in the folder
-    auto files = path.listDir();
-    if (!files) {
-        return DumpError::result(DumpErrorType::CANNOT_LIST_COMMITS, files.error());
-    }
-
-    static constexpr std::string_view COMMIT_FOLDER_PREFIX = "commit-";
-
     graph->_versionController = std::make_unique<VersionController>(graph);
 
-    std::map<uint64_t, std::pair<CommitHash, fs::Path>> commitInfo;
+    const fs::Path logFile = graphDir / "commitlog";
 
-    for (auto& child : files.value()) {
-        const auto& childStr = child.filename();
-
-        if (childStr.find(COMMIT_FOLDER_PREFIX) == std::string::npos) {
-            // Not a commit folder
-            continue;
-        }
-
-        const auto suffixRes = GraphDumpHelper::getCommitSuffix(
-            childStr,
-            COMMIT_FOLDER_PREFIX.size());
-
-        if (!suffixRes) {
-            return suffixRes.get_unexpected();
-        }
-
-        const auto [offset, hash] = suffixRes.value();
-        commitInfo.emplace(offset, std::make_pair(hash, child));
+    auto fileRes = fs::File::open(logFile);
+    if (!fileRes) {
+        return DumpError::result(DumpErrorType::CANNOT_OPEN_COMMIT_LOG, fileRes.error());
     }
 
-    if (commitInfo.empty()) {
-        return DumpError::result(DumpErrorType::NO_COMMITS);
+    fs::FileReader reader;
+    reader.setFile(&fileRes.value());
+    reader.read();
+    if (reader.errorOccured()) {
+        return DumpError::result(DumpErrorType::CANNOT_OPEN_COMMIT_LOG);
+    }
+    fs::ByteBufferIterator it = reader.iterateBuffer();
+
+    const auto fileHeaderRes = GraphDumpHelper::checkFileHeader(&it);
+    if (!fileHeaderRes) {
+        return fileHeaderRes.get_unexpected();
     }
 
-    const CommitHistory* prevHistory = nullptr;
+    const size_t numEntries = it.get<uint64_t>();
 
-    for (const auto& [commitIndex, commitInfoPair] : commitInfo) {
-        const auto& [hash, path] = commitInfoPair;
-        auto res = CommitLoader::load(path, *graph, CommitHash {hash}, prevHistory);
+    const Commit* prevCommit = nullptr;
+    for (size_t i = 0; i < numEntries; ++i) {
+        const auto hash = it.get<uint64_t>();
+        const fs::Path commitDir = graphDir / fmt::format("{}", hash);
 
+        auto res = CommitLoader::load(commitDir, *graph, CommitHash {hash}, prevCommit);
         if (!res) {
             return res.get_unexpected();
         }
 
-        auto* ptr = res->get();
+        prevCommit = res.value().get();
         graph->_versionController->addCommit(std::move(res.value()));
-        prevHistory = &ptr->history();
     }
 
     return {};

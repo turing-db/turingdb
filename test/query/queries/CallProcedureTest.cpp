@@ -117,14 +117,14 @@ TEST_F(CallProcedureTest, DescribeCommit) {
                 EXPECT_EQ(edgeCounts->at(i), edgeCount);
             };
 
-            check(0, 0, 0);
-            check(1, 7, 8);
-            check(2, 2, 2);
-            check(3, 2, 2);
-            check(4, 1, 1);
-            check(5, 1, 0);
-            check(6, 3, 2);
-            check(7, 2, 3);
+            check(0, 2, 3);
+            check(1, 3, 2);
+            check(2, 1, 0);
+            check(3, 1, 1);
+            check(4, 2, 2);
+            check(5, 2, 2);
+            check(6, 7, 8);
+            check(7, 0, 0);
 
             executed = true;
         });

@@ -9,7 +9,7 @@ class DataPart;
 
 class DataPartDumper {
 public:
-    [[nodiscard]] static DumpResult<void> dump(const DataPart& part, const fs::Path& path);
+    [[nodiscard]] static DumpResult<void> dump(const DataPart& part, const fs::Path& partDir);
 };
 
 }

@@ -24,12 +24,12 @@
 
 using namespace db;
 
-DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
+DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& dataPartDir,
                                                    const GraphMetadata& metadata,
                                                    VersionController& versionController) {
     Profile profile("DataPartLoader::load");
 
-    if (!path.exists()) {
+    if (!dataPartDir.exists()) {
         return DumpError::result(DumpErrorType::DATAPART_DOES_NOT_EXIST);
     }
 
@@ -39,8 +39,8 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     {
         Profile profile("DataPartLoader::load <info>");
 
-        const fs::Path infoPath = path / "info";
-        auto reader = fs::FilePageReader::open(infoPath, DumpConfig::PAGE_SIZE);
+        const fs::Path infoFile = dataPartDir / "info";
+        auto reader = fs::FilePageReader::open(infoFile, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_INFO, reader.error());
         }
@@ -54,9 +54,9 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     }
 
     // Loading nodes
-    const fs::Path nodesPath = path / "nodes";
-    if (nodesPath.exists()) {
-        auto reader = fs::FilePageReader::open(nodesPath, DumpConfig::PAGE_SIZE);
+    const fs::Path nodesFile = dataPartDir / "nodes";
+    if (nodesFile.exists()) {
+        auto reader = fs::FilePageReader::open(nodesFile, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_NODES, reader.error());
         }
@@ -75,9 +75,9 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     }
 
     // Loading edges
-    const fs::Path edgesPath = path / "edges";
-    if (edgesPath.exists()) {
-        auto reader = fs::FilePageReader::open(edgesPath, DumpConfig::PAGE_SIZE);
+    const fs::Path edgesFile = dataPartDir / "edges";
+    if (edgesFile.exists()) {
+        auto reader = fs::FilePageReader::open(edgesFile, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGES, reader.error());
         }
@@ -97,9 +97,9 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     }
 
     // Loading edge indexer
-    const fs::Path edgeIndexerPath = path / "edge-indexer";
-    if (edgeIndexerPath.exists()) {
-        auto reader = fs::FilePageReader::open(edgeIndexerPath, DumpConfig::PAGE_SIZE);
+    const fs::Path edgeIndexerFile = dataPartDir / "edge-indexer";
+    if (edgeIndexerFile.exists()) {
+        auto reader = fs::FilePageReader::open(edgeIndexerFile, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_INDEXER, reader.error());
         }
@@ -115,7 +115,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     }
 
     // Listing files in the folder
-    auto files = path.listDir();
+    auto files = dataPartDir.listDir();
     if (!files) {
         return DumpError::result(DumpErrorType::CANNOT_LIST_DATAPART_FILES, files.error());
     }
@@ -132,7 +132,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
             return DumpError::result(DumpErrorType::INCORRECT_PROPERTY_TYPE_ID);
         }
 
-        auto reader = fs::FilePageReader::open(path / filename, DumpConfig::PAGE_SIZE);
+        auto reader = fs::FilePageReader::open(dataPartDir / filename, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROPS, reader.error());
         }
@@ -228,12 +228,12 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     };
 
     // Loading node property indexer
-    const fs::Path nodePropertyIndexerPath = path / "node-prop-indexer";
+    const fs::Path nodePropertyIndexerFile = dataPartDir / "node-prop-indexer";
 
-    if (nodePropertyIndexerPath.exists()) {
+    if (nodePropertyIndexerFile.exists()) {
         Profile profile("DataPartLoader::load <node-prop-indexer>");
 
-        auto reader = fs::FilePageReader::open(nodePropertyIndexerPath, DumpConfig::PAGE_SIZE);
+        auto reader = fs::FilePageReader::open(nodePropertyIndexerFile, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, reader.error());
         }
@@ -247,12 +247,12 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
     }
 
     // Loading edge property indexer
-    const fs::Path edgePropertyIndexerPath = path / "edge-prop-indexer";
+    const fs::Path edgePropertyIndexerFile = dataPartDir / "edge-prop-indexer";
 
-    if (edgePropertyIndexerPath.exists()) {
+    if (edgePropertyIndexerFile.exists()) {
         Profile profile("DataPartLoader::load <edge-prop-indexer>");
 
-        auto reader = fs::FilePageReader::open(edgePropertyIndexerPath, DumpConfig::PAGE_SIZE);
+        auto reader = fs::FilePageReader::open(edgePropertyIndexerFile, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, reader.error());
         }
@@ -286,17 +286,17 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
 
     // Dump node StringIndexer
     {
-        const fs::Path nodeStrIndexerPath = path / "node-string-prop-indexer";
-        const fs::Path nodeStrIndexerPathAlt = path / "node-string-prop-indexer-owners";
+        const fs::Path nodeStrIndexerFile = dataPartDir / "node-string-prop-indexer";
+        const fs::Path nodeStrIndexerFileAlt = dataPartDir / "node-string-prop-indexer-owners";
 
-        if (!nodeStrIndexerPath.exists() || !nodeStrIndexerPathAlt.exists()) {
+        if (!nodeStrIndexerFile.exists() || !nodeStrIndexerFileAlt.exists()) {
             return DumpError::result(
                 DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER);
         }
 
-        auto reader = fs::FilePageReader::open(nodeStrIndexerPath, DumpConfig::PAGE_SIZE);
+        auto reader = fs::FilePageReader::open(nodeStrIndexerFile, DumpConfig::PAGE_SIZE);
         auto auxReader =
-            fs::FilePageReader::open(nodeStrIndexerPathAlt, DumpConfig::PAGE_SIZE);
+            fs::FilePageReader::open(nodeStrIndexerFileAlt, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(
                 DumpErrorType::CANNOT_OPEN_DATAPART_NODE_PROP_INDEXER, reader.error());
@@ -320,17 +320,17 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& path,
 
     // Dump edge StringIndexer
     {
-        const fs::Path edgeStrIndexerPath = path / "edge-string-prop-indexer";
-        const fs::Path edgeStrIndexerPathAlt = path / "edge-string-prop-indexer-owners";
+        const fs::Path edgeStrIndexerFile = dataPartDir / "edge-string-prop-indexer";
+        const fs::Path edgeStrIndexerFileAlt = dataPartDir / "edge-string-prop-indexer-owners";
 
-        if (!edgeStrIndexerPath.exists() || !edgeStrIndexerPathAlt.exists()) {
+        if (!edgeStrIndexerFile.exists() || !edgeStrIndexerFileAlt.exists()) {
             return DumpError::result(
                 DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_STR_PROP_INDEXER);
         }
 
-        auto reader = fs::FilePageReader::open(edgeStrIndexerPath, DumpConfig::PAGE_SIZE);
+        auto reader = fs::FilePageReader::open(edgeStrIndexerFile, DumpConfig::PAGE_SIZE);
         auto auxReader =
-            fs::FilePageReader::open(edgeStrIndexerPathAlt, DumpConfig::PAGE_SIZE);
+            fs::FilePageReader::open(edgeStrIndexerFileAlt, DumpConfig::PAGE_SIZE);
         if (!reader) {
             return DumpError::result(
                 DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_PROP_INDEXER, reader.error());

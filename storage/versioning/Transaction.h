@@ -34,6 +34,7 @@ public:
     [[nodiscard]] GraphView viewGraph() const;
     [[nodiscard]] GraphReader readGraph() const;
     [[nodiscard]] const WeakArc<const CommitData>& commitData() const { return _data; }
+    [[nodiscard]] CommitHash getCommitHash() const;
 
 private:
     WeakArc<const CommitData> _data;
@@ -57,6 +58,7 @@ public:
     [[nodiscard]] bool isValid() const { return _changeAccessor.isValid(); }
     [[nodiscard]] GraphView viewGraph() const;
     [[nodiscard]] GraphReader readGraph() const;
+    [[nodiscard]] CommitHash getCommitHash() const;
 
 private:
     ChangeAccessor _changeAccessor;
@@ -81,6 +83,7 @@ public:
     [[nodiscard]] bool isValid() const { return _changeAccessor.isValid(); }
     [[nodiscard]] GraphView viewGraph() const;
     [[nodiscard]] GraphReader readGraph() const;
+    [[nodiscard]] CommitHash getCommitHash() const;
 
 private:
     ChangeAccessor _changeAccessor;
@@ -132,6 +135,7 @@ public:
     [[nodiscard]] bool isValid() const;
     [[nodiscard]] GraphView viewGraph() const;
     [[nodiscard]] GraphReader readGraph() const;
+    [[nodiscard]] CommitHash getCommitHash() const;
 
 private:
     std::variant<FrozenCommitTx, PendingCommitWriteTx, PendingCommitReadTx> _tx;

@@ -41,7 +41,7 @@ TEST_F(GraphLoaderTest, SimpleDumpLoad) {
     auto loadedGraph = Graph::create();
     const auto loadRes = GraphLoader::load(loadedGraph.get(), _dumpPath);
     if (!loadRes) {
-        throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
+        throw TuringException("Failed to load graph:\n" + loadRes.error().fmtMessage());
     }
 
     ASSERT_TRUE(GraphComparator::same(*_graph, *loadedGraph));

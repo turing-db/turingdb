@@ -5,16 +5,16 @@
 #include "comparators/WriteSetComparator.h"
 #include "comparators/TombstoneSetComparator.h"
 #include "versioning/CommitData.h"
-#include "versioning/CommitView.h"
 #include "versioning/CommitHistory.h"
+#include "versioning/Commit.h"
 
 using namespace db;
 
-bool CommitViewComparator::same(const CommitView& a, const CommitView& b) {
+bool CommitComparator::same(const Commit* a, const Commit* b) {
     // Verifiying commit journals
     {
-        const CommitJournal& journalA = a.history().journal();
-        const CommitJournal& journalB = b.history().journal();
+        const CommitJournal& journalA = a->history().journal();
+        const CommitJournal& journalB = b->history().journal();
 
         const WriteSet<NodeID>& nodeWriteSetA = journalA.nodeWriteSet();
         const WriteSet<NodeID>& nodeWriteSetB = journalB.nodeWriteSet();
@@ -35,8 +35,8 @@ bool CommitViewComparator::same(const CommitView& a, const CommitView& b) {
 
     // Verifiying tombstones
     {
-        const Tombstones& tombstonesA = a.data().tombstones();
-        const Tombstones& tombstonesB = b.data().tombstones();
+        const Tombstones& tombstonesA = a->data().tombstones();
+        const Tombstones& tombstonesB = b->data().tombstones();
 
         const Tombstones::NodeTombstones& nodesA = tombstonesA.nodeTombstones();
         const Tombstones::NodeTombstones& nodesB = tombstonesB.nodeTombstones();

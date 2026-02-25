@@ -13,11 +13,11 @@ class GraphMetadata;
 
 class GraphMetadataLoader {
 public:
-    [[nodiscard]] static DumpResult<void> load(const fs::Path& path, GraphMetadata& metadata) {
+    [[nodiscard]] static DumpResult<void> load(const fs::Path& metaDataDir, GraphMetadata& metadata) {
         // Reading labels
         {
-            const fs::Path labelsPath = path / "labels";
-            auto reader = fs::FilePageReader::open(labelsPath, DumpConfig::PAGE_SIZE);
+            const fs::Path labelsFile = metaDataDir / "labels";
+            auto reader = fs::FilePageReader::open(labelsFile, DumpConfig::PAGE_SIZE);
             if (!reader) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELS, reader.error());
             }
@@ -30,8 +30,8 @@ public:
         }
 
         {
-            const fs::Path edgeTypesPath = path / "edge-types";
-            auto reader = fs::FilePageReader::open(edgeTypesPath, DumpConfig::PAGE_SIZE);
+            const fs::Path edgeTypesFile = metaDataDir / "edge-types";
+            auto reader = fs::FilePageReader::open(edgeTypesFile, DumpConfig::PAGE_SIZE);
             if (!reader) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_EDGE_TYPES, reader.error());
             }
@@ -45,8 +45,8 @@ public:
 
         // Reading property types
         {
-            const fs::Path propTypesPath = path / "property-types";
-            auto reader = fs::FilePageReader::open(propTypesPath, DumpConfig::PAGE_SIZE);
+            const fs::Path propTypesFile = metaDataDir / "property-types";
+            auto reader = fs::FilePageReader::open(propTypesFile, DumpConfig::PAGE_SIZE);
             if (!reader) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_PROPERTY_TYPES, reader.error());
             }
@@ -60,8 +60,8 @@ public:
 
         // Reading labelsets
         {
-            const fs::Path labelsetsPath = path / "labelsets";
-            auto reader = fs::FilePageReader::open(labelsetsPath, DumpConfig::PAGE_SIZE);
+            const fs::Path labelsetsFile = metaDataDir / "labelsets";
+            auto reader = fs::FilePageReader::open(labelsetsFile, DumpConfig::PAGE_SIZE);
             if (!reader) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELSETS, reader.error());
             }
@@ -76,5 +76,4 @@ public:
         return {};
     }
 };
-
 }

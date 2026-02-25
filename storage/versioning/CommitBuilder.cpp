@@ -28,17 +28,21 @@ CommitBuilder::~CommitBuilder() {
 
 std::unique_ptr<CommitBuilder> CommitBuilder::prepare(VersionController& controller,
                                                       Change* change,
-                                                      const GraphView& view) {
-    auto* ptr = new CommitBuilder {controller, change, view};
-    ptr->initialize();
+                                                      const Commit* prevCommit) {
+    const GraphView view = GraphView(&prevCommit->data());
+    auto* ptr = new CommitBuilder(controller, change, view);
+
+    ptr->initialize(prevCommit);
     return std::unique_ptr<CommitBuilder> {ptr};
 }
 
 std::unique_ptr<CommitBuilder> CommitBuilder::prepareMerge(VersionController& controller,
                                                            Change* change,
-                                                           const GraphView& view) {
+                                                           const Commit* prevCommit) {
+    const GraphView view = GraphView {&prevCommit->data()};
     auto* ptr = new CommitBuilder {controller, change, view};
-    ptr->initializeMerge();
+
+    ptr->initializeMerge(prevCommit);
     return std::unique_ptr<CommitBuilder> {ptr};
 }
 
@@ -47,7 +51,7 @@ CommitHash CommitBuilder::hash() const {
 }
 
 GraphView CommitBuilder::viewGraph() const {
-    return GraphView {*_commitData};
+    return GraphView {_commitData.get()};
 }
 
 GraphReader CommitBuilder::readGraph() const {
@@ -60,8 +64,9 @@ void CommitBuilder::appendBuilder(std::unique_ptr<DataPartBuilder> builder) {
 }
 
 DataPartBuilder& CommitBuilder::newBuilder() {
-    std::unique_lock<std::mutex> lock(_mutex);
-    GraphView view(*_commitData);
+    std::unique_lock<std::mutex> lock {_mutex};
+
+    const GraphView view = GraphView(_commitData.get());
     const size_t partIndex = view.dataparts().size() + _builders.size();
     auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_metadataBuilder,
                                                                     view.read().getTotalNodesAllocated(),
@@ -76,7 +81,7 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     std::unique_lock<std::mutex> lock(_mutex);
 
-    const GraphView view(*_commitData);
+    const GraphView view {_commitData.get()};
 
     CommitHistoryBuilder historyBuilder(_commitData->_history);
     for (const auto& builder : _builders) {
@@ -103,6 +108,20 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
     }
 
     _commit->history().journal().finalise();
+
+    const size_t numCommitDataParts = _commit->history().commitDataparts().size();
+    size_t numNodesAdded = 0;
+    size_t numEdgesAdded = 0;
+
+    for (size_t i = 0; i < numCommitDataParts; ++i) {
+        const DataPart* part = _commit->data().commitDataparts()[i].get();
+        numNodesAdded += part->getNodeContainerSize();
+        numEdgesAdded += part->getEdgeContainerSize();
+    }
+
+    _commit->setNumDataParts(numCommitDataParts);
+    _commit->setNumNodes(numNodesAdded);
+    _commit->setNumEdges(numEdgesAdded);
 
     return std::move(_commit);
 }
@@ -136,8 +155,8 @@ CommitBuilder::CommitBuilder(VersionController& controller, Change* change, cons
 {
 }
 
-void CommitBuilder::initialize() {
-    Profile profile("CommitBuilder::initialize");
+void CommitBuilder::initialize(const Commit* prevCommit) {
+    Profile profile ("CommitBuilder::initialize");
 
     const auto reader = _view.read();
 
@@ -150,8 +169,6 @@ void CommitBuilder::initialize() {
     // next ID in the graph on main at the time of submission.
     _nextNodeID = reader.getTotalNodesAllocated();
     _nextEdgeID = reader.getTotalEdgesAllocated();
-
-    const CommitView prevCommit = reader.commits().back();
 
     // Create new commit data
     _commitData = _controller->createCommitData(CommitHash::create());
@@ -166,21 +183,17 @@ void CommitBuilder::initialize() {
     // Create the write buffer for this commit
     _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal());
     // Copy tombstones from previous commit
-    _commitData->_tombstones = prevCommit.tombstones();
+    _commitData->_tombstones = _view.tombstones();
 }
 
-void CommitBuilder::initializeMerge() {
-    Profile profile("CommitBuilder::initialize");
-
-    const auto reader = _view.read();
+void CommitBuilder::initializeMerge(const Commit* prevCommit) {
+    Profile profile ("CommitBuilder::initialize");
 
     _firstNodeID = 0;
     _firstEdgeID = 0;
 
     _nextNodeID = 0;
     _nextEdgeID = 0;
-
-    const CommitView prevCommit = reader.commits().back();
 
     // Create new commit data
     _commitData = _controller->createCommitData(CommitHash::create());

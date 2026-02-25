@@ -11,11 +11,15 @@ FrozenCommitTx::FrozenCommitTx() = default;
 FrozenCommitTx::~FrozenCommitTx() = default;
 
 GraphView FrozenCommitTx::viewGraph() const {
-    return GraphView {*_data};
+    return GraphView(_data.get());
 }
 
 GraphReader FrozenCommitTx::readGraph() const {
-    return GraphView {*_data}.read();
+    return viewGraph().read();
+}
+
+CommitHash FrozenCommitTx::getCommitHash() const {
+    return _data->hash();
 }
 
 PendingCommitReadTx::PendingCommitReadTx() = default;
@@ -30,11 +34,15 @@ PendingCommitReadTx::PendingCommitReadTx(ChangeAccessor&& changeAccessor,
 }
 
 GraphView PendingCommitReadTx::viewGraph() const {
-    return GraphView {_commitBuilder->commitData()};
+    return GraphView {&_commitBuilder->commitData()};
 }
 
 GraphReader PendingCommitReadTx::readGraph() const {
-    return GraphView {_commitBuilder->commitData()}.read();
+    return GraphView {&_commitBuilder->commitData()}.read();
+}
+
+CommitHash PendingCommitReadTx::getCommitHash() const {
+    return _commitBuilder->hash();
 }
 
 PendingCommitWriteTx::PendingCommitWriteTx() = default;
@@ -49,11 +57,15 @@ PendingCommitWriteTx::PendingCommitWriteTx(ChangeAccessor&& changeAccessor,
 }
 
 GraphView PendingCommitWriteTx::viewGraph() const {
-    return GraphView {_commitBuilder->commitData()};
+    return GraphView {&_commitBuilder->commitData()};
 }
 
 GraphReader PendingCommitWriteTx::readGraph() const {
-    return GraphView {_commitBuilder->commitData()}.read();
+    return GraphView {&_commitBuilder->commitData()}.read();
+}
+
+CommitHash PendingCommitWriteTx::getCommitHash() const {
+    return _commitBuilder->hash();
 }
 
 bool Transaction::isValid() const {
@@ -66,4 +78,8 @@ GraphView Transaction::viewGraph() const {
 
 GraphReader Transaction::readGraph() const {
     return std::visit([](auto&& tx) { return tx.readGraph(); }, _tx);
+}
+
+CommitHash Transaction::getCommitHash() const {
+    return std::visit([](auto&& tx) { return tx.getCommitHash(); }, _tx);
 }

@@ -24,3 +24,17 @@ void FileReader::read() {
         _error = res.error();
     }
 }
+
+void FileReader::read(size_t size) {
+    if (size == 0) {
+        _buffer.clear();
+        return;
+    }
+
+    _buffer.resize(size);
+
+    const auto res = _file->read(_buffer.data(), _buffer.size());
+    if (!res) {
+        _error = res.error();
+    }
+}

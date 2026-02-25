@@ -9,7 +9,7 @@ class Graph;
 
 class GraphLoader {
 public:
-    [[nodiscard]] static DumpResult<void> load(Graph* graph, const fs::Path& path);
+    [[nodiscard]] static DumpResult<void> load(Graph* graph, const fs::Path& graphDir);
 };
 
 }

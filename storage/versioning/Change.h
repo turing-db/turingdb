@@ -61,7 +61,9 @@ private:
 
     CommitBuilder* _tip {nullptr};
 
-    explicit Change(VersionController* versionController, ChangeID id, CommitHash base);
+    explicit Change(VersionController* versionController,
+                    ChangeID id,
+                    const Commit* prevCommit);
 
     [[nodiscard]] CommitResult<void> commit(JobSystem& jobsystem);
     [[nodiscard]] CommitResult<void> rebase(JobSystem& jobsystem);

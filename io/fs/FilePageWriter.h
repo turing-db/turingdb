@@ -67,6 +67,13 @@ public:
         write(reinterpret_cast<const uint8_t*>(&v), sizeof(decltype(v)));
     }
 
+    // To ensure that size_t gets written as a standard
+    // 64bits.
+    void write(size_t v) {
+        const uint64_t value = static_cast<uint64_t>(v);
+        write(reinterpret_cast<const uint8_t*>(&value), sizeof(uint64_t));
+    }
+
     template <TrivialPrimitive T, size_t SpanSizeT>
     void write(std::span<T, SpanSizeT> s) {
         write(reinterpret_cast<const uint8_t*>(s.data()), s.size() * sizeof(T));

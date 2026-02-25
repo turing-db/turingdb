@@ -9,7 +9,7 @@ class Commit;
 
 class CommitDumper {
 public:
-    [[nodiscard]] static DumpResult<void> dump(const Commit& commit, const fs::Path& path);
+    [[nodiscard]] static DumpResult<void> dump(const Commit& commit, const fs::Path& commitDir);
 };
 
 }
