@@ -8,6 +8,7 @@
 #include "dataframe/Dataframe.h"
 #include "OutputWriter.h"
 #include "OutputValues.h"
+#include "ControlCharacters.h"
 
 namespace db {
 
@@ -61,7 +62,7 @@ public:
 private:
     WriterT& _writer;
     const size_t _logicalRowCount {0};
-    std::string _escaped;
+    std::string _sanitized;
 
     template <Optional T>
     void encodeValue(const T& value) {
@@ -97,7 +98,8 @@ private:
     }
 
     void encodeValue(ValueType value) {
-        _writer.write(fmt::format("\"{}\"", ValueTypeName::value(value)));
+        ControlCharactersEscaper::escapeAndSurroundByQuotes(ValueTypeName::value(value), _sanitized);
+        _writer.write(_sanitized);
     }
 
     void encodeValue(PropertyNull) {
@@ -106,31 +108,8 @@ private:
 
     template <std::convertible_to<std::string_view> T>
     void encodeValue(const T& value) {
-        sanitizeJsonString(value);
-        _writer.write(_escaped);
-    }
-
-    void sanitizeJsonString(std::string_view input) {
-        constexpr std::string_view escapedQuotes = "\\\"";
-        constexpr std::string_view escapedBackslash = "\\\\";
-        constexpr std::string_view escapedNewline = "\\n";
-
-        _escaped.clear();
-        _escaped.push_back('\"');
-
-        for (const char c : input) {
-            if (c == '"') {
-                _escaped += escapedQuotes;
-            } else if (c == '\\') {
-                _escaped += escapedBackslash;
-            } else if (c == '\n') {
-                _escaped += escapedNewline;
-            } else {
-                _escaped += c;
-            }
-        }
-
-        _escaped.push_back('\"');
+        ControlCharactersEscaper::escapeAndSurroundByQuotes(value, _sanitized);
+        _writer.write(_sanitized);
     }
 };
 
@@ -194,8 +173,8 @@ public:
         key("column_types");
         arr();
 
-        std::string columnName;
-        ColumnTypeGenerator generator(columnName);
+        std::string columnType;
+        ColumnTypeGenerator generator(columnType);
 
         using Types = OutputtedTypes;
         using ColTypeGen = ColumnSingleDispatcher<Types::Allowed, ColumnTypeGenerator, Types::Excluded>;
@@ -205,7 +184,7 @@ public:
 
             ColTypeGen::dispatch(col, generator);
 
-            value(columnName);
+            value(columnType);
         }
 
         end(); // column_types
@@ -270,10 +249,11 @@ public:
     }
 
     void key(std::string_view k) {
+        ControlCharactersEscaper::escape(k, _sanitized);
         if (_comma) {
-            _writer.write(fmt::format(",\"{}\":", k));
+            _writer.write(fmt::format(",\"{}\":", _sanitized));
         } else {
-            _writer.write(fmt::format("\"{}\":", k));
+            _writer.write(fmt::format("\"{}\":", _sanitized));
         }
 
         _comma = false;
@@ -284,18 +264,14 @@ public:
             end();
         }
 
+        // Escape error message
         const std::string_view errstr = QueryStatusDescription::value(status);
-        std::string sanitizedDetails;
-        sanitizeJsonString(details.empty()
-                               ? "No error message available."
-                               : details,
-                           sanitizedDetails);
 
         key("error");
         value(errstr);
 
         key("error_details");
-        value(sanitizedDetails);
+        value(details.empty() ? "No error message available." : details);
     }
 
     void encodeTime(float milliseconds) {
@@ -308,35 +284,22 @@ public:
     }
 
     void value(std::string_view v) {
+        ControlCharactersEscaper::escapeAndSurroundByQuotes(v, _sanitized);
         if (_comma) {
-            _writer.write(fmt::format(",\"{}\"", v));
+            _writer.write(',');
+            _writer.write(_sanitized);
         } else {
-            _writer.write(fmt::format("\"{}\"", v));
+            _writer.write(_sanitized);
         }
 
         _comma = true;
-    }
-
-    static void sanitizeJsonString(std::string_view input, std::string& res) {
-        res.reserve(input.size() * 1.2);
-
-        for (const char c : input) {
-            if (c == '"') {
-                res += "\\\"";
-            } else if (c == '\\') {
-                res += "\\\\";
-            } else if (c == '\n') {
-                res += "\\n";
-            } else {
-                res += c;
-            }
-        }
     }
 
 private:
     WriterT& _writer;
     std::string _closingTokens;
     bool _comma {false};
+    std::string _sanitized;
 };
 
 }
