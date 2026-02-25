@@ -57,13 +57,26 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         throwError("DISTINCT not yet supported.", _stmt);
     }
 
+    // If a return item is an expression, add the dependencies to be evaluated
     for (const Projection::ReturnItem& returnItem : _proj->items()) {
         Expr* const* exprPtr = std::get_if<Expr*>(&returnItem);
-        if (!exprPtr) {
-            continue;
+        if (exprPtr) {
+            handleExprDependencies(*exprPtr);
         }
+    }
 
-        handleExprDependencies(*exprPtr);
+    // If the projection has an ORDER BY, add expression dependencies to be evaluated
+    if (_proj->hasOrderBy()) {
+        const auto& projOrderItems = _proj->getOrderBy()->getItems();
+        // Get dependencies that we require to order, e.g.
+        // `MATCH (n) RETURN n ORDER BY n.name`
+        // requires inserting a plan node to get n.name
+        for (const OrderByItem* item : projOrderItems) {
+            Expr* itemExpr = item->getExpr();
+            bioassert(itemExpr, "OrderByItem had null expr.");
+
+            handleExprDependencies(itemExpr);
+        }
     }
 
     // Expression evaluation is the only node which does not require a previous input, for example
@@ -103,15 +116,11 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
     // is `RETURN 5 LIMIT 10` (it has EXPR EVAL as a previous input). Therefore, we can
     // only add thse projection properties if @ref prevNode is valid.
     if (_prevNode && _proj->hasOrderBy()) {
-        const auto& projOrderItems = _proj->getOrderBy()->getItems();
-        // Get dependencies that we require to order, e.g.
-        // `MATCH (n) RETURN n ORDER BY n.name`
-        // requires inserting a plan node to get n.name
-        for (const OrderByItem* item : projOrderItems) {
-            Expr* itemExpr = item->getExpr();
-            handleExprDependencies(itemExpr);
-        }
-
+        // Any expression dependencies, e.g.
+        // `MATCH (n) RETURN n.age ORDER BY n.age + 10`
+        // where `n.age + 10` need be evaluated first, are handled at the entrypoint of
+        // this function, meaning at this point, if there is an ORDER BY, all dependent
+        // columns will be registered.
         auto* orderBy = _tree->newOut<OrderByNode>(_prevNode);
         orderBy->setItems(_proj->getOrderBy()->getItems());
         _prevNode = orderBy;
