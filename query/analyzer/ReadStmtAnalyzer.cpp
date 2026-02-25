@@ -72,7 +72,7 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
 
         case Stmt::Kind::VECTOR_SEARCH:
             analyze(static_cast<const VectorSearchStmt*>(stmt));
-            break;
+        break;
 
         default:
             throwError("Unsupported read statement type", stmt);
