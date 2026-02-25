@@ -1,6 +1,7 @@
 #include "OrderByProcessor.h"
 
 #include <algorithm>
+#include <compare>
 #include <concepts>
 #include <numeric>
 
@@ -202,13 +203,17 @@ struct CompareInner {
     int& _res;
 
     template <typename T>
+        requires std::totally_ordered<T>
     void operator()(const ColumnVector<T>* col) {
-        const std::strong_ordering cmp = col->operator[](_i) <=> col->operator[](_j);
-        if (cmp < 0) {
+        const std::partial_ordering cmp = col->operator[](_i) <=> col->operator[](_j);
+        if (cmp == std::partial_ordering::less) {
             _res = -1;
-        } else if (cmp > 0) {
+        } else if (cmp == std::partial_ordering::greater) {
             _res = 1;
-        } else {
+        } else if (cmp == std::partial_ordering::equivalent) {
+            _res = 0;
+        } else /*(cmp == std::partial_ordering::unordered)*/ {
+            // FIXME: How do we want to handle non-totally ordered types like double?
             _res = 0;
         }
     }

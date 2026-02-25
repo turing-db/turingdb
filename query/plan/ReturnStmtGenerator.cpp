@@ -66,6 +66,9 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         handleExprDependencies(*exprPtr);
     }
 
+    // Expression evaluation is the only node which does not require a previous input, for example
+    // `RETURN 5`
+    // has no previous input, but is valid.
     if (!_exprEvalNode->getExprs().empty()) {
         if (_prevNode) {
             _prevNode->connectOut(_exprEvalNode);
@@ -73,17 +76,25 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         _prevNode = _exprEvalNode;
     }
 
-    if (!_funcEvalNode->getFuncs().empty()) {
-        if (_prevNode) {
-            _prevNode->connectOut(_funcEvalNode);
-        }
+    // Functions always require some previous node, even in the case of
+    // `RETURN sqrt(5)`
+    // the `5` must have been produced by the above ExprEvalNode, which sets
+    // @ref _prevNode to non-null
+    // NOTE: In case of a function which takes no arguments being supported, the above
+    // becomes false.
+    if (_prevNode && !_funcEvalNode->getFuncs().empty()) {
+        _prevNode->connectOut(_funcEvalNode);
         _prevNode = _funcEvalNode;
     }
 
-    if (!_aggrEvalNode->getFuncs().empty()) {
-        if (_prevNode) {
-            _prevNode->connectOut(_aggrEvalNode);
-        }
+    // Aggregates always require some previous node, even in the case of
+    // `RETURN COUNT(5)`
+    // the `5` must have been produced by the above ExprEvalNode, which sets
+    // @ref _prevNode to non-null
+    // NOTE: In case of an aggregate which takes no arguments being supported, the above
+    // becomes false.
+    if (_prevNode && !_aggrEvalNode->getFuncs().empty()) {
+        _prevNode->connectOut(_aggrEvalNode);
         _prevNode = _aggrEvalNode;
     }
 
