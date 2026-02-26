@@ -40,6 +40,7 @@
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/ListExpr.h"
 
+#include "QuantifiedPath.h"
 #include "ProcedureLookup.h"
 
 #include "BioAssert.h"
@@ -414,6 +415,46 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             _exprAnalyzer->analyzeRootExpr(predExpr);
 
             data->addExprConstraint(propName->getName(), propType->_valueType, predExpr);
+        }
+    }
+
+    // Validate QuantifiedPath
+    const QuantifiedPath* qp = edgePattern->getQuantifiedPath();
+    if (qp) {
+        int64_t lhs = qp->getLhs();
+        int64_t rhs = qp->getRhs();
+
+        if (lhs != 0 && lhs != 1) {
+            throwError("Variable-length path minimum hops must be 0 or 1",
+                       edgePattern);
+        }
+
+        if (!qp->isRhsUnbounded()) {
+            if (rhs < lhs) {
+                throwError("Variable-length path maximum hops must be "
+                           "greater than or equal to minimum hops",
+                           edgePattern);
+            }
+            if (rhs < 1) {
+                throwError("Variable-length path maximum hops must be "
+                           "at least 1",
+                           edgePattern);
+            }
+        }
+
+        // Phase 1 restriction: no type or property filters
+        // with variable-length paths
+        const auto& types = edgePattern->types();
+        if (types && !types->empty()) {
+            throwError("Edge type filters are not supported with "
+                       "variable-length paths yet",
+                       edgePattern);
+        }
+
+        if (properties) {
+            throwError("Edge property filters are not supported with "
+                       "variable-length paths yet",
+                       edgePattern);
         }
     }
 }

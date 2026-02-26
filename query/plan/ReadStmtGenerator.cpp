@@ -44,7 +44,11 @@
 #include "nodes/VarNode.h"
 #include "nodes/ShortestPathNode.h"
 #include "nodes/VectorSearchNode.h"
+#include "nodes/BFSExpandOutEdgesNode.h"
+#include "nodes/BFSExpandInEdgesNode.h"
+#include "nodes/BFSExpandEdgesNode.h"
 
+#include "QuantifiedPath.h"
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
@@ -236,14 +240,18 @@ void ReadStmtGenerator::generatePatternElement(const PatternElement* element) {
             throwError("Pattern element edge must be an edge pattern", element);
         }
 
-        currentNode = generatePatternElementEdge(currentNode, e);
-
         const NodePattern* n = dynamic_cast<const NodePattern*>(node);
         if (!node) {
             throwError("Pattern element node must be a node pattern", element);
         }
 
-        currentNode = generatePatternElementTarget(currentNode, n);
+        if (e->getQuantifiedPath()) {
+            currentNode = generatePatternElementVariableLengthPath(currentNode, e);
+            currentNode = generatePatternElementTarget(currentNode, n);
+        } else {
+            currentNode = generatePatternElementEdge(currentNode, e);
+            currentNode = generatePatternElementTarget(currentNode, n);
+        }
     }
 }
 
@@ -413,6 +421,45 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
     }
 
     return var;
+}
+
+VarNode* ReadStmtGenerator::generatePatternElementVariableLengthPath(VarNode* prevNode, const EdgePattern* edge)
+{
+    const QuantifiedPath* qp = edge->getQuantifiedPath();
+    const int64_t minHops = qp->getLhs();
+    const int64_t maxHops = qp->getRhs();
+
+    // Create BFS expand node based on direction
+    PlanGraphNode* expandNode = nullptr;
+    switch (edge->getDirection()) {
+        case EdgePattern::Direction::Undirected: {
+            expandNode = _tree->newOut<BFSExpandEdgesNode>(
+                prevNode, minHops, maxHops);
+        } break;
+        case EdgePattern::Direction::Backward: {
+            expandNode = _tree->newOut<BFSExpandInEdgesNode>(
+                prevNode, minHops, maxHops);
+        } break;
+        case EdgePattern::Direction::Forward: {
+            expandNode = _tree->newOut<BFSExpandOutEdgesNode>(
+                prevNode, minHops, maxHops);
+        } break;
+    }
+
+    // Edge variable + filter
+    const VarDecl* edgeDecl = edge->getDecl();
+    auto [edgeVar, edgeFilter] = _variables->getVarNodeAndFilter(edgeDecl);
+    if (!edgeVar) {
+        std::tie(edgeVar, edgeFilter) =
+            _variables->createVarNodeAndFilter(edgeDecl);
+        _variables->setProducer(edgeDecl, edgeVar);
+    } else {
+        throwError("Re-using the same edge variable, "
+                   "this is not supported", edge);
+    }
+    expandNode->connectOut(edgeFilter);
+
+    return edgeVar;
 }
 
 void ReadStmtGenerator::unwrapWhereExpr(Expr* expr) {

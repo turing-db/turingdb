@@ -1034,7 +1034,10 @@ patternElem
     ;
 
 patternElemChain
-    : edgePattern opt_quantifiedPath nodePattern { $$ = std::make_pair($1, $3); }
+    : edgePattern opt_quantifiedPath nodePattern {
+        if ($2) $1->setQuanfiedPath($2);
+        $$ = std::make_pair($1, $3);
+    }
     ;
 
 opt_quantifiedPath
@@ -1044,7 +1047,7 @@ opt_quantifiedPath
 
 quantifiedPath
     : PLUS { $$ = QuantifiedPath::create(ast); $$->setLhs(1); LOC($$, @$); }
-    | MULT { $$ = nullptr; LOC($$, @$); }
+    | MULT { $$ = QuantifiedPath::create(ast); LOC($$, @$); }
     | quantifiedPathRange { $$ = $1; }
     ;
 
@@ -1096,9 +1099,9 @@ opt_edgeTypes
 
 
 edgePattern
-    : TAIL_TAIL     { $$ = EdgePattern::create(ast, EdgePattern::Direction::Undirected); LOC($$, @$); } // Undirected
-    | TIP_TAIL_TAIL { $$ = EdgePattern::create(ast, EdgePattern::Direction::Backward); LOC($$, @$); } // Directed backwards
-    | TAIL_TAIL_TIP { $$ = EdgePattern::create(ast, EdgePattern::Direction::Forward); LOC($$, @$); } // Directed forwards
+    : TAIL_TAIL     { $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Undirected); LOC($$, @$); } // Undirected
+    | TIP_TAIL_TAIL { $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Backward); LOC($$, @$); } // Directed backwards
+    | TAIL_TAIL_TIP { $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Forward); LOC($$, @$); } // Directed forwards
     | TAIL_BRACKET edgeDetail BRACKET_TAIL     { $$ = $2; $$->setDirection(EdgePattern::Direction::Undirected); LOC($$, @$); } // Undirected
     | TIP_TAIL_BRACKET edgeDetail BRACKET_TAIL { $$ = $2; $$->setDirection(EdgePattern::Direction::Backward); LOC($$, @$); } // Directed backwards
     | TAIL_BRACKET edgeDetail BRACKET_TAIL_TIP { $$ = $2; $$->setDirection(EdgePattern::Direction::Forward); LOC($$, @$); } // Directed forwards
@@ -1106,7 +1109,7 @@ edgePattern
 
 edgeDetail
     : opt_symbol opt_edgeTypes opt_properties { 
-        $$ = EdgePattern::create(ast, EdgePattern::Direction::Undirected);
+        $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Undirected);
         $$->setSymbol($1);
         $$->setTypes($2);
         $$->setProperties($3);

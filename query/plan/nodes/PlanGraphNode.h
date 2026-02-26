@@ -100,7 +100,10 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::SHOW_VECTOR_INDEXES, "SHOW_VECTOR_INDEXES">,
     EnumStringPair<PlanGraphOpcode::LOAD_COMMIT, "LOAD_COMMIT">,
     EnumStringPair<PlanGraphOpcode::INSTALL_EXTENSION, "INSTALL_EXTENSION">,
-    EnumStringPair<PlanGraphOpcode::SHOW_EXTENSIONS, "SHOW_EXTENSIONS">>;
+    EnumStringPair<PlanGraphOpcode::SHOW_EXTENSIONS, "SHOW_EXTENSIONS">,
+    EnumStringPair<PlanGraphOpcode::BFS_EXPAND_OUT_EDGES, "BFS_EXPAND_OUT_EDGES">,
+    EnumStringPair<PlanGraphOpcode::BFS_EXPAND_IN_EDGES, "BFS_EXPAND_IN_EDGES">,
+    EnumStringPair<PlanGraphOpcode::BFS_EXPAND_EDGES, "BFS_EXPAND_EDGES">>;
 
 class PlanGraphNode {
 public:

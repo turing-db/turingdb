@@ -56,6 +56,7 @@ public:
     VarNode* generatePatternElementOrigin(const NodePattern* origin);
     VarNode* generatePatternElementEdge(VarNode* prevNode, const EdgePattern* edge);
     VarNode* generatePatternElementTarget(VarNode* prevNode, const NodePattern* target);
+    VarNode* generatePatternElementVariableLengthPath(VarNode* prevNode, const EdgePattern* edge);
 
     void unwrapWhereExpr(Expr*);
 
