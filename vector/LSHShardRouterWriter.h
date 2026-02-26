@@ -23,7 +23,7 @@ public:
         _writer.setFile(file);
     }
 
-    [[nodiscard]] VectorResult<void> write(const LSHShardRouter& router);
+    [[nodiscard]] VectorResult<void> write(const LSHShardRouter* router);
 
 private:
     fs::FileWriter<BUFFER_SIZE> _writer;

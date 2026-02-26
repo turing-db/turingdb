@@ -86,7 +86,7 @@ void LoadVectorProcessor::execute() {
         throw PipelineException(fmt::format("Failed to open file '{}'", filePath.get()));
     }
 
-    vec::Dimension dimension = accessor.metadata()._dimension;
+    vec::Dimension dimension = accessor.metadata()->_dimension;
     vec::BatchVectorCreate batch;
     accessor.prepareCreateBatch(&batch);
 
@@ -124,7 +124,7 @@ void LoadVectorProcessor::execute() {
         batch.addPoint(id, std::span<const float>(values));
     }
 
-    const vec::VectorResult<void> result = accessor.addEmbeddings(batch);
+    const vec::VectorResult<void> result = accessor.addEmbeddings(&batch);
     if (!result.has_value()) {
         throw PipelineException(fmt::format(
             "Failed to add embeddings: {}", result.error().fmtMessage()));

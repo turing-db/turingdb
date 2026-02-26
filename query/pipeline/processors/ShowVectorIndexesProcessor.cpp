@@ -64,7 +64,7 @@ void ShowVectorIndexesProcessor::execute() {
         vec::VecLibAccessor accessor = vectorDb->getLibrary(name);
         if (accessor.isValid()) {
             colNames->push_back(name);
-            colDimensions->push_back(accessor.metadata()._dimension);
+            colDimensions->push_back(accessor.metadata()->_dimension);
         }
     }
 

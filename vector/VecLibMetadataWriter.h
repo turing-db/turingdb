@@ -23,7 +23,7 @@ public:
         _writer.setFile(file);
     }
 
-    [[nodiscard]] VectorResult<void> write(const VecLibMetadata& metadata);
+    [[nodiscard]] VectorResult<void> write(const VecLibMetadata* metadata);
 
 private:
     fs::FileWriter<BUFFER_SIZE> _writer;

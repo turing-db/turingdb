@@ -21,7 +21,7 @@ VecLibWriteAccessor::VecLibWriteAccessor(VecLib& vecLib)
 VecLibWriteAccessor::~VecLibWriteAccessor() {
 }
 
-const VecLibMetadata& VecLibWriteAccessor::metadata() const {
+const VecLibMetadata* VecLibWriteAccessor::metadata() const {
     bioassert(_vecLib, "Invalid VecLib write accessor");
     return _vecLib->metadata();
 }
@@ -31,7 +31,7 @@ void VecLibWriteAccessor::prepareCreateBatch(BatchVectorCreate* batch) {
     _vecLib->prepareCreateBatch(batch);
 }
 
-VectorResult<void> VecLibWriteAccessor::addEmbeddings(const BatchVectorCreate& batch) {
+VectorResult<void> VecLibWriteAccessor::addEmbeddings(const BatchVectorCreate* batch) {
     bioassert(_vecLib, "Invalid VecLib write accessor");
     return _vecLib->addEmbeddings(batch);
 }

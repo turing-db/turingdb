@@ -22,11 +22,15 @@
 
 using namespace vec;
 
+VecLib::VecLib()
+{
+}
+
 VecLib::~VecLib() {
 }
 
 VecLib::Builder::Builder()
-    : _vecLib(new VecLib)
+    : _vecLib(new VecLib())
 {
 }
 
@@ -57,7 +61,7 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Builder::build() {
 }
 
 VecLib::Loader::Loader()
-    : _vecLib(new VecLib)
+    : _vecLib(new VecLib())
 {
 }
 
@@ -84,14 +88,14 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Loader::load(VecLibStorage& storag
     return std::move(_vecLib);
 }
 
-VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate& batch) {
+VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
     // The BatchVectorCreate stores vectors grouped by LSH signature. We need to iterate
     // using explicit indices rather than simple range-based iteration because the batch
     // is a sparse array - vectors are stored at indices matching their LSH signature,
     // with empty entries for unused signatures. The signature value is needed to route
     // each vector to the correct shard in the cache.
     LSHSignature signature = 0;
-    for (auto it = batch.begin(); it != batch.end(); ++it, ++signature) {
+    for (auto it = batch->begin(); it != batch->end(); ++it, ++signature) {
         const auto& data = *it;
         if (data._externalIDs.empty()) {
             continue;
@@ -122,16 +126,16 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate& batch) {
     return {};
 }
 
-VectorResult<void> VecLib::search(const VectorSearchQuery& query, VectorSearchResult& results) {
-    const std::span<const float> embeddings = query.embeddings();
-    const size_t maxResultCount = query.resultCount();
+VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchResult* results) {
+    const std::span<const float> embeddings = query->embeddings();
+    const size_t maxResultCount = query->resultCount();
 
     std::vector<LSHSignature> searchSignatures;
 
     // Compute signature
     _shardRouter->getSearchSignatures(embeddings, searchSignatures);
 
-    results.reset();
+    results->reset();
 
     std::vector<float> distances(maxResultCount);
     std::vector<faiss::idx_t> indices(maxResultCount);
@@ -152,11 +156,11 @@ VectorResult<void> VecLib::search(const VectorSearchQuery& query, VectorSearchRe
                 break;
             }
 
-            results.addResult(signature, shard._ids.at(indices[i]), distances[i]);
+            results->addResult(signature, shard._ids.at(indices[i]), distances[i]);
         }
     }
 
-    results.finishSearch(maxResultCount);
+    results->finishSearch(maxResultCount);
 
     return {};
 }
@@ -165,14 +169,11 @@ void VecLib::prepareCreateBatch(BatchVectorCreate* batch) {
     batch->init(_shardRouter.get(), _metadata._dimension);
 }
 
-const VecLibStorage& VecLib::getStorage() const {
-    return _storage->getStorage(_metadata._id);
+const VecLibStorage* VecLib::getStorage() const {
+    return &_storage->getStorage(_metadata._id);
 }
 
 VecLibAccessor VecLib::access() {
-    return VecLibAccessor {_mutex, *this};
+    return VecLibAccessor(this);
 }
 
-VecLib::VecLib()
-{
-}
