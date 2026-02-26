@@ -193,7 +193,6 @@ Commit::CommitSpan VersionController::getCommitsSinceCommitHash(CommitHash from)
     bioassert(startIndexOpt, "Could not find Commit with hash {:x}", from.get());
 
     const size_t startIndex = *startIndexOpt;
-    bioassert(static_cast<size_t>(startIndex) + 1 <= _commits.size(), "invalid startIndex");
 
     // +1 to skip the commit we branched from
     const auto* spanStart = _commits.data() + startIndex + 1;
