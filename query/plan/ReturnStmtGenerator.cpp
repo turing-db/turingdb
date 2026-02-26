@@ -33,12 +33,12 @@ ReturnStmtGenerator::ReturnStmtGenerator(const CypherAST* ast,
                                          GetPropertyCache& propCache,
                                          GetEntityTypeCache& entCache)
     : _ast(ast),
-      _stmt(rtnStmt),
-      _tree(tree),
-      _prevNode(prevNode),
-      _variables(vars),
-      _propCache(propCache),
-      _entCache(entCache)
+    _stmt(rtnStmt),
+    _tree(tree),
+    _prevNode(prevNode),
+    _variables(vars),
+    _propCache(propCache),
+    _entCache(entCache)
 {
 }
 

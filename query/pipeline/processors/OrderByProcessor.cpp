@@ -382,7 +382,7 @@ void OrderByProcessor::addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t s
     auto startIt = std::ranges::adjacent_find(rg);
 
     while (startIt != std::end(rg)) {
-        // Find the interval [start, end) of duplicated entries in column
+        // Find all [start, end) ranges of duplicated entries in column
         auto endIt = startIt;
         while (endIt != std::end(rg) && *endIt == *startIt) {
             ++endIt;
@@ -556,9 +556,11 @@ void OrderByProcessor::execute() {
 
     if (_state == State::SORT_INCOMING) {
         // Input guaranteed to have data via @ref _needsData of input
-        subsort();
-        memorise();
-        inputPort->consume();
+        if (inputPort->hasData()) {
+            subsort();
+            memorise();
+            inputPort->consume();
+        }
 
         // All input runs have been sorted and memorised
         if (inputPort->isClosed()) {

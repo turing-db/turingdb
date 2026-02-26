@@ -376,6 +376,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::SHORTEST_PATH:
             return translateShortestPathNode(static_cast<ShortestPathNode*>(node));
         break;
+
         case PlanGraphOpcode::ORDER_BY:
             return translateOrderByNode(static_cast<OrderByNode*>(node));
         break;
