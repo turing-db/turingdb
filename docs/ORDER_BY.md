@@ -33,11 +33,20 @@ Stage 2; executed at each call to `OrderByProcessor::execute` once input is clos
   for an ordered sequence of order-keys, $k_1, k_2, k_3,\dots, k_i$
     1. Sort with respect to values in $k_1$
 
-    for $2\le j < i$:
+    2. Find subranges, R, of $k_1$ which all share the same value
 
-    2. Check for contiguous runs of rows in column $k_{j}$ where there are ties on the same value in $k_{j-1}$, call these runs $R$
+    for $1 < j < i$
 
-    3. Sort the rows in each run $r \in R$ with respect to $k_{j}$
+    3. Sort the subranges of R in $k_j$
+
+    4. Find subranges of each subrange in R which all have the same value in $k_j$, set R to be these subranges
+
+  - Step 4. "shrinks" the subranges to sort, so at the total length of the ranges to sort monotonically decreases
+    after sorting each column
+
+  - This algorithm means we can sort column-wise, and often only sort a small subrange of each column
+
+  - If at any point there are no tied ranges, we can exit early - often happens if the first order key is an entity ID
 
 ### Stage 2 specification
 - Merge-implemented sorts cannot use "subsort"-esque algorithms because merge-implemented sorts require examining
