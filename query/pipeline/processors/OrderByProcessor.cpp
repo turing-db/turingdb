@@ -30,6 +30,52 @@ namespace rv = rg::views;
 
 namespace {
 
+template <typename T>
+    requires std::totally_ordered<T>
+int compare(const T& a, const T& b) {
+    std::partial_ordering cmp = a <=> b;
+
+    if (cmp == std::partial_ordering::less) {
+        return -1;
+    }
+
+    if (cmp == std::partial_ordering::greater) {
+        return  1;
+    }
+
+    if (cmp == std::partial_ordering::equivalent) {
+        return 0;
+    }
+
+    // FIXME: How do we want to handle non-totally ordered types like double?
+    /*(cmp == std::partial_ordering::unordered)*/
+    return 0;
+}
+
+/// Implements a NULLS LAST ordering on optional types
+/// As per: https://neo4j.com/docs/cypher-manual/current/clauses/order-by/#null
+template <typename T>
+    requires std::totally_ordered<T>
+int compare(const std::optional<T>& a, const std::optional<T>& b) {
+    // NULL == NULL
+    if (!a.has_value() && !b.has_value()) {
+        return 0;
+    }
+
+    // NON NULL < NULL (makes NULLs appear last)
+    if (!b.has_value()) {
+        return -1;
+    }
+
+    // NULL > NON NULL (makes NULLs appear last)
+    if (!a.has_value()) {
+        return 1;
+    }
+
+    // Otherwise both enganged, ordered normally
+    return compare(*a, *b);
+}
+
 /**
  * @brief Functor to sort @ref _indices by values in a column, and populate @ref _ranges
  * as tieranges.
@@ -37,18 +83,26 @@ namespace {
 struct OrderColumn {
     OrderByProcessor::Indices& _indices;
     OrderByProcessor::TieRanges& _ranges;
-    bool _ascending {true};
+    bool _asc {true};
 
     template <typename T>
         requires std::totally_ordered<T>
     void operator()(const ColumnVector<T>* typed) {
         const std::vector<T>& data = typed->getRaw();
+        bioassert(_indices.size() == data.size(),
+                  "Indices did not match column dimensions.");
 
         // Sort the indices by indexing the column
-        if (_ascending) {
-            rg::sort(_indices, [&](size_t i, size_t j) { return data[i] < data[j]; });
+        if (_asc) {
+            const auto lt = [&data](size_t i, size_t j) {
+                return compare(data[i], data[j]) < 0;
+            };
+            rg::sort(_indices, lt);
         } else {
-            rg::sort(_indices, [&](size_t i, size_t j) { return data[i] > data[j]; });
+            const auto gt = [&data](size_t i, size_t j) {
+                return compare(data[i], data[j]) > 0;
+            };
+            rg::sort(_indices, gt);
         }
 
         // Get a view of the column with the sorted indices
@@ -205,17 +259,7 @@ struct CompareInner {
     template <typename T>
         requires std::totally_ordered<T>
     void operator()(const ColumnVector<T>* col) {
-        const std::partial_ordering cmp = col->operator[](_i) <=> col->operator[](_j);
-        if (cmp == std::partial_ordering::less) {
-            _res = -1;
-        } else if (cmp == std::partial_ordering::greater) {
-            _res = 1;
-        } else if (cmp == std::partial_ordering::equivalent) {
-            _res = 0;
-        } else /*(cmp == std::partial_ordering::unordered)*/ {
-            // FIXME: How do we want to handle non-totally ordered types like double?
-            _res = 0;
-        }
+        _res = compare(col->operator[](_i), col->operator[](_j));
     }
 
     // Any two positions in a ColumnConst are equal
@@ -393,7 +437,7 @@ void OrderByProcessor::subsort() {
         std::ranges::iota(*_indices, 0);
 
         OrderColumn sorter {
-            ._indices = *_indices, ._ranges = _tieRanges, ._ascending = asc};
+            ._indices = *_indices, ._ranges = _tieRanges, ._asc = asc};
 
         Sort::dispatch(dominantCol, sorter);
     }
@@ -504,7 +548,6 @@ void OrderByProcessor::reset() {
     markAsReset();
 }
 
-// TODO: Handle ColumnConst as order key
 void OrderByProcessor::execute() {
     bioassert(_indices, "Null indices in OrderByProcessor.");
 
