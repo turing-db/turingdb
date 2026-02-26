@@ -1,26 +1,28 @@
 # Phase 1: Basic Quantified Path Patterns
 
-**Status:** Active Design  
+**Status:** Active Design
 **Target:** Initial implementation
 
 ---
 
 ## Scope
 
-Phase 1 implements basic quantified path patterns without the ability to return relationships or use advanced features.
+Phase 1 implements basic quantified path patterns with no filtering on edges or target nodes. Only the source node may have label/property filters. Relationship variables are allowed and edges can be returned.
 
 **What you CAN do:**
 - Use quantified relationships: `->+`, `->*`, `->{n,m}`
-- Return start and end nodes
-- Filter by relationship types and properties
+- Return start nodes, end nodes, and edges
+- Use relationship variables in quantified patterns
+- Filter the source node by labels and properties
 - Mix quantified and regular patterns
 - Use all edge directions
 
 **What you CANNOT do:**
-- Return relationships from quantified patterns
-- Use relationship variables in quantified patterns
-- Use parenthesized path patterns
+- Filter by relationship type: `-[:KNOWS]->+`
+- Filter by relationship properties: `-[{since: 2020}]->+`
+- Filter the target node by labels or properties: `->+(m:Person)`
 - Use WHERE clauses in patterns
+- Use parenthesized path patterns
 
 ---
 
@@ -36,25 +38,31 @@ simplePathPattern ::= nodePattern
 
 nodePattern ::= "(" [variable] [nodeLabels] [properties] ")"
 
-relationshipPattern ::= 
+relationshipPattern ::=
   "<-" "[" [variable] [relationshipTypes] [properties] "]" "-"
   | "-" "[" [variable] [relationshipTypes] [properties] "]" "->"
   | "-" "[" [variable] [relationshipTypes] [properties] "]" "-"
 
-quantifiedRelationship ::= 
-  relationshipPatternNoVariable quantifier
+quantifiedRelationship ::=
+  quantifiedRelationshipPattern quantifier
 
-relationshipPatternNoVariable ::=
-  "<-" "[" [relationshipTypes] [properties] "]"
-  | "-" "[" [relationshipTypes] [properties] "]" "->"
-  | "-" "[" [relationshipTypes] [properties] "]"
+quantifiedRelationshipPattern ::=
+  "<-" "[" [variable] "]" "-"
+  | "-" "[" [variable] "]" "->"
+  | "-" "[" [variable] "]" "-"
+  | "<-" "-"
+  | "-" "->"
+  | "-" "-"
 
 quantifier ::= "*" | "+" | "{" quantifierRange "}"
 
-quantifierRange ::= 
+quantifierRange ::=
   [ integer ] "," [ integer ]
   | integer
 ```
+
+Note: regular (non-quantified) relationship patterns retain full type/property support.
+Quantified relationship patterns only support an optional variable — no types or properties.
 
 ---
 
@@ -65,49 +73,40 @@ All combinations of direction and quantifier are supported:
 ### Outgoing (Right Arrow)
 ```cypher
 -->+          // 1 or more hops
--[]->+
+-[e]->+       // with variable
 -->*          // 0 or more hops
--[]->*
+-[e]->*       // with variable
 -->{n,m}      // between n and m hops
--[]->{n,m}
+-[e]->{n,m}   // with variable
 -->{n,}       // n or more hops
--[]->{n,}
 -->{,m}       // 0 to m hops
--[]->{,m}
 -->{n}        // exactly n hops (equivalent to {n,n})
--[]->{n}
 ```
 
 ### Incoming (Left Arrow)
 ```cypher
 <--+
-<-[]-+
+<-[e]-+
 <--*
-<-[]-*
+<-[e]-*
 <--{n,m}
-<-[]-{n,m}
+<-[e]-{n,m}
 <--{n,}
-<-[]-{n,}
 <--{,m}
-<-[]-{,m}
 <--{n}
-<-[]-{n}
 ```
 
 ### Undirected
 ```cypher
 --+
---[]-+
+-[e]-+
 --*
---[]-*
+-[e]-*
 --{n,m}
---[]-{n,m}
+-[e]-{n,m}
 --{n,}
---[]-{n,}
 --{,m}
---[]-{,m}
 --{n}
---[]-{n}
 ```
 
 ---
@@ -135,97 +134,103 @@ All combinations of direction and quantifier are supported:
 ### Basic Usage
 ```cypher
 // Simple one-or-more
-MATCH (n)-[:KNOWS]->+(m)
+MATCH (n)->+(m)
 RETURN n, m
 
 // Zero-or-more (includes starting node)
-MATCH (n:Person {name: 'Alice'})-[:MANAGES]->*(m)
-RETURN m  // Returns Alice herself plus all direct/indirect reports
+MATCH (n:Person {name: 'Alice'})->*(m)
+RETURN m  // Returns Alice herself plus all direct/indirect neighbors
 
 // Bounded hops
-MATCH (n)-[:KNOWS]->{1,4}(m)
+MATCH (n)->{1,4}(m)
 RETURN n, m
 
 // Exactly n hops
-MATCH (n)-[:KNOWS]->{3}(m)
+MATCH (n)->{3}(m)
 RETURN n, m
 ```
 
-### With Relationship Types
+### With Relationship Variables
 ```cypher
-// Single type
-MATCH (n)-[:FRIEND]->+(m)
-RETURN n, m
+// Return the edges traversed
+MATCH (n)-[e]->+(m)
+RETURN n, e, m
 
-// Multiple types (OR semantics)
-MATCH (n)-[:KNOWS|FRIEND]->+(m)
-RETURN n, m
+// Variable on undirected edge
+MATCH (a)-[e]-+(b)
+RETURN a, e, b
 ```
 
-### With Properties
+### Filtering the Source Node
 ```cypher
-// Property filter applies to ALL hops
-MATCH (n)-[:KNOWS {since: 2020}]->+(m)
+// Source node with label
+MATCH (n:Person)->+(m)
 RETURN n, m
+
+// Source node with properties
+MATCH (n:Person {name: 'Alice'})->*(m)
+RETURN m
+
+// Source node with label, target unfiltered
+MATCH (n:Person {dept: 'Engineering'})->+(m)
+RETURN n.name, m.name
 ```
 
 ### Mixed with Regular Patterns
 ```cypher
-// Quantified followed by regular
-MATCH (n)-[:KNOWS]->*(m)-->(c:Crime)
+// Quantified followed by regular (regular patterns keep full filtering)
+MATCH (n)->*(m)-->(c:Crime)
 RETURN n, m, c
 
 // Multiple quantified segments
-MATCH (a)-[:FRIEND]->+(b)-[:WORKS_AT]->{1,2}(c:Company)
+MATCH (a)->+(b)->+(c)
 RETURN a, b, c
 
 // Sandwiched patterns
-MATCH (a)-[:KNOWS]->+(b)<-[:REPORTS_TO]-(c)
+MATCH (a)->+(b)<-[e:REPORTS_TO]-(c)
 RETURN a, b, c
 ```
 
 ### Different Directions
 ```cypher
 // Incoming
-MATCH (manager)<-[:REPORTS_TO]-+(employee)
+MATCH (manager)<-+(employee)
 RETURN manager, employee
 
 // Undirected
-MATCH (person1)-[:CONNECTED]-+(person2)
+MATCH (person1)-+(person2)
 RETURN person1, person2
-```
-
-### Empty Relationship Type (Wildcard)
-```cypher
-// Matches any relationship type
-MATCH (n)-[]->+(m)
-RETURN n, m
 ```
 
 ---
 
 ## Restrictions in Phase 1
 
-### Cannot Return Relationships
+### Cannot Filter Quantified Edges by Type
 ```cypher
-// ERROR: Cannot return relationship variable from quantified pattern
-MATCH (n)-[r]->+(m)
-RETURN n, r, m
-```
-
-### Cannot Use Relationship Variables
-```cypher
-// ERROR: Relationship variables not supported in quantified patterns
-MATCH (n)-[r:KNOWS]->+(m)
+// ERROR: Edge type filters not supported on quantified patterns in Phase 1
+MATCH (n)-[:KNOWS]->+(m)
 RETURN n, m
 ```
 
-**Why:** Relationships in quantified patterns form a list. Phase 1 doesn't have list type support yet.
+### Cannot Filter Quantified Edges by Properties
+```cypher
+// ERROR: Edge property filters not supported on quantified patterns in Phase 1
+MATCH (n)-[{since: 2020}]->+(m)
+RETURN n, m
+```
+
+### Cannot Filter Target Nodes
+```cypher
+// ERROR: Target node filters not supported on quantified patterns in Phase 1
+MATCH (n)->+(m:Person)
+RETURN n, m
+```
 
 ### Quantifiers Must Be Literals
 ```cypher
 // ERROR: Expected literal integer
-MATCH (n)-[:KNOWS]->{1,$maxHops}(m)
+MATCH (n)->{1,$maxHops}(m)
 RETURN n, m
 ```
 
@@ -243,20 +248,25 @@ RETURN n, m
 When users attempt unsupported features, provide clear, actionable errors:
 
 ```
-ERROR: Cannot return relationship variables from quantified patterns
-  MATCH (n)-[r]->+(m) RETURN r
+ERROR: Edge type filters not supported on quantified patterns
+  MATCH (n)-[:KNOWS]->+(m) RETURN n, m
               ^
-HINT: Relationship variables in quantified patterns will be supported in Phase 2.
-      For now, you can only return the start and end nodes.
+HINT: This feature is planned for Phase 2.
+      For now, remove the type filter: (n)->+(m)
 
-ERROR: Relationship variables not allowed in quantified patterns
-  MATCH (n)-[r:KNOWS]->+(m)
+ERROR: Edge property filters not supported on quantified patterns
+  MATCH (n)-[{since: 2020}]->+(m)
              ^
-HINT: Remove the variable name: -[:KNOWS]->+
+HINT: This feature is planned for Phase 2.
+
+ERROR: Target node filters not supported on quantified patterns
+  MATCH (n)->+(m:Person)
+               ^
+HINT: This feature is planned for Phase 2.
 
 ERROR: Dynamic quantifiers not supported
-  MATCH (n)-[:KNOWS]->{1,$max}(m)
-                         ^
+  MATCH (n)->{1,$max}(m)
+                ^
 HINT: Use a literal number: ->{1,10}
 
 ERROR: Parenthesized path patterns not yet implemented
@@ -271,12 +281,11 @@ HINT: This feature is planned for Phase 3.
 
 ### Path Matching
 
-A quantified pattern `(n)-[:REL]->{min,max}(m)` matches if there exists a path:
+A quantified pattern `(n)->{min,max}(m)` matches if there exists a path:
 - Starting at node `n`
 - Ending at node `m`
-- Consisting of `k` relationships of type `REL` (where `min ≤ k ≤ max`)
+- Consisting of `k` relationships (where `min <= k <= max`)
 - Following the specified direction
-- All relationships matching any property constraints
 
 ### Zero-or-More Semantics
 
@@ -285,27 +294,13 @@ A quantified pattern `(n)-[:REL]->{min,max}(m)` matches if there exists a path:
 ```cypher
 // Graph: (A)-[:MANAGES]->(B)-[:MANAGES]->(C)
 
-MATCH (n:Person {name: 'A'})-[:MANAGES]->*(m)
+MATCH (n:Person {name: 'A'})->*(m)
 RETURN m
 
 // Results: A (0 hops), B (1 hop), C (2 hops)
 ```
 
 This is useful for hierarchical queries where you want to include the root.
-
-### Property Filter Semantics
-
-Property filters must match **ALL** relationships in the path:
-
-```cypher
-// Graph: (A)-[:KNOWS {since: 2020}]->(B)-[:KNOWS {since: 2021}]->(C)
-
-MATCH (n)-[:KNOWS {since: 2020}]->+(m)
-RETURN n, m
-
-// Result: (A, B) only
-// Does NOT return (A, C) because the second hop has since: 2021
-```
 
 ---
 
@@ -321,7 +316,7 @@ RETURN n, m
 Graph: A-[:REL]->B-[:REL]->C
        A-[:REL]->D-[:REL]->C
 
-MATCH (a)-[:REL]->+(c) RETURN a, c
+MATCH (a)->+(c) RETURN a, c
 
 Results:
   (A, C) from path A->B->C
@@ -377,7 +372,7 @@ Results:
 ```
 Graph: (A)-[:REL]->(B)-[:REL]->(A)  // cycle
 
-MATCH (a)-[:REL]->+(b) could match:
+MATCH (a)->+(b) could match:
   A->B (1 hop)
   A->B->A (2 hops)
   A->B->A->B (3 hops)
@@ -387,7 +382,7 @@ MATCH (a)-[:REL]->+(b) could match:
 **Option B - Forbid cycles (path cannot revisit nodes):**
 ```
 Same graph:
-MATCH (a)-[:REL]->+(b)
+MATCH (a)->+(b)
 
 Results:
   A->B
@@ -411,25 +406,6 @@ Results:
 
 ---
 
-### Filtering strategies
-
-> [!WARNING]
-> This section should be carefully considered and discussed with the team.
-> Our design choices will drastically impact our decisions on the implementation.
-
-**Question:** How do we execute filters in the middle of a path?
-
-```cypher
-MATCH (n)-[:KNOWS {since: 2020}]->+(m)
-RETURN n, m
-```
-
-In this query, all edges that are matched should have the `:KNOWS {since: 2020}` filter applied.
-In practice, it means that we cannot simply run a depth/breadth-first exploration from `n` since
-we need to apply the filters in the middle of the path.
-
----
-
 ## Result Cardinality
 
 The number of results depends on the path uniqueness decision:
@@ -447,7 +423,7 @@ The number of results depends on the path uniqueness decision:
 Graph: (A)-[:FRIEND]->(B)-[:FRIEND]->(C)
        (A)-[:FRIEND]->(D)-[:FRIEND]->(C)
 
-Query: MATCH (a)-[:FRIEND]->+(c) RETURN a, c
+Query: MATCH (a)->+(c) RETURN a, c
 ```
 
 One row per path: 4 rows (**preferred**)
@@ -470,7 +446,7 @@ One row per endpoint pair: 3 rows
 CREATE (a:Person {name: 'A'})-[:KNOWS]->(b:Person {name: 'B'})
        -[:KNOWS]->(c:Person {name: 'C'})
 
-MATCH (n)-[:KNOWS]->+(m)
+MATCH (n)->+(m)
 RETURN n.name, m.name
 
 Expected: (A,B), (A,C), (B,C)
@@ -478,7 +454,7 @@ Expected: (A,B), (A,C), (B,C)
 
 ### Test 2: Zero-or-More Includes Self
 ```cypher
-MATCH (n:Person {name: 'A'})-[:KNOWS]->*(m)
+MATCH (n:Person {name: 'A'})->*(m)
 RETURN m.name
 
 Expected: A, B, C
@@ -486,7 +462,7 @@ Expected: A, B, C
 
 ### Test 3: Bounded Hops
 ```cypher
-MATCH (n)-[:KNOWS]->{1,1}(m)
+MATCH (n)->{1,1}(m)
 RETURN n.name, m.name
 
 Expected: (A,B), (B,C)
@@ -495,28 +471,28 @@ Expected: (A,B), (B,C)
 ### Test 4: No Path
 ```cypher
 CREATE (isolated:Person {name: 'D'})
-MATCH (n)-[:KNOWS]->+(isolated)
+MATCH (n)->+(isolated)
 RETURN n.name
 
 Expected: (empty result)
 ```
 
-### Test 5: Property Filtering
+### Test 5: Returning Edges
 ```cypher
-CREATE (a)-[:KNOWS {since: 2020}]->(b)-[:KNOWS {since: 2021}]->(c)
+CREATE (a:Person {name: 'A'})-[:KNOWS]->(b:Person {name: 'B'})
+       -[:FOLLOWS]->(c:Person {name: 'C'})
 
-MATCH (n)-[:KNOWS {since: 2020}]->+(m)
-RETURN n, m
+MATCH (n)-[e]->+(m)
+RETURN n.name, e, m.name
 
-Expected: (a,b) only
-// Does NOT match a->c because second hop has since: 2021
+Expected: edges are returned for each path
 ```
 
 ### Test 6: Cycle Graph (depends on cycle handling decision)
 ```cypher
 CREATE (a:Node)-[:REL]->(b:Node)-[:REL]->(a)
 
-MATCH (n)-[:REL]->+(m)
+MATCH (n)->+(m)
 RETURN n, m
 
 Expected (if cycles forbidden): (a,b), (b,a)
@@ -525,18 +501,26 @@ Expected (if cycles allowed): (a,b), (b,a), (a,b,a), (b,a,b), ...
 
 ### Test 7: Mixed with Regular Patterns
 ```cypher
-MATCH (a)-[:KNOWS]->+(b)-[:LIVES_IN]->(c:City)
+MATCH (a)->+(b)-[:LIVES_IN]->(c:City)
 RETURN a.name, c.name
 
-Expected: All people transitively connected through KNOWS who live in cities
+Expected: All people transitively connected who live in cities
 ```
 
 ### Test 8: Multiple Quantified Patterns
 ```cypher
-MATCH (a)-[:FRIEND]->+(b)-[:COLLEAGUE]->+(c)
+MATCH (a)->+(b)->+(c)
 RETURN a, b, c
 
 Expected: Paths with both quantified segments satisfied
+```
+
+### Test 9: Source Node Filter Only
+```cypher
+MATCH (n:Person {name: 'A'})->+(m)
+RETURN m.name
+
+Expected: All nodes reachable from A via any edges
 ```
 
 ---
