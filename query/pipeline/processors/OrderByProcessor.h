@@ -20,7 +20,7 @@ class Dataframe;
 /**
  * @brief Processor to perform sorting based on ORDER BY clauses.
  * @detail Three-stage algorithm:
- *            1. (Whilst input is not closed)
+ *            1. (On @ref execute, whilst @ref _input is not closed)
  *               Sort incoming dataframe by specified keys. Store sorted run into next
  *               available slot in @ref _memory.
  *
@@ -32,9 +32,10 @@ class Dataframe;
  *               Emit rows in the total order achieved in 2. to @ref _output. Emit at most
  *               one chunk at a time. Repeat until all rows from memory have been emitted.
  *
- * All sorting is done using a "late materialisation" strategy, where only indices are sorted,
- * until we need the rows to be materialised ( i.e. when storing to memory, when emitting a chunk),
- * at which point we project the new indices-defined order onto the destination dataframe.
+ * All sorting is done using a "late materialisation" strategy, where only indices are
+ * sorted, until we need the rows to be materialised (i.e. when storing to memory, when
+ * emitting a chunk), at which point we project the new indices-defined order onto the
+ * destination dataframe.
  */
 class OrderByProcessor final : public Processor {
 public:
@@ -81,9 +82,8 @@ public:
 
     /**
      * @ref Helper function to find subranges, S, [l, r) in a a range, R, where
-     * R[i] = R[j] for l <= i < r < j. Appends all such S found in @param rg to
+     * R[i] = R[j] for l <= i <= j < r. Appends all such S found in @param rg to
      * @param tieRanges.
-     * @warn Assumes operator== is defined for the type contained in @param rg.
      */
     template <std::ranges::random_access_range Rg>
     static void addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t start = 0);
@@ -133,7 +133,7 @@ private:
     /**
      * @brief Column-oriented dataframe-sorting algorithm used in @ref
      * State::SORT_INCOMING.
-     * @detail for an ordered sequence of order-keys, $k_1, k_2, k_3,\dots, k_i$
+     * @detail for an ordered sequence of order-keys, $k_1, k_2, k_3, ..., k_i$
      * 1. Sort with respect to values in $k_1$
      *    for $2\le j < i$:
      * 2. Check for contiguous runs of rows in column $k_{j}$ where there are ties on the
