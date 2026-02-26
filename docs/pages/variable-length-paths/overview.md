@@ -101,34 +101,31 @@ If users need to migrate queries from Neo4j, we'll provide a migration guide sho
 
 ### [Phase 1: Basic Quantified Path Patterns](phase-1-spec.md)
 
-**Scope:** Basic quantified relationships without intermediate variable returns.
+**Scope:** Basic quantified relationships with no filtering on edges or target nodes. Only source node filters are allowed. Edge variables can be returned.
 
 **You can write:**
 ```cypher
-MATCH (n)-[:KNOWS]->+(m) RETURN n, m
-MATCH (a)-[:REL]->{1,5}(b)-->(c) RETURN a, b, c
+MATCH (n:Person {name: 'Alice'})->+(m) RETURN n, m
+MATCH (a)-[e]->{1,5}(b)-->(c) RETURN a, e, b, c
 ```
 
 **You cannot:**
-- Return relationships: `MATCH (n)-[r]->+(m) RETURN r`
-- Use relationship variables: `MATCH (n)-[r:KNOWS]->+(m)`
+- Filter quantified edges by type: `-[:KNOWS]->+`
+- Filter quantified edges by properties: `-[{since: 2020}]->+`
+- Filter target nodes: `->+(m:Person)`
 - Use parenthesized patterns: `((a)-[:REL]->(b)){1,5}`
 - Use WHERE clauses in patterns
 
 ---
 
-### [Phase 2: Relationship Return Support](phase-2-spec.md)
+### [Phase 2: Filtered Quantified Path Patterns](phase-2-spec.md)
 
-**Scope:** Add ability to return relationships from quantified patterns.
-
-**Requires:**
-- List/array type support in the type system
-- Relationships returned as lists
+**Scope:** Add filtering support to quantified patterns — edge types, edge properties, and target node labels/properties.
 
 **New capabilities:**
 ```cypher
-MATCH (n)-[r]->+(m) RETURN n, r, m
-// r is a list: [rel1, rel2, ..., relN]
+MATCH (n)-[:KNOWS]->+(m) RETURN n, m
+MATCH (n)-[:KNOWS {since: 2020}]->+(m:Person) RETURN n, m
 ```
 
 ---
@@ -149,15 +146,15 @@ RETURN n, m
 ## Why This Phased Approach?
 
 ### Phase 1: Minimal Viable Implementation
-- Gets core path matching working
-- No complex type system changes needed
-- Users can run most common queries
+- Gets core path matching working (pure traversal)
+- Edge variables and return support from day one
+- Source node filtering provides basic query scoping
 - Builds foundation for later phases
 
-### Phase 2: Type System Extension
-- Adds list support (needed for multiple relationships)
-- Enables more sophisticated queries
-- Maintains backward compatibility with Phase 1
+### Phase 2: Full Filtering
+- Adds edge type/property and target node filtering
+- Requires per-hop filter evaluation during traversal
+- Enables the most common real-world queries
 
 ### Phase 3: Advanced Patterns
 - Enables complex graph traversals
