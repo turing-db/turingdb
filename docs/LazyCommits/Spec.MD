@@ -20,8 +20,8 @@ This is wasteful in at least two scenarios:
 - Load only the data required for the commits that are actually accessed.
 - Eagerly load HEAD at startup (since most operations target it).
 - Keep all other commits as lightweight stubs that can be hydrated on demand.
-- Introduce a CommitLog that provides fast commit history iteration without
-  requiring loaded DataParts.
+- Introduce a graph-level commitlog file that provides fast commit history
+  iteration without requiring loaded DataParts.
 - Restructure the on-disk layout so DataParts are stored independently of
   commits and referenced by a stable persistent ID.
 
@@ -84,8 +84,8 @@ Result: all commits and all DataParts are fully materialized at startup.
 - `_journal` -- `unique_ptr<CommitJournal>`.
 
 The `_commits` vector is used by `HistoryProcedure`, `DescribeCommitProcedure`,
-`DBServerProcessor::commit_log`, and `GraphReader::isNodeDeleted`. In most
-cases, it is either iterated for display or only the last entry is accessed.
+and `GraphReader::isNodeDeleted`. In most cases, it is either iterated for
+display or only the last entry is accessed.
 
 ---
 
@@ -120,7 +120,7 @@ back on load.
   type
   commitlog                     # new: graph-level commit log file
   dataparts/                    # new: shared DataPart storage
-    datapart-<id>/
+    <id>/
       info
       nodes
       edges
@@ -134,103 +134,91 @@ back on load.
       edge-string-prop-indexer
       edge-string-prop-indexer-owners
   commits/                      # new: commit directories (no index prefix)
-    commit-<hash>/
-      metadata/
+    <hash>/
+      metadata
       journal
       tombstones
-      manifest                  # new: references DataParts by ID
 ```
 
 Key changes from the old layout:
-- DataParts move to a top-level `dataparts/` directory, named by their
-  persistent `DataPartID`.
-- Commit directories move under `commits/` and drop the index prefix (ordering
-  comes from the commitlog file).
-- The `merge` marker file is removed. Merge status is stored in the manifest.
-- A graph-level `commitlog` file stores the commit ordering and summary stats.
+- DataParts move to a top-level `dataparts/` directory, each named by its bare
+  `DataPartID`.
+- Commit directories move under `commits/`, each named by its bare
+  `CommitHash`, with no index prefix (ordering comes from the commitlog file).
+- The `merge` marker file is removed entirely.
+- The `metadata/` directory is replaced by a single `metadata` file (see
+  below) that contains both commit stats and the DataPart reference list.
+- A graph-level `commitlog` file stores the commit ordering.
 
-### 3. Commit Manifest File
+### 3. Commit Metadata File
 
-Each commit directory contains a `manifest` file that describes which DataParts
-the commit references, without requiring ancestor commits to be loaded.
-
-**Binary format:**
-
-| Field                    | Type         | Description                                         |
-|--------------------------|--------------|-----------------------------------------------------|
-| `allDataPartsCount`      | `uint64_t`   | Number of entries in allDataParts                   |
-| `allDataPartIDs`         | `uint64_t[]` | Array of DataPartIDs (length = allDataPartsCount)   |
-| `commitDataPartsStart`   | `uint64_t`   | Start index of commitDataParts span in allDataPartIDs |
-| `isMergeCommit`          | `uint8_t`    | 1 if merge commit, 0 otherwise                     |
-
-The `commitDataParts` span is reconstructed as
-`allDataPartIDs[commitDataPartsStart .. allDataPartsCount]` (it always extends
-to the end of the array).
-
-A commit's manifest makes it fully self-describing: given the manifest and the
-shared `dataparts/` folder, a commit can be hydrated independently without
-loading any ancestor commits.
-
-### 4. CommitLog
-
-#### CommitLog Struct
-
-A lightweight struct that summarizes a commit without requiring its data to be
-loaded:
-
-```cpp
-struct CommitLog {
-    CommitHash _hash;
-    uint64_t _numDataParts;
-    uint64_t _numNodes;
-    uint64_t _numEdges;
-};
-```
-
-#### Ownership
-
-`VersionController` owns the commit log as `std::vector<CommitLog>`. This
-replaces the role that `CommitHistory::_commits` (the `vector<CommitView>`)
-previously served for history iteration.
-
-Each `Change` owns a commit log as well.
-
-#### Graph-Level Commitlog File
+Each commit directory contains a `metadata` file that is the single
+self-describing source of truth for a commit. It contains both summary
+statistics and the list of DataPart references, making it possible to populate
+a stub commit and later hydrate it without any other files.
 
 **Binary format:**
 
-| Field            | Type             | Description                          |
-|------------------|------------------|--------------------------------------|
-| File header      | fixed            | Magic bytes + version                |
-| `numCommits`     | `uint64_t`       | Number of commit entries             |
-| Commit entries   | `CommitLog[]`    | Array of CommitLog structs           |
+| Field                  | Type         | Description                                              |
+|------------------------|--------------|----------------------------------------------------------|
+| `numNodes`             | `uint64_t`   | Number of nodes added in this commit                     |
+| `numEdges`             | `uint64_t`   | Number of edges added in this commit                     |
+| `numCommitDataParts`   | `uint64_t`   | Number of DataParts created in this commit               |
+| `numAllDataParts`      | `uint64_t`   | Total DataParts visible to this commit (inherited + own) |
+| `allDataPartIDs`       | `uint64_t[]` | Array of DataPartIDs (length = numAllDataParts)          |
+
+The `_commitDataparts` span is reconstructed as the last `numCommitDataParts`
+entries of `allDataPartIDs` (it always extends to the end of the array).
+
+### 4. Graph-Level Commitlog File
+
+The commitlog file stores the ordered sequence of commit hashes for the graph,
+from the root commit to HEAD. This establishes commit ordering without requiring
+any commit directory to be read.
+
+**Binary format:**
+
+| Field            | Type           | Description                          |
+|------------------|----------------|--------------------------------------|
+| File header      | fixed          | Magic bytes + version                |
+| `numCommits`     | `uint64_t`     | Number of commit entries             |
+| Commit entries   | `CommitHash[]` | Array of CommitHashes, root to HEAD  |
 
 The file is appendable: when new commits are dumped, seek to the `numCommits`
-offset, overwrite the count, then append the new entries at the end of the file.
+offset, overwrite the count, then append the new hash at the end of the file.
 
-If the file is ever found to be inconsistent (e.g., crash during append), it can
-be reconstructed from the commit directories on disk.
+If the file is ever found to be inconsistent (e.g., crash during append), it
+can be reconstructed by reading the `metadata` files in the commit directories.
 
-#### CommitLog Population
+### 5. prevCommit Pointer Chain
 
-- **At load time:** Read from the commitlog file.
-- **At runtime:** When a new commit is created via `Change::submit` or `Change::commit`, a
-  `CommitLog` entry is appended to the vector.
-- **At dump time:** New entries are appended to the commitlog file.
+Each `Commit` stores a `const Commit* _prevCommit` that points to the
+immediately preceding commit. History is traversed by following this chain from
+HEAD back to the root (where `_prevCommit` is `nullptr`).
 
-### 5. CommitHistory Refactoring
+This replaces `CommitHistory::_commits` -- the `vector<CommitView>` that
+previously encoded the full commit chain inside each commit's data.
 
-Remove `std::vector<CommitView> _commits` from `CommitHistory`. This vector
-encoded the commit chain inside each commit's data, which couples per-commit
-state with global history.
+**The `_prevCommit` pointer is set in three ways:**
 
-**Consumers and their migration:**
+1. **At load time.** `GraphLoader` reads the commitlog file, which lists hashes
+   from root to HEAD. As it creates stub `Commit` objects in order, each
+   stub's `_prevCommit` is wired to the previously created stub.
+
+2. **At commit time.** `CommitBuilder::prepare` and `CommitBuilder::prepareMerge`
+   receive the previous commit explicitly and pass it to the `Commit`
+   constructor. This is the live write path via `Change::submit`.
+
+3. **At rebase time.** When a `Change` is rebased onto the current HEAD,
+   `Change::rebase` calls `setPreviousCommit` on the first commit in the
+   change's commit list, updating it to point to the new HEAD.
+
+**Consumers of `_commits` and their migration:**
 
 | Consumer                     | Current usage                            | New approach                                    |
 |------------------------------|------------------------------------------|-------------------------------------------------|
-| `HistoryProcedure`           | Iterates `_view.commits()` for stats     | Read from `VersionController::commitLog()`      |
-| `DescribeCommitProcedure`    | Finds commit by hash, reads stats        | Look up in CommitLog by hash                    |
-| `DBServerProcessor`          | Iterates commits for log display         | Read from CommitLog                             |
+| `HistoryProcedure`           | Iterates `_view.commits()` for stats     | Walk `_prevCommit` chain from HEAD              |
+| `DescribeCommitProcedure`    | Finds commit by hash, reads stats        | Look up commit by hash in VersionController     |
 | `GraphReader::isNodeDeleted` | Accesses `commits().back().tombstones()` | Access tombstones directly from CommitData      |
 | `CommitBuilder`              | Accesses `commits().back()` for prev     | Receives previous commit reference explicitly   |
 
@@ -244,12 +232,15 @@ After this refactoring, `CommitHistory` retains only:
 #### Commit Stub
 
 At startup, `GraphLoader` reads the commitlog file and creates a lightweight
-`Commit` object for each entry -- containing only the `CommitHash` and a null
-`_data` pointer. The existing `Commit::hasData()` method distinguishes stubs
-from hydrated commits.
+`Commit` object for each hash. For each stub:
+- `_prevCommit` is wired to the previously created stub.
+- The commit's `metadata` file is read to populate `_numNodes`, `_numEdges`,
+  and `_numDataParts` on the stub, and to cache the `DataPartID` list for
+  later hydration.
+- `_data` remains null (no `CommitData`, no DataParts loaded).
 
 `VersionController` is populated with these stubs so `_commits` and `_offsets`
-are fully available for commit lookup.
+are fully available for commit lookup and history traversal.
 
 HEAD is then eagerly hydrated (see below).
 
@@ -258,16 +249,16 @@ HEAD is then eagerly hydrated (see below).
 When `openTransaction(hash)` targets an unhydrated commit, hydration is
 triggered:
 
-1. Resolve the commit's directory path from its hash: `commits/commit-<hash>/`.
-2. Load metadata, journal, and tombstones from the commit directory.
-3. Read the manifest to get the list of `DataPartID`s.
+1. Resolve the commit's directory path from its hash: `commits/<hash>/`.
+2. Load journal and tombstones from the commit directory.
+3. Use the cached `DataPartID` list (read at stub creation time from `metadata`).
 4. For each DataPartID:
    - Check if the DataPart is already loaded (lookup in a
      `DataPartID -> WeakArc<DataPart>` map on `VersionController`).
-   - If not loaded, load it from `dataparts/datapart-<id>/` via
+   - If not loaded, load it from `dataparts/<id>/` via
      `DataPartLoader::load` and register it in the map.
    - Obtain the `WeakArc<DataPart>` reference.
-5. Reconstruct `_allDataparts` and `_commitDataparts` from the manifest.
+5. Reconstruct `_allDataparts` and `_commitDataparts` from the cached ID list.
 6. Set `Commit::_data` to the newly created `CommitData`.
 
 Since DataParts are shared via `ArcManager` and looked up by `DataPartID`, a
@@ -315,15 +306,6 @@ Callers must handle the error case. This affects:
 - `Change` constructor (line 20 in `Change.cpp`)
 - All call sites in query pipeline, server, and tests
 
-#### CommitLog Access
-
-```cpp
-// On VersionController
-std::span<const CommitLog> commitLog() const;
-```
-
-Procedures and the server use this instead of `GraphView::commits()`.
-
 ### 8. Write Path (Unchanged)
 
 The runtime write path is unaffected:
@@ -332,19 +314,19 @@ The runtime write path is unaffected:
   `newCommitHistoryFromPrevious` to copy the parent's `_allDataparts`. This
   works because the parent commit (HEAD) is always hydrated.
 - `CommitBuilder`, `CommitWriteBuffer`, and `Change` operate as before.
-- `Change::submit` appends a `CommitLog` entry to the VersionController's
-  vector.
+- `Change::submit` wires `_prevCommit` on the new commit to the current HEAD
+  before adding it to `VersionController`.
 
 ### 9. Dump Path Changes
 
 The dump path is updated for the new on-disk layout:
 
-- **DataParts** are written to `dataparts/datapart-<id>/` instead of nested
-  under commit directories. Only `commitDataparts` are dumped per commit (same
-  as today).
-- **Commits** are written to `commits/commit-<hash>/` with a manifest file
-  instead of the merge marker.
-- **Commitlog file** is written/appended at the graph level.
+- **DataParts** are written to `dataparts/<id>/` instead of nested under commit
+  directories. Only `commitDataparts` are dumped per commit (same as today).
+- **Commits** are written to `commits/<hash>/` with the new `metadata` file
+  format instead of the old `metadata/` directory and `merge` marker.
+- **Commitlog file** is written/appended at the graph level (new hash appended,
+  count updated).
 - **Incremental dump** checks for existing DataPart directories by ID (instead
   of checking commit directories) and only writes new ones.
 
@@ -355,17 +337,19 @@ The dump path is updated for the new on-disk layout:
 ```
 GraphLoader::load(graph, path)
   1. Load graph info from <path>/info
-  2. Read commitlog file -> vector<CommitLog>
-  3. For each CommitLog entry:
-     - Create stub Commit (hash only, _data = null)
-     - Register in VersionController (_commits, _offsets)
-  4. Populate VersionController::_commitLog
-  5. Hydrate HEAD commit
-     - Load commit directory (metadata, journal, tombstones)
-     - Read manifest -> list of DataPartIDs
-     - Load each DataPart from dataparts/ directory
-     - Register DataParts in _loadedDataParts map
-     - Construct CommitData and attach to Commit
+  2. Read commitlog file -> ordered list of CommitHashes (root to HEAD)
+  3. For each CommitHash in order:
+     a. Read commits/<hash>/metadata
+        -> numNodes, numEdges, numCommitDataParts, numAllDataParts, DataPartID[]
+     b. Create stub Commit (hash, prevCommit = previous stub, _data = null)
+     c. Populate _numNodes, _numEdges, _numDataParts on stub
+     d. Cache DataPartID list on stub for later hydration
+     e. Register stub in VersionController (_commits, _offsets)
+  4. Hydrate HEAD commit
+     a. Load commits/<hash>/journal and tombstones
+     b. For each DataPartID in cached list:
+        - Check _loadedDataParts map; load from dataparts/<id>/ if not present
+     c. Construct CommitData, attach to Commit
 ```
 
 ## Hydration Flow (On Demand)
@@ -375,14 +359,13 @@ VersionController::openTransaction(hash)
   1. Look up commit in _offsets
   2. If commit.hasData() -> return FrozenCommitTx (fast path)
   3. Else hydrate:
-     a. Resolve path: commits/commit-<hash>/
-     b. Load metadata, journal, tombstones
-     c. Read manifest
-     d. For each DataPartID in manifest.allDataPartIDs:
+     a. Load commits/<hash>/journal and tombstones
+     b. For each DataPartID in commit's cached list:
         - If in _loadedDataParts -> use existing WeakArc
         - Else -> DataPartLoader::load, register in map
-     e. Build _allDataparts vector and _commitDataparts span
-     f. Attach CommitData to Commit
+     c. Build _allDataparts vector and _commitDataparts span
+        (_commitDataparts = last numCommitDataParts entries)
+     d. Attach CommitData to Commit
   4. Return FrozenCommitTx
 ```
 
