@@ -80,6 +80,12 @@ int main(int argc, const char** argv) {
     {
         auto graph = Graph::create();
         const auto loadRes = GraphLoader::load(graph.get(), outDir);
+
+        if (!loadRes) {
+            spdlog::error("{}", loadRes.error().fmtMessage());
+            return EXIT_FAILURE;
+        }
+
         const auto tx = graph->openTransaction();
 
         const PropertyType name = tx.viewGraph().metadata().propTypes().get("name").value();
