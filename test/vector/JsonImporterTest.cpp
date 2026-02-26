@@ -143,7 +143,7 @@ TEST_F(JsonImporterTest, ValidJson) {
     }
 
     {
-        auto res = accessor.addEmbeddings(batch);
+        auto res = accessor.addEmbeddings(&batch);
         ASSERT_TRUE(res);
     }
 
@@ -175,7 +175,7 @@ TEST_F(JsonImporterTest, ValidJson) {
     }
 
     {
-        auto res = accessor.addEmbeddings(batch);
+        auto res = accessor.addEmbeddings(&batch);
         ASSERT_TRUE(res);
     }
 
@@ -186,7 +186,7 @@ TEST_F(JsonImporterTest, ValidJson) {
         query.setVector(v);
         query.setMaxResultCount(10);
 
-        auto res = accessor.search(query, results);
+        auto res = accessor.search(&query, &results);
         ASSERT_TRUE(res);
         results.finishSearch(1);
     }

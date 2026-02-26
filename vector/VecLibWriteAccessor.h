@@ -27,10 +27,10 @@ public:
         return _vecLib != nullptr;
     }
 
-    const VecLibMetadata& metadata() const;
+    const VecLibMetadata* metadata() const;
 
     void prepareCreateBatch(BatchVectorCreate* batch);
-    [[nodiscard]] VectorResult<void> addEmbeddings(const BatchVectorCreate& batch);
+    [[nodiscard]] VectorResult<void> addEmbeddings(const BatchVectorCreate* batch);
 
 private:
     std::unique_lock<std::shared_mutex> _lock;

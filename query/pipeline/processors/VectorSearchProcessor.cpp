@@ -67,12 +67,12 @@ void VectorSearchProcessor::execute() {
     }
 
     // Execute search
-    vec::VectorSearchQuery query(accessor.metadata()._dimension);
+    vec::VectorSearchQuery query(accessor.metadata()->_dimension);
     query.setVector(_queryVector);
     query.setMaxResultCount(_k);
 
     vec::VectorSearchResult result;
-    vec::VectorResult<void> searchResult = accessor.search(query, result);
+    const vec::VectorResult<void> searchResult = accessor.search(&query, &result);
 
     if (!searchResult) {
         throw PipelineException(

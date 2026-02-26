@@ -45,15 +45,15 @@ VectorResult<std::unique_ptr<StorageManager>> StorageManager::create(const fs::P
 }
 
 VectorResult<void> StorageManager::createLibraryStorage(const VecLib& lib) {
-    const auto& meta = lib.metadata();
+    const auto* meta = lib.metadata();
 
-    const fs::Path libRoot = getLibraryPath(meta._id);
-    const fs::Path metadataPath = getMetadataPath(meta._id);
-    const fs::Path shardRouterPath = getShardRouterPath(meta._id);
+    const fs::Path libRoot = getLibraryPath(meta->_id);
+    const fs::Path metadataPath = getMetadataPath(meta->_id);
+    const fs::Path shardRouterPath = getShardRouterPath(meta->_id);
 
     std::unique_lock lock(_mutex);
 
-    if (_storages.contains(meta._id)) {
+    if (_storages.contains(meta->_id)) {
         return VectorError::result(VectorErrorCode::LibraryStorageAlreadyExists);
     }
 
@@ -90,7 +90,7 @@ VectorResult<void> StorageManager::createLibraryStorage(const VecLib& lib) {
         return nonstd::make_unexpected(res.error());
     }
 
-    _storages.emplace(meta._id, std::move(storage));
+    _storages.emplace(meta->_id, std::move(storage));
 
     return {};
 }

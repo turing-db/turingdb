@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
                 fmt::println("      Generated {} vectors in {:.2f} ms", vecCountPerBatch, dur);
 
                 t1 = Clock::now();
-                if (auto res = lib.addEmbeddings(batch); !res) {
+                if (auto res = lib.addEmbeddings(&batch); !res) {
                     fmt::println("Could not add vectors: {}", res.error().fmtMessage());
                     return 1;
                 }
@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
 
     const auto t0Search = Clock::now();
 
-    if (auto res = lib.search(query, results); !res) {
+    if (auto res = lib.search(&query, &results); !res) {
         fmt::println("Could not search vectors. {}", res.error().fmtMessage());
         return 1;
     }

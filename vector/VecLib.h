@@ -93,37 +93,30 @@ public:
         std::unique_ptr<VecLib> _vecLib;
     };
 
-    [[nodiscard]] VectorResult<void> addEmbeddings(const BatchVectorCreate& batch);
-    [[nodiscard]] VectorResult<void> search(const VectorSearchQuery& query, VectorSearchResult& results);
+    [[nodiscard]] VectorResult<void> addEmbeddings(const BatchVectorCreate* batch);
+
+    [[nodiscard]] VectorResult<void> search(const VectorSearchQuery* query, VectorSearchResult* results);
+
     void prepareCreateBatch(BatchVectorCreate* batch);
 
-    [[nodiscard]] VecLibID id() const {
-        return _metadata._id;
-    }
+    [[nodiscard]] VecLibID id() const { return _metadata._id; }
 
-    [[nodiscard]] std::string_view name() const {
-        return _metadata._name;
-    }
+    [[nodiscard]] std::string_view name() const { return _metadata._name; }
 
-    [[nodiscard]] const VecLibMetadata& metadata() const {
-        return _metadata;
-    }
+    [[nodiscard]] const VecLibMetadata* metadata() const { return &_metadata; }
 
-    [[nodiscard]] VecLibMetadata& metadata() {
-        return _metadata;
-    }
+    [[nodiscard]] VecLibMetadata* metadata() { return &_metadata; }
 
-    [[nodiscard]] const LSHShardRouter& shardRouter() const {
-        return *_shardRouter;
-    }
+    [[nodiscard]] const LSHShardRouter* shardRouter() const { return _shardRouter.get(); }
 
-    [[nodiscard]] const VecLibStorage& getStorage() const;
+    [[nodiscard]] const VecLibStorage* getStorage() const;
 
     [[nodiscard]] VecLibAccessor access();
 
 private:
     friend Builder;
     friend VectorDatabase;
+    friend VecLibAccessor;
     friend VecLibWriteAccessor;
 
     mutable std::shared_mutex _mutex;
