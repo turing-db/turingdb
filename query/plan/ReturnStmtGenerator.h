@@ -23,9 +23,13 @@ class CypherAST;
  */
 class ReturnStmtGenerator {
 public:
-    ReturnStmtGenerator(const CypherAST* ast, const ReturnStmt* rtnStmt, PlanGraph* tree,
-                        PlanGraphNode* prevNode, PlanGraphVariables* vars,
-                        GetPropertyCache& propCache, GetEntityTypeCache& entCache);
+    ReturnStmtGenerator(const CypherAST* ast,
+                        const ReturnStmt* rtnStmt,
+                        PlanGraph* tree,
+                        PlanGraphNode* prevNode,
+                        PlanGraphVariables* vars,
+                        GetPropertyCache& propCache,
+                        GetEntityTypeCache& entCache);
 
     ~ReturnStmtGenerator() = default;
 

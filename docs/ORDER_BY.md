@@ -15,13 +15,20 @@ Stage 1; executed at each call to `OrderByProcessor::execute` whilst input is no
 
 Stage 2; executed at each call to `OrderByProcessor::execute` once input is closed:
   1. Performs a merge-implemented sort of all "sorted runs" in the "memory store"
-  2. Emits at most one chunk of ulitmately sorted data to the output
+  2. Emits at most one chunk of ultimately sorted data to the output
 
   Stage 2.2 is repeated until the entire memory store has been emitted, at which point the
   output port of `OrderByProcessor` is closed
 
 ### Stage 1 specification
-- "Subsort" algorithm for sorting columnar data w.r.t. multiple order-keys defined in [^1] as:
+- Sort input chunks using a column-orientated subsort approach (see below)
+  - Column-orientated sorting: motivated by suspected negligible speedup of ~1.2x shown in
+    row-orientated sorting on inputs of size ~65k (CHUNK_SIZE), where 1.2x is *without*
+    accounting for time taken to transform columnar input to row-orientated input [^1]
+  - "Subsort" approach: motivated by lower cache misses and branch mispredictions when compared
+    with alternative "tuple-at-a-time" for columnar sorting [^1]
+
+- "Subsort" algorithm for sorting columnar data w.r.t. multiple order-keys defined in [^1] (page 4) as:
 
   for an ordered sequence of order-keys, $k_1, k_2, k_3,\dots, k_i$
     1. Sort with respect to values in $k_1$
@@ -32,22 +39,29 @@ Stage 2; executed at each call to `OrderByProcessor::execute` once input is clos
 
     3. Sort the rows in each run $r \in R$ with respect to $k_{j}$
 
-- Sort input chunks using a column-orientated subsort approach (as defined in [^1] page 4)
-  - Column-orientated sorting: motivated by suspected negligible speedup of ~1.2x shown in
-    row-orientated sorting on inputs of size ~65k (CHUNK_SIZE), where 1.2x is *without*
-    accounting for time taken to transform columnar input to row-orientated input [^1]
-  - "Subsort" approach: motivated by lower cache misses and branch mispredictions when compared
-    with alternative "tuple-at-a-time" for columnar sorting [^1]
-    
 ### Stage 2 specification
 - Merge-implemented sorts cannot use "subsort"-esque algorithms because merge-implemented sorts require examining
   the entire row to determine the ordering, whilst a subsort algorithm only considers one column at a time
-- Stage 2 merge-implemented sort is therefore implemented using order-key normalisation, defined as:
-  - For an ordered sequence of order-keys, $k_1, k_2, k_3, \dots, k_i$ define a "normalised key", $K$, of size
-    $\texttt{sizeof(}K\texttt{)} = \sum_{i=1}^n \texttt{sizeof(}k_i\texttt{)}$ (assuming all $k_i$ are static size\*)
-  - Elements of $K$ are produced by `memcpy` the values in a row for each $k_i$, and let $K_i$ be the normalised key
-    for row $i$.
-  - A merge-implemented sort can use `memcmp` on $K_i$ and $K_j$ as a total-ordering of rows
+
+- Instead, since "memory" will contain a sequence of sorted ranges, $r_i$ ,which are all adjacent in memory, we can use `std::inplace_merge`
+  to merge these ranges together, creating a total ordering of all input chunks
+
+- We "fold" the ranges, merging the first with the second, achieving a new sorted range, in place, and merging that new range with the third.
+  Repeat until we have amassed a single merged range, which is our total ordering.
+
+- Actually, instead of merging the ranges in place, we can just construct an `indices` vector with size equal to the number of rows in memory.
+  We then use the ranges to sort these indices. This saves us moving entire rows around in memory, and is a form of late materialisation
+  (see #general-sorting-notes).
+
+- Once we have the total ordering of indices, we can just project from memory, using the indices, to the output dataframe, one chunk at a time.
+
+>[!note] Key normalisation not currently implemented, as dispatch-based sorting was simpler to implement whilst being relatively performant
+>- Stage 2 merge-implemented sort is therefore implemented using order-key normalisation, defined as:
+>- For an ordered sequence of order-keys, $k_1, k_2, k_3, \dots, k_i$ define a "normalised key", $K$, of size
+>   $\texttt{sizeof(}K\texttt{)} = \sum_{i=1}^n \texttt{sizeof(}k_i\texttt{)}$ (assuming all $k_i$ are static size\*)
+>  - Elements of $K$ are produced by `memcpy` the values in a row for each $k_i$, and let $K_i$ be the normalised key
+>   for row $i$.
+> - A merge-implemented sort can use `memcmp` on $K_i$ and $K_j$ as a total-ordering of rows
 
   \* Non-static sizes such as strings can have a fixed-size prefix be stored in $K$, and the ordering of two rows with
      exact prefixes can be resolved by examining the full strings

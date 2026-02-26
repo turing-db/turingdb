@@ -1,8 +1,8 @@
 #pragma once
 
-#include <cstdint>
 #include <ranges>
 #include <span>
+#include <stdint.h>
 
 #include "Processor.h"
 
