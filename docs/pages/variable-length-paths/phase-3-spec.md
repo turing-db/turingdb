@@ -1,6 +1,6 @@
 # Phase 3: Parenthesized Quantified Patterns
 
-**Status:** To be filled  
+**Status:** To be filled
 **Prerequisites:** Phase 1 and 2 complete
 
 ---
@@ -23,8 +23,7 @@ RETURN n, m
 **Nested patterns:**
 
 > [!WARNING]
-> Chdeck if Cypher allows thisj
-
+> Check if Cypher allows this
 
 ```cypher
 MATCH ((a)-[:REL]->(b)-[:REL]->(c)){2,5}
