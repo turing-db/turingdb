@@ -113,7 +113,7 @@ void ShardCache::evictLibraryShards(VecLibID libID) {
 }
 
 void ShardCache::flush() {
-    std::unique_lock lock {_mutex};
+    std::unique_lock lock(_mutex);
 
     for (auto& [id, it] : _accessedMap) {
         it->second._shard->save();

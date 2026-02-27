@@ -23,7 +23,7 @@ namespace {
 
 // Helper struct to hold a vector with its ID
 struct TestVector {
-    uint64_t id {0};
+    uint64_t _id {0};
     std::vector<float> values;
 };
 
@@ -47,7 +47,7 @@ void findKNearestNeighbors(std::vector<uint64_t>& result,
     std::vector<std::pair<float, uint64_t>> distances;
     for (const auto& vec : vectors) {
         const float dist = euclideanDistanceSquared(vec.values, query);
-        distances.emplace_back(dist, vec.id);
+        distances.emplace_back(dist, vec._id);
     }
 
     // Sort by distance (ascending)
@@ -369,7 +369,7 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
     {
         std::ofstream out(vectorFile);
         for (const auto& vec : testVectors) {
-            out << vec.id;
+            out << vec._id;
             for (float v : vec.values) {
                 out << "," << v;
             }
@@ -438,7 +438,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
     {
         std::ofstream out(vectorFile);
         for (const auto& vec : testVectors) {
-            out << vec.id;
+            out << vec._id;
             for (float v : vec.values) {
                 out << "," << v;
             }
@@ -507,7 +507,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
         std::ofstream out(vectorFile);
         out << std::fixed << std::setprecision(6);
         for (const auto& vec : testVectors) {
-            out << vec.id;
+            out << vec._id;
             for (float v : vec.values) {
                 out << "," << v;
             }
@@ -624,7 +624,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
     {
         std::ofstream out(vectorFile);
         for (const auto& vec : testVectors) {
-            out << vec.id;
+            out << vec._id;
             for (const float v : vec.values) {
                 out << "," << v;
             }
