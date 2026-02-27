@@ -66,6 +66,7 @@ void LimitProcessor::execute() {
 
         if (blockRowCount >= remainingCapacity) {
             _reachedLimit = true;
+            _input.getPort()->close();
         }
 
         _currentRowCount += rowsToWrite;

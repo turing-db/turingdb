@@ -50,5 +50,13 @@ void PipelineV2::clear() {
         processor->_prepared = false;
         processor->_finished = false;
         processor->_scheduled = false;
+
+        for (PipelineInputPort* port : processor->_inputs) {
+            port->reset();
+        }
+
+        for (PipelineOutputPort* port : processor->_outputs) {
+            port->reset();
+        }
     }
 }
