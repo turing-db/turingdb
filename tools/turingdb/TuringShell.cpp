@@ -439,6 +439,32 @@ void tabulateWrite(tabulate::RowStream& rs, const db::Path& path) {
     rs << result;
 }
 
+void tabulateWrite(tabulate::RowStream& rs, const db::EntityList& list) {
+    if (list.empty()) {
+        rs << "";
+        return;
+    }
+
+    std::string result;
+    const std::span<const EntityList::Entry> entries = list.entries();
+    const EntityList::Entry& first = entries.front();
+    if (first._type == EntityType::Node) {
+        result += fmt::format("({}:)", first._id);
+    } else {
+        result += fmt::format("[{}:]", first._id);
+    }
+
+    for (size_t i = 1; i < entries.size(); ++i) {
+        const auto& [type, val] = entries[i];
+        if (type == EntityType::Node) {
+            result += fmt::format(", ({}:)", val);
+        } else {
+            result += fmt::format(", [{}:]", val);
+        }
+    }
+    rs << result;
+}
+
 void tabulateWrite(tabulate::RowStream& rs, db::ValueType v) {
     rs << ValueTypeName::value(v);
 }
@@ -494,6 +520,7 @@ void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table
                 TABULATE_COL_CASE(ColumnVector<NodeID>, i)
                 TABULATE_COL_CASE(ColumnVector<EdgeID>, i)
                 TABULATE_COL_CASE(ColumnVector<Path>, i)
+                TABULATE_COL_CASE(ColumnVector<EntityList>, i)
                 TABULATE_COL_CASE(ColumnVector<PropertyTypeID>, i)
                 TABULATE_COL_CASE(ColumnVector<LabelID>, i)
                 TABULATE_COL_CASE(ColumnVector<EdgeTypeID>, i)

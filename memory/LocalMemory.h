@@ -36,6 +36,7 @@ public:
         MakeMemoryPool<ColumnVector<NodeID>>::type,
         MakeMemoryPool<ColumnVector<EdgeID>>::type,
         MakeMemoryPool<ColumnVector<Path>>::type,
+        MakeMemoryPool<ColumnVector<EntityList>>::type,
         MakeMemoryPool<ColumnVector<LabelID>>::type,
         MakeMemoryPool<ColumnVector<LabelSetID>>::type,
         MakeMemoryPool<ColumnVector<EdgeTypeID>>::type,

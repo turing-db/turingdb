@@ -9,6 +9,7 @@ set(storage_sources
         RowStore.cpp
         EmbeddingBucket.cpp
         EmbeddingContainer.cpp
+        EntityList.cpp
 
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp

@@ -107,6 +107,7 @@ INSTANTIATE(ColumnVector<types::Bool::Primitive>);
 INSTANTIATE(ColumnVector<types::Embedding::Primitive>);
 
 INSTANTIATE(ColumnVector<Path>);
+INSTANTIATE(ColumnVector<EntityList>);
 
 INSTANTIATE(ColumnOptVector<types::UInt64::Primitive>);
 INSTANTIATE(ColumnOptVector<types::Int64::Primitive>);

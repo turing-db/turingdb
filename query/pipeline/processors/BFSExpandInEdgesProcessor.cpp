@@ -14,7 +14,7 @@
 #include "columns/ColumnVector.h"
 #include "columns/ColumnIndices.h"
 
-#include "GraphPath.h"
+#include "EntityList.h"
 #include "PipelineBuffer.h"
 
 using namespace db;
@@ -68,7 +68,7 @@ void BFSExpandInEdgesProcessor::prepare(ExecutionContext* ctxt) {
     bioassert(_outputSources, "Output sources nodes column is null");
     bioassert(_outputPaths, "Output paths column is null");
     bioassert(_outputIndices, "Output indices column is null");
-    bioassert(dynamic_cast<ColumnVector<Path>*>(_outputPaths->getColumn()), "Output paths column is not a path column");
+    bioassert(dynamic_cast<ColumnVector<EntityList>*>(_outputPaths->getColumn()), "Output paths column is not a path column");
     bioassert(dynamic_cast<ColumnNodeIDs*>(_outputSources->getColumn()), "Output sources column is not an entity ID column");
 
     // BFS Execution state
@@ -93,13 +93,13 @@ void BFSExpandInEdgesProcessor::execute() {
     _outputIndices->clear();
 
     auto* outputSources = static_cast<ColumnNodeIDs*>(_outputSources->getColumn());
-    auto* outputPaths = static_cast<ColumnVector<Path>*>(_outputPaths->getColumn());
+    auto* outputPaths = static_cast<ColumnVector<EntityList>*>(_outputPaths->getColumn());
 
     outputPaths->clear();
 
     struct FrontierEntry {
         NodeID node;
-        Path edges;
+        EntityList edges;
         // bool _finished {false}; // TODO: Add this to the frontier
         //       and use it to avoid reexploring over and over again
     };
@@ -138,13 +138,17 @@ void BFSExpandInEdgesProcessor::execute() {
             _bfsWriter->reset();
             _bfsWriter->fill(SIZE_MAX); // TODO -> Make the bfs processor chunked
 
+            EntityList::Entry edgeVal {
+                ._type = EntityType::Edge,
+            };
+
             nextFrontier.clear();
             for (size_t i = 0; i < bfsEdges.size(); i++) {
                 const NodeID intermediate = bfsIntermediates[i];
                 const size_t parentIdx = bfsIndices[i];
-                const EntityID edgeVal = bfsEdges[i].getValue();
+                edgeVal._id = bfsEdges[i].getValue();
 
-                const Path& parentPath = frontier[parentIdx].edges;
+                const EntityList& parentPath = frontier[parentIdx].edges;
                 const bool alreadyUsed = std::find(
                                              parentPath.begin(), parentPath.end(),
                                              edgeVal)
@@ -155,7 +159,7 @@ void BFSExpandInEdgesProcessor::execute() {
 
                 FrontierEntry& newEntry = nextFrontier.emplace_back();
                 newEntry.edges = parentPath; // Copy parent path
-                newEntry.edges.push_back(edgeVal);
+                newEntry.edges.add(edgeVal._type, edgeVal._id);
                 newEntry.node = intermediate;
 
                 if (depth >= _minHops) {
