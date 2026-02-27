@@ -6,6 +6,7 @@
 #include "metadata/LabelSetHandle.h"
 #include "metadata/SupportedType.h"
 #include "metadata/PropertyType.h"
+#include "versioning/DataPartID.h"
 
 namespace db {
 
@@ -40,6 +41,8 @@ public:
     ~DataPart();
 
     bool load(const GraphView&, JobSystem&, DataPartBuilder&);
+
+    DataPartID getID() const { return _id; }
 
     NodeID getFirstNodeID() const;
     NodeID getFirstNodeID(const LabelSetHandle& labelset) const;
@@ -79,6 +82,8 @@ private:
     bool _initialized {false};
     NodeID _firstNodeID {0};
     EdgeID _firstEdgeID {0};
+
+    const DataPartID _id {0};
 
     std::unique_ptr<NodeContainer> _nodes;
     std::unique_ptr<EdgeContainer> _edges;

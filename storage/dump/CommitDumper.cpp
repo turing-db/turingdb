@@ -1,7 +1,6 @@
 #include "CommitDumper.h"
 
-#include <range/v3/view/enumerate.hpp>
-
+#include "DataPart.h"
 #include "FilePageWriter.h"
 #include "DataPartDumper.h"
 #include "LabelMapDumper.h"
@@ -13,6 +12,7 @@
 #include "DumpConfig.h"
 
 #include "dump/TombstonesDumper.h"
+#include "dump/CommitMetaDataDumper.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitJournal.h"
 
@@ -20,10 +20,9 @@
 
 using namespace db;
 
-namespace rg = ranges;
-namespace rv = rg::views;
-
-DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& commitDir) {
+DumpResult<void> CommitDumper::dump(const Commit& commit,
+                                    const fs::Path& commitDir,
+                                    const fs::Path& partsDir) {
     Profile profile("CommitDumper::dump");
 
     if (commitDir.exists()) {
@@ -140,24 +139,38 @@ DumpResult<void> CommitDumper::dump(const Commit& commit, const fs::Path& commit
         }
     }
 
-    // Dumping Merge File
-    // Existence Of File Confirms If We Have A Merge Commit
     {
-        Profile profile("CommitDumper::dump <merge>");
-        if (commit.isMergeCommit()) {
-            const fs::Path mergeFile = commitDir / "merge";
-            auto writerRes = fs::FilePageWriter::open(mergeFile, DumpConfig::PAGE_SIZE);
-            if (!writerRes) {
-                return DumpError::result(DumpErrorType::CANNOT_OPEN_MERGE, writerRes.error());
+        Profile profile("CommitDumper::dump <commit dataparts>");
+        for (const auto& part : commit.data().commitDataparts()) {
+            const std::string dataPartDirName = fmt::format("{}", part->getID().get());
+            const fs::Path partDir = partsDir / dataPartDirName;
+
+            if (auto res = DataPartDumper::dump(*part, partDir); !res) {
+                return res;
             }
         }
     }
 
-    for (const auto& [i, part] : commit.data().commitDataparts() | rv::enumerate) {
-        const fs::Path partDir = commitDir / "datapart-" + std::to_string(i);
+    {
+        Profile profile("CommitMetaDataDumper::dump <commit metadata>");
+        const fs::Path metaDataFile = commitDir / "metadata";
 
-        if (auto res = DataPartDumper::dump(*part, partDir); !res) {
+        auto fileRes = fs::File::createAndOpen(metaDataFile);
+        if (!fileRes) {
+            return DumpError::result(DumpErrorType::CANNOT_OPEN_COMMIT_METADATA, fileRes.error());
+        }
+        fs::FileWriter writer;
+        writer.setFile(&fileRes.value());
+
+        if (auto res = CommitMetaDataDumper::dump(commit, writer); !res) {
             return res;
+        }
+
+        writer.flush();
+        writer.file().close();
+        if (writer.errorOccured()) {
+            return DumpError::result(DumpErrorType::COULD_NOT_WRITE_COMMIT_METADATA,
+                                     *writer.error());
         }
     }
 

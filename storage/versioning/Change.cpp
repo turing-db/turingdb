@@ -92,17 +92,17 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     Profile profile("Change::rebase");
 
     // Get the state of main at time of rebase
-    const WeakArc<const CommitData> currentMainHead =
+    const WeakArc<const CommitData> currentMainHeadData =
         _versionController->openTransaction().commitData();
     // CommitData of current head of main
-    const CommitData* currentHeadCommitData = currentMainHead.get();
+    const CommitData* currentHeadCommitData = currentMainHeadData.get();
     // CommitHistory of current head of main
-    const CommitHistory* currentHeadHistory = &currentMainHead->history();
+    const CommitHistory* currentHeadHistory = &currentMainHeadData->history();
 
     // Read the graph as it was when this change was created
     const GraphReader branchTimeReader(_base.get());
     // Read the graph as it is now on main
-    const GraphReader mainReader(currentMainHead.get());
+    const GraphReader mainReader(currentMainHeadData.get());
 
     ChangeRebaser rebaser(*this, currentHeadCommitData, currentHeadHistory);
     rebaser.init(mainReader, branchTimeReader);
@@ -124,11 +124,13 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
 
     // The previous commit of the first commit needs to be changed to
     // the new base.
-    const Commit* prevCommit = _versionController->getCommitUnsafe(currentMainHead->_hash);
-    _commits.front()->_commit->setPreviousCommit(prevCommit);
+    // We use the getCommitUnsafe as we are in a locked context of version controller
+    // already
+    const Commit* currentMainHead = _versionController->getCommitUnsafe(currentMainHeadData->_hash);
+    _commits.front()->_commit->_prevCommit = currentMainHead;
 
     // Update the base commit to be main
-    _base = currentMainHead;
+    _base = currentMainHeadData;
 
     return {};
 }

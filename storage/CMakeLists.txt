@@ -99,6 +99,7 @@ set(storage_sources
         dump/GraphDumper.cpp
         dump/DataPartLoader.cpp
         dump/CommitDumper.cpp
+        dump/CommitLoader.cpp
         dump/DataPartDumper.cpp
         dump/DumpResult.cpp
         dump/DumpUtils.cpp
@@ -107,6 +108,7 @@ set(storage_sources
         dump/StringIndexerLoader.cpp
         dump/CommitJournalDumper.cpp
         dump/CommitJournalLoader.cpp
+        dump/CommitMetaDataDumper.cpp
         dump/TombstonesDumper.cpp
         dump/TombstonesLoader.cpp
       )

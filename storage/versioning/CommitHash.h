@@ -86,6 +86,8 @@ public:
         return TemplateCommitHash(hashValue);
     }
 
+    bool isValid() { return _value == 0; }
+
 private:
     ValueType _value {std::numeric_limits<ValueType>::max()};
 };

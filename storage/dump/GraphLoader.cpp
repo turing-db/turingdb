@@ -65,9 +65,14 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& graphDir) {
     const Commit* prevCommit = nullptr;
     for (size_t i = 0; i < numEntries; ++i) {
         const auto hash = it.get<uint64_t>();
-        const fs::Path commitDir = graphDir / fmt::format("{}", hash);
+        const fs::Path commitDir = graphDir / "commits" / fmt::format("{}", hash);
+        const fs::Path partDir = graphDir / "dataparts";
 
-        auto res = CommitLoader::load(commitDir, *graph, CommitHash {hash}, prevCommit);
+        auto res = CommitLoader::load(commitDir,
+                                      partDir,
+                                      *graph,
+                                      CommitHash {hash},
+                                      prevCommit);
         if (!res) {
             return res.get_unexpected();
         }
