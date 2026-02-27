@@ -575,7 +575,7 @@ void OrderByProcessor::merge() {
     // Reset @ref _indices, we now need to determine the correct order of all rows from
     // each sorted run in memory
     _indices->resize(memRowCount);
-    std::ranges::iota(*_indices, 0);
+    std::iota(_indices->begin(), _indices->end(), (size_t)0);
 
     SortedRun mergedRun = _sortedRuns.front();
 
