@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <string>
 
+#include "EntityList.h"
 #include "columns/KindTypes.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -51,6 +52,7 @@ public:
         NodeID,
         EdgeID,
         Path,
+        EntityList,
         LabelSetID,
         LabelSet,
         EdgeTypeID,

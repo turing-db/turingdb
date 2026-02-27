@@ -346,13 +346,13 @@ PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandOutEdges(int64_t minH
     NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(outDf);
     proc->setOutputTargetsColumn(targetNodes);
 
-    NamedColumn* pathCol = allocColumn<ColumnVector<Path>>(outDf);
+    NamedColumn* pathCol = allocColumn<ColumnVector<EntityList>>(outDf);
     proc->setOutputPathsColumn(pathCol);
 
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);
     matData.addToStep<ColumnNodeIDs>(targetNodes);
-    matData.addToStep<ColumnVector<Path>>(pathCol);
+    matData.addToStep<ColumnVector<EntityList>>(pathCol);
 
     _pendingOutput.updateInterface(&output);
 
@@ -378,13 +378,13 @@ PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandInEdges(int64_t minHo
     NamedColumn* sourceNodes = allocColumn<ColumnNodeIDs>(outDf);
     proc->setOutputSourcesColumn(sourceNodes);
 
-    NamedColumn* pathCol = allocColumn<ColumnVector<Path>>(outDf);
+    NamedColumn* pathCol = allocColumn<ColumnVector<EntityList>>(outDf);
     proc->setOutputPathsColumn(pathCol);
 
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);
     matData.addToStep<ColumnNodeIDs>(sourceNodes);
-    matData.addToStep<ColumnVector<Path>>(pathCol);
+    matData.addToStep<ColumnVector<EntityList>>(pathCol);
 
     _pendingOutput.updateInterface(&output);
 
@@ -410,13 +410,13 @@ PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandEdges(int64_t minHops
     NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(outDf);
     proc->setOutputTargetsColumn(targetNodes);
 
-    NamedColumn* pathCol = allocColumn<ColumnVector<Path>>(outDf);
+    NamedColumn* pathCol = allocColumn<ColumnVector<EntityList>>(outDf);
     proc->setOutputPathsColumn(pathCol);
 
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);
     matData.addToStep<ColumnNodeIDs>(targetNodes);
-    matData.addToStep<ColumnVector<Path>>(pathCol);
+    matData.addToStep<ColumnVector<EntityList>>(pathCol);
 
     _pendingOutput.updateInterface(&output);
 
