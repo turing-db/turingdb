@@ -26,14 +26,14 @@ using namespace db;
 
 DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& dataPartDir,
                                                    const GraphMetadata& metadata,
-                                                   VersionController& versionController) {
+                                                   VersionController* versionController) {
     Profile profile("DataPartLoader::load");
 
     if (!dataPartDir.exists()) {
         return DumpError::result(DumpErrorType::DATAPART_DOES_NOT_EXIST);
     }
 
-    WeakArc<DataPart> part = versionController.createDataPart(0, 0);
+    WeakArc<DataPart> part = versionController->createDataPart(0, 0);
 
     // Loading info
     {

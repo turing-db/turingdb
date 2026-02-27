@@ -4,6 +4,7 @@
 
 #include <range/v3/view/enumerate.hpp>
 #include <sys/types.h>
+#include <shared_mutex>
 
 #include "JobSystem.h"
 #include "Graph.h"
@@ -47,7 +48,7 @@ void VersionController::createFirstCommit() {
 DataPartMergeResult<void> VersionController::mergeDataParts(JobSystem& jobSystem) {
     Profile profile("VersionController::mergeDataParts");
 
-    std::scoped_lock lock(_mutex);
+    std::unique_lock<std::shared_mutex> uniqueLock(_mutex);
 
     Commit* headCommit = _head.load();
 
@@ -74,7 +75,7 @@ FrozenCommitTx VersionController::openTransaction(CommitHash hash) const {
         return _head.load()->openTransaction();
     }
 
-    std::scoped_lock lock(_mutex);
+    std::shared_lock<std::shared_mutex> sharedLock(_mutex);
 
     auto it = _offsets.find(hash);
     if (it == _offsets.end()) {
@@ -85,6 +86,8 @@ FrozenCommitTx VersionController::openTransaction(CommitHash hash) const {
 }
 
 CommitHash VersionController::getHeadHash() const {
+    std::shared_lock<std::shared_mutex> sharedLock(_mutex);
+
     const Commit* head = _head.load();
     if (!head) {
         return CommitHash::head();
@@ -96,7 +99,7 @@ CommitHash VersionController::getHeadHash() const {
 CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jobSystem) {
     Profile profile("VersionController::submitChange");
 
-    std::scoped_lock lock(_mutex);
+    std::unique_lock<std::shared_mutex> uniqueLock(_mutex);
 
     // atomic load main
     Commit* headCommit = _head.load();
@@ -132,8 +135,8 @@ std::unique_ptr<Change> VersionController::newChange(CommitHash base) {
     return Change::create(this, ChangeID {_nextChangeID.fetch_add(1)}, base);
 }
 
-std::unique_lock<std::mutex> VersionController::lock() {
-    return std::unique_lock<std::mutex> {_mutex};
+std::unique_lock<std::shared_mutex> VersionController::lock() {
+    return std::unique_lock<std::shared_mutex> {_mutex};
 }
 
 // Needs to be called in a locked context

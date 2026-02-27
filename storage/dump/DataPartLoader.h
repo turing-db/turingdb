@@ -15,7 +15,7 @@ class DataPartLoader {
 public:
     [[nodiscard]] static DumpResult<WeakArc<DataPart>> load(const fs::Path& dataPartDir,
                                                             const GraphMetadata& metadata,
-                                                            VersionController& versionController);
+                                                            VersionController* versionController);
 
 private:
     static constexpr std::string_view NODE_PROPS_PREFIX = "node-props-";

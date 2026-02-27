@@ -119,9 +119,9 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
         numEdgesAdded += part->getEdgeContainerSize();
     }
 
-    _commit->setNumDataParts(numCommitDataParts);
-    _commit->setNumNodes(numNodesAdded);
-    _commit->setNumEdges(numEdgesAdded);
+    _commit->_numDataParts = numCommitDataParts;
+    _commit->_numNodes = numNodesAdded;
+    _commit->_numEdges = numEdgesAdded;
 
     return std::move(_commit);
 }

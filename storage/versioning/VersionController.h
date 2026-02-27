@@ -2,9 +2,8 @@
 
 #include <unordered_map>
 #include <memory>
-#include <mutex>
+#include <shared_mutex>
 #include <atomic>
-#include <ArcManager.h>
 
 #include "ID.h"
 #include "Profiler.h"
@@ -14,6 +13,7 @@
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "DataPart.h"
+#include "ArcManager.h"
 
 namespace db {
 
@@ -31,6 +31,7 @@ struct EntityIDPair {
 class VersionController {
 public:
     using CommitMap = std::unordered_map<CommitHash, size_t>;
+    using DataPartMap = std::unordered_map<DataPartID, WeakArc<DataPart>>;
     explicit VersionController(Graph* graph);
     ~VersionController();
 
@@ -51,9 +52,6 @@ public:
 
     size_t getNumCommits() const { return _commits.size(); }
 
-    /// Gets the offset for a given commit hash, or nullopt if not found
-    std::optional<size_t> getCommitIndex(CommitHash hash) const;
-
     WeakArc<CommitData> createCommitData(CommitHash hash) {
         Profile profile("VersionController::createCommitData");
         return _dataManager->create(hash);
@@ -64,8 +62,11 @@ public:
         return _partManager->create(firstNodeID, firstEdgeID);
     }
 
+    DataPartMap& getPartMap() { return _partMap; }
+
 private:
     friend GraphLoader;
+    friend CommitLoader;
     friend GraphDumper;
     friend Change;
     friend Graph;
@@ -75,13 +76,18 @@ private:
     std::atomic<Commit*> _head {nullptr};
     std::atomic<uint64_t> _nextChangeID {0};
 
-    mutable std::mutex _mutex;
+    mutable std::shared_mutex _mutex;
     Commit::CommitVector _commits;
     CommitMap _offsets;
     std::unique_ptr<ArcManager<CommitData>> _dataManager;
     std::unique_ptr<ArcManager<DataPart>> _partManager;
 
-    std::unique_lock<std::mutex> lock();
+    DataPartMap _partMap;
+
+    std::unique_lock<std::shared_mutex> lock();
+
+    /// Gets the offset for a given commit hash, or nullopt if not found
+    std::optional<size_t> getCommitIndex(CommitHash hash) const;
 
     void addCommit(std::unique_ptr<Commit> commit);
 

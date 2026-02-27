@@ -91,14 +91,15 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& graphDir)
             commitList.emplace_back(commit->hash());
 
             const std::string fileName = fmt::format("{}", commit->hash().get());
-            const fs::Path commitDir = graphDir / fileName;
+            const fs::Path commitDir = graphDir / "commits" / fileName;
+            const fs::Path partsDir = graphDir / "dataparts";
 
             if (commitDir.exists()) {
                 // commit shouldn't exist
                 return DumpError::result(DumpErrorType::COMMIT_ALREADY_EXISTS);
             }
 
-            if (auto res = CommitDumper::dump(*commit, commitDir); !res) {
+            if (auto res = CommitDumper::dump(*commit, commitDir, partsDir); !res) {
                 return res;
             }
 
@@ -189,14 +190,15 @@ DumpResult<void> GraphDumper::dumpMissingCommits(const Graph& graph, const fs::P
         commitList.emplace_back(commit->hash());
 
         const std::string fileName = fmt::format("{}", commit->hash().get());
-        const fs::Path commitDir = graphDir / fileName;
+        const fs::Path commitDir = graphDir / "commits" / fileName;
+        const fs::Path partsDir = graphDir / "dataparts";
 
         if (commitDir.exists()) {
             // commit shouldn't exist
             return DumpError::result(DumpErrorType::COMMIT_ALREADY_EXISTS);
         }
 
-        if (auto res = CommitDumper::dump(*commit, commitDir); !res) {
+        if (auto res = CommitDumper::dump(*commit, commitDir, partsDir); !res) {
             return res;
         }
         commit = commit->getPreviousCommit();

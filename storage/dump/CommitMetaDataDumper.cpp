@@ -1,0 +1,30 @@
+#include "CommitMetaDataDumper.h"
+
+#include <range/v3/view/enumerate.hpp>
+
+#include "DataPart.h"
+
+#include "dump/GraphDumpHelper.h"
+#include "versioning/Commit.h"
+#include "DataPartSpan.h"
+
+using namespace db;
+
+DumpResult<void> CommitMetaDataDumper::dump(const Commit& commit,
+                                            fs::FileWriter<>& writer) {
+    GraphDumpHelper::writeFileHeader(&writer);
+    const DataPartSpan allDataParts = commit.data().allDataparts();
+    const size_t numDataParts = allDataParts.size();
+
+    writer.write(numDataParts);
+    for (const auto& dp : allDataParts) {
+        writer.write(dp->getID().get());
+    }
+
+    const DataPartSpan commitDataParts = commit.data().commitDataparts();
+    const size_t commitDataSize = commitDataParts.size();
+
+    writer.write(commitDataSize);
+
+    return {};
+}

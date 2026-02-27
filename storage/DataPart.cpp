@@ -33,6 +33,7 @@ DataPart::DataPart(NodeID firstNodeID,
                    EdgeID firstEdgeID)
     : _firstNodeID(firstNodeID),
     _firstEdgeID(firstEdgeID),
+    _id(DataPartID::create()),
     _nodeStrPropIdx(std::make_unique<StringPropertyIndexer>()),
     _edgeStrPropIdx(std::make_unique<StringPropertyIndexer>())
     
