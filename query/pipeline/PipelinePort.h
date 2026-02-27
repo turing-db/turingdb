@@ -33,6 +33,10 @@ public:
     }
 
     bool canWriteData() const {
+        if (!_open) {
+            return false;
+        }
+
         return _connectedPort ? !_buffer->hasData() : true;
     }
 
@@ -41,6 +45,10 @@ public:
         if (_connectedPort) {
             _connectedPort->_open = false;
         }
+    }
+
+    void reset() {
+        _open = true;
     }
 
 protected:
@@ -74,10 +82,6 @@ public:
         }
     }
 
-    bool hasData() const {
-        return _connectedPort ? _buffer->hasData() : false;
-    }
-
     static PipelineInputPort* create(PipelineV2* pipeline, Processor* processor);
 
 private:
@@ -100,10 +104,6 @@ public:
         if (_connectedPort) {
             _connectedPort->getBuffer()->writeData();
         }
-    }
-
-    bool canWriteData() const {
-        return _connectedPort ? !_buffer->hasData() : true;
     }
 
     static PipelineOutputPort* create(PipelineV2* pipeline, Processor* processor);
