@@ -24,6 +24,10 @@ CHANGE SUBMIT
 quit
 EOF
 
+# Copy CSV files into the data directory
+cp $SCRIPT_DIR/test.csv $SCRIPT_DIR/.turing/data/
+cp $SCRIPT_DIR/test_no_headers.csv $SCRIPT_DIR/.turing/data/
+
 # Now start daemon to run LOAD CSV tests via Python SDK
 turingdb -demon -turing-dir $SCRIPT_DIR/.turing
 # Wait for turingdb to be ready
