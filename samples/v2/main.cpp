@@ -153,6 +153,7 @@ int main(int argc, char** argv) {
                                           view,
                                           &pipeline,
                                           &mem,
+                                          &sysMan,
                                           procedures.get(),
                                           &callbacks);
             try {

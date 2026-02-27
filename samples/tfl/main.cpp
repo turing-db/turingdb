@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <algorithm>
+#include <filesystem>
 #include <map>
 #include <set>
 #include <string>
@@ -69,13 +70,15 @@ int main(int argc, const char** argv) {
     // ---------------------------------------------------------------
     // Step 1: Load connections.csv using LOAD CSV
     // ---------------------------------------------------------------
-    fs::Path csvPath = fs::Path(SAMPLE_DIR) / "connections.csv";
+    // Copy CSV into the data directory so LOAD CSV can find it
+    fs::Path srcCsv = fs::Path(SAMPLE_DIR) / "connections.csv";
+    fs::Path dstCsv = config.getDataDir() / "connections.csv";
+    std::filesystem::copy_file(srcCsv.get(), dstCsv.get());
 
     const std::string loadQuery =
-        "LOAD CSV '" + std::string(csvPath.get())
-        + "' WITH HEADERS AS row "
+        "LOAD CSV 'connections.csv' WITH HEADERS AS row "
         "RETURN row.station1 AS s1, row.station2 AS s2, "
-        "row.line AS line, row._time AS time";
+        "row.line AS line, row.time AS time";
 
     struct Connection {
         std::string station1;

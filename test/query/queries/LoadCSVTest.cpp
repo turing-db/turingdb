@@ -48,11 +48,12 @@ protected:
 
     std::string writeTempCSV(const std::string& name,
                              const std::string& content) {
-        std::string path = _outDir + "/" + name;
+        const std::string& dataDir = _env->getConfig().getDataDir().get();
+        std::string path = dataDir + "/" + name;
         std::ofstream f(path);
         f << content;
         f.close();
-        return path;
+        return name;
     }
 
     NodeID findNode(std::string_view name) {
@@ -95,7 +96,7 @@ TEST_F(LoadCSVTest, loadCSVReturn) {
                         std::string {c2->at(i)}});
         }
     });
-    ASSERT_TRUE(res);
+    ASSERT_TRUE(res) << res.getError();
     EXPECT_TRUE(expected.equals(actual));
 }
 
@@ -128,7 +129,7 @@ TEST_F(LoadCSVTest, loadCSVWithHeaders) {
                         std::string {c2->at(i)}});
         }
     });
-    ASSERT_TRUE(res);
+    ASSERT_TRUE(res) << res.getError();
     EXPECT_TRUE(expected.equals(actual));
 }
 

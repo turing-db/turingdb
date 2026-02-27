@@ -24,7 +24,6 @@ CSVSourceProcessor::CSVSourceProcessor(const fs::Path& path,
 }
 
 CSVSourceProcessor::~CSVSourceProcessor() {
-    delete _parser;
 }
 
 CSVSourceProcessor* CSVSourceProcessor::create(PipelineV2* pipeline,
@@ -55,7 +54,8 @@ void CSVSourceProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
     bioassert(!_parser, "CSVSourceProcessor: parser already exists");
-    _parser = new CSVParser(_path, _hasHeaders, _errorMode, _expectedFieldCount);
+
+    _parser = std::make_unique<CSVParser>(_path, _hasHeaders, _errorMode, _expectedFieldCount);
 
     markAsPrepared();
 }

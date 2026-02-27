@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "Processor.h"
 #include "Path.h"
 #include "CSVErrorMode.h"
@@ -33,10 +35,10 @@ private:
     bool _hasHeaders {false};
     CSVErrorMode _errorMode {CSVErrorMode::Fail};
     size_t _expectedFieldCount {0};
+    ColumnStringTable* _outputTable {nullptr};
     PipelineBlockOutputInterface _output;
 
-    ColumnStringTable* _outputTable {nullptr};
-    CSVParser* _parser {nullptr};
+    std::unique_ptr<CSVParser> _parser;
 
     CSVSourceProcessor(const fs::Path& path,
                        bool hasHeaders,

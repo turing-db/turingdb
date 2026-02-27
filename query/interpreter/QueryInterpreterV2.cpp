@@ -167,6 +167,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
                                   view,
                                   &pipeline,
                                   mem,
+                                  _sysMan,
                                   ctxt.getProcedures(),
                                   ctxt.getQueryCallbacks());
     try {
