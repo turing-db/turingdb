@@ -113,8 +113,8 @@ public:
         }
 
         // Get a view of the column with the sorted indices
-        auto reordered = _indices
-                         | rv::transform([&](std::size_t i) -> auto& { return data[i]; });
+        const auto reordered = _indices
+                               | rv::transform([&](std::size_t i) -> auto& { return data[i]; });
 
         OrderByProcessor::addTieRanges(_ranges, reordered);
     }
@@ -195,8 +195,8 @@ public:
         const std::vector<T>& data = typed->getRaw();
 
         // Get a view of the sorted column
-        auto reordered = _indices
-                         | rv::transform([&](std::size_t i) -> auto& { return data[i]; });
+        const auto reordered = _indices
+                               | rv::transform([&](std::size_t i) -> auto& { return data[i]; });
 
         // Temporary vector which will contain the new tie-ranges
         OrderByProcessor::TieRanges temp;
@@ -407,7 +407,7 @@ std::string OrderByProcessor::describe() const {
 
 OrderByProcessor* OrderByProcessor::create(PipelineV2* pipeline,
                                            std::span<const OrderByKey> keys) {
-    OrderByProcessor* proc = new OrderByProcessor;
+    OrderByProcessor* proc = new OrderByProcessor();
 
     {
         PipelineInputPort* inputPort = PipelineInputPort::create(pipeline, proc);
@@ -437,11 +437,12 @@ template <std::ranges::random_access_range Rg>
 void OrderByProcessor::addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t start) {
     // Find the first instance of a duplciated entry in the column
     auto startIt = std::ranges::adjacent_find(rg);
+    const auto endSentinel = std::end(rg);
 
-    while (startIt != std::end(rg)) {
+    while (startIt != endSentinel) {
         // Find all [start, end) ranges of duplicated entries in column
         auto endIt = startIt;
-        while (endIt != std::end(rg) && *endIt == *startIt) {
+        while (endIt != endSentinel && *endIt == *startIt) {
             ++endIt;
         }
         const size_t startIdx = std::distance(std::begin(rg), startIt) + start;
