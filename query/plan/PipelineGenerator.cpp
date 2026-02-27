@@ -90,6 +90,8 @@
 #include "ExprProgramGenerator.h"
 #include "PredicateProgramGenerator.h"
 
+#include "SystemManager.h"
+#include "TuringConfig.h"
 #include "PipelineException.h"
 #include "PlannerException.h"
 #include "FatalException.h"
@@ -384,7 +386,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::LOAD_CSV:
             return translateLoadCSVNode(static_cast<LoadCSVNode*>(node));
-            break;
+        break;
 
         case PlanGraphOpcode::CREATE_VECTOR_INDEX:
             return translateCreateVectorIndexNode(static_cast<CreateVectorIndexNode*>(node));
@@ -1410,9 +1412,19 @@ PipelineOutputInterface* PipelineGenerator::translateShortestPathNode(ShortestPa
 }
 
 PipelineOutputInterface* PipelineGenerator::translateLoadCSVNode(LoadCSVNode* node) {
+    // Resolve file path relative to the data directory
+    const fs::Path& dataDir = _sysMan->getConfig()->getDataDir();
+    const fs::Path filePath = dataDir / node->getFilePath().get();
+
+    if (!filePath.isSubDirectory(dataDir)) {
+        throw PipelineException(fmt::format(
+            "Invalid file path: path must be relative to '{}'",
+            dataDir.get()));
+    }
+
     // Peek at file structure to discover field count and headers
     CSVFileInfo fileInfo;
-    CSVParser::peekFileStructure(node->getFilePath(), node->hasHeaders(), fileInfo);
+    CSVParser::peekFileStructure(filePath, node->hasHeaders(), fileInfo);
 
     _csvHeaders = fileInfo._headers;
     _csvFieldCount = fileInfo._fieldCount;
@@ -1426,9 +1438,12 @@ PipelineOutputInterface* PipelineGenerator::translateLoadCSVNode(LoadCSVNode* no
     const CSVErrorMode errorMode =
         node->skipOnError() ? CSVErrorMode::Skip : CSVErrorMode::Fail;
 
-    auto* csvSource = CSVSourceProcessor::create(
-        _pipeline, node->getFilePath(), node->hasHeaders(),
-        errorMode, _csvFieldCount, table);
+    auto* csvSource = CSVSourceProcessor::create(_pipeline,
+                                                 filePath,
+                                                 node->hasHeaders(),
+                                                 errorMode,
+                                                 _csvFieldCount,
+                                                 table);
 
     // Register the ColumnStringTable in the output dataframe
     PipelineBlockOutputInterface& output = csvSource->output();

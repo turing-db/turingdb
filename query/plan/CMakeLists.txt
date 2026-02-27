@@ -27,6 +27,7 @@ target_link_libraries(turing_db_plan_s PRIVATE
     turing_db_io_csv_s
     turing_db_query_common_s
     turing_db_storage_s
+    turing_db_system_s
     turing_db_base_s
     turing_common_s
     turing_vector_s

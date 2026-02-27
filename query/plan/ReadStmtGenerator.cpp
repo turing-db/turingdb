@@ -163,11 +163,10 @@ void ReadStmtGenerator::generateLoadCSVStmt(const LoadCSVStmt* stmt) {
     const VarDecl* aliasDecl = stmt->getAliasDecl();
     bioassert(aliasDecl, "LoadCSVStmt alias does not have a VarDecl");
 
-    LoadCSVNode* loadCSVNode = _tree->create<LoadCSVNode>(
-        stmt->getFilePath(),
-        stmt->hasHeaders(),
-        stmt->skipOnError(),
-        aliasDecl);
+    LoadCSVNode* loadCSVNode = _tree->create<LoadCSVNode>(stmt->getFilePath(),
+                                                          stmt->hasHeaders(),
+                                                          stmt->skipOnError(),
+                                                          aliasDecl);
 
     _variables->setProducer(aliasDecl, loadCSVNode);
 }
