@@ -246,8 +246,8 @@ void ReadStmtGenerator::generatePatternElement(const PatternElement* element) {
         }
 
         if (e->getQuantifiedPath()) {
-            currentNode = generatePatternElementVariableLengthPath(currentNode, e);
-            currentNode = generatePatternElementTarget(currentNode, n);
+            PlanGraphNode* bfsNode = generatePatternElementVariableLengthPath(currentNode, e, n);
+            currentNode = generatePatternElementTarget(bfsNode, n, false);
         } else {
             currentNode = generatePatternElementEdge(currentNode, e);
             currentNode = generatePatternElementTarget(currentNode, n);
@@ -303,7 +303,7 @@ VarNode* ReadStmtGenerator::generatePatternElementOrigin(const NodePattern* orig
     return var;
 }
 
-VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
+VarNode* ReadStmtGenerator::generatePatternElementEdge(PlanGraphNode* prevNode,
                                                        const EdgePattern* edge) {
     // Expand edge based on direction
 
@@ -367,8 +367,9 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
     return var;
 }
 
-VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
-                                                         const NodePattern* target) {
+VarNode* ReadStmtGenerator::generatePatternElementTarget(PlanGraphNode* prevNode,
+                                                         const NodePattern* target,
+                                                         bool generateGetTarget) {
     // Target nodes
     const NodePatternData* data = target->getData();
     const std::span labels = data->labelConstraints();
@@ -377,7 +378,9 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
     const LabelMap& labelMap = _graphMetadata.labels();
     const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
-    PlanGraphNode* currentNode = _tree->newOut<GetEdgeTargetNode>(prevNode);
+    PlanGraphNode* currentNode = generateGetTarget
+        ? _tree->newOut<GetEdgeTargetNode>(prevNode)
+        : prevNode;
 
     auto [var, filter] = _variables->getVarNodeAndFilter(decl);
     if (!var) {
@@ -423,43 +426,40 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(VarNode* prevNode,
     return var;
 }
 
-VarNode* ReadStmtGenerator::generatePatternElementVariableLengthPath(VarNode* prevNode, const EdgePattern* edge)
-{
+PlanGraphNode* ReadStmtGenerator::generatePatternElementVariableLengthPath(PlanGraphNode* prevNode,
+                                                                           const EdgePattern* edge,
+                                                                           const NodePattern* target) {
     const QuantifiedPath* qp = edge->getQuantifiedPath();
     const int64_t minHops = qp->getLhs();
     const int64_t maxHops = qp->getRhs();
 
-    // Create BFS expand node based on direction
-    PlanGraphNode* expandNode = nullptr;
-    switch (edge->getDirection()) {
-        case EdgePattern::Direction::Undirected: {
-            expandNode = _tree->newOut<BFSExpandEdgesNode>(
-                prevNode, minHops, maxHops);
-        } break;
-        case EdgePattern::Direction::Backward: {
-            expandNode = _tree->newOut<BFSExpandInEdgesNode>(
-                prevNode, minHops, maxHops);
-        } break;
-        case EdgePattern::Direction::Forward: {
-            expandNode = _tree->newOut<BFSExpandOutEdgesNode>(
-                prevNode, minHops, maxHops);
-        } break;
-    }
-
-    // Edge variable + filter
+    // Checking if the edge variable is already used
     const VarDecl* edgeDecl = edge->getDecl();
     auto [edgeVar, edgeFilter] = _variables->getVarNodeAndFilter(edgeDecl);
-    if (!edgeVar) {
-        std::tie(edgeVar, edgeFilter) =
-            _variables->createVarNodeAndFilter(edgeDecl);
-        _variables->setProducer(edgeDecl, edgeVar);
-    } else {
-        throwError("Re-using the same edge variable, "
-                   "this is not supported", edge);
-    }
-    expandNode->connectOut(edgeFilter);
 
-    return edgeVar;
+    if (edgeVar) {
+        throwError("Re-using the same edge variable, this is not supported", edge);
+    }
+
+    const VarDecl* nodeDecl = target->getDecl();
+
+    // Create BFS expand node based on direction
+    PlanGraphNode* expandNode = nullptr;
+
+    switch (edge->getDirection()) {
+        case EdgePattern::Direction::Undirected: {
+            expandNode = _tree->newOut<BFSExpandEdgesNode>(prevNode, edgeDecl, nodeDecl, minHops, maxHops);
+        } break;
+        case EdgePattern::Direction::Backward: {
+            expandNode = _tree->newOut<BFSExpandInEdgesNode>(prevNode, edgeDecl, nodeDecl, minHops, maxHops);
+        } break;
+        case EdgePattern::Direction::Forward: {
+            expandNode = _tree->newOut<BFSExpandOutEdgesNode>(prevNode, edgeDecl, nodeDecl, minHops, maxHops);
+        } break;
+    }
+
+    _variables->setProducer(edgeDecl, expandNode);
+    return expandNode;
 }
 
 void ReadStmtGenerator::unwrapWhereExpr(Expr* expr) {

@@ -7,6 +7,8 @@
 
 #include "PipelineException.h"
 
+#include "GraphPath.h"
+
 using namespace db;
 
 MaterializeData::MaterializeData(LocalMemory* mem, DataframeManager* dfMan)
@@ -103,6 +105,8 @@ INSTANTIATE(ColumnVector<types::Double::Primitive>);
 INSTANTIATE(ColumnVector<types::String::Primitive>);
 INSTANTIATE(ColumnVector<types::Bool::Primitive>);
 INSTANTIATE(ColumnVector<types::Embedding::Primitive>);
+
+INSTANTIATE(ColumnVector<Path>);
 
 INSTANTIATE(ColumnOptVector<types::UInt64::Primitive>);
 INSTANTIATE(ColumnOptVector<types::Int64::Primitive>);
