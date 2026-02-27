@@ -488,7 +488,7 @@ void OrderByProcessor::subsort() {
         const size_t size = dominantCol->size();
 
         _indices->resize(size);
-        std::ranges::iota(*_indices, 0);
+        std::iota(_indices->begin(), _indices->end(), (size_t)0);
 
         OrderColumn sorter(*_indices, _tieRanges, asc);
 
