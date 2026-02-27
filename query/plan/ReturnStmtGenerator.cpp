@@ -2,6 +2,7 @@
 
 #include "CypherAST.h"
 #include "ExprDependencies.h"
+#include "FunctionInvocation.h"
 #include "PlanGraph.h"
 #include "Projection.h"
 
@@ -21,7 +22,16 @@
 #include "nodes/ProduceResultsNode.h"
 #include "nodes/SkipNode.h"
 
+#include "expr/EntityTypeExpr.h"
+#include "expr/ExprChain.h"
+#include "expr/FunctionInvocationExpr.h"
+#include "expr/PropertyExpr.h"
+#include "expr/SymbolExpr.h"
+
 #include "DiagnosticsManager.h"
+
+#include "BioAssert.h"
+#include "PlannerException.h"
 
 using namespace db;
 
