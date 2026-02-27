@@ -1,4 +1,3 @@
-import os
 import turingdb
 
 GRAPH_NAME = "csvtest"
@@ -13,9 +12,8 @@ def main() -> None:
     client.set_graph(GRAPH_NAME)
     print(f"Set graph {GRAPH_NAME}")
 
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(test_dir, "test.csv")
-    csv_no_headers_path = os.path.join(test_dir, "test_no_headers.csv")
+    csv_path = "test.csv"
+    csv_no_headers_path = "test_no_headers.csv"
 
     # ---------------------------------------------------------------
     # Test 1: LOAD CSV without headers (index access)

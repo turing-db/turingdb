@@ -1,5 +1,4 @@
 import csv
-import os
 import turingdb
 
 GRAPH_NAME = "csvtest"
@@ -14,8 +13,7 @@ def main() -> None:
     client.set_graph(GRAPH_NAME)
     print(f"Set graph {GRAPH_NAME}")
 
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(test_dir, "stations.csv")
+    csv_path = "stations.csv"
 
     # Read the CSV file in Python for ground truth
     with open(csv_path, newline='') as f:
