@@ -22,6 +22,7 @@
 #include "dataframe/NamedColumn.h"
 
 #include "BioAssert.h"
+#include "FatalException.h"
 
 using namespace db;
 
@@ -33,7 +34,7 @@ namespace {
 template <typename T>
     requires std::totally_ordered<T>
 int compare(const T& a, const T& b) {
-    std::partial_ordering cmp = a <=> b;
+    const std::partial_ordering cmp = a <=> b;
 
     if (cmp == std::partial_ordering::less) {
         return -1;
@@ -80,10 +81,16 @@ int compare(const std::optional<T>& a, const std::optional<T>& b) {
  * @brief Functor to sort @ref _indices by values in a column, and populate @ref _ranges
  * as tieranges.
  */
-struct OrderColumn {
-    OrderByProcessor::Indices& _indices;
-    OrderByProcessor::TieRanges& _ranges;
-    bool _asc {true};
+class OrderColumn {
+public:
+    OrderColumn(OrderByProcessor::Indices& indices,
+                OrderByProcessor::TieRanges& tieranges,
+                bool asc)
+        : _indices(indices),
+        _ranges(tieranges),
+        _asc(asc)
+    {
+    }
 
     template <typename T>
         requires std::totally_ordered<T>
@@ -115,14 +122,26 @@ struct OrderColumn {
     // ColumnConst is vacuously sorted
     template <typename T>
     void operator()(const ColumnConst<T>*) {}
+
+private:
+    OrderByProcessor::Indices& _indices;
+    OrderByProcessor::TieRanges& _ranges;
+    bool _asc {true};
 };
 
 /// Functor to sort @ref _indices by subranges in a column.
-struct OrderColumnSubrange {
-    OrderByProcessor::Indices& _indices;
-    size_t _subrangeStart {0};
-    size_t _subrangeEnd {0};
-    bool _asc {true};
+class OrderColumnSubrange {
+public:
+    OrderColumnSubrange(OrderByProcessor::Indices& indices, bool asc)
+        : _indices(indices),
+          _asc(asc)
+    {
+    }
+
+    void setStart(size_t start) { _subrangeStart = start; }
+    void setEnd(size_t end) { _subrangeEnd = end; }
+    size_t start() const { return _subrangeStart; }
+    size_t end() const { return _subrangeEnd; }
 
     template <typename T>
         requires std::totally_ordered<T>
@@ -144,6 +163,12 @@ struct OrderColumnSubrange {
     // ColumnConst is vacuously sorted
     template <typename T>
     void operator()(const ColumnConst<T>*) {}
+
+private:
+    OrderByProcessor::Indices& _indices;
+    size_t _subrangeStart {0};
+    size_t _subrangeEnd {0};
+    bool _asc {true};
 };
 
 /**
@@ -155,9 +180,14 @@ struct OrderColumnSubrange {
  * $k_2$[r] != $k_2$[r + 1].
  *
  */
-struct NarrowTieRanges {
-    OrderByProcessor::Indices& _indices;
-    OrderByProcessor::TieRanges& _ranges;
+class NarrowTieRanges {
+public:
+    NarrowTieRanges(OrderByProcessor::Indices& indices,
+                    OrderByProcessor::TieRanges& ranges)
+        : _indices(indices),
+        _ranges(ranges)
+    {
+    }
 
     template <typename T>
         requires std::totally_ordered<T>
@@ -189,18 +219,30 @@ struct NarrowTieRanges {
     // ColumnConst does not change tie ranges
     template <typename T>
     void operator()(const ColumnConst<T>*) {}
+
+private:
+    OrderByProcessor::Indices& _indices;
+    OrderByProcessor::TieRanges& _ranges;
 };
 
 /// Functor to project a new ordering defined by @ref _indices on to @ref _res
-struct ProjectOrder {
-    Column* _res {nullptr};
-    ColumnVector<size_t>* _indices {nullptr};
-    size_t _numRows {0};
-    size_t _fromSrcRow {0};
-    size_t _fromDstRow {0};
+class ProjectOrder {
+public:
+    ProjectOrder(Column* result,
+                 OrderByProcessor::Indices& indices,
+                 size_t numRows,
+                 size_t fromSrcRow,
+                 size_t fromDstRow)
+        : _res(result),
+        _indices(indices),
+        _numRows(numRows),
+        _fromSrcRow(fromSrcRow),
+        _fromDstRow(fromDstRow)
+    {
+    }
 
     template <typename T>
-    void operator()(const ColumnVector<T>* source) {
+        void operator()(const ColumnVector<T>* source) {
         auto* casted = dynamic_cast<ColumnVector<T>*>(_res);
         bioassert(casted, "Incorrect cast for projected result column.");
 
@@ -219,9 +261,9 @@ struct ProjectOrder {
         const size_t dstSize = casted->size();
 
         bioassert(
-            _fromSrcRow + _numRows <= _indices->size(),
+            _fromSrcRow + _numRows <= _indices.size(),
             "Attempted to project rows from {} to {}, but only provided {} indices.",
-            _fromSrcRow, _fromSrcRow + _numRows, _indices->size()
+            _fromSrcRow, _fromSrcRow + _numRows, _indices.size()
         );
 
         bioassert(dstSize >= _fromDstRow + _numRows,
@@ -230,7 +272,7 @@ struct ProjectOrder {
         );
 
         const auto& srcd = source->getRaw();
-        const auto& indicesd = _indices->getRaw();
+        const auto& indicesd = _indices.getRaw();
         auto& resd = casted->getRaw();
 
         for (size_t i = 0; i < _numRows; i++) {
@@ -248,13 +290,24 @@ struct ProjectOrder {
 
         casted->set(value);
     }
+
+private:
+    Column* _res {nullptr};
+    OrderByProcessor::Indices& _indices;
+    size_t _numRows {0};
+    size_t _fromSrcRow {0};
+    size_t _fromDstRow {0};
 };
 
 /// Functor to dispatch a comparison operator on a type-erased column
-struct CompareInner {
-    size_t _i {0};
-    size_t _j {0};
-    int& _res;
+class CompareInner {
+public:
+    CompareInner(size_t i, size_t j, int& res)
+        : _i(i),
+          _j(j),
+          _res(res)
+    {
+    }
 
     template <typename T>
         requires std::totally_ordered<T>
@@ -265,6 +318,10 @@ struct CompareInner {
     // Any two positions in a ColumnConst are equal
     template <typename T>
     void operator()(const ColumnConst<T>*) { _res = 0; }
+private:
+    size_t _i {0};
+    size_t _j {0};
+    int& _res;
 };
 
 using Compare = ColumnSingleDispatcher<OrderedTypes::Allowed, CompareInner, OrderedTypes::Excluded>;
@@ -293,7 +350,7 @@ void mergeAdjacent(OrderByProcessor::Indices& indices,
 
     auto rowCmp = [&](size_t i, size_t j) {
         int comparisonResult = 0;
-        CompareInner cmp {._i = i, ._j = j, ._res = comparisonResult};
+        CompareInner cmp(i, j, comparisonResult);
 
         for (const auto& [tag, asc] : keys) {
             // Validity of columns checked above
@@ -396,11 +453,7 @@ void OrderByProcessor::addTieRanges(TieRanges& tieRanges, const Rg& rg, size_t s
 
 void OrderByProcessor::project(const Column* src, Column* dst, size_t numRows,
                                size_t fromSrcRow, size_t fromDstRow) {
-    ProjectOrder project {._res = dst,
-                          ._indices = _indices,
-                          ._numRows = numRows,
-                          ._fromSrcRow = fromSrcRow,
-                          ._fromDstRow = fromDstRow};
+    ProjectOrder project(dst, *_indices, numRows, fromSrcRow, fromDstRow);
 
     Projection::dispatch(src, project);
 }
@@ -436,8 +489,7 @@ void OrderByProcessor::subsort() {
         _indices->resize(size);
         std::ranges::iota(*_indices, 0);
 
-        OrderColumn sorter {
-            ._indices = *_indices, ._ranges = _tieRanges, ._asc = asc};
+        OrderColumn sorter(*_indices, _tieRanges, asc);
 
         Sort::dispatch(dominantCol, sorter);
     }
@@ -459,19 +511,19 @@ void OrderByProcessor::subsort() {
 
         Column* column = getOrderedColumn(key);
 
-        OrderColumnSubrange subrangeSorter {._indices = *_indices, ._asc = key._asc};
+        OrderColumnSubrange subrangeSorter(*_indices, key._asc);
 
         // Sort each individual range
         for (const auto& [start, size] : _tieRanges) {
             const size_t end = start + size;
 
-            subrangeSorter._subrangeStart = start;
-            subrangeSorter._subrangeEnd = end;
+            subrangeSorter.setStart(start);
+            subrangeSorter.setEnd(end);
 
             SubrangeSort::dispatch(column, subrangeSorter);
         }
 
-        NarrowTieRanges narrowTieRanges {._indices = *_indices, ._ranges = _tieRanges};
+        NarrowTieRanges narrowTieRanges(*_indices, _tieRanges);
 
         // Shrink tie ranges
         NarrowRanges::dispatch(column, narrowTieRanges);
@@ -568,11 +620,7 @@ void OrderByProcessor::execute() {
             // No longer need data to execute
             inputPort->setNeedsData(false);
         }
-
-        return;
-    }
-
-    if (_state == State::MERGE_SORTED_RUNS) {
+    } else if (_state == State::MERGE_SORTED_RUNS) {
         merge();
         // @ref _indices now contains total order of all rows from memory
 
@@ -580,15 +628,18 @@ void OrderByProcessor::execute() {
 
          // Reuse this member as a pointer to how far through memory we have emitted
         _nextMemoryStart = 0;
-        return;
-    }
-
-    if (_state == State::EMIT_FROM_MEMORY) {
+    } else if (_state == State::EMIT_FROM_MEMORY) {
          const size_t memoryRowCount = _memory.getLogicalRowCount();
          const size_t remainingToWrite = memoryRowCount - _nextMemoryStart;
 
          if (remainingToWrite == 0) {
-             outputPort->close();
+
+             // Emit an empty chunk if and only if the memory was empty, allowing next
+             // processor to proceed.
+             if (memoryRowCount == 0) {
+                 outputPort->writeData();
+             }
+
              finish();
              return;
          }
@@ -610,9 +661,10 @@ void OrderByProcessor::execute() {
          _nextMemoryStart += rowsToWrite;
 
          if (_nextMemoryStart == memoryRowCount) {
-             outputPort->close();
              finish();
          }
+    } else {
+        throw FatalException("OrderByProcessor was in an invalid state.");
     }
 }
 
