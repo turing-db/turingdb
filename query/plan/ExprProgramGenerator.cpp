@@ -377,7 +377,7 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
 
         Column* argCol = generateExpr(args->front());
 
-        ColumnOperator convOp;
+        ColumnOperator convOp = OP_NOOP;
         Column* resCol = nullptr;
 
         if (funcName == "toInteger") {

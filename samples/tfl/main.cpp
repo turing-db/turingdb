@@ -75,13 +75,13 @@ int main(int argc, const char** argv) {
         "LOAD CSV '" + std::string(csvPath.get())
         + "' WITH HEADERS AS row "
         "RETURN row.station1 AS s1, row.station2 AS s2, "
-        "row.line AS line, row.time AS time";
+        "row.line AS line, row._time AS time";
 
     struct Connection {
         std::string station1;
         std::string station2;
         std::string line;
-        double time;
+        double _time = 0.0;
     };
 
     std::vector<Connection> connections;
@@ -177,8 +177,8 @@ int main(int argc, const char** argv) {
             " line: \"{}\"}}]->({})"
             ",\n({})-[:CONNECTED_TO {{time: {:.1f},"
             " line: \"{}\"}}]->({})",
-            v1, conn.time, conn.line, v2,
-            v2, conn.time, conn.line, v1);
+            v1, conn._time, conn.line, v2,
+            v2, conn._time, conn.line, v1);
         edgeCount += 2;
     }
 
@@ -209,7 +209,7 @@ int main(int argc, const char** argv) {
     // Walk edges (all platforms of s1 <-> all platforms of s2)
     for (const auto& conn : connections) {
         if (conn.line != "Walk") continue;
-        double walkWeight = conn.time + penalty;
+        double walkWeight = conn._time + penalty;
         for (const auto& l1 :
              stationLines[conn.station1]) {
             for (const auto& l2 :
