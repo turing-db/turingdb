@@ -452,6 +452,10 @@ PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
 
     Dataframe* outDf = output->getDataframe();
 
+    if (stream.isEmpty()) {
+        return _builder.getPendingOutputInterface();
+    }
+
     const auto visitor = Overloaded {
         [&](const EntityOutputStream::NodeStream& stream) {
             bioassert(stream._nodeIDsTag.isValid(), "NodeStream does not have a nodeIDsTag");
@@ -461,11 +465,19 @@ PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
             outDf->getColumn(stream._nodeIDsTag)->rename(varName);
         },
         [&](const EntityOutputStream::EdgeStream& stream) {
-            bioassert(stream._edgeIDsTag.isValid(), "EdgeStream does not have a edgeIDsTag");
-            bioassert(outDf->getColumn(stream._edgeIDsTag), "EdgeStream does not have a edgeIDs column");
-
-            _declToColumn[node->getVarDecl()] = stream._edgeIDsTag;
-            outDf->getColumn(stream._edgeIDsTag)->rename(varName);
+            if (stream._pathTag.isValid()) {
+                bioassert(outDf->getColumn(stream._pathTag),
+                          "EdgeStream does not have a path column");
+                _declToColumn[node->getVarDecl()] = stream._pathTag;
+                outDf->getColumn(stream._pathTag)->rename(varName);
+            } else {
+                bioassert(stream._edgeIDsTag.isValid(),
+                          "EdgeStream does not have a edgeIDsTag");
+                bioassert(outDf->getColumn(stream._edgeIDsTag),
+                          "EdgeStream does not have a edgeIDs column");
+                _declToColumn[node->getVarDecl()] = stream._edgeIDsTag;
+                outDf->getColumn(stream._edgeIDsTag)->rename(varName);
+            }
         },
     };
 
@@ -1517,6 +1529,27 @@ PipelineOutputInterface* PipelineGenerator::translateVectorSearchNode(VectorSear
             _declToColumn[idsDecl] = idsCol->getTag();
         }
     }
+
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateBFSExpandOutEdgesNode(BFSExpandOutEdgesNode* node)
+{
+    _builder.addBFSExpandOutEdges(node->getMinHops(), node->getMaxHops());
+
+    const BFSExpandOutEdgesProcessor* proc = dynamic_cast<BFSExpandOutEdgesProcessor*>(_builder.getLastProc());
+    bioassert(proc, "Failed to cast last proc to BFSExpandOutEdgesProcessor");
+
+    const VarDecl* edgeDecl = node->getEdgeDecl();
+    const VarDecl* targetDecl = node->getTargetDecl();
+
+    NamedColumn* pathsCol = proc->getOutputPathsColumn();
+    pathsCol->rename(edgeDecl->getName());
+    _declToColumn[edgeDecl] = pathsCol->getTag();
+
+    NamedColumn* sourceCol = proc->getOutputTargetsColumn();
+    sourceCol->rename(targetDecl->getName());
+    _declToColumn[targetDecl] = sourceCol->getTag();
 
     return _builder.getPendingOutputInterface();
 }

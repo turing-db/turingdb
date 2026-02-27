@@ -37,7 +37,6 @@
 #include "processors/S3PullProcessor.h"
 #include "processors/S3PushProcessor.h"
 #include "processors/ExprEvalProcessor.h"
-#include "processors/ExprProgram.h"
 #include "processors/FilterProcessor.h"
 #include "processors/ShortestPathProcessor.h"
 #include "processors/CreateVectorIndexProcessor.h"
@@ -54,6 +53,8 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnEdgeTypes.h"
+
+#include "GraphPath.h"
 
 #include "dataframe/ColumnTag.h"
 #include "dataframe/NamedColumn.h"
@@ -160,6 +161,7 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
     _matProc->getMaterializeData().addToStep<ColumnNodeIDs>(nodeIDs);
 
     _pendingOutput.updateInterface(&outNodeIDs);
+    _lastProc = proc;
 
     return outNodeIDs;
 }
@@ -194,6 +196,7 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetOutEdges() {
     matData.addToStep<ColumnNodeIDs>(targetNodes);
 
     _pendingOutput.updateInterface(&output);
+    _lastProc = getOutEdges;
 
     return output;
 }
@@ -230,6 +233,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addShortestPath(PipelineOutputInt
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = shortestPath;
     return output;
 }
 
@@ -258,6 +262,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutpu
     duplicateDataframeShape(_mem, _dfMan, leftDf, &cartProd->leftMemory());
     duplicateDataframeShape(_mem, _dfMan, rightDf, &cartProd->rightMemory());
 
+    _lastProc = cartProd;
     return output;
 }
 
@@ -288,6 +293,7 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetInEdges() {
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = getInEdges;
     return output;
 }
 
@@ -318,6 +324,103 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = getEdges;
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandOutEdges(int64_t minHops, int64_t maxHops)
+{
+    auto* proc = BFSExpandOutEdgesProcessor::create(_pipeline, _mem, minHops, maxHops);
+
+    PipelineNodeInputInterface& input = proc->input();
+    PipelineBlockOutputInterface& output = proc->output();
+
+    _pendingOutput.connectTo(input);
+    input.propagateColumns(output);
+
+    Dataframe* outDf = output.getDataframe();
+
+    const NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
+    proc->setOutputIndicesColumn(static_cast<ColumnIndices*>(indices->getColumn()));
+
+    NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(outDf);
+    proc->setOutputTargetsColumn(targetNodes);
+
+    NamedColumn* pathCol = allocColumn<ColumnVector<Path>>(outDf);
+    proc->setOutputPathsColumn(pathCol);
+
+    MaterializeData& matData = _matProc->getMaterializeData();
+    matData.createStep(indices);
+    matData.addToStep<ColumnNodeIDs>(targetNodes);
+    matData.addToStep<ColumnVector<Path>>(pathCol);
+
+    _pendingOutput.updateInterface(&output);
+
+    _lastProc = proc;
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandInEdges(int64_t minHops, int64_t maxHops)
+{
+    auto* proc = BFSExpandInEdgesProcessor::create(_pipeline, _mem, minHops, maxHops);
+
+    PipelineNodeInputInterface& input = proc->input();
+    PipelineBlockOutputInterface& output = proc->output();
+
+    _pendingOutput.connectTo(input);
+    input.propagateColumns(output);
+
+    Dataframe* outDf = output.getDataframe();
+
+    const NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
+    proc->setOutputIndicesColumn(static_cast<ColumnIndices*>(indices->getColumn()));
+
+    NamedColumn* sourceNodes = allocColumn<ColumnNodeIDs>(outDf);
+    proc->setOutputSourcesColumn(sourceNodes);
+
+    NamedColumn* pathCol = allocColumn<ColumnVector<Path>>(outDf);
+    proc->setOutputPathsColumn(pathCol);
+
+    MaterializeData& matData = _matProc->getMaterializeData();
+    matData.createStep(indices);
+    matData.addToStep<ColumnNodeIDs>(sourceNodes);
+    matData.addToStep<ColumnVector<Path>>(pathCol);
+
+    _pendingOutput.updateInterface(&output);
+
+    _lastProc = proc;
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandEdges(int64_t minHops,
+                                                                 int64_t maxHops) {
+    auto* proc = BFSExpandEdgesProcessor::create(_pipeline, _mem, minHops, maxHops);
+
+    PipelineNodeInputInterface& input = proc->input();
+    PipelineBlockOutputInterface& output = proc->output();
+
+    _pendingOutput.connectTo(input);
+    input.propagateColumns(output);
+
+    Dataframe* outDf = output.getDataframe();
+
+    const NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
+    proc->setOutputIndicesColumn(static_cast<ColumnIndices*>(indices->getColumn()));
+
+    NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(outDf);
+    proc->setOutputTargetsColumn(targetNodes);
+
+    NamedColumn* pathCol = allocColumn<ColumnVector<Path>>(outDf);
+    proc->setOutputPathsColumn(pathCol);
+
+    MaterializeData& matData = _matProc->getMaterializeData();
+    matData.createStep(indices);
+    matData.addToStep<ColumnNodeIDs>(targetNodes);
+    matData.addToStep<ColumnVector<Path>>(pathCol);
+
+    _pendingOutput.updateInterface(&output);
+
+    _lastProc = proc;
     return output;
 }
 
@@ -338,6 +441,7 @@ PipelineBuilder::ForkOutputs& PipelineBuilder::addFork(size_t count) {
         output.setStream(input.getStream());
     }
 
+    _lastProc = fork;
     return outputs;
 }
 
@@ -357,6 +461,7 @@ void PipelineBuilder::addLambda(const LambdaProcessor::Callback& callback) {
     LambdaProcessor* lambda = LambdaProcessor::create(_pipeline, callback);
     _pendingOutput.connectTo(lambda->input());
     _pendingOutput.updateInterface(nullptr);
+    _lastProc = lambda;
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addSkip(size_t count) {
@@ -371,6 +476,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addSkip(size_t count) {
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = skip;
     return skip->output();
 }
 
@@ -386,6 +492,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addLimit(size_t count) {
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = limit;
     return limit->output();
 }
 
@@ -405,6 +512,7 @@ PipelineValueOutputInterface& PipelineBuilder::addCount(ColumnTag colTag) {
     count->output().setValue(countColumn);
 
     _pendingOutput.updateInterface(&count->output());
+    _lastProc = count;
     return count->output();
 }
 
@@ -441,6 +549,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = projection;
     return output;
 }
 
@@ -503,12 +612,14 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterfa
 
     _pendingOutput.setInterface(&outInterface);
 
+    _lastProc = join;
     return outInterface;
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {
     LambdaSourceProcessor* source = LambdaSourceProcessor::create(_pipeline, callback);
     _pendingOutput.updateInterface(&source->output());
+    _lastProc = source;
     return source->output();
 }
 
@@ -531,6 +642,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addCallProcedure(const Procedure*
     proc->setInputValues(args);
     proc->allocReturnValues(_mem, _dfMan, yield);
 
+    _lastProc = proc;
     return output;
 }
 
@@ -545,6 +657,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addChangeOp(ChangeOp op) {
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = proc;
     return output;
 }
 
@@ -554,6 +667,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addCommit() {
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = proc;
     return output;
 }
 
@@ -575,6 +689,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addLambdaTransform(const LambdaTr
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = transf;
     return output;
 }
 
@@ -592,6 +707,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addExprEval(ExprProgram* exprProg
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = proc;
     return output;
 }
 
@@ -614,6 +730,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetLabelSetID() {
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = proc;
     return output;
 }
 
@@ -635,6 +752,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetEdgeTypeID() {
     matData.addToStep<ColumnVector<EdgeTypeID>>(edgeTypeIDValues);
 
     _pendingOutput.updateInterface(&output);
+    _lastProc = proc;
     return output;
 }
 
@@ -651,6 +769,7 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodesByLabel(const LabelSet
 
     _pendingOutput.updateInterface(&outNodeIDs);
 
+    _lastProc = proc;
     return outNodeIDs;
 }
 
@@ -666,6 +785,7 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadGraph(std::string_view gra
 
     _pendingOutput.setInterface(&output);
 
+    _lastProc = loadGraph;
     return output;
 }
 
@@ -681,6 +801,7 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadGML(std::string_view graph
 
     _pendingOutput.setInterface(&output);
 
+    _lastProc = loadGML;
     return output;
 }
 
@@ -696,6 +817,7 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadJsonl(std::string_view gra
 
     _pendingOutput.setInterface(&output);
 
+    _lastProc = proc;
     return output;
 }
 
@@ -712,6 +834,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addFilter(PredicateProgram* predP
     output.setStream(_pendingOutput.getInterface()->getStream());
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = filterProc;
     return output;
 }
 
@@ -746,6 +869,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetProperties(PropertyType pr
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = getProps;
     return output;
 }
 
@@ -776,6 +900,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(ColumnT
 
     _pendingOutput.updateInterface(&output);
 
+    _lastProc = getProps;
     return output;
 }
 
@@ -860,6 +985,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
     }
 
     _pendingOutput.updateInterface(&output);
+    _lastProc = processor;
     return output;
 }
 
@@ -874,6 +1000,7 @@ PipelineValueOutputInterface& PipelineBuilder::addListGraph() {
 
     _pendingOutput.setInterface(&output);
 
+    _lastProc = loadGraph;
     return output;
 }
 
@@ -888,6 +1015,7 @@ PipelineValueOutputInterface& PipelineBuilder::addCreateGraph(std::string_view g
 
     _pendingOutput.setInterface(&output);
 
+    _lastProc = loadGraph;
     return output;
 }
 
@@ -915,6 +1043,7 @@ void PipelineBuilder::addS3Connect(std::string_view accessId,
 
     PipelineValueOutputInterface& output = connectProc->output();
     _pendingOutput.setInterface(&output);
+    _lastProc = connectProc;
 }
 
 void PipelineBuilder::addS3Pull(std::string_view s3Bucket,
@@ -930,6 +1059,7 @@ void PipelineBuilder::addS3Pull(std::string_view s3Bucket,
     PipelineValueOutputInterface& output = pullProc->output();
 
     _pendingOutput.setInterface(&output);
+    _lastProc = pullProc;
 }
 
 void PipelineBuilder::addS3Push(std::string_view s3Bucket,
@@ -945,6 +1075,7 @@ void PipelineBuilder::addS3Push(std::string_view s3Bucket,
     PipelineValueOutputInterface& output = pushProc->output();
 
     _pendingOutput.setInterface(&output);
+    _lastProc = pushProc;
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addShowProcedures() {
@@ -963,6 +1094,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addShowProcedures() {
 
     _pendingOutput.setInterface(&output);
 
+    _lastProc = proc;
     return output;
 }
 

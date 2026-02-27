@@ -33,6 +33,9 @@ set(processors_sources
     processors/LambdaTransformProcessor.cpp
     processors/CartesianProductProcessor.cpp
     processors/ShortestPathProcessor.cpp
+    processors/BFSExpandOutEdgesProcessor.cpp
+    processors/BFSExpandInEdgesProcessor.cpp
+    processors/BFSExpandEdgesProcessor.cpp
     processors/HashJoinProcessor.cpp
     processors/WriteProcessor.cpp
     processors/GetLabelSetIDProcessor.cpp

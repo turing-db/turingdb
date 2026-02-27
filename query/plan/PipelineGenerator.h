@@ -157,4 +157,5 @@ private:
     PipelineOutputInterface* translateInstallExtensionNode(InstallExtensionNode* node);
     PipelineOutputInterface* translateShowExtensionsNode(ShowExtensionsNode* node);
 };
+
 }

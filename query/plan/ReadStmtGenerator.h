@@ -54,9 +54,9 @@ public:
     void generatePatternElement(const PatternElement* element);
 
     VarNode* generatePatternElementOrigin(const NodePattern* origin);
-    VarNode* generatePatternElementEdge(VarNode* prevNode, const EdgePattern* edge);
-    VarNode* generatePatternElementTarget(VarNode* prevNode, const NodePattern* target);
-    VarNode* generatePatternElementVariableLengthPath(VarNode* prevNode, const EdgePattern* edge);
+    VarNode* generatePatternElementEdge(PlanGraphNode* prevNode, const EdgePattern* edge);
+    VarNode* generatePatternElementTarget(PlanGraphNode* prevNode, const NodePattern* target, bool generateGetTarget = true);
+    PlanGraphNode* generatePatternElementVariableLengthPath(PlanGraphNode* prevNode, const EdgePattern* edge, const NodePattern* target);
 
     void unwrapWhereExpr(Expr*);
 

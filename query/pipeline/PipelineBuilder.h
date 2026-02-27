@@ -76,6 +76,14 @@ public:
     PipelineEdgeOutputInterface& addGetInEdges();
     PipelineEdgeOutputInterface& addGetEdges();
 
+    // BFS expand edges (variable-length paths)
+    PipelineBlockOutputInterface& addBFSExpandOutEdges(int64_t minHops,
+                                                       int64_t maxHops);
+    PipelineBlockOutputInterface& addBFSExpandInEdges(int64_t minHops,
+                                                      int64_t maxHops);
+    PipelineBlockOutputInterface& addBFSExpandEdges(int64_t minHops,
+                                                    int64_t maxHops);
+
     PipelineOutputInterface& projectEdgesOnOtherIDs() {
         _pendingOutput.projectEdgesOnOtherIDs();
         return *_pendingOutput.getInterface();
@@ -224,11 +232,14 @@ public:
 
     void setOutputDataframe(const Dataframe* df);
 
+    Processor* getLastProc() const { return _lastProc; }
+
 private:
     LocalMemory* _mem {nullptr};
     PipelineV2* _pipeline {nullptr};
     DataframeManager* _dfMan {nullptr};
     PendingOutputView _pendingOutput;
+    Processor* _lastProc {nullptr};
     MaterializeProcessor* _matProc {nullptr};
 
     template <typename ColumnType>

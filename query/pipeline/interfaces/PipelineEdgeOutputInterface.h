@@ -33,6 +33,10 @@ public:
                                                         _edgeTypes->getTag());
     }
 
+    void setPathTag(ColumnTag tag) {
+        _stream.setEdgePathTag(tag);
+    }
+
     void setIndices(NamedColumn* indices) { _indices = indices; }
 
     NamedColumn* getIndices() const { return _indices; }
