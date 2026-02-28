@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "Column.h"
@@ -11,6 +12,7 @@ namespace db {
 class ColumnStringTable : public Column {
 public:
     using StringColumn = ColumnVector<std::string>;
+    using Headers = std::vector<std::string>;
 
     ColumnStringTable();
     ~ColumnStringTable() override;
@@ -20,8 +22,12 @@ public:
     size_t size() const override { return getRowCount(); }
 
     StringColumn* getFieldColumn(size_t index) const { return _columns[index]; }
+    StringColumn* findFieldByHeader(std::string_view name) const;
 
     void addFieldColumn(StringColumn* col) { _columns.push_back(col); }
+
+    void setHeaders(Headers& headers);
+    const Headers& getHeaders() const { return _headers; }
 
     void clear();
     void assign(const Column* other) override;
@@ -41,6 +47,7 @@ public:
 private:
     static constexpr auto _staticKind = ColumnKind::code<ColumnStringTable>();
     std::vector<StringColumn*> _columns;
+    Headers _headers;
 };
 
 }

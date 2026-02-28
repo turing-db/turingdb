@@ -2,7 +2,6 @@
 
 #include "QueryCallbacks.h"
 
-#include <string>
 #include <vector>
 
 #include "PipelineBuilder.h"
@@ -95,9 +94,6 @@ public:
     const VarColumnMap& varColMap() const { return _declToColumn; }
     LocalMemory& memory() { return *_mem; }
     GraphView view() { return _view; }
-    const std::vector<std::string>& getCSVHeaders() const {
-        return _csvHeaders;
-    }
 
 private:
     const PlanGraph* _graph {nullptr};
@@ -157,7 +153,5 @@ private:
     PipelineOutputInterface* translateOrderByNode(OrderByNode* node);
     PipelineOutputInterface* translateLoadCommit(LoadCommitNode* node);
 
-    std::vector<std::string> _csvHeaders;
-    size_t _csvFieldCount {0};
 };
 }
