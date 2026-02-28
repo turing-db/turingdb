@@ -1,6 +1,8 @@
 #include "ColumnStringTable.h"
 
 #include <ostream>
+#include <string_view>
+#include <utility>
 
 #include "BioAssert.h"
 
@@ -44,6 +46,19 @@ void ColumnStringTable::assignFromLine(const Column* other,
     for (size_t i = 0; i < _columns.size(); i++) {
         _columns[i]->assignFromLine(src->_columns[i], startLine, rowCount);
     }
+}
+
+void ColumnStringTable::setHeaders(Headers& headers) {
+    _headers.swap(headers);
+}
+
+ColumnStringTable::StringColumn* ColumnStringTable::findFieldByHeader(std::string_view name) const {
+    for (size_t i = 0; i < _headers.size(); i++) {
+        if (_headers[i] == name) {
+            return _columns[i];
+        }
+    }
+    return nullptr;
 }
 
 void ColumnStringTable::dump(std::ostream& out) const {

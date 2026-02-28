@@ -1426,34 +1426,33 @@ PipelineOutputInterface* PipelineGenerator::translateLoadCSVNode(LoadCSVNode* no
     CSVFileInfo fileInfo;
     CSVParser::peekFileStructure(filePath, node->hasHeaders(), fileInfo);
 
-    _csvHeaders = fileInfo._headers;
-    _csvFieldCount = fileInfo._fieldCount;
+    const size_t fieldCount = fileInfo._fieldCount;
 
     // Allocate ColumnStringTable with field columns
     auto* table = _mem->alloc<ColumnStringTable>();
-    for (size_t i = 0; i < _csvFieldCount; i++) {
+    table->setHeaders(fileInfo._headers);
+    for (size_t i = 0; i < fieldCount; i++) {
         table->addFieldColumn(_mem->alloc<ColumnStringTable::StringColumn>());
     }
 
-    const CSVErrorMode errorMode =
-        node->skipOnError() ? CSVErrorMode::Skip : CSVErrorMode::Fail;
+    const CSVErrorMode errorMode = node->skipOnError() ? CSVErrorMode::Skip : CSVErrorMode::Fail;
 
     auto* csvSource = CSVSourceProcessor::create(_pipeline,
                                                  filePath,
                                                  node->hasHeaders(),
                                                  errorMode,
-                                                 _csvFieldCount,
+                                                 fieldCount,
                                                  table);
 
     // Register the ColumnStringTable in the output dataframe
     PipelineBlockOutputInterface& output = csvSource->output();
     Dataframe* outDf = output.getDataframe();
     DataframeManager* dfMan = _pipeline->getDataframeManager();
-    const ColumnTag tag = dfMan->allocTag();
-    NamedColumn* namedCol = NamedColumn::create(dfMan, table, tag);
-    outDf->addColumn(namedCol);
+    const ColumnTag stringTblTag = dfMan->allocTag();
+    NamedColumn* stringTblCol = NamedColumn::create(dfMan, table, stringTblTag);
+    outDf->addColumn(stringTblCol);
 
-    _declToColumn[node->getAliasDecl()] = tag;
+    _declToColumn[node->getAliasDecl()] = stringTblTag;
 
     _builder.getPendingOutput().setInterface(&output);
     return _builder.getPendingOutputInterface();

@@ -222,15 +222,11 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
         auto* table = static_cast<ColumnStringTable*>(tableCol->getColumn());
 
         const std::string_view headerName = propExpr->getPropName();
-        const auto& headers = _gen->getCSVHeaders();
-
-        for (size_t i = 0; i < headers.size(); i++) {
-            if (headers[i] == headerName) {
-                return table->getFieldColumn(i);
-            }
+        Column* field = table->findFieldByHeader(headerName);
+        if (!field) {
+            throw PlannerException(fmt::format("CSV header '{}' not found", headerName));
         }
-
-        throw PlannerException(fmt::format("CSV header '{}' not found", headerName));
+        return field;
     }
 
     const VarDecl* exprVarDecl = propExpr->getExprVarDecl();
