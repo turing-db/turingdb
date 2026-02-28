@@ -85,7 +85,6 @@ Please read `CODING_STYLE.md` for guidelines before any new work.
 
 Key points:
 **Formatting:**
-- 90 char max line length (ideal ~80)
 - 4 spaces indentation, no tabs
 - Opening brace on same line (except constructors)
 - `public`/`private` aligned with `class`

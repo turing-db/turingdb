@@ -51,9 +51,6 @@ gh_output "skip=false"
 git show "HEAD:CODING_STYLE.md" > /tmp/CODING_STYLE.md 2>/dev/null \
     || echo "No CODING_STYLE.md found." > /tmp/CODING_STYLE.md
 
-git show "HEAD:REVIEW.md" > /tmp/REVIEW.md 2>/dev/null \
-    || echo "No REVIEW.md found." > /tmp/REVIEW.md
-
 # ── 3. Build review prompt ──────────────────────────────────────────
 cat > /tmp/review_prompt.txt << 'PROMPT_HEADER'
 You are an expert C++ code reviewer. Review the following diff against the
@@ -61,7 +58,7 @@ coding style guide and the review checklist provided below.
 
 RULES:
 - Only flag lines that were ADDED in the diff (lines starting with +).
-- For each violation, cite the specific rule from CODING_STYLE.md or REVIEW.md.
+- For each violation, cite the specific rule from CODING_STYLE.md.
 - Also flag consistency issues: e.g. switch statements where cases mix
 different termination styles (some use break, others return). These are
 valid findings even if they are not purely formatting-related.
@@ -122,7 +119,7 @@ OUTPUT FORMAT (follow these three phases in order):
 
 2. <review> — Re-examine every candidate from the analysis. For each one,
    verify that (a) the line was actually ADDED in the diff (starts with +),
-   and (b) the cited rule exists in CODING_STYLE.md or REVIEW.md.
+   and (b) the cited rule exists in CODING_STYLE.md.
    Only drop a candidate if it is clearly a false positive — i.e. the rule
    does not actually apply to the flagged code. When in doubt, keep it.
 
@@ -144,11 +141,6 @@ PROMPT_HEADER
     echo "## CODING_STYLE.md"
     echo '```'
     cat /tmp/CODING_STYLE.md
-    echo '```'
-    echo ""
-    echo "## REVIEW.md"
-    echo '```'
-    cat /tmp/REVIEW.md
     echo '```'
     echo ""
     echo "## Diff to review"

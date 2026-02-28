@@ -23,7 +23,6 @@ Remy Boutonnet as the main designer and maintainer of TuringDB provides the opin
 
 ### Line length
 
-The preferred maximum line length is around 90 characters, with the objective to keep lines short and as readable as possible.
 IMPORTANT: do not overwrap lines just to satisfy the line length. Code esthetics always comes first.
 Never split a single simple statement across multiple lines just to stay under the limit. A slightly long but readable line is always better than an ugly wrapped one.
 
