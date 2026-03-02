@@ -78,13 +78,15 @@ void GetPropertiesProcessor<Entity, T>::reset() {
 
 template <EntityType Entity, SupportedType T>
 void GetPropertiesProcessor<Entity, T>::execute() {
+    reset();
     _propWriter->fill(_ctxt->getChunkSize());
 
-    // The GetPropertiesProcessor always finishes in one step
-    _input.getPort()->consume();
-    _output.getPort()->writeData();
+    if (!_propWriter->isValid()) {
+        _input.getPort()->consume();
+        finish();
+    }
 
-    finish();
+    _output.getPort()->writeData();
 }
 
 template <EntityType Entity, SupportedType T>
