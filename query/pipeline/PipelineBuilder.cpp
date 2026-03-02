@@ -55,6 +55,7 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnEdgeTypes.h"
+#include "columns/ColumnDispatcher.h"
 
 #include "dataframe/ColumnTag.h"
 #include "dataframe/NamedColumn.h"
@@ -63,6 +64,12 @@
 using namespace db;
 
 namespace {
+
+template <typename T>
+struct RemoveOptional { using type = T; };
+
+template <typename T>
+struct RemoveOptional<std::optional<T>> { using type = T; };
 
 void populateStringTableShape(LocalMemory* mem,
                               Column* dest,
@@ -530,32 +537,48 @@ PipelineBlockOutputInterface& PipelineBuilder::addOrderBy(std::span<const OrderB
 PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterface* rhs,
                                                            ColumnTag leftJoinKey,
                                                            ColumnTag rightJoinKey) {
-    HashJoinProcessor* join = HashJoinProcessor::create(_pipeline,
-                                                        leftJoinKey,
-                                                        rightJoinKey);
+    const Dataframe* pendingDf = _pendingOutput.getDataframe();
+    Column* keyCol = pendingDf->getColumn(leftJoinKey)->getColumn();
 
-    _pendingOutput.connectTo(join->leftInput());
-    rhs->connectTo(join->rightInput());
+    return dispatchColumnVector(keyCol, [&](auto* typedCol) -> PipelineBlockOutputInterface& {
+        using ValueType = typename std::decay_t<decltype(*typedCol)>::ValueType;
+        using Key = typename RemoveOptional<ValueType>::type;
 
-    const Dataframe* leftDf = join->leftInput().getDataframe();
-    const Dataframe* rightDf = join->rightInput().getDataframe();
+        if constexpr (std::is_same_v<Key, NodeID> ||
+                      std::is_same_v<Key, int64_t> ||
+                      std::is_same_v<Key, uint64_t> ||
+                      std::is_same_v<Key, double> ||
+                      std::is_same_v<Key, std::string_view>) {
+            auto* join = HashJoinProcessor<Key>::create(_pipeline, leftJoinKey, rightJoinKey);
 
-    PipelineBlockOutputInterface& outInterface = join->output();
-    Dataframe* outDf = outInterface.getDataframe();
+            _pendingOutput.connectTo(join->leftInput());
+            rhs->connectTo(join->rightInput());
 
-    // need to change output shape
-    createHashJoinDataFrameShape(_mem,
-                                 _dfMan,
-                                 leftDf,
-                                 rightDf,
-                                 outDf,
-                                 leftJoinKey,
-                                 rightJoinKey);
+            const Dataframe* leftDf = join->leftInput().getDataframe();
+            const Dataframe* rightDf = join->rightInput().getDataframe();
 
-    _pendingOutput.setInterface(&outInterface);
+            PipelineBlockOutputInterface& outInterface = join->output();
+            Dataframe* outDf = outInterface.getDataframe();
 
-    _lastProc = join;
-    return outInterface;
+            createHashJoinDataFrameShape(_mem,
+                                         _dfMan,
+                                         leftDf,
+                                         rightDf,
+                                         outDf,
+                                         leftJoinKey,
+                                         rightJoinKey);
+
+            auto joinTag = outDf->cols().back()->getTag();
+
+            outInterface.setStream(EntityOutputStream::createNodeStream(joinTag));
+            _pendingOutput.setInterface(&outInterface);
+
+            _lastProc = join;
+            return outInterface;
+        } else {
+            throw PipelineException("unsupported column kind for hash join");
+        }
+    });
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {

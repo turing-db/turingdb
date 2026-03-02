@@ -26,35 +26,56 @@ void fillOutputColumn(T* outputColumn,
                 (*inputColumn)[rowIndex]);
 }
 
+template <typename Key>
+bool hasKey(Column* col, size_t index, bool isOptional) {
+    if (!isOptional) {
+        return true;
+    }
+    return (*static_cast<ColumnVector<std::optional<Key>>*>(col))[index].has_value();
+}
+
 template <typename Key, typename Value>
-auto findInMap(const std::unordered_map<Key, Value>& map, Column* col, size_t index) {
-    const auto it = map.find((*static_cast<ColumnVector<Key>*>(col))[index]);
-    return it;
+auto findInMap(const std::unordered_map<Key, Value>& map, Column* col, size_t index, bool isOptional) {
+    if (isOptional) {
+        const auto& val = (*static_cast<ColumnVector<std::optional<Key>>*>(col))[index];
+        if (!val.has_value()) {
+            return map.end();
+        }
+        return map.find(*val);
+    }
+    return map.find((*static_cast<ColumnVector<Key>*>(col))[index]);
 }
 
 template <typename Key>
 std::vector<RowOffset>& getMap(std::unordered_map<Key, std::vector<RowOffset>>& map,
                                Column* col,
-                               size_t index) {
+                               size_t index,
+                               bool isOptional) {
+    if (isOptional) {
+        return map[*(*static_cast<ColumnVector<std::optional<Key>>*>(col))[index]];
+    }
     return map[(*static_cast<const ColumnVector<Key>*>(col))[index]];
 }
 
 }
 
-std::string HashJoinProcessor::describe() const {
+template <typename Key>
+std::string HashJoinProcessor<Key>::describe() const {
     return fmt::format("HashJoinProcessor @={}", fmt::ptr(this));
 }
 
-HashJoinProcessor::HashJoinProcessor(const ColumnTag leftJoinKey,
-                                     const ColumnTag rightJoinKey)
+template <typename Key>
+HashJoinProcessor<Key>::HashJoinProcessor(const ColumnTag leftJoinKey,
+                                          const ColumnTag rightJoinKey)
     : _leftJoinKey(leftJoinKey),
     _rightJoinKey(rightJoinKey)
 {
 }
 
-HashJoinProcessor* HashJoinProcessor::create(PipelineV2* pipeline,
-                                             const ColumnTag leftJoinKey,
-                                             const ColumnTag rightJoinKey) {
+template <typename Key>
+HashJoinProcessor<Key>* HashJoinProcessor<Key>::create(PipelineV2* pipeline,
+                                                       const ColumnTag leftJoinKey,
+                                                       const ColumnTag rightJoinKey) {
     HashJoinProcessor* hashJoin = new HashJoinProcessor(leftJoinKey, rightJoinKey);
 
     PipelineInputPort* leftInput = PipelineInputPort::create(pipeline, hashJoin);
@@ -76,7 +97,8 @@ HashJoinProcessor* HashJoinProcessor::create(PipelineV2* pipeline,
     return hashJoin;
 }
 
-void HashJoinProcessor::prepare(ExecutionContext* ctxt) {
+template <typename Key>
+void HashJoinProcessor<Key>::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
     const auto* leftDf = _leftInput.getDataframe();
@@ -92,14 +114,25 @@ void HashJoinProcessor::prepare(ExecutionContext* ctxt) {
     //the size of the output dataframe
     _rightRowLen = outDf->size() - _leftRowLen - 1;
 
+    // Detect if the join key columns are optional (nullable)
+    auto* leftKeyCol = leftDf->getColumn(_leftJoinKey)->getColumn();
+    _isLeftOptionalKey = (leftKeyCol->getKind() == ColumnVector<std::optional<Key>>::staticKind());
+
+    const auto* rightDf = _rightInput.getDataframe();
+    auto* rightKeyCol = rightDf->getColumn(_rightJoinKey)->getColumn();
+    _isRightOptionalKey = (rightKeyCol->getKind() == ColumnVector<std::optional<Key>>::staticKind());
+
     markAsPrepared();
 }
-void HashJoinProcessor::reset() {
+
+template <typename Key>
+void HashJoinProcessor<Key>::reset() {
     _hasWritten = false;
     markAsReset();
 }
 
-void HashJoinProcessor::execute() {
+template <typename Key>
+void HashJoinProcessor<Key>::execute() {
     size_t rowsRemaining = _ctxt->getChunkSize();
     size_t totalRowsInserted = 0;
 
@@ -158,7 +191,7 @@ void HashJoinProcessor::execute() {
 
         // calculate how many hash hits we get for the input so we can allocate once
         for (size_t i = _leftInputIdx; i < leftCol->size(); ++i) {
-            if (const auto it = findInMap(_rightMap, leftCol, i); it != _rightMap.end()) {
+            if (const auto it = findInMap(_rightMap, leftCol, i, _isLeftOptionalKey); it != _rightMap.end()) {
                 const auto& rows = it->second;
                 totalSizeIncrease += rows.size();
             }
@@ -209,7 +242,7 @@ void HashJoinProcessor::execute() {
         size_t totalSizeIncrease = 0;
         // calculate total size of new additions from hashes on the right column and allocate once.-
         for (size_t i = _rightInputIdx; i < rightCol->size(); ++i) {
-            if (const auto it = findInMap(_leftMap, rightCol, i); it != _leftMap.end()) {
+            if (const auto it = findInMap(_leftMap, rightCol, i, _isRightOptionalKey); it != _leftMap.end()) {
                 const auto& rows = it->second;
                 totalSizeIncrease += rows.size();
             }
@@ -261,15 +294,21 @@ void HashJoinProcessor::execute() {
     }
 }
 
-void HashJoinProcessor::processLeftStream(size_t& rowsRemaining,
-                                          size_t& totalRowsInserted) {
+template <typename Key>
+void HashJoinProcessor<Key>::processLeftStream(size_t& rowsRemaining,
+                                               size_t& totalRowsInserted) {
     const Dataframe* leftDf = _leftInput.getDataframe();
     Dataframe* outDf = _output.getDataframe();
 
     auto* leftCol = leftDf->getColumn(_leftJoinKey)->getColumn();
 
     for (; _leftInputIdx < leftCol->size(); ++_leftInputIdx) {
-        const auto it = findInMap(_rightMap, leftCol, _leftInputIdx);
+        // Skip null keys - NULL != NULL semantics
+        if (!hasKey<Key>(leftCol, _leftInputIdx, _isLeftOptionalKey)) {
+            continue;
+        }
+
+        const auto it = findInMap(_rightMap, leftCol, _leftInputIdx, _isLeftOptionalKey);
         if (it != _rightMap.end()) {
             const auto& rows = it->second;
             const auto& cols = leftDf->cols();
@@ -337,7 +376,8 @@ void HashJoinProcessor::processLeftStream(size_t& rowsRemaining,
         // Create a hash table entry for the input
         auto& offsetVec = getMap(_leftMap,
                                  leftCol,
-                                 _leftInputIdx);
+                                 _leftInputIdx,
+                                 _isLeftOptionalKey);
         offsetVec.emplace_back(_store.insertRow(leftDf,
                                                 _leftJoinKey,
                                                 _leftRowLen,
@@ -359,8 +399,9 @@ void HashJoinProcessor::processLeftStream(size_t& rowsRemaining,
     }
 }
 
-void HashJoinProcessor::processRightStream(size_t& rowsRemaining,
-                                           size_t& totalRowsInserted) {
+template <typename Key>
+void HashJoinProcessor<Key>::processRightStream(size_t& rowsRemaining,
+                                                size_t& totalRowsInserted) {
     const Dataframe* rightDf = _rightInput.getDataframe();
     const Dataframe* leftDf = _leftInput.getDataframe();
     Dataframe* outDf = _output.getDataframe();
@@ -368,7 +409,12 @@ void HashJoinProcessor::processRightStream(size_t& rowsRemaining,
     auto* rightCol = rightDf->getColumn(_rightJoinKey)->getColumn();
 
     for (; _rightInputIdx < rightDf->getLogicalRowCount(); ++_rightInputIdx) {
-        const auto it = findInMap(_leftMap, rightCol, _rightInputIdx);
+        // Skip null keys - NULL != NULL semantics
+        if (!hasKey<Key>(rightCol, _rightInputIdx, _isRightOptionalKey)) {
+            continue;
+        }
+
+        const auto it = findInMap(_leftMap, rightCol, _rightInputIdx, _isRightOptionalKey);
         if (it != _leftMap.end()) {
             const auto& rows = it->second;
             const auto& cols = rightDf->cols();
@@ -389,7 +435,7 @@ void HashJoinProcessor::processRightStream(size_t& rowsRemaining,
             size_t columnOffset = _leftRowLen;
             for (size_t j = 0; j < rightDf->size(); ++j) {
                 //Skip Columns present in the left input and the join key
-                if (leftDf->getColumn(cols[j]->getTag()) != nullptr || 
+                if (leftDf->getColumn(cols[j]->getTag()) != nullptr ||
                     cols[j]->getTag() == _rightJoinKey) {
                     continue;
                 }
@@ -435,7 +481,8 @@ void HashJoinProcessor::processRightStream(size_t& rowsRemaining,
 
         auto& offsetVec = getMap(_rightMap,
                                  rightCol,
-                                 _rightInputIdx);
+                                 _rightInputIdx,
+                                 _isRightOptionalKey);
 
         offsetVec.emplace_back(_store.insertRow(rightDf,
                                                 leftDf,
@@ -456,8 +503,9 @@ void HashJoinProcessor::processRightStream(size_t& rowsRemaining,
     }
 }
 
-void HashJoinProcessor::flushRightStream(size_t& rowsRemaining,
-                                         size_t& totalRowsInserted) {
+template <typename Key>
+void HashJoinProcessor<Key>::flushRightStream(size_t& rowsRemaining,
+                                              size_t& totalRowsInserted) {
     const Dataframe* rightDf = _rightInput.getDataframe();
     const Dataframe* leftDf = _leftInput.getDataframe();
     Dataframe* outDf = _output.getDataframe();
@@ -528,8 +576,9 @@ void HashJoinProcessor::flushRightStream(size_t& rowsRemaining,
     rowsRemaining -= rowsToCopy;
 }
 
-void HashJoinProcessor::flushLeftStream(size_t& rowsRemaining,
-                                        size_t& totalRowsInserted) {
+template <typename Key>
+void HashJoinProcessor<Key>::flushLeftStream(size_t& rowsRemaining,
+                                             size_t& totalRowsInserted) {
     const Dataframe* leftDf = _leftInput.getDataframe();
     Dataframe* outDf = _output.getDataframe();
 
@@ -593,3 +642,9 @@ void HashJoinProcessor::flushLeftStream(size_t& rowsRemaining,
 
     rowsRemaining -= rowsToCopy;
 }
+
+template class HashJoinProcessor<NodeID>;
+template class HashJoinProcessor<int64_t>;
+template class HashJoinProcessor<uint64_t>;
+template class HashJoinProcessor<double>;
+template class HashJoinProcessor<std::string_view>;
