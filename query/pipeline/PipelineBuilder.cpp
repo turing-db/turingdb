@@ -3,6 +3,7 @@
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
+#include "processors/LoadCommitProcessor.h"
 #include "processors/CallProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
 #include "processors/HashJoinProcessor.h"
@@ -546,6 +547,13 @@ PipelineBlockOutputInterface& PipelineBuilder::addCommit() {
 
     _pendingOutput.updateInterface(&output);
 
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addLoadCommit(std::string_view hashStr) {
+    LoadCommitProcessor* proc = LoadCommitProcessor::create(_pipeline, hashStr);
+    auto& output = proc->output();
+    _pendingOutput.updateInterface(&output);
     return output;
 }
 

@@ -110,6 +110,7 @@ void CypherAnalyzer::analyze() {
             case QueryCommand::Kind::SHOW_PROCEDURES_QUERY:
             case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
             case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
+            case QueryCommand::Kind::LOAD_COMMIT_QUERY:
             break;
 
             default:

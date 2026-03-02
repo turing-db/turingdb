@@ -61,6 +61,7 @@
     #include "LoadGraphQuery.h"
     #include "LoadGMLQuery.h"
     #include "LoadJsonlQuery.h"
+    #include "LoadCommitQuery.h"
     #include "ShowProceduresQuery.h"
     #include "stmt/LoadCSVStmt.h"
     #include "CreateVectorIndexQuery.h"
@@ -319,6 +320,7 @@
 %type<db::LoadGraphQuery*> loadGraph
 %type<db::LoadGMLQuery*> loadGML
 %type<db::LoadJsonlQuery*> loadJsonl
+%type<db::LoadCommitQuery*> loadCommitQuery
 %type<db::Stmt*> readingStatement
 %type<db::Stmt*> updatingStatement
 %type<db::StmtContainer*> readingStatements
@@ -380,6 +382,7 @@ singleQuery
     | createGraphQuery { $$ = $1; }
     | loadGML { $$ = $1; }
     | loadJsonl { $$ = $1; }
+    | loadCommitQuery { $$ = $1; }
     | s3ConnectQuery { $$ = $1; }
     | s3TransferQuery { $$ = $1; }
     | showProceduresQuery { $$ = $1; }
@@ -454,6 +457,9 @@ vectorSearchSt
         $$->setYield($8);
         LOC($$, @$);
       }
+
+loadCommitQuery
+    : LOAD COMMIT STRING_LITERAL { $$ = LoadCommitQuery::create(ast, $3); LOC($$, @$);}
     ;
 
 createGraphQuery

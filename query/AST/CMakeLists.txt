@@ -53,6 +53,7 @@ set(ast_sources
     CreateGraphQuery.cpp
     LoadGMLQuery.cpp
     LoadJsonlQuery.cpp
+    LoadCommitQuery.cpp
     S3ConnectQuery.cpp
     S3TransferQuery.cpp
     ShowProceduresQuery.cpp

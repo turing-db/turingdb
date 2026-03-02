@@ -47,8 +47,28 @@ bool GraphComparator::same(const Graph& a, const Graph& b) {
 
         size_t index = 0;
         while (commitA != nullptr && commitB != nullptr) {
-            if (!CommitComparator::same(commitA, commitB)) {
-                spdlog::error("Graph A commit at index {} differs from Graph B commit.",
+            if (commitA->hasData() && commitB->hasData()) {
+                if (!CommitComparator::same(commitA, commitB)) {
+                    spdlog::error("Graph A commit at index {} differs from Graph B commit.",
+                                  index);
+                    return false;
+                }
+            }
+            
+            if(commitA->getNumEdges() != commitB->getNumEdges()) {
+                spdlog::error("At Index {} commitA and commitB have different number of edges",
+                              index);
+                return false;
+            }
+
+            if(commitA->getNumNodes() != commitB->getNumNodes()) {
+                spdlog::error("At Index {} commitA and commitB have different number of nodes",
+                              index);
+                return false;
+            }
+
+            if(commitA->getNumDataParts() != commitB->getNumDataParts()) {
+                spdlog::error("At Index {} commitA and commitB have different number of dataparts",
                               index);
                 return false;
             }

@@ -95,6 +95,8 @@ enum class DumpErrorType : uint8_t {
 
     COULD_NOT_READ_VECTOR,
 
+    COMMIT_HASH_NOT_FOUND,
+
     _SIZE
 };
 
@@ -168,7 +170,8 @@ using DumpErrorTypeDescription = EnumToString<DumpErrorType>::Create<
     EnumStringPair<DumpErrorType::COULD_NOT_READ_STR_PROP_INDEXER, "Could not read entity string property indexer">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_JOURNAL, "Could not read commit journal">,
     EnumStringPair<DumpErrorType::COULD_NOT_READ_TOMBSTONES, "Could not read commit tombstones">,
-    EnumStringPair<DumpErrorType::COULD_NOT_READ_VECTOR, "Could not read vector">>;
+    EnumStringPair<DumpErrorType::COULD_NOT_READ_VECTOR, "Could not read vector">,
+    EnumStringPair<DumpErrorType::COMMIT_HASH_NOT_FOUND, "Commit hash not found">>;
 
 class DumpError {
 public:

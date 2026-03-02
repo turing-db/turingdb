@@ -63,9 +63,11 @@ void SimpleGraph::findOutEdges(Graph* graph,
     }
 }
 
-void SimpleGraph::createSimpleGraph(Graph* graph) {
+void SimpleGraph::createSimpleGraph(Graph* graph, bool changeName) {
     GraphWriter writer(graph);
-    writer.setName("simpledb");
+    if (changeName) {
+        writer.setName("simpledb");
+    }
 
     const auto findNodeIDInWriter = [&](std::string_view nodeName) -> NodeID {
         const auto transaction = writer.openWriteTransaction();

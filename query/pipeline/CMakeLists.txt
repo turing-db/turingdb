@@ -13,6 +13,7 @@ set(processors_sources
     processors/CallProcedureProcessor.cpp
     processors/ChangeProcessor.cpp
     processors/CommitProcessor.cpp
+    processors/LoadCommitProcessor.cpp
     processors/ScanNodesProcessor.cpp
     processors/ScanNodesByLabelProcessor.cpp
     processors/GetInEdgesProcessor.cpp

@@ -8,6 +8,8 @@
 
 #include "JobSystem.h"
 #include "Graph.h"
+#include "dump/CommitLoader.h"
+#include "dump/DumpResult.h"
 #include "CommitView.h"
 #include "mergers/DataPartMerger.h"
 #include "writers/DataPartBuilder.h"
@@ -173,7 +175,7 @@ const Commit* VersionController::getCommitUnsafe(CommitHash hash) const {
 }
 
 const Commit* VersionController::getCommitSafe(CommitHash hash) const {
-    std::scoped_lock lock(_mutex);
+    std::shared_lock lock(_mutex);
 
     if (hash == CommitHash::head()) {
         return _head.load();
@@ -203,4 +205,27 @@ Commit::CommitSpan VersionController::getCommitsSinceCommitHash(CommitHash from)
     const size_t numCommitsSinceFrom = _commits.size() - (startIndex + 1);
 
     return {spanStart, numCommitsSinceFrom};
+}
+
+DumpResult<void> VersionController::loadCommit(CommitHash hash,
+                                               const fs::Path& commitDir,
+                                               const fs::Path& partsDir,
+                                               Graph* graph) {
+    std::shared_lock lock(_mutex);
+
+    const auto offset = getCommitIndex(hash);
+    if (!offset.has_value()) {
+        return DumpError::result(DumpErrorType::COMMIT_HASH_NOT_FOUND);
+    }
+
+    Commit* commit = _commits[offset.value()].get();
+    if (commit->hasData()) {
+        return {}; // already loaded — success
+    }
+
+    auto res = CommitLoader::loadData(commitDir, partsDir, graph, commit);
+    if (!res) {
+        return res.get_unexpected();
+    }
+    return {};
 }

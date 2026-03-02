@@ -48,6 +48,7 @@
 #include "nodes/S3ConnectNode.h"
 #include "nodes/S3TransferNode.h"
 #include "nodes/ShowProceduresNode.h"
+#include "nodes/LoadCommitNode.h"
 #include "nodes/ShortestPathNode.h"
 #include "nodes/ExprEvalNode.h"
 #include "nodes/CreateVectorIndexNode.h"
@@ -71,6 +72,7 @@
 #include "LoadVectorQuery.h"
 #include "DeleteVectorIndexQuery.h"
 #include "ShowVectorIndexesQuery.h"
+#include "LoadCommitQuery.h"
 
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
@@ -150,6 +152,10 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
             generateShowVectorIndexesQuery(static_cast<const ShowVectorIndexesQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::LOAD_COMMIT_QUERY:
+            generateLoadCommitQuery(static_cast<const LoadCommitQuery*>(query));
         break;
 
         default:
@@ -321,6 +327,12 @@ void PlanGraphGenerator::generateDeleteVectorIndexQuery(const DeleteVectorIndexQ
 
 void PlanGraphGenerator::generateShowVectorIndexesQuery(const ShowVectorIndexesQuery* query) {
     ShowVectorIndexesNode* node = _tree.create<ShowVectorIndexesNode>();
+    _tree.newOut<ProduceResultsNode>(node);
+}
+
+
+void PlanGraphGenerator::generateLoadCommitQuery(const LoadCommitQuery* query) {
+    LoadCommitNode* node = _tree.create<LoadCommitNode>(query->getHashStr());
     _tree.newOut<ProduceResultsNode>(node);
 }
 

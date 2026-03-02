@@ -23,8 +23,8 @@ public:
     Commit();
     Commit(VersionController* controller,
            const WeakArc<CommitData>& data,
-           const Commit* prevCommit,
-           bool isMergeCommit = false);
+           const Commit* prevCommit);
+    Commit(VersionController* controller, CommitHash hash, const Commit* prevCommit);
     ~Commit();
 
     Commit(const Commit&) = delete;
@@ -74,5 +74,7 @@ private:
     size_t _numNodes {0};
     size_t _numEdges {0};
     size_t _numDataParts {0};
+
+    void setCommitData(const WeakArc<CommitData>& data) { _data = data;};
 };
 }

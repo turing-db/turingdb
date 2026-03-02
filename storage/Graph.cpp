@@ -29,6 +29,12 @@ CommitHash Graph::getHeadHash() const {
     return _versionController->getHeadHash();
 }
 
+DumpResult<void> Graph::loadCommit(CommitHash hash) {
+    const fs::Path commitDir = _graphPath / "commits" / std::to_string(hash.get());
+    const fs::Path partsDir = _graphPath / "dataparts";
+    return _versionController->loadCommit(hash, commitDir, partsDir, this);
+}
+
 std::unique_ptr<Graph> Graph::create() {
     auto* graph = new Graph();
     graph->_versionController->createFirstCommit();

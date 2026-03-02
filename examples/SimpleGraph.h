@@ -11,7 +11,7 @@ class Graph;
 
 class SimpleGraph {
 public:
-    static void createSimpleGraph(Graph* graph);
+    static void createSimpleGraph(Graph* graph, bool changeName = true);
 
     static NodeID findNodeID(Graph* graph, std::string_view nodeName);
     static void findNodesByLabel(Graph* graph,
@@ -26,5 +26,4 @@ public:
 
     SimpleGraph() = delete;
 };
-
 }

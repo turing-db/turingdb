@@ -68,11 +68,11 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& graphDir) {
         const fs::Path commitDir = graphDir / "commits" / fmt::format("{}", hash);
         const fs::Path partDir = graphDir / "dataparts";
 
-        auto res = CommitLoader::load(commitDir,
-                                      partDir,
-                                      *graph,
+        auto res = CommitLoader::load(graph,
                                       CommitHash {hash},
+                                      commitDir,
                                       prevCommit);
+
         if (!res) {
             return res.get_unexpected();
         }
@@ -80,6 +80,18 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& graphDir) {
         prevCommit = res.value().get();
         graph->_versionController->addCommit(std::move(res.value()));
     }
+
+    //Load the head commit
+    Commit* headCommit = graph->_versionController->_head.load();
+    const CommitHash headHash = headCommit->hash();
+
+    const fs::Path commitDir = graphDir / "commits" / fmt::format("{}", headHash.get());
+    const fs::Path partsDir = graphDir / "dataparts";
+
+    auto res = CommitLoader::loadData(commitDir,
+                                      partsDir,
+                                      graph,
+                                      headCommit);
 
     return {};
 }

@@ -75,6 +75,12 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
                 return;
             }
             break;
+            case ChangeErrorType::COMMIT_NOT_LOADED: {
+                status.setStatus(QueryStatus::Status::COMMIT_NOT_LOADED);
+                status.setMessage(txRes.error().fmtMessage());
+                return;
+            }
+            break;
             default: {
                 status.setStatus(QueryStatus::Status::COMMIT_NOT_FOUND);
                 return;
