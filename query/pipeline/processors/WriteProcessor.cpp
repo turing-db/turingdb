@@ -10,6 +10,8 @@
 #include "ExecutionContext.h"
 
 #include "columns/ColumnConst.h"
+#include "columns/ColumnVector.h"
+#include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
 #include "processors/ExprProgram.h"
@@ -60,51 +62,84 @@ void validateDeletions(const GraphReader reader, const ColumnVector<IDT>* col) {
 template void validateDeletions<NodeID>(const GraphReader reader, const ColumnVector<NodeID>* col);
 template void validateDeletions<EdgeID>(const GraphReader reader, const ColumnVector<EdgeID>* col);
 
-CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
-                                                         ValueType type,
-                                                         PropertyTypeID propID) {
+// Convert a column value to SupportedTypeVariant. String columns store
+// string_view but the variant needs std::string.
+template <typename T>
+CommitWriteBuffer::SupportedTypeVariant toVariant(const T& val) {
+    if constexpr (std::is_same_v<T, std::string_view>) {
+        return std::string(val);
+    } else {
+        return val;
+    }
+}
+
+// Resolve a property column type once, then apply a value per row to pending entities.
+// GetProps: (size_t row) -> CommitWriteBuffer::UntypedProperties& for that entity.
+template <typename T, typename GetProps>
+void applyTypedProperty(Column* valueCol, PropertyTypeID propID,
+                        size_t numRows, GetProps& getProps) {
+    if (auto* cc = dynamic_cast<ColumnConst<T>*>(valueCol)) {
+        const CommitWriteBuffer::UntypedProperty prop {propID, toVariant(cc->getRaw())};
+        for (size_t i = 0; i < numRows; i++) {
+            getProps(i).emplace_back(prop);
+        }
+        return;
+    }
+    if (auto* cv = dynamic_cast<ColumnVector<T>*>(valueCol)) {
+        for (size_t i = 0; i < numRows; i++) {
+            getProps(i).emplace_back(
+                CommitWriteBuffer::UntypedProperty {propID, toVariant((*cv)[i])});
+        }
+        return;
+    }
+    if (auto* co = dynamic_cast<ColumnOptVector<T>*>(valueCol)) {
+        for (size_t i = 0; i < numRows; i++) {
+            const auto& val = (*co)[i];
+            if (!val.has_value()) {
+                throw PipelineException("NULL value for non-nullable property");
+            }
+            getProps(i).emplace_back(
+                CommitWriteBuffer::UntypedProperty {propID, toVariant(val.value())});
+        }
+        return;
+    }
+    // String columns from CSV store std::string, but types::String::Primitive is
+    // string_view. Try ColumnVector<std::string> and acquire a string_view.
+    if constexpr (std::is_same_v<T, std::string_view>) {
+        if (auto* cv = dynamic_cast<ColumnVector<std::string>*>(valueCol)) {
+            for (size_t i = 0; i < numRows; i++) {
+                const std::string_view sv = (*cv)[i];
+                getProps(i).emplace_back(
+                    CommitWriteBuffer::UntypedProperty {propID, std::string(sv)});
+            }
+            return;
+        }
+    }
+    throw FatalException("Unsupported column container for property type.");
+}
+
+template <typename GetProps>
+void applyProperty(Column* valueCol, ValueType type, PropertyTypeID propID,
+                   size_t numRows, GetProps getProps) {
     switch (type) {
-        case ValueType::Int64: {
-            const auto* casted = dynamic_cast<ColumnConst<types::Int64::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get constant property value.");
-            return {propID, casted->getRaw()};
-        }
-        break;
-
-        case ValueType::UInt64: {
-            const auto* casted = dynamic_cast<ColumnConst<types::UInt64::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get constant property value.");
-            return {propID, casted->getRaw()};
-        }
-        break;
-
-        case ValueType::String: {
-            const auto* casted = dynamic_cast<ColumnConst<types::String::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get constant property value.");
-            return {propID, std::string(casted->getRaw())};
-
-        }
-        break;
-
-        case ValueType::Double: {
-            const auto* casted = dynamic_cast<ColumnConst<types::Double::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get constant property value.");
-            return {propID, casted->getRaw()};
-        }
-        break;
-
-        case ValueType::Bool: {
-            const auto* casted = dynamic_cast<ColumnConst<types::Bool::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get constant property value.");
-            return {propID, casted->getRaw()};
-        }
-        break;
-
+        case ValueType::Int64:
+            applyTypedProperty<types::Int64::Primitive>(valueCol, propID, numRows, getProps);
+            return;
+        case ValueType::UInt64:
+            applyTypedProperty<types::UInt64::Primitive>(valueCol, propID, numRows, getProps);
+            return;
+        case ValueType::String:
+            applyTypedProperty<types::String::Primitive>(valueCol, propID, numRows, getProps);
+            return;
+        case ValueType::Double:
+            applyTypedProperty<types::Double::Primitive>(valueCol, propID, numRows, getProps);
+            return;
+        case ValueType::Bool:
+            applyTypedProperty<types::Bool::Primitive>(valueCol, propID, numRows, getProps);
+            return;
         case ValueType::Invalid:
-        case ValueType::_SIZE: {
+        case ValueType::_SIZE:
             throw FatalException("Property value column with invalid type.");
-        }
-        break;
     }
     throw FatalException("Failed to match against property value type.");
 }
@@ -242,18 +277,6 @@ void WriteProcessor::createNodes(size_t numIters) {
         }
         lblset = getLabelSet(labels);
 
-        // Get all properties: this can throw, so we do this BEFORE adding PendingNodes to
-        // CommitWriteBuffer, as otherwise after throwing this could leave it in invalid
-        // state.
-        std::vector<CommitWriteBuffer::UntypedProperty> constProps;
-        constProps.reserve(node._properties.size());
-        for (const auto& [name, type, valueCol] : node._properties) {
-            const PropertyTypeID propID =
-                _metadataBuilder->getOrCreatePropertyType(name, type)._id;
-
-            constProps.emplace_back(getConstPropertyValue(valueCol, type, propID));
-        }
-
         {
             // Create nodes, set label set
             const size_t numPendingNodesPrior = _writeBuffer->numPendingNodes();
@@ -263,14 +286,16 @@ void WriteProcessor::createNodes(size_t numIters) {
                 newNode.labelsetHandle = hdl;
             }
 
-            // Add each property; NOTE: for now all ColumnConst, so all same value.
-            // Extract the value first, then add that value to each node to create.
-            // TODO: More cache friendly access patterns
-            for (const CommitWriteBuffer::UntypedProperty& prop : constProps) {
-                for (size_t i = 0; i < numIters; i++) {
-                    auto& pendingNode = _writeBuffer->getPendingNode(numPendingNodesPrior + i);
-                    pendingNode.properties.emplace_back(prop);
-                }
+            // Apply properties: column type is resolved once per property, then
+            // looped over rows internally.
+            for (const auto& [name, type, valueCol] : node._properties) {
+                const PropertyTypeID propID =
+                    _metadataBuilder->getOrCreatePropertyType(name, type)._id;
+
+                applyProperty(valueCol, type, propID, numIters,
+                    [&](size_t i) -> CommitWriteBuffer::UntypedProperties& {
+                        return _writeBuffer->getPendingNode(numPendingNodesPrior + i).properties;
+                    });
             }
         }
 
@@ -346,18 +371,6 @@ void WriteProcessor::createEdges(size_t numIters) {
         bioassert(tgtCol->size() == srcCol->size(), "src and target column should have same dimension");
         bioassert(tgtCol->size() == numIters, "invalid size of target column");
 
-        // Get all properties: this can throw, so we do this BEFORE adding PendingEdges to
-        // CommitWriteBuffer, as otherwise after throwing this could leave it in invalid
-        // state.
-        std::vector<CommitWriteBuffer::UntypedProperty> constProps;
-        constProps.reserve(edge._properties.size());
-        for (const auto& [name, type, valueCol] : edge._properties) {
-            const PropertyTypeID propID =
-                _metadataBuilder->getOrCreatePropertyType(name, type)._id;
-
-            constProps.emplace_back(getConstPropertyValue(valueCol, type, propID));
-        }
-
         const size_t numPendingEdgesPrior = _writeBuffer->numPendingEdges();
         const EdgeTypeID typeID = _metadataBuilder->getOrCreateEdgeType(edge._edgeType);
         for (size_t rowPtr = 0; rowPtr < numIters; rowPtr++) {
@@ -368,33 +381,35 @@ void WriteProcessor::createEdges(size_t numIters) {
             const CommitWriteBuffer::ExistingOrPendingNode source =
                 srcIsPending ? CommitWriteBuffer::ExistingOrPendingNode {
                                     std::in_place_type<CommitWriteBuffer::PendingNodeOffset>,
-                                    srcCol->at(rowPtr).getValue()
+                                    (*srcCol)[rowPtr].getValue()
                                }
                              : CommitWriteBuffer::ExistingOrPendingNode {
-                                   std::in_place_type<NodeID>, srcCol->at(rowPtr)
+                                   std::in_place_type<NodeID>, (*srcCol)[rowPtr]
                                };
 
             const CommitWriteBuffer::ExistingOrPendingNode target =
                 tgtIsPending ? CommitWriteBuffer::ExistingOrPendingNode {
                                  std::in_place_type<CommitWriteBuffer::PendingNodeOffset>,
-                                 tgtCol->at(rowPtr).getValue()
+                                 (*tgtCol)[rowPtr].getValue()
                                }
                              : CommitWriteBuffer::ExistingOrPendingNode {
-                                 std::in_place_type<NodeID>, tgtCol->at(rowPtr)
+                                 std::in_place_type<NodeID>, (*tgtCol)[rowPtr]
                                };
 
             auto& pendingEdge = _writeBuffer->newPendingEdge(source, target);
             pendingEdge.edgeType = typeID;
         }
 
-        // Add each property; NOTE: for now all ColumnConst, so all same value.
-        // Extract the value first, then add that value to each node to create.
-        // TODO: More cache friendly access patterns
-        for (const CommitWriteBuffer::UntypedProperty& prop : constProps) {
-            for (size_t i = 0; i < numIters; i++) {
-                auto& pendingEdge = _writeBuffer->getPendingEdge(numPendingEdgesPrior + i);
-                pendingEdge.properties.emplace_back(prop);
-            }
+        // Apply properties: column type is resolved once per property, then
+        // looped over rows internally.
+        for (const auto& [name, type, valueCol] : edge._properties) {
+            const PropertyTypeID propID =
+                _metadataBuilder->getOrCreatePropertyType(name, type)._id;
+
+            applyProperty(valueCol, type, propID, numIters,
+                [&](size_t i) -> CommitWriteBuffer::UntypedProperties& {
+                    return _writeBuffer->getPendingEdge(numPendingEdgesPrior + i).properties;
+                });
         }
 
         // Populate the output column for this edge with the index in the CWB which it

@@ -37,6 +37,7 @@ add_subdirectory(bulk_create_crash)
 add_subdirectory(get_nodes_invalid_id)
 add_subdirectory(test_suite_queries)
 add_subdirectory(load_csv)
+add_subdirectory(load_csv_create)
 add_subdirectory(load_csv_stations)
 add_subdirectory(vector_serialization)
 

@@ -12,6 +12,7 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnIDs.h"
 #include "metadata/PropertyType.h"
+#include "versioning/Change.h"
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
 #include "dataframe/Dataframe.h"
@@ -36,14 +37,28 @@ protected:
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
     Graph* _graph {nullptr};
+    ChangeID _currentChange {ChangeID::head()};
 
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     auto query(std::string_view query, auto callback) {
         auto res = _db->query(query, _graphName, &_env->getMem(),
                               callback, CommitHash::head(),
-                              ChangeID::head());
+                              _currentChange);
         return res;
+    }
+
+    void newChange() {
+        auto res = _env->getSystemManager().newChange(_graphName);
+        ASSERT_TRUE(res);
+        _currentChange = res.value()->id();
+    }
+
+    void submitCurrentChange() {
+        auto res = _db->query("change submit", _graphName, &_env->getMem(),
+                              CommitHash::head(), _currentChange);
+        ASSERT_TRUE(res);
+        _currentChange = ChangeID::head();
     }
 
     std::string writeTempCSV(const std::string& name,
@@ -314,4 +329,177 @@ TEST_F(LoadCSVTest, DISABLED_loadCSVMatchNoResults) {
     if (res) {
         EXPECT_EQ(totalRows, 0);
     }
+}
+
+// =============================================================================
+// LOAD CSV + CREATE
+// =============================================================================
+
+TEST_F(LoadCSVTest, loadCSVCreateNodesWithHeaders) {
+    const std::string csv = writeTempCSV("create_headers.csv",
+        "name,city\n"
+        "Alice,London\n"
+        "Bob,Paris\n"
+        "Charlie,Berlin\n");
+
+    newChange();
+    {
+        const std::string q =
+            "LOAD CSV '" + csv + "' WITH HEADERS AS row "
+            "CREATE (n:Imported {name: row.name, city: row.city})";
+
+        auto res = query(q, [](const Dataframe*) {});
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    // Query back the created nodes and verify properties
+    using Rows = LineContainer<std::string, std::string>;
+    Rows expected;
+    expected.add({"Alice", "London"});
+    expected.add({"Bob", "Paris"});
+    expected.add({"Charlie", "Berlin"});
+
+    Rows actual;
+    {
+        auto res = query("MATCH (n:Imported) RETURN n.name, n.city",
+            [&](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                const auto* nameCol = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
+                const auto* cityCol = df->cols()[1]->as<ColumnOptVector<types::String::Primitive>>();
+                ASSERT_TRUE(nameCol && cityCol);
+
+                for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+                    actual.add({std::string((*nameCol)[i].value()),
+                                std::string((*cityCol)[i].value())});
+                }
+            });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+TEST_F(LoadCSVTest, loadCSVCreateNodesWithTypeConversion) {
+    const std::string csv = writeTempCSV("create_typed.csv",
+        "name,age\n"
+        "Alice,30\n"
+        "Bob,25\n");
+
+    newChange();
+    {
+        const std::string q =
+            "LOAD CSV '" + csv + "' WITH HEADERS AS row "
+            "CREATE (n:TypedImport {name: row.name, age: toInteger(row.age)})";
+
+        auto res = query(q, [](const Dataframe*) {});
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    // Verify integer property was stored correctly
+    using Rows = LineContainer<std::string, int64_t>;
+    Rows expected;
+    expected.add({"Alice", 30});
+    expected.add({"Bob", 25});
+
+    Rows actual;
+    {
+        auto res = query("MATCH (n:TypedImport) RETURN n.name, n.age",
+            [&](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                const auto* nameCol = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
+                const auto* ageCol = df->cols()[1]->as<ColumnOptVector<types::Int64::Primitive>>();
+                ASSERT_TRUE(nameCol && ageCol);
+
+                for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+                    actual.add({std::string((*nameCol)[i].value()),
+                                (*ageCol)[i].value()});
+                }
+            });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+TEST_F(LoadCSVTest, loadCSVCreateNodesIndexAccess) {
+    const std::string csv = writeTempCSV("create_index.csv",
+        "Alice,London\n"
+        "Bob,Paris\n");
+
+    newChange();
+    {
+        const std::string q =
+            "LOAD CSV '" + csv + "' AS row "
+            "CREATE (n:IndexImport {name: row[0], city: row[1]})";
+
+        auto res = query(q, [](const Dataframe*) {});
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    // Query back and verify
+    using Rows = LineContainer<std::string, std::string>;
+    Rows expected;
+    expected.add({"Alice", "London"});
+    expected.add({"Bob", "Paris"});
+
+    Rows actual;
+    {
+        auto res = query("MATCH (n:IndexImport) RETURN n.name, n.city",
+            [&](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                const auto* nameCol = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
+                const auto* cityCol = df->cols()[1]->as<ColumnOptVector<types::String::Primitive>>();
+                ASSERT_TRUE(nameCol && cityCol);
+
+                for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+                    actual.add({std::string((*nameCol)[i].value()),
+                                std::string((*cityCol)[i].value())});
+                }
+            });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+TEST_F(LoadCSVTest, loadCSVCreateEdges) {
+    const std::string csv = writeTempCSV("create_edges.csv",
+        "src,tgt\n"
+        "Alice,Bob\n"
+        "Charlie,Doruk\n");
+
+    newChange();
+    {
+        const std::string q =
+            "LOAD CSV '" + csv + "' WITH HEADERS AS row "
+            "CREATE (a:CSVNode {name: row.src})-[:LINKED]->(b:CSVNode {name: row.tgt})";
+
+        auto res = query(q, [](const Dataframe*) {});
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    // Query back edges and verify src->tgt relationships
+    using Rows = LineContainer<std::string, std::string>;
+    Rows expected;
+    expected.add({"Alice", "Bob"});
+    expected.add({"Charlie", "Doruk"});
+
+    Rows actual;
+    {
+        auto res = query("MATCH (a:CSVNode)-[:LINKED]->(b:CSVNode) RETURN a.name, b.name",
+            [&](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                const auto* srcCol = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
+                const auto* tgtCol = df->cols()[1]->as<ColumnOptVector<types::String::Primitive>>();
+                ASSERT_TRUE(srcCol && tgtCol);
+
+                for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+                    actual.add({std::string((*srcCol)[i].value()),
+                                std::string((*tgtCol)[i].value())});
+                }
+            });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    EXPECT_TRUE(expected.equals(actual));
 }

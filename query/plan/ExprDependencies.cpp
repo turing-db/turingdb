@@ -17,6 +17,9 @@
 #include "expr/IndexExpr.h"
 #include "expr/ListExpr.h"
 
+#include "decl/VarDecl.h"
+#include "decl/EvaluatedType.h"
+
 #include "BioAssert.h"
 
 using namespace db;
@@ -91,6 +94,9 @@ void ExprDependencies::genExprDependencies(PlanGraphVariables& variables, Expr* 
 
         case Expr::Kind::SYMBOL: {
             const SymbolExpr* symbol = static_cast<SymbolExpr*>(expr);
+            if (symbol->getDecl()->getType() == EvaluatedType::StringTable) {
+                break;
+            }
             PlanGraphNode* producer = variables.getProducer(symbol->getDecl());
             bioassert(producer, "VarDecl not found");
 
