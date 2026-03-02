@@ -29,7 +29,6 @@ void writeChunk(Data* data,
     auto* edgeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(2));
     auto* partCountCol = static_cast<UInt64Col*>(data->getReturnColumn(3));
 
-
     if (commitCol) {
         commitCol->clear();
     }
@@ -45,13 +44,15 @@ void writeChunk(Data* data,
 
     // Traverse through the commit history chain until we reach the root commit or
     // we have outputed a chunksize worth of commits.
-    while (count < chunkSize) {
+    while (data->_commit && count < chunkSize) {
         const Commit* commit = data->_commit;
+        const bool isHead = (count == 0);
 
         if (commitCol) {
-            commitCol->push_back(fmt::format("{:x}", commit->hash().get()));
+            commitCol->push_back(isHead
+                ? fmt::format("{:x}(HEAD)", commit->hash().get())
+                : fmt::format("{:x}", commit->hash().get()));
         }
-
         if (nodeCountCol) {
             nodeCountCol->push_back(commit->getNumNodes());
         }
@@ -64,11 +65,6 @@ void writeChunk(Data* data,
 
         ++count;
         data->_commit = data->_commit->getPreviousCommit();
-
-        // If we have reached the root commit, stop.
-        if (!data->_commit) {
-            break;
-        }
     }
 
     if (!data->_commit) {
