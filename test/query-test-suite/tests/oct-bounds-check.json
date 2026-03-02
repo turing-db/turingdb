@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN 0o777777777777777777777, -0o777777777777777777777",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n __expr__: v0\n __expr__: v1\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "result": "0o777777777777777777777,-0o777777777777777777777\n9223372036854775807,-9223372036854775807"
+  },
+  "tags": [
+    "literal",
+    "oct",
+    "return"
+  ],
+  "write-required": false
+}

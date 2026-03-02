@@ -215,6 +215,9 @@ using Token = db::YCypherParser::token;
      * yytext will always be at least 2/3 characters due to the
      * below regex, so it is always safe to + 2/3.
      * We also need to manually negate the resultant value.
+     * NOTE: Current implementation disallows literals equal to INT_MIN,
+     * because it requires more complex processing. Values in the range
+     * [INT_MIN + 1, INT_MAX] are allowed.
      */
 -?0[xX][0-9a-fA-F]+ {
     static constexpr int HEX_BASE = 16;
@@ -231,7 +234,10 @@ using Token = db::YCypherParser::token;
     }
 
     int64_t v = 0;
-    std::from_chars(begin, end, v, HEX_BASE);
+    auto [_, err] = std::from_chars(begin, end, v, HEX_BASE);
+    if (err == std::errc::result_out_of_range) {
+        syntaxError(*yylloc, "Hexadecimal literal exceeded int64 range.");
+    }
 
     if (negative) {
         v = -v;
@@ -250,6 +256,9 @@ using Token = db::YCypherParser::token;
      * yytext will always be at least 2/3 characters due to the
      * below regex, so it is always safe to + 2/3.
      * We also need to manually negate the resultant value.
+     * NOTE: Current implementation disallows literals equal to INT_MIN,
+     * because it requires more complex processing. Values in the range
+     * [INT_MIN + 1, INT_MAX] are allowed.
      */
 -?0[oO][0-7]+ {
     static constexpr int OCT_BASE = 8;
@@ -266,7 +275,12 @@ using Token = db::YCypherParser::token;
     }
 
     int64_t v = 0;
-    std::from_chars(begin, end, v, OCT_BASE);
+    auto [_, err] = std::from_chars(begin, end, v, OCT_BASE);
+
+    if (err == std::errc::result_out_of_range) {
+        syntaxError(*yylloc, "Octal literal exceeded int64 range.");
+    }
+
     if (negative) {
         v = -v;
     }
@@ -279,7 +293,8 @@ using Token = db::YCypherParser::token;
     /*
      * Decimal literals; no prefix required.
      * from_chars automatically strips leading '-' for decimal,
-     * and handles negation if present.
+     * and handles negation if present. Allows literals in the
+     * range [INT_MIN, INT_MAX].
      */
 -?[0-9]+ {
     static constexpr int DEC_BASE = 10;
@@ -288,7 +303,12 @@ using Token = db::YCypherParser::token;
     const char* end = yytext + yyleng;
 
     int64_t v = 0;
-    std::from_chars(begin, end, v, DEC_BASE);
+    auto [_, err] = std::from_chars(begin, end, v, DEC_BASE);
+
+    if (err == std::errc::result_out_of_range) {
+        syntaxError(*yylloc, "Decimal literal exceeded int64 range.");
+    }
+
     yylval->emplace<int64_t>(v);
 
     return Token::DIGIT;
