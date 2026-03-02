@@ -225,9 +225,8 @@ using Token = db::YCypherParser::token;
     const char* begin = yytext;
     const char* end = yytext + yyleng;
 
-    bool negative = false;
-    if (*begin == '-') {
-        negative = true;
+    const bool negative = *begin == '-';
+    if (negative) {
         begin += 3; // skip leading "-0x"
     } else {
         begin += 2; // skip leading "0x"
@@ -266,9 +265,8 @@ using Token = db::YCypherParser::token;
     const char* begin = yytext;
     const char* end = yytext + yyleng;
 
-    bool negative = false;
-    if (*begin == '-') {
-        negative = true;
+    const bool negative = *begin == '-';
+    if (negative) {
         begin += 3; // skips leading "-0o"
     } else {
         begin += 2; // skips leading "0o"
