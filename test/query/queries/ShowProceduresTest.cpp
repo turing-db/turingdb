@@ -24,12 +24,14 @@ protected:
 };
 
 TEST_F(ShowProceduresTest, showProcedures) {
+    _db->query("INSTALL greeter", "default", &_env->getMem());
+
     bool executed = false;
     const auto res = _db->query("SHOW PROCEDURES", "default", &_env->getMem(),
                                 [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 2);
-        ASSERT_EQ(df->getLogicalRowCount(), 6);
+        ASSERT_EQ(df->getLogicalRowCount(), 7);
 
         const auto& cols = df->cols();
         const auto* colName = cols.at(0)->as<ColumnVector<types::String::Primitive>>();
@@ -57,6 +59,8 @@ TEST_F(ShowProceduresTest, showProcedures) {
         ASSERT_EQ(colSignature->at(4), "db.describeCommit(commit :: STRING)"
                                        " :: (nodeCount :: INTEGER, edgeCount :: INTEGER, partCount :: INTEGER)");
         ASSERT_EQ(colSignature->at(5), "db.procedures() :: (name :: STRING, signature :: STRING)");
+        ASSERT_EQ(colName->at(6), "greeter.hello");
+        ASSERT_EQ(colSignature->at(6), "greeter.hello() :: (message :: STRING)");
 
         executed = true;
     });

@@ -31,6 +31,8 @@ class CreateVectorIndexQuery;
 class LoadVectorQuery;
 class DeleteVectorIndexQuery;
 class ShowVectorIndexesQuery;
+class InstallExtensionQuery;
+class ShowExtensionsQuery;
 class QueryCommand;
 
 class PlanGraphGenerator {
@@ -68,6 +70,8 @@ private:
     void generateDeleteVectorIndexQuery(const DeleteVectorIndexQuery* query);
     void generateShowVectorIndexesQuery(const ShowVectorIndexesQuery* query);
     void generateLoadCommitQuery(const LoadCommitQuery* query);
+    void generateInstallExtensionQuery(const InstallExtensionQuery* query);
+    void generateShowExtensionsQuery(const ShowExtensionsQuery* query);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

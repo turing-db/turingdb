@@ -26,6 +26,8 @@ public:
         DELETE_VECTOR_INDEX_QUERY,
         SHOW_VECTOR_INDEXES_QUERY,
         LOAD_COMMIT_QUERY,
+        INSTALL_EXTENSION_QUERY,
+        SHOW_EXTENSIONS_QUERY,
     };
 
     virtual Kind getKind() const = 0;

@@ -25,6 +25,7 @@
 #include "processors/WriteProcessor.h"
 #include "processors/ListGraphProcessor.h"
 #include "processors/ShowProceduresProcessor.h"
+#include "processors/ShowExtensionsProcessor.h"
 #include "processors/WriteProcessorTypes.h"
 #include "processors/GetLabelSetIDProcessor.h"
 #include "processors/GetEdgeTypeIDProcessor.h"
@@ -44,6 +45,7 @@
 #include "processors/VectorSearchProcessor.h"
 #include "processors/DeleteVectorIndexProcessor.h"
 #include "processors/ShowVectorIndexesProcessor.h"
+#include "processors/InstallExtensionProcessor.h"
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
@@ -884,6 +886,20 @@ PipelineValueOutputInterface& PipelineBuilder::addCreateGraph(std::string_view g
     return output;
 }
 
+PipelineValueOutputInterface& PipelineBuilder::addInstallExtension(std::string_view extensionName) {
+    auto* proc = InstallExtensionProcessor::create(_pipeline, extensionName);
+
+    PipelineValueOutputInterface& output = proc->output();
+    Dataframe* df = output.getDataframe();
+    NamedColumn* nameValue = allocColumn<ColumnConst<types::String::Primitive>>(df);
+    nameValue->rename("extensionName");
+    output.setValue(nameValue);
+
+    _pendingOutput.setInterface(&output);
+
+    return output;
+}
+
 void PipelineBuilder::addS3Connect(std::string_view accessId,
                                    std::string_view secretKey,
                                    std::string_view region) {
@@ -939,6 +955,21 @@ PipelineBlockOutputInterface& PipelineBuilder::addShowProcedures() {
     NamedColumn* signatureCol = allocColumn<ColumnVector<std::string>>(df);
     signatureCol->rename("signature");
     proc->setSignatureColumn(signatureCol);
+
+    _pendingOutput.setInterface(&output);
+
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addShowExtensions() {
+    ShowExtensionsProcessor* proc = ShowExtensionsProcessor::create(_pipeline);
+
+    PipelineBlockOutputInterface& output = proc->output();
+    Dataframe* df = output.getDataframe();
+
+    NamedColumn* nameCol = allocColumn<ColumnVector<types::String::Primitive>>(df);
+    nameCol->rename("name");
+    proc->setNameColumn(nameCol);
 
     _pendingOutput.setInterface(&output);
 

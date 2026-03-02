@@ -50,6 +50,8 @@ enum class PlanGraphOpcode {
     DELETE_VECTOR_INDEX,
     SHOW_VECTOR_INDEXES,
     LOAD_COMMIT,
+    INSTALL_EXTENSION,
+    SHOW_EXTENSIONS,
     _SIZE
 };
 
@@ -96,7 +98,9 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::VECTOR_SEARCH, "VECTOR_SEARCH">,
     EnumStringPair<PlanGraphOpcode::DELETE_VECTOR_INDEX, "DELETE_VECTOR_INDEX">,
     EnumStringPair<PlanGraphOpcode::SHOW_VECTOR_INDEXES, "SHOW_VECTOR_INDEXES">,
-    EnumStringPair<PlanGraphOpcode::LOAD_COMMIT, "LOAD_COMMIT">>;
+    EnumStringPair<PlanGraphOpcode::LOAD_COMMIT, "LOAD_COMMIT">,
+    EnumStringPair<PlanGraphOpcode::INSTALL_EXTENSION, "INSTALL_EXTENSION">,
+    EnumStringPair<PlanGraphOpcode::SHOW_EXTENSIONS, "SHOW_EXTENSIONS">>;
 
 class PlanGraphNode {
 public:

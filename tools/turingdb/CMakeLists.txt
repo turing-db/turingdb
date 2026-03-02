@@ -4,6 +4,7 @@ set(turingdb_sources
     TuringShell.cpp)
 
 add_executable(turingdb ${turingdb_sources})
+set_target_properties(turingdb PROPERTIES ENABLE_EXPORTS TRUE)
 target_link_libraries(turingdb PUBLIC
     turing_db_s
     turing_db_storage_s

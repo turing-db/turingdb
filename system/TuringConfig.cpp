@@ -1,10 +1,37 @@
 #include "TuringConfig.h"
 
 #include <stdlib.h>
+#include <unistd.h>
+
+#include <spdlog/spdlog.h>
 
 #include "BioAssert.h"
 
 using namespace db;
+
+namespace {
+
+void resolveInstallExtensionsDir(fs::Path& result) {
+    const char* envDir = getenv("TURING_EXTENSIONS_DIR");
+    if (envDir && *envDir) {
+        result = fs::Path(std::string(envDir));
+        return;
+    }
+
+    char buf[4096];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len > 0) {
+        buf[len] = '\0';
+        fs::Path exePath(std::string(buf, len));
+        result = exePath.parent().parent()
+            / "lib" / "turingdb" / "extensions";
+        return;
+    }
+
+    spdlog::warn("Could not resolve install extensions directory");
+}
+
+} // namespace
 
 TuringConfig::TuringConfig()
 {
@@ -16,6 +43,8 @@ TuringConfig::TuringConfig()
     _graphsDir = _turingDir / "graphs";
     _dataDir = _turingDir / "data";
     _vectorDir = _turingDir / "vector";
+    _userExtensionsDir = _turingDir / "extensions";
+    resolveInstallExtensionsDir(_installExtensionsDir);
 }
 
 TuringConfig::~TuringConfig() {
@@ -34,4 +63,5 @@ void TuringConfig::setTuringDirectory(const fs::Path& turingDir) {
     _graphsDir = _turingDir / "graphs";
     _dataDir = _turingDir / "data";
     _vectorDir = _turingDir / "vector";
+    _userExtensionsDir = _turingDir / "extensions";
 }

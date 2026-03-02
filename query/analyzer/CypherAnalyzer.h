@@ -21,6 +21,7 @@ class S3ConnectQuery;
 class S3TransferQuery;
 class CreateVectorIndexQuery;
 class LoadVectorQuery;
+class InstallExtensionQuery;
 class OrderBy;
 class Skip;
 class Limit;
@@ -51,6 +52,7 @@ public:
     void analyze(S3TransferQuery* s3Transfer);
     void analyze(const CreateVectorIndexQuery* query);
     void analyze(const LoadVectorQuery* query);
+    void analyze(const InstallExtensionQuery* query);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt);

@@ -175,8 +175,14 @@ public:
     // Create Graph
     PipelineValueOutputInterface& addCreateGraph(std::string_view graphName);
 
+    // Install Extension
+    PipelineValueOutputInterface& addInstallExtension(std::string_view extensionName);
+
     // Show Procedures
     PipelineBlockOutputInterface& addShowProcedures();
+
+    // Show Extensions
+    PipelineBlockOutputInterface& addShowExtensions();
 
     // S3 Commands
     void addS3Connect(std::string_view accessId,

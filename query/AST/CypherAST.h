@@ -87,6 +87,8 @@ class CreateVectorIndexQuery;
 class LoadVectorQuery;
 class DeleteVectorIndexQuery;
 class ShowVectorIndexesQuery;
+class InstallExtensionQuery;
+class ShowExtensionsQuery;
 class VectorSearchStmt;
 
 class CypherAST {
@@ -159,6 +161,8 @@ public:
     friend LoadVectorQuery;
     friend DeleteVectorIndexQuery;
     friend ShowVectorIndexesQuery;
+    friend InstallExtensionQuery;
+    friend ShowExtensionsQuery;
     friend VectorSearchStmt;
     friend YCypherParser;
 

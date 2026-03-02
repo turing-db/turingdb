@@ -21,6 +21,7 @@
 #include "LoadVectorQuery.h"
 #include "DeleteVectorIndexQuery.h"
 #include "ShowVectorIndexesQuery.h"
+#include "InstallExtensionQuery.h"
 #include "Projection.h"
 #include "decl/DeclContext.h"
 #include "expr/Expr.h"
@@ -103,6 +104,10 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<const LoadVectorQuery*>(query));
             break;
 
+            case QueryCommand::Kind::INSTALL_EXTENSION_QUERY:
+                analyze(static_cast<const InstallExtensionQuery*>(query));
+            break;
+
             // Nothing to analyze
             case QueryCommand::Kind::CHANGE_QUERY:
             case QueryCommand::Kind::COMMIT_QUERY:
@@ -111,6 +116,7 @@ void CypherAnalyzer::analyze() {
             case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
             case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
             case QueryCommand::Kind::LOAD_COMMIT_QUERY:
+            case QueryCommand::Kind::SHOW_EXTENSIONS_QUERY:
             break;
 
             default:
@@ -451,6 +457,22 @@ void CypherAnalyzer::analyze(const LoadVectorQuery* query) {
     const std::string_view indexName = query->getIndexName();
     if (indexName.empty()) {
         throwError("LOAD VECTOR index name cannot be empty", query);
+    }
+}
+
+void CypherAnalyzer::analyze(const InstallExtensionQuery* query) {
+    const std::string_view name = query->getExtensionName();
+    if (name.empty()) {
+        throwError("INSTALL extension name cannot be empty", query);
+    }
+
+    for (char c : name) {
+        if (!(isalnum(c) || c == '_')) [[unlikely]] {
+            throwError(fmt::format("Extension name must only contain "
+                                   "alphanumeric characters or '_': "
+                                   "character '{}' not allowed.", c),
+                       query);
+        }
     }
 }
 

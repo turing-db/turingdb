@@ -1,0 +1,17 @@
+#pragma once
+
+namespace db {
+class ProcedureNamespace;
+}
+
+// Init callback type - receives ProcedureNamespace* to register procedures
+using TuringExtensionInitCallback = void (*)(db::ProcedureNamespace*);
+
+// Each extension declares one of these
+struct TuringExtensionDef {
+    const char* _namespaceName;
+    TuringExtensionInitCallback _initCallback;
+};
+
+// Every extension .so must export:
+//   extern "C" const TuringExtensionDef* turing_extension();

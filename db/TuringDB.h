@@ -18,6 +18,7 @@ class SystemManager;
 class LocalMemory;
 class JobSystem;
 class Block;
+class ExtensionManager;
 class ProcedureManager;
 
 class TuringDB {
@@ -59,11 +60,14 @@ public:
         return _procedures.get();
     }
 
+    ExtensionManager* getExtensions() { return _extensions.get(); }
+
 private:
     const TuringConfig* _config {nullptr};
     std::unique_ptr<SystemManager> _systemManager;
     std::unique_ptr<JobSystem> _jobSystem;
     std::unique_ptr<ProcedureManager> _procedures;
+    std::unique_ptr<ExtensionManager> _extensions;
     std::unique_ptr<vec::VectorDatabase> _vectorDatabase;
 };
 
