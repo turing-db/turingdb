@@ -14,7 +14,7 @@ public:
                                   const VarDecl* sourceDecl,
                                   int64_t minHops,
                                   int64_t maxHops)
-        : PlanGraphNode(PlanGraphOpcode::BFS_EXPAND_EDGES),
+        : PlanGraphNode(PlanGraphOpcode::BFS_EXPAND_IN_EDGES),
           _edgeDecl(edgeDecl),
           _sourceDecl(sourceDecl),
           _minHops(minHops),

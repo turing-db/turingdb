@@ -75,11 +75,12 @@ void GetPropertiesWithNullProcessor<Entity, T>::execute() {
     reset();
     _propWriter->fill(_ctxt->getChunkSize());
 
-    // The GetPropertiesWithNullProcessor always finishes in one step
-    _input.getPort()->consume();
-    _output.getPort()->writeData();
+    if (!_propWriter->isValid()) {
+        _input.getPort()->consume();
+        finish();
+    }
 
-    finish();
+    _output.getPort()->writeData();
 }
 
 template <EntityType Entity, SupportedType T>

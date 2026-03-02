@@ -1533,6 +1533,16 @@ PipelineOutputInterface* PipelineGenerator::translateVectorSearchNode(VectorSear
     return _builder.getPendingOutputInterface();
 }
 
+PipelineOutputInterface* PipelineGenerator::translateDeleteVectorIndexNode(DeleteVectorIndexNode* node) {
+    _builder.addDeleteVectorIndex(node->getIndexName());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowVectorIndexesNode* node) {
+    _builder.addShowVectorIndexes();
+    return _builder.getPendingOutputInterface();
+}
+
 PipelineOutputInterface* PipelineGenerator::translateBFSExpandOutEdgesNode(BFSExpandOutEdgesNode* node)
 {
     _builder.addBFSExpandOutEdges(node->getMinHops(), node->getMaxHops());

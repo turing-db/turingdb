@@ -29,6 +29,7 @@ public:
     }
 
     bool empty() const { return _entries.empty(); }
+    size_t size() const { return _entries.size(); }
 
     std::span<const Entry> entries() const { return _entries; }
     std::vector<Entry>::const_iterator begin() const { return _entries.begin(); }

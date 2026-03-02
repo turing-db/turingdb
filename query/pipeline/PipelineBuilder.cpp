@@ -349,6 +349,8 @@ PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandOutEdges(int64_t minH
     NamedColumn* pathCol = allocColumn<ColumnVector<EntityList>>(outDf);
     proc->setOutputPathsColumn(pathCol);
 
+    output.setStream(EntityOutputStream::createNodeStream(targetNodes->getTag()));
+
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);
     matData.addToStep<ColumnNodeIDs>(targetNodes);
@@ -381,6 +383,8 @@ PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandInEdges(int64_t minHo
     NamedColumn* pathCol = allocColumn<ColumnVector<EntityList>>(outDf);
     proc->setOutputPathsColumn(pathCol);
 
+    output.setStream(EntityOutputStream::createNodeStream(sourceNodes->getTag()));
+
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);
     matData.addToStep<ColumnNodeIDs>(sourceNodes);
@@ -412,6 +416,8 @@ PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandEdges(int64_t minHops
 
     NamedColumn* pathCol = allocColumn<ColumnVector<EntityList>>(outDf);
     proc->setOutputPathsColumn(pathCol);
+
+    output.setStream(EntityOutputStream::createNodeStream(targetNodes->getTag()));
 
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);

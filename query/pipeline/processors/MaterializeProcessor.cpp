@@ -49,6 +49,7 @@ inline void copyChunkImpl(const Column* srcPtr,
         COPY_CHUNK_CASE(ColumnOptVector<types::String::Primitive>)
         COPY_CHUNK_CASE(ColumnOptVector<types::Bool::Primitive>)
         COPY_CHUNK_CASE(ColumnVector<Path>)
+        COPY_CHUNK_CASE(ColumnVector<EntityList>)
 
         default: {
             bioassert(false, "copyChunk operator not handled between columns of kind {} and {}",
@@ -87,6 +88,7 @@ inline void copyTransformedChunkImpl(const ColumnVector<size_t>* transform,
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::String::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::Bool::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<Path>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<EntityList>)
         default: {
             bioassert(false, "copyTransformedChunk operator not handled between columns of kind {} and {}",
                       srcPtr->getKind(), dstPtr->getKind());
