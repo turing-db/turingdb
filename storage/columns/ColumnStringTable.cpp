@@ -50,15 +50,19 @@ void ColumnStringTable::assignFromLine(const Column* other,
 
 void ColumnStringTable::setHeaders(Headers& headers) {
     _headers.swap(headers);
+    _headerIndex.clear();
+    _headerIndex.reserve(_headers.size());
+    for (size_t i = 0; i < _headers.size(); i++) {
+        _headerIndex[_headers[i]] = i;
+    }
 }
 
 ColumnStringTable::StringColumn* ColumnStringTable::findFieldByHeader(std::string_view name) const {
-    for (size_t i = 0; i < _headers.size(); i++) {
-        if (_headers[i] == name) {
-            return _columns[i];
-        }
+    const auto it = _headerIndex.find(name);
+    if (it == _headerIndex.end()) {
+        return nullptr;
     }
-    return nullptr;
+    return _columns[it->second];
 }
 
 void ColumnStringTable::dump(std::ostream& out) const {
