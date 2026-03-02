@@ -43,6 +43,7 @@ private:
     std::atomic<bool> _running {false};
     std::atomic<bool> _ready {false};
     std::thread _thread;
+    int _sockFd = -1;
 
     explicit SystemEventHandler(const fs::Path& socketPath);
 

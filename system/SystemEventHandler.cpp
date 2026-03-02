@@ -24,9 +24,13 @@ struct SignalPipes {
     int* data() {
         return &_read;
     }
-} _signalFd {};
+};
 
-int _sockFd = -1;
+/** WARNING: This is a global variable, required for the signal handler
+ *           This makes the SystemEventHandler class risky to use by design.
+ *           It breaks unit tests which is the reason why the signals have
+ *           to be disabled in unit tests (see TuringConfig::useSystemEvents) */
+SignalPipes _signalFd;
 
 void sigHandler(int signal) {
     if (_signalFd._write == -1) {
@@ -94,13 +98,13 @@ void SystemEventHandler::terminate() {
         ::close(_signalFd._write);
     }
 
-    if (_sockFd != -1) {
-        ::close(_sockFd);
+    if (_instance->_sockFd != -1) {
+        ::close(_instance->_sockFd);
     }
 
     _signalFd._read = -1;
     _signalFd._write = -1;
-    _sockFd = -1;
+    _instance->_sockFd = -1;
     _instance->_socketPath.rm();
 }
 
