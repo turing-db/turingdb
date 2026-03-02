@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE VECTOR INDEX embeddings WITH DIMENSION 4 METRIC EUCLID",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __CREATE_VECTOR_INDEX__\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "result": "indexName\nembeddings",
+    "resultJson": "{\"header\":{\"column_names\":[\"indexName\"],\"column_types\":[\"String\"]},\"data\":[[[\"embeddings\"]]]}"
+  },
+  "tags": [
+    "success",
+    "vector",
+    "create-index"
+  ],
+  "write-required": false
+}
