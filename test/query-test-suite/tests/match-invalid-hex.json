@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) WHERE n.age = 0x RETURN n.name, n.age",
+  "expect": {
+    "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) WHERE n.age = 0x RETURN n.name, n.age\n       |                          ^\n-------* syntax error, unexpected ID",
+    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) WHERE n.age = 0x RETURN n.name, n.age\n       |                          ^\n-------* syntax error, unexpected ID",
+    "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | MATCH (n) WHERE n.age = 0x RETURN n.name, n.age\\n       |                          ^\\n-------* syntax error, unexpected ID\"}"
+  },
+  "tags": [
+    "match",
+    "types",
+    "parsing",
+    "errors",
+    "properties",
+    "where"
+  ],
+  "write-required": false
+}
