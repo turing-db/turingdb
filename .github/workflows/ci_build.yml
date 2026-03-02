@@ -14,6 +14,10 @@ on:
       python_version_list:
         required: true
         type: string
+      dev_version_suffix:
+        required: false
+        type: string
+        default: ''
 
   workflow_dispatch:
 
@@ -56,10 +60,32 @@ jobs:
     - name: Setup Python
       run: uv python install ${{ matrix.python_version }}
 
+    - name: Compute version override
+      id: version
+      if: inputs.dev_version_suffix != ''
+      run: |
+        DESC=$(git describe --tags --long --match 'v*' --first-parent)
+        TAG_VERSION=$(echo "$DESC" | sed 's/^v\(.*\)-[0-9]*-g[0-9a-f]*$/\1/')
+        DISTANCE=$(echo "$DESC" | sed 's/^v.*-\([0-9]*\)-g[0-9a-f]*$/\1/')
+        if [ "$DISTANCE" != "0" ]; then
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG_VERSION"
+          PATCH=${PATCH:-0}
+          PATCH=$((PATCH + 1))
+          VERSION="${MAJOR}.${MINOR}.${PATCH}.dev${{ inputs.dev_version_suffix }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Computed version override: $VERSION"
+        fi
+
     - name: Build wheel
-      run: ./build.sh
+      run: |
+        if [ -n "$VERSION_OVERRIDE" ]; then
+          export SETUPTOOLS_SCM_PRETEND_VERSION="$VERSION_OVERRIDE"
+          echo "Using version: $SETUPTOOLS_SCM_PRETEND_VERSION"
+        fi
+        ./build.sh
       env:
         PYTHON_VERSION: ${{ matrix.python_version }}
+        VERSION_OVERRIDE: ${{ steps.version.outputs.version }}
 
     - name: Prepare SimpleDB
       run: |

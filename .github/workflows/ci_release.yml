@@ -15,8 +15,13 @@ jobs:
     outputs:
       os_list: '["ubuntu-22.04", "ubuntu-24.04", "macos-14", "macos-15", "macos-26"]'
       python_version_list: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+      dev_version_suffix: ${{ steps.suffix.outputs.value }}
     steps:
       - run: echo "Defining matrix"
+      - name: Compute dev version suffix for nightly builds
+        id: suffix
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: echo "value=$(date -u +%Y%m%d%H%M)" >> "$GITHUB_OUTPUT"
 
   build-release:
     needs: setup
@@ -24,6 +29,7 @@ jobs:
     with:
       os_list: ${{ needs.setup.outputs.os_list }}
       python_version_list: ${{ needs.setup.outputs.python_version_list }}
+      dev_version_suffix: ${{ needs.setup.outputs.dev_version_suffix }}
 
   publish:
     name: Publish to PyPI
