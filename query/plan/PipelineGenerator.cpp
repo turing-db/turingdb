@@ -891,35 +891,48 @@ PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
             throw PlannerException("Common Successor Joins With Common Ancestor Unsupported");
         }
         case JoinType::PREDICATE: {
-            throw PlannerException("Join On Predicates Not Been Supported");
+            leftJoinTag = _declToColumn.find(node->getLeftVarDecl())->second;
+            rightJoinTag = _declToColumn.find(node->getRightVarDecl())->second;
+            break;
         }
     }
 
     auto& outputIf = _builder.addHashJoin(rhs, leftJoinTag, rightJoinTag);
 
-    // Get the output join column tag
-    ColumnTag streamedTag = outputIf.getDataframe()->cols().back()->getTag();
+    // For value hash joins the join key is a property value, not an entity ID.
+    // Preserve the LHS stream so downstream processors know which entity column to use.
+    // Remap both key VarDecls to the merged join column tag since the original tags
+    // are no longer present in the output dataframe.
+    if (node->getJoinType() == JoinType::PREDICATE) {
+        outputIf.setStream(lhs->getStream());
+        auto joinTag = outputIf.getDataframe()->cols().back()->getTag();
+        _declToColumn.insert_or_assign(node->getLeftVarDecl(), joinTag);
+        _declToColumn.insert_or_assign(node->getRightVarDecl(), joinTag);
+    } else {
+        // Get the output join column tag
+        ColumnTag streamedTag = outputIf.getDataframe()->cols().back()->getTag();
 
-    // Only if we have a dependency tag does the streamedTag become anything other
-    // than the join tag
-    if (node->getDependencyVarDecl()) {
-        const auto it = _declToColumn.find(node->getDependencyVarDecl());
+        // Only if we have a dependency tag does the streamedTag become anything other
+        // than the join tag
+        if (node->getDependencyVarDecl()) {
+            const auto it = _declToColumn.find(node->getDependencyVarDecl());
 
-        // The dependency var decl branch should be fully expanded and the var decl
-        // should exist in the declToColumn map
-        if (it == _declToColumn.end()) {
-            throw PlannerException("Join Dependency VarDecl Not Found");
+            // The dependency var decl branch should be fully expanded and the var decl
+            // should exist in the declToColumn map
+            if (it == _declToColumn.end()) {
+                throw PlannerException("Join Dependency VarDecl Not Found");
+            }
+
+            // The input that doesn't have to dependencyVarDecl is the one we wish to stream
+            if (!lhs->getDataframe()->hasColumn(it->second)) {
+                streamedTag = lhs->getStream().visit(visitor);
+            } else {
+                streamedTag = rhs->getStream().visit(visitor);
+            }
         }
 
-        // The input that doesn't have to dependencyVarDecl is the one we wish to stream
-        if (!lhs->getDataframe()->hasColumn(it->second)) {
-            streamedTag = lhs->getStream().visit(visitor);
-        } else {
-            streamedTag = rhs->getStream().visit(visitor);
-        }
+        outputIf.setStream(EntityOutputStream::createNodeStream(streamedTag));
     }
-
-    outputIf.setStream(EntityOutputStream::createNodeStream(streamedTag));
 
     _builder.setMaterializeProc(MaterializeProcessor::createFromDf(_pipeline,
                                                                    _mem,

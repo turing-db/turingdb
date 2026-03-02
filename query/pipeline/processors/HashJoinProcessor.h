@@ -12,7 +12,6 @@ class ColumnTag;
 }
 
 namespace db {
-using HashJoinMap = std::unordered_map<NodeID, std::vector<RowOffset>>;
 
 struct RowOffsetsCopyState {
     const Dataframe* _df {nullptr};
@@ -42,8 +41,11 @@ struct RowOffsetsCopyState {
     size_t numRemainingOffsets() { return _offsetVec->size() - _rowOffsetIdx; };
 };
 
+template <typename Key>
 class HashJoinProcessor : public Processor {
 public:
+    using HashJoinMap = std::unordered_map<Key, std::vector<RowOffset>>;
+
     static HashJoinProcessor* create(PipelineV2* pipeline,
                                      ColumnTag leftJoinKey,
                                      ColumnTag rightJoinKey);
@@ -83,6 +85,8 @@ private:
     size_t _rightInputIdx {0};
 
     bool _hasWritten {false};
+    bool _isLeftOptionalKey {false};
+    bool _isRightOptionalKey {false};
 
     // Stores Information To Finish Off A Join
     // Mid RowOffset Vector.

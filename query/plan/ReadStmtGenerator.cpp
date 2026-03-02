@@ -620,6 +620,11 @@ void ReadStmtGenerator::placePredicateJoins() {
             throwError("Unknown error. Could not place predicate");
         }
 
+        // Try to place a value hash join instead of cartesian product + filter
+        if (tryPlaceValueHashJoin(pred.get(), deps, var)) {
+            continue;
+        }
+
         // Step 2: Place joins
         for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
             generateDependency(dep._producerNode, dep._expr);
@@ -631,6 +636,75 @@ void ReadStmtGenerator::placePredicateJoins() {
         filterNode->addPredicate(pred.get());
         pred->setFilterNode(filterNode);
     }
+}
+
+bool ReadStmtGenerator::tryPlaceValueHashJoin(Predicate* pred,
+                                               ExprDependencies& deps,
+                                               VarNode* var) {
+    // Must have exactly 2 variable dependencies and no function dependencies
+    auto& varDeps = deps.getVarDeps();
+    if (varDeps.size() != 2 || !deps.getFuncDeps().empty()) {
+        return false;
+    }
+
+    // Must be a BinaryExpr with Equal operator
+    const Expr* expr = pred->getExpr();
+    if (expr->getKind() != Expr::Kind::BINARY) {
+        return false;
+    }
+    const auto* binExpr = static_cast<const BinaryExpr*>(expr);
+    if (binExpr->getOperator() != BinaryOperator::Equal) {
+        return false;
+    }
+
+    // Both dep expressions must resolve to a single VarDecl (simple property/symbol)
+    auto& dep0 = varDeps[0];
+    auto& dep1 = varDeps[1];
+
+    if (!dep0._expr->getExprVarDecl() || !dep1._expr->getExprVarDecl()) {
+        return false;
+    }
+
+    // Check which dep is on a different island from var (NoPath = remote)
+    const auto [path0, ancestor0] = _topology->getShortestPath(var, dep0._producerNode);
+    const auto [path1, ancestor1] = _topology->getShortestPath(var, dep1._producerNode);
+
+    ExprDependencies::VarDependency* localDep = nullptr;
+    ExprDependencies::VarDependency* remoteDep = nullptr;
+
+    if (path0 == PlanGraphTopology::PathToDependency::NoPath &&
+        path1 != PlanGraphTopology::PathToDependency::NoPath) {
+        remoteDep = &dep0;
+        localDep = &dep1;
+    } else if (path1 == PlanGraphTopology::PathToDependency::NoPath &&
+               path0 != PlanGraphTopology::PathToDependency::NoPath) {
+        remoteDep = &dep1;
+        localDep = &dep0;
+    } else {
+        // Both on same island or both remote - fall back to cartesian product
+        return false;
+    }
+
+    // Generate property dependencies (place GetPropertyNodes)
+    generateDependency(localDep->_producerNode, localDep->_expr);
+    generateDependency(remoteDep->_producerNode, remoteDep->_expr);
+
+    // Handle local dep's data flow (may need a join within its island)
+    insertDataFlowNode(var, localDep->_producerNode);
+
+    // Create PREDICATE join instead of CartesianProduct for the remote dep
+    const VarDecl* leftDecl = localDep->_expr->getExprVarDecl();
+    const VarDecl* rightDecl = remoteDep->_expr->getExprVarDecl();
+
+    FilterNode* filterNode = _variables->getNodeFilter(var);
+    JoinNode* joinNode = _tree->insertBefore<JoinNode>(filterNode,
+                                                        leftDecl,
+                                                        rightDecl,
+                                                        JoinType::PREDICATE);
+    PlanGraphNode* remoteBranchTip = _topology->getBranchTip(remoteDep->_producerNode);
+    remoteBranchTip->connectOut(joinNode);
+
+    return true;
 }
 
 void ReadStmtGenerator::placeJoinsOnProcedures() {

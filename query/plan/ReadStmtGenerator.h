@@ -31,6 +31,9 @@ class PropertyExpr;
 class EntityTypeExpr;
 class VarDecl;
 
+class ExprDependencies;
+class Predicate;
+
 class ReadStmtGenerator {
 public:
     ReadStmtGenerator(const CypherAST* ast,
@@ -85,6 +88,8 @@ private:
     bool _isStandaloneCall {false};
 
     void generateDependency(PlanGraphNode* producer, Expr* rawExpr);
+
+    bool tryPlaceValueHashJoin(Predicate* pred, ExprDependencies& deps, VarNode* var);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
