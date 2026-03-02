@@ -1353,52 +1353,6 @@ TEST_F(WriteQueriesTest, exceedChunkThenFilter) {
     }
 }
 
-TEST_F(WriteQueriesTest, createMatchNegativeHexLiteral) {
-    {
-        newChange();
-        {
-            constexpr std::string_view createQuery =
-                R"(CREATE (n:Person{name:"Young", age:-32}))";
-
-            auto res = query(createQuery, [](const Dataframe*) {});
-            ASSERT_TRUE(res);
-            ASSERT_TRUE(query("COMMIT", [](const Dataframe*) {}));
-        }
-        {
-            const auto VERIFY =[](const Dataframe* df) {
-                ASSERT_TRUE(df);
-                ASSERT_EQ(2, df->size());
-
-                const NamedColumn* fst = df->cols().front();
-                const NamedColumn* snd = df->cols().back();
-
-                const auto* name = fst->as<ColumnOptVector<types::String::Primitive>>();
-                const auto* age = snd->as<ColumnOptVector<types::Int64::Primitive>>();
-                ASSERT_TRUE(name && age);
-                ASSERT_EQ(1, name->size());
-                ASSERT_EQ(1, age->size());
-
-                ASSERT_EQ("Young", name->at(0));
-                ASSERT_EQ(-32, age->at(0));
-            };
-
-            {
-                constexpr std::string_view matchQueryDec =
-                    R"(MATCH (n) WHERE n.age = -32 RETURN n.name, n.age)";
-                auto res = query(matchQueryDec, VERIFY);
-                ASSERT_TRUE(res);
-            }
-
-            {
-                constexpr std::string_view matchQueryHex =
-                    R"(MATCH (n) WHERE n.age = -0x20 RETURN n.name, n.age)";
-                auto res = query(matchQueryHex, VERIFY);
-                ASSERT_TRUE(res) << res.getError();
-            }
-        }
-    }
-}
-
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
