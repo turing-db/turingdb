@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "Column.h"
@@ -48,6 +50,7 @@ private:
     static constexpr auto _staticKind = ColumnKind::code<ColumnStringTable>();
     std::vector<StringColumn*> _columns;
     Headers _headers;
+    std::unordered_map<std::string_view, size_t> _headerIndex;
 };
 
 }
