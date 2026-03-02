@@ -104,7 +104,7 @@ setup(
     packages=find_packages(where="python"),
     package_dir={"": "python"},
     include_package_data=True,
-    package_data={"turingdb": ["bin/*", "lib/turingdb/extensions/*.so"]},
+    package_data={"turingdb": ["bin/*", "lib/turingdb/extensions/*.so", "lib/turingdb/extensions/*.dylib"]},
     has_ext_modules=lambda: True,
     cmdclass={
         "egg_info": BuildDirEggInfo,
