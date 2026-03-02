@@ -46,7 +46,11 @@ void ExtensionManager::installExtension(std::string_view name) {
         }
     }
 
+#ifdef __APPLE__
+    const std::string extFilename = std::string(name) + ".dylib";
+#else
     const std::string extFilename = std::string(name) + ".so";
+#endif
 
     // Try install directory first, then user extensions directory
     fs::Path extPath = _installExtensionsDir / extFilename;

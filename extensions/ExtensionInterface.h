@@ -13,5 +13,5 @@ struct TuringExtensionDef {
     TuringExtensionInitCallback _initCallback;
 };
 
-// Every extension .so must export:
+// Every extension shared library (.so on Linux, .dylib on macOS) must export:
 //   extern "C" const TuringExtensionDef* turing_extension();
