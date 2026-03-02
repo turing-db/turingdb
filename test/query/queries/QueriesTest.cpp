@@ -1356,6 +1356,12 @@ TEST_F(QueriesTest, db_history) {
     Rows expectedRows;
     Rows actualRows;
 
+    expectedRows.add({fmt::format("{:x}(HEAD)", commit->hash().get()),
+                      commit->getNumNodes(),
+                      commit->getNumEdges(),
+                      commit->getNumDataParts()});
+    commit = commit->getPreviousCommit();
+
     while (commit) {
         expectedRows.add({fmt::format("{:x}", commit->hash().get()),
                           commit->getNumNodes(),

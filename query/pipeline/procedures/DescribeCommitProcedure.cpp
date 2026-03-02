@@ -42,6 +42,12 @@ void getCommitStats(CommitStats* stats,
     std::transform(lower.begin(), lower.end(), lower.begin(),
                    [](char c) { return std::tolower(c); });
 
+    //Strip away the '(HEAD)' substring from the head hash value
+    const size_t parenPos = lower.find('(');
+    if (parenPos != std::string::npos) {
+        lower.resize(parenPos);
+    }
+
     const Commit* commit = headCommit;
 
     // Traverse the commit history chain to find the relevant commit
