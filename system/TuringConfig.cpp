@@ -3,6 +3,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
+
 #include <spdlog/spdlog.h>
 
 #include "BioAssert.h"
@@ -19,12 +23,17 @@ void resolveInstallExtensionsDir(fs::Path& result) {
     }
 
     char buf[4096];
-    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-    if (len > 0) {
-        buf[len] = '\0';
-        fs::Path exePath(std::string(buf, len));
-        result = exePath.parent().parent()
-            / "lib" / "turingdb" / "extensions";
+#ifdef __APPLE__
+    uint32_t bufSize = sizeof(buf);
+    int ok = _NSGetExecutablePath(buf, &bufSize) == 0;
+#else
+    ssize_t bufSize = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    int ok = bufSize > 0;
+    if (ok) buf[bufSize] = '\0';
+#endif
+    if (ok) {
+        const fs::Path exePath(std::string{buf});
+        result = exePath.parent().parent() / "lib" / "turingdb" / "extensions";
         return;
     }
 

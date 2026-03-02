@@ -133,12 +133,12 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             shutil.copy2(exe_path, dest_exe)
             os.chmod(dest_exe, 0o755)
 
-        # Copy extension .so files
+        # Copy extension shared libraries (.so on Linux, .dylib on macOS)
         if ext_src_dir.exists() and not ext_dest_dir.exists():
             ext_dest_dir.mkdir(parents=True, exist_ok=True)
             copied_extensions = True
-            for so_file in ext_src_dir.glob("*.so"):
-                shutil.copy2(so_file, ext_dest_dir / so_file.name)
+            for ext_file in list(ext_src_dir.glob("*.so")) + list(ext_src_dir.glob("*.dylib")):
+                shutil.copy2(ext_file, ext_dest_dir / ext_file.name)
 
         # Build the wheel using setuptools
         wheel_name = backend.build_wheel(
@@ -178,12 +178,12 @@ def build_sdist(sdist_directory, config_settings=None):
             shutil.copy2(exe_path, dest_exe)
             os.chmod(dest_exe, 0o755)
 
-        # Copy extension .so files
+        # Copy extension shared libraries (.so on Linux, .dylib on macOS)
         if ext_src_dir.exists() and not ext_dest_dir.exists():
             ext_dest_dir.mkdir(parents=True, exist_ok=True)
             copied_extensions = True
-            for so_file in ext_src_dir.glob("*.so"):
-                shutil.copy2(so_file, ext_dest_dir / so_file.name)
+            for ext_file in list(ext_src_dir.glob("*.so")) + list(ext_src_dir.glob("*.dylib")):
+                shutil.copy2(ext_file, ext_dest_dir / ext_file.name)
 
         # Build the sdist using setuptools
         sdist_name = backend.build_sdist(sdist_directory, config_settings)
