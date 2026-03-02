@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN -0o1000000000000000000000",
+  "expect": {
+    "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | RETURN -0o1000000000000000000000\n       |        ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Octal literal exceeded int64 range.",
+    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | RETURN -0o1000000000000000000000\n       |        ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Octal literal exceeded int64 range.",
+    "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | RETURN -0o1000000000000000000000\\n       |        ^^^^^^^^^^^^^^^^^^^^^^^^^\\n-------* Octal literal exceeded int64 range.\"}"
+  },
+  "tags": [
+    "literal",
+    "oct",
+    "return",
+    "error"
+  ],
+  "write-required": false
+}
