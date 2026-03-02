@@ -234,7 +234,7 @@ using Token = db::YCypherParser::token;
     }
 
     int64_t v = 0;
-    auto [_, err] = std::from_chars(begin, end, v, HEX_BASE);
+    const auto [_, err] = std::from_chars(begin, end, v, HEX_BASE);
     if (err == std::errc::result_out_of_range) {
         syntaxError(*yylloc, "Hexadecimal literal exceeded int64 range.");
     }
@@ -275,7 +275,7 @@ using Token = db::YCypherParser::token;
     }
 
     int64_t v = 0;
-    auto [_, err] = std::from_chars(begin, end, v, OCT_BASE);
+    const auto [_, err] = std::from_chars(begin, end, v, OCT_BASE);
 
     if (err == std::errc::result_out_of_range) {
         syntaxError(*yylloc, "Octal literal exceeded int64 range.");
@@ -304,7 +304,7 @@ using Token = db::YCypherParser::token;
     const char* end = yytext + yyleng;
 
     int64_t v = 0;
-    auto [_, err] = std::from_chars(begin, end, v, DEC_BASE);
+    const auto [_, err] = std::from_chars(begin, end, v, DEC_BASE);
 
     if (err == std::errc::result_out_of_range) {
         syntaxError(*yylloc, "Decimal literal exceeded int64 range.");
