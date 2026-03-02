@@ -290,6 +290,7 @@ using Token = db::YCypherParser::token;
     return Token::DIGIT;
 }
 
+
     /*
      * Decimal literals; no prefix required.
      * from_chars automatically strips leading '-' for decimal,
