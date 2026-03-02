@@ -105,6 +105,7 @@ class TuringDB:
             if "commit" in self._params:
                 del self._params["commit"]
         else:
+            self.query(f"LOAD COMMIT '{commit}'")
             self.set_commit(commit)
 
     def new_change(self) -> int:
