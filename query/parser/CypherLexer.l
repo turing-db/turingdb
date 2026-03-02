@@ -208,27 +208,87 @@ using Token = db::YCypherParser::token;
 }
 
 
+    /*
+     * Hexadecimal literals.
+     * from_chars using base 16 does not strip the leading 0x,
+     * so + 2 to the token src location, or + 3 if there is leading '-'.
+     * yytext will always be at least 2/3 characters due to the
+     * below regex, so it is always safe to + 2/3.
+     * We also need to manually negate the resultant value.
+     */
 -?0[xX][0-9a-fA-F]+ {
+    static constexpr int HEX_BASE = 16;
+
+    const char* begin = yytext;
+    const char* end = yytext + yyleng;
+
+    bool negative = false;
+    if (*begin == '-') {
+        negative = true;
+        begin += 3; // skip leading "-0x"
+    } else {
+        begin += 2; // skip leading "0x"
+    }
+
     int64_t v = 0;
-    std::from_chars(yytext, yytext + yyleng, v);
+    std::from_chars(begin, end, v, HEX_BASE);
+
+    if (negative) {
+        v = -v;
+    }
+
     yylval->emplace<int64_t>(v);
 
     return Token::DIGIT;
 }
 
 
--?0[0-7]+ {
+    /*
+     * Octal literals.
+     * from_chars using base 8 does not strip the leading 0o,
+     * so + 2 to the token src location, or + 3 if there is leading '-'.
+     * yytext will always be at least 2/3 characters due to the
+     * below regex, so it is always safe to + 2/3.
+     * We also need to manually negate the resultant value.
+     */
+-?0[oO][0-7]+ {
+    static constexpr int OCT_BASE = 8;
+
+    const char* begin = yytext;
+    const char* end = yytext + yyleng;
+
+    bool negative = false;
+    if (*begin == '-') {
+        negative = true;
+        begin += 3; // skips leading "-0o"
+    } else {
+        begin += 2; // skips leading "0o"
+    }
+
     int64_t v = 0;
-    std::from_chars(yytext, yytext + yyleng, v);
+    std::from_chars(begin, end, v, OCT_BASE);
+    if (negative) {
+        v = -v;
+    }
+
     yylval->emplace<int64_t>(v);
 
     return Token::DIGIT;
 }
 
-
+    /*
+     * Decimal literals; no prefix required.
+     * from_chars automatically strips leading '-' for decimal,
+     * and handles negation if present.
+     */
 -?[0-9]+ {
+    static constexpr int DEC_BASE = 10;
+
+    const char* begin = yytext;
+    const char* end = yytext + yyleng;
+
     int64_t v = 0;
-    std::from_chars(yytext, yytext + yyleng, v);
+    std::from_chars(begin, end, v, DEC_BASE);
     yylval->emplace<int64_t>(v);
 
     return Token::DIGIT;
