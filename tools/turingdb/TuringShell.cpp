@@ -26,6 +26,7 @@
 #include "GraphPath.h"
 
 #include "metadata/PropertyNull.h"
+#include "versioning/ChangeResult.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 
@@ -608,9 +609,24 @@ bool TuringShell::setChangeID(ChangeID changeID) {
 
 bool TuringShell::setCommitHash(CommitHash hash) {
     auto tx = _turingDB.getSystemManager().openTransaction(_graphName, hash, _changeID);
+
     if (!tx) {
-        spdlog::error("Can not switch commit: {}", tx.error().fmtMessage());
-        return false;
+        if (tx.error().getType() == ChangeErrorType::COMMIT_NOT_LOADED) {
+            // Commit exists but isn't hydrated — load it now
+            spdlog::info("Loading commit {:x}...", hash.get());
+            auto loadRes = _turingDB.getSystemManager().loadCommit(_graphName, hash);
+            if (!loadRes) {
+                spdlog::error("Failed to load commit: {}", loadRes.error().fmtMessage());
+                return false;
+            }
+            // Re-open transaction after loading
+            tx = _turingDB.getSystemManager().openTransaction(_graphName, hash, _changeID);
+        }
+
+        if (!tx) {
+            spdlog::error("Can not switch commit: {}", tx.error().fmtMessage());
+            return false;
+        }
     }
 
     if (!tx->isValid()) {

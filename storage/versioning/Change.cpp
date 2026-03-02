@@ -37,7 +37,7 @@ std::unique_ptr<Change> Change::create(VersionController* versionController,
 
     auto* ptr = new Change(versionController, id, prevCommit);
 
-    return std::unique_ptr<Change> {ptr};
+    return std::unique_ptr<Change>(ptr);
 }
 
 PendingCommitWriteTx Change::openWriteTransaction() {

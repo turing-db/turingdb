@@ -21,24 +21,17 @@
 
 using namespace db;
 
-DumpResult<std::unique_ptr<Commit>> CommitLoader::load(const fs::Path& commitDir,
-                                                       const fs::Path& partsDir,
-                                                       Graph& graph,
-                                                       CommitHash hash,
-                                                       const Commit* prevCommit) {
-    Profile profile("CommitLoader::load");
+DumpResult<void> CommitLoader::loadData(const fs::Path& commitDir,
+                                        const fs::Path& partsDir,
+                                        Graph* graph,
+                                        Commit* commit) {
+    Profile profile("CommitLoader::loadData");
 
-    VersionController* controller = graph._versionController.get();
-
-    std::unique_lock<std::shared_mutex> uniqueLock = controller->lock();
+    VersionController* controller = graph->_versionController.get();
     VersionController::DataPartMap& partMap = controller->getPartMap();
+    commit->setCommitData(controller->createCommitData(commit->hash()));
 
-    auto commit = std::make_unique<Commit>(
-        controller,
-        controller->createCommitData(hash),
-        prevCommit);
-
-    CommitHistoryBuilder historyBuilder = CommitHistoryBuilder(commit->_data->_history);
+    CommitHistoryBuilder historyBuilder {commit->_data->_history};
 
     auto& metadata = commit->_data->_metadata;
 
@@ -116,9 +109,13 @@ DumpResult<std::unique_ptr<Commit>> CommitLoader::load(const fs::Path& commitDir
             return res.get_unexpected();
         }
 
-        const size_t numDataParts = it.get<uint64_t>();
+        //Skip the metadata relating to the number of nodes and edges.
+        it.advance(2*sizeof(uint64_t));
 
-        for (size_t i = 0; i < numDataParts; ++i) {
+        const size_t numCommitDataParts = it.get<uint64_t>();
+        const size_t numAllDataParts = it.get<uint64_t>();
+
+        for (size_t i = 0; i < numAllDataParts; ++i) {
             const auto dataPartID = it.get<uint64_t>();
             const auto it = partMap.find(DataPartID(dataPartID));
 
@@ -143,28 +140,52 @@ DumpResult<std::unique_ptr<Commit>> CommitLoader::load(const fs::Path& commitDir
             partMap.emplace(dataPartID, res.value());
         }
 
-        historyBuilder.setCommitDatapartCount(it.get<size_t>());
+        historyBuilder.setCommitDatapartCount(numCommitDataParts);
         reader.file().close();
     }
 
-    // Add Commit Metadata
-    {
-        const size_t numCommitDataParts = commit->data().commitDataparts().size();
-        size_t numNodesAdded = 0;
-        size_t numEdgesAdded = 0;
+    return  {};
+}
 
-        for (size_t i = 0; i < numCommitDataParts; ++i) {
-            const DataPart* part = commit->data().commitDataparts()[i].get();
-            numNodesAdded += part->getNodeContainerSize();
-            numEdgesAdded += part->getEdgeContainerSize();
-        }
+DumpResult<std::unique_ptr<Commit>> CommitLoader::load(Graph* graph,
+                                                       CommitHash hash,
+                                                       const fs::Path& commitDir,
+                                                       const Commit* prevCommit) {
+    Profile profile("CommitLoader::load");
 
-        commit->_numDataParts = numCommitDataParts;
-        commit->_numNodes = numNodesAdded;
-        commit->_numEdges = numEdgesAdded;
+    auto commit = std::make_unique<Commit>(graph->_versionController.get(),
+                                           hash,
+                                           prevCommit);
 
-        commit->_prevCommit = prevCommit;
+    const fs::Path metadataFile = commitDir / "metadata";
+
+    auto fileRes = fs::File::open(metadataFile);
+    if (!fileRes) {
+        return DumpError::result(DumpErrorType::CANNOT_OPEN_COMMIT_METADATA,
+                                 fileRes.error());
     }
+
+    fs::FileReader reader;
+    reader.setFile(&fileRes.value());
+
+    reader.read();
+    if (reader.errorOccured()) {
+        return DumpError::result(DumpErrorType::COULD_NOT_READ_COMMIT_METADATA,
+                                 *reader.error());
+    }
+
+    fs::ByteBufferIterator it = reader.iterateBuffer();
+
+    if (auto res = GraphDumpHelper::checkFileHeader(&it); !res) {
+        return res.get_unexpected();
+    }
+    const size_t numNodes = it.get<uint64_t>();
+    const size_t numEdges = it.get<uint64_t>();
+    const size_t numDataParts = it.get<uint64_t>();
+
+    commit->_numDataParts = numDataParts;
+    commit->_numEdges = numEdges;
+    commit->_numNodes = numNodes;
 
     return std::move(commit);
 }

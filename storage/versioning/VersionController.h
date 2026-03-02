@@ -6,10 +6,12 @@
 #include <atomic>
 
 #include "ID.h"
+#include "Path.h"
 #include "Profiler.h"
 #include "versioning/Change.h"
 #include "versioning/CommitResult.h"
 #include "mergers/DataPartMergeResult.h"
+#include "dump/DumpResult.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "DataPart.h"
@@ -49,6 +51,10 @@ public:
     [[nodiscard]] const Graph* getGraph() const { return _graph; }
     [[nodiscard]] const Commit* getCommitSafe(CommitHash hash) const;
     [[nodiscard]] const Commit* getCommitUnsafe(CommitHash hash) const;
+    [[nodiscard]] DumpResult<void> loadCommit(CommitHash hash,
+                                              const fs::Path& commitDir,
+                                              const fs::Path& partsDir,
+                                              Graph* graph);
 
     size_t getNumCommits() const { return _commits.size(); }
 

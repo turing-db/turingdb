@@ -7,6 +7,7 @@
 #include "ChangeManager.h"
 #include "Graph.h"
 #include "JsonlParser.h"
+#include "versioning/Commit.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 #include "GMLImporter.h"
@@ -398,6 +399,11 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
             return tx;
         }
 
+        // Determine why it failed
+        const Commit* commit = graph->getVersionController().getCommitSafe(commitHash);
+        if (commit != nullptr && !commit->hasData()) {
+            return ChangeError::result(ChangeErrorType::COMMIT_NOT_LOADED);
+        }
         return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
     }
 
@@ -427,5 +433,22 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
         return tx;
     }
 
+    // Determine why it failed
+    {
+        const Commit* commit = graph->getVersionController().getCommitSafe(commitHash);
+        if (commit != nullptr && !commit->hasData()) {
+            return ChangeError::result(ChangeErrorType::COMMIT_NOT_LOADED);
+        }
+    }
     return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
+}
+
+DumpResult<void> SystemManager::loadCommit(std::string_view graphName, CommitHash hash) {
+    std::shared_lock guard(_graphsLock);
+    Graph* graph = graphName.empty() ? getDefaultGraph()
+                                     : getGraph(std::string(graphName));
+    if (!graph) {
+        return DumpError::result(DumpErrorType::GRAPH_DOES_NOT_EXIST);
+    }
+    return graph->loadCommit(hash);
 }

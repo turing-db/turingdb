@@ -129,10 +129,12 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
         case ProcedureState::Step::PREPARE: {
             bioassert(rawCommitCol, "db.describeCommit: must be provided a commit hash");
 
-            const Graph* graph =
-                ctxt->getSystemManager()->getGraph(ctxt->getGraphName().data());
-            data._headCommit =
-                graph->getVersionController().getCommitSafe(ctxt->getGraphView().headCommitHash());
+            const SystemManager* sysMan = ctxt->getSystemManager();
+            const Graph* graph = sysMan->getGraph(ctxt->getGraphName().data());
+            const VersionController* controller = &graph->getVersionController();
+            const CommitHash headHash = ctxt->getGraphView().headCommitHash();
+
+            data._headCommit = controller->getCommitSafe(headHash);
             bioassert(data._headCommit, "headCommitHash not found");
 
             const auto containerKind =

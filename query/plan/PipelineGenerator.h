@@ -55,6 +55,7 @@ class VectorSearchNode;
 class DeleteVectorIndexNode;
 class ShowVectorIndexesNode;
 class OrderByNode;
+class LoadCommitNode;
 
 class PipelineGenerator {
 public:
@@ -150,9 +151,9 @@ private:
     PipelineOutputInterface* translateDeleteVectorIndexNode(DeleteVectorIndexNode* node);
     PipelineOutputInterface* translateShowVectorIndexesNode(ShowVectorIndexesNode* node);
     PipelineOutputInterface* translateOrderByNode(OrderByNode* node);
+    PipelineOutputInterface* translateLoadCommit(LoadCommitNode* node);
 
     std::vector<std::string> _csvHeaders;
     size_t _csvFieldCount {0};
 };
-
 }

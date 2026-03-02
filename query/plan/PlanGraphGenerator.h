@@ -23,6 +23,7 @@ class ListGraphQuery;
 class CreateGraphQuery;
 class LoadGMLQuery;
 class LoadJsonlQuery;
+class LoadCommitQuery;
 class S3ConnectQuery;
 class S3TransferQuery;
 class ShowProceduresQuery;
@@ -66,6 +67,7 @@ private:
     void generateLoadVectorQuery(const LoadVectorQuery* query);
     void generateDeleteVectorIndexQuery(const DeleteVectorIndexQuery* query);
     void generateShowVectorIndexesQuery(const ShowVectorIndexesQuery* query);
+    void generateLoadCommitQuery(const LoadCommitQuery* query);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

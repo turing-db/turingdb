@@ -9,13 +9,20 @@ Commit::Commit() = default;
 
 Commit::Commit(VersionController* controller,
                const WeakArc<CommitData>& data,
-               const Commit* prevCommit,
-               bool isMergeCommit)
+               const Commit* prevCommit)
     : _controller(controller),
     _hash(data->hash()),
     _data(data),
-    _prevCommit(prevCommit),
-    _mergeCommit(isMergeCommit)
+    _prevCommit(prevCommit)
+{
+}
+
+Commit::Commit(VersionController* controller,
+               CommitHash hash,
+               const Commit* prevCommit) 
+    : _controller(controller),
+    _hash(hash),
+    _prevCommit(prevCommit)
 {
 }
 
@@ -50,7 +57,7 @@ std::unique_ptr<Commit> Commit::createNextCommit(VersionController* controller,
 std::unique_ptr<Commit> Commit::createMergeCommit(VersionController* controller,
                                                   const WeakArc<CommitData>& data,
                                                   const Commit* prevCommit) {
-    auto* ptr = new Commit(controller, data, prevCommit, true);
+    auto* ptr = new Commit {controller, data, prevCommit};
 
     const GraphView view = GraphView(&prevCommit->data());
 

@@ -66,6 +66,7 @@ public:
                                                    std::span<Procedure::YieldItem> yield);
     PipelineBlockOutputInterface& addChangeOp(ChangeOp op);
     PipelineBlockOutputInterface& addCommit();
+    PipelineBlockOutputInterface& addLoadCommit(std::string_view hashStr);
 
     PipelineValuesOutputInterface& addGetLabelSetID();
     PipelineValuesOutputInterface& addGetEdgeTypeID();

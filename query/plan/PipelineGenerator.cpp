@@ -65,6 +65,7 @@
 #include "nodes/ShowProceduresNode.h"
 #include "nodes/ShortestPathNode.h"
 #include "nodes/LoadCSVNode.h"
+#include "nodes/LoadCommitNode.h"
 #include "nodes/ExprEvalNode.h"
 #include "nodes/CreateVectorIndexNode.h"
 #include "nodes/LoadVectorNode.h"
@@ -403,6 +404,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::SHOW_VECTOR_INDEXES:
             return translateShowVectorIndexesNode(static_cast<ShowVectorIndexesNode*>(node));
+        break;
+
+        case PlanGraphOpcode::LOAD_COMMIT:
+            return translateLoadCommit(static_cast<LoadCommitNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
@@ -1472,6 +1477,12 @@ PipelineOutputInterface* PipelineGenerator::translateDeleteVectorIndexNode(Delet
 
 PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowVectorIndexesNode* node) {
     _builder.addShowVectorIndexes();
+    return _builder.getPendingOutputInterface();
+}
+
+
+PipelineOutputInterface* PipelineGenerator::translateLoadCommit(LoadCommitNode* node) {
+    _builder.addLoadCommit(node->getHashStr());
     return _builder.getPendingOutputInterface();
 }
 
