@@ -20,11 +20,12 @@
 using namespace db;
 
 BFSExpandEdgesProcessor::BFSExpandEdgesProcessor(LocalMemory* mem,
-                                                     int64_t minHops,
-                                                     int64_t maxHops)
+                                                 int64_t minHops,
+                                                 int64_t maxHops)
     : _mem(mem),
-      _minHops(minHops),
-      _maxHops(maxHops) {
+    _minHops(minHops),
+    _maxHops(maxHops)
+{
 }
 
 BFSExpandEdgesProcessor::~BFSExpandEdgesProcessor() {
@@ -61,15 +62,21 @@ void BFSExpandEdgesProcessor::prepare(ExecutionContext* ctxt) {
     const GraphView& view = ctxt->getGraphView();
 
     // Input
-    _inputSources = dynamic_cast<ColumnNodeIDs*>(_input.getNodeIDs()->getColumn());
+    _inputSources = dynamic_cast<ColumnNodeIDs*>(
+        _input.getNodeIDs()->getColumn());
     bioassert(_inputSources, "Input nodes column is null");
 
     // Output
     bioassert(_outputTargets, "Output target nodes column is null");
     bioassert(_outputPaths, "Output paths column is null");
     bioassert(_outputIndices, "Output indices column is null");
-    bioassert(dynamic_cast<ColumnVector<EntityList>*>(_outputPaths->getColumn()), "Output paths column is not a path column");
-    bioassert(dynamic_cast<ColumnNodeIDs*>(_outputTargets->getColumn()), "Output targets column is not an entity ID column");
+    bioassert(
+        dynamic_cast<ColumnVector<EntityList>*>(
+            _outputPaths->getColumn()),
+        "Output paths column is not a path column");
+    bioassert(
+        dynamic_cast<ColumnNodeIDs*>(_outputTargets->getColumn()),
+        "Output targets column is not an entity ID column");
 
     // BFS Execution state
     _bfsNodes = _mem->alloc<ColumnNodeIDs>();
@@ -77,7 +84,8 @@ void BFSExpandEdgesProcessor::prepare(ExecutionContext* ctxt) {
     _bfsIntermediates = _mem->alloc<ColumnNodeIDs>();
     _bfsIndices = _mem->alloc<ColumnIndices>();
 
-    _bfsWriter = std::make_unique<GetEdgesChunkWriter>(view, _bfsNodes);
+    _bfsWriter = std::make_unique<GetEdgesChunkWriter>(
+        view, _bfsNodes);
     _bfsWriter->setIndices(_bfsIndices);
     _bfsWriter->setEdgeIDs(_bfsEdges);
     _bfsWriter->setOtherIDs(_bfsIntermediates);
@@ -86,98 +94,122 @@ void BFSExpandEdgesProcessor::prepare(ExecutionContext* ctxt) {
 }
 
 void BFSExpandEdgesProcessor::reset() {
+    _bfsInitialized = false;
+    _depthNeedsSetup = true;
+    _depth = 0;
+    _frontier.clear();
+    _nextFrontier.clear();
+    _mainMapping.clear();
+    _nextMainMapping.clear();
     markAsReset();
 }
 
 void BFSExpandEdgesProcessor::execute() {
+    auto* outputTargets =
+        _outputTargets->getColumn()->cast<ColumnNodeIDs>();
+    auto* outputPaths =
+        _outputPaths->getColumn()->cast<ColumnVector<EntityList>>();
+
+    // Clear output columns for this chunk
+    outputTargets->clear();
+    outputPaths->clear();
     _outputIndices->clear();
 
-    auto* outputTargets = static_cast<ColumnNodeIDs*>(_outputTargets->getColumn());
-    auto* outputPaths = static_cast<ColumnVector<EntityList>*>(_outputPaths->getColumn());
+    // Initialize BFS on first call
+    if (!_bfsInitialized) {
+        _bfsInitialized = true;
 
-    outputPaths->clear();
+        const ColumnNodeIDs& inputNodes = *_inputSources;
+        const size_t inputSize = inputNodes.size();
 
-    struct FrontierEntry {
-        NodeID node;
-        EntityList edges;
-        // bool _finished {false}; // TODO: Add this to the frontier
-        //       and use it to avoid reexploring over and over again
-    };
+        _frontier.resize(inputSize);
+        _mainMapping.resize(inputSize);
 
-    const size_t inputSize = _inputSources->size();
-    const ColumnNodeIDs& inputNodes = *_inputSources;
-    std::vector<FrontierEntry> frontier;
-    std::vector<FrontierEntry> nextFrontier;
+        for (size_t i = 0; i < inputSize; i++) {
+            _frontier[i].node = inputNodes[i];
+            _mainMapping[i] = i;
+        }
 
-    ColumnNodeIDs& bfsNodes = *_bfsNodes;
+        _depth = 1;
+        _depthNeedsSetup = true;
+    }
+
+    // Set up current depth if needed
+    if (_depthNeedsSetup) {
+        if (_frontier.empty() || _depth > _maxHops) {
+            // Reached max depth or no more nodes to expand
+            _input.getPort()->consume();
+            _output.getPort()->writeData();
+            finish();
+            return;
+        }
+
+        _bfsNodes->resize(_frontier.size());
+        for (size_t i = 0; i < _frontier.size(); i++) {
+            (*_bfsNodes)[i] = _frontier[i].node;
+        }
+
+        _bfsWriter->reset();
+        _nextFrontier.clear();
+        _nextMainMapping.clear();
+        _depthNeedsSetup = false;
+    }
+
+    // Expand one chunk at current depth
+    _bfsWriter->fill(_ctxt->getChunkSize());
+
+    // Process edges from this fill
     ColumnEdgeIDs& bfsEdges = *_bfsEdges;
     ColumnNodeIDs& bfsIntermediates = *_bfsIntermediates;
     ColumnIndices& bfsIndices = *_bfsIndices;
 
-    for (size_t sourceIdx = 0; sourceIdx < inputSize; sourceIdx++) {
-        const NodeID sourceNode = inputNodes[sourceIdx];
-        frontier.resize(1);
-        frontier[0].node = sourceNode;
-        frontier[0].edges = {};
+    EntityList::Entry edgeVal {
+        ._type = EntityType::Edge,
+    };
 
-        for (int64_t depth = 1; !frontier.empty(); depth++) {
-            if (_maxHops != std::numeric_limits<int64_t>::max() && depth > _maxHops) {
-                break;
-            }
+    for (size_t i = 0; i < bfsEdges.size(); i++) {
+        const NodeID intermediate = bfsIntermediates[i];
+        const size_t parentIdx = bfsIndices[i];
+        edgeVal._id = bfsEdges[i].getValue();
 
-            // Prepare new set of sources
-            bfsNodes.resize(frontier.size());
-            for (size_t i = 0; i < frontier.size(); i++) {
-                bfsNodes[i] = frontier[i].node;
-            }
+        const EntityList& parentPath =
+            _frontier[parentIdx].edges;
+        const bool alreadyUsed = std::find(
+                                     parentPath.begin(),
+                                     parentPath.end(),
+                                     edgeVal)
+                              != parentPath.end();
+        if (alreadyUsed) {
+            // Already visited this edge, skip it
+            continue;
+        }
 
-            bfsEdges.clear();
-            bfsIntermediates.clear();
-            bfsIndices.clear();
+        FrontierEntry& newEntry = _nextFrontier.emplace_back();
+        newEntry.edges = parentPath;
+        newEntry.edges.add(edgeVal._type, edgeVal._id);
+        newEntry.node = intermediate;
+        _nextMainMapping.push_back(_mainMapping[parentIdx]);
 
-            _bfsWriter->reset();
-            _bfsWriter->fill(SIZE_MAX); // TODO -> Make the bfs processor chunked
-
-            EntityList::Entry edgeVal {
-                ._type = EntityType::Edge,
-            };
-
-            nextFrontier.clear();
-            for (size_t i = 0; i < bfsEdges.size(); i++) {
-                const NodeID intermediate = bfsIntermediates[i];
-                const size_t parentIdx = bfsIndices[i];
-                edgeVal._id = bfsEdges[i].getValue();
-
-                const EntityList& parentPath = frontier[parentIdx].edges;
-                const bool alreadyUsed = std::find(
-                                             parentPath.begin(), parentPath.end(),
-                                             edgeVal)
-                                      != parentPath.end();
-                if (alreadyUsed) {
-                    continue;
-                }
-
-                FrontierEntry& newEntry = nextFrontier.emplace_back();
-                newEntry.edges = parentPath; // Copy parent path
-                newEntry.edges.add(edgeVal._type, edgeVal._id);
-                newEntry.node = intermediate;
-
-                if (depth >= _minHops) {
-                    _outputIndices->push_back(sourceIdx);
-                    outputPaths->push_back(newEntry.edges);
-                }
-            }
-
-            frontier = std::move(nextFrontier);
+        if (_depth >= _minHops) {
+            _outputIndices->push_back(_mainMapping[parentIdx]);
+            outputTargets->push_back(intermediate);
+            outputPaths->push_back(newEntry.edges);
         }
     }
 
-    outputTargets->resize(frontier.size());
-    for (size_t i = 0; i < frontier.size(); i++) {
-        outputTargets->set(i, frontier[i].node);
+    // Check if current depth is fully expanded
+    if (!_bfsWriter->isValid()) {
+        _frontier = std::move(_nextFrontier);
+        _mainMapping = std::move(_nextMainMapping);
+        _depth++;
+        _depthNeedsSetup = true;
+
+        // Check if BFS is complete
+        if (_frontier.empty() || _depth > _maxHops) {
+            _input.getPort()->consume();
+            finish();
+        }
     }
 
-    _input.getPort()->consume();
     _output.getPort()->writeData();
-    finish();
 }

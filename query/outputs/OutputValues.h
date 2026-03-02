@@ -81,7 +81,7 @@ struct ColumnTypeGenerator {
         } else if constexpr (IsNull<T>) {
             _name = fmt::format("NULL");
         } else {
-            COMPILE_ERROR("Unexpected column type");
+            _name = fmt::format("Object");
         }
     }
 };
