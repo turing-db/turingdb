@@ -150,6 +150,14 @@ void CypherASTDumper::dump(std::ostream& out) {
             case QueryCommand::Kind::LOAD_COMMIT_QUERY:
                 out << "    script ||--o{ LOAD_COMMIT : \"\"\n";
             break;
+
+            case QueryCommand::Kind::INSTALL_EXTENSION_QUERY:
+                out << "    script ||--o{ INSTALL_EXTENSION : \"\"\n";
+            break;
+
+            case QueryCommand::Kind::SHOW_EXTENSIONS_QUERY:
+                out << "    script ||--o{ SHOW_EXTENSIONS : \"\"\n";
+            break;
         }
     }
 }

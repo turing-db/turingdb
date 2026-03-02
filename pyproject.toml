@@ -35,7 +35,7 @@ package-dir = {"" = "python"}
 where = ["python"]
 
 [tool.setuptools.package-data]
-turingdb = ["bin/*"]
+turingdb = ["bin/*", "lib/turingdb/extensions/*.so"]
 
 [tool.uv]
 dev-dependencies = ["build>=0.10.0", "twine>=4.0.0"]

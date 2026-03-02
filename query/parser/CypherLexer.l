@@ -67,6 +67,7 @@ using Token = db::YCypherParser::token;
 "<"  { return Token::LT; }
 
 
+"EXTENSIONS" { KEYWORD(EXTENSIONS) }
 "PROCEDURES" { KEYWORD(PROCEDURES) }
 "SHORTESTPATH" { KEYWORD(SHORTESTPATH) }
 "DESCENDING" { KEYWORD(DESCENDING) }
@@ -134,6 +135,7 @@ using Token = db::YCypherParser::token;
 "SKIP" { KEYWORD(SKIP) }
 "WITH" { KEYWORD(WITH) }
 "LOAD" { KEYWORD(LOAD) }
+"INSTALL" { KEYWORD(INSTALL) }
 "PUSH" { KEYWORD(PUSH) }
 "PULL" { KEYWORD(PULL) }
 "NEW" { KEYWORD(NEW) }

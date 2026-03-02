@@ -18,6 +18,8 @@ public:
     const fs::Path& getGraphsDir() const { return _graphsDir; }
     const fs::Path& getDataDir() const { return _dataDir; }
     const fs::Path& getVectorDir() const { return _vectorDir; }
+    const fs::Path& getUserExtensionsDir() const { return _userExtensionsDir; }
+    const fs::Path& getInstallExtensionsDir() const { return _installExtensionsDir; }
 
     bool isSyncedOnDisk() const { return _syncedOnDisk; }
     void setTuringDirectory(const fs::Path& turingDir);
@@ -28,6 +30,8 @@ private:
     fs::Path _graphsDir;
     fs::Path _dataDir;
     fs::Path _vectorDir;
+    fs::Path _userExtensionsDir;
+    fs::Path _installExtensionsDir;
 
     bool _syncedOnDisk {true};
 };

@@ -198,6 +198,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     execCtxt.setGraphName(graphName);
     execCtxt.setJobSystem(_jobSystem);
     execCtxt.setProcedures(ctxt.getProcedures());
+    execCtxt.setExtensions(ctxt.getExtensions());
     execCtxt.setVectorDatabase(ctxt.getVectorDatabase());
 
     PipelineExecutor executor(&pipeline, &execCtxt);

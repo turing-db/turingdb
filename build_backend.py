@@ -36,6 +36,19 @@ def _get_package_executable() -> Path:
     return _get_project_root() / "python" / "turingdb" / "bin" / "turingdb"
 
 
+def _get_build_extensions_dir() -> Path:
+    """Get the path to built extensions in the build directory."""
+    turing_home = os.environ.get("TURING_HOME")
+    if turing_home:
+        return Path(turing_home) / "lib" / "turingdb" / "extensions"
+    return _get_project_root() / "build" / "lib" / "turingdb" / "extensions"
+
+
+def _get_package_extensions_dir() -> Path:
+    """Get the path to extensions in the package directory."""
+    return _get_project_root() / "python" / "turingdb" / "lib" / "turingdb" / "extensions"
+
+
 def _run_cmake_build():
     """Run cmake configure, build, and install."""
     source_dir = _get_project_root()
@@ -101,6 +114,8 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     bin_dir = project_root / "python" / "turingdb" / "bin"
     dest_exe = bin_dir / "turingdb"
     build_lib_dir = project_root / "build" / "lib"
+    ext_src_dir = _get_build_extensions_dir()
+    ext_dest_dir = _get_package_extensions_dir()
 
     # Clean up build/lib to avoid including gtest/gmock static libraries
     if build_lib_dir.exists():
@@ -109,6 +124,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
 
     # Check if binary is already in package dir (sdist case)
     binary_already_in_place = exe_path == dest_exe
+    copied_extensions = False
 
     try:
         if not binary_already_in_place:
@@ -116,6 +132,13 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             bin_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(exe_path, dest_exe)
             os.chmod(dest_exe, 0o755)
+
+        # Copy extension .so files
+        if ext_src_dir.exists() and not ext_dest_dir.exists():
+            ext_dest_dir.mkdir(parents=True, exist_ok=True)
+            copied_extensions = True
+            for so_file in ext_src_dir.glob("*.so"):
+                shutil.copy2(so_file, ext_dest_dir / so_file.name)
 
         # Build the wheel using setuptools
         wheel_name = backend.build_wheel(
@@ -127,6 +150,8 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         # Clean up - remove the temporary binary from source tree (only if we copied it)
         if not binary_already_in_place and bin_dir.exists():
             shutil.rmtree(bin_dir)
+        if copied_extensions and ext_dest_dir.exists():
+            shutil.rmtree(ext_dest_dir)
 
 
 def build_sdist(sdist_directory, config_settings=None):
@@ -139,9 +164,12 @@ def build_sdist(sdist_directory, config_settings=None):
     project_root = _get_project_root()
     bin_dir = project_root / "python" / "turingdb" / "bin"
     dest_exe = bin_dir / "turingdb"
+    ext_src_dir = _get_build_extensions_dir()
+    ext_dest_dir = _get_package_extensions_dir()
 
     # Check if binary is already in package dir
     binary_already_in_place = exe_path == dest_exe
+    copied_extensions = False
 
     try:
         if not binary_already_in_place:
@@ -149,6 +177,13 @@ def build_sdist(sdist_directory, config_settings=None):
             bin_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(exe_path, dest_exe)
             os.chmod(dest_exe, 0o755)
+
+        # Copy extension .so files
+        if ext_src_dir.exists() and not ext_dest_dir.exists():
+            ext_dest_dir.mkdir(parents=True, exist_ok=True)
+            copied_extensions = True
+            for so_file in ext_src_dir.glob("*.so"):
+                shutil.copy2(so_file, ext_dest_dir / so_file.name)
 
         # Build the sdist using setuptools
         sdist_name = backend.build_sdist(sdist_directory, config_settings)
@@ -158,3 +193,5 @@ def build_sdist(sdist_directory, config_settings=None):
         # Clean up - remove the temporary binary from source tree (only if we copied it)
         if not binary_already_in_place and bin_dir.exists():
             shutil.rmtree(bin_dir)
+        if copied_extensions and ext_dest_dir.exists():
+            shutil.rmtree(ext_dest_dir)

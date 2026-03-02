@@ -62,6 +62,8 @@ set(processors_sources
     processors/DeleteVectorIndexProcessor.cpp
     processors/ShowVectorIndexesProcessor.cpp
     processors/OrderByProcessor.cpp
+    processors/InstallExtensionProcessor.cpp
+    processors/ShowExtensionsProcessor.cpp
 )
 
 set(procedures_sources
@@ -89,6 +91,7 @@ target_link_libraries(turing_db_pipeline_s PUBLIC
     turing_db_memory_s)
 
 target_link_libraries(turing_db_pipeline_s PRIVATE
+    turing_extensions_s
     turing_db_storage_s
     turing_db_system_s
     turing_db_io_csv_s

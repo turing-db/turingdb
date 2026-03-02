@@ -57,10 +57,12 @@ set(ast_sources
     S3ConnectQuery.cpp
     S3TransferQuery.cpp
     ShowProceduresQuery.cpp
+    ShowExtensionsQuery.cpp
     CreateVectorIndexQuery.cpp
     LoadVectorQuery.cpp
     DeleteVectorIndexQuery.cpp
     ShowVectorIndexesQuery.cpp
+    InstallExtensionQuery.cpp
     stmt/VectorSearchStmt.cpp
     expr/ListExpr.cpp
     NodePattern.cpp

@@ -72,6 +72,8 @@
 #include "nodes/VectorSearchNode.h"
 #include "nodes/DeleteVectorIndexNode.h"
 #include "nodes/ShowVectorIndexesNode.h"
+#include "nodes/InstallExtensionNode.h"
+#include "nodes/ShowExtensionsNode.h"
 #include "nodes/OrderByNode.h"
 
 #include "processors/CreateVectorIndexProcessor.h"
@@ -410,6 +412,14 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::LOAD_COMMIT:
             return translateLoadCommit(static_cast<LoadCommitNode*>(node));
+        break;
+
+        case PlanGraphOpcode::INSTALL_EXTENSION:
+            return translateInstallExtensionNode(static_cast<InstallExtensionNode*>(node));
+        break;
+
+        case PlanGraphOpcode::SHOW_EXTENSIONS:
+            return translateShowExtensionsNode(static_cast<ShowExtensionsNode*>(node));
         break;
 
         case PlanGraphOpcode::GET_ENTITY_TYPE:
@@ -1497,6 +1507,16 @@ PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowV
 
 PipelineOutputInterface* PipelineGenerator::translateLoadCommit(LoadCommitNode* node) {
     _builder.addLoadCommit(node->getHashStr());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateInstallExtensionNode(InstallExtensionNode* node) {
+    _builder.addInstallExtension(node->getExtensionName());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateShowExtensionsNode(ShowExtensionsNode* node) {
+    _builder.addShowExtensions();
     return _builder.getPendingOutputInterface();
 }
 

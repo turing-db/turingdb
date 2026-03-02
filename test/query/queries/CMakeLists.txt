@@ -5,6 +5,7 @@ function(add_queries_gtest exe_name cpp_file)
                 turing_db_s
                 turing_testenv_s)
     target_include_directories(${exe_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    set_target_properties(${exe_name} PROPERTIES ENABLE_EXPORTS TRUE)
 endfunction()
 
 add_queries_gtest(test_queries QueriesTest.cpp)
@@ -27,3 +28,5 @@ add_queries_gtest(test_incorrect_query IncorrectQueryTest.cpp)
 add_queries_gtest(test_load_csv LoadCSVTest.cpp)
 add_queries_gtest(test_vector_queries VectorQueriesTest.cpp)
 add_queries_gtest(test_load_commit LoadCommitTest.cpp)
+add_queries_gtest(test_greeter_extension GreeterExtensionTest.cpp)
+add_queries_gtest(test_show_extensions ShowExtensionsTest.cpp)

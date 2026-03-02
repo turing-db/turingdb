@@ -63,11 +63,13 @@
     #include "LoadJsonlQuery.h"
     #include "LoadCommitQuery.h"
     #include "ShowProceduresQuery.h"
+    #include "ShowExtensionsQuery.h"
     #include "stmt/LoadCSVStmt.h"
     #include "CreateVectorIndexQuery.h"
     #include "LoadVectorQuery.h"
     #include "DeleteVectorIndexQuery.h"
     #include "ShowVectorIndexesQuery.h"
+    #include "InstallExtensionQuery.h"
     #include "stmt/VectorSearchStmt.h"
     #include "expr/ListExpr.h"
     #include "VecLibMetadata.h"
@@ -171,6 +173,8 @@
 %token<std::string_view> LIST
 %token<std::string_view> DESC
 %token<std::string_view> CALL
+%token<std::string_view> INSTALL
+%token<std::string_view> EXTENSIONS
 %token<std::string_view> NULL_
 %token<std::string_view> TRUE
 %token<std::string_view> WHEN
@@ -303,9 +307,11 @@
 %type<db::CommitQuery*> commitQuery
 %type<db::ListGraphQuery*> listGraphQuery
 %type<db::CreateGraphQuery*> createGraphQuery
+%type<db::InstallExtensionQuery*> installExtensionQuery
 %type<db::S3ConnectQuery*> s3ConnectQuery
 %type<db::S3TransferQuery*> s3TransferQuery
 %type<db::ShowProceduresQuery*> showProceduresQuery
+%type<db::ShowExtensionsQuery*> showExtensionsQuery
 %type<db::CreateVectorIndexQuery*> createVectorIndexQuery
 %type<db::LoadVectorQuery*> loadVectorQuery
 %type<db::DeleteVectorIndexQuery*> deleteVectorIndexQuery
@@ -390,6 +396,8 @@ singleQuery
     | loadVectorQuery { $$ = $1; }
     | deleteVectorIndexQuery { $$ = $1; }
     | showVectorIndexesQuery { $$ = $1; }
+    | installExtensionQuery { $$ = $1; }
+    | showExtensionsQuery { $$ = $1; }
     ;
 
 loadGraph
@@ -411,6 +419,14 @@ listGraphQuery
 
 showProceduresQuery
     : SHOW PROCEDURES { $$ = ShowProceduresQuery::create(ast); LOC($$, @$); }
+    ;
+
+showExtensionsQuery
+    : SHOW EXTENSIONS { $$ = ShowExtensionsQuery::create(ast); LOC($$, @$); }
+    ;
+
+installExtensionQuery
+    : INSTALL ID { $$ = InstallExtensionQuery::create(ast, $2); LOC($$, @$); }
     ;
 
 // CREATE VECTOR INDEX vector1 WITH DIMENSION 4 METRIC EUCLID
@@ -1446,6 +1462,8 @@ reservedWord
     | ENDS { $$ = Symbol::create(ast, $1); }
     | DROP { $$ = Symbol::create(ast, $1); }
     | SHOW { $$ = Symbol::create(ast, $1); }
+    | INSTALL { $$ = Symbol::create(ast, $1); }
+    | EXTENSIONS { $$ = Symbol::create(ast, $1); }
     | SKIP { $$ = Symbol::create(ast, $1); }
     | WITH { $$ = Symbol::create(ast, $1); }
     | NEW { $$ = Symbol::create(ast, $1); }

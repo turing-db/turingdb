@@ -1,0 +1,105 @@
+#include "ExtensionManager.h"
+
+#include <dlfcn.h>
+
+#include <spdlog/spdlog.h>
+#include <spdlog/fmt/fmt.h>
+
+#include "ExtensionDescriptor.h"
+#include "procedures/ProcedureManager.h"
+#include "procedures/ProcedureNamespace.h"
+
+#include "TuringException.h"
+
+using namespace db;
+
+ExtensionManager::ExtensionManager(const fs::Path& userExtensionsDir,
+                                   const fs::Path& installExtensionsDir,
+                                   ProcedureManager* procedures)
+    : _userExtensionsDir(userExtensionsDir),
+    _installExtensionsDir(installExtensionsDir),
+    _procedures(procedures)
+{
+}
+
+ExtensionManager::~ExtensionManager() {
+    for (auto& ext : _installed) {
+        ExtensionDescriptor::Handle handle = ext->getHandle();
+        if (handle) {
+            dlclose(handle);
+        }
+    }
+}
+
+void ExtensionManager::installExtension(std::string_view name) {
+    if (isInstalled(name)) {
+        throw TuringException(
+            fmt::format("Extension '{}' is already installed",
+                        name));
+    }
+
+    for (char c : name) {
+        if (!(isalnum(c) || c == '_')) {
+            throw TuringException(
+                fmt::format("Extension name contains invalid character '{}': '{}'",
+                            c, name));
+        }
+    }
+
+    const std::string extFilename = std::string(name) + ".so";
+
+    // Try install directory first, then user extensions directory
+    fs::Path extPath = _installExtensionsDir / extFilename;
+    void* handle = dlopen(extPath.c_str(), RTLD_NOW | RTLD_LOCAL);
+
+    if (!handle && !_userExtensionsDir.empty()) {
+        extPath = _userExtensionsDir / extFilename;
+        handle = dlopen(extPath.c_str(), RTLD_NOW | RTLD_LOCAL);
+    }
+
+    if (!handle) {
+        throw TuringException(
+            fmt::format("Could not load extension '{}': {}",
+                        name, dlerror()));
+    }
+
+    using ExtensionEntryFn = const TuringExtensionDef* (*)();
+
+    void* sym = dlsym(handle, "turing_extension");
+    if (!sym) {
+        dlclose(handle);
+        throw TuringException(
+            fmt::format("Extension '{}' does not export 'turing_extension': {}",
+                        name, dlerror()));
+    }
+
+    auto entryFn = reinterpret_cast<ExtensionEntryFn>(sym);
+    const TuringExtensionDef* def = entryFn();
+    if (!def) {
+        dlclose(handle);
+        throw TuringException(
+            fmt::format("Extension '{}' returned null definition",
+                        name));
+    }
+
+    loadExtensionDef(def, handle);
+}
+
+bool ExtensionManager::isInstalled(std::string_view name) const {
+    return _installedMap.find(name) != _installedMap.end();
+}
+
+void ExtensionManager::loadExtensionDef(const TuringExtensionDef* def,
+                                        ExtensionDescriptor::Handle handle) {
+    const char* nsName = def->_namespaceName;
+
+    spdlog::info("Loading extension '{}'", nsName);
+
+    ProcedureNamespace* ns = _procedures->createNamespace(nsName);
+    def->_initCallback(ns);
+
+    auto descriptor = std::make_unique<ExtensionDescriptor>(nsName, handle);
+    ExtensionDescriptor* ptr = descriptor.get();
+    _installed.push_back(std::move(descriptor));
+    _installedMap[ptr->getName()] = ptr;
+}

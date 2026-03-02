@@ -55,6 +55,8 @@
 #include "nodes/LoadVectorNode.h"
 #include "nodes/DeleteVectorIndexNode.h"
 #include "nodes/ShowVectorIndexesNode.h"
+#include "nodes/InstallExtensionNode.h"
+#include "nodes/ShowExtensionsNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
@@ -73,6 +75,8 @@
 #include "DeleteVectorIndexQuery.h"
 #include "ShowVectorIndexesQuery.h"
 #include "LoadCommitQuery.h"
+#include "InstallExtensionQuery.h"
+#include "ShowExtensionsQuery.h"
 
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
@@ -156,6 +160,14 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::LOAD_COMMIT_QUERY:
             generateLoadCommitQuery(static_cast<const LoadCommitQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::INSTALL_EXTENSION_QUERY:
+            generateInstallExtensionQuery(static_cast<const InstallExtensionQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::SHOW_EXTENSIONS_QUERY:
+            generateShowExtensionsQuery(static_cast<const ShowExtensionsQuery*>(query));
         break;
 
         default:
@@ -333,6 +345,16 @@ void PlanGraphGenerator::generateShowVectorIndexesQuery(const ShowVectorIndexesQ
 
 void PlanGraphGenerator::generateLoadCommitQuery(const LoadCommitQuery* query) {
     LoadCommitNode* node = _tree.create<LoadCommitNode>(query->getHashStr());
+    _tree.newOut<ProduceResultsNode>(node);
+}
+
+void PlanGraphGenerator::generateInstallExtensionQuery(const InstallExtensionQuery* query) {
+    auto* node = _tree.create<InstallExtensionNode>(query->getExtensionName());
+    _tree.newOut<ProduceResultsNode>(node);
+}
+
+void PlanGraphGenerator::generateShowExtensionsQuery(const ShowExtensionsQuery* query) {
+    ShowExtensionsNode* node = _tree.create<ShowExtensionsNode>();
     _tree.newOut<ProduceResultsNode>(node);
 }
 

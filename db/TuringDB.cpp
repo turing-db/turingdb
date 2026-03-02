@@ -8,6 +8,7 @@
 #include "QueryInterpreterV2.h"
 #include "InterpreterContext.h"
 #include "procedures/ProcedureManager.h"
+#include "ExtensionManager.h"
 
 #include "Panic.h"
 #include "TuringConfig.h"
@@ -18,7 +19,10 @@ TuringDB::TuringDB(const TuringConfig* config)
     : _config(config),
     _systemManager(std::make_unique<SystemManager>(config)),
     _jobSystem(JobSystem::create()),
-    _procedures(ProcedureManager::create())
+    _procedures(ProcedureManager::create()),
+    _extensions(std::make_unique<ExtensionManager>(config->getUserExtensionsDir(),
+                                                   config->getInstallExtensionsDir(),
+                                                   _procedures.get()))
 {
 }
 
@@ -86,6 +90,17 @@ void TuringDB::init() {
         }
     }
 
+    const auto& extensionsDir = _config->getUserExtensionsDir();
+
+    if (!extensionsDir.exists()) {
+        spdlog::info("Creating extensions directory {}", extensionsDir.get());
+
+        if (auto res = extensionsDir.mkdir(); !res) {
+            panic("Could not create extensions directory '{}': {}",
+                  extensionsDir.get(), res.error().fmtMessage());
+        }
+    }
+
     // Create vector database
     if (auto res = vec::VectorDatabase::create(vectorDir)) {
         _vectorDatabase = std::move(res.value());
@@ -98,6 +113,7 @@ void TuringDB::init() {
 
     // Init procedures
     _procedures->init();
+
 }
 
 QueryStatus TuringDB::query(std::string_view query,
@@ -117,6 +133,7 @@ QueryStatus TuringDB::query(std::string_view query,
     const InterpreterContext ctxt(mem,
                                   &callbacks,
                                   _procedures.get(),
+                                  _extensions.get(),
                                   _vectorDatabase.get(),
                                   hash,
                                   change);
