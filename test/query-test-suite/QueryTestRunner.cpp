@@ -166,6 +166,27 @@ template <typename T>
     return valueToString(*value);
 }
 
+[[maybe_unused]] std::string valueToString(const EntityList& value) {
+    std::string s = "[";
+    size_t i = 0;
+
+    for (const auto& entry : value) {
+        if (i++ > 0) {
+            s += ", ";
+        }
+
+        if (entry._type == EntityType::Node) {
+            s += fmt::format("({})", entry._id.getValue());
+        } else {
+            s += fmt::format("[{}]", entry._id.getValue());
+        }
+    }
+
+    s += "]";
+
+    return s;
+}
+
 struct Stringify {
     std::string& _string;
     size_t _row {0};

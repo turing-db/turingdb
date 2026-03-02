@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <stdint.h>
+#include <vector>
 
 #include "Processor.h"
 
@@ -10,6 +11,8 @@
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnIndices.h"
+
+#include "EntityList.h"
 
 namespace db {
 
@@ -32,14 +35,29 @@ public:
     PipelineNodeInputInterface& input() { return _input; }
     PipelineBlockOutputInterface& output() { return _output; }
 
-    void setOutputPathsColumn(NamedColumn* paths) { _outputPaths = paths; }
-    void setOutputTargetsColumn(NamedColumn* targetNodes) { _outputTargets = targetNodes; }
-    void setOutputIndicesColumn(ColumnIndices* indices) { _outputIndices = indices; }
+    void setOutputPathsColumn(NamedColumn* paths) {
+        _outputPaths = paths;
+    }
+    void setOutputTargetsColumn(NamedColumn* targetNodes) {
+        _outputTargets = targetNodes;
+    }
+    void setOutputIndicesColumn(ColumnIndices* indices) {
+        _outputIndices = indices;
+    }
 
-    NamedColumn* getOutputTargetsColumn() const { return _outputTargets; }
-    NamedColumn* getOutputPathsColumn() const { return _outputPaths; }
+    NamedColumn* getOutputTargetsColumn() const {
+        return _outputTargets;
+    }
+    NamedColumn* getOutputPathsColumn() const {
+        return _outputPaths;
+    }
 
 private:
+    struct FrontierEntry {
+        NodeID node;
+        EntityList edges;
+    };
+
     BFSExpandOutEdgesProcessor(LocalMemory* mem,
                                int64_t minHops,
                                int64_t maxHops);
@@ -57,12 +75,21 @@ private:
     NamedColumn* _outputPaths {nullptr};
     ColumnIndices* _outputIndices {nullptr};
 
+    // BFS chunk writer internals
     ColumnNodeIDs* _bfsSources {nullptr};
     ColumnEdgeIDs* _bfsEdges {nullptr};
     ColumnNodeIDs* _bfsIntermediates {nullptr};
     ColumnIndices* _bfsIndices {nullptr};
-
     std::unique_ptr<GetOutEdgesChunkWriter> _bfsWriter;
+
+    // BFS persistent state across execute() calls
+    bool _bfsInitialized {false};
+    bool _depthNeedsSetup {true};
+    int64_t _depth {0};
+    std::vector<FrontierEntry> _frontier;
+    std::vector<FrontierEntry> _nextFrontier;
+    std::vector<size_t> _mainMapping;
+    std::vector<size_t> _nextMainMapping;
 };
 
 }

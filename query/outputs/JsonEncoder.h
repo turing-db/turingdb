@@ -146,6 +146,37 @@ private:
         ControlCharactersEscaper::escapeAndSurroundByQuotes(value, _sanitized);
         _writer.write(_sanitized);
     }
+
+    void encodeValue(const EntityList& value) {
+        if (value.empty()) {
+            _writer.write("[]");
+            return;
+        }
+
+        const std::span entries = value.entries();
+        const auto& firstValue = entries.front();
+
+        _writer.write("[{\"type\":\"");
+        _writer.write(firstValue._type == EntityType::Node ? "node" : "edge");
+        _writer.write("\",\"id\":");
+        _writer.write(std::to_string(firstValue._id.getValue()));
+        _writer.write('}');
+
+        for (size_t i = 1; i < entries.size(); i++) {
+            const auto& entry = entries[i];
+            const EntityType type = entry._type;
+            const ID id = entry._id;
+
+            _writer.write(',');
+            _writer.write('{');
+            _writer.write("\"type\":\"");
+            _writer.write(type == EntityType::Node ? "node" : "edge");
+            _writer.write("\",\"id\":");
+            _writer.write(std::to_string(id.getValue()));
+            _writer.write('}');
+        }
+        _writer.write("]");
+    }
 };
 
 template <Writer WriterT>

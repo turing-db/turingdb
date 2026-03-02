@@ -14,6 +14,8 @@
 
 namespace db {
 
+class EntityList;
+
 template <typename... Tuples>
 struct TupleFlatten {
     using Type = decltype(std::tuple_cat(std::declval<Tuples>()...));
@@ -318,7 +320,8 @@ struct OutputtedTypes {
         CommitHash,
         ChangeID,
         std::string,
-        size_t
+        size_t,
+        EntityList
     >>;
 
     using Excluded = ExcludedContainers<
