@@ -643,8 +643,8 @@ void HashJoinProcessor<Key>::flushLeftStream(size_t& rowsRemaining,
     rowsRemaining -= rowsToCopy;
 }
 
-template class HashJoinProcessor<NodeID>;
-template class HashJoinProcessor<int64_t>;
-template class HashJoinProcessor<uint64_t>;
-template class HashJoinProcessor<double>;
-template class HashJoinProcessor<std::string_view>;
+template class db::HashJoinProcessor<NodeID>;
+template class db::HashJoinProcessor<int64_t>;
+template class db::HashJoinProcessor<uint64_t>;
+template class db::HashJoinProcessor<double>;
+template class db::HashJoinProcessor<std::string_view>;
