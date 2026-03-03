@@ -17,6 +17,12 @@
 
 using namespace net;
 
+namespace {
+
+constexpr const char* THREAD_NAME = "turingdb.http";
+
+}
+
 HTTPServer::HTTPServer(Functions&& functions)
     : _functions(std::move(functions))
 {
@@ -99,7 +105,7 @@ FlowStatus HTTPServer::initialize() {
     }
 
     // Storing actual address
-    sockaddr_in actualAddr {};
+    sockaddr_in actualAddr {0};
     memset(&actualAddr, 0, sizeof(actualAddr));
     socklen_t actualAddrLen = sizeof(actualAddr);
 
@@ -130,7 +136,7 @@ FlowStatus HTTPServer::start() {
 
     for (size_t i = 0; i < _workerCount; i++) {
         _threads.emplace_back([&ctxt, i] {
-            db::ThreadName::set("tdb.http-worker");
+            db::ThreadName::set(THREAD_NAME);
             runThread(i + 1, ctxt);
         });
     }

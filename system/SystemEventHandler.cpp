@@ -12,10 +12,13 @@
 #include <spdlog/spdlog.h>
 
 #include "ThreadName.h"
+#include "FileUtils.h"
 
 using namespace db;
 
 namespace {
+
+constexpr const char* THREAD_NAME = "turingdb.com";
 
 struct SignalPipes {
     int _read {-1};
@@ -135,11 +138,7 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
     }
 
     // Save current working directory
-    char savedCwd[PATH_MAX];
-    if (::getcwd(savedCwd, sizeof(savedCwd)) == nullptr) {
-        ::close(sockFd);
-        return false;
-    }
+    const FileUtils::Path savedCwd = FileUtils::cwd();
 
     // Change working directory to socket directory
     // This is needed to ensure the socket path is below the 
@@ -150,7 +149,7 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
     }
 
     // Connect to the socket
-    sockaddr_un addr {};
+    sockaddr_un addr {0};
     addr.sun_family = AF_UNIX;
     const std::string sockName {socketPath.filename()};
     strncpy(addr.sun_path, sockName.c_str(), sizeof(addr.sun_path) - 1);
@@ -161,7 +160,7 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
     // the socket directory, but since requestStop is only called from the stop
     // command process (which exits right after), this is harmless. We must not
     // abort here: STOP must still be sent even if the restore fails.
-    [[maybe_unused]] const int cwdRes = ::chdir(savedCwd);
+    [[maybe_unused]] const int cwdRes = ::chdir(savedCwd.c_str());
 
     // Check connection
     if (res < 0) {
@@ -219,17 +218,14 @@ bool SystemEventHandler::initializeImpl() {
 
     // Bind using the bare filename to stay within the 104/108 char sun_path
     // limit. chdir into the socket directory, bind, then restore the cwd.
-    char savedCwd[PATH_MAX];
-    if (::getcwd(savedCwd, sizeof(savedCwd)) == nullptr) {
-        return false;
-    }
+    const FileUtils::Path savedCwd = FileUtils::cwd();
 
     if (::chdir(_socketPath.parent().c_str()) != 0) {
         return false;
     }
 
     // Bind the socket
-    ::sockaddr_un addr {};
+    ::sockaddr_un addr {0};
     addr.sun_family = AF_UNIX;
     const std::string sockName {_socketPath.filename()};
     strncpy(addr.sun_path, sockName.data(), sizeof(addr.sun_path) - 1);
@@ -237,7 +233,7 @@ bool SystemEventHandler::initializeImpl() {
     const int bindRes = ::bind(_sockFd, (sockaddr*)&addr, sizeof(addr));
 
     // Restore the working directory
-    if (const int res = ::chdir(savedCwd); res < 0) {
+    if (const int res = ::chdir(savedCwd.c_str()); res < 0) {
         return false;
     }
 
@@ -263,16 +259,15 @@ bool SystemEventHandler::initializeImpl() {
     _running.store(true);
 
     _thread = std::thread([this]() {
-        ThreadName::set("tdb.com");
+        ThreadName::set(THREAD_NAME);
 
         std::string cmd;
+        ::pollfd pfds[2] = {
+            {_sockFd,   POLLIN, 0},
+            {_signalFd._read, POLLIN, 0},
+        };
 
         while (_running) {
-            ::pollfd pfds[2] = {
-                {_sockFd,   POLLIN, 0},
-                {_signalFd._read, POLLIN, 0},
-            };
-
             // Wait for either a signal or a new connection
             // No timeout is used, the thread sleeps until a signal or
             // a new connection is received

@@ -56,7 +56,7 @@ PingResult pingServer(const fs::Path& socketPath) {
         return PingResult::NoResponse;
     }
 
-    sockaddr_un addr {};
+    sockaddr_un addr {0};
     addr.sun_family = AF_UNIX;
     const std::string sockName {socketPath.filename()};
     strncpy(addr.sun_path, sockName.c_str(), sizeof(addr.sun_path) - 1);
