@@ -17,7 +17,6 @@ public:
     ProcedureManager();
     ~ProcedureManager();
 
-    static std::unique_ptr<ProcedureManager> create();
     void init();
 
     const Namespaces& namespaces() const { return _namespaces; }
@@ -27,6 +26,8 @@ public:
     ProcedureNamespace* getNamespace(std::string_view name) const;
 
     ProcedureNamespace* createNamespace(std::string_view name);
+
+    static std::unique_ptr<ProcedureManager> create();
 
 private:
     Namespaces _namespaces;
