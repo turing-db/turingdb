@@ -9,9 +9,7 @@
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
 
-#include "columns/ColumnConst.h"
-#include "columns/ColumnVector.h"
-#include "columns/ColumnOptVector.h"
+#include "columns/ColumnDispatcher.h"
 #include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
 #include "processors/ExprProgram.h"
@@ -62,93 +60,28 @@ void validateDeletions(const GraphReader reader, const ColumnVector<IDT>* col) {
 template void validateDeletions<NodeID>(const GraphReader reader, const ColumnVector<NodeID>* col);
 template void validateDeletions<EdgeID>(const GraphReader reader, const ColumnVector<EdgeID>* col);
 
-// Convert a column value to SupportedTypeVariant. String columns store
-// string_view but the variant needs std::string.
 template <typename T>
-CommitWriteBuffer::SupportedTypeVariant toVariant(const T& val) {
-    if constexpr (std::is_same_v<T, std::string_view>) {
+struct IsOptional : std::false_type {};
+
+template <typename T>
+struct IsOptional<std::optional<T>> : std::true_type {};
+
+// Convert a column element to SupportedTypeVariant.
+// Handles optionals (unwrap + null check) and string_view (convert to owned string).
+template <typename T>
+CommitWriteBuffer::SupportedTypeVariant toPropertyVariant(const T& val) {
+    if constexpr (IsOptional<T>::value) {
+        if (!val.has_value()) {
+            throw PipelineException("NULL value for non-nullable property");
+        }
+        return toPropertyVariant(val.value());
+    } else if constexpr (std::is_same_v<T, std::string_view>) {
         return std::string(val);
-    } else {
+    } else if constexpr (std::is_constructible_v<CommitWriteBuffer::SupportedTypeVariant, T>) {
         return val;
+    } else {
+        throw FatalException("Unsupported property value type.");
     }
-}
-
-// Resolve a property column type once, then apply a value per row to pending entities.
-// GetProps: (size_t row) -> CommitWriteBuffer::UntypedProperties& for that entity.
-template <typename T, typename GetProps>
-void applyTypedProperty(Column* valueCol,
-                        PropertyTypeID propID,
-                        size_t numRows,
-                        GetProps& getProps) {
-    if (auto* cc = dynamic_cast<ColumnConst<T>*>(valueCol)) {
-        const CommitWriteBuffer::UntypedProperty prop {propID, toVariant(cc->getRaw())};
-        for (size_t i = 0; i < numRows; i++) {
-            CommitWriteBuffer::UntypedProperties& props = getProps(i);
-            props.emplace_back(prop);
-        }
-        return;
-    }
-    if (auto* cv = dynamic_cast<ColumnVector<T>*>(valueCol)) {
-        for (size_t i = 0; i < numRows; i++) {
-            CommitWriteBuffer::SupportedTypeVariant val = toVariant((*cv)[i]);
-            CommitWriteBuffer::UntypedProperty prop {propID, val};
-            CommitWriteBuffer::UntypedProperties& props = getProps(i);
-            props.emplace_back(prop);
-        }
-        return;
-    }
-    if (auto* co = dynamic_cast<ColumnOptVector<T>*>(valueCol)) {
-        for (size_t i = 0; i < numRows; i++) {
-            const auto& optVal = (*co)[i];
-            if (!optVal.has_value()) {
-                throw PipelineException("NULL value for non-nullable property");
-            }
-            CommitWriteBuffer::SupportedTypeVariant val = toVariant(optVal.value());
-            CommitWriteBuffer::UntypedProperty prop {propID, val};
-            CommitWriteBuffer::UntypedProperties& props = getProps(i);
-            props.emplace_back(prop);
-        }
-        return;
-    }
-    // String columns from CSV store std::string, but types::String::Primitive is
-    // string_view. Try ColumnVector<std::string> directly.
-    if constexpr (std::is_same_v<T, std::string_view>) {
-        if (auto* cv = dynamic_cast<ColumnVector<std::string>*>(valueCol)) {
-            for (size_t i = 0; i < numRows; i++) {
-                CommitWriteBuffer::UntypedProperty prop {propID, (*cv)[i]};
-                CommitWriteBuffer::UntypedProperties& props = getProps(i);
-                props.emplace_back(prop);
-            }
-            return;
-        }
-    }
-    throw FatalException("Unsupported column container for property type.");
-}
-
-template <typename GetProps>
-void applyProperty(Column* valueCol, ValueType type, PropertyTypeID propID,
-                   size_t numRows, GetProps getProps) {
-    switch (type) {
-        case ValueType::Int64:
-            applyTypedProperty<types::Int64::Primitive>(valueCol, propID, numRows, getProps);
-            return;
-        case ValueType::UInt64:
-            applyTypedProperty<types::UInt64::Primitive>(valueCol, propID, numRows, getProps);
-            return;
-        case ValueType::String:
-            applyTypedProperty<types::String::Primitive>(valueCol, propID, numRows, getProps);
-            return;
-        case ValueType::Double:
-            applyTypedProperty<types::Double::Primitive>(valueCol, propID, numRows, getProps);
-            return;
-        case ValueType::Bool:
-            applyTypedProperty<types::Bool::Primitive>(valueCol, propID, numRows, getProps);
-            return;
-        case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw FatalException("Property value column with invalid type.");
-    }
-    throw FatalException("Failed to match against property value type.");
 }
 
 }
@@ -293,17 +226,19 @@ void WriteProcessor::createNodes(size_t numIters) {
                 newNode.labelsetHandle = hdl;
             }
 
-            // Apply properties: column type is resolved once per property, then
-            // looped over rows internally.
             for (const auto& [name, type, valueCol] : node._properties) {
                 const PropertyTypeID propID =
                     _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
-                applyProperty(valueCol, type, propID, numIters,
-                    [&](size_t i) -> CommitWriteBuffer::UntypedProperties& {
+                dispatchColumn(valueCol, [&](auto* col) {
+                    using Elem = typename std::remove_pointer_t<decltype(col)>::ValueType;
+
+                    for (size_t i = 0; i < numIters; i++) {
                         auto& pending = _writeBuffer->getPendingNode(numPendingNodesPrior + i);
-                        return pending.properties;
-                    });
+                        pending.properties.emplace_back(
+                            CommitWriteBuffer::UntypedProperty {propID, toPropertyVariant<Elem>((*col)[i])});
+                    }
+                });
             }
         }
 
@@ -408,17 +343,19 @@ void WriteProcessor::createEdges(size_t numIters) {
             pendingEdge.edgeType = typeID;
         }
 
-        // Apply properties: column type is resolved once per property, then
-        // looped over rows internally.
         for (const auto& [name, type, valueCol] : edge._properties) {
             const PropertyTypeID propID =
                 _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
-            applyProperty(valueCol, type, propID, numIters,
-                [&](size_t i) -> CommitWriteBuffer::UntypedProperties& {
+            dispatchColumn(valueCol, [&](auto* col) {
+                using Elem = typename std::remove_pointer_t<decltype(col)>::ValueType;
+
+                for (size_t i = 0; i < numIters; i++) {
                     auto& pending = _writeBuffer->getPendingEdge(numPendingEdgesPrior + i);
-                    return pending.properties;
-                });
+                    pending.properties.emplace_back(
+                        CommitWriteBuffer::UntypedProperty {propID, toPropertyVariant<Elem>((*col)[i])});
+                }
+            });
         }
 
         // Populate the output column for this edge with the index in the CWB which it

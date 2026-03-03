@@ -173,4 +173,110 @@ inline decltype(auto) dispatchColumnVector(const Column* col, const F& f) {
     CONST_COLUMN_VECTOR_SWITCH(col);
 }
 
+// Extended dispatch that also covers ColumnConst containers.
+// All dispatched column types support operator[] with consistent semantics.
+#define COLUMN_SWITCH(col)                                                               \
+    switch ((col)->getKind()) {                                                          \
+        COL_CASE(ColumnVector<NodeID>)                                                   \
+        COL_CASE(ColumnVector<EdgeID>)                                                   \
+        COL_CASE(ColumnVector<Path>)                                                     \
+        COL_CASE(ColumnVector<EntityID>)                                                 \
+        COL_CASE(ColumnVector<LabelID>)                                                  \
+        COL_CASE(ColumnVector<EdgeTypeID>)                                               \
+        COL_CASE(ColumnVector<PropertyTypeID>)                                           \
+        COL_CASE(ColumnVector<LabelSetID>)                                               \
+        COL_CASE(ColumnVector<ValueType>)                                                \
+        COL_CASE(ColumnVector<types::UInt64::Primitive>)                                 \
+        COL_CASE(ColumnVector<types::Int64::Primitive>)                                  \
+        COL_CASE(ColumnVector<types::Double::Primitive>)                                 \
+        COL_CASE(ColumnVector<types::String::Primitive>)                                 \
+        COL_CASE(ColumnVector<types::Bool::Primitive>)                                   \
+        COL_CASE(ColumnOptVector<types::UInt64::Primitive>)                              \
+        COL_CASE(ColumnOptVector<types::Int64::Primitive>)                               \
+        COL_CASE(ColumnOptVector<types::Double::Primitive>)                              \
+        COL_CASE(ColumnOptVector<types::String::Primitive>)                              \
+        COL_CASE(ColumnOptVector<types::Bool::Primitive>)                                \
+        COL_CASE(ColumnVector<std::string>)                                              \
+        COL_CASE(ColumnVector<const CommitBuilder*>)                                     \
+        COL_CASE(ColumnVector<const Change*>)                                            \
+        COL_CASE(ColumnConst<NodeID>)                                                    \
+        COL_CASE(ColumnConst<EdgeID>)                                                    \
+        COL_CASE(ColumnConst<Path>)                                                      \
+        COL_CASE(ColumnConst<EntityID>)                                                  \
+        COL_CASE(ColumnConst<LabelID>)                                                   \
+        COL_CASE(ColumnConst<EdgeTypeID>)                                                \
+        COL_CASE(ColumnConst<PropertyTypeID>)                                            \
+        COL_CASE(ColumnConst<LabelSetID>)                                                \
+        COL_CASE(ColumnConst<ValueType>)                                                 \
+        COL_CASE(ColumnConst<types::UInt64::Primitive>)                                  \
+        COL_CASE(ColumnConst<types::Int64::Primitive>)                                   \
+        COL_CASE(ColumnConst<types::Double::Primitive>)                                  \
+        COL_CASE(ColumnConst<types::String::Primitive>)                                  \
+        COL_CASE(ColumnConst<types::Bool::Primitive>)                                    \
+        COL_CASE(ColumnConst<std::string>)                                               \
+        COL_CASE(ColumnConst<const CommitBuilder*>)                                      \
+        COL_CASE(ColumnConst<const Change*>)                                             \
+                                                                                         \
+        default: {                                                                       \
+            throw FatalException(fmt::format(                                            \
+                "Can not dispatch column of kind {}", (col)->getKind()));                \
+        }                                                                                \
+    }
+
+#define CONST_COLUMN_SWITCH(col)                                                         \
+    switch ((col)->getKind()) {                                                          \
+        CONST_COL_CASE(ColumnVector<NodeID>)                                             \
+        CONST_COL_CASE(ColumnVector<EdgeID>)                                             \
+        CONST_COL_CASE(ColumnVector<EntityID>)                                           \
+        CONST_COL_CASE(ColumnVector<LabelID>)                                            \
+        CONST_COL_CASE(ColumnVector<EdgeTypeID>)                                         \
+        CONST_COL_CASE(ColumnVector<PropertyTypeID>)                                     \
+        CONST_COL_CASE(ColumnVector<LabelSetID>)                                         \
+        CONST_COL_CASE(ColumnVector<ValueType>)                                          \
+        CONST_COL_CASE(ColumnVector<types::UInt64::Primitive>)                           \
+        CONST_COL_CASE(ColumnVector<types::Int64::Primitive>)                            \
+        CONST_COL_CASE(ColumnVector<types::Double::Primitive>)                           \
+        CONST_COL_CASE(ColumnVector<types::String::Primitive>)                           \
+        CONST_COL_CASE(ColumnVector<types::Bool::Primitive>)                             \
+        CONST_COL_CASE(ColumnOptVector<types::UInt64::Primitive>)                        \
+        CONST_COL_CASE(ColumnOptVector<types::Int64::Primitive>)                         \
+        CONST_COL_CASE(ColumnOptVector<types::Double::Primitive>)                        \
+        CONST_COL_CASE(ColumnOptVector<types::String::Primitive>)                        \
+        CONST_COL_CASE(ColumnOptVector<types::Bool::Primitive>)                          \
+        CONST_COL_CASE(ColumnVector<std::string>)                                        \
+        CONST_COL_CASE(ColumnVector<const CommitBuilder*>)                               \
+        CONST_COL_CASE(ColumnVector<const Change*>)                                      \
+        CONST_COL_CASE(ColumnConst<NodeID>)                                              \
+        CONST_COL_CASE(ColumnConst<EdgeID>)                                              \
+        CONST_COL_CASE(ColumnConst<EntityID>)                                            \
+        CONST_COL_CASE(ColumnConst<LabelID>)                                             \
+        CONST_COL_CASE(ColumnConst<EdgeTypeID>)                                          \
+        CONST_COL_CASE(ColumnConst<PropertyTypeID>)                                      \
+        CONST_COL_CASE(ColumnConst<LabelSetID>)                                          \
+        CONST_COL_CASE(ColumnConst<ValueType>)                                           \
+        CONST_COL_CASE(ColumnConst<types::UInt64::Primitive>)                            \
+        CONST_COL_CASE(ColumnConst<types::Int64::Primitive>)                             \
+        CONST_COL_CASE(ColumnConst<types::Double::Primitive>)                            \
+        CONST_COL_CASE(ColumnConst<types::String::Primitive>)                            \
+        CONST_COL_CASE(ColumnConst<types::Bool::Primitive>)                              \
+        CONST_COL_CASE(ColumnConst<std::string>)                                         \
+        CONST_COL_CASE(ColumnConst<const CommitBuilder*>)                                \
+        CONST_COL_CASE(ColumnConst<const Change*>)                                       \
+                                                                                         \
+        default: {                                                                       \
+            throw FatalException(fmt::format(                                            \
+                "Can not dispatch column of kind {}", (col)->getKind()));                \
+        }                                                                                \
+    }
+
+template <typename F>
+inline decltype(auto) dispatchColumn(Column* col, const F& f) {
+    COLUMN_SWITCH(col);
+}
+
+template <typename F>
+inline decltype(auto) dispatchColumn(const Column* col, const F& f) {
+    CONST_COLUMN_SWITCH(col);
+}
+
 }
