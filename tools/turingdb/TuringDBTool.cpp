@@ -9,9 +9,22 @@
 #include "DBServerConfig.h"
 #include "TuringConfig.h"
 #include "Demonology.h"
+#include "BannerDisplay.h"
+#include "BuildInfo.h"
+#include "DateTimeFmt.h"
 
 #include "ToolInit.h"
 #include "TuringException.h"
+
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+
+namespace {
+    void TuringDBCommitInfo() {
+            std::cout<< "TuringDB - " << TOSTRING(HEAD_COMMIT_HASH) 
+                << " - " << formatUnixTime(BUILD_TIMESTAMP) << "\n\n";
+    }
+}
 
 using namespace db;
 
@@ -54,6 +67,16 @@ int main(int argc, const char** argv) {
              .store_into(turingDir)
              .help("Root Turing directory");
 
+    argParser.add_argument("-v", "--version")
+              .action([&](const auto & /*unused*/) {
+                  TuringDBCommitInfo();
+                  std::exit(0);
+              })
+              .default_value(false)
+              .help("prints version information and exits")
+              .implicit_value(true)
+              .nargs(0);
+
     toolInit.init(argc, argv);
 
     // Config
@@ -91,6 +114,9 @@ int main(int argc, const char** argv) {
     }
 
     try {
+        BannerDisplay::printBanner();
+        TuringDBCommitInfo();
+
         // Run TuringDB
         LocalMemory mem;
         TuringDB turingDB(&config);
