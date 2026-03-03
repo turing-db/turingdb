@@ -76,41 +76,48 @@ CommitWriteBuffer::SupportedTypeVariant toVariant(const T& val) {
 // Resolve a property column type once, then apply a value per row to pending entities.
 // GetProps: (size_t row) -> CommitWriteBuffer::UntypedProperties& for that entity.
 template <typename T, typename GetProps>
-void applyTypedProperty(Column* valueCol, PropertyTypeID propID,
-                        size_t numRows, GetProps& getProps) {
+void applyTypedProperty(Column* valueCol,
+                        PropertyTypeID propID,
+                        size_t numRows,
+                        GetProps& getProps) {
     if (auto* cc = dynamic_cast<ColumnConst<T>*>(valueCol)) {
         const CommitWriteBuffer::UntypedProperty prop {propID, toVariant(cc->getRaw())};
         for (size_t i = 0; i < numRows; i++) {
-            getProps(i).emplace_back(prop);
+            CommitWriteBuffer::UntypedProperties& props = getProps(i);
+            props.emplace_back(prop);
         }
         return;
     }
     if (auto* cv = dynamic_cast<ColumnVector<T>*>(valueCol)) {
         for (size_t i = 0; i < numRows; i++) {
-            getProps(i).emplace_back(
-                CommitWriteBuffer::UntypedProperty {propID, toVariant((*cv)[i])});
+            CommitWriteBuffer::SupportedTypeVariant val = toVariant((*cv)[i]);
+            CommitWriteBuffer::UntypedProperty prop {propID, val};
+            CommitWriteBuffer::UntypedProperties& props = getProps(i);
+            props.emplace_back(prop);
         }
         return;
     }
     if (auto* co = dynamic_cast<ColumnOptVector<T>*>(valueCol)) {
         for (size_t i = 0; i < numRows; i++) {
-            const auto& val = (*co)[i];
-            if (!val.has_value()) {
+            const auto& optVal = (*co)[i];
+            if (!optVal.has_value()) {
                 throw PipelineException("NULL value for non-nullable property");
             }
-            getProps(i).emplace_back(
-                CommitWriteBuffer::UntypedProperty {propID, toVariant(val.value())});
+            CommitWriteBuffer::SupportedTypeVariant val = toVariant(optVal.value());
+            CommitWriteBuffer::UntypedProperty prop {propID, val};
+            CommitWriteBuffer::UntypedProperties& props = getProps(i);
+            props.emplace_back(prop);
         }
         return;
     }
     // String columns from CSV store std::string, but types::String::Primitive is
-    // string_view. Try ColumnVector<std::string> and acquire a string_view.
+    // string_view. Try ColumnVector<std::string> directly.
     if constexpr (std::is_same_v<T, std::string_view>) {
         if (auto* cv = dynamic_cast<ColumnVector<std::string>*>(valueCol)) {
             for (size_t i = 0; i < numRows; i++) {
-                const std::string_view sv = (*cv)[i];
-                getProps(i).emplace_back(
-                    CommitWriteBuffer::UntypedProperty {propID, std::string(sv)});
+                CommitWriteBuffer::UntypedProperty prop {propID, (*cv)[i]};
+                CommitWriteBuffer::UntypedProperties& props = getProps(i);
+                props.emplace_back(prop);
             }
             return;
         }
@@ -294,7 +301,8 @@ void WriteProcessor::createNodes(size_t numIters) {
 
                 applyProperty(valueCol, type, propID, numIters,
                     [&](size_t i) -> CommitWriteBuffer::UntypedProperties& {
-                        return _writeBuffer->getPendingNode(numPendingNodesPrior + i).properties;
+                        auto& pending = _writeBuffer->getPendingNode(numPendingNodesPrior + i);
+                        return pending.properties;
                     });
             }
         }
@@ -408,7 +416,8 @@ void WriteProcessor::createEdges(size_t numIters) {
 
             applyProperty(valueCol, type, propID, numIters,
                 [&](size_t i) -> CommitWriteBuffer::UntypedProperties& {
-                    return _writeBuffer->getPendingEdge(numPendingEdgesPrior + i).properties;
+                    auto& pending = _writeBuffer->getPendingEdge(numPendingEdgesPrior + i);
+                    return pending.properties;
                 });
         }
 
