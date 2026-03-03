@@ -107,6 +107,7 @@ public:
         // Reconstruct the entity ID -> index map; it is not dumped.
         auto& idxMap = container->_idxMap;
         const auto& ids = container->_ids;
+        idxMap.reserve(ids.size());
         for (size_t i = 0; i < ids.size(); i++) {
             idxMap[ids[i]] = i;
         }
@@ -268,8 +269,9 @@ public:
         }
 
         // Reconstruct the entity ID -> index map; it is not dumped.
-        auto& idxMap = container->_offsetMap;
+        auto& idxMap = container->_idxMap;
         const auto& ids = container->_ids;
+        idxMap.reserve(ids.size());
         for (size_t i = 0; i < ids.size(); i++) {
             idxMap[ids[i]] = i;
         }
