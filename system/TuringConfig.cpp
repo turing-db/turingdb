@@ -25,11 +25,13 @@ void resolveInstallExtensionsDir(fs::Path& result) {
     char buf[4096];
 #ifdef __APPLE__
     uint32_t bufSize = sizeof(buf);
-    int ok = _NSGetExecutablePath(buf, &bufSize) == 0;
+    const int ok = _NSGetExecutablePath(buf, &bufSize) == 0;
 #else
     ssize_t bufSize = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-    int ok = bufSize > 0;
-    if (ok) buf[bufSize] = '\0';
+    const int ok = bufSize > 0;
+    if (ok) {
+        buf[bufSize] = '\0';
+    }
 #endif
     if (ok) {
         const fs::Path exePath(std::string{buf});
