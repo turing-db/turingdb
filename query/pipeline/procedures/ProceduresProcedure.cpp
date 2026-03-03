@@ -56,7 +56,8 @@ void writeProcedures(Data* data,
                      ColumnVector<std::string>* nameCol,
                      ColumnVector<std::string>* signatureCol,
                      size_t chunkSize) {
-    const auto& namespaces = manager->namespaces();
+    ProcedureManager::Namespaces namespaces;
+    manager->getNamespaces(namespaces);
 
     if (nameCol) {
         nameCol->clear();
@@ -68,11 +69,12 @@ void writeProcedures(Data* data,
 
     size_t remaining = chunkSize;
     std::string signature;
+    ProcedureNamespace::Procedures procs;
 
     while (remaining > 0
            && data->_nsIndex < namespaces.size()) {
         const ProcedureNamespace* ns = namespaces[data->_nsIndex];
-        const auto& procs = ns->procedures();
+        ns->getProcedures(procs);
 
         while (remaining > 0
                && data->_procIndex < procs.size()) {

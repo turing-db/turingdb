@@ -37,7 +37,14 @@ void ProcedureManager::init() {
     ProceduresProcedure::registerProcedure(db);
 }
 
+void ProcedureManager::getNamespaces(Namespaces& result) const {
+    std::shared_lock<std::shared_mutex> lock(_mutex);
+    result = _namespaces;
+}
+
 const Procedure* ProcedureManager::getProcedure(std::string_view fullName) const {
+    std::shared_lock<std::shared_mutex> lock(_mutex);
+
     const size_t dot = fullName.find('.');
     if (dot == std::string_view::npos) {
         return nullptr;
@@ -46,15 +53,17 @@ const Procedure* ProcedureManager::getProcedure(std::string_view fullName) const
     const std::string_view nsName = fullName.substr(0, dot);
     const std::string_view procName = fullName.substr(dot + 1);
 
-    const ProcedureNamespace* ns = getNamespace(nsName);
-    if (!ns) {
+    const auto it = _namespaceMap.find(nsName);
+    if (it == _namespaceMap.end()) {
         return nullptr;
     }
 
-    return ns->getProcedure(procName);
+    return it->second->getProcedure(procName);
 }
 
 ProcedureNamespace* ProcedureManager::getNamespace(std::string_view name) const {
+    std::shared_lock<std::shared_mutex> lock(_mutex);
+
     const auto it = _namespaceMap.find(name);
     if (it == _namespaceMap.end()) {
         return nullptr;
@@ -64,6 +73,8 @@ ProcedureNamespace* ProcedureManager::getNamespace(std::string_view name) const 
 }
 
 ProcedureNamespace* ProcedureManager::createNamespace(std::string_view name) {
+    std::unique_lock<std::shared_mutex> lock(_mutex);
+
     ProcedureNamespace* ns = new ProcedureNamespace(name);
     _namespaces.push_back(ns);
     _namespaceMap[name] = ns;
