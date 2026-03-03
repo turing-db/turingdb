@@ -1,13 +1,15 @@
 #pragma once
 
 #include <numeric>
-#include <range/v3/algorithm/sort.hpp>
-#include <range/v3/view/zip.hpp>
 #include <unordered_map>
 
-#include "ID.h"
+#include <range/v3/algorithm/sort.hpp>
+#include <range/v3/view/zip.hpp>
+
 #include "StringContainer.h"
 #include "metadata/PropertyType.h"
+
+#include "ID.h"
 
 namespace db {
 
