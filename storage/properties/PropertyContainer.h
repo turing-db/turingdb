@@ -259,7 +259,7 @@ public:
 
         _offsetMap.clear();
         for (size_t i = 0; i < _ids.size(); i++) {
-            _offsetMap[_ids[i]] = offsets[i];
+            _offsetMap[_ids[i]] = i;
         }
     }
 

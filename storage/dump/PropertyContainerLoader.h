@@ -104,6 +104,13 @@ public:
             offset += countInPage;
         }
 
+        // Reconstruct the entity ID -> index map; it is not dumped.
+        auto& idxMap = container->_idxMap;
+        const auto& ids = container->_ids;
+        for (size_t i = 0; i < ids.size(); i++) {
+            idxMap[ids[i]] = i;
+        }
+
         return {std::unique_ptr<PropertyContainer> {container}};
     }
 
@@ -258,6 +265,13 @@ public:
             if (!buckets.addBucket(std::move(rawBuckets[i]), std::move(rawLimits[i]))) {
                 return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
             }
+        }
+
+        // Reconstruct the entity ID -> index map; it is not dumped.
+        auto& idxMap = container->_offsetMap;
+        const auto& ids = container->_ids;
+        for (size_t i = 0; i < ids.size(); i++) {
+            idxMap[ids[i]] = i;
         }
 
         return {std::unique_ptr<PropertyContainer> {container}};
