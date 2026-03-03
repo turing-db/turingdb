@@ -23,11 +23,12 @@ ExtensionManager::ExtensionManager(const fs::Path& userExtensionsDir,
 }
 
 ExtensionManager::~ExtensionManager() {
-    for (auto& ext : _installed) {
+    for (ExtensionDescriptor* ext : _installed) {
         ExtensionDescriptor::Handle handle = ext->getHandle();
         if (handle) {
             dlclose(handle);
         }
+        delete ext;
     }
 }
 
@@ -102,8 +103,7 @@ void ExtensionManager::loadExtensionDef(const TuringExtensionDef* def,
     ProcedureNamespace* ns = _procedures->createNamespace(nsName);
     def->_initCallback(ns);
 
-    auto descriptor = std::make_unique<ExtensionDescriptor>(nsName, handle);
-    ExtensionDescriptor* ptr = descriptor.get();
-    _installed.push_back(std::move(descriptor));
-    _installedMap[ptr->getName()] = ptr;
+    ExtensionDescriptor* descriptor = new ExtensionDescriptor(nsName, handle);
+    _installed.push_back(descriptor);
+    _installedMap[descriptor->getName()] = descriptor;
 }

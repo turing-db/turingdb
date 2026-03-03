@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -15,6 +14,8 @@ class ProcedureManager;
 
 class ExtensionManager {
 public:
+    using Extensions = std::vector<ExtensionDescriptor*>;
+
     ExtensionManager(const fs::Path& userExtensionsDir,
                      const fs::Path& installExtensionsDir,
                      ProcedureManager* procedures);
@@ -22,16 +23,13 @@ public:
 
     void installExtension(std::string_view name);
     bool isInstalled(std::string_view name) const;
-
-    const std::vector<std::unique_ptr<ExtensionDescriptor>>& installed() const {
-        return _installed;
-    }
+    const Extensions& installed() const { return _installed; }
 
 private:
     fs::Path _userExtensionsDir;
     fs::Path _installExtensionsDir;
     ProcedureManager* _procedures {nullptr};
-    std::vector<std::unique_ptr<ExtensionDescriptor>> _installed;
+    Extensions _installed;
     std::unordered_map<std::string_view, ExtensionDescriptor*> _installedMap;
 
     void loadExtensionDef(const TuringExtensionDef* def,
