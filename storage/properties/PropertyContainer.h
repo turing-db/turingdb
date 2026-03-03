@@ -3,7 +3,9 @@
 #include <numeric>
 #include <range/v3/algorithm/sort.hpp>
 #include <range/v3/view/zip.hpp>
+#include <unordered_map>
 
+#include "ID.h"
 #include "StringContainer.h"
 #include "metadata/PropertyType.h"
 
@@ -86,20 +88,15 @@ public:
     }
 
     Values::const_iterator find(EntityID id) const {
-        auto it = std::lower_bound(_ids.begin(),
-                                   _ids.end(),
-                                   id);
-        if (it == _ids.end()) {
+        auto it = _idxMap.find(id);
+
+        if (it == _idxMap.end()) {
             return _values.end();
         }
 
-        const size_t index = std::distance(_ids.begin(), it);
+        const size_t offset = it->second;
 
-        if (_ids[index] != id) {
-            return _values.end();
-        }
-
-        return _values.begin() + index;
+        return _values.begin() + offset;
     }
 
     const T::Primitive& get(EntityID entityID) const {
@@ -144,6 +141,11 @@ public:
                 const EntityID id2 = std::get<0>(pair2);
                 return id1 < id2;
             });
+
+        _idxMap.clear();
+        for (size_t i = 0; i < _ids.size(); i++) {
+            _idxMap[_ids[i]] = i;
+        }
     }
 
     Values& values() { return _values; }
@@ -153,6 +155,7 @@ private:
     friend TrivialPropertyContainerLoader<T>;
 
     Values _values;
+    std::unordered_map<EntityID, size_t> _idxMap;
 };
 
 template <>
@@ -182,20 +185,15 @@ public:
     }
 
     Values::const_iterator find(EntityID id) const {
-        auto it = std::lower_bound(_ids.begin(),
-                                   _ids.end(),
-                                   id);
-        if (it == _ids.end()) {
+        auto it = _offsetMap.find(id);
+
+        if (it == _offsetMap.end()) {
             return _values.end();
         }
 
-        const size_t index = std::distance(_ids.begin(), it);
+        const size_t offset = it->second;
 
-        if (_ids[index] != id) {
-            return _values.end();
-        }
-
-        return _values.begin() + index;
+        return _values.begin() + offset;
     }
 
     const std::string_view& get(EntityID entityID) const {
@@ -258,6 +256,11 @@ public:
         }
 
         _values = std::move(newValues);
+
+        _offsetMap.clear();
+        for (size_t i = 0; i < _ids.size(); i++) {
+            _offsetMap[_ids[i]] = offsets[i];
+        }
     }
 
 private:
@@ -265,5 +268,6 @@ private:
     friend DataPartMerger;
 
     StringContainer _values;
+    std::unordered_map<EntityID, size_t> _offsetMap;
 };
 }
