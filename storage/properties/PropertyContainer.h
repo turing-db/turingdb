@@ -145,6 +145,7 @@ public:
             });
 
         _idxMap.clear();
+        _idxMap.reserve(_ids.size());
         for (size_t i = 0; i < _ids.size(); i++) {
             _idxMap[_ids[i]] = i;
         }
@@ -187,9 +188,9 @@ public:
     }
 
     Values::const_iterator find(EntityID id) const {
-        auto it = _offsetMap.find(id);
+        auto it = _idxMap.find(id);
 
-        if (it == _offsetMap.end()) {
+        if (it == _idxMap.end()) {
             return _values.end();
         }
 
@@ -259,9 +260,10 @@ public:
 
         _values = std::move(newValues);
 
-        _offsetMap.clear();
+        _idxMap.clear();
+        _idxMap.reserve(_ids.size());
         for (size_t i = 0; i < _ids.size(); i++) {
-            _offsetMap[_ids[i]] = i;
+            _idxMap[_ids[i]] = i;
         }
     }
 
@@ -270,6 +272,6 @@ private:
     friend DataPartMerger;
 
     StringContainer _values;
-    std::unordered_map<EntityID, size_t> _offsetMap;
+    std::unordered_map<EntityID, size_t> _idxMap;
 };
 }
