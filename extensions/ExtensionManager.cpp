@@ -1,6 +1,7 @@
 #include "ExtensionManager.h"
 
 #include <dlfcn.h>
+#include <shared_mutex>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/fmt.h>
@@ -33,7 +34,10 @@ ExtensionManager::~ExtensionManager() {
 }
 
 void ExtensionManager::installExtension(std::string_view name) {
-    if (isInstalled(name)) {
+    std::unique_lock<std::shared_mutex> lock(_mutex);
+
+    const auto it = _installedMap.find(name);
+    if (it != _installedMap.end()) {
         throw TuringException(
             fmt::format("Extension '{}' is already installed",
                         name));
@@ -91,7 +95,13 @@ void ExtensionManager::installExtension(std::string_view name) {
 }
 
 bool ExtensionManager::isInstalled(std::string_view name) const {
+    std::shared_lock<std::shared_mutex> lock(_mutex);
     return _installedMap.find(name) != _installedMap.end();
+}
+
+void ExtensionManager::getInstalled(Extensions& result) const {
+    std::shared_lock<std::shared_mutex> lock(_mutex);
+    result = _installed;
 }
 
 void ExtensionManager::loadExtensionDef(const TuringExtensionDef* def,
@@ -100,7 +110,13 @@ void ExtensionManager::loadExtensionDef(const TuringExtensionDef* def,
 
     spdlog::info("Loading extension '{}'", nsName);
 
-    ProcedureNamespace* ns = _procedures->createNamespace(nsName);
+    ProcedureNamespace* ns = _procedures->getNamespace(nsName);
+    if (ns) {
+        throw TuringException(
+            fmt::format("Procedure namespace '{}' already exists",
+                        nsName));
+    }
+    ns = _procedures->createNamespace(nsName);
     def->_initCallback(ns);
 
     ExtensionDescriptor* descriptor = new ExtensionDescriptor(nsName, handle);

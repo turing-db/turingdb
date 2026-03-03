@@ -22,7 +22,8 @@ void resolveInstallExtensionsDir(fs::Path& result) {
         return;
     }
 
-    char buf[4096];
+    constexpr size_t MAX_PATH_LENGTH = 4096;
+    char buf[MAX_PATH_LENGTH];
 #ifdef __APPLE__
     uint32_t bufSize = sizeof(buf);
     const int ok = _NSGetExecutablePath(buf, &bufSize) == 0;

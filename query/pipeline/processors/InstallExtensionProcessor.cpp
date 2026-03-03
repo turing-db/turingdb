@@ -43,6 +43,7 @@ void InstallExtensionProcessor::prepare(ExecutionContext* ctxt) {
 }
 
 void InstallExtensionProcessor::reset() {
+    markAsReset();
 }
 
 void InstallExtensionProcessor::execute() {
