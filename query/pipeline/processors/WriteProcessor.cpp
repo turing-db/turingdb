@@ -9,7 +9,8 @@
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
 
-#include "columns/ColumnDispatcher.h"
+#include "columns/AllowedKinds.h"
+#include "columns/ColumnOperatorDispatcher.h"
 #include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
 #include "processors/ExprProgram.h"
@@ -230,7 +231,7 @@ void WriteProcessor::createNodes(size_t numIters) {
                 const PropertyTypeID propID =
                     _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
-                dispatchColumn(valueCol, [&](auto* col) {
+                auto populateNodeProps = [&](auto* col) {
                     using Elem = typename std::remove_pointer_t<decltype(col)>::ValueType;
 
                     for (size_t i = 0; i < numIters; i++) {
@@ -238,7 +239,10 @@ void WriteProcessor::createNodes(size_t numIters) {
                         auto& pending = _writeBuffer->getPendingNode(numPendingNodesPrior + i);
                         pending.properties.emplace_back(CommitWriteBuffer::UntypedProperty {propID, toPropertyVariant<Elem>(elem)});
                     }
-                });
+                };
+                using Types = OutputtedTypes;
+                ColumnSingleDispatcher<Types::Allowed, decltype(populateNodeProps), Types::Excluded>
+                    ::dispatch(valueCol, populateNodeProps);
             }
         }
 
@@ -347,7 +351,7 @@ void WriteProcessor::createEdges(size_t numIters) {
             const PropertyTypeID propID =
                 _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
-            dispatchColumn(valueCol, [&](auto* col) {
+            auto populateEdgeProps = [&](auto* col) {
                 using Elem = typename std::remove_pointer_t<decltype(col)>::ValueType;
 
                 for (size_t i = 0; i < numIters; i++) {
@@ -355,7 +359,10 @@ void WriteProcessor::createEdges(size_t numIters) {
                     auto& pending = _writeBuffer->getPendingEdge(numPendingEdgesPrior + i);
                     pending.properties.emplace_back(CommitWriteBuffer::UntypedProperty {propID, toPropertyVariant<Elem>(elem)});
                 }
-            });
+            };
+            using Types = OutputtedTypes;
+            ColumnSingleDispatcher<Types::Allowed, decltype(populateEdgeProps), Types::Excluded>
+                ::dispatch(valueCol, populateEdgeProps);
         }
 
         // Populate the output column for this edge with the index in the CWB which it
