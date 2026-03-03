@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -19,7 +21,7 @@ public:
 
     void init();
 
-    const Namespaces& namespaces() const { return _namespaces; }
+    void getNamespaces(Namespaces& result) const;
 
     const Procedure* getProcedure(std::string_view fullName) const;
 
@@ -30,6 +32,7 @@ public:
     static std::unique_ptr<ProcedureManager> create();
 
 private:
+    mutable std::shared_mutex _mutex;
     Namespaces _namespaces;
     std::unordered_map<std::string_view, ProcedureNamespace*> _namespaceMap;
 };

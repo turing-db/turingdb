@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+#include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -19,11 +21,12 @@ public:
 
     const Procedure* getProcedure(std::string_view name) const;
 
-    const Procedures& procedures() const { return _procedures; }
+    void getProcedures(Procedures& result) const;
 
     void addProcedure(Procedure* procedure);
 
 private:
+    mutable std::shared_mutex _mutex;
     std::string_view _name;
     Procedures _procedures;
     std::unordered_map<std::string_view, Procedure*> _procedureMap;

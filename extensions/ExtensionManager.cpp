@@ -1,7 +1,6 @@
 #include "ExtensionManager.h"
 
 #include <dlfcn.h>
-#include <shared_mutex>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/fmt.h>

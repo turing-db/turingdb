@@ -86,9 +86,15 @@ void ShowProceduresProcessor::execute() {
 
     const ProcedureManager* manager = _ctxt->getProcedures();
 
+    ProcedureManager::Namespaces namespaces;
+    manager->getNamespaces(namespaces);
+
     std::string signature;
-    for (const auto* ns : manager->namespaces()) {
-        for (const auto* proc : ns->procedures()) {
+    ProcedureNamespace::Procedures procedures;
+    for (const auto* ns : namespaces) {
+        ns->getProcedures(procedures);
+
+        for (const auto* proc : procedures) {
             colName->push_back(proc->getFullName());
             buildSignature(signature, proc);
             colSignature->push_back(signature);
