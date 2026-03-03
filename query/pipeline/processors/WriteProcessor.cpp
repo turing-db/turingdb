@@ -236,8 +236,7 @@ void WriteProcessor::createNodes(size_t numIters) {
                     for (size_t i = 0; i < numIters; i++) {
                         const Elem& elem = (*col)[i];
                         auto& pending = _writeBuffer->getPendingNode(numPendingNodesPrior + i);
-                        pending.properties.emplace_back(
-                            CommitWriteBuffer::UntypedProperty {propID, toPropertyVariant<Elem>(elem)});
+                        pending.properties.emplace_back(CommitWriteBuffer::UntypedProperty {propID, toPropertyVariant<Elem>(elem)});
                     }
                 });
             }
@@ -354,8 +353,7 @@ void WriteProcessor::createEdges(size_t numIters) {
                 for (size_t i = 0; i < numIters; i++) {
                     const Elem& elem = (*col)[i];
                     auto& pending = _writeBuffer->getPendingEdge(numPendingEdgesPrior + i);
-                    pending.properties.emplace_back(
-                        CommitWriteBuffer::UntypedProperty {propID, toPropertyVariant<Elem>(elem)});
+                    pending.properties.emplace_back(CommitWriteBuffer::UntypedProperty {propID, toPropertyVariant<Elem>(elem)});
                 }
             });
         }
