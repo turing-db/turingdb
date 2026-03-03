@@ -46,7 +46,7 @@ void ShowExtensionsProcessor::execute() {
 
     const ExtensionManager* manager = _ctxt->getExtensions();
 
-    for (const auto& ext : manager->installed()) {
+    for (const ExtensionDescriptor* ext : manager->installed()) {
         colName->push_back(ext->getName());
     }
 
