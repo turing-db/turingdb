@@ -83,7 +83,7 @@ bool setNonBlock(Socket s, bool enable) {
 inline constexpr socklen_t socketAddrLen = sizeof(struct sockaddr_in);
 
 bool bind(ServerSocket s, const char* address, uint32_t port) {
-    sockaddr_in socketAddr;
+    sockaddr_in socketAddr {0};
     memset(&socketAddr, 0, sizeof(socketAddr));
     socketAddr.sin_family = AF_INET;
     socketAddr.sin_port = htons(port);

@@ -14,6 +14,12 @@
 
 using namespace db;
 
+namespace {
+
+constexpr const char* THREAD_NAME = "turingdb.server";
+
+}
+
 TuringServer::TuringServer(const DBServerConfig& config, TuringDB& db)
     : _config(config),
     _db(db)
@@ -55,7 +61,7 @@ void TuringServer::start() {
     }
 
     const auto serverFunc = [&]() {
-        ThreadName::set("tdb.main-server");
+        ThreadName::set(THREAD_NAME);
 
         const auto startRes = _server->start();
         if (startRes != net::FlowStatus::OK) {

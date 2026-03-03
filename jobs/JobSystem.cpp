@@ -9,6 +9,12 @@
 
 using namespace db;
 
+namespace {
+
+constexpr const char* THREAD_NAME = "turingdb.worker";
+
+}
+
 JobSystem::JobSystem()
     : _nThreads(std::max(1ul, (size_t)std::thread::hardware_concurrency())),
     _jobs(_nThreads)
@@ -32,7 +38,7 @@ JobSystem::~JobSystem() {
 void JobSystem::initialize() {
     for (size_t i = 0; i < _nThreads; i++) {
         _workers.emplace_back([&] {
-            ThreadName::set("tdb.worker");
+            ThreadName::set(THREAD_NAME);
 
             while (true) {
                 std::optional<Job> j = _jobs.waitJob([&] {
