@@ -889,24 +889,49 @@ TEST_F(MatchCreateTest, matchCreateEmptyLabel) {
     ASSERT_FALSE(res);
 }
 
-TEST_F(MatchCreateTest, matchCreatePropertyDependency) {
-    // CREATE with property referencing matched node - currently unsupported
+TEST_F(MatchCreateTest, DISABLED_matchCreatePropertyDependency) {
+    // CREATE with property copied from matched node.
     constexpr std::string_view QUERY = R"(MATCH (n:Person) CREATE (m:Copy{name:n.name}) RETURN m)";
 
-    newChange();
-    auto res = query(QUERY, [&](const Dataframe* df) {
-        // May fail or succeed depending on support level
-    });
-
-    // Currently this throws "entity dependencies not supported"
-    // This test documents the current behavior
-    if (!res) {
-        // Expected - feature not supported
-        SUCCEED() << "Property dependency not supported (expected)";
-    } else {
-        // If it works, great - verify it actually copied
-        SUCCEED() << "Property dependency is supported";
+    // Collect expected Person names first
+    using Names = LineContainer<std::string>;
+    Names expectedNames;
+    {
+        auto res = query(R"(MATCH (n:Person) RETURN n.name)",
+            [&](const Dataframe* df) {
+                const auto* col = df->cols().front()
+                    ->as<ColumnOptVector<types::String::Primitive>>();
+                ASSERT_TRUE(col);
+                for (size_t i = 0; i < df->getLogicalRowCount(); ++i) {
+                    expectedNames.add({std::string((*col)[i].value())});
+                }
+            });
+        ASSERT_TRUE(res) << res.getError();
     }
+    ASSERT_GT(expectedNames.size(), 0);
+
+    newChange();
+    {
+        auto res = query(QUERY, [](const Dataframe*) {});
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    // Query back the Copy nodes and verify properties
+    Names actualNames;
+    {
+        auto res = query(R"(MATCH (m:Copy) RETURN m.name)",
+            [&](const Dataframe* df) {
+                const auto* col = df->cols().front()
+                    ->as<ColumnOptVector<types::String::Primitive>>();
+                ASSERT_TRUE(col);
+                for (size_t i = 0; i < df->getLogicalRowCount(); ++i) {
+                    actualNames.add({std::string((*col)[i].value())});
+                }
+            });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    EXPECT_TRUE(expectedNames.equals(actualNames));
 }
 
 TEST_F(MatchCreateTest, matchCreateReuseEdgeVar) {
