@@ -391,6 +391,20 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
         return resCol;
     }
 
+    if (funcName == "labels") {
+        if (args->size() != 1) {
+            throw PlannerException(
+                fmt::format("{}() expects 1 argument, got {}", funcName, args->size()));
+        }
+
+        Column* argCol = generateExpr(args->front());
+        const ColumnOperator op = OP_FUNC_LABELS;
+        Column* resCol = _gen->memory().alloc<ColumnVector<std::string>>();
+
+        _exprProg->addInstr(op, resCol, argCol, nullptr);
+        return resCol;
+    }
+
     throw PlannerException(
         fmt::format("Function '{}' is not supported in expressions", funcName));
 }

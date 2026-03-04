@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <spdlog/fmt/bundled/format.h>
+#include <utility>
 
 #include "EnumToString.h"
 #include "FatalException.h"
@@ -41,6 +42,8 @@ enum ColumnOperator : uint8_t {
     OP_TO_FLOAT,
     OP_TO_BOOLEAN,
 
+    OP_FUNC_LABELS,
+
     _SIZE
 };
 
@@ -50,7 +53,7 @@ enum class ColumnOperatorType : uint8_t {
     OPTYPE_NOOP,
 };
 
-constexpr inline ColumnOperatorType getOperatorType(ColumnOperator op) {
+constexpr ColumnOperatorType getOperatorType(ColumnOperator op) {
     switch (op) {
         case OP_EQUAL:
         case OP_NOT_EQUAL:
@@ -79,6 +82,7 @@ constexpr inline ColumnOperatorType getOperatorType(ColumnOperator op) {
         case OP_TO_INTEGER:
         case OP_TO_FLOAT:
         case OP_TO_BOOLEAN:
+        case OP_FUNC_LABELS:
             return ColumnOperatorType::OPTYPE_UNARY;
         break;
 
@@ -93,7 +97,8 @@ constexpr inline ColumnOperatorType getOperatorType(ColumnOperator op) {
     }
 
     throw FatalException(
-        fmt::format("Failed to get ColumnOperatorType of ColumnOperator : {}", (uint8_t) op));
+        fmt::format("Failed to get ColumnOperatorType of ColumnOperator : {}",
+                    std::to_underlying(op)));
 }
 
 using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
@@ -124,5 +129,7 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
 
     EnumStringPair<ColumnOperator::OP_TO_INTEGER, "TO_INTEGER">,
     EnumStringPair<ColumnOperator::OP_TO_FLOAT, "TO_FLOAT">,
-    EnumStringPair<ColumnOperator::OP_TO_BOOLEAN, "TO_BOOLEAN">>;
+    EnumStringPair<ColumnOperator::OP_TO_BOOLEAN, "TO_BOOLEAN">,
+
+    EnumStringPair<ColumnOperator::OP_FUNC_LABELS, "FUNCTION_LABELS">>;
 }
