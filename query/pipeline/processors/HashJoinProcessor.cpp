@@ -46,7 +46,8 @@ auto findInMap(const std::unordered_map<Key, Value>& map, Column* col, size_t in
         }
         return map.find(*val);
     }
-    return map.find((*static_cast<ColumnVector<Key>*>(col))[index]);
+    auto* typedCol = static_cast<ColumnVector<Key>*>(col);
+    return map.find((*typedCol)[index]);
 }
 
 template <typename Key>
@@ -59,7 +60,8 @@ std::vector<RowOffset>& getMap(std::unordered_map<Key, std::vector<RowOffset>>& 
         const auto& val = (*typedCol)[index];
         return map[*val];
     }
-    return map[(*static_cast<const ColumnVector<Key>*>(col))[index]];
+    auto* typedCol = static_cast<const ColumnVector<Key>*>(col);
+    return map[(*typedCol)[index]];
 }
 
 }
