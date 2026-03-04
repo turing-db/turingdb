@@ -101,9 +101,7 @@ void PipelineEdgeOutputInterface::connectTo(PipelineNodeInputInterface& input) {
 }
 
 void PipelineEdgeOutputInterface::connectTo(PipelineBlockInputInterface& input) {
-    input.setStream(EntityOutputStream::createEdgeStream(_edgeIDs->getTag(),
-                                                         _otherNodes->getTag(),
-                                                         _edgeTypes->getTag()));
+    input.setStream(_stream);
     _port->connectTo(input.getPort());
 }
 
