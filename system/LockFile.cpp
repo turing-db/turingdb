@@ -6,7 +6,6 @@
 #include <chrono>
 #include <thread>
 
-#include "TuringTime.h"
 #include "BioAssert.h"
 #include "File.h"
 #include "FileReader.h"
@@ -66,7 +65,44 @@ LockFileResult<void> LockFile::tryLock() {
     return writeMetadata();
 }
 
-LockFileResult<uint64_t> LockFile::getPid() {
+LockFileResult<size_t> LockFile::getOwningProcess() const {
+    bioassert(!_path.empty(), "Path is empty");
+
+    if (!_path.exists()) {
+        return LockFileError::result(LockFileErrorType::NOT_LOCKED);
+    }
+
+    const int lock_fd = ::open(_path.c_str(), O_CREAT | O_RDWR, 0644);
+
+    if (lock_fd < 0) {
+        return LockFileError::result(LockFileErrorType::PERMISSION_DENIED);
+    }
+
+    const int lock_res = flock(lock_fd, LOCK_EX | LOCK_NB);
+    if (lock_res != 0) {
+        if (errno == EWOULDBLOCK) {
+            // Lock is held by another process
+            // Read the lock file to get PID
+
+            auto pid = getPid();
+            ::close(lock_fd);
+
+            if (!pid) {
+                return pid.get_unexpected();
+            }
+
+            return *pid;
+        }
+
+        ::close(lock_fd);
+        return LockFileError::result(LockFileErrorType::UNKNOWN);
+    }
+
+    ::close(lock_fd);
+    return LockFileError::result(LockFileErrorType::NOT_LOCKED);
+}
+
+LockFileResult<uint64_t> LockFile::getPid() const {
     fs::Result<fs::File> f = fs::File::open(_path);
     if (!f) {
         return LockFileError::result(LockFileErrorType::PERMISSION_DENIED);
@@ -127,7 +163,7 @@ bool LockFile::waitUnlock(size_t milliseconds) {
     bioassert(!_path.empty(), "Path is empty");
 
     const auto deadline = std::chrono::steady_clock::now()
-                          + std::chrono::milliseconds(milliseconds);
+                        + std::chrono::milliseconds(milliseconds);
 
     constexpr size_t interval = 10;
 

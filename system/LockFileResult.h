@@ -12,6 +12,7 @@ enum class LockFileErrorType : uint8_t {
     PERMISSION_DENIED,
     ALREADY_LOCKED,
     NO_PID,
+    NOT_LOCKED,
 
     _SIZE,
 };
@@ -20,7 +21,8 @@ using LockFileErrorTypeDescription = EnumToString<LockFileErrorType>::Create<
     EnumStringPair<LockFileErrorType::UNKNOWN, "Unknown error">,
     EnumStringPair<LockFileErrorType::PERMISSION_DENIED, "Permission denied">,
     EnumStringPair<LockFileErrorType::ALREADY_LOCKED, "Already locked">,
-    EnumStringPair<LockFileErrorType::NO_PID, "No PID in file">>;
+    EnumStringPair<LockFileErrorType::NO_PID, "No PID in file">,
+    EnumStringPair<LockFileErrorType::NOT_LOCKED, "Not locked">>;
 
 class LockFileError {
 public:

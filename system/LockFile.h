@@ -19,6 +19,7 @@ public:
     void setPath(const fs::Path& p);
 
     LockFileResult<void> tryLock();
+    LockFileResult<size_t> getOwningProcess() const;
     void unlock();
     bool waitUnlock(size_t milliseconds);
 
@@ -27,7 +28,7 @@ private:
     fs::File _file;
     bool _locked {false};
 
-    LockFileResult<uint64_t> getPid();
+    LockFileResult<uint64_t> getPid() const;
     LockFileResult<void> writeMetadata();
 };
 

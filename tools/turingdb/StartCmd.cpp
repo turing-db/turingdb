@@ -159,6 +159,19 @@ int StartCmd::execute() {
     const fs::Path& logsDir = config.getLogsDir();
 
     if (_demonize) {
+        LockFile lockFile;
+        lockFile.setPath(config.getLockFilePath());
+
+        const auto pid = lockFile.getOwningProcess();
+
+        if (pid) {
+            spdlog::error("TuringDB is already running (PID: {})", *pid);
+            return EXIT_FAILURE;
+        } else if (pid.error().getType() != LockFileErrorType::NOT_LOCKED) {
+            spdlog::error("Could not read PID from lock file: {}", pid.error().fmtMessage());
+            return EXIT_FAILURE;
+        }
+
         const DemonResult demonResult = Demonology::demonize();
 
         // Process was forked, we are now the parent
@@ -172,7 +185,9 @@ int StartCmd::execute() {
 
         if (demonResult == DemonResult::Parent) {
             if (!waitForReady(config.getSocketPath(), _startTimeout)) {
-                spdlog::error("TuringDB did not respond within {} ms", _startTimeout);
+                spdlog::error("TuringDB failed to start");
+                spdlog::error("Check the logs at {}/turingdb.log for more information",
+                              config.getLogsDir().get());
                 return EXIT_FAILURE;
             }
 
