@@ -4,19 +4,19 @@
 
 #include "BinaryOperators.h"
 #include "BinaryPredicates.h"
-#include "UnaryPredicates.h"
 #include "MaskOperators.h"
+#include "UnaryPredicates.h"
 
-#include "TypeUtils.h"
 #include "ColumnCombinations.h"
+#include "TypeUtils.h"
 
 namespace db {
 
+/// Generic binary operators, returning a non-Bool-like
 struct BinaryOperators {
-    /// Generic binary operators
     template <typename Op, typename ColW, typename ColT, typename ColU>
-        requires is_result_column<Op, ColT, ColU, TypeUtils::decay_col_t<ColW>>
-    static inline void exec(ColW&& res, ColT&& lhs, ColU&& rhs) {
+        requires is_result_column<Op, ColT, ColU, ColW>
+    static void exec(ColW* res, const ColT* lhs, const ColU* rhs) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
         using DecayColU = TypeUtils::decay_col_t<ColU>;
         using DecayColW = TypeUtils::decay_col_t<ColW>;
@@ -25,51 +25,44 @@ struct BinaryOperators {
         using InternalU = InnerTypeHelper<DecayColU>::type;
         using InternalRes = InnerTypeHelper<DecayColW>::type;
 
-        BinaryOpExecutor<Op, InternalRes, InternalT, InternalU>::apply(
-            std::forward<ColW>(res), std::forward<ColT>(lhs), std::forward<ColU>(rhs));
+        BinaryOpExecutor<Op, InternalRes, InternalT, InternalU>::apply(res, lhs, rhs);
     }
 };
 
+/// Binary predicates, returning a Bool-like
 struct BinaryPredicates {
-    /// Binary predicates
     template <typename Op, typename ColT, typename ColU>
-        requires(!std::is_same_v<Op, ApplyMask>) // FIXME: More meaningful constraint
-    static inline void exec(ColumnMask* res, ColT&& lhs, ColU&& rhs) {
+    static void exec(ColumnMask* res, const ColT* lhs, const ColU* rhs) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
         using DecayColU = TypeUtils::decay_col_t<ColU>;
 
         using InternalT = InnerTypeHelper<DecayColT>::type;
         using InternalU = InnerTypeHelper<DecayColU>::type;
 
-        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(
-            res, std::forward<ColT>(lhs), std::forward<ColU>(rhs)
-        );
+        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
     }
 
     template <typename Op, typename ColT, typename ColU>
-        requires(!std::is_same_v<Op, ApplyMask>) // FIXME: More meaningful constraint
-    static inline void exec(ColumnOptMask* res, ColT&& lhs, ColU&& rhs) {
+    static void exec(ColumnOptMask* res, const ColT* lhs, const ColU* rhs) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
         using DecayColU = TypeUtils::decay_col_t<ColU>;
 
         using InternalT = InnerTypeHelper<DecayColT>::type;
         using InternalU = InnerTypeHelper<DecayColU>::type;
 
-        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(
-            res, std::forward<ColT>(lhs), std::forward<ColU>(rhs)
-        );
+        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
     }
 };
 
+/// Unary predicates, returning a Bool-like
 struct UnaryPredicates {
-    /// Unary predicates
     template <typename Op, typename ColT>
-    static inline void exec(ColumnMask* res, ColT&& arg) {
+    static void exec(ColumnMask* res, const ColT* arg) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
 
         using InternalT = InnerTypeHelper<DecayColT>::type;
 
-        UnaryPredicateExecutor<Op, InternalT>::apply(res, std::forward<ColT>(arg));
+        UnaryPredicateExecutor<Op, InternalT>::apply(res, arg);
     }
 
     // Below specialisation is needed for expressions like NOT TRUE, NOT FALSE
@@ -78,7 +71,7 @@ struct UnaryPredicates {
     template <typename Op, typename T>
         requires(std::is_same_v<T, types::Bool::Primitive>)
              || (std::is_same_v<T, std::optional<types::Bool::Primitive>>)
-    static inline void exec(ColumnConst<T>* res, const ColumnConst<T>* arg) {
+    static void exec(ColumnConst<T>* res, const ColumnConst<T>* arg) {
         UnaryPredicateExecutor<Op, T>::apply(res, arg);
     }
 
@@ -87,50 +80,51 @@ struct UnaryPredicates {
     // ColOptMask is a weak alias for ColumnVector<opt<Bool>>
     template <typename Op, typename T>
         requires(std::is_same_v<T, types::Bool::Primitive>)
-    static inline void exec(ColumnVector<T>* res, const ColumnVector<T>* arg) {
+    static void exec(ColumnVector<T>* res, const ColumnVector<T>* arg) {
         UnaryPredicateExecutor<Op, T>::apply(res, arg);
     }
 
     template <typename Op, typename ColT>
-    static inline void exec(ColumnOptMask* res, ColT&& arg) {
+    static void exec(ColumnOptMask* res, const ColT* arg) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
 
         using InternalT = InnerTypeHelper<DecayColT>::type;
 
-        UnaryPredicateExecutor<Op, InternalT>::apply(res, std::forward<ColT>(arg));
+        UnaryPredicateExecutor<Op, InternalT>::apply(res, arg);
     }
 };
 
 struct MaskOperators {
     /// Binary operation on masks
     template <typename Op>
-    static inline void exec(ColumnMask* res, const ColumnMask* lhs, const ColumnMask* rhs) {
+    static void exec(ColumnMask* res, const ColumnMask* lhs, const ColumnMask* rhs) {
         MaskOpExecutor<Op>::apply(res, lhs, rhs);
     }
 
     /// Unary operation on masks
     template <typename Op>
-    static inline void exec(ColumnMask* res, const ColumnMask* arg) {
+    static void exec(ColumnMask* res, const ColumnMask* arg) {
         MaskOpExecutor<Op>::apply(res, arg);
     }
 
     /// Applying masks to vectors
     template <typename Op, typename T>
         requires std::is_same_v<Op, ApplyMask>
-    static inline void exec(ColumnVector<T>* res, const ColumnVector<T>* src, const ColumnMask* mask) {
+    static void exec(ColumnVector<T>* res, const ColumnVector<T>* src, const ColumnMask* mask) {
         MaskApplicator::apply(res, src, mask);
     }
 
     template <typename Op, typename T>
         requires std::is_same_v<Op, ApplyMask>
-    static inline void exec(ColumnVector<T>* res, const ColumnMask* mask, const ColumnVector<T>* src) {
+    static void exec(ColumnVector<T>* res, const ColumnMask* mask, const ColumnVector<T>* src) {
         MaskApplicator::apply(res, src, mask);
     }
 };
 
+/// Generic Column projection and manipulation
 struct ColumnOperators {
     template <typename T>
-    static inline void copyChunk(typename ColumnVector<T>::ConstIterator srcStart,
+    static void copyChunk(typename ColumnVector<T>::ConstIterator srcStart,
                                  typename ColumnVector<T>::ConstIterator srcEnd,
                                  ColumnVector<T>* dst) {
         const size_t count = std::distance(srcStart, srcEnd);
@@ -139,7 +133,7 @@ struct ColumnOperators {
     }
 
     template <typename T>
-    static inline void copyTransformedChunk(const ColumnVector<size_t>* transform,
+    static void copyTransformedChunk(const ColumnVector<size_t>* transform,
                                             const ColumnVector<T>* src,
                                             ColumnVector<T>* dst) {
         const auto& srcd = src->getRaw();
