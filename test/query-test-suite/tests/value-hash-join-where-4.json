@@ -12,7 +12,8 @@
     "reads",
     "match",
     "where",
-    "join"
+    "join",
+    "value-hash-join"
   ],
   "write-required": false
 }
