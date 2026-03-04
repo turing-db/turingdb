@@ -50,6 +50,7 @@
 
 #include "QuantifiedPath.h"
 #include "CardinalityEstimation.h"
+
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
