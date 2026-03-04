@@ -27,62 +27,62 @@ struct Eval {
             using ResultType = ColumnCombination<Eq, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Eq.");
-            ColumnOperators::exec<Eq>(result, lhs, rhs);
+            BinaryPredicates::exec<Eq>(result, lhs, rhs);
         } else if constexpr (Op == OP_NOT_EQUAL) {
             using ResultType = ColumnCombination<Ne, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Ne.");
-            ColumnOperators::exec<Ne>(result, lhs, rhs);
+            BinaryPredicates::exec<Ne>(result, lhs, rhs);
         } else if constexpr (Op == OP_GREATER_THAN) {
             using ResultType = ColumnCombination<Gt, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Gt.");
-            ColumnOperators::exec<Gt>(result, lhs, rhs);
+            BinaryPredicates::exec<Gt>(result, lhs, rhs);
         } else if constexpr (Op == OP_LESS_THAN) {
             using ResultType = ColumnCombination<Lt, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Lt.");
-            ColumnOperators::exec<Lt>(result, lhs, rhs);
+            BinaryPredicates::exec<Lt>(result, lhs, rhs);
         } else if constexpr (Op == OP_GREATER_THAN_OR_EQUAL) {
             using ResultType = ColumnCombination<Gte, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Gte.");
-            ColumnOperators::exec<Gte>(result, lhs, rhs);
+            BinaryPredicates::exec<Gte>(result, lhs, rhs);
         } else if constexpr (Op == OP_LESS_THAN_OR_EQUAL) {
             using ResultType = ColumnCombination<Lte, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Lte.");
-            ColumnOperators::exec<Lte>(result, lhs, rhs);
+            BinaryPredicates::exec<Lte>(result, lhs, rhs);
         } else if constexpr (Op == OP_AND) {
             using ResultType = ColumnCombination<And, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for And.");
-            ColumnOperators::exec<And>(result, lhs, rhs);
+            BinaryPredicates::exec<And>(result, lhs, rhs);
         } else if constexpr (Op == OP_OR) {
             using ResultType = ColumnCombination<Or, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Or.");
-            ColumnOperators::exec<Or>(result, lhs, rhs);
+            BinaryPredicates::exec<Or>(result, lhs, rhs);
         } else if constexpr (Op == OP_ADD) {
             using ResultType = ColumnCombination<Add, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Add.");
-            ColumnOperators::exec<Add>(result, lhs, rhs);
+            BinaryOperators::exec<Add>(result, lhs, rhs);
         } else if constexpr (Op == OP_SUB) {
             using ResultType = ColumnCombination<Sub, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Sub.");
-            ColumnOperators::exec<Sub>(result, lhs, rhs);
+            BinaryOperators::exec<Sub>(result, lhs, rhs);
         } else if constexpr (Op == OP_MUL) {
             using ResultType = ColumnCombination<Mul, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Mul.");
-            ColumnOperators::exec<Mul>(result, lhs, rhs);
+            BinaryOperators::exec<Mul>(result, lhs, rhs);
         } else if constexpr (Op == OP_DIV) {
             using ResultType = ColumnCombination<Div, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Div.");
-            ColumnOperators::exec<Div>(result, lhs, rhs);
+            BinaryOperators::exec<Div>(result, lhs, rhs);
         } else {
             COMPILE_ERROR("Unknown operator");
         }

@@ -12,8 +12,7 @@
 
 namespace db {
 
-class ColumnOperators {
-public:
+struct BinaryOperators {
     /// Generic binary operators
     template <typename Op, typename ColW, typename ColT, typename ColU>
         requires is_result_column<Op, ColT, ColU, TypeUtils::decay_col_t<ColW>>
@@ -29,7 +28,9 @@ public:
         BinaryOpExecutor<Op, InternalRes, InternalT, InternalU>::apply(
             std::forward<ColW>(res), std::forward<ColT>(lhs), std::forward<ColU>(rhs));
     }
+};
 
+struct BinaryPredicates {
     /// Binary predicates
     template <typename Op, typename ColT, typename ColU>
         requires(!std::is_same_v<Op, ApplyMask>) // FIXME: More meaningful constraint
@@ -58,7 +59,9 @@ public:
             res, std::forward<ColT>(lhs), std::forward<ColU>(rhs)
         );
     }
+};
 
+struct UnaryPredicates {
     /// Unary predicates
     template <typename Op, typename ColT>
     static inline void exec(ColumnMask* res, ColT&& arg) {
@@ -96,7 +99,9 @@ public:
 
         UnaryPredicateExecutor<Op, InternalT>::apply(res, std::forward<ColT>(arg));
     }
+};
 
+struct MaskOperators {
     /// Binary operation on masks
     template <typename Op>
     static inline void exec(ColumnMask* res, const ColumnMask* lhs, const ColumnMask* rhs) {
@@ -121,7 +126,9 @@ public:
     static inline void exec(ColumnVector<T>* res, const ColumnMask* mask, const ColumnVector<T>* src) {
         MaskApplicator::apply(res, src, mask);
     }
+};
 
+struct ColumnOperators {
     template <typename T>
     static inline void copyChunk(typename ColumnVector<T>::ConstIterator srcStart,
                                  typename ColumnVector<T>::ConstIterator srcEnd,
