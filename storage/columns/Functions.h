@@ -60,14 +60,16 @@ private:
 
 template <typename Op, typename Res, typename Arg>
 struct FunctionExecutor {
-    static void apply(ColumnVector<Res>* res, const ColumnVector<Arg>* arg) {
+    static void apply(ColumnVector<Res>* res,
+                      const ColumnVector<Arg>* arg,
+                      GraphView view) {
         const size_t size = arg->size();
         res->resize(size);
 
         const auto& argd = arg->getRaw();
         auto& resd = res->getRaw();
 
-        auto op = Op {};
+        auto op = Op {._view = view, ._tmp = ""};
         for (size_t i = 0; i < size ; i ++) {
             resd[i] = op(argd[i]);
         }
