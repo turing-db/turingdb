@@ -1,5 +1,6 @@
 #include "VisualizerProxy.h"
 
+#include <stdlib.h>
 #include <curl/curl.h>
 #include <spdlog/spdlog.h>
 
@@ -75,32 +76,34 @@ VisualizerProxy::~VisualizerProxy() {
 }
 
 void VisualizerProxy::start() {
-    const uint32_t dbPort = _dbPort;
+    const std::string dbBaseUrl = "http://" + _address + ":" + std::to_string(_dbPort);
+
+    const char* visEnv = getenv("TURINGDB_VIS_URL");
+    const std::string visBaseUrl = visEnv ? visEnv : "https://vis.turingdb.org";
 
     net::HTTPServer::Functions functions;
     functions._processor =
-            [dbPort](net::AbstractThreadContext*, net::TCPConnection& connection) {
+            [dbBaseUrl, visBaseUrl](net::AbstractThreadContext*, net::TCPConnection& connection) {
                 auto& parser = connection.getParser<net::HTTPParser<net::URIParser>>();
                 const auto& httpInfo = parser.getHttpInfo();
 
                 const std::string_view path = httpInfo._path;
+                const std::string_view uri = httpInfo._uri;
                 const std::string_view payload = httpInfo._payload;
                 const bool isPost = (httpInfo._method == net::HTTP::Method::POST);
 
-                // Build target URL
+                // Build target URL (use uri to preserve query parameters)
                 std::string targetUrl;
                 static constexpr std::string_view apiPrefix = "/api/";
                 static constexpr std::string_view apiPrefixExact = "/api";
 
                 if (path.starts_with(apiPrefix)) {
-                    // /api/foo → http://127.0.0.1:<dbPort>/foo
-                    targetUrl = "http://127.0.0.1:" + std::to_string(dbPort)
-                              + "/" + std::string(path.substr(apiPrefix.size()));
+                    // /api/foo?bar=baz → <dbBaseUrl>/foo?bar=baz
+                    targetUrl = dbBaseUrl + "/" + std::string(uri.substr(apiPrefix.size()));
                 } else if (path == apiPrefixExact) {
-                    targetUrl = "http://127.0.0.1:" + std::to_string(dbPort) + "/";
+                    targetUrl = dbBaseUrl + "/" + std::string(uri.substr(apiPrefixExact.size()));
                 } else {
-                    // Everything else → vis.turingdb.org
-                    targetUrl = "https://vis.turingdb.org" + std::string(path);
+                    targetUrl = visBaseUrl + std::string(uri);
                 }
 
                 // Perform curl request
@@ -177,6 +180,7 @@ void VisualizerProxy::start() {
             };
 
     _server = std::make_unique<net::HTTPServer>(std::move(functions));
+    _server->setName("Visualizer");
     _server->setAddress(_address.c_str());
     _server->setPort(_proxyPort);
     _server->setWorkerCount(1);
