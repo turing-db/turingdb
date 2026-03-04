@@ -34,9 +34,10 @@ size_t headerCallback(char* buffer, size_t size, size_t nitems, void* userdata) 
 
     std::string_view line(buffer, total);
 
+    // Extract Content-Type from upstream response headers for forwarding
     static constexpr std::string_view contentTypeKey = "content-type:";
     if (line.size() > contentTypeKey.size()) {
-        bool match = std::equal(contentTypeKey.begin(), contentTypeKey.end(),
+        const bool match = std::equal(contentTypeKey.begin(), contentTypeKey.end(),
                                 line.begin(),
                                 [](char a, char b) { return a == tolower(b); });
         if (match) {
