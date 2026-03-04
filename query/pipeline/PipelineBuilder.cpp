@@ -55,6 +55,7 @@
 #include "columns/ColumnVector.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnDispatcher.h"
+#include "TypeUtils.h"
 
 #include "dataframe/ColumnTag.h"
 #include "dataframe/NamedColumn.h"
@@ -63,12 +64,6 @@
 using namespace db;
 
 namespace {
-
-template <typename T>
-struct RemoveOptional { using type = T; };
-
-template <typename T>
-struct RemoveOptional<std::optional<T>> { using type = T; };
 
 void populateStringTableShape(LocalMemory* mem,
                               Column* dest,
@@ -541,7 +536,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterfa
 
     return dispatchColumnVector(keyCol, [&](auto* typedCol) -> PipelineBlockOutputInterface& {
         using ValueType = typename std::decay_t<decltype(*typedCol)>::ValueType;
-        using Key = typename RemoveOptional<ValueType>::type;
+        using Key = TypeUtils::unwrap_optional_t<ValueType>;
 
         if constexpr (std::is_same_v<Key, NodeID> ||
                       std::is_same_v<Key, int64_t> ||

@@ -31,13 +31,16 @@ bool hasKey(Column* col, size_t index, bool isOptional) {
     if (!isOptional) {
         return true;
     }
-    return (*static_cast<ColumnVector<std::optional<Key>>*>(col))[index].has_value();
+    auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
+    const auto& val = (*typedCol)[index];
+    return val.has_value();
 }
 
 template <typename Key, typename Value>
 auto findInMap(const std::unordered_map<Key, Value>& map, Column* col, size_t index, bool isOptional) {
     if (isOptional) {
-        const auto& val = (*static_cast<ColumnVector<std::optional<Key>>*>(col))[index];
+        auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
+        const auto& val = (*typedCol)[index];
         if (!val.has_value()) {
             return map.end();
         }
@@ -52,7 +55,9 @@ std::vector<RowOffset>& getMap(std::unordered_map<Key, std::vector<RowOffset>>& 
                                size_t index,
                                bool isOptional) {
     if (isOptional) {
-        return map[*(*static_cast<ColumnVector<std::optional<Key>>*>(col))[index]];
+        auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
+        const auto& val = (*typedCol)[index];
+        return map[*val];
     }
     return map[(*static_cast<const ColumnVector<Key>*>(col))[index]];
 }
@@ -504,8 +509,7 @@ void HashJoinProcessor<Key>::processRightStream(size_t& rowsRemaining,
 }
 
 template <typename Key>
-void HashJoinProcessor<Key>::flushRightStream(size_t& rowsRemaining,
-                                              size_t& totalRowsInserted) {
+void HashJoinProcessor<Key>::flushRightStream(size_t& rowsRemaining, size_t& totalRowsInserted) {
     const Dataframe* rightDf = _rightInput.getDataframe();
     const Dataframe* leftDf = _leftInput.getDataframe();
     Dataframe* outDf = _output.getDataframe();
@@ -577,8 +581,7 @@ void HashJoinProcessor<Key>::flushRightStream(size_t& rowsRemaining,
 }
 
 template <typename Key>
-void HashJoinProcessor<Key>::flushLeftStream(size_t& rowsRemaining,
-                                             size_t& totalRowsInserted) {
+void HashJoinProcessor<Key>::flushLeftStream(size_t& rowsRemaining, size_t& totalRowsInserted) {
     const Dataframe* leftDf = _leftInput.getDataframe();
     Dataframe* outDf = _output.getDataframe();
 
