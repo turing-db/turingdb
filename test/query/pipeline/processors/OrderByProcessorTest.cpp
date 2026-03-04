@@ -216,6 +216,83 @@ TEST_F(OrderByProcessorTest, millionRandomInts) {
     ASSERT_TRUE(std::ranges::is_sorted(rhsRes, std::greater<> {}));
 }
 
+/// Test the OrderByProcessor recieving empty and non-empty chunks, alternating
+TEST_F(OrderByProcessorTest, alternatingEmpty) {
+    using Int = types::Int64::Primitive;
+    using ColumnInts = ColumnVector<Int>;
+    Int nextVal = 1;
+    constexpr Int MAX_VAL = ChunkConfig::CHUNK_SIZE + 10;
+
+    /// Produce ints 1-10, but every other chunk is empty
+    bool writeEmpty = false;
+    const auto genInputChunk = [&](Dataframe* df,
+                                   bool& isFinished,
+                                   auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+
+        ASSERT_EQ(df->size(), 1);
+
+        auto* col = df->cols().front()->as<ColumnInts>();
+        col->clear();
+
+        if (!writeEmpty) {
+            col->push_back(nextVal++);
+        }
+
+        writeEmpty = !writeEmpty;
+
+        if (nextVal == MAX_VAL + 1) {
+            isFinished = true;
+        }
+    };
+
+    [[maybe_unused]] const auto& rngEmitter = _builder->addLambdaSource(genInputChunk);
+    const ColumnTag intTag = _pipeline.getDataframeManager()->allocTag();
+    _builder->addColumnToOutput<ColumnInts>(intTag);
+
+    OrderByProcessor::OrderByKeys keys = {
+      {._col = intTag, ._asc = true}
+    };
+
+    const auto& orderBy = _builder->addOrderBy(keys);
+    ASSERT_EQ(orderBy.getDataframe()->size(), 1);
+
+    std::vector<Int> res;
+    size_t seenChunks = 0;
+
+    const auto COLLECT_RESULTS = [&](const Dataframe* df,
+                                     LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        seenChunks++;
+
+        ASSERT_EQ(df->size(), 1);
+
+        {
+            const NamedColumn* lhsNCol = df->getColumn(intTag);
+            ASSERT_TRUE(lhsNCol);
+            const auto* casted = lhsNCol->as<ColumnInts>();
+            ASSERT_TRUE(casted);
+            ASSERT_TRUE(casted->size() <= ChunkConfig::CHUNK_SIZE);
+            const auto& lhsd = casted->getRaw();
+
+            res.insert(end(res), begin(lhsd), end(lhsd));
+        }
+    };
+
+    auto [transaction, view, reader] = readGraph();
+    _builder->addLambda(COLLECT_RESULTS);
+    EXECUTE(view, ChunkConfig::CHUNK_SIZE);
+
+    // OrderBy should've aggregated those chunks, only output 1
+    ASSERT_EQ(seenChunks, 2);
+    ASSERT_EQ(res.size(), MAX_VAL);
+    ASSERT_TRUE(std::ranges::is_sorted(res));
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 10;
