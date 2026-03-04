@@ -1,5 +1,7 @@
 #include "ReadStmtGenerator.h"
 
+#include <stdlib.h>
+#include <string.h>
 #include <spdlog/fmt/bundled/format.h>
 
 #include "CypherAST.h"
@@ -621,8 +623,11 @@ void ReadStmtGenerator::placePredicateJoins() {
         }
 
         // Try to place a value hash join instead of cartesian product + filter
-        if (tryPlaceValueHashJoin(pred.get(), deps, var)) {
-            continue;
+        const char* valueHashJoinEnv = getenv("TURING_VALUE_HASH_JOIN");
+        if (valueHashJoinEnv && strcmp(valueHashJoinEnv, "0") != 0) {
+            if (tryPlaceValueHashJoin(pred.get(), deps, var)) {
+                continue;
+            }
         }
 
         // Step 2: Place joins
