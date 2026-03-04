@@ -9,6 +9,7 @@
 #include "EntityOutputStream.h"
 #include "ExecutionContext.h"
 #include "FunctionInvocation.h"
+#include "FunctionSignature.h"
 #include "PendingOutputView.h"
 #include "PlanGraph.h"
 #include "Predicate.h"
@@ -75,6 +76,7 @@
 #include "nodes/InstallExtensionNode.h"
 #include "nodes/ShowExtensionsNode.h"
 #include "nodes/OrderByNode.h"
+#include "nodes/FuncEvalNode.h"
 
 #include "processors/CreateVectorIndexProcessor.h"
 #include "processors/LoadVectorProcessor.h"
@@ -89,8 +91,10 @@
 
 #include "Overloaded.h"
 #include "processors/ExprProgram.h"
+#include "processors/FunctionProgram.h"
 #include "ExprProgramGenerator.h"
 #include "PredicateProgramGenerator.h"
+#include "FunctionProgramGenerator.h"
 
 #include "SystemManager.h"
 #include "TuringConfig.h"
@@ -422,9 +426,12 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateShowExtensionsNode(static_cast<ShowExtensionsNode*>(node));
         break;
 
+        case PlanGraphOpcode::FUNC_EVAL:
+            return translateFuncEvalNode(static_cast<FuncEvalNode*>(node));
+        break;
+
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
-        case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::UNKNOWN:
         case PlanGraphOpcode::_SIZE:
             throw PlannerException(fmt::format("PipelineGenerator does not support PlanGraphNode: {}",
@@ -1572,4 +1579,40 @@ PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* no
     _builder.setMaterializeProc(newMatProc);
 
     return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateFuncEvalNode(FuncEvalNode* node) {
+    if (!_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    const FuncEvalNode::Funcs& funcs = node->getFuncs();
+
+    if (funcs.empty()) {
+        return _builder.getPendingOutputInterface();
+    }
+
+    FunctionProgram* prog = FunctionProgram::create(_pipeline);
+    FunctionProgramGenerator progGen(this, prog, _builder.getPendingOutput());
+
+    for (const FunctionInvocationExpr* funcInvocExpr : funcs) {
+        const std::string_view name = funcInvocExpr->getName();
+
+        const FunctionInvocation* invoc = funcInvocExpr->getFunctionInvocation();
+        const FunctionSignature* sig = invoc->getSignature();
+        bioassert(!sig->isAggregate(),
+                  "Attempted to evaluate aggregate function {} as non-aggregate.", name);
+
+        { // Check correct arguments
+            const size_t expectedArgs = sig->argumentTypes().size();
+            const size_t actualArgs = invoc->getArguments()->size();
+            bioassert(expectedArgs != actualArgs,
+                      "Expected {} arguments for {}, but only recieved {}.", expectedArgs,
+                      name, actualArgs);
+        }
+
+        progGen.generateFuncInvocationExpr(funcInvocExpr);
+    }
+
+    return {};
 }

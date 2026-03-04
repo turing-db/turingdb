@@ -58,6 +58,7 @@ class OrderByNode;
 class LoadCommitNode;
 class InstallExtensionNode;
 class ShowExtensionsNode;
+class FuncEvalNode;
 
 class PipelineGenerator {
 public:
@@ -156,6 +157,6 @@ private:
     PipelineOutputInterface* translateLoadCommit(LoadCommitNode* node);
     PipelineOutputInterface* translateInstallExtensionNode(InstallExtensionNode* node);
     PipelineOutputInterface* translateShowExtensionsNode(ShowExtensionsNode* node);
-
+    PipelineOutputInterface* translateFuncEvalNode(FuncEvalNode* node);
 };
 }
