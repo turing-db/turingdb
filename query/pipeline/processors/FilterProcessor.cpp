@@ -29,7 +29,7 @@ namespace {
 
 #define APPLY_MASK_CASE(Type)                                              \
     case Type::staticKind(): {                                             \
-        ColumnOperators::exec<ApplyMask>(static_cast<Type*>(dest),         \
+        MaskOperators::exec<ApplyMask>(static_cast<Type*>(dest),           \
                                          static_cast<const Type*>(src),    \
                                          mask);                            \
     }                                                                      \
@@ -153,13 +153,13 @@ void FilterProcessor::execute() {
         for (Column* predicateResult : _predProg->getTopLevelPredicates()) {
             if (const auto* predResOptMask = dynamic_cast<ColumnOptMask*>(predicateResult);
                     predResOptMask) {
-                ColumnOperators::exec<And>(&finalOptMask, &finalOptMask, predResOptMask);
+                BinaryPredicates::exec<And>(&finalOptMask, &finalOptMask, predResOptMask);
                 continue;
             }
 
             if (const auto* predResMask = dynamic_cast<ColumnMask*>(predicateResult);
                     predResMask) {
-                ColumnOperators::exec<And>(&finalOptMask, &finalOptMask, predResMask);
+                BinaryPredicates::exec<And>(&finalOptMask, &finalOptMask, predResMask);
                 continue;
             }
 

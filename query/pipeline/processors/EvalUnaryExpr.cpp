@@ -29,7 +29,7 @@ struct Eval {
             using ResultType = T; // XXX: Should have unary ColumnCombinations
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Not.");
-            ColumnOperators::exec<Not>(result, arg);
+            UnaryPredicates::exec<Not>(result, arg);
         } else {
             COMPILE_ERROR("Invalid operator for Unary evaluation.");
         }
