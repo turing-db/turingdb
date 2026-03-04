@@ -46,6 +46,7 @@
 #include "processors/DeleteVectorIndexProcessor.h"
 #include "processors/ShowVectorIndexesProcessor.h"
 #include "processors/InstallExtensionProcessor.h"
+#include "processors/FuncEvalProcessor.h"
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
@@ -1068,8 +1069,8 @@ void PipelineBuilder::setOutputDataframe(const Dataframe* df) {
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addFuncEval(FunctionProgram* funcProg) {
-    const bool hasInput = _pendingOutput.getInterface();
-    ExprEvalProcessor* proc = ExprEvalProcessor::create(_pipeline, funcProg, hasInput);
+    const bool hasInput = _pendingOutput.getInterface() != nullptr;
+    FuncEvalProcessor* proc = FuncEvalProcessor::create(_pipeline, funcProg, hasInput);
 
     PipelineBlockOutputInterface& output = proc->output();
 

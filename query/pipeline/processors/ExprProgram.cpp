@@ -7,6 +7,7 @@
 #include "EvalBinaryExpr.h"
 #include "EvalUnaryExpr.h"
 #include "metadata/SupportedType.h"
+#include "EvalFunction.h"
 
 #include "PipelineV2.h"
 
@@ -167,7 +168,7 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         break;
 
         case OP_FUNC_LABELS:
-            throw FatalException("labels() not yet implemented");
+            EvalFunction::eval<OP_FUNC_LABELS>(res, input);
         break;
 
         case OP_EQUAL:
