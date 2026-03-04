@@ -19,12 +19,23 @@
 #include "Demonology.h"
 #include "LogSetup.h"
 #include "SystemEventHandler.h"
+#include "BannerDisplay.h"
+#include "BuildInfo.h"
+#include "DateTimeFmt.h"
 
 #include "TuringException.h"
 
 using namespace db;
 
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+
 namespace {
+
+void TuringDBCommitInfo() {
+    std::cout << "TuringDB - " << TOSTRING(HEAD_COMMIT_HASH)
+              << " - " << formatUnixTime(BUILD_TIMESTAMP) << "\n\n";
+}
 
 enum class PingResult {
     Pong,
@@ -157,6 +168,9 @@ int StartCmd::execute() {
     const fs::Path& turingDir = config.getTuringDir();
     const fs::Path& graphsDir = config.getGraphsDir();
     const fs::Path& logsDir = config.getLogsDir();
+
+    BannerDisplay::printBanner();
+    TuringDBCommitInfo();
 
     if (_demonize) {
         LockFile lockFile;

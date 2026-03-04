@@ -4,12 +4,26 @@
 #include <string>
 #include <unordered_set>
 
+#include "BuildInfo.h"
+#include "DateTimeFmt.h"
 #include "StartCmd.h"
 #include "StopCmd.h"
 
 #include "FatalException.h"
 
 using namespace db;
+
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+
+namespace {
+
+void TuringDBCommitInfo() {
+    std::cout << "TuringDB - " << TOSTRING(HEAD_COMMIT_HASH)
+              << " - " << formatUnixTime(BUILD_TIMESTAMP) << "\n\n";
+}
+
+}
 
 int main(int argc, const char** argv) {
     const std::unordered_set<std::string_view> subcommands = {
@@ -18,8 +32,8 @@ int main(int argc, const char** argv) {
     };
 
     const std::unordered_set<std::string_view> passthrough = {
-        "-h", "--help",
-        "-v", "--version",
+        "-h",
+        "--help",
     };
 
     std::vector<const char*> args(argv, argv + argc);
@@ -35,6 +49,16 @@ int main(int argc, const char** argv) {
 
     std::unique_ptr<StartCmd> startCmd = StartCmd::create();
     std::unique_ptr<StopCmd> stopCmd = StopCmd::create();
+
+    rootParser.add_argument("-v", "--version")
+        .action([&](const auto& /*unused*/) {
+            TuringDBCommitInfo();
+            std::exit(0);
+        })
+        .default_value(false)
+        .help("prints version information and exits")
+        .implicit_value(true)
+        .nargs(0);
 
     rootParser.add_subparser(startCmd->getArgParser());
     rootParser.add_subparser(stopCmd->getArgParser());
