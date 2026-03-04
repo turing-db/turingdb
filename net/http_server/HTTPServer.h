@@ -38,11 +38,13 @@ public:
     void setPort(uint32_t port) { _port = port; };
     void setWorkerCount(uint32_t count) { _workerCount = count; };
     void setMaxConnections(uint32_t count) { _maxConnections = count; }
+    void setName(const char* name) { _name = name; }
 
     std::string_view getAddress() const { return {_actualAddress.data()}; };
     uint32_t getPort() const { return _port; };
 
 private:
+    const char* _name {"server"};
     const char* _address {"127.0.0.1"};
     uint32_t _port {6666};
     uint32_t _workerCount {8};

@@ -157,7 +157,7 @@ void HTTPServer::terminate() {
         return;
     }
 
-    spdlog::info("Terminating server");
+    spdlog::info("Terminating {}", _name);
     _running.store(false);
 
     // Write to the shutdown pipe to wake all workers blocked in
