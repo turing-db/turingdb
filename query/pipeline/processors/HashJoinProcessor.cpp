@@ -648,3 +648,4 @@ template class db::HashJoinProcessor<int64_t>;
 template class db::HashJoinProcessor<uint64_t>;
 template class db::HashJoinProcessor<double>;
 template class db::HashJoinProcessor<std::string_view>;
+template class db::HashJoinProcessor<CustomBool>;
