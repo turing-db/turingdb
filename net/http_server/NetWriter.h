@@ -132,6 +132,22 @@ public:
         _header.increment(data.size());
     }
 
+    void addRawHeader(std::string_view headerLine) {
+        if (errorOccured()) {
+            return;
+        }
+
+        if (headerLine.size() + 2 > _header._remaining) {
+            _status = Status::HeaderTooLarge;
+            return;
+        }
+
+        memcpy(_header._content.data() + _header._position,
+               headerLine.data(), headerLine.size());
+        _header.increment(headerLine.size());
+        _header.endLine();
+    }
+
     void addConnection(ConnectionHeader connection) {
         if (errorOccured()) {
             return;

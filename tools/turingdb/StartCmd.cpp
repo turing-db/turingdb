@@ -15,6 +15,7 @@
 #include "LocalMemory.h"
 #include "TuringShell.h"
 #include "TuringServer.h"
+#include "VisualizerProxy.h"
 #include "DBServerConfig.h"
 #include "Demonology.h"
 #include "LogSetup.h"
@@ -215,6 +216,7 @@ int StartCmd::execute() {
     try {
         std::unique_ptr<TuringServer> server;
         std::unique_ptr<TuringShell> shell;
+        std::unique_ptr<VisualizerProxy> proxy;
 
         // Run TuringDB
         LocalMemory mem;
@@ -265,9 +267,17 @@ int StartCmd::execute() {
         server = std::make_unique<TuringServer>(serverConfig, turingDB);
         server->start();
 
+        if (_launchUI) {
+            proxy = std::make_unique<VisualizerProxy>(_address, _uiPort, _port);
+            proxy->start();
+        }
+
         if (_demonize) {
             SystemEventHandler::setReady();
             server->wait();
+            if (proxy) {
+                proxy->stop();
+            }
             server.reset();
         } else {
             shell = std::make_unique<TuringShell>(turingDB, &mem);
@@ -279,6 +289,9 @@ int StartCmd::execute() {
             shell->startLoop();
             shell.reset();
 
+            if (proxy) {
+                proxy->stop();
+            }
             server->stop();
             server->wait();
             server.reset();
@@ -328,6 +341,13 @@ void StartCmd::initialize() {
     _argParser.add_argument("-in-memory")
         .help("Run turingdb in-memory only without writing graphs on disk")
         .store_into(_inMemory);
+    _argParser.add_argument("-ui")
+        .help("Launch visualizer proxy")
+        .store_into(_launchUI);
+    _argParser.add_argument("-ui-port")
+        .metavar("port")
+        .help("Visualizer proxy port (default: 8080)")
+        .store_into(_uiPort);
     _argParser.add_argument("-start-timeout")
         .metavar("seconds")
         .help("Milliseconds to wait for the first INIT response when daemonizing (default: 500)")
