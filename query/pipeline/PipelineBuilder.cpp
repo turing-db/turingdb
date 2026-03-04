@@ -1067,6 +1067,23 @@ void PipelineBuilder::setOutputDataframe(const Dataframe* df) {
     _pipeline->setOutputDataframe(df);
 }
 
+PipelineBlockOutputInterface& PipelineBuilder::addFuncEval(FunctionProgram* funcProg) {
+    const bool hasInput = _pendingOutput.getInterface();
+    ExprEvalProcessor* proc = ExprEvalProcessor::create(_pipeline, funcProg, hasInput);
+
+    PipelineBlockOutputInterface& output = proc->output();
+
+    if (hasInput) {
+        PipelineBlockInputInterface& input = proc->input();
+        _pendingOutput.connectTo(proc->input());
+        input.propagateColumns(output);
+    }
+
+    _pendingOutput.updateInterface(&output);
+
+    return output;
+}
+
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Int64>(PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::UInt64>(PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Double>(PropertyType);
