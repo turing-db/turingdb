@@ -547,7 +547,8 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterfa
                       std::is_same_v<Key, int64_t> ||
                       std::is_same_v<Key, uint64_t> ||
                       std::is_same_v<Key, double> ||
-                      std::is_same_v<Key, std::string_view>) {
+                      std::is_same_v<Key, std::string_view> ||
+                      std::is_same_v<Key, CustomBool>) {
             auto* join = HashJoinProcessor<Key>::create(_pipeline, leftJoinKey, rightJoinKey);
 
             _pendingOutput.connectTo(join->leftInput());
