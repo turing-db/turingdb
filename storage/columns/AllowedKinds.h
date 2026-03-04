@@ -8,6 +8,7 @@
 #include "ColumnOperator.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
+#include "GraphPath.h"
 #include "ContainerKind.h"
 
 namespace db {
@@ -260,6 +261,7 @@ struct OutputtedTypes {
         NodeID,
         EdgeID,
         LabelID,
+        Path,
         LabelSetID,
         EdgeTypeID,
         ValueType,

@@ -3,6 +3,7 @@
 #include <string_view>
 #include <type_traits>
 
+#include "GraphPath.h"
 #include "ID.h"
 #include "OptionalLike.h"
 #include "metadata/PropertyNull.h"
@@ -49,6 +50,9 @@ concept IsBool = std::is_convertible_v<T, bool>
               || OptionalBool<T>;
 
 template <typename T>
+concept IsPath = std::is_same_v<T, Path>;
+
+template <typename T>
 concept IsNull = std::is_same_v<T, PropertyNull>;
 
 struct ColumnTypeGenerator {
@@ -66,6 +70,8 @@ struct ColumnTypeGenerator {
             _name = fmt::format("String");
         } else if constexpr (IsBool<T>) {
             _name = fmt::format("Bool");
+        } else if constexpr (IsPath<T>) {
+            _name = fmt::format("Path");
         } else if constexpr (IsNull<T>) {
             _name = fmt::format("NULL");
         } else {
