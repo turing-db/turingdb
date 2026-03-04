@@ -45,7 +45,6 @@
 #include "nodes/ShortestPathNode.h"
 #include "nodes/VectorSearchNode.h"
 
-#include "spdlog/spdlog.h"
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
@@ -759,9 +758,10 @@ void ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* depende
 
         case PlanGraphTopology::PathToDependency::UndirectedPath: {
             const auto* varDecl = static_cast<VarNode*>(ancestorNode)->getVarDecl();
-            JoinNode* join = _tree->create<JoinNode>(varDecl,
-                                                     varDecl,
-                                                     JoinType::COMMON_ANCESTOR);
+            JoinNode* join = _tree->insertBefore<JoinNode>(filter,
+                                                           varDecl,
+                                                           varDecl,
+                                                           JoinType::COMMON_ANCESTOR);
             PlanGraphNode* depBranchTip = _topology->getBranchTip(dependency);
             depBranchTip->connectOut(join);
             return;
