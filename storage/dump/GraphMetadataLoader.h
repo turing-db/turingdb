@@ -1,7 +1,5 @@
 #pragma once
 
-#include "spdlog/spdlog.h"
-
 #include "FilePageReader.h"
 #include "metadata/GraphMetadata.h"
 #include "LabelMapLoader.h"
@@ -19,7 +17,6 @@ public:
         // Reading labels
         {
             const fs::Path labelsFile = metaDataDir / "labels";
-            spdlog::info("{}", labelsFile.c_str());
             auto reader = fs::FilePageReader::open(labelsFile, DumpConfig::PAGE_SIZE);
             if (!reader) {
                 return DumpError::result(DumpErrorType::CANNOT_OPEN_LABELS, reader.error());
