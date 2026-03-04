@@ -4,6 +4,8 @@
 
 #include "columns/ColumnOperator.h"
 
+#include "views/GraphView.h"
+
 namespace db {
 
 class PipelineV2;
@@ -40,6 +42,7 @@ public:
 private:
     // All instructions which need be evaluated
     Instructions _instrs;
+    GraphView _view;
 
     ExprProgram() = default;
     virtual ~ExprProgram() = default;

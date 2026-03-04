@@ -88,6 +88,12 @@ concept TuringPredicate =
     || std::same_as<CustomBool,  std::invoke_result_t<Func, Args...>>
     || std::same_as<bool,  std::invoke_result_t<Func, Args...>>;
 
+template <typename Func, typename... Args>
+concept TuringPredicateColumn =
+    std::same_as<ColumnMask::Bool_t, std::invoke_result_t<Func, InnerTypeHelper<TypeUtils::decay_col_t<Args>>...>>
+    || std::same_as<CustomBool,  std::invoke_result_t<Func, InnerTypeHelper<TypeUtils::decay_col_t<Args>>...>>
+    || std::same_as<bool,  std::invoke_result_t<Func, InnerTypeHelper<TypeUtils::decay_col_t<Args>>...>>;
+
 /**
  * @brief Predicate that can be invoked, but one or both arguments may be wrapped in
  * optional.

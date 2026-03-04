@@ -12,6 +12,8 @@
 #include "columns/Functions.h"
 #include "columns/KindTypes.h"
 
+#include "views/GraphView.h"
+
 namespace db {
 
 /// Generic binary operators, returning a non-Bool-like

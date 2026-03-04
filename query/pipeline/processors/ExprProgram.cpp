@@ -168,7 +168,7 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         break;
 
         case OP_FUNC_LABELS:
-            EvalFunction::eval<OP_FUNC_LABELS>(res, input);
+            EvalFunction::eval<OP_FUNC_LABELS>(res, input, _view);
         break;
 
         case OP_EQUAL:

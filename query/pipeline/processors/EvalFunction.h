@@ -14,12 +14,13 @@ class Column;
 class EvalFunction {
 public:
     template <ColumnOperator Op>
-    static void eval(Column* res, const Column* arg);
+    static void eval(Column* res, const Column* arg, GraphView view);
 };
 
 template <ColumnOperator Op>
 struct Eval {
     Column* _res {nullptr};
+    GraphView _view;
 
     template <typename T>
     void operator()(const T* arg) {
@@ -30,7 +31,7 @@ struct Eval {
             using ResultType = ColumnVector<std::string>;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid cast to result column for labels().");
-            ColumnOperators::exec<LabelsFunction>(result, arg);
+            ColumnOperators::exec<LabelsFunction>(result, arg, _view);
         } else {
             COMPILE_ERROR("Invalid function.");
         }
@@ -38,9 +39,9 @@ struct Eval {
 };
 
 template <ColumnOperator Op>
-void EvalFunction::eval(Column* res, const Column* arg) {
+void EvalFunction::eval(Column* res, const Column* arg, GraphView view) {
     using Types = TypeRestrictions<Op>;
-    Eval<Op> fn {res};
+    Eval<Op> fn {res, view};
     using Dispatcher = ColumnSingleDispatcher<typename Types::Allowed,
                                               Eval<Op>,
                                               typename Types::Excluded>;
