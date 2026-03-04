@@ -21,8 +21,8 @@ public:
 
 private:
     std::string _address;
-    uint32_t _proxyPort;
-    uint32_t _dbPort;
+    uint32_t _proxyPort {0};
+    uint32_t _dbPort {0};
     std::unique_ptr<net::HTTPServer> _server;
     std::thread _serverThread;
 };
