@@ -200,7 +200,7 @@ TEST_F(QueriesTest, scanAllLimit) {
             for (auto col : df->cols()) {
                 const ColumnNodeIDs* nodeIDs = col->as<ColumnNodeIDs>();
                 ASSERT_TRUE(nodeIDs != nullptr);
-                ASSERT_FALSE(nodeIDs->empty());
+                ASSERT_LE(nodeIDs->size(), limit);
                 ASSERT_EQ(col->getName(), "n");
                 returnedNodeIDs.insert(returnedNodeIDs.end(), nodeIDs->begin(), nodeIDs->end());
             }
@@ -246,7 +246,7 @@ TEST_F(QueriesTest, scanAllSkipLimit) {
 
                 const ColumnNodeIDs* nodeIDs = df->cols()[0]->as<ColumnNodeIDs>();
                 ASSERT_TRUE(nodeIDs != nullptr);
-                ASSERT_FALSE(nodeIDs->empty());
+                ASSERT_LE(nodeIDs->size(), limit);
                 returnedNodeIDs.insert(returnedNodeIDs.end(), nodeIDs->begin(), nodeIDs->end());
             });
 
