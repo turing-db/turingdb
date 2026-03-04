@@ -116,6 +116,7 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         case OP_TO_INTEGER:
         case OP_TO_FLOAT:
         case OP_TO_BOOLEAN:
+        case OP_FUNC_LABELS:
             throw FatalException(
                 fmt::format("Attempted to evaluate {} as binary operator.",
                             ColumnOperatorDescription::value(op)));
@@ -163,6 +164,10 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
 
         case OP_TO_BOOLEAN:
             EvalUnaryExpr::eval<OP_TO_BOOLEAN>(res, input);
+        break;
+
+        case OP_FUNC_LABELS:
+            throw FatalException("labels() not yet implemented");
         break;
 
         case OP_EQUAL:
