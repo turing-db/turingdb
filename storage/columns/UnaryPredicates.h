@@ -38,7 +38,7 @@ inline auto optionalUnaryPredicate(T&& a) -> TypeUtils::optional_invoke_result<P
 /**
  * @brief Wrapper of overloads of @ref apply functions for different operand shapes and
  * outputs for executing unary predicates.
- * @detail The role of this aggregate is to define once the logic for each possible
+ * @detail The role of this struct is to define once the logic for each possible
  * operand shape and result columns. It is not concerned with the internal type
  * of its argument.
  */

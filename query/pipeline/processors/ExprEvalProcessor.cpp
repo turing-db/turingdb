@@ -26,7 +26,7 @@ PipelineBlockInputInterface& ExprEvalProcessor::input() {
 }
 
 std::string ExprEvalProcessor::describe() const {
-    return fmt::format("ComputeExprProcessor @={}", fmt::ptr(this));
+    return fmt::format("EvalExprProcessor @={}", fmt::ptr(this));
 }
 
 ExprEvalProcessor* ExprEvalProcessor::create(PipelineV2* pipeline,

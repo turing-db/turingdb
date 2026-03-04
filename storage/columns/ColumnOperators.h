@@ -9,6 +9,8 @@
 
 #include "ColumnCombinations.h"
 #include "TypeUtils.h"
+#include "columns/Functions.h"
+#include "columns/KindTypes.h"
 
 namespace db {
 

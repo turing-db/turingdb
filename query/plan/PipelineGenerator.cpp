@@ -1595,6 +1595,11 @@ PipelineOutputInterface* PipelineGenerator::translateFuncEvalNode(FuncEvalNode* 
     FunctionProgram* prog = FunctionProgram::create(_pipeline);
     FunctionProgramGenerator progGen(this, prog, _builder.getPendingOutput());
 
+    // Add the evaluating processor to the pipeline. It takes a pointer to the above
+    // @ref FunctionProgram (@ref prog), and the below loops over expressions modifies
+    // @ref prog via that same pointer, in place.
+    _builder.addFuncEval(prog);
+
     for (const FunctionInvocationExpr* funcInvocExpr : funcs) {
         const std::string_view name = funcInvocExpr->getName();
 
@@ -1606,7 +1611,7 @@ PipelineOutputInterface* PipelineGenerator::translateFuncEvalNode(FuncEvalNode* 
         { // Check correct arguments
             const size_t expectedArgs = sig->argumentTypes().size();
             const size_t actualArgs = invoc->getArguments()->size();
-            bioassert(expectedArgs != actualArgs,
+            bioassert(expectedArgs == actualArgs,
                       "Expected {} arguments for {}, but only recieved {}.", expectedArgs,
                       name, actualArgs);
         }
@@ -1614,5 +1619,5 @@ PipelineOutputInterface* PipelineGenerator::translateFuncEvalNode(FuncEvalNode* 
         progGen.generateFuncInvocationExpr(funcInvocExpr);
     }
 
-    return {};
+    return _builder.getPendingOutputInterface();
 }

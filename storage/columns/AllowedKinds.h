@@ -241,6 +241,19 @@ struct TypeRestrictions<OP_NOT> {
     >;
 };
 
+template <>
+struct TypeRestrictions<OP_FUNC_LABELS> {
+    using Allowed = GenerateKindList<std::tuple<
+        NodeID
+    >>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>(),
+        ContainerKind::code<ColumnConst>()
+    >;
+};
+
 /// Types that are outputted by queries, used in @ref QueryTestRunner
 struct OutputtedTypes {
     using Allowed = GenerateKindList<std::tuple<

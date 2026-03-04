@@ -12,6 +12,7 @@ class PipelineBuffer;
 class ExprProgram;
 class PredicateProgram;
 class Dataframe;
+class FunctionProgram;
 
 class PipelineV2 {
 public:
@@ -20,6 +21,7 @@ public:
     friend PipelineBuffer;
     friend ExprProgram;
     friend PredicateProgram;
+    friend FunctionProgram;
     using Processors = std::vector<Processor*>;
     using SourcesSet = std::vector<Processor*>;
     using Buffers = std::vector<PipelineBuffer*>;

@@ -5,6 +5,7 @@
 
 #include <range/v3/view/drop.hpp>
 
+#include "columns/ColumnOperator.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "metadata/LabelMap.h"
@@ -55,6 +56,22 @@ public:
 private:
     GraphView _view;
     std::string _tmp;
+};
+
+template <typename Op, typename Res, typename Arg>
+struct FunctionExecutor {
+    static void apply(ColumnVector<Res>* res, const ColumnVector<Arg>* arg) {
+        const size_t size = arg->size();
+        res->resize(size);
+
+        const auto& argd = arg->getRaw();
+        auto& resd = res->getRaw();
+
+        auto op = Op {};
+        for (size_t i = 0; i < size ; i ++) {
+            resd[i] = op(argd[i]);
+        }
+    }
 };
 
 }

@@ -64,6 +64,8 @@ set(processors_sources
     processors/OrderByProcessor.cpp
     processors/InstallExtensionProcessor.cpp
     processors/ShowExtensionsProcessor.cpp
+    processors/FuncEvalProcessor.cpp
+    processors/FunctionProgram.cpp
 )
 
 set(procedures_sources
