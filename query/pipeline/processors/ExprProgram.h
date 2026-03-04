@@ -9,13 +9,14 @@ namespace db {
 class PipelineV2;
 class Column;
 class PredicateProgram;
+class FunctionProgram;
 
 class ExprProgram {
 public:
     friend PipelineV2;
     friend PredicateProgram;
+    friend FunctionProgram;
     struct Instruction;
-
     using Instructions = std::vector<Instruction>;
 
     struct Instruction {
