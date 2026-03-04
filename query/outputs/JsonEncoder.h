@@ -97,6 +97,21 @@ private:
         _writer.write(value ? "true" : "false");
     }
 
+    void encodeValue(const Path& value) {
+        _writer.write("[");
+        if(!value.empty()) {
+            auto it = value.rbegin();
+            _writer.write(it->getValue());
+            ++it;
+            while(it != value.rend()) {
+                _writer.write(",");
+                _writer.write(it->getValue());
+                ++it;
+            }
+        }
+        _writer.write("]");
+    }
+
     void encodeValue(ValueType value) {
         ControlCharactersEscaper::escapeAndSurroundByQuotes(ValueTypeName::value(value), _sanitized);
         _writer.write(_sanitized);

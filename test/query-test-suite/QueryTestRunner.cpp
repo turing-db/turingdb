@@ -83,6 +83,28 @@ void trimTrailingEmptyLines(std::string& trimmed,
     return value;
 }
 
+[[maybe_unused]] std::string valueToString(const Path& value) {
+    std::string result;
+
+    if (value.empty()) {
+        return  "";
+    }
+
+    const auto reversed = value | std::views::reverse;
+    size_t i = 0;
+    for (auto val : reversed) {
+        if (i % 2 == 0) {
+            // NodeID
+            result += fmt::format("({})", val.getValue());
+        } else {
+            // EdgeID
+            result += fmt::format("-[{}]->", val.getValue());
+        }
+        ++i;
+    }
+    return result;
+}
+
 [[maybe_unused]] std::string valueToString(const std::string_view& value) {
     return std::string(value);
 }
