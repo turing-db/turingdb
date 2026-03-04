@@ -228,8 +228,7 @@ void WriteProcessor::createNodes(size_t numIters) {
             }
 
             for (const auto& [name, type, valueCol] : node._properties) {
-                const PropertyTypeID propID =
-                    _metadataBuilder->getOrCreatePropertyType(name, type)._id;
+                const PropertyTypeID propID = _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
                 auto populateNodeProps = [&](auto* col) {
                     using Elem = typename std::remove_pointer_t<decltype(col)>::ValueType;
@@ -241,8 +240,8 @@ void WriteProcessor::createNodes(size_t numIters) {
                     }
                 };
                 using Types = OutputtedTypes;
-                ColumnSingleDispatcher<Types::Allowed, decltype(populateNodeProps), Types::Excluded>
-                    ::dispatch(valueCol, populateNodeProps);
+                using Dispatcher = ColumnSingleDispatcher<Types::Allowed, decltype(populateNodeProps), Types::Excluded>;
+                Dispatcher::dispatch(valueCol, populateNodeProps);
             }
         }
 
@@ -348,8 +347,7 @@ void WriteProcessor::createEdges(size_t numIters) {
         }
 
         for (const auto& [name, type, valueCol] : edge._properties) {
-            const PropertyTypeID propID =
-                _metadataBuilder->getOrCreatePropertyType(name, type)._id;
+            const PropertyTypeID propID = _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
             auto populateEdgeProps = [&](auto* col) {
                 using Elem = typename std::remove_pointer_t<decltype(col)>::ValueType;
@@ -361,8 +359,8 @@ void WriteProcessor::createEdges(size_t numIters) {
                 }
             };
             using Types = OutputtedTypes;
-            ColumnSingleDispatcher<Types::Allowed, decltype(populateEdgeProps), Types::Excluded>
-                ::dispatch(valueCol, populateEdgeProps);
+            using Dispatcher = ColumnSingleDispatcher<Types::Allowed, decltype(populateEdgeProps), Types::Excluded>;
+            Dispatcher::dispatch(valueCol, populateEdgeProps);
         }
 
         // Populate the output column for this edge with the index in the CWB which it
