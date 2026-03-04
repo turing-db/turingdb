@@ -38,14 +38,14 @@ int main(int argc, const char** argv) {
 
     std::vector<const char*> args(argv, argv + argc);
 
-    // If no explicit subcommand or help/version flag was given, fallback to "start"
+    // If no explicit subcommand or help flag was given, fallback to "start"
     const bool skipInject = argc >= 2 && passthrough.contains(argv[1]);
 
     if (!skipInject && (argc < 2 || !subcommands.contains(argv[1]))) {
         args.insert(args.begin() + 1, "start");
     }
 
-    argparse::ArgumentParser rootParser("turingdb");
+    argparse::ArgumentParser rootParser("turingdb", "1.0", argparse::default_arguments::help);
 
     std::unique_ptr<StartCmd> startCmd = StartCmd::create();
     std::unique_ptr<StopCmd> stopCmd = StopCmd::create();
@@ -62,6 +62,11 @@ int main(int argc, const char** argv) {
 
     rootParser.add_subparser(startCmd->getArgParser());
     rootParser.add_subparser(stopCmd->getArgParser());
+
+    std::stringstream ss;
+    ss << "\nBy default 'start' is trigged. Options:\n" << startCmd->getArgParser();
+    rootParser.add_description("TuringDB - Graph Database Server");
+    rootParser.add_epilog(ss.str());
 
     try {
         rootParser.parse_args(args.size(), args.data());
