@@ -48,12 +48,11 @@ static void getLabelString(std::string& out, const GraphView view, NodeID n) {
 }
 
 struct LabelsFunction {
-public:
     std::string operator()(const NodeID n) {
         getLabelString(_tmp, _view, n);
         return _tmp;
     }
-private:
+
     GraphView _view;
     std::string _tmp;
 };

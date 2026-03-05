@@ -63,7 +63,6 @@ struct UnaryPredicates {
     template <typename Op, typename ColT>
     static void exec(ColumnMask* res, const ColT* arg) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
-
         using InternalT = InnerTypeHelper<DecayColT>::type;
 
         UnaryPredicateExecutor<Op, InternalT>::apply(res, arg);
@@ -126,9 +125,13 @@ struct MaskOperators {
 };
 
 struct ColumnFunctions {
-    template <typename Op, typename ColW, typename ColT>
-    static void exec(ColW* res, const ColT* arg, const GraphView view) {
-        FunctionExecutor<Op, ColW, ColT>::apply(res, arg, view);
+    /// labels() function; result type is string
+    template <typename Op, typename ColT>
+    static void exec(ColumnVector<std::string>* res, const ColT* arg, const GraphView view) {
+        using DecayColT = TypeUtils::decay_col_t<ColT>;
+        using InternalT = InnerTypeHelper<DecayColT>::type;
+
+        FunctionExecutor<Op, std::string, InternalT>::apply(res, arg, view);
     }
 };
 

@@ -43,6 +43,10 @@ void ExprProgram::evalInstr(const Instruction& instr) {
             evalUnaryInstr(instr);
         break;
 
+        case ColumnOperatorType::OPTYPE_FUNC:
+            throw FatalException("Attempted to evaluate function call as expression.");
+        break;
+
         case ColumnOperatorType::OPTYPE_NOOP:
         break;
     }
@@ -168,10 +172,6 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         break;
 
         case OP_FUNC_LABELS:
-            throw FatalException("labels() not implemented.");
-            // EvalFunction::eval<OP_FUNC_LABELS>(res, input, _view);
-        break;
-
         case OP_EQUAL:
         case OP_NOT_EQUAL:
         case OP_GREATER_THAN:
