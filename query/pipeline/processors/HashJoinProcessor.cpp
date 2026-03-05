@@ -95,6 +95,7 @@ void HashJoinProcessor::prepare(ExecutionContext* ctxt) {
     markAsPrepared();
 }
 void HashJoinProcessor::reset() {
+    _hasWritten = false;
     markAsReset();
 }
 
@@ -469,15 +470,16 @@ void HashJoinProcessor::flushRightStream(size_t& rowsRemaining,
 
     const size_t rowsToCopy = std::min(rows.size() - rowOffsetIdx, rowsRemaining);
 
+    size_t columnOffset = _leftRowLen;
     for (size_t j = 0; j < rightDf->size(); ++j) {
         //Skip Columns present in the left input and the join key
-        if (leftDf->getColumn(cols[j]->getTag()) != nullptr || 
+        if (leftDf->getColumn(cols[j]->getTag()) != nullptr ||
             cols[j]->getTag() == _rightJoinKey) {
             continue;
         }
 
         auto* inputColumn = cols[j]->getColumn();
-        auto* outputColumn = outCols[_leftRowLen + j]->getColumn();
+        auto* outputColumn = outCols[columnOffset]->getColumn();
         dispatchColumnVector(outputColumn, [&](auto* col) {
             auto* typedOutCol = static_cast<decltype(col)>(outputColumn);
             const auto* typedInCol = static_cast<decltype(col)>(inputColumn);
@@ -487,6 +489,7 @@ void HashJoinProcessor::flushRightStream(size_t& rowsRemaining,
                              totalRowsInserted,
                              rowsToCopy);
         });
+        ++columnOffset;
     }
 
     // Copy the join column to the last output column
