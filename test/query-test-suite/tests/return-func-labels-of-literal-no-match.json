@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN labels(1)",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN labels(1)\n       |        ^^^^^^^^^\n-------* Invalid arguments for function 'labels'",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN labels(1)\n       |        ^^^^^^^^^\n-------* Invalid arguments for function 'labels'",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | RETURN labels(1)\\n       |        ^^^^^^^^^\\n-------* Invalid arguments for function 'labels'\"}"
+  },
+  "tags": [
+    "error",
+    "function",
+    "labels",
+    "return",
+    "projection"
+  ],
+  "write-required": false
+}
