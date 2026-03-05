@@ -168,7 +168,8 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         break;
 
         case OP_FUNC_LABELS:
-            EvalFunction::eval<OP_FUNC_LABELS>(res, input, _view);
+            throw FatalException("labels() not implemented.");
+            // EvalFunction::eval<OP_FUNC_LABELS>(res, input, _view);
         break;
 
         case OP_EQUAL:
