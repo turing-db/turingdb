@@ -36,8 +36,10 @@ bool hasKey(Column* col, size_t index, bool isOptional) {
     return val.has_value();
 }
 
-template <typename Key, typename Value>
-auto findInMap(const std::unordered_map<Key, Value>& map, Column* col, size_t index, bool isOptional) {
+// Key is the column's value type (e.g. string_view). The map's key type
+// may differ (e.g. std::string) so we accept the map via auto&.
+template <typename Key>
+auto findInMap(const auto& map, Column* col, size_t index, bool isOptional) {
     if (isOptional) {
         auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
         const auto& val = (*typedCol)[index];
@@ -50,18 +52,35 @@ auto findInMap(const std::unordered_map<Key, Value>& map, Column* col, size_t in
     return map.find((*typedCol)[index]);
 }
 
+// Extracts the key from the column, converting string_view to std::string
+// so the map owns the key data.
 template <typename Key>
-std::vector<RowOffset>& getMap(std::unordered_map<Key, std::vector<RowOffset>>& map,
+auto extractKey(Column* col, size_t index, bool isOptional) {
+    if constexpr (std::is_same_v<Key, std::string_view>) {
+        if (isOptional) {
+            auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
+            return std::string(*(*typedCol)[index]);
+        } else {
+            auto* typedCol = static_cast<const ColumnVector<Key>*>(col);
+            return std::string((*typedCol)[index]);
+        }
+    } else {
+        if (isOptional) {
+            auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
+            return *(*typedCol)[index];
+        } else {
+            auto* typedCol = static_cast<const ColumnVector<Key>*>(col);
+            return (*typedCol)[index];
+        }
+    }
+}
+
+template <typename Key>
+std::vector<RowOffset>& getMap(auto& map,
                                Column* col,
                                size_t index,
                                bool isOptional) {
-    if (isOptional) {
-        auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
-        const auto& val = (*typedCol)[index];
-        return map[*val];
-    }
-    auto* typedCol = static_cast<const ColumnVector<Key>*>(col);
-    return map[(*typedCol)[index]];
+    return map[extractKey<Key>(col, index, isOptional)];
 }
 
 }
@@ -208,7 +227,7 @@ void HashJoinProcessor<Key>::execute() {
 
         // calculate how many hash hits we get for the input so we can allocate once
         for (size_t i = _leftInputIdx; i < leftCol->size(); ++i) {
-            if (const auto it = findInMap(_rightMap, leftCol, i, _isLeftOptionalKey); it != _rightMap.end()) {
+            if (const auto it = findInMap<Key>(_rightMap, leftCol, i, _isLeftOptionalKey); it != _rightMap.end()) {
                 const auto& rows = it->second;
                 totalSizeIncrease += rows.size();
             }
@@ -259,7 +278,7 @@ void HashJoinProcessor<Key>::execute() {
         size_t totalSizeIncrease = 0;
         // calculate total size of new additions from hashes on the right column and allocate once.-
         for (size_t i = _rightInputIdx; i < rightCol->size(); ++i) {
-            if (const auto it = findInMap(_leftMap, rightCol, i, _isRightOptionalKey); it != _leftMap.end()) {
+            if (const auto it = findInMap<Key>(_leftMap, rightCol, i, _isRightOptionalKey); it != _leftMap.end()) {
                 const auto& rows = it->second;
                 totalSizeIncrease += rows.size();
             }
@@ -325,7 +344,7 @@ void HashJoinProcessor<Key>::processLeftStream(size_t& rowsRemaining,
             continue;
         }
 
-        const auto it = findInMap(_rightMap, leftCol, _leftInputIdx, _isLeftOptionalKey);
+        const auto it = findInMap<Key>(_rightMap, leftCol, _leftInputIdx, _isLeftOptionalKey);
         if (it != _rightMap.end()) {
             const auto& rows = it->second;
             const auto& cols = leftDf->cols();
@@ -391,10 +410,10 @@ void HashJoinProcessor<Key>::processLeftStream(size_t& rowsRemaining,
         }
 
         // Create a hash table entry for the input
-        auto& offsetVec = getMap(_leftMap,
-                                 leftCol,
-                                 _leftInputIdx,
-                                 _isLeftOptionalKey);
+        auto& offsetVec = getMap<Key>(_leftMap,
+                                     leftCol,
+                                     _leftInputIdx,
+                                     _isLeftOptionalKey);
         offsetVec.emplace_back(_store.insertRow(leftDf,
                                                 _leftJoinKey,
                                                 _leftRowLen,
@@ -431,7 +450,7 @@ void HashJoinProcessor<Key>::processRightStream(size_t& rowsRemaining,
             continue;
         }
 
-        const auto it = findInMap(_leftMap, rightCol, _rightInputIdx, _isRightOptionalKey);
+        const auto it = findInMap<Key>(_leftMap, rightCol, _rightInputIdx, _isRightOptionalKey);
         if (it != _leftMap.end()) {
             const auto& rows = it->second;
             const auto& cols = rightDf->cols();
@@ -496,10 +515,10 @@ void HashJoinProcessor<Key>::processRightStream(size_t& rowsRemaining,
             totalRowsInserted += rowsToCopy;
         }
 
-        auto& offsetVec = getMap(_rightMap,
-                                 rightCol,
-                                 _rightInputIdx,
-                                 _isRightOptionalKey);
+        auto& offsetVec = getMap<Key>(_rightMap,
+                                     rightCol,
+                                     _rightInputIdx,
+                                     _isRightOptionalKey);
 
         offsetVec.emplace_back(_store.insertRow(rightDf,
                                                 leftDf,

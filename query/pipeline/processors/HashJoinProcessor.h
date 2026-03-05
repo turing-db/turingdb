@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+#include <type_traits>
 #include <unordered_map>
 
 #include "Processor.h"
@@ -10,6 +12,37 @@
 namespace db {
 
 class ColumnTag;
+
+// Transparent hash for std::string keys, enabling find() by std::string_view
+// without allocating a temporary std::string.
+struct StringHash {
+    using is_transparent = void;
+    size_t operator()(std::string_view sv) const noexcept {
+        return std::hash<std::string_view>{}(sv);
+    }
+};
+
+struct StringEqual {
+    using is_transparent = void;
+    bool operator()(std::string_view a, std::string_view b) const noexcept {
+        return a == b;
+    }
+};
+
+// Selects the hash map type for the join key.
+// When Key is std::string_view, stores std::string to own the key data
+// and avoid dangling pointers after column chunks are consumed.
+// Uses transparent hash/equal so find() accepts string_view without allocation.
+template <typename Key>
+struct HashJoinMapType {
+    using Type = std::unordered_map<Key, std::vector<RowOffset>>;
+};
+
+template <>
+struct HashJoinMapType<std::string_view> {
+    using Type = std::unordered_map<std::string, std::vector<RowOffset>,
+                                    StringHash, StringEqual>;
+};
 
 struct RowOffsetsCopyState {
     const Dataframe* _df {nullptr};
@@ -42,7 +75,7 @@ struct RowOffsetsCopyState {
 template <typename Key>
 class HashJoinProcessor : public Processor {
 public:
-    using HashJoinMap = std::unordered_map<Key, std::vector<RowOffset>>;
+    using HashJoinMap = typename HashJoinMapType<Key>::Type;
 
     static HashJoinProcessor* create(PipelineV2* pipeline,
                                      ColumnTag leftJoinKey,
