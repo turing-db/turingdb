@@ -171,7 +171,7 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
     constexpr std::string_view stop = "STOP";
     const ssize_t nwrite = ::write(sockFd, stop.data(), stop.size());
 
-    if (nwrite != stop.size()) {
+    if (nwrite < 0 || static_cast<size_t>(nwrite) != stop.size()) {
         ::close(sockFd);
         return false;
     }
