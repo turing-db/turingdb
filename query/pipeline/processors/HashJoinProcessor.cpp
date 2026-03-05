@@ -26,38 +26,39 @@ void fillOutputColumn(T* outputColumn,
                 (*inputColumn)[rowIndex]);
 }
 
-template <typename Key>
-bool hasKey(Column* col, size_t index, bool isOptional) {
-    if (!isOptional) {
+template <typename Key, bool IsOptional>
+bool hasKey(Column* col, size_t index) {
+    if constexpr (!IsOptional) {
         return true;
+    } else {
+        auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
+        return (*typedCol)[index].has_value();
     }
-    auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
-    const auto& val = (*typedCol)[index];
-    return val.has_value();
 }
 
 // Key is the column's value type (e.g. string_view). The map's key type
 // may differ (e.g. std::string) so we accept the map via auto&.
-template <typename Key>
-auto findInMap(const auto& map, Column* col, size_t index, bool isOptional) {
-    if (isOptional) {
+template <typename Key, bool IsOptional>
+auto findInMap(const auto& map, Column* col, size_t index) {
+    if constexpr (IsOptional) {
         auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
         const auto& val = (*typedCol)[index];
         if (!val.has_value()) {
             return map.end();
         }
         return map.find(*val);
+    } else {
+        auto* typedCol = static_cast<ColumnVector<Key>*>(col);
+        return map.find((*typedCol)[index]);
     }
-    auto* typedCol = static_cast<ColumnVector<Key>*>(col);
-    return map.find((*typedCol)[index]);
 }
 
 // Extracts the key from the column, converting string_view to std::string
 // so the map owns the key data.
-template <typename Key>
-auto extractKey(Column* col, size_t index, bool isOptional) {
+template <typename Key, bool IsOptional>
+auto extractKey(Column* col, size_t index) {
     if constexpr (std::is_same_v<Key, std::string_view>) {
-        if (isOptional) {
+        if constexpr (IsOptional) {
             auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
             return std::string(*(*typedCol)[index]);
         } else {
@@ -65,7 +66,7 @@ auto extractKey(Column* col, size_t index, bool isOptional) {
             return std::string((*typedCol)[index]);
         }
     } else {
-        if (isOptional) {
+        if constexpr (IsOptional) {
             auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
             return *(*typedCol)[index];
         } else {
@@ -75,12 +76,9 @@ auto extractKey(Column* col, size_t index, bool isOptional) {
     }
 }
 
-template <typename Key>
-std::vector<RowOffset>& getMap(auto& map,
-                               Column* col,
-                               size_t index,
-                               bool isOptional) {
-    return map[extractKey<Key>(col, index, isOptional)];
+template <typename Key, bool IsOptional>
+std::vector<RowOffset>& getMap(auto& map, Column* col, size_t index) {
+    return map[extractKey<Key, IsOptional>(col, index)];
 }
 
 }
@@ -222,33 +220,11 @@ void HashJoinProcessor<Key>::execute() {
     }
 
     if (_leftInput.getPort()->hasData()) {
-        auto* leftCol = leftDf->getColumn(_leftJoinKey)->getColumn();
-        size_t totalSizeIncrease = 0;
-
-        // calculate how many hash hits we get for the input so we can allocate once
-        for (size_t i = _leftInputIdx; i < leftCol->size(); ++i) {
-            if (const auto it = findInMap<Key>(_rightMap, leftCol, i, _isLeftOptionalKey); it != _rightMap.end()) {
-                const auto& rows = it->second;
-                totalSizeIncrease += rows.size();
-            }
+        if (_isLeftOptionalKey) {
+            processLeftStream<true>(rowsRemaining, totalRowsInserted);
+        } else {
+            processLeftStream<false>(rowsRemaining, totalRowsInserted);
         }
-
-        if (totalSizeIncrease) {
-            // The output size of the df will be the number of rows we have already
-            // added so far in the execution + the calculated total size increase we
-            // have just calculated.
-            const size_t newOutputSize = std::min(_ctxt->getChunkSize(),
-                                                  totalRowsInserted + totalSizeIncrease);
-            for (const auto* namedCol : outDf->cols()) {
-                dispatchColumnVector(namedCol->getColumn(),
-                                     [&](auto* col) {
-                                         auto* colVector = static_cast<decltype(col)>(col);
-                                         colVector->resize(newOutputSize);
-                                     });
-            }
-        }
-
-        processLeftStream(rowsRemaining, totalRowsInserted);
 
         if (rowsRemaining == 0) {
             // If there are no rows remaining in our output chunk we can write the output
@@ -274,29 +250,11 @@ void HashJoinProcessor<Key>::execute() {
     }
 
     if (_rightInput.getPort()->hasData()) {
-        auto* rightCol = rightDf->getColumn(_rightJoinKey)->getColumn();
-        size_t totalSizeIncrease = 0;
-        // calculate total size of new additions from hashes on the right column and allocate once.-
-        for (size_t i = _rightInputIdx; i < rightCol->size(); ++i) {
-            if (const auto it = findInMap<Key>(_leftMap, rightCol, i, _isRightOptionalKey); it != _leftMap.end()) {
-                const auto& rows = it->second;
-                totalSizeIncrease += rows.size();
-            }
+        if (_isRightOptionalKey) {
+            processRightStream<true>(rowsRemaining, totalRowsInserted);
+        } else {
+            processRightStream<false>(rowsRemaining, totalRowsInserted);
         }
-
-        if (totalSizeIncrease) {
-            const size_t newOutputSize = std::min(_ctxt->getChunkSize(),
-                                                  totalRowsInserted + totalSizeIncrease);
-            for (const auto* namedCol : outDf->cols()) {
-                dispatchColumnVector(namedCol->getColumn(),
-                                     [&](auto* col) {
-                                         auto* colVector = static_cast<decltype(col)>(col);
-                                         colVector->resize(newOutputSize);
-                                     });
-            }
-        }
-
-        processRightStream(rowsRemaining, totalRowsInserted);
 
         // if we aren't paused mid-row vector (no _copyState)
         // and we don't have any more columns to read we can consume
@@ -331,6 +289,7 @@ void HashJoinProcessor<Key>::execute() {
 }
 
 template <typename Key>
+template <bool IsOptional>
 void HashJoinProcessor<Key>::processLeftStream(size_t& rowsRemaining,
                                                size_t& totalRowsInserted) {
     const Dataframe* leftDf = _leftInput.getDataframe();
@@ -338,13 +297,35 @@ void HashJoinProcessor<Key>::processLeftStream(size_t& rowsRemaining,
 
     auto* leftCol = leftDf->getColumn(_leftJoinKey)->getColumn();
 
+    // Calculate how many hash hits we get for the input so we can allocate once
+    {
+        size_t totalSizeIncrease = 0;
+        for (size_t i = _leftInputIdx; i < leftCol->size(); ++i) {
+            if (const auto it = findInMap<Key, IsOptional>(_rightMap, leftCol, i);
+                it != _rightMap.end()) {
+                totalSizeIncrease += it->second.size();
+            }
+        }
+        if (totalSizeIncrease) {
+            const size_t newOutputSize = std::min(_ctxt->getChunkSize(),
+                                                  totalRowsInserted + totalSizeIncrease);
+            for (const auto* namedCol : outDf->cols()) {
+                dispatchColumnVector(namedCol->getColumn(),
+                                     [&](auto* col) {
+                                         auto* colVector = static_cast<decltype(col)>(col);
+                                         colVector->resize(newOutputSize);
+                                     });
+            }
+        }
+    }
+
     for (; _leftInputIdx < leftCol->size(); ++_leftInputIdx) {
         // Skip null keys - NULL != NULL semantics
-        if (!hasKey<Key>(leftCol, _leftInputIdx, _isLeftOptionalKey)) {
+        if (!hasKey<Key, IsOptional>(leftCol, _leftInputIdx)) {
             continue;
         }
 
-        const auto it = findInMap<Key>(_rightMap, leftCol, _leftInputIdx, _isLeftOptionalKey);
+        const auto it = findInMap<Key, IsOptional>(_rightMap, leftCol, _leftInputIdx);
         if (it != _rightMap.end()) {
             const auto& rows = it->second;
             const auto& cols = leftDf->cols();
@@ -410,10 +391,9 @@ void HashJoinProcessor<Key>::processLeftStream(size_t& rowsRemaining,
         }
 
         // Create a hash table entry for the input
-        auto& offsetVec = getMap<Key>(_leftMap,
-                                     leftCol,
-                                     _leftInputIdx,
-                                     _isLeftOptionalKey);
+        auto& offsetVec = getMap<Key, IsOptional>(_leftMap,
+                                                   leftCol,
+                                                   _leftInputIdx);
         offsetVec.emplace_back(_store.insertRow(leftDf,
                                                 _leftJoinKey,
                                                 _leftRowLen,
@@ -436,6 +416,7 @@ void HashJoinProcessor<Key>::processLeftStream(size_t& rowsRemaining,
 }
 
 template <typename Key>
+template <bool IsOptional>
 void HashJoinProcessor<Key>::processRightStream(size_t& rowsRemaining,
                                                 size_t& totalRowsInserted) {
     const Dataframe* rightDf = _rightInput.getDataframe();
@@ -444,13 +425,35 @@ void HashJoinProcessor<Key>::processRightStream(size_t& rowsRemaining,
 
     auto* rightCol = rightDf->getColumn(_rightJoinKey)->getColumn();
 
+    // Calculate total size of new additions so we can allocate once
+    {
+        size_t totalSizeIncrease = 0;
+        for (size_t i = _rightInputIdx; i < rightCol->size(); ++i) {
+            if (const auto it = findInMap<Key, IsOptional>(_leftMap, rightCol, i);
+                it != _leftMap.end()) {
+                totalSizeIncrease += it->second.size();
+            }
+        }
+        if (totalSizeIncrease) {
+            const size_t newOutputSize = std::min(_ctxt->getChunkSize(),
+                                                  totalRowsInserted + totalSizeIncrease);
+            for (const auto* namedCol : outDf->cols()) {
+                dispatchColumnVector(namedCol->getColumn(),
+                                     [&](auto* col) {
+                                         auto* colVector = static_cast<decltype(col)>(col);
+                                         colVector->resize(newOutputSize);
+                                     });
+            }
+        }
+    }
+
     for (; _rightInputIdx < rightDf->getLogicalRowCount(); ++_rightInputIdx) {
         // Skip null keys - NULL != NULL semantics
-        if (!hasKey<Key>(rightCol, _rightInputIdx, _isRightOptionalKey)) {
+        if (!hasKey<Key, IsOptional>(rightCol, _rightInputIdx)) {
             continue;
         }
 
-        const auto it = findInMap<Key>(_leftMap, rightCol, _rightInputIdx, _isRightOptionalKey);
+        const auto it = findInMap<Key, IsOptional>(_leftMap, rightCol, _rightInputIdx);
         if (it != _leftMap.end()) {
             const auto& rows = it->second;
             const auto& cols = rightDf->cols();
@@ -515,10 +518,9 @@ void HashJoinProcessor<Key>::processRightStream(size_t& rowsRemaining,
             totalRowsInserted += rowsToCopy;
         }
 
-        auto& offsetVec = getMap<Key>(_rightMap,
-                                     rightCol,
-                                     _rightInputIdx,
-                                     _isRightOptionalKey);
+        auto& offsetVec = getMap<Key, IsOptional>(_rightMap,
+                                                   rightCol,
+                                                   _rightInputIdx);
 
         offsetVec.emplace_back(_store.insertRow(rightDf,
                                                 leftDf,

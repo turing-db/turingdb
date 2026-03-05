@@ -123,7 +123,9 @@ private:
     // Mid RowOffset Vector.
     RowOffsetsCopyState _rowOffsetState;
 
+    template <bool IsOptional>
     void processRightStream(size_t& rowsRemaining, size_t& totalRowsInserted);
+    template <bool IsOptional>
     void processLeftStream(size_t& rowsRemaining, size_t& totalRowsInserted);
 
     void flushRightStream(size_t& rowsRemaining, size_t& totalRowsInserted);
