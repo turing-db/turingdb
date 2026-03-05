@@ -22,15 +22,15 @@ class DataPartLoader;
 class DataPartRebaser;
 class JobSystem;
 class StringIndex;
+
 template <SupportedType T>
 class TypedPropertyContainer;
+
 class PropertyContainer;
 class StringPropertyIndexer;
 
 class DataPart {
 public:
-    using StringPropertyContainer = TypedPropertyContainer<types::String>;
-
     DataPart(NodeID firstNodeID,
              EdgeID firstEdgeID);
 
