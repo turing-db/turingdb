@@ -767,11 +767,13 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                 continue;
             }
 
-            Column* col = exprGen.generateExpr(expr);
-            ColumnTag tag = dfMan->allocTag();
-            NamedColumn* namedCol = NamedColumn::create(dfMan, col, tag);
-            df->addColumn(namedCol);
-            _declToColumn[decl] = tag;
+            if (ExprEvalNode::needsEvaluation(expr)) {
+                Column* col = exprGen.generateExpr(expr);
+                ColumnTag tag = dfMan->allocTag();
+                NamedColumn* namedCol = NamedColumn::create(dfMan, col, tag);
+                df->addColumn(namedCol);
+                _declToColumn[decl] = tag;
+            }
         }
 
         if (!exprProg->instrs().empty()) {
@@ -1616,7 +1618,12 @@ PipelineOutputInterface* PipelineGenerator::translateFuncEvalNode(FuncEvalNode* 
                       name, actualArgs);
         }
 
-        progGen.generateFuncInvocationExpr(funcInvocExpr);
+        Column* resultantColumn = progGen.generateFuncInvocationExpr(funcInvocExpr);
+        NamedColumn* resultNCol = _builder.addColumnToOutput(resultantColumn);
+        const ColumnTag resultTag = resultNCol->getTag();
+        const VarDecl* var = funcInvocExpr->getExprVarDecl();
+
+        _declToColumn[var] = resultTag;
     }
 
     return _builder.getPendingOutputInterface();
