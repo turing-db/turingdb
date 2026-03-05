@@ -90,9 +90,9 @@ public:
     }
 
     Values::const_iterator find(EntityID id) const {
-        auto it = _idxMap.find(id);
+        const auto it = _entityIndexMap.find(id);
 
-        if (it == _idxMap.end()) {
+        if (it == _entityIndexMap.end()) {
             return _values.end();
         }
 
@@ -144,10 +144,10 @@ public:
                 return id1 < id2;
             });
 
-        _idxMap.clear();
-        _idxMap.reserve(_ids.size());
+        _entityIndexMap.clear();
+        _entityIndexMap.reserve(_ids.size());
         for (size_t i = 0; i < _ids.size(); i++) {
-            _idxMap[_ids[i]] = i;
+            _entityIndexMap[_ids[i]] = i;
         }
     }
 
@@ -158,7 +158,7 @@ private:
     friend TrivialPropertyContainerLoader<T>;
 
     Values _values;
-    std::unordered_map<EntityID, size_t> _idxMap;
+    std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
 
 template <>
@@ -188,9 +188,9 @@ public:
     }
 
     Values::const_iterator find(EntityID id) const {
-        auto it = _idxMap.find(id);
+        auto it = _entityIndexMap.find(id);
 
-        if (it == _idxMap.end()) {
+        if (it == _entityIndexMap.end()) {
             return _values.end();
         }
 
@@ -260,10 +260,10 @@ public:
 
         _values = std::move(newValues);
 
-        _idxMap.clear();
-        _idxMap.reserve(_ids.size());
+        _entityIndexMap.clear();
+        _entityIndexMap.reserve(_ids.size());
         for (size_t i = 0; i < _ids.size(); i++) {
-            _idxMap[_ids[i]] = i;
+            _entityIndexMap[_ids[i]] = i;
         }
     }
 
@@ -272,6 +272,6 @@ private:
     friend DataPartMerger;
 
     StringContainer _values;
-    std::unordered_map<EntityID, size_t> _idxMap;
+    std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
 }
