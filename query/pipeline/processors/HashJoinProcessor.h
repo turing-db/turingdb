@@ -8,10 +8,8 @@
 #include "ID.h"
 
 namespace db {
-class ColumnTag;
-}
 
-namespace db {
+class ColumnTag;
 
 struct RowOffsetsCopyState {
     const Dataframe* _df {nullptr};
