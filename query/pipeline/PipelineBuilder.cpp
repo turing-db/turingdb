@@ -222,7 +222,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addShortestPath(PipelineOutputInt
 
     PipelineBlockOutputInterface& output = shortestPath->output();
     Dataframe* outDf = output.getDataframe();
-    distCol = allocColumn<ColumnVector<types::Double::Primitive>>(outDf);
+    distCol = allocColumn<ColumnVector<typename T::Primitive>>(outDf);
     pathCol = allocColumn<ColumnVector<Path>>(outDf);
 
     shortestPath->addDistVarTag(distCol->getTag());
