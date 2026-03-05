@@ -539,41 +539,41 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterfa
         using ValueType = typename std::decay_t<decltype(*typedCol)>::ValueType;
         using Key = TypeUtils::unwrap_optional_t<ValueType>;
 
-        if constexpr (!(std::is_same_v<Key, NodeID> ||
-                        std::is_same_v<Key, int64_t> ||
-                        std::is_same_v<Key, uint64_t> ||
-                        std::is_same_v<Key, double> ||
-                        std::is_same_v<Key, std::string_view> ||
-                        std::is_same_v<Key, CustomBool>)) {
+        if constexpr (std::is_same_v<Key, NodeID> ||
+                     std::is_same_v<Key, int64_t> ||
+                     std::is_same_v<Key, uint64_t> ||
+                     std::is_same_v<Key, double> ||
+                     std::is_same_v<Key, std::string_view> ||
+                     std::is_same_v<Key, CustomBool>) {
+            auto* join = HashJoinProcessor<Key>::create(_pipeline, leftJoinKey, rightJoinKey);
+
+            _pendingOutput.connectTo(join->leftInput());
+            rhs->connectTo(join->rightInput());
+
+            const Dataframe* leftDf = join->leftInput().getDataframe();
+            const Dataframe* rightDf = join->rightInput().getDataframe();
+
+            PipelineBlockOutputInterface& outInterface = join->output();
+            Dataframe* outDf = outInterface.getDataframe();
+
+            createHashJoinDataFrameShape(_mem,
+                                         _dfMan,
+                                         leftDf,
+                                         rightDf,
+                                         outDf,
+                                         leftJoinKey,
+                                         rightJoinKey);
+
+            auto joinTag = outDf->cols().back()->getTag();
+
+            outInterface.setStream(EntityOutputStream::createNodeStream(joinTag));
+            _pendingOutput.setInterface(&outInterface);
+
+            _lastProc = join;
+            return outInterface;
+        } else {
             throw PipelineException("unsupported column kind for hash join");
         }
-
-        auto* join = HashJoinProcessor<Key>::create(_pipeline, leftJoinKey, rightJoinKey);
-
-        _pendingOutput.connectTo(join->leftInput());
-        rhs->connectTo(join->rightInput());
-
-        const Dataframe* leftDf = join->leftInput().getDataframe();
-        const Dataframe* rightDf = join->rightInput().getDataframe();
-
-        PipelineBlockOutputInterface& outInterface = join->output();
-        Dataframe* outDf = outInterface.getDataframe();
-
-        createHashJoinDataFrameShape(_mem,
-                                     _dfMan,
-                                     leftDf,
-                                     rightDf,
-                                     outDf,
-                                     leftJoinKey,
-                                     rightJoinKey);
-
-        auto joinTag = outDf->cols().back()->getTag();
-
-        outInterface.setStream(EntityOutputStream::createNodeStream(joinTag));
-        _pendingOutput.setInterface(&outInterface);
-
-        _lastProc = join;
-        return outInterface;
     });
 }
 
