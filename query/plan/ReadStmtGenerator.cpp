@@ -608,6 +608,10 @@ void ReadStmtGenerator::placeJoinsOnVars() {
 }
 
 void ReadStmtGenerator::placePredicateJoins() {
+    const char* valueHashJoinEnv = getenv("TURING_VALUE_HASH_JOIN");
+    bool useValueHashJoin = valueHashJoinEnv && strcmp(valueHashJoinEnv, "0") != 0;
+    std::vector<FilterNode*> vhjFilters;
+
     for (auto& pred : _tree->getPredicates()) {
         ExprDependencies& deps = pred->getDependencies();
 
@@ -623,9 +627,9 @@ void ReadStmtGenerator::placePredicateJoins() {
         }
 
         // Try to place a value hash join instead of cartesian product + filter
-        const char* valueHashJoinEnv = getenv("TURING_VALUE_HASH_JOIN");
-        if (valueHashJoinEnv && strcmp(valueHashJoinEnv, "0") != 0) {
+        if (useValueHashJoin) {
             if (tryPlaceValueHashJoin(pred.get(), deps, var)) {
+                vhjFilters.push_back(_variables->getNodeFilter(var));
                 continue;
             }
         }
@@ -640,6 +644,27 @@ void ReadStmtGenerator::placePredicateJoins() {
         FilterNode* filterNode = _variables->getNodeFilter(var);
         filterNode->addPredicate(pred.get());
         pred->setFilterNode(filterNode);
+    }
+
+    // Bypass filters left empty by value hash joins.
+    // We do this here rather than in a general optimizer pass to avoid
+    // masking planner bugs that accidentally produce empty filters.
+    for (FilterNode* filterNode : vhjFilters) {
+        if (!filterNode->isEmpty()) {
+            continue;
+        }
+
+        const auto inputs = filterNode->inputs();
+        const auto outputs = filterNode->outputs();
+
+        filterNode->clearInputs();
+        filterNode->clearOutputs();
+
+        for (PlanGraphNode* input : inputs) {
+            for (PlanGraphNode* output : outputs) {
+                input->connectOut(output);
+            }
+        }
     }
 }
 
