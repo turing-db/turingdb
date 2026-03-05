@@ -301,8 +301,8 @@ void HashJoinProcessor<Key>::processLeftStream(size_t& rowsRemaining,
     {
         size_t totalSizeIncrease = 0;
         for (size_t i = _leftInputIdx; i < leftCol->size(); ++i) {
-            if (const auto it = findInMap<Key, IsOptional>(_rightMap, leftCol, i);
-                it != _rightMap.end()) {
+            const auto it = findInMap<Key, IsOptional>(_rightMap, leftCol, i);
+            if (it != _rightMap.end()) {
                 totalSizeIncrease += it->second.size();
             }
         }
@@ -429,8 +429,8 @@ void HashJoinProcessor<Key>::processRightStream(size_t& rowsRemaining,
     {
         size_t totalSizeIncrease = 0;
         for (size_t i = _rightInputIdx; i < rightCol->size(); ++i) {
-            if (const auto it = findInMap<Key, IsOptional>(_leftMap, rightCol, i);
-                it != _leftMap.end()) {
+            const auto it = findInMap<Key, IsOptional>(_leftMap, rightCol, i);
+            if (it != _leftMap.end()) {
                 totalSizeIncrease += it->second.size();
             }
         }
