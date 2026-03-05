@@ -5,11 +5,14 @@
 
 namespace db {
 
+class FunctionProgram;
+class ExprProgram;
+
 class FunctionProgramGenerator final : public ExprProgramGenerator {
 public:
     FunctionProgramGenerator(PipelineGenerator* gen,
-                              ExprProgram* exprProg,
-                              const PendingOutputView& pendingOut)
+                             ExprProgram* exprProg,
+                             const PendingOutputView& pendingOut)
         : ExprProgramGenerator(gen, exprProg, pendingOut)
     {
     }
