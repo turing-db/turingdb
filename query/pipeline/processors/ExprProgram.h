@@ -4,7 +4,6 @@
 
 #include "columns/ColumnOperator.h"
 
-#include "views/GraphView.h"
 
 namespace db {
 
@@ -37,16 +36,15 @@ public:
         _instrs.emplace_back(std::forward<Args>(args)...);
     }
 
-    void evaluateInstructions();
+    virtual void evaluateInstructions();
 
 private:
     // All instructions which need be evaluated
     Instructions _instrs;
-    GraphView _view;
 
     ExprProgram() = default;
     virtual ~ExprProgram() = default;
-    void evalInstr(const Instruction& instr);
+    virtual void evalInstr(const Instruction& instr);
     void evalBinaryInstr(const Instruction& instr);
     void evalUnaryInstr(const Instruction& instr);
 };

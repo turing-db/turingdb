@@ -50,6 +50,7 @@ enum ColumnOperator : uint8_t {
 enum class ColumnOperatorType : uint8_t {
     OPTYPE_BINARY = 0,
     OPTYPE_UNARY,
+    OPTYPE_FUNC,
     OPTYPE_NOOP,
 };
 
@@ -82,8 +83,11 @@ constexpr ColumnOperatorType getOperatorType(ColumnOperator op) {
         case OP_TO_INTEGER:
         case OP_TO_FLOAT:
         case OP_TO_BOOLEAN:
-        case OP_FUNC_LABELS:
             return ColumnOperatorType::OPTYPE_UNARY;
+        break;
+
+        case OP_FUNC_LABELS:
+            return ColumnOperatorType::OPTYPE_FUNC;
         break;
 
         case OP_NOOP:

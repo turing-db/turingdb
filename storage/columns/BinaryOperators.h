@@ -46,7 +46,7 @@ inline auto optionalGeneric(T&& a,
 /**
  * @brief Wrapper of overloads of @ref apply functions for different combinations of
  * operands shapes and outputs for executing operators.
- * @detail The role of this aggregate is to define once the logic for each possible
+ * @detail The role of this struct is to define once the logic for each possible
  * combination of operand and result columns. It is not concerned with the internal types
  * of its arguments.
  */

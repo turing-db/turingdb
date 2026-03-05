@@ -2,6 +2,7 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "ExecutionContext.h"
 #include "PipelineV2.h"
 #include "FunctionProgram.h"
 #include "interfaces/PipelineBlockInputInterface.h"
@@ -56,7 +57,8 @@ std::string FuncEvalProcessor::describe() const {
 }
 
 
-void FuncEvalProcessor::prepare(ExecutionContext* /*ctxt*/) {
+void FuncEvalProcessor::prepare(ExecutionContext* ctxt) {
+    _funcProg->setView(ctxt->getGraphView());
     markAsPrepared();
 }
 
