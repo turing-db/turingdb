@@ -29,7 +29,8 @@ struct BinaryOperators {
         using InternalU = InnerTypeHelper<DecayColU>::type;
         using InternalRes = InnerTypeHelper<DecayColW>::type;
 
-        BinaryOpExecutor<Op, InternalRes, InternalT, InternalU>::apply(res, lhs, rhs);
+        BinaryOpExecutor<Op, InternalRes, InternalT, InternalU>::apply(
+            std::forward<ColW>(res), std::forward<ColT>(lhs), std::forward<ColU>(rhs));
     }
 };
 
@@ -43,7 +44,9 @@ struct BinaryPredicates {
         using InternalT = InnerTypeHelper<DecayColT>::type;
         using InternalU = InnerTypeHelper<DecayColU>::type;
 
-        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
+        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(
+            res, std::forward<ColT>(lhs), std::forward<ColU>(rhs)
+        );
     }
 
     template <typename Op, typename ColT, typename ColU>
@@ -54,7 +57,9 @@ struct BinaryPredicates {
         using InternalT = InnerTypeHelper<DecayColT>::type;
         using InternalU = InnerTypeHelper<DecayColU>::type;
 
-        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
+        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(
+            res, std::forward<ColT>(lhs), std::forward<ColU>(rhs)
+        );
     }
 };
 
@@ -66,7 +71,7 @@ struct UnaryPredicates {
 
         using InternalT = InnerTypeHelper<DecayColT>::type;
 
-        UnaryPredicateExecutor<Op, InternalT>::apply(res, arg);
+        UnaryPredicateExecutor<Op, InternalT>::apply(res, std::forward<ColT>(arg));
     }
 
     // Below specialisation is needed for expressions like NOT TRUE, NOT FALSE
@@ -94,7 +99,7 @@ struct UnaryPredicates {
 
         using InternalT = InnerTypeHelper<DecayColT>::type;
 
-        UnaryPredicateExecutor<Op, InternalT>::apply(res, arg);
+        UnaryPredicateExecutor<Op, InternalT>::apply(res, std::forward<ColT>(arg));
     }
 };
 
