@@ -29,8 +29,7 @@ struct BinaryOperators {
         using InternalU = InnerTypeHelper<DecayColU>::type;
         using InternalRes = InnerTypeHelper<DecayColW>::type;
 
-        BinaryOpExecutor<Op, InternalRes, InternalT, InternalU>::apply(
-            std::forward<ColW>(res), std::forward<ColT>(lhs), std::forward<ColU>(rhs));
+        BinaryOpExecutor<Op, InternalRes, InternalT, InternalU>::apply(res, lhs, rhs);
     }
 };
 
@@ -44,9 +43,7 @@ struct BinaryPredicates {
         using InternalT = InnerTypeHelper<DecayColT>::type;
         using InternalU = InnerTypeHelper<DecayColU>::type;
 
-        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(
-            res, std::forward<ColT>(lhs), std::forward<ColU>(rhs)
-        );
+        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
     }
 
     template <typename Op, typename ColT, typename ColU>
@@ -57,9 +54,7 @@ struct BinaryPredicates {
         using InternalT = InnerTypeHelper<DecayColT>::type;
         using InternalU = InnerTypeHelper<DecayColU>::type;
 
-        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(
-            res, std::forward<ColT>(lhs), std::forward<ColU>(rhs)
-        );
+        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
     }
 };
 
@@ -71,7 +66,7 @@ struct UnaryPredicates {
 
         using InternalT = InnerTypeHelper<DecayColT>::type;
 
-        UnaryPredicateExecutor<Op, InternalT>::apply(res, std::forward<ColT>(arg));
+        UnaryPredicateExecutor<Op, InternalT>::apply(res, arg);
     }
 
     // Below specialisation is needed for expressions like NOT TRUE, NOT FALSE
@@ -99,7 +94,7 @@ struct UnaryPredicates {
 
         using InternalT = InnerTypeHelper<DecayColT>::type;
 
-        UnaryPredicateExecutor<Op, InternalT>::apply(res, std::forward<ColT>(arg));
+        UnaryPredicateExecutor<Op, InternalT>::apply(res, arg);
     }
 };
 
@@ -127,6 +122,13 @@ struct MaskOperators {
         requires std::is_same_v<Op, ApplyMask>
     static void exec(ColumnVector<T>* res, const ColumnMask* mask, const ColumnVector<T>* src) {
         MaskApplicator::apply(res, src, mask);
+    }
+};
+
+struct ColumnFunctions {
+    template <typename Op, typename ColW, typename ColT>
+    static void exec(ColW* res, const ColT* arg, const GraphView view) {
+        FunctionExecutor<Op, ColW, ColT>::apply(res, arg, view);
     }
 };
 

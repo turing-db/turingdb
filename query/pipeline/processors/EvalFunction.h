@@ -31,7 +31,7 @@ struct Eval {
             using ResultType = ColumnVector<std::string>;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid cast to result column for labels().");
-            ColumnOperators::exec<LabelsFunction>(result, arg, _view);
+            ColumnFunctions::exec<LabelsFunction>(result, arg, _view);
         } else {
             COMPILE_ERROR("Invalid function.");
         }
