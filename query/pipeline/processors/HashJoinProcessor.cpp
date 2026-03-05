@@ -122,12 +122,22 @@ void HashJoinProcessor<Key>::prepare(ExecutionContext* ctxt) {
     _rightRowLen = outDf->size() - _leftRowLen - 1;
 
     // Detect if the join key columns are optional (nullable)
-    auto* leftKeyCol = leftDf->getColumn(_leftJoinKey)->getColumn();
-    _isLeftOptionalKey = (leftKeyCol->getKind() == ColumnVector<std::optional<Key>>::staticKind());
+    {
+        auto* leftKeyCol = leftDf->getColumn(_leftJoinKey)->getColumn();
+        const auto leftKind = leftKeyCol->getKind();
+        _isLeftOptionalKey = (leftKind == ColumnVector<std::optional<Key>>::staticKind());
+        bioassert(_isLeftOptionalKey || leftKind == ColumnVector<Key>::staticKind(),
+                  "left join key column type does not match HashJoinProcessor key type");
+    }
 
-    const auto* rightDf = _rightInput.getDataframe();
-    auto* rightKeyCol = rightDf->getColumn(_rightJoinKey)->getColumn();
-    _isRightOptionalKey = (rightKeyCol->getKind() == ColumnVector<std::optional<Key>>::staticKind());
+    {
+        const auto* rightDf = _rightInput.getDataframe();
+        auto* rightKeyCol = rightDf->getColumn(_rightJoinKey)->getColumn();
+        const auto rightKind = rightKeyCol->getKind();
+        _isRightOptionalKey = (rightKind == ColumnVector<std::optional<Key>>::staticKind());
+        bioassert(_isRightOptionalKey || rightKind == ColumnVector<Key>::staticKind(),
+                  "right join key column type does not match HashJoinProcessor key type");
+    }
 
     markAsPrepared();
 }
