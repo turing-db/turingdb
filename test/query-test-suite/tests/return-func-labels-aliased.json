@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN labels(n) AS labels",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __FUNC_EVAL__\n        __func__: labels\n    `\"]\n    4[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4",
+    "result": "labels\n\"Person, SoftwareEngineering, Founder\"\n\"Person, Founder, Bioinformatics\"\n\"SoftwareEngineering, Interest\"\n\"Interest, Exotic\"\nInterest\nInterest\n\"Interest, Exotic, Supernatural, SleepDisturber\"\nInterest\n\"Person, Bioinformatics\"\n\"Person, SoftwareEngineering\"\n\"Interest, SleepDisturber\"\n\"Person, Bioinformatics\"\n\"Person, SoftwareEngineering\"\nInterest\nInterest\n\"Person, SoftwareEngineering\"\nInterest\n\"Person, Sales\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"labels\"],\"column_types\":[\"String\"]},\"data\":[[[\"Person, SoftwareEngineering, Founder\",\"Person, Founder, Bioinformatics\",\"SoftwareEngineering, Interest\",\"Interest, Exotic\",\"Interest\",\"Interest\",\"Interest, Exotic, Supernatural, SleepDisturber\",\"Interest\",\"Person, Bioinformatics\",\"Person, SoftwareEngineering\",\"Interest, SleepDisturber\",\"Person, Bioinformatics\",\"Person, SoftwareEngineering\",\"Interest\",\"Interest\",\"Person, SoftwareEngineering\",\"Interest\",\"Person, Sales\"]]]}"
+  },
+  "tags": [
+    "function",
+    "labels",
+    "return",
+    "projection",
+    "as",
+    "alias"
+  ],
+  "write-required": false
+}

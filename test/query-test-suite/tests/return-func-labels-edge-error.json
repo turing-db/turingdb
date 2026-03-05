@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH ()-[e]->() RETURN labels(e)",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH ()-[e]->() RETURN labels(e)\n       |                         ^^^^^^^^^\n-------* Invalid arguments for function 'labels'",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH ()-[e]->() RETURN labels(e)\n       |                         ^^^^^^^^^\n-------* Invalid arguments for function 'labels'",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH ()-[e]->() RETURN labels(e)\\n       |                         ^^^^^^^^^\\n-------* Invalid arguments for function 'labels'\"}"
+  },
+  "tags": [
+    "functions",
+    "return",
+    "projection",
+    "error"
+  ],
+  "write-required": false
+}
