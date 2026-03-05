@@ -30,8 +30,8 @@ namespace {
 #define APPLY_MASK_CASE(Type)                                              \
     case Type::staticKind(): {                                             \
         MaskOperators::exec<ApplyMask>(static_cast<Type*>(dest),           \
-                                         static_cast<const Type*>(src),    \
-                                         mask);                            \
+                                       static_cast<const Type*>(src),      \
+                                       mask);                              \
     }                                                                      \
     break;
 

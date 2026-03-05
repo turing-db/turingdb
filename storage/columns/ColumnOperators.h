@@ -125,8 +125,8 @@ struct MaskOperators {
 struct ColumnOperators {
     template <typename T>
     static void copyChunk(typename ColumnVector<T>::ConstIterator srcStart,
-                                 typename ColumnVector<T>::ConstIterator srcEnd,
-                                 ColumnVector<T>* dst) {
+                          typename ColumnVector<T>::ConstIterator srcEnd,
+                          ColumnVector<T>* dst) {
         const size_t count = std::distance(srcStart, srcEnd);
         dst->resize(count);
         std::copy(srcStart, srcEnd, dst->begin());
@@ -134,8 +134,8 @@ struct ColumnOperators {
 
     template <typename T>
     static void copyTransformedChunk(const ColumnVector<size_t>* transform,
-                                            const ColumnVector<T>* src,
-                                            ColumnVector<T>* dst) {
+                                     const ColumnVector<T>* src,
+                                     ColumnVector<T>* dst) {
         const auto& srcd = src->getRaw();
         const auto& transformd = transform->getRaw();
         const size_t count = transform->size();
