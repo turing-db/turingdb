@@ -19,8 +19,6 @@ void PlanOptimizer::optimize() {
     // Do some very simple plan rewriting
 
     rewriteScanByLabels();
-    removeEmptyFilters();
-
     _plan->removeIsolatedNodes();
 }
 
@@ -70,24 +68,3 @@ void PlanOptimizer::rewriteScanByLabels() {
     }
 }
 
-void PlanOptimizer::removeEmptyFilters() {
-    for (const auto& node : _plan->nodes()) {
-        FilterNode* filterNode = dynamic_cast<FilterNode*>(node.get());
-        if (!filterNode || !filterNode->isEmpty()) {
-            continue;
-        }
-
-        // Bypass: connect each input directly to each output
-        const auto inputs = filterNode->inputs();
-        const auto outputs = filterNode->outputs();
-
-        filterNode->clearInputs();
-        filterNode->clearOutputs();
-
-        for (PlanGraphNode* input : inputs) {
-            for (PlanGraphNode* output : outputs) {
-                input->connectOut(output);
-            }
-        }
-    }
-}
