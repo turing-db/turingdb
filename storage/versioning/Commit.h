@@ -66,7 +66,7 @@ private:
     friend Change;
 
     VersionController* _controller {nullptr};
-    CommitHash _hash = CommitHash::create();
+    CommitHash _hash;
     WeakArc<CommitData> _data;
     const Commit* _prevCommit {nullptr};
 

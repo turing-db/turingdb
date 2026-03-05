@@ -5,7 +5,10 @@
 
 using namespace db;
 
-Commit::Commit() = default;
+Commit::Commit()
+    : _hash(CommitHash::create())
+{
+}
 
 Commit::Commit(VersionController* controller,
                const WeakArc<CommitData>& data,
@@ -26,7 +29,8 @@ Commit::Commit(VersionController* controller,
 {
 }
 
-Commit::~Commit() = default;
+Commit::~Commit() {
+}
 
 bool Commit::isHead() const {
     return _controller->getHeadHash() == _hash;
