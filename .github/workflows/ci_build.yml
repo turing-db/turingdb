@@ -36,7 +36,8 @@ jobs:
       with:
         persist-credentials: true
         lfs: true
-        fetch-depth: 0
+        fetch-depth: 500
+        fetch-tags: true
 
     - name: Checkout submodules (shallow)
       run: git submodule update --init --recursive --depth 1
