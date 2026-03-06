@@ -2605,6 +2605,220 @@ TEST_F(QueriesTest, labelsFunction) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
+// Issue #477: Count does not work with joins
+TEST_F(QueriesTest, ancestorJoinCountStar) {
+    // First get all edges to compute expected count
+    ColumnNodeIDs* sources = nullptr;
+    ColumnNodeIDs* targets = nullptr;
+    std::unordered_map<NodeID, std::vector<NodeID>> srcToTgtMap;
+
+    {
+        auto res = query("MATCH (n)-->(m) RETURN n,m", [&](const Dataframe* df) {
+            ASSERT_EQ(df->size(), 2);
+            sources = df->cols()[0]->as<ColumnNodeIDs>();
+            targets = df->cols()[1]->as<ColumnNodeIDs>();
+        });
+        ASSERT_TRUE(res);
+    }
+
+    for (size_t i = 0; i < sources->size(); ++i) {
+        srcToTgtMap[sources->at(i)].emplace_back(targets->at(i));
+    }
+
+    // MATCH (x)-->(a), (x)-->(b) produces d(x)^2 rows per node x
+    uint64_t expectedCount = 0;
+    for (const auto& entry : srcToTgtMap) {
+        const uint64_t deg = entry.second.size();
+        expectedCount += deg * deg;
+    }
+
+    uint64_t actualCount = 0;
+    auto result = query("MATCH (x)-->(a), (x)-->(b) RETURN count(*)",
+                        [&](const Dataframe* df) {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
+
+        const auto* col = df->cols().at(0)->as<ColumnConst<uint64_t>>();
+        ASSERT_TRUE(col != nullptr);
+        actualCount = col->at(0);
+    });
+
+    EXPECT_TRUE(result.isOk());
+    EXPECT_GT(expectedCount, 0u);
+    EXPECT_EQ(actualCount, expectedCount);
+}
+
+// Issue #477: Count does not work with joins
+TEST_F(QueriesTest, ancestorJoinCountVar) {
+    ColumnNodeIDs* sources = nullptr;
+    ColumnNodeIDs* targets = nullptr;
+    std::unordered_map<NodeID, std::vector<NodeID>> srcToTgtMap;
+
+    {
+        auto res = query("MATCH (n)-->(m) RETURN n,m", [&](const Dataframe* df) {
+            ASSERT_EQ(df->size(), 2);
+            sources = df->cols()[0]->as<ColumnNodeIDs>();
+            targets = df->cols()[1]->as<ColumnNodeIDs>();
+        });
+        ASSERT_TRUE(res);
+    }
+
+    for (size_t i = 0; i < sources->size(); ++i) {
+        srcToTgtMap[sources->at(i)].emplace_back(targets->at(i));
+    }
+
+    uint64_t expectedCount = 0;
+    for (const auto& entry : srcToTgtMap) {
+        const uint64_t deg = entry.second.size();
+        expectedCount += deg * deg;
+    }
+
+    uint64_t actualCount = 0;
+    auto result = query("MATCH (x)-->(a), (x)-->(b) RETURN count(x)",
+                        [&](const Dataframe* df) {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
+
+        const auto* col = df->cols().at(0)->as<ColumnConst<uint64_t>>();
+        ASSERT_TRUE(col != nullptr);
+        actualCount = col->at(0);
+    });
+
+    EXPECT_TRUE(result.isOk());
+    EXPECT_GT(expectedCount, 0u);
+    EXPECT_EQ(actualCount, expectedCount);
+}
+
+// Issue #477: Count does not work with joins (successor join variant)
+TEST_F(QueriesTest, successorJoinCountStar) {
+    ColumnNodeIDs* sources = nullptr;
+    ColumnNodeIDs* targets = nullptr;
+    std::unordered_map<NodeID, std::vector<NodeID>> tgtToSrcMap;
+
+    {
+        auto res = query("MATCH (n)-->(m) RETURN n,m", [&](const Dataframe* df) {
+            ASSERT_EQ(df->size(), 2);
+            sources = df->cols()[0]->as<ColumnNodeIDs>();
+            targets = df->cols()[1]->as<ColumnNodeIDs>();
+        });
+        ASSERT_TRUE(res);
+    }
+
+    for (size_t i = 0; i < sources->size(); ++i) {
+        tgtToSrcMap[targets->at(i)].emplace_back(sources->at(i));
+    }
+
+    // MATCH (a)-->(x), (b)-->(x) produces d_in(x)^2 rows per node x
+    uint64_t expectedCount = 0;
+    for (const auto& entry : tgtToSrcMap) {
+        const uint64_t deg = entry.second.size();
+        expectedCount += deg * deg;
+    }
+
+    uint64_t actualCount = 0;
+    auto result = query("MATCH (a)-->(x), (b)-->(x) RETURN count(*)",
+                        [&](const Dataframe* df) {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
+
+        const auto* col = df->cols().at(0)->as<ColumnConst<uint64_t>>();
+        ASSERT_TRUE(col != nullptr);
+        actualCount = col->at(0);
+    });
+
+    EXPECT_TRUE(result.isOk());
+    EXPECT_GT(expectedCount, 0u);
+    EXPECT_EQ(actualCount, expectedCount);
+}
+
+// Issue #477: Count does not work with joins (successor join, count on variable)
+TEST_F(QueriesTest, successorJoinCountVar) {
+    ColumnNodeIDs* sources = nullptr;
+    ColumnNodeIDs* targets = nullptr;
+    std::unordered_map<NodeID, std::vector<NodeID>> tgtToSrcMap;
+
+    {
+        auto res = query("MATCH (n)-->(m) RETURN n,m", [&](const Dataframe* df) {
+            ASSERT_EQ(df->size(), 2);
+            sources = df->cols()[0]->as<ColumnNodeIDs>();
+            targets = df->cols()[1]->as<ColumnNodeIDs>();
+        });
+        ASSERT_TRUE(res);
+    }
+
+    for (size_t i = 0; i < sources->size(); ++i) {
+        tgtToSrcMap[targets->at(i)].emplace_back(sources->at(i));
+    }
+
+    uint64_t expectedCount = 0;
+    for (const auto& entry : tgtToSrcMap) {
+        const uint64_t deg = entry.second.size();
+        expectedCount += deg * deg;
+    }
+
+    uint64_t actualCount = 0;
+    auto result = query("MATCH (a)-->(x), (b)-->(x) RETURN count(x)",
+                        [&](const Dataframe* df) {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
+
+        const auto* col = df->cols().at(0)->as<ColumnConst<uint64_t>>();
+        ASSERT_TRUE(col != nullptr);
+        actualCount = col->at(0);
+    });
+
+    EXPECT_TRUE(result.isOk());
+    EXPECT_GT(expectedCount, 0u);
+    EXPECT_EQ(actualCount, expectedCount);
+}
+
+// Issue #477: Count does not work with joins (double ancestor join)
+TEST_F(QueriesTest, doubleAncestorJoinCountStar) {
+    ColumnNodeIDs* sources = nullptr;
+    ColumnNodeIDs* targets = nullptr;
+    std::unordered_map<NodeID, std::vector<NodeID>> srcToTgtMap;
+
+    {
+        auto res = query("MATCH (n)-->(m) RETURN n,m", [&](const Dataframe* df) {
+            ASSERT_EQ(df->size(), 2);
+            sources = df->cols()[0]->as<ColumnNodeIDs>();
+            targets = df->cols()[1]->as<ColumnNodeIDs>();
+        });
+        ASSERT_TRUE(res);
+    }
+
+    for (size_t i = 0; i < sources->size(); ++i) {
+        srcToTgtMap[sources->at(i)].emplace_back(targets->at(i));
+    }
+
+    // MATCH (x)-->(a), (x)-->(b), (x)-->(c) produces d(x)^3 rows per node x
+    uint64_t expectedCount = 0;
+    for (const auto& entry : srcToTgtMap) {
+        const uint64_t deg = entry.second.size();
+        expectedCount += deg * deg * deg;
+    }
+
+    uint64_t actualCount = 0;
+    auto result = query("MATCH (x)-->(a), (x)-->(b), (x)-->(c) RETURN count(*)",
+                        [&](const Dataframe* df) {
+        ASSERT_TRUE(df != nullptr);
+        ASSERT_EQ(df->cols().size(), 1);
+        ASSERT_EQ(df->getLogicalRowCount(), 1);
+
+        const auto* col = df->cols().at(0)->as<ColumnConst<uint64_t>>();
+        ASSERT_TRUE(col != nullptr);
+        actualCount = col->at(0);
+    });
+
+    EXPECT_TRUE(result.isOk());
+    EXPECT_GT(expectedCount, 0u);
+    EXPECT_EQ(actualCount, expectedCount);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
