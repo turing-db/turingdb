@@ -45,16 +45,6 @@ void ForkProcessor::reset() {
 }
 
 void ForkProcessor::execute() {
-    bool isFinished = true;
-    for (const auto& output : _outputs) {
-        const auto outputRes = output.getPort()->getConnectedPort()->getProcessor()->isFinished();
-        isFinished &= outputRes;
-    }
-
-    if (isFinished) {
-        finish();
-        return;
-    }
 
     for (const auto& output : _outputs) {
         // Copy the dataframes over - sharing buffers gets messy
@@ -62,5 +52,11 @@ void ForkProcessor::execute() {
         output.getDataframe()->copyFrom(input().getDataframe());
         // Every port can write data
         output.getPort()->writeData();
+    }
+
+    //If the input port is closed we close the fork
+    if (_input.getPort()->isClosed()) {
+        finish();
+        return;
     }
 }
