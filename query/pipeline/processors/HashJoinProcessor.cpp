@@ -318,6 +318,14 @@ void HashJoinProcessor<LeftKey, RightKey>::execute() {
 
     // If we have written to the output but have not completed a whole chunk
     if (totalRowsInserted > 0) {
+        // Trim output columns to the actual number of rows inserted
+        for (const auto* namedCol : outDf->cols()) {
+            dispatchColumnVector(namedCol->getColumn(),
+                                 [&](auto* col) {
+                                     auto* colVector = static_cast<decltype(col)>(col);
+                                     colVector->resize(totalRowsInserted);
+                                 });
+        }
         _output.getPort()->writeData();
         _hasWritten = true;
     }
@@ -326,6 +334,14 @@ void HashJoinProcessor<LeftKey, RightKey>::execute() {
     // Data to the output port lets the pipeline cycle continue.
     if (_leftInput.getPort()->isClosed() && _rightInput.getPort()->isClosed()) {
         if (!_hasWritten) {
+            // Trim output columns to 0 since no rows were produced
+            for (const auto* namedCol : outDf->cols()) {
+                dispatchColumnVector(namedCol->getColumn(),
+                                     [&](auto* col) {
+                                         auto* colVector = static_cast<decltype(col)>(col);
+                                         colVector->resize(0);
+                                     });
+            }
             _output.getPort()->writeData();
         }
     }
@@ -348,28 +364,17 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
 
     auto* leftCol = leftDf->getColumn(_leftJoinKey)->getColumn();
 
-    // Calculate how many hash hits we get for the input so we can allocate once
+    // Resize output columns to chunkSize upfront; we trim after the loop.
     {
-        size_t totalSizeIncrease = 0;
-        for (size_t i = _leftInputIdx; i < leftCol->size(); ++i) {
-            if (!isNonNullKey<LeftKey, IsOptional>(leftCol, i)) {
-                continue;
-            }
-            const auto it = findInMap<LeftKey, IsOptional>(_rightMap, leftCol, i);
-            if (it != _rightMap.end()) {
-                totalSizeIncrease += it->second.size();
-            }
-        }
-        if (totalSizeIncrease) {
-            const size_t newOutputSize = std::min(_ctxt->getChunkSize(),
-                                                  totalRowsInserted + totalSizeIncrease);
-            for (const auto* namedCol : outDf->cols()) {
-                dispatchColumnVector(namedCol->getColumn(),
-                                     [&](auto* col) {
-                                         auto* colVector = static_cast<decltype(col)>(col);
-                                         colVector->resize(newOutputSize);
-                                     });
-            }
+        const size_t chunkSize = _ctxt->getChunkSize();
+        for (const auto* namedCol : outDf->cols()) {
+            dispatchColumnVector(namedCol->getColumn(),
+                                 [&](auto* col) {
+                                     auto* colVector = static_cast<decltype(col)>(col);
+                                     if (colVector->size() < chunkSize) {
+                                         colVector->resize(chunkSize);
+                                     }
+                                 });
         }
     }
 
@@ -479,28 +484,17 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
 
     auto* rightCol = rightDf->getColumn(_rightJoinKey)->getColumn();
 
-    // Calculate total size of new additions so we can allocate once
+    // Resize output columns to chunkSize upfront; we trim after the loop.
     {
-        size_t totalSizeIncrease = 0;
-        for (size_t i = _rightInputIdx; i < rightCol->size(); ++i) {
-            if (!isNonNullKey<RightKey, IsOptional>(rightCol, i)) {
-                continue;
-            }
-            const auto it = findInMap<RightKey, IsOptional>(_leftMap, rightCol, i);
-            if (it != _leftMap.end()) {
-                totalSizeIncrease += it->second.size();
-            }
-        }
-        if (totalSizeIncrease) {
-            const size_t newOutputSize = std::min(_ctxt->getChunkSize(),
-                                                  totalRowsInserted + totalSizeIncrease);
-            for (const auto* namedCol : outDf->cols()) {
-                dispatchColumnVector(namedCol->getColumn(),
-                                     [&](auto* col) {
-                                         auto* colVector = static_cast<decltype(col)>(col);
-                                         colVector->resize(newOutputSize);
-                                     });
-            }
+        const size_t chunkSize = _ctxt->getChunkSize();
+        for (const auto* namedCol : outDf->cols()) {
+            dispatchColumnVector(namedCol->getColumn(),
+                                 [&](auto* col) {
+                                     auto* colVector = static_cast<decltype(col)>(col);
+                                     if (colVector->size() < chunkSize) {
+                                         colVector->resize(chunkSize);
+                                     }
+                                 });
         }
     }
 
