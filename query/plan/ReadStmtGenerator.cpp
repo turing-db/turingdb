@@ -49,6 +49,7 @@
 #include "nodes/PathExplorerNode.h"
 
 #include "QuantifiedPath.h"
+#include "CardinalityEstimation.h"
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
@@ -713,6 +714,35 @@ bool ReadStmtGenerator::tryPlaceValueHashJoin(Predicate* pred,
     } else {
         // Both on same island or both remote - fall back to cartesian product
         return false;
+    }
+
+    // Skip VHJ when the cartesian product is small enough to be cheap
+    {
+        auto* localVar = dynamic_cast<VarNode*>(localDep->_producerNode);
+        auto* remoteVar = dynamic_cast<VarNode*>(remoteDep->_producerNode);
+        if (localVar && remoteVar) {
+            LabelSet leftLabels;
+            LabelSet rightLabels;
+
+            FilterNode* localFilter = _variables->getNodeFilter(localVar);
+            if (localFilter) {
+                if (auto* nf = localFilter->asNodeFilter()) {
+                    leftLabels = nf->getLabelConstraints();
+                }
+            }
+
+            FilterNode* remoteFilter = _variables->getNodeFilter(remoteVar);
+            if (remoteFilter) {
+                if (auto* nf = remoteFilter->asNodeFilter()) {
+                    rightLabels = nf->getLabelConstraints();
+                }
+            }
+
+            CardinalityEstimation estimation(_graphView);
+            if (estimation.isSmallCartesianProduct(leftLabels, rightLabels)) {
+                return false;
+            }
+        }
     }
 
     // Generate property dependencies (place GetPropertyNodes)
