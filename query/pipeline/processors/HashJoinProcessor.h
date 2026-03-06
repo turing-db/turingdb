@@ -100,9 +100,13 @@ private:
     PipelineBlockInputInterface _leftInput;
     PipelineBlockOutputInterface _output;
 
-    // These are the length of the rows we are storing
+    // These are the length of the rows we are storing (column count)
     size_t _leftRowLen {0};
     size_t _rightRowLen {0};
+
+    // Actual byte sizes of stored rows (for RowStore slab checks)
+    size_t _leftRowByteSize {0};
+    size_t _rightRowByteSize {0};
 
     // map to a vector of offsets
     // the offsets point to the corresponding row in our
