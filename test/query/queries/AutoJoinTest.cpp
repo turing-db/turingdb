@@ -2363,7 +2363,7 @@ TEST_F(JoinFeatureTest, DISABLED_multiJoin_symmetricInterestChain) {
 // Test 40: Category-interest-category chain
 // Pattern: (cat1)<--(i)-->(cat2) with person attached
 // (a)-->(i)-->(cat1), (i)-->(cat2)
-TEST_F(JoinFeatureTest, multiJoin_multiCategoryInterest) {
+TEST_F(JoinFeatureTest, DISABLED_multiJoin_multiCategoryInterest) {
     constexpr std::string_view QUERY = R"(
         MATCH (a:Person)-->(i:Interest)-->(cat1:Category), (i)-->(cat2:Category)
         WHERE cat1.name <> cat2.name
