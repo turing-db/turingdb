@@ -5,6 +5,7 @@
 #include "ColumnVector.h"
 #include "ColumnMask.h"
 #include "TypeUtils.h"
+#include "columns/AllowedKinds.h"
 
 namespace db {
 
@@ -172,6 +173,33 @@ template <typename Op, typename PColT>
 class UnaryColumnCombination {
 public:
     using ResultColumnType = TypeUtils::decay_col_t<PColT>;
+};
+
+template <typename Op, typename PColT>
+class FunctionColumnResult;
+
+template <typename ColT, typename InternalT>
+class FunctionResultImpl;
+
+template <typename AnyT, typename InternalT>
+class FunctionResultImpl<ColumnVector<AnyT>, InternalT> {
+public:
+    using ResultColumnType = ColumnVector<InternalT>;
+};
+
+template <typename AnyT, typename InternalT>
+class FunctionResultImpl<ColumnConst<AnyT>, InternalT> {
+public:
+    using ResultColumnType = ColumnConst<InternalT>;
+};
+
+template<typename Op, typename PColT>
+class FunctionColumnResult {
+private:
+    using InternalT = Op::ResultType;
+    using DecayedColT = TypeUtils::decay_col_t<PColT>;
+public:
+    using ResultColumnType = FunctionResultImpl<DecayedColT, InternalT>::ResultColumnType;
 };
 
 template <typename Op, typename ColT, typename ColU, typename ColRes>

@@ -51,7 +51,9 @@ static void getLabelString(std::string& out, const GraphView view, NodeID n) {
 }
 
 struct LabelsFunction {
-    std::string operator()(const NodeID n) {
+    using ResultType = std::string;
+
+    ResultType operator()(const NodeID n) {
         getLabelString(_tmp, _view, n);
         return _tmp;
     }
@@ -61,7 +63,9 @@ struct LabelsFunction {
 };
 
 struct toIntegerFunction {
-    types::Int64::Primitive operator()(const std::string& str) {
+    using ResultType = types::Int64::Primitive;
+
+    ResultType operator()(const std::string& str) {
         try {
             return std::stoll(str);
         } catch (...) {
@@ -72,7 +76,9 @@ struct toIntegerFunction {
 };
 
 struct toFloatFunction {
-    types::Double::Primitive operator()(const std::string& str) {
+    using ResultType = types::Double::Primitive;
+
+    ResultType operator()(const std::string& str) {
         try {
             return std::stod(str);
         } catch (...) {
@@ -97,6 +103,15 @@ struct FunctionExecutor {
         for (size_t i = 0; i < size; i++) {
             resd[i] = op(argd[i]);
         }
+    }
+
+    static void apply(ColumnConst<Res>* res,
+                      const ColumnConst<Arg>* arg) {
+        const auto& argd = arg->getRaw();
+
+        auto op = Op {};
+        auto&& result = op(argd);
+        res->set(result);
     }
 };
 
