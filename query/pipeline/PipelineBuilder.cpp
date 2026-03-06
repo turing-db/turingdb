@@ -45,6 +45,7 @@
 #include "processors/DeleteVectorIndexProcessor.h"
 #include "processors/ShowVectorIndexesProcessor.h"
 #include "processors/InstallExtensionProcessor.h"
+#include "processors/PathExplorerProcessor.h"
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
@@ -330,7 +331,7 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
 
 PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandOutEdges(int64_t minHops, int64_t maxHops)
 {
-    auto* proc = BFSExpandOutEdgesProcessor::create(_pipeline, _mem, minHops, maxHops);
+    auto* proc = PathExplorerProcessor<ExplorationDir::Forward>::create(_pipeline, _mem, minHops, maxHops);
 
     PipelineNodeInputInterface& input = proc->input();
     PipelineBlockOutputInterface& output = proc->output();
@@ -364,7 +365,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandOutEdges(int64_t minH
 
 PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandInEdges(int64_t minHops, int64_t maxHops)
 {
-    auto* proc = BFSExpandInEdgesProcessor::create(_pipeline, _mem, minHops, maxHops);
+    auto* proc = PathExplorerProcessor<ExplorationDir::Backward>::create(_pipeline, _mem, minHops, maxHops);
 
     PipelineNodeInputInterface& input = proc->input();
     PipelineBlockOutputInterface& output = proc->output();
@@ -378,7 +379,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandInEdges(int64_t minHo
     proc->setOutputIndicesColumn(static_cast<ColumnIndices*>(indices->getColumn()));
 
     NamedColumn* sourceNodes = allocColumn<ColumnNodeIDs>(outDf);
-    proc->setOutputSourcesColumn(sourceNodes);
+    proc->setOutputTargetsColumn(sourceNodes);
 
     NamedColumn* pathCol = allocColumn<ColumnVector<EntityList>>(outDf);
     proc->setOutputPathsColumn(pathCol);
@@ -398,7 +399,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandInEdges(int64_t minHo
 
 PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandEdges(int64_t minHops,
                                                                  int64_t maxHops) {
-    auto* proc = BFSExpandEdgesProcessor::create(_pipeline, _mem, minHops, maxHops);
+    auto* proc = PathExplorerProcessor<ExplorationDir::Both>::create(_pipeline, _mem, minHops, maxHops);
 
     PipelineNodeInputInterface& input = proc->input();
     PipelineBlockOutputInterface& output = proc->output();

@@ -8,13 +8,15 @@ namespace db {
 class EntityList {
 public:
     struct Entry {
-        EntityType _type;
+        EntityType _type {};
         EntityID _id;
 
         bool operator==(const Entry& other) const {
             return _type == other._type && _id == other._id;
         }
     };
+
+    using Container = std::vector<Entry>;
 
     EntityList();
     ~EntityList();
@@ -28,15 +30,31 @@ public:
         _entries.emplace_back(type, id);
     }
 
+    void assign(Container::const_iterator first, Container::const_iterator last) {
+        _entries.assign(first, last);
+    }
+
+    void clear() {
+        _entries.clear();
+    }
+
+    void resize(size_t size) {
+        _entries.resize(size);
+    }
+
+    EntityList::Entry& operator[](size_t idx) {
+        return _entries[idx];
+    }
+
     bool empty() const { return _entries.empty(); }
     size_t size() const { return _entries.size(); }
+    const Container& getEntries() const { return _entries; }
 
-    std::span<const Entry> entries() const { return _entries; }
-    std::vector<Entry>::const_iterator begin() const { return _entries.begin(); }
-    std::vector<Entry>::const_iterator end() const { return _entries.end(); }
+    Container::const_iterator begin() const { return _entries.begin(); }
+    Container::const_iterator end() const { return _entries.end(); }
 
 private:
-    std::vector<Entry> _entries;
+    Container _entries;
 };
 
 }

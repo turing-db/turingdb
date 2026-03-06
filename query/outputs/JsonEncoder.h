@@ -153,7 +153,7 @@ private:
             return;
         }
 
-        const std::span entries = value.entries();
+        const auto& entries = value.getEntries();
         const auto& firstValue = entries.front();
 
         _writer.write("[{\"type\":\"");
@@ -162,10 +162,10 @@ private:
         _writer.write(std::to_string(firstValue._id.getValue()));
         _writer.write('}');
 
-        for (size_t i = 1; i < entries.size(); i++) {
-            const auto& entry = entries[i];
-            const EntityType type = entry._type;
-            const ID id = entry._id;
+        auto it = entries.begin();
+        it++;
+        for (; it != entries.end(); ++it) {
+            const auto& [type, id] = *it;
 
             _writer.write(',');
             _writer.write('{');

@@ -421,13 +421,8 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     // Validate QuantifiedPath
     const QuantifiedPath* qp = edgePattern->getQuantifiedPath();
     if (qp) {
-        int64_t lhs = qp->getLhs();
-        int64_t rhs = qp->getRhs();
-
-        if (lhs != 0 && lhs != 1) {
-            throwError("Variable-length path minimum hops must be 0 or 1",
-                       edgePattern);
-        }
+        const int64_t lhs = qp->getLhs();
+        const int64_t rhs = qp->getRhs();
 
         if (!qp->isRhsUnbounded()) {
             if (rhs < lhs) {

@@ -28,6 +28,7 @@
 #include "interfaces/PipelineValuesOutputInterface.h"
 #include "procedures/ProcedureManager.h"
 #include "processors/OrderByProcessor.h"
+#include "processors/PathExplorerProcessor.h"
 #include "processors/PredicateProgram.h"
 #include "processors/WriteProcessor.h"
 #include "processors/WriteProcessorTypes.h"
@@ -1543,12 +1544,18 @@ PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowV
     return _builder.getPendingOutputInterface();
 }
 
+
+PipelineOutputInterface* PipelineGenerator::translateDeleteVectorIndexNode(DeleteVectorIndexNode* node) {
+    _builder.addDeleteVectorIndex(node->getIndexName());
+    return _builder.getPendingOutputInterface();
+}
+
 PipelineOutputInterface* PipelineGenerator::translateBFSExpandOutEdgesNode(BFSExpandOutEdgesNode* node)
 {
     _builder.addBFSExpandOutEdges(node->getMinHops(), node->getMaxHops());
 
-    const BFSExpandOutEdgesProcessor* proc = dynamic_cast<BFSExpandOutEdgesProcessor*>(_builder.getLastProc());
-    bioassert(proc, "Failed to cast last proc to BFSExpandOutEdgesProcessor");
+    const auto* proc = dynamic_cast<PathExplorerProcessor<ExplorationDir::Forward>*>(_builder.getLastProc());
+    bioassert(proc, "Failed to cast last proc to PathExplorerProcessor");
 
     const VarDecl* edgeDecl = node->getEdgeDecl();
     const VarDecl* targetDecl = node->getTargetDecl();
@@ -1564,8 +1571,25 @@ PipelineOutputInterface* PipelineGenerator::translateBFSExpandOutEdgesNode(BFSEx
     return _builder.getPendingOutputInterface();
 }
 
-PipelineOutputInterface* PipelineGenerator::translateDeleteVectorIndexNode(DeleteVectorIndexNode* node) {
-    _builder.addDeleteVectorIndex(node->getIndexName());
+PipelineOutputInterface* PipelineGenerator::translateBFSExpandInEdgesNode(
+    BFSExpandInEdgesNode* node)
+{
+    _builder.addBFSExpandInEdges(node->getMinHops(), node->getMaxHops());
+
+    const auto* proc = dynamic_cast<PathExplorerProcessor<ExplorationDir::Backward>*>(_builder.getLastProc());
+    bioassert(proc, "Failed to cast last proc to PathExplorerProcessor");
+
+    const VarDecl* edgeDecl = node->getEdgeDecl();
+    const VarDecl* sourceDecl = node->getSourceDecl();
+
+    NamedColumn* pathsCol = proc->getOutputPathsColumn();
+    pathsCol->rename(edgeDecl->getName());
+    _declToColumn[edgeDecl] = pathsCol->getTag();
+
+    NamedColumn* sourceCol = proc->getOutputTargetsColumn();
+    sourceCol->rename(sourceDecl->getName());
+    _declToColumn[sourceDecl] = sourceCol->getTag();
+
     return _builder.getPendingOutputInterface();
 }
 
@@ -1573,7 +1597,6 @@ PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowV
     _builder.addShowVectorIndexes();
     return _builder.getPendingOutputInterface();
 }
-
 
 PipelineOutputInterface* PipelineGenerator::translateLoadCommit(LoadCommitNode* node) {
     _builder.addLoadCommit(node->getHashStr());
