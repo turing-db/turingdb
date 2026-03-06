@@ -6,6 +6,7 @@
 
 #include "StorageManager.h"
 #include "VecLibShard.h"
+#include "VecLibShardAccessor.h"
 
 #include "BioAssert.h"
 #include "VectorException.h"
@@ -20,6 +21,7 @@ ShardCache::ShardCache(StorageManager& storageManager)
 ShardCache::~ShardCache() noexcept {
     for (auto& [id, it] : _accessedMap) {
         try {
+            const std::unique_lock shardLock(it->second._shard->_mutex);
             it->second._shard->save();
         } catch (...) {
             fmt::println("Error writing shard {}", id._signature);
@@ -27,8 +29,8 @@ ShardCache::~ShardCache() noexcept {
     }
 }
 
-VecLibShard& ShardCache::getShard(const VecLibMetadata& meta, LSHSignature signature) {
-    std::unique_lock lock(_mutex);
+VecLibShardAccessor ShardCache::getShard(const VecLibMetadata& meta, LSHSignature signature) {
+    const std::unique_lock lock(_mutex);
 
     const ShardIdentifier id(meta._id, signature);
 
@@ -37,7 +39,7 @@ VecLibShard& ShardCache::getShard(const VecLibMetadata& meta, LSHSignature signa
     // If already in cache, increment access count and return
     if (it != _accessedMap.end()) {
         it->second->second._accessCount++;
-        return *it->second->second._shard;
+        return VecLibShardAccessor(it->second->second._shard.get());
     }
 
     // If not in cache, load/create the shard
@@ -78,11 +80,11 @@ VecLibShard& ShardCache::getShard(const VecLibMetadata& meta, LSHSignature signa
         _memUsage -= evictOne();
     }
 
-    return *_accessed.front().second._shard;
+    return VecLibShardAccessor(_accessedMap.at(id)->second._shard.get());
 }
 
 void ShardCache::updateMemUsage() {
-    std::unique_lock lock(_mutex);
+    const std::unique_lock lock(_mutex);
 
     ssize_t memUsage = 0;
 
@@ -100,11 +102,15 @@ void ShardCache::updateMemUsage() {
 }
 
 void ShardCache::evictLibraryShards(VecLibID libID) {
-    std::unique_lock lock(_mutex);
+    const std::unique_lock lock(_mutex);
 
     for (auto it = _accessedMap.begin(); it != _accessedMap.end();) {
         if (it->first._libID == libID) {
-            it->second->second._shard->save();
+            {
+                const std::unique_lock shardLock(it->second->second._shard->_mutex);
+                it->second->second._shard->save();
+            }
+            _accessed.erase(it->second);
             it = _accessedMap.erase(it);
         } else {
             ++it;
@@ -113,9 +119,10 @@ void ShardCache::evictLibraryShards(VecLibID libID) {
 }
 
 void ShardCache::flush() {
-    std::unique_lock lock(_mutex);
+    const std::unique_lock lock(_mutex);
 
     for (auto& [id, it] : _accessedMap) {
+        const std::unique_lock shardLock(it->second._shard->_mutex);
         it->second._shard->save();
     }
 }
@@ -123,15 +130,29 @@ void ShardCache::flush() {
 ssize_t ShardCache::evictOne() {
     bioassert(!_accessed.empty(), "Shard cache is empty");
 
-    // Find shard with lowest access count
-    auto victim = _accessed.begin();
-    size_t minAccessCount = victim->second._accessCount;
+    // Find the unlocked shard with the lowest access count
+    auto victim = _accessed.end();
+    size_t minAccessCount = SIZE_MAX;
+    std::unique_lock<std::mutex> victimLock;
 
     for (auto it = _accessed.begin(); it != _accessed.end(); ++it) {
-        if (it->second._accessCount < minAccessCount) {
-            minAccessCount = it->second._accessCount;
-            victim = it;
+        if (it->second._accessCount >= minAccessCount) {
+            continue;
         }
+
+        std::unique_lock<std::mutex> lock(it->second._shard->_mutex, std::try_to_lock);
+        if (!lock.owns_lock()) {
+            continue;
+        }
+
+        // Better candidate found — take ownership of its lock, releasing the previous winner
+        victimLock = std::move(lock);
+        victim = it;
+        minAccessCount = it->second._accessCount;
+    }
+
+    if (victim == _accessed.end()) {
+        return 0; // all shards in use, nothing to evict
     }
 
     victim->second._shard->save();

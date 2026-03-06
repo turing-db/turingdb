@@ -7,10 +7,10 @@
 
 #include "LSHSignature.h"
 #include "VecLibMetadata.h"
+#include "VecLibShardAccessor.h"
 
 namespace vec {
 
-struct VecLibShard;
 class StorageManager;
 
 class ShardCache {
@@ -45,7 +45,7 @@ public:
     ShardCache& operator=(const ShardCache&) = delete;
     ShardCache& operator=(ShardCache&&) = delete;
 
-    [[nodiscard]] VecLibShard& getShard(const VecLibMetadata& meta, LSHSignature signature);
+    [[nodiscard]] VecLibShardAccessor getShard(const VecLibMetadata& meta, LSHSignature signature);
 
     void updateMemUsage();
     void evictLibraryShards(VecLibID libID);
