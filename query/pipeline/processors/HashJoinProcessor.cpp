@@ -162,6 +162,38 @@ void HashJoinProcessor<LeftKey, RightKey>::prepare(ExecutionContext* ctxt) {
     //the size of the output dataframe
     _rightRowLen = outDf->size() - _leftRowLen - 1;
 
+    // Compute actual byte sizes of rows stored in the RowStore
+    _leftRowByteSize = 0;
+    for (const auto* namedCol : leftDf->cols()) {
+        if (namedCol->getTag() == _leftJoinKey) {
+            continue;
+        }
+        dispatchColumnVector(namedCol->getColumn(), [&](auto* col) {
+            using ColType = std::remove_pointer_t<decltype(col)>;
+            using ValType = typename ColType::ValueType;
+            if constexpr (std::is_trivially_copyable_v<ValType>) {
+                _leftRowByteSize += sizeof(ValType);
+            }
+        });
+    }
+
+    const auto* rightDf = _rightInput.getDataframe();
+
+    _rightRowByteSize = 0;
+    for (const auto* namedCol : rightDf->cols()) {
+        if (leftDf->getColumn(namedCol->getTag()) != nullptr ||
+            namedCol->getTag() == _rightJoinKey) {
+            continue;
+        }
+        dispatchColumnVector(namedCol->getColumn(), [&](auto* col) {
+            using ColType = std::remove_pointer_t<decltype(col)>;
+            using ValType = typename ColType::ValueType;
+            if constexpr (std::is_trivially_copyable_v<ValType>) {
+                _rightRowByteSize += sizeof(ValType);
+            }
+        });
+    }
+
     // Detect if the join key columns are optional (nullable)
     {
         auto* leftKeyCol = leftDf->getColumn(_leftJoinKey)->getColumn();
@@ -170,7 +202,6 @@ void HashJoinProcessor<LeftKey, RightKey>::prepare(ExecutionContext* ctxt) {
     }
 
     {
-        const auto* rightDf = _rightInput.getDataframe();
         auto* rightKeyCol = rightDf->getColumn(_rightJoinKey)->getColumn();
         const auto rightKind = rightKeyCol->getKind();
         _isRightOptionalKey = (rightKind == ColumnVector<std::optional<RightKey>>::staticKind());
@@ -419,7 +450,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
                                                        _leftInputIdx);
         offsetVec.emplace_back(_store.insertRow(leftDf,
                                                 _leftJoinKey,
-                                                _leftRowLen,
+                                                _leftRowByteSize,
                                                 _leftInputIdx));
 
         // If we can't write anymore rows to the output chunk
@@ -544,7 +575,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
         offsetVec.emplace_back(_store.insertRow(rightDf,
                                                 leftDf,
                                                 _rightJoinKey,
-                                                _rightRowLen,
+                                                _rightRowByteSize,
                                                 _rightInputIdx));
 
         // break if we don't have any rows remaining to write
