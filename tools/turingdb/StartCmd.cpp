@@ -10,6 +10,7 @@
 #include <chrono>
 #include <thread>
 
+#include "LineNoiseHandle.h"
 #include "TuringConfig.h"
 #include "TuringDB.h"
 #include "LocalMemory.h"
@@ -231,7 +232,7 @@ int StartCmd::execute() {
         });
 
         turingDB.init();
-        LogSetup::setupLogFileBacked((logsDir / "turingdb.log").get(), false);
+        auto consoleSink = LogSetup::setupLogFileBacked((logsDir / "turingdb.log").get(), false);
 
         // Delete existing `default` graph if requested
         if (_resetDefault) {
@@ -280,7 +281,9 @@ int StartCmd::execute() {
             }
             server.reset();
         } else {
-            shell = std::make_unique<TuringShell>(turingDB, &mem);
+            LineNoiseHandle lineNoiseHandle;
+            lineNoiseHandle.initProtectedLogger(consoleSink);
+            shell = std::make_unique<TuringShell>(turingDB, &mem, &lineNoiseHandle);
 
             if (!_graphsToLoad.empty()) {
                 shell->setGraphName(_graphsToLoad.front());

@@ -2,6 +2,8 @@
 set(turingdb_sources
     TuringDBTool.cpp
     TuringShell.cpp
+    LineNoiseHandle.cpp
+    ProtectedLineNoiseSink.cpp
     StartCmd.cpp
     StopCmd.cpp)
 
