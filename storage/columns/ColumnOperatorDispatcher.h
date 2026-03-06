@@ -62,7 +62,6 @@ public:
     }
 
 private:
-
     // Unwraps the tuple of types
     // This is to avoid having to instantiate a std::tuple<...>
     // which would require all its members to have constexpr 

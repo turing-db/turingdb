@@ -47,6 +47,18 @@ void FunctionProgram::evalFunction(const Instruction& instr) {
     Column* res = instr._res;
 
     switch (op) {
+        case OP_TO_INTEGER:
+            EvalFunction::eval<OP_TO_INTEGER>(res, arg);
+        break;
+
+        case OP_TO_FLOAT:
+            EvalFunction::eval<OP_TO_FLOAT>(res, arg);
+        break;
+
+        case OP_TO_BOOLEAN:
+            EvalFunction::eval<OP_TO_BOOLEAN>(res, arg);
+        break;
+
         case OP_FUNC_LABELS:
             EvalFunction::eval<OP_FUNC_LABELS>(res, arg, _view);
         break;
@@ -68,9 +80,6 @@ void FunctionProgram::evalFunction(const Instruction& instr) {
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:
-        case OP_TO_INTEGER:
-        case OP_TO_FLOAT:
-        case OP_TO_BOOLEAN:
             throw FatalException(fmt::format("Attempted to evalute {} as function.",
                                              ColumnOperatorDescription::value(op)));
         break;

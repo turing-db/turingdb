@@ -160,18 +160,10 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         break;
 
         case OP_TO_INTEGER:
-            EvalUnaryExpr::eval<OP_TO_INTEGER>(res, input);
-        break;
-
         case OP_TO_FLOAT:
-            EvalUnaryExpr::eval<OP_TO_FLOAT>(res, input);
-        break;
-
         case OP_TO_BOOLEAN:
-            EvalUnaryExpr::eval<OP_TO_BOOLEAN>(res, input);
-        break;
-
         case OP_FUNC_LABELS:
+
         case OP_EQUAL:
         case OP_NOT_EQUAL:
         case OP_GREATER_THAN:

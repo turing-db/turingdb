@@ -80,12 +80,12 @@ constexpr ColumnOperatorType getOperatorType(ColumnOperator op) {
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:
-        case OP_TO_INTEGER:
-        case OP_TO_FLOAT:
-        case OP_TO_BOOLEAN:
             return ColumnOperatorType::OPTYPE_UNARY;
         break;
 
+        case OP_TO_INTEGER:
+        case OP_TO_FLOAT:
+        case OP_TO_BOOLEAN:
         case OP_FUNC_LABELS:
             return ColumnOperatorType::OPTYPE_FUNC;
         break;

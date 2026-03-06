@@ -5,10 +5,13 @@
 
 #include <range/v3/view/drop.hpp>
 
-#include "columns/ColumnOperator.h"
+#include "columns/ColumnVector.h"
+#include "metadata/PropertyType.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "metadata/LabelMap.h"
+
+#include "PipelineException.h"
 
 #include "ID.h"
 
@@ -57,10 +60,51 @@ struct LabelsFunction {
     std::string _tmp;
 };
 
+struct toIntegerFunction {
+    types::Int64::Primitive operator()(const std::string& str) {
+        try {
+            return std::stoll(str);
+        } catch (...) {
+            throw PipelineException(
+                fmt::format("toInteger: cannot convert '{}' to integer", str));
+        }
+    }
+};
+
+struct toFloatFunction {
+    types::Double::Primitive operator()(const std::string& str) {
+        try {
+            return std::stod(str);
+        } catch (...) {
+            throw PipelineException(
+                fmt::format("toFloat: cannot convert '{}' to float", str));
+        }
+    }
+};
+
+/// Generic function executor; default constructible operator
 template <typename Op, typename Res, typename Arg>
 struct FunctionExecutor {
     static void apply(ColumnVector<Res>* res,
-                      const ColumnVector<Arg>* arg,
+                      const ColumnVector<Arg>* arg) {
+        const size_t size = arg->size();
+        res->resize(size);
+
+        const auto& argd = arg->getRaw();
+        auto& resd = res->getRaw();
+
+        auto op = Op {};
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = op(argd[i]);
+        }
+    }
+};
+
+/// Specialisation for labels()
+template <typename Res, typename Arg>
+struct FunctionExecutor<LabelsFunction, Res, Arg> {
+    static void apply(ColumnVector<std::string>* res,
+                      const ColumnNodeIDs* arg,
                       GraphView view) {
         const size_t size = arg->size();
         res->resize(size);
@@ -68,7 +112,7 @@ struct FunctionExecutor {
         const auto& argd = arg->getRaw();
         auto& resd = res->getRaw();
 
-        auto op = Op {._view = view, ._tmp = ""};
+        auto op = LabelsFunction{._view = view, ._tmp = ""};
         for (size_t i = 0; i < size ; i ++) {
             resd[i] = op(argd[i]);
         }

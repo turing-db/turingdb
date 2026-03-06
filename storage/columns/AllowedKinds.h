@@ -2,6 +2,7 @@
 
 #include <tuple>
 #include <optional>
+#include <type_traits>
 
 #include "ID.h"
 #include "versioning/ChangeID.h"
@@ -103,6 +104,10 @@ struct IsTuple<std::tuple<Ts...>> : std::true_type {};
 
 template <typename T>
 concept TupleExact = IsTuple<T>::value;
+
+template <ColumnOperator Function>
+concept ConversionFunction = (Function == OP_TO_INTEGER) || (Function == OP_TO_FLOAT)
+                          || (Function == OP_TO_BOOLEAN);
 
 // Restriction for Binary operators
 template <ColumnOperator Op>
@@ -254,6 +259,20 @@ struct TypeRestrictions<OP_FUNC_LABELS> {
     >;
 };
 
+template <ColumnOperator Func>
+    requires ConversionFunction<Func>
+struct TypeRestrictions<Func> {
+    using Allowed = GenerateKindList<std::tuple<
+        std::string
+    >>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>(),
+        ContainerKind::code<ColumnConst>()
+    >;
+};
+
 /// Types that are outputted by queries, used in @ref QueryTestRunner
 struct OutputtedTypes {
     using Allowed = GenerateKindList<std::tuple<
@@ -292,7 +311,6 @@ struct OutputtedTypes {
 };
 
 /// Totally ordered types, e.g. sorted in ORDER BY
-// TODO: Add all types
 struct OrderedTypes {
     using Allowed = GenerateKindList<std::tuple<
         // All property types and their optional variants
