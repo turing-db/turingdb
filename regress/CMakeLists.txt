@@ -40,13 +40,14 @@ add_subdirectory(load_csv)
 add_subdirectory(load_csv_stations)
 add_subdirectory(vector_serialization)
 add_subdirectory(start-stop)
+add_subdirectory(load_jsonl_reactome)
 
 # write run_regress target
 # The script finds the wheel at runtime to avoid needing to re-run cmake after wheel build
 set(RUN_REGRESS_CONTENT "#!/bin/bash\nset -e\n")
 set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}export TURING_HOME=\"${CMAKE_INSTALL_PREFIX}\"\n")
 set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}export PATH=\"\$TURING_HOME/bin:\$PATH\"\n")
-set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"\n\n")
+set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}export SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"\n\n")
 set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}# Find wheel at runtime (wheelhouse/ first, then dist/)\n")
 set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}if [[ -z \"\$PYTURINGDB\" ]]\; then\n")
 set(RUN_REGRESS_CONTENT "${RUN_REGRESS_CONTENT}    PYTURINGDB=\$(ls \"\$SOURCE_DIR\"/wheel/*.whl 2>/dev/null | head -1)\n")

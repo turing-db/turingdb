@@ -12,3 +12,4 @@ python/turingdb/_version.py
 *.whl
 wheel/
 dist
+external/datasets/reactome.jsonl
