@@ -268,8 +268,7 @@ struct TypeRestrictions<Func> {
 
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>(),
-        ContainerKind::code<ColumnConst>()
+        ContainerKind::code<ColumnMask>()
     >;
 };
 

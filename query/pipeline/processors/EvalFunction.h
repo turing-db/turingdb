@@ -1,5 +1,6 @@
 #pragma once
 
+#include "columns/ColumnCombinations.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperator.h"
@@ -38,22 +39,25 @@ struct Eval {
         bioassert(_res && arg, "Null operands to function.");
 
         if constexpr (Op == OP_FUNC_LABELS) {
-            // TODO: Get from function signature
-            using ResultType = ColumnVector<std::string>;
+            using ResultType = FunctionColumnResult<LabelsFunction, T>::ResultColumnType;
+
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid cast to result column for labels().");
+
             ColumnFunctions::exec<LabelsFunction>(result, arg, _view);
         } else if constexpr (Op == OP_TO_INTEGER) {
-            // TODO: Get from function signature
-            using ResultType = ColumnVector<types::Int64::Primitive>;
+            using ResultType = FunctionColumnResult<toIntegerFunction, T>::ResultColumnType;
+
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid cast to result column for toInteger().");
+
             ColumnFunctions::exec<toIntegerFunction>(result, arg);
         } else if constexpr (Op == OP_TO_FLOAT) {
-            // TODO: Get from function signature
-            using ResultType = ColumnVector<types::Double::Primitive>;
+            using ResultType = FunctionColumnResult<toFloatFunction, T>::ResultColumnType;
+
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid cast to result column for toFloat().");
+
             ColumnFunctions::exec<toFloatFunction>(result, arg);
         } else {
             COMPILE_ERROR("Invalid function.");
