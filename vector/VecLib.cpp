@@ -1,12 +1,11 @@
 #include "VecLib.h"
 
-#include <mutex>
-
 #include <faiss/Index.h>
 #include <faiss/IndexFlat.h>
 #include <faiss/index_io.h>
 
 #include "ShardCache.h"
+#include "VecLibShardAccessor.h"
 #include "StorageManager.h"
 #include "BatchVectorCreate.h"
 #include "VectorSearchQuery.h"
@@ -42,7 +41,7 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Builder::build() {
     bioassert(_vecLib->_shardCache, "VecLib shard cache must be set");
     bioassert(meta._dimension > 0, "VecLib dimension must be set");
 
-    constexpr uint8_t nbits = 10;
+    constexpr uint8_t nbits = 11;
     _vecLib->_shardRouter = std::make_unique<LSHShardRouter>(meta._dimension, nbits);
     _vecLib->_shardRouter->initialize();
 
@@ -102,18 +101,16 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
         }
 
         // Use the actual index (signature) where data is stored
-        auto& shard = _shardCache->getShard(_metadata, signature);
-
         {
-            std::unique_lock lock(shard._mutex);
+            VecLibShardAccessor shard = _shardCache->getShard(_metadata, signature);
 
             // Add all ids to the shard
-            shard._ids.insert(shard._ids.end(),
-                              data._externalIDs.begin(),
-                              data._externalIDs.end());
+            shard->_ids.insert(shard->_ids.end(),
+                               data._externalIDs.begin(),
+                               data._externalIDs.end());
 
             // Add vectors to index
-            shard._index->add(data._externalIDs.size(), data._embeddings.data());
+            shard->_index->add(data._externalIDs.size(), data._embeddings.data());
         }
 
         _shardCache->updateMemUsage();
@@ -136,27 +133,28 @@ VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchRe
     _shardRouter->getSearchSignatures(embeddings, searchSignatures);
 
     results->reset();
+    results->setAscendingIsBetter(_metadata._metric == DistanceMetric::EUCLIDEAN_DIST);
 
     std::vector<float> distances(maxResultCount);
     std::vector<faiss::idx_t> indices(maxResultCount);
 
     for (const LSHSignature& signature : searchSignatures) {
-        auto& shard = _shardCache->getShard(_metadata, signature);
-        std::unique_lock lock(shard._mutex);
+        const VecLibShardAccessor shard = _shardCache->getShard(_metadata, signature);
 
-        if (shard._index->ntotal == 0) {
+        if (shard->_index->ntotal == 0) {
             continue;
         }
 
-        const size_t k = std::min(maxResultCount, (size_t)shard._index->ntotal);
-        shard._index->search(1, embeddings.data(), k, distances.data(), indices.data());
+        const size_t k = std::min(maxResultCount, (size_t)shard->_index->ntotal);
+        shard->_index->search(1, embeddings.data(), k, distances.data(), indices.data());
 
         for (size_t i = 0; i < k; i++) {
             if (indices[i] < 0) {
                 break;
             }
 
-            results->addResult(signature, shard._ids.at(indices[i]), distances[i]);
+            fmt::println("Found result {}, distance {}", indices[i], distances[i]);
+            results->addResult(signature, shard->_ids.at(indices[i]), distances[i]);
         }
     }
 

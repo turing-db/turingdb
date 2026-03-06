@@ -1,7 +1,5 @@
 #include "VecLibShard.h"
 
-#include <mutex>
-
 #include <faiss/IndexFlat.h>
 #include <faiss/index_io.h>
 
@@ -13,8 +11,6 @@
 using namespace vec;
 
 VectorResult<void> VecLibShard::save() {
-    std::unique_lock lock(_mutex);
-
     faiss::write_index(_index.get(), _indexPath.c_str());
 
     if (auto res = _idsFile.clearContent(); !res) {
@@ -32,8 +28,6 @@ VectorResult<void> VecLibShard::save() {
 }
 
 VectorResult<void> VecLibShard::load(const VecLibMetadata& meta) {
-    std::unique_lock lock(_mutex);
-
     switch (meta._metric) {
         case DistanceMetric::EUCLIDEAN_DIST:
             _index = std::make_unique<faiss::IndexFlatL2>(meta._dimension);

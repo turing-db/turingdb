@@ -137,15 +137,18 @@ bool VectorDatabase::libraryExists(std::string_view libName) const {
     return _vecLibIDs.contains(libName);
 }
 
-VecLibAccessor VectorDatabase::getLibrary(const VecLibID& libID) {
-    std::shared_lock lock(_mutex);
-
+VecLibAccessor VectorDatabase::getLibraryLocked(const VecLibID& libID) {
     auto it = _vecLibs.find(libID);
     if (it == _vecLibs.end()) {
         return VecLibAccessor();
     }
 
     return it->second->access();
+}
+
+VecLibAccessor VectorDatabase::getLibrary(const VecLibID& libID) {
+    std::shared_lock lock(_mutex);
+    return getLibraryLocked(libID);
 }
 
 VecLibAccessor VectorDatabase::getLibrary(std::string_view libName) {
@@ -156,18 +159,21 @@ VecLibAccessor VectorDatabase::getLibrary(std::string_view libName) {
         return VecLibAccessor();
     }
 
-    return getLibrary(it->second);
+    return getLibraryLocked(it->second);
 }
 
-VecLibWriteAccessor VectorDatabase::getLibraryForWrite(const VecLibID& libID) {
-    std::shared_lock lock(_mutex);
-
+VecLibWriteAccessor VectorDatabase::getLibraryForWriteLocked(const VecLibID& libID) {
     auto it = _vecLibs.find(libID);
     if (it == _vecLibs.end()) {
         return VecLibWriteAccessor {};
     }
 
     return VecLibWriteAccessor {*it->second};
+}
+
+VecLibWriteAccessor VectorDatabase::getLibraryForWrite(const VecLibID& libID) {
+    std::shared_lock lock(_mutex);
+    return getLibraryForWriteLocked(libID);
 }
 
 VecLibWriteAccessor VectorDatabase::getLibraryForWrite(std::string_view libName) {
@@ -178,7 +184,7 @@ VecLibWriteAccessor VectorDatabase::getLibraryForWrite(std::string_view libName)
         return VecLibWriteAccessor {};
     }
 
-    return getLibraryForWrite(it->second);
+    return getLibraryForWriteLocked(it->second);
 }
 
 void VectorDatabase::listLibraryNames(std::vector<std::string>& out) const {

@@ -3,6 +3,7 @@ set(VECTOR_SOURCES
         VectorException.cpp
         StorageManager.cpp
         LSHShardRouter.cpp
+        VecLibShardAccessor.cpp
         VectorResult.cpp
         VectorDatabase.cpp
         VecLibMetadataLoader.cpp

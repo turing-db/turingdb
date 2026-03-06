@@ -36,6 +36,10 @@ public:
         return _distances;
     }
 
+    void setAscendingIsBetter(bool value) {
+        _ascendingIsBetter = value;
+    }
+
     void reset() {
         _shardSig.clear();
         _ids.clear();
@@ -55,7 +59,8 @@ public:
         std::iota(sortIdx.begin(), sortIdx.end(), 0);
 
         std::sort(sortIdx.begin(), sortIdx.end(), [this](size_t a, size_t b) {
-            return _distances[a] < _distances[b];
+            return _ascendingIsBetter ? _distances[a] < _distances[b]
+                                      : _distances[a] > _distances[b];
         });
 
         std::vector<LSHSignature> shardIdx(_shardSig.size());
@@ -87,6 +92,11 @@ private:
     std::vector<uint64_t> _ids;
     std::vector<float> _distances;
     size_t _resultCount {0};
+
+    /// @brief Controls sort direction in finishSearch. True for EUCLIDEAN_DIST (smaller
+    // distance = closer), false for INNER_PRODUCT (higher score = more similar).
+    // Set via setAscendingIsBetter() before performing a search.
+    bool _ascendingIsBetter {true};
 };
 
 }
