@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <spdlog/fmt/bundled/format.h>
+#include <spdlog/spdlog.h>
 
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
@@ -698,6 +699,12 @@ bool ReadStmtGenerator::tryPlaceValueHashJoin(Predicate* pred,
     auto& dep1 = varDeps[1];
 
     if (!dep0._expr->getExprVarDecl() || !dep1._expr->getExprVarDecl()) {
+        return false;
+    }
+
+    // Both producers must be VarNodes (graph pattern traversals)
+    if (dep0._producerNode->getOpcode() != PlanGraphOpcode::VAR ||
+        dep1._producerNode->getOpcode() != PlanGraphOpcode::VAR) {
         return false;
     }
 
