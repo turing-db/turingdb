@@ -18,10 +18,27 @@ namespace db {
 
 class LocalMemory;
 class GetOutEdgesChunkWriter;
+class GetInEdgesChunkWriter;
+class GetEdgesChunkWriter;
 
-class BFSExpandOutEdgesProcessor : public Processor {
+enum class ExplorationDir {
+    Forward,
+    Backward,
+    Both,
+};
+
+template <ExplorationDir dir>
+class PathExplorerProcessor : public Processor {
 public:
-    static BFSExpandOutEdgesProcessor* create(PipelineV2* pipeline,
+    using DirectedChunkWriter = std::conditional<dir == ExplorationDir::Forward,
+                                                 GetOutEdgesChunkWriter,
+                                                 GetInEdgesChunkWriter>::type;
+
+    using ChunkWriter = std::conditional<dir == ExplorationDir::Both,
+                                         GetEdgesChunkWriter,
+                                         DirectedChunkWriter>::type;
+
+    static PathExplorerProcessor* create(PipelineV2* pipeline,
                                               LocalMemory* mem,
                                               int64_t minHops,
                                               int64_t maxHops);
@@ -55,13 +72,15 @@ public:
 private:
     struct FrontierEntry {
         NodeID node;
-        EntityList edges;
+        EdgeID edge;                 // single edge that led to this node
+        size_t parentIdx {SIZE_MAX}; // index into _allEntries, -1 for root
+        size_t sourceIdx {SIZE_MAX}; // original input source index
     };
 
-    BFSExpandOutEdgesProcessor(LocalMemory* mem,
+    PathExplorerProcessor(LocalMemory* mem,
                                int64_t minHops,
                                int64_t maxHops);
-    ~BFSExpandOutEdgesProcessor() override;
+    ~PathExplorerProcessor() override;
 
     LocalMemory* _mem {nullptr};
     int64_t _minHops {0};
@@ -70,6 +89,7 @@ private:
     PipelineNodeInputInterface _input;
     PipelineBlockOutputInterface _output;
 
+    // Processor input/outputs
     ColumnNodeIDs* _inputSources {nullptr};
     NamedColumn* _outputTargets {nullptr};
     NamedColumn* _outputPaths {nullptr};
@@ -80,16 +100,18 @@ private:
     ColumnEdgeIDs* _bfsEdges {nullptr};
     ColumnNodeIDs* _bfsIntermediates {nullptr};
     ColumnIndices* _bfsIndices {nullptr};
-    std::unique_ptr<GetOutEdgesChunkWriter> _bfsWriter;
+    std::unique_ptr<ChunkWriter> _bfsWriter;
 
-    // BFS persistent state across execute() calls
+    // Persistent state across execute() calls
     bool _bfsInitialized {false};
     bool _depthNeedsSetup {true};
     int64_t _depth {0};
-    std::vector<FrontierEntry> _frontier;
-    std::vector<FrontierEntry> _nextFrontier;
-    std::vector<size_t> _mainMapping;
-    std::vector<size_t> _nextMainMapping;
+    std::vector<FrontierEntry> _allEntries; // persistent tree, never shrunk until new input chunk received
+    size_t _depthStart {0};                 // index of first entry at current depth
+    size_t _depthEnd {0};                   // index one past last entry at current depth
+
+    bool edgeUsedInPath(size_t entryIdx, EdgeID edge) const;
+    void reconstructPath(size_t entryIdx, EntityList& path) const;
 };
 
 }

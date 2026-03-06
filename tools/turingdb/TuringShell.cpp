@@ -446,20 +446,18 @@ void tabulateWrite(tabulate::RowStream& rs, const db::EntityList& list) {
     }
 
     std::string result;
-    const std::span<const EntityList::Entry> entries = list.entries();
-    const EntityList::Entry& first = entries.front();
-    if (first._type == EntityType::Node) {
-        result += fmt::format("({}:)", first._id);
-    } else {
-        result += fmt::format("[{}:]", first._id);
-    }
+    const auto& entries = list.getEntries();
 
-    for (size_t i = 1; i < entries.size(); ++i) {
-        const auto& [type, val] = entries[i];
+    size_t i = 0;
+    for (const auto& [type, val] : entries) {
+        if (i++ != 0) {
+            result += ", ";
+        }
+
         if (type == EntityType::Node) {
-            result += fmt::format(", ({}:)", val);
+            result += fmt::format("({}:)", val);
         } else {
-            result += fmt::format(", [{}:]", val);
+            result += fmt::format("[{}:]", val);
         }
     }
     rs << result;
