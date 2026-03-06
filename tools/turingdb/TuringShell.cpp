@@ -11,6 +11,8 @@
 #include <argparse.hpp>
 #include <linenoise.h>
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/base_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <tabulate/table.hpp>
 #include <termcolor/termcolor.hpp>
 
@@ -18,6 +20,7 @@
 #include "Graph.h"
 #include "SystemManager.h"
 #include "ChangeManager.h"
+#include "LineNoiseHandle.h"
 
 #include "columns/Block.h"
 #include "columns/Column.h"
@@ -278,9 +281,12 @@ void shCommand(const TuringShell::Command::Words& args, TuringShell& shell, std:
 
 } // namespace
 
-TuringShell::TuringShell(TuringDB& turingDB, LocalMemory* mem)
+TuringShell::TuringShell(TuringDB& turingDB,
+                         LocalMemory* mem,
+                         LineNoiseHandle* lineNoiseHandle)
     : _turingDB(turingDB),
-    _mem(mem)
+    _mem(mem),
+    _lineNoiseHandle(lineNoiseHandle)
 {
     _localCommands.emplace("q", Command {quitCommand});
     _localCommands.emplace("quit", Command {quitCommand});
@@ -312,7 +318,6 @@ void TuringShell::startLoop() {
 
     // Prepare prompt
     char* line = nullptr;
-    std::string lineStr;
     std::string shellPrompt = composePrompt();
 
     // History settings
@@ -333,7 +338,19 @@ void TuringShell::startLoop() {
 
     while (_running.load()) {
         errno = 0;
-        line = linenoise(shellPrompt.c_str());
+
+        // Async Lineoise API
+        linenoiseEditStart(_lineNoiseHandle->getState(), -1, -1,
+                           _lineNoiseHandle->getBuffer(),
+                           LineNoiseHandle::BUFSIZE,
+                           shellPrompt.c_str());
+        _lineNoiseHandle->setActive();
+
+        line = linenoiseEditMore;
+        while ((line = linenoiseEditFeed(_lineNoiseHandle->getState())) == linenoiseEditMore) { }
+
+        _lineNoiseHandle->setInactive();
+        linenoiseEditStop(_lineNoiseHandle->getState());
 
         if (line == nullptr) {
             if (errno == EAGAIN) {
@@ -347,14 +364,13 @@ void TuringShell::startLoop() {
             break;
         }
 
-        lineStr = line;
+        std::string lineStr(line);
         if (lineStr.empty()) {
             linenoiseFree(line);
             continue;
         }
 
         processLine(lineStr);
-
         linenoiseHistoryAdd(line);
 
         shellPrompt = composePrompt();

@@ -1,11 +1,12 @@
 #pragma once
 
-#include <unordered_map>
+#include <atomic>
+#include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
-#include <functional>
+#include <unordered_map>
 #include <vector>
-#include <atomic>
 
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
@@ -14,6 +15,7 @@ namespace db {
 
 class TuringDB;
 class LocalMemory;
+class LineNoiseHandle;
 
 class TuringShell {
 public:
@@ -22,7 +24,9 @@ public:
         std::function<void(const Words&, TuringShell&, std::string& line)> _func;
     };
 
-    TuringShell(TuringDB& turingDB, LocalMemory* mem);
+    TuringShell(TuringDB& turingDB,
+                LocalMemory* mem,
+                LineNoiseHandle*);
     ~TuringShell();
 
     bool setGraphName(const std::string& graphName);
@@ -46,6 +50,7 @@ private:
     bool _quiet {false};
     pthread_t _threadID {};
     std::atomic<bool> _running {true};
+    LineNoiseHandle* _lineNoiseHandle {nullptr};
     std::unordered_map<std::string_view, Command> _localCommands;
 
     void processLine(std::string& line);
@@ -53,5 +58,4 @@ private:
     std::string composePrompt();
     void checkShellContext();
 };
-
 }
