@@ -611,6 +611,7 @@ void ReadStmtGenerator::placeJoinsOnVars() {
 }
 
 void ReadStmtGenerator::placePredicateJoins() {
+#define TURING_VHJ_BENCHMARK 1
 #ifdef TURING_VHJ_BENCHMARK
     const char* valueHashJoinEnv = getenv("TURING_VALUE_HASH_JOIN");
     bool useValueHashJoin = valueHashJoinEnv && strcmp(valueHashJoinEnv, "0") != 0;
