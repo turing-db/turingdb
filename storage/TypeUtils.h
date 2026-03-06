@@ -11,6 +11,9 @@
 
 namespace db {
 
+template <typename T>
+concept StringLike = std::same_as<T, std::string> || std::same_as<T, std::string_view>;
+
 template <typename T, typename U>
 concept Stringy = (
     (std::same_as<T, std::string_view> && std::same_as<std::string, U>) ||
