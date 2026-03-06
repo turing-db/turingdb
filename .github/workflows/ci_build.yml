@@ -105,6 +105,12 @@ jobs:
         uv pip install wheel/*.whl --python .venv-test/bin/python
         .venv-test/bin/turingdb --help
 
+    - name: Cache reactome dataset
+      uses: actions/cache@v4
+      with:
+        path: external/datasets/reactome.jsonl
+        key: dataset-reactome-v1
+
     - name: Run regress
       run: |
         ./run_regress.sh
