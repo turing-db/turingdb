@@ -18,32 +18,31 @@
 
 using namespace db;
 
-template <ExplorationDir dir>
-PathExplorerProcessor<dir>::PathExplorerProcessor(LocalMemory* mem,
-                                                            int64_t minHops,
-                                                            int64_t maxHops)
+PathExplorerProcessor::PathExplorerProcessor(LocalMemory* mem,
+                                             PathExplorationDir dir,
+                                             int64_t minHops,
+                                             int64_t maxHops)
     : _mem(mem),
+    _dir(dir),
     _minHops(minHops),
     _maxHops(maxHops)
 {
 }
 
-template <ExplorationDir dir>
-PathExplorerProcessor<dir>::~PathExplorerProcessor() {
+PathExplorerProcessor::~PathExplorerProcessor() {
 }
 
-template <ExplorationDir dir>
-std::string PathExplorerProcessor<dir>::describe() const {
+std::string PathExplorerProcessor::describe() const {
     return fmt::format("PathExplorerProcessor @={} hops=[{},{}]",
                        fmt::ptr(this), _minHops, _maxHops);
 }
 
-template <ExplorationDir dir>
-PathExplorerProcessor<dir>* PathExplorerProcessor<dir>::create(PipelineV2* pipeline,
-                                                                         LocalMemory* mem,
-                                                                         int64_t minHops,
-                                                                         int64_t maxHops) {
-    auto* proc = new PathExplorerProcessor<dir>(mem, minHops, maxHops);
+PathExplorerProcessor* PathExplorerProcessor::create(PipelineV2* pipeline,
+                                                     LocalMemory* mem,
+                                                     PathExplorationDir dir,
+                                                     int64_t minHops,
+                                                     int64_t maxHops) {
+    auto* proc = new PathExplorerProcessor(mem, dir, minHops, maxHops);
 
     PipelineInputPort* inPort = PipelineInputPort::create(pipeline, proc);
     PipelineOutputPort* outPort = PipelineOutputPort::create(pipeline, proc);
@@ -59,8 +58,7 @@ PathExplorerProcessor<dir>* PathExplorerProcessor<dir>::create(PipelineV2* pipel
     return proc;
 }
 
-template <ExplorationDir dir>
-void PathExplorerProcessor<dir>::prepare(ExecutionContext* ctxt) {
+void PathExplorerProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
     const GraphView& view = ctxt->getGraphView();
 
@@ -83,23 +81,33 @@ void PathExplorerProcessor<dir>::prepare(ExecutionContext* ctxt) {
     _bfsIntermediates = _mem->alloc<ColumnNodeIDs>();
     _bfsIndices = _mem->alloc<ColumnIndices>();
 
-    _bfsWriter = std::make_unique<ChunkWriter>(view, _bfsSources);
-    _bfsWriter->setIndices(_bfsIndices);
-    _bfsWriter->setEdgeIDs(_bfsEdges);
-
-    if constexpr (dir == ExplorationDir::Forward) {
-        _bfsWriter->setTgtIDs(_bfsIntermediates);
-    } else if constexpr (dir == ExplorationDir::Backward) {
-        _bfsWriter->setSrcIDs(_bfsIntermediates);
-    } else {
-        _bfsWriter->setOtherIDs(_bfsIntermediates);
+    switch (_dir) {
+        case PathExplorationDir::Forward: {
+            auto* bfsWriter = new GetOutEdgesChunkWriter(view, _bfsSources);
+            bfsWriter->setIndices(_bfsIndices);
+            bfsWriter->setEdgeIDs(_bfsEdges);
+            bfsWriter->setTgtIDs(_bfsIntermediates);
+            _bfsWriter = std::unique_ptr<Iterator>(bfsWriter);
+        } break;
+        case PathExplorationDir::Backward: {
+            auto* bfsWriter = new GetInEdgesChunkWriter(view, _bfsSources);
+            bfsWriter->setIndices(_bfsIndices);
+            bfsWriter->setEdgeIDs(_bfsEdges);
+            bfsWriter->setSrcIDs(_bfsIntermediates);
+            _bfsWriter = std::unique_ptr<Iterator>(bfsWriter);
+        } break;
+        case PathExplorationDir::Both: {
+            auto* bfsWriter = new GetEdgesChunkWriter(view, _bfsSources);
+            bfsWriter->setIndices(_bfsIndices);
+            bfsWriter->setEdgeIDs(_bfsEdges);
+            bfsWriter->setOtherIDs(_bfsIntermediates);
+            _bfsWriter = std::unique_ptr<Iterator>(bfsWriter);
+        } break;
     }
-
     markAsPrepared();
 }
 
-template <ExplorationDir dir>
-void PathExplorerProcessor<dir>::reset() {
+void PathExplorerProcessor::reset() {
     _bfsInitialized = false;
     _depthNeedsSetup = true;
     _depth = 0;
@@ -109,8 +117,7 @@ void PathExplorerProcessor<dir>::reset() {
     markAsReset();
 }
 
-template <ExplorationDir dir>
-void PathExplorerProcessor<dir>::reconstructPath(size_t entryIdx, EntityList& path) const {
+void PathExplorerProcessor::reconstructPath(size_t entryIdx, EntityList& path) const {
     size_t idx = entryIdx;
 
     path.resize(_depth);
@@ -132,8 +139,7 @@ void PathExplorerProcessor<dir>::reconstructPath(size_t entryIdx, EntityList& pa
 }
 
 /// Walk up the parent chain to check if edge is already used in the current row.
-template <ExplorationDir dir>
-bool PathExplorerProcessor<dir>::edgeUsedInPath(size_t entryIdx, EdgeID edge) const {
+bool PathExplorerProcessor::edgeUsedInPath(size_t entryIdx, EdgeID edge) const {
     size_t idx = entryIdx;
 
     while (idx != SIZE_MAX) {
@@ -149,8 +155,7 @@ bool PathExplorerProcessor<dir>::edgeUsedInPath(size_t entryIdx, EdgeID edge) co
     return false;
 }
 
-template <ExplorationDir dir>
-void PathExplorerProcessor<dir>::execute() {
+void PathExplorerProcessor::execute() {
     auto* outputTargets = _outputTargets->getColumn()->cast<ColumnNodeIDs>();
     auto* outputPaths = _outputPaths->getColumn()->cast<ColumnVector<EntityList>>();
 
@@ -222,12 +227,33 @@ void PathExplorerProcessor<dir>::execute() {
             (*_bfsSources)[i] = _allEntries[_depthStart + i].node;
         }
 
-        _bfsWriter->reset();
+        switch (_dir) {
+            case PathExplorationDir::Forward: {
+                static_cast<GetOutEdgesChunkWriter*>(_bfsWriter.get())->reset();
+            } break;
+            case PathExplorationDir::Backward: {
+                static_cast<GetInEdgesChunkWriter*>(_bfsWriter.get())->reset();
+            } break;
+            case PathExplorationDir::Both: {
+                static_cast<GetEdgesChunkWriter*>(_bfsWriter.get())->reset();
+            } break;
+        }
+
         _depthNeedsSetup = false;
     }
 
     // Step 3. Fill one chunk of edges from the current depth set of sources.
-    _bfsWriter->fill(remaining);
+    switch (_dir) {
+        case PathExplorationDir::Forward: {
+            static_cast<GetOutEdgesChunkWriter*>(_bfsWriter.get())->fill(remaining);
+        } break;
+        case PathExplorationDir::Backward: {
+            static_cast<GetInEdgesChunkWriter*>(_bfsWriter.get())->fill(remaining);
+        } break;
+        case PathExplorationDir::Both: {
+            static_cast<GetEdgesChunkWriter*>(_bfsWriter.get())->fill(remaining);
+        } break;
+    }
 
     ColumnEdgeIDs& bfsEdges = *_bfsEdges;
     ColumnNodeIDs& bfsIntermediates = *_bfsIntermediates;
@@ -286,10 +312,4 @@ void PathExplorerProcessor<dir>::execute() {
     }
 
     _output.getPort()->writeData();
-}
-
-namespace db {
-template class PathExplorerProcessor<ExplorationDir::Forward>;
-template class PathExplorerProcessor<ExplorationDir::Backward>;
-template class PathExplorerProcessor<ExplorationDir::Both>;
 }

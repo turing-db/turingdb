@@ -5,6 +5,7 @@
 #include "ChangeOp.h"
 #include "EntityType.h"
 #include "Path.h"
+#include "PathExplorationDir.h"
 #include "PipelineV2.h"
 #include "PendingOutputView.h"
 #include "VecLibMetadata.h"
@@ -30,7 +31,6 @@
 #include "metadata/LabelSet.h"
 
 #include "LocalMemory.h"
-#include "Path.h"
 
 namespace db {
 
@@ -77,12 +77,9 @@ public:
     PipelineEdgeOutputInterface& addGetEdges();
 
     // BFS expand edges (variable-length paths)
-    PipelineBlockOutputInterface& addBFSExpandOutEdges(int64_t minHops,
-                                                       int64_t maxHops);
-    PipelineBlockOutputInterface& addBFSExpandInEdges(int64_t minHops,
-                                                      int64_t maxHops);
-    PipelineBlockOutputInterface& addBFSExpandEdges(int64_t minHops,
-                                                    int64_t maxHops);
+    PipelineBlockOutputInterface& addPathExplorer(PathExplorationDir,
+                                                  int64_t minHops,
+                                                  int64_t maxHops);
 
     PipelineOutputInterface& projectEdgesOnOtherIDs() {
         _pendingOutput.projectEdgesOnOtherIDs();

@@ -329,9 +329,11 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
     return output;
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandOutEdges(int64_t minHops, int64_t maxHops)
-{
-    auto* proc = PathExplorerProcessor<ExplorationDir::Forward>::create(_pipeline, _mem, minHops, maxHops);
+PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer(PathExplorationDir dir,
+                                                               int64_t minHops,
+                                                               int64_t maxHops) {
+
+    auto* proc = PathExplorerProcessor::create(_pipeline, _mem, dir, minHops, maxHops);
 
     PipelineNodeInputInterface& input = proc->input();
     PipelineBlockOutputInterface& output = proc->output();
@@ -340,82 +342,13 @@ PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandOutEdges(int64_t minH
     input.propagateColumns(output);
 
     Dataframe* outDf = output.getDataframe();
-
-    const NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
-    proc->setOutputIndicesColumn(static_cast<ColumnIndices*>(indices->getColumn()));
 
     NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(outDf);
-    proc->setOutputTargetsColumn(targetNodes);
-
     NamedColumn* pathCol = allocColumn<ColumnVector<EntityList>>(outDf);
-    proc->setOutputPathsColumn(pathCol);
-
-    output.setStream(EntityOutputStream::createNodeStream(targetNodes->getTag()));
-
-    MaterializeData& matData = _matProc->getMaterializeData();
-    matData.createStep(indices);
-    matData.addToStep<ColumnNodeIDs>(targetNodes);
-    matData.addToStep<ColumnVector<EntityList>>(pathCol);
-
-    _pendingOutput.updateInterface(&output);
-
-    _lastProc = proc;
-    return output;
-}
-
-PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandInEdges(int64_t minHops, int64_t maxHops)
-{
-    auto* proc = PathExplorerProcessor<ExplorationDir::Backward>::create(_pipeline, _mem, minHops, maxHops);
-
-    PipelineNodeInputInterface& input = proc->input();
-    PipelineBlockOutputInterface& output = proc->output();
-
-    _pendingOutput.connectTo(input);
-    input.propagateColumns(output);
-
-    Dataframe* outDf = output.getDataframe();
-
     const NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
+
     proc->setOutputIndicesColumn(static_cast<ColumnIndices*>(indices->getColumn()));
-
-    NamedColumn* sourceNodes = allocColumn<ColumnNodeIDs>(outDf);
-    proc->setOutputTargetsColumn(sourceNodes);
-
-    NamedColumn* pathCol = allocColumn<ColumnVector<EntityList>>(outDf);
-    proc->setOutputPathsColumn(pathCol);
-
-    output.setStream(EntityOutputStream::createNodeStream(sourceNodes->getTag()));
-
-    MaterializeData& matData = _matProc->getMaterializeData();
-    matData.createStep(indices);
-    matData.addToStep<ColumnNodeIDs>(sourceNodes);
-    matData.addToStep<ColumnVector<EntityList>>(pathCol);
-
-    _pendingOutput.updateInterface(&output);
-
-    _lastProc = proc;
-    return output;
-}
-
-PipelineBlockOutputInterface& PipelineBuilder::addBFSExpandEdges(int64_t minHops,
-                                                                 int64_t maxHops) {
-    auto* proc = PathExplorerProcessor<ExplorationDir::Both>::create(_pipeline, _mem, minHops, maxHops);
-
-    PipelineNodeInputInterface& input = proc->input();
-    PipelineBlockOutputInterface& output = proc->output();
-
-    _pendingOutput.connectTo(input);
-    input.propagateColumns(output);
-
-    Dataframe* outDf = output.getDataframe();
-
-    const NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
-    proc->setOutputIndicesColumn(static_cast<ColumnIndices*>(indices->getColumn()));
-
-    NamedColumn* targetNodes = allocColumn<ColumnNodeIDs>(outDf);
     proc->setOutputTargetsColumn(targetNodes);
-
-    NamedColumn* pathCol = allocColumn<ColumnVector<EntityList>>(outDf);
     proc->setOutputPathsColumn(pathCol);
 
     output.setStream(EntityOutputStream::createNodeStream(targetNodes->getTag()));

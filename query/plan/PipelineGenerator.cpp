@@ -78,6 +78,7 @@
 #include "nodes/ShowExtensionsNode.h"
 #include "nodes/OrderByNode.h"
 #include "nodes/FuncEvalNode.h"
+#include "nodes/BFSExpandOutEdgesNode.h"
 
 #include "processors/CreateVectorIndexProcessor.h"
 #include "processors/LoadVectorProcessor.h"
@@ -426,6 +427,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::SHOW_EXTENSIONS:
             return translateShowExtensionsNode(static_cast<ShowExtensionsNode*>(node));
+        break;
+
+        case PlanGraphOpcode::PATH_EXPLORER:
+            return translatePathExplorerNode(static_cast<PathExplorerNode*>(node));
         break;
 
         case PlanGraphOpcode::FUNC_EVAL:
@@ -1545,16 +1550,11 @@ PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowV
 }
 
 
-PipelineOutputInterface* PipelineGenerator::translateDeleteVectorIndexNode(DeleteVectorIndexNode* node) {
-    _builder.addDeleteVectorIndex(node->getIndexName());
-    return _builder.getPendingOutputInterface();
-}
-
-PipelineOutputInterface* PipelineGenerator::translateBFSExpandOutEdgesNode(BFSExpandOutEdgesNode* node)
+PipelineOutputInterface* PipelineGenerator::translatePathExplorerNode(PathExplorerNode* node)
 {
-    _builder.addBFSExpandOutEdges(node->getMinHops(), node->getMaxHops());
+    _builder.addPathExplorer(node->getDir(), node->getMinHops(), node->getMaxHops());
 
-    const auto* proc = dynamic_cast<PathExplorerProcessor<ExplorationDir::Forward>*>(_builder.getLastProc());
+    const auto* proc = dynamic_cast<PathExplorerProcessor*>(_builder.getLastProc());
     bioassert(proc, "Failed to cast last proc to PathExplorerProcessor");
 
     const VarDecl* edgeDecl = node->getEdgeDecl();
@@ -1568,33 +1568,6 @@ PipelineOutputInterface* PipelineGenerator::translateBFSExpandOutEdgesNode(BFSEx
     sourceCol->rename(targetDecl->getName());
     _declToColumn[targetDecl] = sourceCol->getTag();
 
-    return _builder.getPendingOutputInterface();
-}
-
-PipelineOutputInterface* PipelineGenerator::translateBFSExpandInEdgesNode(
-    BFSExpandInEdgesNode* node)
-{
-    _builder.addBFSExpandInEdges(node->getMinHops(), node->getMaxHops());
-
-    const auto* proc = dynamic_cast<PathExplorerProcessor<ExplorationDir::Backward>*>(_builder.getLastProc());
-    bioassert(proc, "Failed to cast last proc to PathExplorerProcessor");
-
-    const VarDecl* edgeDecl = node->getEdgeDecl();
-    const VarDecl* sourceDecl = node->getSourceDecl();
-
-    NamedColumn* pathsCol = proc->getOutputPathsColumn();
-    pathsCol->rename(edgeDecl->getName());
-    _declToColumn[edgeDecl] = pathsCol->getTag();
-
-    NamedColumn* sourceCol = proc->getOutputTargetsColumn();
-    sourceCol->rename(sourceDecl->getName());
-    _declToColumn[sourceDecl] = sourceCol->getTag();
-
-    return _builder.getPendingOutputInterface();
-}
-
-PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowVectorIndexesNode* node) {
-    _builder.addShowVectorIndexes();
     return _builder.getPendingOutputInterface();
 }
 
