@@ -609,8 +609,12 @@ void ReadStmtGenerator::placeJoinsOnVars() {
 }
 
 void ReadStmtGenerator::placePredicateJoins() {
+#ifdef TURING_VHJ_BENCHMARK
     const char* valueHashJoinEnv = getenv("TURING_VALUE_HASH_JOIN");
     bool useValueHashJoin = valueHashJoinEnv && strcmp(valueHashJoinEnv, "0") != 0;
+#else
+    constexpr bool useValueHashJoin = true;
+#endif
     std::vector<FilterNode*> vhjFilters;
 
     for (auto& pred : _tree->getPredicates()) {

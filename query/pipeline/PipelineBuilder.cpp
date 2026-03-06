@@ -537,6 +537,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterfa
     const Dataframe* rhsDf = rhs->getDataframe();
     Column* rightKeyCol = rhsDf->getColumn(rightJoinKey)->getColumn();
 
+    // Do the hash join connectivity and setup interfaces
     auto setupJoin = [&](auto* join) -> PipelineBlockOutputInterface& {
         _pendingOutput.connectTo(join->leftInput());
         rhs->connectTo(join->rightInput());
@@ -558,36 +559,41 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterfa
         return outInterface;
     };
 
-    return dispatchColumnVector(keyCol, [&](auto* typedCol) -> PipelineBlockOutputInterface& {
+    // Create the join depending on the type combination of the keys
+    PipelineBlockOutputInterface* result = nullptr;
+
+    dispatchColumnVector(keyCol, [&](auto* typedCol) {
         using ValueType = typename std::decay_t<decltype(*typedCol)>::ValueType;
         using LeftKey = TypeUtils::unwrap_optional_t<ValueType>;
 
+        // For std::string/std::string_view and their symetries,
+        // we have a different type for the left and the right key
+        // but they are compatible in the sense that they are "string-like"
         if constexpr (std::is_same_v<LeftKey, NodeID> ||
                      std::is_same_v<LeftKey, int64_t> ||
                      std::is_same_v<LeftKey, uint64_t> ||
                      std::is_same_v<LeftKey, double> ||
                      std::is_same_v<LeftKey, CustomBool>) {
-            return setupJoin(HashJoinProcessor<LeftKey>::create(
-                _pipeline, leftJoinKey, rightJoinKey));
+            auto* join = HashJoinProcessor<LeftKey>::create(_pipeline, leftJoinKey, rightJoinKey);
+            result = &setupJoin(join);
         } else if constexpr (StringLike<LeftKey>) {
-            return dispatchColumnVector(rightKeyCol,
-                    [&](auto* rightTypedCol) -> PipelineBlockOutputInterface& {
-                using RVT = typename std::decay_t<decltype(*rightTypedCol)>::ValueType;
-                using RightKey = TypeUtils::unwrap_optional_t<RVT>;
+            dispatchColumnVector(rightKeyCol, [&](auto* rightTypedCol) {
+                using RightValueType = typename std::decay_t<decltype(*rightTypedCol)>::ValueType;
+                using RightKey = TypeUtils::unwrap_optional_t<RightValueType>;
 
                 if constexpr (StringLike<RightKey>) {
-                    return setupJoin(
-                        HashJoinProcessor<LeftKey, RightKey>::create(
-                            _pipeline, leftJoinKey, rightJoinKey));
+                    auto* join = HashJoinProcessor<LeftKey, RightKey>::create(_pipeline, leftJoinKey, rightJoinKey);
+                    result = &setupJoin(join);
                 } else {
-                    throw PipelineException(
-                        "incompatible right key type for string hash join");
+                    throw PipelineException("incompatible right key type for string hash join");
                 }
             });
         } else {
             throw PipelineException("unsupported column kind for hash join");
         }
     });
+
+    return *result;
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addLambdaSource(const LambdaSourceProcessor::Callback& callback) {
