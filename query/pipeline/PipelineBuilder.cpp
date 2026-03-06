@@ -534,42 +534,56 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterfa
     const Dataframe* pendingDf = _pendingOutput.getDataframe();
     Column* keyCol = pendingDf->getColumn(leftJoinKey)->getColumn();
 
+    const Dataframe* rhsDf = rhs->getDataframe();
+    Column* rightKeyCol = rhsDf->getColumn(rightJoinKey)->getColumn();
+
+    auto setupJoin = [&](auto* join) -> PipelineBlockOutputInterface& {
+        _pendingOutput.connectTo(join->leftInput());
+        rhs->connectTo(join->rightInput());
+
+        const Dataframe* leftDf = join->leftInput().getDataframe();
+        const Dataframe* rightDf = join->rightInput().getDataframe();
+
+        PipelineBlockOutputInterface& outInterface = join->output();
+        Dataframe* outDf = outInterface.getDataframe();
+
+        createHashJoinDataFrameShape(_mem, _dfMan, leftDf, rightDf, outDf,
+                                     leftJoinKey, rightJoinKey);
+
+        auto joinTag = outDf->cols().back()->getTag();
+        outInterface.setStream(EntityOutputStream::createNodeStream(joinTag));
+        _pendingOutput.setInterface(&outInterface);
+
+        _lastProc = join;
+        return outInterface;
+    };
+
     return dispatchColumnVector(keyCol, [&](auto* typedCol) -> PipelineBlockOutputInterface& {
         using ValueType = typename std::decay_t<decltype(*typedCol)>::ValueType;
-        using Key = TypeUtils::unwrap_optional_t<ValueType>;
+        using LeftKey = TypeUtils::unwrap_optional_t<ValueType>;
 
-        if constexpr (std::is_same_v<Key, NodeID> ||
-                     std::is_same_v<Key, int64_t> ||
-                     std::is_same_v<Key, uint64_t> ||
-                     std::is_same_v<Key, double> ||
-                     std::is_same_v<Key, std::string_view> ||
-                     std::is_same_v<Key, CustomBool>) {
-            auto* join = HashJoinProcessor<Key>::create(_pipeline, leftJoinKey, rightJoinKey);
+        if constexpr (std::is_same_v<LeftKey, NodeID> ||
+                     std::is_same_v<LeftKey, int64_t> ||
+                     std::is_same_v<LeftKey, uint64_t> ||
+                     std::is_same_v<LeftKey, double> ||
+                     std::is_same_v<LeftKey, CustomBool>) {
+            return setupJoin(HashJoinProcessor<LeftKey>::create(
+                _pipeline, leftJoinKey, rightJoinKey));
+        } else if constexpr (StringLike<LeftKey>) {
+            return dispatchColumnVector(rightKeyCol,
+                    [&](auto* rightTypedCol) -> PipelineBlockOutputInterface& {
+                using RVT = typename std::decay_t<decltype(*rightTypedCol)>::ValueType;
+                using RightKey = TypeUtils::unwrap_optional_t<RVT>;
 
-            _pendingOutput.connectTo(join->leftInput());
-            rhs->connectTo(join->rightInput());
-
-            const Dataframe* leftDf = join->leftInput().getDataframe();
-            const Dataframe* rightDf = join->rightInput().getDataframe();
-
-            PipelineBlockOutputInterface& outInterface = join->output();
-            Dataframe* outDf = outInterface.getDataframe();
-
-            createHashJoinDataFrameShape(_mem,
-                                         _dfMan,
-                                         leftDf,
-                                         rightDf,
-                                         outDf,
-                                         leftJoinKey,
-                                         rightJoinKey);
-
-            auto joinTag = outDf->cols().back()->getTag();
-
-            outInterface.setStream(EntityOutputStream::createNodeStream(joinTag));
-            _pendingOutput.setInterface(&outInterface);
-
-            _lastProc = join;
-            return outInterface;
+                if constexpr (StringLike<RightKey>) {
+                    return setupJoin(
+                        HashJoinProcessor<LeftKey, RightKey>::create(
+                            _pipeline, leftJoinKey, rightJoinKey));
+                } else {
+                    throw PipelineException(
+                        "incompatible right key type for string hash join");
+                }
+            });
         } else {
             throw PipelineException("unsupported column kind for hash join");
         }

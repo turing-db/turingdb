@@ -1529,6 +1529,159 @@ TEST_F(HashJoinProcessorTest, multipleValuesPerKeyWithChunkedInputs) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
+// Helper to run a string join test with parameterised left/right column types.
+// LeftColT and RightColT are the column types for the join key (e.g.
+// ColumnVector<std::string>, ColumnVector<std::string_view>).
+// The output join column type matches the left side.
+template <typename LeftColT, typename RightColT>
+void runStringJoinTest(TuringTestEnv& env,
+                       PipelineBuilder& builder,
+                       PipelineV2& pipeline,
+                       const GraphView& view) {
+    using OutColT = LeftColT;
+    constexpr size_t NUM_ROWS = 100;
+    constexpr size_t NUM_DATA_COLS = 2;
+    constexpr size_t NUM_COLS = NUM_DATA_COLS + 1; // + join key
+    const size_t chunkSize = 64; // 1.5 chunks worth of data
+
+    // Stable storage for string join keys
+    static std::array<std::string, NUM_ROWS> keyStrings = [] {
+        std::array<std::string, NUM_ROWS> arr;
+        for (size_t i = 0; i < NUM_ROWS; i++) {
+            arr[i] = std::to_string(i + 1);
+        }
+        return arr;
+    }();
+
+    const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        for (size_t c = 0; c < NUM_DATA_COLS; c++) {
+            auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[c]->getColumn());
+            col->resize(NUM_ROWS);
+            std::iota(col->begin(), col->end(), (c + 3) * 1000 + 1);
+        }
+        auto* joinCol = dynamic_cast<RightColT*>(df->cols()[NUM_COLS - 1]->getColumn());
+        joinCol->resize(NUM_ROWS);
+        for (size_t i = 0; i < NUM_ROWS; i++) {
+            (*joinCol)[i] = keyStrings[i];
+        }
+        isFinished = true;
+    };
+
+    const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        for (size_t c = 0; c < NUM_DATA_COLS; c++) {
+            auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[c]->getColumn());
+            col->resize(NUM_ROWS);
+            std::iota(col->begin(), col->end(), (c + 1) * 1000 + 1);
+        }
+        auto* joinCol = dynamic_cast<LeftColT*>(df->cols()[NUM_COLS - 1]->getColumn());
+        joinCol->resize(NUM_ROWS);
+        for (size_t i = 0; i < NUM_ROWS; i++) {
+            (*joinCol)[i] = keyStrings[i];
+        }
+        isFinished = true;
+    };
+
+    ColumnTag leftJoinTag(0);
+    ColumnTag rightJoinTag(0);
+    {
+        auto& rhsIF = builder.addLambdaSource(genRDF);
+        for (size_t i = 0; i < NUM_DATA_COLS; i++) {
+            builder.addColumnToOutput<ColumnNodeIDs>(
+                pipeline.getDataframeManager()->allocTag());
+        }
+        rightJoinTag = pipeline.getDataframeManager()->allocTag();
+        builder.addColumnToOutput<RightColT>(rightJoinTag);
+
+        [[maybe_unused]] auto& lhsIF = builder.addLambdaSource(genLDF);
+        for (size_t i = 0; i < NUM_DATA_COLS; i++) {
+            builder.addColumnToOutput<ColumnNodeIDs>(
+                pipeline.getDataframeManager()->allocTag());
+        }
+        leftJoinTag = pipeline.getDataframeManager()->allocTag();
+        builder.addColumnToOutput<LeftColT>(leftJoinTag);
+
+        const auto& hashJoin = builder.addHashJoin(&rhsIF, leftJoinTag, rightJoinTag);
+        ASSERT_EQ(hashJoin.getDataframe()->cols().size(), NUM_COLS + NUM_DATA_COLS);
+    }
+
+    using Rows = LineContainer<NodeID, NodeID, NodeID, NodeID, std::string>;
+    Rows expected;
+    for (size_t i = 0; i < NUM_ROWS; i++) {
+        expected.add({NodeID(1000 + i + 1),
+                      NodeID(2000 + i + 1),
+                      NodeID(3000 + i + 1),
+                      NodeID(4000 + i + 1),
+                      keyStrings[i]});
+    }
+
+    Rows actual;
+    bool callbackExecuted = false;
+    const auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        callbackExecuted = true;
+
+        auto* col0 = dynamic_cast<ColumnNodeIDs*>(df->cols().at(0)->getColumn());
+        auto* col1 = dynamic_cast<ColumnNodeIDs*>(df->cols().at(1)->getColumn());
+        auto* col2 = dynamic_cast<ColumnNodeIDs*>(df->cols().at(2)->getColumn());
+        auto* col3 = dynamic_cast<ColumnNodeIDs*>(df->cols().at(3)->getColumn());
+        auto* joinCol = dynamic_cast<OutColT*>(df->cols().back()->getColumn());
+        ASSERT_TRUE(joinCol != nullptr);
+
+        for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+            actual.add({col0->at(i),
+                        col1->at(i),
+                        col2->at(i),
+                        col3->at(i),
+                        std::string((*joinCol)[i])});
+        }
+    };
+
+    builder.addLambda(callback);
+
+    ExecutionContext execCtxt(&env.getSystemManager(), view);
+    execCtxt.setChunkSize(chunkSize);
+    pipeline.clear();
+    PipelineExecutor executor(&pipeline, &execCtxt);
+    executor.execute();
+
+    ASSERT_TRUE(callbackExecuted);
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+TEST_F(HashJoinProcessorTest, stringStringJoin) {
+    auto [transaction, view, reader] = readGraph();
+    using StringCol = ColumnVector<std::string>;
+    runStringJoinTest<StringCol, StringCol>(*_env, *_builder, _pipeline, view);
+}
+
+TEST_F(HashJoinProcessorTest, stringViewStringViewJoin) {
+    auto [transaction, view, reader] = readGraph();
+    using SVCol = ColumnVector<std::string_view>;
+    runStringJoinTest<SVCol, SVCol>(*_env, *_builder, _pipeline, view);
+}
+
+TEST_F(HashJoinProcessorTest, stringViewStringJoin) {
+    auto [transaction, view, reader] = readGraph();
+    using SVCol = ColumnVector<std::string_view>;
+    using SCol = ColumnVector<std::string>;
+    runStringJoinTest<SVCol, SCol>(*_env, *_builder, _pipeline, view);
+}
+
+TEST_F(HashJoinProcessorTest, stringStringViewJoin) {
+    auto [transaction, view, reader] = readGraph();
+    using SVCol = ColumnVector<std::string_view>;
+    using SCol = ColumnVector<std::string>;
+    runStringJoinTest<SCol, SVCol>(*_env, *_builder, _pipeline, view);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 1;

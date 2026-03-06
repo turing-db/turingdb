@@ -8,6 +8,7 @@
 #include "RowStore.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "ID.h"
+#include "TypeUtils.h"
 
 namespace db {
 
@@ -22,17 +23,9 @@ struct StringHash {
     }
 };
 
-struct StringEqual {
-    using is_transparent = void;
-    bool operator()(std::string_view a, std::string_view b) const noexcept {
-        return a == b;
-    }
-};
-
 // Selects the hash map type for the join key.
-// When Key is std::string_view, stores std::string to own the key data
-// and avoid dangling pointers after column chunks are consumed.
-// Uses transparent hash/equal so find() accepts string_view without allocation.
+// String types store std::string to own key data and use transparent
+// hash/equal so find() accepts both string and string_view without allocation.
 template <typename Key>
 struct HashJoinMapType {
     using Type = std::unordered_map<Key, std::vector<RowOffset>>;
@@ -41,7 +34,13 @@ struct HashJoinMapType {
 template <>
 struct HashJoinMapType<std::string_view> {
     using Type = std::unordered_map<std::string, std::vector<RowOffset>,
-                                    StringHash, StringEqual>;
+                                    StringHash, std::equal_to<>>;
+};
+
+template <>
+struct HashJoinMapType<std::string> {
+    using Type = std::unordered_map<std::string, std::vector<RowOffset>,
+                                    StringHash, std::equal_to<>>;
 };
 
 struct RowOffsetsCopyState {
@@ -72,10 +71,15 @@ struct RowOffsetsCopyState {
     size_t numRemainingOffsets() { return _offsetVec->size() - _rowOffsetIdx; };
 };
 
-template <typename Key>
+template <typename LeftKey, typename RightKey = LeftKey>
 class HashJoinProcessor : public Processor {
 public:
-    using HashJoinMap = typename HashJoinMapType<Key>::Type;
+    static_assert(std::is_same_v<LeftKey, RightKey> ||
+                  (StringLike<LeftKey> && StringLike<RightKey>),
+                  "LeftKey and RightKey must be the same type or both string-like");
+
+    using LeftHashJoinMap = typename HashJoinMapType<LeftKey>::Type;
+    using RightHashJoinMap = typename HashJoinMapType<RightKey>::Type;
 
     static HashJoinProcessor* create(PipelineV2* pipeline,
                                      ColumnTag leftJoinKey,
@@ -102,8 +106,8 @@ private:
 
     // map to a vector of offsets
     // the offsets point to the corresponding row in our
-    HashJoinMap _rightMap;
-    HashJoinMap _leftMap;
+    RightHashJoinMap _rightMap;
+    LeftHashJoinMap _leftMap;
 
     RowStore _store;
 
