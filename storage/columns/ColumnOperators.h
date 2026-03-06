@@ -133,6 +133,17 @@ struct ColumnFunctions {
 
         FunctionExecutor<Op, std::string, InternalT>::apply(res, arg, view);
     }
+
+    template <typename Op, typename ColW, typename ColT>
+    static void exec(ColW* res, const ColT* arg) {
+        using DecayColW = TypeUtils::decay_col_t<ColW>;
+        using InternalW = InnerTypeHelper<DecayColW>::type;
+
+        using DecayColT = TypeUtils::decay_col_t<ColT>;
+        using InternalT = InnerTypeHelper<DecayColT>::type;
+
+        FunctionExecutor<Op, InternalW, InternalT>::apply(res, arg);
+    }
 };
 
 /// Generic Column projection and manipulation
