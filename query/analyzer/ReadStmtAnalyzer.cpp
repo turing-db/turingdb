@@ -437,8 +437,6 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             }
         }
 
-        // Phase 1 restriction: no type or property filters
-        // with variable-length paths
         const auto& types = edgePattern->types();
         if (types && !types->empty()) {
             throwError("Edge type filters are not supported with "

@@ -44,7 +44,7 @@
 #include "nodes/VarNode.h"
 #include "nodes/ShortestPathNode.h"
 #include "nodes/VectorSearchNode.h"
-#include "nodes/BFSExpandOutEdgesNode.h"
+#include "nodes/PathExplorerNode.h"
 
 #include "QuantifiedPath.h"
 #include "stmt/Stmt.h"

@@ -18,7 +18,6 @@ public:
         ColumnTag _edgeIDsTag;
         ColumnTag _otherIDsTag;
         ColumnTag _edgeTypesTag;
-        ColumnTag _pathTag;
     };
 
     using StreamVariant = std::variant<std::monostate, NodeStream, EdgeStream>;
@@ -49,14 +48,6 @@ public:
         }
 
         _stream = NodeStream {asEdgeStream()._otherIDsTag};
-    }
-
-    void setEdgePathTag(ColumnTag tag) {
-        if (!isEdgeStream()) {
-            throw PipelineException("Cannot set path tag on non-edge stream");
-        }
-
-        std::get<EdgeStream>(_stream)._pathTag = tag;
     }
 
     bool isEmpty() const {

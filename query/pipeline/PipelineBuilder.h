@@ -76,7 +76,6 @@ public:
     PipelineEdgeOutputInterface& addGetInEdges();
     PipelineEdgeOutputInterface& addGetEdges();
 
-    // BFS expand edges (variable-length paths)
     PipelineBlockOutputInterface& addPathExplorer(PathExplorationDir,
                                                   int64_t minHops,
                                                   int64_t maxHops);

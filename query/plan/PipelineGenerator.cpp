@@ -78,7 +78,7 @@
 #include "nodes/ShowExtensionsNode.h"
 #include "nodes/OrderByNode.h"
 #include "nodes/FuncEvalNode.h"
-#include "nodes/BFSExpandOutEdgesNode.h"
+#include "nodes/PathExplorerNode.h"
 
 #include "processors/CreateVectorIndexProcessor.h"
 #include "processors/LoadVectorProcessor.h"
@@ -458,10 +458,6 @@ PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
 
     Dataframe* outDf = output->getDataframe();
 
-    if (stream.isEmpty()) {
-        return _builder.getPendingOutputInterface();
-    }
-
     const auto visitor = Overloaded {
         [&](const EntityOutputStream::NodeStream& stream) {
             bioassert(stream._nodeIDsTag.isValid(), "NodeStream does not have a nodeIDsTag");
@@ -471,19 +467,10 @@ PipelineOutputInterface* PipelineGenerator::translateVarNode(VarNode* node) {
             outDf->getColumn(stream._nodeIDsTag)->rename(varName);
         },
         [&](const EntityOutputStream::EdgeStream& stream) {
-            if (stream._pathTag.isValid()) {
-                bioassert(outDf->getColumn(stream._pathTag),
-                          "EdgeStream does not have a path column");
-                _declToColumn[node->getVarDecl()] = stream._pathTag;
-                outDf->getColumn(stream._pathTag)->rename(varName);
-            } else {
-                bioassert(stream._edgeIDsTag.isValid(),
-                          "EdgeStream does not have a edgeIDsTag");
-                bioassert(outDf->getColumn(stream._edgeIDsTag),
-                          "EdgeStream does not have a edgeIDs column");
-                _declToColumn[node->getVarDecl()] = stream._edgeIDsTag;
-                outDf->getColumn(stream._edgeIDsTag)->rename(varName);
-            }
+            bioassert(stream._edgeIDsTag.isValid(), "EdgeStream does not have a edgeIDsTag");
+            bioassert(outDf->getColumn(stream._edgeIDsTag), "EdgeStream does not have a edgeIDs column");
+            _declToColumn[node->getVarDecl()] = stream._edgeIDsTag;
+            outDf->getColumn(stream._edgeIDsTag)->rename(varName);
         },
     };
 
