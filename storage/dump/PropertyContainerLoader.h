@@ -105,11 +105,11 @@ public:
         }
 
         // Reconstruct the entity ID -> index map; it is not dumped.
-        auto& idxMap = container->_entityIndexMap;
+        auto& entityIndexMap = container->_entityIndexMap;
         const auto& ids = container->_ids;
-        idxMap.reserve(ids.size());
+        entityIndexMap.reserve(ids.size());
         for (size_t i = 0; i < ids.size(); i++) {
-            idxMap[ids[i]] = i;
+            entityIndexMap[ids[i]] = i;
         }
 
         return {std::unique_ptr<PropertyContainer> {container}};
@@ -269,11 +269,11 @@ public:
         }
 
         // Reconstruct the entity ID -> index map; it is not dumped.
-        auto& idxMap = container->_entityIndexMap;
+        auto& entityIndexMap = container->_entityIndexMap;
         const auto& ids = container->_ids;
-        idxMap.reserve(ids.size());
+        entityIndexMap.reserve(ids.size());
         for (size_t i = 0; i < ids.size(); i++) {
-            idxMap[ids[i]] = i;
+            entityIndexMap[ids[i]] = i;
         }
 
         return {std::unique_ptr<PropertyContainer> {container}};
