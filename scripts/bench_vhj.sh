@@ -107,6 +107,7 @@ bench_query() {
     for _ in $(seq 1 $BENCH_ROUNDS); do
         t=$(run_query "$query")
         if [ "$t" = "TIMEOUT" ] || [ "$t" = "ERROR" ]; then
+            _LAST_MEDIAN="FAILED"
             printf "  %-35s  FAILED (%s)\n" "$name" "$t"
             return
         fi
@@ -120,6 +121,7 @@ bench_query() {
     local max=${sorted[$((${#sorted[@]} - 1))]}
     local mid_idx=$(( ${#sorted[@]} / 2 ))
     local median=${sorted[$mid_idx]}
+    _LAST_MEDIAN="$median"
 
     printf "  %-35s  min=%10s ms  median=%10s ms  max=%10s ms\n" \
         "$name" "$min" "$median" "$max"
@@ -154,8 +156,10 @@ stop_turingdb
 unset TURING_VALUE_HASH_JOIN
 start_turingdb
 
+MEDIANS_WITHOUT=()
 for i in $(seq 0 $((num_queries - 1))); do
     bench_query "${QUERY_NAMES[$i]}" "${QUERIES[$i]}"
+    MEDIANS_WITHOUT+=("$_LAST_MEDIAN")
 done
 
 stop_turingdb
@@ -168,12 +172,34 @@ echo "--------------------------------------------------------------"
 export TURING_VALUE_HASH_JOIN=1
 start_turingdb
 
+MEDIANS_WITH=()
 for i in $(seq 0 $((num_queries - 1))); do
     bench_query "${QUERY_NAMES[$i]}" "${QUERIES[$i]}"
+    MEDIANS_WITH+=("$_LAST_MEDIAN")
 done
 
 stop_turingdb
 unset TURING_VALUE_HASH_JOIN
+
+# --- Comparison table ---
+TABLE_LINE="+-----------------------------------+----------------------+----------------------+----------+"
+echo ""
+echo "$TABLE_LINE"
+printf "| %-33s | %20s | %20s | %8s |\n" \
+    "Query" "Without VHJ (median)" "With VHJ (median)" "Speedup"
+echo "$TABLE_LINE"
+for i in $(seq 0 $((num_queries - 1))); do
+    wo="${MEDIANS_WITHOUT[$i]}"
+    wi="${MEDIANS_WITH[$i]}"
+    if [ "$wo" = "FAILED" ] || [ "$wi" = "FAILED" ]; then
+        printf "| %-33s | %20s | %20s | %8s |\n" \
+            "${QUERY_NAMES[$i]}" "$wo" "$wi" "N/A"
+    else
+        awk -v n="${QUERY_NAMES[$i]}" -v wo="$wo" -v wi="$wi" \
+            'BEGIN { printf "| %-33s | %17.3f ms | %17.3f ms | %7.1fx |\n", n, wo, wi, wo/wi }'
+    fi
+done
+echo "$TABLE_LINE"
 
 echo ""
 echo "--------------------------------------------------------------"
