@@ -45,8 +45,6 @@
 #include "nodes/ShortestPathNode.h"
 #include "nodes/VectorSearchNode.h"
 #include "nodes/BFSExpandOutEdgesNode.h"
-#include "nodes/BFSExpandInEdgesNode.h"
-#include "nodes/BFSExpandEdgesNode.h"
 
 #include "QuantifiedPath.h"
 #include "stmt/Stmt.h"
@@ -443,18 +441,21 @@ PlanGraphNode* ReadStmtGenerator::generatePatternElementVariableLengthPath(PlanG
 
     const VarDecl* nodeDecl = target->getDecl();
 
-    // Create BFS expand node based on direction
-    PlanGraphNode* expandNode = nullptr;
+    PathExplorerNode* expandNode = _tree->newOut<PathExplorerNode>(prevNode,
+                                                                   edgeDecl,
+                                                                   nodeDecl,
+                                                                   minHops,
+                                                                   maxHops);
 
     switch (edge->getDirection()) {
         case EdgePattern::Direction::Undirected: {
-            expandNode = _tree->newOut<BFSExpandEdgesNode>(prevNode, edgeDecl, nodeDecl, minHops, maxHops);
+            expandNode->setDir(PathExplorationDir::Both);
         } break;
         case EdgePattern::Direction::Backward: {
-            expandNode = _tree->newOut<BFSExpandInEdgesNode>(prevNode, edgeDecl, nodeDecl, minHops, maxHops);
+            expandNode->setDir(PathExplorationDir::Backward);
         } break;
         case EdgePattern::Direction::Forward: {
-            expandNode = _tree->newOut<BFSExpandOutEdgesNode>(prevNode, edgeDecl, nodeDecl, minHops, maxHops);
+            expandNode->setDir(PathExplorationDir::Forward);
         } break;
     }
 

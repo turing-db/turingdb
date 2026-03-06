@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person)-[e]->*(m:Person) RETURN n.name, e, m.name",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __label__: Person\n    `\"]\n    3[\"`\n        __PATH_EXPLORER__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    5[\"`\n        __FILTER_NODE__\n        __label__: Person\n    `\"]\n    6[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    7[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ m\n        __prop__ name\n    `\"]\n    8[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->7\n    7-->8",
+    "result": "n.name,e,m.name\nRemy,[],Remy\nAdam,[],Adam\nMaxime,[],Maxime\nLuc,[],Luc\nMartina,[],Martina\nSuhas,[],Suhas\nCyrus,[],Cyrus\nDoruk,[],Doruk\nRemy,[[0]],Adam\nAdam,[[4]],Remy\nRemy,\"[[0], [4]]\",Remy\nRemy,\"[[1], [7]]\",Remy\nAdam,\"[[4], [0]]\",Adam\nRemy,\"[[1], [7], [0]]\",Adam\nAdam,\"[[4], [1], [7]]\",Remy\nRemy,\"[[0], [4], [1], [7]]\",Remy\nRemy,\"[[1], [7], [0], [4]]\",Remy\nAdam,\"[[4], [1], [7], [0]]\",Adam",
+    "resultJson": "{\"header\":{\"column_names\":[\"n.name\",\"e\",\"m.name\"],\"column_types\":[\"String\",\"Object\",\"String\"]},\"data\":[[[\"Remy\",\"Adam\",\"Maxime\",\"Luc\",\"Martina\",\"Suhas\",\"Cyrus\",\"Doruk\",\"Remy\",\"Adam\"],[[],[],[],[],[],[],[],[],[{\"type\":\"edge\",\"id\":0}],[{\"type\":\"edge\",\"id\":4}]],[\"Remy\",\"Adam\",\"Maxime\",\"Luc\",\"Martina\",\"Suhas\",\"Cyrus\",\"Doruk\",\"Adam\",\"Remy\"]],[[\"Remy\",\"Remy\",\"Adam\"],[[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4}],[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}],[{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":0}]],[\"Remy\",\"Remy\",\"Adam\"]],[[\"Remy\",\"Adam\"],[[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0}],[{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}]],[\"Adam\",\"Remy\"]],[[\"Remy\",\"Remy\",\"Adam\"],[[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}],[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4}],[{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0}]],[\"Remy\",\"Remy\",\"Adam\"]],[[],[],[]]]}"
+  },
+  "tags": [
+    "variable",
+    "quantified-path",
+    "variable-length",
+    "bfs",
+    "unbounded"
+  ],
+  "write-required": false
+}

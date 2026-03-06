@@ -12,36 +12,21 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnIndices.h"
 
+#include "PathExplorationDir.h"
 #include "EntityList.h"
 
 namespace db {
 
 class LocalMemory;
-class GetOutEdgesChunkWriter;
-class GetInEdgesChunkWriter;
-class GetEdgesChunkWriter;
+class Iterator;
 
-enum class ExplorationDir {
-    Forward,
-    Backward,
-    Both,
-};
-
-template <ExplorationDir dir>
 class PathExplorerProcessor : public Processor {
 public:
-    using DirectedChunkWriter = std::conditional<dir == ExplorationDir::Forward,
-                                                 GetOutEdgesChunkWriter,
-                                                 GetInEdgesChunkWriter>::type;
-
-    using ChunkWriter = std::conditional<dir == ExplorationDir::Both,
-                                         GetEdgesChunkWriter,
-                                         DirectedChunkWriter>::type;
-
     static PathExplorerProcessor* create(PipelineV2* pipeline,
-                                              LocalMemory* mem,
-                                              int64_t minHops,
-                                              int64_t maxHops);
+                                         LocalMemory* mem,
+                                         PathExplorationDir dir,
+                                         int64_t minHops,
+                                         int64_t maxHops);
 
     std::string describe() const override;
 
@@ -78,11 +63,13 @@ private:
     };
 
     PathExplorerProcessor(LocalMemory* mem,
-                               int64_t minHops,
-                               int64_t maxHops);
+                          PathExplorationDir dir,
+                          int64_t minHops,
+                          int64_t maxHops);
     ~PathExplorerProcessor() override;
 
     LocalMemory* _mem {nullptr};
+    PathExplorationDir _dir {PathExplorationDir::Both};
     int64_t _minHops {0};
     int64_t _maxHops {0};
 
@@ -100,7 +87,7 @@ private:
     ColumnEdgeIDs* _bfsEdges {nullptr};
     ColumnNodeIDs* _bfsIntermediates {nullptr};
     ColumnIndices* _bfsIndices {nullptr};
-    std::unique_ptr<ChunkWriter> _bfsWriter;
+    std::unique_ptr<Iterator> _bfsWriter;
 
     // Persistent state across execute() calls
     bool _bfsInitialized {false};
