@@ -51,6 +51,7 @@ inline void copyChunkImpl(const Column* srcPtr,
             bioassert(false, "copyChunk operator not handled between columns of kind {} and {}",
                       srcPtr->getKind(), dstPtr->getKind());
         }
+        break;
     }
 }
 
@@ -87,6 +88,7 @@ inline void copyTransformedChunkImpl(const ColumnVector<size_t>* transform,
             bioassert(false, "copyTransformedChunk operator not handled between columns of kind {} and {}",
                       srcPtr->getKind(), dstPtr->getKind());
         }
+        break;
     }
 }
 

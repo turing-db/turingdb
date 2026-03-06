@@ -75,16 +75,16 @@ void Process::updateExitCode() {
         switch (errno) {
             case ECHILD: {
                 spdlog::error("Could not wait on process: child error");
-                break;
             }
+            break;
             case EINTR: {
                 spdlog::error("Could not wait on process: EINTR");
-                break;
             }
+            break;
             case EINVAL: {
                 spdlog::error("Could not wait on process: EINVAL");
-                break;
             }
+            break;
         }
 
         return;
@@ -219,16 +219,16 @@ bool Process::wait() {
         switch (errno) {
             case ECHILD: {
                 spdlog::error("Could not wait on process: child error");
-                break;
             }
+            break;
             case EINTR: {
                 spdlog::error("Could not wait on process: EINTR");
-                break;
             }
+            break;
             case EINVAL: {
                 spdlog::error("Could not wait on process: EINVAL");
-                break;
             }
+            break;
         }
         return false;
     }

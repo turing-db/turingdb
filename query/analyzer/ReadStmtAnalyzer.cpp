@@ -60,15 +60,15 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
     switch (stmt->getKind()) {
         case Stmt::Kind::MATCH:
             analyze(static_cast<const MatchStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::CALL:
             analyze(static_cast<const CallStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::LOAD_CSV:
             analyze(static_cast<LoadCSVStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::VECTOR_SEARCH:
             analyze(static_cast<const VectorSearchStmt*>(stmt));
@@ -76,7 +76,7 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
 
         default:
             throwError("Unsupported read statement type", stmt);
-            break;
+        break;
     }
 }
 

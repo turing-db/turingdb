@@ -55,16 +55,20 @@ void ChangeProcessor::execute() {
     switch (_op) {
         case ChangeOp::NEW: {
             createChange();
-        } break;
+        }
+        break;
         case ChangeOp::SUBMIT: {
             submitChange();
-        } break;
+        }
+        break;
         case ChangeOp::DELETE: {
             deleteChange();
-        } break;
+        }
+        break;
         case ChangeOp::LIST: {
             listChanges();
-        } break;
+        }
+        break;
     }
 
     PipelineOutputPort* outputPort = _output.getPort();

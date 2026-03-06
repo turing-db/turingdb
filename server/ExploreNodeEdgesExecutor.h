@@ -10,7 +10,7 @@
 #define CASE_RUN_FILTER(filters_set)               \
     case combineFilters filters_set:               \
         runFiltered<combineFilters filters_set>(); \
-        break;
+    break;
 
 
 namespace db {

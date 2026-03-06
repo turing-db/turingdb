@@ -64,7 +64,7 @@ void CommitBuilder::appendBuilder(std::unique_ptr<DataPartBuilder> builder) {
 }
 
 DataPartBuilder& CommitBuilder::newBuilder() {
-    std::unique_lock<std::mutex> lock {_mutex};
+    std::unique_lock<std::mutex> lock(_mutex);
 
     const GraphView view = GraphView(_commitData.get());
     const size_t partIndex = view.dataparts().size() + _builders.size();
@@ -81,7 +81,7 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     std::unique_lock<std::mutex> lock(_mutex);
 
-    const GraphView view {_commitData.get()};
+    const GraphView view(_commitData.get());
 
     CommitHistoryBuilder historyBuilder(_commitData->_history);
     for (const auto& builder : _builders) {

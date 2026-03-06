@@ -59,7 +59,7 @@ int StopCmd::execute() {
 }
 
 std::unique_ptr<StopCmd> StopCmd::create() {
-    std::unique_ptr<StopCmd> cmd {new StopCmd()};
+    std::unique_ptr<StopCmd> cmd(new StopCmd());
 
     cmd->initialize();
 

@@ -470,7 +470,8 @@ struct ResultAllocator {
         ColumnDoubleDispatcher<Pairs::Allowed, Pairs::AllowedMixed,                      \
                                ResultAllocator<Operator>,                                \
                                Pairs::Excluded>::dispatch(lhs, rhs, allocator);          \
-    } break;
+    }                                                                                    \
+    break;
 
 Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
                                                    const Column* lhs,

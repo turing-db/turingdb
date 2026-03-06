@@ -125,33 +125,40 @@ public:
         switch (_state) {
             case State::Start: {
                 throwError(ImportErrorCode::JSONInvalidFormat, "{", "`[`");
-            } break;
+            }
+            break;
 
             case State::ParsingData: {
                 _state = State::ParsingEntry;
-            } break;
+            }
+            break;
 
             case State::ParsingEntry: {
                 throwError(ImportErrorCode::JSONInvalidFormat, "{", "`\"id\"` or `\"vector\"`");
-            } break;
+            }
+            break;
 
             case State::ParsingID: {
                 throwError(ImportErrorCode::JSONInvalidFormat, "{", "`unsigned integer`");
-            } break;
+            }
+            break;
 
             case State::BeginParsingVector: {
                 throwError(ImportErrorCode::JSONInvalidFormat, "{", "`[...]`");
-            } break;
+            }
+            break;
 
             case State::ParsingVector: {
                 throwError(ImportErrorCode::JSONInvalidFormat, "{", "`float` or `]`");
-            } break;
+            }
+            break;
 
             // Logic error:
             case State::End:
             case State::_SIZE: {
                 throwCorruptedData("}");
-            } break;
+            }
+            break;
         }
 
         return true;
@@ -161,7 +168,8 @@ public:
         switch (_state) {
             case State::Start: {
                 throw ImportException {ImportErrorCode::JSONInvalidFormat, std::string {"Input is empty"}};
-            } break;
+            }
+            break;
 
             case State::ParsingEntry: {
                 if (_currentID == InvalidID) {
@@ -182,7 +190,8 @@ public:
                 _currentID = InvalidID;
 
                 _state = State::ParsingData;
-            } break;
+            }
+            break;
 
             // Logic error:
             case State::ParsingData:
@@ -192,7 +201,8 @@ public:
             case State::End:
             case State::_SIZE: {
                 throwCorruptedData("}");
-            } break;
+            }
+            break;
         }
 
         return true;
@@ -202,33 +212,40 @@ public:
         switch (_state) {
             case State::Start: {
                 _state = State::ParsingData;
-            } break;
+            }
+            break;
 
             case State::ParsingData: {
                 throwError(ImportErrorCode::JSONInvalidFormat, "[", "`{`");
-            } break;
+            }
+            break;
 
             case State::ParsingEntry: {
                 throwError(ImportErrorCode::JSONInvalidFormat, "[", "`\"id\"` or `\"vector\"`");
-            } break;
+            }
+            break;
 
             case State::ParsingID: {
                 throwError(ImportErrorCode::JSONInvalidFormat, "[", "`unsigned integer`");
-            } break;
+            }
+            break;
 
             case State::BeginParsingVector: {
                 _state = State::ParsingVector;
-            } break;
+            }
+            break;
 
             case State::ParsingVector: {
                 throwError(ImportErrorCode::JSONInvalidFormat, "[", "`float` or `]`");
-            } break;
+            }
+            break;
 
             // Logic error:
             case State::End:
             case State::_SIZE: {
                 throwCorruptedData("[");
-            } break;
+            }
+            break;
         }
 
         return true;
@@ -242,11 +259,13 @@ public:
                 if (_count == 0) {
                     throw ImportException {ImportErrorCode::NoVectors};
                 }
-            } break;
+            }
+            break;
 
             case State::ParsingVector: {
                 _state = State::ParsingEntry;
-            } break;
+            }
+            break;
 
             // Logic error:
             case State::Start:
@@ -256,7 +275,8 @@ public:
             case State::End:
             case State::_SIZE: {
                 throwCorruptedData("]");
-            } break;
+            }
+            break;
         }
 
         return true;

@@ -50,7 +50,7 @@ T RandomGenerator::generateUnique(const std::function<bool(T)>& predicate) {
     bioassert(_impl, "Random generator not initialized");
 
     size_t attempts = 0;
-    T value {};
+    T value = {};
 
     do {
         value = generate<T>();

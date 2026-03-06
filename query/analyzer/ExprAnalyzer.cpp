@@ -39,39 +39,39 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
     switch (expr->getKind()) {
         case Expr::Kind::BINARY:
             analyzeBinaryExpr(static_cast<BinaryExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::UNARY:
             analyzeUnaryExpr(static_cast<UnaryExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::STRING:
             analyzeStringExpr(static_cast<StringExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::ENTITY_TYPES:
             analyzeEntityTypeExpr(static_cast<EntityTypeExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::PROPERTY:
             analyzePropertyExpr(static_cast<PropertyExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::PATH:
             analyzePathExpr(static_cast<PathExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::SYMBOL:
             analyzeSymbolExpr(static_cast<SymbolExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::LITERAL:
             analyzeLiteralExpr(static_cast<LiteralExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::FUNCTION_INVOCATION:
             analyzeFuncInvocExpr(static_cast<FunctionInvocationExpr*>(expr),
                                 _ast->getFunctionDecls());
-            break;
+        break;
         case Expr::Kind::INDEX:
             analyzeIndexExpr(static_cast<IndexExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::LIST:
             // List expressions are handled specially in vector search context
             // For now, just mark them as having no specific type
-            break;
+        break;
     }
 }
 
@@ -105,7 +105,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 EvaluatedTypeName::value(b));
 
             throwError(error, expr);
-        } break;
+        }
+        break;
 
         case BinaryOperator::NotEqual:
         case BinaryOperator::Equal: {
@@ -153,7 +154,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 EvaluatedTypeName::value(b));
 
             throwError(error, expr);
-        } break;
+        }
+        break;
         case BinaryOperator::LessThan:
         case BinaryOperator::GreaterThan:
         case BinaryOperator::LessThanOrEqual:
@@ -173,7 +175,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 EvaluatedTypeName::value(b));
 
             throwError(error, expr);
-        } break;
+        }
+        break;
 
         case BinaryOperator::Add:
         case BinaryOperator::Sub:
@@ -198,7 +201,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 EvaluatedTypeName::value(b));
 
             throwError(error, expr);
-        } break;
+        }
+        break;
 
         case BinaryOperator::In: {
             type = EvaluatedType::Bool;
@@ -214,7 +218,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                                                       EvaluatedTypeName::value(a));
                 throwError(error, expr);
             }
-        } break;
+        }
+        break;
 
         case BinaryOperator::_SIZE: {
             throwError("Invalid operand in binary expression.");
@@ -254,7 +259,8 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
             }
 
             type = EvaluatedType::Bool;
-        } break;
+        }
+        break;
 
         case UnaryOperator::Minus:
         case UnaryOperator::Plus: {
@@ -269,7 +275,8 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
                 throwError(error, expr);
             }
 
-        } break;
+        }
+        break;
 
         case UnaryOperator::_SIZE: {
             throwError("Invalid operand in unary expression.");
@@ -309,28 +316,36 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
     switch (literal->getKind()) {
         case Literal::Kind::NULL_LITERAL: {
             expr->setType(EvaluatedType::Null);
-        } break;
+        }
+        break;
         case Literal::Kind::BOOL: {
             expr->setType(EvaluatedType::Bool);
-        } break;
+        }
+        break;
         case Literal::Kind::INTEGER: {
             expr->setType(EvaluatedType::Integer);
-        } break;
+        }
+        break;
         case Literal::Kind::DOUBLE: {
             expr->setType(EvaluatedType::Double);
-        } break;
+        }
+        break;
         case Literal::Kind::STRING: {
             expr->setType(EvaluatedType::String);
-        } break;
+        }
+        break;
         case Literal::Kind::CHAR: {
             expr->setType(EvaluatedType::Char);
-        } break;
+        }
+        break;
         case Literal::Kind::MAP: {
             expr->setType(EvaluatedType::Map);
-        } break;
+        }
+        break;
         case Literal::Kind::WILDCARD: {
             expr->setType(EvaluatedType::Wildcard);
-        } break;
+        }
+        break;
     }
 
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
@@ -411,20 +426,25 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         case ValueType::UInt64:
         case ValueType::Int64: {
             type = EvaluatedType::Integer;
-        } break;
+        }
+        break;
         case ValueType::Bool: {
             type = EvaluatedType::Bool;
-        } break;
+        }
+        break;
         case ValueType::Double: {
             type = EvaluatedType::Double;
-        } break;
+        }
+        break;
         case ValueType::String: {
             type = EvaluatedType::String;
-        } break;
+        }
+        break;
         default: {
             const std::string error = fmt::format("Property type '{}' is invalid", propName->getName());
             throwError(error, expr);
-        } break;
+        }
+        break;
     }
 
     expr->setEntityVarDecl(varDecl);

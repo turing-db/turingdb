@@ -5,7 +5,7 @@
 template <typename NumberType>
 NumberType StringToNumber(std::string_view str, bool& error) {
     try {
-        NumberType res {0};
+        NumberType res = 0;
         std::istringstream iss;
         iss >> res;
         error = false;

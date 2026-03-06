@@ -15,12 +15,18 @@ std::string escapeJson(std::string_view input) {
     out.reserve(input.size());
     for (char ch : input) {
         switch (ch) {
-        case '\\': out += "\\\\"; break;
-        case '\"': out += "\\\""; break;
-        case '\n': out += "\\n"; break;
-        case '\r': out += "\\r"; break;
-        case '\t': out += "\\t"; break;
-        default: out.push_back(ch); break;
+        case '\\': out += "\\\\";
+        break;
+        case '\"': out += "\\\"";
+        break;
+        case '\n': out += "\\n";
+        break;
+        case '\r': out += "\\r";
+        break;
+        case '\t': out += "\\t";
+        break;
+        default: out.push_back(ch);
+        break;
         }
     }
     return out;

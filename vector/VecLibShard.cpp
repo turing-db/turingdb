@@ -37,13 +37,13 @@ VectorResult<void> VecLibShard::load(const VecLibMetadata& meta) {
     switch (meta._metric) {
         case DistanceMetric::EUCLIDEAN_DIST:
             _index = std::make_unique<faiss::IndexFlatL2>(meta._dimension);
-            break;
+        break;
         case DistanceMetric::INNER_PRODUCT:
             _index = std::make_unique<faiss::IndexFlatIP>(meta._dimension);
-            break;
+        break;
         case DistanceMetric::_SIZE:
             panic("VecLibShard: invalid distance metric");
-            break;
+        break;
     }
 
     if (_indexPath.exists()) {

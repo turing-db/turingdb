@@ -44,21 +44,21 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
     switch (stmt->getKind()) {
         case Stmt::Kind::CREATE:
             analyze(static_cast<const CreateStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::SET:
             analyze(static_cast<const SetStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::DELETE:
             analyze(static_cast<const DeleteStmt*>(stmt));
-            break;
+        break;
 
         default:
             throwError(fmt::format("Unsupported write statement type: {}",
                                    (uint64_t)stmt->getKind()),
                        stmt);
-            break;
+        break;
     }
 }
 

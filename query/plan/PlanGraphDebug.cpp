@@ -103,10 +103,12 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             case PlanGraphOpcode::VAR: {
                 const auto* n = dynamic_cast<VarNode*>(node.get());
                 output << fmt::format("        __name__: {}\n", n->getVarDecl()->getName());
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::SCAN_NODES: {
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::SCAN_NODES_BY_LABEL: {
                 const auto* scanNodesByLabel = dynamic_cast<ScanNodesByLabelNode*>(node.get());
@@ -122,24 +124,28 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             case PlanGraphOpcode::LOAD_GRAPH: {
                 const auto* n = dynamic_cast<LoadGraphNode*>(node.get());
                 output << "        __graph__: " << n->getGraphName() << "\n";
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::LOAD_GML: {
                 const auto* n = dynamic_cast<LoadGMLNode*>(node.get());
                 output << "        __graph__: " << n->getGraphName() << "\n";
                 output << "        __filepath__: " << n->getFilePath().get() << "\n";
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::LOAD_JSONL: {
                 const auto* n = dynamic_cast<LoadJsonlNode*>(node.get());
                 output << "        __graph__: " << n->getGraphName() << "\n";
                 output << "        __filepath__: " << n->getFilePath().get() << "\n";
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::CREATE_GRAPH: {
                 const auto* n = dynamic_cast<CreateGraphNode*>(node.get());
                 output << "        __graph__: " << n->getGraphName() << "\n";
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::ORDER_BY: {
                 const auto* n = dynamic_cast<OrderByNode*>(node.get());
@@ -151,7 +157,8 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     const std::string_view ord = (type == OrderByType::ASC ? "ASC" : "DESC");
                     output << varName << ", " << ord << '\n';
                 }
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::FILTER_NODE: {
                 const auto* n = dynamic_cast<NodeFilterNode*>(node.get());
@@ -165,7 +172,8 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 for (const auto& pred : n->getPredicates()) {
                     outputPredicate(output, pred);
                 }
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::FILTER_EDGE: {
                 const auto* e = dynamic_cast<EdgeFilterNode*>(node.get());
@@ -176,7 +184,8 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 for (const auto& pred : e->getPredicates()) {
                     outputPredicate(output, pred);
                 }
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::AGGREGATE_EVAL: {
                 const auto* n = dynamic_cast<AggregateEvalNode*>(node.get());
@@ -187,7 +196,8 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 if (!n->getGroupByKeys().empty()) {
                     output << "        __has grouping keys__: " << n->getGroupByKeys().size() << "\n";
                 }
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::FUNC_EVAL: {
                 const auto* n = dynamic_cast<FuncEvalNode*>(node.get());
@@ -195,7 +205,8 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     const FunctionSignature* signature = func->getFunctionInvocation()->getSignature();
                     output << "        __func__: " << signature->getFullName() << "\n";
                 }
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::WRITE: {
                 const auto* n = dynamic_cast<WriteNode*>(node.get());
@@ -290,26 +301,30 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     output << "        __edge_update__ " << edge._propTypeName << "\n";
                     j++;
                 }
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::GET_PROPERTY: {
                 const auto* n = dynamic_cast<GetPropertyNode*>(node.get());
                 output << "        __var__ " << n->getEntityVarDecl()->getName() << "\n";
                 output << "        __prop__ " << n->getPropName() << "\n";
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::GET_PROPERTY_WITH_NULL: {
                 const auto* n = dynamic_cast<GetPropertyWithNullNode*>(node.get());
                 output << "        __var__ " << n->getEntityVarDecl()->getName() << "\n";
                 output << "        __prop__ " << n->getPropName() << "\n";
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::GET_ENTITY_TYPE: {
                 const auto* n = dynamic_cast<GetEntityTypeNode*>(node.get());
                 const VarDecl* decl = n->getEntityVarDecl();
                 output << "        __type__ " << ((decl->getType() == EvaluatedType::NodePattern) ? "node" : "edge") << "\n";
                 output << "        __var__ " << decl->getName() << "\n";
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::PROCEDURE_EVAL: {
                 const auto* n = dynamic_cast<ProcedureEvalNode*>(node.get());
@@ -342,7 +357,8 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 for (const auto* arg : *args) {
                     output << "        __arg__: " << (arg->getName().empty() ? "unnamed" : arg->getName()) << "\n";
                 }
-            } break;
+            }
+            break;
 
             case PlanGraphOpcode::EXPR_EVAL: {
                 const auto* n = dynamic_cast<ExprEvalNode*>(node.get());
@@ -360,21 +376,27 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 switch (n->getOp()) {
                     case ChangeOp::NEW: {
                         output << "        __op__: new\n";
-                    } break;
+                    }
+                    break;
                     case ChangeOp::SUBMIT: {
                         output << "        __op__: submit\n";
-                    } break;
+                    }
+                    break;
                     case ChangeOp::DELETE: {
                         output << "        __op__: delete\n";
-                    } break;
+                    }
+                    break;
                     case ChangeOp::LIST: {
                         output << "        __op__: list\n";
-                    } break;
+                    }
+                    break;
                 }
-            } break;
+            }
+            break;
 
             default: {
-            } break;
+            }
+            break;
         }
 
         output << "    `\"]\n";

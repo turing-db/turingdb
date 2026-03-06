@@ -149,9 +149,10 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
     }
 
     // Connect to the socket
-    sockaddr_un addr {0};
+    sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    const std::string sockName {socketPath.filename()};
+    const std::string sockName(socketPath.filename());
     strncpy(addr.sun_path, sockName.c_str(), sizeof(addr.sun_path) - 1);
 
     const int res = ::connect(sockFd, (sockaddr*)&addr, sizeof(addr));
@@ -177,7 +178,7 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
     }
 
     // read 'OK'
-    char buf[3] {};
+    char buf[3] = {0};
     const ssize_t nread = ::read(sockFd, buf, sizeof(buf) - 1);
 
     if (nread != 2) {
@@ -188,7 +189,7 @@ bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
 
     ::close(sockFd);
 
-    const std::string_view response {buf, (size_t)nread};
+    const std::string_view response(buf, (size_t)nread);
 
     return response == "OK";
 }
@@ -225,9 +226,10 @@ bool SystemEventHandler::initializeImpl() {
     }
 
     // Bind the socket
-    ::sockaddr_un addr {0};
+    ::sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    const std::string sockName {_socketPath.filename()};
+    const std::string sockName(_socketPath.filename());
     strncpy(addr.sun_path, sockName.data(), sizeof(addr.sun_path) - 1);
 
     const int bindRes = ::bind(_sockFd, (sockaddr*)&addr, sizeof(addr));
@@ -243,7 +245,8 @@ bool SystemEventHandler::initializeImpl() {
     }
 
     // Setting up signal handler
-    struct sigaction sa {};
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
     sa.sa_handler = sigHandler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
@@ -299,7 +302,7 @@ bool SystemEventHandler::initializeImpl() {
                     continue;
                 }
 
-                char buf[64] {};
+                char buf[64] = {0};
                 const ssize_t n = ::read(client, buf, sizeof(buf) - 1);
                 if (n <= 0) {
                     ::close(client);

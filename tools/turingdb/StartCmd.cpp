@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 #include <argparse.hpp>
 
+#include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <limits.h>
@@ -57,6 +58,7 @@ PingResult pingServer(const fs::Path& socketPath) {
 
     // chdir to socket directory to stay within the sun_path length limit
     char savedCwd[PATH_MAX];
+    memset(savedCwd, 0, sizeof(savedCwd));
     if (::getcwd(savedCwd, sizeof(savedCwd)) == nullptr) {
         ::close(sockFd);
         return PingResult::NoResponse;
@@ -67,9 +69,10 @@ PingResult pingServer(const fs::Path& socketPath) {
         return PingResult::NoResponse;
     }
 
-    sockaddr_un addr {0};
+    sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    const std::string sockName {socketPath.filename()};
+    const std::string sockName(socketPath.filename());
     strncpy(addr.sun_path, sockName.c_str(), sizeof(addr.sun_path) - 1);
 
     const int res = ::connect(sockFd, (sockaddr*)&addr, sizeof(addr));
@@ -88,7 +91,8 @@ PingResult pingServer(const fs::Path& socketPath) {
         return PingResult::NoResponse;
     }
 
-    char buf[5] {};
+    char buf[5];
+    memset(buf, 0, sizeof(buf));
     const ssize_t nread = ::read(sockFd, buf, sizeof(buf) - 1);
     ::close(sockFd);
 
@@ -96,7 +100,7 @@ PingResult pingServer(const fs::Path& socketPath) {
         return PingResult::NoResponse;
     }
 
-    const std::string_view response {buf, (size_t)nread};
+    const std::string_view response(buf, (size_t)nread);
 
     if (response == "PONG") {
         return PingResult::Pong;
@@ -293,7 +297,7 @@ int StartCmd::execute() {
 }
 
 std::unique_ptr<StartCmd> StartCmd::create() {
-    std::unique_ptr<StartCmd> cmd {new StartCmd()};
+    std::unique_ptr<StartCmd> cmd(new StartCmd());
 
     cmd->initialize();
 

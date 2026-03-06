@@ -105,7 +105,7 @@ FlowStatus HTTPServer::initialize() {
     }
 
     // Storing actual address
-    sockaddr_in actualAddr {0};
+    sockaddr_in actualAddr;
     memset(&actualAddr, 0, sizeof(actualAddr));
     socklen_t actualAddrLen = sizeof(actualAddr);
 
@@ -121,16 +121,14 @@ FlowStatus HTTPServer::initialize() {
 FlowStatus HTTPServer::start() {
     _running.store(true);
 
-    ServerContext ctxt {
-        ._socket = _serverSocket,
-        ._instance = _epollInstance,
-        ._connections = *_connections,
-        ._serverConnection = *_serverConnection,
-        ._status = _status,
-        ._running = _running,
-        ._process = _functions._processor,
-        ._createThreadContext = _functions._createThreadContext,
-    };
+    ServerContext ctxt(_serverSocket,
+                       _epollInstance,
+                       *_connections,
+                       *_serverConnection,
+                       _status,
+                       _running,
+                       _functions._processor,
+                       _functions._createThreadContext);
 
     _threads.reserve(_workerCount);
 

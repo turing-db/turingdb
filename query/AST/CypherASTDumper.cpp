@@ -146,6 +146,7 @@ void CypherASTDumper::dump(std::ostream& out) {
 
             case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
                 out << "    script ||--o{ SHOW_VECTOR_INDEXES : \"\"\n";
+            break;
 
             case QueryCommand::Kind::LOAD_COMMIT_QUERY:
                 out << "    script ||--o{ LOAD_COMMIT : \"\"\n";
@@ -277,16 +278,16 @@ void CypherASTDumper::dump(std::ostream& out, const ChangeQuery* query) {
     switch (op) {
         case ChangeOp::NEW:
             out << "    _" << std::hex << query << " ||--o{ NEW : \"\"\n";
-            break;
+        break;
         case ChangeOp::DELETE:
             out << "    _" << std::hex << query << " ||--o{ DELETE : \"\"\n";
-            break;
+        break;
         case ChangeOp::LIST:
             out << "    _" << std::hex << query << " ||--o{ LIST : \"\"\n";
-            break;
+        break;
         case ChangeOp::SUBMIT:
             out << "    _" << std::hex << query << " ||--o{ SUBMIT : \"\"\n";
-            break;
+        break;
     }
 }
 
@@ -711,41 +712,41 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
     switch (expr->getKind()) {
         case Expr::Kind::BINARY:
             dump(out, dynamic_cast<const BinaryExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::UNARY:
             dump(out, dynamic_cast<const UnaryExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::STRING:
             dump(out, dynamic_cast<const StringExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::ENTITY_TYPES:
             dump(out, dynamic_cast<const EntityTypeExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::PROPERTY:
             dump(out, dynamic_cast<const PropertyExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::PATH:
             dump(out, dynamic_cast<const PathExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::SYMBOL:
             dump(out, dynamic_cast<const SymbolExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::LITERAL:
             dump(out, dynamic_cast<const LiteralExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::FUNCTION_INVOCATION:
             dump(out, dynamic_cast<const FunctionInvocationExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::INDEX:
             out << "    _" << std::hex << expr << " {\n";
             out << "        ASTType IndexExpr\n";
             out << "    }\n";
-            break;
+        break;
         case Expr::Kind::LIST:
             out << "    _" << std::hex << expr << " {\n";
             out << "        ASTType ListExpr\n";
             out << "    }\n";
-            break;
+        break;
     }
 }
 
@@ -757,55 +758,55 @@ void CypherASTDumper::dump(std::ostream& out, const BinaryExpr* expr) {
     switch (expr->getOperator()) {
         case BinaryOperator::And:
             out << "        Operator AND\n";
-            break;
+        break;
         case BinaryOperator::Xor:
             out << "        Operator XOR\n";
-            break;
+        break;
         case BinaryOperator::Or:
             out << "        Operator OR\n";
-            break;
+        break;
         case BinaryOperator::NotEqual:
             out << "        Operator NOT_EQUAL\n";
-            break;
+        break;
         case BinaryOperator::Equal:
             out << "        Operator EQUAL\n";
-            break;
+        break;
         case BinaryOperator::LessThan:
             out << "        Operator LESS_THAN\n";
-            break;
+        break;
         case BinaryOperator::GreaterThan:
             out << "        Operator GREATER_THAN\n";
-            break;
+        break;
         case BinaryOperator::LessThanOrEqual:
             out << "        Operator LESS_THAN_OR_EQUAL\n";
-            break;
+        break;
         case BinaryOperator::GreaterThanOrEqual:
             out << "        Operator GREATER_THAN_OR_EQUAL\n";
-            break;
+        break;
         case BinaryOperator::Add:
             out << "        Operator ADD\n";
-            break;
+        break;
         case BinaryOperator::Sub:
             out << "        Operator SUB\n";
-            break;
+        break;
         case BinaryOperator::Mult:
             out << "        Operator MULT\n";
-            break;
+        break;
         case BinaryOperator::Div:
             out << "        Operator DIV\n";
-            break;
+        break;
         case BinaryOperator::Mod:
             out << "        Operator MOD\n";
-            break;
+        break;
         case BinaryOperator::Pow:
             out << "        Operator POW\n";
-            break;
+        break;
         case BinaryOperator::In:
             out << "        Operator IN\n";
-            break;
+        break;
         default:
             throw CompilerException("Unknown binary operator");
-            break;
+        break;
     }
 
     out << "    }\n";
@@ -830,16 +831,16 @@ void CypherASTDumper::dump(std::ostream& out, const UnaryExpr* expr) {
     switch (expr->getOperator()) {
         case UnaryOperator::Not:
             out << "        Operator NOT\n";
-            break;
+        break;
         case UnaryOperator::Minus:
             out << "        Operator MINUS\n";
-            break;
+        break;
         case UnaryOperator::Plus:
             out << "        Operator PLUS\n";
-            break;
+        break;
         default:
             throw CompilerException("Unknown unary operator");
-            break;
+        break;
     }
 
     out << "    }\n";
@@ -872,42 +873,42 @@ void CypherASTDumper::dump(std::ostream& out, const LiteralExpr* expr) {
     switch (literal->getKind()) {
         case Literal::Kind::NULL_LITERAL: {
             out << "        NullLiteral _\n";
-            break;
         }
+        break;
         case Literal::Kind::BOOL: {
             const BoolLiteral* boolLiteral = dynamic_cast<const BoolLiteral*>(literal);
             out << "        BoolLiteral _" << boolLiteral->getValue() << "\n";
-            break;
         }
+        break;
         case Literal::Kind::INTEGER: {
             const IntegerLiteral* integerLiteral = dynamic_cast<const IntegerLiteral*>(literal);
             out << "        IntLiteral _" << integerLiteral->getValue() << "\n";
-            break;
         }
+        break;
         case Literal::Kind::DOUBLE: {
             const DoubleLiteral* doubleLiteral = dynamic_cast<const DoubleLiteral*>(literal);
             out << "        DoubleLiteral _" << doubleLiteral->getValue() << "\n";
-            break;
         }
+        break;
         case Literal::Kind::STRING: {
             const StringLiteral* stringLiteral = dynamic_cast<const StringLiteral*>(literal);
             out << "        StringLiteral '" << stringLiteral->getValue() << "'\n";
-            break;
         }
+        break;
         case Literal::Kind::CHAR: {
             const CharLiteral* charLiteral = dynamic_cast<const CharLiteral*>(literal);
             out << "        CharLiteral '" << charLiteral->getValue() << "'\n";
-            break;
         }
+        break;
         case Literal::Kind::MAP: {
             const MapLiteral* mapLiteral = dynamic_cast<const MapLiteral*>(literal);
             out << "        MapLiteral _" << mapLiteral << "\n";
-            break;
         }
+        break;
         default: {
             throw CompilerException("Unknown literal type");
-            break;
         }
+        break;
     }
 
     out << "    }\n";
@@ -948,16 +949,16 @@ void CypherASTDumper::dump(std::ostream& out, const StringExpr* expr) {
     switch (expr->getStringOperator()) {
         case StringOperator::StartsWith:
             out << "        Operator STARTS_WITH\n";
-            break;
+        break;
         case StringOperator::EndsWith:
             out << "        Operator ENDS_WITH\n";
-            break;
+        break;
         case StringOperator::Contains:
             out << "        Operator CONTAINS\n";
-            break;
+        break;
         default:
             throw CompilerException("Unknown string operator");
-            break;
+        break;
     }
 
     out << "    }\n";

@@ -8,7 +8,7 @@
 
 template <size_t NColumns, size_t NCombinations>
 consteval auto generateArray() {
-    std::array<std::array<bool, NColumns>, NCombinations> arr {};
+    std::array<std::array<bool, NColumns>, NCombinations> arr;
     for (size_t i = 0; i < NCombinations; ++i) {
         for (size_t j = 0; j < NColumns; j++) {
             arr[i][j] = i & (1 << j);
@@ -21,7 +21,7 @@ template <size_t NColumns, size_t NCombinations>
 consteval auto generateBitmasks() {
     static_assert(NColumns >= 1 && NColumns <= 5);
     constexpr auto array = generateArray<NColumns, NCombinations>();
-    std::array<uint64_t, NCombinations> masks {};
+    std::array<uint64_t, NCombinations> masks;
     for (size_t i = 0; i < masks.size(); ++i) {
         const auto& bools = array[i];
         if constexpr (NColumns == 5) {

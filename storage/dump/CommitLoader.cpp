@@ -31,7 +31,7 @@ DumpResult<void> CommitLoader::loadData(const fs::Path& commitDir,
     VersionController::DataPartMap& partMap = controller->getPartMap();
     commit->setCommitData(controller->createCommitData(commit->hash()));
 
-    CommitHistoryBuilder historyBuilder {commit->_data->_history};
+    CommitHistoryBuilder historyBuilder(commit->_data->_history);
 
     auto& metadata = commit->_data->_metadata;
 

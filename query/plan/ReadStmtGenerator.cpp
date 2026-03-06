@@ -79,23 +79,23 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
     switch (stmt->getKind()) {
         case Stmt::Kind::MATCH:
             generateMatchStmt(static_cast<const MatchStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::CALL:
             generateCallStmt(static_cast<const CallStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::LOAD_CSV:
             generateLoadCSVStmt(static_cast<const LoadCSVStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::VECTOR_SEARCH:
             generateVectorSearchStmt(static_cast<const VectorSearchStmt*>(stmt));
-            break;
+        break;
 
         default:
             throwError(fmt::format("Unsupported read statement type: {}", (uint64_t)stmt->getKind()), stmt);
-            break;
+        break;
     }
 }
 
@@ -304,13 +304,16 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(VarNode* prevNode,
     switch (edge->getDirection()) {
         case EdgePattern::Direction::Undirected: {
             currentNode = _tree->newOut<GetEdgesNode>(prevNode);
-        } break;
+        }
+        break;
         case EdgePattern::Direction::Backward: {
             currentNode = _tree->newOut<GetInEdgesNode>(prevNode);
-        } break;
+        }
+        break;
         case EdgePattern::Direction::Forward: {
             currentNode = _tree->newOut<GetOutEdgesNode>(prevNode);
-        } break;
+        }
+        break;
     }
 
     // Edge constraints
@@ -694,7 +697,8 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
             case PlanGraphTopology::PathToDependency::BackwardPath: {
                 // Should not happen
                 throwError("Unknown error. A branch cannot have two endpoints.");
-            } break;
+            }
+            break;
 
             case PlanGraphTopology::PathToDependency::UndirectedPath: {
                 // Join
@@ -711,7 +715,8 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
                 lhsNode->connectOut(join);
 
                 rhsNode = join;
-            } break;
+            }
+            break;
             case PlanGraphTopology::PathToDependency::NoPath: {
                 // Cartesian product
                 CartesianProductNode* join = _tree->create<CartesianProductNode>();
@@ -719,7 +724,8 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
                 lhsNode->connectOut(join);
 
                 rhsNode = join;
-            } break;
+            }
+            break;
         }
     }
 

@@ -659,24 +659,24 @@ void DBServerProcessor::get_node_properties() {
         switch (ptype.value()._valueType) {
             case db::ValueType::UInt64: {
                 treat.template operator()<types::UInt64>();
-                break;
             }
+            break;
             case db::ValueType::Int64: {
                 treat.template operator()<types::Int64>();
-                break;
             }
+            break;
             case db::ValueType::Double: {
                 treat.template operator()<types::Double>();
-                break;
             }
+            break;
             case db::ValueType::Bool: {
                 treat.template operator()<types::Bool>();
-                break;
             }
+            break;
             case db::ValueType::String: {
                 treat.template operator()<types::String>();
-                break;
             }
+            break;
             case db::ValueType::Invalid:
             case db::ValueType::_SIZE: {
                 _writer.writeHttpError(net::HTTP::Status::METHOD_NOT_ALLOWED);

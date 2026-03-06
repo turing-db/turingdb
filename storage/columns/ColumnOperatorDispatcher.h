@@ -20,7 +20,8 @@ namespace db {
         } else {                                                                         \
             unsupported(lhs, rhs, fn);                                                   \
         }                                                                                \
-    } break;
+    }                                                                                    \
+    break;
 
 #define CASE_SINGLE_DISPATCH(Operand)                                      \
     case ContainerKind::code<Operand>(): {                                 \
@@ -29,7 +30,8 @@ namespace db {
         } else {                                                           \
             unsupported(operand, fn);                                      \
         }                                                                  \
-    } break;
+    }                                                                      \
+    break;
 
 template <TupleExact AllowedInternalTypes,
           class Functor,
@@ -107,7 +109,7 @@ private:
 
     template <template <typename> class Container, typename... Types>
     static consteval auto makeTable(UnwrappedTypes<std::tuple<Types...>>) {
-        std::array<Fn, N + 1> t {};
+        std::array<Fn, N + 1> t;
 
         for (std::size_t i = 0; i <= N; ++i) {
             t[i] = &unsupported;
@@ -272,7 +274,7 @@ private:
 
     template <template <typename> class LhsContainer, typename... Mixed>
     static consteval auto makeTableLImpl(AllowedMixedList<Mixed...>) {
-        std::array<Fn, N + 1> t {};
+        std::array<Fn, N + 1> t;
 
         for (std::size_t i = 0; i <= N; ++i) {
             t[i] = &unsupported;
@@ -289,7 +291,7 @@ private:
 
     template <template <typename> class RhsContainer, typename... Mixed>
     static consteval auto makeTableRImpl(AllowedMixedList<Mixed...>) {
-        std::array<Fn, N + 1> t {};
+        std::array<Fn, N + 1> t;
 
         for (std::size_t i = 0; i <= N; ++i) {
             t[i] = &unsupported;
@@ -301,7 +303,7 @@ private:
 
     template <template <typename> class LhsContainer, template <typename> class RhsContainer, typename... Pairs>
     static consteval auto makeTableLR(KindPairList<Pairs...>) {
-        std::array<std::array<Fn, N + 1>, N + 1> t {};
+        std::array<std::array<Fn, N + 1>, N + 1> t;
 
         for (std::size_t i = 0; i <= N; ++i) {
             for (std::size_t j = 0; j <= N; ++j) {

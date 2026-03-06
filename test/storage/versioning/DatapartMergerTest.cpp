@@ -544,34 +544,34 @@ TEST_F(DataPartMergerTest, MergeTest) {
                     const auto& oldVal = std::get<std::unordered_map<int64_t, types::Bool::Primitive>>(_nodePropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                break;
+            break;
             case db::ValueType::Int64:
                 for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::Int64>(it.first).zipped()) {
                     const auto& oldVal = std::get<std::unordered_map<int64_t, types::Int64::Primitive>>(_nodePropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                break;
+            break;
             case db::ValueType::String:
                 for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::String>(it.first).zipped()) {
                     const auto& oldVal = std::get<std::unordered_map<int64_t, types::String::Primitive>>(_nodePropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                break;
+            break;
             case db::ValueType::UInt64:
                 for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::UInt64>(it.first).zipped()) {
                     const auto& oldVal = std::get<std::unordered_map<int64_t, types::UInt64::Primitive>>(_nodePropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                break;
+            break;
             case db::ValueType::Double:
                 for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::Double>(it.first).zipped()) {
                     const auto& oldVal = std::get<std::unordered_map<int64_t, types::Double::Primitive>>(_nodePropertyMap[it.first.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                break;
+            break;
             default:
                 throw std::runtime_error(fmt::format("Invalid Value Type"));
-                break;
+            break;
         }
     }
 
@@ -587,34 +587,34 @@ TEST_F(DataPartMergerTest, MergeTest) {
                     const auto& oldVal = std::get<std::unordered_map<int64_t, types::Bool::Primitive>>(_edgePropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                break;
+            break;
             case db::ValueType::Int64:
                 for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::Int64>(it.first).zipped()) {
                     const auto& oldVal = std::get<std::unordered_map<int64_t, types::Int64::Primitive>>(_edgePropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                break;
+            break;
             case db::ValueType::String:
                 for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::String>(it.first).zipped()) {
                     const auto& oldVal = std::get<std::unordered_map<int64_t, types::String::Primitive>>(_edgePropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                break;
+            break;
             case db::ValueType::UInt64:
                 for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::UInt64>(it.first).zipped()) {
                     const auto& oldVal = std::get<std::unordered_map<int64_t, types::UInt64::Primitive>>(_edgePropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                break;
+            break;
             case db::ValueType::Double:
                 for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::Double>(it.first).zipped()) {
                     const auto& oldVal = std::get<std::unordered_map<int64_t, types::Double::Primitive>>(_edgePropertyMap[it.first.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                     ASSERT_EQ(val, oldVal);
                 }
-                break;
+            break;
             default:
                 throw std::runtime_error(fmt::format("Invalid Value Type"));
-                break;
+            break;
         }
     }
 }
@@ -693,34 +693,34 @@ TEST_F(DataPartMergerTest, DeleteNodeAndMerge) {
                         const auto& oldVal = std::get<std::unordered_map<int64_t, types::Bool::Primitive>>(_nodePropertyMap[ptId.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                         ASSERT_EQ(val, oldVal);
                     }
-                    break;
+                break;
                 case db::ValueType::Int64:
                     for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::Int64>(ptId).zipped()) {
                         const auto& oldVal = std::get<std::unordered_map<int64_t, types::Int64::Primitive>>(_nodePropertyMap[ptId.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                         ASSERT_EQ(val, oldVal);
                     }
-                    break;
+                break;
                 case db::ValueType::String:
                     for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::String>(ptId).zipped()) {
                         const auto& oldVal = std::get<std::unordered_map<int64_t, types::String::Primitive>>(_nodePropertyMap[ptId.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                         ASSERT_EQ(val, oldVal);
                     }
-                    break;
+                break;
                 case db::ValueType::UInt64:
                     for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::UInt64>(ptId).zipped()) {
                         const auto& oldVal = std::get<std::unordered_map<int64_t, types::UInt64::Primitive>>(_nodePropertyMap[ptId.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                         ASSERT_EQ(val, oldVal);
                     }
-                    break;
+                break;
                 case db::ValueType::Double:
                     for (const auto& [id, val] : mergedDataPart.nodeProperties().getContainer<types::Double>(ptId).zipped()) {
                         const auto& oldVal = std::get<std::unordered_map<int64_t, types::Double::Primitive>>(_nodePropertyMap[ptId.getValue()])[_nodeMap.getPropertyFromNew(id.getValue())];
                         ASSERT_EQ(val, oldVal);
                     }
-                    break;
+                break;
                 default:
                     throw std::runtime_error(fmt::format("Invalid Value Type"));
-                    break;
+                break;
             }
         }
     }
@@ -780,34 +780,34 @@ TEST_F(DataPartMergerTest, DeleteEdgeAndMerge) {
                         const auto& oldVal = std::get<std::unordered_map<int64_t, types::Bool::Primitive>>(_edgePropertyMap[ptId.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                         ASSERT_EQ(val, oldVal);
                     }
-                    break;
+                break;
                 case db::ValueType::Int64:
                     for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::Int64>(ptId).zipped()) {
                         const auto& oldVal = std::get<std::unordered_map<int64_t, types::Int64::Primitive>>(_edgePropertyMap[ptId.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                         ASSERT_EQ(val, oldVal);
                     }
-                    break;
+                break;
                 case db::ValueType::String:
                     for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::String>(ptId).zipped()) {
                         const auto& oldVal = std::get<std::unordered_map<int64_t, types::String::Primitive>>(_edgePropertyMap[ptId.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                         ASSERT_EQ(val, oldVal);
                     }
-                    break;
+                break;
                 case db::ValueType::UInt64:
                     for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::UInt64>(ptId).zipped()) {
                         const auto& oldVal = std::get<std::unordered_map<int64_t, types::UInt64::Primitive>>(_edgePropertyMap[ptId.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                         ASSERT_EQ(val, oldVal);
                     }
-                    break;
+                break;
                 case db::ValueType::Double:
                     for (const auto& [id, val] : mergedDataPart.edgeProperties().getContainer<types::Double>(ptId).zipped()) {
                         const auto& oldVal = std::get<std::unordered_map<int64_t, types::Double::Primitive>>(_edgePropertyMap[ptId.getValue()])[_edgeMap.getPropertyFromNew(id.getValue())];
                         ASSERT_EQ(val, oldVal);
                     }
-                    break;
+                break;
                 default:
                     throw std::runtime_error(fmt::format("Invalid Value Type"));
-                    break;
+                break;
             }
         }
     }

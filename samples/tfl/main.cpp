@@ -84,7 +84,7 @@ int main(int argc, const char** argv) {
         std::string station1;
         std::string station2;
         std::string line;
-        double _time = 0.0;
+        double _time{0.0};
     };
 
     std::vector<Connection> connections;

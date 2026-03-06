@@ -193,35 +193,36 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& dataPartDir,
                 if (auto res = storeTrivialContainer.operator()<types::UInt64>(manager); !res) {
                     return res.get_unexpected();
                 }
-                break;
             }
+            break;
             case ValueType::Int64: {
                 if (auto res = storeTrivialContainer.operator()<types::Int64>(manager); !res) {
                     return res.get_unexpected();
                 }
-                break;
             }
+            break;
             case ValueType::Double: {
                 if (auto res = storeTrivialContainer.operator()<types::Double>(manager); !res) {
                     return res.get_unexpected();
                 }
-                break;
             }
+            break;
             case ValueType::String: {
                 if (auto res = storeStringContainer(manager, idxer); !res) {
                     return res.get_unexpected();
                 }
-                break;
             }
+            break;
             case ValueType::Bool: {
                 if (auto res = storeTrivialContainer.operator()<types::Bool>(manager); !res) {
                     return res.get_unexpected();
                 }
-                break;
             }
+            break;
             case ValueType::Invalid:
             case ValueType::_SIZE:
                 bioassert(false, "Invalid value type");
+            break;
         }
 
         return {};

@@ -304,7 +304,8 @@ void TuringShell::startLoop() {
     // Setup SIGUSR1 signal
     // Doesn't do anything by default, it only
     // interrupts ::read() (default unix behaviour)
-    struct sigaction sa {};
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
     sa.sa_handler = [](int) {};
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
@@ -447,7 +448,8 @@ void tabulateWrite(tabulate::RowStream& rs, const PropertyNull) {
     case Type::staticKind(): {                            \
         const Type& src = *static_cast<const Type*>(col); \
         tabulateWrite(rs, src[i]);                        \
-    } break;
+    }                                                     \
+    break;
 
 void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table) {
     const size_t rowCount = df->getLogicalRowCount();

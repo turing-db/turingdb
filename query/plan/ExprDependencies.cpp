@@ -34,18 +34,21 @@ void ExprDependencies::genExprDependencies(PlanGraphVariables& variables, Expr* 
             const BinaryExpr* binary = static_cast<BinaryExpr*>(expr);
             genExprDependencies(variables, binary->getLHS());
             genExprDependencies(variables, binary->getRHS());
-        } break;
+        }
+        break;
 
         case Expr::Kind::UNARY: {
             const UnaryExpr* unary = static_cast<UnaryExpr*>(expr);
             genExprDependencies(variables, unary->getSubExpr());
-        } break;
+        }
+        break;
 
         case Expr::Kind::STRING: {
             const StringExpr* string = static_cast<StringExpr*>(expr);
             genExprDependencies(variables, string->getLHS());
             genExprDependencies(variables, string->getRHS());
-        } break;
+        }
+        break;
 
         case Expr::Kind::ENTITY_TYPES: {
             const EntityTypeExpr* entityType = static_cast<EntityTypeExpr*>(expr);
@@ -58,7 +61,8 @@ void ExprDependencies::genExprDependencies(PlanGraphVariables& variables, Expr* 
             }
 
             _varDeps.emplace_back(var, expr);
-        } break;
+        }
+        break;
 
         case Expr::Kind::PROPERTY: {
             const PropertyExpr* prop = static_cast<PropertyExpr*>(expr);
@@ -76,7 +80,8 @@ void ExprDependencies::genExprDependencies(PlanGraphVariables& variables, Expr* 
             }
 
             _varDeps.emplace_back(p, expr);
-        } break;
+        }
+        break;
 
         case Expr::Kind::FUNCTION_INVOCATION: {
             const FunctionInvocationExpr* func = static_cast<FunctionInvocationExpr*>(expr);
@@ -87,7 +92,8 @@ void ExprDependencies::genExprDependencies(PlanGraphVariables& variables, Expr* 
             }
 
             _funcDeps.emplace_back(func);
-        } break;
+        }
+        break;
 
         case Expr::Kind::SYMBOL: {
             const SymbolExpr* symbol = static_cast<SymbolExpr*>(expr);
@@ -95,30 +101,33 @@ void ExprDependencies::genExprDependencies(PlanGraphVariables& variables, Expr* 
             bioassert(producer, "VarDecl not found");
 
             _varDeps.emplace_back(producer, expr);
-        } break;
+        }
+        break;
 
         case Expr::Kind::PATH:
             // throwError("Path expression not supported yet", expr);
             // TODO Find a way to get access to throwError
             throw PlannerException("Path expression not supported yet");
-            break;
+        break;
 
         case Expr::Kind::LITERAL:
             // Reached end
-            break;
+        break;
 
         case Expr::Kind::INDEX: {
             const IndexExpr* index = static_cast<IndexExpr*>(expr);
             genExprDependencies(variables, index->getBase());
             genExprDependencies(variables, index->getIndexExpr());
-        } break;
+        }
+        break;
 
         case Expr::Kind::LIST: {
             const ListExpr* list = static_cast<const ListExpr*>(expr);
             for (Expr* elem : list->getElements()) {
                 genExprDependencies(variables, elem);
             }
-        } break;
+        }
+        break;
     }
 }
 

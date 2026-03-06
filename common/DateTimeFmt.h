@@ -10,6 +10,7 @@ inline std::string formatUnixTime(long long seconds) {
     tm* tm   = gmtime(&t); // or std::localtime(&t) for local time
 
     char buf[64];
+    memset(buf, 0, sizeof(buf));
     strftime(buf, sizeof(buf), "%d-%m-%Y %H:%M:%S", tm);
 
     return fmt::format("{}", buf);

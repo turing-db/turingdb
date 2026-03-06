@@ -57,7 +57,7 @@ TEST_F(OrderByProcessorTest, simpleOrder) {
         Rows expected;
         {
             for (const NodeID id : reader.scanNodes()) {
-                const ColumnNodeIDs idc {id};
+                const ColumnNodeIDs idc({id});
                 auto names = reader.getNodePropertiesWithNull<types::String>(nameType._id, &idc);
                 auto maybeName = *names.begin();
                 ASSERT_TRUE(maybeName.has_value());

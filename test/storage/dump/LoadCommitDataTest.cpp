@@ -55,7 +55,7 @@ protected:
     std::unique_ptr<db::JobSystem> _jobSystem;
     CommitHash _initialHeadHash; // initial commit — skeleton after load
     CommitHash _newHeadHash;     // HEAD commit   — fully loaded after load
-    size_t _numInitialCommits;
+    size_t _numInitialCommits{0};
     fs::Path _originalPath;
     fs::Path _graphPath;
     std::unique_ptr<Graph> _dumpedGraph;
@@ -113,7 +113,7 @@ TEST_F(LoadCommitDataTest, loadAlreadyLoadedCommitIsNoOp) {
 }
 
 TEST_F(LoadCommitDataTest, loadNonExistentHashFails) {
-    const CommitHash bogusHash {0xdeadbeefcafeULL};
+    const CommitHash bogusHash(0xdeadbeefcafeULL);
     const auto res = _loadedGraph->loadCommit(bogusHash);
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().getType(), DumpErrorType::COMMIT_HASH_NOT_FOUND);

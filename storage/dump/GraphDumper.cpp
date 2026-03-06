@@ -80,7 +80,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& graphDir)
 
     // Dump Commits and CommitLog
     {
-        Profile profile {"GraphDumper::dump <Commit Log>"};
+        Profile profile("GraphDumper::dump <Commit Log>");
         const fs::Path logFile = graphDir / "commitlog";
 
         const Commit* commit = graph._versionController->_head.load();

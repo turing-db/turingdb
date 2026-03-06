@@ -94,7 +94,7 @@ struct Eval {
 template <ColumnOperator Op>
 void EvalBinaryExpr::eval(Column* res, const Column* lhs, const Column* rhs) {
     using Pairs = PairRestrictions<Op>;
-    Eval<Op> fn {res};
+    Eval<Op> fn{res};
     ColumnDoubleDispatcher<typename Pairs::Allowed,
                            typename Pairs::AllowedMixed,
                            Eval<Op>,

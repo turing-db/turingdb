@@ -83,7 +83,8 @@ public:
                     }
 
                     _state = State::NextEntity;
-                } break;
+                }
+                break;
                 case State::NextEntity: {
                     const char c = *_rem.data();
                     CHECK_UNEXPECTED_EOF("]");
@@ -145,7 +146,8 @@ public:
 
                     _state = State::GraphAttributeKey;
 
-                } break;
+                }
+                break;
                 case State::NodePropertyKey: {
                     CHECK_UNEXPECTED_EOF("]");
 
@@ -189,7 +191,8 @@ public:
                     setCurrentKeyAndSkip(strRes.value());
 
                     _state = State::NodePropertyValue;
-                } break;
+                }
+                break;
                 case State::EdgePropertyKey: {
                     CHECK_UNEXPECTED_EOF("]");
 
@@ -243,7 +246,8 @@ public:
                     setCurrentKeyAndSkip(strRes.value());
 
                     _state = State::EdgePropertyValue;
-                } break;
+                }
+                break;
                 case State::NodeID: {
                     CHECK_UNEXPECTED_EOF("node ID (unsigned integer)");
 
@@ -259,7 +263,8 @@ public:
                     }
 
                     _state = State::NodePropertyKey;
-                } break;
+                }
+                break;
                 case State::NodePropertyValue: {
                     CHECK_UNEXPECTED_EOF("property value");
 
@@ -312,7 +317,8 @@ public:
                     skipBlanks();
 
                     _state = State::NodePropertyKey;
-                } break;
+                }
+                break;
                 case State::EdgePropertyValue: {
                     CHECK_UNEXPECTED_EOF("property value");
 
@@ -364,7 +370,8 @@ public:
                     skipBlanks();
 
                     _state = State::EdgePropertyKey;
-                } break;
+                }
+                break;
                 case State::EdgeSource: {
                     CHECK_UNEXPECTED_EOF("source ID (unsigned integer)");
 
@@ -380,7 +387,8 @@ public:
                     }
 
                     _state = State::EdgePropertyKey;
-                } break;
+                }
+                break;
                 case State::EdgeTarget: {
                     CHECK_UNEXPECTED_EOF("target ID (unsigned integer)");
 
@@ -396,7 +404,8 @@ public:
                     }
 
                     _state = State::EdgePropertyKey;
-                } break;
+                }
+                break;
                 case State::GraphAttributeKey: {
                     strRes = this->getNextWord("Graph Attribute Key");
                     if (!strRes) {
@@ -407,7 +416,8 @@ public:
 
                     _state = State::GraphAttributeValue;
 
-                } break;
+                }
+                break;
                 case State::GraphAttributeValue: {
                     if (*_rem.data() == '"') {
                         next();
@@ -431,7 +441,8 @@ public:
 
                     _state = State::NextEntity;
 
-                } break;
+                }
+                break;
             }
         }
     }

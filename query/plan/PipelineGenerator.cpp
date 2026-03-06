@@ -869,13 +869,13 @@ PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
         case JoinType::COMMON_ANCESTOR: {
             leftJoinTag = _declToColumn.find(node->getLeftVarDecl())->second;
             rightJoinTag = _declToColumn.find(node->getRightVarDecl())->second;
-            break;
         }
+        break;
         case JoinType::COMMON_SUCCESSOR: {
             leftJoinTag = lhs->getStream().visit(visitor);
             rightJoinTag = rhs->getStream().visit(visitor);
-            break;
         }
+        break;
         case JoinType::DIAMOND: {
             throw PlannerException("Common Successor Joins With Common Ancestor Unsupported");
         }

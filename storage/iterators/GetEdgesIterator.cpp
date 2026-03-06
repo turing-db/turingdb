@@ -238,6 +238,7 @@ void GetEdgesChunkWriter::fill(size_t maxCount) {
 
         default:
             bioassert(false, "Unexpected column combination");
+        break;
     }
 
     // Base column is _edgeIDs: only need to check if there are edge tombstones

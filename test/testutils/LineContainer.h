@@ -46,7 +46,7 @@ public:
     }
 
     std::size_t getCount(std::tuple<ValueTypes...> values) const {
-        const Line line {values};
+        const Line line = values;
         const auto it = _lineMap.find(line);
         if (it == _lineMap.end()) {
             return 0;

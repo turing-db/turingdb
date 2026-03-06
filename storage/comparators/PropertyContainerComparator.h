@@ -53,8 +53,8 @@ public:
                         b->cast<types::UInt64>())) {
                     return false;
                 }
-                break;
             }
+            break;
 
             case ValueType::Int64: {
                 if (!TypedPropertyContainerComparator<types::Int64>::same(
@@ -62,8 +62,8 @@ public:
                         b->cast<types::Int64>())) {
                     return false;
                 }
-                break;
             }
+            break;
 
             case ValueType::Double: {
                 if (!TypedPropertyContainerComparator<types::Double>::same(
@@ -71,8 +71,8 @@ public:
                         b->cast<types::Double>())) {
                     return false;
                 }
-                break;
             }
+            break;
 
             case ValueType::String: {
                 if (!TypedPropertyContainerComparator<types::String>::same(
@@ -80,8 +80,8 @@ public:
                         b->cast<types::String>())) {
                     return false;
                 }
-                break;
             }
+            break;
 
             case ValueType::Bool: {
                 if (!TypedPropertyContainerComparator<types::Bool>::same(
@@ -89,13 +89,13 @@ public:
                         b->cast<types::Bool>())) {
                     return false;
                 }
-                break;
             }
+            break;
 
             case ValueType::Invalid:
             case ValueType::_SIZE: {
-                break;
             }
+            break;
         }
 
         return true;

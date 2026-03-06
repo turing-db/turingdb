@@ -108,7 +108,7 @@ LockFileResult<uint64_t> LockFile::getPid() const {
         return LockFileError::result(LockFileErrorType::PERMISSION_DENIED);
     }
 
-    std::array<char, 256> buf {};
+    std::array<char, 256> buf;
     f->read(buf.data(), buf.size());
 
     size_t endline = 0;

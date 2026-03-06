@@ -41,7 +41,7 @@ struct Eval {
 template <ColumnOperator Op>
 void EvalUnaryExpr::eval(Column* res, const Column* operand) {
     using Types = TypeRestrictions<Op>;
-    Eval<Op> fn {res};
+    Eval<Op> fn{res};
     ColumnSingleDispatcher<typename Types::Allowed,
                            Eval<Op>,
                            typename Types::Excluded>::dispatch(operand, fn);

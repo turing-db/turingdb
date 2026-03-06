@@ -28,36 +28,36 @@ DumpResult<void> dumpProperties(fs::FilePageWriter& writer, PropertyContainer* c
             if (auto res = dumper.dump(container->cast<types::UInt64>()); !res) {
                 return res.get_unexpected();
             }
-            break;
         }
+        break;
         case ValueType::Int64: {
             TrivialPropertyContainerDumper<types::Int64> dumper(writer);
             if (auto res = dumper.dump(container->cast<types::Int64>()); !res) {
                 return res.get_unexpected();
             }
-            break;
         }
+        break;
         case ValueType::Double: {
             TrivialPropertyContainerDumper<types::Double> dumper(writer);
             if (auto res = dumper.dump(container->cast<types::Double>()); !res) {
                 return res.get_unexpected();
             }
-            break;
         }
+        break;
         case ValueType::String: {
             StringPropertyContainerDumper dumper(writer);
             if (auto res = dumper.dump(container->cast<types::String>()); !res) {
                 return res.get_unexpected();
             }
-            break;
         }
+        break;
         case ValueType::Bool: {
             TrivialPropertyContainerDumper<types::Bool> dumper(writer);
             if (auto res = dumper.dump(container->cast<types::Bool>()); !res) {
                 return res.get_unexpected();
             }
-            break;
         }
+        break;
         case ValueType::_SIZE:
         case ValueType::Invalid: {
             panic("Error, invalid type");

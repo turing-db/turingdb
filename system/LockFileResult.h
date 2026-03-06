@@ -39,7 +39,7 @@ public:
     }
 
 private:
-    LockFileErrorType _type {};
+    LockFileErrorType _type {LockFileErrorType::UNKNOWN};
     std::string _message;
 };
 

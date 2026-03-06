@@ -66,19 +66,19 @@ WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* pre
     switch (stmt->getKind()) {
         case Stmt::Kind::CREATE:
             generateCreateStmt(static_cast<const CreateStmt*>(stmt), prevNode);
-            break;
+        break;
 
         case Stmt::Kind::SET:
             generateSetStmt(static_cast<const SetStmt*>(stmt), prevNode);
-            break;
+        break;
 
         case Stmt::Kind::DELETE:
             generateDeleteStmt(static_cast<const DeleteStmt*>(stmt), prevNode);
-            break;
+        break;
 
         default:
             throwError(fmt::format("Unsupported write statement type: {}", (uint64_t)stmt->getKind()), stmt);
-            break;
+        break;
     }
 
     return _currentNode;
@@ -228,10 +228,10 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
                 throwError("Cannot use undirected edges in write statements", edge);
             case EdgePattern::Direction::Backward:
                 _currentNode->addEdge(edgeDecl, edge->getData(), rhs, lhs);
-                break;
+            break;
             case EdgePattern::Direction::Forward:
                 _currentNode->addEdge(edgeDecl, edge->getData(), lhs, rhs);
-                break;
+            break;
         }
 
         lhs = rhs;
