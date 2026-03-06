@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (x)-->(a), (x)-->(b) WHERE a.age = b.age RETURN  x.name, a.name, a.age, b.name, b.age",
+  "expect": {
+    "plan": "",
+    "result": ""
+  },
+  "tags": [
+  ],
+  "write-required": false
+}
