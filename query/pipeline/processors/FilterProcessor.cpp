@@ -62,7 +62,7 @@ void applyMask(const Column* src,
         APPLY_MASK_CASE(ColumnVector<EntityList>)
 
         default: {
-            throw PipelineException(fmt::format(" nsupported mask application for column type {}",
+            throw PipelineException(fmt::format("Unsupported mask application for column type {}",
                                                 src->getTypeName()));
         }
     }

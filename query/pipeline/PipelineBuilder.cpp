@@ -55,8 +55,6 @@
 #include "columns/ColumnVector.h"
 #include "columns/ColumnEdgeTypes.h"
 
-#include "GraphPath.h"
-
 #include "dataframe/ColumnTag.h"
 #include "dataframe/NamedColumn.h"
 #include "versioning/ChangeID.h"

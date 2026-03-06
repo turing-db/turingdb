@@ -272,7 +272,7 @@ void PathExplorerProcessor::execute() {
         // frontier entries array
         const size_t parentIdx = _depthStart + bfsIndices[i];
 
-        // Per-path edge uniqueness check — O(depth) walk up parent chain
+        // Per-path edge uniqueness check - O(depth) walk up parent chain
         // To check if the edge was already encountered in the current path
         if (edgeUsedInPath(parentIdx, edge)) {
             continue;
@@ -297,8 +297,8 @@ void PathExplorerProcessor::execute() {
         }
     }
 
-    // Current depth fully expanded — advance to next depth. Next execute()
-    // call will trigger Step 2), as well as Step 1 if the input chunk is exhausted)
+    // Current depth fully expanded - advance to next depth. Next execute()
+    // call will trigger Step 2, as well as Step 1 if the input chunk is exhausted
     if (!_bfsWriter->isValid()) {
         _depthStart = _depthEnd;
         _depthEnd = _allEntries.size();
