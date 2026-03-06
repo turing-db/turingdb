@@ -12,6 +12,5 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/datasets/cyber-security-ad.jsonl
               ${CMAKE_CURRENT_SOURCE_DIR}/datasets/network-management.jsonl
               ${CMAKE_CURRENT_SOURCE_DIR}/datasets/openstreetmap.jsonl
               ${CMAKE_CURRENT_SOURCE_DIR}/datasets/poledb.jsonl
-              ${CMAKE_CURRENT_SOURCE_DIR}/datasets/reactome.jsonl
               ${CMAKE_CURRENT_SOURCE_DIR}/datasets/recommendations.jsonl
         DESTINATION datasets)
