@@ -25,8 +25,8 @@ public:
     static PathExplorerProcessor* create(PipelineV2* pipeline,
                                          LocalMemory* mem,
                                          PathExplorationDir dir,
-                                         int64_t minHops,
-                                         int64_t maxHops);
+                                         uint64_t minHops,
+                                         uint64_t maxHops);
 
     std::string describe() const override;
 
@@ -64,14 +64,14 @@ private:
 
     PathExplorerProcessor(LocalMemory* mem,
                           PathExplorationDir dir,
-                          int64_t minHops,
-                          int64_t maxHops);
+                          uint64_t minHops,
+                          uint64_t maxHops);
     ~PathExplorerProcessor() override;
 
     LocalMemory* _mem {nullptr};
     PathExplorationDir _dir {PathExplorationDir::Both};
-    int64_t _minHops {0};
-    int64_t _maxHops {0};
+    uint64_t _minHops {0};
+    uint64_t _maxHops {0};
 
     PipelineNodeInputInterface _input;
     PipelineBlockOutputInterface _output;
@@ -92,7 +92,7 @@ private:
     // Persistent state across execute() calls
     bool _bfsInitialized {false};
     bool _depthNeedsSetup {true};
-    int64_t _depth {0};
+    uint64_t _depth {0};
     std::vector<FrontierEntry> _allEntries; // persistent tree, never shrunk until new input chunk received
     size_t _depthStart {0};                 // index of first entry at current depth
     size_t _depthEnd {0};                   // index one past last entry at current depth

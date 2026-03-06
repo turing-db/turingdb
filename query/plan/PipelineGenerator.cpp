@@ -1539,7 +1539,9 @@ PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowV
 
 PipelineOutputInterface* PipelineGenerator::translatePathExplorerNode(PathExplorerNode* node)
 {
-    _builder.addPathExplorer(node->getDir(), node->getMinHops(), node->getMaxHops());
+    const uint64_t minHops = static_cast<uint64_t>(node->getMinHops());
+    const uint64_t maxHops = static_cast<uint64_t>(node->getMaxHops());
+    _builder.addPathExplorer(node->getDir(), minHops, maxHops);
 
     const auto* proc = dynamic_cast<PathExplorerProcessor*>(_builder.getLastProc());
     bioassert(proc, "Failed to cast last proc to PathExplorerProcessor");

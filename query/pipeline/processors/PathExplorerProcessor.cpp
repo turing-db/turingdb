@@ -20,8 +20,8 @@ using namespace db;
 
 PathExplorerProcessor::PathExplorerProcessor(LocalMemory* mem,
                                              PathExplorationDir dir,
-                                             int64_t minHops,
-                                             int64_t maxHops)
+                                             uint64_t minHops,
+                                             uint64_t maxHops)
     : _mem(mem),
     _dir(dir),
     _minHops(minHops),
@@ -40,8 +40,8 @@ std::string PathExplorerProcessor::describe() const {
 PathExplorerProcessor* PathExplorerProcessor::create(PipelineV2* pipeline,
                                                      LocalMemory* mem,
                                                      PathExplorationDir dir,
-                                                     int64_t minHops,
-                                                     int64_t maxHops) {
+                                                     uint64_t minHops,
+                                                     uint64_t maxHops) {
     auto* proc = new PathExplorerProcessor(mem, dir, minHops, maxHops);
 
     PipelineInputPort* inPort = PipelineInputPort::create(pipeline, proc);
@@ -88,21 +88,24 @@ void PathExplorerProcessor::prepare(ExecutionContext* ctxt) {
             bfsWriter->setEdgeIDs(_bfsEdges);
             bfsWriter->setTgtIDs(_bfsIntermediates);
             _bfsWriter = std::unique_ptr<Iterator>(bfsWriter);
-        } break;
+        }
+        break;
         case PathExplorationDir::Backward: {
             auto* bfsWriter = new GetInEdgesChunkWriter(view, _bfsSources);
             bfsWriter->setIndices(_bfsIndices);
             bfsWriter->setEdgeIDs(_bfsEdges);
             bfsWriter->setSrcIDs(_bfsIntermediates);
             _bfsWriter = std::unique_ptr<Iterator>(bfsWriter);
-        } break;
+        }
+        break;
         case PathExplorationDir::Both: {
             auto* bfsWriter = new GetEdgesChunkWriter(view, _bfsSources);
             bfsWriter->setIndices(_bfsIndices);
             bfsWriter->setEdgeIDs(_bfsEdges);
             bfsWriter->setOtherIDs(_bfsIntermediates);
             _bfsWriter = std::unique_ptr<Iterator>(bfsWriter);
-        } break;
+        } 
+        break;
     }
     markAsPrepared();
 }
@@ -229,14 +232,20 @@ void PathExplorerProcessor::execute() {
 
         switch (_dir) {
             case PathExplorationDir::Forward: {
-                static_cast<GetOutEdgesChunkWriter*>(_bfsWriter.get())->reset();
-            } break;
+                auto* writer = static_cast<GetOutEdgesChunkWriter*>(_bfsWriter.get());
+                writer->reset();
+            }
+            break;
             case PathExplorationDir::Backward: {
-                static_cast<GetInEdgesChunkWriter*>(_bfsWriter.get())->reset();
-            } break;
+                auto* writer = static_cast<GetInEdgesChunkWriter*>(_bfsWriter.get());
+                writer->reset();
+            }
+            break;
             case PathExplorationDir::Both: {
-                static_cast<GetEdgesChunkWriter*>(_bfsWriter.get())->reset();
-            } break;
+                auto* writer = static_cast<GetEdgesChunkWriter*>(_bfsWriter.get());
+                writer->reset();
+            }
+            break;
         }
 
         _depthNeedsSetup = false;
@@ -245,14 +254,20 @@ void PathExplorerProcessor::execute() {
     // Step 3. Fill one chunk of edges from the current depth set of sources.
     switch (_dir) {
         case PathExplorationDir::Forward: {
-            static_cast<GetOutEdgesChunkWriter*>(_bfsWriter.get())->fill(remaining);
-        } break;
+            auto* writer = static_cast<GetOutEdgesChunkWriter*>(_bfsWriter.get());
+            writer->fill(remaining);
+        }
+        break;
         case PathExplorationDir::Backward: {
-            static_cast<GetInEdgesChunkWriter*>(_bfsWriter.get())->fill(remaining);
-        } break;
+            auto* writer = static_cast<GetInEdgesChunkWriter*>(_bfsWriter.get());
+            writer->fill(remaining);
+        }
+        break;
         case PathExplorationDir::Both: {
-            static_cast<GetEdgesChunkWriter*>(_bfsWriter.get())->fill(remaining);
-        } break;
+            auto* writer = static_cast<GetEdgesChunkWriter*>(_bfsWriter.get());
+            writer->fill(remaining);
+        }
+        break;
     }
 
     ColumnEdgeIDs& bfsEdges = *_bfsEdges;
