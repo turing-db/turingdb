@@ -160,7 +160,6 @@ private:
     PipelineOutputInterface* translatePathExplorerNode(PathExplorerNode* node);
 
     std::vector<std::string> _csvHeaders;
-    size_t _csvFieldCount {0};
 };
 
 }
