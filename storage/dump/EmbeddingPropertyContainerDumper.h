@@ -72,8 +72,6 @@ public:
 
             size_t embeddingIdx = 0;
             size_t floatOffsetInEmbedding = 0;
-            size_t floatsWritten = 0;
-
             for (size_t i = 0; i < dataPageCount; i++) {
                 _writer.nextPage();
 
@@ -106,7 +104,6 @@ public:
                     }
                 }
 
-                floatsWritten += floatsInPage;
             }
         }
 
