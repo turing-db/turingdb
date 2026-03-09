@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Skip on macOS GitHub Actions runners
+if [[ "$RUNNER_OS" == "macOS" ]]; then
+    echo "Skipping load_jsonl_reactome on macOS runner"
+    exit 0
+fi
+
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 cd $SCRIPT_DIR
