@@ -21,12 +21,10 @@ class IndexExpr;
 class FunctionInvocationExpr;
 class PipelineGenerator;
 class PendingOutputView;
-class FunctionProgramGenerator;
 
 class ExprProgramGenerator {
 public:
     friend PredicateProgramGenerator;
-    friend FunctionProgramGenerator;
 
     ExprProgramGenerator(PipelineGenerator* gen,
                          ExprProgram* exprProg,

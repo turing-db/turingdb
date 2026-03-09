@@ -91,10 +91,8 @@
 
 #include "Overloaded.h"
 #include "processors/ExprProgram.h"
-#include "processors/FunctionProgram.h"
 #include "ExprProgramGenerator.h"
 #include "PredicateProgramGenerator.h"
-#include "FunctionProgramGenerator.h"
 
 #include "SystemManager.h"
 #include "TuringConfig.h"
@@ -427,9 +425,6 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         break;
 
         case PlanGraphOpcode::FUNC_EVAL:
-            return translateFuncEvalNode(static_cast<FuncEvalNode*>(node));
-        break;
-
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::UNKNOWN:
@@ -1578,52 +1573,6 @@ PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* no
     // input of this processor.
     auto* newMatProc = MaterializeProcessor::createFromDf(_pipeline, _mem, outputDf);
     _builder.setMaterializeProc(newMatProc);
-
-    return _builder.getPendingOutputInterface();
-}
-
-PipelineOutputInterface* PipelineGenerator::translateFuncEvalNode(FuncEvalNode* node) {
-    if (!_builder.isSingleMaterializeStep()) {
-        _builder.addMaterialize();
-    }
-
-    const FuncEvalNode::Funcs& funcs = node->getFuncs();
-
-    if (funcs.empty()) {
-        return _builder.getPendingOutputInterface();
-    }
-
-    FunctionProgram* prog = FunctionProgram::create(_pipeline);
-    FunctionProgramGenerator progGen(this, prog, _builder.getPendingOutput());
-
-    // Add the evaluating processor to the pipeline. It takes a pointer to the above
-    // @ref FunctionProgram (@ref prog), and the below loops over expressions modifies
-    // @ref prog via that same pointer, in place.
-    _builder.addFuncEval(prog);
-
-    for (const FunctionInvocationExpr* funcInvocExpr : funcs) {
-        const std::string_view name = funcInvocExpr->getName();
-
-        const FunctionInvocation* invoc = funcInvocExpr->getFunctionInvocation();
-        const FunctionSignature* sig = invoc->getSignature();
-        bioassert(!sig->isAggregate(),
-                  "Attempted to evaluate aggregate function {} as non-aggregate.", name);
-
-        { // Check correct arguments
-            const size_t expectedArgs = sig->argumentTypes().size();
-            const size_t actualArgs = invoc->getArguments()->size();
-            bioassert(expectedArgs == actualArgs,
-                      "Expected {} arguments for {}, but only recieved {}.", expectedArgs,
-                      name, actualArgs);
-        }
-
-        Column* resultantColumn = progGen.generateFuncInvocationExpr(funcInvocExpr);
-        NamedColumn* resultNCol = _builder.addColumnToOutput(resultantColumn);
-        const ColumnTag resultTag = resultNCol->getTag();
-        const VarDecl* var = funcInvocExpr->getExprVarDecl();
-
-        _declToColumn[var] = resultTag;
-    }
 
     return _builder.getPendingOutputInterface();
 }

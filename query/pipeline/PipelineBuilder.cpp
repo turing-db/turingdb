@@ -46,7 +46,6 @@
 #include "processors/DeleteVectorIndexProcessor.h"
 #include "processors/ShowVectorIndexesProcessor.h"
 #include "processors/InstallExtensionProcessor.h"
-#include "processors/FuncEvalProcessor.h"
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
@@ -1066,23 +1065,6 @@ PipelineValuesOutputInterface& PipelineBuilder::addShowVectorIndexes() {
 
 void PipelineBuilder::setOutputDataframe(const Dataframe* df) {
     _pipeline->setOutputDataframe(df);
-}
-
-PipelineBlockOutputInterface& PipelineBuilder::addFuncEval(FunctionProgram* funcProg) {
-    const bool hasInput = _pendingOutput.getInterface() != nullptr;
-    FuncEvalProcessor* proc = FuncEvalProcessor::create(_pipeline, funcProg, hasInput);
-
-    PipelineBlockOutputInterface& output = proc->output();
-
-    if (hasInput) {
-        PipelineBlockInputInterface& input = proc->input();
-        _pendingOutput.connectTo(proc->input());
-        input.propagateColumns(output);
-    }
-
-    _pendingOutput.updateInterface(&output);
-
-    return output;
 }
 
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Int64>(PropertyType);

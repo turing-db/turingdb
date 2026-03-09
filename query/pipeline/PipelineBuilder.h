@@ -40,7 +40,6 @@ class MaterializeProcessor;
 class ExprProgram;
 class PredicateProgram;
 class ProcedureManager;
-class FunctionProgram;
 
 class PipelineBuilder {
 public:
@@ -114,9 +113,6 @@ public:
 
     // Expression evaluation
     PipelineBlockOutputInterface& addExprEval(ExprProgram* exprProg);
-
-    /// Functio evaluation
-    PipelineBlockOutputInterface& addFuncEval(FunctionProgram* funcProg);
 
     // Filter
     PipelineBlockOutputInterface& addFilter(PredicateProgram* predProg);
