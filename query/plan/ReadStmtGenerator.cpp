@@ -702,12 +702,6 @@ bool ReadStmtGenerator::tryPlaceValueHashJoin(Predicate* pred,
         return false;
     }
 
-    // Edge ID equality (WHERE e = f) is not supported by value hash join
-    if (dep0._expr->getExprVarDecl()->getType() == EvaluatedType::EdgePattern ||
-        dep1._expr->getExprVarDecl()->getType() == EvaluatedType::EdgePattern) {
-        return false;
-    }
-
     // Both producers must be VarNodes (graph pattern traversals)
     if (dep0._producerNode->getOpcode() != PlanGraphOpcode::VAR ||
         dep1._producerNode->getOpcode() != PlanGraphOpcode::VAR) {
@@ -835,7 +829,7 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
     // Step 1: Find all end points
     std::vector<PlanGraphNode*> ends;
     for (const auto& node : _tree->nodes()) {
-        if (node->outputs().empty()) {
+        if (node->outputs().empty() && !node->inputs().empty()) {
             ends.push_back(node.get());
         }
     }
