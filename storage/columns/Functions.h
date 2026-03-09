@@ -22,6 +22,14 @@ namespace db {
 namespace rg = ranges;
 namespace rv = rg::views;
 
+static void strToLower(std::string& lower, std::string_view src) {
+    lower.clear();
+    lower.reserve();
+    for (const auto c : src) {
+        lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+}
+
 static void getLabelString(std::string& out, const GraphView view, NodeID n) {
     out.clear();
     const LabelSetHandle lblset = view.read().getNodeLabelSet(n);
@@ -110,11 +118,23 @@ struct toFloatFunction {
     }
 };
 
-// NOTE: Define this stub for uniformity when using @ref FunctionColumnResult.
-// However, this function is never used, because we specialise
-// @ref EvalFunction::eval<OP_TO_BOOLEAN> to allow for reuse of the string buffer.
 struct toBoolFunction {
     using ResultType = types::Bool::Primitive;
+    std::string _buf; // Preallocated buffer to reuse over iterations
+
+    ResultType operator()(std::string_view sv) {
+        strToLower(_buf, sv);
+
+        if (_buf == "true") {
+            return true;
+        }
+        if (_buf == "false") {
+            return false;
+        }
+
+        throw PipelineException(
+            fmt::format("toBoolean: cannot convert '{}' to boolean", sv));
+    }
 };
 
 /// Generic function executor; default constructible operator
