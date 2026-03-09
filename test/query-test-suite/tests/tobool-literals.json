@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN toBoolean(\"false\"), toBoolean(\"true\"), toBoolean(\"FALSE\"), toBoolean(\"TRUE\"), toBoolean(\"FaLsE\"), toBoolean(\"tRuE\")",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __FUNC_EVAL__\n        __func__: toBoolean\n        __func__: toBoolean\n        __func__: toBoolean\n        __func__: toBoolean\n        __func__: toBoolean\n        __func__: toBoolean\n    `\"]\n    1[\"`\n        __EXPR_EVAL__\n        __exprs__\n __expr__: v0\n __expr__: v2\n __expr__: v4\n __expr__: v6\n __expr__: v8\n __expr__: v10\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->0",
+    "result": "\"toBoolean(\"\"false\"\")\",\"toBoolean(\"\"true\"\")\",\"toBoolean(\"\"FALSE\"\")\",\"toBoolean(\"\"TRUE\"\")\",\"toBoolean(\"\"FaLsE\"\")\",\"toBoolean(\"\"tRuE\"\")\"\nfalse,true,false,true,false,true",
+    "resultJson": "{\"header\":{\"column_names\":[\"toBoolean(\\\"false\\\")\",\"toBoolean(\\\"true\\\")\",\"toBoolean(\\\"FALSE\\\")\",\"toBoolean(\\\"TRUE\\\")\",\"toBoolean(\\\"FaLsE\\\")\",\"toBoolean(\\\"tRuE\\\")\"],\"column_types\":[\"Bool\",\"Bool\",\"Bool\",\"Bool\",\"Bool\",\"Bool\"]},\"data\":[[[false],[true],[false],[true],[false],[true]]]}"
+  },
+  "tags": [
+    "literals",
+    "functions",
+    "return",
+    "projection"
+  ],
+  "write-required": false
+}
