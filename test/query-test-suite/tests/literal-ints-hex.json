@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "RETURN 0x32, -0x32, 0o12, -0o12",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n __expr__: v0\n __expr__: v1\n __expr__: v2\n __expr__: v3\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v0\n__expr__ (LITERAL): v1\n__expr__ (LITERAL): v2\n__expr__ (LITERAL): v3\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
     "result": "0x32,-0x32,0o12,-0o12\n50,-50,10,-10",
     "resultJson": "{\"header\":{\"column_names\":[\"0x32\",\"-0x32\",\"0o12\",\"-0o12\"],\"column_types\":[\"Int64\",\"Int64\",\"Int64\",\"Int64\"]},\"data\":[[[50],[-50],[10],[-10]]]}"
   },

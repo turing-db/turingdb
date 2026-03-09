@@ -119,6 +119,11 @@ void ExprDependencies::genExprDependencies(PlanGraphVariables& variables, Expr* 
                 genExprDependencies(variables, elem);
             }
         } break;
+
+        case Expr::Kind::_SIZE:
+            throw PlannerException("Unknown expression type in ExprDependencies.");
+        break;
+
     }
 }
 
