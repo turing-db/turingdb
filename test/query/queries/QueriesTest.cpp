@@ -1239,6 +1239,73 @@ TEST_F(QueriesTest, xShapedJoinTest) {
     EXPECT_TRUE(expectedRows.equals(actualRows));
 }
 
+// Re-using the same edge variable across comma-separated patterns is not supported.
+// The query `MATCH (a)-[e]->(b), (c)-[e]->(d)` would require a join on EdgeID,
+// but the planner rejects re-used edge variables before reaching the join stage.
+TEST_F(QueriesTest, DISABLED_joinOnEdgeIDTest) {
+    constexpr std::string_view query =
+        "MATCH (a)-[e]->(b), (c)-[e]->(d) RETURN a,b,c,d,e";
+    QueryStatus res = _db->query(query, _graphName, &_env->getMem(),
+                                   [&](const Dataframe* df) -> void {});
+    ASSERT_FALSE(res);
+    ASSERT_TRUE(res.hasErrorMessage());
+}
+
+TEST_F(QueriesTest, joinOnEdgeIDWhereTest) {
+    using Rows = LineContainer<NodeID, EdgeID, NodeID, NodeID, EdgeID, NodeID>;
+
+    Rows expectedRows;
+    ColumnNodeIDs* sources = nullptr;
+    ColumnEdgeIDs* edges = nullptr;
+    ColumnNodeIDs* targets = nullptr;
+
+    {
+        constexpr std::string_view scanQuery = "MATCH (n)-[e]->(m) RETURN n,e,m";
+        auto res = _db->query(scanQuery, _graphName, &_env->getMem(),
+                              [&](const Dataframe* df) -> void {
+                                  ASSERT_EQ(df->size(), 3);
+                                  const auto& cols = df->cols();
+                                  sources = cols[0]->as<ColumnNodeIDs>();
+                                  edges = cols[1]->as<ColumnEdgeIDs>();
+                                  targets = cols[2]->as<ColumnNodeIDs>();
+                              });
+        ASSERT_TRUE(res);
+    }
+
+    // WHERE e = f constrains both patterns to the same edge, so each edge
+    // produces exactly one row: (source, e, target, source, e, target).
+    for (size_t i = 0; i < edges->size(); ++i) {
+        expectedRows.add({sources->at(i), edges->at(i), targets->at(i),
+                          sources->at(i), edges->at(i), targets->at(i)});
+    }
+
+    Rows actualRows;
+    {
+        constexpr std::string_view query =
+            "MATCH (a)-[e]->(b), (c)-[f]->(d) WHERE e = f RETURN a,e,b,c,f,d";
+        QueryStatus res = _db->query(
+            query, _graphName, &_env->getMem(), [&](const Dataframe* df) -> void {
+                ASSERT_TRUE(df != nullptr);
+                ASSERT_EQ(df->size(), 6);
+                const auto& nCols = df->cols();
+                const auto* a = nCols.at(0)->as<ColumnNodeIDs>();
+                const auto* e = nCols.at(1)->as<ColumnEdgeIDs>();
+                const auto* b = nCols.at(2)->as<ColumnNodeIDs>();
+                const auto* c = nCols.at(3)->as<ColumnNodeIDs>();
+                const auto* f = nCols.at(4)->as<ColumnEdgeIDs>();
+                const auto* d = nCols.at(5)->as<ColumnNodeIDs>();
+
+                for (size_t rowPtr = 0; rowPtr < df->getLogicalRowCount(); rowPtr++) {
+                    actualRows.add({a->at(rowPtr), e->at(rowPtr), b->at(rowPtr),
+                                    c->at(rowPtr), f->at(rowPtr), d->at(rowPtr)});
+                }
+            });
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+    EXPECT_TRUE(expectedRows.equals(actualRows));
+}
+
 // The type of join for this test has not been implemented yet - so it is disabled for now
 TEST_F(QueriesTest, blockedBinaryQuery) {
     constexpr std::string_view query = "MATCH (n)-[e]->(m), (n)<-[f]-(m) return n, e, m, f";

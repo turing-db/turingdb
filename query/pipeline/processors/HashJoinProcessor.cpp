@@ -719,6 +719,7 @@ void HashJoinProcessor<LeftKey, RightKey>::flushLeftStream(size_t& rowsRemaining
 }
 
 template class db::HashJoinProcessor<NodeID>;
+template class db::HashJoinProcessor<EdgeID>;
 template class db::HashJoinProcessor<int64_t>;
 template class db::HashJoinProcessor<uint64_t>;
 template class db::HashJoinProcessor<double>;

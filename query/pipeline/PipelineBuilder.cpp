@@ -570,6 +570,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterfa
         // we have a different type for the left and the right key
         // but they are compatible in the sense that they are "string-like"
         if constexpr (std::is_same_v<LeftKey, NodeID> ||
+                     std::is_same_v<LeftKey, EdgeID> ||
                      std::is_same_v<LeftKey, int64_t> ||
                      std::is_same_v<LeftKey, uint64_t> ||
                      std::is_same_v<LeftKey, double> ||
