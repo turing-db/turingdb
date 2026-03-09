@@ -402,13 +402,14 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
 
             rowsRemaining -= rowsToCopy;
 
+            size_t outColIdx = 0;
             for (size_t j = 0; j < leftDf->size(); ++j) {
                 if (cols[j]->getTag() == _leftJoinKey) {
                     continue;
                 }
 
                 auto* inputColumn = cols[j]->getColumn();
-                auto* outputColumn = outCols[j]->getColumn();
+                auto* outputColumn = outCols[outColIdx]->getColumn();
 
                 dispatchColumnVector(outputColumn, [&](auto* col) {
                     auto* typedOutCol = static_cast<decltype(col)>(outputColumn);
@@ -419,6 +420,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
                                      totalRowsInserted,
                                      rowsToCopy);
                 });
+                ++outColIdx;
             }
 
             // Copy the join column to the last output column
@@ -665,13 +667,14 @@ void HashJoinProcessor<LeftKey, RightKey>::flushLeftStream(size_t& rowsRemaining
 
     const size_t rowsToCopy = std::min(rows.size() - rowOffsetIdx, rowsRemaining);
 
+    size_t outColIdx = 0;
     for (size_t j = 0; j < leftDf->size(); ++j) {
         if (cols[j]->getTag() == _leftJoinKey) {
             continue;
         }
 
         auto* inputColumn = cols[j]->getColumn();
-        auto* outputColumn = outCols[j]->getColumn();
+        auto* outputColumn = outCols[outColIdx]->getColumn();
         dispatchColumnVector(outputColumn, [&](auto* col) {
             auto* typedOutCol = static_cast<decltype(col)>(outputColumn);
             const auto* typedInCol = static_cast<decltype(col)>(inputColumn);
@@ -681,6 +684,7 @@ void HashJoinProcessor<LeftKey, RightKey>::flushLeftStream(size_t& rowsRemaining
                              totalRowsInserted,
                              rowsToCopy);
         });
+        ++outColIdx;
     }
     // Copy the join column to the last output column
     auto* inputColumn = leftDf->getColumn(_leftJoinKey)->getColumn();

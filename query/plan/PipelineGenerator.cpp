@@ -18,6 +18,7 @@
 #include "YieldItems.h"
 #include "dataframe/ColumnTag.h"
 #include "dataframe/NamedColumn.h"
+#include "decl/EvaluatedType.h"
 #include "decl/PatternData.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
@@ -883,8 +884,21 @@ PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
             break;
         }
         case JoinType::COMMON_SUCCESSOR: {
-            leftJoinTag = lhs->getStream().visit(visitor);
-            rightJoinTag = rhs->getStream().visit(visitor);
+            if (node->getLeftVarDecl()->getType() == EvaluatedType::EdgePattern) {
+                const auto edgeVisitor = Overloaded {
+                    [](const EntityOutputStream::NodeStream& stream) -> ColumnTag {
+                        return stream._nodeIDsTag;
+                    },
+                    [](const EntityOutputStream::EdgeStream& stream) -> ColumnTag {
+                        return stream._edgeIDsTag;
+                    },
+                };
+                leftJoinTag = lhs->getStream().visit(edgeVisitor);
+                rightJoinTag = rhs->getStream().visit(edgeVisitor);
+            } else {
+                leftJoinTag = lhs->getStream().visit(visitor);
+                rightJoinTag = rhs->getStream().visit(visitor);
+            }
             break;
         }
         case JoinType::DIAMOND: {
@@ -908,6 +922,17 @@ PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
         auto joinTag = outputIf.getDataframe()->cols().back()->getTag();
         _declToColumn.insert_or_assign(node->getLeftVarDecl(), joinTag);
         _declToColumn.insert_or_assign(node->getRightVarDecl(), joinTag);
+    } else if (node->getJoinType() == JoinType::COMMON_SUCCESSOR &&
+               node->getLeftVarDecl()->getType() == EvaluatedType::EdgePattern) {
+        // Restore EdgeStream so downstream GetEdgeTarget can project to target node.
+        // Use the merged join key tag (last column) as the edgeIDsTag since the
+        // original tags from each side were replaced during the join.
+        const auto& edgeStream = lhs->getStream().asEdgeStream();
+        ColumnTag mergedEdgeIDsTag = outputIf.getDataframe()->cols().back()->getTag();
+        auto stream = EntityOutputStream::createEdgeStream(mergedEdgeIDsTag,
+                                                           edgeStream._otherIDsTag,
+                                                           edgeStream._edgeTypesTag);
+        outputIf.setStream(stream);
     } else {
         // Get the output join column tag
         ColumnTag streamedTag = outputIf.getDataframe()->cols().back()->getTag();
