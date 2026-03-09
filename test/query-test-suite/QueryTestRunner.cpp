@@ -263,15 +263,15 @@ std::string formatStatusError(db::QueryStatus::Status status,
 
 void generatePlanGraph(std::string_view query,
                        db::GraphView view,
-                       std::ostream& out) {
+                       std::ostream& out,
+                       db::PlanGenConfig* planGenConfig) {
     auto procedures = db::ProcedureManager::create();
     procedures->init();
 
     db::CypherAST ast(procedures.get(), query);
     db::CypherParser parser(&ast);
     db::CypherAnalyzer analyzer(&ast, view);
-    db::PlanGenConfig planGenConfig;
-    db::PlanGraphGenerator planGen(ast, view, &planGenConfig);
+    db::PlanGraphGenerator planGen(ast, view, planGenConfig);
 
     try {
         parser.parse(query);
@@ -480,17 +480,21 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     db::SimpleGraph::createSimpleGraph(graph);
     db::TuringDB* db = &env->getDB();
 
+    db::QueryConfig queryConfig;
+    const bool forceVHJ = std::find(spec._tags.begin(), spec._tags.end(), "value-hash-join") != spec._tags.end();
+    if (forceVHJ) {
+        queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
+    }
+
     std::stringstream planOut;
     {
         const db::Transaction tx = graph->openTransaction();
         const db::GraphView view = tx.viewGraph();
-        generatePlanGraph(spec._query, view, planOut);
+        generatePlanGraph(spec._query, view, planOut, &queryConfig.getPlanGenConfig());
     }
 
     std::vector<std::vector<std::string>> rows;
     std::vector<std::string> columnNames;
-
-    db::QueryConfig queryConfig;
 
     std::string jsonOutput;
     StringStreamWriter jsonWriter(&jsonOutput);

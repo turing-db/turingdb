@@ -38,7 +38,6 @@ public:
         _graph = _env->getSystemManager().createGraph(_graphName);
         SimpleGraph::createSimpleGraph(_graph);
         _db = &_env->getDB();
-        _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
     }
 
 protected:
@@ -1302,6 +1301,7 @@ TEST_F(QueriesTest, joinOnEdgeIDTest) {
 }
 
 TEST_F(QueriesTest, joinOnEdgeIDWhereTest) {
+    _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
     using Rows = LineContainer<NodeID, EdgeID, NodeID, NodeID, EdgeID, NodeID>;
 
     Rows expectedRows;
