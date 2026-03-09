@@ -30,6 +30,7 @@ QUERY_NAMES=(
     "same_species_pathway_join"
     "cross_species_gene_products"
     "same_compartment_reactions"
+    "edge_id_join_hasEvent"
 )
 
 QUERIES=(
@@ -47,6 +48,9 @@ QUERIES=(
 
     # Q5: Reactions whose inputs/outputs share a compartment
     "MATCH (r:ReactionLikeEvent)-[:input]->(p:PhysicalEntity)-[:compartment]->(c1:Compartment), (r2:ReactionLikeEvent)-[:output]->(p2:PhysicalEntity)-[:compartment]->(c2:Compartment) WHERE c1.displayName = c2.displayName RETURN r.displayName, r2.displayName, c1.displayName LIMIT 1000"
+
+    # Q6: Join on edge ID – same edge variable across two patterns
+    "MATCH (a:Pathway)-[e:hasEvent]->(b), (c)-[e]->(d) RETURN a.displayName, b.displayName LIMIT 1000"
 )
 
 # ---------------------------------------------------------------------------

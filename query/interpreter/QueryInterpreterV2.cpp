@@ -40,11 +40,13 @@ void QueryInterpreterV2::execute(const InterpreterContext& ctxt,
 
     const QueryCallbacks* callbacks = ctxt.getQueryCallbacks();
 
-    const TimePoint start = Clock::now();
-    executeImpl(ctxt, status, query, graphName);
-    const TimePoint end = Clock::now();
+    {
+        const TimePoint start = Clock::now();
+        executeImpl(ctxt, status, query, graphName);
+        const TimePoint end = Clock::now();
 
-    status.setTotalTime(end - start);
+        status.setTotalTime(end - start);
+    }
 
     if (!status.isOk()) {
         callbacks->onError(status);
@@ -129,7 +131,8 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     }
 
     // Generate plan graph
-    PlanGraphGenerator planGen(ast, view);
+    const QueryConfig* queryConfig = ctxt.getQueryConfig();
+    PlanGraphGenerator planGen(ast, view, &queryConfig->getPlanGenConfig());
     try {
         planGen.generate(ast.queries().front());
     } catch (const CompilerException& e) {
@@ -194,6 +197,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
 
     // Execute pipeline
     ExecutionContext execCtxt(_sysMan, view);
+    execCtxt.setChunkSize(queryConfig->getChunkSize());
     execCtxt.setTransaction(&txRes.value());
     execCtxt.setGraphName(graphName);
     execCtxt.setJobSystem(_jobSystem);

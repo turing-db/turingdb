@@ -3,6 +3,7 @@
 #include <string_view>
 
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "Graph.h"
 #include "SystemManager.h"
 #include "columns/ColumnIDs.h"
@@ -39,11 +40,12 @@ protected:
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
     Graph* _graph {nullptr};
+    QueryConfig _queryConfig;
 
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
+        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callback,
                               CommitHash::head(), ChangeID::head());
         return res;
     }

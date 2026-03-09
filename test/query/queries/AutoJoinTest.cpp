@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "Graph.h"
 #include "SystemManager.h"
 #include "columns/ColumnIDs.h"
@@ -237,6 +238,7 @@ public:
         _graph = _env->getSystemManager().createGraph(_graphName);
         JoinTestGraph::createJoinTestGraph(_graph);
         _db = &_env->getDB();
+        _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
     }
 
 protected:
@@ -244,12 +246,13 @@ protected:
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db{nullptr};
     Graph* _graph{nullptr};
+    QueryConfig _queryConfig;
 
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
-                              CommitHash::head(), ChangeID::head());
+        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig,
+                              callback, CommitHash::head(), ChangeID::head());
         if (!res) {
             spdlog::error("Query failed: {}", res.getError());
         }

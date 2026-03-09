@@ -16,6 +16,7 @@
 #include "ID.h"
 #include "PlanGraph.h"
 #include "PlanGraphDebug.h"
+#include "QueryConfig.h"
 #include "PlanGraphGenerator.h"
 #include "QueryCallbacks.h"
 #include "QueryStatus.h"
@@ -269,7 +270,8 @@ void generatePlanGraph(std::string_view query,
     db::CypherAST ast(procedures.get(), query);
     db::CypherParser parser(&ast);
     db::CypherAnalyzer analyzer(&ast, view);
-    db::PlanGraphGenerator planGen(ast, view);
+    db::PlanGenConfig planGenConfig;
+    db::PlanGraphGenerator planGen(ast, view, &planGenConfig);
 
     try {
         parser.parse(query);
@@ -488,6 +490,8 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     std::vector<std::vector<std::string>> rows;
     std::vector<std::string> columnNames;
 
+    db::QueryConfig queryConfig;
+
     std::string jsonOutput;
     StringStreamWriter jsonWriter(&jsonOutput);
     db::JsonEncoder<StringStreamWriter> jsonEncoder(jsonWriter);
@@ -554,6 +558,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
         db->query("CHANGE NEW",
                   spec._graphName,
                   &env->getMem(),
+                  &queryConfig,
                   callback,
                   CommitHash::head(),
                   ChangeID::head());
@@ -563,6 +568,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     const db::QueryStatus status = db->query(spec._query,
                                              spec._graphName,
                                              &env->getMem(),
+                                             &queryConfig,
                                              queryCallbacks,
                                              db::CommitHash::head(),
                                              changeID);
@@ -606,6 +612,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
         db->query("CHANGE SUBMIT",
                   spec._graphName,
                   &env->getMem(),
+                  &queryConfig,
                   db::CommitHash::head(),
                   changeID);
     }

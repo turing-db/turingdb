@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
@@ -21,14 +22,15 @@ public:
 protected:
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
+    QueryConfig _queryConfig;
 };
 
 TEST_F(GreeterExtensionTest, callGreeterHello) {
-    _db->query("INSTALL greeter", "default", &_env->getMem());
+    _db->query("INSTALL greeter", "default", &_env->getMem(), &_queryConfig);
 
     bool executed = false;
     const auto res = _db->query(
-        "CALL greeter.hello()", "default", &_env->getMem(),
+        "CALL greeter.hello()", "default", &_env->getMem(), &_queryConfig,
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);

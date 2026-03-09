@@ -34,12 +34,14 @@ class EntityTypeExpr;
 class VarDecl;
 
 class ExprDependencies;
+class PlanGenConfig;
 class Predicate;
 
 class ReadStmtGenerator {
 public:
     ReadStmtGenerator(const CypherAST* ast,
                       GraphView graphView,
+                      const PlanGenConfig* config,
                       PlanGraph* tree,
                       PlanGraphVariables* variables);
 
@@ -83,6 +85,7 @@ public:
 private:
     const CypherAST* _ast {nullptr};
     GraphView _graphView;
+    const PlanGenConfig* _config {nullptr};
     const GraphMetadata& _graphMetadata;
     PlanGraph* _tree {nullptr};
     PlanGraphVariables* _variables {nullptr};

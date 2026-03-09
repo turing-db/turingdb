@@ -6,6 +6,7 @@
 #include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "SimpleGraph.h"
 #include "TuringTestEnv.h"
 #include "dump/GraphDumper.h"
@@ -39,6 +40,7 @@ protected:
     std::unique_ptr<Graph> _loadedGraph;
     fs::Path _workingPath;
     std::unique_ptr<TuringTestEnv> _env;
+    QueryConfig _queryConfig;
 
     void dumpLoadSimpleDB() {
         auto res = GraphDumper::dump(*_builtGraph, _workingPath);
@@ -110,11 +112,11 @@ TEST_F(CommitJournalSerialisationTest, createNodeThenLoad) {
     // Make a change to the graph
     {
         ChangeID changeID = newChange();
-        auto res1 = _env->getDB().query("create (n:NEWNODE)", graphName, &_env->getMem(),
+        auto res1 = _env->getDB().query("create (n:NEWNODE)", graphName, &_env->getMem(), &_queryConfig,
                                         CommitHash::head(), changeID);
         ASSERT_TRUE(res1);
 
-        auto res2 = _env->getDB().query("change submit", graphName, &_env->getMem(),
+        auto res2 = _env->getDB().query("change submit", graphName, &_env->getMem(), &_queryConfig,
                                         CommitHash::head(), changeID);
         ASSERT_TRUE(res2);
     }
@@ -168,15 +170,15 @@ TEST_F(CommitJournalSerialisationTest, createNodesAndEdgesThenLoad) {
     // Make a change to the graph
     {
         ChangeID changeID = newChange();
-        auto res1 = _env->getDB().query("create (n:NEWNODE)", graphName, &_env->getMem(),
+        auto res1 = _env->getDB().query("create (n:NEWNODE)", graphName, &_env->getMem(), &_queryConfig,
                                         CommitHash::head(), changeID);
 
         ASSERT_TRUE(res1);
         auto res2 = _env->getDB().query("create (n:NEWNODE)-[e:NEWEDGE]->(m:NEWNODE)", graphName,
-                                        &_env->getMem(), CommitHash::head(), changeID);
+                                        &_env->getMem(), &_queryConfig, CommitHash::head(), changeID);
         ASSERT_TRUE(res2);
 
-        auto res3 = _env->getDB().query("change submit", graphName, &_env->getMem(),
+        auto res3 = _env->getDB().query("change submit", graphName, &_env->getMem(), &_queryConfig,
                                         CommitHash::head(), changeID);
         ASSERT_TRUE(res3);
     }

@@ -12,6 +12,7 @@
 #include "CompilerException.h"
 #include "procedures/ProcedureManager.h"
 #include "versioning/Transaction.h"
+#include "PlanGenConfig.h"
 #include "PlanGraphGenerator.h"
 #include "PlanGraph.h"
 #include "PlanGraphDebug.h"
@@ -108,7 +109,8 @@ int main(int argc, char** argv) {
         dumper.dump(std::cout);
     }
 
-    PlanGraphGenerator planGen(ast, view);
+    PlanGenConfig planGenConfig;
+    PlanGraphGenerator planGen(ast, view, &planGenConfig);
     PlanGraph& planGraph = planGen.getPlanGraph();
     {
         fmt::print("\n=== Query plan generation ===\n\n");

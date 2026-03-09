@@ -11,6 +11,7 @@
 #include "procedures/ProcedureManager.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
+#include "PlanGenConfig.h"
 #include "PlanGraphGenerator.h"
 #include "PlanGraph.h"
 #include "CypherAnalyzer.h"
@@ -97,7 +98,8 @@ void runPlan2(std::string_view query) {
         return;
     }
 
-    PlanGraphGenerator planGen(ast, view);
+    PlanGenConfig planGenConfig;
+    PlanGraphGenerator planGen(ast, view, &planGenConfig);
     try {
         const auto t0 = Clock::now();
         planGen.generate(ast.queries().front());
