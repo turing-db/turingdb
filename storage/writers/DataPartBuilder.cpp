@@ -68,10 +68,21 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
         _edgeProperties->registerPropertyType<T>(ptID);
     }
     if (edge._edgeID < _firstEdgeID) {
-        _patchedEdges.emplace(edge._edgeID, &edge);
+        _patchedEdges.emplace(edge._edgeID, edge);
         _patchNodeLabelSets.emplace(edge._nodeID, LabelSetHandle {});
     }
     _edgeProperties->add<T>(ptID, edge._edgeID.getValue(), std::move(value));
+}
+
+void DataPartBuilder::addNodePropertyTombstone(NodeID nodeID, PropertyTypeID ptID) {
+    if (nodeID < _firstNodeID) {
+        _patchNodeLabelSets.emplace(nodeID, LabelSetHandle {});
+    }
+    _nodePropertyTombstones.add(ptID, nodeID.getValue());
+}
+
+void DataPartBuilder::addEdgePropertyTombstone(EdgeID edgeID, PropertyTypeID ptID) {
+    _edgePropertyTombstones.add(ptID, edgeID.getValue());
 }
 
 const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, NodeID tgtID) {

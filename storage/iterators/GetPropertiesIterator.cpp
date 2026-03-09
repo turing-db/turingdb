@@ -135,19 +135,7 @@ void GetPropertiesIteratorWithNull<ID, T>::init() {
     }
 
     _entityIt = _inputIDs->cbegin();
-    for (; _partIt.isNotEnd(); _partIt.next()) {
-        const DataPart* part = _partIt.get();
-        const PropertyManager& properties = std::is_same_v<ID, NodeID>
-                                              ? part->nodeProperties()
-                                              : part->edgeProperties();
-
-        if (properties.hasPropertyType(_propTypeID)) {
-            _prop = properties.tryGet<T>(_propTypeID, _entityIt->getValue());
-            if (_prop) {
-                return;
-            }
-        }
-    }
+    findProperty();
 }
 
 template <IteratedID ID, SupportedType T>
@@ -159,7 +147,6 @@ void GetPropertiesIteratorWithNull<ID, T>::reset() {
 
 template <IteratedID ID, SupportedType T>
 void GetPropertiesIteratorWithNull<ID, T>::next() {
-    // Reset the _prop pointer
     _prop = nullptr;
 
     _entityIt++;
@@ -167,18 +154,38 @@ void GetPropertiesIteratorWithNull<ID, T>::next() {
         return;
     }
 
-    Iterator::reset();
-    for (; _partIt.isNotEnd(); _partIt.next()) {
-        const DataPart* part = _partIt.get();
+    findProperty();
+}
+
+template <IteratedID ID, SupportedType T>
+void GetPropertiesIteratorWithNull<ID, T>::findProperty() {
+    _prop = nullptr;
+    const auto parts = _view.dataparts();
+
+    for (auto it = parts.rbegin(); it != parts.rend(); ++it) {
+        const DataPart* part = it->get();
+
+        if constexpr (std::is_same_v<ID, NodeID>) {
+            if (part->nodePropertyTombstones().contains(_propTypeID, _entityIt->getValue())) {
+                return;
+            }
+        } else {
+            if (part->edgePropertyTombstones().contains(_propTypeID, _entityIt->getValue())) {
+                return;
+            }
+        }
+
         const PropertyManager& properties = std::is_same_v<ID, NodeID>
                                               ? part->nodeProperties()
                                               : part->edgeProperties();
 
-        if (properties.hasPropertyType(_propTypeID)) {
-            _prop = properties.tryGet<T>(_propTypeID, _entityIt->getValue());
-            if (_prop) {
-                return;
-            }
+        if (!properties.hasPropertyType(_propTypeID)) {
+            continue;
+        }
+
+        _prop = properties.tryGet<T>(_propTypeID, _entityIt->getValue());
+        if (_prop) {
+            return;
         }
     }
 }

@@ -7,6 +7,7 @@
 #include "EdgeRecord.h"
 #include "ID.h"
 #include "properties/PropertyManager.h"
+#include "versioning/PropertyTombstoneSet.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -51,6 +52,9 @@ public:
 
     const EdgeRecord& addEdge(EdgeTypeID typeID, NodeID srcID, NodeID tgtID);
 
+    void addNodePropertyTombstone(NodeID nodeID, PropertyTypeID ptID);
+    void addEdgePropertyTombstone(EdgeID edgeID, PropertyTypeID ptID);
+
     NodeID firstNodeID() const { return _firstNodeID; }
     EdgeID firstEdgeID() const { return _firstEdgeID; }
     size_t nodeCount() const { return _coreNodeLabelSets.size(); }
@@ -80,18 +84,21 @@ private:
     std::vector<LabelSetHandle> _coreNodeLabelSets;
     std::vector<NodeID> _tmpNodeIDVector;
     std::vector<EdgeRecord> _edges;
-    std::unordered_map<EdgeID, const EdgeRecord*> _patchedEdges;
+    std::unordered_map<EdgeID, EdgeRecord> _patchedEdges;
     std::unordered_set<NodeID> _nodeHasPatchEdges;
     std::map<NodeID, LabelSetHandle> _patchNodeLabelSets;
     std::unique_ptr<PropertyManager> _nodeProperties;
     std::unique_ptr<PropertyManager> _edgeProperties;
+
+    PropertyTombstoneSet _nodePropertyTombstones;
+    PropertyTombstoneSet _edgePropertyTombstones;
 
     std::vector<LabelSetHandle>& coreNodeLabelSets() { return _coreNodeLabelSets; }
     std::vector<EdgeRecord>& edges() { return _edges; }
     std::unique_ptr<PropertyManager>& nodeProperties() { return _nodeProperties; }
     std::unique_ptr<PropertyManager>& edgeProperties() { return _edgeProperties; }
     std::map<NodeID, LabelSetHandle>& patchNodeLabelSets() { return _patchNodeLabelSets; }
-    std::unordered_map<EdgeID, const EdgeRecord*>& patchedEdges() { return _patchedEdges; }
+    std::unordered_map<EdgeID, EdgeRecord>& patchedEdges() { return _patchedEdges; }
     size_t patchNodeEdgeDataCount() const {
         return _nodeHasPatchEdges.size();
     }

@@ -108,6 +108,7 @@ protected:
     ColumnIDs::ConstIterator _entityIt;
 
     void init();
+    void findProperty();
 };
 
 template <IteratedID ID, SupportedType T>
