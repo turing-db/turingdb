@@ -95,23 +95,31 @@ struct toIntegerFunction {
     }
 };
 
+// NOTE: macOS wheel build libc++ doesn't support from_chars on double: use strtod instead
 struct toFloatFunction {
     using ResultType = types::Double::Primitive;
 
+    std::string _buf; // Temporary buffer to null-terminate string view
+
     ResultType operator()(std::string_view sv) {
-        ResultType result {std::numeric_limits<ResultType>::max()};
+        // @ref std::strtod requires a null-terminated std::string: convert the string_view
+        _buf.assign(sv);
+        char* end {nullptr};
+        errno = 0;
 
-        const auto* start = sv.data();
-        const auto* end = sv.data() + sv.size();
+        const ResultType result = std::strtod(_buf.data(), &end);
 
-        auto [ptr, ec] = std::from_chars(start, end, result);
-
-        const bool success = ec == std::errc {};
-        const bool parsedAll = ptr == end;
-
-        if (!success || !parsedAll) {
+        // Either empty string, or could not parse all of the string as double
+        const bool couldNotConvert = end == _buf.data() || end != _buf.data() + _buf.size();
+        if (couldNotConvert) {
             throw PipelineException(
                 fmt::format("toFloat: cannot convert '{}' to float.", sv));
+        }
+
+        const bool outOfRange = errno == ERANGE;
+        if (outOfRange) {
+            throw PipelineException(
+                fmt::format("toFloat: cannot convert '{}' to float: out of range.", sv));
         }
 
         return result;
