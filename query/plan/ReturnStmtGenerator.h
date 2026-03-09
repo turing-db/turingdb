@@ -52,7 +52,6 @@ private:
 
     ExprEvalNode* _exprEvalNode {nullptr};
     AggregateEvalNode* _aggrEvalNode {nullptr};
-    FuncEvalNode* _funcEvalNode {nullptr};
 
     GetPropertyCache& _propCache;
     GetEntityTypeCache& _entCache;

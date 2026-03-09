@@ -54,7 +54,6 @@ ReturnStmtGenerator::ReturnStmtGenerator(const CypherAST* ast,
 
 void ReturnStmtGenerator::prepare() {
     _aggrEvalNode = _tree->create<AggregateEvalNode>();
-    _funcEvalNode = _tree->create<FuncEvalNode>();
     _exprEvalNode = _tree->create<ExprEvalNode>();
     _proj = _stmt->getProjection();
     bioassert(_proj, "Failed to get projection for RETURN statement.");
@@ -89,25 +88,16 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         }
     }
 
-    // Expression evaluation is the only node which does not require a previous input, for example
-    // `RETURN 5`
-    // has no previous input, but is valid.
+    // Expression evaluation (including non-aggregate function evaluation) is the only
+    // node which does not require a previous input, for example `RETURN 5` has no
+    // previous input, but is valid.
+    // NOTE: In case of a function which takes no arguments being supported, the above
+    // becomes false.
     if (!_exprEvalNode->getExprs().empty()) {
         if (_prevNode) {
             _prevNode->connectOut(_exprEvalNode);
         }
         _prevNode = _exprEvalNode;
-    }
-
-    // Functions always require some previous node, even in the case of
-    // `RETURN sqrt(5)`
-    // the `5` must have been produced by the above ExprEvalNode, which sets
-    // @ref _prevNode to non-null
-    // NOTE: In case of a function which takes no arguments being supported, the above
-    // becomes false.
-    if (_prevNode && !_funcEvalNode->getFuncs().empty()) {
-        _prevNode->connectOut(_funcEvalNode);
-        _prevNode = _funcEvalNode;
     }
 
     // Aggregates always require some previous node, even in the case of
@@ -269,8 +259,6 @@ void ReturnStmtGenerator::handleExprDependencies(Expr* expr) {
 
         if (signature->isAggregate()) {
             _aggrEvalNode->addFunc(dep._expr);
-        } else {
-            _funcEvalNode->addFunc(dep._expr);
         }
     }
 
