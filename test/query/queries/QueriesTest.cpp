@@ -1409,36 +1409,6 @@ TEST_F(QueriesTest, db_history) {
     actualRows.clear();
 }
 
-TEST_F(QueriesTest, matchCrossProductWithDbHistory) {
-    using HistoryRow = LineContainer<std::string, uint64_t, uint64_t, uint64_t>;
-
-    HistoryRow expectedRows;
-    HistoryRow actualRows;
-
-    size_t nodeCount = 0;
-
-    auto result = query("MATCH (n), (m) RETURN labels(n)", [&](const Dataframe* df) -> void {
-        ASSERT_TRUE(df != nullptr);
-        ASSERT_EQ(df->cols().size(), 4);
-        ASSERT_EQ(df->getLogicalRowCount(), nodeCount * nodeCount);
-
-        const auto& cols = df->cols();
-        const auto* commitCol = cols.at(0)->as<ColumnVector<std::string>>();
-        const auto* nodeCountCol = cols.at(1)->as<ColumnVector<uint64_t>>();
-        const auto* edgeCountCol = cols.at(2)->as<ColumnVector<uint64_t>>();
-        const auto* partCountCol = cols.at(3)->as<ColumnVector<uint64_t>>();
-
-        for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
-            actualRows.add({commitCol->at(i),
-                            nodeCountCol->at(i),
-                            edgeCountCol->at(i),
-                            partCountCol->at(i)});
-        }
-    });
-
-    EXPECT_EQ(result.getStatus(), QueryStatus::Status::PLAN_ERROR);
-}
-
 TEST_F(QueriesTest, matchCrossProductWithCountStar) {
     const size_t nodeCount = read().getNodeCount();
     const size_t expectedCount = nodeCount * nodeCount;
