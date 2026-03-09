@@ -1,5 +1,7 @@
 #include "GraphReader.h"
 
+#include <unordered_set>
+
 #include "DataPart.h"
 #include "NodeContainer.h"
 #include "EdgeContainer.h"
@@ -190,15 +192,21 @@ NodeView GraphReader::getNodeView(NodeID id) const {
         return view;
     }
 
-    // Once we found the labelset of a node,
-    // it means we found the definition of the node
-    // We can start gathering properties and edges
+    // Gather properties newest-first for dedup, edges from all parts
+    const auto parts = _view.dataparts();
+    std::unordered_set<PropertyTypeID> seen;
+
+    for (auto it = parts.rbegin(); it != parts.rend(); ++it) {
+        const PropertyManager& nodeProperties = (*it)->nodeProperties();
+        nodeProperties.fillEntityPropertyViewUnique(id.getValue(), labelset, view._props, seen);
+        // After checking values, mark tombstoned ptIDs as seen so older values are skipped
+        (*it)->nodePropertyTombstones().markSeen(id.getValue(), seen);
+    }
+
+    // Gather edges from all parts (order doesn't matter for edges)
     for (; partIt.isNotEnd(); partIt.next()) {
         const auto* part = partIt.get();
         const EdgeIndexer& edgeIndexer = part->edgeIndexer();
-        const PropertyManager& nodeProperties = part->nodeProperties();
-
-        nodeProperties.fillEntityPropertyView(id.getValue(), labelset, view._props);
         edgeIndexer.fillEntityEdgeView(id, view._edges);
     }
 
@@ -231,12 +239,14 @@ EdgeView GraphReader::getEdgeView(EdgeID id) const {
         return view;
     }
 
-    // Once we found the edge, we can start gathering its properties
-    for (; partIt.isNotEnd(); partIt.next()) {
-        const auto* part = partIt.get();
-        const PropertyManager& edgeProperties = part->edgeProperties();
+    // Gather properties newest-first for dedup
+    const auto parts = _view.dataparts();
+    std::unordered_set<PropertyTypeID> seen;
 
-        edgeProperties.fillEntityPropertyView(id.getValue(), labelset, view._props);
+    for (auto it = parts.rbegin(); it != parts.rend(); ++it) {
+        const PropertyManager& edgeProperties = (*it)->edgeProperties();
+        edgeProperties.fillEntityPropertyViewUnique(id.getValue(), labelset, view._props, seen);
+        (*it)->edgePropertyTombstones().markSeen(id.getValue(), seen);
     }
 
     return view;
@@ -257,8 +267,12 @@ MatchLabelSetIterator GraphReader::matchLabelSets(const LabelSetHandle& labelSet
 }
 
 bool GraphReader::nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const {
-    for (const auto& part : _view.dataparts()) {
-        if (part->nodeProperties().has(ptID, nodeID.getValue())) {
+    const auto parts = _view.dataparts();
+    for (auto it = parts.rbegin(); it != parts.rend(); ++it) {
+        if ((*it)->nodePropertyTombstones().contains(ptID, nodeID.getValue())) {
+            return false;
+        }
+        if ((*it)->nodeProperties().has(ptID, nodeID.getValue())) {
             return true;
         }
     }
@@ -287,8 +301,12 @@ bool GraphReader::edgeIsDeleted(EdgeID edgeID) const {
 
 template <SupportedType T>
 const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const {
-    for (const auto& part : _view.dataparts()) {
-        const auto* p = part->nodeProperties().tryGet<T>(ptID, nodeID.getValue());
+    const auto parts = _view.dataparts();
+    for (auto it = parts.rbegin(); it != parts.rend(); ++it) {
+        if ((*it)->nodePropertyTombstones().contains(ptID, nodeID.getValue())) {
+            return nullptr;
+        }
+        const auto* p = (*it)->nodeProperties().tryGet<T>(ptID, nodeID.getValue());
         if (p) {
             return p;
         }
@@ -299,8 +317,12 @@ const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID 
 
 template <SupportedType T>
 const T::Primitive* GraphReader::tryGetEdgeProperty(PropertyTypeID ptID, EdgeID edgeID) const {
-    for (const auto& part : _view.dataparts()) {
-        const auto* p = part->edgeProperties().tryGet<T>(ptID, edgeID.getValue());
+    const auto parts = _view.dataparts();
+    for (auto it = parts.rbegin(); it != parts.rend(); ++it) {
+        if ((*it)->edgePropertyTombstones().contains(ptID, edgeID.getValue())) {
+            return nullptr;
+        }
+        const auto* p = (*it)->edgeProperties().tryGet<T>(ptID, edgeID.getValue());
         if (p) {
             return p;
         }

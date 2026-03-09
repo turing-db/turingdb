@@ -55,6 +55,39 @@ public:
      using DeletedNodes = std::unordered_set<NodeID>;
      using DeletedEdges = std::unordered_set<EdgeID>;
 
+     struct UpdatedNodeProperty {
+         NodeID nodeID;
+         UntypedProperty property;
+     };
+
+     struct UpdatedEdgeProperty {
+         EdgeID edgeID;
+         NodeID srcID;
+         NodeID tgtID;
+         EdgeTypeID edgeType;
+         UntypedProperty property;
+     };
+
+     struct RemovedNodeProperty {
+         NodeID nodeID;
+         PropertyTypeID propertyID;
+     };
+
+     struct RemovedEdgeProperty {
+         EdgeID edgeID;
+         PropertyTypeID propertyID;
+     };
+
+     void addUpdatedNodeProperty(NodeID nodeID, UntypedProperty property);
+     void addUpdatedEdgeProperty(EdgeID edgeID, NodeID srcID, NodeID tgtID,
+                                 EdgeTypeID edgeType, UntypedProperty property);
+     void addRemovedNodeProperty(NodeID nodeID, PropertyTypeID propertyID);
+     void addRemovedEdgeProperty(EdgeID edgeID, PropertyTypeID propertyID);
+
+     void buildUpdated(DataPartBuilder& builder);
+
+     bool containsUpdates() const;
+
      /**
       * @brief Adds a pending node to this WriteBuffer with empty properties and
       * labels.
@@ -155,6 +188,14 @@ private:
 
     // Edges to be deleted when this commit commits
     std::unordered_set<EdgeID> _deletedEdges;
+
+    // Property value updates
+    std::vector<UpdatedNodeProperty> _updatedNodeProperties;
+    std::vector<UpdatedEdgeProperty> _updatedEdgeProperties;
+
+    // Property removals
+    std::vector<RemovedNodeProperty> _removedNodeProperties;
+    std::vector<RemovedEdgeProperty> _removedEdgeProperties;
 
     PendingNodes& pendingNodes() { return _pendingNodes; }
     PendingEdges& pendingEdges() { return _pendingEdges; }

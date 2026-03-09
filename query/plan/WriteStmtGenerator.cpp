@@ -102,16 +102,20 @@ void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* pre
             // PropertyExprAssign case
             [this](const SetItem::PropertyExprAssign& v) {
                 const VarDecl* decl = v._propTypeExpr->getEntityVarDecl();
+                const std::string_view propName = v._propTypeExpr->getPropName();
 
-                if (decl->getType() == EvaluatedType::NodePattern) {
-                    _currentNode->addNodeUpdate(v._propTypeExpr->getEntityVarDecl(),
-                                                v._propTypeExpr->getPropName(),
-                                                v._propValueExpr);
+                if (v._propValueExpr->getType() == EvaluatedType::Null) {
+                    // Property removal
+                    if (decl->getType() == EvaluatedType::NodePattern) {
+                        _currentNode->addNodePropertyRemoval(decl, propName);
+                    } else if (decl->getType() == EvaluatedType::EdgePattern) {
+                        _currentNode->addEdgePropertyRemoval(decl, propName);
+                    }
+                } else if (decl->getType() == EvaluatedType::NodePattern) {
+                    _currentNode->addNodeUpdate(decl, propName, v._propValueExpr);
 
                 } else if (decl->getType() == EvaluatedType::EdgePattern) {
-                    _currentNode->addEdgeUpdate(v._propTypeExpr->getEntityVarDecl(),
-                                                v._propTypeExpr->getPropName(),
-                                                v._propValueExpr);
+                    _currentNode->addEdgeUpdate(decl, propName, v._propValueExpr);
                 }
             },
 

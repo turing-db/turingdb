@@ -775,7 +775,11 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
                                                         const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
                                                         const WriteProcessor::DeletedEdges& edgeColumnsToDelete,
                                                         WriteProcessor::PendingNodes& pendingNodes,
-                                                        WriteProcessor::PendingEdges& pendingEdges) {
+                                                        WriteProcessor::PendingEdges& pendingEdges,
+                                                        WriteProcessor::NodeUpdates& nodeUpdates,
+                                                        WriteProcessor::EdgeUpdates& edgeUpdates,
+                                                        WriteProcessor::NodePropertyRemovals& nodeRemovals,
+                                                        WriteProcessor::EdgePropertyRemovals& edgeRemovals) {
     const bool hasInput = _pendingOutput.getInterface();
     auto* processor = WriteProcessor::create(_pipeline, exprProg, hasInput);
     if (hasInput) {
@@ -842,8 +846,31 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
         edge._tag = newCol->getTag();
         edge._srcTag = edge._srcTag.isValid() ? edge._srcTag : varToCol[edge._srcName];
         edge._tgtTag = edge._tgtTag.isValid() ? edge._tgtTag : varToCol[edge._tgtName];
+        varToCol[edge._name] = edge._tag;
     }
     processor->setPendingEdges(pendingEdges);
+
+    // Resolve any unresolved tags for updates/removals (e.g. when SET refers to a
+    // node created in the same CREATE clause, the column is allocated above)
+    {
+        auto resolveTag = [&](ColumnTag& tag, std::string_view varName) {
+            if (!tag.isValid() && !varName.empty()) {
+                auto it = varToCol.find(varName);
+                if (it != varToCol.end()) {
+                    tag = it->second;
+                }
+            }
+        };
+        for (auto& u : nodeUpdates) { resolveTag(u._tag, u._varName); }
+        for (auto& u : edgeUpdates) { resolveTag(u._tag, u._varName); }
+        for (auto& r : nodeRemovals) { resolveTag(r._tag, r._varName); }
+        for (auto& r : edgeRemovals) { resolveTag(r._tag, r._varName); }
+    }
+
+    processor->setNodeUpdates(nodeUpdates);
+    processor->setEdgeUpdates(edgeUpdates);
+    processor->setNodePropertyRemovals(nodeRemovals);
+    processor->setEdgePropertyRemovals(edgeRemovals);
 
     if (hasInput) {
         PipelineBlockInputInterface& input = processor->input();

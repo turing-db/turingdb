@@ -85,6 +85,7 @@ set(storage_sources
         versioning/WriteSet.cpp
         versioning/Tombstones.cpp
         versioning/TombstoneSet.cpp
+        versioning/PropertyTombstoneSet.cpp
         versioning/VersionControlException.cpp
         versioning/TombstoneRanges.cpp
 

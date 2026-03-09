@@ -145,6 +145,11 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         wb.buildPending(dpBuilder);
     }
 
+    if (wb.containsUpdates()) {
+        DataPartBuilder& dpBuilder = newBuilder();
+        wb.buildUpdated(dpBuilder);
+    }
+
     wb.setFlushed();
 }
 

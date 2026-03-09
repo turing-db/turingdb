@@ -27,6 +27,16 @@ public:
         const Expr* _propValueExpr {nullptr};
     };
 
+    struct NodePropertyRemoval {
+        const VarDecl* _decl {nullptr};
+        std::string_view _propTypeName;
+    };
+
+    struct EdgePropertyRemoval {
+        const VarDecl* _decl {nullptr};
+        std::string_view _propTypeName;
+    };
+
     /// @brief Describes a pending node.
     struct PendingNode {
         /// @brief The node data, contains the label and property constraints
@@ -88,6 +98,14 @@ public:
         _edgeUpdates.emplace_back(decl, propTypeExpr, expr);
     }
 
+    void addNodePropertyRemoval(const VarDecl* decl, std::string_view propName) {
+        _nodePropertyRemovals.emplace_back(decl, propName);
+    }
+
+    void addEdgePropertyRemoval(const VarDecl* decl, std::string_view propName) {
+        _edgePropertyRemovals.emplace_back(decl, propName);
+    }
+
     const PendingNode& getPendingNode(size_t offset) const {
         return _newNodes.at(offset);
     }
@@ -118,6 +136,8 @@ public:
     using ToDeleteEdgeSpan = std::span<const VarDecl* const>;
     using NodeUpdateSpan = std::span<const NodeUpdate>;
     using EdgeUpdateSpan = std::span<const EdgeUpdate>;
+    using NodePropertyRemovalSpan = std::span<const NodePropertyRemoval>;
+    using EdgePropertyRemovalSpan = std::span<const EdgePropertyRemoval>;
 
     PendingNodeSpan pendingNodes() const { return _newNodes; }
     PendingEdgeSpan pendingEdges() const { return _newEdges; }
@@ -125,6 +145,8 @@ public:
     ToDeleteEdgeSpan toDeleteEdges() const { return _toDeleteEdges; }
     NodeUpdateSpan nodeUpdates() const { return _nodeUpdates; }
     EdgeUpdateSpan edgeUpdates() const { return _edgeUpdates; }
+    NodePropertyRemovalSpan nodePropertyRemovals() const { return _nodePropertyRemovals; }
+    EdgePropertyRemovalSpan edgePropertyRemovals() const { return _edgePropertyRemovals; }
 
 private:
     /// @brief Maps the VarDecl of a new node to its offset in the _newNodes vector
@@ -150,6 +172,12 @@ private:
 
     /// @brief Contains the VarDecls of edges to be deleted
     std::vector<const VarDecl*> _toDeleteEdges;
+
+    /// @brief Contains the node property removals (SET NULL / REMOVE)
+    std::vector<NodePropertyRemoval> _nodePropertyRemovals;
+
+    /// @brief Contains the edge property removals (SET NULL / REMOVE)
+    std::vector<EdgePropertyRemoval> _edgePropertyRemovals;
 };
 
 }

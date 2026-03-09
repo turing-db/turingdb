@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "ID.h"
 #include "metadata/PropertyType.h"
@@ -133,6 +134,11 @@ public:
     void fillEntityPropertyView(EntityID entityID,
                                 const LabelSetHandle& labelset,
                                 EntityPropertyView& view) const;
+
+    void fillEntityPropertyViewUnique(EntityID entityID,
+                                      const LabelSetHandle& labelset,
+                                      EntityPropertyView& view,
+                                      std::unordered_set<PropertyTypeID>& seen) const;
 
     PropertyContainerMap::iterator begin() { return _map.begin(); }
     PropertyContainerMap::const_iterator begin() const { return _map.begin(); }

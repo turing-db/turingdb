@@ -59,6 +59,55 @@ void PropertyManager::fillEntityPropertyView(EntityID entityID,
     }
 }
 
+void PropertyManager::fillEntityPropertyViewUnique(EntityID entityID,
+                                                    const LabelSetHandle& labelset,
+                                                    EntityPropertyView& view,
+                                                    std::unordered_set<PropertyTypeID>& seen) const {
+    bioassert(labelset.isValid(), "Labelset must be valid");
+
+    const auto fill = [&](const auto& container, PropertyTypeID ptID) {
+        if (seen.contains(ptID)) {
+            return;
+        }
+        if (!_indexers.contains(ptID)) {
+            return;
+        }
+
+        const auto* primitive = container.tryGet(entityID);
+        if (primitive) {
+            auto& prop = view._props.emplace_back();
+            prop._id = ptID;
+            prop._value = primitive;
+            seen.insert(ptID);
+        }
+    };
+
+    for (const auto& [ptID, rawContainer] : _uint64s) {
+        const auto& container = rawContainer->cast<types::UInt64>();
+        fill(container, ptID);
+    }
+
+    for (const auto& [ptID, rawContainer] : _int64s) {
+        const auto& container = rawContainer->cast<types::Int64>();
+        fill(container, ptID);
+    }
+
+    for (const auto& [ptID, rawContainer] : _doubles) {
+        const auto& container = rawContainer->cast<types::Double>();
+        fill(container, ptID);
+    }
+
+    for (const auto& [ptID, rawContainer] : _strings) {
+        const auto& container = rawContainer->cast<types::String>();
+        fill(container, ptID);
+    }
+
+    for (const auto& [ptID, rawContainer] : _bools) {
+        const auto& container = rawContainer->cast<types::Bool>();
+        fill(container, ptID);
+    }
+}
+
 const LabelSetPropertyIndexer* PropertyManager::tryGetIndexer(PropertyTypeID ptID) const {
     auto it = _indexers.find(ptID);
     if (it != _indexers.end()) {

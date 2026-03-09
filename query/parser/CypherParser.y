@@ -338,6 +338,8 @@
 %type<db::CreateStmt*> createSt
 %type<db::SetStmt*> setSt
 %type<db::SetItem*> setItem
+%type<db::SetStmt*> removeSt
+%type<db::SetItem*> removeItem
 %type<db::LoadCSVStmt*> loadCSVSt
 %type<db::DeleteStmt*> deleteSt
 %type<db::ReturnStmt*> returnSt
@@ -719,7 +721,7 @@ updatingStatement
     | mergeSt { scanner.notImplemented(@$, "MERGE"); }
     | deleteSt { $$ = $1; }
     | setSt { $$ = $1; }
-    | removeSt { scanner.notImplemented(@$, "REMOVE"); }
+    | removeSt { $$ = $1; }
     ;
  
 deleteSt
@@ -728,17 +730,25 @@ deleteSt
     ;
 
 removeSt
-    : REMOVE removeItemChain { scanner.notImplemented(@$, "REMOVE"); }
-    ;
-
-removeItemChain
-    : removeItem { scanner.notImplemented(@$, "REMOVE"); }
-    | removeItemChain COMMA removeItem { scanner.notImplemented(@$, "REMOVE multiple items"); }
+    : REMOVE removeItem {
+        $$ = SetStmt::create(ast);
+        $$->addItem($2);
+        LOC($$, @$);
+      }
+    | removeSt COMMA removeItem {
+        $$ = $1;
+        $$->addItem($3);
+      }
     ;
 
 removeItem
-    : entityTypeExpr { scanner.notImplemented(@$, "REMOVE"); }
-    | propertyExpr { scanner.notImplemented(@$, "REMOVE"); }
+    : entityTypeExpr { scanner.notImplemented(@$, "REMOVE label"); }
+    | propertyExpr {
+        auto* nullExpr = NullLiteral::create(ast);
+        auto* nullLitExpr = LiteralExpr::create(ast, nullExpr);
+        $$ = SetItem::create(ast, static_cast<PropertyExpr*>($1), nullLitExpr);
+        LOC($$, @$);
+      }
     ;
 
 callSt

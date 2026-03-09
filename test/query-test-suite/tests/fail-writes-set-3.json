@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) SET n.age = \"text\"",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) SET n.age = \"text\"\n       |                      ^^^^^^^^^^^^^^\n-------* Cannot evaluate property: types 'Int64' and 'String' are incompatible",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) SET n.age = \"text\"\n       |                      ^^^^^^^^^^^^^^\n-------* Cannot evaluate property: types 'Int64' and 'String' are incompatible",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n:Person) SET n.age = \\\"text\\\"\\n       |                      ^^^^^^^^^^^^^^\\n-------* Cannot evaluate property: types 'Int64' and 'String' are incompatible\"}"
+  },
+  "tags": [
+    "fail",
+    "writes",
+    "set"
+  ],
+  "write-required": true
+}

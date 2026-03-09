@@ -253,16 +253,22 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
     const auto visitor = Overloaded {
         // PropertyExprAssign case
         [this, item](const SetItem::PropertyExprAssign& v) {
-            // Analyzing rhs
+            // Analyze RHS expression first so its type is evaluated
+            _exprAnalyzer->analyzeRootExpr(v._propValueExpr);
+
             const EvaluatedType rhsType = v._propValueExpr->getType();
 
-            // Analyzing lhs
+            if (rhsType == EvaluatedType::Null) {
+                // SET n.prop = NULL removes the property
+                // Property must already exist (allowCreate=false)
+                _exprAnalyzer->analyzePropertyExpr(v._propTypeExpr, false);
+                return;
+            }
+
             const ValueType lhsEvaluatedVt = _exprAnalyzer->analyzePropertyExpr(v._propTypeExpr,
                                                                                 true,
                                                                                 evaluatedToValueType(rhsType));
-            _exprAnalyzer->analyzeRootExpr(v._propValueExpr);
 
-            // Checking property compatibility
             if (!ExprAnalyzer::propTypeCompatible(lhsEvaluatedVt, rhsType)) {
                 throwError(fmt::format("Cannot evaluate property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(lhsEvaluatedVt),

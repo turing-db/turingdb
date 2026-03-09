@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) REMOVE n:Person",
+  "expect": {
+    "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n:Person) REMOVE n:Person\n       |                         ^^^^^^^^\n-------* Not implemented: REMOVE label",
+    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n:Person) REMOVE n:Person\n       |                         ^^^^^^^^\n-------* Not implemented: REMOVE label",
+    "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | MATCH (n:Person) REMOVE n:Person\\n       |                         ^^^^^^^^\\n-------* Not implemented: REMOVE label\"}"
+  },
+  "tags": [
+    "fail",
+    "writes",
+    "remove"
+  ],
+  "write-required": true
+}

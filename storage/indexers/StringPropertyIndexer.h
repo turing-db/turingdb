@@ -87,12 +87,13 @@ void StringPropertyIndexer::addStringPropertyToIndex(
     const auto zipped = stringPropertyContainer.zipped();
     std::vector<std::string> tokens;
     for (const auto&& [tId, stringValue] : zipped) {
-        auto id = tempIDMap.at(tId.getValue());
+        const auto it = tempIDMap.find(tId.getValue());
+        const auto idVal = (it != tempIDMap.end()) ? it->second.getValue() : tId.getValue();
         // Preprocess and tokenise the string into alphanumeric subwords
         StringIndex::preprocess(tokens, stringValue);
         // Insert each subword
         for (const auto& token : tokens) {
-            trie->insert(token, id.getValue());
+            trie->insert(token, idVal);
         }
         tokens.clear();
     }

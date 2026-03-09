@@ -7,6 +7,7 @@
 #include "metadata/SupportedType.h"
 #include "metadata/PropertyType.h"
 #include "versioning/DataPartID.h"
+#include "versioning/PropertyTombstoneSet.h"
 
 namespace db {
 
@@ -73,6 +74,9 @@ public:
     const StringPropertyIndexer& getNodeStrPropIndexer() const;
     const StringPropertyIndexer& getEdgeStrPropIndexer() const;
 
+    const PropertyTombstoneSet& nodePropertyTombstones() const { return _nodePropertyTombstones; }
+    const PropertyTombstoneSet& edgePropertyTombstones() const { return _edgePropertyTombstones; }
+
 private:
     friend DataPartInfoLoader;
     friend GraphReader;
@@ -92,6 +96,9 @@ private:
     std::unique_ptr<EdgeIndexer> _edgeIndexer;
     std::unique_ptr<StringPropertyIndexer> _nodeStrPropIdx;
     std::unique_ptr<StringPropertyIndexer> _edgeStrPropIdx;
+
+    PropertyTombstoneSet _nodePropertyTombstones;
+    PropertyTombstoneSet _edgePropertyTombstones;
 };
 
 }

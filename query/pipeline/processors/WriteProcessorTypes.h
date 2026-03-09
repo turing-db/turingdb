@@ -75,13 +75,27 @@ public:
     };
 
     struct NodeUpdate {
-        PropertyConstraint* _propUpdate {nullptr};
+        PropertyConstraint _propUpdate;
         ColumnTag _tag;
+        std::string_view _varName;  // for deferred tag resolution in addWrite
     };
 
     struct EdgeUpdate {
-        PropertyConstraint* _propUpdate {nullptr};
+        PropertyConstraint _propUpdate;
         ColumnTag _tag;
+        std::string_view _varName;
+    };
+
+    struct NodePropertyRemoval {
+        std::string_view _propName;
+        ColumnTag _tag;
+        std::string_view _varName;
+    };
+
+    struct EdgePropertyRemoval {
+        std::string_view _propName;
+        ColumnTag _tag;
+        std::string_view _varName;
     };
 
 };

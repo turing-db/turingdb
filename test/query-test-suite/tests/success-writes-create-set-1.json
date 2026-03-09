@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (n:Test) SET n.name = \"Hello\" SET n.age = 42",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __WRITE__\n        __node__ (0:Test)\n        __node_update__ name\n        __node_update__ age\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "result": "",
+    "resultJson": "{\"header\":{\"column_names\":[],\"column_types\":[]},\"data\":[[]]}"
+  },
+  "tags": [
+    "success",
+    "writes",
+    "create",
+    "set"
+  ],
+  "write-required": true
+}

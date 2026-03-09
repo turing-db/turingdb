@@ -34,6 +34,10 @@ public:
     using DeletedEdges = std::vector<ColumnTag>;
     using PendingNodes = std::vector<WriteProcessorTypes::PendingNode>;
     using PendingEdges = std::vector<WriteProcessorTypes::PendingEdge>;
+    using NodeUpdates = std::vector<WriteProcessorTypes::NodeUpdate>;
+    using EdgeUpdates = std::vector<WriteProcessorTypes::EdgeUpdate>;
+    using NodePropertyRemovals = std::vector<WriteProcessorTypes::NodePropertyRemoval>;
+    using EdgePropertyRemovals = std::vector<WriteProcessorTypes::EdgePropertyRemoval>;
 
     static WriteProcessor* create(PipelineV2* pipeline,
                                   ExprProgram* exprProg,
@@ -48,6 +52,11 @@ public:
 
     void setDeletedNodes(const DeletedNodes& nodes) { _deletedNodes = nodes; }
     void setDeletedEdges(const DeletedEdges& edges) { _deletedEdges = edges; }
+
+    void setNodeUpdates(const NodeUpdates& updates) { _nodeUpdates = updates; }
+    void setEdgeUpdates(const EdgeUpdates& updates) { _edgeUpdates = updates; }
+    void setNodePropertyRemovals(const NodePropertyRemovals& r) { _nodePropertyRemovals = r; }
+    void setEdgePropertyRemovals(const EdgePropertyRemovals& r) { _edgePropertyRemovals = r; }
 
     PipelineBlockInputInterface& input() {
         if (!_input) {
@@ -78,6 +87,11 @@ private:
     PendingNodes _pendingNodes;
     PendingEdges _pendingEdges;
 
+    NodeUpdates _nodeUpdates;
+    EdgeUpdates _edgeUpdates;
+    NodePropertyRemovals _nodePropertyRemovals;
+    EdgePropertyRemovals _edgePropertyRemovals;
+
     ExprProgram* _exprProgram {nullptr};
 
     bool _writtenRowsThisCycle {false};
@@ -106,9 +120,10 @@ private:
     void performCreations();
 
     /**
-     * @warn NOT IMPLEMENTED
+     * @brief Applies property updates and removals from SET/REMOVE clauses
+     * to the @ref _writeBuffer.
      */
-    void performUpdates() = delete;
+    void performUpdates();
 
     /**
      * @brief Adds @param numIters copies of each element of @ref _pendingNodes to @ref

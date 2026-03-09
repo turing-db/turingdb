@@ -649,6 +649,7 @@ void ExprAnalyzer::addToBeCreatedType(std::string_view name, ValueType type, con
 bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
     switch (exprType) {
         case EvaluatedType::Null:
+            return true;
         case EvaluatedType::NodePattern:
         case EvaluatedType::EdgePattern:
         case EvaluatedType::StringTable:

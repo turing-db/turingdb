@@ -436,6 +436,144 @@ void WriteProcessor::postProcessTempIDs() {
     }
 }
 
+namespace {
+
+CommitWriteBuffer::UntypedProperty getPropertyValueAtRow(Column* valueCol,
+                                                          ValueType type,
+                                                          PropertyTypeID propID,
+                                                          size_t row) {
+    switch (type) {
+        case ValueType::Int64: {
+            if (auto* constCol = dynamic_cast<ColumnConst<types::Int64::Primitive>*>(valueCol)) {
+                return {propID, constCol->getRaw()};
+            }
+            auto* vecCol = dynamic_cast<ColumnVector<types::Int64::Primitive>*>(valueCol);
+            bioassert(vecCol, "Could not cast to Int64 column.");
+            return {propID, vecCol->at(row)};
+        }
+        case ValueType::UInt64: {
+            if (auto* constCol = dynamic_cast<ColumnConst<types::UInt64::Primitive>*>(valueCol)) {
+                return {propID, constCol->getRaw()};
+            }
+            auto* vecCol = dynamic_cast<ColumnVector<types::UInt64::Primitive>*>(valueCol);
+            bioassert(vecCol, "Could not cast to UInt64 column.");
+            return {propID, vecCol->at(row)};
+        }
+        case ValueType::Double: {
+            if (auto* constCol = dynamic_cast<ColumnConst<types::Double::Primitive>*>(valueCol)) {
+                return {propID, constCol->getRaw()};
+            }
+            auto* vecCol = dynamic_cast<ColumnVector<types::Double::Primitive>*>(valueCol);
+            bioassert(vecCol, "Could not cast to Double column.");
+            return {propID, vecCol->at(row)};
+        }
+        case ValueType::String: {
+            if (auto* constCol = dynamic_cast<ColumnConst<types::String::Primitive>*>(valueCol)) {
+                return {propID, std::string(constCol->getRaw())};
+            }
+            if (auto* vecCol = dynamic_cast<ColumnVector<types::String::Primitive>*>(valueCol)) {
+                return {propID, std::string(vecCol->at(row))};
+            }
+            auto* strCol = dynamic_cast<ColumnVector<std::string>*>(valueCol);
+            bioassert(strCol, "Could not cast to String column.");
+            return {propID, std::string(strCol->at(row))};
+        }
+        case ValueType::Bool: {
+            if (auto* constCol = dynamic_cast<ColumnConst<types::Bool::Primitive>*>(valueCol)) {
+                return {propID, constCol->getRaw()};
+            }
+            auto* vecCol = dynamic_cast<ColumnVector<types::Bool::Primitive>*>(valueCol);
+            bioassert(vecCol, "Could not cast to Bool column.");
+            return {propID, vecCol->at(row)};
+        }
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw FatalException("Property value column with invalid type.");
+    }
+    throw FatalException("Failed to match against property value type.");
+}
+
+}
+
+void WriteProcessor::performUpdates() {
+    const Dataframe* inDf = _input ? _input->getDataframe() : nullptr;
+    const Dataframe* outDf = _output.getDataframe();
+    const size_t numRows = inDf ? inDf->getLogicalRowCount() : outDf->getLogicalRowCount();
+    const GraphReader reader = _ctxt->getGraphView().read();
+
+    // Resolve column from input or output dataframe
+    const auto findColumn = [&](ColumnTag tag) -> NamedColumn* {
+        if (inDf) {
+            NamedColumn* col = inDf->getColumn(tag);
+            if (col) return col;
+        }
+        return outDf->getColumn(tag);
+    };
+
+    // Property value updates
+    for (const WriteProcessorTypes::NodeUpdate& update : _nodeUpdates) {
+        const auto* nodeCol = findColumn(update._tag)->as<ColumnNodeIDs>();
+        bioassert(nodeCol, "Node update column is not a NodeID column");
+        const auto& prop = update._propUpdate;
+
+        const PropertyTypeID propID =
+            _metadataBuilder->getOrCreatePropertyType(prop._propName, prop._type)._id;
+
+        for (size_t row = 0; row < numRows; ++row) {
+            const NodeID nodeID = nodeCol->at(row);
+            auto untypedProp = getPropertyValueAtRow(prop._col, prop._type, propID, row);
+            _writeBuffer->addUpdatedNodeProperty(nodeID, std::move(untypedProp));
+        }
+    }
+
+    for (const WriteProcessorTypes::EdgeUpdate& update : _edgeUpdates) {
+        const auto* edgeCol = findColumn(update._tag)->as<ColumnEdgeIDs>();
+        bioassert(edgeCol, "Edge update column is not an EdgeID column");
+        const auto& prop = update._propUpdate;
+
+        const PropertyTypeID propID =
+            _metadataBuilder->getOrCreatePropertyType(prop._propName, prop._type)._id;
+
+        for (size_t row = 0; row < numRows; ++row) {
+            const EdgeID edgeID = edgeCol->at(row);
+            const EdgeRecord* edgeRecord = reader.getEdge(edgeID);
+            bioassert(edgeRecord, "Edge not found for update");
+            auto untypedProp = getPropertyValueAtRow(prop._col, prop._type, propID, row);
+            _writeBuffer->addUpdatedEdgeProperty(edgeID, edgeRecord->_nodeID,
+                                                  edgeRecord->_otherID,
+                                                  edgeRecord->_edgeTypeID,
+                                                  std::move(untypedProp));
+        }
+    }
+
+    // Property removals (SET NULL / REMOVE)
+    for (const WriteProcessorTypes::NodePropertyRemoval& removal : _nodePropertyRemovals) {
+        const auto* nodeCol = findColumn(removal._tag)->as<ColumnNodeIDs>();
+        bioassert(nodeCol, "Node removal column is not a NodeID column");
+        const auto propType = reader.getMetadata().propTypes().get(removal._propName);
+        bioassert(propType.has_value(), "Property type not found for removal");
+        const PropertyTypeID propID = propType.value()._id;
+
+        for (size_t row = 0; row < numRows; ++row) {
+            const NodeID nodeID = nodeCol->at(row);
+            _writeBuffer->addRemovedNodeProperty(nodeID, propID);
+        }
+    }
+
+    for (const WriteProcessorTypes::EdgePropertyRemoval& removal : _edgePropertyRemovals) {
+        const auto* edgeCol = findColumn(removal._tag)->as<ColumnEdgeIDs>();
+        bioassert(edgeCol, "Edge removal column is not an EdgeID column");
+        const auto propType = reader.getMetadata().propTypes().get(removal._propName);
+        bioassert(propType.has_value(), "Property type not found for removal");
+        const PropertyTypeID propID = propType.value()._id;
+
+        for (size_t row = 0; row < numRows; ++row) {
+            const EdgeID edgeID = edgeCol->at(row);
+            _writeBuffer->addRemovedEdgeProperty(edgeID, propID);
+        }
+    }
+}
+
 void WriteProcessor::performCreations() {
     // We apply the CREATE command for each row in the input, or just a single row if we
     // have no inputs
@@ -507,11 +645,23 @@ void WriteProcessor::execute() {
         performDeletions();
     }
 
-    if (!_pendingNodes.empty() || !_pendingEdges.empty()) {
-        // Evaluate instructions so that property columns are populated with their
-        // evaluated value
+    const bool hasUpdates = !_nodeUpdates.empty() || !_edgeUpdates.empty()
+                          || !_nodePropertyRemovals.empty() || !_edgePropertyRemovals.empty();
+    const bool hasCreates = !_pendingNodes.empty() || !_pendingEdges.empty();
+
+    // Evaluate expression instructions once (shared by creates and updates)
+    if (hasUpdates || hasCreates) {
         _exprProgram->evaluateInstructions();
+    }
+
+    // Creates must happen before updates so that CREATE ... SET can reference
+    // the pending node/edge columns in the output dataframe
+    if (hasCreates) {
         performCreations();
+    }
+
+    if (hasUpdates) {
+        performUpdates();
     }
 
     if (_input) {

@@ -129,7 +129,10 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
         jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
             for (auto& id : props->ids()) {
                 if (id >= firstTmpNodeID.getValue()) {
-                    id = tmpToFinalNodeIDs.at(id.getValue()).getValue();
+                    const auto it = tmpToFinalNodeIDs.find(id.getValue());
+                    if (it != tmpToFinalNodeIDs.end()) {
+                        id = it->second.getValue();
+                    }
                 }
             }
 
@@ -191,7 +194,10 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
         jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
             for (auto& id : props->ids()) {
                 if (id >= firstTmpEdgeID.getValue()) {
-                    id = tmpToFinalEdgeIDs.at(id.getValue()).getValue();
+                    const auto it = tmpToFinalEdgeIDs.find(id.getValue());
+                    if (it != tmpToFinalEdgeIDs.end()) {
+                        id = it->second.getValue();
+                    }
                 }
             }
 

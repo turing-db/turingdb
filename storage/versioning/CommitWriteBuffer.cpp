@@ -21,6 +21,82 @@ CommitWriteBuffer::CommitWriteBuffer(CommitJournal& journal)
 {
 }
 
+void CommitWriteBuffer::addUpdatedNodeProperty(NodeID nodeID, UntypedProperty property) {
+    _updatedNodeProperties.push_back({nodeID, std::move(property)});
+}
+
+void CommitWriteBuffer::addUpdatedEdgeProperty(EdgeID edgeID, NodeID srcID, NodeID tgtID,
+                                                EdgeTypeID edgeType, UntypedProperty property) {
+    _updatedEdgeProperties.push_back({edgeID, srcID, tgtID, edgeType, std::move(property)});
+}
+
+void CommitWriteBuffer::addRemovedNodeProperty(NodeID nodeID, PropertyTypeID propertyID) {
+    _removedNodeProperties.push_back({nodeID, propertyID});
+}
+
+void CommitWriteBuffer::addRemovedEdgeProperty(EdgeID edgeID, PropertyTypeID propertyID) {
+    _removedEdgeProperties.push_back({edgeID, propertyID});
+}
+
+bool CommitWriteBuffer::containsUpdates() const {
+    return !_updatedNodeProperties.empty() || !_updatedEdgeProperties.empty()
+        || !_removedNodeProperties.empty() || !_removedEdgeProperties.empty();
+}
+
+void CommitWriteBuffer::buildUpdated(DataPartBuilder& builder) {
+    for (const auto& update : _updatedNodeProperties) {
+        std::visit(
+            [&](auto&& val) {
+                using T = std::decay_t<decltype(val)>;
+                if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
+                    builder.addNodeProperty<types::Int64>(update.nodeID, update.property.propertyID, val);
+                } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
+                    builder.addNodeProperty<types::UInt64>(update.nodeID, update.property.propertyID, val);
+                } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
+                    builder.addNodeProperty<types::Double>(update.nodeID, update.property.propertyID, val);
+                } else if constexpr (std::is_same_v<T, std::string>) {
+                    builder.addNodeProperty<types::String>(
+                        update.nodeID, update.property.propertyID, std::string(val));
+                } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
+                    builder.addNodeProperty<types::Bool>(update.nodeID, update.property.propertyID, val);
+                }
+            },
+            update.property.value);
+        _journal.addWrittenNode(update.nodeID);
+    }
+
+    for (const auto& update : _updatedEdgeProperties) {
+        const EdgeRecord edgeRecord {update.edgeID, update.srcID, update.tgtID, update.edgeType};
+        std::visit(
+            [&](auto&& val) {
+                using T = std::decay_t<decltype(val)>;
+                if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
+                    builder.addEdgeProperty<types::Int64>(edgeRecord, update.property.propertyID, val);
+                } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
+                    builder.addEdgeProperty<types::UInt64>(edgeRecord, update.property.propertyID, val);
+                } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
+                    builder.addEdgeProperty<types::Double>(edgeRecord, update.property.propertyID, val);
+                } else if constexpr (std::is_same_v<T, std::string>) {
+                    builder.addEdgeProperty<types::String>(edgeRecord, update.property.propertyID, std::string(val));
+                } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
+                    builder.addEdgeProperty<types::Bool>(edgeRecord, update.property.propertyID, val);
+                }
+            },
+            update.property.value);
+        _journal.addWrittenEdge(update.edgeID);
+    }
+
+    for (const auto& removal : _removedNodeProperties) {
+        builder.addNodePropertyTombstone(removal.nodeID, removal.propertyID);
+        _journal.addWrittenNode(removal.nodeID);
+    }
+
+    for (const auto& removal : _removedEdgeProperties) {
+        builder.addEdgePropertyTombstone(removal.edgeID, removal.propertyID);
+        _journal.addWrittenEdge(removal.edgeID);
+    }
+}
+
 CommitWriteBuffer::PendingNode& CommitWriteBuffer::newPendingNode() {
     return _pendingNodes.emplace_back();
 }
@@ -217,6 +293,23 @@ void CommitWriteBufferRebaser::rebase() {
         if (NodeID* oldTgtID = std::get_if<NodeID>(&edge.tgt)) {
             edge.tgt = NodeID {_idRebaser->rebaseNodeID(*oldTgtID)};
         }
+    }
+
+    // Rebase property value updates
+    for (auto& update : _buffer->_updatedNodeProperties) {
+        update.nodeID = _idRebaser->rebaseNodeID(update.nodeID);
+    }
+    for (auto& update : _buffer->_updatedEdgeProperties) {
+        update.edgeID = _idRebaser->rebaseEdgeID(update.edgeID);
+        update.srcID = _idRebaser->rebaseNodeID(update.srcID);
+        update.tgtID = _idRebaser->rebaseNodeID(update.tgtID);
+    }
+    // Rebase property removals
+    for (auto& removal : _buffer->_removedNodeProperties) {
+        removal.nodeID = _idRebaser->rebaseNodeID(removal.nodeID);
+    }
+    for (auto& removal : _buffer->_removedEdgeProperties) {
+        removal.edgeID = _idRebaser->rebaseEdgeID(removal.edgeID);
     }
 
     // Rebase delete sets

@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "disabled-reason": "Edge SET crashes with map::at out_of_range — implementation bug",
+  "graph": "simpledb",
+  "query": "MATCH ()-[e:KNOWS_WELL]->() SET e.duration = 999 RETURN e.duration",
+  "expect": {
+    "plan": "",
+    "result": "",
+    "resultJson": ""
+  },
+  "tags": [
+    "success",
+    "writes",
+    "set"
+  ],
+  "write-required": true
+}

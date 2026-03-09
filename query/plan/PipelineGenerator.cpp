@@ -92,6 +92,8 @@
 #include "Overloaded.h"
 #include "processors/ExprProgram.h"
 #include "ExprProgramGenerator.h"
+#include "decl/EvaluatedType.h"
+#include "expr/Expr.h"
 #include "PredicateProgramGenerator.h"
 
 #include "SystemManager.h"
@@ -112,6 +114,22 @@ namespace rg = ranges;
 namespace rv = rg::views;
 
 namespace {
+
+ValueType evaluatedToValueType(EvaluatedType type) {
+    switch (type) {
+        case EvaluatedType::Bool:
+            return ValueType::Bool;
+        case EvaluatedType::Char:
+        case EvaluatedType::String:
+            return ValueType::String;
+        case EvaluatedType::Double:
+            return ValueType::Double;
+        case EvaluatedType::Integer:
+            return ValueType::Int64;
+        default:
+            return ValueType::Invalid;
+    }
+}
 
 struct TranslateNodeToken {
     PlanGraphNode* _node {nullptr};
@@ -1321,9 +1339,69 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
         }
     }
 
-    // Has the side effect of allocing columns, and modifying the @ref _tag field of
-    // elements of @ref penNodes and @ref penEdges in-place
-    _builder.addWrite(exprProg, delNodes, delEdges, penNodes, penEdges);
+    // Process node property updates
+    // Tags for pending nodes (created in same CREATE) are resolved by addWrite using _varName
+    WriteProcessor::NodeUpdates nodeUpdates;
+    for (const WriteNode::NodeUpdate& planUpdate : node->nodeUpdates()) {
+        Column* valueCol = exprGen.registerPropertyConstraint(planUpdate._propValueExpr);
+
+        const auto propType = _view.metadata().propTypes().get(planUpdate._propTypeName);
+        const ValueType vt = propType ? propType.value()._valueType
+                                      : evaluatedToValueType(planUpdate._propValueExpr->getType());
+
+        ColumnTag tag;
+        const auto it = _declToColumn.find(planUpdate._decl);
+        if (it != end(_declToColumn)) {
+            tag = it->second;
+        }
+
+        nodeUpdates.push_back({{planUpdate._propTypeName, vt, valueCol}, tag,
+                                planUpdate._decl->getName()});
+    }
+
+    WriteProcessor::EdgeUpdates edgeUpdates;
+    for (const WriteNode::EdgeUpdate& planUpdate : node->edgeUpdates()) {
+        Column* valueCol = exprGen.registerPropertyConstraint(planUpdate._propValueExpr);
+
+        const auto propType = _view.metadata().propTypes().get(planUpdate._propTypeName);
+        const ValueType vt = propType ? propType.value()._valueType
+                                      : evaluatedToValueType(planUpdate._propValueExpr->getType());
+
+        ColumnTag tag;
+        const auto it = _declToColumn.find(planUpdate._decl);
+        if (it != end(_declToColumn)) {
+            tag = it->second;
+        }
+
+        edgeUpdates.push_back({{planUpdate._propTypeName, vt, valueCol}, tag,
+                                planUpdate._decl->getName()});
+    }
+
+    // Process property removals
+    WriteProcessor::NodePropertyRemovals nodeRemovals;
+    for (const WriteNode::NodePropertyRemoval& planRemoval : node->nodePropertyRemovals()) {
+        ColumnTag tag;
+        const auto it = _declToColumn.find(planRemoval._decl);
+        if (it != end(_declToColumn)) {
+            tag = it->second;
+        }
+        nodeRemovals.push_back({planRemoval._propTypeName, tag, planRemoval._decl->getName()});
+    }
+
+    WriteProcessor::EdgePropertyRemovals edgeRemovals;
+    for (const WriteNode::EdgePropertyRemoval& planRemoval : node->edgePropertyRemovals()) {
+        ColumnTag tag;
+        const auto it = _declToColumn.find(planRemoval._decl);
+        if (it != end(_declToColumn)) {
+            tag = it->second;
+        }
+        edgeRemovals.push_back({planRemoval._propTypeName, tag, planRemoval._decl->getName()});
+    }
+
+    // Has the side effect of allocing columns, modifying _tag in penNodes/penEdges,
+    // and resolving invalid tags in updates/removals using variable names
+    _builder.addWrite(exprProg, delNodes, delEdges, penNodes, penEdges,
+                      nodeUpdates, edgeUpdates, nodeRemovals, edgeRemovals);
 
     // Above call to @ref addWrite alloc'd columns for the new nodes/edges, storing the
     // tag in the elements of @ref penNodes @ref penEdges. We may need to reference these
