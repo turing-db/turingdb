@@ -4,6 +4,7 @@
 
 #include "columns/ColumnOperator.h"
 
+#include "views/GraphView.h"
 
 namespace db {
 
@@ -38,15 +39,19 @@ public:
 
     virtual void evaluateInstructions();
 
+    void setView(GraphView view) { _view = view; }
+
 private:
     // All instructions which need be evaluated
     Instructions _instrs;
+    GraphView _view;
 
     ExprProgram() = default;
     virtual ~ExprProgram() = default;
     virtual void evalInstr(const Instruction& instr);
     void evalBinaryInstr(const Instruction& instr);
     void evalUnaryInstr(const Instruction& instr);
+    void evalFunction(const Instruction& instr);
 };
 
 }

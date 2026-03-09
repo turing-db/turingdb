@@ -2,6 +2,7 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "ExecutionContext.h"
 #include "PipelineV2.h"
 #include "ExprProgram.h"
 #include "interfaces/PipelineBlockInputInterface.h"
@@ -55,7 +56,8 @@ ExprEvalProcessor* ExprEvalProcessor::create(PipelineV2* pipeline,
     return proc;
 }
 
-void ExprEvalProcessor::prepare(ExecutionContext* /*ctxt*/) {
+void ExprEvalProcessor::prepare(ExecutionContext* ctxt) {
+    _exprProg->setView(ctxt->getGraphView());
     markAsPrepared();
 }
 

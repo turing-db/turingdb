@@ -3,6 +3,7 @@
 #include "Literal.h"
 #include "decl/EvaluatedType.h"
 #include "expr/Expr.h"
+#include "expr/FunctionInvocationExpr.h"
 #include "expr/PropertyExpr.h"
 
 #include "BioAssert.h"
@@ -34,14 +35,27 @@ bool ExprEvalNode::needsEvaluation(const Expr* expr) {
         return true;
     }
 
+    const bool isFunction = exprKind == Expr::Kind::FUNCTION_INVOCATION;
+
+    if (isFunction) {
+        const auto* func = dynamic_cast<const FunctionInvocationExpr*>(expr);
+        bioassert(func, "Failed to get FunctionInvocationExpr.");
+        const bool isAggregate = func->isAggregate();
+
+        // Aggregates do not need to be evaluated, they have their own processor
+        return !isAggregate;
+    }
+
+    // Regular property accesses do not need to be evaluated, but using the `.` (dot)
+    // operator to access CSV fields do (both are typed as PropertyExpr).
     const bool maybeCSVFieldAccess = exprKind == Expr::Kind::PROPERTY;
     if (maybeCSVFieldAccess) {
         const auto* propExpr = dynamic_cast<const PropertyExpr*>(expr);
         bioassert(propExpr, "Failed to cast PropertyExpr for evalutation.");
+
         const bool needsEval = propExpr->isStringTableHeaderAccess();
-        if (needsEval) {
-            return true;
-        }
+
+        return needsEval;
     }
 
     const bool isLiteral = exprKind == Expr::Kind::LITERAL;
