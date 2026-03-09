@@ -263,7 +263,8 @@ template <ColumnOperator Func>
     requires ConversionFunction<Func>
 struct TypeRestrictions<Func> {
     using Allowed = GenerateKindList<std::tuple<
-        std::string
+        std::string,
+        types::String::Primitive
     >>;
 
     using Excluded = ExcludedContainers<

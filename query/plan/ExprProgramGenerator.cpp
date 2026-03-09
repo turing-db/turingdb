@@ -8,6 +8,7 @@
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnCombinations.h"
 #include "columns/ColumnOperatorDispatcher.h"
+#include "columns/Functions.h"
 #include "columns/UnaryPredicates.h"
 #include "dataframe/ColumnTag.h"
 #include "decl/EvaluatedType.h"
@@ -378,13 +379,13 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
 
         if (funcName == "toInteger") {
             convOp = OP_TO_INTEGER;
-            resCol = _gen->memory().alloc<ColumnOptVector<types::Int64::Primitive>>();
+            resCol = allocUnaryResultCol(convOp, argCol);
         } else if (funcName == "toFloat") {
             convOp = OP_TO_FLOAT;
-            resCol = _gen->memory().alloc<ColumnOptVector<types::Double::Primitive>>();
+            resCol = allocUnaryResultCol(convOp, argCol);
         } else {
             convOp = OP_TO_BOOLEAN;
-            resCol = _gen->memory().alloc<ColumnOptVector<types::Bool::Primitive>>();
+            resCol = allocUnaryResultCol(convOp, argCol);
         }
 
         _exprProg->addInstr(convOp, resCol, argCol, nullptr);
@@ -399,7 +400,7 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
 
         Column* argCol = generateExpr(args->front());
         const ColumnOperator op = OP_FUNC_LABELS;
-        Column* resCol = _gen->memory().alloc<ColumnVector<std::string>>();
+        Column* resCol = allocUnaryResultCol(op, argCol);
 
         _exprProg->addInstr(op, resCol, argCol, nullptr);
         return resCol;
@@ -426,9 +427,22 @@ struct ResultAllocator {
         if constexpr (Op == OP_NOT) {
             using ResultType = typename UnaryColumnCombination<Not, T>::ResultColumnType;
             _resultCol = _gen->memory().alloc<ResultType>();
+        } else if constexpr (Op == OP_TO_INTEGER) {
+            using ResultType = FunctionColumnResult<toIntegerFunction, T>::ResultColumnType;
+            _resultCol = _gen->memory().alloc<ResultType>();
+        } else if constexpr (Op == OP_TO_FLOAT) {
+            using ResultType = FunctionColumnResult<toFloatFunction, T>::ResultColumnType;
+            _resultCol = _gen->memory().alloc<ResultType>();
+        } else if constexpr (Op == OP_TO_BOOLEAN) {
+            using ResultType = FunctionColumnResult<toBoolFunction, T>::ResultColumnType;
+            _resultCol = _gen->memory().alloc<ResultType>();
+        } else if constexpr (Op == OP_FUNC_LABELS) {
+            using ResultType = FunctionColumnResult<LabelsFunction, T>::ResultColumnType;
+            _resultCol = _gen->memory().alloc<ResultType>();
         }
     }
 
+    // Allocating for binary operators
     template <typename T, typename U>
     void operator()(const T* lhs, const U* rhs) {
         bioassert(lhs && rhs,
@@ -548,6 +562,10 @@ Column* ExprProgramGenerator::allocUnaryResultCol(ColumnOperator op, const Colum
 
     switch (op) {
         UNARY_DISPATCHER_CASE(OP_NOT)
+        UNARY_DISPATCHER_CASE(OP_TO_INTEGER)
+        UNARY_DISPATCHER_CASE(OP_TO_FLOAT)
+        UNARY_DISPATCHER_CASE(OP_TO_BOOLEAN)
+        UNARY_DISPATCHER_CASE(OP_FUNC_LABELS)
 
         case OP_MINUS:
         case OP_PLUS:
@@ -577,7 +595,6 @@ Column* ExprProgramGenerator::allocUnaryResultCol(ColumnOperator op, const Colum
 
         case OP_NOOP:
         case _SIZE:
-        default:
             throw FatalException("Attempted invalid operator result allocation.");
         break;
     };

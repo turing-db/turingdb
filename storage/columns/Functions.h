@@ -1,19 +1,21 @@
 #pragma once
 
+#include <limits>
 #include <optional>
 #include <string>
+#include <system_error>
 
 #include <range/v3/view/drop.hpp>
 
 #include "columns/ColumnVector.h"
-#include "metadata/PropertyType.h"
-#include "views/GraphView.h"
-#include "reader/GraphReader.h"
 #include "metadata/LabelMap.h"
-
-#include "PipelineException.h"
+#include "metadata/PropertyType.h"
+#include "reader/GraphReader.h"
+#include "views/GraphView.h"
 
 #include "ID.h"
+
+#include "PipelineException.h"
 
 namespace db {
 
@@ -65,27 +67,54 @@ struct LabelsFunction {
 struct toIntegerFunction {
     using ResultType = types::Int64::Primitive;
 
-    ResultType operator()(const std::string& str) {
-        try {
-            return std::stoll(str);
-        } catch (...) {
+    ResultType operator()(std::string_view sv) {
+        ResultType result {std::numeric_limits<ResultType>::max()};
+
+        const auto* start = sv.data();
+        const auto* end = sv.data() + sv.size();
+
+        auto [ptr, ec] = std::from_chars(start, end, result);
+
+        const bool success = ec == std::errc {};
+        const bool parsedAll = ptr == end;
+
+        if (!success || !parsedAll) {
             throw PipelineException(
-                fmt::format("toInteger: cannot convert '{}' to integer", str));
+                fmt::format("toInteger: cannot convert '{}' to integer.", sv));
         }
+
+        return result;
     }
 };
 
 struct toFloatFunction {
     using ResultType = types::Double::Primitive;
 
-    ResultType operator()(const std::string& str) {
-        try {
-            return std::stod(str);
-        } catch (...) {
+    ResultType operator()(std::string_view sv) {
+        ResultType result {std::numeric_limits<ResultType>::max()};
+
+        const auto* start = sv.data();
+        const auto* end = sv.data() + sv.size();
+
+        auto [ptr, ec] = std::from_chars(start, end, result);
+
+        const bool success = ec == std::errc {};
+        const bool parsedAll = ptr == end;
+
+        if (!success || !parsedAll) {
             throw PipelineException(
-                fmt::format("toFloat: cannot convert '{}' to float", str));
+                fmt::format("toFloat: cannot convert '{}' to float.", sv));
         }
+
+        return result;
     }
+};
+
+// NOTE: Define this stub for uniformity when using @ref FunctionColumnResult.
+// However, this function is never used, because we specialise
+// @ref EvalFunction::eval<OP_TO_BOOLEAN> to allow for reuse of the string buffer.
+struct toBoolFunction {
+    using ResultType = types::Bool::Primitive;
 };
 
 /// Generic function executor; default constructible operator
