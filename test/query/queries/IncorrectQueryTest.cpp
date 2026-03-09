@@ -3,6 +3,7 @@
 #include <string>
 
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
@@ -27,10 +28,11 @@ protected:
     const std::string _graphName = "testdb";
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
+    QueryConfig _queryConfig;
     Graph* _graph {nullptr};
 
     QueryStatus query(std::string_view q) {
-        return _db->query(q, _graphName, &_env->getMem(),
+        return _db->query(q, _graphName, &_env->getMem(), &_queryConfig,
                           [](const Dataframe*) {},
                           CommitHash::head(), ChangeID::head());
     }
@@ -99,7 +101,7 @@ TEST_F(IncorrectQueryTest, validQuerySucceeds) {
 
 TEST_F(IncorrectQueryTest, queryNonExistentGraph) {
     auto result = _db->query("MATCH (n) RETURN n", "no_such_graph",
-                             &_env->getMem(), [](const Dataframe*) {},
+                             &_env->getMem(), &_queryConfig, [](const Dataframe*) {},
                              CommitHash::head(), ChangeID::head());
 
     EXPECT_FALSE(result);

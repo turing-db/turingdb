@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
@@ -24,13 +25,14 @@ protected:
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
+    QueryConfig _queryConfig;
     Graph* _graph {nullptr};
 };
 
 TEST_F(CreateGraphTest, createGraph) {
     bool executed = false;
 
-    const auto res = _db->query("CREATE GRAPH testDB", "default", &_env->getMem(), [&](const Dataframe* df) -> void {
+    const auto res = _db->query("CREATE GRAPH testDB", "default", &_env->getMem(), &_queryConfig, [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 1);
         ASSERT_EQ(df->getLogicalRowCount(), 1);

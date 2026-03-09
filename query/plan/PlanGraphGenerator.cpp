@@ -86,9 +86,11 @@
 using namespace db;
 
 PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
-                                       const GraphView& view)
+                                       const GraphView& view,
+                                       const PlanGenConfig* config)
     : _ast(&ast),
     _view(view),
+    _config(config),
     _variables(std::make_unique<PlanGraphVariables>(&_tree))
 {
 }
@@ -198,7 +200,7 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
     // Generate read statements (optional)
     if (readStmts) {
-        ReadStmtGenerator readGenerator(_ast, _view, &_tree, _variables.get());
+        ReadStmtGenerator readGenerator(_ast, _view, _config, &_tree, _variables.get());
 
         for (const Stmt* stmt : readStmts->stmts()) {
             readGenerator.generateStmt(stmt);

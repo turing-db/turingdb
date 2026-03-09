@@ -3,6 +3,7 @@
 #include <string_view>
 
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
@@ -43,8 +44,9 @@ public:
             bioassert(changeRes, "create change failed");
             const ChangeID chid = changeRes.value()->id();
 
+            QueryConfig buildQueryConfig;
             const auto submitRes = buildEnv->getDB().query(
-                "CHANGE SUBMIT", "testdb", &buildEnv->getMem(),
+                "CHANGE SUBMIT", "testdb", &buildEnv->getMem(), &buildQueryConfig,
                 CommitHash::head(), chid);
             bioassert(submitRes, "change submit failed");
             _newHeadHash = graph->getHeadHash(); // HEAD commit (loaded after LOAD GRAPH)
@@ -56,7 +58,7 @@ public:
         }
 
         // Step 4: Load the graph via query so the SystemManager registers it.
-        auto loadRes = _db->query("LOAD GRAPH testdb", "default", &_env->getMem(),
+        auto loadRes = _db->query("LOAD GRAPH testdb", "default", &_env->getMem(), &_queryConfig,
                                   [](const Dataframe*) {});
         bioassert(loadRes, "LOAD GRAPH failed");
     }
@@ -66,10 +68,11 @@ protected:
     CommitHash _newHeadHash;     // HEAD commit   — fully loaded after LOAD GRAPH
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
+    QueryConfig _queryConfig;
 
     QueryStatus query(std::string_view q,
                       CommitHash hash = CommitHash::head()) {
-        return _db->query(q, "testdb", &_env->getMem(), [](const Dataframe*) {}, hash, ChangeID::head());
+        return _db->query(q, "testdb", &_env->getMem(), &_queryConfig, [](const Dataframe*) {}, hash, ChangeID::head());
     }
 
     // Build the LOAD COMMIT query string for a given hash (hex-encoded).

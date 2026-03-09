@@ -3,6 +3,7 @@
 #include <string_view>
 
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "Graph.h"
 #include "SystemManager.h"
 #include "dataframe/Dataframe.h"
@@ -68,11 +69,11 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(TEST_GRAPH_CYPHER, _graphName, &_env->getMem(),
+            auto status = _db->query(TEST_GRAPH_CYPHER, _graphName, &_env->getMem(), &_queryConfig,
                                      [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create graph: " << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(),
+            auto submitStatus = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), &_queryConfig,
                                            [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit change: "
                                              << submitStatus.getError();
@@ -87,11 +88,11 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(TEST_STAR_GRAPH_CYPHER, _starGraphName, &_env->getMem(),
+            auto status = _db->query(TEST_STAR_GRAPH_CYPHER, _starGraphName, &_env->getMem(), &_queryConfig,
                                      [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create graph: " << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _starGraphName, &_env->getMem(),
+            auto submitStatus = _db->query("CHANGE SUBMIT", _starGraphName, &_env->getMem(), &_queryConfig,
                                            [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit change: "
                                              << submitStatus.getError();
@@ -117,10 +118,11 @@ protected:
     static inline TuringDB* _db = nullptr;
     static inline Graph* _graph = nullptr;
     static inline Graph* _stargraph = nullptr;
+    static inline QueryConfig _queryConfig;
 
     auto query(std::string_view query, std::string_view graphName, auto callback) {
-        auto res = _db->query(query, graphName, &_env->getMem(), callback,
-                              CommitHash::head(), ChangeID::head());
+        auto res = _db->query(query, graphName, &_env->getMem(), &_queryConfig,
+                              callback, CommitHash::head(), ChangeID::head());
         if (!res) {
             spdlog::error("Query failed: {}", res.getError());
         }

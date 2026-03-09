@@ -11,6 +11,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "TuringConfig.h"
 #include "SystemManager.h"
 #include "Graph.h"
@@ -90,7 +91,8 @@ int main(int argc, const char** argv) {
     std::vector<Connection> connections;
     std::set<std::string> stationSet;
 
-    const auto status = db.query(loadQuery, graphName, &mem,
+    QueryConfig queryConfig;
+    const auto status = db.query(loadQuery, graphName, &mem, &queryConfig,
         [&](const Dataframe* df) {
             using StringCol = ColumnVector<std::string>;
 
@@ -263,14 +265,14 @@ int main(int argc, const char** argv) {
     }
     Change* change = changeRes.value();
 
-    const auto createStatus = db.query(createQuery, graphName, &mem,
+    const auto createStatus = db.query(createQuery, graphName, &mem, &queryConfig,
                                         CommitHash::head(), change->id());
     if (!createStatus.isOk()) {
         spdlog::error("CREATE failed: {}", createStatus.getError());
         return EXIT_FAILURE;
     }
 
-    const auto submitStatus = db.query("CHANGE SUBMIT", graphName, &mem,
+    const auto submitStatus = db.query("CHANGE SUBMIT", graphName, &mem, &queryConfig,
                                         CommitHash::head(), change->id());
     if (!submitStatus.isOk()) {
         spdlog::error("CHANGE SUBMIT failed: {}",
@@ -294,7 +296,7 @@ int main(int argc, const char** argv) {
     double distance = 0;
     Path pathResult;
 
-    const auto spStatus = db.query(spQuery, graphName, &mem,
+    const auto spStatus = db.query(spQuery, graphName, &mem, &queryConfig,
         [&](const Dataframe* df) {
             auto* distCol =
                 df->cols()[0]->as<ColumnVector<double>>();

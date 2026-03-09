@@ -6,6 +6,7 @@
 
 #include "ID.h"
 #include "Path.h"
+#include "QueryConfig.h"
 #include "SystemManager.h"
 #include "columns/Block.h"
 #include "columns/ColumnVector.h"
@@ -65,6 +66,7 @@ void DeleteTest::deleteEdges(std::vector<EdgeID>&& edges) {
 
 bool DeleteTest::runDeleteQueries(bool nodes) {
     TuringDB& db = _env->getDB();
+    QueryConfig queryConfig;
     const std::string type = nodes ? "nodes" : "edges";
 
     std::string deleteQuery = "delete " + type + " ";
@@ -87,14 +89,14 @@ bool DeleteTest::runDeleteQueries(bool nodes) {
         return false;
     }
     Change* ch = res.value();
-    if (auto qres = db.query(deleteQuery, _graphName, &_env->getMem(),
+    if (auto qres = db.query(deleteQuery, _graphName, &_env->getMem(), &queryConfig,
                              CommitHash::head(), ch->id());
         !res) {
         spdlog::error("Failed to delete {}: {}", type, qres.getError());
         return false;
     }
-    if (!db.query("change submit", _graphName, &_env->getMem(), CommitHash::head(),
-                  ch->id())) {
+    if (!db.query("change submit", _graphName, &_env->getMem(), &queryConfig,
+                  CommitHash::head(), ch->id())) {
         spdlog::error("Failed to submit {} deletion change.", type);
         return false;
     }
@@ -133,6 +135,7 @@ bool DeleteTest::run() {
 
     SystemManager& sysMan = _env->getSystemManager();
     TuringDB& db = _env->getDB();
+    QueryConfig queryConfig;
 
     bool loaded = sysMan.loadGraph(_graphName);
     if (!loaded) {
@@ -155,7 +158,7 @@ bool DeleteTest::run() {
         const auto COPY_BLOCK = [&thisBlock](const Block& block){
             thisBlock.append(block);
         };
-        db.query(query, _graphName, &_env->getMem(), COPY_BLOCK, CommitHash::head(), ChangeID::head());
+        db.query(query, _graphName, &_env->getMem(), &queryConfig, COPY_BLOCK, CommitHash::head(), ChangeID::head());
         queryOutputBlocks.push_back(std::move(thisBlock));
     }
 
@@ -252,8 +255,8 @@ bool DeleteTest::run() {
             same = true;
         };
 
-        if (auto res = db.query(query, _graphName, &_env->getMem(), ASSERT_EQ,
-                                CommitHash::head(), ChangeID::head());
+        if (auto res = db.query(query, _graphName, &_env->getMem(), &queryConfig,
+                                ASSERT_EQ, CommitHash::head(), ChangeID::head());
             !res) {
             spdlog::error("Failed to run query {}: {}", query, res.getError());
             return false;

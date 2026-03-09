@@ -6,6 +6,7 @@
 
 namespace db {
 class GraphView;
+class PlanGenConfig;
 }
 
 namespace db {
@@ -38,7 +39,8 @@ class QueryCommand;
 class PlanGraphGenerator {
 public:
     PlanGraphGenerator(const CypherAST& ast,
-                       const GraphView& view);
+                       const GraphView& view,
+                       const PlanGenConfig* config);
     ~PlanGraphGenerator();
 
     PlanGraph& getPlanGraph() { return _tree; }
@@ -48,6 +50,7 @@ public:
 private:
     const CypherAST* _ast {nullptr};
     const GraphView& _view;
+    const PlanGenConfig* _config {nullptr};
     PlanGraph _tree;
     std::unique_ptr<PlanGraphVariables> _variables;
 

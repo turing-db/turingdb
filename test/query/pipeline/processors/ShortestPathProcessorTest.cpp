@@ -5,6 +5,7 @@
 #include "SystemManager.h"
 #include "Graph.h"
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "processors/ProcessorTester.h"
 #include "versioning/Transaction.h"
 #include "metadata/PropertyType.h"
@@ -573,11 +574,11 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(ROAD_NETWORK_CYPHER, _graphName, &_env->getMem(),
+            auto status = _db->query(ROAD_NETWORK_CYPHER, _graphName, &_env->getMem(), &_queryConfig,
                                      [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create road network: " << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(),
+            auto submitStatus = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), &_queryConfig,
                                            [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit change: "
                                              << submitStatus.getError();
@@ -592,12 +593,12 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(NEGATIVE_WEIGHT_GRAPH_CYPHER, _negGraphName, &_env->getMem(),
+            auto status = _db->query(NEGATIVE_WEIGHT_GRAPH_CYPHER, _negGraphName, &_env->getMem(), &_queryConfig,
                                      [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create negative weight graph: "
                                        << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _negGraphName, &_env->getMem(),
+            auto submitStatus = _db->query("CHANGE SUBMIT", _negGraphName, &_env->getMem(), &_queryConfig,
                                            [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit negative weight change: "
                                              << submitStatus.getError();
@@ -612,11 +613,11 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(DISJOINT_GRAPH_CYPHER, _disjGraphName, &_env->getMem(),
+            auto status = _db->query(DISJOINT_GRAPH_CYPHER, _disjGraphName, &_env->getMem(), &_queryConfig,
                                      [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create disjoint graph: " << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _disjGraphName, &_env->getMem(),
+            auto submitStatus = _db->query("CHANGE SUBMIT", _disjGraphName, &_env->getMem(), &_queryConfig,
                                            [](const Dataframe*) {}, CommitHash::head(), changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit disjoint change: "
                                              << submitStatus.getError();
@@ -648,6 +649,7 @@ protected:
     static inline Graph* _graph = nullptr;
     static inline Graph* _negGraph = nullptr;
     static inline Graph* _disjGraph = nullptr;
+    static inline QueryConfig _queryConfig;
 
     // Helper to find node by ID property using Cypher
     NodeID findNodeByID(int nodeID, const std::string& graphName, const std::string& label) {
@@ -656,7 +658,7 @@ protected:
         std::string query = fmt::format(
             "MATCH (n:{}) WHERE n.id = '{}' RETURN n", label, nodeID);
 
-        auto status = _db->query(query, graphName, &_env->getMem(),
+        auto status = _db->query(query, graphName, &_env->getMem(), &_queryConfig,
                                  [&](const Dataframe* df) -> void {
                                      if (df && !df->cols().empty()) {
                                          const auto* nodeCol = df->cols()[0]->as<ColumnNodeIDs>();
@@ -788,7 +790,7 @@ protected:
 TEST_F(ShortestPathProcessorTest, graphLoadedCorrectly) {
     // Verify node count
     uint64_t nodeCount = 0;
-    auto status = _db->query("MATCH (n:City) RETURN COUNT(n) AS cnt", _graphName, &_env->getMem(),
+    auto status = _db->query("MATCH (n:City) RETURN COUNT(n) AS cnt", _graphName, &_env->getMem(), &_queryConfig,
                              [&](const Dataframe* df) -> void {
                                  if (df && !df->cols().empty()) {
                                      const auto* col = df->cols()[0]->as<ColumnConst<uint64_t>>();
@@ -808,7 +810,7 @@ TEST_F(ShortestPathProcessorTest, graphLoadedCorrectly) {
 TEST_F(ShortestPathProcessorTest, edgesLoadedCorrectly) {
     // Count edges
     uint64_t edgeCount = 0;
-    auto status = _db->query("MATCH ()-[r:ROAD]->() RETURN COUNT(r) AS cnt", _graphName, &_env->getMem(),
+    auto status = _db->query("MATCH ()-[r:ROAD]->() RETURN COUNT(r) AS cnt", _graphName, &_env->getMem(), &_queryConfig,
                              [&](const Dataframe* df) -> void {
                                  if (df && !df->cols().empty()) {
                                      const auto* col = df->cols()[0]->as<ColumnConst<uint64_t>>();

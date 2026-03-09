@@ -139,24 +139,21 @@ void TuringDB::init() {
 QueryStatus TuringDB::query(std::string_view query,
                             std::string_view graphName,
                             LocalMemory* mem,
+                            const QueryConfig* queryConfig,
                             const QueryCallbacks& callbacks,
                             CommitHash hash,
                             ChangeID change) {
     QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
 
-    // TODO: This is still using NRVO
-    //       We should pass the QueryStatus& as argument to the function
-    //       however, the function is becoming quite complex. We should
-    //       probably refactor it to take in a QueryContext& instead,
-    //       that would contain everything needed to execute the query.
     QueryStatus status;
-    const InterpreterContext ctxt(mem,
-                                  &callbacks,
-                                  _procedures.get(),
-                                  _extensions.get(),
-                                  _vectorDatabase.get(),
-                                  hash,
-                                  change);
+    InterpreterContext ctxt(mem,
+                            &callbacks,
+                            _procedures.get(),
+                            _extensions.get(),
+                            _vectorDatabase.get(),
+                            hash,
+                            change);
+    ctxt.setQueryConfig(queryConfig);
     interp.execute(ctxt, status, query, graphName);
 
     return status;
@@ -165,21 +162,23 @@ QueryStatus TuringDB::query(std::string_view query,
 QueryStatus TuringDB::query(std::string_view query,
                             std::string_view graphName,
                             LocalMemory* mem,
+                            const QueryConfig* queryConfig,
                             const QueryCallbacks::OnOutputData& callback,
                             CommitHash hash,
                             ChangeID change) {
     QueryCallbacks callbacks;
     callbacks.setOnOutputData(callback);
 
-    return this->query(query, graphName, mem, callbacks, hash, change);
+    return this->query(query, graphName, mem, queryConfig, callbacks, hash, change);
 }
 
 QueryStatus TuringDB::query(std::string_view query,
                             std::string_view graphName,
                             LocalMemory* mem,
+                            const QueryConfig* queryConfig,
                             CommitHash hash,
                             ChangeID change) {
     const QueryCallbacks handler;
 
-    return this->query(query, graphName, mem, handler, hash, change);
+    return this->query(query, graphName, mem, queryConfig, handler, hash, change);
 }

@@ -6,6 +6,7 @@
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
+#include "QueryConfig.h"
 #include "SystemManager.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Tombstones.h"
@@ -50,7 +51,7 @@ public:
                                       +"}]->(m:Person{id:"+std::to_string(target)+"})";
             const auto res = db.query(queryStr,
                                       _workingGraphName,
-                                      &_env->getMem(),
+                                      &_env->getMem(), &_queryConfig,
                                       CommitHash::head(),
                                       change->id());
             ASSERT_TRUE(res);
@@ -59,7 +60,7 @@ public:
         spdlog::info("Ran create queries");
 
         // implicit dump on change submit
-        ASSERT_TRUE(db.query("change submit", _workingGraphName, &_env->getMem(),
+        ASSERT_TRUE(db.query("change submit", _workingGraphName, &_env->getMem(), &_queryConfig,
                              CommitHash::head(), change->id()));
         spdlog::info("Submitted change");
 
@@ -72,7 +73,7 @@ public:
             }
         };
 
-        ASSERT_TRUE(db.query("match (n) return n", _workingGraphName, &_env->getMem(),
+        ASSERT_TRUE(db.query("match (n) return n", _workingGraphName, &_env->getMem(), &_queryConfig,
                              VERIFY, CommitHash::head(), ChangeID::head()));
 
         spdlog::info("Successfully populated graph");
@@ -92,7 +93,7 @@ public:
             const std::string queryStr = "match (n{id: " + std::to_string(node) + "}) delete n";
             const auto res = db.query(queryStr,
                                       _workingGraphName,
-                                      &_env->getMem(),
+                                      &_env->getMem(), &_queryConfig,
                                       CommitHash::head(),
                                       delChange->id());
             spdlog::info(queryStr);
@@ -102,14 +103,14 @@ public:
             const std::string queryStr = "match (n)-[e{id: "+ std::to_string(edge)+"}]->(m) delete e";
             const auto res = db.query(queryStr,
                                       _workingGraphName,
-                                      &_env->getMem(),
+                                      &_env->getMem(), &_queryConfig,
                                       CommitHash::head(),
                                       delChange->id());
             spdlog::info(queryStr);
             ASSERT_TRUE(res);
         }
         // implicit dump on change submit
-        ASSERT_TRUE(db.query("change submit", _workingGraphName, &_env->getMem(),
+        ASSERT_TRUE(db.query("change submit", _workingGraphName, &_env->getMem(), &_queryConfig,
                              CommitHash::head(), delChange->id()));
 
         spdlog::info("Submitted deletions change");
@@ -122,6 +123,7 @@ protected:
     Graph* _builtGraph {nullptr};
     std::unique_ptr<Graph> _loadedGraph;
     LocalMemory _mem;
+    QueryConfig _queryConfig;
 
     static constexpr size_t NUM_EDGES = 10;
     static constexpr size_t NUM_NODES = 2 * NUM_EDGES;
@@ -184,7 +186,7 @@ TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
 
         const auto res = db.query("match (n) return n.id",
                                   _workingGraphName,
-                                  &_env->getMem(),
+                                  &_env->getMem(), &_queryConfig,
                                   callback);
         ASSERT_TRUE(res);
         ASSERT_TRUE(!actualNodes.empty());
@@ -206,7 +208,7 @@ TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
 
         const auto res = db.query("match (n)-[e]->(m) return e.id",
                                   _workingGraphName,
-                                  &_env->getMem(),
+                                  &_env->getMem(), &_queryConfig,
                                   callback);
         ASSERT_TRUE(res);
         ASSERT_TRUE(!actualEdges.empty());

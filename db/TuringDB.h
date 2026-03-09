@@ -15,6 +15,7 @@ class VectorDatabase;
 namespace db {
 
 class TuringConfig;
+class QueryConfig;
 class SystemManager;
 class LocalMemory;
 class JobSystem;
@@ -33,6 +34,7 @@ public:
     QueryStatus query(std::string_view query,
                       std::string_view graphName,
                       LocalMemory* mem,
+                      const QueryConfig* queryConfig,
                       const QueryCallbacks& callbacks,
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
@@ -40,6 +42,7 @@ public:
     QueryStatus query(std::string_view query,
                       std::string_view graphName,
                       LocalMemory* mem,
+                      const QueryConfig* queryConfig,
                       const QueryCallbacks::OnOutputData& callback,
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
@@ -47,6 +50,7 @@ public:
     QueryStatus query(std::string_view query,
                       std::string_view graphName,
                       LocalMemory* mem,
+                      const QueryConfig* queryConfig,
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
 

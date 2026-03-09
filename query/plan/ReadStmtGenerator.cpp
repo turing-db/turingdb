@@ -1,7 +1,5 @@
 #include "ReadStmtGenerator.h"
 
-#include <stdlib.h>
-#include <string.h>
 #include <spdlog/fmt/bundled/format.h>
 #include <spdlog/spdlog.h>
 
@@ -51,6 +49,7 @@
 
 #include "QuantifiedPath.h"
 #include "CardinalityEstimation.h"
+#include "PlanGenConfig.h"
 
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
@@ -67,10 +66,12 @@ using namespace db;
 
 ReadStmtGenerator::ReadStmtGenerator(const CypherAST* ast,
                                      GraphView graphView,
+                                     const PlanGenConfig* config,
                                      PlanGraph* tree,
                                      PlanGraphVariables* variables)
     : _ast(ast),
     _graphView(graphView),
+    _config(config),
     _graphMetadata(graphView.metadata()),
     _tree(tree),
     _variables(variables),
@@ -615,13 +616,7 @@ void ReadStmtGenerator::placeJoinsOnVars() {
 }
 
 void ReadStmtGenerator::placePredicateJoins() {
-#define TURING_VHJ_BENCHMARK 1
-#ifdef TURING_VHJ_BENCHMARK
-    const char* valueHashJoinEnv = getenv("TURING_VALUE_HASH_JOIN");
-    bool useValueHashJoin = valueHashJoinEnv && strcmp(valueHashJoinEnv, "0") != 0;
-#else
-    constexpr bool useValueHashJoin = true;
-#endif
+    const bool useValueHashJoin = _config->getUseValueHashJoin();
     std::vector<FilterNode*> vhjFilters;
 
     for (auto& pred : _tree->getPredicates()) {
@@ -707,6 +702,12 @@ bool ReadStmtGenerator::tryPlaceValueHashJoin(Predicate* pred,
         return false;
     }
 
+    // Edge ID equality (WHERE e = f) is not supported by value hash join
+    if (dep0._expr->getExprVarDecl()->getType() == EvaluatedType::EdgePattern ||
+        dep1._expr->getExprVarDecl()->getType() == EvaluatedType::EdgePattern) {
+        return false;
+    }
+
     // Both producers must be VarNodes (graph pattern traversals)
     if (dep0._producerNode->getOpcode() != PlanGraphOpcode::VAR ||
         dep1._producerNode->getOpcode() != PlanGraphOpcode::VAR) {
@@ -734,7 +735,7 @@ bool ReadStmtGenerator::tryPlaceValueHashJoin(Predicate* pred,
     }
 
     // Skip VHJ when the cartesian product is small enough to be cheap
-    {
+    if (!_config->getForceValueHashJoin()) {
         auto* localVar = dynamic_cast<VarNode*>(localDep->_producerNode);
         auto* remoteVar = dynamic_cast<VarNode*>(remoteDep->_producerNode);
         if (localVar && remoteVar) {

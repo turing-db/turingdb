@@ -13,6 +13,7 @@
 #include "LineNoiseHandle.h"
 #include "TuringConfig.h"
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "LocalMemory.h"
 #include "TuringShell.h"
 #include "TuringServer.h"
@@ -250,8 +251,9 @@ int StartCmd::execute() {
         auto consoleSink = LogSetup::setupLogFileBacked((logsDir / "turingdb.log").get(), false);
 
         // Load graphs
+        QueryConfig queryConfig;
         for (const auto& graphName : _graphsToLoad) {
-            const QueryStatus res = turingDB.query("load graph " + graphName, "", &mem);
+            const QueryStatus res = turingDB.query("load graph " + graphName, "", &mem, &queryConfig);
             if (!res.isOk()) {
                 return EXIT_FAILURE;
             }

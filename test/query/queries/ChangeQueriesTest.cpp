@@ -6,6 +6,7 @@
 #include <range/v3/view/zip.hpp>
 
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
@@ -42,6 +43,7 @@ protected:
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
     Graph* _graph {nullptr};
+    QueryConfig _queryConfig;
     ChangeID _currentChange {ChangeID::head()};
 
     static constexpr std::string_view GET_PROPERTIES_QUERY =
@@ -60,14 +62,14 @@ protected:
     }
 
     void submitCurrentChange() {
-        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(),
+        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), &_queryConfig,
                                 emptyCallback, CommitHash::head(), _currentChange);
         ASSERT_TRUE(res);
         _currentChange = ChangeID::head();
     }
 
     void submitChange(ChangeID chid) {
-        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(),
+        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), &_queryConfig,
                                 emptyCallback, CommitHash::head(), chid);
 
         ASSERT_TRUE(res);
@@ -79,7 +81,7 @@ protected:
     }
 
     auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
+        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callback,
                                 CommitHash::head(), _currentChange);
         return res;
     }

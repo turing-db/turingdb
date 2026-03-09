@@ -3,6 +3,7 @@
 #include "Graph.h"
 #include "LineContainer.h"
 #include "TuringDB.h"
+#include "QueryConfig.h"
 #include "SystemManager.h"
 
 #include "SimpleGraph.h"
@@ -32,6 +33,7 @@ protected:
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
     Graph* _graph {nullptr};
+    QueryConfig _queryConfig;
     ChangeID _currentChange {ChangeID::head()};
 
     GraphReader read() { return _graph->openTransaction().readGraph(); }
@@ -45,13 +47,13 @@ protected:
     }
 
     void submitCurrentChange() {
-        auto res = _db->query("change submit", _graphName, &_env->getMem(), CommitHash::head(), _currentChange);
+        auto res = _db->query("change submit", _graphName, &_env->getMem(), &_queryConfig, CommitHash::head(), _currentChange);
         ASSERT_TRUE(res);
         _currentChange = ChangeID::head();
     }
 
     auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
+        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callback,
                               CommitHash::head(), _currentChange);
         return res;
     }
