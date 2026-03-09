@@ -1,8 +1,12 @@
 #include "ExprEvalNode.h"
 
-#include "expr/Expr.h"
 #include "Literal.h"
 #include "decl/EvaluatedType.h"
+#include "expr/Expr.h"
+#include "expr/PropertyExpr.h"
+
+#include "BioAssert.h"
+
 
 using namespace db;
 
@@ -22,11 +26,22 @@ ExprEvalNode::~ExprEvalNode() {
 bool ExprEvalNode::needsEvaluation(const Expr* expr) {
     const Expr::Kind exprKind = expr->getKind();
 
-    const bool operatorType =
-        exprKind == Expr::Kind::BINARY || exprKind == Expr::Kind::UNARY;
+    const bool operatorType = exprKind == Expr::Kind::BINARY
+                           || exprKind == Expr::Kind::UNARY
+                           || exprKind == Expr::Kind::INDEX;
 
     if (operatorType) {
         return true;
+    }
+
+    const bool maybeCSVFieldAccess = exprKind == Expr::Kind::PROPERTY;
+    if (maybeCSVFieldAccess) {
+        const auto* propExpr = dynamic_cast<const PropertyExpr*>(expr);
+        bioassert(propExpr, "Failed to cast PropertyExpr for evalutation.");
+        const bool needsEval = propExpr->isStringTableHeaderAccess();
+        if (needsEval) {
+            return true;
+        }
     }
 
     const bool isLiteral = exprKind == Expr::Kind::LITERAL;

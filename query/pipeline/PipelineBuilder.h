@@ -118,7 +118,6 @@ public:
     /// Functio evaluation
     PipelineBlockOutputInterface& addFuncEval(FunctionProgram* funcProg);
 
-
     // Filter
     PipelineBlockOutputInterface& addFilter(PredicateProgram* predProg);
 

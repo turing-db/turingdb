@@ -793,8 +793,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
 
                 if (!decl) {
                     throw PlannerException(
-                        "Projection item does not have "
-                        "a variable declaration");
+                        "Projection item does not have a variable declaration");
                 }
 
                 const auto findColIt = _declToColumn.find(decl);
