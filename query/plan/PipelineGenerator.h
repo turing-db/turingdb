@@ -35,6 +35,7 @@ class CartesianProductNode;
 class AggregateEvalNode;
 class ProcedureEvalNode;
 class ExprEvalNode;
+class FuncEvalNode;
 class WriteNode;
 class ScanNodesByLabelNode;
 class LoadGraphNode;
@@ -133,6 +134,7 @@ private:
     PipelineOutputInterface* translateAggregateEvalNode(AggregateEvalNode* node);
     PipelineOutputInterface* translateProcedureEvalNode(ProcedureEvalNode* node);
     PipelineOutputInterface* translateExprEvalNode(ExprEvalNode* node);
+    PipelineOutputInterface* translateFuncEvalNode(FuncEvalNode* node);
     PipelineOutputInterface* translateWriteNode(WriteNode* node);
     PipelineOutputInterface* translateScanNodesByLabelNode(ScanNodesByLabelNode* node);
     PipelineOutputInterface* translateLoadGraph(LoadGraphNode* node);

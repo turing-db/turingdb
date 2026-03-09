@@ -14,6 +14,8 @@
 #include "decl/VarDecl.h"
 
 #include "expr/All.h"
+#include "expr/ListExpr.h"
+#include "expr/LiteralExpr.h"
 
 using namespace db;
 
@@ -68,15 +70,24 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::INDEX:
             analyzeIndexExpr(static_cast<IndexExpr*>(expr));
             break;
-        case Expr::Kind::LIST:
-            // List expressions are handled specially in vector search context
-            // For now, just mark them as having no specific type
-            break;
+        case Expr::Kind::LIST: {
+            const auto* listExpr = static_cast<const ListExpr*>(expr);
+            for (const Expr* elem : listExpr->getElements()) {
+                if (elem->getKind() != Expr::Kind::LITERAL) {
+                    throwError("List elements must be numeric literals", expr);
+                }
+                const auto* lit = static_cast<const LiteralExpr*>(elem);
+                const auto kind = lit->getLiteral()->getKind();
+                if (kind != Literal::Kind::INTEGER && kind != Literal::Kind::DOUBLE) {
+                    throwError("List elements must be numeric literals (Integer or Double)", expr);
+                }
+            }
+            expr->setType(EvaluatedType::List);
+        } break;
 
         case Expr::Kind::_SIZE:
             throwError("Unknown expression type in ExprAnalyzer.");
         break;
-
     }
 }
 
@@ -129,7 +140,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char)
                 || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Char)
-                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)) {
+                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)
+                || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
                 break;
             }
 
@@ -426,6 +438,9 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         case ValueType::String: {
             type = EvaluatedType::String;
         } break;
+        case ValueType::Embedding: {
+            type = EvaluatedType::List;
+        } break;
         default: {
             const std::string error = fmt::format("Property type '{}' is invalid", propName->getName());
             throwError(error, expr);
@@ -663,6 +678,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::Bool:
             return vt == ValueType::Bool;
         case EvaluatedType::List:
+            return vt == ValueType::Embedding;
         case EvaluatedType::Map:
         case EvaluatedType::Wildcard:
         case EvaluatedType::Invalid:

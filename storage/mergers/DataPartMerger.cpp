@@ -9,6 +9,7 @@
 #include "NodeContainer.h"
 #include "versioning/TombstoneRanges.h"
 #include "properties/PropertyManager.h"
+#include "metadata/EmbeddingPropertyConfig.h"
 #include "reader/GraphReader.h"
 
 #include "ID.h"
@@ -32,6 +33,8 @@ struct PropertyTypeDispatcher {
                 return executor.template operator()<types::Bool>();
             case ValueType::String:
                 return executor.template operator()<types::String>();
+            case ValueType::Embedding:
+                return executor.template operator()<types::Embedding>();
             case ValueType::_SIZE:
             case ValueType::Invalid: {
                 throw TuringException("Unsupported property type");
@@ -174,6 +177,37 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                         _nodePropertiesCount[propertyID] += size;
                     }
 
+                } else if constexpr (std::is_same_v<Type, types::Embedding>) {
+                    if (!nodePropertyManager.hasPropertyType(propertyID)) {
+                        if (_nodePropertiesCount[propertyID] == 0) {
+                            emptyNodeProperties.insert(propertyID);
+                            return;
+                        }
+                        const auto& oldEmbContainer = propertyContainer->cast<types::Embedding>();
+                        EmbeddingPropertyConfig config {oldEmbContainer.dimension(), EmbeddingPrecision::Float32};
+                        nodePropertyManager.registerEmbeddingPropertyType(propertyID, config);
+
+                        auto& newEmbContainer = nodePropertyManager.getMutableContainer<types::Embedding>(propertyID);
+                        newEmbContainer._values._views.resize(_nodePropertiesCount[propertyID]);
+                        newEmbContainer.ids().resize(_nodePropertiesCount[propertyID]);
+
+                        _nodePropertiesCount[propertyID] = 0;
+                    }
+
+                    auto& oldContainer = propertyContainer->cast<types::Embedding>();
+                    auto& newContainer = nodePropertyManager.getMutableContainer<types::Embedding>(propertyID);
+
+                    const TombstoneRanges& deletedNodeIDs = nodeRangesPerPart.at(idx).at(propertyID);
+                    for (const auto& [start, size] : deletedNodeIDs) {
+                        std::memcpy(newContainer._values._views.data() + _nodePropertiesCount[propertyID],
+                                    oldContainer._values._views.data() + start,
+                                    (size * sizeof(std::span<const float>)));
+                        std::memcpy(newContainer.ids().data() + _nodePropertiesCount[propertyID],
+                                    oldContainer.ids().data() + start,
+                                    (size * sizeof(EntityID)));
+                        _nodePropertiesCount[propertyID] += size;
+                    }
+
                 } else {
                     if (!nodePropertyManager.hasPropertyType(propertyID)) {
                         if (_nodePropertiesCount[propertyID] == 0) {
@@ -240,6 +274,37 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                         std::memcpy(newContainer._values._views.data() + _edgePropertiesCount[propertyID],
                                     oldContainer._values._views.data() + start,
                                     (size * sizeof(std::string_view)));
+                        std::memcpy(newContainer.ids().data() + _edgePropertiesCount[propertyID],
+                                    oldContainer.ids().data() + start,
+                                    (size * sizeof(EntityID)));
+                        _edgePropertiesCount[propertyID] += size;
+                    }
+
+                } else if constexpr (std::is_same_v<Type, types::Embedding>) {
+                    if (!edgePropertyManager.hasPropertyType(propertyID)) {
+                        if (_edgePropertiesCount[propertyID] == 0) {
+                            emptyEdgeProperties.insert(propertyID);
+                            return;
+                        }
+                        const auto& oldEmbContainer = propertyContainer->cast<types::Embedding>();
+                        EmbeddingPropertyConfig config {oldEmbContainer.dimension(), EmbeddingPrecision::Float32};
+                        edgePropertyManager.registerEmbeddingPropertyType(propertyID, config);
+
+                        auto& newEmbContainer = edgePropertyManager.getMutableContainer<types::Embedding>(propertyID);
+                        newEmbContainer._values._views.resize(_edgePropertiesCount[propertyID]);
+                        newEmbContainer.ids().resize(_edgePropertiesCount[propertyID]);
+
+                        _edgePropertiesCount[propertyID] = 0;
+                    }
+
+                    auto& oldContainer = propertyContainer->cast<types::Embedding>();
+                    auto& newContainer = edgePropertyManager.getMutableContainer<types::Embedding>(propertyID);
+
+                    const TombstoneRanges& deletedEdgeIDs = edgeRangesPerPart.at(idx).at(propertyID);
+                    for (const auto& [start, size] : deletedEdgeIDs) {
+                        std::memcpy(newContainer._values._views.data() + _edgePropertiesCount[propertyID],
+                                    oldContainer._values._views.data() + start,
+                                    (size * sizeof(std::span<const float>)));
                         std::memcpy(newContainer.ids().data() + _edgePropertiesCount[propertyID],
                                     oldContainer.ids().data() + start,
                                     (size * sizeof(EntityID)));

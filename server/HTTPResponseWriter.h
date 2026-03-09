@@ -290,6 +290,17 @@ public:
         write(v ? "true" : "false");
     }
 
+    void writeValue(std::span<const float> v) {
+        write('[');
+        for (size_t i = 0; i < v.size(); i++) {
+            if (i > 0) {
+                write(',');
+            }
+            write(std::to_string(v[i]));
+        }
+        write(']');
+    }
+
     void writeValue(const PropertyTypeMap& propTypes, const NodeView& nodeView) {
         const auto& edges = nodeView.edges();
         const auto& props = nodeView.properties();

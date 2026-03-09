@@ -15,6 +15,7 @@
 #include "PipelinePort.h"
 
 #include "PipelineException.h"
+#include "columns/ColumnEmbeddingMany.h"
 #include "metadata/PropertyType.h"
 #include "processors/PredicateProgram.h"
 
@@ -59,6 +60,22 @@ void applyMask(const Column* src,
         APPLY_MASK_CASE(ColumnVector<EdgeTypeID>)
         APPLY_MASK_CASE(ColumnVector<PropertyTypeID>)
         APPLY_MASK_CASE(ColumnVector<std::string>)
+
+        case ColumnEmbeddingMany::staticKind(): {
+            auto* destEmb = static_cast<ColumnEmbeddingMany*>(dest);
+            const auto* srcEmb = static_cast<const ColumnEmbeddingMany*>(src);
+            const size_t rowCount = srcEmb->size();
+
+            destEmb->clear();
+            destEmb->setDimension(srcEmb->dimension());
+
+            for (size_t i = 0; i < rowCount; i++) {
+                if ((*mask)[i]) {
+                    destEmb->push_back(srcEmb->at(i));
+                }
+            }
+        }
+        break;
 
         default: {
             throw PipelineException(fmt::format("Unsupported mask application for column type {}",

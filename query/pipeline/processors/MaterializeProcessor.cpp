@@ -2,6 +2,7 @@
 
 #include "MaterializeData.h"
 
+#include "columns/ColumnEmbeddingMany.h"
 #include "columns/ColumnOperators.h"
 #include "columns/ColumnOptVector.h"
 #include "dataframe/Dataframe.h"
@@ -47,6 +48,11 @@ inline void copyChunkImpl(const Column* srcPtr,
         COPY_CHUNK_CASE(ColumnOptVector<types::String::Primitive>)
         COPY_CHUNK_CASE(ColumnOptVector<types::Bool::Primitive>)
 
+        case ColumnEmbeddingMany::staticKind(): {
+            dstPtr->assign(srcPtr);
+            return;
+        }
+
         default: {
             bioassert(false, "copyChunk operator not handled between columns of kind {} and {}",
                       srcPtr->getKind(), dstPtr->getKind());
@@ -83,6 +89,17 @@ inline void copyTransformedChunkImpl(const ColumnVector<size_t>* transform,
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::Double::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::String::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::Bool::Primitive>)
+
+        case ColumnEmbeddingMany::staticKind(): {
+            const auto* src = static_cast<const ColumnEmbeddingMany*>(srcPtr);
+            auto* dst = static_cast<ColumnEmbeddingMany*>(dstPtr);
+            dst->clear();
+            for (size_t i = 0; i < transform->size(); i++) {
+                dst->push_back(src->at((*transform)[i]));
+            }
+            return;
+        }
+
         default: {
             bioassert(false, "copyTransformedChunk operator not handled between columns of kind {} and {}",
                       srcPtr->getKind(), dstPtr->getKind());

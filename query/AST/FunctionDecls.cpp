@@ -110,6 +110,11 @@ void FunctionDecls::initDefault() {
     FunctionSignature* toBoolean = createFunction("toBoolean");
     toBoolean->setArguments({EvaluatedType::String});
     toBoolean->setReturnTypes({{EvaluatedType::Bool}});
+
+    // Embedding functions
+    FunctionSignature* cosSim = createFunction("cosineSimilarity");
+    cosSim->setArguments({EvaluatedType::List, EvaluatedType::List});
+    cosSim->setReturnTypes({{EvaluatedType::Double}});
 }
 
 FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {

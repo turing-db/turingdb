@@ -19,6 +19,7 @@ class LiteralExpr;
 class SymbolExpr;
 class IndexExpr;
 class FunctionInvocationExpr;
+class ListExpr;
 class PipelineGenerator;
 class PendingOutputView;
 
@@ -57,6 +58,7 @@ private:
     Column* generateLiteralExpr(const LiteralExpr* literalExpr);
     Column* generateSymbolExpr(const SymbolExpr* symbolExpr);
     Column* generateIndexExpr(const IndexExpr* indexExpr);
+    Column* generateListExpr(const ListExpr* listExpr);
     Column* generateFuncInvocationExpr(const FunctionInvocationExpr* funcExpr);
 
     Column* allocUnaryResultCol(ColumnOperator op, const Column* arg);

@@ -17,6 +17,7 @@
 #include "NodeContainerLoader.h"
 #include "EdgeContainerLoader.h"
 #include "PropertyContainerLoader.h"
+#include "EmbeddingPropertyContainerLoader.h"
 #include "PropertyIndexerLoader.h"
 #include "versioning/VersionController.h"
 
@@ -169,6 +170,23 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& dataPartDir,
             return {};
         };
 
+        // Lambda to store embedding properties
+        const auto storeEmbeddingContainer =
+            [&](PropertyManager& manager) -> DumpResult<void> {
+            EmbeddingPropertyContainerLoader loader(reader.value());
+
+            auto props = loader.load();
+            if (!props) {
+                return props.get_unexpected();
+            }
+
+            auto* ptr = props.value().release();
+            manager._map.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
+            manager._embeddings.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
+
+            return {};
+        };
+
         // Lambda to store string properties
         const auto storeStringContainer =
             [&](PropertyManager& manager,
@@ -215,6 +233,12 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& dataPartDir,
             }
             case ValueType::Bool: {
                 if (auto res = storeTrivialContainer.operator()<types::Bool>(manager); !res) {
+                    return res.get_unexpected();
+                }
+                break;
+            }
+            case ValueType::Embedding: {
+                if (auto res = storeEmbeddingContainer(manager); !res) {
                     return res.get_unexpected();
                 }
                 break;

@@ -1,5 +1,6 @@
 #include "MaterializeData.h"
 
+#include "columns/ColumnEmbeddingMany.h"
 #include "dataframe/DataframeManager.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
@@ -81,6 +82,15 @@ void MaterializeData::addToStep(const NamedColumn* col) {
     _columnsPerStep[_step].push_back(col->getColumn());
 
     ColumnType* outCol = _mem->alloc<ColumnType>();
+    NamedColumn* outNamedCol = NamedColumn::create(_dfMan, outCol, col->getTag());
+    _output->addColumn(outNamedCol);
+}
+
+void MaterializeData::addEmbeddingToStep(const NamedColumn* col, uint32_t dimension) {
+    ++_colCount;
+    _columnsPerStep[_step].push_back(col->getColumn());
+
+    ColumnEmbeddingMany* outCol = _mem->alloc<ColumnEmbeddingMany>(dimension);
     NamedColumn* outNamedCol = NamedColumn::create(_dfMan, outCol, col->getTag());
     _output->addColumn(outNamedCol);
 }

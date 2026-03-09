@@ -9,6 +9,8 @@
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitHash.h"
+#include "columns/ColumnEmbeddingMany.h"
+#include "columns/ColumnEmbeddingConst.h"
 
 #include "Panic.h"
 
@@ -78,6 +80,9 @@ struct ColumnTypeGenerator {
             COMPILE_ERROR("Unexpected column type");
         }
     }
+
+    void operator()(const ColumnEmbeddingMany*) { _name = "Embedding"; }
+    void operator()(const ColumnEmbeddingConst*) { _name = "Embedding"; }
 };
 
 }

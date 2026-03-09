@@ -44,6 +44,11 @@ enum ColumnOperator : uint8_t {
 
     OP_FUNC_LABELS,
 
+    // Embedding operators (binary)
+    OP_EMBEDDING_EQUAL,
+    OP_EMBEDDING_NOT_EQUAL,
+    OP_COSINE_SIMILARITY,
+
     _SIZE
 };
 
@@ -74,6 +79,9 @@ constexpr ColumnOperatorType getOperatorType(ColumnOperator op) {
 
         case OP_PROJECT:
         case OP_IN:
+        case OP_EMBEDDING_EQUAL:
+        case OP_EMBEDDING_NOT_EQUAL:
+        case OP_COSINE_SIMILARITY:
             return ColumnOperatorType::OPTYPE_BINARY;
         break;
 
@@ -135,5 +143,9 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
     EnumStringPair<ColumnOperator::OP_TO_FLOAT, "TO_FLOAT">,
     EnumStringPair<ColumnOperator::OP_TO_BOOLEAN, "TO_BOOLEAN">,
 
-    EnumStringPair<ColumnOperator::OP_FUNC_LABELS, "FUNCTION_LABELS">>;
+    EnumStringPair<ColumnOperator::OP_FUNC_LABELS, "FUNCTION_LABELS">,
+
+    EnumStringPair<ColumnOperator::OP_EMBEDDING_EQUAL, "EMBEDDING_EQUAL">,
+    EnumStringPair<ColumnOperator::OP_EMBEDDING_NOT_EQUAL, "EMBEDDING_NOT_EQUAL">,
+    EnumStringPair<ColumnOperator::OP_COSINE_SIMILARITY, "COSINE_SIMILARITY">>;
 }

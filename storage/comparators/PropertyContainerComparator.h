@@ -92,6 +92,30 @@ public:
                 break;
             }
 
+            case ValueType::Embedding: {
+                const auto& embA = a->cast<types::Embedding>();
+                const auto& embB = b->cast<types::Embedding>();
+                if (embA.size() != embB.size()) {
+                    return false;
+                }
+                const auto& idsA = embA.ids();
+                const auto& idsB = embB.ids();
+                for (size_t i = 0; i < embA.size(); i++) {
+                    if (idsA[i] != idsB[i]) {
+                        return false;
+                    }
+                    const auto& vA = embA.get(i);
+                    const auto& vB = embB.get(i);
+                    if (vA.size() != vB.size()) {
+                        return false;
+                    }
+                    if (std::memcmp(vA.data(), vB.data(), vA.size() * sizeof(float)) != 0) {
+                        return false;
+                    }
+                }
+                break;
+            }
+
             case ValueType::Invalid:
             case ValueType::_SIZE: {
                 break;

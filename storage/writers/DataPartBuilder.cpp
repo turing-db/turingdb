@@ -51,7 +51,14 @@ void DataPartBuilder::addNodeProperty(NodeID nodeID,
                                       PropertyTypeID ptID,
                                       T::Primitive value) {
     if (!_nodeProperties->hasPropertyType(ptID)) {
-        _nodeProperties->registerPropertyType<T>(ptID);
+        if constexpr (std::is_same_v<T, types::Embedding>) {
+            EmbeddingPropertyConfig config;
+            config._dimension = value.size();
+            config._precision = EmbeddingPrecision::Float32;
+            _nodeProperties->registerEmbeddingPropertyType(ptID, config);
+        } else {
+            _nodeProperties->registerPropertyType<T>(ptID);
+        }
     }
 
     if (nodeID < _firstNodeID) {
@@ -65,7 +72,14 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
                                       PropertyTypeID ptID,
                                       T::Primitive value) {
     if (!_edgeProperties->hasPropertyType(ptID)) {
-        _edgeProperties->registerPropertyType<T>(ptID);
+        if constexpr (std::is_same_v<T, types::Embedding>) {
+            EmbeddingPropertyConfig config;
+            config._dimension = value.size();
+            config._precision = EmbeddingPrecision::Float32;
+            _edgeProperties->registerEmbeddingPropertyType(ptID, config);
+        } else {
+            _edgeProperties->registerPropertyType<T>(ptID);
+        }
     }
     if (edge._edgeID < _firstEdgeID) {
         _patchedEdges.emplace(edge._edgeID, &edge);
@@ -110,3 +124,4 @@ INSTANTIATE(types::UInt64);
 INSTANTIATE(types::Double);
 INSTANTIATE(types::String);
 INSTANTIATE(types::Bool);
+INSTANTIATE(types::Embedding);

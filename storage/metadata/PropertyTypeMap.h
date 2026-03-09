@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include "metadata/PropertyType.h"
+#include "metadata/EmbeddingPropertyConfig.h"
 
 namespace db {
 
@@ -37,10 +38,14 @@ public:
 
     PropertyType getOrCreate(std::string_view labelName, ValueType valueType);
 
+    PropertyType getOrCreateEmbedding(std::string_view name, const EmbeddingPropertyConfig& config);
+    const EmbeddingPropertyConfig* getEmbeddingConfig(PropertyTypeID ptID) const;
+
 private:
     Container _container;
     NameMap _nameMap;
     IDMap _idMap;
+    std::unordered_map<PropertyTypeID, EmbeddingPropertyConfig> _embeddingConfigs;
 };
 
 }

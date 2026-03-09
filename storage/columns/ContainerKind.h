@@ -21,6 +21,8 @@ class ColumnSet;
 
 class ColumnMask;
 class ColumnStringTable;
+class ColumnEmbeddingMany;
+class ColumnEmbeddingConst;
 
 // Implementation
 
@@ -31,7 +33,9 @@ public:
         TemplateKind<ColumnConst>,
         TemplateKind<ColumnSet>,
         ColumnMask,
-        ColumnStringTable>;
+        ColumnStringTable,
+        ColumnEmbeddingMany,
+        ColumnEmbeddingConst>;
 
     using Code = uint8_t;
 

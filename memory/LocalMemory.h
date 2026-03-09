@@ -13,6 +13,8 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnStringTable.h"
+#include "columns/ColumnEmbeddingMany.h"
+#include "columns/ColumnEmbeddingConst.h"
 
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
@@ -84,7 +86,9 @@ public:
         MakeMemoryPool<ColumnOptVector<types::Bool::Primitive>>::type,
         MakeMemoryPool<ColumnSet<NodeID>>::type,
         MakeMemoryPool<ColumnSet<EdgeID>>::type,
-        MakeMemoryPool<ColumnStringTable>::type>;
+        MakeMemoryPool<ColumnStringTable>::type,
+        MakeMemoryPool<ColumnEmbeddingMany>::type,
+        MakeMemoryPool<ColumnEmbeddingConst>::type>;
 
     template <typename KeyT, typename ValueT>
     struct ClearTransform {

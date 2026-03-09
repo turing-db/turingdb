@@ -306,6 +306,7 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
         case EvaluatedType::EdgePattern:
         case EvaluatedType::StringTable:
         case EvaluatedType::List:
+            return ValueType::Embedding;
         case EvaluatedType::Map:
         case EvaluatedType::Invalid:
         case EvaluatedType::Wildcard:

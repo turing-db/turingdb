@@ -5,6 +5,8 @@
 #include "QueryStatus.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnEmbeddingMany.h"
+#include "columns/ColumnEmbeddingConst.h"
 #include "dataframe/Dataframe.h"
 #include "OutputWriter.h"
 #include "OutputValues.h"
@@ -56,6 +58,32 @@ public:
             const T& value = col->operator[](row);
 
             encodeValue(value);
+        }
+    }
+
+    void operator()(const ColumnEmbeddingMany* col) {
+        if (_logicalRowCount == 0) {
+            return;
+        }
+
+        encodeEmbedding((*col)[0]);
+
+        for (size_t row = 1; row < _logicalRowCount; row++) {
+            _writer.write(",");
+            encodeEmbedding((*col)[row]);
+        }
+    }
+
+    void operator()(const ColumnEmbeddingConst* col) {
+        if (_logicalRowCount == 0) {
+            return;
+        }
+
+        encodeEmbedding((*col)[0]);
+
+        for (size_t row = 1; row < _logicalRowCount; row++) {
+            _writer.write(",");
+            encodeEmbedding((*col)[0]);
         }
     }
 
@@ -125,6 +153,15 @@ private:
     void encodeValue(const T& value) {
         ControlCharactersEscaper::escapeAndSurroundByQuotes(value, _sanitized);
         _writer.write(_sanitized);
+    }
+
+    void encodeEmbedding(std::span<const float> emb) {
+        _writer.write("[");
+        for (size_t i = 0; i < emb.size(); i++) {
+            if (i > 0) _writer.write(",");
+            _writer.write(std::to_string(emb[i]));
+        }
+        _writer.write("]");
     }
 };
 
@@ -197,7 +234,12 @@ public:
         for (const NamedColumn* namedCol : df.cols()) {
             const Column* col = namedCol->getColumn();
 
-            ColTypeGen::dispatch(col, generator);
+            if (col->getContainerKind() == ContainerKind::code<ColumnEmbeddingMany>()
+                || col->getContainerKind() == ContainerKind::code<ColumnEmbeddingConst>()) {
+                generator(static_cast<const ColumnEmbeddingMany*>(nullptr));
+            } else {
+                ColTypeGen::dispatch(col, generator);
+            }
 
             value(columnType);
         }
@@ -223,7 +265,13 @@ public:
 
             const Column* col = namedCol->getColumn();
 
-            Encoder::dispatch(col, encoder);
+            if (col->getContainerKind() == ContainerKind::code<ColumnEmbeddingMany>()) {
+                encoder(static_cast<const ColumnEmbeddingMany*>(col));
+            } else if (col->getContainerKind() == ContainerKind::code<ColumnEmbeddingConst>()) {
+                encoder(static_cast<const ColumnEmbeddingConst*>(col));
+            } else {
+                Encoder::dispatch(col, encoder);
+            }
 
             end();
         }

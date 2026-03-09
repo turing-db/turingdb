@@ -35,6 +35,13 @@ PropertyType MetadataBuilder::getOrCreatePropertyType(std::string_view propTypeN
     return  _metadata->_propTypeMap.getOrCreate(propTypeName, valueType);
 }
 
+PropertyType MetadataBuilder::getOrCreateEmbeddingPropertyType(std::string_view propTypeName,
+                                                                const EmbeddingPropertyConfig& config) {
+    std::unique_lock lock(_spinLock);
+
+    return _metadata->_propTypeMap.getOrCreateEmbedding(propTypeName, config);
+}
+
 std::unique_ptr<MetadataBuilder> MetadataBuilder::create(const GraphMetadata& prevMetadata, GraphMetadata* metadata) {
     Profile profile("MetadataBuilder::create");
 

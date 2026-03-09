@@ -143,6 +143,21 @@ public:
         _comma = true;
     }
 
+    void value(std::span<const float> v) {
+        if (_comma) {
+            _writer->write(',');
+        }
+        _writer->write('[');
+        for (size_t i = 0; i < v.size(); i++) {
+            if (i > 0) {
+                _writer->write(',');
+            }
+            _writer->write(std::to_string(v[i]));
+        }
+        _writer->write(']');
+        _comma = true;
+    }
+
     void value(std::string_view v) {
         if (_comma) {
             _writer->write(",\"");

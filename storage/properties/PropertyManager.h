@@ -5,6 +5,7 @@
 
 #include "ID.h"
 #include "metadata/PropertyType.h"
+#include "metadata/EmbeddingPropertyConfig.h"
 #include "indexers/PropertyIndexer.h"
 #include "PropertyContainer.h"
 #include "FatalException.h"
@@ -50,8 +51,12 @@ public:
             _strings.emplace(ptID, static_cast<PropertyContainer*>(ptr));
         } else if constexpr (std::is_same_v<T, types::Bool>) {
             _bools.emplace(ptID, static_cast<PropertyContainer*>(ptr));
+        } else if constexpr (std::is_same_v<T, types::Embedding>) {
+            _embeddings.emplace(ptID, static_cast<PropertyContainer*>(ptr));
         }
     }
+
+    void registerEmbeddingPropertyType(PropertyTypeID ptID, const EmbeddingPropertyConfig& config);
 
     template <SupportedType T, typename... Args>
     void add(PropertyTypeID ptID, EntityID entityID, Args&&... args) {
@@ -186,6 +191,7 @@ private:
     PropertyContainerReferences _doubles;
     PropertyContainerReferences _strings;
     PropertyContainerReferences _bools;
+    PropertyContainerReferences _embeddings;
 
     PropertyIndexer _indexers;
 };

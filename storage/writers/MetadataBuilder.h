@@ -4,6 +4,7 @@
 
 #include "ID.h"
 #include "RWSpinLock.h"
+#include "metadata/EmbeddingPropertyConfig.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
 
@@ -25,6 +26,8 @@ public:
 
     // PropertyTypes
     PropertyType getOrCreatePropertyType(std::string_view propTypeName, ValueType valueType);
+    PropertyType getOrCreateEmbeddingPropertyType(std::string_view propTypeName,
+                                                   const EmbeddingPropertyConfig& config);
 
     [[nodiscard]] static std::unique_ptr<MetadataBuilder> create(const GraphMetadata& prevMetadata, GraphMetadata* metadata);
 

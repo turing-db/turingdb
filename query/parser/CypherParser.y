@@ -998,6 +998,7 @@ propertyExpr
 atomExpr
     : pathExpr { $$ = $1; }
     | literal { $$ = LiteralExpr::create(ast, $1); LOC($$, @$); }
+    | listLit { $$ = $1; }
     | symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
 
     | parameter { scanner.notImplemented(@$, "Parameters"); }
@@ -1298,7 +1299,6 @@ literal
     | numLit { $$ = $1; }
     | NULL_ { $$ = NullLiteral::create(ast); }
     | stringLit { $$ = $1; }
-    | listLit { scanner.notImplemented(@$, "Lists"); }
     | mapLit { $$ = $1; }
     ;
 

@@ -3,6 +3,8 @@
 #include "metadata/PropertyTypeMap.h"
 #include "GraphDumpHelper.h"
 
+#include "BioAssert.h"
+
 namespace db {
 
 class PropertyTypeMapDumper {
@@ -30,7 +32,10 @@ public:
         auto* buffer = &_writer.buffer();
         for (const auto& [pt, name] : propTypes) {
             const uint64_t strsize = name->size();
-            const size_t stride = PROPERTY_TYPE_BASE_STRIDE + strsize;
+            const size_t embeddingExtra = (pt._valueType == ValueType::Embedding)
+                                            ? sizeof(uint32_t) + sizeof(uint8_t)
+                                            : 0;
+            const size_t stride = PROPERTY_TYPE_BASE_STRIDE + strsize + embeddingExtra;
 
             if (buffer->avail() < stride) {
                 // Fill page header
@@ -47,6 +52,14 @@ public:
             _writer.writeToCurrentPage(pt._valueType);
             _writer.writeToCurrentPage(strsize);
             _writer.writeToCurrentPage(*name);
+
+            if (pt._valueType == ValueType::Embedding) {
+                const auto* embConfig = propTypes.getEmbeddingConfig(pt._id);
+                bioassert(embConfig, "Embedding property must have config");
+                _writer.writeToCurrentPage(embConfig->_dimension);
+                _writer.writeToCurrentPage(static_cast<uint8_t>(embConfig->_precision));
+            }
+
             countInPage++;
         }
 

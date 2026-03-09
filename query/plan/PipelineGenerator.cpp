@@ -68,6 +68,7 @@
 #include "nodes/LoadCSVNode.h"
 #include "nodes/LoadCommitNode.h"
 #include "nodes/ExprEvalNode.h"
+#include "nodes/FuncEvalNode.h"
 #include "nodes/CreateVectorIndexNode.h"
 #include "nodes/LoadVectorNode.h"
 #include "nodes/VectorSearchNode.h"
@@ -94,6 +95,7 @@
 #include "ExprProgramGenerator.h"
 #include "PredicateProgramGenerator.h"
 
+#include "metadata/EmbeddingPropertyConfig.h"
 #include "SystemManager.h"
 #include "TuringConfig.h"
 #include "PipelineException.h"
@@ -141,6 +143,7 @@ struct PropertyTypeDispatcher {
             case db::ValueType::Bool:
                 executor.template operator()<db::types::Bool>();
             break;
+            case db::ValueType::Embedding:
             case db::ValueType::_SIZE:
             case db::ValueType::Invalid: {
                 throw PlannerException("Unsupported property type");
@@ -425,6 +428,9 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         break;
 
         case PlanGraphOpcode::FUNC_EVAL:
+            return translateFuncEvalNode(static_cast<FuncEvalNode*>(node));
+        break;
+
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::UNKNOWN:
@@ -518,26 +524,40 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
     }
 
     // Adding the GetProperty processor to the pipeline
-    switch (entityDecl->getType()) {
-        case EvaluatedType::NodePattern: {
-            const auto process = [&]<SupportedType Type> {
-                output = &_builder.addGetProperties<EntityType::Node, Type>(*foundProp);
-            };
-            PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
-        }
-        break;
-        case EvaluatedType::EdgePattern: {
-            const auto process = [&]<SupportedType Type> {
-                output = &_builder.addGetProperties<EntityType::Edge, Type>(*foundProp);
-            };
-
-            PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
-        }
-        break;
-        default: {
+    if (foundProp->_valueType == ValueType::Embedding) {
+        const auto* config = _view.read().getMetadata().propTypes().getEmbeddingConfig(foundProp->_id);
+        bioassert(config, "Embedding property missing config");
+        if (entityDecl->getType() == EvaluatedType::NodePattern) {
+            output = &_builder.addGetEmbeddingProperties<EntityType::Node>(*foundProp, config->_dimension);
+        } else if (entityDecl->getType() == EvaluatedType::EdgePattern) {
+            output = &_builder.addGetEmbeddingProperties<EntityType::Edge>(*foundProp, config->_dimension);
+        } else {
             throw PlannerException(fmt::format(
                 "GetProperty must act on a Node/EdgePattern. Instead acting on {}",
                 EvaluatedTypeName::value(entityDecl->getType())));
+        }
+    } else {
+        switch (entityDecl->getType()) {
+            case EvaluatedType::NodePattern: {
+                const auto process = [&]<SupportedType Type> {
+                    output = &_builder.addGetProperties<EntityType::Node, Type>(*foundProp);
+                };
+                PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+            }
+            break;
+            case EvaluatedType::EdgePattern: {
+                const auto process = [&]<SupportedType Type> {
+                    output = &_builder.addGetProperties<EntityType::Edge, Type>(*foundProp);
+                };
+
+                PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+            }
+            break;
+            default: {
+                throw PlannerException(fmt::format(
+                    "GetProperty must act on a Node/EdgePattern. Instead acting on {}",
+                    EvaluatedTypeName::value(entityDecl->getType())));
+            }
         }
     }
 
@@ -595,7 +615,19 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
         throw PlannerException(fmt::format("Property type {} does not exist", propName));
     }
 
-    if (entityDecl->getType() == EvaluatedType::NodePattern) {
+    if (foundProp->_valueType == ValueType::Embedding) {
+        const auto* config = _view.read().getMetadata().propTypes().getEmbeddingConfig(foundProp->_id);
+        bioassert(config, "Embedding property missing config");
+        if (entityDecl->getType() == EvaluatedType::NodePattern) {
+            output = &_builder.addGetEmbeddingPropertiesWithNull<EntityType::Node>(entityTag, *foundProp, config->_dimension);
+        } else if (entityDecl->getType() == EvaluatedType::EdgePattern) {
+            output = &_builder.addGetEmbeddingPropertiesWithNull<EntityType::Edge>(entityTag, *foundProp, config->_dimension);
+        } else {
+            throw PlannerException(fmt::format(
+                "GetPropertyWithNull must act on a Node/EdgePattern. Instead acting on {}",
+                EvaluatedTypeName::value(entityDecl->getType())));
+        }
+    } else if (entityDecl->getType() == EvaluatedType::NodePattern) {
         const auto process = [&]<SupportedType Type> {
             output = &_builder.addGetPropertiesWithNull<EntityType::Node, Type>(entityTag, *foundProp);
         };
@@ -1180,6 +1212,35 @@ PipelineOutputInterface* PipelineGenerator::translateExprEvalNode(ExprEvalNode* 
         NamedColumn* resultNCol = _builder.addColumnToOutput(resultantColumn);
 
         // Map back this variable to the new column for return projections, etc.
+        _declToColumn[var] = resultNCol->getTag();
+    }
+
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateFuncEvalNode(FuncEvalNode* node) {
+    if (!_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    const FuncEvalNode::Funcs& funcs = node->getFuncs();
+
+    if (funcs.empty()) {
+        return _builder.getPendingOutputInterface();
+    }
+
+    ExprProgram* prog = ExprProgram::create(_pipeline);
+    ExprProgramGenerator progGen(this, prog, _builder.getPendingOutput());
+
+    _builder.addExprEval(prog);
+
+    for (const FunctionInvocationExpr* funcExpr : funcs) {
+        const VarDecl* var = funcExpr->getExprVarDecl();
+        bioassert(var, "Function expression to evaluate had null variable declaration.");
+
+        Column* resultantColumn = progGen.generateExpr(funcExpr);
+        NamedColumn* resultNCol = _builder.addColumnToOutput(resultantColumn);
+
         _declToColumn[var] = resultNCol->getTag();
     }
 

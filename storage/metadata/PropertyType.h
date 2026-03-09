@@ -17,6 +17,7 @@ enum class ValueType : uint8_t {
     Double,
     String,
     Bool,
+    Embedding,
 
     _SIZE,
 };
@@ -27,7 +28,8 @@ using ValueTypeName = EnumToString<ValueType>::Create<
     EnumStringPair<ValueType::UInt64, "UInt64">,
     EnumStringPair<ValueType::Double, "Double">,
     EnumStringPair<ValueType::String, "String">,
-    EnumStringPair<ValueType::Bool, "Bool">>;
+    EnumStringPair<ValueType::Bool, "Bool">,
+    EnumStringPair<ValueType::Embedding, "Embedding">>;
 
 struct CustomBool {
     CustomBool() = default;
@@ -106,10 +108,15 @@ struct Bool : public PropertyType {
     static constexpr auto _valueType = ValueType::Bool;
 };
 
+struct Embedding : public PropertyType {
+    using Primitive = std::span<const float>;
+    static constexpr auto _valueType = ValueType::Embedding;
+};
+
 }
 
 template <typename T>
-concept TrivialSupportedType = SupportedType<T> && !std::same_as<T, types::String>;
+concept TrivialSupportedType = SupportedType<T> && !std::same_as<T, types::String> && !std::same_as<T, types::Embedding>;
 
 enum class PropertyImportance : uint8_t {
     Mandatory = 0,

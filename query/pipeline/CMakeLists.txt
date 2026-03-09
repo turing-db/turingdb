@@ -21,6 +21,7 @@ set(processors_sources
     processors/GetOutEdgesProcessor.cpp
     processors/GetPropertiesProcessor.cpp
     processors/GetPropertiesWithNullProcessor.cpp
+    processors/GetEmbeddingPropertiesProcessor.cpp
     processors/MaterializeProcessor.cpp
     processors/ForkProcessor.cpp
     processors/MaterializeData.cpp
@@ -55,6 +56,7 @@ set(processors_sources
     processors/ExprProgram.cpp
     processors/EvalBinaryExpr.cpp
     processors/EvalUnaryExpr.cpp
+    processors/EvalEmbeddingExpr.cpp
     processors/CSVSourceProcessor.cpp
     processors/CreateVectorIndexProcessor.cpp
     processors/LoadVectorProcessor.cpp

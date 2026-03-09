@@ -7,6 +7,7 @@
 #include "metadata/SupportedType.h"
 #include "DumpConfig.h"
 #include "StringBucket.h"
+#include "EmbeddingBucket.h"
 
 namespace db {
 
@@ -79,6 +80,33 @@ public:
 
     // BUCKET count per page
     static constexpr size_t BUCKET_COUNT_PER_PAGE = BUCKET_PAGE_AVAIL / BUCKET_STRIDE;
+};
+
+class EmbeddingPropertyContainerDumpConstants {
+public:
+    // ID page metadata stride
+    static constexpr size_t ID_HEADER_STRIDE = sizeof(uint64_t); // Prop count
+
+    // Data page metadata stride
+    static constexpr size_t DATA_HEADER_STRIDE = sizeof(uint64_t); // Float count
+
+    // Single id stride
+    static constexpr size_t ID_STRIDE = sizeof(EntityID::Type);
+
+    // Single float stride
+    static constexpr size_t FLOAT_STRIDE = sizeof(float);
+
+    // Avail space in id page
+    static constexpr size_t ID_PAGE_AVAIL = DumpConfig::PAGE_SIZE - ID_HEADER_STRIDE;
+
+    // Avail space in data page
+    static constexpr size_t DATA_PAGE_AVAIL = DumpConfig::PAGE_SIZE - DATA_HEADER_STRIDE;
+
+    // ID count per page
+    static constexpr size_t ID_COUNT_PER_PAGE = ID_PAGE_AVAIL / ID_STRIDE;
+
+    // Float count per page
+    static constexpr size_t FLOAT_COUNT_PER_PAGE = DATA_PAGE_AVAIL / FLOAT_STRIDE;
 };
 
 }

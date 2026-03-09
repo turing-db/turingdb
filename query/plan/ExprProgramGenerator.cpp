@@ -38,6 +38,13 @@
 
 #include "LocalMemory.h"
 
+#include "columns/ColumnEmbeddingConst.h"
+#include "columns/ColumnEmbeddingMany.h"
+#include "columns/ColumnMask.h"
+#include "expr/ListExpr.h"
+#include "FunctionSignature.h"
+#include "FunctionInvocation.h"
+
 #include "PlannerException.h"
 #include "FatalException.h"
 
@@ -180,7 +187,7 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
         break;
 
         case Expr::Kind::LIST:
-            throw PlannerException("List expressions are currently not supported.");
+            return generateListExpr(static_cast<const ListExpr*>(expr));
         break;
 
         case Expr::Kind::_SIZE:
@@ -207,6 +214,20 @@ Column* ExprProgramGenerator::generateUnaryExpr(const UnaryExpr* unExpr) {
 Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
     Column* lhs = generateExpr(binExpr->getLHS());
     Column* rhs = generateExpr(binExpr->getRHS());
+
+    // Embedding equality/inequality: bypass the type dispatcher
+    if (binExpr->getLHS()->getType() == EvaluatedType::List
+        && binExpr->getRHS()->getType() == EvaluatedType::List) {
+        const BinaryOperator binOp = binExpr->getOperator();
+        if (binOp == BinaryOperator::Equal || binOp == BinaryOperator::NotEqual) {
+            const ColumnOperator embOp = (binOp == BinaryOperator::Equal)
+                ? OP_EMBEDDING_EQUAL : OP_EMBEDDING_NOT_EQUAL;
+            Column* resCol = _gen->memory().alloc<ColumnMask>();
+            _exprProg->addInstr(embOp, resCol, lhs, rhs);
+            return resCol;
+        }
+    }
+
     const ColumnOperator op = binaryOperatorToColumnOperator(binExpr->getOperator());
     Column* resCol = allocBinaryResultCol(op, lhs, rhs);
 
@@ -359,6 +380,28 @@ Column* ExprProgramGenerator::generateIndexExpr(const IndexExpr* indexExpr) {
     return table->getFieldColumn(fieldIdx);
 }
 
+Column* ExprProgramGenerator::generateListExpr(const ListExpr* listExpr) {
+    std::vector<float> values;
+    values.reserve(listExpr->size());
+
+    for (const Expr* elem : listExpr->getElements()) {
+        const auto* litExpr = static_cast<const LiteralExpr*>(elem);
+        const Literal* lit = litExpr->getLiteral();
+
+        if (lit->getKind() == Literal::Kind::DOUBLE) {
+            values.push_back(static_cast<float>(static_cast<const DoubleLiteral*>(lit)->getValue()));
+        } else if (lit->getKind() == Literal::Kind::INTEGER) {
+            values.push_back(static_cast<float>(static_cast<const IntegerLiteral*>(lit)->getValue()));
+        } else {
+            throw PlannerException("List elements must be numeric literals");
+        }
+    }
+
+    auto* col = _gen->memory().alloc<ColumnEmbeddingConst>();
+    col->set(std::move(values));
+    return col;
+}
+
 Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocationExpr* funcExpr) {
     const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
     const FunctionSignature* signature = invocation->getSignature();
@@ -407,6 +450,20 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
         Column* resCol = allocUnaryResultCol(op, argCol);
 
         _exprProg->addInstr(op, resCol, argCol, nullptr);
+        return resCol;
+    }
+
+    if (funcName == "cosineSimilarity") {
+        if (args->size() != 2) {
+            throw PlannerException(
+                fmt::format("cosineSimilarity() expects 2 arguments, got {}", args->size()));
+        }
+
+        Column* lhsCol = generateExpr(args->getExprs()[0]);
+        Column* rhsCol = generateExpr(args->getExprs()[1]);
+        Column* resCol = _gen->memory().alloc<ColumnVector<double>>();
+
+        _exprProg->addInstr(OP_COSINE_SIMILARITY, resCol, lhsCol, rhsCol);
         return resCol;
     }
 
@@ -531,6 +588,15 @@ Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
             throw PlannerException("Unsupported allocator: IN.");
         break;
 
+        case OP_EMBEDDING_EQUAL:
+        case OP_EMBEDDING_NOT_EQUAL:
+            result = _gen->memory().alloc<ColumnVector<CustomBool>>();
+        break;
+
+        case OP_COSINE_SIMILARITY:
+            result = _gen->memory().alloc<ColumnVector<double>>();
+        break;
+
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:
@@ -592,6 +658,9 @@ Column* ExprProgramGenerator::allocUnaryResultCol(ColumnOperator op, const Colum
         case OP_DIV:
         case OP_PROJECT:
         case OP_IN:
+        case OP_EMBEDDING_EQUAL:
+        case OP_EMBEDDING_NOT_EQUAL:
+        case OP_COSINE_SIMILARITY:
             throw PlannerException(
                 fmt::format("Attempted to allocate unary result for binary operator {}.",
                             ColumnOperatorDescription::value(op)));

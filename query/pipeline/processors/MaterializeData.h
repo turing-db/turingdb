@@ -62,6 +62,8 @@ public:
     template <typename ColumnType>
     void addToStep(const NamedColumn* col);
 
+    void addEmbeddingToStep(const NamedColumn* col, uint32_t dimension);
+
 private:
     LocalMemory* _mem {nullptr};
     DataframeManager* _dfMan {nullptr};

@@ -5,6 +5,7 @@
 #include "columns/ColumnOperator.h"
 #include "columns/ColumnOptVector.h"
 #include "EvalBinaryExpr.h"
+#include "EvalEmbeddingExpr.h"
 #include "EvalUnaryExpr.h"
 #include "metadata/SupportedType.h"
 #include "EvalFunction.h"
@@ -115,6 +116,18 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
             EvalBinaryExpr::eval<OP_DIV>(res, lhs, rhs);
         break;
 
+        case OP_EMBEDDING_EQUAL:
+            EvalEmbeddingExpr::evalEqual(res, lhs, rhs);
+        break;
+
+        case OP_EMBEDDING_NOT_EQUAL:
+            EvalEmbeddingExpr::evalNotEqual(res, lhs, rhs);
+        break;
+
+        case OP_COSINE_SIMILARITY:
+            EvalEmbeddingExpr::evalCosineSimilarity(res, lhs, rhs);
+        break;
+
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:
@@ -178,6 +191,9 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         case OP_DIV:
         case OP_PROJECT:
         case OP_IN:
+        case OP_EMBEDDING_EQUAL:
+        case OP_EMBEDDING_NOT_EQUAL:
+        case OP_COSINE_SIMILARITY:
             throw FatalException(fmt::format(
                 "Attempted to evalute {} as unary operator.",
                 ColumnOperatorDescription::value(op)));

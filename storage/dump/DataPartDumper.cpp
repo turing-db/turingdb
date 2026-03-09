@@ -13,6 +13,7 @@
 #include "NodeContainerDumper.h"
 #include "EdgeContainerDumper.h"
 #include "PropertyContainerDumper.h"
+#include "EmbeddingPropertyContainerDumper.h"
 #include "PropertyIndexerDumper.h"
 
 #include "Panic.h"
@@ -54,6 +55,13 @@ DumpResult<void> dumpProperties(fs::FilePageWriter& writer, PropertyContainer* c
         case ValueType::Bool: {
             TrivialPropertyContainerDumper<types::Bool> dumper(writer);
             if (auto res = dumper.dump(container->cast<types::Bool>()); !res) {
+                return res.get_unexpected();
+            }
+            break;
+        }
+        case ValueType::Embedding: {
+            EmbeddingPropertyContainerDumper dumper(writer);
+            if (auto res = dumper.dump(container->cast<types::Embedding>()); !res) {
                 return res.get_unexpected();
             }
             break;

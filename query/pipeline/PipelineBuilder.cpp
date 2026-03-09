@@ -19,6 +19,7 @@
 #include "processors/LambdaProcessor.h"
 #include "processors/GetPropertiesProcessor.h"
 #include "processors/GetPropertiesWithNullProcessor.h"
+#include "processors/GetEmbeddingPropertiesProcessor.h"
 #include "processors/SkipProcessor.h"
 #include "processors/LimitProcessor.h"
 #include "processors/CountProcessor.h"
@@ -773,6 +774,79 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(ColumnT
 
     return output;
 }
+
+template <EntityType Entity>
+PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingProperties(PropertyType propertyType,
+                                                                          uint32_t dimension) {
+    auto* proc = GetEmbeddingPropertiesProcessor<Entity>::create(_pipeline, propertyType, dimension);
+
+    PipelineBlockInputInterface& input = proc->input();
+    PipelineValuesOutputInterface& output = proc->output();
+
+    _pendingOutput.connectTo(input);
+    input.propagateColumns(output);
+    output.setStream(input.getStream());
+
+    Dataframe* outDf = output.getDataframe();
+
+    // Allocate ColumnEmbeddingMany with the correct dimension
+    auto* embCol = _mem->alloc<ColumnEmbeddingMany>(dimension);
+    NamedColumn* values = NamedColumn::create(_dfMan, embCol, _dfMan->allocTag());
+    outDf->addColumn(values);
+    output.setValues(values);
+
+    // Allocate indices column
+    NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
+    output.setIndices(indices);
+
+    MaterializeData& matData = _matProc->getMaterializeData();
+    matData.createStep(indices);
+    matData.addEmbeddingToStep(values, dimension);
+
+    _pendingOutput.updateInterface(&output);
+
+    return output;
+}
+
+template PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingProperties<EntityType::Node>(PropertyType, uint32_t);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingProperties<EntityType::Edge>(PropertyType, uint32_t);
+
+template <EntityType Entity>
+PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingPropertiesWithNull(ColumnTag entityTag,
+                                                                                   PropertyType propertyType,
+                                                                                   uint32_t dimension) {
+    // Reuse the same processor — for now embedding properties are always present
+    auto* proc = GetEmbeddingPropertiesProcessor<Entity>::create(_pipeline, propertyType, dimension);
+
+    PipelineBlockInputInterface& input = proc->input();
+    PipelineValuesOutputInterface& output = proc->output();
+
+    _pendingOutput.connectTo(input);
+    input.propagateColumns(output);
+    output.setStream(input.getStream());
+
+    Dataframe* outDf = output.getDataframe();
+
+    auto* embCol = _mem->alloc<ColumnEmbeddingMany>(dimension);
+    NamedColumn* values = NamedColumn::create(_dfMan, embCol, _dfMan->allocTag());
+    outDf->addColumn(values);
+    output.setValues(values);
+
+    // Allocate indices column
+    NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
+    output.setIndices(indices);
+
+    MaterializeData& matData = _matProc->getMaterializeData();
+    matData.createStep(indices);
+    matData.addEmbeddingToStep(values, dimension);
+
+    _pendingOutput.updateInterface(&output);
+
+    return output;
+}
+
+template PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingPropertiesWithNull<EntityType::Node>(ColumnTag, PropertyType, uint32_t);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingPropertiesWithNull<EntityType::Edge>(ColumnTag, PropertyType, uint32_t);
 
 PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
                                                         const WriteProcessor::DeletedNodes& nodeColumnsToDelete,

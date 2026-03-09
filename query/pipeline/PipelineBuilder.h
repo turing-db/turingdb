@@ -28,6 +28,7 @@
 
 #include "metadata/SupportedType.h"
 #include "metadata/LabelSet.h"
+#include "columns/ColumnEmbeddingMany.h"
 
 #include "LocalMemory.h"
 #include "Path.h"
@@ -110,6 +111,14 @@ public:
                                                                 PropertyType propertyType) {
         return addGetPropertiesWithNull<EntityType::Edge, T>(entityTag, propertyType);
     }
+
+    template <EntityType Entity>
+    PipelineValuesOutputInterface& addGetEmbeddingProperties(PropertyType propertyType, uint32_t dimension);
+
+    template <EntityType Entity>
+    PipelineValuesOutputInterface& addGetEmbeddingPropertiesWithNull(ColumnTag entityTag,
+                                                                      PropertyType propertyType,
+                                                                      uint32_t dimension);
 
     // Expression evaluation
     PipelineBlockOutputInterface& addExprEval(ExprProgram* exprProg);

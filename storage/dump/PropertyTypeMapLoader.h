@@ -1,6 +1,7 @@
 #pragma once
 
 #include "metadata/PropertyTypeMap.h"
+#include "metadata/EmbeddingPropertyConfig.h"
 #include "DumpResult.h"
 #include "FilePageReader.h"
 #include "GraphDumpHelper.h"
@@ -71,8 +72,18 @@ public:
                 }
 
                 const std::string_view name = it.get<char>(strsize);
-                propTypes.getOrCreate(std::string {name},
-                        valueType);
+
+                if (valueType == ValueType::Embedding) {
+                    const uint32_t dimension = it.get<uint32_t>();
+                    const uint8_t precisionByte = it.get<uint8_t>();
+                    EmbeddingPropertyConfig config {
+                        dimension,
+                        static_cast<EmbeddingPrecision>(precisionByte),
+                    };
+                    propTypes.getOrCreateEmbedding(std::string {name}, config);
+                } else {
+                    propTypes.getOrCreate(std::string {name}, valueType);
+                }
             }
         }
 

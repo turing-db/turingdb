@@ -7,6 +7,7 @@ PropertyTypeMap::PropertyTypeMap() = default;
 PropertyTypeMap::~PropertyTypeMap() = default;
 
 PropertyTypeMap::PropertyTypeMap(const PropertyTypeMap& other)
+    : _embeddingConfigs(other._embeddingConfigs)
 {
     for (const auto& pair : other._container) {
         const PropertyType& pt = pair._pt;
@@ -39,6 +40,8 @@ PropertyTypeMap& PropertyTypeMap::operator=(const PropertyTypeMap& other) {
         _nameMap.emplace(*namePtr, count);
         _idMap.emplace(pt._id, count);
     }
+
+    _embeddingConfigs = other._embeddingConfigs;
 
     return *this;
 }
@@ -94,4 +97,19 @@ PropertyType PropertyTypeMap::getOrCreate(std::string_view name, ValueType value
     _idMap.emplace(nextID, count);
 
     return pt;
+}
+
+PropertyType PropertyTypeMap::getOrCreateEmbedding(std::string_view name,
+                                                    const EmbeddingPropertyConfig& config) {
+    PropertyType pt = getOrCreate(name, ValueType::Embedding);
+    _embeddingConfigs[pt._id] = config;
+    return pt;
+}
+
+const EmbeddingPropertyConfig* PropertyTypeMap::getEmbeddingConfig(PropertyTypeID ptID) const {
+    auto it = _embeddingConfigs.find(ptID);
+    if (it == _embeddingConfigs.end()) {
+        return nullptr;
+    }
+    return &it->second;
 }
