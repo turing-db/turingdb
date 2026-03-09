@@ -236,11 +236,17 @@ void ReadStmtGenerator::generatePatternElement(const PatternElement* element) {
 
     VarNode* currentNode = generatePatternElementOrigin(origin);
 
+    _edgesInPattern.clear();
+
     const auto& chain = element->getElementChain();
     for (const auto& [edge, node] : chain) {
         const EdgePattern* e = dynamic_cast<const EdgePattern*>(edge);
         if (!e) {
             throwError("Pattern element edge must be an edge pattern", element);
+        }
+
+        if (e->getDecl() && !_edgesInPattern.insert(e->getDecl()).second) {
+            throwError("Re-using the same edge variable in a single pattern is not supported", edge);
         }
 
         const NodePattern* n = dynamic_cast<const NodePattern*>(node);
@@ -339,8 +345,6 @@ VarNode* ReadStmtGenerator::generatePatternElementEdge(PlanGraphNode* prevNode,
     if (!var) {
         std::tie(var, filter) = _variables->createVarNodeAndFilter(decl);
         _variables->setProducer(decl, var);
-    } else {
-        throwError("Re-using the same edge variable, this is not supported", edge);
     }
 
     currentNode->connectOut(filter);

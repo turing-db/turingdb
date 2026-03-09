@@ -43,6 +43,9 @@ public:
     }
 
     void projectEdgeTarget() {
+        if (isNodeStream()) {
+            return; // Already projected
+        }
         if (!isEdgeStream()) {
             throw PipelineException("Cannot project edge target on non-edge stream");
         }
