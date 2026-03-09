@@ -182,6 +182,10 @@ Column* ExprProgramGenerator::generateExpr(const Expr* expr) {
         case Expr::Kind::LIST:
             throw PlannerException("List expressions are currently not supported.");
         break;
+
+        case Expr::Kind::_SIZE:
+            throw PlannerException("Unknown expression type in ExprProgramGenerator.");
+        break;
     }
 
     throw FatalException("Invalid Expr type in ExprProgramGenerator.");

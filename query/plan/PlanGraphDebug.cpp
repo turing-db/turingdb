@@ -1,5 +1,6 @@
 #include "PlanGraphDebug.h"
 
+#include "expr/Expr.h"
 #include "nodes/AggregateEvalNode.h"
 #include "nodes/ChangeNode.h"
 #include "nodes/FilterNode.h"
@@ -350,7 +351,11 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 for (const Expr* expr : n->getExprs()) {
                     const VarDecl* var = expr->getExprVarDecl();
                     const std::string_view name = var->getName();
-                    output << " __expr__: " << name << '\n';
+                    const Expr::Kind kind = expr->getKind();
+                    const std::string_view kindDesc = ExprKindDescription::value(kind);
+
+                    const std::string out =  fmt::format("__expr__ ({}): {}", kindDesc, name);
+                    output << out << '\n';
                 }
             }
             break;

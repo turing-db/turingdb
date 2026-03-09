@@ -4,6 +4,8 @@
 
 #include "decl/EvaluatedType.h"
 
+#include "EnumToString.h"
+
 namespace db {
 
 class CypherAST;
@@ -25,6 +27,8 @@ public:
         FUNCTION_INVOCATION,
         INDEX,
         LIST,
+
+        _SIZE
     };
 
     enum class Flags : uint8_t {
@@ -87,5 +91,19 @@ private:
     Flags _flags {Flags::NONE};
     std::string_view _name;
 };
+
+using ExprKindDescription = EnumToString<Expr::Kind>::Create<
+    EnumStringPair<Expr::Kind::BINARY, "BINARY">,
+    EnumStringPair<Expr::Kind::UNARY, "UNARY">,
+    EnumStringPair<Expr::Kind::STRING, "STRING">,
+    EnumStringPair<Expr::Kind::ENTITY_TYPES, "ENTITY_TYPES">,
+    EnumStringPair<Expr::Kind::PROPERTY, "PROPERTY">,
+    EnumStringPair<Expr::Kind::PATH, "PATH">,
+    EnumStringPair<Expr::Kind::SYMBOL, "SYMBOL">,
+    EnumStringPair<Expr::Kind::LITERAL, "LITERAL">,
+    EnumStringPair<Expr::Kind::FUNCTION_INVOCATION, "FUNCTION_INVOCATION">,
+    EnumStringPair<Expr::Kind::INDEX, "INDEX">,
+    EnumStringPair<Expr::Kind::LIST, "LIST">
+>;
 
 }

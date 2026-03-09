@@ -72,6 +72,11 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
             // List expressions are handled specially in vector search context
             // For now, just mark them as having no specific type
             break;
+
+        case Expr::Kind::_SIZE:
+            throwError("Unknown expression type in ExprAnalyzer.");
+        break;
+
     }
 }
 
