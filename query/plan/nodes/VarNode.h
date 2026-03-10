@@ -1,23 +1,17 @@
 #pragma once
 
-#include "PlanGraphNode.h"
+#include "VarDeclProviderNode.h"
 
 namespace db {
 
 class VarDecl;
 
-class VarNode : public PlanGraphNode {
+class VarNode : public VarDeclProviderNode{
 public:
     VarNode(const VarDecl* varDecl)
-        : PlanGraphNode(PlanGraphOpcode::VAR),
-        _varDecl(varDecl)
+        : VarDeclProviderNode(PlanGraphOpcode::VAR, varDecl)
     {
     }
-
-    const VarDecl* getVarDecl() const { return _varDecl; }
-
-private:
-    const VarDecl* _varDecl {nullptr};
 };
 
 }

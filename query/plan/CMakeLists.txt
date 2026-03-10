@@ -14,6 +14,7 @@ set(plan_sources
     PredicateProgramGenerator.cpp
     PlannerException.cpp
     nodes/LoadCSVNode.cpp
+    nodes/VarDeclProviderNode.cpp
     nodes/ExprEvalNode.cpp
 )
 

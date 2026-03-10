@@ -493,9 +493,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterfa
                                  leftJoinKey,
                                  rightJoinKey);
 
-    auto joinTag = outDf->cols().back()->getTag();
-
-    outInterface.setStream(EntityOutputStream::createNodeStream(joinTag));
     _pendingOutput.setInterface(&outInterface);
 
     return outInterface;
