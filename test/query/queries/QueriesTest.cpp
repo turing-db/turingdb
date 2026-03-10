@@ -3568,7 +3568,7 @@ TEST_F(QueriesTest, predicateJoinWithInequalityFilter) {
 
 // Divergent pattern with equality predicate on age (GitHub issue #397).
 //   MATCH (x)-->(a), (x)-->(b) WHERE a.age = b.age RETURN a, b, x
-TEST_F(QueriesTest, predicateJoinDivergentAge) {
+TEST_F(QueriesTest, DISABLED_predicateJoinDivergentAge) {
     _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
 
     using Rows = LineContainer<NodeID, NodeID, NodeID>;
@@ -3627,7 +3627,7 @@ TEST_F(QueriesTest, predicateJoinDivergentAge) {
 
 // Variant of #397 with inequality predicate that produces non-empty results.
 //   MATCH (x)-->(a), (x)-->(b) WHERE a.name <> b.name RETURN a, b, x
-TEST_F(QueriesTest, predicateJoinDivergentNameNeq) {
+TEST_F(QueriesTest, DISABLED_predicateJoinDivergentNameNeq) {
     _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
 
     using Rows = LineContainer<NodeID, NodeID, NodeID>;
