@@ -4,6 +4,7 @@
 
 #include "ColumnVector.h"
 #include "ColumnMask.h"
+#include "ColumnEmbeddingMany.h"
 #include "TypeUtils.h"
 #include "columns/AllowedKinds.h"
 
@@ -158,6 +159,12 @@ class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
 public:
     using ResultColumnType =
         ColumnConst<typename InternalCombination<Op, T, U>::type>;
+};
+
+template <typename Op>
+class ColumnCombinationImpl<Op, ColumnEmbeddingMany, ColumnMask> {
+public:
+    using ResultColumnType = ColumnEmbeddingMany;
 };
 
 template <typename Op, typename PColT, typename PColU>

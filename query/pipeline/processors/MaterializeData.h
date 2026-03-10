@@ -59,10 +59,8 @@ public:
     void createStep(const NamedColumn* indices);
 
     // Add a column to the same step
-    template <typename ColumnType>
-    void addToStep(const NamedColumn* col);
-
-    void addEmbeddingToStep(const NamedColumn* col, uint32_t dimension);
+    template <typename ColumnType, typename... Args>
+    void addToStep(const NamedColumn* col, Args... args);
 
 private:
     LocalMemory* _mem {nullptr};

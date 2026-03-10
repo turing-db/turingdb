@@ -524,20 +524,22 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
     }
 
     // Adding the GetProperty processor to the pipeline
+    const EvaluatedType entityType = entityDecl->getType();
+
     if (foundProp->_valueType == ValueType::Embedding) {
         const auto* config = _view.read().getMetadata().propTypes().getEmbeddingConfig(foundProp->_id);
         bioassert(config, "Embedding property missing config");
-        if (entityDecl->getType() == EvaluatedType::NodePattern) {
-            output = &_builder.addGetEmbeddingProperties<EntityType::Node>(*foundProp, config->_dimension);
-        } else if (entityDecl->getType() == EvaluatedType::EdgePattern) {
-            output = &_builder.addGetEmbeddingProperties<EntityType::Edge>(*foundProp, config->_dimension);
+        if (entityType == EvaluatedType::NodePattern) {
+            output = &_builder.addGetEmbeddingProperties<EntityType::Node>(*foundProp, config->getDimension());
+        } else if (entityType == EvaluatedType::EdgePattern) {
+            output = &_builder.addGetEmbeddingProperties<EntityType::Edge>(*foundProp, config->getDimension());
         } else {
             throw PlannerException(fmt::format(
                 "GetProperty must act on a Node/EdgePattern. Instead acting on {}",
-                EvaluatedTypeName::value(entityDecl->getType())));
+                EvaluatedTypeName::value(entityType)));
         }
     } else {
-        switch (entityDecl->getType()) {
+        switch (entityType) {
             case EvaluatedType::NodePattern: {
                 const auto process = [&]<SupportedType Type> {
                     output = &_builder.addGetProperties<EntityType::Node, Type>(*foundProp);
@@ -556,7 +558,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
             default: {
                 throw PlannerException(fmt::format(
                     "GetProperty must act on a Node/EdgePattern. Instead acting on {}",
-                    EvaluatedTypeName::value(entityDecl->getType())));
+                    EvaluatedTypeName::value(entityType)));
             }
         }
     }
@@ -615,25 +617,27 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
         throw PlannerException(fmt::format("Property type {} does not exist", propName));
     }
 
+    const EvaluatedType entityType = entityDecl->getType();
+
     if (foundProp->_valueType == ValueType::Embedding) {
         const auto* config = _view.read().getMetadata().propTypes().getEmbeddingConfig(foundProp->_id);
         bioassert(config, "Embedding property missing config");
-        if (entityDecl->getType() == EvaluatedType::NodePattern) {
-            output = &_builder.addGetEmbeddingPropertiesWithNull<EntityType::Node>(entityTag, *foundProp, config->_dimension);
-        } else if (entityDecl->getType() == EvaluatedType::EdgePattern) {
-            output = &_builder.addGetEmbeddingPropertiesWithNull<EntityType::Edge>(entityTag, *foundProp, config->_dimension);
+        if (entityType == EvaluatedType::NodePattern) {
+            output = &_builder.addGetEmbeddingPropertiesWithNull<EntityType::Node>(entityTag, *foundProp, config->getDimension());
+        } else if (entityType == EvaluatedType::EdgePattern) {
+            output = &_builder.addGetEmbeddingPropertiesWithNull<EntityType::Edge>(entityTag, *foundProp, config->getDimension());
         } else {
             throw PlannerException(fmt::format(
                 "GetPropertyWithNull must act on a Node/EdgePattern. Instead acting on {}",
-                EvaluatedTypeName::value(entityDecl->getType())));
+                EvaluatedTypeName::value(entityType)));
         }
-    } else if (entityDecl->getType() == EvaluatedType::NodePattern) {
+    } else if (entityType == EvaluatedType::NodePattern) {
         const auto process = [&]<SupportedType Type> {
             output = &_builder.addGetPropertiesWithNull<EntityType::Node, Type>(entityTag, *foundProp);
         };
 
         PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
-    } else if (entityDecl->getType() == EvaluatedType::EdgePattern) {
+    } else if (entityType == EvaluatedType::EdgePattern) {
         const auto process = [&]<SupportedType Type> {
             output = &_builder.addGetPropertiesWithNull<EntityType::Edge, Type>(entityTag, *foundProp);
         };
@@ -642,7 +646,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
     } else {
         throw PlannerException(fmt::format(
             "GetPropertyWithNull must act on a Node/EdgePattern. Instead acting on {}",
-            EvaluatedTypeName::value(entityDecl->getType())));
+            EvaluatedTypeName::value(entityType)));
     }
 
     const Expr* expr = node->getExpr();

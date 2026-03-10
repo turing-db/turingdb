@@ -262,9 +262,8 @@ void WriteProcessor::createNodes(size_t numIters) {
             if (type == ValueType::Embedding) {
                 const auto* embCol = dynamic_cast<const ColumnEmbeddingConst*>(valueCol);
                 bioassert(embCol, "Embedding property value is not a ColumnEmbeddingConst");
-                EmbeddingPropertyConfig config;
-                config._dimension = static_cast<uint32_t>(embCol->at(0).size());
-                config._precision = EmbeddingPrecision::Float32;
+                const uint32_t dimension = embCol->dimension();
+                EmbeddingPropertyConfig config(dimension, EmbeddingPrecision::Float32);
                 propID = _metadataBuilder->getOrCreateEmbeddingPropertyType(name, config)._id;
             } else {
                 propID = _metadataBuilder->getOrCreatePropertyType(name, type)._id;
@@ -375,9 +374,8 @@ void WriteProcessor::createEdges(size_t numIters) {
             if (type == ValueType::Embedding) {
                 const auto* embCol = dynamic_cast<const ColumnEmbeddingConst*>(valueCol);
                 bioassert(embCol, "Embedding edge property value is not a ColumnEmbeddingConst");
-                EmbeddingPropertyConfig config;
-                config._dimension = static_cast<uint32_t>(embCol->at(0).size());
-                config._precision = EmbeddingPrecision::Float32;
+                const uint32_t dimension = embCol->dimension();
+                EmbeddingPropertyConfig config(dimension, EmbeddingPrecision::Float32);
                 propID = _metadataBuilder->getOrCreateEmbeddingPropertyType(name, config)._id;
             } else {
                 propID = _metadataBuilder->getOrCreatePropertyType(name, type)._id;

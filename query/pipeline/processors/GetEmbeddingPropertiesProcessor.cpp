@@ -7,10 +7,6 @@
 #include "columns/ColumnIndices.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
-#include "properties/PropertyManager.h"
-
-#include "DataPart.h"
-#include "iterators/PartIterator.h"
 
 #include "PipelineException.h"
 
@@ -23,8 +19,9 @@ std::string GetEmbeddingPropertiesProcessor<Entity>::describe() const {
 }
 
 template <EntityType Entity>
-GetEmbeddingPropertiesProcessor<Entity>* GetEmbeddingPropertiesProcessor<Entity>::create(
-    PipelineV2* pipeline, PropertyType propType, uint32_t dimension) {
+GetEmbeddingPropertiesProcessor<Entity>* GetEmbeddingPropertiesProcessor<Entity>::create(PipelineV2* pipeline,
+                                                                                         PropertyType propType,
+                                                                                         uint32_t dimension) {
     auto* proc = new GetEmbeddingPropertiesProcessor(propType, dimension);
 
     PipelineInputPort* inPort = PipelineInputPort::create(pipeline, proc);
@@ -43,24 +40,11 @@ GetEmbeddingPropertiesProcessor<Entity>* GetEmbeddingPropertiesProcessor<Entity>
 template <EntityType Entity>
 void GetEmbeddingPropertiesProcessor<Entity>::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
-    markAsPrepared();
-}
 
-template <EntityType Entity>
-void GetEmbeddingPropertiesProcessor<Entity>::reset() {
-    markAsReset();
-}
-
-template <EntityType Entity>
-void GetEmbeddingPropertiesProcessor<Entity>::execute() {
-    using IDType = std::conditional_t<Entity == EntityType::Node, NodeID, EdgeID>;
-    using ColumnIDs = ColumnVector<IDType>;
-
-    const ColumnIDs* ids = nullptr;
     const auto& stream = _input.getStream();
-
     const Dataframe* inDf = _input.getDataframe();
 
+    const ColumnIDs* ids = nullptr;
     if constexpr (Entity == EntityType::Node) {
         const ColumnTag idsTag = stream.asNodeStream()._nodeIDsTag;
         ids = dynamic_cast<const ColumnIDs*>(inDf->getColumn(idsTag)->getColumn());
@@ -71,39 +55,26 @@ void GetEmbeddingPropertiesProcessor<Entity>::execute() {
 
     bioassert(ids, "GetEmbeddingPropertiesProcessor: could not get entity IDs column");
 
-    auto* outCol = dynamic_cast<ColumnEmbeddingMany*>(_output.getValues()->getColumn());
-    bioassert(outCol, "GetEmbeddingPropertiesProcessor: output column is not ColumnEmbeddingMany");
+    _propWriter = std::make_unique<ChunkWriter>(ctxt->getGraphView(), _propType._id, ids);
 
-    auto* indices = dynamic_cast<ColumnVector<size_t>*>(_output.getIndices()->getColumn());
-    bioassert(indices, "GetEmbeddingPropertiesProcessor: indices column is not valid");
+    ColumnIndices* indices = dynamic_cast<ColumnIndices*>(_output.getIndices()->getColumn());
+    _propWriter->setIndices(indices);
 
-    outCol->clear();
-    indices->clear();
-    outCol->reserve(ids->size());
-    indices->reserve(ids->size());
+    ColumnValues* values = dynamic_cast<ColumnValues*>(_output.getValues()->getColumn());
+    _propWriter->setOutput(values);
 
-    const GraphView& view = _ctxt->getGraphView();
-    PartIterator partIt(view);
+    markAsPrepared();
+}
 
-    for (; partIt.isNotEnd(); partIt.next()) {
-        const DataPart* part = partIt.get();
-        const PropertyManager& props = (Entity == EntityType::Node)
-                                        ? part->nodeProperties()
-                                        : part->edgeProperties();
+template <EntityType Entity>
+void GetEmbeddingPropertiesProcessor<Entity>::reset() {
+    _propWriter->reset();
+    markAsReset();
+}
 
-        if (!props.hasPropertyType(_propType._id)) {
-            continue;
-        }
-
-        for (size_t i = 0; i < ids->size(); i++) {
-            const IDType id = (*ids)[i];
-            const auto* val = props.tryGet<types::Embedding>(_propType._id, id.getValue());
-            if (val) {
-                outCol->push_back(*val);
-                indices->push_back(i);
-            }
-        }
-    }
+template <EntityType Entity>
+void GetEmbeddingPropertiesProcessor<Entity>::execute() {
+    _propWriter->fill(_ctxt->getChunkSize());
 
     _input.getPort()->consume();
     _output.getPort()->writeData();

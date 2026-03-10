@@ -4,8 +4,6 @@
 #include <math.h>
 #include <span>
 
-#include <spdlog/fmt/fmt.h>
-
 #include "columns/Column.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnVector.h"
@@ -22,28 +20,26 @@ static size_t getRowCount(const Column* lhs, const Column* rhs) {
 }
 
 struct ResolvedEmbeddingColumn {
-    const ColumnEmbeddingMany* many {nullptr};
-    const ColumnEmbeddingConst* cnst {nullptr};
+    const ColumnEmbeddingMany* _many {nullptr};
+    const ColumnEmbeddingConst* _const {nullptr};
 
     std::span<const float> spanAt(size_t row) const {
-        return many ? (*many)[row] : cnst->at(0);
+        return _many ? (*_many)[row] : _const->at(0);
     }
 
     uint32_t dimension() const {
-        return many ? many->dimension()
-                    : static_cast<uint32_t>(cnst->at(0).size());
+        return _many ? _many->dimension() : _const->dimension();
     }
 };
 
 static ResolvedEmbeddingColumn resolveColumn(const Column* col, const char* context) {
     ResolvedEmbeddingColumn resolved;
-    resolved.many = dynamic_cast<const ColumnEmbeddingMany*>(col);
-    if (!resolved.many) {
-        resolved.cnst = dynamic_cast<const ColumnEmbeddingConst*>(col);
+    resolved._many = dynamic_cast<const ColumnEmbeddingMany*>(col);
+    if (!resolved._many) {
+        resolved._const = dynamic_cast<const ColumnEmbeddingConst*>(col);
     }
-    if (!resolved.many && !resolved.cnst) {
-        throw FatalException(
-            fmt::format("EvalEmbeddingExpr::{}: column is not an embedding column", context));
+    if (!resolved._many && !resolved._const) {
+        throw FatalException(fmt::format("EvalEmbeddingExpr::{}: column is not an embedding column", context));
     }
     return resolved;
 }

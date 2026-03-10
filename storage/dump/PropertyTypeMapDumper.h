@@ -56,8 +56,8 @@ public:
             if (pt._valueType == ValueType::Embedding) {
                 const auto* embConfig = propTypes.getEmbeddingConfig(pt._id);
                 bioassert(embConfig, "Embedding property must have config");
-                _writer.writeToCurrentPage(embConfig->_dimension);
-                _writer.writeToCurrentPage(static_cast<uint8_t>(embConfig->_precision));
+                _writer.writeToCurrentPage(embConfig->getDimension());
+                _writer.writeToCurrentPage(static_cast<uint8_t>(embConfig->getPrecision()));
             }
 
             countInPage++;

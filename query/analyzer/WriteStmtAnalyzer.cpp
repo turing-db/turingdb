@@ -301,12 +301,12 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
             return ValueType::Double;
         case EvaluatedType::Integer:
             return ValueType::Int64;
+        case EvaluatedType::List:
+            return ValueType::Embedding;
         case EvaluatedType::Null:
         case EvaluatedType::NodePattern:
         case EvaluatedType::EdgePattern:
         case EvaluatedType::StringTable:
-        case EvaluatedType::List:
-            return ValueType::Embedding;
         case EvaluatedType::Map:
         case EvaluatedType::Invalid:
         case EvaluatedType::Wildcard:

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "Processor.h"
 #include "EntityType.h"
 
@@ -9,6 +11,7 @@
 #include "ExecutionContext.h"
 
 #include "metadata/PropertyType.h"
+#include "iterators/GetPropertiesIterator.h"
 
 namespace db {
 
@@ -18,7 +21,12 @@ class ColumnEmbeddingMany;
 template <EntityType Entity>
 class GetEmbeddingPropertiesProcessor : public Processor {
 public:
-    using ColumnValues = ColumnEmbeddingMany;
+    using ChunkWriter = std::conditional_t<Entity == EntityType::Node,
+                                           GetNodePropertiesChunkWriter<types::Embedding>,
+                                           GetEdgePropertiesChunkWriter<types::Embedding>>;
+
+    using ColumnValues = typename ChunkWriter::ColumnValues;
+    using ColumnIDs = typename ChunkWriter::ColumnIDs;
 
     static GetEmbeddingPropertiesProcessor* create(PipelineV2* pipeline,
                                                     PropertyType propType,
@@ -36,6 +44,7 @@ public:
 protected:
     PropertyType _propType;
     uint32_t _dimension;
+    std::unique_ptr<ChunkWriter> _propWriter;
     PipelineBlockInputInterface _input;
     PipelineValuesOutputInterface _output;
 

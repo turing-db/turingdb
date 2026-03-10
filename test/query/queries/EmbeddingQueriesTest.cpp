@@ -348,6 +348,132 @@ TEST_F(EmbeddingQueriesTest, returnAllEmbeddingsInDataframe) {
 }
 
 // =============================================================================
+// Nullable embeddings: nodes without embedding property
+// =============================================================================
+
+TEST_F(EmbeddingQueriesTest, nullEmbeddingForNodeWithoutProperty) {
+    // Create nodes: some with embedding, some without
+    execCreate(R"(CREATE (n:Item {name: "a", emb: [1.0, 2.0, 3.0]}))");
+    execCreate(R"(CREATE (n:Item {name: "b"}))");
+    execCreate(R"(CREATE (n:Item {name: "c", emb: [4.0, 5.0, 6.0]}))");
+
+    // Return name and embedding — node "b" should have null embedding
+    std::vector<std::pair<std::string, std::optional<std::vector<float>>>> rows;
+    auto res = query(R"(MATCH (n:Item) RETURN n.name, n.emb)",
+        [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 2) << "Expected 2 columns (name, emb)";
+
+            auto* names = df->cols().at(0)->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(names) << "Column 0 is not ColumnOptVector<String>";
+
+            auto* embs = df->cols().at(1)->as<ColumnEmbeddingMany>();
+            ASSERT_TRUE(embs) << "Column 1 is not ColumnEmbeddingMany";
+
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t i = 0; i < rowCount; i++) {
+                ASSERT_TRUE(names->at(i).has_value());
+                std::string name(names->at(i).value());
+
+                if (i < embs->size()) {
+                    std::span<const float> emb = embs->at(i);
+                    rows.emplace_back(name, std::vector<float>(emb.begin(), emb.end()));
+                } else {
+                    rows.emplace_back(name, std::nullopt);
+                }
+            }
+        });
+    ASSERT_TRUE(res) << "Query failed: status="
+        << static_cast<int>(res.getStatus())
+        << " error=" << res.getError();
+
+    ASSERT_EQ(rows.size(), 3);
+
+    // Sort by name for deterministic comparison
+    std::sort(rows.begin(), rows.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    const std::vector<float> expA = {1.0f, 2.0f, 3.0f};
+    const std::vector<float> expC = {4.0f, 5.0f, 6.0f};
+
+    // "a" has embedding [1, 2, 3]
+    EXPECT_EQ(rows[0].first, "a");
+    ASSERT_TRUE(rows[0].second.has_value());
+    expectEmbeddingEqual(rows[0].second.value(), expA);
+
+    // "b" has NO embedding
+    EXPECT_EQ(rows[1].first, "b");
+    EXPECT_FALSE(rows[1].second.has_value()) << "Node without embedding should have null";
+
+    // "c" has embedding [4, 5, 6]
+    EXPECT_EQ(rows[2].first, "c");
+    ASSERT_TRUE(rows[2].second.has_value());
+    expectEmbeddingEqual(rows[2].second.value(), expC);
+}
+
+// =============================================================================
+// Large-scale: 1000 nodes with 1024-dimension embeddings
+// =============================================================================
+
+TEST_F(EmbeddingQueriesTest, fetch1000NodesWithLargeEmbeddings) {
+    constexpr size_t NODE_COUNT = 1000;
+    constexpr uint32_t DIM = 1024;
+
+    // Build embedding list string for a given node index
+    auto buildEmbeddingList = [](size_t nodeIdx, uint32_t dim) -> std::string {
+        std::string s;
+        s.reserve(dim * 12);
+        s += '[';
+        for (uint32_t j = 0; j < dim; j++) {
+            if (j > 0) s += ',';
+            const float val = static_cast<float>(nodeIdx) + static_cast<float>(j) / static_cast<float>(dim);
+            s += std::to_string(val);
+        }
+        s += ']';
+        return s;
+    };
+
+    // Insert all nodes in a single change
+    newChange();
+    for (size_t i = 0; i < NODE_COUNT; i++) {
+        const std::string q = fmt::format("CREATE (n:BigVec {{emb: {}}})", buildEmbeddingList(i, DIM));
+        auto res = query(q, [&](const Dataframe* df) { ASSERT_TRUE(df); });
+        ASSERT_TRUE(res) << "Failed to create node " << i;
+    }
+    submitCurrentChange();
+
+    // Fetch all embeddings in a single MATCH query
+    size_t fetchedCount = 0;
+    auto res = query(R"(MATCH (n:BigVec) RETURN n.emb)", [&](const Dataframe* df) -> void {
+        ASSERT_TRUE(df);
+        ASSERT_EQ(df->size(), 1);
+
+        auto* embs = df->cols().front()->as<ColumnEmbeddingMany>();
+        ASSERT_TRUE(embs) << "Column is not ColumnEmbeddingMany";
+        EXPECT_EQ(embs->dimension(), DIM);
+
+        fetchedCount = df->getLogicalRowCount();
+        ASSERT_EQ(fetchedCount, NODE_COUNT);
+
+        // Verify each embedding's values
+        for (size_t i = 0; i < fetchedCount; i++) {
+            std::span<const float> emb = embs->at(i);
+            ASSERT_EQ(emb.size(), DIM) << "Wrong dimension at row " << i;
+
+            // Each embedding was created with value = nodeIdx + j/DIM
+            // We don't know the row order, so just verify dimension and finiteness
+            for (uint32_t j = 0; j < DIM; j++) {
+                ASSERT_TRUE(std::isfinite(emb[j])) << "Non-finite at row " << i << " dim " << j;
+            }
+        }
+    });
+    ASSERT_TRUE(res) << "Query failed: status="
+        << static_cast<int>(res.getStatus())
+        << " error=" << res.getError();
+    EXPECT_EQ(fetchedCount, NODE_COUNT);
+}
+
+// =============================================================================
 // Mixed properties: embedding alongside scalar properties
 // =============================================================================
 

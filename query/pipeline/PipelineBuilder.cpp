@@ -801,7 +801,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingProperties(Proper
 
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);
-    matData.addEmbeddingToStep(values, dimension);
+    matData.addToStep<ColumnEmbeddingMany>(values, dimension);
 
     _pendingOutput.updateInterface(&output);
 
@@ -838,7 +838,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingPropertiesWithNul
 
     MaterializeData& matData = _matProc->getMaterializeData();
     matData.createStep(indices);
-    matData.addEmbeddingToStep(values, dimension);
+    matData.addToStep<ColumnEmbeddingMany>(values, dimension);
 
     _pendingOutput.updateInterface(&output);
 

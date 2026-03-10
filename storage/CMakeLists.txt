@@ -53,6 +53,10 @@ set(storage_sources
         indexers/StringPropertyIndexer.cpp
 
         properties/PropertyManager.cpp
+        properties/PropertyContainer.cpp
+
+        EmbeddingBucket.cpp
+        EmbeddingContainer.cpp
 
         writers/DataPartBuilder.cpp
         writers/GraphWriter.cpp
@@ -111,6 +115,8 @@ set(storage_sources
         dump/CommitMetaDataDumper.cpp
         dump/TombstonesDumper.cpp
         dump/TombstonesLoader.cpp
+        dump/EmbeddingPropertyContainerDumper.cpp
+        dump/EmbeddingPropertyContainerLoader.cpp
       )
 
 add_library(turing_db_storage_s STATIC ${storage_sources})

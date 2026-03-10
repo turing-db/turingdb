@@ -1,5 +1,6 @@
 #include "GetPropertiesIterator.h"
 
+#include "columns/ColumnEmbeddingMany.h"
 #include "DataPart.h"
 #include "properties/PropertyManager.h"
 
@@ -109,11 +110,13 @@ template class GetPropertiesIterator<NodeID, types::UInt64>;
 template class GetPropertiesIterator<NodeID, types::Double>;
 template class GetPropertiesIterator<NodeID, types::String>;
 template class GetPropertiesIterator<NodeID, types::Bool>;
+template class GetPropertiesIterator<NodeID, types::Embedding>;
 template class GetPropertiesIterator<EdgeID, types::Int64>;
 template class GetPropertiesIterator<EdgeID, types::UInt64>;
 template class GetPropertiesIterator<EdgeID, types::Double>;
 template class GetPropertiesIterator<EdgeID, types::String>;
 template class GetPropertiesIterator<EdgeID, types::Bool>;
+template class GetPropertiesIterator<EdgeID, types::Embedding>;
 
 }
 
@@ -190,11 +193,13 @@ template class GetPropertiesIteratorWithNull<NodeID, types::UInt64>;
 template class GetPropertiesIteratorWithNull<NodeID, types::Double>;
 template class GetPropertiesIteratorWithNull<NodeID, types::String>;
 template class GetPropertiesIteratorWithNull<NodeID, types::Bool>;
+template class GetPropertiesIteratorWithNull<NodeID, types::Embedding>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::Int64>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::UInt64>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::Double>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::String>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::Bool>;
+template class GetPropertiesIteratorWithNull<EdgeID, types::Embedding>;
 
 }
 
@@ -225,6 +230,33 @@ void GetPropertiesChunkWriter<ID, T>::fill(size_t maxCount) {
     }
 }
 
+template <IteratedID ID>
+GetPropertiesChunkWriter<ID, types::Embedding>::GetPropertiesChunkWriter(const GraphView& view,
+                                                                         PropertyTypeID propTypeID,
+                                                                         const ColumnIDs* inputIDs)
+    : GetPropertiesIterator<ID, types::Embedding>(view, propTypeID, inputIDs)
+{
+}
+
+template <IteratedID ID>
+void GetPropertiesChunkWriter<ID, types::Embedding>::fill(size_t maxCount) {
+    _indices->clear();
+    _output->clear();
+
+    _output->reserve(this->_inputIDs->size());
+    _indices->reserve(this->_inputIDs->size());
+
+    while (this->isValid()) {
+        const auto& currentProp = this->get();
+        const size_t currIndex = std::distance(this->_inputIDs->cbegin(), this->_entityIt);
+
+        _output->push_back(currentProp);
+        _indices->push_back(currIndex);
+
+        this->next();
+    }
+}
+
 namespace db {
 
 template class GetPropertiesChunkWriter<NodeID, types::Int64>;
@@ -232,11 +264,13 @@ template class GetPropertiesChunkWriter<NodeID, types::UInt64>;
 template class GetPropertiesChunkWriter<NodeID, types::Double>;
 template class GetPropertiesChunkWriter<NodeID, types::String>;
 template class GetPropertiesChunkWriter<NodeID, types::Bool>;
+template class GetPropertiesChunkWriter<NodeID, types::Embedding>;
 template class GetPropertiesChunkWriter<EdgeID, types::Int64>;
 template class GetPropertiesChunkWriter<EdgeID, types::UInt64>;
 template class GetPropertiesChunkWriter<EdgeID, types::Double>;
 template class GetPropertiesChunkWriter<EdgeID, types::String>;
 template class GetPropertiesChunkWriter<EdgeID, types::Bool>;
+template class GetPropertiesChunkWriter<EdgeID, types::Embedding>;
 
 }
 

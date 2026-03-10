@@ -76,21 +76,12 @@ void MaterializeData::createStep(const NamedColumn* indices) {
     ++_step;
 }
 
-template <typename ColumnType>
-void MaterializeData::addToStep(const NamedColumn* col) {
+template <typename ColumnType, typename... Args>
+void MaterializeData::addToStep(const NamedColumn* col, Args... args) {
     ++_colCount;
     _columnsPerStep[_step].push_back(col->getColumn());
 
-    ColumnType* outCol = _mem->alloc<ColumnType>();
-    NamedColumn* outNamedCol = NamedColumn::create(_dfMan, outCol, col->getTag());
-    _output->addColumn(outNamedCol);
-}
-
-void MaterializeData::addEmbeddingToStep(const NamedColumn* col, uint32_t dimension) {
-    ++_colCount;
-    _columnsPerStep[_step].push_back(col->getColumn());
-
-    ColumnEmbeddingMany* outCol = _mem->alloc<ColumnEmbeddingMany>(dimension);
+    ColumnType* outCol = _mem->alloc<ColumnType>(args...);
     NamedColumn* outNamedCol = NamedColumn::create(_dfMan, outCol, col->getTag());
     _output->addColumn(outNamedCol);
 }
@@ -118,3 +109,5 @@ INSTANTIATE(ColumnOptVector<types::Int64::Primitive>);
 INSTANTIATE(ColumnOptVector<types::Double::Primitive>);
 INSTANTIATE(ColumnOptVector<types::String::Primitive>);
 INSTANTIATE(ColumnOptVector<types::Bool::Primitive>);
+
+template void MaterializeData::addToStep<ColumnEmbeddingMany, uint32_t>(const NamedColumn*, uint32_t);

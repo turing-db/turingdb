@@ -76,10 +76,8 @@ public:
                 if (valueType == ValueType::Embedding) {
                     const uint32_t dimension = it.get<uint32_t>();
                     const uint8_t precisionByte = it.get<uint8_t>();
-                    EmbeddingPropertyConfig config {
-                        dimension,
-                        static_cast<EmbeddingPrecision>(precisionByte),
-                    };
+                    const EmbeddingPrecision precision = static_cast<EmbeddingPrecision>(precisionByte);
+                    EmbeddingPropertyConfig config(dimension, precision);
                     propTypes.getOrCreateEmbedding(std::string {name}, config);
                 } else {
                     propTypes.getOrCreate(std::string {name}, valueType);

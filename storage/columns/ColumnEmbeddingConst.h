@@ -33,6 +33,7 @@ public:
     }
 
     size_t size() const override { return 1; }
+    uint32_t dimension() const { return static_cast<uint32_t>(_data.size()); }
 
     void set(std::vector<float>&& data) { _data = std::move(data); }
 

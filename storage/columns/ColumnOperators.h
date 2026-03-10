@@ -124,6 +124,20 @@ struct MaskOperators {
     }
 };
 
+    /// Applying masks to embedding columns
+    template <typename Op>
+    requires std::is_same_v<Op, ApplyMask>
+    static inline void exec(ColumnEmbeddingMany* res, const ColumnEmbeddingMany* src, const ColumnMask* mask) {
+        res->clear();
+        res->setDimension(src->dimension());
+        for (size_t i = 0; i < src->size(); i++) {
+            if ((*mask)[i]) {
+                res->push_back((*src)[i]);
+            }
+        }
+    }
+};
+
 struct ColumnFunctions {
     /// labels() function; result type is string
     template <typename Op, typename ColT>
@@ -149,12 +163,14 @@ struct ColumnFunctions {
 /// Generic Column projection and manipulation
 struct ColumnOperators {
     template <typename T>
-    static void copyChunk(typename ColumnVector<T>::ConstIterator srcStart,
-                          typename ColumnVector<T>::ConstIterator srcEnd,
-                          ColumnVector<T>* dst) {
-        const size_t count = std::distance(srcStart, srcEnd);
+    static inline void copyChunk(const ColumnVector<T>* src, ColumnVector<T>* dst) {
+        const size_t count = src->size();
         dst->resize(count);
-        std::copy(srcStart, srcEnd, dst->begin());
+        std::copy(src->begin(), src->end(), dst->begin());
+    }
+
+    static inline void copyChunk(const ColumnEmbeddingMany* src, ColumnEmbeddingMany* dst) {
+        dst->assign(src);
     }
 
     template <typename T>
@@ -169,6 +185,16 @@ struct ColumnOperators {
         auto& dstd = dst->getRaw();
         for (size_t i = 0; i < count; i++) {
             dstd[i] = srcd[transformd[i]];
+        }
+    }
+
+    static inline void copyTransformedChunk(const ColumnVector<size_t>* transform,
+                                            const ColumnEmbeddingMany* src,
+                                            ColumnEmbeddingMany* dst) {
+        dst->clear();
+        dst->setDimension(src->dimension());
+        for (size_t i = 0; i < transform->size(); i++) {
+            dst->push_back(src->at((*transform)[i]));
         }
     }
 };

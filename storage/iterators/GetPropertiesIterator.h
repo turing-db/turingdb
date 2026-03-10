@@ -8,6 +8,8 @@
 
 namespace db {
 
+class ColumnEmbeddingMany;
+
 template <typename T>
 concept IteratedID = std::is_same_v<T, NodeID> || std::is_same_v<T, EdgeID>;
 
@@ -130,6 +132,28 @@ public:
     using ValueType = typename T::Primitive;
     using ColumnIDs = ColumnVector<ID>;
     using ColumnValues = ColumnVector<ValueType>;
+
+    GetPropertiesChunkWriter(const GraphView& view,
+                             PropertyTypeID propTypeID,
+                             const ColumnIDs* inputIDs);
+
+    void fill(size_t maxCount);
+
+    void setOutput(ColumnValues* output) { _output = output; }
+    void setIndices(ColumnVector<size_t>* indices) { _indices = indices; }
+
+private:
+    ColumnVector<size_t>* _indices {nullptr};
+    ColumnValues* _output {nullptr};
+};
+
+template <IteratedID ID>
+class GetPropertiesChunkWriter<ID, types::Embedding> : public GetPropertiesIterator<ID, types::Embedding> {
+public:
+    using IDType = ID;
+    using PropertyType = types::Embedding;
+    using ColumnIDs = ColumnVector<ID>;
+    using ColumnValues = ColumnEmbeddingMany;
 
     GetPropertiesChunkWriter(const GraphView& view,
                              PropertyTypeID propTypeID,

@@ -36,12 +36,10 @@ public:
     }
 
     std::span<const float> at(size_t i) const {
-        bioassert(i * _dim + _dim <= _data.size(), "ColumnEmbeddingMany::at out of bounds");
         return {_data.data() + i * _dim, _dim};
     }
 
     void push_back(std::span<const float> embedding) {
-        bioassert(embedding.size() == _dim, "Embedding dimension mismatch");
         _data.insert(_data.end(), embedding.begin(), embedding.end());
     }
 

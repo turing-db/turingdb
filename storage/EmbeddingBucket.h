@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <string.h>
 #include <span>
 #include <vector>
 
@@ -28,16 +27,7 @@ public:
     EmbeddingBucket& operator=(const EmbeddingBucket&) = delete;
     EmbeddingBucket& operator=(EmbeddingBucket&&) noexcept = default;
 
-    std::span<const float> alloc(std::span<const float> embedding) {
-        bioassert(embedding.size() == _dimension, "Embedding dimension mismatch");
-        bioassert(availFloats() >= _dimension, "Embedding does not fit in bucket");
-
-        float* dst = _bucket.data() + _floatCount;
-        std::memcpy(dst, embedding.data(), _dimension * sizeof(float));
-        _floatCount += _dimension;
-
-        return {dst, _dimension};
-    }
+    std::span<const float> alloc(std::span<const float> embedding);
 
     uint32_t embeddingCount() const { return _floatCount / _dimension; }
     uint32_t availFloats() const { return BUCKET_FLOATS - _floatCount; }

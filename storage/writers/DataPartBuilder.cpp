@@ -52,9 +52,7 @@ void DataPartBuilder::addNodeProperty(NodeID nodeID,
                                       T::Primitive value) {
     if (!_nodeProperties->hasPropertyType(ptID)) {
         if constexpr (std::is_same_v<T, types::Embedding>) {
-            EmbeddingPropertyConfig config;
-            config._dimension = value.size();
-            config._precision = EmbeddingPrecision::Float32;
+            EmbeddingPropertyConfig config(value.size(), EmbeddingPrecision::Float32);
             _nodeProperties->registerEmbeddingPropertyType(ptID, config);
         } else {
             _nodeProperties->registerPropertyType<T>(ptID);
@@ -73,9 +71,7 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
                                       T::Primitive value) {
     if (!_edgeProperties->hasPropertyType(ptID)) {
         if constexpr (std::is_same_v<T, types::Embedding>) {
-            EmbeddingPropertyConfig config;
-            config._dimension = value.size();
-            config._precision = EmbeddingPrecision::Float32;
+            EmbeddingPropertyConfig config(value.size(), EmbeddingPrecision::Float32);
             _edgeProperties->registerEmbeddingPropertyType(ptID, config);
         } else {
             _edgeProperties->registerPropertyType<T>(ptID);

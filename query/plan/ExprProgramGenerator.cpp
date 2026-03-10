@@ -212,12 +212,15 @@ Column* ExprProgramGenerator::generateUnaryExpr(const UnaryExpr* unExpr) {
 }
 
 Column* ExprProgramGenerator::generateBinaryExpr(const BinaryExpr* binExpr) {
-    Column* lhs = generateExpr(binExpr->getLHS());
-    Column* rhs = generateExpr(binExpr->getRHS());
+    const Expr* lhsExpr = binExpr->getLHS();
+    const Expr* rhsExpr = binExpr->getRHS();
+    const EvaluatedType lhsType = lhsExpr->getType();
+    const EvaluatedType rhsType = rhsExpr->getType();
+    Column* lhs = generateExpr(lhsExpr);
+    Column* rhs = generateExpr(rhsExpr);
 
     // Embedding equality/inequality: bypass the type dispatcher
-    if (binExpr->getLHS()->getType() == EvaluatedType::List
-        && binExpr->getRHS()->getType() == EvaluatedType::List) {
+    if (lhsType == EvaluatedType::List && rhsType == EvaluatedType::List) {
         const BinaryOperator binOp = binExpr->getOperator();
         if (binOp == BinaryOperator::Equal || binOp == BinaryOperator::NotEqual) {
             const ColumnOperator embOp = (binOp == BinaryOperator::Equal)
