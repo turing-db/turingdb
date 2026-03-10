@@ -106,7 +106,8 @@ template <typename T>
 concept TupleExact = IsTuple<T>::value;
 
 template <ColumnOperator Function>
-concept ConversionFunction = (Function == OP_TO_INTEGER) || (Function == OP_TO_FLOAT)
+concept ConversionFunction = (Function == OP_TO_INTEGER)
+                          || (Function == OP_TO_FLOAT)
                           || (Function == OP_TO_BOOLEAN);
 
 // Restriction for Binary operators
