@@ -138,6 +138,8 @@ bool VectorDatabase::libraryExists(std::string_view libName) const {
 }
 
 VecLibAccessor VectorDatabase::getLibrary(const VecLibID& libID) {
+    const std::shared_lock lock(_mutex);
+
     // Find the library
     const auto it = _vecLibs.find(libID);
     if (it == _vecLibs.end()) {
