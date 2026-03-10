@@ -3218,6 +3218,468 @@ TEST_F(QueriesTest, doubleAncestorJoinCountStar) {
     EXPECT_EQ(actualCount, expectedCount);
 }
 
+// ---------------------------------------------------------------------------
+// Predicate join tests on simpledb (inspired by VHJ benchmark queries)
+// ---------------------------------------------------------------------------
+
+// Q1-style: Two traversals sharing same target node property + inequality on
+// source nodes.  Analogous to "pathways sharing a reaction" (bench_vhj Q1).
+//   MATCH (a:Person)-[:INTERESTED_IN]->(i1:Interest),
+//         (b:Person)-[:INTERESTED_IN]->(i2:Interest)
+//   WHERE i1.name = i2.name AND a.name <> b.name
+//   RETURN a.name, b.name, i1.name
+TEST_F(QueriesTest, predicateJoinSharedInterest) {
+    _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
+
+    using String = types::String::Primitive;
+    using Rows = LineContainer<String, String, String>;
+
+    const LabelID personLabel = getLabelID("Person");
+    const LabelID interestLabel = getLabelID("Interest");
+    const PropertyTypeID nameProp = getPropID("name");
+    const EdgeTypeID INTERESTED_IN_TYPEID = 1;
+
+    // Build expected: all (person1, person2, interest) where both are
+    // INTERESTED_IN the same-named Interest and person names differ.
+    struct PersonInterest {
+        String personName;
+        String interestName;
+    };
+    std::vector<PersonInterest> pairs;
+    for (const EdgeRecord& e : read().scanOutEdges()) {
+        if (read().getEdgeTypeID(e._edgeID) != INTERESTED_IN_TYPEID) {
+            continue;
+        }
+        NodeView srcView = read().getNodeView(e._nodeID);
+        NodeView dstView = read().getNodeView(e._otherID);
+        if (!srcView.labelset().hasLabel(personLabel)
+            || !dstView.labelset().hasLabel(interestLabel)) {
+            continue;
+        }
+        const auto* pName = read().tryGetNodeProperty<types::String>(
+            nameProp, e._nodeID);
+        const auto* iName = read().tryGetNodeProperty<types::String>(
+            nameProp, e._otherID);
+        if (pName && iName) {
+            pairs.push_back({*pName, *iName});
+        }
+    }
+
+    Rows expected;
+    for (size_t i = 0; i < pairs.size(); ++i) {
+        for (size_t j = 0; j < pairs.size(); ++j) {
+            if (pairs[i].interestName == pairs[j].interestName
+                && pairs[i].personName != pairs[j].personName) {
+                expected.add({pairs[i].personName, pairs[j].personName,
+                              pairs[i].interestName});
+            }
+        }
+    }
+    ASSERT_NE(0, expected.size());
+
+    Rows actual;
+    {
+        constexpr std::string_view q =
+            "MATCH (a:Person)-[:INTERESTED_IN]->(i1:Interest), "
+            "(b:Person)-[:INTERESTED_IN]->(i2:Interest) "
+            "WHERE i1.name = i2.name AND a.name <> b.name "
+            "RETURN a.name, b.name, i1.name";
+        auto res = query(q, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(3, df->size());
+            auto* aNames = findColumn(df, "a.name")
+                               ->as<ColumnVector<std::optional<String>>>();
+            auto* bNames = findColumn(df, "b.name")
+                               ->as<ColumnVector<std::optional<String>>>();
+            auto* iNames = findColumn(df, "i1.name")
+                               ->as<ColumnVector<std::optional<String>>>();
+            ASSERT_TRUE(aNames && bNames && iNames);
+            for (size_t row = 0; row < aNames->size(); ++row) {
+                actual.add({*aNames->at(row), *bNames->at(row),
+                            *iNames->at(row)});
+            }
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+// Q3-style: Two traversals joined by a boolean property on the source node.
+// Analogous to "pathways joined by same species" (bench_vhj Q3).
+//   MATCH (a:Person)-[:INTERESTED_IN]->(i1),
+//         (b:Person)-[:INTERESTED_IN]->(i2)
+//   WHERE a.isFrench = b.isFrench
+//   RETURN a.name, i1.name, b.name, i2.name, a.isFrench
+TEST_F(QueriesTest, predicateJoinSameGroupTraversal) {
+    _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
+
+    using String = types::String::Primitive;
+    using Boolean = types::Bool::Primitive;
+    using Rows = LineContainer<String, String, String, String, bool>;
+
+    const LabelID personLabel = getLabelID("Person");
+    const PropertyTypeID nameProp = getPropID("name");
+    const PropertyTypeID isFrenchProp = getPropID("isFrench");
+    const EdgeTypeID INTERESTED_IN_TYPEID = 1;
+
+    struct PersonEdge {
+        String personName;
+        Boolean isFrench;
+        String targetName;
+    };
+    std::vector<PersonEdge> tuples;
+    for (const EdgeRecord& e : read().scanOutEdges()) {
+        if (read().getEdgeTypeID(e._edgeID) != INTERESTED_IN_TYPEID) {
+            continue;
+        }
+        NodeView srcView = read().getNodeView(e._nodeID);
+        if (!srcView.labelset().hasLabel(personLabel)) {
+            continue;
+        }
+        const auto* pName = read().tryGetNodeProperty<types::String>(
+            nameProp, e._nodeID);
+        const auto* french = read().tryGetNodeProperty<types::Bool>(
+            isFrenchProp, e._nodeID);
+        const auto* tName = read().tryGetNodeProperty<types::String>(
+            nameProp, e._otherID);
+        if (pName && french && tName) {
+            tuples.push_back({*pName, *french, *tName});
+        }
+    }
+
+    Rows expected;
+    for (size_t i = 0; i < tuples.size(); ++i) {
+        for (size_t j = 0; j < tuples.size(); ++j) {
+            if (tuples[i].isFrench == tuples[j].isFrench) {
+                expected.add({tuples[i].personName, tuples[i].targetName,
+                              tuples[j].personName, tuples[j].targetName,
+                              bool(tuples[i].isFrench)});
+            }
+        }
+    }
+    ASSERT_NE(0, expected.size());
+
+    Rows actual;
+    {
+        constexpr std::string_view q =
+            "MATCH (a:Person)-[:INTERESTED_IN]->(i1), "
+            "(b:Person)-[:INTERESTED_IN]->(i2) "
+            "WHERE a.isFrench = b.isFrench "
+            "RETURN a.name, i1.name, b.name, i2.name, a.isFrench";
+        auto res = query(q, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(5, df->size());
+            auto* aNames = findColumn(df, "a.name")
+                               ->as<ColumnVector<std::optional<String>>>();
+            auto* i1Names = findColumn(df, "i1.name")
+                                ->as<ColumnVector<std::optional<String>>>();
+            auto* bNames = findColumn(df, "b.name")
+                               ->as<ColumnVector<std::optional<String>>>();
+            auto* i2Names = findColumn(df, "i2.name")
+                                ->as<ColumnVector<std::optional<String>>>();
+            auto* isFrenchCol = findColumn(df, "a.isFrench")
+                                    ->as<ColumnOptVector<Boolean>>();
+            ASSERT_TRUE(aNames && i1Names && bNames && i2Names
+                        && isFrenchCol);
+            for (size_t row = 0; row < aNames->size(); ++row) {
+                actual.add({*aNames->at(row), *i1Names->at(row),
+                            *bNames->at(row), *i2Names->at(row),
+                            bool(*isFrenchCol->at(row))});
+            }
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+// Q2/Q5-style: Two traversals joined by an edge string property.
+// Analogous to "complexes sharing component by displayName" (bench_vhj Q2).
+//   MATCH (a:Person)-[e1:INTERESTED_IN]->(b),
+//         (c:Person)-[e2:INTERESTED_IN]->(d)
+//   WHERE e1.proficiency = e2.proficiency
+//   RETURN a.name, b.name, c.name, d.name, e1.proficiency
+TEST_F(QueriesTest, predicateJoinEdgeProficiency) {
+    _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
+
+    using String = types::String::Primitive;
+    using Rows = LineContainer<String, String, String, String, String>;
+
+    const LabelID personLabel = getLabelID("Person");
+    const PropertyTypeID nameProp = getPropID("name");
+    const PropertyTypeID profProp = getPropID("proficiency");
+    const EdgeTypeID INTERESTED_IN_TYPEID = 1;
+
+    struct EdgeTuple {
+        String srcName;
+        String dstName;
+        String proficiency;
+    };
+    std::vector<EdgeTuple> tuples;
+    for (const EdgeRecord& e : read().scanOutEdges()) {
+        if (read().getEdgeTypeID(e._edgeID) != INTERESTED_IN_TYPEID) {
+            continue;
+        }
+        NodeView srcView = read().getNodeView(e._nodeID);
+        if (!srcView.labelset().hasLabel(personLabel)) {
+            continue;
+        }
+        const auto* prof = read().tryGetEdgeProperty<types::String>(
+            profProp, e._edgeID);
+        if (!prof) {
+            continue;
+        }
+        const auto* srcName = read().tryGetNodeProperty<types::String>(
+            nameProp, e._nodeID);
+        const auto* dstName = read().tryGetNodeProperty<types::String>(
+            nameProp, e._otherID);
+        if (srcName && dstName) {
+            tuples.push_back({*srcName, *dstName, *prof});
+        }
+    }
+
+    Rows expected;
+    for (size_t i = 0; i < tuples.size(); ++i) {
+        for (size_t j = 0; j < tuples.size(); ++j) {
+            if (tuples[i].proficiency == tuples[j].proficiency) {
+                expected.add({tuples[i].srcName, tuples[i].dstName,
+                              tuples[j].srcName, tuples[j].dstName,
+                              tuples[i].proficiency});
+            }
+        }
+    }
+    ASSERT_NE(0, expected.size());
+
+    Rows actual;
+    {
+        constexpr std::string_view q =
+            "MATCH (a:Person)-[e1:INTERESTED_IN]->(b), "
+            "(c:Person)-[e2:INTERESTED_IN]->(d) "
+            "WHERE e1.proficiency = e2.proficiency "
+            "RETURN a.name, b.name, c.name, d.name, e1.proficiency";
+        auto res = query(q, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(5, df->size());
+            auto* aNames = findColumn(df, "a.name")
+                               ->as<ColumnVector<std::optional<String>>>();
+            auto* bNames = findColumn(df, "b.name")
+                               ->as<ColumnVector<std::optional<String>>>();
+            auto* cNames = findColumn(df, "c.name")
+                               ->as<ColumnVector<std::optional<String>>>();
+            auto* dNames = findColumn(df, "d.name")
+                               ->as<ColumnVector<std::optional<String>>>();
+            auto* profs = findColumn(df, "e1.proficiency")
+                              ->as<ColumnOptVector<String>>();
+            ASSERT_TRUE(aNames && bNames && cNames && dNames && profs);
+            for (size_t row = 0; row < aNames->size(); ++row) {
+                actual.add({*aNames->at(row), *bNames->at(row),
+                            *cNames->at(row), *dNames->at(row),
+                            *profs->at(row)});
+            }
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+// Q4-style: Property join with inequality filter on a second property.
+// Analogous to "gene products with same geneName across different species"
+// (bench_vhj Q4).
+//   MATCH (a:Person), (b:Person)
+//   WHERE a.isFrench = b.isFrench AND a.hasPhD <> b.hasPhD
+//   RETURN a.name, b.name, a.isFrench, a.hasPhD, b.hasPhD
+TEST_F(QueriesTest, predicateJoinWithInequalityFilter) {
+    _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
+
+    using String = types::String::Primitive;
+    using Boolean = types::Bool::Primitive;
+    using Rows = LineContainer<String, String, bool, bool, bool>;
+
+    const LabelID personLabel = getLabelID("Person");
+    const PropertyTypeID nameProp = getPropID("name");
+    const PropertyTypeID isFrenchProp = getPropID("isFrench");
+    const PropertyTypeID hasPhDProp = getPropID("hasPhD");
+
+    struct PersonData {
+        String name;
+        Boolean isFrench;
+        Boolean hasPhD;
+    };
+    std::vector<PersonData> people;
+    for (NodeID n : read().scanNodes()) {
+        NodeView v = read().getNodeView(n);
+        if (!v.labelset().hasLabel(personLabel)) {
+            continue;
+        }
+        const auto* nm = read().tryGetNodeProperty<types::String>(nameProp, n);
+        const auto* fr = read().tryGetNodeProperty<types::Bool>(
+            isFrenchProp, n);
+        const auto* phd = read().tryGetNodeProperty<types::Bool>(
+            hasPhDProp, n);
+        if (nm && fr && phd) {
+            people.push_back({*nm, *fr, *phd});
+        }
+    }
+
+    Rows expected;
+    for (size_t i = 0; i < people.size(); ++i) {
+        for (size_t j = 0; j < people.size(); ++j) {
+            if (people[i].isFrench == people[j].isFrench
+                && people[i].hasPhD != people[j].hasPhD) {
+                expected.add({people[i].name, people[j].name,
+                              bool(people[i].isFrench),
+                              bool(people[i].hasPhD),
+                              bool(people[j].hasPhD)});
+            }
+        }
+    }
+    ASSERT_NE(0, expected.size());
+
+    Rows actual;
+    {
+        constexpr std::string_view q =
+            "MATCH (a:Person), (b:Person) "
+            "WHERE a.isFrench = b.isFrench AND a.hasPhD <> b.hasPhD "
+            "RETURN a.name, b.name, a.isFrench, a.hasPhD, b.hasPhD";
+        auto res = query(q, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(5, df->size());
+            auto* aNames = findColumn(df, "a.name")
+                               ->as<ColumnVector<std::optional<String>>>();
+            auto* bNames = findColumn(df, "b.name")
+                               ->as<ColumnVector<std::optional<String>>>();
+            auto* aFrench = findColumn(df, "a.isFrench")
+                                ->as<ColumnOptVector<Boolean>>();
+            auto* aPhD = findColumn(df, "a.hasPhD")
+                             ->as<ColumnOptVector<Boolean>>();
+            auto* bPhD = findColumn(df, "b.hasPhD")
+                             ->as<ColumnOptVector<Boolean>>();
+            ASSERT_TRUE(aNames && bNames && aFrench && aPhD && bPhD);
+            for (size_t row = 0; row < aNames->size(); ++row) {
+                actual.add({*aNames->at(row), *bNames->at(row),
+                            bool(*aFrench->at(row)),
+                            bool(*aPhD->at(row)),
+                            bool(*bPhD->at(row))});
+            }
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+// Divergent pattern with equality predicate on age (GitHub issue #397).
+//   MATCH (x)-->(a), (x)-->(b) WHERE a.age = b.age RETURN a, b, x
+TEST_F(QueriesTest, predicateJoinDivergentAge) {
+    _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
+
+    using Rows = LineContainer<NodeID, NodeID, NodeID>;
+
+    const PropertyTypeID ageProp = getPropID("age");
+
+    // Collect every (source, target) edge pair.
+    struct EdgePair {
+        NodeID src;
+        NodeID tgt;
+    };
+
+    std::vector<EdgePair> edges;
+    for (const EdgeRecord& e : read().scanOutEdges()) {
+        edges.push_back({e._nodeID, e._otherID});
+    }
+
+    // For every two edges from the same source x, keep pairs where
+    // targets a and b both have age and their ages are equal.
+    Rows expected;
+    for (size_t i = 0; i < edges.size(); ++i) {
+        for (size_t j = 0; j < edges.size(); ++j) {
+            if (edges[i].src != edges[j].src) {
+                continue;
+            }
+            const auto* ageA = read().tryGetNodeProperty<types::Int64>(ageProp, edges[i].tgt);
+            const auto* ageB = read().tryGetNodeProperty<types::Int64>(ageProp, edges[j].tgt);
+            if (!ageA || !ageB || *ageA != *ageB) {
+                continue;
+            }
+            expected.add({edges[i].tgt, edges[j].tgt, edges[i].src});
+        }
+    }
+    ASSERT_NE(0, expected.size());
+
+    Rows actual;
+    {
+        constexpr std::string_view q =
+            "MATCH (x)-->(a), (x)-->(b) "
+            "WHERE a.age = b.age RETURN a, b, x";
+        auto res = query(q, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(3, df->size());
+            auto* aCol = findColumn(df, "a")->as<ColumnNodeIDs>();
+            auto* bCol = findColumn(df, "b")->as<ColumnNodeIDs>();
+            auto* xCol = findColumn(df, "x")->as<ColumnNodeIDs>();
+            ASSERT_TRUE(aCol && bCol && xCol);
+            for (size_t row = 0; row < aCol->size(); ++row) {
+                actual.add({aCol->at(row), bCol->at(row), xCol->at(row)});
+            }
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+// Variant of #397 with inequality predicate that produces non-empty results.
+//   MATCH (x)-->(a), (x)-->(b) WHERE a.name <> b.name RETURN a, b, x
+TEST_F(QueriesTest, predicateJoinDivergentNameNeq) {
+    _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
+
+    using Rows = LineContainer<NodeID, NodeID, NodeID>;
+
+    const PropertyTypeID nameProp = getPropID("name");
+
+    struct EdgePair {
+        NodeID src;
+        NodeID tgt;
+    };
+    std::vector<EdgePair> edges;
+    for (const EdgeRecord& e : read().scanOutEdges()) {
+        edges.push_back({e._nodeID, e._otherID});
+    }
+
+    Rows expected;
+    for (size_t i = 0; i < edges.size(); ++i) {
+        for (size_t j = 0; j < edges.size(); ++j) {
+            if (edges[i].src != edges[j].src) {
+                continue;
+            }
+            const auto* nameA = read().tryGetNodeProperty<types::String>(nameProp, edges[i].tgt);
+            const auto* nameB = read().tryGetNodeProperty<types::String>(nameProp, edges[j].tgt);
+            if (!nameA || !nameB || *nameA == *nameB) {
+                continue;
+            }
+            expected.add({edges[i].tgt, edges[j].tgt, edges[i].src});
+        }
+    }
+    ASSERT_NE(0, expected.size());
+
+    Rows actual;
+    {
+        constexpr std::string_view q =
+            "MATCH (x)-->(a), (x)-->(b) "
+            "WHERE a.name <> b.name RETURN a, b, x";
+        auto res = query(q, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(3, df->size());
+            auto* aCol = findColumn(df, "a")->as<ColumnNodeIDs>();
+            auto* bCol = findColumn(df, "b")->as<ColumnNodeIDs>();
+            auto* xCol = findColumn(df, "x")->as<ColumnNodeIDs>();
+            ASSERT_TRUE(aCol && bCol && xCol);
+            for (size_t row = 0; row < aCol->size(); ++row) {
+                actual.add({aCol->at(row), bCol->at(row), xCol->at(row)});
+            }
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    EXPECT_TRUE(expected.equals(actual));
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
