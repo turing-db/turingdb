@@ -11,13 +11,11 @@ namespace db {
 class PipelineV2;
 class Column;
 class PredicateProgram;
-class FunctionProgram;
 
 class ExprProgram {
 public:
     friend PipelineV2;
     friend PredicateProgram;
-    friend FunctionProgram;
     struct Instruction;
     using Instructions = std::vector<Instruction>;
 
@@ -37,7 +35,7 @@ public:
         _instrs.emplace_back(std::forward<Args>(args)...);
     }
 
-    virtual void evaluateInstructions();
+    void evaluateInstructions();
 
     void setView(GraphView view) { _view = view; }
 
@@ -48,7 +46,7 @@ private:
 
     ExprProgram() = default;
     virtual ~ExprProgram() = default;
-    virtual void evalInstr(const Instruction& instr);
+    void evalInstr(const Instruction& instr);
     void evalBinaryInstr(const Instruction& instr);
     void evalUnaryInstr(const Instruction& instr);
     void evalFunction(const Instruction& instr);
