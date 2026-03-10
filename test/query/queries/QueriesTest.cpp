@@ -3,12 +3,15 @@
 #include <functional>
 #include <string_view>
 
+#include <range/v3/view/drop.hpp>
+
 #include "TuringDB.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
+#include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
 #include "ID.h"
 #include "versioning/CommitBuilder.h"
@@ -23,6 +26,9 @@
 #include "versioning/VersionController.h"
 
 using namespace turing::test;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 class QueriesTest : public TuringTest {
 public:
@@ -2543,6 +2549,60 @@ TEST_F(QueriesTest, indirectLabelFilter) {
             }
         });
     }
+}
+
+TEST_F(QueriesTest, labelsFunction) {
+    constexpr std::string_view matchLabels = R"(MATCH (n) RETURN n, labels(n) AS labels)";
+
+    using Rows = LineContainer<NodeID, std::string>;
+
+    Rows expected;
+    {
+        std::vector<LabelID> lbls;
+        std::string expStr;
+        const GraphMetadata md = read().getView().metadata();
+        for (const NodeID n : read().scanNodes()) {
+            const NodeView nv = read().getNodeView(n);
+            const LabelSetHandle& lsh = nv.labelset();
+            lbls.clear();
+            lsh.decompose(lbls);
+
+            ASSERT_FALSE(lbls.empty()) << "Error with graph, not labels function.";
+
+            const LabelID fstLabel = lbls.front();
+            std::optional<std::string_view> fstLabelName = md.labels().getName(fstLabel);
+            ASSERT_TRUE(fstLabelName.has_value());
+
+            expStr.clear();
+            expStr += *fstLabelName;
+
+            for (const LabelID lid : lbls | rv::drop(1)) {
+                std::optional<std::string_view> labelName = md.labels().getName(lid);
+                ASSERT_TRUE(labelName.has_value());
+                expStr += ", ";
+                expStr += *labelName;
+            }
+
+            expected.add({n, expStr});
+        }
+    }
+    ASSERT_NE(0, expected.size());
+
+    Rows actual;
+    {
+        auto res = query(matchLabels, [&actual](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
+            auto* labels = findColumn(df, "labels")->as<ColumnVector<std::string>>();
+            ASSERT_TRUE(ns && labels);
+            ASSERT_EQ(ns->size(), labels->size());
+
+            for (const auto& [n, lbl] : rv::zip(*ns, *labels)) {
+                actual.add({n, lbl});
+            }
+        });
+    }
+    EXPECT_TRUE(expected.equals(actual));
 }
 
 int main(int argc, char** argv) {
