@@ -246,6 +246,9 @@ void ExprProgram::evalFunction(const Instruction& instr) {
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:
+        case OP_EMBEDDING_EQUAL:
+        case OP_EMBEDDING_NOT_EQUAL:
+        case OP_COSINE_SIMILARITY:
             throw FatalException(fmt::format("Attempted to evalute {} as function.",
                                              ColumnOperatorDescription::value(op)));
         break;

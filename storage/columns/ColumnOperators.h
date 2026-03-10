@@ -122,7 +122,6 @@ struct MaskOperators {
     static void exec(ColumnVector<T>* res, const ColumnMask* mask, const ColumnVector<T>* src) {
         MaskApplicator::apply(res, src, mask);
     }
-};
 
     /// Applying masks to embedding columns
     template <typename Op>

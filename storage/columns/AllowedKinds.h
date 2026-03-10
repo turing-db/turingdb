@@ -258,7 +258,9 @@ struct TypeRestrictions<OP_FUNC_LABELS> {
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
         ContainerKind::code<ColumnMask>(),
-        ContainerKind::code<ColumnConst>()
+        ContainerKind::code<ColumnConst>(),
+        ContainerKind::code<ColumnEmbeddingMany>(),
+        ContainerKind::code<ColumnEmbeddingConst>()
     >;
 };
 
@@ -272,7 +274,9 @@ struct TypeRestrictions<Func> {
 
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnMask>(),
+        ContainerKind::code<ColumnEmbeddingMany>(),
+        ContainerKind::code<ColumnEmbeddingConst>()
     >;
 };
 
