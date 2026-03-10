@@ -836,6 +836,183 @@ TEST_F(ReactomeVHJTest, edgeIdJoinHasEvent) {
 }
 
 // =============================================================================
+// Shared-source fan-out with cross-pattern predicate (issue #397 motif)
+//   MATCH (x)-->(a), (x)-->(b) WHERE predicate(a, b) RETURN ...
+// =============================================================================
+
+// TODO: Enable when issue #397 (incorrect dependency detection) is fixed.
+TEST_F(ReactomeVHJTest, DISABLED_sharedSourcePathwayFanOut) {
+    // Pathway x fans out to two distinct events a and b
+    constexpr std::string_view QUERY = R"(
+        MATCH (x:Pathway)-[:hasEvent]->(a),
+              (x)-[:hasEvent]->(b)
+        WHERE a.dbId <> b.dbId
+        RETURN x.displayName, a.displayName, b.displayName
+    )";
+
+    using String = types::String::Primitive;
+    using OptString = std::optional<String>;
+    using Rows = LineContainer<OptString, OptString, OptString>;
+
+    Rows actual;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        auto* xCol = findColumn(df, "x.displayName")->as<ColumnOptVector<String>>();
+        auto* aCol = findColumn(df, "a.displayName")->as<ColumnOptVector<String>>();
+        auto* bCol = findColumn(df, "b.displayName")->as<ColumnOptVector<String>>();
+        ASSERT_TRUE(xCol && aCol && bCol);
+        for (size_t i = 0; i < xCol->size(); i++) {
+            actual.add({xCol->at(i), aCol->at(i), bCol->at(i)});
+        }
+    });
+    ASSERT_TRUE(res);
+
+    // Pathways with 2+ hasEvent edges produce ordered pairs:
+    //   Signal Transduction:           pwEGFR, pwEGFRDownreg
+    //   Metabolism of lipids:          pwAPOE, pwLipidTransport
+    //   Signaling by EGFR:            rxnEGFRBinding, rxnEGFRDimer
+    //   APOE4-mediated lipid transp.: rxnAPOELipid, rxnLipidClearance
+    //   Macro-autophagy initiation:   rxnULKActivation, rxnPhagophore
+    Rows expected;
+    expected.add({String("Signal Transduction"),
+                  String("Signaling by EGFR"),
+                  String("EGFR downregulation")});
+    expected.add({String("Signal Transduction"),
+                  String("EGFR downregulation"),
+                  String("Signaling by EGFR")});
+    expected.add({String("Metabolism of lipids"),
+                  String("APOE4-mediated lipid transport"),
+                  String("Lipid particle transport")});
+    expected.add({String("Metabolism of lipids"),
+                  String("Lipid particle transport"),
+                  String("APOE4-mediated lipid transport")});
+    expected.add({String("Signaling by EGFR"),
+                  String("EGF binds EGFR"),
+                  String("EGFR dimerization")});
+    expected.add({String("Signaling by EGFR"),
+                  String("EGFR dimerization"),
+                  String("EGF binds EGFR")});
+    expected.add({String("APOE4-mediated lipid transport"),
+                  String("APOE4 binds lipid particle"),
+                  String("Lipid particle clearance")});
+    expected.add({String("APOE4-mediated lipid transport"),
+                  String("Lipid particle clearance"),
+                  String("APOE4 binds lipid particle")});
+    expected.add({String("Macro-autophagy initiation"),
+                  String("ULK1 complex activation"),
+                  String("Phagophore nucleation")});
+    expected.add({String("Macro-autophagy initiation"),
+                  String("Phagophore nucleation"),
+                  String("ULK1 complex activation")});
+
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+// TODO: Enable when issue #397 (incorrect dependency detection) is fixed.
+TEST_F(ReactomeVHJTest, DISABLED_sharedSourceReactionInputPairs) {
+    // Reaction x fans out via input to two distinct physical entities
+    constexpr std::string_view QUERY = R"(
+        MATCH (x:ReactionLikeEvent)-[:input]->(a:PhysicalEntity),
+              (x)-[:input]->(b:PhysicalEntity)
+        WHERE a.dbId <> b.dbId
+        RETURN x.displayName, a.displayName, b.displayName
+    )";
+
+    using String = types::String::Primitive;
+    using OptString = std::optional<String>;
+    using Rows = LineContainer<OptString, OptString, OptString>;
+
+    Rows actual;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        auto* xCol = findColumn(df, "x.displayName")->as<ColumnOptVector<String>>();
+        auto* aCol = findColumn(df, "a.displayName")->as<ColumnOptVector<String>>();
+        auto* bCol = findColumn(df, "b.displayName")->as<ColumnOptVector<String>>();
+        ASSERT_TRUE(xCol && aCol && bCol);
+        for (size_t i = 0; i < xCol->size(); i++) {
+            actual.add({xCol->at(i), aCol->at(i), bCol->at(i)});
+        }
+    });
+    ASSERT_TRUE(res);
+
+    // Reactions with 2+ input edges:
+    //   EGF binds EGFR:          peEGFR, peEGF
+    //   APOE4 binds lipid part.: peAPOE4, peLipidParticle
+    Rows expected;
+    expected.add({String("EGF binds EGFR"),
+                  String("EGFR [plasma membrane]"),
+                  String("EGF [extracellular region]")});
+    expected.add({String("EGF binds EGFR"),
+                  String("EGF [extracellular region]"),
+                  String("EGFR [plasma membrane]")});
+    expected.add({String("APOE4 binds lipid particle"),
+                  String("APOE-4 [extracellular region]"),
+                  String("Lipid particle [extracellular region]")});
+    expected.add({String("APOE4 binds lipid particle"),
+                  String("Lipid particle [extracellular region]"),
+                  String("APOE-4 [extracellular region]")});
+
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+// TODO: Enable when issue #397 (incorrect dependency detection) is fixed.
+TEST_F(ReactomeVHJTest, DISABLED_sharedSourceComponentsSameCompartment) {
+    // Complex x fans out to components a and b that share a compartment
+    // This is the full issue #397 motif: (x)-->(a), (x)-->(b) with
+    // equality predicate on properties reachable from a and b.
+    constexpr std::string_view QUERY = R"(
+        MATCH (x:Complex)-[:hasComponent]->(a:PhysicalEntity)
+                  -[:compartment]->(c1:Compartment),
+              (x)-[:hasComponent]->(b:PhysicalEntity)
+                  -[:compartment]->(c2:Compartment)
+        WHERE c1.displayName = c2.displayName AND a.dbId <> b.dbId
+        RETURN x.displayName, a.displayName, b.displayName,
+               c1.displayName
+    )";
+
+    using String = types::String::Primitive;
+    using OptString = std::optional<String>;
+    using Rows = LineContainer<OptString, OptString, OptString, OptString>;
+
+    Rows actual;
+    auto res = query(QUERY, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        auto* xCol = findColumn(df, "x.displayName")->as<ColumnOptVector<String>>();
+        auto* aCol = findColumn(df, "a.displayName")->as<ColumnOptVector<String>>();
+        auto* bCol = findColumn(df, "b.displayName")->as<ColumnOptVector<String>>();
+        auto* cCol = findColumn(df, "c1.displayName")->as<ColumnOptVector<String>>();
+        ASSERT_TRUE(xCol && aCol && bCol && cCol);
+        for (size_t i = 0; i < xCol->size(); i++) {
+            actual.add({xCol->at(i), aCol->at(i), bCol->at(i), cCol->at(i)});
+        }
+    });
+    ASSERT_TRUE(res);
+
+    // BECN1:PIK3C3 complex: peBECN1 (cytosol), peULK1 (cytosol) -> match
+    // APOE4:Lipid complex:  peAPOE4 (extracellular), peLipid (extracellular) -> match
+    // EGF:EGFR complex:     peEGFR (plasma membrane), peEGF (extracellular) -> no match
+    Rows expected;
+    expected.add({String("BECN1:PIK3C3 complex"),
+                  String("BECN1 [cytosol]"),
+                  String("ULK1 [cytosol]"),
+                  String("cytosol")});
+    expected.add({String("BECN1:PIK3C3 complex"),
+                  String("ULK1 [cytosol]"),
+                  String("BECN1 [cytosol]"),
+                  String("cytosol")});
+    expected.add({String("APOE4:Lipid complex"),
+                  String("APOE-4 [extracellular region]"),
+                  String("Lipid particle [extracellular region]"),
+                  String("extracellular region")});
+    expected.add({String("APOE4:Lipid complex"),
+                  String("Lipid particle [extracellular region]"),
+                  String("APOE-4 [extracellular region]"),
+                  String("extracellular region")});
+
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+// =============================================================================
 // Domain-specific queries: EGFR signalling
 // =============================================================================
 
