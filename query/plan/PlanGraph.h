@@ -66,6 +66,7 @@ public:
     }
 
     void removeIsolatedNodes();
+    void removeNode(PlanGraphNode* node);
 
     GetPropertyCache& getGetPropertyCache() { return _getPropertyCache; }
     GetEntityTypeCache& getGetEntityTypeCache() { return _getEntityTypeCache; }

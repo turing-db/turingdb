@@ -672,6 +672,8 @@ void ReadStmtGenerator::placePredicateJoins() {
                 input->connectOut(output);
             }
         }
+
+        _tree->removeNode(filterNode);
     }
 }
 
@@ -829,7 +831,7 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
     // Step 1: Find all end points
     std::vector<PlanGraphNode*> ends;
     for (const auto& node : _tree->nodes()) {
-        if (node->outputs().empty() && !node->inputs().empty()) {
+        if (node->outputs().empty()) {
             ends.push_back(node.get());
         }
     }
