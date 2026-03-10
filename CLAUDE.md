@@ -88,6 +88,8 @@ Key points:
 - 4 spaces indentation, no tabs
 - Opening brace on same line (except constructors)
 - `public`/`private` aligned with `class`
+- Do not overwrap: prefer keeping statements on one line when they fit. A slightly long line is better than an ugly split.
+- Function calls: first argument must start on the same line as the function name, never on the next line. If arguments must wrap, align them under the first argument.
 
 **Naming:**
 - Private members prefixed with underscore: `_member`

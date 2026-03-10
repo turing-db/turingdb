@@ -21,10 +21,11 @@ Remy Boutonnet as the main designer and maintainer of TuringDB provides the opin
 
 ## Formatting
 
-### Line length
+### No line length limit
 
-IMPORTANT: do not overwrap lines just to satisfy the line length. Code esthetics always comes first.
-Never split a single simple statement across multiple lines just to stay under the limit. A slightly long but readable line is always better than an ugly wrapped one.
+There is no line length limit in this codebase. Do not overwrap lines. Code esthetics always comes first.
+
+When in doubt, keep everything on one line. Overwrapping code — splitting lines that could reasonably stay together — is one of the worst esthetic offenses in this codebase. A line that reads naturally is far superior to a broken-up mess spread across multiple lines for no good reason.
 
 ### Indentation
 
@@ -254,7 +255,9 @@ void MyClass::myFunction(Arg1* arg1, Arg2* arg2, Arg3* arg3) {
 }
 ```
 
-When a function has more than 3 arguments or they don't fit well on one line, the arguments have to be broken down
+Prefer keeping arguments on a single line whenever possible. Only break arguments across lines when the line truly becomes too long to read comfortably — do not overwrap.
+
+When a function has more than 3 arguments or they genuinely don't fit well on one line, the arguments have to be broken down
 and put each on their own line. Each argument must then be correctly aligned one below the other:
 ```cpp
 void MyClass::myFunction(Arg1* arg1,
@@ -276,6 +279,38 @@ void MyClass::myFunction(
     SomeVeryLongArgumentType* arg) {
 }
 ```
+
+## Function call formatting
+
+The same alignment rules apply to function calls. The first argument must always start on the same line as the function name. Never place the opening parenthesis at the end of a line with all arguments beginning on the next line.
+
+Prefer keeping everything on one line. Do not overwrap function calls — it is always more esthetic to have the call on a single line than to needlessly split it across lines.
+
+When all arguments fit on one line, keep them together:
+```cpp
+// Good:
+myObj.myFunc(arg1, arg2, arg3);
+
+// Bad — arguments starting on the next line:
+myObj.myFunc(
+    arg1, arg2, arg3);
+```
+
+When arguments don't fit on one line, break them across multiple lines with each argument aligned under the first:
+```cpp
+// Good:
+myObj.myFunc(arg1,
+             arg2,
+             arg3);
+
+// Bad:
+myObj.myFunc(
+    arg1,
+    arg2,
+    arg3);
+```
+
+This rule applies everywhere: method calls, free function calls, constructor calls, macro invocations, and any other call-like syntax.
 
 ## Function result type
 
