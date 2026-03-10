@@ -30,6 +30,7 @@ jobs:
       os_list: ${{ needs.setup.outputs.os_list }}
       python_version_list: ${{ needs.setup.outputs.python_version_list }}
       dev_version_suffix: ${{ needs.setup.outputs.dev_version_suffix }}
+    secrets: inherit
 
   publish:
     name: Publish to PyPI
