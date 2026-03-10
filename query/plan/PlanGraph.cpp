@@ -47,3 +47,9 @@ void PlanGraph::removeIsolatedNodes() {
 
     _nodes = std::move(newNodes);
 }
+
+void PlanGraph::removeNode(PlanGraphNode* node) {
+    std::erase_if(_nodes, [node](const std::unique_ptr<PlanGraphNode>& n) {
+        return n.get() == node;
+    });
+}

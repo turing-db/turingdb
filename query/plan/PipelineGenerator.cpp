@@ -905,7 +905,24 @@ PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
             throw PlannerException("Common Successor Joins With Common Ancestor Unsupported");
         }
         case JoinType::PREDICATE: {
-            leftJoinTag = _declToColumn.find(node->getLeftVarDecl())->second;
+            // The left VarDecl (local dep) may not be in _declToColumn when
+            // the JoinNode sits before that VarNode's filter.  In that case
+            // the entity ID tag is still available from the LHS stream.
+            // The right VarDecl (remote dep) is always fully processed.
+            const auto leftIt = _declToColumn.find(node->getLeftVarDecl());
+            if (leftIt != _declToColumn.end()) {
+                leftJoinTag = leftIt->second;
+            } else {
+                const auto entityVisitor = Overloaded {
+                    [](const EntityOutputStream::NodeStream& s) -> ColumnTag {
+                        return s._nodeIDsTag;
+                    },
+                    [](const EntityOutputStream::EdgeStream& s) -> ColumnTag {
+                        return s._edgeIDsTag;
+                    },
+                };
+                leftJoinTag = lhs->getStream().visit(entityVisitor);
+            }
             rightJoinTag = _declToColumn.find(node->getRightVarDecl())->second;
             break;
         }
@@ -913,13 +930,30 @@ PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
 
     auto& outputIf = _builder.addHashJoin(rhs, leftJoinTag, rightJoinTag);
 
-    // For value hash joins the join key is a property value, not an entity ID.
-    // Preserve the LHS stream so downstream processors know which entity column to use.
-    // Remap both key VarDecls to the merged join column tag since the original tags
-    // are no longer present in the output dataframe.
+    // For predicate joins, remap both key VarDecls to the merged join column
+    // tag since the original tags are no longer in the output dataframe.
+    // When the left key was resolved from the LHS stream (entity-type join
+    // where the VarNode is downstream), create a fresh stream with the merged
+    // tag so the downstream VarNode can pick it up.  Otherwise preserve the
+    // LHS stream (property value joins or entity joins whose VarDecl was
+    // already registered).
     if (node->getJoinType() == JoinType::PREDICATE) {
-        outputIf.setStream(lhs->getStream());
-        auto joinTag = outputIf.getDataframe()->cols().back()->getTag();
+        const auto joinTag = outputIf.getDataframe()->cols().back()->getTag();
+        const bool leftFromStream = !_declToColumn.contains(node->getLeftVarDecl());
+        if (leftFromStream) {
+            const auto leftType = node->getLeftVarDecl()->getType();
+            if (leftType == EvaluatedType::EdgePattern) {
+                const auto& es = lhs->getStream().asEdgeStream();
+                const auto merged = EntityOutputStream::createEdgeStream(joinTag,
+                                                                         es._otherIDsTag,
+                                                                         es._edgeTypesTag);
+                outputIf.setStream(merged);
+            } else {
+                outputIf.setStream(EntityOutputStream::createNodeStream(joinTag));
+            }
+        } else {
+            outputIf.setStream(lhs->getStream());
+        }
         _declToColumn.insert_or_assign(node->getLeftVarDecl(), joinTag);
         _declToColumn.insert_or_assign(node->getRightVarDecl(), joinTag);
     } else if (node->getJoinType() == JoinType::COMMON_SUCCESSOR &&
