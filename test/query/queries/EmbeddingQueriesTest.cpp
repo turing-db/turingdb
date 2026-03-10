@@ -375,7 +375,7 @@ TEST_F(EmbeddingQueriesTest, nullEmbeddingForNodeWithoutProperty) {
                 ASSERT_TRUE(names->at(i).has_value());
                 std::string name(names->at(i).value());
 
-                if (i < embs->size()) {
+                if (!embs->isNull(i)) {
                     std::span<const float> emb = embs->at(i);
                     rows.emplace_back(name, std::vector<float>(emb.begin(), emb.end()));
                 } else {

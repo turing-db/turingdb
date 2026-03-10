@@ -187,6 +187,24 @@ private:
     ColumnValues* _output {nullptr};
 };
 
+template <IteratedID ID>
+class GetPropertiesWithNullChunkWriter<ID, types::Embedding> : public GetPropertiesIteratorWithNull<ID, types::Embedding> {
+public:
+    using ColumnIDs = ColumnVector<ID>;
+    using ColumnValues = ColumnEmbeddingMany;
+
+    GetPropertiesWithNullChunkWriter(const GraphView& view,
+                                     PropertyTypeID propTypeID,
+                                     const ColumnIDs* inputIDs);
+
+    void fill(size_t maxCount);
+
+    void setOutput(ColumnValues* output) { _output = output; }
+
+private:
+    ColumnValues* _output {nullptr};
+};
+
 template <SupportedType T>
 using GetNodePropertiesIterator = GetPropertiesIterator<NodeID, T>;
 template <SupportedType T>

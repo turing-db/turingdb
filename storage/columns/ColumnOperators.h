@@ -194,7 +194,12 @@ struct ColumnOperators {
         dst->clear();
         dst->setDimension(src->dimension());
         for (size_t i = 0; i < transform->size(); i++) {
-            dst->push_back(src->at((*transform)[i]));
+            const size_t idx = (*transform)[i];
+            if (src->isNull(idx)) {
+                dst->pushNull();
+            } else {
+                dst->push_back(src->at(idx));
+            }
         }
     }
 };

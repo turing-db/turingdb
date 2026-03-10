@@ -296,6 +296,31 @@ void GetPropertiesWithNullChunkWriter<ID, T>::fill(size_t maxCount) {
     }
 }
 
+template <IteratedID ID>
+GetPropertiesWithNullChunkWriter<ID, types::Embedding>::GetPropertiesWithNullChunkWriter(const GraphView& view,
+                                                                                          PropertyTypeID propTypeID,
+                                                                                          const ColumnIDs* inputIDs)
+    : GetPropertiesIteratorWithNull<ID, types::Embedding>(view, propTypeID, inputIDs)
+{
+}
+
+template <IteratedID ID>
+void GetPropertiesWithNullChunkWriter<ID, types::Embedding>::fill(size_t maxCount) {
+    const size_t availableSize = std::distance(this->_entityIt, this->_inputIDs->end());
+    const size_t rangeSize = std::min(maxCount, availableSize);
+
+    for (size_t i = 0; i < rangeSize; i++) {
+        auto optVal = this->get();
+        if (optVal.has_value()) {
+            _output->push_back(optVal.value());
+        } else {
+            _output->pushNull();
+        }
+
+        this->next();
+    }
+}
+
 namespace db {
 
 template class GetPropertiesWithNullChunkWriter<NodeID, types::Int64>;
@@ -303,10 +328,12 @@ template class GetPropertiesWithNullChunkWriter<NodeID, types::UInt64>;
 template class GetPropertiesWithNullChunkWriter<NodeID, types::Double>;
 template class GetPropertiesWithNullChunkWriter<NodeID, types::String>;
 template class GetPropertiesWithNullChunkWriter<NodeID, types::Bool>;
+template class GetPropertiesWithNullChunkWriter<NodeID, types::Embedding>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::Int64>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::UInt64>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::Double>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::String>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::Bool>;
+template class GetPropertiesWithNullChunkWriter<EdgeID, types::Embedding>;
 
 }

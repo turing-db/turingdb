@@ -815,11 +815,12 @@ template <EntityType Entity>
 PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingPropertiesWithNull(ColumnTag entityTag,
                                                                                    PropertyType propertyType,
                                                                                    uint32_t dimension) {
-    // Reuse the same processor — for now embedding properties are always present
-    auto* proc = GetEmbeddingPropertiesProcessor<Entity>::create(_pipeline, propertyType, dimension);
+    using GetPropsProc = GetPropertiesWithNullProcessor<Entity, types::Embedding>;
 
-    PipelineBlockInputInterface& input = proc->input();
-    PipelineValuesOutputInterface& output = proc->output();
+    auto* getProps = GetPropsProc::create(_pipeline, entityTag, propertyType);
+
+    PipelineBlockInputInterface& input = getProps->input();
+    PipelineValuesOutputInterface& output = getProps->output();
 
     _pendingOutput.connectTo(input);
     input.propagateColumns(output);
@@ -832,12 +833,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingPropertiesWithNul
     outDf->addColumn(values);
     output.setValues(values);
 
-    // Allocate indices column
-    NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
-    output.setIndices(indices);
-
     MaterializeData& matData = _matProc->getMaterializeData();
-    matData.createStep(indices);
     matData.addToStep<ColumnEmbeddingMany>(values, dimension);
 
     _pendingOutput.updateInterface(&output);

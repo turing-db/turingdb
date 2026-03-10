@@ -41,9 +41,19 @@ public:
 
     void push_back(std::span<const float> embedding) {
         _data.insert(_data.end(), embedding.begin(), embedding.end());
+        _nullBitmap.push_back(false);
     }
 
-    void reserve(size_t count) { _data.reserve(count * _dim); }
+    void pushNull() {
+        _data.insert(_data.end(), _dim, 0.0f);
+        _nullBitmap.push_back(true);
+    }
+
+    bool isNull(size_t i) const {
+        return i < _nullBitmap.size() && _nullBitmap[i];
+    }
+
+    void reserve(size_t count) { _data.reserve(count * _dim); _nullBitmap.reserve(count); }
 
     size_t size() const override { return _dim > 0 ? _data.size() / _dim : 0; }
 
@@ -52,6 +62,7 @@ public:
         bioassert(otherCol, "ColumnEmbeddingMany::assign: other is not a ColumnEmbeddingMany");
         _data = otherCol->_data;
         _dim = otherCol->_dim;
+        _nullBitmap = otherCol->_nullBitmap;
     }
 
     void assignFromLine(const Column* other, size_t startLine, size_t rowCount) override {
@@ -59,12 +70,17 @@ public:
         bioassert(otherCol, "ColumnEmbeddingMany::assignFromLine: other is not a ColumnEmbeddingMany");
 
         _data.clear();
+        _nullBitmap.clear();
         _dim = otherCol->_dim;
         const auto otherStart = otherCol->_data.cbegin() + startLine * _dim;
         _data.assign(otherStart, otherStart + rowCount * _dim);
+        if (!otherCol->_nullBitmap.empty()) {
+            const auto bitmapStart = otherCol->_nullBitmap.cbegin() + startLine;
+            _nullBitmap.assign(bitmapStart, bitmapStart + rowCount);
+        }
     }
 
-    void clear() { _data.clear(); }
+    void clear() { _data.clear(); _nullBitmap.clear(); }
     void setDimension(uint32_t dim) { _dim = dim; }
 
     void dump(std::ostream& out) const override {
@@ -84,6 +100,7 @@ public:
 
 private:
     std::vector<float> _data;
+    std::vector<bool> _nullBitmap;
     uint32_t _dim;
 
     static constexpr auto _staticKind = ColumnKind::code<ColumnEmbeddingMany>();
