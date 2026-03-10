@@ -103,14 +103,15 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
         // Use the actual index (signature) where data is stored
         {
             VecLibShardAccessor shard = _shardCache->getShard(_metadata, signature);
+            VecLibShard& shardRef = shard.get();
 
             // Add all ids to the shard
-            shard->_ids.insert(shard->_ids.end(),
+            shardRef._ids.insert(shardRef._ids.end(),
                                data._externalIDs.begin(),
                                data._externalIDs.end());
 
             // Add vectors to index
-            shard->_index->add(data._externalIDs.size(), data._embeddings.data());
+            shardRef._index->add(data._externalIDs.size(), data._embeddings.data());
         }
 
         _shardCache->updateMemUsage();
@@ -140,13 +141,14 @@ VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchRe
 
     for (const LSHSignature& signature : searchSignatures) {
         const VecLibShardAccessor shard = _shardCache->getShard(_metadata, signature);
+        const VecLibShard& shardRef = shard.get();
 
-        if (shard->_index->ntotal == 0) {
+        if (shardRef._index->ntotal == 0) {
             continue;
         }
 
-        const size_t k = std::min(maxResultCount, (size_t)shard->_index->ntotal);
-        shard->_index->search(1, embeddings.data(), k, distances.data(), indices.data());
+        const size_t k = std::min(maxResultCount, (size_t)shardRef._index->ntotal);
+        shardRef._index->search(1, embeddings.data(), k, distances.data(), indices.data());
 
         for (size_t i = 0; i < k; i++) {
             if (indices[i] < 0) {
@@ -154,7 +156,7 @@ VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchRe
             }
 
             fmt::println("Found result {}, distance {}", indices[i], distances[i]);
-            results->addResult(signature, shard->_ids.at(indices[i]), distances[i]);
+            results->addResult(signature, shardRef._ids.at(indices[i]), distances[i]);
         }
     }
 

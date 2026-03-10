@@ -58,12 +58,6 @@ private:
     VectorDatabase();
 
     [[nodiscard]] VectorResult<void> load();
-
-    // Lock-free overload
-    [[nodiscard]] VecLibAccessor getLibraryLocked(const VecLibID& libID);
-
-    // Lock-free overload
-    [[nodiscard]] VecLibWriteAccessor getLibraryForWriteLocked(const VecLibID& libID);
 };
 
 }

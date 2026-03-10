@@ -18,11 +18,8 @@ public:
     VecLibShardAccessor& operator=(const VecLibShardAccessor&) = delete;
     VecLibShardAccessor& operator=(VecLibShardAccessor&&) = delete;
 
-    VecLibShard* operator->() { return _shard; }
-    const VecLibShard* operator->() const { return _shard; }
-
-    VecLibShard& operator*() { return *_shard; }
-    const VecLibShard& operator*() const { return *_shard; }
+    VecLibShard& get() { return *_shard; }
+    const VecLibShard& get() const { return *_shard; }
 
 private:
     VecLibShard* _shard {nullptr};
