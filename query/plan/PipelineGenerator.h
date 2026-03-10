@@ -58,7 +58,6 @@ class OrderByNode;
 class LoadCommitNode;
 class InstallExtensionNode;
 class ShowExtensionsNode;
-class FuncEvalNode;
 
 class PipelineGenerator {
 public:
