@@ -361,6 +361,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
                                                              size_t& totalRowsInserted) {
     const Dataframe* leftDf = _leftInput.getDataframe();
     Dataframe* outDf = _output.getDataframe();
+    const size_t leftRowCount = leftDf->getLogicalRowCount();
 
     auto* leftCol = leftDf->getColumn(_leftJoinKey)->getColumn();
 
@@ -378,7 +379,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
         }
     }
 
-    for (; _leftInputIdx < leftCol->size(); ++_leftInputIdx) {
+    for (; _leftInputIdx < leftRowCount; ++_leftInputIdx) {
         // Skip null keys - NULL != NULL semantics
         if (!isNonNullKey<LeftKey, IsOptional>(leftCol, _leftInputIdx)) {
             continue;
@@ -437,10 +438,8 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
                                  rowsToCopy);
             });
 
-            // copy over the stored rows:
-            // here we calculate the starting index of the output column that we are
-            // inserting the row into  as _leftRowLen as we we want to copy the left input of
-            // the join into the first columns of the output.
+            // Copy over the stored rows starting at column _leftRowLen,
+            // as we want to copy the left input into the first columns of the output.
             for (size_t k = 0; k < rowsToCopy; ++k) {
                 _store.copyRow(outDf,
                                _leftRowLen,
@@ -471,7 +470,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
     // from next row on the next cycle. We don't do this if we
     // still have to finish processing a retreived vector of row offsets,
     // or if we have fully processed the input
-    if (!_rowOffsetState.hasRowOffsets() && _leftInputIdx != leftCol->size()) {
+    if (!_rowOffsetState.hasRowOffsets() && _leftInputIdx != leftRowCount) {
         _leftInputIdx += 1;
     }
 }
@@ -483,6 +482,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
     const Dataframe* rightDf = _rightInput.getDataframe();
     const Dataframe* leftDf = _leftInput.getDataframe();
     Dataframe* outDf = _output.getDataframe();
+    const size_t rightRowCount = rightDf->getLogicalRowCount();
 
     auto* rightCol = rightDf->getColumn(_rightJoinKey)->getColumn();
 
@@ -500,7 +500,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
         }
     }
 
-    for (; _rightInputIdx < rightDf->getLogicalRowCount(); ++_rightInputIdx) {
+    for (; _rightInputIdx < rightRowCount; ++_rightInputIdx) {
         // Skip null keys - NULL != NULL semantics
         if (!isNonNullKey<RightKey, IsOptional>(rightCol, _rightInputIdx)) {
             continue;
@@ -582,7 +582,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
 
     // if we don't need to finish of copying a row offset vector
     // we can start from the next index
-    if (!_rowOffsetState.hasRowOffsets() && _rightInputIdx != rightCol->size()) {
+    if (!_rowOffsetState.hasRowOffsets() && _rightInputIdx != rightRowCount) {
         _rightInputIdx += 1;
     }
 }
