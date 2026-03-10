@@ -5,8 +5,6 @@
 #include "QueryStatus.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
-#include "columns/ColumnEmbeddingMany.h"
-#include "columns/ColumnEmbeddingConst.h"
 #include "dataframe/Dataframe.h"
 #include "OutputWriter.h"
 #include "OutputValues.h"
@@ -233,14 +231,7 @@ public:
 
         for (const NamedColumn* namedCol : df.cols()) {
             const Column* col = namedCol->getColumn();
-
-            if (col->getContainerKind() == ContainerKind::code<ColumnEmbeddingMany>()
-                || col->getContainerKind() == ContainerKind::code<ColumnEmbeddingConst>()) {
-                generator(static_cast<const ColumnEmbeddingMany*>(nullptr));
-            } else {
-                ColTypeGen::dispatch(col, generator);
-            }
-
+            ColTypeGen::dispatch(col, generator);
             value(columnType);
         }
 
@@ -264,14 +255,7 @@ public:
             arr();
 
             const Column* col = namedCol->getColumn();
-
-            if (col->getContainerKind() == ContainerKind::code<ColumnEmbeddingMany>()) {
-                encoder(static_cast<const ColumnEmbeddingMany*>(col));
-            } else if (col->getContainerKind() == ContainerKind::code<ColumnEmbeddingConst>()) {
-                encoder(static_cast<const ColumnEmbeddingConst*>(col));
-            } else {
-                Encoder::dispatch(col, encoder);
-            }
+            Encoder::dispatch(col, encoder);
 
             end();
         }

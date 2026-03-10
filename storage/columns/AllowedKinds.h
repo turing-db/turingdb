@@ -243,7 +243,9 @@ struct TypeRestrictions<OP_NOT> {
 
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnMask>(),
+        ContainerKind::code<ColumnEmbeddingMany>(),
+        ContainerKind::code<ColumnEmbeddingConst>()
     >;
 };
 
@@ -334,7 +336,9 @@ struct OrderedTypes {
 
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnMask>(),
+        ContainerKind::code<ColumnEmbeddingMany>(),
+        ContainerKind::code<ColumnEmbeddingConst>()
     >;
 };
 

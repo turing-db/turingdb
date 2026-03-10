@@ -5,6 +5,8 @@
 #include "ColumnConst.h"
 #include "ColumnSet.h"
 #include "ColumnMask.h"
+#include "ColumnEmbeddingMany.h"
+#include "ColumnEmbeddingConst.h"
 #include "PairColumnKind.h"
 
 #include "FatalException.h"
@@ -54,6 +56,8 @@ public:
             CASE_SINGLE_DISPATCH(ColumnConst<Dummy>)
             CASE_SINGLE_DISPATCH(ColumnSet<Dummy>)
             CASE_SINGLE_DISPATCH(ColumnMask)
+            CASE_SINGLE_DISPATCH(ColumnEmbeddingMany)
+            CASE_SINGLE_DISPATCH(ColumnEmbeddingConst)
 
             default: {
                 throw FatalException("Unknown container kind");

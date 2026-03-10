@@ -9,6 +9,8 @@
 
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnEmbeddingMany.h"
+#include "columns/ColumnEmbeddingConst.h"
 #include "TypeUtils.h"
 
 #include "PipelineException.h"
@@ -123,6 +125,14 @@ public:
     // e.g. COUNT(NULL) : count non-null values; always 0
     constexpr void operator()(const ColumnConst<PropertyNull>*  /*unused*/) {
         _count = 0;
+    }
+
+    void operator()(const ColumnEmbeddingMany* typed) {
+        _count = typed->size();
+    }
+
+    constexpr void operator()(const ColumnEmbeddingConst*  /*unused*/) {
+        _count = 1;
     }
 
 private:

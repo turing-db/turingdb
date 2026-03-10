@@ -25,6 +25,8 @@
 #include "TuringTestEnv.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnEmbeddingMany.h"
+#include "columns/ColumnEmbeddingConst.h"
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
 #include "JsonEncoder.h"
@@ -167,6 +169,26 @@ struct Stringify {
     void operator()(const ColumnConst<T>* typed) {
         const T& value = typed->at(_row);
         _string = valueToString(value);
+    }
+
+    void operator()(const ColumnEmbeddingMany* typed) {
+        std::span<const float> emb = (*typed)[_row];
+        _string = "[";
+        for (size_t i = 0; i < emb.size(); i++) {
+            if (i > 0) _string += ",";
+            _string += std::to_string(emb[i]);
+        }
+        _string += "]";
+    }
+
+    void operator()(const ColumnEmbeddingConst* typed) {
+        std::span<const float> emb = (*typed)[0];
+        _string = "[";
+        for (size_t i = 0; i < emb.size(); i++) {
+            if (i > 0) _string += ",";
+            _string += std::to_string(emb[i]);
+        }
+        _string += "]";
     }
 };
 
