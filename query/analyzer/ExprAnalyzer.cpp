@@ -614,7 +614,7 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
 
         expr->setSignature(signature);
         // Create a variable declaration for the function call so that it can be retrieved
-        // later (for projection or in an expression / filter), e.g. RETURN COUNT(5 + 5)
+        // later (for projection or in an expression / filter), e.g. RETURN sqrt(5)
         const VarDecl* decl = _ctxt->createUnnamedVariable(_ast, expr->getType());
         expr->setExprVarDecl(decl);
 
