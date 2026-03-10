@@ -60,14 +60,21 @@ static void getLabelString(std::string& out, const GraphView view, NodeID n) {
     }
 }
 
-struct LabelsFunction {
+class LabelsFunction {
+public:
     using ResultType = std::string;
+
+    explicit LabelsFunction(GraphView view)
+        : _view(view)
+    {
+    }
 
     ResultType operator()(const NodeID n) {
         getLabelString(_tmp, _view, n);
         return _tmp;
     }
 
+private:
     GraphView _view;
     std::string _tmp;
 };
@@ -96,10 +103,9 @@ struct toIntegerFunction {
 };
 
 // NOTE: macOS wheel build libc++ doesn't support from_chars on double: use strtod instead
-struct toFloatFunction {
+class toFloatFunction {
+public:
     using ResultType = types::Double::Primitive;
-
-    std::string _buf; // Temporary buffer to null-terminate string view
 
     ResultType operator()(std::string_view sv) {
         // @ref std::strtod requires a null-terminated std::string: convert the string_view
@@ -124,11 +130,14 @@ struct toFloatFunction {
 
         return result;
     }
+
+private:
+    std::string _buf; // Temporary buffer to null-terminate string view
 };
 
-struct toBoolFunction {
+class toBoolFunction {
+public:
     using ResultType = types::Bool::Primitive;
-    std::string _buf; // Preallocated buffer to reuse over iterations
 
     ResultType operator()(std::string_view sv) {
         strToLower(_buf, sv);
@@ -143,6 +152,9 @@ struct toBoolFunction {
         throw PipelineException(
             fmt::format("toBoolean: cannot convert '{}' to boolean", sv));
     }
+
+private:
+    std::string _buf; // Preallocated buffer to reuse over iterations
 };
 
 /// Generic function executor; default constructible operator
@@ -184,9 +196,9 @@ struct FunctionExecutor<LabelsFunction, Res, Arg> {
         const auto& argd = arg->getRaw();
         auto& resd = res->getRaw();
 
-        auto op = LabelsFunction{._view = view, ._tmp = ""};
+        LabelsFunction labels(view);
         for (size_t i = 0; i < size ; i ++) {
-            resd[i] = op(argd[i]);
+            resd[i] = labels(argd[i]);
         }
     }
 };
