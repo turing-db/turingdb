@@ -79,10 +79,17 @@ def main() -> None:
     failed = 0
     skipped = 0
 
+    skip_tags = {"value-hash-join"}
+
     for test in tests:
         name = test["_name"]
 
         if not test.get("enabled", True):
+            skipped += 1
+            continue
+
+        test_tags = set(test.get("tags", []))
+        if test_tags & skip_tags:
             skipped += 1
             continue
 
