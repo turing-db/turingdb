@@ -266,12 +266,46 @@ public:
     ~TypedPropertyContainer() override = default;
 
     void add(EntityID entityID, std::span<const float> v);
-    bool has(EntityID entityID) const override;
-    const std::span<const float>& get(EntityID entityID) const;
-    const std::span<const float>& get(size_t offset) const;
+
+    bool has(EntityID entityID) const override {
+        if (_isDense) {
+            const auto diff = entityID.getValue() - _firstID.getValue();
+            return diff < _ids.size();
+        }
+        return _entityIndexMap.find(entityID) != _entityIndexMap.end();
+    }
+
+    const std::span<const float>& get(EntityID entityID) const {
+        if (_isDense) {
+            const size_t offset = entityID.getValue() - _firstID.getValue();
+            return _values.getView(offset);
+        }
+        const auto it = _entityIndexMap.find(entityID);
+        return _values.getView(it->second);
+    }
+
+    const std::span<const float>& get(size_t offset) const {
+        return _values.getView(offset);
+    }
+
     const EmbeddingContainer& getRawContainer() const { return _values; }
-    const std::span<const float>* tryGet(EntityID entityID) const;
-    size_t size() const override;
+
+    const std::span<const float>* tryGet(EntityID entityID) const {
+        if (_isDense) {
+            const auto diff = entityID.getValue() - _firstID.getValue();
+            if (diff >= _ids.size()) {
+                return nullptr;
+            }
+            return &_values.getView(diff);
+        }
+        const auto it = _entityIndexMap.find(entityID);
+        if (it == _entityIndexMap.end()) {
+            return nullptr;
+        }
+        return &_values.getView(it->second);
+    }
+
+    size_t size() const override { return _values.size(); }
     void sort() override;
 
     bool isDense() const { return _isDense; }

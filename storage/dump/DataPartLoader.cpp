@@ -171,8 +171,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& dataPartDir,
         };
 
         // Lambda to store embedding properties
-        const auto storeEmbeddingContainer =
-            [&](PropertyManager& manager) -> DumpResult<void> {
+        const auto storeEmbeddingContainer = [&](PropertyManager& manager) -> DumpResult<void> {
             EmbeddingPropertyContainerLoader loader(reader.value());
 
             auto props = loader.load();

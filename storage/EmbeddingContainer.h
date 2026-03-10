@@ -59,7 +59,7 @@ public:
 private:
     friend DataPartMerger;
 
-    uint32_t _dimension;
+    uint32_t _dimension {0};
     BucketVector _buckets;
     ViewVector _views;
 };

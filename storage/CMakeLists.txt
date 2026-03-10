@@ -41,6 +41,7 @@ set(storage_sources
 
         columns/Block.cpp
         columns/Column.cpp
+        columns/ColumnEmbeddingMany.cpp
         columns/ColumnStringTable.cpp
 
         dataframe/Dataframe.cpp

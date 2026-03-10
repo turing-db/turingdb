@@ -106,8 +106,8 @@ void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
                 } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
                     builder.addNodeProperty<types::Bool>(nodeID, id, val);
                 } else if constexpr (std::is_same_v<T, std::vector<float>>) {
-                    builder.addNodeProperty<types::Embedding>(nodeID, id,
-                        std::span<const float>(val.data(), val.size()));
+                    const std::span<const float> emb(val.data(), val.size());
+                    builder.addNodeProperty<types::Embedding>(nodeID, id, emb);
                 }
             },
             value);
@@ -179,9 +179,8 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
                     builder.addEdgeProperty<types::Bool>(
                         {newEdgeID, srcID, tgtID, edgeTypeID}, id, val);
                 } else if constexpr (std::is_same_v<T, std::vector<float>>) {
-                    builder.addEdgeProperty<types::Embedding>(
-                        {newEdgeID, srcID, tgtID, edgeTypeID}, id,
-                        std::span<const float>(val.data(), val.size()));
+                    const std::span<const float> emb(val.data(), val.size());
+                    builder.addEdgeProperty<types::Embedding>({newEdgeID, srcID, tgtID, edgeTypeID}, id, emb);
                 }
             },
             value);

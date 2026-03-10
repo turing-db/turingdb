@@ -7,45 +7,6 @@ void TypedPropertyContainer<types::Embedding>::add(EntityID entityID, std::span<
     _ids.emplace_back(entityID);
 }
 
-bool TypedPropertyContainer<types::Embedding>::has(EntityID entityID) const {
-    if (_isDense) {
-        const auto diff = entityID.getValue() - _firstID.getValue();
-        return diff < _ids.size();
-    }
-    return _entityIndexMap.find(entityID) != _entityIndexMap.end();
-}
-
-const std::span<const float>& TypedPropertyContainer<types::Embedding>::get(EntityID entityID) const {
-    if (_isDense) {
-        const size_t offset = entityID.getValue() - _firstID.getValue();
-        return _values.getView(offset);
-    }
-    const auto it = _entityIndexMap.find(entityID);
-    return _values.getView(it->second);
-}
-
-const std::span<const float>& TypedPropertyContainer<types::Embedding>::get(size_t offset) const {
-    return _values.getView(offset);
-}
-
-const std::span<const float>* TypedPropertyContainer<types::Embedding>::tryGet(EntityID entityID) const {
-    if (_isDense) {
-        const auto diff = entityID.getValue() - _firstID.getValue();
-        if (diff >= _ids.size()) {
-            return nullptr;
-        }
-        return &_values.getView(diff);
-    }
-    auto it = _entityIndexMap.find(entityID);
-    if (it == _entityIndexMap.end()) {
-        return nullptr;
-    }
-    return &_values.getView(it->second);
-}
-
-size_t TypedPropertyContainer<types::Embedding>::size() const {
-    return _values.size();
-}
 
 void TypedPropertyContainer<types::String>::sort() {
     StringContainer newValues;

@@ -70,25 +70,29 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::INDEX:
             analyzeIndexExpr(static_cast<IndexExpr*>(expr));
             break;
-        case Expr::Kind::LIST: {
-            const auto* listExpr = static_cast<const ListExpr*>(expr);
-            for (const Expr* elem : listExpr->getElements()) {
-                if (elem->getKind() != Expr::Kind::LITERAL) {
-                    throwError("List elements must be numeric literals", expr);
-                }
-                const auto* lit = static_cast<const LiteralExpr*>(elem);
-                const auto kind = lit->getLiteral()->getKind();
-                if (kind != Literal::Kind::INTEGER && kind != Literal::Kind::DOUBLE) {
-                    throwError("List elements must be numeric literals (Integer or Double)", expr);
-                }
-            }
-            expr->setType(EvaluatedType::List);
-        } break;
+        case Expr::Kind::LIST:
+            analyzeListExpr(expr);
+        break;
 
         case Expr::Kind::_SIZE:
             throwError("Unknown expression type in ExprAnalyzer.");
         break;
     }
+}
+
+void ExprAnalyzer::analyzeListExpr(Expr* expr) {
+    const auto* listExpr = static_cast<const ListExpr*>(expr);
+    for (const Expr* elem : listExpr->getElements()) {
+        if (elem->getKind() != Expr::Kind::LITERAL) {
+            throwError("List elements must be numeric literals", expr);
+        }
+        const auto* lit = static_cast<const LiteralExpr*>(elem);
+        const auto kind = lit->getLiteral()->getKind();
+        if (kind != Literal::Kind::INTEGER && kind != Literal::Kind::DOUBLE) {
+            throwError("List elements must be numeric literals (Integer or Double)", expr);
+        }
+    }
+    expr->setType(EvaluatedType::List);
 }
 
 void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {

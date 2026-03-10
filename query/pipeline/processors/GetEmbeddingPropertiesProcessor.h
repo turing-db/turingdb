@@ -42,8 +42,8 @@ public:
     PipelineValuesOutputInterface& output() { return _output; }
 
 protected:
-    PropertyType _propType;
-    uint32_t _dimension;
+    PropertyType _propType {{}, ValueType::Invalid};
+    uint32_t _dimension {0};
     std::unique_ptr<ChunkWriter> _propWriter;
     PipelineBlockInputInterface _input;
     PipelineValuesOutputInterface _output;

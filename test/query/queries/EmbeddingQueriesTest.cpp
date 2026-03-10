@@ -180,18 +180,24 @@ TEST_F(EmbeddingQueriesTest, matchWhereEmbeddingEqual) {
     execCreate(R"(CREATE (n:Vec {name: "c", emb: [1.0, 2.0, 3.0]}))");
 
     // Filter for nodes whose embedding equals [1.0, 2.0, 3.0]
-    size_t matchCount = 0;
-    auto res = query(R"(MATCH (n:Vec) WHERE n.emb = [1.0, 2.0, 3.0] RETURN n)",
+    std::vector<std::vector<float>> results;
+    auto res = query(R"(MATCH (n:Vec) WHERE n.emb = [1.0, 2.0, 3.0] RETURN n.emb)",
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            auto* ns = df->cols().front()->as<ColumnVector<NodeID>>();
-            ASSERT_TRUE(ns);
-            matchCount = ns->size();
+            auto* embs = df->cols().front()->as<ColumnEmbeddingMany>();
+            ASSERT_TRUE(embs);
+            for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+                std::span<const float> emb = embs->at(i);
+                results.emplace_back(emb.begin(), emb.end());
+            }
         });
     ASSERT_TRUE(res) << "Query failed: status="
         << static_cast<int>(res.getStatus())
         << " error=" << res.getError();
-    EXPECT_EQ(matchCount, 2);
+    ASSERT_EQ(results.size(), 2);
+    const std::vector<float> expected = {1.0f, 2.0f, 3.0f};
+    expectEmbeddingEqual(results[0], expected);
+    expectEmbeddingEqual(results[1], expected);
 }
 
 TEST_F(EmbeddingQueriesTest, matchWhereEmbeddingNotEqual) {
@@ -200,18 +206,23 @@ TEST_F(EmbeddingQueriesTest, matchWhereEmbeddingNotEqual) {
     execCreate(R"(CREATE (n:Vec {emb: [1.0, 2.0, 3.0]}))");
 
     // Filter for nodes whose embedding does NOT equal [1.0, 2.0, 3.0]
-    size_t matchCount = 0;
-    auto res = query(R"(MATCH (n:Vec) WHERE n.emb <> [1.0, 2.0, 3.0] RETURN n)",
+    std::vector<std::vector<float>> results;
+    auto res = query(R"(MATCH (n:Vec) WHERE n.emb <> [1.0, 2.0, 3.0] RETURN n.emb)",
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            auto* ns = df->cols().front()->as<ColumnVector<NodeID>>();
-            ASSERT_TRUE(ns);
-            matchCount = ns->size();
+            auto* embs = df->cols().front()->as<ColumnEmbeddingMany>();
+            ASSERT_TRUE(embs);
+            for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+                std::span<const float> emb = embs->at(i);
+                results.emplace_back(emb.begin(), emb.end());
+            }
         });
     ASSERT_TRUE(res) << "Query failed: status="
         << static_cast<int>(res.getStatus())
         << " error=" << res.getError();
-    EXPECT_EQ(matchCount, 1);
+    ASSERT_EQ(results.size(), 1);
+    const std::vector<float> expected = {4.0f, 5.0f, 6.0f};
+    expectEmbeddingEqual(results[0], expected);
 }
 
 // =============================================================================
@@ -270,19 +281,25 @@ TEST_F(EmbeddingQueriesTest, cosineSimilarityFilter) {
     execCreate(R"(CREATE (n:Vec {name: "xy", emb: [0.707, 0.707, 0.0]}))");
 
     // Filter: cosine similarity with [1,0,0] > 0.5 should match "x" and "xy"
-    size_t matchCount = 0;
+    std::vector<std::string> names;
     auto res = query(
-        R"(MATCH (n:Vec) WHERE cosineSimilarity(n.emb, [1.0, 0.0, 0.0]) > 0.5 RETURN n)",
+        R"(MATCH (n:Vec) WHERE cosineSimilarity(n.emb, [1.0, 0.0, 0.0]) > 0.5 RETURN n.name)",
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            auto* ns = df->cols().front()->as<ColumnVector<NodeID>>();
-            ASSERT_TRUE(ns);
-            matchCount = ns->size();
+            auto* nameCol = df->cols().front()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(nameCol);
+            for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+                ASSERT_TRUE(nameCol->at(i).has_value());
+                names.emplace_back(nameCol->at(i).value());
+            }
         });
     ASSERT_TRUE(res) << "Query failed: status="
         << static_cast<int>(res.getStatus())
         << " error=" << res.getError();
-    EXPECT_EQ(matchCount, 2);
+    ASSERT_EQ(names.size(), 2);
+    std::sort(names.begin(), names.end());
+    EXPECT_EQ(names[0], "x");
+    EXPECT_EQ(names[1], "xy");
 }
 
 // =============================================================================
@@ -482,29 +499,38 @@ TEST_F(EmbeddingQueriesTest, embeddingWithScalarProperties) {
     execCreate(R"(CREATE (n:Vec {name: "beta", emb: [0.4, 0.5, 0.6]}))");
 
     // Return both scalar and embedding property
-    size_t rowCount = 0;
+    std::vector<std::pair<std::string, std::vector<float>>> rows;
     auto res = query(R"(MATCH (n:Vec) RETURN n.name, n.emb)",
         [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 2);
 
-            // Column 0: name (optional string)
             auto* names = df->cols().at(0)->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(names);
 
-            // Column 1: embedding
             auto* embs = df->cols().at(1)->as<ColumnEmbeddingMany>();
             ASSERT_TRUE(embs);
 
-            rowCount = df->getLogicalRowCount();
-            EXPECT_EQ(rowCount, 2);
-
+            const size_t rowCount = df->getLogicalRowCount();
             for (size_t i = 0; i < rowCount; i++) {
-                EXPECT_TRUE(names->at(i).has_value());
+                ASSERT_TRUE(names->at(i).has_value());
                 std::span<const float> emb = embs->at(i);
-                EXPECT_EQ(emb.size(), 3);
+                rows.emplace_back(
+                    std::string(names->at(i).value()),
+                    std::vector<float>(emb.begin(), emb.end()));
             }
         });
     ASSERT_TRUE(res);
-    EXPECT_EQ(rowCount, 2);
+    ASSERT_EQ(rows.size(), 2);
+
+    std::sort(rows.begin(), rows.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    EXPECT_EQ(rows[0].first, "alpha");
+    const std::vector<float> expAlpha = {0.1f, 0.2f, 0.3f};
+    expectEmbeddingEqual(rows[0].second, expAlpha);
+
+    EXPECT_EQ(rows[1].first, "beta");
+    const std::vector<float> expBeta = {0.4f, 0.5f, 0.6f};
+    expectEmbeddingEqual(rows[1].second, expBeta);
 }

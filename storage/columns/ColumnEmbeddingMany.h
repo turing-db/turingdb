@@ -83,9 +83,7 @@ public:
     void clear() { _data.clear(); _nullBitmap.clear(); }
     void setDimension(uint32_t dim) { _dim = dim; }
 
-    void dump(std::ostream& out) const override {
-        (void)out;
-    }
+    void dump(std::ostream& out) const override;
 
     uint32_t dimension() const { return _dim; }
 
@@ -101,7 +99,7 @@ public:
 private:
     std::vector<float> _data;
     std::vector<bool> _nullBitmap;
-    uint32_t _dim;
+    uint32_t _dim {0};
 
     static constexpr auto _staticKind = ColumnKind::code<ColumnEmbeddingMany>();
 };

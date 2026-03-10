@@ -99,8 +99,7 @@ PropertyType PropertyTypeMap::getOrCreate(std::string_view name, ValueType value
     return pt;
 }
 
-PropertyType PropertyTypeMap::getOrCreateEmbedding(std::string_view name,
-                                                    const EmbeddingPropertyConfig& config) {
+PropertyType PropertyTypeMap::getOrCreateEmbedding(std::string_view name, const EmbeddingPropertyConfig& config) {
     PropertyType pt = getOrCreate(name, ValueType::Embedding);
     _embeddingConfigs[pt._id] = config;
     return pt;

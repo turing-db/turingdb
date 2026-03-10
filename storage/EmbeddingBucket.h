@@ -37,7 +37,7 @@ public:
 
 private:
     std::vector<float> _bucket;
-    uint32_t _dimension;
+    uint32_t _dimension {0};
     uint32_t _floatCount {0};
 };
 

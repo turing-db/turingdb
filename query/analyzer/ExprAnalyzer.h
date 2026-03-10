@@ -27,6 +27,7 @@ class EntityTypeExpr;
 class PathExpr;
 class FunctionInvocationExpr;
 class IndexExpr;
+class ListExpr;
 class Symbol;
 
 class ExprAnalyzer {
@@ -53,6 +54,7 @@ public:
     void analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver);
     void analyzePathExpr(PathExpr* expr);
     void analyzeIndexExpr(IndexExpr* expr);
+    void analyzeListExpr(Expr* expr);
 
     ValueType analyzePropertyExpr(PropertyExpr* expr,
                                   bool allowCreate = false,
