@@ -2,14 +2,15 @@
 
 using namespace db;
 
+LoadCSVNode::~LoadCSVNode() = default;
+
 LoadCSVNode::LoadCSVNode(const fs::Path& path,
                          bool hasHeaders,
                          bool skipOnError,
                          const VarDecl* aliasDecl)
-    : PlanGraphNode(PlanGraphOpcode::LOAD_CSV),
+    : VarDeclProviderNode(PlanGraphOpcode::LOAD_CSV, aliasDecl),
     _path(path),
     _hasHeaders(hasHeaders),
-    _skipOnError(skipOnError),
-    _aliasDecl(aliasDecl)
+    _skipOnError(skipOnError)
 {
 }

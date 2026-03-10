@@ -748,6 +748,7 @@ void ReadStmtGenerator::insertShortestPathNode(VarNode* source,
 
 void ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* dependency) {
     FilterNode* filter = _variables->getNodeFilter(node);
+    const auto* dependencyVarDecl = static_cast<VarDeclProviderNode*>(dependency)->getVarDecl();
     const auto [path, ancestorNode] = _topology->getShortestPath(node, dependency);
 
     switch (path) {
@@ -761,7 +762,9 @@ void ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* depende
             JoinNode* join = _tree->insertBefore<JoinNode>(filter,
                                                            varDecl,
                                                            varDecl,
+                                                           dependencyVarDecl,
                                                            JoinType::COMMON_ANCESTOR);
+
             PlanGraphNode* depBranchTip = _topology->getBranchTip(dependency);
             depBranchTip->connectOut(join);
             return;

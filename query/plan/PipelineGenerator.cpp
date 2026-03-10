@@ -887,7 +887,32 @@ PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
         }
     }
 
-    const auto& outputIf = _builder.addHashJoin(rhs, leftJoinTag, rightJoinTag);
+    auto& outputIf = _builder.addHashJoin(rhs, leftJoinTag, rightJoinTag);
+
+    // Get the output join column tag
+    ColumnTag streamedTag = outputIf.getDataframe()->cols().back()->getTag();
+
+    // Only if we have a dependency tag does the streamedTag become anything other
+    // than the join tag
+    if (node->getDependencyVarDecl()) {
+        const auto it = _declToColumn.find(node->getDependencyVarDecl());
+
+        // The dependency var decl branch should be fully expanded and the var decl
+        // should exist in the declToColumn map
+        if (it == _declToColumn.end()) {
+            throw PlannerException("Join Dependency VarDecl Not Found");
+        }
+
+        // The input that doesn't have to dependencyVarDecl is the one we wish to stream
+        if (!lhs->getDataframe()->hasColumn(it->second)) {
+            streamedTag = lhs->getStream().visit(visitor);
+        } else {
+            streamedTag = rhs->getStream().visit(visitor);
+        }
+    }
+
+    outputIf.setStream(EntityOutputStream::createNodeStream(streamedTag));
+
     _builder.setMaterializeProc(MaterializeProcessor::createFromDf(_pipeline,
                                                                    _mem,
                                                                    outputIf.getDataframe()));
