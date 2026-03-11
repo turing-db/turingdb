@@ -4,8 +4,8 @@
 #include <variant>
 #include <vector>
 
-#include <range/v3/view/reverse.hpp>
 #include <range/v3/view/drop.hpp>
+#include <range/v3/view/reverse.hpp>
 
 #include "CypherAST.h"
 #include "ExprDependencies.h"
@@ -81,13 +81,9 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         throwError("DISTINCT not yet supported.", _stmt);
     }
 
-    std::queue<const Expr*> frontier;
-    std::queue<const Expr*> blockers;
-
     using EvaluationStep = std::variant<ExprEvalNode*, AggregateEvalNode*>;
 
     std::vector<EvaluationStep> evalSteps;
-
 
     for (const Projection::ReturnItem& returnItem : _proj->items()) {
         Expr* const* exprPtr = std::get_if<Expr*>(&returnItem);
@@ -95,22 +91,23 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
             continue;
         }
 
+        // TODO: Can we reuse a single eval node for multiple independent statements?
         ExprEvalNode* exprEval = _tree->create<ExprEvalNode>();
 
         const Expr* root = *exprPtr;
         // BFS from root; blocked by aggregates
-        frontier = std::queue<const Expr*> {};
-        blockers = std::queue<const Expr*> {};
-        frontier.push(root);
+        _frontier = std::queue<const Expr*> {};
+        _blockers = std::queue<const Expr*> {};
+        _frontier.push(root);
 
-        while (!frontier.empty() || !blockers.empty()) {
-            while (!frontier.empty()) {
-                const Expr* front = frontier.front();
-                frontier.pop();
+        while (!_frontier.empty() || !_blockers.empty()) {
+            while (!_frontier.empty()) {
+                const Expr* front = _frontier.front();
+                _frontier.pop();
 
                 // Evaluation blockers need be evaluated on their own level
                 if (isEvaluationBlocker(front)) {
-                    blockers.push(front);
+                    _blockers.push(front);
                     continue;
                 }
 
@@ -123,14 +120,14 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                         const auto* bin = static_cast<const BinaryExpr*>(front);
                         const Expr* lhs = bin->getLHS();
                         const Expr* rhs = bin->getRHS();
-                        frontier.push(lhs);
-                        frontier.push(rhs);
+                        _frontier.push(lhs);
+                        _frontier.push(rhs);
                     } break;
 
                     case Expr::Kind::UNARY: {
                         const auto* unary = static_cast<const UnaryExpr*>(front);
                         const Expr* subExpr = unary->getSubExpr();
-                        frontier.push(subExpr);
+                        _frontier.push(subExpr);
                     } break;
 
                     case Expr::Kind::LITERAL:
@@ -145,7 +142,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                         const FunctionInvocation* invok = func->getFunctionInvocation();
                         const ExprChain* args = invok->getArguments();
                         for (const Expr* arg : *args) {
-                            frontier.push(arg);
+                            _frontier.push(arg);
                         }
                     } break;
 
@@ -172,15 +169,15 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                 }
             }
 
-            if (!exprEval->getExprs().empty()){
+            if (!exprEval->getExprs().empty()) {
                 evalSteps.emplace_back(exprEval);
                 exprEval = _tree->create<ExprEvalNode>();
             }
 
             // Repopulate exploration queue with blockers
-            while (!blockers.empty()) {
-                const Expr* blocker = blockers.front();
-                blockers.pop();
+            while (!_blockers.empty()) {
+                const Expr* blocker = _blockers.front();
+                _blockers.pop();
 
                 // FIXME: Handle non-COUNT() blockers
                 const auto* aggr = dynamic_cast<const FunctionInvocationExpr*>(blocker);
@@ -193,43 +190,44 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
 
                 const auto* invok = aggr->getFunctionInvocation();
                 for (const Expr* arg : *invok->getArguments()) {
-                    frontier.push(arg);
+                    _frontier.push(arg);
                 }
             }
-
         }
     }
 
-    bioassert(!evalSteps.empty(), "No evaluation steps.");
+    if (!evalSteps.empty()) {
+        const auto addStepToPlan = [this](auto&& evalNode) {
+            _prevNode->connectOut(evalNode);
+            _prevNode = evalNode;
+        };
 
-    const auto addStepToPlan = [this](auto&& evalNode) {
-        _prevNode->connectOut(evalNode);
-        _prevNode = evalNode;
-    };
+        {
+            const EvaluationStep& firstEvalStep = evalSteps.back();
+            if (_prevNode) {
+                std::visit(addStepToPlan, firstEvalStep);
+            } else {
+                std::visit([this](auto&& fstStep) { _prevNode = fstStep; },
+                           firstEvalStep);
+            }
+        }
 
-    {
-        const EvaluationStep& firstEvalStep = evalSteps.back();
-        if (_prevNode) {
-            std::visit(addStepToPlan, firstEvalStep);
-        } else {
-            std::visit([this](auto&& fstStep) { _prevNode = fstStep; }, firstEvalStep);
+        for (const EvaluationStep& evalStep : rv::reverse(evalSteps) | rv::drop(1)) {
+            std::visit(addStepToPlan, evalStep);
         }
     }
 
-    for (const EvaluationStep& evalStep : rv::reverse(evalSteps) | rv::drop(1)) {
-        std::visit(addStepToPlan, evalStep);
-    }
-
-    // ORDER BY, SKIP, LIMIT require a previous input, `LIMIT 10` is not a valid query,
-    // but `MATCH (n) LIMIT 10` is (because it has SCAN NODES as a previous input), and so
-    // is `RETURN 5 LIMIT 10` (it has EXPR EVAL as a previous input). Therefore, we can
-    // only add thse projection properties if @ref prevNode is valid.
+    // ORDER BY, SKIP, LIMIT require a previous input, `LIMIT 10` is not a valid
+    // query, but `MATCH (n) LIMIT 10` is (because it has SCAN NODES as a previous
+    // input), and so is `RETURN 5 LIMIT 10` (it has EXPR EVAL as a previous input).
+    // Therefore, we can only add thse projection properties if @ref prevNode is
+    // valid.
     if (_prevNode && _proj->hasOrderBy()) {
         // Any expression dependencies, e.g.
         // `MATCH (n) RETURN n.age ORDER BY n.age + 10`
-        // where `n.age + 10` need be evaluated first, are handled at the entrypoint of
-        // this function, meaning at this point, if there is an ORDER BY, all dependent
-        // columns will be registered.
+        // where `n.age + 10` need be evaluated first, are handled at the entrypoint
+        // of this function, meaning at this point, if there is an ORDER BY, all
+        // dependent columns will be registered.
         auto* orderBy = _tree->newOut<OrderByNode>(_prevNode);
         orderBy->setItems(_proj->getOrderBy()->getItems());
         _prevNode = orderBy;
@@ -392,6 +390,62 @@ bool ReturnStmtGenerator::isEvaluationBlocker(const Expr* expr) {
     const bool isBlocker = isAggregate /* || other blockers */;
 
     return isBlocker;
+}
+
+void ReturnStmtGenerator::treeWalkExpr(const Expr* expr) {
+    switch (expr->getKind()) {
+        case Expr::Kind::BINARY: {
+            const auto* bin = static_cast<const BinaryExpr*>(expr);
+            const Expr* lhs = bin->getLHS();
+            const Expr* rhs = bin->getRHS();
+            _frontier.push(lhs);
+            _frontier.push(rhs);
+        }
+        break;
+
+        case Expr::Kind::UNARY: {
+            const auto* unary = static_cast<const UnaryExpr*>(expr);
+            const Expr* subExpr = unary->getSubExpr();
+            _frontier.push(subExpr);
+        }
+        break;
+
+        case Expr::Kind::LITERAL:
+            // Literal is generated in guarded call to @ref needsEvaluation
+        break;
+
+        case Expr::Kind::FUNCTION_INVOCATION: {
+            // Is not aggregate: guaranteed by guard of @ref
+            // isEvaluationBlocker
+            const auto* func = static_cast<const FunctionInvocationExpr*>(expr);
+            const FunctionInvocation* invok = func->getFunctionInvocation();
+            const ExprChain* args = invok->getArguments();
+            for (const Expr* arg : *args) {
+                _frontier.push(arg);
+            }
+        }
+        break;
+
+        case Expr::Kind::SYMBOL:
+            // Symbol should already exist as a result of previous nodes
+        break;
+
+        case Expr::Kind::STRING:
+        case Expr::Kind::ENTITY_TYPES:
+        case Expr::Kind::PROPERTY:
+        case Expr::Kind::PATH:
+        case Expr::Kind::INDEX:
+        case Expr::Kind::LIST:
+            throwError(
+                fmt::format("{} expressions not yet supported in RETURN statements.",
+                            ExprKindDescription::value(expr->getKind())),
+                expr);
+        break;
+
+        case Expr::Kind::_SIZE:
+            throwError("Unknown expression type.", expr);
+        break;
+    }
 }
 
 void ReturnStmtGenerator::throwError(std::string_view msg, const void* obj) const {
