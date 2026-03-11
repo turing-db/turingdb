@@ -8,6 +8,5 @@
     "resultJson": "{\"header\":{\"column_names\":[\"x.name\",\"a.name\",\"a.age\",\"b.name\",\"b.age\"],\"column_types\":[\"String\",\"String\",\"Int64\",\"String\",\"Int64\"]},\"data\":[[[\"Remy\",\"Adam\",\"Ghosts\"],[\"Adam\",\"Remy\",\"Remy\"],[32,32,32],[\"Adam\",\"Remy\",\"Remy\"],[32,32,32]]]}"
   },
   "tags": [],
-  "write-required": false,
-  "disabled-reason": "This is a stream issue it should be fixed in a future PR"
+  "write-required": false
 }
