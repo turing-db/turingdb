@@ -15,6 +15,7 @@
 
 #include "QualifiedName.h"
 #include "Symbol.h"
+#include "decl/VarDecl.h"
 #include "expr/BinaryExpr.h"
 #include "expr/Expr.h"
 #include "expr/LiteralExpr.h"
@@ -92,15 +93,15 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         // TODO: Can we reuse a single eval node for multiple independent statements?
         _exprEvalNode = _tree->create<ExprEvalNode>();
 
-        const Expr* root = *exprPtr;
+        Expr* root = *exprPtr;
         // BFS from root; blocked by aggregates
-        _frontier = std::queue<const Expr*> {};
-        _blockers = std::queue<const Expr*> {};
+        _frontier = std::queue<Expr*> {};
+        _blockers = std::queue<Expr*> {};
         _frontier.push(root);
 
         while (!_frontier.empty() || !_blockers.empty()) {
             while (!_frontier.empty()) {
-                const Expr* front = _frontier.front();
+                Expr* front = _frontier.front();
                 _frontier.pop();
 
                 // Evaluation blockers need be evaluated on their own level
@@ -200,12 +201,12 @@ bool ReturnStmtGenerator::isEvaluationBlocker(const Expr* expr) {
     return isBlocker;
 }
 
-void ReturnStmtGenerator::treeWalkExpr(const Expr* expr) {
+void ReturnStmtGenerator::treeWalkExpr(Expr* expr) {
     switch (expr->getKind()) {
         case Expr::Kind::BINARY: {
             const auto* bin = static_cast<const BinaryExpr*>(expr);
-            const Expr* lhs = bin->getLHS();
-            const Expr* rhs = bin->getRHS();
+            Expr* lhs = bin->getLHS();
+            Expr* rhs = bin->getRHS();
             _frontier.push(lhs);
             _frontier.push(rhs);
         }
@@ -213,7 +214,7 @@ void ReturnStmtGenerator::treeWalkExpr(const Expr* expr) {
 
         case Expr::Kind::UNARY: {
             const auto* unary = static_cast<const UnaryExpr*>(expr);
-            const Expr* subExpr = unary->getSubExpr();
+            Expr* subExpr = unary->getSubExpr();
             _frontier.push(subExpr);
         }
         break;
@@ -228,11 +229,40 @@ void ReturnStmtGenerator::treeWalkExpr(const Expr* expr) {
             const auto* func = static_cast<const FunctionInvocationExpr*>(expr);
             const FunctionInvocation* invok = func->getFunctionInvocation();
             const ExprChain* args = invok->getArguments();
-            for (const Expr* arg : *args) {
+            for (Expr* arg : *args) {
                 _frontier.push(arg);
             }
         }
         break;
+        case Expr::Kind::PROPERTY: {
+            auto* prop = static_cast<PropertyExpr*>(expr);
+            const VarDecl* entityVar = prop->getEntityVarDecl();
+            const VarDecl* propVar = prop->getExprVarDecl();
+            const std::string_view propName = prop->getPropName();
+
+            if (!propVar) {
+                throwError("Property had no variable declaration.", prop);
+            }
+
+            if (!entityVar) {
+                throwError("Property had no enitity variable declation.", prop);
+            }
+
+            const auto* cached = _propCache.cacheOrRetrieve(entityVar, propVar, propName);
+            if (cached) {
+                // GetProperty is already present in the cache. Map the existing propExpr
+                // to the current one
+                if (!cached->_exprDecl) {
+                    throwError("Cached property had no expression variable.", prop);
+                }
+
+                prop->setExprVarDecl(cached->_exprDecl);
+                break;
+            }
+            // TODO: Add a get properties
+        }
+        break;
+
 
         case Expr::Kind::SYMBOL:
             // Symbol should already exist as a result of previous nodes
@@ -240,7 +270,7 @@ void ReturnStmtGenerator::treeWalkExpr(const Expr* expr) {
 
         case Expr::Kind::STRING:
         case Expr::Kind::ENTITY_TYPES:
-        case Expr::Kind::PROPERTY:
+            // TODO: Add a GetEntityType node (currently unused)
         case Expr::Kind::PATH:
         case Expr::Kind::INDEX:
         case Expr::Kind::LIST:
@@ -283,7 +313,7 @@ void ReturnStmtGenerator::handleEvaluationBlocker(const Expr* expr) {
 
             // Add each argument to the frontier; they may or may not be blocking
             const FunctionInvocation* invok = func->getFunctionInvocation();
-            for (const Expr* arg : *invok->getArguments()) {
+            for (Expr* arg : *invok->getArguments()) {
                 _frontier.push(arg);
             }
         }
