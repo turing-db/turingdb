@@ -138,6 +138,10 @@ private:
     */
     LabelSet getLabelSet(std::span<const std::string_view> labels);
 
+    PropertyTypeID resolvePropertyTypeID(std::string_view name,
+                                         ValueType type,
+                                         const Column* valueCol);
+
     WriteProcessor(ExprProgram* exprProg);
     ~WriteProcessor() final = default;
 };

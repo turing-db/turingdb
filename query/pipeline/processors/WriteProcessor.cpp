@@ -231,6 +231,20 @@ LabelSet WriteProcessor::getLabelSet(std::span<const std::string_view> labels) {
     return labelset;
 }
 
+PropertyTypeID WriteProcessor::resolvePropertyTypeID(std::string_view name,
+                                                     ValueType type,
+                                                     const Column* valueCol) {
+    if (type == ValueType::Embedding) {
+        const auto* embCol = dynamic_cast<const ColumnEmbeddingConst*>(valueCol);
+        bioassert(embCol, "Embedding property value is not a ColumnEmbeddingConst");
+        const uint32_t dimension = embCol->dimension();
+        EmbeddingPropertyConfig config(dimension, EmbeddingPrecision::Float32);
+        return _metadataBuilder->getOrCreateEmbeddingPropertyType(name, config)._id;
+    } else {
+        return _metadataBuilder->getOrCreatePropertyType(name, type)._id;
+    }
+}
+
 void WriteProcessor::createNodes(size_t numIters) {
     NodeID nextNodeID = _writeBuffer->numPendingNodes();
     const Dataframe* outDf = _output.getDataframe();
@@ -258,17 +272,7 @@ void WriteProcessor::createNodes(size_t numIters) {
         std::vector<CommitWriteBuffer::UntypedProperty> constProps;
         constProps.reserve(node._properties.size());
         for (const auto& [name, type, valueCol] : node._properties) {
-            PropertyTypeID propID;
-            if (type == ValueType::Embedding) {
-                const auto* embCol = dynamic_cast<const ColumnEmbeddingConst*>(valueCol);
-                bioassert(embCol, "Embedding property value is not a ColumnEmbeddingConst");
-                const uint32_t dimension = embCol->dimension();
-                EmbeddingPropertyConfig config(dimension, EmbeddingPrecision::Float32);
-                propID = _metadataBuilder->getOrCreateEmbeddingPropertyType(name, config)._id;
-            } else {
-                propID = _metadataBuilder->getOrCreatePropertyType(name, type)._id;
-            }
-
+            const PropertyTypeID propID = resolvePropertyTypeID(name, type, valueCol);
             constProps.emplace_back(getConstPropertyValue(valueCol, type, propID));
         }
 
@@ -370,17 +374,7 @@ void WriteProcessor::createEdges(size_t numIters) {
         std::vector<CommitWriteBuffer::UntypedProperty> constProps;
         constProps.reserve(edge._properties.size());
         for (const auto& [name, type, valueCol] : edge._properties) {
-            PropertyTypeID propID;
-            if (type == ValueType::Embedding) {
-                const auto* embCol = dynamic_cast<const ColumnEmbeddingConst*>(valueCol);
-                bioassert(embCol, "Embedding edge property value is not a ColumnEmbeddingConst");
-                const uint32_t dimension = embCol->dimension();
-                EmbeddingPropertyConfig config(dimension, EmbeddingPrecision::Float32);
-                propID = _metadataBuilder->getOrCreateEmbeddingPropertyType(name, config)._id;
-            } else {
-                propID = _metadataBuilder->getOrCreatePropertyType(name, type)._id;
-            }
-
+            const PropertyTypeID propID = resolvePropertyTypeID(name, type, valueCol);
             constProps.emplace_back(getConstPropertyValue(valueCol, type, propID));
         }
 
