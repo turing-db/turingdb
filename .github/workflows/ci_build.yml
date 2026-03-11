@@ -37,7 +37,9 @@ jobs:
         persist-credentials: true
         lfs: true
         fetch-depth: 500
-        fetch-tags: true
+
+    - name: Fetch tags
+      run: git fetch --tags --force
 
     - name: Checkout submodules (shallow)
       run: git submodule update --init --recursive --depth 1
