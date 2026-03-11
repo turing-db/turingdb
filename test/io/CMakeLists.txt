@@ -6,6 +6,7 @@ add_turing_test(test_io_filepagereader FilePageReaderTest.cpp)
 add_turing_test(test_io_fileresult FileResultTest.cpp)
 add_turing_test(test_io_s3 S3Test.cpp)
 add_turing_test(test_io_filecache FileCacheTest.cpp)
+add_turing_test(test_io_agingrincache AgingRingCacheTest.cpp)
 
 target_link_libraries(test_io_path
     PRIVATE turing_db_io_fs_s)
@@ -30,3 +31,6 @@ target_link_libraries(test_io_s3
 
 target_link_libraries(test_io_filecache
     PRIVATE turing_db_io_filecache_s)
+
+target_link_libraries(test_io_agingrincache
+    PRIVATE turing_db_io_cache_s)
