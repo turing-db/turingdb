@@ -83,6 +83,10 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& graphDir) {
 
     //Load the head commit
     Commit* headCommit = graph->_versionController->_head.load();
+    if (!headCommit) {
+        return DumpError::result(DumpErrorType::NO_COMMITS);
+    }
+
     const CommitHash headHash = headCommit->hash();
 
     const fs::Path commitDir = graphDir / "commits" / fmt::format("{}", headHash.get());
