@@ -1,5 +1,6 @@
 #pragma once
 
+#include <queue>
 #include <string_view>
 
 namespace db {
@@ -41,6 +42,8 @@ public:
     PlanGraphNode* generateReturnStmt();
 
 private:
+    using EvaluationQueue = std::queue<const Expr*>;
+
     const CypherAST* _ast {nullptr};
 
     const ReturnStmt* _stmt {nullptr};
@@ -56,9 +59,13 @@ private:
     GetPropertyCache& _propCache;
     GetEntityTypeCache& _entCache;
 
+    EvaluationQueue _frontier;
+    EvaluationQueue _blockers;
+
     void prepare();
     void handleExprDependencies(Expr* expr);
 
+    void treeWalkExpr(const Expr* expr);
     static bool isEvaluationBlocker(const Expr* expr);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = nullptr) const;
