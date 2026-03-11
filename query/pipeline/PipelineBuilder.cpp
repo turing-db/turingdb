@@ -776,8 +776,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(ColumnT
 }
 
 template <EntityType Entity>
-PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingProperties(PropertyType propertyType,
-                                                                          uint32_t dimension) {
+PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingProperties(PropertyType propertyType, uint32_t dimension) {
     auto* proc = GetEmbeddingPropertiesProcessor<Entity>::create(_pipeline, propertyType, dimension);
 
     PipelineBlockInputInterface& input = proc->input();
@@ -813,8 +812,8 @@ template PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingProperti
 
 template <EntityType Entity>
 PipelineValuesOutputInterface& PipelineBuilder::addGetEmbeddingPropertiesWithNull(ColumnTag entityTag,
-                                                                                   PropertyType propertyType,
-                                                                                   uint32_t dimension) {
+                                                                                  PropertyType propertyType,
+                                                                                  uint32_t dimension) {
     using GetPropsProc = GetPropertiesWithNullProcessor<Entity, types::Embedding>;
 
     auto* getProps = GetPropsProc::create(_pipeline, entityTag, propertyType);
