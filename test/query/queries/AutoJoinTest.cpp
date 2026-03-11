@@ -2363,7 +2363,7 @@ TEST_F(JoinFeatureTest, DISABLED_multiJoin_symmetricInterestChain) {
 // Test 40: Category-interest-category chain
 // Pattern: (cat1)<--(i)-->(cat2) with person attached
 // (a)-->(i)-->(cat1), (i)-->(cat2)
-TEST_F(JoinFeatureTest, DISABLED_multiJoin_multiCategoryInterest) {
+TEST_F(JoinFeatureTest, multiJoin_multiCategoryInterest) {
     constexpr std::string_view QUERY = R"(
         MATCH (a:Person)-->(i:Interest)-->(cat1:Category), (i)-->(cat2:Category)
         WHERE cat1.name <> cat2.name
@@ -2393,8 +2393,24 @@ TEST_F(JoinFeatureTest, DISABLED_multiJoin_multiCategoryInterest) {
             }
         }
     });
-    // Loop pattern not supported - comma-separated patterns with shared variable 'i'
-    ASSERT_FALSE(res);
+    ASSERT_TRUE(res);
+
+    // Only MegaHub (I5) connects to two categories (Cat2, Cat3).
+    // Persons connected to MegaHub: A, B, C, D, E.
+    // Each person produces two permutations: (Cat2, Cat3) and (Cat3, Cat2).
+    std::set<std::tuple<String, String, String, String>> expected = {
+        {"A", "MegaHub", "Cat2", "Cat3"},
+        {"A", "MegaHub", "Cat3", "Cat2"},
+        {"B", "MegaHub", "Cat2", "Cat3"},
+        {"B", "MegaHub", "Cat3", "Cat2"},
+        {"C", "MegaHub", "Cat2", "Cat3"},
+        {"C", "MegaHub", "Cat3", "Cat2"},
+        {"D", "MegaHub", "Cat2", "Cat3"},
+        {"D", "MegaHub", "Cat3", "Cat2"},
+        {"E", "MegaHub", "Cat2", "Cat3"},
+        {"E", "MegaHub", "Cat3", "Cat2"},
+    };
+    EXPECT_EQ(results, expected);
 }
 
 // Test 41: Dual interest to single category
