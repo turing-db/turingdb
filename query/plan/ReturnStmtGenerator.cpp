@@ -1,11 +1,26 @@
 #include "ReturnStmtGenerator.h"
 
+#include <queue>
+#include <variant>
+#include <vector>
+
+#include <range/v3/view/reverse.hpp>
+#include <range/v3/view/drop.hpp>
+
 #include "CypherAST.h"
 #include "ExprDependencies.h"
+#include "FatalException.h"
 #include "FunctionInvocation.h"
 #include "PlanGraph.h"
 #include "Projection.h"
 
+#include "QualifiedName.h"
+#include "Symbol.h"
+#include "expr/BinaryExpr.h"
+#include "expr/Expr.h"
+#include "expr/LiteralExpr.h"
+#include "expr/UnaryExpr.h"
+#include "spdlog/spdlog.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
@@ -34,6 +49,8 @@
 #include "PlannerException.h"
 
 using namespace db;
+namespace rg = ranges;
+namespace rv = rg::views;
 
 ReturnStmtGenerator::ReturnStmtGenerator(const CypherAST* ast,
                                          const ReturnStmt* rtnStmt,
@@ -66,49 +83,148 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         throwError("DISTINCT not yet supported.", _stmt);
     }
 
-    // If a return item is an expression, add the dependencies to be evaluated
+    std::queue<const Expr*> frontier;
+    std::queue<const Expr*> blockers;
+
+    using EvaluationStep = std::variant<ExprEvalNode*, AggregateEvalNode*>;
+
+    [[maybe_unused]] const auto prntStep = [](auto&& evalStep) {
+        if (auto* expr = std::get_if<ExprEvalNode*>(&evalStep); expr) {
+            spdlog::info("ExprEvalNode");
+        } else if (auto* aggr = std::get_if<AggregateEvalNode*>(&evalStep); aggr) {
+            spdlog::info("AggregateEvalNode");
+        } else {
+            spdlog::error("BADSTEP");
+        }
+    };
+
+    std::vector<EvaluationStep> evalSteps;
+
+
     for (const Projection::ReturnItem& returnItem : _proj->items()) {
         Expr* const* exprPtr = std::get_if<Expr*>(&returnItem);
-        if (exprPtr) {
-            handleExprDependencies(*exprPtr);
+        if (!exprPtr) {
+            continue;
+        }
+
+        ExprEvalNode* exprEval = _tree->create<ExprEvalNode>();
+        evalSteps.emplace_back(exprEval);
+
+        const Expr* root = *exprPtr;
+        // BFS from root; blocked by aggregates
+        frontier = std::queue<const Expr*> {};
+        blockers = std::queue<const Expr*> {};
+        frontier.push(root);
+
+        while (!frontier.empty() || !blockers.empty()) {
+            while (!frontier.empty()) {
+                const Expr* front = frontier.front();
+                frontier.pop();
+
+                // Evaluation blockers need be evaluated on their own level
+                if (isEvaluationBlocker(front)) {
+                    blockers.push(front);
+                    continue;
+                }
+
+                if (ExprEvalNode::needsEvaluation(front)) {
+                    exprEval->addExpr(front);
+                }
+
+                switch (front->getKind()) {
+                    case Expr::Kind::BINARY: {
+                        const auto* bin = static_cast<const BinaryExpr*>(front);
+                        const Expr* lhs = bin->getLHS();
+                        const Expr* rhs = bin->getRHS();
+                        frontier.push(lhs);
+                        frontier.push(rhs);
+                    } break;
+
+                    case Expr::Kind::UNARY: {
+                        const auto* unary = static_cast<const UnaryExpr*>(front);
+                        const Expr* subExpr = unary->getSubExpr();
+                        frontier.push(subExpr);
+                    } break;
+
+                    case Expr::Kind::LITERAL:
+                        // Literal is generated in guarded call to @ref needsEvaluation
+                        break;
+
+                    case Expr::Kind::FUNCTION_INVOCATION: {
+                        // Is not aggregate: guaranteed by guard of @ref
+                        // isEvaluationBlocker
+                        const auto* func =
+                            static_cast<const FunctionInvocationExpr*>(front);
+                        const FunctionInvocation* invok = func->getFunctionInvocation();
+                        const ExprChain* args = invok->getArguments();
+                        for (const Expr* arg : *args) {
+                            frontier.push(arg);
+                        }
+                    } break;
+
+                    case Expr::Kind::SYMBOL:
+                        // Symbol should already exist as a result of previous nodes
+                        break;
+
+                    case Expr::Kind::STRING:
+                    case Expr::Kind::ENTITY_TYPES:
+                    case Expr::Kind::PROPERTY:
+                    case Expr::Kind::PATH:
+                    case Expr::Kind::INDEX:
+                    case Expr::Kind::LIST:
+                        throwError(
+                            fmt::format(
+                                "{} expressions not yet supported in RETURN statements.",
+                                ExprKindDescription::value(front->getKind())),
+                            front);
+                        break;
+
+                    case Expr::Kind::_SIZE:
+                        throwError("Unknown expression type.", front);
+                        break;
+                }
+            }
+
+            // Repopulate exploration queue with blockers
+            while (!blockers.empty()) {
+                const Expr* blocker = blockers.front();
+                blockers.pop();
+
+                // FIXME: Handle non-COUNT() blockers
+                const auto* aggr = dynamic_cast<const FunctionInvocationExpr*>(blocker);
+                bioassert(aggr, "Failed to cast blocking evaluation.");
+                bioassert(aggr->isAggregate(), "Blocker was not aggregate");
+
+                AggregateEvalNode* aggrEval = _tree->create<AggregateEvalNode>();
+                aggrEval->addFunc(aggr);
+                evalSteps.emplace_back(aggrEval);
+
+                const auto* invok = aggr->getFunctionInvocation();
+                for (const Expr* arg : *invok->getArguments()) {
+                    frontier.push(arg);
+                }
+            }
+
         }
     }
 
-    // If the projection has an ORDER BY, add expression dependencies to be evaluated
-    if (_proj->hasOrderBy()) {
-        const auto& projOrderItems = _proj->getOrderBy()->getItems();
-        // Get dependencies that we require to order, e.g.
-        // `MATCH (n) RETURN n ORDER BY n.name`
-        // requires inserting a plan node to get n.name
-        for (const OrderByItem* item : projOrderItems) {
-            Expr* itemExpr = item->getExpr();
-            bioassert(itemExpr, "OrderByItem had null expr.");
+    bioassert(!evalSteps.empty(), "No evaluation steps.");
 
-            handleExprDependencies(itemExpr);
-        }
-    }
+    const auto addStepToPlan = [this](auto&& evalNode) {
+        _prevNode->connectOut(evalNode);
+    };
 
-    // Expression evaluation (including non-aggregate function evaluation) is the only
-    // node which does not require a previous input, for example `RETURN 5` has no
-    // previous input, but is valid.
-    // NOTE: In case of a function which takes no arguments being supported, the above
-    // becomes false.
-    if (!_exprEvalNode->getExprs().empty()) {
+    {
+        const EvaluationStep& firstEvalStep = evalSteps.back();
         if (_prevNode) {
-            _prevNode->connectOut(_exprEvalNode);
+            std::visit(addStepToPlan, firstEvalStep);
+        } else {
+            std::visit([this](auto&& fstStep) { _prevNode = fstStep; }, firstEvalStep);
         }
-        _prevNode = _exprEvalNode;
     }
 
-    // Aggregates always require some previous node, even in the case of
-    // `RETURN COUNT(5)`
-    // the `5` must have been produced by the above ExprEvalNode, which sets
-    // @ref _prevNode to non-null
-    // NOTE: In case of an aggregate which takes no arguments being supported, the above
-    // becomes false.
-    if (_prevNode && !_aggrEvalNode->getFuncs().empty()) {
-        _prevNode->connectOut(_aggrEvalNode);
-        _prevNode = _aggrEvalNode;
+    for (const EvaluationStep& evalStep : rv::reverse(evalSteps) | rv::drop(1)) {
+        std::visit(addStepToPlan, evalStep);
     }
 
     // ORDER BY, SKIP, LIMIT require a previous input, `LIMIT 10` is not a valid query,
@@ -274,6 +390,15 @@ void ReturnStmtGenerator::handleExprDependencies(Expr* expr) {
 
         _aggrEvalNode->addGroupByKey(expr);
     }
+}
+
+bool ReturnStmtGenerator::isEvaluationBlocker(const Expr* expr) {
+    const auto* function = dynamic_cast<const FunctionInvocationExpr*>(expr);
+    const bool isAggregate = function && function->isAggregate();
+
+    const bool isBlocker = isAggregate /* || other blockers */;
+
+    return isBlocker;
 }
 
 void ReturnStmtGenerator::throwError(std::string_view msg, const void* obj) const {
