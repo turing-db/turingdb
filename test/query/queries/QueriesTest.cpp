@@ -2691,6 +2691,79 @@ TEST_F(QueriesTest, ancestorJoinCountVar) {
     EXPECT_EQ(actualCount, expectedCount);
 }
 
+// Issue #397: Incorrect dependency detection on successor join with cross-variable filter
+TEST_F(QueriesTest, successorJoinWithCrossFilter) {
+    std::string_view MATCH_QUERY =
+        "MATCH (a)-->(x), (b)-->(x) WHERE a.age = b.age RETURN x.name, a.name, a.age, b.name, b.age";
+    const PropertyTypeID NAME_PROPID = 0;
+    const PropertyTypeID AGE_PROPID = 2;
+
+    using String = types::String::Primitive;
+    using Int64 = types::Int64::Primitive;
+    using Rows = LineContainer<String, String, Int64, String, Int64>;
+
+    Rows expected;
+    {
+        // Build a map of target node -> list of source nodes
+        std::unordered_map<NodeID, std::vector<NodeID>> incomingMap;
+        for (NodeID src : read().scanNodes()) {
+            ColumnNodeIDs srcCol;
+            srcCol.push_back(src);
+            for (const auto& edge : read().getOutEdges(&srcCol)) {
+                incomingMap[edge._otherID].push_back(src);
+            }
+        }
+
+        for (const auto& [x, sources] : incomingMap) {
+            const String* xname = read().tryGetNodeProperty<types::String>(NAME_PROPID, x);
+            if (!xname) continue;
+
+            for (NodeID a : sources) {
+                const Int64* aAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, a);
+                if (!aAge) continue;
+                const String* aName = read().tryGetNodeProperty<types::String>(NAME_PROPID, a);
+                if (!aName) continue;
+
+                for (NodeID b : sources) {
+                    const Int64* bAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, b);
+                    if (!bAge) continue;
+                    if (*aAge != *bAge) continue;
+                    const String* bName = read().tryGetNodeProperty<types::String>(NAME_PROPID, b);
+                    if (!bName) continue;
+
+                    expected.add({*xname, *aName, *aAge, *bName, *bAge});
+                }
+            }
+        }
+    }
+
+    Rows actual;
+    {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(5, df->size());
+            auto* xnames = df->cols().at(0)->as<ColumnVector<std::optional<String>>>();
+            auto* anames = df->cols().at(1)->as<ColumnVector<std::optional<String>>>();
+            auto* aages = df->cols().at(2)->as<ColumnVector<std::optional<Int64>>>();
+            auto* bnames = df->cols().at(3)->as<ColumnVector<std::optional<String>>>();
+            auto* bages = df->cols().at(4)->as<ColumnVector<std::optional<Int64>>>();
+            ASSERT_TRUE(xnames);
+            ASSERT_TRUE(anames);
+            ASSERT_TRUE(aages);
+            ASSERT_TRUE(bnames);
+            ASSERT_TRUE(bages);
+            for (size_t row = 0; row < xnames->size(); row++) {
+                actual.add({*xnames->at(row), *anames->at(row), *aages->at(row),
+                            *bnames->at(row), *bages->at(row)});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    EXPECT_GT(expected.size(), 0u);
+    EXPECT_TRUE(expected.equals(actual));
+}
+
 // Issue #477: Count does not work with joins (successor join variant)
 TEST_F(QueriesTest, successorJoinCountStar) {
     ColumnNodeIDs* sources = nullptr;
@@ -2774,6 +2847,166 @@ TEST_F(QueriesTest, successorJoinCountVar) {
     EXPECT_TRUE(result.isOk());
     EXPECT_GT(expectedCount, 0u);
     EXPECT_EQ(actualCount, expectedCount);
+}
+
+// Issue #397: Incorrect dependency detection on join with cross-variable filter
+TEST_F(QueriesTest, ancestorJoinWithCrossFilter) {
+    std::string_view MATCH_QUERY =
+        "MATCH (x)-->(a), (x)-->(b) WHERE a.age = b.age RETURN x.name, a.name, a.age, b.name, b.age";
+    const PropertyTypeID NAME_PROPID = 0;
+    const PropertyTypeID AGE_PROPID = 2;
+
+    using String = types::String::Primitive;
+    using Int64 = types::Int64::Primitive;
+    using Rows = LineContainer<String, String, Int64, String, Int64>;
+
+    Rows expected;
+    {
+        ColumnNodeIDs columnNodeIDs;
+        for (NodeID n : read().scanNodes()) {
+            columnNodeIDs.push_back(n);
+        }
+
+        for (NodeID x : read().scanNodes()) {
+            std::vector<NodeID> targets;
+            ColumnNodeIDs xCol;
+            xCol.push_back(x);
+            for (const auto& edge : read().getOutEdges(&xCol)) {
+                targets.push_back(edge._otherID);
+            }
+
+            const String* xname = read().tryGetNodeProperty<types::String>(NAME_PROPID, x);
+            if (!xname) continue;
+
+            for (NodeID a : targets) {
+                const Int64* aAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, a);
+                if (!aAge) continue;
+                const String* aName = read().tryGetNodeProperty<types::String>(NAME_PROPID, a);
+                if (!aName) continue;
+
+                for (NodeID b : targets) {
+                    const Int64* bAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, b);
+                    if (!bAge) continue;
+                    if (*aAge != *bAge) continue;
+                    const String* bName = read().tryGetNodeProperty<types::String>(NAME_PROPID, b);
+                    if (!bName) continue;
+
+                    expected.add({*xname, *aName, *aAge, *bName, *bAge});
+                }
+            }
+        }
+    }
+
+    Rows actual;
+    {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(5, df->size());
+            auto* xnames = df->cols().at(0)->as<ColumnVector<std::optional<String>>>();
+            auto* anames = df->cols().at(1)->as<ColumnVector<std::optional<String>>>();
+            auto* aages = df->cols().at(2)->as<ColumnVector<std::optional<Int64>>>();
+            auto* bnames = df->cols().at(3)->as<ColumnVector<std::optional<String>>>();
+            auto* bages = df->cols().at(4)->as<ColumnVector<std::optional<Int64>>>();
+            ASSERT_TRUE(xnames);
+            ASSERT_TRUE(anames);
+            ASSERT_TRUE(aages);
+            ASSERT_TRUE(bnames);
+            ASSERT_TRUE(bages);
+            for (size_t row = 0; row < xnames->size(); row++) {
+                actual.add({*xnames->at(row), *anames->at(row), *aages->at(row),
+                            *bnames->at(row), *bages->at(row)});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    EXPECT_GT(expected.size(), 0u);
+    EXPECT_TRUE(expected.equals(actual));
+}
+
+// Issue #397: 3-way ancestor join with chain through b-->d and cross-variable name filter
+TEST_F(QueriesTest, tripleAncestorJoinWithChainAndCrossFilter) {
+    std::string_view MATCH_QUERY =
+        "MATCH (x)-->(a), (x)-->(b)-->(d), (x)-->(c) "
+        "WHERE a.name = b.name AND b.name = c.name AND a.name = c.name "
+        "RETURN x.name, a.name, b.name, c.name, d.name";
+    const PropertyTypeID NAME_PROPID = 0;
+
+    using String = types::String::Primitive;
+    using Rows = LineContainer<String, String, String, String, String>;
+
+    Rows expected;
+    {
+        for (NodeID x : read().scanNodes()) {
+            const String* xname = read().tryGetNodeProperty<types::String>(NAME_PROPID, x);
+            if (!xname) continue;
+
+            std::vector<NodeID> xTargets;
+            ColumnNodeIDs xCol;
+            xCol.push_back(x);
+            for (const auto& edge : read().getOutEdges(&xCol)) {
+                xTargets.push_back(edge._otherID);
+            }
+
+            for (NodeID a : xTargets) {
+                const String* aName = read().tryGetNodeProperty<types::String>(NAME_PROPID, a);
+                if (!aName) continue;
+
+                for (NodeID b : xTargets) {
+                    const String* bName = read().tryGetNodeProperty<types::String>(NAME_PROPID, b);
+                    if (!bName) continue;
+                    if (*aName != *bName) continue;
+
+                    // b-->d: get outgoing edges of b
+                    std::vector<NodeID> bTargets;
+                    ColumnNodeIDs bCol;
+                    bCol.push_back(b);
+                    for (const auto& edge : read().getOutEdges(&bCol)) {
+                        bTargets.push_back(edge._otherID);
+                    }
+
+                    for (NodeID c : xTargets) {
+                        const String* cName = read().tryGetNodeProperty<types::String>(NAME_PROPID, c);
+                        if (!cName) continue;
+                        if (*bName != *cName) continue;
+
+                        for (NodeID d : bTargets) {
+                            const String* dName = read().tryGetNodeProperty<types::String>(NAME_PROPID, d);
+                            if (!dName) continue;
+
+                            expected.add({*xname, *aName, *bName, *cName, *dName});
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Rows actual;
+    {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(5, df->size());
+            auto* xnames = df->cols().at(0)->as<ColumnVector<std::optional<String>>>();
+            auto* anames = df->cols().at(1)->as<ColumnVector<std::optional<String>>>();
+            auto* bnames = df->cols().at(2)->as<ColumnVector<std::optional<String>>>();
+            auto* cnames = df->cols().at(3)->as<ColumnVector<std::optional<String>>>();
+            auto* dnames = df->cols().at(4)->as<ColumnVector<std::optional<String>>>();
+            ASSERT_TRUE(xnames);
+            ASSERT_TRUE(anames);
+            ASSERT_TRUE(bnames);
+            ASSERT_TRUE(cnames);
+            ASSERT_TRUE(dnames);
+            for (size_t row = 0; row < xnames->size(); row++) {
+                actual.add({*xnames->at(row), *anames->at(row),
+                            *bnames->at(row), *cnames->at(row), *dnames->at(row)});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    EXPECT_GT(expected.size(), 0u);
+    EXPECT_TRUE(expected.equals(actual));
 }
 
 // Issue #477: Count does not work with joins (double ancestor join)
