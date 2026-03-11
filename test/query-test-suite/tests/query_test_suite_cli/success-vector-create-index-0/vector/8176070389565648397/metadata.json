@@ -1,0 +1,10 @@
+{
+    "id": 8176070389565648397,
+    "name": "embeddings",
+    "dimension": 4,
+    "metric": "EUCLIDEAN_DIST",
+    "precision": 32,
+    "index_type": "BRUTE_FORCE",
+    "created_at": 0,
+    "modified_at": 0
+}

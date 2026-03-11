@@ -1,10 +1,11 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) WHERE NOT TRUE RETURN NOT FALSE",
   "expect": {
-    "plan": "",
-    "result": ""
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) WHERE NOT TRUE RETURN NOT FALSE\n       |                 ^^^^^^^^\n-------* Predicates without dependencies are not supported yet",
+    "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) WHERE NOT TRUE RETURN NOT FALSE\n       |                 ^^^^^^^^\n-------* Predicates without dependencies are not supported yet",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) WHERE NOT TRUE RETURN NOT FALSE\\n       |                 ^^^^^^^^\\n-------* Predicates without dependencies are not supported yet\"}"
   },
   "tags": [
     "operators",
