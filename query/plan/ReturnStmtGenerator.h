@@ -42,7 +42,7 @@ public:
     PlanGraphNode* generateReturnStmt();
 
 private:
-    using EvaluationQueue = std::queue<const Expr*>;
+    using EvaluationQueue = std::queue<Expr*>;
 
     const CypherAST* _ast {nullptr};
 
@@ -64,7 +64,7 @@ private:
 
     void prepare();
 
-    void treeWalkExpr(const Expr* expr);
+    void treeWalkExpr(Expr* expr);
     static bool isEvaluationBlocker(const Expr* expr);
     void handleEvaluationBlocker(const Expr* expr);
 
