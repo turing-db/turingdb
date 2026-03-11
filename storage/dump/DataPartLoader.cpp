@@ -284,7 +284,8 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& dataPartDir,
         }
     }
 
-    // Dump node StringIndexer
+#ifndef DISABLE_STRING_INDEX
+    // Load node StringIndexer
     {
         const fs::Path nodeStrIndexerFile = dataPartDir / "node-string-prop-indexer";
         const fs::Path nodeStrIndexerFileAlt = dataPartDir / "node-string-prop-indexer-owners";
@@ -314,11 +315,10 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& dataPartDir,
             return DumpError::result(
                 DumpErrorType::CANNOT_OPEN_DATAPART_NODE_STR_PROP_INDEXER);
         }
-
         part->_nodeStrPropIdx = std::move(res.value());
     }
 
-    // Dump edge StringIndexer
+    // Load edge StringIndexer
     {
         const fs::Path edgeStrIndexerFile = dataPartDir / "edge-string-prop-indexer";
         const fs::Path edgeStrIndexerFileAlt = dataPartDir / "edge-string-prop-indexer-owners";
@@ -351,6 +351,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(const fs::Path& dataPartDir,
 
         part->_edgeStrPropIdx = std::move(res.value());
     }
+#endif
 
     part->_initialized = true;
 

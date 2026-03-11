@@ -252,6 +252,9 @@ add_subdirectory(external)
 # miniocpp (MinIO S3 client)
 find_package(miniocpp REQUIRED)
 
+# NOTE: Disabled 11/03/26 due to being inaccessible in v2 CYPHER
+add_compile_definitions(DISABLE_STRING_INDEX)
+
 add_subdirectory(common)
 add_subdirectory(base)
 add_subdirectory(jobs)

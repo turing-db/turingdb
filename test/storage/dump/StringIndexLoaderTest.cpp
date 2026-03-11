@@ -54,8 +54,8 @@ TEST_F(StringIndexLoaderTest, SimpleDumpLoad) {
     auto builtDps = reader.dataparts();
 
     for (const auto& dp : builtDps) {
-        EXPECT_TRUE(dp->getEdgeStrPropIndexer().isInitialised());
-        EXPECT_TRUE(dp->getNodeStrPropIndexer().isInitialised());
+        EXPECT_FALSE(dp->getEdgeStrPropIndexer().isInitialised());
+        EXPECT_FALSE(dp->getNodeStrPropIndexer().isInitialised());
     }
 
     auto txl = loadedGraph->openTransaction();
@@ -63,8 +63,8 @@ TEST_F(StringIndexLoaderTest, SimpleDumpLoad) {
     auto loadedDps = readerl.dataparts();
 
     for (const auto& dp : loadedDps) {
-        EXPECT_TRUE(dp->getEdgeStrPropIndexer().isInitialised());
-        EXPECT_TRUE(dp->getNodeStrPropIndexer().isInitialised());
+        EXPECT_FALSE(dp->getEdgeStrPropIndexer().isInitialised());
+        EXPECT_FALSE(dp->getNodeStrPropIndexer().isInitialised());
     }
 }
 

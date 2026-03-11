@@ -131,7 +131,7 @@ protected:
 };
 
 
-TEST_F(StringIndexTest, prefixSemanticsTest) {
+TEST_F(StringIndexTest, DISABLED_prefixSemanticsTest) {
     auto db = createPrefixTestDB();
     const FrozenCommitTx transaction1 = db->openTransaction();
     GraphReader reader = transaction1.readGraph();
@@ -172,7 +172,7 @@ TEST_F(StringIndexTest, prefixSemanticsTest) {
     EXPECT_THAT(owners, UnorderedElementsAre(0)) << "Query for 'playfully' failed";
 }
 
-TEST_F(StringIndexTest, simpleIndex) {
+TEST_F(StringIndexTest, DISABLED_simpleIndex) {
     const NodeID FIRSTNODEID = NodeID(0);
     const NodeID SECONDNODEID = NodeID(1);
     const EdgeID FIRSTEDGEID = EdgeID(0);
@@ -248,7 +248,7 @@ TEST_F(StringIndexTest, simpleIndex) {
 }
 
 
-TEST_F(StringIndexTest, stringApproximation) {
+TEST_F(StringIndexTest, DISABLED_stringApproximation) {
     auto db = createBioGraph();
     const FrozenCommitTx transaction = db->openTransaction();
     GraphReader reader = transaction.readGraph();
@@ -301,7 +301,7 @@ TEST_F(StringIndexTest, stringApproximation) {
 }
 
 
-TEST_F(StringIndexTest, multiDataPartTest) {
+TEST_F(StringIndexTest, DISABLED_multiDataPartTest) {
     auto db = createMultiDatapartGraph();
     const FrozenCommitTx transaction = db->openTransaction();
     GraphReader reader = transaction.readGraph();
@@ -373,7 +373,7 @@ TEST_F(StringIndexTest, multiDataPartTest) {
 }
 
 // Check outer limits of the alphabet to check constants are caluclated correctly
-TEST_F(StringIndexTest, edgeCaseTrie) {
+TEST_F(StringIndexTest, DISABLED_edgeCaseTrie) {
     auto db = createEdgeCaseGraph();
     const FrozenCommitTx transaction1 = db->openTransaction();
     GraphReader reader = transaction1.readGraph();

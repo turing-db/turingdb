@@ -119,8 +119,11 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
 
     // Build indexes for noted node properties.
     // TODO: Async with jobs
-    _nodeStrPropIdx->buildIndex(nodesToIndex, tmpToFinalNodeIDs); 
+    // NOTE: Disabled 11/03/26 due to being inaccessible in v2 CYPHER
+#ifndef DISABLE_STRING_INDEX
+    _nodeStrPropIdx->buildIndex(nodesToIndex, tmpToFinalNodeIDs);
     _nodeStrPropIdx->setInitialised();
+#endif
 
     for (const auto& [ptID, props] : *_nodeProperties) {
         jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
@@ -178,8 +181,11 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
 
     // Build indexes for noted edge properties.
     // TODO: Async with jobs
+    // NOTE: Disabled 11/03/26 due to being inaccessible in v2 CYPHER
+#ifndef DISABLE_STRING_INDEX
     _edgeStrPropIdx->buildIndex(edgesToIndex, tmpToFinalEdgeIDs);
     _edgeStrPropIdx->setInitialised();
+#endif
 
     for (const auto& [ptID, props] : *_edgeProperties) {
         jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
