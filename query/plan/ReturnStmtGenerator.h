@@ -59,6 +59,8 @@ private:
     void prepare();
     void handleExprDependencies(Expr* expr);
 
+    static bool isEvaluationBlocker(const Expr* expr);
+
     [[noreturn]] void throwError(std::string_view msg, const void* obj = nullptr) const;
 };
 
