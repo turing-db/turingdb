@@ -59,6 +59,8 @@ private:
     Column* generateIndexExpr(const IndexExpr* indexExpr);
     Column* generateFuncInvocationExpr(const FunctionInvocationExpr* funcExpr);
 
+    Column* fetchAggregateColumn(const FunctionInvocationExpr* aggregateExpr);
+
     Column* allocUnaryResultCol(ColumnOperator op, const Column* arg);
     Column* allocBinaryResultCol(ColumnOperator op, const Column* lhs, const Column* rhs);
 
