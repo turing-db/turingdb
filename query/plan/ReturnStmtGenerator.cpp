@@ -140,18 +140,15 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
 
     if (!evalSteps.empty()) {
         const auto addStepToPlan = [this](auto&& evalNode) {
-            _prevNode->connectOut(evalNode);
+            if (_prevNode) {
+                _prevNode->connectOut(evalNode);
+            }
             _prevNode = evalNode;
         };
 
         {
             const EvaluationStep& firstEvalStep = evalSteps.back();
-            if (_prevNode) {
-                std::visit(addStepToPlan, firstEvalStep);
-            } else {
-                std::visit([this](auto&& fstStep) { _prevNode = fstStep; },
-                           firstEvalStep);
-            }
+            std::visit(addStepToPlan, firstEvalStep);
         }
 
         for (const EvaluationStep& evalStep : rv::reverse(evalSteps) | rv::drop(1)) {
@@ -192,137 +189,6 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
     results->setProjection(_proj);
 
     return results;
-}
-
-void ReturnStmtGenerator::handleExprDependencies(Expr* expr) {
-    if (ExprEvalNode::needsEvaluation(expr)) {
-        _exprEvalNode->addExpr(expr);
-    }
-
-    ExprDependencies deps;
-    deps.genExprDependencies(*_variables, expr);
-
-    for (const ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
-        if (!_prevNode) {
-            throwError(
-                "Expression had dependencies, but no previous node to provide them.",
-                expr);
-        }
-
-        if (auto* propExpr = dynamic_cast<PropertyExpr*>(dep._expr)) {
-            const VarDecl* entityDecl = propExpr->getEntityVarDecl();
-            const VarDecl* propExprDecl = propExpr->getExprVarDecl();
-
-            if (!propExprDecl) [[unlikely]] {
-                throwError(
-                    "Property propExpression does not have an propExpression variable "
-                    "declaration",
-                    propExpr);
-            }
-
-            if (!entityDecl) [[unlikely]] {
-                throwError(
-                    "Property propExpression does not have an entity variable declaration",
-                    propExpr);
-            }
-
-            const auto* cached = _propCache.cacheOrRetrieve(entityDecl, propExprDecl,
-                                                            propExpr->getPropName());
-
-            if (cached) {
-                // GetProperty is already present in the cache. Map the existing propExpr to
-                // the current one
-                if (!cached->_exprDecl) [[unlikely]] {
-                    throwError("GetProperty propExpression does not have an propExpression "
-                               "variable declaration",
-                               propExpr);
-                }
-
-                propExpr->setExprVarDecl(cached->_exprDecl);
-                continue;
-            }
-
-            auto* n = _tree->newOut<GetPropertyWithNullNode>(_prevNode,
-                                                             propExpr->getPropName());
-            n->setExpr(propExpr);
-            n->setEntityVarDecl(entityDecl);
-            _prevNode = n;
-        } else if (auto* entExpr = dynamic_cast<EntityTypeExpr*>(dep._expr)) {
-            const VarDecl* entityDecl = entExpr->getEntityVarDecl();
-            const VarDecl* exprDecl = entExpr->getExprVarDecl();
-
-            if (!exprDecl) [[unlikely]] {
-                throwError("Entity type expression does not have an expression variable "
-                           "declaration",
-                           expr);
-            }
-
-            if (!entityDecl) [[unlikely]] {
-                throwError(
-                    "Entity type expression does not have an entity variable declaration",
-                    expr);
-            }
-
-            const auto* cached = _entCache.cacheOrRetrieve(entityDecl, exprDecl);
-
-            if (cached) {
-                // GetEntityType is already present in the cache. Map the existing expr to
-                // the current one
-
-                if (!cached->_exprDecl) [[unlikely]] {
-                    throwError("GetEntityType expression does not have an expression "
-                               "variable declaration",
-                               expr);
-                }
-
-                expr->setExprVarDecl(cached->_exprDecl);
-                continue;
-            }
-
-            auto* n = _tree->newOut<GetEntityTypeNode>(_prevNode);
-            n->setExpr(expr);
-            n->setEntityVarDecl(entityDecl);
-            _prevNode = n;
-        } else if (dynamic_cast<const SymbolExpr*>(dep._expr)) {
-            // Symbol value should already be in a column in a block, no need to change
-            // anything
-        } else {
-            throwError(
-                "Expression dependency could not be handled in the predicate evaluation");
-        }
-    }
-
-    // Functions may have expressions which need be evaluated prior to the functions
-    // evaluation, e.g. COUNT(5 + 5).
-    for (const ExprDependencies::FuncDependency& dep : deps.getFuncDeps()) {
-        const FunctionInvocationExpr* funcExpr = dep._expr;
-        const FunctionInvocation* funcInvok = funcExpr->getFunctionInvocation();
-        const FunctionSignature* signature = funcInvok->getSignature();
-
-        const ExprChain* arguments = funcInvok->getArguments();
-        for (const Expr* argument : *arguments) {
-            if (ExprEvalNode::needsEvaluation(argument)) {
-                _exprEvalNode->addExpr(argument);
-            }
-        }
-
-        if (signature->isAggregate()) {
-            _aggrEvalNode->addFunc(dep._expr);
-        }
-    }
-
-    if (_proj->isAggregate() && !expr->isAggregate()) {
-        const Expr::Kind kind = expr->getKind();
-
-        if (kind != Expr::Kind::SYMBOL && kind != Expr::Kind::PROPERTY) {
-            throwError(
-                "Complex grouping keys are not supported yet. Only variables (e.g. n), "
-                "or property expression (e.g. n.name) are allowed",
-                _proj);
-        }
-
-        _aggrEvalNode->addGroupByKey(expr);
-    }
 }
 
 bool ReturnStmtGenerator::isEvaluationBlocker(const Expr* expr) {
@@ -407,12 +273,15 @@ void ReturnStmtGenerator::handleEvaluationBlocker(const Expr* expr) {
 
         case Expr::Kind::FUNCTION_INVOCATION: {
             const auto* func = static_cast<const FunctionInvocationExpr*>(expr);
+            // Only aggregate functions are blockers
             if (!func->isAggregate()) {
                 throwError("Tried to handle non-aggregate function as blocker.", expr);
             }
 
+            // Add the function to be evaluated
             _aggrEvalNode->addFunc(func);
 
+            // Add each argument to the frontier; they may or may not be blocking
             const FunctionInvocation* invok = func->getFunctionInvocation();
             for (const Expr* arg : *invok->getArguments()) {
                 _frontier.push(arg);
