@@ -63,7 +63,6 @@ private:
     EvaluationQueue _blockers;
 
     void prepare();
-    void handleExprDependencies(Expr* expr);
 
     void treeWalkExpr(const Expr* expr);
     static bool isEvaluationBlocker(const Expr* expr);
