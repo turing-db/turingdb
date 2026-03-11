@@ -360,8 +360,16 @@ Column* ExprProgramGenerator::generateIndexExpr(const IndexExpr* indexExpr) {
 }
 
 Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocationExpr* funcExpr) {
+    // Aggregates are not evaluated by this program, they require their own processor,
+    // which should've been scheduled in prior to this ExprProgram. Fetch the column from
+    // the input dataframe.
+    if (funcExpr->isAggregate()) {
+        return fetchAggregateColumn(funcExpr);
+    }
+
     const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
     const FunctionSignature* signature = invocation->getSignature();
+
 
     if (!signature) {
         throw PlannerException("Function invocation does not have a signature");
@@ -605,4 +613,29 @@ Column* ExprProgramGenerator::allocUnaryResultCol(ColumnOperator op, const Colum
 
     bioassert(result, "Failed to allocate result column.");
     return result;
+}
+
+Column* ExprProgramGenerator::fetchAggregateColumn(const FunctionInvocationExpr* aggregateExpr) {
+    const Dataframe* inputDf = _pendingOut.getDataframe();
+    bioassert(inputDf, "ExprProgram expected input, but did not have one.");
+
+    const VarDecl* var = aggregateExpr->getExprVarDecl();
+    bioassert(var, "Aggregate function invocation had no variable declaration.");
+
+    const PipelineGenerator::VarColumnMap& varColMap = _gen->varColMap();
+
+    const auto findIt = varColMap.find(var);
+    bioassert(findIt != end(varColMap), "Aggregate function had no associated column.");
+
+    const ColumnTag aggregateResTag = findIt->second;
+
+    const bool foundColumn = inputDf->hasColumn(aggregateResTag);
+    bioassert(foundColumn, "Could not find column for aggregate function.");
+
+    const NamedColumn* nCol = inputDf->getColumn(aggregateResTag);
+    bioassert(nCol, "Null column for aggregate function.");
+
+    Column* resultColumn = nCol->getColumn();
+
+    return resultColumn;
 }

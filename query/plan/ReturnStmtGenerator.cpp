@@ -9,7 +9,6 @@
 
 #include "CypherAST.h"
 #include "ExprDependencies.h"
-#include "FatalException.h"
 #include "FunctionInvocation.h"
 #include "PlanGraph.h"
 #include "Projection.h"
@@ -20,7 +19,6 @@
 #include "expr/Expr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/UnaryExpr.h"
-#include "spdlog/spdlog.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
@@ -88,16 +86,6 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
 
     using EvaluationStep = std::variant<ExprEvalNode*, AggregateEvalNode*>;
 
-    [[maybe_unused]] const auto prntStep = [](auto&& evalStep) {
-        if (auto* expr = std::get_if<ExprEvalNode*>(&evalStep); expr) {
-            spdlog::info("ExprEvalNode");
-        } else if (auto* aggr = std::get_if<AggregateEvalNode*>(&evalStep); aggr) {
-            spdlog::info("AggregateEvalNode");
-        } else {
-            spdlog::error("BADSTEP");
-        }
-    };
-
     std::vector<EvaluationStep> evalSteps;
 
 
@@ -108,7 +96,6 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         }
 
         ExprEvalNode* exprEval = _tree->create<ExprEvalNode>();
-        evalSteps.emplace_back(exprEval);
 
         const Expr* root = *exprPtr;
         // BFS from root; blocked by aggregates
@@ -185,6 +172,11 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                 }
             }
 
+            if (!exprEval->getExprs().empty()){
+                evalSteps.emplace_back(exprEval);
+                exprEval = _tree->create<ExprEvalNode>();
+            }
+
             // Repopulate exploration queue with blockers
             while (!blockers.empty()) {
                 const Expr* blocker = blockers.front();
@@ -212,6 +204,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
 
     const auto addStepToPlan = [this](auto&& evalNode) {
         _prevNode->connectOut(evalNode);
+        _prevNode = evalNode;
     };
 
     {
