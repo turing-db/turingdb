@@ -9,7 +9,6 @@
 #include <vector>
 
 using namespace turing::test;
-using namespace db;
 
 namespace {
 

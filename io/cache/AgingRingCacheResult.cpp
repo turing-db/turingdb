@@ -2,8 +2,6 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
-using namespace db;
-
 std::string AgingRingCacheError::fmtMessage() const {
     const std::string_view desc = AgingRingCacheErrorTypeDescription::value(_type);
 
