@@ -28,6 +28,7 @@ target_link_libraries(turing_vector_s
     PUBLIC  turing_common_s
             Threads::Threads
             turing_db_io_fs_s
+            turing_db_io_cache_s
             nlohmann_json::nlohmann_json
             faiss
             OpenMP::OpenMP_CXX)

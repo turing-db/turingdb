@@ -8,8 +8,8 @@
 #include "BioAssert.h"
 
 #include "AgingRingCacheResult.h"
-
-namespace db {
+#include "AgingRingCacheEntry.h"
+#include "AgingRingCacheHandle.h"
 
 template <typename Key,
           typename Payload,
@@ -26,87 +26,14 @@ public:
     using OnEvictCallback = std::function<AgingRingCacheResult<void>(const Key&, const Payload&)>;
     using CalculateMemoryUsageCallback = std::function<size_t(const Payload&)>;
 
-    struct Entry;
-
+    using Entry = AgingRingCacheEntry<Key, Payload, Hash, Equal>;
     using HashMap = std::unordered_map<Key, Entry, Hash, Equal>;
     using Ring = std::list<Key>;
     using RingIterator = std::list<Key>::iterator;
-
-    enum class State : uint8_t {
-        LOADING = 0,
-        RESIDENT,
-        EVICTING,
-    };
-
-    struct Entry {
-        std::unique_ptr<Payload> _payload;
-        State _state {State::LOADING};
-        uint32_t _pinCount {0};
-        uint8_t _age {0};
-        RingIterator _ringIt;
-    };
-
-    class Handle {
-    public:
-        Handle() = default;
-
-        ~Handle() {
-            if (!_cache) {
-                return;
-            }
-
-            _cache->release(*this);
-        }
-
-        Handle(Handle&& other) noexcept
-            : _cache(other._cache),
-            _entry(other._entry)
-        {
-            other._cache = nullptr;
-            other._entry = nullptr;
-        }
-
-        Handle& operator=(Handle&& other) noexcept {
-            if (&other == this) {
-                return *this;
-            }
-
-            if (_cache) {
-                _cache->release(*this);
-            }
-
-            _cache = other._cache;
-            _entry = other._entry;
-
-            other._cache = nullptr;
-            other._entry = nullptr;
-
-            return *this;
-        }
-
-        Handle(const Handle&) = delete;
-        Handle& operator=(const Handle&) = delete;
-
-        Payload& get() noexcept { return *_entry->_payload; }
-        Payload* operator->() noexcept { return _entry->_payload.get(); }
-        Payload& operator*() noexcept { return get(); }
-
-        explicit operator bool() const noexcept { return _entry != nullptr; }
-
-    private:
-        friend class AgingRingCache;
-
-        AgingRingCache* _cache {nullptr};
-        Entry* _entry {nullptr};
-
-        Handle(AgingRingCache* cache, Entry* entry)
-            : _cache(cache),
-            _entry(entry)
-        {
-        }
-    };
+    using Handle = AgingRingCacheHandle<Key, Payload, Hash, Equal>;
 
     AgingRingCache() = default;
+
     ~AgingRingCache() {
         shutdown();
     }
@@ -153,7 +80,7 @@ public:
                     key,
                     Entry {
                         ._payload = std::move(payload),
-                        ._state = State::LOADING,
+                        ._state = AgingRingCacheState::LOADING,
                     });
 
                 Entry* entryPtr = &newIt->second;
@@ -202,7 +129,7 @@ public:
 
             /* Case 2: Found an entry, but it's currently being loaded by another thread
              *         Wait until it's done and retry */
-            if (entry._state == State::LOADING) {
+            if (entry._state == AgingRingCacheState::LOADING) {
                 _stateCv.wait(lock, [&] {
                     const auto it2 = _map.find(key);
                     if (it2 == _map.end()) {
@@ -210,7 +137,7 @@ public:
                         return true;
                     }
 
-                    return it2->second._state != State::LOADING;
+                    return it2->second._state != AgingRingCacheState::LOADING;
                 });
 
                 // The state of the entry has changed, check if the loading succeeded
@@ -225,7 +152,7 @@ public:
              *         Wait until it's done and retry
              *
              * NOTE: An optimization could be to ask the other thread to abort the eviction */
-            if (entry._state == State::EVICTING) {
+            if (entry._state == AgingRingCacheState::EVICTING) {
                 _stateCv.wait(lock, [&] {
                     const auto it2 = _map.find(key);
                     if (it2 == _map.end()) {
@@ -233,7 +160,7 @@ public:
                         return true;
                     }
 
-                    return it2->second._state != State::EVICTING;
+                    return it2->second._state != AgingRingCacheState::EVICTING;
                 });
 
                 continue; // -> Retry
@@ -241,7 +168,7 @@ public:
 
             /* Case 4: Cache hit
              *         Pin and return the entry */
-            bioassert(entry._state == State::RESIDENT, "Unexpected cache entry state");
+            bioassert(entry._state == AgingRingCacheState::RESIDENT, "Unexpected cache entry state");
             entry._pinCount++;
             _totalPinCount++;
             entry._age = _maxAge;
@@ -305,6 +232,8 @@ public:
     }
 
 private:
+    friend class AgingRingCacheHandle<Key, Payload, Hash, Equal>;
+
     /** @brief Hash map for entries in the cache. */
     HashMap _map;
 
@@ -374,7 +303,7 @@ private:
     void release(Handle& handle) {
         std::unique_lock lock(_mutex);
 
-        if (handle._entry == nullptr || handle._entry->_state != State::RESIDENT) {
+        if (handle._entry == nullptr || handle._entry->_state != AgingRingCacheState::RESIDENT) {
             return;
         }
 
@@ -394,7 +323,7 @@ private:
         size_t total = 0;
 
         for (const auto& [key, entry] : _map) {
-            if (entry._state == State::RESIDENT && entry._payload) {
+            if (entry._state == AgingRingCacheState::RESIDENT && entry._payload) {
                 total += _calculateMemoryUsage(*entry._payload);
             }
         }
@@ -431,7 +360,7 @@ private:
                 }
 
                 Entry& entry = it->second;
-                bioassert(entry._state == State::EVICTING, "Unexpected cache entry state");
+                bioassert(entry._state == AgingRingCacheState::EVICTING, "Unexpected cache entry state");
                 victimPayload = entry._payload.get();
                 _inFlightIoCount++;
             }
@@ -497,7 +426,7 @@ private:
             bioassert(it != _map.end(), "Could not find key in map");
 
             Entry& entry = it->second;
-            bioassert(entry._state == State::RESIDENT, "Unexpected cache entry state");
+            bioassert(entry._state == AgingRingCacheState::RESIDENT, "Unexpected cache entry state");
 
             // If in use, skip
             if (entry._pinCount > 0) {
@@ -511,7 +440,7 @@ private:
             }
 
             // Found a victim
-            entry._state = State::EVICTING;
+            entry._state = AgingRingCacheState::EVICTING;
             _ring.erase(ringIt);
 
             if (_ring.empty()) {
@@ -538,7 +467,7 @@ private:
 
             Entry& entry = mapIt->second;
             if (entry._pinCount == 0) {
-                entry._state = State::EVICTING;
+                entry._state = AgingRingCacheState::EVICTING;
 
                 if (_clockHand == it) {
                     _clockHand = _ring.erase(it);
@@ -556,7 +485,7 @@ private:
     }
 
     void putInRingLocked(const Key& key, Entry& entry) {
-        entry._state = State::RESIDENT;
+        entry._state = AgingRingCacheState::RESIDENT;
         entry._age = _maxAge;
         _ring.push_back(key);
         entry._ringIt = std::prev(_ring.end());
@@ -577,7 +506,3 @@ private:
         }
     }
 };
-
-inline constexpr size_t t = sizeof(AgingRingCache<int, int>);
-
-}

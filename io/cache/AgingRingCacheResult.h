@@ -3,8 +3,6 @@
 #include "BasicResult.h"
 #include "EnumToString.h"
 
-namespace db {
-
 enum class AgingRingCacheErrorCode : uint8_t {
     UNKNOWN = 0,
     TERMINATING,
@@ -41,5 +39,3 @@ private:
 
 template <typename T>
 using AgingRingCacheResult = BasicResult<T, class AgingRingCacheError>;
-
-}
