@@ -66,8 +66,13 @@ TEST_F(StringIndexSerialisationTest, indexInitialisation) {
     auto builtDps = reader.dataparts();
 
     for (const auto& dp : builtDps) {
+#ifdef DISABLE_STRING_INDEX
         EXPECT_FALSE(dp->getEdgeStrPropIndexer().isInitialised());
         EXPECT_FALSE(dp->getNodeStrPropIndexer().isInitialised());
+#else
+        EXPECT_TRUE(dp->getEdgeStrPropIndexer().isInitialised());
+        EXPECT_TRUE(dp->getNodeStrPropIndexer().isInitialised());
+#endif
     }
 
     auto txl = _loadedGraph->openTransaction();
@@ -75,8 +80,13 @@ TEST_F(StringIndexSerialisationTest, indexInitialisation) {
     auto loadedDps = readerl.dataparts();
 
     for (const auto& dp : loadedDps) {
+#ifdef DISABLE_STRING_INDEX
         EXPECT_FALSE(dp->getEdgeStrPropIndexer().isInitialised());
         EXPECT_FALSE(dp->getNodeStrPropIndexer().isInitialised());
+#else
+        EXPECT_TRUE(dp->getEdgeStrPropIndexer().isInitialised());
+        EXPECT_TRUE(dp->getNodeStrPropIndexer().isInitialised());
+#endif
     }
 }
 
