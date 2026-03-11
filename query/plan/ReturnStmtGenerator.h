@@ -67,6 +67,7 @@ private:
 
     void treeWalkExpr(const Expr* expr);
     static bool isEvaluationBlocker(const Expr* expr);
+    void handleEvaluationBlocker(const Expr* expr);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = nullptr) const;
 };

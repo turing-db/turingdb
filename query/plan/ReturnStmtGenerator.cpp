@@ -68,8 +68,6 @@ ReturnStmtGenerator::ReturnStmtGenerator(const CypherAST* ast,
 }
 
 void ReturnStmtGenerator::prepare() {
-    _aggrEvalNode = _tree->create<AggregateEvalNode>();
-    _exprEvalNode = _tree->create<ExprEvalNode>();
     _proj = _stmt->getProjection();
     bioassert(_proj, "Failed to get projection for RETURN statement.");
 }
@@ -92,7 +90,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         }
 
         // TODO: Can we reuse a single eval node for multiple independent statements?
-        ExprEvalNode* exprEval = _tree->create<ExprEvalNode>();
+        _exprEvalNode = _tree->create<ExprEvalNode>();
 
         const Expr* root = *exprPtr;
         // BFS from root; blocked by aggregates
@@ -112,86 +110,30 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                 }
 
                 if (ExprEvalNode::needsEvaluation(front)) {
-                    exprEval->addExpr(front);
+                    _exprEvalNode->addExpr(front);
                 }
 
-                switch (front->getKind()) {
-                    case Expr::Kind::BINARY: {
-                        const auto* bin = static_cast<const BinaryExpr*>(front);
-                        const Expr* lhs = bin->getLHS();
-                        const Expr* rhs = bin->getRHS();
-                        _frontier.push(lhs);
-                        _frontier.push(rhs);
-                    } break;
-
-                    case Expr::Kind::UNARY: {
-                        const auto* unary = static_cast<const UnaryExpr*>(front);
-                        const Expr* subExpr = unary->getSubExpr();
-                        _frontier.push(subExpr);
-                    } break;
-
-                    case Expr::Kind::LITERAL:
-                        // Literal is generated in guarded call to @ref needsEvaluation
-                        break;
-
-                    case Expr::Kind::FUNCTION_INVOCATION: {
-                        // Is not aggregate: guaranteed by guard of @ref
-                        // isEvaluationBlocker
-                        const auto* func =
-                            static_cast<const FunctionInvocationExpr*>(front);
-                        const FunctionInvocation* invok = func->getFunctionInvocation();
-                        const ExprChain* args = invok->getArguments();
-                        for (const Expr* arg : *args) {
-                            _frontier.push(arg);
-                        }
-                    } break;
-
-                    case Expr::Kind::SYMBOL:
-                        // Symbol should already exist as a result of previous nodes
-                        break;
-
-                    case Expr::Kind::STRING:
-                    case Expr::Kind::ENTITY_TYPES:
-                    case Expr::Kind::PROPERTY:
-                    case Expr::Kind::PATH:
-                    case Expr::Kind::INDEX:
-                    case Expr::Kind::LIST:
-                        throwError(
-                            fmt::format(
-                                "{} expressions not yet supported in RETURN statements.",
-                                ExprKindDescription::value(front->getKind())),
-                            front);
-                        break;
-
-                    case Expr::Kind::_SIZE:
-                        throwError("Unknown expression type.", front);
-                        break;
-                }
+                // Adds all to @ref _frontier that we can
+                treeWalkExpr(front);
             }
 
-            if (!exprEval->getExprs().empty()) {
-                evalSteps.emplace_back(exprEval);
-                exprEval = _tree->create<ExprEvalNode>();
+            if (!_exprEvalNode->getExprs().empty()) {
+                evalSteps.emplace_back(_exprEvalNode);
+                _exprEvalNode = _tree->create<ExprEvalNode>();
             }
 
             // Repopulate exploration queue with blockers
+            _aggrEvalNode = _tree->create<AggregateEvalNode>();
             while (!_blockers.empty()) {
                 const Expr* blocker = _blockers.front();
                 _blockers.pop();
 
-                // FIXME: Handle non-COUNT() blockers
-                const auto* aggr = dynamic_cast<const FunctionInvocationExpr*>(blocker);
-                bioassert(aggr, "Failed to cast blocking evaluation.");
-                bioassert(aggr->isAggregate(), "Blocker was not aggregate");
+                handleEvaluationBlocker(blocker);
+            }
 
-                AggregateEvalNode* aggrEval = _tree->create<AggregateEvalNode>();
-                aggrEval->addFunc(aggr);
-                evalSteps.emplace_back(aggrEval);
-
-                const auto* invok = aggr->getFunctionInvocation();
-                for (const Expr* arg : *invok->getArguments()) {
-                    _frontier.push(arg);
-                }
+            if (!_aggrEvalNode->getFuncs().empty()) {
+                evalSteps.emplace_back(_aggrEvalNode);
+                _aggrEvalNode = _tree->create<AggregateEvalNode>();
             }
         }
     }
@@ -444,6 +386,42 @@ void ReturnStmtGenerator::treeWalkExpr(const Expr* expr) {
 
         case Expr::Kind::_SIZE:
             throwError("Unknown expression type.", expr);
+        break;
+    }
+}
+
+void ReturnStmtGenerator::handleEvaluationBlocker(const Expr* expr) {
+    switch (expr->getKind()) {
+        case Expr::Kind::BINARY:
+        case Expr::Kind::UNARY:
+        case Expr::Kind::STRING:
+        case Expr::Kind::ENTITY_TYPES:
+        case Expr::Kind::PROPERTY:
+        case Expr::Kind::PATH:
+        case Expr::Kind::SYMBOL:
+        case Expr::Kind::LITERAL:
+        case Expr::Kind::INDEX:
+        case Expr::Kind::LIST:
+            throwError("Tried to handle non-blocking expression as blocker.", expr);
+        break;
+
+        case Expr::Kind::FUNCTION_INVOCATION: {
+            const auto* func = static_cast<const FunctionInvocationExpr*>(expr);
+            if (!func->isAggregate()) {
+                throwError("Tried to handle non-aggregate function as blocker.", expr);
+            }
+
+            _aggrEvalNode->addFunc(func);
+
+            const FunctionInvocation* invok = func->getFunctionInvocation();
+            for (const Expr* arg : *invok->getArguments()) {
+                _frontier.push(arg);
+            }
+        }
+        break;
+
+        case Expr::Kind::_SIZE:
+            throwError("Tried to handle unknown expression as blocker.", expr);
         break;
     }
 }
