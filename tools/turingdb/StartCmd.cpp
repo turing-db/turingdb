@@ -231,9 +231,6 @@ int StartCmd::execute() {
             }
         });
 
-        turingDB.init();
-        auto consoleSink = LogSetup::setupLogFileBacked((logsDir / "turingdb.log").get(), false);
-
         // Delete existing `default` graph if requested
         if (_resetDefault) {
             spdlog::info("Resetting default graph.");
@@ -248,6 +245,9 @@ int StartCmd::execute() {
                 spdlog::warn("Default graph not found.");
             }
         }
+
+        turingDB.init();
+        auto consoleSink = LogSetup::setupLogFileBacked((logsDir / "turingdb.log").get(), false);
 
         // Load graphs
         for (const auto& graphName : _graphsToLoad) {
