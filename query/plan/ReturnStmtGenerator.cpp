@@ -216,7 +216,11 @@ void ReturnStmtGenerator::treeWalkExpr(Expr* expr) {
         break;
 
         case Expr::Kind::LITERAL:
-            // Literal is generated in guarded call to @ref needsEvaluation
+            // Literals are added for eval in guarded call to @ref needsEvaluation
+        break;
+
+        case Expr::Kind::INDEX:
+            // Index ops are added for eval in guarded call to @ref needsEvaluation
         break;
 
         case Expr::Kind::FUNCTION_INVOCATION: {
@@ -230,12 +234,20 @@ void ReturnStmtGenerator::treeWalkExpr(Expr* expr) {
             }
         }
         break;
+
         case Expr::Kind::PROPERTY: {
             auto* prop = static_cast<PropertyExpr*>(expr);
+
+            // If we are reading from CSV, we get the value from the ExprEval...
+            const bool isCSVRead = prop->isStringTableHeaderAccess();
+            if (isCSVRead) {
+                break; // CSV reads added for eval in guarded call to @ref needsEvaluation
+            }
+
+            // ... otherwise, regular property; get from cache or generate.
             fetchOrGenerateProperty(prop);
         }
         break;
-
 
         case Expr::Kind::SYMBOL:
             // Symbol should already exist as a result of previous nodes
@@ -245,7 +257,6 @@ void ReturnStmtGenerator::treeWalkExpr(Expr* expr) {
         case Expr::Kind::ENTITY_TYPES:
             // TODO: Add a GetEntityType node (currently unused)
         case Expr::Kind::PATH:
-        case Expr::Kind::INDEX:
         case Expr::Kind::LIST:
             throwError(
                 fmt::format("{} expressions not yet supported in RETURN statements.",

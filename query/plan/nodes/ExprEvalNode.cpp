@@ -8,7 +8,6 @@
 
 #include "BioAssert.h"
 
-
 using namespace db;
 
 ExprEvalNode::ExprEvalNode()
@@ -53,8 +52,9 @@ bool ExprEvalNode::needsEvaluation(const Expr* expr) {
         const auto* propExpr = dynamic_cast<const PropertyExpr*>(expr);
         bioassert(propExpr, "Failed to cast PropertyExpr for evalutation.");
 
-        const bool needsEval = propExpr->isStringTableHeaderAccess();
+        const bool isCSVFieldAccess = propExpr->isStringTableHeaderAccess();
 
+        const bool needsEval = isCSVFieldAccess;
         return needsEval;
     }
 
