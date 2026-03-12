@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "RETURN COUNT(5)",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: count\n    `\"]\n    1[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v0\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->0",
+    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v0\n    `\"]\n    1[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: count\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1\n    1-->2",
     "result": "COUNT(5)\n1",
     "resultJson": "{\"header\":{\"column_names\":[\"COUNT(5)\"],\"column_types\":[\"UInt64\"]},\"data\":[[[1]]]}"
   },
