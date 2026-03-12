@@ -2,6 +2,7 @@
 
 #include <queue>
 #include <string_view>
+#include <variant>
 
 namespace db {
 
