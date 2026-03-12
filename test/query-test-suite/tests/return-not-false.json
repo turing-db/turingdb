@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "RETURN NOT FALSE",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (UNARY): v1\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (UNARY): v1\n__expr__ (LITERAL): v0\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
     "result": "NOT FALSE\ntrue",
     "resultJson": "{\"header\":{\"column_names\":[\"NOT FALSE\"],\"column_types\":[\"Bool\"]},\"data\":[[[true]]]}"
   },

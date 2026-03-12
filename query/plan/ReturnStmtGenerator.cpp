@@ -117,12 +117,6 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                 expandExpr(front);
             }
 
-            const bool needEvaluate = _exprEvalNode && !_exprEvalNode->getExprs().empty();
-            if (needEvaluate) {
-                _evalSteps.emplace_back(_exprEvalNode);
-                _exprEvalNode = nullptr;
-            }
-
             // Process all blocking expressions on the frontier
             while (!_blockers.empty()) {
                 const Expr* blocker = _blockers.front();
@@ -131,12 +125,29 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                 handleEvaluationBlocker(blocker);
             }
 
+            // We may have populated both @ref _aggrEvalNode and @ref _exprEvalNode.
+            // If we have no aggregates (blockers), do not add an ExprEvalNode becuase we
+            // may have more expressions to evaluate in following return items. If we have
+            // aggregates, add the ExprEval and then the blocking AggregatEval.
             const bool haveAggrs = _aggrEvalNode && !_aggrEvalNode->getFuncs().empty();
+            const bool needEvaluate = _exprEvalNode && !_exprEvalNode->getExprs().empty();
             if (haveAggrs) {
+                if (needEvaluate) {
+                    _evalSteps.emplace_back(_exprEvalNode);
+                    _exprEvalNode = nullptr; // Reset to denote we need a new node
+                }
                 _evalSteps.emplace_back(_aggrEvalNode);
-                _aggrEvalNode = nullptr;
+                _aggrEvalNode = nullptr; // Reset to denote we need a new node
             }
         }
+    }
+
+    // Since we only add ExprEvalNode if we have aggregates, we may have a remaning
+    // ExprEvalNode which was never added because there was no AggregateEval. Check, and
+    // add if needed.
+    const bool needEvaluate = _exprEvalNode && !_exprEvalNode->getExprs().empty();
+    if (needEvaluate) {
+        _evalSteps.emplace_back(_exprEvalNode);
     }
 
     if (!_evalSteps.empty()) {
