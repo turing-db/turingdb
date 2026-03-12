@@ -73,6 +73,30 @@ void ReturnStmtGenerator::prepare() {
     bioassert(_proj, "Failed to get projection for RETURN statement.");
 }
 
+/// We need to process all expressions in return items, and those in order by keys
+static void getReturnExpressions(const Projection* proj, std::vector<Expr*>& exprs) {
+    exprs.clear();
+    for (const Projection::ReturnItem& item : proj->items()) {
+         Expr* const* exprPtr = std::get_if<Expr*>(&item);
+        if (!exprPtr) {
+            continue;
+        }
+
+        Expr* returnExpression = *exprPtr;
+        exprs.push_back(returnExpression);
+    }
+
+    if (!proj->hasOrderBy()) {
+        return;
+    }
+
+    const auto orderByItems = proj->getOrderBy()->getItems();
+    for (const OrderByItem* item : orderByItems) {
+        Expr* orderByExpression = item->getExpr();
+        exprs.push_back(orderByExpression);
+    }
+}
+
 PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
     prepare();
 
@@ -82,13 +106,10 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
 
     _exprEvalNode = _tree->create<ExprEvalNode>();
 
-    for (const Projection::ReturnItem& returnItem : _proj->items()) {
-        Expr* const* exprPtr = std::get_if<Expr*>(&returnItem);
-        if (!exprPtr) {
-            continue;
-        }
+    std::vector<Expr*> returnExpressions;
+    getReturnExpressions(_proj, returnExpressions);
 
-        Expr* root = *exprPtr;
+    for (Expr* root : returnExpressions) {
         // BFS from root; blocked by aggregates
         _frontier = std::queue<Expr*> {};
         _blockers = std::queue<Expr*> {};
