@@ -8,6 +8,7 @@
 #include "Symbol.h"
 #include "decl/DeclContext.h"
 #include "expr/BinaryExpr.h"
+#include "expr/LiteralExpr.h"
 #include "expr/EntityTypeExpr.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
@@ -17,6 +18,7 @@
 #include "ExprDependencies.h"
 #include "nodes/ChangeNode.h"
 #include "nodes/CommitNode.h"
+#include "Literal.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/ReturnStmt.h"
@@ -201,6 +203,20 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
     // Generate read statements (optional)
     if (readStmts) {
         ReadStmtGenerator readGenerator(_ast, _view, _config, &_tree, _variables.get());
+
+        // Pass literal LIMIT to the read generator for join planning
+        if (returnStmt) {
+            const Projection* proj = returnStmt->getProjection();
+            if (proj && proj->hasLimit()) {
+                const Expr* limitExpr = proj->getLimit()->getExpr();
+                if (limitExpr->getKind() == Expr::Kind::LITERAL) {
+                    const auto* lit = static_cast<const LiteralExpr*>(limitExpr)->getLiteral();
+                    if (lit->getKind() == Literal::Kind::INTEGER) {
+                        readGenerator.setQueryLimit(static_cast<const IntegerLiteral*>(lit)->getValue());
+                    }
+                }
+            }
+        }
 
         for (const Stmt* stmt : readStmts->stmts()) {
             readGenerator.generateStmt(stmt);

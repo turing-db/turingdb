@@ -1,5 +1,7 @@
 #include "CardinalityEstimation.h"
 
+#include <algorithm>
+
 #include "reader/GraphReader.h"
 
 using namespace db;
@@ -17,9 +19,23 @@ size_t CardinalityEstimation::estimateNodeCount(const LabelSet& labelset) const 
     return reader.getNodeCountMatchingLabelset(labelset.handle());
 }
 
-bool CardinalityEstimation::isSmallCartesianProduct(const LabelSet& left,
-                                                     const LabelSet& right) const {
+bool CardinalityEstimation::shouldPreferCartesian(const LabelSet& left, const LabelSet& right, size_t queryLimit) const {
     const size_t leftCount = estimateNodeCount(left);
     const size_t rightCount = estimateNodeCount(right);
-    return leftCount * rightCount < SMALL_CARTESIAN_THRESHOLD;
+
+    // Small cartesian product is cheap enough without a hash join
+    if (leftCount * rightCount < SMALL_CARTESIAN_THRESHOLD) {
+        return true;
+    }
+
+    // With a small LIMIT, cartesian can terminate early while VHJ
+    // must process full chunks from both sides
+    if (queryLimit > 0 && queryLimit <= MAX_LIMIT_FOR_VHJ_HEURISTIC) {
+        const size_t largerSide = std::max(leftCount, rightCount);
+        if (largerSide > queryLimit * VHJ_LIMIT_RATIO) {
+            return true;
+        }
+    }
+
+    return false;
 }

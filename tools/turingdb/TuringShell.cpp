@@ -17,7 +17,6 @@
 #include <termcolor/termcolor.hpp>
 
 #include "TuringDB.h"
-#include "QueryConfig.h"
 #include "Graph.h"
 #include "SystemManager.h"
 #include "ChangeManager.h"
@@ -644,8 +643,7 @@ void TuringShell::processLine(std::string& line) {
             queryCallback(execCount++, df, table);
         };
 
-        QueryConfig queryConfig;
-        res = _turingDB.query(line, _graphName, _mem, &queryConfig, callback, _hash, _changeID);
+        res = _turingDB.query(line, _graphName, _mem, &_turingDB.getDefaultQueryConfig(), callback, _hash, _changeID);
     }
 
     checkShellContext();

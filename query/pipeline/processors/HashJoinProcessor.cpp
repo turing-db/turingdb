@@ -36,31 +36,18 @@ bool isNonNullKey(Column* col, size_t index) {
     }
 }
 
-// Key is the column's value type (e.g. string_view). The map's key type
-// may differ (e.g. std::string) so we accept the map via auto&.
-// Caller must ensure the key at index is non-null (via hasKey) for optionals.
+// Extracts the join key from the column as a lightweight value suitable for
+// map lookups. For string-like keys returns std::string_view (no allocation).
+// Caller must ensure the key at index is non-null (via isNonNullKey) for optionals.
 template <typename Key, bool IsOptional>
-auto findInMap(const auto& map, Column* col, size_t index) {
-    if constexpr (IsOptional) {
-        auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
-        return map.find(*(*typedCol)[index]);
-    } else {
-        auto* typedCol = static_cast<ColumnVector<Key>*>(col);
-        return map.find((*typedCol)[index]);
-    }
-}
-
-// Extracts the key from the column, converting string_view to std::string
-// so the map owns the key data.
-template <typename Key, bool IsOptional>
-auto extractKey(Column* col, size_t index) {
-    if constexpr (std::is_same_v<Key, std::string_view>) {
+auto extractKeyView(Column* col, size_t index) {
+    if constexpr (StringLike<Key>) {
         if constexpr (IsOptional) {
             auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
-            return std::string(*(*typedCol)[index]);
+            return std::string_view(*(*typedCol)[index]);
         } else {
             auto* typedCol = static_cast<const ColumnVector<Key>*>(col);
-            return std::string((*typedCol)[index]);
+            return std::string_view((*typedCol)[index]);
         }
     } else {
         if constexpr (IsOptional) {
@@ -73,9 +60,19 @@ auto extractKey(Column* col, size_t index) {
     }
 }
 
-template <typename Key, bool IsOptional>
-std::vector<RowOffset>& getMap(auto& map, Column* col, size_t index) {
-    return map[extractKey<Key, IsOptional>(col, index)];
+// Looks up or inserts the key in the map, returning the offset vector.
+// For string keys, uses transparent find to avoid allocation when the key exists.
+std::vector<RowOffset>& getMap(auto& map, const auto& key) {
+    using KeyType = std::decay_t<decltype(key)>;
+    if constexpr (std::is_same_v<KeyType, std::string_view>) {
+        const auto it = map.find(key);
+        if (it != map.end()) {
+            return it->second;
+        }
+        return map.emplace(std::string(key), std::vector<RowOffset>()).first->second;
+    } else {
+        return map[key];
+    }
 }
 
 // Copies a single value from inputColumn[rowIndex] into outputColumn at
@@ -385,7 +382,8 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
             continue;
         }
 
-        const auto it = findInMap<LeftKey, IsOptional>(_rightMap, leftCol, _leftInputIdx);
+        const auto leftKey = extractKeyView<LeftKey, IsOptional>(leftCol, _leftInputIdx);
+        const auto it = _rightMap.find(leftKey);
         if (it != _rightMap.end()) {
             const auto& rows = it->second;
             const auto& cols = leftDf->cols();
@@ -451,9 +449,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
         }
 
         // Create a hash table entry for the input
-        auto& offsetVec = getMap<LeftKey, IsOptional>(_leftMap,
-                                                       leftCol,
-                                                       _leftInputIdx);
+        auto& offsetVec = getMap(_leftMap, leftKey);
         offsetVec.emplace_back(_store.insertRow(leftDf,
                                                 _leftJoinKey,
                                                 _leftRowByteSize,
@@ -506,7 +502,8 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
             continue;
         }
 
-        const auto it = findInMap<RightKey, IsOptional>(_leftMap, rightCol, _rightInputIdx);
+        const auto rightKey = extractKeyView<RightKey, IsOptional>(rightCol, _rightInputIdx);
+        const auto it = _leftMap.find(rightKey);
         if (it != _leftMap.end()) {
             const auto& rows = it->second;
             const auto& cols = rightDf->cols();
@@ -564,9 +561,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
             totalRowsInserted += rowsToCopy;
         }
 
-        auto& offsetVec = getMap<RightKey, IsOptional>(_rightMap,
-                                                        rightCol,
-                                                        _rightInputIdx);
+        auto& offsetVec = getMap(_rightMap, rightKey);
 
         offsetVec.emplace_back(_store.insertRow(rightDf,
                                                 leftDf,

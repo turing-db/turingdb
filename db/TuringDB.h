@@ -3,6 +3,7 @@
 #include <string_view>
 
 #include "LockFile.h"
+#include "QueryConfig.h"
 #include "QueryStatus.h"
 #include "QueryCallbacks.h"
 #include "versioning/CommitHash.h"
@@ -15,7 +16,6 @@ class VectorDatabase;
 namespace db {
 
 class TuringConfig;
-class QueryConfig;
 class SystemManager;
 class LocalMemory;
 class JobSystem;
@@ -54,23 +54,18 @@ public:
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
 
-    SystemManager& getSystemManager() {
-        return *_systemManager;
-    }
+    const QueryConfig& getDefaultQueryConfig() const { return _defaultQueryConfig; }
 
-    JobSystem& getJobSystem() {
-        return *_jobSystem;
-    }
-
-    const ProcedureManager* getProcedures() const {
-        return _procedures.get();
-    }
-
+    SystemManager& getSystemManager() { return *_systemManager; }
+    JobSystem& getJobSystem() { return *_jobSystem; }
+    const ProcedureManager* getProcedures() const { return _procedures.get(); }
     ExtensionManager* getExtensions() { return _extensions.get(); }
+
     void stop();
 
 private:
     const TuringConfig* _config {nullptr};
+    QueryConfig _defaultQueryConfig;
     LockFile _lockFile;
 
     std::unique_ptr<SystemManager> _systemManager;
