@@ -80,14 +80,13 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         throwError("DISTINCT not yet supported.", _stmt);
     }
 
+    _exprEvalNode = _tree->create<ExprEvalNode>();
+
     for (const Projection::ReturnItem& returnItem : _proj->items()) {
         Expr* const* exprPtr = std::get_if<Expr*>(&returnItem);
         if (!exprPtr) {
             continue;
         }
-
-        // TODO: Can we reuse a single eval node for multiple independent statements?
-        _exprEvalNode = _tree->create<ExprEvalNode>();
 
         Expr* root = *exprPtr;
         // BFS from root; blocked by aggregates
