@@ -17,6 +17,8 @@ class GetEntityTypeCache;
 class Expr;
 class Projection;
 class CypherAST;
+class PropertyExpr;
+class GetPropertyWithNullNode;
 
 /**
  * @brief Helper class to wrap logic for generating the plan graph structure from a
@@ -43,6 +45,8 @@ public:
 
 private:
     using EvaluationQueue = std::queue<Expr*>;
+    using EvaluationStep =
+        std::variant<ExprEvalNode*, AggregateEvalNode*, GetPropertyWithNullNode*>;
 
     const CypherAST* _ast {nullptr};
 
@@ -52,6 +56,8 @@ private:
     PlanGraph* _tree {nullptr};
     PlanGraphNode* _prevNode {nullptr};
     PlanGraphVariables* _variables {nullptr};
+
+    std::vector<EvaluationStep> _evalSteps;
 
     ExprEvalNode* _exprEvalNode {nullptr};
     AggregateEvalNode* _aggrEvalNode {nullptr};
@@ -67,6 +73,8 @@ private:
     void treeWalkExpr(Expr* expr);
     static bool isEvaluationBlocker(const Expr* expr);
     void handleEvaluationBlocker(const Expr* expr);
+
+    void fetchOrGenerateProperty(PropertyExpr* prop);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = nullptr) const;
 };

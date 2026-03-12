@@ -80,10 +80,6 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         throwError("DISTINCT not yet supported.", _stmt);
     }
 
-    using EvaluationStep = std::variant<ExprEvalNode*, AggregateEvalNode*>;
-
-    std::vector<EvaluationStep> evalSteps;
-
     for (const Projection::ReturnItem& returnItem : _proj->items()) {
         Expr* const* exprPtr = std::get_if<Expr*>(&returnItem);
         if (!exprPtr) {
@@ -119,7 +115,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
             }
 
             if (!_exprEvalNode->getExprs().empty()) {
-                evalSteps.emplace_back(_exprEvalNode);
+                _evalSteps.emplace_back(_exprEvalNode);
                 _exprEvalNode = _tree->create<ExprEvalNode>();
             }
 
@@ -133,13 +129,13 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
             }
 
             if (!_aggrEvalNode->getFuncs().empty()) {
-                evalSteps.emplace_back(_aggrEvalNode);
+                _evalSteps.emplace_back(_aggrEvalNode);
                 _aggrEvalNode = _tree->create<AggregateEvalNode>();
             }
         }
     }
 
-    if (!evalSteps.empty()) {
+    if (!_evalSteps.empty()) {
         const auto addStepToPlan = [this](auto&& evalNode) {
             if (_prevNode) {
                 _prevNode->connectOut(evalNode);
@@ -148,11 +144,11 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         };
 
         {
-            const EvaluationStep& firstEvalStep = evalSteps.back();
+            const EvaluationStep& firstEvalStep = _evalSteps.back();
             std::visit(addStepToPlan, firstEvalStep);
         }
 
-        for (const EvaluationStep& evalStep : rv::reverse(evalSteps) | rv::drop(1)) {
+        for (const EvaluationStep& evalStep : rv::reverse(_evalSteps) | rv::drop(1)) {
             std::visit(addStepToPlan, evalStep);
         }
     }
@@ -236,30 +232,7 @@ void ReturnStmtGenerator::treeWalkExpr(Expr* expr) {
         break;
         case Expr::Kind::PROPERTY: {
             auto* prop = static_cast<PropertyExpr*>(expr);
-            const VarDecl* entityVar = prop->getEntityVarDecl();
-            const VarDecl* propVar = prop->getExprVarDecl();
-            const std::string_view propName = prop->getPropName();
-
-            if (!propVar) {
-                throwError("Property had no variable declaration.", prop);
-            }
-
-            if (!entityVar) {
-                throwError("Property had no enitity variable declation.", prop);
-            }
-
-            const auto* cached = _propCache.cacheOrRetrieve(entityVar, propVar, propName);
-            if (cached) {
-                // GetProperty is already present in the cache. Map the existing propExpr
-                // to the current one
-                if (!cached->_exprDecl) {
-                    throwError("Cached property had no expression variable.", prop);
-                }
-
-                prop->setExprVarDecl(cached->_exprDecl);
-                break;
-            }
-            // TODO: Add a get properties
+            fetchOrGenerateProperty(prop);
         }
         break;
 
@@ -323,6 +296,38 @@ void ReturnStmtGenerator::handleEvaluationBlocker(const Expr* expr) {
             throwError("Tried to handle unknown expression as blocker.", expr);
         break;
     }
+}
+
+void ReturnStmtGenerator::fetchOrGenerateProperty(PropertyExpr* prop) {
+    const VarDecl* entityVar = prop->getEntityVarDecl();
+    const VarDecl* propVar = prop->getExprVarDecl();
+    const std::string_view propName = prop->getPropName();
+
+    if (!propVar) {
+        throwError("Property had no variable declaration.", prop);
+    }
+
+    if (!entityVar) {
+        throwError("Property had no enitity variable declation.", prop);
+    }
+
+    const auto* cached = _propCache.cacheOrRetrieve(entityVar, propVar, propName);
+    if (cached) {
+        if (!cached->_exprDecl) {
+            throwError("Cached property had no expression variable.", prop);
+        }
+        // GetProperty is already present in the cache. Map the existing propExpr
+        // to the current one
+        prop->setExprVarDecl(cached->_exprDecl);
+        return;
+    }
+
+    // Otherwise we need to fetch this property just for the return, add a node and update
+    // the propExpr.
+    auto* getProps = _tree->create<GetPropertyWithNullNode>(propName);
+    getProps->setExpr(prop);
+    getProps->setEntityVarDecl(entityVar);
+    _evalSteps.emplace_back(getProps);
 }
 
 void ReturnStmtGenerator::throwError(std::string_view msg, const void* obj) const {
