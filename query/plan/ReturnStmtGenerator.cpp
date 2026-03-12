@@ -95,6 +95,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         _frontier.push(root);
 
         while (!_frontier.empty() || !_blockers.empty()) {
+            // Process all non-blocking expressions on the frontier
             while (!_frontier.empty()) {
                 Expr* front = _frontier.front();
                 _frontier.pop();
@@ -109,8 +110,8 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                     _exprEvalNode->addExpr(front);
                 }
 
-                // Adds all to @ref _frontier that we can
-                treeWalkExpr(front);
+                // Adds all children of @ref front to @ref _frontier, to continue BFS
+                expandExpr(front);
             }
 
             if (!_exprEvalNode->getExprs().empty()) {
@@ -118,8 +119,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                 _exprEvalNode = _tree->create<ExprEvalNode>();
             }
 
-            // Repopulate exploration queue with blockers
-            _aggrEvalNode = _tree->create<AggregateEvalNode>();
+            // Process all blocking expressions on the frontier
             while (!_blockers.empty()) {
                 const Expr* blocker = _blockers.front();
                 _blockers.pop();
@@ -196,7 +196,7 @@ bool ReturnStmtGenerator::isEvaluationBlocker(const Expr* expr) {
     return isBlocker;
 }
 
-void ReturnStmtGenerator::treeWalkExpr(Expr* expr) {
+void ReturnStmtGenerator::expandExpr(Expr* expr) {
     switch (expr->getKind()) {
         case Expr::Kind::BINARY: {
             const auto* bin = static_cast<const BinaryExpr*>(expr);

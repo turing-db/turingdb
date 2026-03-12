@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "RETURN 4 + 5",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (BINARY): v2\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (BINARY): v2\n__expr__ (LITERAL): v0\n__expr__ (LITERAL): v1\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
     "result": "4 + 5\n9",
     "resultJson": "{\"header\":{\"column_names\":[\"4 + 5\"],\"column_types\":[\"Int64\"]},\"data\":[[[9]]]}"
   },
