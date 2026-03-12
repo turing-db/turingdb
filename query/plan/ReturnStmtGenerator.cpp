@@ -107,6 +107,9 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                 }
 
                 if (ExprEvalNode::needsEvaluation(front)) {
+                    if (!_exprEvalNode) {
+                        _exprEvalNode = _tree->create<ExprEvalNode>();
+                    }
                     _exprEvalNode->addExpr(front);
                 }
 
@@ -116,7 +119,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
 
             if (!_exprEvalNode->getExprs().empty()) {
                 _evalSteps.emplace_back(_exprEvalNode);
-                _exprEvalNode = _tree->create<ExprEvalNode>();
+                _exprEvalNode = nullptr;
             }
 
             // Process all blocking expressions on the frontier
@@ -127,9 +130,9 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                 handleEvaluationBlocker(blocker);
             }
 
-            if (!_aggrEvalNode->getFuncs().empty()) {
+            if (_aggrEvalNode && !_aggrEvalNode->getFuncs().empty()) {
                 _evalSteps.emplace_back(_aggrEvalNode);
-                _aggrEvalNode = _tree->create<AggregateEvalNode>();
+                _aggrEvalNode = nullptr;
             }
         }
     }
@@ -289,6 +292,10 @@ void ReturnStmtGenerator::handleEvaluationBlocker(const Expr* expr) {
             // Only aggregate functions are blockers
             if (!func->isAggregate()) {
                 throwError("Tried to handle non-aggregate function as blocker.", expr);
+            }
+
+            if (!_aggrEvalNode) {
+                _aggrEvalNode = _tree->create<AggregateEvalNode>();
             }
 
             // Add the function to be evaluated
