@@ -152,7 +152,6 @@ VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchRe
                 break;
             }
 
-            fmt::println("Found result {}, distance {}", indices[i], distances[i]);
             results->addResult(signature, shardRef._ids.at(indices[i]), distances[i]);
         }
     }
