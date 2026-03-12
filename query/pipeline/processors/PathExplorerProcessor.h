@@ -18,13 +18,23 @@
 namespace db {
 
 class Iterator;
+class GetEdgesChunkWriter;
+class GetOutEdgesChunkWriter;
+class GetInEdgesChunkWriter;
 
+template <PathExplorationDir Dir>
 class PathExplorerProcessor : public Processor {
 public:
     static PathExplorerProcessor* create(PipelineV2* pipeline,
-                                         PathExplorationDir dir,
                                          uint64_t minHops,
                                          uint64_t maxHops);
+
+    using BFSChunkWriter = std::conditional_t<
+        Dir == PathExplorationDir::BOTH,
+        GetEdgesChunkWriter,
+        std::conditional_t<Dir == PathExplorationDir::FORWARD,
+                           GetOutEdgesChunkWriter,
+                           GetInEdgesChunkWriter>>;
 
     std::string describe() const override;
 
@@ -69,17 +79,15 @@ private:
 
     struct FrontierEntry {
         NodeID node;
-        EdgeID edge;                 // single edge that led to this node
+        EdgeID edge;             // single edge that led to this node
         size_t parentIdx {ROOT}; // index into _allEntries, -1 for root
         size_t sourceIdx {ROOT}; // original input source index
     };
 
-    PathExplorerProcessor(PathExplorationDir dir,
-                          uint64_t minHops,
+    PathExplorerProcessor(uint64_t minHops,
                           uint64_t maxHops);
     ~PathExplorerProcessor() override;
 
-    PathExplorationDir _dir {PathExplorationDir::Both};
     uint64_t _minHops {0};
     uint64_t _maxHops {0};
 
@@ -97,7 +105,7 @@ private:
     ColumnEdgeIDs* _bfsEdges {nullptr};
     ColumnNodeIDs* _bfsIntermediates {nullptr};
     ColumnIndices* _bfsIndices {nullptr};
-    std::unique_ptr<Iterator> _bfsWriter;
+    std::unique_ptr<BFSChunkWriter> _bfsWriter;
 
     bool _bfsInitialized {false};
     bool _depthNeedsSetup {true};
