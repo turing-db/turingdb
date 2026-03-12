@@ -117,7 +117,8 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                 expandExpr(front);
             }
 
-            if (!_exprEvalNode->getExprs().empty()) {
+            const bool needEvaluate = _exprEvalNode && !_exprEvalNode->getExprs().empty();
+            if (needEvaluate) {
                 _evalSteps.emplace_back(_exprEvalNode);
                 _exprEvalNode = nullptr;
             }
@@ -130,7 +131,8 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
                 handleEvaluationBlocker(blocker);
             }
 
-            if (_aggrEvalNode && !_aggrEvalNode->getFuncs().empty()) {
+            const bool haveAggrs = _aggrEvalNode && !_aggrEvalNode->getFuncs().empty();
+            if (haveAggrs) {
                 _evalSteps.emplace_back(_aggrEvalNode);
                 _aggrEvalNode = nullptr;
             }
@@ -340,11 +342,13 @@ void ReturnStmtGenerator::fetchOrGenerateProperty(PropertyExpr* prop) {
     }
 
     // Otherwise we need to fetch this property just for the return, add a node and update
-    // the propExpr.
-    auto* getProps = _tree->create<GetPropertyWithNullNode>(propName);
+    // the propExpr. Place the GetProperties immediately: this ensures all properties are
+    // present for any expression evaluations that may use them.
+    auto* getProps = _tree->newOut<GetPropertyWithNullNode>(_prevNode, propName);
+    _prevNode = getProps;
+
     getProps->setExpr(prop);
     getProps->setEntityVarDecl(entityVar);
-    _evalSteps.emplace_back(getProps);
 }
 
 void ReturnStmtGenerator::throwError(std::string_view msg, const void* obj) const {
