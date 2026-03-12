@@ -76,8 +76,8 @@ public:
     PipelineEdgeOutputInterface& addGetInEdges();
     PipelineEdgeOutputInterface& addGetEdges();
 
-    PipelineBlockOutputInterface& addPathExplorer(PathExplorationDir,
-                                                  int64_t minHops,
+    template <PathExplorationDir Dir>
+    PipelineBlockOutputInterface& addPathExplorer(int64_t minHops,
                                                   int64_t maxHops);
 
     PipelineOutputInterface& projectEdgesOnOtherIDs() {

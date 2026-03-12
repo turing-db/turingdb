@@ -449,13 +449,13 @@ PlanGraphNode* ReadStmtGenerator::generatePatternElementVariableLengthPath(PlanG
 
     switch (edge->getDirection()) {
         case EdgePattern::Direction::Undirected: {
-            expandNode->setDir(PathExplorationDir::Both);
+            expandNode->setDir(PathExplorationDir::BOTH);
         } break;
         case EdgePattern::Direction::Backward: {
-            expandNode->setDir(PathExplorationDir::Backward);
+            expandNode->setDir(PathExplorationDir::BACKWARD);
         } break;
         case EdgePattern::Direction::Forward: {
-            expandNode->setDir(PathExplorationDir::Forward);
+            expandNode->setDir(PathExplorationDir::FORWARD);
         } break;
     }
 

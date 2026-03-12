@@ -327,11 +327,10 @@ PipelineEdgeOutputInterface& PipelineBuilder::addGetEdges() {
     return output;
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer(PathExplorationDir dir,
-                                                               int64_t minHops,
-                                                               int64_t maxHops) {
+template <PathExplorationDir Dir>
+PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer(int64_t minHops, int64_t maxHops) {
 
-    auto* proc = PathExplorerProcessor::create(_pipeline, dir, minHops, maxHops);
+    auto* proc = PathExplorerProcessor<Dir>::create(_pipeline, minHops, maxHops);
 
     PipelineNodeInputInterface& input = proc->input();
     PipelineBlockOutputInterface& output = proc->output();
@@ -1190,3 +1189,7 @@ template PipelineBlockOutputInterface& PipelineBuilder::addShortestPath<db::type
                                                                                           const PropertyType&,
                                                                                           NamedColumn*&,
                                                                                           NamedColumn*&);
+
+template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::BOTH>(int64_t, int64_t);
+template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::FORWARD>(int64_t, int64_t);
+template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::BACKWARD>(int64_t, int64_t);

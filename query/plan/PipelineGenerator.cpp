@@ -1540,21 +1540,36 @@ PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowV
 PipelineOutputInterface* PipelineGenerator::translatePathExplorerNode(PathExplorerNode* node) {
     const uint64_t minHops = static_cast<uint64_t>(node->getMinHops());
     const uint64_t maxHops = static_cast<uint64_t>(node->getMaxHops());
-    _builder.addPathExplorer(node->getDir(), minHops, maxHops);
 
-    const auto* proc = dynamic_cast<PathExplorerProcessor*>(_builder.getLastProc());
-    bioassert(proc, "Failed to cast last proc to PathExplorerProcessor");
+    const auto makeProcessor = [&]<PathExplorationDir Dir>() {
+        _builder.addPathExplorer<Dir>(minHops, maxHops);
 
-    const VarDecl* edgeDecl = node->getEdgeDecl();
-    const VarDecl* targetDecl = node->getTargetDecl();
+        const auto* proc = dynamic_cast<PathExplorerProcessor<Dir>*>(_builder.getLastProc());
+        bioassert(proc, "Failed to cast last proc to PathExplorerProcessor");
 
-    NamedColumn* pathsCol = proc->getOutputPathsColumn();
-    pathsCol->rename(edgeDecl->getName());
-    _declToColumn[edgeDecl] = pathsCol->getTag();
+        const VarDecl* edgeDecl = node->getEdgeDecl();
+        const VarDecl* targetDecl = node->getTargetDecl();
 
-    NamedColumn* sourceCol = proc->getOutputTargetsColumn();
-    sourceCol->rename(targetDecl->getName());
-    _declToColumn[targetDecl] = sourceCol->getTag();
+        NamedColumn* pathsCol = proc->getOutputPathsColumn();
+        pathsCol->rename(edgeDecl->getName());
+        _declToColumn[edgeDecl] = pathsCol->getTag();
+
+        NamedColumn* sourceCol = proc->getOutputTargetsColumn();
+        sourceCol->rename(targetDecl->getName());
+        _declToColumn[targetDecl] = sourceCol->getTag();
+    };
+
+    switch (node->getDir()) {
+        case PathExplorationDir::BOTH:
+            makeProcessor.template operator()<PathExplorationDir::BOTH>();
+        break;
+        case PathExplorationDir::FORWARD:
+            makeProcessor.template operator()<PathExplorationDir::FORWARD>();
+        break;
+        case PathExplorationDir::BACKWARD:
+            makeProcessor.template operator()<PathExplorationDir::BACKWARD>();
+        break;
+    }
 
     return _builder.getPendingOutputInterface();
 }

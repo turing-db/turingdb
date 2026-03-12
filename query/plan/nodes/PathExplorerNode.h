@@ -32,7 +32,7 @@ public:
     const VarDecl* getTargetDecl() const { return _targetDecl; }
 
 private:
-    PathExplorationDir _dir {PathExplorationDir::Both};
+    PathExplorationDir _dir {PathExplorationDir::BOTH};
     const VarDecl* _edgeDecl {nullptr};
     const VarDecl* _targetDecl {nullptr};
     uint64_t _minHops {0};
