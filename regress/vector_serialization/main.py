@@ -20,12 +20,13 @@ def spawn_turingdb():
 
 def stop_turingdb(proc):
     print(f"- {GREEN}Stopping turingdb{NC}")
-    subprocess.call('pkill -9 turingdb', shell=True)
+    subprocess.call("exec turingdb stop -turing-dir .turing", shell=True)
     # Wait for port to be released
     import socket
+
     for _ in range(100):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(('127.0.0.1', 6666)) != 0:
+            if s.connect_ex(("127.0.0.1", 6666)) != 0:
                 break
         time.sleep(0.1)
 
@@ -39,7 +40,7 @@ def wait_ready(client):
         except:
             time.sleep(1)
 
-    raise RuntimeError('Failed to connect to turingdb')
+    raise RuntimeError("Failed to connect to turingdb")
 
 
 def test_vector_search(client, query_vector, expected_first_id, description):
@@ -50,7 +51,7 @@ def test_vector_search(client, query_vector, expected_first_id, description):
     result = client.query(query)
 
     # Result should have 'ids' column
-    ids = list(result['ids'])
+    ids = list(result["ids"])
 
     if len(ids) == 0:
         raise Exception(f"{description}: Expected results but got empty")
@@ -91,12 +92,12 @@ if __name__ == "__main__":
         indexes = get_vector_indexes(client)
         print(f"  Vector indexes: {indexes}")
 
-        names = list(indexes['name'])
-        if 'test_vectors' not in names:
+        names = list(indexes["name"])
+        if "test_vectors" not in names:
             raise Exception("Vector index 'test_vectors' was not created")
 
-        dimensions = list(indexes['dimension'])
-        idx = names.index('test_vectors')
+        dimensions = list(indexes["dimension"])
+        idx = names.index("test_vectors")
         if dimensions[idx] != 8:
             raise Exception(f"Expected dimension 8, got {dimensions[idx]}")
 
@@ -115,10 +116,7 @@ if __name__ == "__main__":
 
         # Query for vector closest to [0,0,0,0,0,0,0,0] - should be ID 0
         results_before_1 = test_vector_search(
-            client,
-            "[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]",
-            0,
-            "Query for origin"
+            client, "[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]", 0, "Query for origin"
         )
 
         # Query for vector closest to [1,0,0,0,0,0,0,0] - should be ID 1
@@ -126,7 +124,7 @@ if __name__ == "__main__":
             client,
             "[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]",
             1,
-            "Query for [1,0,0,...]"
+            "Query for [1,0,0,...]",
         )
 
         # Query for vector closest to [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8] - should be ID 6
@@ -134,7 +132,7 @@ if __name__ == "__main__":
             client,
             "[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]",
             6,
-            "Query for [0.1,0.2,...]"
+            "Query for [0.1,0.2,...]",
         )
 
         # Restart turingdb
@@ -149,14 +147,16 @@ if __name__ == "__main__":
         indexes = get_vector_indexes(client)
         print(f"  Vector indexes after restart: {indexes}")
 
-        names = list(indexes['name'])
-        if 'test_vectors' not in names:
+        names = list(indexes["name"])
+        if "test_vectors" not in names:
             raise Exception("Vector index 'test_vectors' not found after restart")
 
-        dimensions = list(indexes['dimension'])
-        idx = names.index('test_vectors')
+        dimensions = list(indexes["dimension"])
+        idx = names.index("test_vectors")
         if dimensions[idx] != 8:
-            raise Exception(f"Expected dimension 8 after restart, got {dimensions[idx]}")
+            raise Exception(
+                f"Expected dimension 8 after restart, got {dimensions[idx]}"
+            )
 
         print("  Index metadata persisted correctly")
 
@@ -164,24 +164,21 @@ if __name__ == "__main__":
         print(f"- {BLUE}Testing vector search after restart{NC}")
 
         results_after_1 = test_vector_search(
-            client,
-            "[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]",
-            0,
-            "Query for origin"
+            client, "[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]", 0, "Query for origin"
         )
 
         results_after_2 = test_vector_search(
             client,
             "[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]",
             1,
-            "Query for [1,0,0,...]"
+            "Query for [1,0,0,...]",
         )
 
         results_after_3 = test_vector_search(
             client,
             "[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]",
             6,
-            "Query for [0.1,0.2,...]"
+            "Query for [0.1,0.2,...]",
         )
 
         # Verify results match
