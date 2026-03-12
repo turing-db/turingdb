@@ -3,7 +3,6 @@
 #include <nlohmann/json.hpp>
 
 #include "TuringDB.h"
-#include "QueryConfig.h"
 #include "Graph.h"
 #include "JsonEncoder.h"
 #include "reader/GraphReader.h"
@@ -1396,6 +1395,5 @@ void DBServerProcessor::queryImpl(std::string_view query,
         encoder.finish();
     });
 
-    QueryConfig queryConfig;
-    _db.query(query, graphName, &mem, &queryConfig, queryCallbacks, commit, change);
+    _db.query(query, graphName, &mem, &_db.getDefaultQueryConfig(), queryCallbacks, commit, change);
 }

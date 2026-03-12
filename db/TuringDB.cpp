@@ -134,6 +134,13 @@ void TuringDB::init() {
     SystemEventHandler::setOnStop([this] {
         _config->getOnStopRequest()();
     });
+
+    // Configure default query config from environment
+    const char* vhjEnv = getenv("TURING_VALUE_HASH_JOIN");
+    if (vhjEnv) {
+        const bool enabled = std::string(vhjEnv) != "0";
+        _defaultQueryConfig.getPlanGenConfig().setUseValueHashJoin(enabled);
+    }
 }
 
 QueryStatus TuringDB::query(std::string_view query,

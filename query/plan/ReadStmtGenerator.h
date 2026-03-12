@@ -81,6 +81,7 @@ public:
                                 const VarDecl* pathDecl);
 
     void setIsStandaloneCall(bool hasReturn) { _isStandaloneCall = hasReturn; }
+    void setQueryLimit(size_t limit) { _queryLimit = limit; }
 
 private:
     const CypherAST* _ast {nullptr};
@@ -91,6 +92,7 @@ private:
     PlanGraphVariables* _variables {nullptr};
     std::unique_ptr<PlanGraphTopology> _topology;
     bool _isStandaloneCall {false};
+    size_t _queryLimit {0};
     std::unordered_set<const VarDecl*> _edgesInPattern;
 
     void generateDependency(PlanGraphNode* producer, Expr* rawExpr);

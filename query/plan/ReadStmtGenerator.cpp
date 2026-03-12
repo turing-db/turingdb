@@ -753,7 +753,7 @@ bool ReadStmtGenerator::tryPlaceValueHashJoin(Predicate* pred,
             }
 
             CardinalityEstimation estimation(_graphView);
-            if (estimation.isSmallCartesianProduct(leftLabels, rightLabels)) {
+            if (estimation.shouldPreferCartesian(leftLabels, rightLabels, _queryLimit)) {
                 return false;
             }
         }

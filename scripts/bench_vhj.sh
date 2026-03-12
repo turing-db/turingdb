@@ -157,7 +157,7 @@ echo "--------------------------------------------------------------"
 echo "  WITHOUT value hash join (CartesianProduct + Filter)"
 echo "--------------------------------------------------------------"
 stop_turingdb
-unset TURING_VALUE_HASH_JOIN
+export TURING_VALUE_HASH_JOIN=0
 start_turingdb
 
 MEDIANS_WITHOUT=()
