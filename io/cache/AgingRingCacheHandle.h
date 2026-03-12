@@ -62,6 +62,9 @@ public:
     Payload& get() noexcept { return *_entry->_payload; }
     Payload* operator->() noexcept { return _entry->_payload.get(); }
     Payload& operator*() noexcept { return get(); }
+    const Payload& get() const noexcept { return *_entry->_payload; }
+    const Payload* operator->() const noexcept { return _entry->_payload.get(); }
+    const Payload& operator*() const noexcept { return get(); }
 
     explicit operator bool() const noexcept { return _entry != nullptr; }
 

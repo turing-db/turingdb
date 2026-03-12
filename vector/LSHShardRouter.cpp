@@ -29,6 +29,10 @@ void LSHShardRouter::initialize() {
     }
 }
 
+void LSHShardRouter::registerShardSignature(LSHSignature signature) {
+    _instantiatedShardSignatures.emplace(signature);
+}
+
 LSHSignature LSHShardRouter::getSignature(std::span<const float> vector) const {
     LSHSignature signature = 0;
     float dot = 0.0f;

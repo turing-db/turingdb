@@ -102,6 +102,7 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
 
         // Use the actual index (signature) where data is stored
         {
+            _shardRouter->registerShardSignature(signature);
             VecLibShardAccessor shard = _shardCache->getShard(_metadata, signature);
             VecLibShard& shardRef = shard.get();
 
@@ -113,13 +114,9 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
             // Add vectors to index
             shardRef._index->add(data._externalIDs.size(), data._embeddings.data());
         }
-
-        _shardCache->updateMemUsage();
     }
 
     _metadata._modifiedAt = Clock::now().time_since_epoch().count();
-
-    _shardCache->flush();
 
     return {};
 }
@@ -163,6 +160,15 @@ VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchRe
     results->finishSearch(maxResultCount);
 
     return {};
+}
+
+void VecLib::evictAllShards() {
+    const auto& shardSignatures = _shardRouter->getInstantiatedShardSignatures();
+
+    for (const LSHSignature sig : shardSignatures) {
+        const ShardIdentifier id(_metadata._id, sig);
+        _shardCache->evictShard(id);
+    }
 }
 
 void VecLib::prepareCreateBatch(BatchVectorCreate* batch) {

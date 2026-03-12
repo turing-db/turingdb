@@ -102,7 +102,7 @@ VectorResult<void> VectorDatabase::deleteLibrary(std::string_view libName) {
 
         // Perform the deletion
 
-        _shardCache->evictLibraryShards(libID);
+        lib->evictAllShards();
 
         if (auto res = _storageManager->deleteLibraryStorage(libID); !res) {
             return nonstd::make_unexpected(res.error());

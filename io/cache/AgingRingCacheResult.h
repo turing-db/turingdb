@@ -6,6 +6,7 @@
 enum class AgingRingCacheErrorCode : uint8_t {
     UNKNOWN = 0,
     TERMINATING,
+    COULD_NOT_EVICT,
     COULD_NOT_LOAD,
     NOTHING_TO_EVICT,
 
@@ -15,6 +16,7 @@ enum class AgingRingCacheErrorCode : uint8_t {
 using AgingRingCacheErrorTypeDescription = EnumToString<AgingRingCacheErrorCode>::Create<
     EnumStringPair<AgingRingCacheErrorCode::UNKNOWN, "Unknown">,
     EnumStringPair<AgingRingCacheErrorCode::TERMINATING, "Terminating">,
+    EnumStringPair<AgingRingCacheErrorCode::COULD_NOT_EVICT, "Could not evict entry">,
     EnumStringPair<AgingRingCacheErrorCode::COULD_NOT_LOAD, "Could not load entry">,
     EnumStringPair<AgingRingCacheErrorCode::NOTHING_TO_EVICT, "Nothing to evict">>;
 
