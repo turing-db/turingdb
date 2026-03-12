@@ -97,6 +97,8 @@ public:
 
     [[nodiscard]] VectorResult<void> search(const VectorSearchQuery* query, VectorSearchResult* results);
 
+    void evictAllShards();
+
     void prepareCreateBatch(BatchVectorCreate* batch);
 
     [[nodiscard]] VecLibID id() const { return _metadata._id; }

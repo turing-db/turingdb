@@ -18,12 +18,12 @@ template <typename Key,
     requires std::is_default_constructible_v<Payload>
 class AgingRingCache {
 public:
-    using OnLoadFn = AgingRingCacheResult<void> (*)(const Key&, Payload&);
-    using OnEvictFn = AgingRingCacheResult<void> (*)(const Key&, const Payload&);
+    using OnLoadFn = bool (*)(const Key&, Payload&, void*);
+    using OnEvictFn = bool (*)(const Key&, Payload&);
     using CalculateMemoryUsageFn = size_t (*)(const Payload&);
 
-    using OnLoadCallback = std::function<AgingRingCacheResult<void>(const Key&, Payload&)>;
-    using OnEvictCallback = std::function<AgingRingCacheResult<void>(const Key&, const Payload&)>;
+    using OnLoadCallback = std::function<bool(const Key&, Payload&, void*)>;
+    using OnEvictCallback = std::function<bool(const Key&, Payload&)>;
     using CalculateMemoryUsageCallback = std::function<size_t(const Payload&)>;
 
     using Entry = AgingRingCacheEntry<Key, Payload, Hash, Equal>;
@@ -59,7 +59,8 @@ public:
         _maxMemUsage = maxMemUsage;
     }
 
-    AgingRingCacheResult<Handle> acquire(const Key& key) {
+    template <typename... Args>
+    AgingRingCacheResult<Handle> acquire(const Key& key, void* data = nullptr) {
         for (;;) {
             std::unique_lock lock(_mutex);
 
@@ -89,7 +90,7 @@ public:
                 _inFlightIoCount++;
 
                 lock.unlock();
-                const auto loadRes = _onLoad(key, *payloadPtr);
+                const auto loadRes = _onLoad(key, *payloadPtr, data);
                 lock.lock();
 
                 onIoFinishedLocked();
@@ -99,7 +100,7 @@ public:
                     _map.erase(key);
                     _stateCv.notify_all();
 
-                    return loadRes.get_unexpected();
+                    return AgingRingCacheError::result(AgingRingCacheErrorCode::COULD_NOT_LOAD);
                 }
 
                 // If terminating, remove the entry and return the error
@@ -224,11 +225,59 @@ public:
             _onEvict(*victimKey, **victimPayload);
 
             std::unique_lock lock(_mutex);
+
+            // Find the entry again since the map may be have been modified
+            // during the eviction callback execution (invalidated iterators)
             auto it = _map.find(*victimKey);
             if (it != _map.end()) {
                 _map.erase(it);
             }
         }
+    }
+
+    /** @brief Evicts a single entry from the cache. */
+    void tryEvict(const Key& key) {
+        std::unique_lock lock(_mutex);
+
+        auto it = _map.find(key);
+        if (it == _map.end()) {
+            return;
+        }
+
+        Entry& entry = it->second;
+        bioassert(entry._state == AgingRingCacheState::EVICTING, "Unexpected cache entry state");
+        Payload& victimPayload = *entry._payload;
+        _inFlightIoCount++;
+
+        lock.unlock();
+        const auto evictRes = _onEvict(key, victimPayload);
+        lock.lock();
+
+        onIoFinishedLocked();
+
+        if (!evictRes) {
+            // Put back the victim in the cache since the eviction failed and return an error
+
+            auto it = _map.find(key);
+            if (it == _map.end()) {
+                // Should never happen, entry disappeared while we were saving it
+                return;
+            }
+
+            Entry& entry = it->second;
+            putInRingLocked(key, entry);
+
+            return;
+        }
+
+        it = _map.find(key);
+        if (it == _map.end()) {
+            // Should never happen, entry disappeared while we were erasing it
+            return;
+        }
+
+        _map.erase(it);
+        _stateCv.notify_all();
     }
 
 private:
@@ -277,12 +326,12 @@ private:
     uint32_t _inFlightIoCount {0};
 
     /** @brief Default invalid payload callback. */
-    static constexpr const OnLoadFn _invalidOnLoad = [](const Key&, Payload&) -> AgingRingCacheResult<void> {
+    static constexpr const OnLoadFn _invalidOnLoad = [](const Key&, Payload&, void*) -> bool {
         throw std::runtime_error("AgingRingCache error: On load callback is not set");
     };
 
     /** @brief Default invalid payload callback. */
-    static constexpr const OnEvictFn _invalidOnEvict = [](const Key&, const Payload&) -> AgingRingCacheResult<void> {
+    static constexpr const OnEvictFn _invalidOnEvict = [](const Key&, Payload&) -> bool {
         throw std::runtime_error("AgingRingCache error: On evict callback is not set");
     };
 
@@ -383,7 +432,7 @@ private:
                 Entry& entry = it->second;
                 putInRingLocked(*victimKey, entry);
 
-                return evictRes.get_unexpected();
+                return AgingRingCacheError::result(AgingRingCacheErrorCode::COULD_NOT_EVICT);
             }
 
             // Step 3: erase the victim from the map
@@ -447,7 +496,7 @@ private:
                 _clockHand = _ring.end();
             }
 
-            return key;
+            return it->first;
         }
 
         // No suitable victim found
@@ -478,7 +527,7 @@ private:
                     _ring.erase(it);
                 }
 
-                return key;
+                return mapIt->first;
             }
         }
         return std::nullopt;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <set>
 #include <span>
 #include <vector>
 #include <stdint.h>
@@ -22,8 +23,16 @@ public:
 
     void initialize();
 
+    void registerShardSignature(LSHSignature signature);
+
     LSHSignature getSignature(std::span<const float> vector) const;
-    void getSearchSignatures(std::span<const float> vector, std::vector<LSHSignature>& signatures) const;
+
+    void getSearchSignatures(std::span<const float> vector,
+                             std::vector<LSHSignature>& signatures) const;
+
+    const std::set<LSHSignature>& getInstantiatedShardSignatures() const {
+        return _instantiatedShardSignatures;
+    }
 
 private:
     friend class LSHShardRouterLoader;
@@ -32,6 +41,7 @@ private:
     size_t _dim {0};
     uint8_t _nbits {0};
     std::vector<std::vector<float>> _hyperplanes;
+    std::set<LSHSignature> _instantiatedShardSignatures;
 };
 
 }

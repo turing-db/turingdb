@@ -21,43 +21,48 @@ VectorResult<void> LSHShardRouterLoader::load(LSHShardRouter& router) {
         return VectorError::result<void>(VectorErrorCode::ReaderNotInitialized);
     }
 
+    const size_t fileSize = _reader.file().getInfo()._size;
+    size_t remaining = fileSize;
+
     _reader.read();
 
     if (_reader.errorOccured()) {
         return VectorError::result<void>(VectorErrorCode::CouldNotLoadShardRouterFile, _reader.error());
     }
 
-    const fs::ByteBuffer& buffer = _reader.getBuffer();
-
     fs::ByteBufferIterator it = _reader.iterateBuffer();
     CHECK_VALID(it, VectorErrorCode::ShardRouterFileEmpty);
 
     // Reading nbits
     router._nbits = it.get<uint8_t>();
-    CHECK_VALID(it, VectorErrorCode::ShardRouterInvalidDimension);
 
     if (router._nbits < 2 || router._nbits > 16) {
         return VectorError::result<void>(VectorErrorCode::ShardRouterInvalidBitCount);
     }
 
+    CHECK_VALID(it, VectorErrorCode::ShardRouterInvalidDimension);
+
     // Reading dim
     router._dim = it.get<uint64_t>(); // dim
-    CHECK_VALID(it, VectorErrorCode::ShardRouterInvalidVectors);
 
     if (router._dim == 0 || router._dim > 32ull * 1024) {
         return VectorError::result<void>(VectorErrorCode::InvalidDimension);
     }
 
-    // Check buffer size
-    const size_t lshRouterSize = sizeof(uint8_t)
-                               + sizeof(uint64_t)
-                               + sizeof(float) * router._dim * router._nbits;
+    CHECK_VALID(it, VectorErrorCode::ShardRouterInvalidHyperplanes);
 
-    if (buffer.size() != lshRouterSize) {
-        // If we switch to writing whole pages, this check
-        // needs to become if (buffer.size() < lshRouterSize)
-        return VectorError::result<void>(VectorErrorCode::ShardRouterInvalidVectors);
+    // Reading hyperplanes
+    remaining = remaining
+              - sizeof(uint8_t)
+              - sizeof(uint64_t);
+
+    const size_t hyperplanesSize = sizeof(float) * router._dim * router._nbits;
+
+    if (remaining < hyperplanesSize) {
+        return VectorError::result<void>(VectorErrorCode::ShardRouterInvalidHyperplanes);
     }
+
+    remaining -= hyperplanesSize;
 
     router._hyperplanes.resize(router._nbits);
 
@@ -67,6 +72,20 @@ VectorResult<void> LSHShardRouterLoader::load(LSHShardRouter& router) {
         for (float& value : hyperplane) {
             value = it.get<float>();
         }
+    }
+
+    // Reading shard IDs
+    CHECK_VALID(it, VectorErrorCode::ShardRouterInvalidShardIDs);
+
+    const size_t shardCount = it.get<uint64_t>();
+    remaining -= sizeof(uint64_t);
+
+    if (remaining < shardCount * sizeof(uint64_t)) {
+        return VectorError::result<void>(VectorErrorCode::ShardRouterInvalidShardIDs);
+    }
+
+    for (size_t i = 0; i < shardCount; i++) {
+        router._instantiatedShardSignatures.emplace(it.get<uint64_t>());
     }
 
     return {};

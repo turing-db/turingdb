@@ -1,12 +1,13 @@
 #include "VecLibShardAccessor.h"
 
 #include "VecLibShard.h"
+#include "AgingRingCache.h"
 
 using namespace vec;
 
-VecLibShardAccessor::VecLibShardAccessor(VecLibShard* shard)
-    : _shard(shard),
-    _lock(shard->_mutex)
+VecLibShardAccessor::VecLibShardAccessor(Handle&& handle)
+    : _lock(handle->get()->_mutex),
+    _handle(std::move(handle))
 {
 }
 

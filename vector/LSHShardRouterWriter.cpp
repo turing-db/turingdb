@@ -29,6 +29,14 @@ VectorResult<void> LSHShardRouterWriter::write(const LSHShardRouter* router) {
         }
     }
 
+    const auto& instantiatedShardSignatures = router->getInstantiatedShardSignatures();
+
+    _writer.write(instantiatedShardSignatures.size());
+
+    for (const auto& signature : instantiatedShardSignatures) {
+        _writer.write(signature);
+    }
+
     _writer.flush();
 
     if (_writer.errorOccured()) {

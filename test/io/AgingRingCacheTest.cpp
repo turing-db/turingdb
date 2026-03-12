@@ -80,12 +80,12 @@ protected:
 
     /** Build a cache wired up to a FakeDisk instance. */
     void buildCache(TestCache& cache, FakeDisk& disk, size_t maxMemBytes = 64ul * 1024 * 1024) {
-        cache.setOnLoad([&disk](const int& key, DynamicPayload& p) {
-            return disk.load(key, p);
+        cache.setOnLoad([&disk](const int& key, DynamicPayload& p, void*) {
+            return disk.load(key, p).has_value();
         });
 
-        cache.setOnEvict([&disk](const int& key, const DynamicPayload& p) {
-            return disk.save(key, p);
+        cache.setOnEvict([&disk](const int& key, DynamicPayload& p) {
+            return disk.save(key, p).has_value();
         });
 
         cache.setCalculateMemoryUsage(calcMemUsage);
@@ -124,9 +124,12 @@ TEST_F(AgingRingCacheTest, ST_ConstructAcquireRelease) {
     FakeDisk disk;
     buildCache(cache, disk);
 
-    auto res = cache.acquire(42);
-    ASSERT_TRUE(res);
-    EXPECT_EQ((*res)->_items, std::vector<int>(4, 42));
+    {
+        auto res = cache.acquire(42);
+        ASSERT_TRUE(res);
+        EXPECT_EQ((*res)->_items, std::vector<int>(4, 42));
+    }
+    cache.shutdown();
 }
 
 TEST_F(AgingRingCacheTest, ST_RepeatedAcquireSameKey) {
@@ -210,12 +213,12 @@ TEST_F(AgingRingCacheTest, ST_LoadError) {
     TestCache cache;
     const FakeDisk disk;
 
-    cache.setOnLoad([](const int&, DynamicPayload&) -> AgingRingCacheResult<void> {
-        return AgingRingCacheError::result(AgingRingCacheErrorCode::COULD_NOT_LOAD);
+    cache.setOnLoad([](const int&, DynamicPayload&, void*) {
+        return false;
     });
 
-    cache.setOnEvict([](const int&, const DynamicPayload&) -> AgingRingCacheResult<void> {
-        return {};
+    cache.setOnEvict([](const int&, const DynamicPayload&) {
+        return true;
     });
 
     cache.setCalculateMemoryUsage(calcMemUsage);
@@ -243,13 +246,13 @@ TEST_F(AgingRingCacheTest, ST_MemoryUsageCalculation) {
     FakeDisk disk;
 
     // Each payload holds exactly 10 ints
-    cache.setOnLoad([](const int& key, DynamicPayload& p) -> AgingRingCacheResult<void> {
+    cache.setOnLoad([](const int& key, DynamicPayload& p, void*) {
         p._items.assign(10, key);
-        return {};
+        return true;
     });
 
     cache.setOnEvict([&disk](const int& key, const DynamicPayload& p) {
-        return disk.save(key, p);
+        return disk.save(key, p).has_value();
     });
 
     cache.setCalculateMemoryUsage(calcMemUsage);
@@ -279,6 +282,8 @@ TEST_F(AgingRingCacheTest, ST_MemoryUsageCalculation) {
 
     // At least one eviction must have happened
     EXPECT_GE(disk._saveCount.load(), 1u);
+
+    cache.shutdown();
 }
 
 TEST_F(AgingRingCacheTest, ST_EvictionTriggeredByMemoryLimit) {
@@ -286,13 +291,13 @@ TEST_F(AgingRingCacheTest, ST_EvictionTriggeredByMemoryLimit) {
     FakeDisk disk;
 
     // Large payload: 1000 ints each
-    cache.setOnLoad([](const int& key, DynamicPayload& p) -> AgingRingCacheResult<void> {
+    cache.setOnLoad([](const int& key, DynamicPayload& p, void*) {
         p._items.assign(1000, key);
-        return {};
+        return true;
     });
 
     cache.setOnEvict([&disk](const int& key, const DynamicPayload& p) {
-        return disk.save(key, p);
+        return disk.save(key, p).has_value();
     });
 
     cache.setCalculateMemoryUsage(calcMemUsage);
@@ -385,14 +390,14 @@ TEST_F(AgingRingCacheTest, MT_ConcurrentAcquireWithEviction) {
     FakeDisk disk;
 
     // Tiny payload: 1 int
-    cache.setOnLoad([](const int& key, DynamicPayload& p) -> AgingRingCacheResult<void> {
+    cache.setOnLoad([](const int& key, DynamicPayload& p, void*) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         p._items.assign(1, key);
-        return {};
+        return true;
     });
 
     cache.setOnEvict([&disk](const int& key, const DynamicPayload& p) {
-        return disk.save(key, p);
+        return disk.save(key, p).has_value();
     });
 
     cache.setCalculateMemoryUsage(calcMemUsage);
@@ -432,13 +437,13 @@ TEST_F(AgingRingCacheTest, MT_PinnedEntriesNotEvicted) {
     TestCache cache;
     FakeDisk disk;
 
-    cache.setOnLoad([](const int& key, DynamicPayload& p) -> AgingRingCacheResult<void> {
+    cache.setOnLoad([](const int& key, DynamicPayload& p, void*) {
         p._items.assign(1000, key);
-        return {};
+        return true;
     });
 
     cache.setOnEvict([&disk](const int& key, const DynamicPayload& p) {
-        return disk.save(key, p);
+        return disk.save(key, p).has_value();
     });
 
     cache.setCalculateMemoryUsage(calcMemUsage);
@@ -552,13 +557,13 @@ TEST_F(AgingRingCacheTest, SaveFailure_ErrorMessageIsSet) {
     TestCache cache;
     const FakeDisk disk;
 
-    cache.setOnLoad([](const int& key, DynamicPayload& p) -> AgingRingCacheResult<void> {
+    cache.setOnLoad([](const int& key, DynamicPayload& p, void*) {
         p._items.assign(1000, key);
-        return {};
+        return true;
     });
 
-    cache.setOnEvict([](const int&, const DynamicPayload&) -> AgingRingCacheResult<void> {
-        return AgingRingCacheError::result(AgingRingCacheErrorCode::UNKNOWN);
+    cache.setOnEvict([](const int&, const DynamicPayload&) {
+        return false;
     });
 
     cache.setCalculateMemoryUsage(calcMemUsage);
@@ -583,8 +588,8 @@ TEST_F(AgingRingCacheTest, SaveFailure_ErrorMessageIsSet) {
     EXPECT_FALSE(msg.empty());
     EXPECT_NE(msg.find("Unknown"), std::string::npos);
 
-    cache.setOnEvict([](const int&, const DynamicPayload&) -> AgingRingCacheResult<void> {
-        return {};
+    cache.setOnEvict([](const int&, const DynamicPayload&) {
+        return true;
     });
     cache.shutdown();
 }
@@ -594,13 +599,13 @@ TEST_F(AgingRingCacheTest, SaveFailure_EntryPutBackInRing) {
     FakeDisk disk;
     disk._saveShouldFail = true;
 
-    cache.setOnLoad([](const int& key, DynamicPayload& p) -> AgingRingCacheResult<void> {
+    cache.setOnLoad([](const int& key, DynamicPayload& p, void*) {
         p._items.assign(1000, key);
-        return {};
+        return true;
     });
 
     cache.setOnEvict([&disk](const int& key, const DynamicPayload& p) {
-        return disk.save(key, p);
+        return disk.save(key, p).has_value();
     });
 
     cache.setCalculateMemoryUsage(calcMemUsage);

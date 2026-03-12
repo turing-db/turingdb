@@ -150,7 +150,7 @@ fs::Path StorageManager::getShardPath(const VecLibID& libID, LSHSignature sig) c
 }
 
 VectorResult<void> StorageManager::initialize() {
-    const auto listRes = _rootPath.listDir();
+    auto listRes = _rootPath.listDir();
     if (!listRes) {
         return VectorError::result(VectorErrorCode::CouldNotListLibraries);
     }

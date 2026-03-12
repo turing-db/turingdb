@@ -55,7 +55,8 @@ enum class VectorErrorCode : uint8_t {
     ShardRouterFileEmpty,
     ShardRouterInvalidDimension,
     ShardRouterInvalidBitCount,
-    ShardRouterInvalidVectors,
+    ShardRouterInvalidHyperplanes,
+    ShardRouterInvalidShardIDs,
 
     CouldNotLoadMetadataFile,
     CouldNotLoadNodeIdsFile,
@@ -110,7 +111,8 @@ using VectorErrorTypeDescription = EnumToString<VectorErrorCode>::Create<
     EnumStringPair<VectorErrorCode::ShardRouterFileEmpty, "Shard router file is empty">,
     EnumStringPair<VectorErrorCode::ShardRouterInvalidDimension, "Shard router file has invalid dimension">,
     EnumStringPair<VectorErrorCode::ShardRouterInvalidBitCount, "Shard router file has invalid bit count">,
-    EnumStringPair<VectorErrorCode::ShardRouterInvalidVectors, "Shard router file has invalid vectors">,
+    EnumStringPair<VectorErrorCode::ShardRouterInvalidHyperplanes, "Shard router file has invalid hyperplanes">,
+    EnumStringPair<VectorErrorCode::ShardRouterInvalidShardIDs, "Shard router file has invalid shard IDs">,
 
     EnumStringPair<VectorErrorCode::CouldNotLoadMetadataFile, "Could not load metadata file">,
     EnumStringPair<VectorErrorCode::CouldNotLoadNodeIdsFile, "Could not load node IDs file">>;
