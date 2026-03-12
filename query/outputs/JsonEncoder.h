@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ranges>
 #include <spdlog/fmt/bundled/format.h>
 
 #include "QueryStatus.h"
@@ -162,11 +163,7 @@ private:
         _writer.write(std::to_string(firstValue._id.getValue()));
         _writer.write('}');
 
-        auto it = entries.begin();
-        it++;
-        for (; it != entries.end(); ++it) {
-            const auto& [type, id] = *it;
-
+        for (const auto& [type, id] : entries | std::views::drop(1)) {
             _writer.write(',');
             _writer.write('{');
             _writer.write("\"type\":\"");

@@ -17,13 +17,11 @@
 
 namespace db {
 
-class LocalMemory;
 class Iterator;
 
 class PathExplorerProcessor : public Processor {
 public:
     static PathExplorerProcessor* create(PipelineV2* pipeline,
-                                         LocalMemory* mem,
                                          PathExplorationDir dir,
                                          uint64_t minHops,
                                          uint64_t maxHops);
@@ -46,6 +44,18 @@ public:
     void setOutputIndicesColumn(ColumnIndices* indices) {
         _outputIndices = indices;
     }
+    void setBfsIndicesColumn(ColumnIndices* indices) {
+        _bfsIndices = indices;
+    }
+    void setBfsEdgesColumn(ColumnEdgeIDs* edges) {
+        _bfsEdges = edges;
+    }
+    void setBfsIntermediatesColumn(ColumnNodeIDs* intermediates) {
+        _bfsIntermediates = intermediates;
+    }
+    void setBfsSourcesColumn(ColumnNodeIDs* sources) {
+        _bfsSources = sources;
+    }
 
     NamedColumn* getOutputTargetsColumn() const {
         return _outputTargets;
@@ -55,20 +65,20 @@ public:
     }
 
 private:
+    static constexpr size_t ROOT = std::numeric_limits<size_t>::max();
+
     struct FrontierEntry {
         NodeID node;
         EdgeID edge;                 // single edge that led to this node
-        size_t parentIdx {SIZE_MAX}; // index into _allEntries, -1 for root
-        size_t sourceIdx {SIZE_MAX}; // original input source index
+        size_t parentIdx {ROOT}; // index into _allEntries, -1 for root
+        size_t sourceIdx {ROOT}; // original input source index
     };
 
-    PathExplorerProcessor(LocalMemory* mem,
-                          PathExplorationDir dir,
+    PathExplorerProcessor(PathExplorationDir dir,
                           uint64_t minHops,
                           uint64_t maxHops);
     ~PathExplorerProcessor() override;
 
-    LocalMemory* _mem {nullptr};
     PathExplorationDir _dir {PathExplorationDir::Both};
     uint64_t _minHops {0};
     uint64_t _maxHops {0};
@@ -89,13 +99,20 @@ private:
     ColumnIndices* _bfsIndices {nullptr};
     std::unique_ptr<Iterator> _bfsWriter;
 
-    // Persistent state across execute() calls
     bool _bfsInitialized {false};
     bool _depthNeedsSetup {true};
+
+    /** @brief Current depth of the exploration */
     uint64_t _depth {0};
-    std::vector<FrontierEntry> _allEntries; // persistent tree, never shrunk until new input chunk received
-    size_t _depthStart {0};                 // index of first entry at current depth
-    size_t _depthEnd {0};                   // index one past last entry at current depth
+
+    /** @brief Persistent tree, never shrunk until new input chunk received */
+    std::vector<FrontierEntry> _allEntries;
+
+    /** @brief Index of first entry at current depth */
+    size_t _depthStart {0};
+
+    /** @brief Index one past last entry at current depth */
+    size_t _depthEnd {0};
 
     bool edgeUsedInPath(size_t entryIdx, EdgeID edge) const;
     void reconstructPath(size_t entryIdx, EntityList& path) const;

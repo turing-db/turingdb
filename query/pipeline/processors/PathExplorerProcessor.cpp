@@ -3,7 +3,6 @@
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
-#include "LocalMemory.h"
 
 #include "dataframe/NamedColumn.h"
 #include "columns/ColumnIDs.h"
@@ -18,12 +17,10 @@
 
 using namespace db;
 
-PathExplorerProcessor::PathExplorerProcessor(LocalMemory* mem,
-                                             PathExplorationDir dir,
+PathExplorerProcessor::PathExplorerProcessor(PathExplorationDir dir,
                                              uint64_t minHops,
                                              uint64_t maxHops)
-    : _mem(mem),
-    _dir(dir),
+    : _dir(dir),
     _minHops(minHops),
     _maxHops(maxHops)
 {
@@ -38,11 +35,10 @@ std::string PathExplorerProcessor::describe() const {
 }
 
 PathExplorerProcessor* PathExplorerProcessor::create(PipelineV2* pipeline,
-                                                     LocalMemory* mem,
                                                      PathExplorationDir dir,
                                                      uint64_t minHops,
                                                      uint64_t maxHops) {
-    auto* proc = new PathExplorerProcessor(mem, dir, minHops, maxHops);
+    auto* proc = new PathExplorerProcessor(dir, minHops, maxHops);
 
     PipelineInputPort* inPort = PipelineInputPort::create(pipeline, proc);
     PipelineOutputPort* outPort = PipelineOutputPort::create(pipeline, proc);
@@ -63,23 +59,17 @@ void PathExplorerProcessor::prepare(ExecutionContext* ctxt) {
     const GraphView& view = ctxt->getGraphView();
 
     // Input
-    _inputSources = dynamic_cast<ColumnNodeIDs*>(_input.getNodeIDs()->getColumn());
+    _inputSources = _input.getNodeIDs()->as<ColumnNodeIDs>();
     bioassert(_inputSources, "Input nodes column is null");
 
     // Output
     bioassert(_outputTargets, "Output target nodes column is null");
     bioassert(_outputPaths, "Output paths column is null");
     bioassert(_outputIndices, "Output indices column is null");
-    bioassert(dynamic_cast<ColumnVector<EntityList>*>(_outputPaths->getColumn()),
-              "Output paths column is not a path column");
-    bioassert(dynamic_cast<ColumnNodeIDs*>(_outputTargets->getColumn()),
-              "Output targets column is not an entity ID column");
-
-    // BFS Execution state
-    _bfsSources = _mem->alloc<ColumnNodeIDs>();
-    _bfsEdges = _mem->alloc<ColumnEdgeIDs>();
-    _bfsIntermediates = _mem->alloc<ColumnNodeIDs>();
-    _bfsIndices = _mem->alloc<ColumnIndices>();
+    bioassert(_outputPaths->as<ColumnVector<EntityList>>(),
+              "Output paths column is not an entity list column");
+    bioassert(_outputTargets->as<ColumnNodeIDs>(),
+              "Output targets column is not a node ID column");
 
     switch (_dir) {
         case PathExplorationDir::Forward: {
@@ -121,21 +111,27 @@ void PathExplorerProcessor::reset() {
 }
 
 void PathExplorerProcessor::reconstructPath(size_t entryIdx, EntityList& path) const {
-    size_t idx = entryIdx;
-
     path.resize(_depth);
 
-    size_t i = _depth - 1;
+    // Current index into the _allEntries array
+    size_t idx = entryIdx;
 
-    // Fill the path in reverse order
-    while (idx != SIZE_MAX) {
+    // Current position into the outputed path array
+    size_t pathCursor = _depth - 1;
+
+    // Walk up the parent chain to fill the path until we reach the root
+    while (idx != ROOT) {
         const FrontierEntry& e = _allEntries[idx];
 
-        if (e.parentIdx != SIZE_MAX) {
-            auto& entry = path[i--];
-            entry._type = EntityType::Edge;
-            entry._id = e.edge.getValue();
+        if (e.parentIdx == ROOT) {
+            // The "root edge" entry is a special case,
+            // it is not part of the path, do not output it
+            break;
         }
+
+        auto& out = path[pathCursor--];
+        out._type = EntityType::Edge;
+        out._id = e.edge.getValue();
 
         idx = e.parentIdx;
     }
@@ -145,10 +141,10 @@ void PathExplorerProcessor::reconstructPath(size_t entryIdx, EntityList& path) c
 bool PathExplorerProcessor::edgeUsedInPath(size_t entryIdx, EdgeID edge) const {
     size_t idx = entryIdx;
 
-    while (idx != SIZE_MAX) {
+    while (idx != ROOT) {
         const FrontierEntry& e = _allEntries[idx];
 
-        if (e.parentIdx != SIZE_MAX && e.edge == edge) {
+        if (e.parentIdx != ROOT && e.edge == edge) {
             return true;
         }
 
@@ -159,8 +155,8 @@ bool PathExplorerProcessor::edgeUsedInPath(size_t entryIdx, EdgeID edge) const {
 }
 
 void PathExplorerProcessor::execute() {
-    auto* outputTargets = _outputTargets->getColumn()->cast<ColumnNodeIDs>();
-    auto* outputPaths = _outputPaths->getColumn()->cast<ColumnVector<EntityList>>();
+    auto* outputTargets = _outputTargets->as<ColumnNodeIDs>();
+    auto* outputPaths = _outputPaths->as<ColumnVector<EntityList>>();
 
     outputTargets->clear();
     outputPaths->clear();
@@ -183,7 +179,7 @@ void PathExplorerProcessor::execute() {
             _allEntries[i] = FrontierEntry {
                 .node = inputNodes[i],
                 .edge = EdgeID {},
-                .parentIdx = SIZE_MAX,
+                .parentIdx = ROOT,
                 .sourceIdx = i,
             };
         }
@@ -207,6 +203,9 @@ void PathExplorerProcessor::execute() {
         _depthNeedsSetup = true;
     }
 
+    bioassert(_depth > 0,
+              "Initialization error, depth should always be greater than 0 at this point");
+
     if (_depthNeedsSetup) {
         // Step 2. This is the first time execute() is called on the current depth.
         //         It sets up the current depth window and feeds it to the BFS writer.
@@ -216,7 +215,10 @@ void PathExplorerProcessor::execute() {
         //         > `windowSize` can exceed the maximum ChunkSize
         //         >   -> the memory usage is unbounded.
 
-        if (_depthStart == _depthEnd || _depth > _maxHops) {
+        // If:
+        //  - _depth > _maxHops -> We have reached the maximum hops
+        //  - _depthStart == _depthEnd -> No more edges to expand
+        if (_depth > _maxHops || _depthStart == _depthEnd) {
             _input.getPort()->consume();
             _output.getPort()->writeData();
             finish();

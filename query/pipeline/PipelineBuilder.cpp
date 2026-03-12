@@ -331,7 +331,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer(PathExplorationDi
                                                                int64_t minHops,
                                                                int64_t maxHops) {
 
-    auto* proc = PathExplorerProcessor::create(_pipeline, _mem, dir, minHops, maxHops);
+    auto* proc = PathExplorerProcessor::create(_pipeline, dir, minHops, maxHops);
 
     PipelineNodeInputInterface& input = proc->input();
     PipelineBlockOutputInterface& output = proc->output();
@@ -345,9 +345,13 @@ PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer(PathExplorationDi
     NamedColumn* pathCol = allocColumn<ColumnVector<EntityList>>(outDf);
     const NamedColumn* indices = allocColumn<ColumnIndices>(outDf);
 
-    proc->setOutputIndicesColumn(static_cast<ColumnIndices*>(indices->getColumn()));
+    proc->setOutputIndicesColumn(indices->as<ColumnIndices>());
     proc->setOutputTargetsColumn(targetNodes);
     proc->setOutputPathsColumn(pathCol);
+    proc->setBfsIndicesColumn(_mem->alloc<ColumnIndices>());
+    proc->setBfsEdgesColumn(_mem->alloc<ColumnEdgeIDs>());
+    proc->setBfsIntermediatesColumn(_mem->alloc<ColumnNodeIDs>());
+    proc->setBfsSourcesColumn(_mem->alloc<ColumnNodeIDs>());
 
     output.setStream(EntityOutputStream::createNodeStream(targetNodes->getTag()));
 
