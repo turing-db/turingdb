@@ -86,7 +86,9 @@ ShardCache::ShardCache(StorageManager& storageManager)
     _cache->setMaxMemUsage(10ull * 1024 * 1024 * 1024); // 10 GB
 }
 
-ShardCache::~ShardCache() noexcept = default;
+ShardCache::~ShardCache() noexcept {
+    _cache->shutdown();
+}
 
 VecLibShardAccessor ShardCache::getShard(const VecLibMetadata& meta, LSHSignature signature) {
     const ShardIdentifier id(meta._id, signature);
