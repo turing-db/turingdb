@@ -70,7 +70,7 @@ private:
 
     void prepare();
 
-    void treeWalkExpr(Expr* expr);
+    void expandExpr(Expr* expr);
     static bool isEvaluationBlocker(const Expr* expr);
     void handleEvaluationBlocker(const Expr* expr);
 
