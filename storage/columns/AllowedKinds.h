@@ -328,8 +328,12 @@ struct OrderedTypes {
         std::optional<types::Bool::Primitive>,
 
         // Entities
+        NodeID,
         EdgeID,
-        NodeID
+        EdgeTypeID,
+        PropertyTypeID,
+        LabelID,
+        LabelSetID
     >>;
 
     using Excluded = ExcludedContainers<
