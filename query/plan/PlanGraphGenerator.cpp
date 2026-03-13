@@ -360,15 +360,12 @@ void PlanGraphGenerator::generateShowExtensionsQuery(const ShowExtensionsQuery* 
 
 PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {
     GetPropertyCache& propCache = _tree.getGetPropertyCache();
-    GetEntityTypeCache& entCache = _tree.getGetEntityTypeCache();
 
     ReturnStmtGenerator stmtGen(_ast,
                                 stmt,
                                 &_tree,
                                 prevNode,
-                                _variables.get(),
-                                propCache,
-                                entCache);
+                                propCache);
 
     PlanGraphNode* returnProjectionNode = stmtGen.generateReturnStmt();
 

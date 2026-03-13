@@ -31,9 +31,7 @@ public:
                         const ReturnStmt* rtnStmt,
                         PlanGraph* tree,
                         PlanGraphNode* prevNode,
-                        PlanGraphVariables* vars,
-                        GetPropertyCache& propCache,
-                        GetEntityTypeCache& entCache);
+                        GetPropertyCache& propCache);
 
     ~ReturnStmtGenerator() = default;
 
@@ -56,7 +54,6 @@ private:
 
     PlanGraph* _tree {nullptr};
     PlanGraphNode* _prevNode {nullptr};
-    PlanGraphVariables* _variables {nullptr};
 
     std::vector<EvaluationStep> _evalSteps;
 
@@ -64,7 +61,6 @@ private:
     AggregateEvalNode* _aggrEvalNode {nullptr};
 
     GetPropertyCache& _propCache;
-    GetEntityTypeCache& _entCache;
 
     EvaluationQueue _frontier;
     EvaluationQueue _blockers;
