@@ -633,9 +633,10 @@ Column* ExprProgramGenerator::fetchAggregateColumn(const FunctionInvocationExpr*
     bioassert(foundColumn, "Could not find column for aggregate function.");
 
     const NamedColumn* nCol = inputDf->getColumn(aggregateResTag);
-    bioassert(nCol, "Null column for aggregate function.");
+    bioassert(nCol, "Null NamedColumn of aggregate function.");
 
     Column* resultColumn = nCol->getColumn();
+    bioassert(resultColumn, "Null result column of aggregate function.");
 
     return resultColumn;
 }

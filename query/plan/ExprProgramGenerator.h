@@ -59,6 +59,7 @@ private:
     Column* generateIndexExpr(const IndexExpr* indexExpr);
     Column* generateFuncInvocationExpr(const FunctionInvocationExpr* funcExpr);
 
+    /// Find the column where the result of an aggregate evaluation should be stored
     Column* fetchAggregateColumn(const FunctionInvocationExpr* aggregateExpr);
 
     Column* allocUnaryResultCol(ColumnOperator op, const Column* arg);
