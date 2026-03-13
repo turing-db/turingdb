@@ -3,19 +3,17 @@
 #include <spdlog/fmt/fmt.h>
 #include <range/v3/view/drop.hpp>
 
-#include "ID.h"
+#include "ApplyMask.h"
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnKind.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOperators.h"
-#include "columns/ColumnOptVector.h"
 #include "dataframe/NamedColumn.h"
 #include "dataframe/Dataframe.h"
 
 #include "PipelinePort.h"
 
 #include "PipelineException.h"
-#include "metadata/PropertyType.h"
 #include "processors/PredicateProgram.h"
 
 #include "FatalException.h"
@@ -183,7 +181,7 @@ void FilterProcessor::execute() {
     for (size_t i = 0; i < colCount; i++) {
         const Column* srcCol = srcCols[i]->getColumn();
         Column* destCol = destCols[i]->getColumn(); 
-        applyMask(srcCol, &finalMask, destCol);
+        ApplyMask::eval(destCol, &finalMask, srcCol);
     }
 
     _input.getPort()->consume();

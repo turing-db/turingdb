@@ -124,13 +124,13 @@ struct MaskOperators {
 
     /// Applying masks to vectors
     template <typename Op, typename T>
-        requires std::is_same_v<Op, ApplyMask>
+        requires std::is_same_v<Op, Apply>
     static void exec(ColumnVector<T>* res, const ColumnVector<T>* src, const ColumnMask* mask) {
         MaskApplicator::apply(res, src, mask);
     }
 
     template <typename Op, typename T>
-        requires std::is_same_v<Op, ApplyMask>
+        requires std::is_same_v<Op, Apply>
     static void exec(ColumnVector<T>* res, const ColumnMask* mask, const ColumnVector<T>* src) {
         MaskApplicator::apply(res, src, mask);
     }
