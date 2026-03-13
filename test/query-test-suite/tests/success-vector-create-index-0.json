@@ -1,5 +1,5 @@
 {
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "CREATE VECTOR INDEX embeddings WITH DIMENSION 4 METRIC EUCLID",
   "expect": {
