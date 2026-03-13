@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n)<-[e]-(m) RETURN n, e, m ORDER BY n DESC, e DESC, m DESC",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __GET_IN_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: e\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n    `\"]\n    9[\"`\n        __ORDER_BY__\n        __item__: n, DESC\n        __item__: e, DESC\n        __item__: m, DESC\n    `\"]\n    10[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->8\n    7-->9\n    8-->7\n    9-->10",
+    "result": "n,e,m\n16,16,12\n14,14,15\n13,17,17\n13,15,12\n13,13,15\n10,10,9\n7,9,8\n6,1,0\n5,12,11\n5,6,1\n4,8,8\n4,5,1\n3,3,0\n2,11,9\n2,2,0\n1,0,0\n0,7,6\n0,4,1",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\",\"e\",\"m\"],\"column_types\":[\"UInt64\",\"UInt64\",\"UInt64\"]},\"data\":[[[16,14,13,13,13,10,7,6,5,5,4,4,3,2,2,1,0,0],[16,14,17,15,13,10,9,1,12,6,8,5,3,11,2,0,7,4],[12,15,17,12,15,9,8,0,11,1,8,1,0,9,0,0,6,1]]]}"
+  },
+  "tags": [
+    "order",
+    "edges",
+    "return",
+    "projection"],
+  "write-required": false
+}
