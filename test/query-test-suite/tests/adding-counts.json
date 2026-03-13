@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN COUNT(n) + COUNT(n)",
+  "expect": {
+    "plan": "",
+    "result": ""
+  },
+  "tags": [
+  ],
+  "write-required": false
+}
