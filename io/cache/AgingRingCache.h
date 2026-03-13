@@ -5,11 +5,11 @@
 #include <unordered_map>
 #include <list>
 
-#include "BioAssert.h"
-
 #include "AgingRingCacheResult.h"
 #include "AgingRingCacheEntry.h"
 #include "AgingRingCacheHandle.h"
+
+#include "BioAssert.h"
 
 template <typename Key,
           typename Payload,
@@ -68,7 +68,7 @@ public:
                 return AgingRingCacheError::result(AgingRingCacheErrorCode::TERMINATING);
             }
 
-            auto it = _map.find(key);
+            const auto it = _map.find(key);
 
             /* Case 1: Cache miss
              *         Create a new entry (LOADING state) */
@@ -224,13 +224,15 @@ public:
 
             _onEvict(*victimKey, **victimPayload);
 
-            std::unique_lock lock(_mutex);
+            {
+                std::unique_lock lock(_mutex);
 
-            // Find the entry again since the map may be have been modified
-            // during the eviction callback execution (invalidated iterators)
-            auto it = _map.find(*victimKey);
-            if (it != _map.end()) {
-                _map.erase(it);
+                // Find the entry again since the map may be have been modified
+                // during the eviction callback execution (invalidated iterators)
+                const auto it = _map.find(*victimKey);
+                if (it != _map.end()) {
+                    _map.erase(it);
+                }
             }
         }
     }
@@ -258,7 +260,7 @@ public:
         if (!evictRes) {
             // Put back the victim in the cache since the eviction failed and return an error
 
-            auto it = _map.find(key);
+            it = _map.find(key);
             if (it == _map.end()) {
                 // Should never happen, entry disappeared while we were saving it
                 return;
@@ -423,7 +425,7 @@ private:
             if (!evictRes) {
                 // Put back the victim in the cache since the eviction failed and return an error
 
-                auto it = _map.find(*victimKey);
+                const auto it = _map.find(*victimKey);
                 if (it == _map.end()) {
                     // Should never happen, entry disappeared while we were saving it
                     return AgingRingCacheError::result(AgingRingCacheErrorCode::UNKNOWN);
@@ -436,7 +438,7 @@ private:
             }
 
             // Step 3: erase the victim from the map
-            auto it = _map.find(*victimKey);
+            const auto it = _map.find(*victimKey);
             if (it == _map.end()) {
                 // Should never happen, entry disappeared while we were erasing it
                 return AgingRingCacheError::result(AgingRingCacheErrorCode::UNKNOWN);
