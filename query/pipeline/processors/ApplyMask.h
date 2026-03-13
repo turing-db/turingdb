@@ -7,24 +7,6 @@
 
 namespace db {
 
-class Column;
-class Eval;
-
-class ApplyMask {
-public:
-    static void eval(Column* res, const Column* arg, const Column* mask);
-};
-
-inline void ApplyMask::eval(Column* res, const Column* arg, const Column* mask) {
-    using Pairs = MaskedPairs;
-    Eval fn {res};
-    using Dispatcher = ColumnDoubleDispatcher<Pairs::Allowed,
-                                              Pairs::AllowedMixed,
-                                              Eval,
-                                              Pairs::Excluded>;
-    Dispatcher::dispatch(arg, mask, fn);
-}
-
 namespace {
 
 struct Eval {
@@ -40,6 +22,23 @@ struct Eval {
     }
 };
 
+}
+
+class Column;
+
+class ApplyMask {
+public:
+    static void eval(Column* res, const Column* arg, const Column* mask);
+};
+
+inline void ApplyMask::eval(Column* res, const Column* arg, const Column* mask) {
+    using Pairs = MaskedPairs;
+    Eval fn {res};
+    using Dispatcher = ColumnDoubleDispatcher<Pairs::Allowed,
+                                              Pairs::AllowedMixed,
+                                              Eval,
+                                              Pairs::Excluded>;
+    Dispatcher::dispatch(arg, mask, fn);
 }
 
 }
