@@ -1,6 +1,5 @@
 #pragma once
 
-#include <functional>
 #include <concepts>
 
 #include "columns/ColumnMask.h"
@@ -115,10 +114,14 @@ struct MaskApplicator {
            }
         }
     }
+
+    static void apply(ColumnMask*, const ColumnMask*, const ColumnMask*) {
+        bioassert(false, "Invalid mask operatoin");
+    }
 };
 
 }
 
-using ApplyMask = MaskOperator<std::identity>;
+using Apply = MaskApplicator;
 
 }

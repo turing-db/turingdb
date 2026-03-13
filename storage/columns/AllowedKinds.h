@@ -251,6 +251,44 @@ struct PairRestrictions<Op> {
     >;
 };
 
+struct MaskedPairs {
+    using Allowed = GenerateKindPairList<>;
+
+    using AllowedMixed = AllowedMixedList<
+        MixedKind<ColumnMask, types::Int64::Primitive>,
+        MixedKind<ColumnMask, types::Int64::Primitive>,
+        MixedKind<ColumnMask, types::UInt64::Primitive>,
+        MixedKind<ColumnMask, types::Double::Primitive>,
+        MixedKind<ColumnMask, types::String::Primitive>,
+        MixedKind<ColumnMask, types::Bool::Primitive>,
+        MixedKind<ColumnMask, std::optional<types::Int64::Primitive>>,
+        MixedKind<ColumnMask, std::optional<types::Int64::Primitive>>,
+        MixedKind<ColumnMask, std::optional<types::UInt64::Primitive>>,
+        MixedKind<ColumnMask, std::optional<types::Double::Primitive>>,
+        MixedKind<ColumnMask, std::optional<types::String::Primitive>>,
+        MixedKind<ColumnMask, std::optional<types::Bool::Primitive>>,
+        MixedKind<ColumnMask, PropertyNull>,
+
+        MixedKind<ColumnMask, NodeID>,
+        MixedKind<ColumnMask, EdgeID>,
+        MixedKind<ColumnMask, LabelID>,
+        MixedKind<ColumnMask, Path>,
+        MixedKind<ColumnMask, LabelSetID>,
+        MixedKind<ColumnMask, EdgeTypeID>,
+        MixedKind<ColumnMask, ValueType>,
+        MixedKind<ColumnMask, PropertyTypeID>,
+        MixedKind<ColumnMask, CommitHash>,
+        MixedKind<ColumnMask, ChangeID>,
+        MixedKind<ColumnMask, std::string>,
+        MixedKind<ColumnMask, size_t>
+    >;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnConst>()
+    >;
+};
+
 // Restriction for Unary operators
 template <ColumnOperator Op>
 struct TypeRestrictions;
