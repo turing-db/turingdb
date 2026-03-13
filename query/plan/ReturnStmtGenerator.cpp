@@ -69,7 +69,7 @@ void ReturnStmtGenerator::prepare() {
     bioassert(_proj, "Failed to get projection for RETURN statement.");
 }
 
-/// We need to process all expressions in return items, and those in order by keys
+/// Helper to get all expressions in return items, and those in order by keys
 static void getReturnExpressions(const Projection* proj, std::vector<Expr*>& exprs) {
     exprs.clear();
     for (const Projection::ReturnItem& item : proj->items()) {
@@ -167,6 +167,8 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         _evalSteps.emplace_back(_exprEvalNode);
     }
 
+    // We explored each return expression from root to leaf, meaning the order of
+    // @ref _evalSteps is the reverse order that the nodes need be evaluated in.
     if (!_evalSteps.empty()) {
         const auto addStepToPlan = [this](auto&& evalNode) {
             if (_prevNode) {
@@ -175,12 +177,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
             _prevNode = evalNode;
         };
 
-        {
-            const EvaluationStep& firstEvalStep = _evalSteps.back();
-            std::visit(addStepToPlan, firstEvalStep);
-        }
-
-        for (const EvaluationStep& evalStep : rv::reverse(_evalSteps) | rv::drop(1)) {
+        for (const EvaluationStep& evalStep : rv::reverse(_evalSteps)) {
             std::visit(addStepToPlan, evalStep);
         }
     }
