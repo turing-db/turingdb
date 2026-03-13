@@ -247,7 +247,7 @@ public:
         }
 
         Entry& entry = it->second;
-        bioassert(entry._state == AgingRingCacheState::EVICTING, "Unexpected cache entry state");
+        bioassert(entry._state == AgingRingCacheState::RESIDENT, "Unexpected cache entry state");
         Payload& victimPayload = *entry._payload;
         _inFlightIoCount++;
 
