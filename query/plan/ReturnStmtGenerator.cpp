@@ -55,16 +55,12 @@ ReturnStmtGenerator::ReturnStmtGenerator(const CypherAST* ast,
                                          const ReturnStmt* rtnStmt,
                                          PlanGraph* tree,
                                          PlanGraphNode* prevNode,
-                                         PlanGraphVariables* vars,
-                                         GetPropertyCache& propCache,
-                                         GetEntityTypeCache& entCache)
+                                         GetPropertyCache& propCache)
     : _ast(ast),
     _stmt(rtnStmt),
     _tree(tree),
     _prevNode(prevNode),
-    _variables(vars),
-    _propCache(propCache),
-    _entCache(entCache)
+    _propCache(propCache)
 {
 }
 
