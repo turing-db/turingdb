@@ -370,7 +370,6 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
     const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
     const FunctionSignature* signature = invocation->getSignature();
 
-
     if (!signature) {
         throw PlannerException("Function invocation does not have a signature");
     }
