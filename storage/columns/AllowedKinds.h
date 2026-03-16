@@ -269,6 +269,7 @@ struct MaskedPairs {
         MixedKind<ColumnMask, std::optional<types::Bool::Primitive>>,
         MixedKind<ColumnMask, PropertyNull>,
 
+        MixedKind<ColumnMask, EntityID>,
         MixedKind<ColumnMask, NodeID>,
         MixedKind<ColumnMask, EdgeID>,
         MixedKind<ColumnMask, LabelID>,
