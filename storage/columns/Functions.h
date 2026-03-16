@@ -60,6 +60,17 @@ static void getLabelString(std::string& out, const GraphView view, NodeID n) {
     }
 }
 
+static void getEdgeTypeString(std::string& out, const GraphView view, EdgeID e) {
+    out.clear();
+    const EdgeTypeID et = view.read().getEdgeTypeID(e);
+
+    const EdgeTypeMap& etMap = view.metadata().edgeTypes();
+    const std::optional<std::string_view> name = etMap.getName(et);
+    bioassert(name, "Could not get name of EdgeTypeID {}.", et.getValue());
+
+    out = *name;
+}
+
 class LabelsFunction {
 public:
     using ResultType = std::string;
@@ -71,6 +82,25 @@ public:
 
     ResultType operator()(const NodeID n) {
         getLabelString(_tmp, _view, n);
+        return _tmp;
+    }
+
+private:
+    GraphView _view;
+    std::string _tmp;
+};
+
+class EdgeTypesFunction {
+public:
+    using ResultType = std::string;
+
+    explicit EdgeTypesFunction(GraphView view)
+        : _view(view)
+    {
+    }
+
+    ResultType operator()(const EdgeID e) {
+        getEdgeTypeString(_tmp, _view, e);
         return _tmp;
     }
 
@@ -199,6 +229,25 @@ struct FunctionExecutor<LabelsFunction, Res, Arg> {
         LabelsFunction labels(view);
         for (size_t i = 0; i < size ; i ++) {
             resd[i] = labels(argd[i]);
+        }
+    }
+};
+
+/// Specialisation for edgeTypes()
+template <typename Res, typename Arg>
+struct FunctionExecutor<EdgeTypesFunction, Res, Arg> {
+    static void apply(ColumnVector<std::string>* res,
+                      const ColumnEdgeIDs* arg,
+                      GraphView view) {
+        const size_t size = arg->size();
+        res->resize(size);
+
+        const auto& argd = arg->getRaw();
+        auto& resd = res->getRaw();
+
+        EdgeTypesFunction edgeTypes(view);
+        for (size_t i = 0; i < size ; i ++) {
+            resd[i] = edgeTypes(argd[i]);
         }
     }
 };

@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n)-[e]->(m) WHERE n.age = toInteger(\"32\") RETURN n.age + toFloat(\"10.2\"), labels(n), edgeTypes(e)",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __has predicate__\n        __dep__ _n_._age_ (Integer)\n    `\"]\n    3[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: e\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n    `\"]\n    9[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ age\n    `\"]\n    10[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (BINARY): v7\n__expr__ (LITERAL): v5\n__expr__ (FUNCTION_INVOCATION): v8\n__expr__ (FUNCTION_INVOCATION): v9\n    `\"]\n    11[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->9\n    1-->3\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->8\n    7-->10\n    8-->7\n    9-->2\n    10-->11",
+    "result": "\"n.age + toFloat(\"\"10.2\"\")\",labels(n),edgeTypes(e)\n42.2,\"Person, SoftwareEngineering, Founder\",KNOWS_WELL\n42.2,\"Person, SoftwareEngineering, Founder\",INTERESTED_IN\n42.2,\"Person, SoftwareEngineering, Founder\",INTERESTED_IN\n42.2,\"Person, SoftwareEngineering, Founder\",INTERESTED_IN\n42.2,\"Person, Founder, Bioinformatics\",KNOWS_WELL\n42.2,\"Person, Founder, Bioinformatics\",INTERESTED_IN\n42.2,\"Person, Founder, Bioinformatics\",INTERESTED_IN",
+    "resultJson": "{\"header\":{\"column_names\":[\"n.age + toFloat(\\\"10.2\\\")\",\"labels(n)\",\"edgeTypes(e)\"],\"column_types\":[\"Double\",\"String\",\"String\"]},\"data\":[[[42.200000,42.200000,42.200000,42.200000,42.200000,42.200000,42.200000],[\"Person, SoftwareEngineering, Founder\",\"Person, SoftwareEngineering, Founder\",\"Person, SoftwareEngineering, Founder\",\"Person, SoftwareEngineering, Founder\",\"Person, Founder, Bioinformatics\",\"Person, Founder, Bioinformatics\",\"Person, Founder, Bioinformatics\"],[\"KNOWS_WELL\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"KNOWS_WELL\",\"INTERESTED_IN\",\"INTERESTED_IN\"]]]}"
+  },
+  "tags": [
+    "filter",
+    "where",
+    "predicate",
+    "function",
+    "return",
+    "projection",
+    "labels",
+    "edgeTypes"
+  ],
+  "write-required": false
+}
