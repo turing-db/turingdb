@@ -59,6 +59,8 @@ set(storage_sources
         properties/PropertyContainer.cpp
         properties/PropertyManager.cpp
 
+        indexes/PropertyHashIndex.cpp
+
         writers/DataPartBuilder.cpp
         writers/GraphWriter.cpp
         writers/MetadataBuilder.cpp

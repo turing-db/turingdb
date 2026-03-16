@@ -1,3 +1,7 @@
+# Open Questions
+- How do we define the interface of a generic index?
+- How/when do we decide whether to consult an index or a normal `GetPropertiesIterator`? plan time? execution time?
+
 # Indexes
 
 We wish to have *indexes* which speed up retrieval of certain data
@@ -82,5 +86,11 @@ This means we do not need to reindex all that is indexed by $I$, but means that 
 to linear search through indexes to find all matches. This is in line with our current
 philosophy as we already consider it bad practices to split nodes and edges over many
 dataparts/commits.
+
+# Serialisation
+All indexes need to be able to dumped to disk and loaded.
+
+Indexes should be dumped "flat" just as dataparts, so that an arbitrary commit can be
+loaded, along with all of the indexes it requires.
 
 # Summary of operations
