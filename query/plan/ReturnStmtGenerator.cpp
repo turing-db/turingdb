@@ -107,8 +107,9 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
 
     for (Expr* root : returnExpressions) {
         // BFS from root; blocked by aggregates
-        _frontier = std::queue<Expr*> {};
-        _blockers = std::queue<Expr*> {};
+        bioassert(_frontier.empty(), "Expression frontier was non-empty.");
+        bioassert(_frontier.empty(), "Expression-blocking queue was non-empty.");
+
         _frontier.push(root);
 
         while (!_frontier.empty() || !_blockers.empty()) {
