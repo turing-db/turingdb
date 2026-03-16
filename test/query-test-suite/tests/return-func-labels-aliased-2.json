@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n)-[e]->(m) RETURN edgeTypes(e) AS et",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: e\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n    `\"]\n    9[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (FUNCTION_INVOCATION): v0\n    `\"]\n    10[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->8\n    7-->9\n    8-->7\n    9-->10",
+    "result": "et\nKNOWS_WELL\nINTERESTED_IN\nINTERESTED_IN\nINTERESTED_IN\nKNOWS_WELL\nINTERESTED_IN\nINTERESTED_IN\nKNOWS_WELL\nINTERESTED_IN\nINTERESTED_IN\nINTERESTED_IN\nINTERESTED_IN\nINTERESTED_IN\nINTERESTED_IN\nINTERESTED_IN\nINTERESTED_IN\nINTERESTED_IN\nINTERESTED_IN",
+    "resultJson": "{\"header\":{\"column_names\":[\"et\"],\"column_types\":[\"String\"]},\"data\":[[[\"KNOWS_WELL\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"KNOWS_WELL\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"KNOWS_WELL\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"INTERESTED_IN\",\"INTERESTED_IN\"]]]}"
+  },
+  "tags": [
+    "function",
+    "return",
+    "projection",
+    "as",
+    "alias",
+    "edgeTypes"
+  ],
+  "write-required": false
+}

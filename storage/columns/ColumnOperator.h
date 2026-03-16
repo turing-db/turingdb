@@ -43,6 +43,7 @@ enum ColumnOperator : uint8_t {
     OP_TO_BOOLEAN,
 
     OP_FUNC_LABELS,
+    OP_FUNC_EDGE_TYPES,
 
     _SIZE
 };
@@ -87,6 +88,7 @@ constexpr ColumnOperatorType getOperatorType(ColumnOperator op) {
         case OP_TO_FLOAT:
         case OP_TO_BOOLEAN:
         case OP_FUNC_LABELS:
+        case OP_FUNC_EDGE_TYPES:
             return ColumnOperatorType::OPTYPE_FUNC;
         break;
 
@@ -135,5 +137,6 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
     EnumStringPair<ColumnOperator::OP_TO_FLOAT, "TO_FLOAT">,
     EnumStringPair<ColumnOperator::OP_TO_BOOLEAN, "TO_BOOLEAN">,
 
-    EnumStringPair<ColumnOperator::OP_FUNC_LABELS, "FUNCTION_LABELS">>;
+    EnumStringPair<ColumnOperator::OP_FUNC_LABELS, "FUNCTION_LABELS">,
+    EnumStringPair<ColumnOperator::OP_FUNC_EDGE_TYPES, "FUNCTION_EDGE_TYOES">>;
 }

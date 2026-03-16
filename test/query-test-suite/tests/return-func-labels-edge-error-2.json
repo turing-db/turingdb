@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN edgeTypes(n)",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN edgeTypes(n)\n       |                  ^^^^^^^^^^^^\n-------* Invalid arguments for function 'edgeTypes'",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN edgeTypes(n)\n       |                  ^^^^^^^^^^^^\n-------* Invalid arguments for function 'edgeTypes'",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) RETURN edgeTypes(n)\\n       |                  ^^^^^^^^^^^^\\n-------* Invalid arguments for function 'edgeTypes'\"}"
+  },
+  "tags": [
+    "functions",
+    "return",
+    "projection",
+    "error",
+    "edgeTypes"
+  ],
+  "write-required": false
+}

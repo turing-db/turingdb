@@ -30,6 +30,16 @@ struct Eval {
             bioassert(result, "Invalid cast to result column for labels().");
 
             ColumnFunctions::exec<LabelsFunction>(result, arg, _view);
+        } else if constexpr (Op == OP_FUNC_EDGE_TYPES) {
+            bioassert(_view.isValid(),
+                      "Attempted to evaluate edgeTypes() with invalid GraphView.");
+
+            using ResultType = FunctionColumnResult<EdgeTypesFunction, T>::ResultColumnType;
+
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid cast to result column for edgeTypes().");
+
+            ColumnFunctions::exec<EdgeTypesFunction>(result, arg, _view);
         } else if constexpr (Op == OP_TO_INTEGER) {
             using ResultType =
                 FunctionColumnResult<toIntegerFunction, T>::ResultColumnType;
@@ -81,6 +91,7 @@ void EvalFunction::eval(Column* res, const Column* arg) {
 }
 
 template void EvalFunction::eval<OP_FUNC_LABELS>(Column* res, const Column* arg, GraphView view);
+template void EvalFunction::eval<OP_FUNC_EDGE_TYPES>(Column* res, const Column* arg, GraphView view);
 
 template void EvalFunction::eval<OP_TO_INTEGER>(Column* res, const Column* arg);
 template void EvalFunction::eval<OP_TO_FLOAT>(Column* res, const Column* arg);
