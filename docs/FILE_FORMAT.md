@@ -18,10 +18,12 @@ as well as all the dataparts and other metadata for that graph.
 
 * All the dataparts and commits for a given graph are stored in the same file
 * We want writers from different branches to be able to write in parallel to the file
-* Parallelism and contention: 
-** Contention 1: new page allocation in the file. But we could have a pool of free pages reserved per branch.
-** Contention 2: creation of a new branch. No contention in the file for writing pages that are intra-branch.
-* Writing commits and data parts inside a branch should be able to proceed in parallel over multiple writers provided that we have free pages and the branch is already created in the file.
+  
+### Parallelism and contention: 
+* Contention 1: new page allocation in the file. But we could have a pool of free pages reserved per branch.
+* Contention 2: creation of a new branch. No contention in the file for writing pages that are intra-branch.
+
+Writing commits and data parts inside a branch should be able to proceed in parallel over multiple writers provided that we have free pages and the branch is already created in the file.
 
 Why there are no contention on data parts and why we don't need a central datapart directory in the file:
 * We commits are created by inheriting data parts from their parents and creating new data parts
