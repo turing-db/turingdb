@@ -86,7 +86,7 @@ static void getReturnExpressions(const Projection* proj, std::vector<Expr*>& exp
         return;
     }
 
-    const auto orderByItems = proj->getOrderBy()->getItems();
+    const OrderByNode::ItemVector& orderByItems = proj->getOrderBy()->getItems();
     for (const OrderByItem* item : orderByItems) {
         Expr* orderByExpression = item->getExpr();
         exprs.push_back(orderByExpression);
