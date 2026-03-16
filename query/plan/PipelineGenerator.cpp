@@ -20,6 +20,7 @@
 #include "dataframe/NamedColumn.h"
 #include "decl/EvaluatedType.h"
 #include "decl/PatternData.h"
+#include "expr/Expr.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/SymbolExpr.h"
@@ -1228,8 +1229,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             // Properties
             WriteProcessorTypes::PropertyConstraints props;
             props.reserve(data->exprConstraints().size());
-            for (const EntityPropertyConstraint& propConstr : data->exprConstraints()) {
-                const auto& [name, type, expr] = propConstr;
+            for (const auto& [name, type, expr] : data->exprConstraints()) {
                 Column* propCol = exprGen.registerPropertyConstraint(expr);
 
                 props.emplace_back(name, type, propCol);
@@ -1290,6 +1290,26 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             const ColumnTag edgeTag;
             penEdges.emplace_back(std::move(props), edgeType, edgeVarName, srcName,
                                   tgtName, edgeTag, srcTag, tgtTag);
+        }
+    }
+
+    WriteProcessor::UpdatedNodes updatedNodes;
+    updatedNodes.reserve(node->nodeUpdates().size());
+    {
+        for (const auto& [var, name, valueExpr] : node->nodeUpdates()) {
+            bioassert(var && valueExpr, "Invalid variable and value for updated node");
+            Column* propCol = exprGen.registerPropertyConstraint(valueExpr);
+
+            const auto findIt = _declToColumn.find(var);
+            if (findIt == end(_declToColumn)) {
+                throw FatalException(fmt::format(
+                    "Failed to get column to update variable {}.", var->getName()));
+            }
+
+            const ColumnTag tagToUpdate = findIt->second;
+
+            WriteProcessorTypes::PropertyConstraint propUpdated(name, {}, propCol);
+            updatedNodes.emplace_back(propUpdated, tagToUpdate);
         }
     }
 

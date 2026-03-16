@@ -10,16 +10,11 @@ namespace db {
 
 class Column;
 
-}
-
-namespace db {
-
 class WriteProcessorTypes {
 public:
     struct PropertyConstraint;
 
     using PendingNodeIndex = size_t;
-    // TODO: Check this is what it should be
     using PropertyConstraints = std::vector<PropertyConstraint>;
     using Labels = std::vector<std::string_view>;
 
@@ -29,12 +24,8 @@ public:
         Column* _col {nullptr}; // Column where the values of this property may be found
     };
 
-    struct PendingNode {
-        Labels _labels;
-        PropertyConstraints _properties;
-        std::string_view _name;
-        ColumnTag _tag;
-
+    class PendingNode {
+    public:
         PendingNode(Labels&& labels, PropertyConstraints&& props, std::string_view name, ColumnTag tag)
             : _labels(std::move(labels)),
             _properties(std::move(props)),
@@ -42,18 +33,17 @@ public:
             _tag(tag)
         {
         }
+
+    private:
+        Labels _labels;
+        PropertyConstraints _properties;
+        std::string_view _name;
+        ColumnTag _tag;
+
     };
 
-    struct PendingEdge {
-        PropertyConstraints _properties;
-        std::string_view _edgeType;
-        std::string_view _name;
-        std::string_view _srcName;
-        std::string_view _tgtName;
-        ColumnTag _tag;
-        ColumnTag _srcTag;
-        ColumnTag _tgtTag;
-
+    class PendingEdge {
+    public:
         PendingEdge(PropertyConstraints&& props,
                     std::string_view type,
                     std::string_view name,
@@ -72,15 +62,25 @@ public:
               _tgtTag(tgtTag)
         {
         }
+
+    private:
+        PropertyConstraints _properties;
+        std::string_view _edgeType;
+        std::string_view _name;
+        std::string_view _srcName;
+        std::string_view _tgtName;
+        ColumnTag _tag;
+        ColumnTag _srcTag;
+        ColumnTag _tgtTag;
     };
 
     struct NodeUpdate {
-        PropertyConstraint* _propUpdate {nullptr};
+        PropertyConstraint _propUpdate;
         ColumnTag _tag;
     };
 
     struct EdgeUpdate {
-        PropertyConstraint* _propUpdate {nullptr};
+        PropertyConstraint _propUpdate;
         ColumnTag _tag;
     };
 

@@ -69,6 +69,7 @@ WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* pre
             break;
 
         case Stmt::Kind::SET:
+            throwError("SET statements are not currently supported.", stmt);
             generateSetStmt(static_cast<const SetStmt*>(stmt), prevNode);
             break;
 
@@ -99,7 +100,6 @@ void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* pre
 
     for (const SetItem* item : stmt->getItems()) {
         const auto visitor = Overloaded {
-            // PropertyExprAssign case
             [this](const SetItem::PropertyExprAssign& v) {
                 const VarDecl* decl = v._propTypeExpr->getEntityVarDecl();
 
