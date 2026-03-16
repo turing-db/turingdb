@@ -15,6 +15,8 @@
 
 namespace db {
 
+class EntityList;
+
 template <typename T>
 struct IsHash : std::false_type {};
 
@@ -54,6 +56,9 @@ template <typename T>
 concept IsPath = std::is_same_v<T, Path>;
 
 template <typename T>
+concept IsList = std::is_same_v<T, EntityList>;
+
+template <typename T>
 concept IsNull = std::is_same_v<T, PropertyNull>;
 
 template <typename T>
@@ -80,8 +85,10 @@ struct ColumnTypeGenerator {
             _name = fmt::format("Path");
         } else if constexpr (IsNull<T>) {
             _name = fmt::format("NULL");
+        } else if constexpr (IsList<T>) {
+            _name = fmt::format("List");
         } else {
-            _name = fmt::format("Object");
+            COMPILE_ERROR("Unknown column type");
         }
     }
 };
