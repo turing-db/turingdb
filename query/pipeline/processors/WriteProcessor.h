@@ -34,6 +34,8 @@ public:
     using DeletedEdges = std::vector<ColumnTag>;
     using PendingNodes = std::vector<WriteProcessorTypes::PendingNode>;
     using PendingEdges = std::vector<WriteProcessorTypes::PendingEdge>;
+    using UpdatedNodes = std::vector<WriteProcessorTypes::NodeUpdate>;
+    using UpdatedEdges = std::vector<WriteProcessorTypes::EdgeUpdate>;
 
     static WriteProcessor* create(PipelineV2* pipeline,
                                   ExprProgram* exprProg,
@@ -77,6 +79,9 @@ private:
 
     PendingNodes _pendingNodes;
     PendingEdges _pendingEdges;
+
+    UpdatedNodes _updatedNodes;
+    UpdatedEdges _updatedEdges;
 
     ExprProgram* _exprProgram {nullptr};
 
