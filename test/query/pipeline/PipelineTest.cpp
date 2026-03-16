@@ -6,6 +6,7 @@
 #include "Graph.h"
 #include "TuringDB.h"
 
+#include "processors/CountProcessor.h"
 #include "versioning/Transaction.h"
 #include "metadata/PropertyType.h"
 #include "views/GraphView.h"
@@ -365,7 +366,8 @@ TEST_F(PipelineTest, scanNodesCount) {
     builder.setMaterializeProc(MaterializeProcessor::create(&pipeline, &mem));
     builder.addScanNodes();
     builder.addMaterialize();
-    builder.addCount();
+    const PipelineValueOutputInterface count = builder.addCount();
+    const ColumnTag countTag = count.getValue()->getTag();
 
     // Lambda
     size_t expectedCount = 0;
@@ -376,9 +378,9 @@ TEST_F(PipelineTest, scanNodesCount) {
     }
 
     auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
-        EXPECT_EQ(df->size(), 1);
+        EXPECT_EQ(df->size(), 2);
 
-        const ColumnConst<types::UInt64::Primitive>* count = dynamic_cast<const ColumnConst<types::UInt64::Primitive>*>(df->cols().front()->getColumn());
+        const auto* count = df->getColumn(countTag)->as<ColumnConst<CountProcessor::CountType>>();
         ASSERT_TRUE(count != nullptr);
 
         EXPECT_TRUE(count->getRaw() != 0);
@@ -429,14 +431,15 @@ TEST_F(PipelineTest, multiChunkCount) {
     builder.addColumnToOutput<ColumnNodeIDs>(pipeline.getDataframeManager()->allocTag());
 
     // Count
-    builder.addCount();
+    const PipelineValueOutputInterface count = builder.addCount();
+    const ColumnTag countTag = count.getValue()->getTag();
     
     // Lambda
     size_t returnedCount = 0;
     size_t lambdaSinkExecutions = 0;
     auto callback = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
-        EXPECT_EQ(df->size(), 1);
-        const ColumnConst<types::UInt64::Primitive>* count = dynamic_cast<const ColumnConst<types::UInt64::Primitive>*>(df->cols().front()->getColumn());
+        EXPECT_EQ(df->size(), 2);
+        const auto* count = df->getColumn(countTag)->as<ColumnConst<CountProcessor::CountType>>();
         ASSERT_TRUE(count != nullptr);
         returnedCount = count->getRaw();
 

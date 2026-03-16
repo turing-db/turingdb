@@ -18,6 +18,7 @@
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
 #include "processors/MaterializeProcessor.h"
+#include "processors/CountProcessor.h"
 
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -67,7 +68,8 @@ TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
         builder.addScanNodes();
         builder.addGetOutEdges();
         builder.addMaterialize();
-        builder.addCount();
+        const PipelineValueOutputInterface count = builder.addCount();
+        const ColumnTag countTag = count.getValue()->getTag();
 
         bool sinkExecuted = false;
         size_t rowCount = 0;
@@ -78,7 +80,8 @@ TEST_F(CountProcessorTest, multiChunkSourceWithMaterialize) {
 
             sinkExecuted = true;
 
-            const ColumnConst<types::UInt64::Primitive>* countValue = df->cols().front()->as<ColumnConst<types::UInt64::Primitive>>();
+            const auto* countValue = df->getColumn(countTag)->as<ColumnConst<CountProcessor::CountType>>();
+            ASSERT_TRUE(countValue);
             rowCount = countValue->getRaw();
         };
 
@@ -136,7 +139,8 @@ TEST_F(CountProcessorTest, expand3) {
         builder.addGetOutEdges();
         builder.addGetOutEdges();
         builder.addMaterialize();
-        builder.addCount();
+        const PipelineValueOutputInterface count = builder.addCount();
+        const ColumnTag countTag = count.getValue()->getTag();
 
         bool sinkExecuted = false;
         size_t rowCount = 0;
@@ -146,8 +150,8 @@ TEST_F(CountProcessorTest, expand3) {
             }
 
             sinkExecuted = true;
-
-            const ColumnConst<types::UInt64::Primitive>* countValue = df->cols().front()->as<ColumnConst<types::UInt64::Primitive>>();
+            const auto* countValue = df->getColumn(countTag)->as<ColumnConst<CountProcessor::CountType>>();
+            ASSERT_TRUE(countValue);
             rowCount = countValue->getRaw();
         };
 
