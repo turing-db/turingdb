@@ -108,7 +108,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
     for (Expr* root : returnExpressions) {
         // BFS from root; blocked by aggregates
         bioassert(_frontier.empty(), "Expression frontier was non-empty.");
-        bioassert(_frontier.empty(), "Expression-blocking queue was non-empty.");
+        bioassert(_blockers.empty(), "Expression-blocking queue was non-empty.");
 
         _frontier.push(root);
 
