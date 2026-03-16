@@ -18,7 +18,6 @@ PropertyHashIndex<P, I>::PropertyHashIndex(std::string_view propertyName,
 {
 }
 
-
 template <SupportedType P, TypedInternalID I>
 void PropertyHashIndex<P, I>::init(GraphView view) {
     for (const WeakArc<DataPart>& part : view.dataparts()) {
