@@ -8,6 +8,7 @@
 #include "ID.h"
 #include "Path.h"
 #include "Profiler.h"
+#include "indexes/IndexManager.h"
 #include "versioning/Change.h"
 #include "versioning/CommitResult.h"
 #include "mergers/DataPartMergeResult.h"
@@ -89,6 +90,7 @@ private:
     CommitMap _offsets;
     std::unique_ptr<ArcManager<CommitData>> _dataManager;
     std::unique_ptr<ArcManager<DataPart>> _partManager;
+    IndexManager _indexManager;
 
     DataPartMap _partMap;
 

@@ -15,7 +15,7 @@ void CommitHistory::newCommitHistoryFromPrevious(const CommitHistory& previous) 
     _commitDataparts = {};
 }
 
-void CommitHistory::newMergeCommitHistory(const CommitHistory& previous) {
+void CommitHistory::newMergeCommitHistory() {
     _allDataparts = {};
     _commitDataparts = {};
 }
