@@ -174,8 +174,10 @@ void GetPropertiesIteratorWithNull<ID, T>::next() {
         return;
     }
 
-    Iterator::reset();
-    for (; _partIt.isNotEnd(); _partIt.next()) {
+    // Iterate over parts in reverse order: find the most recent property value first
+    _partIt.skipToEnd();
+    while (_partIt.isNotStart()) {
+        _partIt.prev();
         const DataPart* part = _partIt.get();
         const PropertyManager& properties = std::is_same_v<ID, NodeID>
                                               ? part->nodeProperties()
@@ -183,10 +185,6 @@ void GetPropertiesIteratorWithNull<ID, T>::next() {
 
         if (properties.hasPropertyType(_propTypeID)) {
             _prop = properties.tryGet<T>(_propTypeID, _entityIt->getValue());
-
-            // NOTE: SET: Can intervene here: do lookup in map, check if we already
-            // saw the property for an updated node/edge, if not first encounter,
-            // then set _prop back to nullptr.
 
             if (_prop) {
                 return;

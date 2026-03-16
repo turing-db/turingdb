@@ -24,8 +24,16 @@ public:
         ++_it;
     }
 
+    inline void prev() {
+        --_it;
+    }
+
     bool isNotEnd() const {
         return _it != _itEnd;
+    }
+
+    bool isNotStart() const {
+        return _it != _itStart;
     }
 
     bool operator!=(const PartIterator& other) const {
@@ -34,6 +42,11 @@ public:
 
     inline PartIterator& operator++() {
         ++_it;
+        return *this;
+    }
+
+    inline PartIterator& operator--() {
+        --_it;
         return *this;
     }
 
@@ -46,6 +59,7 @@ public:
 private:
     DataPartIterator _it;
     DataPartIterator _itEnd;
+    DataPartIterator _itStart;
 };
 
 }
