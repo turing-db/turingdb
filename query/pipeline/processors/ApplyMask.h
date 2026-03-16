@@ -33,11 +33,11 @@ public:
 
 inline void ApplyMask::eval(Column* res, const Column* arg, const Column* mask) {
     using Pairs = MaskedPairs;
-    Eval fn {res};
     using Dispatcher = ColumnDoubleDispatcher<Pairs::Allowed,
                                               Pairs::AllowedMixed,
                                               Eval,
                                               Pairs::Excluded>;
+    Eval fn {res};
     Dispatcher::dispatch(arg, mask, fn);
 }
 
