@@ -26,7 +26,7 @@ public:
     DataPartSpan commitDataparts() const { return _commitDataparts; }
 
     void newCommitHistoryFromPrevious(const CommitHistory& previous);
-    void newMergeCommitHistory(const CommitHistory& previous);
+    void newMergeCommitHistory();
 
     const CommitJournal& journal() const { return *_journal; }
 
