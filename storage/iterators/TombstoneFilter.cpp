@@ -25,7 +25,7 @@ TombstoneFilter::TombstoneFilter(const Tombstones& tombstones)
 
 template <TypedInternalID IDT>
 void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
-    if (!baseCol) [[unlikely]] {
+    if (!baseCol) {
         throw FatalException(
             "Planner failed to provide necessary column to ChunkWriter for filtering.");
     }
@@ -45,7 +45,7 @@ void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
     size_t i = 0;
     while (i < col.size()) { // Scan each element in the base column
         // Skip until we find a non-deleted entry
-        const bool deleted =  _tombstones.contains(col[i]);
+        const bool deleted = _tombstones.contains(col[i]);
         if (deleted) {
             i++;
             continue;
@@ -53,7 +53,7 @@ void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
 
         // We have found a non-deleted entry, scan forward to see how many non-deleted
         // entries we have in a row, and form a range from it
-        size_t start = i;
+        const size_t start = i;
         size_t size = 1;
         i++; // Pre-increment i: we scan the next entry after the non-deleted just found
         while (i < col.size() && !_tombstones.contains(col[i])) {
