@@ -123,15 +123,16 @@ Using `pip`:
 pip install turingdb
 ```
 
-or using the `uv`  package manager (you will need to create a project first):
-
+Using `uv` (you will need to create a project first):
 ```bash
 uv add turingdb
 ```
-And then it should be in your $PATH
+and then `turingdb` should be in `$PATH`
 
-or using the docker image:
-If you can it’s better to use TuringDB within a `uv` project or with `pip install` to avoid loss in latency performance related to the docker deployment.
+Using `nix`:
+- TuringDB is available on the `unstable` channel on `nixpkgs` as `turingdb` for both x86 Linux and AArch macOS ([Link](https://github.com/NixOS/nixpkgs/blob/master/pkgs/by-name/tu/turingdb/package.nix))
+
+Docker image (please note: other installation methods are preferred, as there is some performance loss when deploying via Docker):
 
 ``` bash
 docker run -it turingdbai/turingdb:nightly turingdb
