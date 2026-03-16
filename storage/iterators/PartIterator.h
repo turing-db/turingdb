@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-
 #include "views/GraphView.h"
 #include "DataPartSpan.h"
 
