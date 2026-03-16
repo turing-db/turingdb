@@ -391,9 +391,17 @@ PipelineBlockOutputInterface& PipelineBuilder::addLimit(size_t count) {
 
 PipelineValueOutputInterface& PipelineBuilder::addCount(ColumnTag colTag) {
     CountProcessor* count = CountProcessor::create(_pipeline, colTag);
-    _pendingOutput.connectTo(count->input());
 
-    NamedColumn* countColumn = allocColumn<ColumnConst<types::UInt64::Primitive>>(count->output().getDataframe());
+    PipelineBlockInputInterface countIn = count->input();
+    PipelineValueOutputInterface countOut = count->output();
+    Dataframe* countOutDf = countOut.getDataframe();
+
+    _pendingOutput.connectTo(countIn);
+
+    countIn.propagateColumns(countOut);
+
+    NamedColumn* countColumn =
+        allocColumn<ColumnConst<CountProcessor::CountType>>(countOutDf);
     count->output().setValue(countColumn);
 
     _pendingOutput.updateInterface(&count->output());

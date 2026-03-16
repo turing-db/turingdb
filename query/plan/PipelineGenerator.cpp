@@ -1006,10 +1006,6 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
         throw PlannerException("AggregateEvalNode does not have any functions");
     }
 
-    if (funcs.size() != 1) [[unlikely]] {
-        throw PlannerException("Evaluation of multiple aggregate functions is not supported yet");
-    }
-
     for (const FunctionInvocationExpr* func : funcs) {
         const FunctionInvocation* invocation = func->getFunctionInvocation();
         const ExprChain* args = invocation->getArguments();
