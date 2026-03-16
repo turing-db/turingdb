@@ -36,9 +36,8 @@ should store references to indexes that concern them.
 
 A given index may be used to index the data contained within one or more dataparts.
 
-An operation we may need to perform is to determine whether there exists an index on
-property `Y` visible to the current commit.
-
+>[!note] Required Operation
+Determine whether there exists an index on property `Y` visible to the current commit.
 
 ### Immutability of Indexes
 
@@ -77,4 +76,11 @@ Step 7. then creates an additional index on property `Y`, but only for the prope
 values stored in the nodes created at 6.
 
 That is, if $I$ is the set of property values indexed by index created at 3., and $J$
-is the set of property values indexed by the index created at 7., then $I \cup J = \emptyset$.
+is the set of property values indexed by the index created at 7., then $I \cap J = \emptyset$.
+
+This means we do not need to reindex all that is indexed by $I$, but means that we need
+to linear search through indexes to find all matches. This is in line with our current
+philosophy as we already consider it bad practices to split nodes and edges over many
+dataparts/commits.
+
+# Summary of operations

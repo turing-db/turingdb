@@ -66,7 +66,7 @@ std::unique_ptr<Commit> Commit::createMergeCommit(VersionController* controller,
     const GraphView view = GraphView(&prevCommit->data());
 
     // Copy previous commit history and metadata
-    ptr->_data->_history.newMergeCommitHistory(view.history());
+    ptr->_data->_history.newMergeCommitHistory();
     ptr->_data->_metadata = view.metadata();
 
     return std::unique_ptr<Commit>(ptr);
