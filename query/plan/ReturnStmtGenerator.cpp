@@ -105,58 +105,57 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
     std::vector<Expr*> returnExpressions;
     getReturnExpressions(_proj, returnExpressions);
 
+    // BFS from root; blocked by aggregates
+    bioassert(_frontier.empty(), "Expression frontier was non-empty.");
+    bioassert(_blockers.empty(), "Expression-blocking queue was non-empty.");
     for (Expr* root : returnExpressions) {
-        // BFS from root; blocked by aggregates
-        bioassert(_frontier.empty(), "Expression frontier was non-empty.");
-        bioassert(_blockers.empty(), "Expression-blocking queue was non-empty.");
-
         _frontier.push(root);
+    }
 
-        while (!_frontier.empty() || !_blockers.empty()) {
-            // Process all non-blocking expressions on the frontier
-            while (!_frontier.empty()) {
-                Expr* front = _frontier.front();
-                _frontier.pop();
+    while (!_frontier.empty() || !_blockers.empty()) {
+        // Process all non-blocking expressions on the frontier
+        while (!_frontier.empty()) {
+            Expr* front = _frontier.front();
+            _frontier.pop();
 
-                // Evaluation blockers need be evaluated on their own level
-                if (isEvaluationBlocker(front)) {
-                    _blockers.push(front);
-                    continue;
-                }
-
-                if (ExprEvalNode::needsEvaluation(front)) {
-                    if (!_exprEvalNode) {
-                        _exprEvalNode = _tree->create<ExprEvalNode>();
-                    }
-                    _exprEvalNode->addExpr(front);
-                }
-
-                // Adds all children of @ref front to @ref _frontier, to continue BFS
-                expandExpr(front);
+            // Evaluation blockers need be evaluated on their own level
+            if (isEvaluationBlocker(front)) {
+                _blockers.push(front);
+                continue;
             }
 
-            // Process all blocking expressions on the frontier
-            while (!_blockers.empty()) {
-                const Expr* blocker = _blockers.front();
-                _blockers.pop();
-
-                handleEvaluationBlocker(blocker);
-            }
-
-            // We may have populated both @ref _aggrEvalNode and @ref _exprEvalNode.
-            // If we have no aggregates (blockers), do not add an ExprEvalNode becuase we
-            // may have more expressions to evaluate in following return items. If we have
-            // aggregates, add the ExprEval and then the blocking AggregatEval.
-            const bool haveAggrs = _aggrEvalNode && !_aggrEvalNode->getFuncs().empty();
-            const bool needEvaluate = _exprEvalNode && !_exprEvalNode->getExprs().empty();
-            if (haveAggrs) {
-                if (needEvaluate) {
-                    _evalSteps.emplace_back(_exprEvalNode);
-                    _exprEvalNode = nullptr; // Reset to denote we need a new node
+            if (ExprEvalNode::needsEvaluation(front)) {
+                if (!_exprEvalNode) {
+                    _exprEvalNode = _tree->create<ExprEvalNode>();
                 }
-                _evalSteps.emplace_back(_aggrEvalNode);
-                _aggrEvalNode = nullptr; // Reset to denote we need a new node
+                _exprEvalNode->addExpr(front);
             }
+
+            // Adds all children of @ref front to @ref _frontier, to continue BFS
+            expandExpr(front);
+        }
+
+        // Process all blocking expressions on the frontier
+        while (!_blockers.empty()) {
+            const Expr* blocker = _blockers.front();
+            _blockers.pop();
+
+            handleEvaluationBlocker(blocker);
+        }
+
+        // We may have populated both @ref _aggrEvalNode and @ref _exprEvalNode.
+        // If we have no aggregates (blockers), do not add an ExprEvalNode becuase we
+        // may have more expressions to evaluate in following return items. If we have
+        // aggregates, add the ExprEval and then the blocking AggregatEval.
+        const bool haveAggrs = _aggrEvalNode && !_aggrEvalNode->getFuncs().empty();
+        const bool needEvaluateExpr = _exprEvalNode && !_exprEvalNode->getExprs().empty();
+        if (haveAggrs) {
+            if (needEvaluateExpr) {
+                _evalSteps.emplace_back(_exprEvalNode);
+                _exprEvalNode = nullptr; // Reset to denote we need a new node
+            }
+            _evalSteps.emplace_back(_aggrEvalNode);
+            _aggrEvalNode = nullptr; // Reset to denote we need a new node
         }
     }
 

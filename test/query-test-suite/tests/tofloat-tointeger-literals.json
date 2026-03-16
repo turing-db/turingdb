@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "RETURN toFloat(\"10\"), toInteger(\"10\"), toFloat(\"103.421313\"), 103.24522, 10.0",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (FUNCTION_INVOCATION): v1\n__expr__ (LITERAL): v0\n__expr__ (FUNCTION_INVOCATION): v3\n__expr__ (LITERAL): v2\n__expr__ (FUNCTION_INVOCATION): v5\n__expr__ (LITERAL): v4\n__expr__ (LITERAL): v6\n__expr__ (LITERAL): v7\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (FUNCTION_INVOCATION): v1\n__expr__ (FUNCTION_INVOCATION): v3\n__expr__ (FUNCTION_INVOCATION): v5\n__expr__ (LITERAL): v6\n__expr__ (LITERAL): v7\n__expr__ (LITERAL): v0\n__expr__ (LITERAL): v2\n__expr__ (LITERAL): v4\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
     "result": "\"toFloat(\"\"10\"\")\",\"toInteger(\"\"10\"\")\",\"toFloat(\"\"103.421313\"\")\",103.24522,10.0\n10,10,103.421313,103.24522,10",
     "resultJson": "{\"header\":{\"column_names\":[\"toFloat(\\\"10\\\")\",\"toInteger(\\\"10\\\")\",\"toFloat(\\\"103.421313\\\")\",\"103.24522\",\"10.0\"],\"column_types\":[\"Double\",\"Int64\",\"Double\",\"Double\",\"Double\"]},\"data\":[[[10.000000],[10],[103.421313],[103.245220],[10.000000]]]}"
   },
