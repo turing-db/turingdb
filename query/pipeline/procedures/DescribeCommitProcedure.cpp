@@ -141,6 +141,12 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
             const CommitHash headHash = ctxt->getGraphView().headCommitHash();
 
             data._headCommit = controller->getCommitSafe(headHash);
+            if (!data._headCommit) {
+                // On a change, headCommitHash() returns a pending CommitBuilder
+                // hash that doesn't exist in the VersionController. Fall back to
+                // the committed head.
+                data._headCommit = controller->getCommitSafe(CommitHash::head());
+            }
             bioassert(data._headCommit, "headCommitHash not found");
 
             const auto containerKind =
