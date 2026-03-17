@@ -11,7 +11,10 @@
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
 
+#include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
+#include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnVector.h"
 #include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
 #include "processors/ExprProgram.h"
@@ -30,12 +33,20 @@
 
 #include "FatalException.h"
 #include "PipelineException.h"
+#include "TypeUtils.h"
 
 using namespace db;
 namespace rg = ranges;
 namespace rv = rg::views;
 
 namespace {
+
+bool isColumnConst(const Column* col) {
+    constexpr ColumnKind::Code constKind = ColumnConst<int>::staticKind();
+    constexpr ContainerKind::Code constContainerKind = ColumnKind::extractContainerKind(constKind);
+
+    return col->getContainerKind() == constContainerKind;
+}
 
 template <TypedInternalID IDT>
 void validateDeletions(const GraphReader reader, const ColumnVector<IDT>* col) {
@@ -113,7 +124,7 @@ CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
     throw FatalException("Failed to match against property value type.");
 }
 
-void getUntypedProperties(CommitWriteBuffer::UntypedProperties& buf,
+[[maybe_unused]] void getUntypedProperties(CommitWriteBuffer::UntypedProperties& buf,
                           Column* valueCol,
                           ValueType type,
                           PropertyTypeID propID) {
@@ -192,6 +203,91 @@ void getUntypedProperties(CommitWriteBuffer::UntypedProperties& buf,
     }
     throw FatalException("Failed to match against property value type.");
 }
+
+class ColumnVectorToUntypedProperties {
+public:
+    explicit ColumnVectorToUntypedProperties(CommitWriteBuffer::UntypedProperties& buffer,
+                                             PropertyTypeID propID)
+        : _buf(buffer),
+        _propID(propID)
+    {
+    }
+    
+    template <typename T>
+    void operator()(const ColumnVector<T>* typed) {
+        _buf.clear();
+
+        for (const T& val : *typed) {
+            _buf.emplace_back(_propID, val);
+        }
+    }
+
+    void operator()(const ColumnVector<std::string_view>* typed) {
+        _buf.clear();
+
+        std::string tmp;
+        for (const std::string_view val : *typed) {
+            tmp.assign(begin(val), end(val));
+            _buf.emplace_back(_propID, tmp);
+        }
+    }
+
+    template <typename T>
+    void operator()(const ColumnVector<std::optional<T>>* typed) {
+        _buf.clear();
+
+        for (const T& val : *typed) {
+            bioassert(val.has_value(), "Column had nullopt.");
+
+            _buf.emplace_back(_propID, *val);
+        }
+    }
+
+    void operator()(const ColumnVector<std::optional<std::string_view>>* typed) {
+        _buf.clear();
+
+        std::string tmp;
+        for (const std::optional<std::string_view> val : *typed) {
+            bioassert(val.has_value(), "Column had nullopt.");
+            const std::string_view v = *val;
+
+            tmp.assign(begin(v), end(v));
+            _buf.emplace_back(_propID, tmp);
+        }
+    }
+
+private:
+    CommitWriteBuffer::UntypedProperties& _buf;
+    PropertyTypeID _propID;
+};
+
+class ColumnConstToUntypedProperty {
+public:
+    explicit ColumnConstToUntypedProperty(CommitWriteBuffer::UntypedProperty& prop,
+                                          PropertyTypeID propID)
+    : _prop(prop),
+    _propID(propID)
+    {
+    }
+
+    template <typename T>
+    void operator()(const ColumnConst<T>* typed) {
+        const T& val = typed->getRaw();
+
+        _prop = CommitWriteBuffer::UntypedProperty(_propID, val);
+    }
+
+    void operator()(const ColumnConst<std::string_view>* typed) {
+        const std::string_view val = typed->getRaw();
+        const std::string v(begin(val), end(val));
+
+        _prop = CommitWriteBuffer::UntypedProperty(_propID, v);
+    }
+
+private:
+    CommitWriteBuffer::UntypedProperty _prop;
+    PropertyTypeID _propID;
+};
 
 }
 
@@ -534,14 +630,35 @@ void WriteProcessor::updateNodes() {
         const ColumnNodeIDs* source = srcNCol->as<ColumnNodeIDs>();
         bioassert(source, "Failed to get node update source column as ColumnNodeIDs.");
 
-        // Determines runtime type of property values and fills @ref propBuffer with variants
-        getUntypedProperties(propBuffer, valueColumn, valueType, pid);
+        if (isColumnConst(valueColumn)) {
+            using Types = PropertyTypes;
+            using Dispatcher =
+                ColumnSingleDispatcher<Types::Allowed, ColumnConstToUntypedProperty,
+                                       Types::ExcludedConst>;
 
-        bioassert(source->size() == propBuffer.size(),
-                  "Mismatch in dimensions of nodes to updates and property values.");
+            CommitWriteBuffer::UntypedProperty prop;
+            ColumnConstToUntypedProperty toProp(prop, pid);
+            Dispatcher::dispatch(valueColumn, toProp);
 
-        for (const auto& [nodeID, update] : rv::zip(*source, propBuffer)) {
-            _writeBuffer->addNodeUpdate(nodeID, update);
+            for (const NodeID n : *source) {
+                _writeBuffer->addNodeUpdate(n, prop);
+            }
+        } else {
+            using Types = PropertyTypes;
+            using Dispatcher =
+                ColumnSingleDispatcher<Types::Allowed,
+                                       ColumnVectorToUntypedProperties,
+                                       Types::ExcludedVector>;
+
+            // Determines type of property values and fills @ref propBuffer with variants
+            ColumnVectorToUntypedProperties toVec(propBuffer, pid);
+            Dispatcher::dispatch(valueColumn, toVec);
+            bioassert(source->size() == propBuffer.size(),
+                      "Mismatch in dimensions of nodes to updates and property values.");
+
+            for (const auto& [nodeID, update] : rv::zip(*source, propBuffer)) {
+                _writeBuffer->addNodeUpdate(nodeID, update);
+            }
         }
     }
 }

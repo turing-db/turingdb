@@ -383,4 +383,26 @@ struct OrderedTypes {
     >;
 };
 
+struct PropertyTypes {
+    using Allowed = GenerateKindList<std::tuple<
+        types::Int64::Primitive,
+        types::UInt64::Primitive,
+        types::Double::Primitive,
+        types::String::Primitive,
+        types::Bool::Primitive
+    >>;
+    using ExcludedVector = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnConst>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+
+    using ExcludedConst = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnVector>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+
+};
+
 }
