@@ -66,20 +66,19 @@ WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* pre
     switch (stmt->getKind()) {
         case Stmt::Kind::CREATE:
             generateCreateStmt(static_cast<const CreateStmt*>(stmt), prevNode);
-            break;
+        break;
 
         case Stmt::Kind::SET:
-            throwError("SET statements are not currently supported.", stmt);
             generateSetStmt(static_cast<const SetStmt*>(stmt), prevNode);
-            break;
+        break;
 
         case Stmt::Kind::DELETE:
             generateDeleteStmt(static_cast<const DeleteStmt*>(stmt), prevNode);
-            break;
+        break;
 
         default:
             throwError(fmt::format("Unsupported write statement type: {}", (uint64_t)stmt->getKind()), stmt);
-            break;
+        break;
     }
 
     return _currentNode;

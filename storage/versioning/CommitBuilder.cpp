@@ -4,6 +4,7 @@
 
 #include "reader/GraphReader.h"
 #include "Graph.h"
+#include "spdlog/spdlog.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHistoryBuilder.h"
 #include "versioning/Tombstones.h"
@@ -144,6 +145,8 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         DataPartBuilder& dpBuilder = newBuilder();
         wb.buildPending(dpBuilder);
     }
+
+    spdlog::info("Have {} node updates", wb.updatedNodes().size());
 
     wb.setFlushed();
 }

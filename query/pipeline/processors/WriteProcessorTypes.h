@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <string_view>
 
+#include "ID.h"
 #include "dataframe/ColumnTag.h"
 #include "metadata/PropertyType.h"
 
@@ -24,8 +25,14 @@ public:
         Column* _col {nullptr}; // Column where the values of this property may be found
     };
 
-    class PendingNode {
-    public:
+    struct PropertyUpdate {
+        std::string_view _propName;
+        ValueType _type {ValueType::Invalid};
+        Column* _col {nullptr}; // Column where the updated value may be found
+        PropertyTypeID _pid;
+    };
+
+    struct PendingNode {
         PendingNode(Labels&& labels, PropertyConstraints&& props, std::string_view name, ColumnTag tag)
             : _labels(std::move(labels)),
             _properties(std::move(props)),
@@ -34,16 +41,13 @@ public:
         {
         }
 
-    private:
         Labels _labels;
         PropertyConstraints _properties;
         std::string_view _name;
         ColumnTag _tag;
-
     };
 
-    class PendingEdge {
-    public:
+    struct PendingEdge {
         PendingEdge(PropertyConstraints&& props,
                     std::string_view type,
                     std::string_view name,
@@ -63,7 +67,6 @@ public:
         {
         }
 
-    private:
         PropertyConstraints _properties;
         std::string_view _edgeType;
         std::string_view _name;
@@ -75,12 +78,12 @@ public:
     };
 
     struct NodeUpdate {
-        PropertyConstraint _propUpdate;
+        PropertyUpdate _propUpdate;
         ColumnTag _tag;
     };
 
     struct EdgeUpdate {
-        PropertyConstraint _propUpdate;
+        PropertyUpdate _propUpdate;
         ColumnTag _tag;
     };
 

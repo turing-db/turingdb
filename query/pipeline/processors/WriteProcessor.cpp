@@ -5,6 +5,8 @@
 #include <string_view>
 #include <utility>
 
+#include <range/v3/view/zip.hpp>
+
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
@@ -30,6 +32,8 @@
 #include "PipelineException.h"
 
 using namespace db;
+namespace rg = ranges;
+namespace rv = rg::views;
 
 namespace {
 
@@ -67,21 +71,21 @@ CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
         case ValueType::Int64: {
             const auto* casted = dynamic_cast<ColumnConst<types::Int64::Primitive>*>(valueCol);
             bioassert(casted, "Could not get constant property value.");
-            return {propID, casted->getRaw()};
+            return {.propertyID=propID, .value=casted->getRaw()};
         }
         break;
 
         case ValueType::UInt64: {
             const auto* casted = dynamic_cast<ColumnConst<types::UInt64::Primitive>*>(valueCol);
             bioassert(casted, "Could not get constant property value.");
-            return {propID, casted->getRaw()};
+            return {.propertyID=propID, .value=casted->getRaw()};
         }
         break;
 
         case ValueType::String: {
             const auto* casted = dynamic_cast<ColumnConst<types::String::Primitive>*>(valueCol);
             bioassert(casted, "Could not get constant property value.");
-            return {propID, std::string(casted->getRaw())};
+            return {.propertyID=propID, .value=std::string(casted->getRaw())};
 
         }
         break;
@@ -89,14 +93,86 @@ CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
         case ValueType::Double: {
             const auto* casted = dynamic_cast<ColumnConst<types::Double::Primitive>*>(valueCol);
             bioassert(casted, "Could not get constant property value.");
-            return {propID, casted->getRaw()};
+            return {.propertyID=propID, .value=casted->getRaw()};
         }
         break;
 
         case ValueType::Bool: {
             const auto* casted = dynamic_cast<ColumnConst<types::Bool::Primitive>*>(valueCol);
             bioassert(casted, "Could not get constant property value.");
-            return {propID, casted->getRaw()};
+            return {.propertyID=propID, .value=casted->getRaw()};
+        }
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE: {
+            throw FatalException("Property value column with invalid type.");
+        }
+        break;
+    }
+    throw FatalException("Failed to match against property value type.");
+}
+
+void getUntypedProperties(CommitWriteBuffer::UntypedProperties& buf,
+                          Column* valueCol,
+                          ValueType type,
+                          PropertyTypeID propID) {
+    buf.clear();
+    switch (type) {
+        case ValueType::Int64: {
+            const auto* casted = dynamic_cast<ColumnVector<types::Int64::Primitive>*>(valueCol);
+            bioassert(casted, "Could not get untyped property vector.");
+
+            buf.reserve(casted->size());
+            for (const auto& val : *casted) {
+                buf.emplace_back(propID, val);
+            }
+        }
+        break;
+
+        case ValueType::UInt64: {
+            const auto* casted = dynamic_cast<ColumnVector<types::UInt64::Primitive>*>(valueCol);
+            bioassert(casted, "Could not get untyped property vector.");
+
+            buf.reserve(casted->size());
+            for (const auto& val : *casted) {
+                buf.emplace_back(propID, val);
+            }
+        }
+        break;
+
+        case ValueType::String: {
+            const auto* casted = dynamic_cast<ColumnVector<types::String::Primitive>*>(valueCol);
+            bioassert(casted, "Could not get untyped property vector.");
+
+            buf.reserve(casted->size());
+            std::string tmp;
+            for (const std::string_view& val : *casted) {
+                tmp.assign(begin(val), end(val));
+                buf.emplace_back(propID, tmp);
+            }
+        }
+        break;
+
+        case ValueType::Double: {
+            const auto* casted = dynamic_cast<ColumnVector<types::Double::Primitive>*>(valueCol);
+            bioassert(casted, "Could not get untyped property vector.");
+
+            buf.reserve(casted->size());
+            for (const auto& val : *casted) {
+                buf.emplace_back(propID, val);
+            }
+        }
+        break;
+
+        case ValueType::Bool: {
+            const auto* casted = dynamic_cast<ColumnVector<types::Bool::Primitive>*>(valueCol);
+            bioassert(casted, "Could not get untyped property vector.");
+
+            buf.reserve(casted->size());
+            for (const auto& val : *casted) {
+                buf.emplace_back(propID, val);
+            }
         }
         break;
 
@@ -239,7 +315,7 @@ void WriteProcessor::createNodes(size_t numIters) {
         auto* createdNodeCol = outDf->getColumn(node._tag)->as<ColumnNodeIDs>();
 
         // Always empty on first call, or has been cleared by @ref setup.
-        bioassert(createdNodeCol->size() == 0,
+        bioassert(createdNodeCol->empty(),
                   "Pending nodes column should be empty but is size {}",
                   createdNodeCol->size());
 
@@ -307,7 +383,7 @@ void WriteProcessor::createEdges(size_t numIters) {
         auto* createdEdgeColumn = outDf->getColumn(edge._tag)->as<ColumnEdgeIDs>();
 
         // Always empty on first call, or has been cleared by @ref setup.
-        bioassert(createdEdgeColumn->size() == 0,
+        bioassert(createdEdgeColumn->empty(),
                   "Pending edges column should be empty but is size {}",
                   createdEdgeColumn->size());
 
@@ -444,6 +520,32 @@ void WriteProcessor::postProcessTempIDs() {
     }
 }
 
+void WriteProcessor::updateNodes() {
+    CommitWriteBuffer::UntypedProperties propBuffer;
+
+    for (const auto& [propUpdate, srcTag] : _updatedNodes) {
+        const auto& [name, valueType, valueColumn, pid] = propUpdate;
+
+        const Dataframe* inDf = tryGetInput().getDataframe();
+
+        const NamedColumn* srcNCol = inDf->getColumn(srcTag);
+        bioassert(srcNCol, "Failed to get node update source column.");
+
+        const ColumnNodeIDs* source = srcNCol->as<ColumnNodeIDs>();
+        bioassert(source, "Failed to get node update source column as ColumnNodeIDs.");
+
+        // Determines runtime type of property values and fills @ref propBuffer with variants
+        getUntypedProperties(propBuffer, valueColumn, valueType, pid);
+
+        bioassert(source->size() == propBuffer.size(),
+                  "Mismatch in dimensions of nodes to updates and property values.");
+
+        for (const auto& [nodeID, update] : rv::zip(*source, propBuffer)) {
+            _writeBuffer->addNodeUpdate(nodeID, update);
+        }
+    }
+}
+
 void WriteProcessor::performCreations() {
     // We apply the CREATE command for each row in the input, or just a single row if we
     // have no inputs
@@ -456,6 +558,11 @@ void WriteProcessor::performCreations() {
     createEdges(numIters);
 
     postProcessTempIDs();
+}
+
+void WriteProcessor::performUpdates() {
+    updateNodes();
+    // updateEdges();
 }
 
 void WriteProcessor::setup() {
@@ -515,11 +622,15 @@ void WriteProcessor::execute() {
         performDeletions();
     }
 
+    // Evaluate instructions so that property columns are populated with their
+    // evaluated value
+    _exprProgram->evaluateInstructions();
     if (!_pendingNodes.empty() || !_pendingEdges.empty()) {
-        // Evaluate instructions so that property columns are populated with their
-        // evaluated value
-        _exprProgram->evaluateInstructions();
         performCreations();
+    }
+
+    if (!_updatedNodes.empty() || !_updatedEdges.empty()) {
+        performUpdates();
     }
 
     if (_input) {
