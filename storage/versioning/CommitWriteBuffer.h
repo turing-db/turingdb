@@ -6,6 +6,7 @@
 
 #include "DataPart.h"
 #include "ID.h"
+#include "writers/DataPartBuilder.h"
 
 namespace db {
 
@@ -92,6 +93,8 @@ public:
       * @ref _journal
       */
      void buildPending(DataPartBuilder& builder);
+
+     void applyUpdates(DataPartBuilder& builder);
 
      size_t numPendingNodes() const { return _pendingNodes.size(); }
      size_t numPendingEdges() const { return _pendingEdges.size(); }

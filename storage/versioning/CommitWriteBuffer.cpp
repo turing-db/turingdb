@@ -204,6 +204,29 @@ void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
     buildPendingEdges(builder);
 }
 
+void CommitWriteBuffer::applyUpdates(DataPartBuilder& builder) {
+    for (const auto& [nodeID, property] : _updatedNodes) {
+        const auto& [propID, value] = property;
+        std::visit(
+            [&](auto&& val) {
+                using T = std::decay_t<decltype(val)>;
+
+                if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
+                    builder.addNodeProperty<types::Int64>(nodeID, propID, val);
+                } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
+                    builder.addNodeProperty<types::UInt64>(nodeID, propID, val);
+                } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
+                    builder.addNodeProperty<types::Double>(nodeID, propID, val);
+                } else if constexpr (std::is_same_v<T, std::string>) {
+                    builder.addNodeProperty<types::String>(nodeID, propID, val);
+                } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
+                    builder.addNodeProperty<types::Bool>(nodeID, propID, val);
+                }
+            },
+            value);
+    }
+}
+
 void CommitWriteBuffer::applyDeletions(Tombstones& tombstones) {
     // Apply symbolic/implicit deletions
     tombstones.addNodeTombstones(_deletedNodes);
