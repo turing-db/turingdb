@@ -180,6 +180,7 @@ public:
     ~TypedPropertyContainer() override = default;
 
     void add(EntityID entityID, std::string_view v) {
+        _entityIndexMap[entityID] = _ids.size();
         _values.alloc(v);
         _ids.emplace_back(entityID);
     }
@@ -274,12 +275,12 @@ public:
         return _entityIndexMap.contains(entityID);
     }
 
-    std::span<const float> get(EntityID entityID) const {
+    types::Embedding::Primitive get(EntityID entityID) const {
         const auto it = _entityIndexMap.find(entityID);
         return _values.getView(it->second);
     }
 
-    std::span<const float> get(size_t offset) const {
+    types::Embedding::Primitive get(size_t offset) const {
         return _values.getView(offset);
     }
 
