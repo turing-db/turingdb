@@ -13,8 +13,7 @@ EmbeddingPropertyContainerDumper::EmbeddingPropertyContainerDumper(fs::FilePageW
 EmbeddingPropertyContainerDumper::~EmbeddingPropertyContainerDumper() {
 }
 
-DumpResult<void> EmbeddingPropertyContainerDumper::dump(
-        const TypedPropertyContainer<types::Embedding>& props) {
+DumpResult<void> EmbeddingPropertyContainerDumper::dump(const TypedPropertyContainer<types::Embedding>& props) {
     Profile profile("EmbeddingPropertyContainerDumper::dump");
 
     const auto& container = props.getRawContainer();
@@ -55,7 +54,7 @@ DumpResult<void> EmbeddingPropertyContainerDumper::dump(
             const size_t countInPage = isLastPage
                                          ? (remainder == 0 ? idCountPerPage : remainder)
                                          : idCountPerPage;
-            const std::span idSpan = std::span {ids}.subspan(offset, countInPage);
+            const std::span idSpan = std::span{ids}.subspan(offset, countInPage);
             offset += countInPage;
 
             _writer.writeToCurrentPage(countInPage);
