@@ -1,18 +1,18 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "MATCH (n) RETURN edgeTypes(n)",
+  "query": "MATCH (n) RETURN edgeType(n)",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN edgeTypes(n)\n       |                  ^^^^^^^^^^^^\n-------* Invalid arguments for function 'edgeTypes'",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN edgeTypes(n)\n       |                  ^^^^^^^^^^^^\n-------* Invalid arguments for function 'edgeTypes'",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) RETURN edgeTypes(n)\\n       |                  ^^^^^^^^^^^^\\n-------* Invalid arguments for function 'edgeTypes'\"}"
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN edgeType(n)\n       |                  ^^^^^^^^^^^\n-------* Invalid arguments for function 'edgeType'",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN edgeType(n)\n       |                  ^^^^^^^^^^^\n-------* Invalid arguments for function 'edgeType'",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) RETURN edgeType(n)\\n       |                  ^^^^^^^^^^^\\n-------* Invalid arguments for function 'edgeType'\"}"
   },
   "tags": [
     "functions",
     "return",
     "projection",
     "error",
-    "edgeTypes"
+    "edgeType"
   ],
   "write-required": false
 }

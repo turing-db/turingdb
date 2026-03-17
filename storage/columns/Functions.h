@@ -233,7 +233,7 @@ struct FunctionExecutor<LabelsFunction, Res, Arg> {
     }
 };
 
-/// Specialisation for edgeTypes()
+/// Specialisation for edgeType()
 template <typename Res, typename Arg>
 struct FunctionExecutor<EdgeTypesFunction, Res, Arg> {
     static void apply(ColumnVector<std::string>* res,
@@ -245,9 +245,9 @@ struct FunctionExecutor<EdgeTypesFunction, Res, Arg> {
         const auto& argd = arg->getRaw();
         auto& resd = res->getRaw();
 
-        EdgeTypesFunction edgeTypes(view);
+        EdgeTypesFunction edgeType(view);
         for (size_t i = 0; i < size ; i ++) {
-            resd[i] = edgeTypes(argd[i]);
+            resd[i] = edgeType(argd[i]);
         }
     }
 };

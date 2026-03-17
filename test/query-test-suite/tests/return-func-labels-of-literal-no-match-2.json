@@ -1,18 +1,18 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "RETURN edgeTypes(1)",
+  "query": "RETURN edgeType(1)",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN edgeTypes(1)\n       |        ^^^^^^^^^^^^\n-------* Invalid arguments for function 'edgeTypes'",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN edgeTypes(1)\n       |        ^^^^^^^^^^^^\n-------* Invalid arguments for function 'edgeTypes'",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | RETURN edgeTypes(1)\\n       |        ^^^^^^^^^^^^\\n-------* Invalid arguments for function 'edgeTypes'\"}"
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN edgeType(1)\n       |        ^^^^^^^^^^^\n-------* Invalid arguments for function 'edgeType'",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN edgeType(1)\n       |        ^^^^^^^^^^^\n-------* Invalid arguments for function 'edgeType'",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | RETURN edgeType(1)\\n       |        ^^^^^^^^^^^\\n-------* Invalid arguments for function 'edgeType'\"}"
   },
   "tags": [
     "error",
     "function",
     "return",
     "projection",
-    "edgeTypes"
+    "edgeType"
   ],
   "write-required": false
 }
