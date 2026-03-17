@@ -4,6 +4,7 @@
 #include <functional>
 #include <unordered_map>
 #include <list>
+#include <optional>
 
 #include "AgingRingCacheResult.h"
 #include "AgingRingCacheEntry.h"
