@@ -205,6 +205,7 @@ void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
 }
 
 void CommitWriteBuffer::applyUpdates(DataPartBuilder& builder) {
+    // FIXME: multiple updates get overwritten strangely
     for (const auto& [nodeID, property] : _updatedNodes) {
         const auto& [propID, value] = property;
         std::visit(
@@ -221,6 +222,29 @@ void CommitWriteBuffer::applyUpdates(DataPartBuilder& builder) {
                     builder.addNodeProperty<types::String>(nodeID, propID, val);
                 } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
                     builder.addNodeProperty<types::Bool>(nodeID, propID, val);
+                }
+            },
+            value);
+        _journal.addWrittenNode(nodeID);
+    }
+
+    for (const auto& [edgeID, property] : _updatedEdges) {
+        const auto& [propID, value] = property;
+
+        std::visit(
+            [&](auto&& val) {
+                using T = std::decay_t<decltype(val)>;
+
+                if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
+                    builder.addEdgeProperty<types::Int64>(edgeID, propID, val);
+                } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
+                    builder.addEdgeProperty<types::UInt64>(edgeID, propID, val);
+                } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
+                    builder.addEdgeProperty<types::Double>(edgeID, propID, val);
+                } else if constexpr (std::is_same_v<T, std::string>) {
+                    builder.addEdgeProperty<types::String>(edgeID, propID, val);
+                } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
+                    builder.addEdgeProperty<types::Bool>(edgeID, propID, val);
                 }
             },
             value);
