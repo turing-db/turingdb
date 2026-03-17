@@ -138,5 +138,5 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
     EnumStringPair<ColumnOperator::OP_TO_BOOLEAN, "TO_BOOLEAN">,
 
     EnumStringPair<ColumnOperator::OP_FUNC_LABELS, "FUNCTION_LABELS">,
-    EnumStringPair<ColumnOperator::OP_FUNC_EDGE_TYPES, "FUNCTION_EDGE_TYOES">>;
+    EnumStringPair<ColumnOperator::OP_FUNC_EDGE_TYPES, "FUNCTION_EDGE_TYPES">>;
 }
