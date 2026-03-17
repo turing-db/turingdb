@@ -306,7 +306,7 @@ public:
     }
 
     size_t size() const override {
-        return _values.getSize();
+        return _values.getEmbeddingCount();
     }
 
     void sort() override;

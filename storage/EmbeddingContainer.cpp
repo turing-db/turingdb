@@ -7,8 +7,7 @@ using namespace db;
 EmbeddingContainer::EmbeddingContainer(size_t dimension)
     : _dimension(dimension)
 {
-    EmbeddingBucket& bucket = _buckets.emplace_back(_dimension);
-    _capacity = bucket.getCapacity();
+    _buckets.emplace_back(_dimension);
 }
 
 EmbeddingContainer::~EmbeddingContainer() {

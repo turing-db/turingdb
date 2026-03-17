@@ -18,7 +18,6 @@ public:
     EmbeddingBucket& operator=(EmbeddingBucket&&) noexcept = default;
 
     size_t getDimension() const { return _dimension; }
-    size_t getCapacity() const { return _capacity; }
     size_t getEmbeddingCount() const { return _embeddingCount; }
     size_t getAvailCount() const { return _capacity - _embeddingCount; }
     const float* data() const { return _bucket.data(); }
