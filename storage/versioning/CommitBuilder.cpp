@@ -146,7 +146,9 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         wb.buildPending(dpBuilder);
     }
 
-    spdlog::info("Have {} node updates", wb.updatedNodes().size());
+    if (wb.containsUpdates()) {
+        spdlog::info("Have {} node updates", wb.updatedNodes().size());
+    }
 
     wb.setFlushed();
 }

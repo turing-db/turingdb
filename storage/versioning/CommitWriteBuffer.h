@@ -124,6 +124,10 @@ public:
          return !_deletedNodes.empty() || !_deletedEdges.empty();
      }
 
+     bool containsUpdates() const {
+         return !_updatedNodes.empty() || !_updatedEdges.empty();
+     }
+
     /**
      * @brief Adds NodeIDs contained in @param newDeletedNodes to the member @ref
      * _deletedNodes
