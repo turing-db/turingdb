@@ -29,8 +29,8 @@ public:
     std::span<float> alloc(std::span<const float> content);
 
 private:
-    size_t _dimension {0};
-    size_t _capacity {0};
+    const size_t _dimension {0};
+    const size_t _capacity {0};
     size_t _embeddingCount {0};
     std::vector<float> _bucket;
 };
