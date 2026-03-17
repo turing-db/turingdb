@@ -108,6 +108,20 @@ Key points:
 - Only use `std::unique_ptr` for ownership; no `std::shared_ptr`
 - Don't return STL containers or strings; use output references
 
+**Member variables:**
+- POD/scalar members must always have a default value: `size_t _count {0};`
+- Getter methods use `getX()` style: `getDimension()`, `getCapacity()`
+
+**Headers vs implementation:**
+- Keep headers declaration-only; put non-trivial implementations in `.cpp` files
+- Only trivial one-liner getters should be inline in headers
+- Destructors: declare `~ClassName();` in header, define in `.cpp` (not `= default` in header)
+- Helper functions that don't need to be in the public API should be anonymous/static functions in the `.cpp`
+
+**Error handling and return values:**
+- Don't return large/non-trivial objects by value from factory methods; use fill/output reference patterns instead
+- Throw `TuringException` on failure rather than returning error codes or optionals
+
 **Other rules:**
 - Never `using namespace` in headers
 - Never `using namespace std`

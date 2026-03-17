@@ -95,11 +95,13 @@ template class GetPropertiesWithNullProcessor<EntityType::Node, types::UInt64>;
 template class GetPropertiesWithNullProcessor<EntityType::Node, types::Double>;
 template class GetPropertiesWithNullProcessor<EntityType::Node, types::String>;
 template class GetPropertiesWithNullProcessor<EntityType::Node, types::Bool>;
+template class GetPropertiesWithNullProcessor<EntityType::Node, types::Embedding>;
 
 template class GetPropertiesWithNullProcessor<EntityType::Edge, types::Int64>;
 template class GetPropertiesWithNullProcessor<EntityType::Edge, types::UInt64>;
 template class GetPropertiesWithNullProcessor<EntityType::Edge, types::Double>;
 template class GetPropertiesWithNullProcessor<EntityType::Edge, types::String>;
 template class GetPropertiesWithNullProcessor<EntityType::Edge, types::Bool>;
+template class GetPropertiesWithNullProcessor<EntityType::Edge, types::Embedding>;
 
 }

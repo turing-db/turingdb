@@ -144,6 +144,16 @@ template <typename T>
     return "null";
 }
 
+[[maybe_unused]] std::string valueToString(const std::span<const float>& value) {
+    std::string result = "[";
+    for (size_t i = 0; i < value.size(); i++) {
+        if (i > 0) result += ",";
+        result += std::to_string(value[i]);
+    }
+    result += "]";
+    return result;
+}
+
 template <typename T>
 [[maybe_unused]] std::string valueToString(const std::optional<T>& value) {
     if (!value.has_value()) {

@@ -57,6 +57,22 @@ void PropertyManager::fillEntityPropertyView(EntityID entityID,
         const auto& container = rawContainer->cast<types::Bool>();
         fill(container, ptID);
     }
+
+    for (const auto& [ptID, rawContainer] : _embeddings) {
+        if (!_indexers.contains(ptID)) {
+            continue;
+        }
+
+        const auto& container = rawContainer->cast<types::Embedding>();
+        if (!container.has(entityID)) {
+            continue;
+        }
+
+        auto& prop = view._props.emplace_back();
+        prop._id = ptID;
+        prop._value = container.get(entityID);
+    }
+
 }
 
 const LabelSetPropertyIndexer* PropertyManager::tryGetIndexer(PropertyTypeID ptID) const {

@@ -109,11 +109,13 @@ template class GetPropertiesIterator<NodeID, types::UInt64>;
 template class GetPropertiesIterator<NodeID, types::Double>;
 template class GetPropertiesIterator<NodeID, types::String>;
 template class GetPropertiesIterator<NodeID, types::Bool>;
+template class GetPropertiesIterator<NodeID, types::Embedding>;
 template class GetPropertiesIterator<EdgeID, types::Int64>;
 template class GetPropertiesIterator<EdgeID, types::UInt64>;
 template class GetPropertiesIterator<EdgeID, types::Double>;
 template class GetPropertiesIterator<EdgeID, types::String>;
 template class GetPropertiesIterator<EdgeID, types::Bool>;
+template class GetPropertiesIterator<EdgeID, types::Embedding>;
 
 }
 
@@ -190,11 +192,13 @@ template class GetPropertiesIteratorWithNull<NodeID, types::UInt64>;
 template class GetPropertiesIteratorWithNull<NodeID, types::Double>;
 template class GetPropertiesIteratorWithNull<NodeID, types::String>;
 template class GetPropertiesIteratorWithNull<NodeID, types::Bool>;
+template class GetPropertiesIteratorWithNull<NodeID, types::Embedding>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::Int64>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::UInt64>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::Double>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::String>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::Bool>;
+template class GetPropertiesIteratorWithNull<EdgeID, types::Embedding>;
 
 }
 
@@ -232,11 +236,13 @@ template class GetPropertiesChunkWriter<NodeID, types::UInt64>;
 template class GetPropertiesChunkWriter<NodeID, types::Double>;
 template class GetPropertiesChunkWriter<NodeID, types::String>;
 template class GetPropertiesChunkWriter<NodeID, types::Bool>;
+template class GetPropertiesChunkWriter<NodeID, types::Embedding>;
 template class GetPropertiesChunkWriter<EdgeID, types::Int64>;
 template class GetPropertiesChunkWriter<EdgeID, types::UInt64>;
 template class GetPropertiesChunkWriter<EdgeID, types::Double>;
 template class GetPropertiesChunkWriter<EdgeID, types::String>;
 template class GetPropertiesChunkWriter<EdgeID, types::Bool>;
+template class GetPropertiesChunkWriter<EdgeID, types::Embedding>;
 
 }
 
@@ -269,10 +275,12 @@ template class GetPropertiesWithNullChunkWriter<NodeID, types::UInt64>;
 template class GetPropertiesWithNullChunkWriter<NodeID, types::Double>;
 template class GetPropertiesWithNullChunkWriter<NodeID, types::String>;
 template class GetPropertiesWithNullChunkWriter<NodeID, types::Bool>;
+template class GetPropertiesWithNullChunkWriter<NodeID, types::Embedding>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::Int64>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::UInt64>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::Double>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::String>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::Bool>;
+template class GetPropertiesWithNullChunkWriter<EdgeID, types::Embedding>;
 
 }

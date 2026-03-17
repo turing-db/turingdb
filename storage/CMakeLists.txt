@@ -7,6 +7,7 @@ set(storage_sources
         NodeContainer.cpp
         EdgeContainer.cpp
         RowStore.cpp
+        EmbeddingContainer.cpp
 
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp
@@ -52,6 +53,7 @@ set(storage_sources
         indexes/StringIndex.cpp
         indexers/StringPropertyIndexer.cpp
 
+        properties/PropertyContainer.cpp
         properties/PropertyManager.cpp
 
         writers/DataPartBuilder.cpp
@@ -106,6 +108,8 @@ set(storage_sources
         dump/LoadUtils.cpp
         dump/StringIndexerDumper.cpp
         dump/StringIndexerLoader.cpp
+        dump/EmbeddingPropertyContainerDumper.cpp
+        dump/EmbeddingPropertyContainerLoader.cpp
         dump/CommitJournalDumper.cpp
         dump/CommitJournalLoader.cpp
         dump/CommitMetaDataDumper.cpp

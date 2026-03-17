@@ -1074,6 +1074,8 @@ template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<Entity
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::Double>(PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::String>(PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::Bool>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Embedding>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::Embedding>(PropertyType);
 
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Int64>(ColumnTag, PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::UInt64>(ColumnTag, PropertyType);
@@ -1085,6 +1087,8 @@ template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNul
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Double>(ColumnTag, PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::String>(ColumnTag, PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Bool>(ColumnTag, PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Embedding>(ColumnTag, PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Embedding>(ColumnTag, PropertyType);
 
 template PipelineBlockOutputInterface& PipelineBuilder::addShortestPath<db::types::Double>(PipelineOutputInterface*,
                                                                                            ColumnTag,

@@ -141,6 +141,9 @@ struct PropertyTypeDispatcher {
             case db::ValueType::Bool:
                 executor.template operator()<db::types::Bool>();
             break;
+            case db::ValueType::Embedding:
+                executor.template operator()<db::types::Embedding>();
+            break;
             case db::ValueType::_SIZE:
             case db::ValueType::Invalid: {
                 throw PlannerException("Unsupported property type");

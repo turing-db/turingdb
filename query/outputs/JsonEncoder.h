@@ -121,6 +121,23 @@ private:
         _writer.write("null");
     }
 
+    void encodeValue(types::Embedding::Primitive value) {
+        _writer.write("[");
+        for (size_t i = 0; i < value.size(); i++) {
+            if (i > 0) _writer.write(",");
+            _writer.write(std::to_string(value[i]));
+        }
+        _writer.write("]");
+    }
+
+    void encodeValue(const std::optional<types::Embedding::Primitive>& value) {
+        if (!value.has_value()) {
+            _writer.write("null");
+        } else {
+            encodeValue(*value);
+        }
+    }
+
     template <std::convertible_to<std::string_view> T>
     void encodeValue(const T& value) {
         ControlCharactersEscaper::escapeAndSurroundByQuotes(value, _sanitized);

@@ -92,6 +92,7 @@ public:
                 break;
             }
 
+            case ValueType::Embedding:
             case ValueType::Invalid:
             case ValueType::_SIZE: {
                 break;

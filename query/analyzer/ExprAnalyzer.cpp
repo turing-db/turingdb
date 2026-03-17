@@ -426,6 +426,9 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         case ValueType::String: {
             type = EvaluatedType::String;
         } break;
+        case ValueType::Embedding: {
+            type = EvaluatedType::Embedding;
+        } break;
         default: {
             const std::string error = fmt::format("Property type '{}' is invalid", propName->getName());
             throwError(error, expr);
@@ -662,6 +665,8 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
             return vt == ValueType::String;
         case EvaluatedType::Bool:
             return vt == ValueType::Bool;
+        case EvaluatedType::Embedding:
+            return vt == ValueType::Embedding;
         case EvaluatedType::List:
         case EvaluatedType::Map:
         case EvaluatedType::Wildcard:

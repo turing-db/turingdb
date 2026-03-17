@@ -19,6 +19,7 @@ set(common_sources
         StringUtils.cpp
         Profiler.cpp
         ThreadName.cpp
+        EmbeddingBucket.cpp
 
         log/LogSetup.cpp
         log/LogUtils.cpp)

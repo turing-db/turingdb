@@ -55,12 +55,18 @@ concept IsPath = std::is_same_v<T, Path>;
 template <typename T>
 concept IsNull = std::is_same_v<T, PropertyNull>;
 
+template <typename T>
+concept IsEmbedding = std::is_same_v<T, types::Embedding::Primitive>
+                   || std::is_same_v<T, std::optional<types::Embedding::Primitive>>;
+
 struct ColumnTypeGenerator {
     std::string& _name;
 
     template <template <typename> typename U, typename T>
     void operator()(const U<T>*) {
-        if constexpr (IsUInt64<T>) {
+        if constexpr (IsEmbedding<T>) {
+            _name = fmt::format("Embedding");
+        } else if constexpr (IsUInt64<T>) {
             _name = fmt::format("UInt64");
         } else if constexpr (IsInt64<T>) {
             _name = fmt::format("Int64");

@@ -677,6 +677,7 @@ void DBServerProcessor::get_node_properties() {
                 treat.template operator()<types::String>();
                 break;
             }
+            case db::ValueType::Embedding:
             case db::ValueType::Invalid:
             case db::ValueType::_SIZE: {
                 _writer.writeHttpError(net::HTTP::Status::METHOD_NOT_ALLOWED);

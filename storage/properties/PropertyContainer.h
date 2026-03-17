@@ -6,6 +6,7 @@
 #include <range/v3/algorithm/sort.hpp>
 #include <range/v3/view/zip.hpp>
 
+#include "EmbeddingContainer.h"
 #include "StringContainer.h"
 #include "metadata/PropertyType.h"
 
@@ -20,6 +21,7 @@ template <SupportedType T>
 class TrivialPropertyContainerLoader;
 
 class StringPropertyContainerLoader;
+class EmbeddingPropertyContainerLoader;
 
 class PropertyContainer {
 public:
@@ -237,35 +239,7 @@ public:
         return _values.size();
     }
 
-    void sort() override {
-        StringContainer newValues;
-        if (_ids.empty()) {
-            return;
-        }
-
-        std::vector<size_t> offsets(_ids.size());
-        std::iota(offsets.begin(), offsets.end(), 0);
-
-        ranges::sort(
-            ranges::views::zip(_ids, offsets),
-            [&](const auto& pair1, const auto& pair2) {
-                const EntityID id1 = std::get<0>(pair1);
-                const EntityID id2 = std::get<0>(pair2);
-                return id1 < id2;
-            });
-
-        for (size_t i : offsets) {
-            newValues.alloc(_values.getView(i));
-        }
-
-        _values = std::move(newValues);
-
-        _entityIndexMap.clear();
-        _entityIndexMap.reserve(_ids.size());
-        for (size_t i = 0; i < _ids.size(); i++) {
-            _entityIndexMap[_ids[i]] = i;
-        }
-    }
+    void sort() override;
 
 private:
     friend StringPropertyContainerLoader;
@@ -274,4 +248,75 @@ private:
     StringContainer _values;
     std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
+
+template <>
+class TypedPropertyContainer<types::Embedding> : public PropertyContainer {
+public:
+    explicit TypedPropertyContainer(size_t dimension)
+        : PropertyContainer(types::Embedding::_valueType),
+        _values(dimension)
+    {
+    }
+
+    TypedPropertyContainer(const TypedPropertyContainer&) = delete;
+    TypedPropertyContainer(TypedPropertyContainer&&) noexcept = default;
+    TypedPropertyContainer& operator=(const TypedPropertyContainer&) = delete;
+    TypedPropertyContainer& operator=(TypedPropertyContainer&&) noexcept = default;
+    ~TypedPropertyContainer() override = default;
+
+    void add(EntityID entityID, std::span<const float> v) {
+        _values.alloc(v);
+        _ids.emplace_back(entityID);
+    }
+
+    bool has(EntityID entityID) const override {
+        return _entityIndexMap.contains(entityID);
+    }
+
+    std::span<const float> get(EntityID entityID) const {
+        const auto it = _entityIndexMap.find(entityID);
+        return _values.getView(it->second);
+    }
+
+    std::span<const float> get(size_t offset) const {
+        return _values.getView(offset);
+    }
+
+    const types::Embedding::Primitive* tryGet(EntityID entityID) const {
+        const auto it = _entityIndexMap.find(entityID);
+        if (it == _entityIndexMap.end()) {
+            return nullptr;
+        }
+        const auto& views = _values.get();
+        return &views[it->second];
+    }
+
+    std::span<const types::Embedding::Primitive> all() const {
+        const auto& views = _values.get();
+        return views;
+    }
+
+    std::span<const types::Embedding::Primitive> getSpan(size_t first, size_t count) const {
+        const auto& views = _values.get();
+        return std::span{views}.subspan(first, count);
+    }
+
+    const EmbeddingContainer& getRawContainer() const {
+        return _values;
+    }
+
+    size_t size() const override {
+        return _values.getSize();
+    }
+
+    void sort() override;
+
+private:
+    friend EmbeddingPropertyContainerLoader;
+    friend DataPartMerger;
+
+    EmbeddingContainer _values;
+    std::unordered_map<EntityID, size_t> _entityIndexMap;
+};
+
 }

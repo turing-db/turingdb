@@ -301,6 +301,8 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
             return ValueType::Double;
         case EvaluatedType::Integer:
             return ValueType::Int64;
+        case EvaluatedType::Embedding:
+            return ValueType::Embedding;
         case EvaluatedType::Null:
         case EvaluatedType::NodePattern:
         case EvaluatedType::EdgePattern:

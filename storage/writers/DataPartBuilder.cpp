@@ -97,6 +97,34 @@ const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, Node
     return edge;
 }
 
+template <>
+void DataPartBuilder::addNodeProperty<types::Embedding>(NodeID nodeID,
+                                                         PropertyTypeID ptID,
+                                                         types::Embedding::Primitive value) {
+    if (!_nodeProperties->hasPropertyType(ptID)) {
+        _nodeProperties->registerEmbeddingPropertyType(ptID, value.size());
+    }
+
+    if (nodeID < _firstNodeID) {
+        _patchNodeLabelSets.emplace(nodeID, LabelSetHandle {});
+    }
+    _nodeProperties->add<types::Embedding>(ptID, nodeID.getValue(), value);
+}
+
+template <>
+void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
+                                                         PropertyTypeID ptID,
+                                                         types::Embedding::Primitive value) {
+    if (!_edgeProperties->hasPropertyType(ptID)) {
+        _edgeProperties->registerEmbeddingPropertyType(ptID, value.size());
+    }
+    if (edge._edgeID < _firstEdgeID) {
+        _patchedEdges.emplace(edge._edgeID, &edge);
+        _patchNodeLabelSets.emplace(edge._nodeID, LabelSetHandle {});
+    }
+    _edgeProperties->add<types::Embedding>(ptID, edge._edgeID.getValue(), value);
+}
+
 #define INSTANTIATE(PType)                                                   \
     template void DataPartBuilder::addNodeProperty<PType>(NodeID,            \
                                                           PropertyTypeID,    \
