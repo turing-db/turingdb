@@ -99,8 +99,8 @@ const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, Node
 
 template <>
 void DataPartBuilder::addNodeProperty<types::Embedding>(NodeID nodeID,
-                                                         PropertyTypeID ptID,
-                                                         types::Embedding::Primitive value) {
+                                                        PropertyTypeID ptID,
+                                                        types::Embedding::Primitive value) {
     if (!_nodeProperties->hasPropertyType(ptID)) {
         _nodeProperties->registerEmbeddingPropertyType(ptID, value.size());
     }
@@ -113,8 +113,8 @@ void DataPartBuilder::addNodeProperty<types::Embedding>(NodeID nodeID,
 
 template <>
 void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
-                                                         PropertyTypeID ptID,
-                                                         types::Embedding::Primitive value) {
+                                                        PropertyTypeID ptID,
+                                                        types::Embedding::Primitive value) {
     if (!_edgeProperties->hasPropertyType(ptID)) {
         _edgeProperties->registerEmbeddingPropertyType(ptID, value.size());
     }
