@@ -285,7 +285,7 @@ public:
     }
 
 private:
-    CommitWriteBuffer::UntypedProperty _prop;
+    CommitWriteBuffer::UntypedProperty& _prop;
     PropertyTypeID _propID;
 };
 

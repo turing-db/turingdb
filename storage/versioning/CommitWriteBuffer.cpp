@@ -224,6 +224,7 @@ void CommitWriteBuffer::applyUpdates(DataPartBuilder& builder) {
                 }
             },
             value);
+        _journal.addWrittenNode(nodeID);
     }
 }
 

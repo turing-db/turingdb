@@ -1,11 +1,11 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "CREATE (n:Person) SET n.name = \"Node\"",
+  "query": "CREATE (n:Person) SET n.age = \"Node\"",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __WRITE__\n        __node__ (0:Person)\n        __node_update__ name\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": "",
-    "resultJson": "{\"header\":{\"column_names\":[],\"column_types\":[]},\"data\":[[]]}"
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = \"Node\"\n       |                       ^^^^^^^^^^^^^^\n-------* Cannot evaluate property: types 'Int64' and 'String' are incompatible",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = \"Node\"\n       |                       ^^^^^^^^^^^^^^\n-------* Cannot evaluate property: types 'Int64' and 'String' are incompatible",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n:Person) SET n.age = \\\"Node\\\"\\n       |                       ^^^^^^^^^^^^^^\\n-------* Cannot evaluate property: types 'Int64' and 'String' are incompatible\"}"
   },
   "tags": [
     "success",
