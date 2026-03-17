@@ -281,7 +281,9 @@ public:
         const std::string_view val = typed->getRaw();
         const std::string v(begin(val), end(val));
 
-        _prop = CommitWriteBuffer::UntypedProperty(_propID, v);
+        // NOTE: use emplace to avoid this gcc bug
+        // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=114592
+        _prop.value.template emplace<std::string>(v);
     }
 
 private:
