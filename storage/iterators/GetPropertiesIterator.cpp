@@ -142,7 +142,9 @@ void GetPropertiesIteratorWithNull<ID, T>::init() {
     }
 
     _entityIt = _inputIDs->cbegin();
-    for (; _partIt.isNotEnd(); _partIt.next()) {
+    _partIt.skipToEnd();
+    while (_partIt.isNotStart()) {
+        _partIt.prev();
         const DataPart* part = _partIt.get();
         const PropertyManager& properties = std::is_same_v<ID, NodeID>
                                               ? part->nodeProperties()
@@ -159,7 +161,7 @@ void GetPropertiesIteratorWithNull<ID, T>::init() {
 
 template <IteratedID ID, SupportedType T>
 void GetPropertiesIteratorWithNull<ID, T>::reset() {
-    Iterator::reset();
+    _partIt.skipToEnd();
     _entityIt = _inputIDs->cbegin();
     init();
 }
