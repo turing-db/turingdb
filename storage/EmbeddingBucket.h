@@ -17,9 +17,22 @@ public:
     ~EmbeddingBucket();
 
     EmbeddingBucket(const EmbeddingBucket&) = delete;
-    EmbeddingBucket(EmbeddingBucket&&) noexcept = default;
+
+    EmbeddingBucket(EmbeddingBucket&& other) noexcept
+        : _dimension(other._dimension),
+        _capacity(other._capacity),
+        _embeddingCount(other._embeddingCount),
+        _bucket(std::move(other._bucket))
+    {
+    }
+
     EmbeddingBucket& operator=(const EmbeddingBucket&) = delete;
-    EmbeddingBucket& operator=(EmbeddingBucket&&) noexcept = default;
+
+    EmbeddingBucket& operator=(EmbeddingBucket&& other) noexcept {
+        _embeddingCount = other._embeddingCount;
+        _bucket = std::move(other._bucket);
+        return *this;
+    }
 
     size_t getDimension() const { return _dimension; }
     size_t getEmbeddingCount() const { return _embeddingCount; }
