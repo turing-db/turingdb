@@ -22,7 +22,7 @@ void EmbeddingContainer::alloc(types::Embedding::Primitive content) {
     }
 
     EmbeddingBucket& bucket = _buckets.back();
-    const std::span<float> view = bucket.alloc(content);
+    const types::Embedding::Primitive view = bucket.alloc(content);
     _views.push_back(view);
 }
 
