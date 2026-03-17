@@ -18,7 +18,14 @@ public:
     ~EmbeddingContainer();
 
     EmbeddingContainer(const EmbeddingContainer&) = delete;
-    EmbeddingContainer(EmbeddingContainer&&) noexcept = default;
+
+    EmbeddingContainer(EmbeddingContainer&& other) noexcept
+        : _dimension(other._dimension),
+        _buckets(std::move(other._buckets)),
+        _views(std::move(other._views))
+    {
+    }
+
     EmbeddingContainer& operator=(const EmbeddingContainer&) = delete;
 
     EmbeddingContainer& operator=(EmbeddingContainer&& other) noexcept {
