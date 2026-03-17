@@ -922,11 +922,13 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
                                                         const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
                                                         const WriteProcessor::DeletedEdges& edgeColumnsToDelete,
                                                         WriteProcessor::PendingNodes& pendingNodes,
-                                                        WriteProcessor::PendingEdges& pendingEdges) {
+                                                        WriteProcessor::PendingEdges& pendingEdges,
+                                                        const WriteProcessor::UpdatedNodes& nodeUpdates,
+                                                        const WriteProcessor::UpdatedEdges& edgeUpdates) {
     const bool hasInput = _pendingOutput.getInterface();
     auto* processor = WriteProcessor::create(_pipeline, exprProg, hasInput);
     if (hasInput) {
-        _pendingOutput.connectTo(processor->input());
+        _pendingOutput.connectTo(processor->tryGetInput());
     }
 
     PipelineBlockOutputInterface& output = processor->output();
@@ -938,7 +940,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
 
     // Register columns for deleted nodes and edges
     if (hasInput) {
-        PipelineBlockInputInterface& input = processor->input();
+        PipelineBlockInputInterface& input = processor->tryGetInput();
         Dataframe* inDf = input.getDataframe();
 
         for (const ColumnTag deletedNodeCol : nodeColumnsToDelete) {
@@ -966,6 +968,27 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
             outDf->addColumn(inputColumnToDelete);
         }
         processor->setDeletedEdges(edgeColumnsToDelete);
+
+        for (const auto& [propUpdate, srcTag] : nodeUpdates) {
+            const auto& [propName, vt, valueCol, pid] = propUpdate;
+
+            NamedColumn* updateCol = inDf->getColumn(srcTag);
+            bioassert(updateCol, "Failed to get node column to update.");
+
+            bioassert(valueCol, "Failed to get value column for node update");
+        }
+
+        for (const auto& [propUpdate, srcTag] : edgeUpdates) {
+            const auto& [propName, vt, valueCol, pid] = propUpdate;
+
+            NamedColumn* updateCol = inDf->getColumn(srcTag);
+            bioassert(updateCol, "Failed to get edge column to update.");
+
+            bioassert(valueCol, "Failed to get value column for edge update");
+        }
+
+        processor->setNodeUpdates(nodeUpdates);
+        processor->setEdgeUpdates(edgeUpdates);
     }
 
     // Register columns for newly created nodes/edges
@@ -993,7 +1016,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
     processor->setPendingEdges(pendingEdges);
 
     if (hasInput) {
-        PipelineBlockInputInterface& input = processor->input();
+        PipelineBlockInputInterface& input = processor->tryGetInput();
         // This function already handles duplicates, so call it after adding all our columns
         input.propagateColumns(output);
     }

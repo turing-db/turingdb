@@ -51,6 +51,10 @@ void CommitWriteBuffer::addDeletedEdge(const EdgeID& newDeletedEdge) {
     _deletedEdges.insert(newDeletedEdge);
 }
 
+void CommitWriteBuffer::addNodeUpdate(NodeID id, UntypedProperty& updatedProperty) {
+    _updatedNodes.emplace_back(id, updatedProperty);
+}
+
 void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
     // TODO: With the new @ref WriteProcessor, we already have the column. Update this
     // function to take the ColumnVector<NodeID> explicitly so we do not need to construct

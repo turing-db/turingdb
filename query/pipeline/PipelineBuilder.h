@@ -169,7 +169,9 @@ public:
                                            const WriteProcessor::DeletedNodes& nodeColumnsToDelete,
                                            const WriteProcessor::DeletedEdges& edgeColumnsToDelete,
                                            WriteProcessor::PendingNodes& pendingNodes,
-                                           WriteProcessor::PendingEdges& pendingEdges);
+                                           WriteProcessor::PendingEdges& pendingEdges,
+                                           const WriteProcessor::UpdatedNodes& nodeUpdates,
+                                           const WriteProcessor::UpdatedEdges& edgeUpdates);
 
     // Load graph
     PipelineValueOutputInterface& addLoadGraph(std::string_view graphName);

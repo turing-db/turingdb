@@ -10,6 +10,7 @@
 #include "ExecutionContext.h"
 #include "FunctionInvocation.h"
 #include "FunctionSignature.h"
+#include "ID.h"
 #include "PendingOutputView.h"
 #include "PlanGraph.h"
 #include "Predicate.h"
@@ -1293,12 +1294,15 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
         }
     }
 
+    const PropertyTypeMap& propMap = _view.metadata().propTypes();
+
     WriteProcessor::UpdatedNodes updatedNodes;
     updatedNodes.reserve(node->nodeUpdates().size());
     {
         for (const auto& [var, name, valueExpr] : node->nodeUpdates()) {
             bioassert(var && valueExpr, "Invalid variable and value for updated node");
             Column* propCol = exprGen.registerPropertyConstraint(valueExpr);
+            bioassert(propCol, "Failed to generate value column for node property update.");
 
             const auto findIt = _declToColumn.find(var);
             if (findIt == end(_declToColumn)) {
@@ -1308,14 +1312,25 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
 
             const ColumnTag tagToUpdate = findIt->second;
 
-            WriteProcessorTypes::PropertyConstraint propUpdated(name, {}, propCol);
+            std::optional<PropertyType> maybePropType = propMap.get(name);
+            bioassert(maybePropType.has_value(), "Property {} could not be found.", name);
+
+            const ValueType valType = maybePropType->_valueType;
+            const PropertyTypeID propID = maybePropType->_id;
+
+            const WriteProcessorTypes::PropertyUpdate propUpdated(name, valType, propCol, propID);
             updatedNodes.emplace_back(propUpdated, tagToUpdate);
         }
     }
 
+    const WriteProcessor::UpdatedEdges updatedEdges;
+    {
+        // TODO
+    }
+
     // Has the side effect of allocing columns, and modifying the @ref _tag field of
     // elements of @ref penNodes and @ref penEdges in-place
-    _builder.addWrite(exprProg, delNodes, delEdges, penNodes, penEdges);
+    _builder.addWrite(exprProg, delNodes, delEdges, penNodes, penEdges, updatedNodes, updatedEdges);
 
     // Above call to @ref addWrite alloc'd columns for the new nodes/edges, storing the
     // tag in the elements of @ref penNodes @ref penEdges. We may need to reference these

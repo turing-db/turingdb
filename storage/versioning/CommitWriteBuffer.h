@@ -20,21 +20,37 @@ struct ConflictCheckSets;
 class CommitWriteBuffer {
 
 public:
-    CommitWriteBuffer(CommitJournal& journal);
+    struct UntypedProperty;
+    struct PendingNode;
+    struct PendingEdge;
+    struct NodeUpdate;
+    struct EdgeUpdate;
 
-    using SupportedTypeVariant =
-        std::variant<types::Int64::Primitive, types::UInt64::Primitive,
-                     types::Double::Primitive, std::string,
-                     types::Bool::Primitive, types::Embedding::OwningPrimitive>;
-
-     struct UntypedProperty {
-        PropertyTypeID propertyID;
-        SupportedTypeVariant value;
-     };
-
+    using SupportedTypeVariant = std::variant<
+                     types::Int64::Primitive,
+                     types::UInt64::Primitive,
+                     types::Double::Primitive,
+                     std::string, /// Needs to be owning to outlive the query
+                     types::Bool::Primitive
+     >;
      using UntypedProperties = std::vector<UntypedProperty>;
      using PendingNodeOffset = size_t;
+     /// A node: either exists in previous commit (materialised as NodeID),
+     /// or to be created in this commit (materialised as PendingNodeOffset)
      using ExistingOrPendingNode = std::variant<NodeID, PendingNodeOffset>;
+     using PendingNodes = std::vector<PendingNode>;
+     using PendingEdges = std::vector<PendingEdge>;
+     using DeletedNodes = std::unordered_set<NodeID>;
+     using DeletedEdges = std::unordered_set<EdgeID>;
+     using UpdatedNodes = std::vector<NodeUpdate>;
+     using UpdatedEdges = std::vector<EdgeUpdate>;
+
+     explicit CommitWriteBuffer(CommitJournal& journal);
+
+     struct UntypedProperty {
+         PropertyTypeID propertyID;
+         SupportedTypeVariant value;
+     };
 
      struct PendingNode {
          LabelSetHandle labelsetHandle;
@@ -46,14 +62,17 @@ public:
          ExistingOrPendingNode tgt;
          EdgeTypeID edgeType;
          UntypedProperties properties;
-    };
+     };
 
-     // A node: either exists in previous commit (materialised as NodeID),
-     // or to be created in this commit (materialised as PendingNodeOffset)
-     using PendingNodes = std::vector<PendingNode>;
-     using PendingEdges = std::vector<PendingEdge>;
-     using DeletedNodes = std::unordered_set<NodeID>;
-     using DeletedEdges = std::unordered_set<EdgeID>;
+     struct NodeUpdate {
+         NodeID _idToUpdate;
+         UntypedProperty _updatedValue;
+     };
+
+     struct EdgeUpdate {
+         EdgeID _idToUpdate;
+         UntypedProperty _updatedValue;
+     };
 
      /**
       * @brief Adds a pending node to this WriteBuffer with empty properties and
@@ -89,6 +108,9 @@ public:
      const DeletedNodes& deletedNodes() const { return _deletedNodes; }
      const DeletedEdges& deletedEdges() const { return _deletedEdges; }
 
+     const UpdatedNodes& updatedNodes() const { return _updatedNodes; }
+     const UpdatedEdges& updatedEdges() const { return _updatedEdges; }
+
      bool empty() const {
          return _pendingNodes.empty() && _pendingEdges.empty() && _deletedNodes.empty()
              && _deletedEdges.empty();
@@ -120,6 +142,8 @@ public:
      */
     void addDeletedNode(const NodeID& newDeletedNode);
 
+    void addNodeUpdate(NodeID id, UntypedProperty& updatedProperty);
+
     /**
      * @brief Adds a single EdgeID contained in @param newDeletedEdge to the member @ref
      * _deletedEdges
@@ -145,16 +169,19 @@ private:
     CommitJournal& _journal;
 
     // Nodes to be created when this commit commits
-    std::vector<PendingNode> _pendingNodes;
+    PendingNodes _pendingNodes;
 
     // Edges to be created when this commit commits
-    std::vector<PendingEdge> _pendingEdges;
+    PendingEdges _pendingEdges;
 
     // Nodes to be deleted when this commit commits
-    std::unordered_set<NodeID> _deletedNodes;
+    DeletedNodes _deletedNodes;
 
     // Edges to be deleted when this commit commits
-    std::unordered_set<EdgeID> _deletedEdges;
+    DeletedEdges _deletedEdges;
+
+    UpdatedNodes _updatedNodes;
+    UpdatedEdges _updatedEdges;
 
     PendingNodes& pendingNodes() { return _pendingNodes; }
     PendingEdges& pendingEdges() { return _pendingEdges; }

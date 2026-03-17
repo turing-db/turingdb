@@ -51,7 +51,10 @@ public:
     void setDeletedNodes(const DeletedNodes& nodes) { _deletedNodes = nodes; }
     void setDeletedEdges(const DeletedEdges& edges) { _deletedEdges = edges; }
 
-    PipelineBlockInputInterface& input() {
+    void setNodeUpdates(const UpdatedNodes& nodes) { _updatedNodes = nodes; }
+    void setEdgeUpdates(const UpdatedEdges& nodes) { _updatedEdges = nodes; }
+
+    PipelineBlockInputInterface& tryGetInput() {
         if (!_input) {
             throw FatalException("Attempted to get null input of WriteProcessor.");
         }
@@ -111,9 +114,13 @@ private:
     void performCreations();
 
     /**
-     * @warn NOT IMPLEMENTED
+     * @todo
      */
-    void performUpdates() = delete;
+    void performUpdates();
+
+    void updateNodes();
+
+    void updateEdges();
 
     /**
      * @brief Adds @param numIters copies of each element of @ref _pendingNodes to @ref
