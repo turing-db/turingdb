@@ -20,8 +20,10 @@ public:
     size_t getDimension() const { return _dimension; }
     size_t getEmbeddingCount() const { return _embeddingCount; }
     size_t getAvailCount() const { return _capacity - _embeddingCount; }
+
     const float* data() const { return _bucket.data(); }
     float* data() { return _bucket.data(); }
+
     std::span<const float> span() const { return {_bucket.data(), _embeddingCount * _dimension}; }
 
     std::span<float> alloc(std::span<const float> content);
