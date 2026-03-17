@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "EmbeddingBucket.h"
+#include "metadata/PropertyType.h"
 
 namespace db {
 class DataPartMerger;
@@ -19,9 +20,9 @@ public:
     EmbeddingContainer& operator=(const EmbeddingContainer&) = delete;
     EmbeddingContainer& operator=(EmbeddingContainer&&) noexcept = default;
 
-    void alloc(std::span<const float> content);
+    void alloc(types::Embedding::Primitive content);
 
-    const std::span<const float>& getView(size_t index) const { return _views[index]; }
+    const types::Embedding::Primitive& getView(size_t index) const { return _views[index]; }
 
     size_t getDimension() const { return _dimension; }
     size_t getEmbeddingCount() const { return _count; }
