@@ -30,7 +30,7 @@ public:
 
     std::span<const float> span() const { return {_bucket.data(), _embeddingCount * _dimension}; }
 
-    std::span<float> alloc(types::Embedding::Primitive content);
+    types::Embedding::Primitive alloc(types::Embedding::Primitive content);
 
 private:
     const size_t _dimension {0};
