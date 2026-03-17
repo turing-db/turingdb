@@ -227,29 +227,6 @@ void CommitWriteBuffer::applyUpdates(DataPartBuilder& builder) {
             value);
         _journal.addWrittenNode(nodeID);
     }
-
-    for (const auto& [edgeID, property] : _updatedEdges) {
-        const auto& [propID, value] = property;
-
-        std::visit(
-            [&](auto&& val) {
-                using T = std::decay_t<decltype(val)>;
-
-                if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
-                    builder.addEdgeProperty<types::Int64>(edgeID, propID, val);
-                } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
-                    builder.addEdgeProperty<types::UInt64>(edgeID, propID, val);
-                } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
-                    builder.addEdgeProperty<types::Double>(edgeID, propID, val);
-                } else if constexpr (std::is_same_v<T, std::string>) {
-                    builder.addEdgeProperty<types::String>(edgeID, propID, val);
-                } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
-                    builder.addEdgeProperty<types::Bool>(edgeID, propID, val);
-                }
-            },
-            value);
-        _journal.addWrittenNode(nodeID);
-    }
 }
 
 void CommitWriteBuffer::applyDeletions(Tombstones& tombstones) {
