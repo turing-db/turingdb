@@ -265,6 +265,7 @@ public:
     ~TypedPropertyContainer() override = default;
 
     void add(EntityID entityID, std::span<const float> v) {
+        _entityIndexMap[entityID] = _ids.size();
         _values.alloc(v);
         _ids.emplace_back(entityID);
     }
