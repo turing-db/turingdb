@@ -118,19 +118,22 @@ For MacOS:
 
 ### Install TuringDB
 
-Using `pip`:    
+- Using `pip`:    
 ```bash
 pip install turingdb
 ```
 
-Using `uv` (you will need to create a project first):
+- Using `uv` (you will need to create a project first):
 ```bash
 uv add turingdb
 ```
 and then `turingdb` should be in `$PATH`
 
-Using `nix`:
-- TuringDB is available on the `unstable` channel on `nixpkgs` as `turingdb` for both x86 Linux and AArch macOS ([Link](https://github.com/NixOS/nixpkgs/blob/master/pkgs/by-name/tu/turingdb/package.nix))
+- Using `nix`:
+
+TuringDB is available on the `unstable` channel on `nixpkgs` as `turingdb` for both x86 Linux and AArch macOS ([Link](https://github.com/NixOS/nixpkgs/blob/master/pkgs/by-name/tu/turingdb/package.nix))
+
+- Using Docker:
 
 Docker image (please note: other installation methods are preferred, as there is some performance loss when deploying via Docker):
 
