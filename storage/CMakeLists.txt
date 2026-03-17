@@ -7,6 +7,7 @@ set(storage_sources
         NodeContainer.cpp
         EdgeContainer.cpp
         RowStore.cpp
+        EmbeddingBucket.cpp
         EmbeddingContainer.cpp
 
         metadata/EdgeTypeMap.cpp

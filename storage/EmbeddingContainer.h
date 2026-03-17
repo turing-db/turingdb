@@ -20,14 +20,19 @@ public:
     EmbeddingContainer(const EmbeddingContainer&) = delete;
     EmbeddingContainer(EmbeddingContainer&&) noexcept = default;
     EmbeddingContainer& operator=(const EmbeddingContainer&) = delete;
-    EmbeddingContainer& operator=(EmbeddingContainer&&) noexcept = default;
+
+    EmbeddingContainer& operator=(EmbeddingContainer&& other) noexcept {
+        _buckets = std::move(other._buckets);
+        _views = std::move(other._views);
+        return *this;
+    }
 
     void alloc(types::Embedding::Primitive content);
 
     const types::Embedding::Primitive& getView(size_t index) const { return _views[index]; }
 
     size_t getDimension() const { return _dimension; }
-    size_t getEmbeddingCount() const { return _count; }
+    size_t getEmbeddingCount() const { return _views.size(); }
 
     const ViewVector& get() const { return _views; }
 
@@ -36,8 +41,7 @@ public:
 private:
     friend DataPartMerger;
 
-    size_t _dimension {0};
-    size_t _count {0};
+    const size_t _dimension {0};
     std::vector<EmbeddingBucket> _buckets;
     ViewVector _views;
 };
