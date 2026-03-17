@@ -104,6 +104,12 @@ void HistoryProcedure::execute(ProcedureState* proc) {
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE:
             data._commit = controller.getCommitSafe(ctxt->getGraphView().headCommitHash());
+            if (!data._commit) {
+                // On a change, headCommitHash() returns a pending CommitBuilder
+                // hash that doesn't exist in the VersionController. Fall back to
+                // the committed head.
+                data._commit = controller.getCommitSafe(CommitHash::head());
+            }
             bioassert(data._commit, "headCommitHash not found");
         break;
 
