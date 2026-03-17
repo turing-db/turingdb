@@ -12,6 +12,8 @@ class DataPartMerger;
 
 class EmbeddingContainer {
 public:
+    using ViewVector = std::vector<types::Embedding::Primitive>;
+
     explicit EmbeddingContainer(size_t dimension);
     ~EmbeddingContainer();
 
@@ -27,7 +29,7 @@ public:
     size_t getDimension() const { return _dimension; }
     size_t getEmbeddingCount() const { return _count; }
 
-    const std::vector<std::span<const float>>& get() const { return _views; }
+    const ViewVector& get() const { return _views; }
 
     void clear();
 
@@ -37,7 +39,7 @@ private:
     size_t _dimension {0};
     size_t _count {0};
     std::vector<EmbeddingBucket> _buckets;
-    std::vector<std::span<const float>> _views;
+    ViewVector _views;
 };
 
 }
