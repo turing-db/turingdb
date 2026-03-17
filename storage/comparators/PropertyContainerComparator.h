@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string.h>
+
 #include <range/v3/view/zip.hpp>
 
 #include "properties/PropertyContainer.h"
@@ -92,7 +94,38 @@ public:
                 break;
             }
 
-            case ValueType::Embedding:
+            case ValueType::Embedding: {
+                const auto& ca = a->cast<types::Embedding>();
+                const auto& cb = b->cast<types::Embedding>();
+
+                if (ca.size() != cb.size()) {
+                    return false;
+                }
+
+                const auto& idsA = ca.ids();
+                const auto& idsB = cb.ids();
+                if (idsA.size() != idsB.size()) {
+                    return false;
+                }
+
+                const auto& dimension = ca.getRawContainer().getDimension();
+                if (dimension != cb.getRawContainer().getDimension()) {
+                    return false;
+                }
+
+                const auto viewsA = ca.all();
+                const auto viewsB = cb.all();
+                for (size_t i = 0; i < ca.size(); i++) {
+                    if (idsA[i] != idsB[i]) {
+                        return false;
+                    }
+                    if (std::memcmp(viewsA[i].data(), viewsB[i].data(), dimension * sizeof(float)) != 0) {
+                        return false;
+                    }
+                }
+                break;
+            }
+
             case ValueType::Invalid:
             case ValueType::_SIZE: {
                 break;

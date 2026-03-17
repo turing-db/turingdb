@@ -1,6 +1,12 @@
 #include "TuringTest.h"
 
+#include "dump/DumpConfig.h"
 #include "dump/PropertyContainerDumper.h"
+#include "dump/PropertyContainerLoader.h"
+#include "comparators/PropertyContainerComparator.h"
+#include "EmbeddingBucket.h"
+#include "FilePageReader.h"
+#include "FilePageWriter.h"
 
 using namespace db;
 using namespace turing::test;
@@ -70,6 +76,102 @@ TEST_F(PropertyContainerDumperTest, manyInts) {
     }
 
     ASSERT_TRUE(dumper.dump(container));
+}
+
+TEST_F(PropertyContainerDumperTest, emptyEmbeddingRoundTrip) {
+    fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "embeddings_empty";
+
+    TypedPropertyContainer<types::Embedding> original(3);
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        EmbeddingPropertyContainerDumper dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    {
+        auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+        ASSERT_TRUE(reader);
+        EmbeddingPropertyContainerLoader loader(reader.value());
+        auto result = loader.load();
+        ASSERT_TRUE(result);
+
+        const auto& loaded = result.value()->cast<types::Embedding>();
+        ASSERT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+    }
+}
+
+TEST_F(PropertyContainerDumperTest, embeddingRoundTrip) {
+    fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "embeddings";
+    const size_t dimension = 4;
+
+    TypedPropertyContainer<types::Embedding> original(dimension);
+
+    std::vector<float> embedding(dimension);
+    for (EntityID id = 0; id < 1000; id++) {
+        for (size_t d = 0; d < dimension; d++) {
+            embedding[d] = static_cast<float>(id.getValue() * dimension + d);
+        }
+        original.add(id, embedding);
+    }
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        EmbeddingPropertyContainerDumper dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    {
+        auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+        ASSERT_TRUE(reader);
+        EmbeddingPropertyContainerLoader loader(reader.value());
+        auto result = loader.load();
+        ASSERT_TRUE(result);
+
+        const auto& loaded = result.value()->cast<types::Embedding>();
+        ASSERT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+    }
+}
+
+TEST_F(PropertyContainerDumperTest, manyEmbeddingsRoundTrip) {
+    fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "embeddings_many";
+    const size_t dimension = 8;
+
+    EmbeddingBucket probe(dimension);
+    const size_t count = probe.getAvailCount() * 2 + 100;
+
+    TypedPropertyContainer<types::Embedding> original(dimension);
+
+    std::vector<float> embedding(dimension);
+    for (size_t i = 0; i < count; i++) {
+        for (size_t d = 0; d < dimension; d++) {
+            embedding[d] = static_cast<float>(i * dimension + d);
+        }
+        original.add(EntityID(i), embedding);
+    }
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        EmbeddingPropertyContainerDumper dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    {
+        auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+        ASSERT_TRUE(reader);
+        EmbeddingPropertyContainerLoader loader(reader.value());
+        auto result = loader.load();
+        ASSERT_TRUE(result);
+
+        const auto& loaded = result.value()->cast<types::Embedding>();
+        ASSERT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+    }
 }
 
 int main(int argc, char** argv) {
