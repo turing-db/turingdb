@@ -314,9 +314,11 @@ template const types::Int64::Primitive* GraphReader::tryGetNodeProperty<types::I
 template const types::Double::Primitive* GraphReader::tryGetNodeProperty<types::Double>(PropertyTypeID ptID, NodeID nodeID) const;
 template const types::String::Primitive* GraphReader::tryGetNodeProperty<types::String>(PropertyTypeID ptID, NodeID nodeID) const;
 template const types::Bool::Primitive* GraphReader::tryGetNodeProperty<types::Bool>(PropertyTypeID ptID, NodeID nodeID) const;
+template const types::Embedding::Primitive* GraphReader::tryGetNodeProperty<types::Embedding>(PropertyTypeID ptID, NodeID nodeID) const;
 
 template const types::UInt64::Primitive* GraphReader::tryGetEdgeProperty<types::UInt64>(PropertyTypeID ptID, EdgeID edgeID) const;
 template const types::Int64::Primitive* GraphReader::tryGetEdgeProperty<types::Int64>(PropertyTypeID ptID, EdgeID edgeID) const;
 template const types::Double::Primitive* GraphReader::tryGetEdgeProperty<types::Double>(PropertyTypeID ptID, EdgeID edgeID) const;
 template const types::String::Primitive* GraphReader::tryGetEdgeProperty<types::String>(PropertyTypeID ptID, EdgeID edgeID) const;
 template const types::Bool::Primitive* GraphReader::tryGetEdgeProperty<types::Bool>(PropertyTypeID ptID, EdgeID edgeID) const;
+template const types::Embedding::Primitive* GraphReader::tryGetEdgeProperty<types::Embedding>(PropertyTypeID ptID, EdgeID edgeID) const;

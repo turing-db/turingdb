@@ -49,7 +49,7 @@ private:
     friend DataPartMerger;
 
     const size_t _dimension {0};
-    std::vector<EmbeddingBucket> _buckets;
+    std::vector<std::unique_ptr<EmbeddingBucket>> _buckets;
     ViewVector _views;
 };
 
