@@ -102,9 +102,11 @@ INSTANTIATE(ColumnVector<types::Int64::Primitive>);
 INSTANTIATE(ColumnVector<types::Double::Primitive>);
 INSTANTIATE(ColumnVector<types::String::Primitive>);
 INSTANTIATE(ColumnVector<types::Bool::Primitive>);
+INSTANTIATE(ColumnVector<types::Embedding::Primitive>);
 
 INSTANTIATE(ColumnOptVector<types::UInt64::Primitive>);
 INSTANTIATE(ColumnOptVector<types::Int64::Primitive>);
 INSTANTIATE(ColumnOptVector<types::Double::Primitive>);
 INSTANTIATE(ColumnOptVector<types::String::Primitive>);
 INSTANTIATE(ColumnOptVector<types::Bool::Primitive>);
+INSTANTIATE(ColumnOptVector<types::Embedding::Primitive>);

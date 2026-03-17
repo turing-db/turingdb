@@ -170,12 +170,14 @@ template class ScanEdgePropertiesIterator<types::UInt64>;
 template class ScanEdgePropertiesIterator<types::Double>;
 template class ScanEdgePropertiesIterator<types::String>;
 template class ScanEdgePropertiesIterator<types::Bool>;
+template class ScanEdgePropertiesIterator<types::Embedding>;
 
 template class ScanEdgePropertiesChunkWriter<types::Int64>;
 template class ScanEdgePropertiesChunkWriter<types::UInt64>;
 template class ScanEdgePropertiesChunkWriter<types::Double>;
 template class ScanEdgePropertiesChunkWriter<types::String>;
 template class ScanEdgePropertiesChunkWriter<types::Bool>;
+template class ScanEdgePropertiesChunkWriter<types::Embedding>;
 
 }
 

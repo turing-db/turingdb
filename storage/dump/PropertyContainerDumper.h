@@ -258,4 +258,15 @@ private:
     fs::FilePageWriter& _writer;
 };
 
+class EmbeddingPropertyContainerDumper {
+public:
+    explicit EmbeddingPropertyContainerDumper(fs::FilePageWriter& writer);
+    ~EmbeddingPropertyContainerDumper();
+
+    [[nodiscard]] DumpResult<void> dump(const TypedPropertyContainer<types::Embedding>& props);
+
+private:
+    fs::FilePageWriter& _writer;
+};
+
 }

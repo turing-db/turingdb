@@ -290,6 +290,15 @@ public:
         write(v ? "true" : "false");
     }
 
+    void writeValue(std::span<const float> v) {
+        write('[');
+        for (size_t i = 0; i < v.size(); i++) {
+            if (i > 0) write(',');
+            write(std::to_string(v[i]));
+        }
+        write(']');
+    }
+
     void writeValue(const PropertyTypeMap& propTypes, const NodeView& nodeView) {
         const auto& edges = nodeView.edges();
         const auto& props = nodeView.properties();
@@ -302,7 +311,13 @@ public:
 
         size_t count = 0;
         for (const auto& [ptID, value] : props) {
-            std::visit([&](const auto& v) { writeKeyValue(propTypes.getName(ptID).value(), *v); }, value);
+            std::visit([&](const auto& v) {
+                if constexpr (std::is_same_v<std::decay_t<decltype(v)>, std::span<const float>>) {
+                    writeKeyValue(propTypes.getName(ptID).value(), v);
+                } else {
+                    writeKeyValue(propTypes.getName(ptID).value(), *v);
+                }
+            }, value);
             ++count;
 
             if (count != props.getCount()) {

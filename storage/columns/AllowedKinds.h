@@ -137,7 +137,8 @@ struct PairRestrictions<Op> {
             KindPair<std::optional<types::UInt64::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Double::Primitive>, PropertyNull>,
             KindPair<std::optional<types::String::Primitive>, PropertyNull>,
-            KindPair<std::optional<types::Bool::Primitive>, PropertyNull>
+            KindPair<std::optional<types::Bool::Primitive>, PropertyNull>,
+            KindPair<std::optional<types::Embedding::Primitive>, PropertyNull>
         >
     >;
 
@@ -296,12 +297,14 @@ struct OutputtedTypes {
         types::Double::Primitive,
         types::String::Primitive,
         types::Bool::Primitive,
+        types::Embedding::Primitive,
         std::optional<types::Int64::Primitive>,
         std::optional<types::Int64::Primitive>,
         std::optional<types::UInt64::Primitive>,
         std::optional<types::Double::Primitive>,
         std::optional<types::String::Primitive>,
         std::optional<types::Bool::Primitive>,
+        std::optional<types::Embedding::Primitive>,
         PropertyNull,
 
         NodeID,

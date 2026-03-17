@@ -131,6 +131,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
             std::unordered_map<PropertyTypeID, PropertyContainer*> doubles;
             std::unordered_map<PropertyTypeID, PropertyContainer*> strings;
             std::unordered_map<PropertyTypeID, PropertyContainer*> bools;
+            std::unordered_map<PropertyTypeID, PropertyContainer*> embeddings;
 
             for (auto& [ptID, container] : nodeProperties->_map) {
                 const auto newPT = metadata.getPropertyTypeMapping(ptID);
@@ -162,13 +163,19 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
                 bools[newPT._id] = container;
             }
 
+            for (const auto& [ptID, container] : nodeProperties->_embeddings) {
+                const auto newPT = metadata.getPropertyTypeMapping(ptID);
+                embeddings[newPT._id] = container;
+            }
+
             nodeProperties->_map = std::move(newContainers);
             nodeProperties->_uint64s = std::move(uint64s);
             nodeProperties->_int64s = std::move(int64s);
             nodeProperties->_doubles = std::move(doubles);
             nodeProperties->_strings = std::move(strings);
             nodeProperties->_bools = std::move(bools);
-            static_assert((size_t)ValueType::_SIZE == 6 && "A value type was added");
+            nodeProperties->_embeddings = std::move(embeddings);
+            static_assert((size_t)ValueType::_SIZE == 7 && "A value type was added");
         }
 
         if (metadata.labelsetsChanged() || metadata.propTypesChanged()) {
@@ -205,6 +212,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
             std::unordered_map<PropertyTypeID, PropertyContainer*> doubles;
             std::unordered_map<PropertyTypeID, PropertyContainer*> strings;
             std::unordered_map<PropertyTypeID, PropertyContainer*> bools;
+            std::unordered_map<PropertyTypeID, PropertyContainer*> embeddings;
 
             for (auto& [ptID, container] : edgeProperties->_map) {
                 const auto newPT = metadata.getPropertyTypeMapping(ptID);
@@ -236,13 +244,19 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
                 bools[newPT._id] = container;
             }
 
+            for (const auto& [ptID, container] : edgeProperties->_embeddings) {
+                const auto newPT = metadata.getPropertyTypeMapping(ptID);
+                embeddings[newPT._id] = container;
+            }
+
             edgeProperties->_map = std::move(newContainers);
             edgeProperties->_uint64s = std::move(uint64s);
             edgeProperties->_int64s = std::move(int64s);
             edgeProperties->_doubles = std::move(doubles);
             edgeProperties->_strings = std::move(strings);
             edgeProperties->_bools = std::move(bools);
-            static_assert((size_t)ValueType::_SIZE == 6 && "A value type was added");
+            edgeProperties->_embeddings = std::move(embeddings);
+            static_assert((size_t)ValueType::_SIZE == 7 && "A value type was added");
         }
 
         if (metadata.labelsetsChanged() || metadata.propTypesChanged()) {

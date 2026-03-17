@@ -1,6 +1,7 @@
 #include "WriteProcessor.h"
 
 #include <algorithm>
+#include <numeric>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -95,6 +96,13 @@ CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
 
         case ValueType::Bool: {
             const auto* casted = dynamic_cast<ColumnConst<types::Bool::Primitive>*>(valueCol);
+            bioassert(casted, "Could not get constant property value.");
+            return {propID, casted->getRaw()};
+        }
+        break;
+
+        case ValueType::Embedding: {
+            const auto* casted = dynamic_cast<ColumnConst<types::Embedding::Primitive>*>(valueCol);
             bioassert(casted, "Could not get constant property value.");
             return {propID, casted->getRaw()};
         }

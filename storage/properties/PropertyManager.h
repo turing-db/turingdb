@@ -32,6 +32,7 @@ public:
     PropertyManager& operator=(PropertyManager&&) = delete;
 
     template <SupportedType T>
+    requires (!std::same_as<T, types::Embedding>)
     void registerPropertyType(PropertyTypeID ptID) {
         if (_map.find(ptID) != _map.end()) {
             throw FatalException("Trying to register a type that was already registered");
@@ -51,6 +52,16 @@ public:
         } else if constexpr (std::is_same_v<T, types::Bool>) {
             _bools.emplace(ptID, static_cast<PropertyContainer*>(ptr));
         }
+    }
+
+    void registerEmbeddingPropertyType(PropertyTypeID ptID, size_t dimension) {
+        if (_map.find(ptID) != _map.end()) {
+            throw FatalException("Trying to register a type that was already registered");
+        }
+
+        auto* ptr = new TypedPropertyContainer<types::Embedding>(dimension);
+        _map.emplace(ptID, static_cast<PropertyContainer*>(ptr));
+        _embeddings.emplace(ptID, static_cast<PropertyContainer*>(ptr));
     }
 
     template <SupportedType T, typename... Args>
@@ -186,6 +197,7 @@ private:
     PropertyContainerReferences _doubles;
     PropertyContainerReferences _strings;
     PropertyContainerReferences _bools;
+    PropertyContainerReferences _embeddings;
 
     PropertyIndexer _indexers;
 };

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <math.h>
+#include <numeric>
 
 #include "SystemManager.h"
 #include "Graph.h"

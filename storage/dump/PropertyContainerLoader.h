@@ -282,4 +282,16 @@ public:
 private:
     fs::FilePageReader& _reader;
 };
+
+class EmbeddingPropertyContainerLoader {
+public:
+    explicit EmbeddingPropertyContainerLoader(fs::FilePageReader& reader);
+    ~EmbeddingPropertyContainerLoader();
+
+    [[nodiscard]] DumpResult<std::unique_ptr<PropertyContainer>> load();
+
+private:
+    fs::FilePageReader& _reader;
+};
+
 }

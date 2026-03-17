@@ -159,6 +159,19 @@ public:
         _comma = true;
     }
 
+    void value(std::span<const float> v) {
+        if (_comma) {
+            _writer->write(',');
+        }
+        _writer->write('[');
+        for (size_t i = 0; i < v.size(); i++) {
+            if (i > 0) _writer->write(',');
+            _writer->write(std::to_string(v[i]));
+        }
+        _writer->write(']');
+        _comma = true;
+    }
+
     void value(const CommitBuilder* v) {
         value(v->hash().get());
     }
@@ -280,7 +293,11 @@ private:
                 std::visit(
                     [&](const auto& v) {
                         this->key(propTypes.getName(ptID).value());
-                        this->value(*v);
+                        if constexpr (std::is_same_v<std::decay_t<decltype(v)>, std::span<const float>>) {
+                            this->value(v);
+                        } else {
+                            this->value(*v);
+                        }
                     },
                     variant);
             }
@@ -307,7 +324,11 @@ private:
                 std::visit(
                     [&](const auto& v) {
                         this->key(ptID);
-                        this->value(*v);
+                        if constexpr (std::is_same_v<std::decay_t<decltype(v)>, std::span<const float>>) {
+                            this->value(v);
+                        } else {
+                            this->value(*v);
+                        }
                     },
                     variant);
             }

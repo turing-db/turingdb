@@ -32,11 +32,13 @@ using AllValueTypes = TypeList<
     types::Double::Primitive,
     types::String::Primitive,
     types::Bool::Primitive,
+    types::Embedding::Primitive,
     std::optional<types::Int64::Primitive>,
     std::optional<types::UInt64::Primitive>,
     std::optional<types::Double::Primitive>,
     std::optional<types::String::Primitive>,
     std::optional<types::Bool::Primitive>,
+    std::optional<types::Embedding::Primitive>,
     std::string,
     const CommitBuilder*,
     const Change*
@@ -118,11 +120,13 @@ struct ColumnTypeFromKind {
         COL_CASE(ColumnVector<types::Double::Primitive>)                                 \
         COL_CASE(ColumnVector<types::String::Primitive>)                                 \
         COL_CASE(ColumnVector<types::Bool::Primitive>)                                   \
+        COL_CASE(ColumnVector<types::Embedding::Primitive>)                              \
         COL_CASE(ColumnOptVector<types::UInt64::Primitive>)                              \
         COL_CASE(ColumnOptVector<types::Int64::Primitive>)                               \
         COL_CASE(ColumnOptVector<types::Double::Primitive>)                              \
         COL_CASE(ColumnOptVector<types::String::Primitive>)                              \
         COL_CASE(ColumnOptVector<types::Bool::Primitive>)                                \
+        COL_CASE(ColumnOptVector<types::Embedding::Primitive>)                           \
         COL_CASE(ColumnVector<std::string>)                                              \
         COL_CASE(ColumnVector<const CommitBuilder*>)                                     \
         COL_CASE(ColumnVector<const Change*>)                                            \
@@ -148,11 +152,13 @@ struct ColumnTypeFromKind {
         CONST_COL_CASE(ColumnVector<types::Double::Primitive>)                           \
         CONST_COL_CASE(ColumnVector<types::String::Primitive>)                           \
         CONST_COL_CASE(ColumnVector<types::Bool::Primitive>)                             \
+        CONST_COL_CASE(ColumnVector<types::Embedding::Primitive>)                        \
         CONST_COL_CASE(ColumnOptVector<types::UInt64::Primitive>)                        \
         CONST_COL_CASE(ColumnOptVector<types::Int64::Primitive>)                         \
         CONST_COL_CASE(ColumnOptVector<types::Double::Primitive>)                        \
         CONST_COL_CASE(ColumnOptVector<types::String::Primitive>)                        \
         CONST_COL_CASE(ColumnOptVector<types::Bool::Primitive>)                          \
+        CONST_COL_CASE(ColumnOptVector<types::Embedding::Primitive>)                     \
         CONST_COL_CASE(ColumnVector<std::string>)                                        \
         CONST_COL_CASE(ColumnVector<const CommitBuilder*>)                               \
         CONST_COL_CASE(ColumnVector<const Change*>)                                      \

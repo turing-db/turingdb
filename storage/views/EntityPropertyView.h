@@ -94,6 +94,6 @@ private:
     EntityPropertyView() = default;
 };
 
-static_assert((size_t)ValueType::_SIZE == 6);
+static_assert((size_t)ValueType::_SIZE == 7);
 
 }
