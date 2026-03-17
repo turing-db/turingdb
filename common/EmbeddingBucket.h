@@ -26,10 +26,6 @@ public:
 
     std::span<float> alloc(std::span<const float> content);
 
-    /// @brief Fills this bucket from raw float data (for loading from disk).
-    /// @throws TuringException if dimension is 0 or floats has fewer than count * dimension elements.
-    void fill(std::vector<float>&& floats, size_t count);
-
 private:
     size_t _dimension {0};
     size_t _capacity {0};
