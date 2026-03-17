@@ -4,6 +4,10 @@
 #include <span>
 #include <vector>
 
+#include "metadata/PropertyType.h"
+
+namespace db {
+
 class EmbeddingBucket {
 public:
     static constexpr size_t MIN_BUCKET_BYTES = 4 * 1024 * 1024;
@@ -26,7 +30,7 @@ public:
 
     std::span<const float> span() const { return {_bucket.data(), _embeddingCount * _dimension}; }
 
-    std::span<float> alloc(std::span<const float> content);
+    std::span<float> alloc(types::Embedding::Primitive content);
 
 private:
     const size_t _dimension {0};
@@ -34,3 +38,5 @@ private:
     size_t _embeddingCount {0};
     std::vector<float> _bucket;
 };
+
+}

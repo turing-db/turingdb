@@ -13,7 +13,7 @@ EmbeddingContainer::EmbeddingContainer(size_t dimension)
 EmbeddingContainer::~EmbeddingContainer() {
 }
 
-void EmbeddingContainer::alloc(std::span<const float> content) {
+void EmbeddingContainer::alloc(types::Embedding::Primitive content) {
     bioassert(content.size() == _dimension, "Embedding dimension mismatch");
 
     const EmbeddingBucket& last = _buckets.back();
@@ -24,11 +24,9 @@ void EmbeddingContainer::alloc(std::span<const float> content) {
     EmbeddingBucket& bucket = _buckets.back();
     const std::span<float> view = bucket.alloc(content);
     _views.push_back(view);
-    _count++;
 }
 
 void EmbeddingContainer::clear() {
     _buckets.clear();
     _views.clear();
-    _count = 0;
 }

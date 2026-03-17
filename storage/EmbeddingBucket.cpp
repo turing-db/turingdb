@@ -4,6 +4,8 @@
 
 #include "BioAssert.h"
 
+using namespace db;
+
 namespace {
 
 size_t computeCapacity(size_t dimension) {
@@ -25,7 +27,7 @@ EmbeddingBucket::EmbeddingBucket(size_t dimension)
 EmbeddingBucket::~EmbeddingBucket() {
 }
 
-std::span<float> EmbeddingBucket::alloc(std::span<const float> content) {
+std::span<float> EmbeddingBucket::alloc(types::Embedding::Primitive content) {
     bioassert(content.size() == _dimension, "Embedding dimension mismatch");
     bioassert(getAvailCount() > 0, "Embedding bucket is full");
 
