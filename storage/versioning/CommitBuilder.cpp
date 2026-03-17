@@ -148,6 +148,10 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
 
     if (wb.containsUpdates()) {
         spdlog::info("Have {} node updates", wb.updatedNodes().size());
+
+        // Create a new datapart: ensures updates apply to newly created entities
+        DataPartBuilder& dpBuilder = newBuilder();
+        wb.applyUpdates(dpBuilder);
     }
 
     wb.setFlushed();
