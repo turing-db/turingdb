@@ -439,6 +439,20 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
         return resCol;
     }
 
+    if (funcName == "propertyTypes") {
+        if (args->size() != 1) {
+            throw PlannerException(
+                fmt::format("{}() expects 1 argument, got {}", funcName, args->size()));
+        }
+
+        Column* argCol = generateExpr(args->front());
+        const ColumnOperator op = OP_FUNC_PROPERTY_TYPES;
+        Column* resCol = allocUnaryResultCol(op, argCol);
+
+        _exprProg->addInstr(op, resCol, argCol, nullptr);
+        return resCol;
+    }
+
     const bool isCosineSimilarity = (funcName == "cosine_similarity");
     const bool isEuclideanDistance = (funcName == "euclidean_distance");
     if (isCosineSimilarity || isEuclideanDistance) {
@@ -456,8 +470,6 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
 
         Column* resCol = allocBinaryResultCol(op, lhsCol, rhsCol);
         _exprProg->addInstr(op, resCol, lhsCol, rhsCol);
-
-        return resCol;
     }
 
     throw PlannerException(
@@ -495,6 +507,9 @@ struct ResultAllocator {
             _resultCol = _gen->memory().alloc<ResultType>();
         } else if constexpr (Op == OP_FUNC_EDGE_TYPES) {
             using ResultType = FunctionColumnResult<EdgeTypesFunction, T>::ResultColumnType;
+            _resultCol = _gen->memory().alloc<ResultType>();
+        } else if constexpr (Op == OP_FUNC_PROPERTY_TYPES) {
+            using ResultType = FunctionColumnResult<PropertyTypesFunction, T>::ResultColumnType;
             _resultCol = _gen->memory().alloc<ResultType>();
         }
     }
@@ -633,6 +648,7 @@ Column* ExprProgramGenerator::allocUnaryResultCol(ColumnOperator op, const Colum
         UNARY_DISPATCHER_CASE(OP_TO_BOOLEAN)
         UNARY_DISPATCHER_CASE(OP_FUNC_LABELS)
         UNARY_DISPATCHER_CASE(OP_FUNC_EDGE_TYPES)
+        UNARY_DISPATCHER_CASE(OP_FUNC_PROPERTY_TYPES)
 
         case OP_MINUS:
         case OP_PLUS:

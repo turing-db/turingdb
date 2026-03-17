@@ -31,6 +31,14 @@ void FunctionDecls::initDefault() {
     keysEdges->setArguments({EvaluatedType::EdgePattern});
     keysEdges->setReturnTypes({{EvaluatedType::String}});
 
+    FunctionSignature* propertyTypesNodes = createFunction("propertyTypes");
+    propertyTypesNodes->setArguments({EvaluatedType::NodePattern});
+    propertyTypesNodes->setReturnTypes({{EvaluatedType::String}});
+
+    FunctionSignature* propertyTypesEdges = createFunction("propertyTypes");
+    propertyTypesEdges->setArguments({EvaluatedType::EdgePattern});
+    propertyTypesEdges->setReturnTypes({{EvaluatedType::String}});
+
     // Aggregate functions
     FunctionSignature* countNodes = createFunction("count");
     countNodes->setArguments({EvaluatedType::NodePattern});

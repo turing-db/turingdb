@@ -181,6 +181,40 @@ public:
                           const types::Embedding::Primitive& b);
 };
 
+static void getPropertyTypesString(std::string& out, const GraphView view, NodeID n) {
+    out.clear();
+    // TODO: implement
+}
+
+static void getPropertyTypesString(std::string& out, const GraphView view, EdgeID e) {
+    out.clear();
+    // TODO: implement
+}
+
+class PropertyTypesFunction {
+public:
+    using ResultType = std::string;
+
+    explicit PropertyTypesFunction(GraphView view)
+        : _view(view)
+    {
+    }
+
+    ResultType operator()(const NodeID n) {
+        getPropertyTypesString(_tmp, _view, n);
+        return _tmp;
+    }
+
+    ResultType operator()(const EdgeID e) {
+        getPropertyTypesString(_tmp, _view, e);
+        return _tmp;
+    }
+
+private:
+    GraphView _view;
+    std::string _tmp;
+};
+
 /// Generic function executor; default constructible operator
 template <typename Op, typename Res, typename Arg>
 struct FunctionExecutor {
@@ -324,5 +358,39 @@ struct BinaryFunc {
 
 using CosineSimilarity = BinaryFunc<CosineSimilarityFunction>;
 using EuclideanDistance = BinaryFunc<EuclideanDistanceFunction>;
+
+/// Specialisation for propertyTypes() on nodes
+template <typename Res, typename Arg>
+struct FunctionExecutor<PropertyTypesFunction, Res, Arg> {
+    static void apply(ColumnVector<std::string>* res,
+                      const ColumnNodeIDs* arg,
+                      GraphView view) {
+        const size_t size = arg->size();
+        res->resize(size);
+
+        const auto& argd = arg->getRaw();
+        auto& resd = res->getRaw();
+
+        PropertyTypesFunction propertyTypes(view);
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = propertyTypes(argd[i]);
+        }
+    }
+
+    static void apply(ColumnVector<std::string>* res,
+                      const ColumnEdgeIDs* arg,
+                      GraphView view) {
+        const size_t size = arg->size();
+        res->resize(size);
+
+        const auto& argd = arg->getRaw();
+        auto& resd = res->getRaw();
+
+        PropertyTypesFunction propertyTypes(view);
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = propertyTypes(argd[i]);
+        }
+    }
+};
 
 }
