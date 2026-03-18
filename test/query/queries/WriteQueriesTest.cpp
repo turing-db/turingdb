@@ -1354,6 +1354,70 @@ TEST_F(WriteQueriesTest, exceedChunkThenFilter) {
     }
 }
 
+TEST_F(WriteQueriesTest, setAllConstant) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) SET n.age = 31)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.age)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size());
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(ages);
+
+            ASSERT_FALSE(ages->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*ages,
+                [](std::optional<types::Int64::Primitive> age) { return *age == 31; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, multipleSets) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) SET n.age = 100 SET n.age = 31)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.age)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size());
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(ages);
+
+            ASSERT_FALSE(ages->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*ages,
+                [](std::optional<types::Int64::Primitive> age) { return *age == 31; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
