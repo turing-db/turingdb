@@ -35,6 +35,7 @@ add_storage_tests(test_storage_dump_propertycontainerdumper dump/PropertyContain
 add_storage_tests(test_storage_dump_graphloader dump/GraphLoaderTest.cpp)
 add_storage_tests(test_storage_dump_stringindexloader dump/StringIndexLoaderTest.cpp)
 add_storage_tests(test_storage_dump_loadcommit dump/LoadCommitDataTest.cpp)
+add_storage_tests(test_storage_dump_embedding_graph dump/EmbeddingGraphDumpLoadTest.cpp)
 
 add_storage_tests(test_storage_columns_dispatcher ColumnDispatcherTest.cpp)
 
