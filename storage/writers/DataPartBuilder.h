@@ -6,8 +6,8 @@
 
 #include "EdgeRecord.h"
 #include "ID.h"
+#include "MetadataBuilder.h"
 #include "properties/PropertyManager.h"
-#include "views/GraphView.h"
 
 namespace db {
 

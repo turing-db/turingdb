@@ -6,6 +6,7 @@
 
 #include "DataPart.h"
 #include "ID.h"
+#include "views/GraphView.h"
 #include "writers/DataPartBuilder.h"
 
 namespace db {
@@ -46,7 +47,7 @@ public:
      using UpdatedNodes = std::vector<NodeUpdate>;
      using UpdatedEdges = std::vector<EdgeUpdate>;
 
-     explicit CommitWriteBuffer(CommitJournal& journal);
+     explicit CommitWriteBuffer(CommitJournal& journal, GraphView view);
 
      struct UntypedProperty {
          PropertyTypeID propertyID;
@@ -174,6 +175,7 @@ private:
     bool _flushed {false};
 
     CommitJournal& _journal;
+    GraphView _view;
 
     // Nodes to be created when this commit commits
     PendingNodes _pendingNodes;
@@ -199,6 +201,9 @@ private:
 
     void buildPendingNode(DataPartBuilder& builder, const PendingNode& node);
     void buildPendingEdge(DataPartBuilder& builder, const PendingEdge& edge);
+
+    void applyNodeUpdates(DataPartBuilder& builder);
+    void applyEdgeUpdates(DataPartBuilder& builder);
 };
 
 class CommitWriteBufferRebaser {

@@ -674,6 +674,9 @@ void WriteProcessor::updateNodes() {
     }
 }
 
+void WriteProcessor::updateEdges() {
+}
+
 void WriteProcessor::performCreations() {
     // We apply the CREATE command for each row in the input, or just a single row if we
     // have no inputs
