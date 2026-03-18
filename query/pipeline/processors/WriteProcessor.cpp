@@ -33,7 +33,6 @@
 
 #include "FatalException.h"
 #include "PipelineException.h"
-#include "TypeUtils.h"
 
 using namespace db;
 namespace rg = ranges;
@@ -263,6 +262,19 @@ private:
     PropertyTypeID _propID;
 };
 
+void getUntypedProperties(const Column* valueColumn,
+                          CommitWriteBuffer::UntypedProperties& props,
+                          PropertyTypeID pid) {
+    using Types = PropertyTypes;
+    using Dispatcher =
+        ColumnSingleDispatcher<Types::Allowed,
+                               ColumnVectorToUntypedProperties,
+                               Types::ExcludedVector>;
+    // Determines type of property values and fills @ref propBuffer with variants
+    ColumnVectorToUntypedProperties toVec(props, pid);
+    Dispatcher::dispatch(valueColumn, toVec);
+}
+
 class ColumnConstToUntypedProperty {
 public:
     explicit ColumnConstToUntypedProperty(CommitWriteBuffer::UntypedProperty& prop,
@@ -290,6 +302,17 @@ private:
     CommitWriteBuffer::UntypedProperty& _prop;
     PropertyTypeID _propID;
 };
+
+void getConstantUntypedProperty(const Column* valueColumn,
+                                CommitWriteBuffer::UntypedProperty& prop,
+                                PropertyTypeID pid) {
+    using Types = PropertyTypes;
+    using Dispatcher = ColumnSingleDispatcher<Types::Allowed,
+                                              ColumnConstToUntypedProperty,
+                                              Types::ExcludedConst>;
+    ColumnConstToUntypedProperty toProp(prop, pid);
+    Dispatcher::dispatch(valueColumn, toProp);
+}
 
 }
 
@@ -619,8 +642,6 @@ void WriteProcessor::postProcessTempIDs() {
 }
 
 void WriteProcessor::updateNodes() {
-    CommitWriteBuffer::UntypedProperties propBuffer;
-
     for (const auto& [propUpdate, srcTag] : _updatedNodes) {
         const auto& [name, valueType, valueColumn, pid] = propUpdate;
 
@@ -632,29 +653,17 @@ void WriteProcessor::updateNodes() {
         const ColumnNodeIDs* source = srcNCol->as<ColumnNodeIDs>();
         bioassert(source, "Failed to get node update source column as ColumnNodeIDs.");
 
+        // ColumnConst -> all nodes get assigned same property
         if (isColumnConst(valueColumn)) {
-            using Types = PropertyTypes;
-            using Dispatcher =
-                ColumnSingleDispatcher<Types::Allowed, ColumnConstToUntypedProperty,
-                                       Types::ExcludedConst>;
-
             CommitWriteBuffer::UntypedProperty prop;
-            ColumnConstToUntypedProperty toProp(prop, pid);
-            Dispatcher::dispatch(valueColumn, toProp);
+            getConstantUntypedProperty(valueColumn, prop, pid);
 
             for (const NodeID n : *source) {
                 _writeBuffer->addNodeUpdate(n, prop);
             }
-        } else {
-            using Types = PropertyTypes;
-            using Dispatcher =
-                ColumnSingleDispatcher<Types::Allowed,
-                                       ColumnVectorToUntypedProperties,
-                                       Types::ExcludedVector>;
-
-            // Determines type of property values and fills @ref propBuffer with variants
-            ColumnVectorToUntypedProperties toVec(propBuffer, pid);
-            Dispatcher::dispatch(valueColumn, toVec);
+        } else { // Column(Opt)Vector -> unique property for each node
+            CommitWriteBuffer::UntypedProperties propBuffer;
+            getUntypedProperties(valueColumn, propBuffer, pid);
             bioassert(source->size() == propBuffer.size(),
                       "Mismatch in dimensions of nodes to updates and property values.");
 
