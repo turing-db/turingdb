@@ -77,8 +77,6 @@ bool GraphComparator::same(const Graph& a, const Graph& b) {
             commitB = commitB->getPreviousCommit();
             index++;
         }
-
-        return true;
     }
 
     const DataPartSpan partsA = readerA.dataparts();
