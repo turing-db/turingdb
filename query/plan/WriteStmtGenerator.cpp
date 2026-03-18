@@ -1,5 +1,6 @@
 #include "WriteStmtGenerator.h"
 
+#include <string_view>
 #include <type_traits>
 
 #include <spdlog/fmt/bundled/format.h>
@@ -15,6 +16,7 @@
 #include "WhereClause.h"
 #include "PlanGraphVariables.h"
 
+#include "decl/EvaluatedType.h"
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
 
@@ -52,10 +54,12 @@ void checkDependencies(PlanGraphVariables& variables, T data) {
 
 WriteStmtGenerator::WriteStmtGenerator(const CypherAST* ast,
                                        PlanGraph* tree,
-                                       PlanGraphVariables* variables)
+                                       PlanGraphVariables* variables,
+                                       GetPropertyCache& propCache)
     : _ast(ast),
     _tree(tree),
-    _variables(variables)
+    _variables(variables),
+    _propCache(propCache)
 {
 }
 
@@ -100,17 +104,18 @@ void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* pre
     for (const SetItem* item : stmt->getItems()) {
         const auto visitor = Overloaded {
             [this](const SetItem::PropertyExprAssign& v) {
-                const VarDecl* decl = v._propTypeExpr->getEntityVarDecl();
+                const PropertyExpr* propertyExpr = v._propTypeExpr; // *n.age* =  10
+                const Expr* propertyValue = v._propValueExpr;       //  n.age  = *10*
 
-                if (decl->getType() == EvaluatedType::NodePattern) {
-                    _currentNode->addNodeUpdate(v._propTypeExpr->getEntityVarDecl(),
-                                                v._propTypeExpr->getPropName(),
-                                                v._propValueExpr);
+                const VarDecl* propertyVar = propertyExpr->getEntityVarDecl();
+                const std::string_view propertyName = propertyExpr->getPropName();
+                const EvaluatedType propertyType = propertyVar->getType();
 
-                } else if (decl->getType() == EvaluatedType::EdgePattern) {
-                    _currentNode->addEdgeUpdate(v._propTypeExpr->getEntityVarDecl(),
-                                                v._propTypeExpr->getPropName(),
-                                                v._propValueExpr);
+                if (propertyType == EvaluatedType::NodePattern) {
+                    _currentNode->addNodeUpdate(propertyVar, propertyName, propertyValue);
+
+                } else if (propertyType == EvaluatedType::EdgePattern) {
+                    _currentNode->addEdgeUpdate(propertyVar, propertyName, propertyValue);
                 }
             },
 
