@@ -7,6 +7,7 @@
 #include "EdgeRecord.h"
 #include "ID.h"
 #include "MetadataBuilder.h"
+#include "metadata/SupportedType.h"
 #include "properties/PropertyManager.h"
 
 namespace db {
@@ -61,6 +62,10 @@ public:
     std::vector<NodeID>& getTmpNodeIDs() { return _tmpNodeIDVector; }
 
     MetadataBuilder& getMetadata() { return *_metadata; }
+
+    /// Checks if the current property container for T contains a property for I at pid
+    template <SupportedType T, TypedInternalID I>
+    bool hasProperty(I id, PropertyTypeID pid);
 
 private:
     friend ConcurrentWriter;
