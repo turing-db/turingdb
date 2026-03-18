@@ -1354,7 +1354,7 @@ TEST_F(WriteQueriesTest, exceedChunkThenFilter) {
     }
 }
 
-TEST_F(WriteQueriesTest, setAllConstant) {
+TEST_F(WriteQueriesTest, setAllNodesConstant) {
     newChange();
     {
         constexpr std::string_view setQuery = R"(MATCH (n) SET n.age = 31)";
@@ -1386,7 +1386,7 @@ TEST_F(WriteQueriesTest, setAllConstant) {
     }
 }
 
-TEST_F(WriteQueriesTest, multipleSets) {
+TEST_F(WriteQueriesTest, multipleNodeSetsSameProperty) {
     newChange();
     {
         constexpr std::string_view setQuery = R"(MATCH (n) SET n.age = 100 SET n.age = 31)";
@@ -1413,6 +1413,70 @@ TEST_F(WriteQueriesTest, multipleSets) {
             ASSERT_TRUE(std::ranges::all_of(*ages,
                 [](std::optional<types::Int64::Primitive> age) { return *age == 31; })
             ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, setAllEdgesConstant) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH ()-[e]->() SET e.duration = 0)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH ()-[e]->() RETURN e.duration)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size());
+            const auto* duration = findColumn(df, "e.duration")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(duration);
+
+            ASSERT_FALSE(duration->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*duration,
+                [](std::optional<types::Int64::Primitive> dur) { return *dur == 0; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, multipleEdgeSetsSameProperty) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH ()-[e]->() SET e.duration = 0, e.duration = 100)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH ()-[e]->() RETURN e.duration)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size());
+            const auto* duration = findColumn(df, "e.duration")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(duration);
+
+            ASSERT_FALSE(duration->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*duration,
+                [](std::optional<types::Int64::Primitive> dur) { return *dur == 100; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
         });
         ASSERT_TRUE(res);
     }

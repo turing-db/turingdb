@@ -675,6 +675,36 @@ void WriteProcessor::updateNodes() {
 }
 
 void WriteProcessor::updateEdges() {
+    for (const auto& [propUpdate, srcTag] : _updatedEdges) {
+        const auto& [name, valueType, valueColumn, pid] = propUpdate;
+
+        const Dataframe* inDf = tryGetInput().getDataframe();
+
+        const NamedColumn* srcNCol = inDf->getColumn(srcTag);
+        bioassert(srcNCol, "Failed to get edge update source column.");
+
+        const ColumnEdgeIDs* source = srcNCol->as<ColumnEdgeIDs>();
+        bioassert(source, "Failed to get edge update source column as ColumnNodeIDs.");
+
+        // ColumnConst -> all edges get assigned same property
+        if (isColumnConst(valueColumn)) {
+            CommitWriteBuffer::UntypedProperty prop;
+            getConstantUntypedProperty(valueColumn, prop, pid);
+
+            for (const EdgeID e : *source) {
+                _writeBuffer->addEdgeUpdate(e, prop);
+            }
+        } else { // Column(Opt)Vector -> unique property for each edge
+            CommitWriteBuffer::UntypedProperties propBuffer;
+            getUntypedProperties(valueColumn, propBuffer, pid);
+            bioassert(source->size() == propBuffer.size(),
+                      "Mismatch in dimensions of nodes to updates and property values.");
+
+            for (const auto& [edgeID, update] : rv::zip(*source, propBuffer)) {
+                _writeBuffer->addEdgeUpdate(edgeID, update);
+            }
+        }
+    }
 }
 
 void WriteProcessor::performCreations() {
@@ -693,7 +723,7 @@ void WriteProcessor::performCreations() {
 
 void WriteProcessor::performUpdates() {
     updateNodes();
-    // updateEdges();
+    updateEdges();
 }
 
 void WriteProcessor::setup() {

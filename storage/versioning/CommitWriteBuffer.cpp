@@ -9,6 +9,7 @@
 #include "columns/ColumnVector.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
+#include "reader/GraphReader.h"
 #include "versioning/MetadataRebaser.h"
 #include "versioning/EntityIDRebaser.h"
 #include "writers/DataPartBuilder.h"
@@ -54,6 +55,10 @@ void CommitWriteBuffer::addDeletedEdge(const EdgeID& newDeletedEdge) {
 
 void CommitWriteBuffer::addNodeUpdate(NodeID id, UntypedProperty& updatedProperty) {
     _updatedNodes.emplace_back(id, updatedProperty);
+}
+
+void CommitWriteBuffer::addEdgeUpdate(EdgeID id, UntypedProperty& updatedProperty) {
+    _updatedEdges.emplace_back(id, updatedProperty);
 }
 
 void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
@@ -226,14 +231,40 @@ void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
                 }
             },
             value);
+
         _journal.addWrittenNode(nodeID);
     }
 }
 
 void CommitWriteBuffer::applyEdgeUpdates(DataPartBuilder& builder) {
-    // for (const auto& [edgeID, property] : _updatedEdges) {
-        // const EdgeRecord& er = builder;
-    // }
+    for (const auto& [edgeID, property] : _updatedEdges) {
+        const EdgeRecord* maybeRecord = _view.read().getEdge(edgeID);
+        bioassert(maybeRecord, "Failed to get updated edge {}", edgeID.getValue());
+
+        const EdgeRecord& record = *maybeRecord;
+
+        const auto& [propID, value] = property;
+
+        std::visit(
+            [&](auto&& val) {
+                using T = std::decay_t<decltype(val)>;
+
+                if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
+                    builder.addEdgeProperty<types::Int64>(record, propID, val);
+                } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
+                    builder.addEdgeProperty<types::UInt64>(record, propID, val);
+                } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
+                    builder.addEdgeProperty<types::Double>(record, propID, val);
+                } else if constexpr (std::is_same_v<T, std::string>) {
+                    builder.addEdgeProperty<types::String>(record, propID, val);
+                } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
+                    builder.addEdgeProperty<types::Bool>(record, propID, val);
+                }
+            },
+            value);
+
+        _journal.addWrittenEdge(edgeID);
+    }
 }
 
 void CommitWriteBuffer::applyUpdates(DataPartBuilder& builder) {
