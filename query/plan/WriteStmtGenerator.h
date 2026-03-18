@@ -20,13 +20,14 @@ class VarNode;
 class NodePattern;
 class EdgePattern;
 class GetPropertyCache;
+class PropertyExpr;
 
 class WriteStmtGenerator {
 public:
     WriteStmtGenerator(const CypherAST* ast,
                        PlanGraph* tree,
                        PlanGraphVariables* variables,
-                       GetPropertyCache& propCache);
+                       PlanGraphNode* prevNode);
 
     ~WriteStmtGenerator();
 
@@ -35,10 +36,10 @@ public:
     WriteStmtGenerator& operator=(const WriteStmtGenerator&) = delete;
     WriteStmtGenerator& operator=(WriteStmtGenerator&&) = delete;
 
-    WriteNode* generateStmt(const Stmt* stmt, PlanGraphNode* prevNode = nullptr);
-    void generateSetStmt(const SetStmt* stmt, PlanGraphNode* prevNode);
-    void generateCreateStmt(const CreateStmt* stmt, PlanGraphNode* prevNode);
-    void generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNode* prevNode);
+    WriteNode* generateStmt(const Stmt* stmt);
+    void generateSetStmt(const SetStmt* stmt);
+    void generateCreateStmt(const CreateStmt* stmt);
+    void generateDeleteStmt(const DeleteStmt* stmt);
     void generateCreatePatternElement(const PatternElement* element);
 
     void generateCreatePatternElementNode(NodePattern* origin);
@@ -50,11 +51,14 @@ private:
     const CypherAST* _ast {nullptr};
     PlanGraph* _tree {nullptr};
     PlanGraphVariables* _variables {nullptr};
-    WriteNode* _currentNode {nullptr};
+    WriteNode* _writeNode {nullptr};
+    PlanGraphNode* _prevNode {nullptr};
 
     GetPropertyCache& _propCache;
 
-    void prepareWriteNode(PlanGraphNode* prevNode);
+    void prepareWriteNode();
+
+    void fetchOrGenerateProperty(PropertyExpr* prop);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 
