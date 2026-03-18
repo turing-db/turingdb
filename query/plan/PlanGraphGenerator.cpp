@@ -2,6 +2,7 @@
 
 #include "BioAssert.h"
 #include "FunctionInvocation.h"
+#include "GetPropertyCache.h"
 #include "Projection.h"
 #include "QualifiedName.h"
 #include "ReturnStmtGenerator.h"
@@ -261,7 +262,8 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
     // Generate update statements (optional)
     if (updateStmts) {
-        WriteStmtGenerator writeGenerator(_ast, &_tree, _variables.get());
+        GetPropertyCache& propCache = _tree.getGetPropertyCache();
+        WriteStmtGenerator writeGenerator(_ast, &_tree, _variables.get(), propCache);
 
         for (const Stmt* stmt : updateStmts->stmts()) {
             currentNode = writeGenerator.generateStmt(stmt, currentNode);

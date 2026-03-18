@@ -19,12 +19,14 @@ class Expr;
 class VarNode;
 class NodePattern;
 class EdgePattern;
+class GetPropertyCache;
 
 class WriteStmtGenerator {
 public:
     WriteStmtGenerator(const CypherAST* ast,
                        PlanGraph* tree,
-                       PlanGraphVariables* variables);
+                       PlanGraphVariables* variables,
+                       GetPropertyCache& propCache);
 
     ~WriteStmtGenerator();
 
@@ -49,6 +51,8 @@ private:
     PlanGraph* _tree {nullptr};
     PlanGraphVariables* _variables {nullptr};
     WriteNode* _currentNode {nullptr};
+
+    GetPropertyCache& _propCache;
 
     void prepareWriteNode(PlanGraphNode* prevNode);
 
