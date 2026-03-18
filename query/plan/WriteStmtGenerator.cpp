@@ -298,7 +298,7 @@ void WriteStmtGenerator::fetchOrGenerateProperty(PropertyExpr* prop) {
     // Otherwise we need to fetch this property just for the return, add a node and update
     // the propExpr. Place the GetProperties immediately: this ensures all properties are
     // present for any expression evaluations that may use them.
-    auto* getProps = _tree->newOut<GetPropertyWithNullNode>(_prevNode, propName);
+    auto* getProps = _tree->insertBefore<GetPropertyWithNullNode>(_writeNode, propName);
     _prevNode = getProps;
 
     getProps->setExpr(prop);
