@@ -1546,6 +1546,200 @@ TEST_F(WriteQueriesTest, multipleEdgeSetsSamePropertyString) {
     }
 }
 
+TEST_F(WriteQueriesTest, multipleNodeSetQueries) {
+    newChange();
+    {
+        constexpr std::string_view setQuery1 = R"(MATCH (n) SET n.name = "New", n.age = 100)";
+        constexpr std::string_view setQuery2 = R"(MATCH (n) SET n.name = "Newer", n.age = 1000)";
+
+        {
+            auto res = query(setQuery1, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res);
+        }
+        {
+            auto res = query(setQuery2, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res);
+        }
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.name, n.age)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(2, df->size());
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(names && ages);
+
+            ASSERT_FALSE(names->empty());
+            ASSERT_FALSE(ages->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*names,
+                [](std::optional<types::String::Primitive> name) { return *name == "Newer"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*ages,
+                [](std::optional<types::Int64::Primitive> age) { return *age == 1000; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, multipleNodeSetQueriesWithCommit) {
+    newChange();
+    {
+        constexpr std::string_view setQuery1 = R"(MATCH (n) SET n.name = "New", n.age = 100)";
+        constexpr std::string_view setQuery2 = R"(MATCH (n) SET n.name = "Newer", n.age = 1000)";
+
+        {
+            auto res = query(setQuery1, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res);
+        }
+        ASSERT_TRUE(query("commit", [](const Dataframe*){}));
+        {
+            auto res = query(setQuery2, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res);
+        }
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.name, n.age)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(2, df->size());
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(names && ages);
+
+            ASSERT_FALSE(names->empty());
+            ASSERT_FALSE(ages->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*names,
+                [](std::optional<types::String::Primitive> name) { return *name == "Newer"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*ages,
+                [](std::optional<types::Int64::Primitive> age) { return *age == 1000; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, multipleEdgeSetQueries) {
+    newChange();
+    {
+        constexpr std::string_view setQuery1 = R"(MATCH ()-[e]->() SET e.name = "New", e.duration = 100)";
+        constexpr std::string_view setQuery2 = R"(MATCH ()-[e]->() SET e.name = "Newer", e.duration = 1000)";
+
+        {
+            auto res = query(setQuery1, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res);
+        }
+        {
+            auto res = query(setQuery2, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res);
+        }
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH ()-[e]->() RETURN e.name, e.duration)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(2, df->size());
+            const auto* names = findColumn(df, "e.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* durs = findColumn(df, "e.duration")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(names && durs);
+
+            ASSERT_FALSE(names->empty());
+            ASSERT_FALSE(durs->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*names,
+                [](std::optional<types::String::Primitive> name) { return *name == "Newer"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*durs,
+                [](std::optional<types::Int64::Primitive> dur) { return *dur == 1000; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, multipleEdgeSetQueriesWithCommit) {
+    newChange();
+    {
+        constexpr std::string_view setQuery1 = R"(MATCH ()-[e]->() SET e.name = "New", e.duration = 100)";
+        constexpr std::string_view setQuery2 = R"(MATCH ()-[e]->() SET e.name = "Newer", e.duration = 1000)";
+
+        {
+            auto res = query(setQuery1, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res);
+        }
+        ASSERT_TRUE(query("commit", [](const Dataframe*){}));
+        {
+            auto res = query(setQuery2, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res);
+        }
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH ()-[e]->() RETURN e.name, e.duration)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(2, df->size());
+            const auto* names = findColumn(df, "e.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* durs = findColumn(df, "e.duration")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(names && durs);
+
+            ASSERT_FALSE(names->empty());
+            ASSERT_FALSE(durs->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*names,
+                [](std::optional<types::String::Primitive> name) { return *name == "Newer"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*durs,
+                [](std::optional<types::Int64::Primitive> dur) { return *dur == 1000; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
