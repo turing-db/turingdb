@@ -4,11 +4,14 @@
 #include <variant>
 #include <vector>
 
+#include <range/v3/view/reverse.hpp>
+
 #include "Graph.h"
 #include "ID.h"
 #include "columns/ColumnVector.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
+#include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "versioning/MetadataRebaser.h"
 #include "versioning/EntityIDRebaser.h"
@@ -16,6 +19,8 @@
 #include "Tombstones.h"
 
 using namespace db;
+namespace rg = ranges;
+namespace rv = rg::views;
 
 CommitWriteBuffer::CommitWriteBuffer(CommitJournal& journal, GraphView view)
     : _journal(journal),
@@ -211,23 +216,47 @@ void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
 }
 
 void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
-    // FIXME: multiple updates get overwritten strangely
-    for (const auto& [nodeID, property] : _updatedNodes) {
+    // Iterate through updates in reverse: most recent take precedence
+    for (const auto& [nodeID, property] : rv::reverse(_updatedNodes)) {
         const auto& [propID, value] = property;
         std::visit(
-            [&](auto&& val) {
+            [&](const auto& val) {
                 using T = std::decay_t<decltype(val)>;
 
+                // Check if the builder already has a property registered for this nodeID
+                // for that property type; if it does then we are attempting to set an
+                // older value: ignore, because we are iterating from newest -> oldest
+                // updates.
                 if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
-                    builder.addNodeProperty<types::Int64>(nodeID, propID, val);
+                    using Type = types::Int64;
+                    if (builder.hasProperty<Type>(nodeID, propID)) {
+                        return;
+                    }
+                    builder.addNodeProperty<Type>(nodeID, propID, val);
                 } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
-                    builder.addNodeProperty<types::UInt64>(nodeID, propID, val);
+                    using Type = types::UInt64;
+                    if (builder.hasProperty<Type>(nodeID, propID)) {
+                        return;
+                    }
+                    builder.addNodeProperty<Type>(nodeID, propID, val);
                 } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
-                    builder.addNodeProperty<types::Double>(nodeID, propID, val);
+                    using Type = types::Double;
+                    if (builder.hasProperty<Type>(nodeID, propID)) {
+                        return;
+                    }
+                    builder.addNodeProperty<Type>(nodeID, propID, val);
                 } else if constexpr (std::is_same_v<T, std::string>) {
-                    builder.addNodeProperty<types::String>(nodeID, propID, val);
+                    using Type = types::String;
+                    if (builder.hasProperty<Type>(nodeID, propID)) {
+                        return;
+                    }
+                    builder.addNodeProperty<Type>(nodeID, propID, val);
                 } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
-                    builder.addNodeProperty<types::Bool>(nodeID, propID, val);
+                    using Type = types::Bool;
+                    if (builder.hasProperty<Type>(nodeID, propID)) {
+                        return;
+                    }
+                    builder.addNodeProperty<Type>(nodeID, propID, val);
                 }
             },
             value);
@@ -237,27 +266,52 @@ void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
 }
 
 void CommitWriteBuffer::applyEdgeUpdates(DataPartBuilder& builder) {
-    for (const auto& [edgeID, property] : _updatedEdges) {
+    // Iterate through updates in reverse: most recent take precedence
+    for (const auto& [edgeID, property] : rv::reverse(_updatedEdges)) {
         const EdgeRecord* maybeRecord = _view.read().getEdge(edgeID);
-        bioassert(maybeRecord, "Failed to get updated edge {}", edgeID.getValue());
+        bioassert(maybeRecord, "Failed to get updated edge {}.", edgeID.getValue());
 
         const EdgeRecord& record = *maybeRecord;
 
         const auto& [propID, value] = property;
 
         std::visit(
-            [&](auto&& val) {
+            [&](const auto& val) {
                 using T = std::decay_t<decltype(val)>;
 
+                // Check if the builder already has a property registered for this edgeID
+                // for that property type; if it does then we are attempting to set an
+                // older value: ignore, because we are iterating from newest -> oldest
+                // updates.
                 if constexpr (std::is_same_v<T, types::Int64::Primitive>) {
+                    using Type = types::Int64;
+                    if (builder.hasProperty<Type>(edgeID, propID)) {
+                        return;
+                    }
                     builder.addEdgeProperty<types::Int64>(record, propID, val);
                 } else if constexpr (std::is_same_v<T, types::UInt64::Primitive>) {
+                    using Type = types::UInt64;
+                    if (builder.hasProperty<Type>(edgeID, propID)) {
+                        return;
+                    }
                     builder.addEdgeProperty<types::UInt64>(record, propID, val);
                 } else if constexpr (std::is_same_v<T, types::Double::Primitive>) {
+                    using Type = types::Double;
+                    if (builder.hasProperty<Type>(edgeID, propID)) {
+                        return;
+                    }
                     builder.addEdgeProperty<types::Double>(record, propID, val);
                 } else if constexpr (std::is_same_v<T, std::string>) {
+                    using Type = types::String;
+                    if (builder.hasProperty<Type>(edgeID, propID)) {
+                        return;
+                    }
                     builder.addEdgeProperty<types::String>(record, propID, val);
                 } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
+                    using Type = types::Bool;
+                    if (builder.hasProperty<Type>(edgeID, propID)) {
+                        return;
+                    }
                     builder.addEdgeProperty<types::Bool>(record, propID, val);
                 }
             },

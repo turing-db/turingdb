@@ -34,7 +34,7 @@ public:
     template <SupportedType T>
     requires (!std::same_as<T, types::Embedding>)
     void registerPropertyType(PropertyTypeID ptID) {
-        if (_map.find(ptID) != _map.end()) {
+        if (_map.contains(ptID)) {
             throw FatalException("Trying to register a type that was already registered");
         }
 
@@ -71,7 +71,7 @@ public:
     }
 
     bool hasPropertyType(PropertyTypeID ptID) const {
-        return _map.find(ptID) != _map.end();
+        return _map.contains(ptID);
     }
 
     bool has(PropertyTypeID ptID, EntityID entityID) const {

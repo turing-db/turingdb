@@ -74,6 +74,19 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
     _edgeProperties->add<T>(ptID, edge._edgeID.getValue(), std::move(value));
 }
 
+template <SupportedType T, TypedInternalID I>
+bool DataPartBuilder::hasProperty(I id, PropertyTypeID pid) {
+    PropertyManager const* propertyManager {nullptr};
+
+    if constexpr (std::is_same_v<I, NodeID>) {
+        propertyManager = _nodeProperties.get();
+    } else {
+        propertyManager = _edgeProperties.get();
+    }
+
+    return propertyManager->tryGet<T>(pid, id.getValue());
+}
+
 const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, NodeID tgtID) {
     auto& edge = _edges.emplace_back();
     edge._edgeID = _nextEdgeID;
@@ -131,7 +144,9 @@ void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
                                                           PType::Primitive); \
     template void DataPartBuilder::addEdgeProperty<PType>(const EdgeRecord&, \
                                                           PropertyTypeID,    \
-                                                          PType::Primitive);
+                                                          PType::Primitive); \
+    template bool DataPartBuilder::hasProperty<PType>(NodeID id, PropertyTypeID pid);             \
+    template bool DataPartBuilder::hasProperty<PType>(EdgeID id, PropertyTypeID pid);             \
 
 INSTANTIATE(types::Int64);
 INSTANTIATE(types::UInt64);
