@@ -251,18 +251,23 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
 void WriteStmtAnalyzer::analyze(SetItem* item) {
     const auto visitor = Overloaded {
-        // PropertyExprAssign case
+        // PropertyExprAssign case, e.g;
+        // MATCH (n) SET n.age = 10
+        // MATCH (n), (m) SET n.age = m.age
         [this, item](const SetItem::PropertyExprAssign& v) {
-            // Analyzing rhs
-            const EvaluatedType rhsType = v._propValueExpr->getType();
+            PropertyExpr* lhs = v._propTypeExpr;
+            Expr* rhs = v._propValueExpr;
 
-            // Analyzing lhs
-            const ValueType lhsEvaluatedVt = _exprAnalyzer->analyzePropertyExpr(v._propTypeExpr,
-                                                                                true,
-                                                                                evaluatedToValueType(rhsType));
+            _exprAnalyzer->analyzeExpr(rhs);
+            const EvaluatedType rhsType = rhs->getType();
+
+            constexpr bool ALLOW_CREATES = true;
+            const ValueType lhsEvaluatedVt = _exprAnalyzer->analyzePropertyExpr(
+                lhs, ALLOW_CREATES, evaluatedToValueType(rhsType)
+            );
+
             _exprAnalyzer->analyzeRootExpr(v._propValueExpr);
 
-            // Checking property compatibility
             if (!ExprAnalyzer::propTypeCompatible(lhsEvaluatedVt, rhsType)) {
                 throwError(fmt::format("Cannot evaluate property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(lhsEvaluatedVt),
