@@ -146,9 +146,12 @@ template <typename T>
 
 [[maybe_unused]] std::string valueToString(const std::span<const float>& value) {
     std::string result = "[";
-    for (size_t i = 0; i < value.size(); i++) {
-        if (i > 0) result += ",";
-        result += std::to_string(value[i]);
+    if (value.size() > 0) {
+        result += std::to_string(value[0]);
+        for (size_t i = 1; i < value.size(); i++) {
+            result += ",";
+            result += std::to_string(value[i]);
+        }
     }
     result += "]";
     return result;

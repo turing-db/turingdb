@@ -123,9 +123,12 @@ private:
 
     void encodeValue(types::Embedding::Primitive value) {
         _writer.write("[");
-        for (size_t i = 0; i < value.size(); i++) {
-            if (i > 0) _writer.write(",");
-            _writer.write(std::to_string(value[i]));
+        if (value.size() > 0) {
+            _writer.write(std::to_string(value[0]));
+            for (size_t i = 1; i < value.size(); i++) {
+                _writer.write(",");
+                _writer.write(std::to_string(value[i]));
+            }
         }
         _writer.write("]");
     }

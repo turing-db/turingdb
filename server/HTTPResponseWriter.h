@@ -292,9 +292,12 @@ public:
 
     void writeValue(std::span<const float> v) {
         write('[');
-        for (size_t i = 0; i < v.size(); i++) {
-            if (i > 0) write(',');
-            write(std::to_string(v[i]));
+        if (v.size() > 0) {
+            write(std::to_string(v[0]));
+            for (size_t i = 1; i < v.size(); i++) {
+                write(',');
+                write(std::to_string(v[i]));
+            }
         }
         write(']');
     }
@@ -311,13 +314,7 @@ public:
 
         size_t count = 0;
         for (const auto& [ptID, value] : props) {
-            std::visit([&](const auto& v) {
-                if constexpr (std::is_same_v<std::decay_t<decltype(v)>, std::span<const float>>) {
-                    writeKeyValue(propTypes.getName(ptID).value(), v);
-                } else {
-                    writeKeyValue(propTypes.getName(ptID).value(), *v);
-                }
-            }, value);
+            std::visit([&](const auto& v) { writeKeyValue(propTypes.getName(ptID).value(), *v); }, value);
             ++count;
 
             if (count != props.getCount()) {

@@ -59,18 +59,8 @@ void PropertyManager::fillEntityPropertyView(EntityID entityID,
     }
 
     for (const auto& [ptID, rawContainer] : _embeddings) {
-        if (!_indexers.contains(ptID)) {
-            continue;
-        }
-
         const auto& container = rawContainer->cast<types::Embedding>();
-        if (!container.has(entityID)) {
-            continue;
-        }
-
-        auto& prop = view._props.emplace_back();
-        prop._id = ptID;
-        prop._value = container.get(entityID);
+        fill(container, ptID);
     }
 
 }

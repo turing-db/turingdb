@@ -6,6 +6,7 @@
 #include "GraphPath.h"
 #include "ID.h"
 #include "OptionalLike.h"
+#include "TypeUtils.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitHash.h"
@@ -56,8 +57,7 @@ template <typename T>
 concept IsNull = std::is_same_v<T, PropertyNull>;
 
 template <typename T>
-concept IsEmbedding = std::is_same_v<T, types::Embedding::Primitive>
-                   || std::is_same_v<T, std::optional<types::Embedding::Primitive>>;
+concept IsEmbedding = std::is_same_v<TypeUtils::unwrap_optional_t<T>, types::Embedding::Primitive>;
 
 struct ColumnTypeGenerator {
     std::string& _name;

@@ -39,7 +39,7 @@ public:
     const types::Embedding::Primitive& getView(size_t index) const { return _views[index]; }
 
     size_t getDimension() const { return _dimension; }
-    size_t getEmbeddingCount() const { return _views.size(); }
+    size_t size() const { return _views.size(); }
 
     const ViewVector& get() const { return _views; }
 
