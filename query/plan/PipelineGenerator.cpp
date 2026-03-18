@@ -1300,14 +1300,14 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
     updatedNodes.reserve(node->nodeUpdates().size());
     {
         for (const auto& [var, name, valueExpr] : node->nodeUpdates()) {
-            bioassert(var && valueExpr, "Invalid variable and value for updated node");
+            bioassert(var && valueExpr, "Invalid variable and value for updated node.");
             Column* propCol = exprGen.registerPropertyConstraint(valueExpr);
             bioassert(propCol, "Failed to generate value column for node property update.");
 
             const auto findIt = _declToColumn.find(var);
             if (findIt == end(_declToColumn)) {
                 throw FatalException(fmt::format(
-                    "Failed to get column to update variable {}.", var->getName()));
+                    "Failed to get column to update node {}.", var->getName()));
             }
 
             const ColumnTag tagToUpdate = findIt->second;
@@ -1323,9 +1323,31 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
         }
     }
 
-    const WriteProcessor::UpdatedEdges updatedEdges;
+    WriteProcessor::UpdatedEdges updatedEdges;
     {
-        // TODO
+        for (const auto& [var, name, valueExpr] : node->edgeUpdates()) {
+            bioassert(var && valueExpr, "Invalid variable and value for updated edge.");
+
+            Column* propCol = exprGen.registerPropertyConstraint(valueExpr);
+            bioassert(propCol, "Failed to generate value column for edge property update.");
+
+            const auto findIt = _declToColumn.find(var);
+            if (findIt == end(_declToColumn)) {
+                throw FatalException(fmt::format(
+                    "Failed to get column to update edge {}.", var->getName()));
+            }
+
+            const ColumnTag tagToUpdate = findIt->second;
+
+            std::optional<PropertyType> maybePropType = propMap.get(name);
+            bioassert(maybePropType.has_value(), "Property {} could not be found.", name);
+
+            const ValueType valType = maybePropType->_valueType;
+            const PropertyTypeID propID = maybePropType->_id;
+
+            const WriteProcessorTypes::PropertyUpdate propUpdated(name, valType, propCol, propID);
+            updatedEdges.emplace_back(propUpdated, tagToUpdate);
+        }
     }
 
     // Has the side effect of allocing columns, and modifying the @ref _tag field of

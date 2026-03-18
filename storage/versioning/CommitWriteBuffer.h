@@ -151,6 +151,7 @@ public:
     void addDeletedNode(const NodeID& newDeletedNode);
 
     void addNodeUpdate(NodeID id, UntypedProperty& updatedProperty);
+    void addEdgeUpdate(EdgeID id, UntypedProperty& updatedProperty);
 
     /**
      * @brief Adds a single EdgeID contained in @param newDeletedEdge to the member @ref
