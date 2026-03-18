@@ -27,7 +27,7 @@ public:
 
     const ProcedureData& getData() const { return *_data; }
 
-    const ExecutionContext* getContext() const { return _ctxt; }
+    ExecutionContext* getContext() const { return _ctxt; }
 
     bool isFinished() const { return _finished; }
 
@@ -40,7 +40,7 @@ private:
 
     ProcedureData* _data {nullptr};
     const Procedure* _procedure {nullptr};
-    const ExecutionContext* _ctxt {nullptr};
+    ExecutionContext* _ctxt {nullptr};
     bool _finished {false};
     Step _step {Step::PREPARE};
 };

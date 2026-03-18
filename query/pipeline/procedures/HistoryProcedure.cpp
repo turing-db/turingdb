@@ -6,6 +6,8 @@
 #include "ProcedureNamespace.h"
 #include "Graph.h"
 #include "SystemManager.h"
+#include "versioning/CommitBuilder.h"
+#include "versioning/Transaction.h"
 #include "versioning/VersionController.h"
 #include "columns/ColumnVector.h"
 
@@ -95,22 +97,24 @@ void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
 
 void HistoryProcedure::execute(ProcedureState* proc) {
     Data& data = proc->data<Data>();
-    const ExecutionContext* ctxt = proc->getContext();
+    ExecutionContext* ctxt = proc->getContext();
     const std::string& graphName = ctxt->getGraphName().data();
     const VersionController& controller = ctxt->getSystemManager()->getGraph(graphName)->getVersionController();
 
     const size_t chunkSize = ctxt->getChunkSize();
 
     switch (proc->getStep()) {
-        case ProcedureState::Step::PREPARE:
-            data._commit = controller.getCommitSafe(ctxt->getGraphView().headCommitHash());
-            if (!data._commit) {
-                // On a change, headCommitHash() returns a pending CommitBuilder
-                // hash that doesn't exist in the VersionController. Fall back to
-                // the committed head.
-                data._commit = controller.getCommitSafe(CommitHash::head());
+        case ProcedureState::Step::PREPARE: {
+            Transaction* tx = ctxt->getTransaction();
+            if (tx->readingFrozenCommit()) {
+                data._commit = controller.getCommitSafe(tx->get<FrozenCommitTx>().getCommitHash());
+            } else if (tx->readingPendingCommit()) {
+                data._commit = tx->get<PendingCommitReadTx>().commitBuilder()->commit();
+            } else if (tx->writingPendingCommit()) {
+                data._commit = tx->get<PendingCommitWriteTx>().commitBuilder()->commit();
             }
             bioassert(data._commit, "headCommitHash not found");
+        }
         break;
 
         case ProcedureState::Step::RESET:

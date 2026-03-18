@@ -10,6 +10,8 @@
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "versioning/Commit.h"
+#include "versioning/CommitBuilder.h"
+#include "versioning/Transaction.h"
 #include "versioning/VersionController.h"
 
 #include "PipelineException.h"
@@ -124,7 +126,7 @@ void DescribeCommitProcedure::registerProcedure(ProcedureNamespace* ns) {
 
 void DescribeCommitProcedure::execute(ProcedureState* proc) {
     Data& data = proc->data<Data>();
-    const ExecutionContext* ctxt = proc->getContext();
+    ExecutionContext* ctxt = proc->getContext();
 
     const Column* rawCommitCol = data.getInputColumn(0);
     auto* nodeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(0));
@@ -138,14 +140,14 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
             const SystemManager* sysMan = ctxt->getSystemManager();
             const Graph* graph = sysMan->getGraph(ctxt->getGraphName().data());
             const VersionController* controller = &graph->getVersionController();
-            const CommitHash headHash = ctxt->getGraphView().headCommitHash();
 
-            data._headCommit = controller->getCommitSafe(headHash);
-            if (!data._headCommit) {
-                // On a change, headCommitHash() returns a pending CommitBuilder
-                // hash that doesn't exist in the VersionController. Fall back to
-                // the committed head.
-                data._headCommit = controller->getCommitSafe(CommitHash::head());
+            Transaction* tx = ctxt->getTransaction();
+            if (tx->readingFrozenCommit()) {
+                data._headCommit = controller->getCommitSafe(tx->get<FrozenCommitTx>().getCommitHash());
+            } else if (tx->readingPendingCommit()) {
+                data._headCommit = tx->get<PendingCommitReadTx>().commitBuilder()->commit();
+            } else if (tx->writingPendingCommit()) {
+                data._headCommit = tx->get<PendingCommitWriteTx>().commitBuilder()->commit();
             }
             bioassert(data._headCommit, "headCommitHash not found");
 
