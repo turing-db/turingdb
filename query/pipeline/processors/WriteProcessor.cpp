@@ -222,6 +222,7 @@ public:
         }
     }
 
+    /// Convert view to owning string; required as WriteBuffer outlives any one query
     void operator()(const ColumnVector<std::string_view>* typed) {
         _buf.clear();
 
@@ -237,18 +238,19 @@ public:
         _buf.clear();
 
         for (const T& val : *typed) {
-            bioassert(val.has_value(), "Column had nullopt.");
+            bioassert(val.has_value(), "Column had nullopt."); // FIXME: Remove/handle
 
             _buf.emplace_back(_propID, *val);
         }
     }
 
+    /// Convert view to owning string; required as WriteBuffer outlives any one query
     void operator()(const ColumnVector<std::optional<std::string_view>>* typed) {
         _buf.clear();
 
         std::string tmp;
         for (const std::optional<std::string_view> val : *typed) {
-            bioassert(val.has_value(), "Column had nullopt.");
+            bioassert(val.has_value(), "Column had nullopt."); // FIXME: Remove/handle
             const std::string_view v = *val;
 
             tmp.assign(begin(v), end(v));
@@ -273,17 +275,15 @@ public:
     template <typename T>
     void operator()(const ColumnConst<T>* typed) {
         const T& val = typed->getRaw();
-
-        _prop = CommitWriteBuffer::UntypedProperty(_propID, val);
+        _prop.value = val;
+        _prop.propertyID = _propID;
     }
 
+    /// Convert view to owning string; required as WriteBuffer outlives any one query
     void operator()(const ColumnConst<std::string_view>* typed) {
-        const std::string_view val = typed->getRaw();
-        const std::string v(begin(val), end(val));
-
-        // NOTE: use emplace to avoid this gcc bug
-        // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=114592
-        _prop.value.template emplace<std::string>(v);
+        const std::string strv(typed->getRaw());
+        _prop.value = strv;
+        _prop.propertyID = _propID;
     }
 
 private:
