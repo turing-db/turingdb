@@ -20,12 +20,15 @@
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
 
+#include "expr/Expr.h"
 #include "expr/ExprChain.h"
 #include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"
 
+#include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/WriteNode.h"
 #include "nodes/VarNode.h"
+#include "nodes/ExprEvalNode.h"
 
 #include "stmt/SetItem.h"
 #include "stmt/SetStmt.h"
@@ -55,29 +58,30 @@ void checkDependencies(PlanGraphVariables& variables, T data) {
 WriteStmtGenerator::WriteStmtGenerator(const CypherAST* ast,
                                        PlanGraph* tree,
                                        PlanGraphVariables* variables,
-                                       GetPropertyCache& propCache)
+                                       PlanGraphNode* prevNode)
     : _ast(ast),
     _tree(tree),
     _variables(variables),
-    _propCache(propCache)
+    _prevNode(prevNode),
+    _propCache(tree->getGetPropertyCache())
 {
 }
 
 WriteStmtGenerator::~WriteStmtGenerator() {
 }
 
-WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* prevNode) {
+WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt) {
     switch (stmt->getKind()) {
         case Stmt::Kind::CREATE:
-            generateCreateStmt(static_cast<const CreateStmt*>(stmt), prevNode);
+            generateCreateStmt(static_cast<const CreateStmt*>(stmt));
         break;
 
         case Stmt::Kind::SET:
-            generateSetStmt(static_cast<const SetStmt*>(stmt), prevNode);
+            generateSetStmt(static_cast<const SetStmt*>(stmt));
         break;
 
         case Stmt::Kind::DELETE:
-            generateDeleteStmt(static_cast<const DeleteStmt*>(stmt), prevNode);
+            generateDeleteStmt(static_cast<const DeleteStmt*>(stmt));
         break;
 
         default:
@@ -85,11 +89,11 @@ WriteNode* WriteStmtGenerator::generateStmt(const Stmt* stmt, PlanGraphNode* pre
         break;
     }
 
-    return _currentNode;
+    return _writeNode;
 }
 
-void WriteStmtGenerator::generateCreateStmt(const CreateStmt* stmt, PlanGraphNode* prevNode) {
-    prepareWriteNode(prevNode);
+void WriteStmtGenerator::generateCreateStmt(const CreateStmt* stmt) {
+    prepareWriteNode();
 
     const Pattern* pattern = stmt->getPattern();
 
@@ -98,28 +102,40 @@ void WriteStmtGenerator::generateCreateStmt(const CreateStmt* stmt, PlanGraphNod
     }
 }
 
-void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* prevNode) {
-    prepareWriteNode(prevNode);
+void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt) {
+    prepareWriteNode();
 
     for (const SetItem* item : stmt->getItems()) {
         const auto visitor = Overloaded {
-            [this](const SetItem::PropertyExprAssign& v) {
+            [this](const SetItem::PropertyExprAssign& v) {          // *n.age  =  10*
                 const PropertyExpr* propertyExpr = v._propTypeExpr; // *n.age* =  10
-                const Expr* propertyValue = v._propValueExpr;       //  n.age  = *10*
+                Expr* propertyValue = v._propValueExpr;             //  n.age  = *10*
 
                 const VarDecl* propertyVar = propertyExpr->getEntityVarDecl();
                 const std::string_view propertyName = propertyExpr->getPropName();
                 const EvaluatedType propertyType = propertyVar->getType();
 
+                ExprDependencies deps;
+                deps.genExprDependencies(*_variables, propertyValue);
+                // TODO: Add supply of dependencies
+                // TODO: Calculate gracefully according to expr tree.
+                for (auto& d : deps.getVarDeps()) {
+                    Expr* e = d._expr;
+                    if (e->getKind() == Expr::Kind::PROPERTY) {
+                        fetchOrGenerateProperty(static_cast<PropertyExpr*>(e));
+                    }
+                }
+
                 if (propertyType == EvaluatedType::NodePattern) {
-                    _currentNode->addNodeUpdate(propertyVar, propertyName, propertyValue);
+                    _writeNode->addNodeUpdate(propertyVar, propertyName, propertyValue);
 
                 } else if (propertyType == EvaluatedType::EdgePattern) {
-                    _currentNode->addEdgeUpdate(propertyVar, propertyName, propertyValue);
+                    _writeNode->addEdgeUpdate(propertyVar, propertyName, propertyValue);
                 }
             },
 
             // SymbolAddAssign case
+            // e.g. n.age += 10 (?)
             [this, item](const SetItem::SymbolAddAssign& v) {
                 throwError("SET cannot dynamically mutate properties yet", item);
             },
@@ -133,8 +149,8 @@ void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt, PlanGraphNode* pre
     };
 }
 
-void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNode* prevNode) {
-    prepareWriteNode(prevNode);
+void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt) {
+    prepareWriteNode();
 
     const ExprChain* exprs = stmt->getExpressions();
 
@@ -153,19 +169,19 @@ void WriteStmtGenerator::generateDeleteStmt(const DeleteStmt* stmt, PlanGraphNod
         const EvaluatedType type = symbol->getType();
 
         if (type == EvaluatedType::NodePattern) {
-            if (_currentNode->hasPendingNode(decl) && !DELETE_PENDING_SUPPORTED) {
+            if (_writeNode->hasPendingNode(decl) && !DELETE_PENDING_SUPPORTED) {
                 // TODO: Check if we should support this, Neo4j does
                 throwError("Cannot delete pending node", symbol);
             }
 
-            _currentNode->deleteNode(decl);
+            _writeNode->deleteNode(decl);
         } else if (type == EvaluatedType::EdgePattern) {
-            if (_currentNode->hasPendingEdge(decl) && !DELETE_PENDING_SUPPORTED) {
+            if (_writeNode->hasPendingEdge(decl) && !DELETE_PENDING_SUPPORTED) {
                 // TODO: Check if we should support this, Neo4j does
                 throwError("Cannot delete pending edge", symbol);
             }
 
-            _currentNode->deleteEdge(decl);
+            _writeNode->deleteEdge(decl);
         } else {
             throwError(fmt::format("Can only delete nodes or edges, not '{}'",
                                    EvaluatedTypeName::value(expr->getType())),
@@ -195,12 +211,12 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
     // Step 1. Handle the origin
     const VarNode* varNode = _variables->getVarNode(originDecl);
 
-    if (!_currentNode->hasPendingNode(originDecl) && varNode == nullptr) {
+    if (!_writeNode->hasPendingNode(originDecl) && varNode == nullptr) {
         // Node is not created yet and is not an input
         checkDependencies(*_variables, data);
-        _currentNode->addNode(originDecl, data);
+        _writeNode->addNode(originDecl, data);
 
-        _variables->setProducer(originDecl, _currentNode);
+        _variables->setProducer(originDecl, _writeNode);
     }
 
     lhs = originDecl;
@@ -212,11 +228,11 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
         const NodePatternData* rhsData = rhsNode->getData();
         const VarNode* rhsVarNode = _variables->getVarNode(rhs);
 
-        if (!_currentNode->hasPendingNode(rhs) && rhsVarNode == nullptr) {
+        if (!_writeNode->hasPendingNode(rhs) && rhsVarNode == nullptr) {
             // Node is not created yet and is not an input
             checkDependencies(*_variables, rhsData);
-            _currentNode->addNode(rhs, rhsData);
-            _variables->setProducer(rhs, _currentNode);
+            _writeNode->addNode(rhs, rhsData);
+            _variables->setProducer(rhs, _writeNode);
         }
 
         // - Create the new edge
@@ -224,17 +240,17 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
         {
             const EdgePatternData* edgeData = edge->getData();
             checkDependencies(*_variables, edgeData);
-            _variables->setProducer(edgeDecl, _currentNode);
+            _variables->setProducer(edgeDecl, _writeNode);
         }
 
         switch (edge->getDirection()) {
             case EdgePattern::Direction::Undirected:
                 throwError("Cannot use undirected edges in write statements", edge);
             case EdgePattern::Direction::Backward:
-                _currentNode->addEdge(edgeDecl, edge->getData(), rhs, lhs);
+                _writeNode->addEdge(edgeDecl, edge->getData(), rhs, lhs);
                 break;
             case EdgePattern::Direction::Forward:
-                _currentNode->addEdge(edgeDecl, edge->getData(), lhs, rhs);
+                _writeNode->addEdge(edgeDecl, edge->getData(), lhs, rhs);
                 break;
         }
 
@@ -242,17 +258,51 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
     }
 }
 
-void WriteStmtGenerator::prepareWriteNode(PlanGraphNode* prevNode) {
-    if (!prevNode) {
+void WriteStmtGenerator::prepareWriteNode() {
+    if (!_prevNode) {
         // First node in the plan graph
-        _currentNode = _tree->create<WriteNode>();
-    } else if (prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
+        _writeNode = _tree->create<WriteNode>();
+    } else if (_prevNode->getOpcode() == PlanGraphOpcode::WRITE) {
         // Previous node is a write node, reuse it
-        _currentNode = static_cast<WriteNode*>(prevNode);
+        _writeNode = static_cast<WriteNode*>(_prevNode);
     } else {
         // Previous node is not a write node, create a new one
-        _currentNode = _tree->newOut<WriteNode>(prevNode);
+        _writeNode = _tree->newOut<WriteNode>(_prevNode);
     }
+}
+
+void WriteStmtGenerator::fetchOrGenerateProperty(PropertyExpr* prop) {
+    const VarDecl* entityVar = prop->getEntityVarDecl();
+    const VarDecl* propVar = prop->getExprVarDecl();
+    const std::string_view propName = prop->getPropName();
+
+    if (!propVar) {
+        throwError("Property had no variable declaration.", prop);
+    }
+
+    if (!entityVar) {
+        throwError("Property had no enitity variable declation.", prop);
+    }
+
+    const auto* cached = _propCache.cacheOrRetrieve(entityVar, propVar, propName);
+    if (cached) {
+        if (!cached->_exprDecl) {
+            throwError("Cached property had no expression variable.", prop);
+        }
+        // GetProperty is already present in the cache. Map the existing propExpr
+        // to the current one
+        prop->setExprVarDecl(cached->_exprDecl);
+        return;
+    }
+
+    // Otherwise we need to fetch this property just for the return, add a node and update
+    // the propExpr. Place the GetProperties immediately: this ensures all properties are
+    // present for any expression evaluations that may use them.
+    auto* getProps = _tree->newOut<GetPropertyWithNullNode>(_prevNode, propName);
+    _prevNode = getProps;
+
+    getProps->setExpr(prop);
+    getProps->setEntityVarDecl(entityVar);
 }
 
 void WriteStmtGenerator::throwError(std::string_view msg, const void* obj) const {

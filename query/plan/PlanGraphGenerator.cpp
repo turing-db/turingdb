@@ -262,11 +262,10 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
     // Generate update statements (optional)
     if (updateStmts) {
-        GetPropertyCache& propCache = _tree.getGetPropertyCache();
-        WriteStmtGenerator writeGenerator(_ast, &_tree, _variables.get(), propCache);
+        WriteStmtGenerator writeGenerator(_ast, &_tree, _variables.get(), currentNode);
 
         for (const Stmt* stmt : updateStmts->stmts()) {
-            currentNode = writeGenerator.generateStmt(stmt, currentNode);
+            currentNode = writeGenerator.generateStmt(stmt);
         }
     }
 
