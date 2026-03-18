@@ -19,7 +19,8 @@ TEST_F(MetadataRebaserTest, labels) {
     GraphMetadata dataA;
     GraphMetadata dataB;
     CommitJournal journal = *CommitJournal::emptyJournal();
-    CommitWriteBuffer cwb(journal);
+    const GraphView dummyView;
+    CommitWriteBuffer cwb(journal, dummyView);
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);
@@ -52,7 +53,8 @@ TEST_F(MetadataRebaserTest, edgeTypes) {
     GraphMetadata dataA;
     GraphMetadata dataB;
     CommitJournal journal = *CommitJournal::emptyJournal();
-    CommitWriteBuffer cwb(journal);
+    const GraphView dummyView;
+    CommitWriteBuffer cwb(journal, dummyView);
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);
@@ -90,7 +92,8 @@ TEST_F(MetadataRebaserTest, propertyTypes) {
     GraphMetadata dataA;
     GraphMetadata dataB;
     CommitJournal journal = *CommitJournal::emptyJournal();
-    CommitWriteBuffer cwb(journal);
+    const GraphView dummyView;
+    CommitWriteBuffer cwb(journal, dummyView);
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);
@@ -128,7 +131,8 @@ TEST_F(MetadataRebaserTest, labelsets) {
     GraphMetadata dataA;
     GraphMetadata dataB;
     CommitJournal journal = *CommitJournal::emptyJournal();
-    CommitWriteBuffer cwb(journal);
+    const GraphView dummyView;
+    CommitWriteBuffer cwb(journal, dummyView);
 
     auto builderA = MetadataBuilder::create(_emptyData, &dataA);
     auto builderB = MetadataBuilder::create(_emptyData, &dataB);

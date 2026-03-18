@@ -16,8 +16,9 @@
 
 using namespace db;
 
-CommitWriteBuffer::CommitWriteBuffer(CommitJournal& journal)
-    : _journal(journal)
+CommitWriteBuffer::CommitWriteBuffer(CommitJournal& journal, GraphView view)
+    : _journal(journal),
+    _view(view)
 {
 }
 
@@ -204,7 +205,7 @@ void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
     buildPendingEdges(builder);
 }
 
-void CommitWriteBuffer::applyUpdates(DataPartBuilder& builder) {
+void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
     // FIXME: multiple updates get overwritten strangely
     for (const auto& [nodeID, property] : _updatedNodes) {
         const auto& [propID, value] = property;
@@ -227,6 +228,17 @@ void CommitWriteBuffer::applyUpdates(DataPartBuilder& builder) {
             value);
         _journal.addWrittenNode(nodeID);
     }
+}
+
+void CommitWriteBuffer::applyEdgeUpdates(DataPartBuilder& builder) {
+    // for (const auto& [edgeID, property] : _updatedEdges) {
+        // const EdgeRecord& er = builder;
+    // }
+}
+
+void CommitWriteBuffer::applyUpdates(DataPartBuilder& builder) {
+    applyNodeUpdates(builder);
+    applyEdgeUpdates(builder);
 }
 
 void CommitWriteBuffer::applyDeletions(Tombstones& tombstones) {

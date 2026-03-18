@@ -188,7 +188,7 @@ void CommitBuilder::initialize(const Commit* prevCommit) {
     bioassert(_commitData->_history._journal, "Invalid journal");
 
     // Create the write buffer for this commit
-    _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal());
+    _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal(), _view);
     // Copy tombstones from previous commit
     _commitData->_tombstones = _view.tombstones();
 }
@@ -212,5 +212,5 @@ void CommitBuilder::initializeMerge(const Commit* prevCommit) {
     _commitData->_history._journal = CommitJournal::emptyJournal();
 
     // Create the write buffer for this commit
-    _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal());
+    _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal(), _view);
 }
