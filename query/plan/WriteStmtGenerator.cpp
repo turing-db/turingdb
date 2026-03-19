@@ -117,7 +117,11 @@ void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt) {
 
                 ExprDependencies deps;
                 deps.genExprDependencies(*_variables, propertyValue);
-                // TODO: Add supply of dependencies
+                if (!deps.empty()) {
+                    throwError("SET statements with variable dependencies are not yet "
+                               "supported.",
+                               propertyValue);
+                }
                 // TODO: Calculate gracefully according to expr tree.
                 for (auto& d : deps.getVarDeps()) {
                     Expr* e = d._expr;
