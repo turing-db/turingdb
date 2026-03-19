@@ -5,4 +5,5 @@ regress_test(ssi_create_after_delete
   create_after_delete_test.py
   delete_after_create_test.py
   delete_after_delete_test.py
+  set_after_set_test.py
 )
