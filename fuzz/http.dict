@@ -1,0 +1,110 @@
+# ============================================================
+# TuringDB HTTP parser dictionary for AFL++
+# Extracted from HTTPParser.h, UriParser.h, DBURIParser.h
+# ============================================================
+
+# --- HTTP methods ---
+"GET"
+"POST"
+"GET "
+"POST "
+
+# --- HTTP versions ---
+"HTTP/1.0"
+"HTTP/1.1"
+" HTTP/1.1\r\n"
+
+# --- Line endings ---
+"\r\n"
+"\r\n\r\n"
+
+# --- Headers ---
+"Host: "
+"Host: localhost"
+"Content-Length: "
+"content-length: "
+"Content-Length: 0"
+"Content-Length: 1"
+"Content-Length: 100"
+"Content-Type: "
+"Content-Type: application/json"
+
+# --- TuringDB endpoints (from DBURIParser.h) ---
+"/query"
+"/query/"
+"/query/default"
+"/query/simpledb"
+"/load_graph"
+"/load_graph/"
+"/get_graph_status"
+"/get_graph_status/"
+"/is_graph_loaded"
+"/is_graph_loaded/"
+"/is_graph_loading"
+"/is_graph_loading/"
+"/list_loaded_graphs"
+"/list_avail_graphs"
+"/list_labels"
+"/list_labels/"
+"/list_property_types"
+"/list_property_types/"
+"/list_edge_types"
+"/list_edge_types/"
+"/list_nodes"
+"/list_nodes/"
+"/get_node_properties"
+"/get_node_properties/"
+"/get_neighbors"
+"/get_neighbors/"
+"/get_nodes"
+"/get_nodes/"
+"/get_node_edges"
+"/get_node_edges/"
+"/get_edges"
+"/get_edges/"
+"/explore_node_edges"
+"/explore_node_edges/"
+
+# --- URI query parameters ---
+"?"
+"&"
+"="
+"?graph="
+"?commit="
+"?change="
+"?id="
+"?id=0"
+"?id=1"
+
+# --- URI valid chars (from HTTPParser::isURIValid) ---
+"/"
+"_"
+"-"
+"."
+";"
+
+# --- Common graph names ---
+"default"
+"simpledb"
+
+# --- JSON payloads ---
+"{}"
+"{\"query\":\"\"}"
+"{\"query\":\"MATCH (n) RETURN n\"}"
+
+# --- Content-Length edge cases ---
+"Content-Length: -1"
+"Content-Length: 0"
+"Content-Length: 999999999999999999"
+"Content-Length: 18446744073709551615"
+
+# --- Partial/malformed requests ---
+"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"
+"POST /query/default HTTP/1.1\r\nContent-Length: 0\r\n\r\n"
+
+# --- Boundary tokens ---
+" "
+"\r"
+"\n"
+"\t"
+"\0"

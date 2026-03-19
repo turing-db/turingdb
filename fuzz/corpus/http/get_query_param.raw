@@ -1,0 +1,3 @@
+GET /query/default?q=test HTTP/1.1
+Host: localhost
+
