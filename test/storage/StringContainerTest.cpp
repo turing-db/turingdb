@@ -1,8 +1,32 @@
 #include <gtest/gtest.h>
 
 #include "StringContainer.h"
+#include "TuringException.h"
 
 using namespace db;
+
+TEST(StringContainerTest, OversizedStringThrows) {
+    StringContainer container;
+    const std::string oversized(StringBucket::BUCKET_SIZE + 1, 'x');
+
+    try {
+        container.alloc(oversized);
+        FAIL() << "Expected TuringException for oversized string";
+    } catch (const TuringException& e) {
+        const std::string msg = e.what();
+        ASSERT_TRUE(msg.find("exceeds") != std::string::npos
+                    || msg.find("too large") != std::string::npos)
+            << "Expected user-friendly message, got internal assertion: " << msg;
+    }
+}
+
+TEST(StringContainerTest, ExactBucketSizeString) {
+    StringContainer container;
+    const std::string exact(StringBucket::BUCKET_SIZE, 'x');
+    ASSERT_NO_THROW(container.alloc(exact));
+    ASSERT_EQ(container.size(), 1);
+    ASSERT_EQ(container.getView(0).size(), StringBucket::BUCKET_SIZE);
+}
 
 TEST(StringContainerTest, General) {
     StringContainer container;
