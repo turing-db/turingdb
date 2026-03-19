@@ -15,7 +15,7 @@ void CommitJournal::clear() {
 }
 
 bool CommitJournal::empty() const {
-    return _nodeWriteSet.empty() && _nodeWriteSet.empty();
+    return _nodeWriteSet.empty() && _edgeWriteSet.empty();
 }
 
 void CommitJournal::addWrittenNode(NodeID node) {
