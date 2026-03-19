@@ -940,12 +940,11 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
 
     // Register columns for deleted nodes and edges
     if (hasInput) {
-        PipelineBlockInputInterface& input = processor->tryGetInput();
-        Dataframe* inDf = input.getDataframe();
+        const PipelineBlockInputInterface& input = processor->tryGetInput();
+        const Dataframe* inDf = input.getDataframe();
 
         for (const ColumnTag deletedNodeCol : nodeColumnsToDelete) {
             NamedColumn* inputColumnToDelete = inDf->getColumn(deletedNodeCol);
-            // TODO: Make exception?
             bioassert(inputColumnToDelete, "input column not found");
 
             // Skip if the column already exists for cases like MATCH (n) DELETE n,n
@@ -958,7 +957,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
 
         for (const ColumnTag deletedEdgeCol : edgeColumnsToDelete) {
             NamedColumn* inputColumnToDelete = inDf->getColumn(deletedEdgeCol);
-            // TODO: Make exception?
             bioassert(inputColumnToDelete, "input column not found");
 
             // Skip if the column already exists for cases like MATCH (n) DELETE n, n
@@ -972,7 +970,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
         for (const auto& [propUpdate, srcTag] : nodeUpdates) {
             const auto& [propName, vt, valueCol, pid] = propUpdate;
 
-            NamedColumn* updateCol = inDf->getColumn(srcTag);
+            const NamedColumn* updateCol = inDf->getColumn(srcTag);
             bioassert(updateCol, "Failed to get node column to update.");
 
             bioassert(valueCol, "Failed to get value column for node update");
@@ -981,7 +979,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addWrite(ExprProgram* exprProg,
         for (const auto& [propUpdate, srcTag] : edgeUpdates) {
             const auto& [propName, vt, valueCol, pid] = propUpdate;
 
-            NamedColumn* updateCol = inDf->getColumn(srcTag);
+            const NamedColumn* updateCol = inDf->getColumn(srcTag);
             bioassert(updateCol, "Failed to get edge column to update.");
 
             bioassert(valueCol, "Failed to get value column for edge update");
