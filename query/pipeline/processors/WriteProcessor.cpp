@@ -649,10 +649,19 @@ void WriteProcessor::postProcessTempIDs() {
 }
 
 void WriteProcessor::updateNodes() {
-    for (const auto& [propUpdate, srcTag] : _updatedNodes) {
-        const auto& [name, valueType, valueColumn, pid] = propUpdate;
+    const Dataframe* inDf = tryGetInput().getDataframe();
 
-        const Dataframe* inDf = tryGetInput().getDataframe();
+    // Temporary buffers, reused over iterations, to add write buffer updates
+    CommitWriteBuffer::UntypedProperty propBuffer;
+    CommitWriteBuffer::UntypedProperties propsBuffer;
+
+    for (auto& [propUpdate, srcTag] : _updatedNodes) {
+        auto& [name, valueType, valueColumn, pid] = propUpdate;
+
+        // If we are updating a property which doesn't exist, create a new PropertyID
+        if (!pid.isValid()) {
+            pid = _metadataBuilder->getOrCreatePropertyType(name, valueType)._id;
+        }
 
         const NamedColumn* srcNCol = inDf->getColumn(srcTag);
         bioassert(srcNCol, "Failed to get node update source column.");
@@ -662,19 +671,17 @@ void WriteProcessor::updateNodes() {
 
         // ColumnConst -> all nodes get assigned same property
         if (isColumnConst(valueColumn)) {
-            CommitWriteBuffer::UntypedProperty prop;
-            getConstantUntypedProperty(valueColumn, prop, pid);
+            getConstantUntypedProperty(valueColumn, propBuffer, pid);
 
             for (const NodeID n : *source) {
-                _writeBuffer->addNodeUpdate(n, prop);
+                _writeBuffer->addNodeUpdate(n, propBuffer);
             }
         } else { // Column(Opt)Vector -> unique property for each node
-            CommitWriteBuffer::UntypedProperties propBuffer;
-            getUntypedProperties(valueColumn, propBuffer, pid);
-            bioassert(source->size() == propBuffer.size(),
-                      "Mismatch in dimensions of nodes to updates and property values.");
+            getUntypedProperties(valueColumn, propsBuffer, pid);
+            bioassert(source->size() == propsBuffer.size(),
+                      "Mismatch in dimensions of nodes to update and property values.");
 
-            for (const auto& [nodeID, update] : rv::zip(*source, propBuffer)) {
+            for (const auto& [nodeID, update] : rv::zip(*source, propsBuffer)) {
                 _writeBuffer->addNodeUpdate(nodeID, update);
             }
         }
@@ -682,10 +689,19 @@ void WriteProcessor::updateNodes() {
 }
 
 void WriteProcessor::updateEdges() {
-    for (const auto& [propUpdate, srcTag] : _updatedEdges) {
-        const auto& [name, valueType, valueColumn, pid] = propUpdate;
+    const Dataframe* inDf = tryGetInput().getDataframe();
 
-        const Dataframe* inDf = tryGetInput().getDataframe();
+    // Temporary buffers, reused over iterations, to add write buffer updates
+    CommitWriteBuffer::UntypedProperty propBuffer;
+    CommitWriteBuffer::UntypedProperties propsBuffer;
+
+    for (auto& [propUpdate, srcTag] : _updatedEdges) {
+        auto& [name, valueType, valueColumn, pid] = propUpdate;
+
+        // If we are updating a property which doesn't exist, create a new PropertyID
+        if (!pid.isValid()) {
+            pid = _metadataBuilder->getOrCreatePropertyType(name, valueType)._id;
+        }
 
         const NamedColumn* srcNCol = inDf->getColumn(srcTag);
         bioassert(srcNCol, "Failed to get edge update source column.");
@@ -695,19 +711,17 @@ void WriteProcessor::updateEdges() {
 
         // ColumnConst -> all edges get assigned same property
         if (isColumnConst(valueColumn)) {
-            CommitWriteBuffer::UntypedProperty prop;
-            getConstantUntypedProperty(valueColumn, prop, pid);
+            getConstantUntypedProperty(valueColumn, propBuffer, pid);
 
             for (const EdgeID e : *source) {
-                _writeBuffer->addEdgeUpdate(e, prop);
+                _writeBuffer->addEdgeUpdate(e, propBuffer);
             }
         } else { // Column(Opt)Vector -> unique property for each edge
-            CommitWriteBuffer::UntypedProperties propBuffer;
-            getUntypedProperties(valueColumn, propBuffer, pid);
-            bioassert(source->size() == propBuffer.size(),
+            getUntypedProperties(valueColumn, propsBuffer, pid);
+            bioassert(source->size() == propsBuffer.size(),
                       "Mismatch in dimensions of nodes to updates and property values.");
 
-            for (const auto& [edgeID, update] : rv::zip(*source, propBuffer)) {
+            for (const auto& [edgeID, update] : rv::zip(*source, propsBuffer)) {
                 _writeBuffer->addEdgeUpdate(edgeID, update);
             }
         }

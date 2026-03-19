@@ -1224,6 +1224,66 @@ TEST_F(ChangeQueriesTest, setEdgeConflict) {
     EXPECT_EQ(expectedErr, err);
 }
 
+TEST_F(ChangeQueriesTest, setNodeConflictDifferentProps) {
+    ChangeID change1;
+    ChangeID change2;
+    {
+        newChange(), change1 = _currentChange;
+        constexpr std::string_view SET_QUERY = R"(MATCH (n) SET n.name = "new")";
+        ASSERT_TRUE(query(SET_QUERY, emptyCallback));
+    }
+    {
+        newChange(), change2 = _currentChange;
+        constexpr std::string_view SET_QUERY = R"(MATCH (n) SET n.age = 1000)";
+        ASSERT_TRUE(query(SET_QUERY, emptyCallback));
+    }
+
+    submitChange(change2);
+    setChange(change1);
+
+    auto res = query("CHANGE SUBMIT", emptyCallback);
+    EXPECT_FALSE(res);
+
+    ASSERT_TRUE(res.hasErrorMessage());
+
+    const std::string_view err = res.getError();
+    const std::string_view expectedErr =
+        "This change attempted to update Node 0 (which is now "
+        "Node 0 on main) which has been modified on main.";
+
+    EXPECT_EQ(expectedErr, err);
+}
+
+TEST_F(ChangeQueriesTest, setEdgeConflictDifferentProps) {
+    ChangeID change1;
+    ChangeID change2;
+    {
+        newChange(), change1 = _currentChange;
+        constexpr std::string_view SET_QUERY = R"(MATCH ()-[e]->() SET e.name = "new")";
+        ASSERT_TRUE(query(SET_QUERY, emptyCallback));
+    }
+    {
+        newChange(), change2 = _currentChange;
+        constexpr std::string_view SET_QUERY = R"(MATCH ()-[e]->() SET e.duration = 1000)";
+        ASSERT_TRUE(query(SET_QUERY, emptyCallback));
+    }
+
+    submitChange(change2);
+    setChange(change1);
+
+    auto res = query("CHANGE SUBMIT", emptyCallback);
+    EXPECT_FALSE(res);
+
+    ASSERT_TRUE(res.hasErrorMessage());
+
+    const std::string_view err = res.getError();
+    const std::string_view expectedErr =
+        "This change attempted to update Edge 0 (which is now "
+        "Edge 0 on main) which has been modified on main.";
+
+    EXPECT_EQ(expectedErr, err);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 100;
