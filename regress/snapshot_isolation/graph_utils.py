@@ -1,8 +1,8 @@
 from turingdb import TuringDB
 
 NUM_TOTAL_NODES = 10
-NUM_EDGES: int = 2  # CREATE (n)-[e]-(m)
-NUM_NODES: int = NUM_TOTAL_NODES - (2 * NUM_EDGES)  # CREATE (n)
+NUM_EDGES: int = 2  # CREATE (n)-[e]->(m)
+NUM_NODES: int = NUM_TOTAL_NODES - (2 * NUM_EDGES)
 
 
 # Helper to create a change and return its ID
@@ -19,7 +19,11 @@ def submit_current_change(client: TuringDB) -> None:
     client.checkout()
 
 
-# Creates a graph for conflict checking to take place on
+"""
+Creates a graph for conflict checking to take place on.
+- 10 isolated nodes
+- 2 source nodes, 2 target nodes, 2 edges
+"""
 def setup_graph(client: TuringDB, graph_name: str) -> None:
     client.query(f"CREATE GRAPH {graph_name}")
     print(f"Created {graph_name}")
