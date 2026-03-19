@@ -49,7 +49,7 @@ public:
             } else if (c == '&') {
                 value = std::string_view(wordStart, pathPtr - wordStart);
                 if (!key.empty() && !value.empty()) {
-                    if (i > HTTP::MAX_PARAM_COUNT) {
+                    if (i >= HTTP::MAX_PARAM_COUNT) {
                         return BadResult(HTTP::Error::TOO_MANY_PARAMS);
                     }
                     parameters[i] = value;
@@ -64,7 +64,7 @@ public:
 
         if (wordStart < uriEnd && !key.empty()) {
             value = std::string_view(wordStart, uriEnd - wordStart);
-            if (i > HTTP::MAX_PARAM_COUNT) {
+            if (i >= HTTP::MAX_PARAM_COUNT) {
                 return BadResult(HTTP::Error::TOO_MANY_PARAMS);
             }
             parameters[i] = value;
