@@ -14,3 +14,4 @@ wheel/
 dist
 external/datasets/reactome.jsonl
 fuzz_results
+build_afl

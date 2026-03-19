@@ -134,7 +134,7 @@ for entry in cmds:
     count += 1
     if rc.returncode != 0:
         if failed < 3:
-            print(f'  FAIL: {basename}', file=sys.stderr)
+            print(f'  FAIL: {os.path.basename(src)}', file=sys.stderr)
             print(rc.stderr.decode()[-300:], file=sys.stderr)
         failed += 1
 
