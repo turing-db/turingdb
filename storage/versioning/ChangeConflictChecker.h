@@ -55,6 +55,9 @@ private:
      * which has since been written to main
      */
     void checkDeletedEdgeConflicts(const ConflictCheckSets& writes, const CommitWriteBuffer& writeBuffer);
+
+    void checkUpdatedNodeConflicts(const ConflictCheckSets& writes, const CommitWriteBuffer& writeBuffer);
+    void checkUpdatedEdgeConflicts(const ConflictCheckSets& writes, const CommitWriteBuffer& writeBuffer);
 };
 
 }

@@ -42,8 +42,12 @@ void ChangeConflictChecker::checkConflicts() {
     for (const std::unique_ptr<CommitBuilder>& commitBuilder : _change._commits) {
         const CommitWriteBuffer& writeBuffer = commitBuilder->writeBuffer();
         checkPendingEdgeConflicts(writes, writeBuffer);
+
         checkDeletedNodeConflicts(writes, writeBuffer);
         checkDeletedEdgeConflicts(writes, writeBuffer);
+
+        checkUpdatedNodeConflicts(writes, writeBuffer);
+        checkUpdatedEdgeConflicts(writes, writeBuffer);
     }
 
     // Check the latest commit for newly created edges that are incident to nodes this
@@ -99,7 +103,7 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
             const EdgeRecord& record = outEdgesIt.get();
             const EdgeID& edgeID = record._edgeID;
 
-            if (!mostRecentView.tombstones().contains(edgeID)) [[unlikely]] {
+            if (!mostRecentView.tombstones().contains(edgeID)) {
                 std::string errorMsg = fmt::format(
                     "Submit rejected: Commits on main have created an edge (ID: {}) "
                     "incident to Node {}, which this Change attempts to delete.",
@@ -120,7 +124,7 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
             const EdgeRecord& record = inEdgesIt.get();
             const EdgeID& edgeID = record._edgeID;
 
-            if (!mostRecentView.tombstones().contains(edgeID)) [[unlikely]] {
+            if (!mostRecentView.tombstones().contains(edgeID)) {
                 std::string errorMsg = fmt::format(
                     "Submit rejected: Commits on main have created an edge (ID: {}) "
                     "incident to Node {}, which this Change attempts to delete.",
@@ -139,7 +143,7 @@ void ChangeConflictChecker::checkPendingEdgeConflicts(const ConflictCheckSets& w
         // Check if source node was modified
         if (const NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
             const NodeID newSrc = {_entityIDRebaser.rebaseNodeID(*oldSrcID)};
-            if (writes.writtenNodes.contains(newSrc)) [[unlikely]] {
+            if (writes.writtenNodes.contains(newSrc)) {
                 std::string errorMsg = fmt::format(
                     "This change attempted to create an edge with source Node {} "
                     "(which is now Node {} on main) which has been modified on main.",
@@ -150,7 +154,7 @@ void ChangeConflictChecker::checkPendingEdgeConflicts(const ConflictCheckSets& w
         // Check if target node was modified
         if (const NodeID* oldTgtID = std::get_if<NodeID>(&edge.tgt)) {
             const NodeID newTgt = {_entityIDRebaser.rebaseNodeID(*oldTgtID)};
-            if (writes.writtenNodes.contains(newTgt)) [[unlikely]] {
+            if (writes.writtenNodes.contains(newTgt)) {
                 std::string errorMsg = fmt::format(
                     "This change attempted to create an edge with target Node {} "
                     "(which is now Node {} on main) which has been modified on main.",
@@ -171,7 +175,7 @@ void ChangeConflictChecker::checkDeletedNodeConflicts(const ConflictCheckSets& w
         if (deletedNode == newID) {
             _deletedExistingNodes.push_back(newID);
         }
-        if (writes.writtenNodes.contains(newID)) [[unlikely]] {
+        if (writes.writtenNodes.contains(newID)) {
             std::string errorMsg = fmt::format(
                 "This change attempted to delete Node {} "
                 "(which is now Node {} on main) which has been modified on main.",
@@ -186,11 +190,45 @@ void ChangeConflictChecker::checkDeletedEdgeConflicts(const ConflictCheckSets& w
     const CommitWriteBuffer::DeletedEdges& deletedEdges = writeBuffer.deletedEdges();
     for (const EdgeID deletedEdge : deletedEdges) {
         const EdgeID newID = _entityIDRebaser.rebaseEdgeID(deletedEdge);
-        if (writes.writtenEdges.contains(newID)) [[unlikely]] {
+        if (writes.writtenEdges.contains(newID)) {
             std::string errorMsg = fmt::format(
                 "This change attempted to delete Edge {} "
                 "(which is now Edge {} on main) which has been modified on main.",
                 deletedEdge, newID);
+            throw VersionControlException(std::move(errorMsg));
+        }
+    }
+}
+
+void ChangeConflictChecker::checkUpdatedNodeConflicts(const ConflictCheckSets& writes,
+                                                      const CommitWriteBuffer& writeBuffer) {
+    const CommitWriteBuffer::UpdatedNodes& updatedNodes = writeBuffer.updatedNodes();
+    for (const CommitWriteBuffer::NodeUpdate& nodeUpdate : updatedNodes) {
+        const NodeID updatedNode = nodeUpdate._idToUpdate;
+
+        const NodeID newID = _entityIDRebaser.rebaseNodeID(updatedNode);
+        if (writes.writtenNodes.contains(newID)) {
+            std::string errorMsg = fmt::format(
+                "This change attempted to update Node {} "
+                "(which is now Node {} on main) which has been modified on main.",
+                updatedNode, newID);
+            throw VersionControlException(std::move(errorMsg));
+        }
+    }
+}
+
+void ChangeConflictChecker::checkUpdatedEdgeConflicts(const ConflictCheckSets& writes,
+                                                      const CommitWriteBuffer& writeBuffer) {
+    const CommitWriteBuffer::UpdatedEdges& updatedEdges = writeBuffer.updatedEdges();
+    for (const CommitWriteBuffer::EdgeUpdate& edgeUpdate : updatedEdges) {
+        const EdgeID updatedEdge = edgeUpdate._idToUpdate;
+
+        const EdgeID newID = _entityIDRebaser.rebaseEdgeID(updatedEdge);
+        if (writes.writtenEdges.contains(newID)) {
+            std::string errorMsg = fmt::format(
+                "This change attempted to update Edge {} "
+                "(which is now Edge {} on main) which has been modified on main.",
+                updatedEdge, newID);
             throw VersionControlException(std::move(errorMsg));
         }
     }

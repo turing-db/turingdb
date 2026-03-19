@@ -1,4 +1,4 @@
-regress_test(ssi_create_after_delete
+regress_test(snapshot_isolation
   run.sh
   main.py
   graph_utils.py
