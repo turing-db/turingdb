@@ -117,7 +117,7 @@ template <ColumnOperator Op>
 struct PairRestrictions;
 
 template <ColumnOperator Op>
-    requires (Op == OP_EQUAL) || (Op == OP_NOT_EQUAL)
+requires (Op == OP_EQUAL) || (Op == OP_NOT_EQUAL)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
         // Standard equality of property types - except doubles
@@ -126,6 +126,7 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::Embedding::Primitive, types::Embedding::Primitive>::Pairs,
 
         std::tuple<
             // Filtering by ID or labels/edge type
@@ -284,6 +285,19 @@ struct TypeRestrictions<Func> {
         types::String::Primitive
     >>;
 
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
+template <ColumnOperator Op>
+requires (Op == OP_FUNC_COSINE_SIMILARITY) || (Op == OP_FUNC_EUCLIDEAN_DISTANCE)
+struct PairRestrictions<Op> {
+    using Allowed = GenerateKindPairList<
+        std::tuple<KindPair<types::Embedding::Primitive, types::Embedding::Primitive>>
+    >;
+    using AllowedMixed = AllowedMixedList<>;
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
         ContainerKind::code<ColumnMask>()

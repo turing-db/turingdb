@@ -12,7 +12,7 @@ namespace db {
 // Helper to determine the internal type of an operation, e.g. Double + Int = Double
 // Predicates should be specialised cases of @ref ColumnCombination
 template <typename Op, typename InternalT, typename InternalU>
-    requires (!OptionalPredicate<Op, InternalT, InternalU>)
+requires (!OptionalPredicate<Op, InternalT, InternalU>)
 class InternalCombination {
     // Get non-optional versions of each internal type
     using AbsInternalT = TypeUtils::unwrap_optional_t<InternalT>;
@@ -200,6 +200,24 @@ private:
     using DecayedColT = TypeUtils::decay_col_t<PColT>;
 public:
     using ResultColumnType = FunctionResultImpl<DecayedColT, InternalT>::ResultColumnType;
+};
+
+template <typename T>
+struct IsBinaryFuncVector : std::false_type {};
+
+template <typename T>
+struct IsBinaryFuncVector<ColumnVector<T>> : std::true_type {};
+
+template <typename Op, typename PColT, typename PColU>
+class BinaryFunctionColumnResult {
+    using InternalRes = typename Op::ResultType;
+    using DecayT = TypeUtils::decay_col_t<PColT>;
+    using DecayU = TypeUtils::decay_col_t<PColU>;
+    static constexpr bool isVector = IsBinaryFuncVector<DecayT>::value
+                                  || IsBinaryFuncVector<DecayU>::value;
+public:
+    using ResultColumnType = std::conditional_t<isVector,
+        ColumnVector<InternalRes>, ColumnConst<InternalRes>>;
 };
 
 template <typename Op, typename ColT, typename ColU, typename ColRes>

@@ -45,6 +45,7 @@ set(storage_sources
         columns/Block.cpp
         columns/Column.cpp
         columns/ColumnStringTable.cpp
+        columns/Functions.cpp
 
         dataframe/Dataframe.cpp
         dataframe/NamedColumn.cpp

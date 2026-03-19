@@ -19,7 +19,7 @@ namespace db {
 /// Generic binary operators, returning a non-Bool-like
 struct BinaryOperators {
     template <typename Op, typename ColW, typename ColT, typename ColU>
-        requires is_result_column<Op, ColT, ColU, ColW>
+    requires is_result_column<Op, ColT, ColU, ColW>
     static void exec(ColW* res, const ColT* lhs, const ColU* rhs) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
         using DecayColU = TypeUtils::decay_col_t<ColU>;
@@ -72,7 +72,7 @@ struct UnaryPredicates {
     // Both Bool and opt<Bool> are needed as there is no way to limit to
     // ColumnConst<{Bool}> whilst also having ColumnVector<{Bool, optional<Bool>}>
     template <typename Op, typename T>
-        requires(std::is_same_v<T, types::Bool::Primitive>)
+    requires(std::is_same_v<T, types::Bool::Primitive>)
              || (std::is_same_v<T, std::optional<types::Bool::Primitive>>)
     static void exec(ColumnConst<T>* res, const ColumnConst<T>* arg) {
         UnaryPredicateExecutor<Op, T>::apply(res, arg);
@@ -82,7 +82,7 @@ struct UnaryPredicates {
     // The optional<Bool> case is handled by @ref exec(ColumnOptMask*, ...) because
     // ColOptMask is a weak alias for ColumnVector<opt<Bool>>
     template <typename Op, typename T>
-        requires(std::is_same_v<T, types::Bool::Primitive>)
+    requires(std::is_same_v<T, types::Bool::Primitive>)
     static void exec(ColumnVector<T>* res, const ColumnVector<T>* arg) {
         UnaryPredicateExecutor<Op, T>::apply(res, arg);
     }
@@ -143,6 +143,18 @@ struct ColumnFunctions {
         using InternalT = InnerTypeHelper<DecayColT>::type;
 
         FunctionExecutor<Op, InternalW, InternalT>::apply(res, arg);
+    }
+
+    /// Binary function (e.g. cosine_similarity, euclidean_distance)
+    template <typename Op, typename ColW, typename ColT, typename ColU>
+    static void exec(ColW* res, const ColT* lhs, const ColU* rhs) {
+        using DecayColT = TypeUtils::decay_col_t<ColT>;
+        using DecayColU = TypeUtils::decay_col_t<ColU>;
+        using DecayColW = TypeUtils::decay_col_t<ColW>;
+        using InternalT = InnerTypeHelper<DecayColT>::type;
+        using InternalU = InnerTypeHelper<DecayColU>::type;
+        using InternalRes = InnerTypeHelper<DecayColW>::type;
+        BinaryFunctionExecutor<Op, InternalRes, InternalT, InternalU>::apply(res, lhs, rhs);
     }
 };
 

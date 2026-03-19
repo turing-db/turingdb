@@ -90,6 +90,22 @@
 
     #undef yylex
     #define yylex scanner.lex
+
+    static void listExprToFloatVector(const db::ListExpr* list, std::vector<float>& out) {
+        out.clear();
+        out.reserve(list->size());
+        for (db::Expr* elem : *list) {
+            const auto* litExpr = static_cast<const db::LiteralExpr*>(elem);
+            const db::Literal* lit = litExpr->getLiteral();
+            if (lit->getKind() == db::Literal::Kind::DOUBLE) {
+                const auto* doubleLit = static_cast<const db::DoubleLiteral*>(lit);
+                out.push_back(static_cast<float>(doubleLit->getValue()));
+            } else if (lit->getKind() == db::Literal::Kind::INTEGER) {
+                const auto* intLit = static_cast<const db::IntegerLiteral*>(lit);
+                out.push_back(static_cast<float>(intLit->getValue()));
+            }
+        }
+    }
 }
 
 %token PROG_END 0
@@ -1318,7 +1334,24 @@ literal
     | numLit { $$ = $1; }
     | NULL_ { $$ = NullLiteral::create(ast); }
     | stringLit { $$ = $1; }
-    | listLit { scanner.notImplemented(@$, "Lists"); }
+    | listLit {
+        ListExpr* list = $1;
+        for (Expr* elem : *list) {
+            if (elem->getKind() != Expr::Kind::LITERAL) {
+                scanner.notImplemented(@$, "Non-literal list elements");
+            }
+
+            const Literal* lit = static_cast<const LiteralExpr*>(elem)->getLiteral();
+            const auto litKind = lit->getKind();
+            if (litKind != Literal::Kind::DOUBLE && litKind != Literal::Kind::INTEGER) {
+                scanner.notImplemented(@$, "Non-numeric list elements");
+            }
+        }
+
+        std::vector<float> data;
+        listExprToFloatVector(list, data);
+        $$ = EmbeddingLiteral::create(ast, std::move(data));
+    }
     | mapLit { $$ = $1; }
     ;
 

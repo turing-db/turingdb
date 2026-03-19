@@ -272,9 +272,17 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
         GEN_LITERAL_CASE(STRING, String, StringLiteral)
         GEN_LITERAL_CASE(DOUBLE, Double, DoubleLiteral)
 
+        case Literal::Kind::EMBEDDING: {
+            auto* value = _gen->memory().alloc<ColumnConst<types::Embedding::Primitive>>();
+            const auto* embLit = static_cast<const EmbeddingLiteral*>(literal);
+            value->set(embLit->getValue());
+            return value;
+        }
+        break;
+
         case Literal::Kind::NULL_LITERAL: {
-                auto* value = _gen->memory().alloc<ColumnConst<PropertyNull>>();
-                return value;
+            auto* value = _gen->memory().alloc<ColumnConst<PropertyNull>>();
+            return value;
         }
         break;
 
@@ -431,6 +439,23 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
         return resCol;
     }
 
+    if (funcName == "cosine_similarity" || funcName == "euclidean_distance") {
+        if (args->size() != 2) {
+            throw PlannerException(
+                fmt::format("{}() expects 2 arguments, got {}", funcName, args->size()));
+        }
+        auto it = args->begin();
+        Column* lhsCol = generateExpr(*it);
+        ++it;
+        Column* rhsCol = generateExpr(*it);
+        const ColumnOperator op = (funcName == "cosine_similarity")
+            ? OP_FUNC_COSINE_SIMILARITY
+            : OP_FUNC_EUCLIDEAN_DISTANCE;
+        Column* resCol = allocBinaryResultCol(op, lhsCol, rhsCol);
+        _exprProg->addInstr(op, resCol, lhsCol, rhsCol);
+        return resCol;
+    }
+
     throw PlannerException(
         fmt::format("Function '{}' is not supported in expressions", funcName));
 }
@@ -512,6 +537,12 @@ struct ResultAllocator {
         } else if constexpr (Op == OP_DIV) {
             using ResultType = typename ColumnCombination<Div, T, U>::ResultColumnType;
             _resultCol = _gen->memory().alloc<ResultType>();
+        } else if constexpr (Op == OP_FUNC_COSINE_SIMILARITY) {
+            using ResultType = typename BinaryFunctionColumnResult<CosineSimilarityFunction, T, U>::ResultColumnType;
+            _resultCol = _gen->memory().alloc<ResultType>();
+        } else if constexpr (Op == OP_FUNC_EUCLIDEAN_DISTANCE) {
+            using ResultType = typename BinaryFunctionColumnResult<EuclideanDistanceFunction, T, U>::ResultColumnType;
+            _resultCol = _gen->memory().alloc<ResultType>();
         } else {
             throw FatalException("Unsupported allocator.");
         }
@@ -550,6 +581,9 @@ Column* ExprProgramGenerator::allocBinaryResultCol(ColumnOperator op,
         DISPATCHER_CASE(OP_SUB)
         DISPATCHER_CASE(OP_MUL)
         DISPATCHER_CASE(OP_DIV)
+
+        DISPATCHER_CASE(OP_FUNC_COSINE_SIMILARITY)
+        DISPATCHER_CASE(OP_FUNC_EUCLIDEAN_DISTANCE)
 
         case OP_IN: // TODO: Implement
             throw PlannerException("Unsupported allocator: IN.");
@@ -617,6 +651,8 @@ Column* ExprProgramGenerator::allocUnaryResultCol(ColumnOperator op, const Colum
         case OP_DIV:
         case OP_PROJECT:
         case OP_IN:
+        case OP_FUNC_COSINE_SIMILARITY:
+        case OP_FUNC_EUCLIDEAN_DISTANCE:
             throw PlannerException(
                 fmt::format("Attempted to allocate unary result for binary operator {}.",
                             ColumnOperatorDescription::value(op)));

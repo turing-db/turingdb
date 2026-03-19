@@ -1,75 +1,19 @@
 #pragma once
 
 #include <limits>
-#include <optional>
 #include <string>
 #include <system_error>
 
-#include <range/v3/view/drop.hpp>
-
+#include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
-#include "metadata/LabelMap.h"
 #include "metadata/PropertyType.h"
-#include "reader/GraphReader.h"
 #include "views/GraphView.h"
 
 #include "ID.h"
 
-#include "PipelineException.h"
+#include "BioAssert.h"
 
 namespace db {
-
-namespace rg = ranges;
-namespace rv = rg::views;
-
-static void strToLower(std::string& lower, std::string_view src) {
-    lower.clear();
-    lower.reserve();
-    for (const auto c : src) {
-        lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-}
-
-static void getLabelString(std::string& out, const GraphView view, NodeID n) {
-    out.clear();
-    const LabelSetHandle lblset = view.read().getNodeLabelSet(n);
-
-    std::vector<LabelID> labels;
-    lblset.decompose(labels);
-
-    bioassert(!labels.empty(), "Could not retrieve labels for node {}.", n.getValue());
-
-    const LabelMap& lblMap = view.metadata().labels();
-
-    {
-        const LabelID fstLbl = labels.front();
-        const std::optional<std::string_view> fstName = lblMap.getName(fstLbl);
-        bioassert(fstName, "Could not get name of LabelID {}.", fstLbl.getValue());
-        const std::string_view fstNameUnwrapped = *fstName;
-
-        out = std::string {fstNameUnwrapped};
-    }
-
-    for (const LabelID label : labels | rv::drop(1)) {
-        out += ", ";
-
-        const std::optional<std::string_view> name = lblMap.getName(label);
-        bioassert(name, "Could not get name of LabelID {}.", label.getValue());
-
-        out += *name;
-    }
-}
-
-static void getEdgeTypeString(std::string& out, const GraphView view, EdgeID e) {
-    out.clear();
-    const EdgeTypeID et = view.read().getEdgeTypeID(e);
-
-    const EdgeTypeMap& etMap = view.metadata().edgeTypes();
-    const std::optional<std::string_view> name = etMap.getName(et);
-    bioassert(name, "Could not get name of EdgeTypeID {}.", et.getValue());
-
-    out = *name;
-}
 
 class LabelsFunction {
 public:
@@ -88,6 +32,8 @@ public:
 private:
     GraphView _view;
     std::string _tmp;
+
+    static void getLabelString(std::string& out, GraphView view, NodeID n);
 };
 
 class EdgeTypesFunction {
@@ -107,13 +53,16 @@ public:
 private:
     GraphView _view;
     std::string _tmp;
+
+    static void getEdgeTypeString(std::string& out, GraphView view, EdgeID e);
 };
 
-struct toIntegerFunction {
+class toIntegerFunction {
+public:
     using ResultType = types::Int64::Primitive;
 
     ResultType operator()(std::string_view sv) {
-        ResultType result {std::numeric_limits<ResultType>::max()};
+        ResultType result = std::numeric_limits<ResultType>::max();
 
         const auto* start = sv.data();
         const auto* end = sv.data() + sv.size();
@@ -123,10 +72,7 @@ struct toIntegerFunction {
         const bool success = ec == std::errc {};
         const bool parsedAll = ptr == end;
 
-        if (!success || !parsedAll) {
-            throw PipelineException(
-                fmt::format("toInteger: cannot convert '{}' to integer.", sv));
-        }
+        bioassert(success && parsedAll, "toInteger: cannot convert '{}' to integer.", sv);
 
         return result;
     }
@@ -140,23 +86,17 @@ public:
     ResultType operator()(std::string_view sv) {
         // @ref std::strtod requires a null-terminated std::string: convert the string_view
         _buf.assign(sv);
-        char* end {nullptr};
+        char* end = nullptr;
         errno = 0;
 
         const ResultType result = std::strtod(_buf.data(), &end);
 
         // Either empty string, or could not parse all of the string as double
         const bool couldNotConvert = end == _buf.data() || end != _buf.data() + _buf.size();
-        if (couldNotConvert) {
-            throw PipelineException(
-                fmt::format("toFloat: cannot convert '{}' to float.", sv));
-        }
+        bioassert(!couldNotConvert, "toFloat: cannot convert '{}' to float.", sv);
 
         const bool outOfRange = errno == ERANGE;
-        if (outOfRange) {
-            throw PipelineException(
-                fmt::format("toFloat: cannot convert '{}' to float: out of range.", sv));
-        }
+        bioassert(!outOfRange, "toFloat: cannot convert '{}' to float: out of range.", sv);
 
         return result;
     }
@@ -179,12 +119,29 @@ public:
             return false;
         }
 
-        throw PipelineException(
-            fmt::format("toBoolean: cannot convert '{}' to boolean", sv));
+        bioassert(false, "toBoolean: cannot convert '{}' to boolean.", sv);
     }
 
 private:
     std::string _buf; // Preallocated buffer to reuse over iterations
+
+    static void strToLower(std::string& lower, std::string_view src);
+};
+
+class CosineSimilarityFunction {
+public:
+    using ResultType = types::Double::Primitive;
+
+    ResultType operator()(const types::Embedding::Primitive& a,
+                          const types::Embedding::Primitive& b);
+};
+
+class EuclideanDistanceFunction {
+public:
+    using ResultType = types::Double::Primitive;
+
+    ResultType operator()(const types::Embedding::Primitive& a,
+                          const types::Embedding::Primitive& b);
 };
 
 /// Generic function executor; default constructible operator
@@ -249,6 +206,65 @@ struct FunctionExecutor<EdgeTypesFunction, Res, Arg> {
         for (size_t i = 0; i < size ; i ++) {
             resd[i] = edgeType(argd[i]);
         }
+    }
+};
+
+/// Binary function executor for two-argument functions
+template <typename Op, typename Res, typename ArgA, typename ArgB>
+struct BinaryFunctionExecutor {
+    static void apply(ColumnVector<Res>* res,
+                      const ColumnVector<ArgA>* lhs,
+                      const ColumnVector<ArgB>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
+
+        const size_t size = lhs->size();
+
+        res->resize(size);
+        auto op = Op {};
+
+        const auto& lhsRaw = lhs->getRaw();
+        const auto& rhsRaw = rhs->getRaw();
+        auto& resRaw = res->getRaw();
+        for (size_t i = 0; i < size; i++) {
+            resRaw[i] = op(lhsRaw[i], rhsRaw[i]);
+        }
+    }
+
+    static void apply(ColumnVector<Res>* res,
+                      const ColumnVector<ArgA>* lhs,
+                      const ColumnConst<ArgB>* rhs) {
+        const size_t size = lhs->size();
+        res->resize(size);
+        auto op = Op {};
+
+        const auto& lhsRaw = lhs->getRaw();
+        const auto& val = rhs->getRaw();
+        auto& resRaw = res->getRaw();
+        for (size_t i = 0; i < size; i++) {
+            resRaw[i] = op(lhsRaw[i], val);
+        }
+    }
+
+    static void apply(ColumnVector<Res>* res,
+                      const ColumnConst<ArgA>* lhs,
+                      const ColumnVector<ArgB>* rhs) {
+        const size_t size = rhs->size();
+        res->resize(size);
+        auto op = Op {};
+
+        const auto& val = lhs->getRaw();
+        const auto& rhsRaw = rhs->getRaw();
+        auto& resRaw = res->getRaw();
+        for (size_t i = 0; i < size; i++) {
+            resRaw[i] = op(val, rhsRaw[i]);
+        }
+    }
+
+    static void apply(ColumnConst<Res>* res,
+                      const ColumnConst<ArgA>* lhs,
+                      const ColumnConst<ArgB>* rhs) {
+        auto op = Op {};
+        res->set(op(lhs->getRaw(), rhs->getRaw()));
     }
 };
 
