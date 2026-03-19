@@ -1806,6 +1806,86 @@ TEST_F(WriteQueriesTest, setAllEdgesConstantNewProperty) {
     }
 }
 
+TEST_F(WriteQueriesTest, setAllNodesConstantNewPropertyString) {
+    newChange();
+    {
+        // "NEWPROP" does not exist
+        constexpr std::string_view setQuery = R"(MATCH (n) SET n.NEWPROP = 1, n.NEWSTRING = "hello")";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.NEWPROP, n.NEWSTRING)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(2, df->size());
+            const auto* news = findColumn(df, "n.NEWPROP")->as<ColumnOptVector<types::Int64::Primitive>>();
+            const auto* strings = findColumn(df, "n.NEWSTRING")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(news);
+            ASSERT_TRUE(strings);
+
+            ASSERT_FALSE(news->empty());
+            ASSERT_FALSE(strings->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*news,
+                [](std::optional<types::Int64::Primitive> n) { return *n == 1; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
+
+            ASSERT_TRUE(std::ranges::all_of(*strings,
+                [](std::optional<types::String::Primitive> s) { return *s == "hello"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, setAllEdgesConstantNewPropertyString) {
+    newChange();
+    {
+        // "NEWPROP" does not exist
+        constexpr std::string_view setQuery = R"(MATCH ()-[e]->() SET e.NEWPROP = 1, e.NEWSTRING = "bye")";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH ()-[e]->() RETURN e.NEWPROP, e.NEWSTRING)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(2, df->size());
+            const auto* news = findColumn(df, "e.NEWPROP")->as<ColumnOptVector<types::Int64::Primitive>>();
+            const auto* strings = findColumn(df, "e.NEWSTRING")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(news);
+            ASSERT_TRUE(strings);
+
+            ASSERT_FALSE(news->empty());
+            ASSERT_FALSE(strings->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*news,
+                [](std::optional<types::Int64::Primitive> n) { return *n == 1; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
+
+            ASSERT_TRUE(std::ranges::all_of(*strings,
+                [](std::optional<types::String::Primitive> s) { return *s == "bye"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
