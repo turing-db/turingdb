@@ -93,7 +93,7 @@ if [[ $SKIP_BUILD -eq 0 ]]; then
     # Step 1: Build everything with normal gcc.
     echo "Step 1/3: Building with gcc..."
     cmake "$SCRIPT_DIR" \
-        -DCMAKE_CXX_FLAGS="-Wno-error=maybe-uninitialized" \
+        -DAFL_CXX_FLAGS="-Wno-error=maybe-uninitialized" \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
         2>&1 | tail -5
     make -j8 "${HARNESSES[@]}" 2>&1 | tail -10
@@ -104,7 +104,7 @@ if [[ $SKIP_BUILD -eq 0 ]]; then
 
     # Step 2: Recompile query/, net/, server/ and fuzz/ with afl-g++.
     # This instruments only the attack surface code for accurate coverage.
-    echo "Step 2/3: Recompiling query/, net/, server/, fuzz/ with afl-g++..."
+    echo "Step 2/3: Recompiling query/, net/, server/, io/, import/, fuzz/ with afl-g++..."
     AFL_GXX_PATH="$AFL_GXX" python3 -c "
 import json, subprocess, sys, os
 
@@ -113,7 +113,7 @@ afl_gxx = os.environ['AFL_GXX_PATH']
 with open('compile_commands.json') as f:
     cmds = json.load(f)
 
-targets = ('/query/', '/net/', '/server/', '/fuzz/')
+targets = ('/query/', '/net/', '/server/', '/fuzz/', '/io/', '/import/')
 count = 0
 failed = 0
 skipped = 0
@@ -154,6 +154,8 @@ if failed > count // 4:
     find . -path "*/query/*" -name "*.a" -delete 2>/dev/null
     find . -path "*/net/*" -name "*.a" -delete 2>/dev/null
     find . -path "*/server/*" -name "*.a" -delete 2>/dev/null
+    find . -path "*/io/*" -name "*.a" -delete 2>/dev/null
+    find . -path "*/import/*" -name "*.a" -delete 2>/dev/null
     # Let make re-archive (it uses `ar`, no compiler needed for that).
     make -j8 "${HARNESSES[@]}" 2>&1 | tail -10
 

@@ -124,7 +124,9 @@ if(NOT APPLE)
 endif()
 
 # C++ flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
+# AFL_CXX_FLAGS is prepended to allow AFL builds to suppress warnings (e.g. -Wno-error=maybe-uninitialized)
+set(AFL_CXX_FLAGS "" CACHE STRING "Extra C++ flags prepended for AFL/fuzzing builds")
+set(CMAKE_CXX_FLAGS "${AFL_CXX_FLAGS} -std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
 if(APPLE AND NOT NIX_BUILD)
 
