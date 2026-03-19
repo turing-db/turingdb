@@ -266,6 +266,8 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
         for (const Stmt* stmt : updateStmts->stmts()) {
             currentNode = writeGenerator.generateStmt(stmt);
+            // Keep the write stmt generator _prevNode up to date
+            writeGenerator.setPrevNode(currentNode);
         }
     }
 
