@@ -90,7 +90,7 @@ public:
      const DeletedEdges& deletedEdges() const { return _deletedEdges; }
 
      bool empty() const {
-         return _pendingNodes.empty() && _pendingEdges.empty() && _deletedEdges.empty()
+         return _pendingNodes.empty() && _pendingEdges.empty() && _deletedNodes.empty()
              && _deletedEdges.empty();
      }
 
