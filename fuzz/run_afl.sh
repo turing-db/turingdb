@@ -102,7 +102,17 @@ if [[ $SKIP_BUILD -eq 0 ]]; then
         exit 1
     fi
 
-    # Step 2: Recompile query/, net/, server/ and fuzz/ with afl-g++.
+    # Verify generated parser files exist if the query engine harness is being built.
+    if [[ $RUN_CYPHER -eq 1 ]]; then
+        for f in query/parser/GeneratedCypherParser.h query/parser/GeneratedCypherLexer.h; do
+            if [[ ! -f "$f" ]]; then
+                echo "ERROR: $f not found. Step 1 build incomplete."
+                exit 1
+            fi
+        done
+    fi
+
+    # Step 2: Recompile query/, net/, server/, io/, import/, fuzz/ with afl-g++.
     # This instruments only the attack surface code for accurate coverage.
     echo "Step 2/3: Recompiling query/, net/, server/, io/, import/, fuzz/ with afl-g++..."
     AFL_GXX_PATH="$AFL_GXX" python3 -c "
@@ -125,7 +135,16 @@ for entry in cmds:
     if not os.path.exists(src):
         skipped += 1
         continue
+    # Only recompile if the .o file exists (i.e. step 1 actually compiled it).
+    # This avoids recompiling files for harnesses that weren't selected.
     cmd = entry['command']
+    output_flag = ' -o '
+    if output_flag in cmd:
+        o_file = cmd.split(output_flag)[1].split(' ')[0]
+        o_path = os.path.join(entry['directory'], o_file)
+        if not os.path.exists(o_path):
+            skipped += 1
+            continue
     directory = entry['directory']
     parts = cmd.split(' ', 1)
     new_cmd = afl_gxx + ' ' + parts[1]
@@ -133,14 +152,12 @@ for entry in cmds:
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     count += 1
     if rc.returncode != 0:
-        if failed < 3:
-            print(f'  FAIL: {os.path.basename(src)}', file=sys.stderr)
-            print(rc.stderr.decode()[-300:], file=sys.stderr)
+        print(f'  FAIL: {os.path.basename(src)}', file=sys.stderr)
+        print(rc.stderr.decode()[-300:], file=sys.stderr)
         failed += 1
 
 print(f'  Recompiled {count - failed}/{count} files ({skipped} skipped, {failed} failures)')
-if failed > count // 4:
-    print('ERROR: Too many failures', file=sys.stderr)
+if failed > 0:
     sys.exit(1)
 "
     if [[ $? -ne 0 ]]; then
