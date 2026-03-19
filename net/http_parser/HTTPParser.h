@@ -195,16 +195,22 @@ private:
         }
 
         _currentPtr += key.size();
-        const char* lengthBegin = _currentPtr;
 
-        for (; _currentPtr != endPtr; _currentPtr++) {
-            if (!isdigit(*_currentPtr)) {
-                lengthBegin = _currentPtr;
-                break;
-            }
+        // Skip optional whitespace after "content-length:"
+        while (_currentPtr != endPtr && (*_currentPtr == ' ' || *_currentPtr == '\t')) {
+            _currentPtr++;
         }
 
-        _payloadSize = std::strtoull(lengthBegin, &_currentPtr, 10);
+        // Parse digits with bounds checking (no strtoull — buffer is not null-terminated)
+        _payloadSize = 0;
+        while (_currentPtr != endPtr && isdigit(*_currentPtr)) {
+            _payloadSize = _payloadSize * 10 + (*_currentPtr - '0');
+            if (_payloadSize > NetBuffer::BUFFER_SIZE) {
+                return BadResult(HTTP::Error::REQUEST_TOO_BIG);
+            }
+            _currentPtr++;
+        }
+
         return jumpToPayload();
     }
 
