@@ -55,7 +55,7 @@ protected:
 
     void submitCurrentChange() {
         auto res = _db->query("change submit", _graphName, &_env->getMem(), &_queryConfig, CommitHash::head(), _currentChange);
-        ASSERT_TRUE(res);
+        ASSERT_TRUE(res) << res.getError();
         _currentChange = ChangeID::head();
     }
 
@@ -1856,7 +1856,7 @@ TEST_F(WriteQueriesTest, setAllEdgesConstantNewPropertyString) {
             ASSERT_TRUE(df);
             ASSERT_EQ(0, df->size());
         });
-        ASSERT_TRUE(res);
+        ASSERT_TRUE(res) << res.getError();
     }
     submitCurrentChange();
 
@@ -1883,6 +1883,52 @@ TEST_F(WriteQueriesTest, setAllEdgesConstantNewPropertyString) {
             ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
         });
         ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, writeAndSetNodesEdges) {
+    setWorkingGraph("default");
+
+    newChange();
+    {
+        constexpr std::string_view createSetQuery = R"(CREATE (n:Person)-[e:LIKES]->(m:Language) SET n.name = "Cyrus", e.amount = "a lot", m.name ="C++")";
+
+        auto res = query(createSetQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n)-[e]->(m) RETURN n.name, e.amount, m.name)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(3, df->size());
+            const auto* ns = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* es = findColumn(df, "e.amount")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ms = findColumn(df, "m.name")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(es);
+            ASSERT_TRUE(ms);
+
+            ASSERT_FALSE(ns->empty());
+            ASSERT_FALSE(es->empty());
+            ASSERT_FALSE(ms->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*ns,
+                [](std::optional<types::String::Primitive> n) { return *n == "Cyrus"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
+            ASSERT_TRUE(std::ranges::all_of(*es,
+                [](std::optional<types::String::Primitive> e) { return *e == "a lot"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
+            ASSERT_TRUE(std::ranges::all_of(*ms,
+                [](std::optional<types::String::Primitive> m) { return *m == "C++"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
+        });
+        ASSERT_TRUE(res) << res.getError();
     }
 }
 

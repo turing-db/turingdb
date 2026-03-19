@@ -34,8 +34,8 @@ public:
                      types::UInt64::Primitive,
                      types::Double::Primitive,
                      std::string, /// Needs to be owning to outlive the query
-                     types::Bool::Primitive,
-                     types::Embedding::OwningPrimitive
+                     types::Bool::Primitive
+                     // types::Embedding::OwningPrimitive
      >;
      using UntypedProperties = std::vector<UntypedProperty>;
      using PendingNodeOffset = size_t;
@@ -203,6 +203,8 @@ private:
     void buildPendingEdges(DataPartBuilder& builder);
 
     void buildPendingNode(DataPartBuilder& builder, const PendingNode& node);
+    void addPendingNodeProperties(DataPartBuilder& builder, const PendingNode& node);
+
     void buildPendingEdge(DataPartBuilder& builder, const PendingEdge& edge);
 
     void applyNodeUpdates(DataPartBuilder& builder);
