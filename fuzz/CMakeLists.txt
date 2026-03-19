@@ -1,5 +1,7 @@
 # Fuzzing harnesses. These read from stdin and can be used standalone or with AFL++.
 # For instrumented AFL++ builds, use: ./fuzz/run_afl.sh
+# Only build on Linux (AFL++ is Linux-only, and macOS clang errors on -stdlib=libc++ with -Werror).
+if(NOT APPLE)
 
 add_executable(fuzz_query_engine fuzz_query_engine.cpp)
 target_link_libraries(fuzz_query_engine PRIVATE
@@ -34,3 +36,5 @@ target_link_libraries(fuzz_http_parser PRIVATE
     turing_db_http_common_s
     turing_db_http_parser_s
     turing_common_s)
+
+endif() # NOT APPLE
