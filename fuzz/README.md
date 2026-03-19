@@ -2,11 +2,17 @@
 
 AFL++ fuzzing harnesses for finding crashes and bugs in TuringDB.
 
+## Prerequisites
+
+```bash
+sudo apt-get install -y afl++
+```
+
+This provides `afl-fuzz`, `afl-gcc`, `afl-g++`, and `afl-showmap`.
+
 ## Quick Start
 
 ```bash
-# Install AFL++
-sudo apt-get install -y afl++
 
 # Build and run all harnesses (5 min each)
 ./fuzz/run_afl.sh
