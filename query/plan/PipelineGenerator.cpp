@@ -1386,7 +1386,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
                 valType = maybePropType->_valueType;
                 propID = maybePropType->_id;
             } else { // New property: get its type, use an invalid PropID (later updated
-                     // in WriteProcessor::updateNodes)
+                     // in WriteProcessor::updateEdges)
                 const EvaluatedType propertyType = valueExpr->getType();
                 valType = evaluatedToValueType(propertyType);
                 propID = PropertyTypeID::max();
