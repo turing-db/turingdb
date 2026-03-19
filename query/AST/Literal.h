@@ -3,6 +3,8 @@
 #include <unordered_map>
 #include <string_view>
 #include <stdint.h>
+#include <span>
+#include <vector>
 
 #include "decl/EvaluatedType.h"
 
@@ -24,6 +26,7 @@ public:
         STRING,
         CHAR,
         MAP,
+        EMBEDDING,
         WILDCARD,
     };
 
@@ -178,6 +181,25 @@ private:
 
     MapLiteral();
     ~MapLiteral() override;
+};
+
+class EmbeddingLiteral : public Literal {
+public:
+    static EmbeddingLiteral* create(CypherAST* ast, std::vector<float>&& data);
+
+    constexpr Kind getKind() const override { return Kind::EMBEDDING; }
+
+    constexpr EvaluatedType getType() const override { return EvaluatedType::Embedding; }
+
+    std::span<const float> getValue() const { return _data; }
+
+    size_t getDimension() const { return _data.size(); }
+
+private:
+    std::vector<float> _data;
+
+    EmbeddingLiteral(std::vector<float>&& data);
+    ~EmbeddingLiteral() override;
 };
 
 class WildcardLiteral : public Literal {

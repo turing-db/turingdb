@@ -1,11 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <concepts>
 #include <functional>
 #include <type_traits>
 
 #include "TypeUtils.h"
 #include "ColumnMask.h"
+#include "metadata/PropertyType.h"
 
 namespace db {
 
@@ -277,9 +279,75 @@ struct BinaryPredicate {
         return F{}(std::forward<T>(a), std::forward<U>(b));
     }
     
+    // Non-optional embedding equality/inequality
+    inline ColumnMask::Bool_t operator()(const types::Embedding::Primitive& a,
+                                         const types::Embedding::Primitive& b)
+    requires TestsEquality<F>
+    {
+        const bool equal = (a.size() == b.size())
+                           && std::equal(a.begin(), a.end(), b.begin());
+        if constexpr (std::is_same_v<F, std::equal_to<>>) {
+            return ColumnMask::Bool_t{equal};
+        } else {
+            return ColumnMask::Bool_t{!equal};
+        }
+    }
+
+    // Optional embedding equality/inequality
+    inline std::optional<CustomBool> operator()(const std::optional<types::Embedding::Primitive>& a,
+                                                const types::Embedding::Primitive& b)
+    requires TestsEquality<F>
+    {
+        if (!a.has_value()) {
+            return std::nullopt;
+        }
+
+        const bool equal = (a->size() == b.size())
+                           && std::equal(a->begin(), a->end(), b.begin());
+        if constexpr (std::is_same_v<F, std::equal_to<>>) {
+            return CustomBool{equal};
+        } else {
+            return CustomBool{!equal};
+        }
+    }
+
+    inline std::optional<CustomBool> operator()(const types::Embedding::Primitive& a,
+                                                const std::optional<types::Embedding::Primitive>& b)
+    requires TestsEquality<F> 
+    {
+        if (!b.has_value()) {
+            return std::nullopt;
+        }
+
+        const bool equal = (a.size() == b->size())
+                           && std::equal(a.begin(), a.end(), b->begin());
+        if constexpr (std::is_same_v<F, std::equal_to<>>) {
+            return CustomBool{equal};
+        } else {
+            return CustomBool{!equal};
+        }
+    }
+
+    inline std::optional<CustomBool> operator()(const std::optional<types::Embedding::Primitive>& a,
+                                                const std::optional<types::Embedding::Primitive>& b)
+    requires TestsEquality<F>
+    {
+        if (!a.has_value() || !b.has_value()) {
+            return std::nullopt;
+        }
+
+        const bool equal = (a->size() == b->size())
+                           && std::equal(a->begin(), a->end(), b->begin());
+        if constexpr (std::is_same_v<F, std::equal_to<>>) {
+            return CustomBool{equal};
+        } else {
+            return CustomBool{!equal};
+        }
+    }
+
     // Specialisation for IS NOT NULL and IS NULL
     template <typename T>
-        requires(TypeUtils::is_optional_v<T> && TestsEquality<F>)
+    requires(TypeUtils::is_optional_v<T> && TestsEquality<F>)
     inline ColumnMask::Bool_t operator()(T&& a, const PropertyNull& null) {
         return F{}(std::forward<T>(a), null);
     }

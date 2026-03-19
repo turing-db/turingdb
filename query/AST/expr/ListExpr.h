@@ -12,25 +12,22 @@ class ListExpr : public Expr {
 public:
     using Elements = std::vector<Expr*>;
 
-    void addItem(Expr* expr);
-
-    const Elements& getElements() const { return _elements; }
     size_t size() const { return _elements.size(); }
     bool empty() const { return _elements.empty(); }
 
-    static ListExpr* create(CypherAST* ast);
+    const Elements& getElements() const { return _elements; }
 
     Elements::const_iterator begin() const { return _elements.begin(); }
     Elements::const_iterator end() const { return _elements.end(); }
 
+    void addItem(Expr* expr);
+
+    static ListExpr* create(CypherAST* ast);
+
 private:
     Elements _elements;
 
-    ListExpr()
-        : Expr(Kind::LIST)
-    {
-    }
-
+    ListExpr();
     ~ListExpr() override;
 };
 

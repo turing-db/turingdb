@@ -13,6 +13,7 @@
 #include "decl/EvaluatedType.h"
 #include "decl/VarDecl.h"
 
+#include "EmbeddingBucket.h"
 #include "StringBucket.h"
 
 #include "expr/All.h"
@@ -339,6 +340,15 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
         } break;
         case Literal::Kind::MAP: {
             expr->setType(EvaluatedType::Map);
+        } break;
+        case Literal::Kind::EMBEDDING: {
+            const auto* embLit = static_cast<const EmbeddingLiteral*>(literal);
+            constexpr size_t maxDimension = EmbeddingBucket::MIN_BUCKET_BYTES / sizeof(float);
+            if (embLit->getDimension() > maxDimension) {
+                throwError(fmt::format("Embedding dimension {} exceeds maximum of {}",
+                                       embLit->getDimension(), maxDimension), expr);
+            }
+            expr->setType(EvaluatedType::Embedding);
         } break;
         case Literal::Kind::WILDCARD: {
             expr->setType(EvaluatedType::Wildcard);

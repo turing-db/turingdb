@@ -110,6 +110,15 @@ void FunctionDecls::initDefault() {
     FunctionSignature* toBoolean = createFunction("toBoolean");
     toBoolean->setArguments({EvaluatedType::String});
     toBoolean->setReturnTypes({{EvaluatedType::Bool}});
+
+    // Embedding distance functions
+    FunctionSignature* cosineSim = createFunction("cosine_similarity");
+    cosineSim->setArguments({EvaluatedType::Embedding, EvaluatedType::Embedding});
+    cosineSim->setReturnTypes({{EvaluatedType::Double}});
+
+    FunctionSignature* euclidDist = createFunction("euclidean_distance");
+    euclidDist->setArguments({EvaluatedType::Embedding, EvaluatedType::Embedding});
+    euclidDist->setReturnTypes({{EvaluatedType::Double}});
 }
 
 FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {

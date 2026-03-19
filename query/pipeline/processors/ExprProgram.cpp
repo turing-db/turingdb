@@ -123,6 +123,8 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         case OP_TO_BOOLEAN:
         case OP_FUNC_LABELS:
         case OP_FUNC_EDGE_TYPES:
+        case OP_FUNC_COSINE_SIMILARITY:
+        case OP_FUNC_EUCLIDEAN_DISTANCE:
             throw FatalException(
                 fmt::format("Attempted to evaluate {} as binary operator.",
                             ColumnOperatorDescription::value(op)));
@@ -165,6 +167,8 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         case OP_TO_BOOLEAN:
         case OP_FUNC_LABELS:
         case OP_FUNC_EDGE_TYPES:
+        case OP_FUNC_COSINE_SIMILARITY:
+        case OP_FUNC_EUCLIDEAN_DISTANCE:
 
         case OP_EQUAL:
         case OP_NOT_EQUAL:
@@ -217,6 +221,14 @@ void ExprProgram::evalFunction(const Instruction& instr) {
 
         case OP_FUNC_EDGE_TYPES:
             EvalFunction::eval<OP_FUNC_EDGE_TYPES>(res, arg, _view);
+        break;
+
+        case OP_FUNC_COSINE_SIMILARITY:
+            EvalFunction::eval<OP_FUNC_COSINE_SIMILARITY>(res, instr._lhs, instr._rhs);
+        break;
+
+        case OP_FUNC_EUCLIDEAN_DISTANCE:
+            EvalFunction::eval<OP_FUNC_EUCLIDEAN_DISTANCE>(res, instr._lhs, instr._rhs);
         break;
 
         case OP_EQUAL:

@@ -23,6 +23,7 @@ class StringLiteral;
 class CharLiteral;
 class MapLiteral;
 class WildcardLiteral;
+class EmbeddingLiteral;
 class Expr;
 class ExprChain;
 class BinaryExpr;
@@ -108,6 +109,7 @@ public:
     friend CharLiteral;
     friend MapLiteral;
     friend WildcardLiteral;
+    friend EmbeddingLiteral;
     friend ExprChain;
     friend BinaryExpr;
     friend LiteralExpr;
