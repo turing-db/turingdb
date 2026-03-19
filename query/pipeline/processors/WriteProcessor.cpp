@@ -74,142 +74,6 @@ void validateDeletions(const GraphReader reader, const ColumnVector<IDT>* col) {
 template void validateDeletions<NodeID>(const GraphReader reader, const ColumnVector<NodeID>* col);
 template void validateDeletions<EdgeID>(const GraphReader reader, const ColumnVector<EdgeID>* col);
 
-CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
-                                                         ValueType type,
-                                                         PropertyTypeID propID) {
-    switch (type) {
-        case ValueType::Int64: {
-            const auto* casted = dynamic_cast<ColumnConst<types::Int64::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get constant property value.");
-            return {.propertyID=propID, .value=casted->getRaw()};
-        }
-        break;
-
-        case ValueType::UInt64: {
-            const auto* casted = dynamic_cast<ColumnConst<types::UInt64::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get constant property value.");
-            return {.propertyID=propID, .value=casted->getRaw()};
-        }
-        break;
-
-        case ValueType::String: {
-            const auto* casted = dynamic_cast<ColumnConst<types::String::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get constant property value.");
-            return {.propertyID=propID, .value=std::string(casted->getRaw())};
-
-        }
-        break;
-
-        case ValueType::Double: {
-            const auto* casted = dynamic_cast<ColumnConst<types::Double::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get constant property value.");
-            return {.propertyID=propID, .value=casted->getRaw()};
-        }
-        break;
-
-        case ValueType::Bool: {
-            const auto* casted = dynamic_cast<ColumnConst<types::Bool::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get constant property value.");
-            return {.propertyID=propID, .value=casted->getRaw()};
-        }
-        break;
-
-        case ValueType::Embedding:
-            // TODO: Migrate to new system
-        case ValueType::Invalid:
-        case ValueType::_SIZE: {
-            throw FatalException("Property value column with invalid type.");
-        }
-        break;
-    }
-    throw FatalException("Failed to match against property value type.");
-}
-
-[[maybe_unused]] void getUntypedProperties(CommitWriteBuffer::UntypedProperties& buf,
-                          Column* valueCol,
-                          ValueType type,
-                          PropertyTypeID propID) {
-    buf.clear();
-    switch (type) {
-        case ValueType::Int64: {
-            const auto* casted = dynamic_cast<ColumnVector<types::Int64::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get untyped property vector.");
-
-            buf.reserve(casted->size());
-            for (const auto& val : *casted) {
-                buf.emplace_back(propID, val);
-            }
-        }
-        break;
-
-        case ValueType::UInt64: {
-            const auto* casted = dynamic_cast<ColumnVector<types::UInt64::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get untyped property vector.");
-
-            buf.reserve(casted->size());
-            for (const auto& val : *casted) {
-                buf.emplace_back(propID, val);
-            }
-        }
-        break;
-
-        case ValueType::String: {
-            const auto* casted = dynamic_cast<ColumnVector<types::String::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get untyped property vector.");
-
-            buf.reserve(casted->size());
-            std::string tmp;
-            for (const std::string_view& val : *casted) {
-                tmp.assign(begin(val), end(val));
-                buf.emplace_back(propID, std::move(tmp));
-            }
-        }
-        break;
-
-        case ValueType::Double: {
-            const auto* casted = dynamic_cast<ColumnVector<types::Double::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get untyped property vector.");
-
-            buf.reserve(casted->size());
-            for (const auto& val : *casted) {
-                buf.emplace_back(propID, val);
-            }
-        }
-        break;
-
-        case ValueType::Bool: {
-            const auto* casted = dynamic_cast<ColumnVector<types::Bool::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get untyped property vector.");
-
-            buf.reserve(casted->size());
-            for (const auto& val : *casted) {
-                buf.emplace_back(propID, val);
-            }
-        }
-        break;
-
-        case ValueType::Embedding: {
-            const auto* casted = dynamic_cast<ColumnVector<types::Embedding::Primitive>*>(valueCol);
-            bioassert(casted, "Could not get constant property value.");
-
-            buf.reserve(casted->size());
-            types::Embedding::OwningPrimitive tmp;
-            for (const auto& val : *casted) {
-                tmp.assign(begin(val), end(val));
-                buf.emplace_back(propID, std::move(tmp));
-            }
-        }
-        break;
-
-        case ValueType::Invalid:
-        case ValueType::_SIZE: {
-            throw FatalException("Property value column with invalid type.");
-        }
-        break;
-    }
-    throw FatalException("Failed to match against property value type.");
-}
-
 class ColumnVectorToUntypedProperties {
 public:
     explicit ColumnVectorToUntypedProperties(CommitWriteBuffer::UntypedProperties& buffer,
@@ -264,6 +128,8 @@ public:
         }
     }
 
+    // TODO: @cyrusknopf add specialisations for types::Embedding
+
 private:
     CommitWriteBuffer::UntypedProperties& _buf;
     PropertyTypeID _propID;
@@ -304,6 +170,8 @@ public:
         _prop.value = strv;
         _prop.propertyID = _propID;
     }
+
+    // TODO: @cyrusknopf add specialisation for types::Embedding
 
 private:
     CommitWriteBuffer::UntypedProperty& _prop;
@@ -459,11 +327,18 @@ void WriteProcessor::createNodes(size_t numIters) {
         // state.
         std::vector<CommitWriteBuffer::UntypedProperty> constProps;
         constProps.reserve(node._properties.size());
+
+        // Temporary buffer, reused across iterations, to add properties to the WriteBuffer
+        CommitWriteBuffer::UntypedProperty propBuffer;
+
         for (const auto& [name, type, valueCol] : node._properties) {
             const PropertyTypeID propID =
                 _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
-            constProps.emplace_back(getConstPropertyValue(valueCol, type, propID));
+            // Extract the constant value from the value column
+            getConstantUntypedProperty(valueCol, propBuffer, propID);
+
+            constProps.emplace_back(propBuffer);
         }
 
         {
@@ -563,11 +438,18 @@ void WriteProcessor::createEdges(size_t numIters) {
         // state.
         std::vector<CommitWriteBuffer::UntypedProperty> constProps;
         constProps.reserve(edge._properties.size());
+
+        // Temporary buffer, reused across iterations, to add properties to the WriteBuffer
+        CommitWriteBuffer::UntypedProperty propBuffer;
+
         for (const auto& [name, type, valueCol] : edge._properties) {
             const PropertyTypeID propID =
                 _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
-            constProps.emplace_back(getConstPropertyValue(valueCol, type, propID));
+            // Extract the constant value from the value column
+            getConstantUntypedProperty(valueCol, propBuffer, propID);
+
+            constProps.emplace_back(std::move(propBuffer));
         }
 
         const size_t numPendingEdgesPrior = _writeBuffer->numPendingEdges();
