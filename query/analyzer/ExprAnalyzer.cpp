@@ -13,6 +13,8 @@
 #include "decl/EvaluatedType.h"
 #include "decl/VarDecl.h"
 
+#include "StringBucket.h"
+
 #include "expr/All.h"
 
 using namespace db;
@@ -325,6 +327,11 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
             expr->setType(EvaluatedType::Double);
         } break;
         case Literal::Kind::STRING: {
+            const StringLiteral* strLiteral = static_cast<const StringLiteral*>(literal);
+            if (strLiteral->getValue().size() > StringBucket::BUCKET_SIZE) {
+                throwError(fmt::format("String literal exceeds maximum size of {} bytes",
+                                       StringBucket::BUCKET_SIZE), expr);
+            }
             expr->setType(EvaluatedType::String);
         } break;
         case Literal::Kind::CHAR: {

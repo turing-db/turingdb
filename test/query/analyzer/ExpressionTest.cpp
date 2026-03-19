@@ -6,6 +6,7 @@
 #include "CypherAST.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
+#include "StringBucket.h"
 #include "decl/DeclContext.h"
 #include "expr/All.h"
 #include "procedures/ProcedureManager.h"
@@ -67,6 +68,19 @@ TEST_F(ExpressionTest, LiteralExpressionTest) {
     EXPECT_EQ(doubleLiteral->getType(), EvaluatedType::Double);
     EXPECT_EQ(stringLiteral->getType(), EvaluatedType::String);
     EXPECT_EQ(charLiteral->getType(), EvaluatedType::Char);
+}
+
+TEST_F(ExpressionTest, OversizedStringLiteralThrows) {
+    const std::string oversized(StringBucket::BUCKET_SIZE + 1, 'x');
+    LiteralExpr* expr = LiteralExpr::create(&_ast, StringLiteral::create(&_ast, oversized));
+    ASSERT_THROW(_analyzer->analyzeRootExpr(expr), AnalyzeException);
+}
+
+TEST_F(ExpressionTest, MaxSizeStringLiteralAccepted) {
+    const std::string maxStr(StringBucket::BUCKET_SIZE, 'x');
+    LiteralExpr* expr = LiteralExpr::create(&_ast, StringLiteral::create(&_ast, maxStr));
+    ASSERT_NO_THROW(_analyzer->analyzeRootExpr(expr));
+    EXPECT_EQ(expr->getType(), EvaluatedType::String);
 }
 
 #define EXPECT_BINARY_VALID(a, op, b, eval)                         \

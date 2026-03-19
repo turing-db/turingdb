@@ -8,6 +8,9 @@
 #include "StringBucket.h"
 
 #include "BioAssert.h"
+#include "TuringException.h"
+
+#include <spdlog/fmt/bundled/format.h>
 
 namespace db {
 class DataPartMerger;
@@ -29,8 +32,11 @@ public:
     StringContainer& operator=(const StringContainer& other) = delete;
 
     void alloc(std::string_view content) {
-        bioassert(content.size() <= StringBucket::BUCKET_SIZE,
-                  "Content larger than bucket size");
+        if (content.size() > StringBucket::BUCKET_SIZE) {
+            throw TuringException(fmt::format(
+                "String property exceeds maximum size of {} bytes (got {} bytes)",
+                StringBucket::BUCKET_SIZE, content.size()));
+        }
 
         StringBucket* bucket = &_buckets.back();
         if (bucket->availSpace() < content.size()) {
