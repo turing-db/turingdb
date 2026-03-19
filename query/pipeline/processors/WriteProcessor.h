@@ -114,7 +114,7 @@ private:
     void performCreations();
 
     /**
-     * @todo
+     * @brief Adds node and edge updates to @ref _writeBuffer.
      */
     void performUpdates();
 

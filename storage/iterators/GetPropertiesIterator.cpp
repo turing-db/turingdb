@@ -96,10 +96,6 @@ void GetPropertiesIterator<ID, T>::next() {
 
         _prop = properties.tryGet<T>(_propTypeID, _entityIt->getValue());
 
-        // NOTE: SET: Can intervene here: do lookup in map, check if we already
-        // saw the property for an updated node/edge, if not first encounter,
-        // then set back to nullptr.
-
         // If _prop is nullptr, the current nodeID does not have this prop,
         // -> start over the algorithm
         // Else, the outer while condition is broken,
