@@ -1,0 +1,3 @@
+GET /is_graph_loaded/default HTTP/1.1
+Host: localhost
+

@@ -124,7 +124,7 @@ if(NOT APPLE)
 endif()
 
 # C++ flags
-set(CMAKE_CXX_FLAGS "-std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
 if(APPLE AND NOT NIX_BUILD)
 
@@ -275,3 +275,4 @@ add_subdirectory(examples)
 add_subdirectory(test)
 add_subdirectory(samples)
 add_subdirectory(regress)
+add_subdirectory(fuzz)

@@ -1,0 +1,3 @@
+GET /list_property_types/default HTTP/1.1
+Host: localhost
+

@@ -13,3 +13,4 @@ python/turingdb/_version.py
 wheel/
 dist
 external/datasets/reactome.jsonl
+fuzz_results
