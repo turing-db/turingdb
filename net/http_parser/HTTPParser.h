@@ -197,17 +197,25 @@ private:
         _currentPtr += key.size();
 
         // Skip optional whitespace after "content-length:"
-        while (_currentPtr != endPtr && (*_currentPtr == ' ' || *_currentPtr == '\t')) {
+        while (_currentPtr != endPtr) {
+            const char c = *_currentPtr;
+            if (c != ' ' && c != '\t') {
+                break;
+            }
             _currentPtr++;
         }
 
         // Parse digits with bounds checking (no strtoull — buffer is not null-terminated)
         _payloadSize = 0;
-        while (_currentPtr != endPtr && isdigit(*_currentPtr)) {
-            _payloadSize = _payloadSize * 10 + (*_currentPtr - '0');
-            if (_payloadSize > NetBuffer::BUFFER_SIZE) {
+        while (_currentPtr != endPtr) {
+            const char c = *_currentPtr;
+            if (!isdigit(c)) {
+                break;
+            }
+            if (_payloadSize > NetBuffer::BUFFER_SIZE / 10) {
                 return BadResult(HTTP::Error::REQUEST_TOO_BIG);
             }
+            _payloadSize = _payloadSize * 10 + (c - '0');
             _currentPtr++;
         }
 
