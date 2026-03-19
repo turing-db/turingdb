@@ -25,7 +25,7 @@ public:
     using SupportedTypeVariant =
         std::variant<types::Int64::Primitive, types::UInt64::Primitive,
                      types::Double::Primitive, std::string,
-                     types::Bool::Primitive, types::Embedding::Primitive>;
+                     types::Bool::Primitive, std::vector<float>>;
 
      struct UntypedProperty {
         PropertyTypeID propertyID;
