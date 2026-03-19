@@ -212,10 +212,21 @@ private:
             if (!isdigit(c)) {
                 break;
             }
+
+            // Uses Horner's rule for decimal number parsing
+            // (if you don't know what it is please read about it)
+            //
+            // Arithmetic overflow: we first check that _payloadSize will not exceed BUFFER_SIZE
+            // if multiplied by 10 and therefore will not overflow as BUFFER_SIZE is way smaller
+            // than the bound
             if (_payloadSize > NetBuffer::BUFFER_SIZE / 10) {
                 return BadResult(HTTP::Error::REQUEST_TOO_BIG);
             }
+
+            // We know that c is a digit between '0' and '9' here
+            // because we checked isdigit earlier
             _payloadSize = _payloadSize * 10 + (c - '0');
+
             _currentPtr++;
         }
 
