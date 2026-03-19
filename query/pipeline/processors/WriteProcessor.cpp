@@ -114,6 +114,8 @@ CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
         }
         break;
 
+        case ValueType::Embedding:
+            // TODO: Migrate to new system
         case ValueType::Invalid:
         case ValueType::_SIZE: {
             throw FatalException("Property value column with invalid type.");
@@ -159,7 +161,7 @@ CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
             std::string tmp;
             for (const std::string_view& val : *casted) {
                 tmp.assign(begin(val), end(val));
-                buf.emplace_back(propID, tmp);
+                buf.emplace_back(propID, std::move(tmp));
             }
         }
         break;
@@ -187,10 +189,15 @@ CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
         break;
 
         case ValueType::Embedding: {
-            const auto* casted = dynamic_cast<ColumnConst<types::Embedding::Primitive>*>(valueCol);
+            const auto* casted = dynamic_cast<ColumnVector<types::Embedding::Primitive>*>(valueCol);
             bioassert(casted, "Could not get constant property value.");
-            const auto& span = casted->getRaw();
-            return {propID, std::vector<float>(span.begin(), span.end())};
+
+            buf.reserve(casted->size());
+            types::Embedding::OwningPrimitive tmp;
+            for (const auto& val : *casted) {
+                tmp.assign(begin(val), end(val));
+                buf.emplace_back(propID, std::move(tmp));
+            }
         }
         break;
 

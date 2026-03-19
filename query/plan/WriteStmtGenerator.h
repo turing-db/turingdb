@@ -46,6 +46,7 @@ public:
     void generateCreatePatternElementEdge(const NodePattern* src,
                                           EdgePattern* edge,
                                           const NodePattern* dst);
+    void setPrevNode(PlanGraphNode* node) { _prevNode = node; }
 
 private:
     const CypherAST* _ast {nullptr};
