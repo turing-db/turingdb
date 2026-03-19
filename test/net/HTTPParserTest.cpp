@@ -27,6 +27,7 @@ static net::HTTP::Result<bool> feedAndAnalyze(const char* data, size_t size) {
     } catch (const FatalException&) {
         throw;
     } catch (...) {
+        throw;
     }
 
     return true;
