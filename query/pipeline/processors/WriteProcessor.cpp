@@ -103,7 +103,8 @@ CommitWriteBuffer::UntypedProperty getConstPropertyValue(Column* valueCol,
         case ValueType::Embedding: {
             const auto* casted = dynamic_cast<ColumnConst<types::Embedding::Primitive>*>(valueCol);
             bioassert(casted, "Could not get constant property value.");
-            return {propID, casted->getRaw()};
+            const auto& span = casted->getRaw();
+            return {propID, std::vector<float>(span.begin(), span.end())};
         }
         break;
 

@@ -51,6 +51,7 @@ void applyMask(const Column* src,
         APPLY_MASK_CASE(ColumnOptVector<types::String::Primitive>) // Also covers string_view
         APPLY_MASK_CASE(ColumnOptVector<types::UInt64::Primitive>) // Also covers size_t
         APPLY_MASK_CASE(ColumnOptVector<types::Double::Primitive>)
+        APPLY_MASK_CASE(ColumnOptVector<types::Embedding::Primitive>)
 
         APPLY_MASK_CASE(ColumnVector<EntityID>)
         APPLY_MASK_CASE(ColumnVector<NodeID>)

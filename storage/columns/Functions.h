@@ -12,6 +12,7 @@
 #include "ID.h"
 
 #include "BioAssert.h"
+#include "TuringException.h"
 
 namespace db {
 
@@ -72,7 +73,9 @@ public:
         const bool success = ec == std::errc {};
         const bool parsedAll = ptr == end;
 
-        bioassert(success && parsedAll, "toInteger: cannot convert '{}' to integer.", sv);
+        if (!success || !parsedAll) {
+            throw TuringException(fmt::format("toInteger: cannot convert '{}' to integer.", sv));
+        }
 
         return result;
     }
@@ -93,10 +96,14 @@ public:
 
         // Either empty string, or could not parse all of the string as double
         const bool couldNotConvert = end == _buf.data() || end != _buf.data() + _buf.size();
-        bioassert(!couldNotConvert, "toFloat: cannot convert '{}' to float.", sv);
+        if (couldNotConvert) {
+            throw TuringException(fmt::format("toFloat: cannot convert '{}' to float.", sv));
+        }
 
         const bool outOfRange = errno == ERANGE;
-        bioassert(!outOfRange, "toFloat: cannot convert '{}' to float: out of range.", sv);
+        if (outOfRange) {
+            throw TuringException(fmt::format("toFloat: cannot convert '{}' to float: out of range.", sv));
+        }
 
         return result;
     }
@@ -119,7 +126,7 @@ public:
             return false;
         }
 
-        bioassert(false, "toBoolean: cannot convert '{}' to boolean.", sv);
+        throw TuringException(fmt::format("toBoolean: cannot convert '{}' to boolean.", sv));
     }
 
 private:
