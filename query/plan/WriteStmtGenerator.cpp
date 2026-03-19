@@ -103,7 +103,9 @@ void WriteStmtGenerator::generateCreateStmt(const CreateStmt* stmt) {
 }
 
 void WriteStmtGenerator::generateSetStmt(const SetStmt* stmt) {
-    prepareWriteNode();
+    // Always create a new write node: allows for CREATE ... SET ... to reference freshly
+    // created nodes/edges
+    _writeNode = _tree->newOut<WriteNode>(_writeNode);
 
     for (const SetItem* item : stmt->getItems()) {
         const auto visitor = Overloaded {

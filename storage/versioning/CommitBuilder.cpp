@@ -149,6 +149,14 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     if (wb.containsUpdates()) {
         // Create a new datapart: ensures updates apply to newly created entities
         DataPartBuilder& dpBuilder = newBuilder();
+
+        // Update the firstXID fields so that this builder knows about the new CREATES
+        const size_t numCreatedNodes = wb.numPendingNodes();
+        const size_t numCreatedEdges = wb.numPendingEdges();
+
+        dpBuilder._firstNodeID += numCreatedNodes;
+        dpBuilder._firstEdgeID += numCreatedEdges;
+
         wb.applyUpdates(dpBuilder);
     }
 

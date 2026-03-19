@@ -368,4 +368,6 @@ void CommitWriteBufferRebaser::rebase() {
         }
         deletedNodes.swap(temp);
     }
+
+    // TODO: Rebase node/edge updates
 }

@@ -6,7 +6,6 @@
     "plan": "",
     "result": ""
   },
-  "tags": [
-  ],
-  "write-required": false
+  "tags": [],
+  "write-required": true
 }
