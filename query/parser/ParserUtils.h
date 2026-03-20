@@ -10,9 +10,13 @@ class ListExpr;
 
 class ParserUtils {
 public:
-    static void listExprToFloatVector(const ListExpr* list, std::vector<float>& out);
+    ParserUtils() = delete;
+    ~ParserUtils() = delete;
 
     static EmbeddingLiteral* listExprToEmbeddingLiteral(CypherAST* ast, const ListExpr* list);
+
+private:
+    static void listExprToFloatVector(const ListExpr* list, std::vector<float>& out);
 };
 
 }
