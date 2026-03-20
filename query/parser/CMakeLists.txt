@@ -13,6 +13,7 @@ set(parser_sources
     YCypherScanner.cpp
     CypherParser.cpp
     ParserException.cpp
+    ParserUtils.cpp
     ${BISON_cypher_parser_OUTPUTS}
     ${FLEX_cypher_lexer_OUTPUTS})
 
