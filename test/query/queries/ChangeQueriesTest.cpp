@@ -72,7 +72,7 @@ protected:
         auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), &_queryConfig,
                                 emptyCallback, CommitHash::head(), chid);
 
-        ASSERT_TRUE(res);
+        ASSERT_TRUE(res) << res.getError();
         _currentChange = ChangeID::head();
     }
 
@@ -1282,6 +1282,378 @@ TEST_F(ChangeQueriesTest, setEdgeConflictDifferentProps) {
         "Edge 0 on main) which has been modified on main.";
 
     EXPECT_EQ(expectedErr, err);
+}
+
+// Two changes (A and B) both create nodes locally, Change A modifies that node with a
+// SET. Change B submits first. Change A submits second. A's modifications should apply to
+// the node it created, not the node B created.
+TEST_F(ChangeQueriesTest, setThenRebase) {
+    setWorkingGraph("default");
+
+    ChangeID change1;
+    ChangeID change2;
+
+    {
+        newChange(), change1 = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Interest) SET n.name = "Dogs")";
+        constexpr std::string_view SET_QUERY = R"(MATCH (n) WHERE n.name = "Dogs" SET n.name = "Cats")";
+
+        {
+            const auto res = query(CREATE_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+            ASSERT_TRUE(query("commit", emptyCallback));
+        }
+
+        {
+            const auto res = query(SET_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+        }
+    }
+
+    {
+        newChange(), change2 = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Interest) SET n.name = "Music")";
+        const auto res = query(CREATE_QUERY, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+        submitCurrentChange();
+    }
+
+    setChange(change1);
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n, n.name)";
+        const auto res = query(MATCH_QUERY, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(2, df->size());
+
+            const auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns && names);
+
+            ASSERT_FALSE(ns->empty());
+            ASSERT_FALSE(names->empty());
+
+            EXPECT_EQ((std::vector<NodeID>{0, 1}), ns->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<std::string_view>> {"Music", "Cats"}),
+                      names->getRaw())
+                << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(ChangeQueriesTest, setIntPropertyThenRebase) {
+    setWorkingGraph("default");
+    ChangeID changeA;
+    ChangeID changeB;
+    {
+        newChange(), changeA = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.age = 1)";
+        constexpr std::string_view SET_QUERY = R"(MATCH (n:Person) WHERE n.age = 1 SET n.age = 2)";
+        {
+            const auto res = query(CREATE_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+            ASSERT_TRUE(query("commit", emptyCallback));
+        }
+        {
+            const auto res = query(SET_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+        }
+    }
+    {
+        newChange(), changeB = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.age = 99)";
+        const auto res = query(CREATE_QUERY, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+        submitCurrentChange();
+    }
+    setChange(changeA);
+    submitCurrentChange();
+    {
+        constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n, n.age)";
+        const auto res = query(MATCH_QUERY, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(2, df->size());
+            const auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(ns && ages);
+            ASSERT_FALSE(ns->empty());
+            ASSERT_FALSE(ages->empty());
+            EXPECT_EQ((std::vector<NodeID> {0, 1}), ns->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<types::Int64::Primitive>>{99, 2}), ages->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(ChangeQueriesTest, threeChangesSetThenRebaseLastSubmit) {
+    setWorkingGraph("default");
+    ChangeID changeA;
+    ChangeID changeB;
+    ChangeID changeC;
+    {
+        newChange(), changeA = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Alpha")";
+        constexpr std::string_view SET_QUERY    = R"(MATCH (n:Person) WHERE n.name = "Alpha" SET n.name = "Beta")";
+        {
+            const auto res = query(CREATE_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+            ASSERT_TRUE(query("commit", emptyCallback));
+        }
+        {
+            const auto res = query(SET_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+        }
+    }
+    {
+        newChange(), changeB = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Gamma")";
+        const auto res = query(CREATE_QUERY, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    {
+        newChange(), changeC = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Delta")";
+        const auto res = query(CREATE_QUERY, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    setChange(changeB);
+    submitCurrentChange();
+    setChange(changeC);
+    submitCurrentChange();
+    setChange(changeA);
+    submitCurrentChange();
+    {
+        constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n, n.name)";
+        const auto res = query(MATCH_QUERY, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(2, df->size());
+            const auto* ns    = findColumn(df, "n")->as<ColumnNodeIDs>();
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns && names);
+            ASSERT_FALSE(ns->empty());
+            ASSERT_FALSE(names->empty());
+            EXPECT_EQ((std::vector<NodeID>{ 0, 1, 2}), ns->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<std::string_view>>{ "Gamma", "Delta", "Beta"}), names->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(ChangeQueriesTest, setPropertyTwiceThenRebase) {
+    setWorkingGraph("default");
+    ChangeID changeA;
+    ChangeID changeB;
+    {
+        newChange(), changeA = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "V1")";
+        constexpr std::string_view SET_QUERY_1  = R"(MATCH (n:Person) WHERE n.name = "V1" SET n.name = "V2")";
+        constexpr std::string_view SET_QUERY_2  = R"(MATCH (n:Person) WHERE n.name = "V2" SET n.name = "V3")";
+        {
+            const auto res = query(CREATE_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+            ASSERT_TRUE(query("commit", emptyCallback));
+        }
+        {
+            const auto res = query(SET_QUERY_1, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+            ASSERT_TRUE(query("commit", emptyCallback));
+        }
+        {
+            const auto res = query(SET_QUERY_2, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+        }
+    }
+    {
+        newChange(), changeB = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Other")";
+        const auto res = query(CREATE_QUERY, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitChange(changeB);
+    submitChange(changeA);
+    {
+        constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n, n.name)";
+        const auto res = query(MATCH_QUERY, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(2, df->size());
+            const auto* ns    = findColumn(df, "n")->as<ColumnNodeIDs>();
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns && names);
+            ASSERT_FALSE(ns->empty());
+            ASSERT_FALSE(names->empty());
+            EXPECT_EQ((std::vector<NodeID> {0, 1}), ns->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<std::string_view>>{ "Other", "V3" }), names->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(ChangeQueriesTest, setTwoCreatedNodesThenRebase) {
+    setWorkingGraph("default");
+    ChangeID changeA;
+    ChangeID changeB;
+    {
+        newChange(), changeA = _currentChange;
+        constexpr std::string_view CREATE_1  = R"(CREATE (n:Person) SET n.name = "First")";
+        constexpr std::string_view CREATE_2  = R"(CREATE (n:Person) SET n.name = "Second")";
+        constexpr std::string_view SET_QUERY = R"(MATCH (n:Person) WHERE n.name = "First" OR n.name = "Second" SET n.name = "Updated")";
+        {
+            const auto res = query(CREATE_1, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+            ASSERT_TRUE(query("commit", emptyCallback));
+        }
+        {
+            const auto res = query(CREATE_2, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+            ASSERT_TRUE(query("commit", emptyCallback));
+        }
+        {
+            const auto res = query(SET_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+        }
+    }
+    {
+        newChange(), changeB = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Third")";
+        const auto res = query(CREATE_QUERY, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+    submitChange(changeB);
+    submitChange(changeA);
+
+    {
+        constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n, n.name)";
+        const auto res = query(MATCH_QUERY, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(2, df->size());
+            const auto* ns    = findColumn(df, "n")->as<ColumnNodeIDs>();
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns && names);
+            ASSERT_FALSE(ns->empty());
+            ASSERT_FALSE(names->empty());
+            EXPECT_EQ((std::vector<NodeID>{ 0, 1, 2 }), ns->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<std::string_view>>{ "Third", "Updated", "Updated" }), names->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(ChangeQueriesTest, threeChangesAllPropertyTypesThenRebase) {
+    setWorkingGraph("default");
+    ChangeID changeA;
+    ChangeID changeB;
+    ChangeID changeC;
+    {
+        newChange(), changeA = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Alice", n.age = 30, n.hasPhD = true)";
+        const auto res = query(CREATE_QUERY, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+        ASSERT_TRUE(query("commit", emptyCallback));
+        constexpr std::string_view SET_QUERY = R"(MATCH (n:Person) WHERE n.name = "Alice" SET n.age = 31)";
+        const auto res2 = query(SET_QUERY, emptyCallback);
+        ASSERT_TRUE(res2) << res2.getError();
+    }
+    {
+        newChange(), changeB = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Bob", n.age = 25, n.hasPhD = false)";
+        const auto res = query(CREATE_QUERY, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+        ASSERT_TRUE(query("commit", emptyCallback));
+        constexpr std::string_view SET_QUERY = R"(MATCH (n:Person) WHERE n.name = "Bob" SET n.hasPhD = true)";
+        const auto res2 = query(SET_QUERY, emptyCallback);
+        ASSERT_TRUE(res2) << res2.getError();
+    }
+    {
+        newChange(), changeC = _currentChange;
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Carol")";
+        const auto res = query(CREATE_QUERY, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+    submitChange(changeC);
+    submitChange(changeA);
+    submitChange(changeB);
+
+    {
+        constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n, n.name, n.age, n.hasPhD)";
+        const auto res = query(MATCH_QUERY, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(4, df->size());
+            const auto* ns      = findColumn(df, "n")->as<ColumnNodeIDs>();
+            const auto* names   = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ages    = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            const auto* hasPhDs = findColumn(df, "n.hasPhD")->as<ColumnOptVector<types::Bool::Primitive>>();
+            ASSERT_TRUE(ns && names && ages && hasPhDs);
+            ASSERT_FALSE(ns->empty());
+            EXPECT_EQ((std::vector<NodeID>{0, 1, 2}), ns->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<std::string_view>>{ "Carol", "Alice", "Bob" }), names->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<types::Int64::Primitive>>{ {}, 31, 25}), ages->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<types::Bool::Primitive>>{ {}, true, true}), hasPhDs->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(ChangeQueriesTest, setNodeAndEdgePropertiesThenRebase) {
+    setWorkingGraph("default");
+    ChangeID changeA;
+    ChangeID changeB;
+
+    {
+        newChange(), changeA = _currentChange;
+        constexpr std::string_view CREATE_QUERY =
+            R"(CREATE (n:Person)-[e:KNOWS]->(m:Person) SET n.name = "Eve", m.name = "Frank", e.age = 5)";
+        constexpr std::string_view SET_QUERY =
+            R"(MATCH (n:Person)-[e:KNOWS]->(m:Person) WHERE n.name = "Eve" SET e.age = 10, n.hasPhD = true)";
+        {
+            const auto res = query(CREATE_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+            ASSERT_TRUE(query("commit", emptyCallback));
+        }
+        {
+            const auto res = query(SET_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+        }
+    }
+    {
+        newChange(), changeB = _currentChange;
+        constexpr std::string_view CREATE_QUERY =
+            R"(CREATE (n:Person)-[e:KNOWS]->(m:Person) SET n.name = "Grace", m.name = "Henry", e.age = 99)";
+        const auto res = query(CREATE_QUERY, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+    submitChange(changeB);
+    submitChange(changeA);
+
+    {
+        constexpr std::string_view MATCH_QUERY = R"(MATCH (n)-[e:KNOWS]->(m) RETURN n, n.name, n.hasPhD, m.name, e, e.age)";
+        const auto res = query(MATCH_QUERY, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(6, df->size());
+
+            const auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
+            const auto* es = findColumn(df, "e")->as<ColumnEdgeIDs>();
+            const auto* nNames = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* hasPhDs = findColumn(df, "n.hasPhD")->as<ColumnOptVector<types::Bool::Primitive>>();
+            const auto* mNames = findColumn(df, "m.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* eages = findColumn(df, "e.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(ns && nNames && hasPhDs && mNames && eages);
+            ASSERT_FALSE(ns->empty());
+
+            EXPECT_EQ((std::vector<NodeID>{ 0, 2 }), ns->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<EdgeID>{ 0, 1 }), es->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<std::string_view>>{ "Grace", "Eve" }), nNames->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<types::Bool::Primitive>>{ {}, true }), hasPhDs->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<std::string_view>>{ "Henry", "Frank" }), mNames->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<types::Int64::Primitive>>{ 99, 10 }), eages->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
 }
 
 int main(int argc, char** argv) {

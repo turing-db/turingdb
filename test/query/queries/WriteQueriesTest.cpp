@@ -80,6 +80,12 @@ protected:
         }
         return nullptr;
     }
+
+    constexpr static auto dump = [](const Dataframe* df) {
+        std::ostringstream out;
+        df->dump(out);
+        return out.str();
+    };
 };
 
 TEST_F(WriteQueriesTest, scanNodesCreateNode) {
@@ -2422,7 +2428,7 @@ TEST_F(WriteQueriesTest, multipleNodeSetQueriesTypesWithCommit) {
 
             ASSERT_TRUE(std::ranges::all_of(*hasPhDs,
                 [](std::optional<types::Bool::Primitive> h) { return *h == CustomBool{true}; })
-            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+            ) << dump(df);
         });
         ASSERT_TRUE(res);
     }

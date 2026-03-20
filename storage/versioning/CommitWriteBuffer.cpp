@@ -385,5 +385,18 @@ void CommitWriteBufferRebaser::rebase() {
         deletedNodes.swap(temp);
     }
 
-    // TODO: Rebase node/edge updates
+    // Rebase node/edge updates
+    {
+        CommitWriteBuffer::UpdatedNodes& updatedNodes = _buffer->_updatedNodes;
+        for (auto& [n, _]  : updatedNodes) {
+            n = _idRebaser->rebaseNodeID(n);
+        }
+    }
+
+    {
+        CommitWriteBuffer::UpdatedEdges& updatedEdges = _buffer->_updatedEdges;
+        for (auto& [e, _]  : updatedEdges) {
+            e = _idRebaser->rebaseEdgeID(e);
+        }
+    }
 }
