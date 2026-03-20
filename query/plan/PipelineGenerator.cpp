@@ -1538,8 +1538,8 @@ PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowV
 
 
 PipelineOutputInterface* PipelineGenerator::translatePathExplorerNode(PathExplorerNode* node) {
-    const uint64_t minHops = static_cast<uint64_t>(node->getMinHops());
-    const uint64_t maxHops = static_cast<uint64_t>(node->getMaxHops());
+    const uint64_t minHops = node->getMinHops();
+    const uint64_t maxHops = node->getMaxHops();
 
     const auto makeProcessor = [&]<PathExplorationDir Dir>() {
         _builder.addPathExplorer<Dir>(minHops, maxHops);
