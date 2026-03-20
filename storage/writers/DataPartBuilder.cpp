@@ -68,7 +68,7 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
         _edgeProperties->registerPropertyType<T>(ptID);
     }
     if (edge._edgeID < _firstEdgeID) {
-        _patchedEdges.emplace(edge._edgeID, &edge);
+        _patchedEdges.emplace(edge._edgeID, edge);
         _patchNodeLabelSets.emplace(edge._nodeID, LabelSetHandle {});
     }
     _edgeProperties->add<T>(ptID, edge._edgeID.getValue(), std::move(value));
@@ -132,7 +132,7 @@ void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
         _edgeProperties->registerEmbeddingPropertyType(ptID, value.size());
     }
     if (edge._edgeID < _firstEdgeID) {
-        _patchedEdges.emplace(edge._edgeID, &edge);
+        _patchedEdges.emplace(edge._edgeID, edge);
         _patchNodeLabelSets.emplace(edge._nodeID, LabelSetHandle {});
     }
     _edgeProperties->add<types::Embedding>(ptID, edge._edgeID.getValue(), value);

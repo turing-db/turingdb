@@ -85,7 +85,18 @@ private:
     std::vector<LabelSetHandle> _coreNodeLabelSets;
     std::vector<NodeID> _tmpNodeIDVector;
     std::vector<EdgeRecord> _edges;
-    std::unordered_map<EdgeID, const EdgeRecord*> _patchedEdges;
+    /**
+     * @brief Map from EdgeID to EdgeRecord for edges that do not exist in this datapart.
+     * @detail This may reference an EdgeRecord in a previous commit, or an EdgeRecord
+     * that does not yet exist in any materialised commit. An example of this is:
+     * `CREATE (n:Node)-[e:NEW_EDGE]->(m:Node) SET e.duration = 10`;
+     * this query creates two dataparts: first one for the CREATE, secondly one for the
+     * SET. This means that 'e' does not exist in any materialised commit when adding
+     * e.duration for the SET, as the first datapart is not yet built at that time. This
+     * requires the map to own EdgeRecords, as 'e' cannot be a pointer to any materialised
+     * EdgeRecord.
+     */
+    std::unordered_map<EdgeID, EdgeRecord> _patchedEdges;
     std::unordered_set<NodeID> _nodeHasPatchEdges;
     std::map<NodeID, LabelSetHandle> _patchNodeLabelSets;
     std::unique_ptr<PropertyManager> _nodeProperties;
@@ -96,7 +107,7 @@ private:
     std::unique_ptr<PropertyManager>& nodeProperties() { return _nodeProperties; }
     std::unique_ptr<PropertyManager>& edgeProperties() { return _edgeProperties; }
     std::map<NodeID, LabelSetHandle>& patchNodeLabelSets() { return _patchNodeLabelSets; }
-    std::unordered_map<EdgeID, const EdgeRecord*>& patchedEdges() { return _patchedEdges; }
+    std::unordered_map<EdgeID, EdgeRecord>& patchedEdges() { return _patchedEdges; }
     size_t patchNodeEdgeDataCount() const {
         return _nodeHasPatchEdges.size();
     }
