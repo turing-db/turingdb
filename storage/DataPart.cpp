@@ -127,7 +127,7 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
 #endif
 
     for (const auto& [ptID, props] : *_nodeProperties) {
-        jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
+        // jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
             for (auto& id : props->ids()) {
                 if (id >= firstTmpNodeID.getValue()) {
                     id = tmpToFinalNodeIDs.at(id.getValue()).getValue();
@@ -157,10 +157,10 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
                 auto& range = info.back();
                 range._count++;
             }
-        });
+        // });
     }
 
-    jobs.wait();
+    // jobs.wait();
 
     // EdgeContainer
     _edges = EdgeContainer::create(_firstNodeID,
@@ -189,7 +189,7 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
 #endif
 
     for (const auto& [ptID, props] : *_edgeProperties) {
-        jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
+        // jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
             for (auto& id : props->ids()) {
                 if (id >= firstTmpEdgeID.getValue()) {
                     id = tmpToFinalEdgeIDs.at(id.getValue()).getValue();
@@ -227,7 +227,7 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
                 auto& range = info.back();
                 range._count++;
             }
-        });
+        // });
     }
 
     // Edge indexer
@@ -237,7 +237,7 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
                                        builder.getOutPatchEdgeCount(),
                                        builder.getInPatchEdgeCount());
 
-    jobs.wait();
+    // jobs.wait();
 
     _initialized = true;
 
