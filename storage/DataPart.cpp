@@ -209,7 +209,9 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
                                  : patchNodeLabelSets.at(edge._nodeID);
                 } else {
                     const EdgeRecord& edge = patchedEdges.at(edgeID.getValue());
-                    labelset = patchNodeLabelSets.at(edge._nodeID);
+                    labelset = edge._nodeID >= _firstNodeID
+                                 ? _nodes->getNodeLabelSet(edge._nodeID)
+                                 : patchNodeLabelSets.at(edge._nodeID);
                 }
 
                 auto& info = indexer[labelset];

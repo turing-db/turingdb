@@ -65,12 +65,17 @@ template <SupportedType T>
 void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
                                       PropertyTypeID ptID,
                                       T::Primitive value,
-                                      LabelSetHandle srcLblSet) {
+                                      LabelSetHandle srcLblSet/*={}*/) {
+    // If the property does not exist in this DP, create it
     if (!_edgeProperties->hasPropertyType(ptID)) {
         _edgeProperties->registerPropertyType<T>(ptID);
     }
+    // If the edge being assigned a property existed before this DP, it is a patch
     if (edge._edgeID < _firstEdgeID) {
         _patchedEdges.emplace(edge._edgeID, edge);
+    }
+    // If the src node of the edge being assigned existed before this DP, it is a patch
+    if (edge._nodeID < _firstNodeID) {
         _patchNodeLabelSets.emplace(edge._nodeID, srcLblSet);
     }
     _edgeProperties->add<T>(ptID, edge._edgeID.getValue(), std::move(value));
