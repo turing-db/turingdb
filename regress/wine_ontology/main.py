@@ -23,7 +23,7 @@ try:
 except Exception as e:
     assert (
         str(e)
-        == "EXEC_ERROR: Unexpected exception: Attempted to create LabelID 256, which exceeds graph label capacity."
+        == "EXEC_ERROR: Attempted to create LabelID 256, which exceeds graph label capacity."
     )
 else:
     assert False  # If an exception wasn't raised: bug
