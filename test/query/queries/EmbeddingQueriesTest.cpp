@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <math.h>
 #include <vector>
 
 #include "TuringDB.h"
@@ -432,6 +433,149 @@ TEST_F(EmbeddingQueriesTest, embeddingInequality) {
         std::sort(actualNames.begin(), actualNames.end());
         std::vector<std::string> expectedNames = {"b1", "b2"};
         EXPECT_EQ(actualNames, expectedNames);
+    }
+}
+
+TEST_F(EmbeddingQueriesTest, cosineSimilarity) {
+    {
+        newChange();
+        for (auto&& q : {
+            R"(CREATE (n:Vec {name: "a", vec: [0.3, 0.7, 0.5]}))",
+            R"(CREATE (n:Vec {name: "b", vec: [0.9, 0.2, 0.4]}))",
+            R"(CREATE (n:Vec {name: "c", vec: [0.1, 0.8, 0.6]}))",
+        }) {
+            auto res = query(q, [](const Dataframe* df) { ASSERT_TRUE(df); });
+            ASSERT_TRUE(res);
+        }
+        submitCurrentChange();
+    }
+
+    // cosine_similarity(vec, ref) where ref = [0.4, 0.3, 0.8]
+    const float a[] = {0.3f, 0.7f, 0.5f};
+    const float b[] = {0.9f, 0.2f, 0.4f};
+    const float c[] = {0.1f, 0.8f, 0.6f};
+    const float ref[] = {0.4f, 0.3f, 0.8f};
+
+    auto cosine = [](const float* x, const float* r, size_t n) {
+        float dot = 0.0f, nx = 0.0f, nr = 0.0f;
+        for (size_t i = 0; i < n; i++) {
+            dot += x[i] * r[i];
+            nx += x[i] * x[i];
+            nr += r[i] * r[i];
+        }
+        return dot / (sqrtf(nx) * sqrtf(nr));
+    };
+
+    const float expectedA = cosine(a, ref, 3);
+    const float expectedB = cosine(b, ref, 3);
+    const float expectedC = cosine(c, ref, 3);
+
+    std::vector<std::string> names;
+    std::vector<double> scores;
+    {
+        constexpr std::string_view QUERY =
+            R"(MATCH (n:Vec) RETURN n.name, cosine_similarity(n.vec, [0.4, 0.3, 0.8]))";
+
+        auto res = query(QUERY, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 2);
+
+            const auto* nameCol = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* scoreCol = df->cols()[1]->as<ColumnVector<double>>();
+            ASSERT_TRUE(nameCol);
+            ASSERT_TRUE(scoreCol);
+
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t i = 0; i < rowCount; i++) {
+                ASSERT_TRUE(nameCol->at(i));
+                names.emplace_back(*nameCol->at(i));
+                scores.push_back(scoreCol->at(i));
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    ASSERT_EQ(names.size(), 3);
+
+    for (size_t i = 0; i < names.size(); i++) {
+        if (names[i] == "a") {
+            EXPECT_FLOAT_EQ(static_cast<float>(scores[i]), expectedA);
+        } else if (names[i] == "b") {
+            EXPECT_FLOAT_EQ(static_cast<float>(scores[i]), expectedB);
+        } else if (names[i] == "c") {
+            EXPECT_FLOAT_EQ(static_cast<float>(scores[i]), expectedC);
+        }
+    }
+}
+
+TEST_F(EmbeddingQueriesTest, euclideanDistance) {
+    {
+        newChange();
+        for (auto&& q : {
+            R"(CREATE (n:Vec {name: "a", vec: [0.3, 0.7, 0.5]}))",
+            R"(CREATE (n:Vec {name: "b", vec: [0.9, 0.2, 0.4]}))",
+            R"(CREATE (n:Vec {name: "c", vec: [0.1, 0.8, 0.6]}))",
+        }) {
+            auto res = query(q, [](const Dataframe* df) { ASSERT_TRUE(df); });
+            ASSERT_TRUE(res);
+        }
+        submitCurrentChange();
+    }
+
+    // euclidean_distance(vec, ref) where ref = [0.2, 0.5, 0.3]
+    const float a[] = {0.3f, 0.7f, 0.5f};
+    const float b[] = {0.9f, 0.2f, 0.4f};
+    const float c[] = {0.1f, 0.8f, 0.6f};
+    const float ref[] = {0.2f, 0.5f, 0.3f};
+
+    auto euclidean = [](const float* x, const float* r, size_t n) {
+        float sum = 0.0f;
+        for (size_t i = 0; i < n; i++) {
+            const float diff = x[i] - r[i];
+            sum += diff * diff;
+        }
+        return sqrtf(sum);
+    };
+
+    const float expectedA = euclidean(a, ref, 3);
+    const float expectedB = euclidean(b, ref, 3);
+    const float expectedC = euclidean(c, ref, 3);
+
+    std::vector<std::string> names;
+    std::vector<double> distances;
+    {
+        constexpr std::string_view QUERY =
+            R"(MATCH (n:Vec) RETURN n.name, euclidean_distance(n.vec, [0.2, 0.5, 0.3]))";
+
+        auto res = query(QUERY, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 2);
+
+            const auto* nameCol = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* distCol = df->cols()[1]->as<ColumnVector<double>>();
+            ASSERT_TRUE(nameCol);
+            ASSERT_TRUE(distCol);
+
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t i = 0; i < rowCount; i++) {
+                ASSERT_TRUE(nameCol->at(i));
+                names.emplace_back(*nameCol->at(i));
+                distances.push_back(distCol->at(i));
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    ASSERT_EQ(names.size(), 3);
+
+    for (size_t i = 0; i < names.size(); i++) {
+        if (names[i] == "a") {
+            EXPECT_FLOAT_EQ(static_cast<float>(distances[i]), expectedA);
+        } else if (names[i] == "b") {
+            EXPECT_FLOAT_EQ(static_cast<float>(distances[i]), expectedB);
+        } else if (names[i] == "c") {
+            EXPECT_FLOAT_EQ(static_cast<float>(distances[i]), expectedC);
+        }
     }
 }
 
