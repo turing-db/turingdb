@@ -439,18 +439,17 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
         return resCol;
     }
 
-    if (funcName == "cosine_similarity" || funcName == "euclidean_distance") {
+    const bool isCosineSimilarity = (funcName == "cosine_similarity");
+    const bool isEuclideanDistance = (funcName == "euclidean_distance");
+    if (isCosineSimilarity || isEuclideanDistance) {
         if (args->size() != 2) {
-            throw PlannerException(
-                fmt::format("{}() expects 2 arguments, got {}", funcName, args->size()));
+            throw PlannerException(fmt::format("{}() expects 2 arguments, got {}", funcName, args->size()));
         }
-        auto it = args->begin();
-        Column* lhsCol = generateExpr(*it);
-        ++it;
-        Column* rhsCol = generateExpr(*it);
-        const ColumnOperator op = (funcName == "cosine_similarity")
-            ? OP_FUNC_COSINE_SIMILARITY
-            : OP_FUNC_EUCLIDEAN_DISTANCE;
+        const Expr* lhsExpr = args->getExprs()[0];
+        const Expr* rhsExpr = args->getExprs()[1];
+        Column* lhsCol = generateExpr(lhsExpr);
+        Column* rhsCol = generateExpr(rhsExpr);
+        const ColumnOperator op = isCosineSimilarity ? OP_FUNC_COSINE_SIMILARITY : OP_FUNC_EUCLIDEAN_DISTANCE;
         Column* resCol = allocBinaryResultCol(op, lhsCol, rhsCol);
         _exprProg->addInstr(op, resCol, lhsCol, rhsCol);
         return resCol;
