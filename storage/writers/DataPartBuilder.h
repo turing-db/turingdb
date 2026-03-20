@@ -7,6 +7,7 @@
 #include "EdgeRecord.h"
 #include "ID.h"
 #include "MetadataBuilder.h"
+#include "metadata/LabelSetHandle.h"
 #include "metadata/SupportedType.h"
 #include "properties/PropertyManager.h"
 
@@ -48,7 +49,8 @@ public:
     template <SupportedType T>
     void addEdgeProperty(const EdgeRecord& edge,
                          PropertyTypeID ptID,
-                         T::Primitive value);
+                         T::Primitive value,
+                         LabelSetHandle srcLblSet = {});
 
     const EdgeRecord& addEdge(EdgeTypeID typeID, NodeID srcID, NodeID tgtID);
 

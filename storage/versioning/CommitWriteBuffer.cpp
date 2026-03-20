@@ -243,56 +243,92 @@ void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
     }
 }
 
+void CommitWriteBuffer::addExistingEdgeUpdate(DataPartBuilder& builder,
+                                  const EdgeRecord& record,
+                                  const CommitWriteBuffer::UntypedProperty& prop) {
+    const auto& [pid, val] = prop;
+    std::visit(
+        [&](const auto& value) {
+            using T = std::decay_t<decltype(value)>;
+            using Type = typename PrimitiveToTag<T>::Type;
+            // A more recent update already registered this property; skip.
+            if (builder.hasProperty<Type>(record._edgeID, pid)) {
+                return;
+            }
+            builder.addEdgeProperty<Type>(record, pid, value);
+        },
+        val);
+
+    _journal.addWrittenEdge(record._edgeID);
+}
+
+void CommitWriteBuffer::addPendingEdgeUpdate(DataPartBuilder& builder,
+                                             EdgeID edgeID,
+                                             const CommitWriteBuffer::UntypedProperty& prop) {
+    const auto& [pid, val] = prop;
+
+    const size_t pendingIndex = edgeID.getValue() - _view.read().getTotalEdgesAllocated();
+    const PendingEdge& pending = _pendingEdges.at(pendingIndex);
+
+    const bool srcIsPending = !std::holds_alternative<NodeID>(pending.src);
+    const bool tgtIsPending = !std::holds_alternative<NodeID>(pending.tgt);
+
+    // Helpers to get a temporary NodeID to reference for the EdgeRecord if the node is
+    // pending (not committed).
+    const NodeID builderFirstNodeID = builder.firstNodeID();
+    const auto nodeIDFromPendingOffset = [builderFirstNodeID](const ExistingOrPendingNode& n) -> NodeID {
+        return NodeID {std::get<PendingNodeOffset>(n)} + builderFirstNodeID;
+    };
+
+    const NodeID srcID = srcIsPending ? nodeIDFromPendingOffset(pending.src)
+                                      : std::get<NodeID>(pending.src);
+
+    const NodeID tgtID = tgtIsPending ? nodeIDFromPendingOffset(pending.tgt)
+                                      : std::get<NodeID>(pending.tgt);
+
+    const EdgeRecord pendingEdgeRecord {._edgeID = edgeID,
+                                        ._nodeID = srcID,
+                                        ._otherID = tgtID,
+                                        ._edgeTypeID = pending.edgeType};
+
+    LabelSetHandle srcLblSet;
+    if (srcIsPending) {
+        const size_t srcOffset = std::get<PendingNodeOffset>(pending.src);
+        const PendingNode pendingSrc = getPendingNode(srcOffset);
+        srcLblSet = pendingSrc.labelsetHandle;
+    } else {
+        srcLblSet = _view.read().getNodeLabelSet(srcID);
+    }
+    bioassert(srcLblSet.isValid(), "Failed to get LabelSet for pending node.");
+    spdlog::info("Adding edge property with lblset {}", srcLblSet.getID().getValue());
+
+    std::visit(
+        [&](const auto& value) {
+            using T = std::decay_t<decltype(value)>;
+            using Type = typename PrimitiveToTag<T>::Type;
+            // A more recent update already registered this property; skip.
+            if (builder.hasProperty<Type>(pendingEdgeRecord._edgeID, pid)) {
+                return;
+            }
+            builder.addEdgeProperty<Type>(pendingEdgeRecord, pid, value, srcLblSet);
+        },
+        val);
+}
+
 void CommitWriteBuffer::applyEdgeUpdates(DataPartBuilder& builder) {
     // We may need to apply an edge update to:
     // 1. An edge that already exists (MATCH ... e ... SET e ...)
     // 2. A pending edge, yet to be created (CREATE ... e ... SET e ...)
     // In case 1. return the edge record from the DB
     // In case 2. construct an edge record using the pending edges in this write buffer
-    const auto resolveRecord = [&](EdgeID edgeID) -> EdgeRecord {
-        if (const EdgeRecord* rec = _view.read().getEdge(edgeID)) {
-            return *rec;
-        }
-        const size_t pendingIndex =
-            edgeID.getValue() - _view.read().getTotalEdgesAllocated();
-        const PendingEdge& pending = _pendingEdges.at(pendingIndex);
-
-        const NodeID srcID =
-            std::holds_alternative<NodeID>(pending.src)
-                ? std::get<NodeID>(pending.src)
-                : NodeID {std::get<CommitWriteBuffer::PendingNodeOffset>(pending.src)}
-                      + builder.firstNodeID();
-
-        const NodeID tgtID =
-            std::holds_alternative<NodeID>(pending.tgt)
-                ? std::get<NodeID>(pending.tgt)
-                : NodeID {std::get<CommitWriteBuffer::PendingNodeOffset>(pending.tgt)}
-                      + builder.firstNodeID();
-
-        return EdgeRecord {._edgeID = edgeID,
-                           ._nodeID = srcID,
-                           ._otherID = tgtID,
-                           ._edgeTypeID = pending.edgeType};
-    };
 
     // Iterate newest → oldest so the first registration wins.
     for (const auto& [edgeID, property] : rv::reverse(_updatedEdges)) {
-        const auto& [propID, value] = property;
-        const EdgeRecord record = resolveRecord(edgeID);
-
-        std::visit(
-            [&](const auto& val) {
-                using T = std::decay_t<decltype(val)>;
-                using Type = typename PrimitiveToTag<T>::Type;
-                // A more recent update already registered this property; skip.
-                if (builder.hasProperty<Type>(edgeID, propID)) {
-                    return;
-                }
-                builder.addEdgeProperty<Type>(record, propID, val);
-            },
-            value);
-
-        _journal.addWrittenEdge(edgeID);
+        if (const EdgeRecord* existingEdge = _view.read().getEdge(edgeID)) {
+            addExistingEdgeUpdate(builder, *existingEdge, property);
+        } else {
+            addPendingEdgeUpdate(builder, edgeID, property);
+        }
     }
 }
 
