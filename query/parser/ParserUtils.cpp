@@ -5,7 +5,7 @@
 #include "Literal.h"
 #include "ParserException.h"
 
-namespace db {
+using namespace db;
 
 void ParserUtils::listExprToFloatVector(const ListExpr* list, std::vector<float>& out) {
     out.clear();
@@ -43,6 +43,4 @@ EmbeddingLiteral* ParserUtils::listExprToEmbeddingLiteral(CypherAST* ast, const 
     std::vector<float> data;
     listExprToFloatVector(list, data);
     return EmbeddingLiteral::create(ast, std::move(data));
-}
-
 }
