@@ -13,8 +13,8 @@ class PathExplorerNode : public PlanGraphNode {
 public:
     explicit PathExplorerNode(const VarDecl* edgeDecl,
                               const VarDecl* targetDecl,
-                              int64_t minHops,
-                              int64_t maxHops)
+                              uint64_t minHops,
+                              uint64_t maxHops)
         : PlanGraphNode(PlanGraphOpcode::PATH_EXPLORER),
         _edgeDecl(edgeDecl),
         _targetDecl(targetDecl),
@@ -26,8 +26,8 @@ public:
     void setDir(PathExplorationDir dir) { _dir = dir; }
 
     PathExplorationDir getDir() const { return _dir; }
-    int64_t getMinHops() const { return _minHops; }
-    int64_t getMaxHops() const { return _maxHops; }
+    uint64_t getMinHops() const { return _minHops; }
+    uint64_t getMaxHops() const { return _maxHops; }
     const VarDecl* getEdgeDecl() const { return _edgeDecl; }
     const VarDecl* getTargetDecl() const { return _targetDecl; }
 
@@ -35,8 +35,8 @@ private:
     PathExplorationDir _dir {PathExplorationDir::BOTH};
     const VarDecl* _edgeDecl {nullptr};
     const VarDecl* _targetDecl {nullptr};
-    int64_t _minHops {0};
-    int64_t _maxHops {0};
+    uint64_t _minHops {0};
+    uint64_t _maxHops {0};
 };
 
 }

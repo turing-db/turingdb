@@ -441,6 +441,14 @@ PlanGraphNode* ReadStmtGenerator::generatePatternElementVariableLengthPath(PlanG
 
     const VarDecl* nodeDecl = target->getDecl();
 
+    if (minHops < 0) {
+        throwError("Variable-length path minimum hops must be greater than or equal to 0", edge);
+    }
+
+    if (maxHops < 1) {
+        throwError("Variable-length path maximum hops must be greater than or equal to 1", edge);
+    }
+
     PathExplorerNode* expandNode = _tree->newOut<PathExplorerNode>(prevNode,
                                                                    edgeDecl,
                                                                    nodeDecl,
