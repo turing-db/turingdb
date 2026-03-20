@@ -445,13 +445,18 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
         if (args->size() != 2) {
             throw PlannerException(fmt::format("{}() expects 2 arguments, got {}", funcName, args->size()));
         }
+
         const Expr* lhsExpr = args->getExprs()[0];
         const Expr* rhsExpr = args->getExprs()[1];
+
         Column* lhsCol = generateExpr(lhsExpr);
         Column* rhsCol = generateExpr(rhsExpr);
+
         const ColumnOperator op = isCosineSimilarity ? OP_FUNC_COSINE_SIMILARITY : OP_FUNC_EUCLIDEAN_DISTANCE;
+
         Column* resCol = allocBinaryResultCol(op, lhsCol, rhsCol);
         _exprProg->addInstr(op, resCol, lhsCol, rhsCol);
+
         return resCol;
     }
 
