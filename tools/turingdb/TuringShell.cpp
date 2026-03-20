@@ -483,6 +483,26 @@ void tabulateWrite(tabulate::RowStream& rs, const PropertyNull) {
     rs << "null";
 }
 
+void tabulateWrite(tabulate::RowStream& rs, const std::span<const float>& embedding) {
+    std::string result = "[";
+    for (size_t i = 0; i < embedding.size(); ++i) {
+        if (i > 0) {
+            result += ", ";
+        }
+        result += fmt::format("{}", embedding[i]);
+    }
+    result += "]";
+    rs << result;
+}
+
+void tabulateWrite(tabulate::RowStream& rs, const std::optional<std::span<const float>>& embedding) {
+    if (embedding) {
+        tabulateWrite(rs, *embedding);
+    } else {
+        rs << "null";
+    }
+}
+
 #define TABULATE_COL_CASE(Type, i)                        \
     case Type::staticKind(): {                            \
         const Type& src = *static_cast<const Type*>(col); \
@@ -535,6 +555,7 @@ void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table
                 TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, i)
                 TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, i)
                 TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, i)
+                TABULATE_COL_CASE(ColumnOptVector<types::Embedding::Primitive>, i)
                 TABULATE_COL_CASE(ColumnVector<std::string>, i)
                 TABULATE_COL_CASE(ColumnVector<const CommitBuilder*>, i)
                 TABULATE_COL_CASE(ColumnVector<const Change*>, i)
