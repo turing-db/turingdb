@@ -300,7 +300,6 @@ void CommitWriteBuffer::addPendingEdgeUpdate(DataPartBuilder& builder,
         srcLblSet = _view.read().getNodeLabelSet(srcID);
     }
     bioassert(srcLblSet.isValid(), "Failed to get LabelSet for pending node.");
-    spdlog::info("Adding edge property with lblset {}", srcLblSet.getID().getValue());
 
     std::visit(
         [&](const auto& value) {
