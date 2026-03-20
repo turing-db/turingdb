@@ -1035,7 +1035,7 @@ patternElem
 
 patternElemChain
     : edgePattern opt_quantifiedPath nodePattern {
-        if ($2) $1->setQuanfiedPath($2);
+        if ($2) $1->setQuantifiedPath($2);
         $$ = std::make_pair($1, $3);
     }
     ;

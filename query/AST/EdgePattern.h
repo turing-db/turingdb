@@ -34,7 +34,7 @@ public:
 
     void setData(EdgePatternData* data) { _data = data; }
 
-    void setQuanfiedPath(QuantifiedPath* quantifiedPath) { _quantifiedPath = quantifiedPath; }
+    void setQuantifiedPath(QuantifiedPath* quantifiedPath) { _quantifiedPath = quantifiedPath; }
 
 private:
     Direction _direction {Direction::Undirected};

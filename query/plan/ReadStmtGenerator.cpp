@@ -234,12 +234,12 @@ void ReadStmtGenerator::generatePatternElement(const PatternElement* element) {
     const auto& chain = element->getElementChain();
     for (const auto& [edge, node] : chain) {
         const EdgePattern* e = dynamic_cast<const EdgePattern*>(edge);
-        if (!edge) {
+        if (!e) {
             throwError("Pattern element edge must be an edge pattern", element);
         }
 
         const NodePattern* n = dynamic_cast<const NodePattern*>(node);
-        if (!node) {
+        if (!n) {
             throwError("Pattern element node must be a node pattern", element);
         }
 
