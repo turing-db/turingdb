@@ -51,7 +51,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     std::vector<LabelSetHandle>& coreNodeLabelSets = builder.coreNodeLabelSets();
     std::vector<EdgeRecord>& outEdges = builder.edges();
     std::map<NodeID, LabelSetHandle>& patchNodeLabelSets = builder.patchNodeLabelSets();
-    std::unordered_map<EdgeID, const EdgeRecord*>& patchedEdges = builder.patchedEdges();
+    std::unordered_map<EdgeID, EdgeRecord>& patchedEdges = builder.patchedEdges();
     std::unique_ptr<PropertyManager>& nodeProperties = builder.nodeProperties();
     std::unique_ptr<PropertyManager>& edgeProperties = builder.edgeProperties();
 
@@ -207,8 +207,8 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
                                  ? _nodes->getNodeLabelSet(edge._nodeID)
                                  : patchNodeLabelSets.at(edge._nodeID);
                 } else {
-                    const EdgeRecord* edge = patchedEdges.at(edgeID.getValue());
-                    labelset = patchNodeLabelSets.at(edge->_nodeID);
+                    const EdgeRecord& edge = patchedEdges.at(edgeID.getValue());
+                    labelset = patchNodeLabelSets.at(edge._nodeID);
                 }
 
                 auto& info = indexer[labelset];
