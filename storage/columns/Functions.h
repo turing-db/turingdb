@@ -4,8 +4,10 @@
 #include <string>
 #include <system_error>
 
+#include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
+#include "TypeUtils.h"
 #include "metadata/PropertyType.h"
 #include "views/GraphView.h"
 
@@ -233,7 +235,7 @@ struct BinaryFunctionExecutor {
         const auto& rhsRaw = rhs->getRaw();
         auto& resRaw = res->getRaw();
         for (size_t i = 0; i < size; i++) {
-            resRaw[i] = op(lhsRaw[i], rhsRaw[i]);
+            resRaw[i] = op(TypeUtils::unwrap(lhsRaw[i]), TypeUtils::unwrap(rhsRaw[i]));
         }
     }
 
@@ -248,7 +250,7 @@ struct BinaryFunctionExecutor {
         const auto& val = rhs->getRaw();
         auto& resRaw = res->getRaw();
         for (size_t i = 0; i < size; i++) {
-            resRaw[i] = op(lhsRaw[i], val);
+            resRaw[i] = op(TypeUtils::unwrap(lhsRaw[i]), TypeUtils::unwrap(val));
         }
     }
 
@@ -263,7 +265,7 @@ struct BinaryFunctionExecutor {
         const auto& rhsRaw = rhs->getRaw();
         auto& resRaw = res->getRaw();
         for (size_t i = 0; i < size; i++) {
-            resRaw[i] = op(val, rhsRaw[i]);
+            resRaw[i] = op(TypeUtils::unwrap(val), TypeUtils::unwrap(rhsRaw[i]));
         }
     }
 
@@ -271,7 +273,7 @@ struct BinaryFunctionExecutor {
                       const ColumnConst<ArgA>* lhs,
                       const ColumnConst<ArgB>* rhs) {
         auto op = Op {};
-        res->set(op(lhs->getRaw(), rhs->getRaw()));
+        res->set(op(TypeUtils::unwrap(lhs->getRaw()), TypeUtils::unwrap(rhs->getRaw())));
     }
 };
 

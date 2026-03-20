@@ -295,7 +295,7 @@ template <ColumnOperator Op>
 requires (Op == OP_FUNC_COSINE_SIMILARITY) || (Op == OP_FUNC_EUCLIDEAN_DISTANCE)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
-        std::tuple<KindPair<types::Embedding::Primitive, types::Embedding::Primitive>>
+        OptionalKindPairs<types::Embedding::Primitive, types::Embedding::Primitive>::Pairs
     >;
     using AllowedMixed = AllowedMixedList<>;
     using Excluded = ExcludedContainers<

@@ -68,17 +68,17 @@ CosineSimilarityFunction::ResultType CosineSimilarityFunction::operator()(const 
                                                                           const types::Embedding::Primitive& b) {
     bioassert(a.size() == b.size(), "Embedding dimension mismatch in cosine_similarity.");
 
-    double dot = 0.0;
-    double normA = 0.0;
-    double normB = 0.0;
+    float dot = 0.0f;
+    float normA = 0.0f;
+    float normB = 0.0f;
     for (size_t i = 0; i < a.size(); i++) {
         dot += a[i] * b[i];
         normA += a[i] * a[i];
         normB += b[i] * b[i];
     }
 
-    const double denom = sqrt(normA) * sqrt(normB);
-    if (denom == 0.0) {
+    const float denom = sqrtf(normA) * sqrtf(normB);
+    if (denom == 0.0f) {
         return 0.0;
     }
 
@@ -89,11 +89,11 @@ EuclideanDistanceFunction::ResultType EuclideanDistanceFunction::operator()(cons
                                                                             const types::Embedding::Primitive& b) {
     bioassert(a.size() == b.size(), "Embedding dimension mismatch in euclidean_distance.");
 
-    double sum = 0.0;
+    float sum = 0.0f;
     for (size_t i = 0; i < a.size(); i++) {
-        const double diff = a[i] - b[i];
+        const float diff = a[i] - b[i];
         sum += diff * diff;
     }
 
-    return sqrt(sum);
+    return sqrtf(sum);
 }
