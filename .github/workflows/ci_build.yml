@@ -42,7 +42,7 @@ jobs:
       run: git fetch --tags --force
 
     - name: Checkout submodules (shallow)
-      run: git submodule update --init --recursive --depth 1
+      run: git submodule update --init --depth 1
 
     - name: Install uv
       uses: astral-sh/setup-uv@v3
