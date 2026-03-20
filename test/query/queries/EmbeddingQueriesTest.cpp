@@ -579,6 +579,48 @@ TEST_F(EmbeddingQueriesTest, euclideanDistance) {
     }
 }
 
+TEST_F(EmbeddingQueriesTest, createNodeWithSingleElementEmbedding) {
+    constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Vec {vec: [4.2]}))";
+    constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n.vec)";
+
+    {
+        newChange();
+        auto res = query(CREATE_QUERY, [](const Dataframe* df) { ASSERT_TRUE(df); });
+        ASSERT_TRUE(res);
+        submitCurrentChange();
+    }
+
+    std::vector<std::vector<float>> actualVecs;
+    {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 1);
+
+            const auto* vecs = df->cols().front()->as<ColumnOptVector<types::Embedding::Primitive>>();
+            ASSERT_TRUE(vecs);
+
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t i = 0; i < rowCount; i++) {
+                ASSERT_TRUE(vecs->at(i));
+                const auto& emb = *vecs->at(i);
+                actualVecs.emplace_back(emb.begin(), emb.end());
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    ASSERT_EQ(actualVecs.size(), 1);
+    expectEmbedding(actualVecs[0], {4.2f});
+}
+
+TEST_F(EmbeddingQueriesTest, createNodeWithEmptyEmbeddingFails) {
+    constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Vec {vec: []}))";
+
+    newChange();
+    auto res = query(CREATE_QUERY, [](const Dataframe*) {});
+    ASSERT_FALSE(res);
+}
+
 TEST_F(EmbeddingQueriesTest, equalityDimensionMismatchReturnsEmpty) {
     // Nodes have 3D embeddings. Matching with a 2D literal should return no results
     // because dimensions differ, so equality is always false.
