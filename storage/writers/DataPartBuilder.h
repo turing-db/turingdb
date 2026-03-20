@@ -88,7 +88,7 @@ private:
     /**
      * @brief Map from EdgeID to EdgeRecord for edges that do not exist in this datapart.
      * @detail This may reference an EdgeRecord in a previous commit, or an EdgeRecord
-     * that does not yet exist in any materialised commit. An example of this is:
+     * that does not yet exist in any materialised commit. Consider:
      * `CREATE (n:Node)-[e:NEW_EDGE]->(m:Node) SET e.duration = 10`;
      * this query creates two dataparts: first one for the CREATE, secondly one for the
      * SET. This means that 'e' does not exist in any materialised commit when adding

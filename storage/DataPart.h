@@ -6,6 +6,7 @@
 #include "metadata/LabelSetHandle.h"
 #include "metadata/SupportedType.h"
 #include "metadata/PropertyType.h"
+#include "versioning/CommitResult.h"
 #include "versioning/DataPartID.h"
 
 namespace db {
@@ -40,7 +41,7 @@ public:
     DataPart& operator=(DataPart&&) = delete;
     ~DataPart();
 
-    bool load(const GraphView&, JobSystem&, DataPartBuilder&);
+    CommitResult<void> load(const GraphView&, JobSystem&, DataPartBuilder&);
 
     DataPartID getID() const { return _id; }
 

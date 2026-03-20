@@ -88,8 +88,8 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     for (const auto& builder : _builders) {
         auto part = _controller->createDataPart(builder->_firstNodeID, builder->_firstEdgeID);
 
-        if (!part->load(view, jobsystem, *builder)) {
-            return CommitError::result(CommitErrorType::BUILD_DATAPART_FAILED);
+        if (auto res = part->load(view, jobsystem, *builder); !res) {
+            return res;
         }
 
         historyBuilder.addDatapart(part);

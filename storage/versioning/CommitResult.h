@@ -14,6 +14,8 @@ enum class CommitErrorType : uint8_t {
     COMMIT_NEEDS_REBASE,
     CHANGE_NEEDS_REBASE,
     BUILD_DATAPART_FAILED,
+    BAD_PATCH_NODE_LABELSET,
+    COULD_NOT_CREATE_NODE_CONTAINER,
     NO_PENDING_COMMIT,
 
     _SIZE,
@@ -26,7 +28,10 @@ using CommitErrorTypeDescription = EnumToString<CommitErrorType>::Create<
     EnumStringPair<CommitErrorType::COMMIT_NEEDS_REBASE, "Commit needs rebase">,
     EnumStringPair<CommitErrorType::CHANGE_NEEDS_REBASE, "Change needs rebase">,
     EnumStringPair<CommitErrorType::BUILD_DATAPART_FAILED, "Could not build datapart">,
-    EnumStringPair<CommitErrorType::NO_PENDING_COMMIT, "No pending commit">>;
+    EnumStringPair<CommitErrorType::BAD_PATCH_NODE_LABELSET, "Patch node had invalid labelset">,
+    EnumStringPair<CommitErrorType::COULD_NOT_CREATE_NODE_CONTAINER, "Failed to create NodeContainer">,
+    EnumStringPair<CommitErrorType::NO_PENDING_COMMIT, "No pending commit">
+>;
 
 class CommitError {
 public:
