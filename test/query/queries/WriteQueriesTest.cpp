@@ -1190,10 +1190,7 @@ TEST_F(WriteQueriesTest, exceedChunk) {
                 ASSERT_EQ(1, es->size());
                 ASSERT_EQ(e, es->front().getValue());
             });
-            if (!res) {
-                spdlog::error(res.getError());
-            }
-            ASSERT_TRUE(res);
+            ASSERT_TRUE(res) << res.getError();
             ASSERT_EQ(2, chunks);
             // We should only ever get 1 empty chunk: the final filter result on the last
             // row of CartesianProduct (we do not create an edge between those nodes)
@@ -1929,6 +1926,505 @@ TEST_F(WriteQueriesTest, writeAndSetNodesEdges) {
             ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
         });
         ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(WriteQueriesTest, setAllNodesBool) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) SET n.hasPhD = true)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.hasPhD)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size());
+            const auto* hasPhDs = findColumn(df, "n.hasPhD")->as<ColumnOptVector<types::Bool::Primitive>>();
+            ASSERT_TRUE(hasPhDs);
+
+            ASSERT_FALSE(hasPhDs->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*hasPhDs,
+                [](std::optional<types::Bool::Primitive> h) { return *h == CustomBool{true}; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, setAllNodesBoolFalse) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) SET n.hasPhD = false)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.hasPhD)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size());
+            const auto* hasPhDs = findColumn(df, "n.hasPhD")->as<ColumnOptVector<types::Bool::Primitive>>();
+            ASSERT_TRUE(hasPhDs);
+
+            ASSERT_FALSE(hasPhDs->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*hasPhDs,
+                [](std::optional<types::Bool::Primitive> h) { return *h == CustomBool{false}; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, overwriteNodeBoolProperty) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) SET n.hasPhD = true, n.hasPhD = false)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.hasPhD)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size());
+            const auto* hasPhDs = findColumn(df, "n.hasPhD")->as<ColumnOptVector<types::Bool::Primitive>>();
+            ASSERT_TRUE(hasPhDs);
+
+            ASSERT_FALSE(hasPhDs->empty());
+
+            // Last write wins
+            ASSERT_TRUE(std::ranges::all_of(*hasPhDs,
+                [](std::optional<types::Bool::Primitive> h) { return *h == CustomBool{false}; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, setThreeNodePropertyTypes) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) SET n.name = "Alice", n.age = 42, n.hasPhD = true)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.name, n.age, n.hasPhD)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(3, df->size());
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            const auto* hasPhDs = findColumn(df, "n.hasPhD")->as<ColumnOptVector<types::Bool::Primitive>>();
+            ASSERT_TRUE(names);
+            ASSERT_TRUE(ages);
+            ASSERT_TRUE(hasPhDs);
+
+            ASSERT_FALSE(names->empty());
+            ASSERT_FALSE(ages->empty());
+            ASSERT_FALSE(hasPhDs->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*names,
+                [](std::optional<types::String::Primitive> n) { return *n == "Alice"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*ages,
+                [](std::optional<types::Int64::Primitive> a) { return *a == 42; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*hasPhDs,
+                [](std::optional<types::Bool::Primitive> h) { return *h == CustomBool{true}; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, setNodesMatchingWhereAge) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) WHERE n.age > 30 SET n.hasPhD = true)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) WHERE n.hasPhD = true RETURN n.age)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size());
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(ages);
+
+            ASSERT_FALSE(ages->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*ages, // All either SET to 99 or don't have age
+                [](std::optional<types::Int64::Primitive> a) { return !a || *a > 30; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, setNodesMatchingWhereName) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) WHERE n.name = "Cyrus" SET n.age = 99)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) WHERE n.name = "Cyrus" RETURN n.age)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size());
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(ages);
+
+            ASSERT_FALSE(ages->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*ages,
+                [](std::optional<types::Int64::Primitive> a) { return *a == 99; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, createNodeAndSetAllProperties) {
+    setWorkingGraph("default");
+
+    newChange();
+    {
+        constexpr std::string_view createSetQuery =
+            R"(CREATE (n:Person) SET n.name = "Bob", n.age = 55, n.hasPhD = false)";
+
+        auto res = query(createSetQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n:Person) RETURN n.name, n.age, n.hasPhD)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(3, df->size());
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            const auto* hasPhDs = findColumn(df, "n.hasPhD")->as<ColumnOptVector<types::Bool::Primitive>>();
+            ASSERT_TRUE(names);
+            ASSERT_TRUE(ages);
+            ASSERT_TRUE(hasPhDs);
+
+            ASSERT_FALSE(names->empty());
+            ASSERT_FALSE(ages->empty());
+            ASSERT_FALSE(hasPhDs->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*names,
+                [](std::optional<types::String::Primitive> n) { return *n == "Bob"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*ages,
+                [](std::optional<types::Int64::Primitive> a) { return *a == 55; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*hasPhDs,
+                [](std::optional<types::Bool::Primitive> h) { return *h == CustomBool{false}; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(WriteQueriesTest, createMultipleNodesAndSetProperties) {
+    setWorkingGraph("default");
+
+    newChange();
+    {
+        constexpr std::string_view createQuery1 = R"(CREATE (n:Person) SET n.name = "Carol", n.age = 28, n.hasPhD = false)";
+        constexpr std::string_view createQuery2 = R"(CREATE (n:Person) SET n.name = "Dave",  n.age = 35, n.hasPhD = true)";
+
+        {
+            auto res = query(createQuery1, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res) << res.getError();
+        }
+        {
+            auto res = query(createQuery2, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res) << res.getError();
+        }
+    }
+    submitCurrentChange();
+
+    {
+        // Verify the PhD holder is Dave with age 35
+        constexpr std::string_view matchQuery = R"(MATCH (n:Person) WHERE n.hasPhD = true RETURN n.name, n.age)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(2, df->size());
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(names);
+            ASSERT_TRUE(ages);
+
+            ASSERT_FALSE(names->empty());
+            ASSERT_FALSE(ages->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*names,
+                [](std::optional<types::String::Primitive> n) { return *n == "Dave"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*ages,
+                [](std::optional<types::Int64::Primitive> a) { return *a == 35; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(WriteQueriesTest, createRelationshipAndSetEdgeProperties) {
+    setWorkingGraph("default");
+
+    newChange();
+    {
+        constexpr std::string_view createSetQuery =
+            R"(CREATE (n:Person)-[e:KNOWS_WELL]->(m:Person) SET n.name = "Eve", m.name = "Frank", e.age = 7, e.hasPhD = false)";
+
+        auto res = query(createSetQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n)-[e:KNOWS_WELL]->(m) RETURN n.name, m.name, e.age, e.hasPhD)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(4, df->size());
+            const auto* ns = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ms = findColumn(df, "m.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* eAges = findColumn(df, "e.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            const auto* ePhDs = findColumn(df, "e.hasPhD")->as<ColumnOptVector<types::Bool::Primitive>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(ms);
+            ASSERT_TRUE(eAges);
+            ASSERT_TRUE(ePhDs);
+
+            ASSERT_FALSE(ns->empty());
+            ASSERT_FALSE(ms->empty());
+            ASSERT_FALSE(eAges->empty());
+            ASSERT_FALSE(ePhDs->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*ns,
+                [](std::optional<types::String::Primitive> n) { return *n == "Eve"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*ms,
+                [](std::optional<types::String::Primitive> m) { return *m == "Frank"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*eAges,
+                [](std::optional<types::Int64::Primitive> a) { return *a == 7; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*ePhDs,
+                [](std::optional<types::Bool::Primitive> h) { return *h == CustomBool{false}; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(WriteQueriesTest, setNewBoolPropertyOnNodes) {
+    newChange();
+    {
+        // hasPhD does not exist on nodes yet
+        constexpr std::string_view setQuery = R"(MATCH (n) SET n.hasPhD = true)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.hasPhD)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size());
+            const auto* hasPhDs = findColumn(df, "n.hasPhD")->as<ColumnOptVector<types::Bool::Primitive>>();
+            ASSERT_TRUE(hasPhDs);
+
+            ASSERT_FALSE(hasPhDs->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*hasPhDs,
+                [](std::optional<types::Bool::Primitive> h) { return *h == CustomBool{true}; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, setAllNewPropertiesOnNodes) {
+    newChange();
+    {
+        constexpr std::string_view setQuery =
+            R"(MATCH (n) SET n.NEWNAME = "genesis", n.NEWAGE = 0, n.NEWPHD = false)";
+
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.NEWNAME, n.NEWAGE, n.NEWPHD)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(3, df->size());
+            const auto* names = findColumn(df, "n.NEWNAME")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ages = findColumn(df, "n.NEWAGE")->as<ColumnOptVector<types::Int64::Primitive>>();
+            const auto* hasPhDs = findColumn(df, "n.NEWPHD")->as<ColumnOptVector<types::Bool::Primitive>>();
+            ASSERT_TRUE(names);
+            ASSERT_TRUE(ages);
+            ASSERT_TRUE(hasPhDs);
+
+            ASSERT_FALSE(names->empty());
+            ASSERT_FALSE(ages->empty());
+            ASSERT_FALSE(hasPhDs->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*names,
+                [](std::optional<types::String::Primitive> n) { return *n == "genesis"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*ages,
+                [](std::optional<types::Int64::Primitive> a) { return *a == 0; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*hasPhDs,
+                [](std::optional<types::Bool::Primitive> h) { return *h == CustomBool{false}; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, multipleNodeSetQueriesTypesWithCommit) {
+    newChange();
+    {
+        constexpr std::string_view setQuery1 = R"(MATCH (n) SET n.name = "Old",  n.age = 1,   n.hasPhD = false)";
+        constexpr std::string_view setQuery2 = R"(MATCH (n) SET n.name = "New",  n.age = 999, n.hasPhD = true)";
+
+        {
+            auto res = query(setQuery1, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res);
+        }
+        ASSERT_TRUE(query("commit", [](const Dataframe*){}));
+        {
+            auto res = query(setQuery2, [](const Dataframe* df) {
+                ASSERT_TRUE(df);
+                ASSERT_EQ(0, df->size());
+            });
+            ASSERT_TRUE(res);
+        }
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.name, n.age, n.hasPhD)";
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(3, df->size());
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            const auto* hasPhDs = findColumn(df, "n.hasPhD")->as<ColumnOptVector<types::Bool::Primitive>>();
+            ASSERT_TRUE(names && ages && hasPhDs);
+
+            ASSERT_FALSE(names->empty());
+            ASSERT_FALSE(ages->empty());
+            ASSERT_FALSE(hasPhDs->empty());
+
+            ASSERT_TRUE(std::ranges::all_of(*names,
+                [](std::optional<types::String::Primitive> n) { return *n == "New"; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*ages,
+                [](std::optional<types::Int64::Primitive> a) { return *a == 999; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+
+            ASSERT_TRUE(std::ranges::all_of(*hasPhDs,
+                [](std::optional<types::Bool::Primitive> h) { return *h == CustomBool{true}; })
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
+        });
+        ASSERT_TRUE(res);
     }
 }
 
