@@ -17,6 +17,7 @@
 #include "indexes/StringIndex.h"
 #include "metadata/PropertyType.h"
 #include "properties/PropertyContainer.h"
+#include "versioning/CommitResult.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 #include "writers/DataPartBuilder.h"
@@ -42,7 +43,7 @@ DataPart::DataPart(NodeID firstNodeID,
 
 DataPart::~DataPart() = default;
 
-bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder& builder) {
+CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder& builder) {
     Profile profile("DataPart::load");
 
     JobGroup jobs = jobSystem.newGroup();
@@ -62,7 +63,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
     for (auto& [nodeID, labelset] : patchNodeLabelSets) {
         labelset = reader.getNodeLabelSet(nodeID);
         if (!labelset.isValid() || !labelset.isStored()) {
-            return false;
+            return CommitError::result(CommitErrorType::BAD_PATCH_NODE_LABELSET);
         }
     }
 
@@ -83,7 +84,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
 
     _nodes = NodeContainer::create(_firstNodeID, coreNodeLabelSets);
     if (!_nodes) {
-        return false;
+        return CommitError::result(CommitErrorType::COULD_NOT_CREATE_NODE_CONTAINER);
     }
 
     std::unordered_map<NodeID, NodeID> tmpToFinalNodeIDs;
@@ -238,7 +239,7 @@ bool DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder
 
     _initialized = true;
 
-    return true;
+    return {};
 }
 
 NodeID DataPart::getFirstNodeID() const {
