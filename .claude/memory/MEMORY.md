@@ -45,6 +45,11 @@
 
 ## Code Style Feedback
 - [Braces and memory access patterns](feedback_braces_and_style.md)
+- [Coding style preferences](feedback_coding_style.md) — POD defaults, getX() getters, no return-by-value, impl in .cpp, destructors in .cpp, throw TuringException
+- [Functions vs operators](feedback_functions_vs_operators.md) — Embedding ops should be functions, not binary operators
+- [Private member ordering](feedback_private_member_ordering.md) — Variables before functions in private sections
+- [Return type same line](feedback_return_type_same_line.md) — Return type and function name on one line
+- [Code spacing](feedback_code_spacing.md) — Blank lines between logical groups, don't write compact code
 
 ## Workflow Preferences
 - [Test-first: write failing test before fix](feedback_test_first.md)
