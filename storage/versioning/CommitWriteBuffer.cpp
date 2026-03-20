@@ -267,30 +267,38 @@ void CommitWriteBuffer::addPendingEdgeUpdate(DataPartBuilder& builder,
                                              const CommitWriteBuffer::UntypedProperty& prop) {
     const auto& [pid, val] = prop;
 
+    // The edge is pending: find the index of this pending edge in the write buffer
     const size_t pendingIndex = edgeID.getValue() - _view.read().getTotalEdgesAllocated();
     const PendingEdge& pending = _pendingEdges.at(pendingIndex);
 
+    // (n)-[e]->(m) : e is pending, but n and m may or may not be
     const bool srcIsPending = !std::holds_alternative<NodeID>(pending.src);
     const bool tgtIsPending = !std::holds_alternative<NodeID>(pending.tgt);
 
     // Helpers to get a temporary NodeID to reference for the EdgeRecord if the node is
     // pending (not committed).
     const NodeID builderFirstNodeID = builder.firstNodeID();
-    const auto nodeIDFromPendingOffset = [builderFirstNodeID](const ExistingOrPendingNode& n) -> NodeID {
+    const auto nodeIDFromPendingOffset =
+        [builderFirstNodeID](const ExistingOrPendingNode& n) -> NodeID {
         return NodeID {std::get<PendingNodeOffset>(n)} + builderFirstNodeID;
     };
 
+    // Get the NodeIDs of source and target of this edge
     const NodeID srcID = srcIsPending ? nodeIDFromPendingOffset(pending.src)
                                       : std::get<NodeID>(pending.src);
 
     const NodeID tgtID = tgtIsPending ? nodeIDFromPendingOffset(pending.tgt)
                                       : std::get<NodeID>(pending.tgt);
 
+    // Construct a "fake" edge record which represents the edge record for when this edge
+    // is committed
     const EdgeRecord pendingEdgeRecord {._edgeID = edgeID,
                                         ._nodeID = srcID,
                                         ._otherID = tgtID,
                                         ._edgeTypeID = pending.edgeType};
 
+    // @ref addEdgeProperty needs the label set of the source node. Retrieve the label set
+    // of the source, either from its PendingNode or from the DB
     LabelSetHandle srcLblSet;
     if (srcIsPending) {
         const size_t srcOffset = std::get<PendingNodeOffset>(pending.src);
@@ -318,8 +326,6 @@ void CommitWriteBuffer::applyEdgeUpdates(DataPartBuilder& builder) {
     // We may need to apply an edge update to:
     // 1. An edge that already exists (MATCH ... e ... SET e ...)
     // 2. A pending edge, yet to be created (CREATE ... e ... SET e ...)
-    // In case 1. return the edge record from the DB
-    // In case 2. construct an edge record using the pending edges in this write buffer
 
     // Iterate newest → oldest so the first registration wins.
     for (const auto& [edgeID, property] : rv::reverse(_updatedEdges)) {

@@ -75,6 +75,8 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
         _patchedEdges.emplace(edge._edgeID, edge);
     }
     // If the src node of the edge being assigned existed before this DP, it is a patch
+    // NOTE: If this node is patch, @param srcLblSet will be default-invalid-initialised,
+    // this gets updated in @ref DataPart::load to its actual value.
     if (edge._nodeID < _firstNodeID) {
         _patchNodeLabelSets.emplace(edge._nodeID, srcLblSet);
     }
