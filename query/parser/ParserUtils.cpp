@@ -24,6 +24,10 @@ void ParserUtils::listExprToFloatVector(const ListExpr* list, std::vector<float>
 }
 
 EmbeddingLiteral* ParserUtils::listExprToEmbeddingLiteral(CypherAST* ast, const ListExpr* list) {
+    if (list->empty()) {
+        throw ParserException("Empty embedding literals are not supported");
+    }
+
     for (Expr* elem : *list) {
         if (elem->getKind() != Expr::Kind::LITERAL) {
             throw ParserException("Non-literal list elements are not supported");
