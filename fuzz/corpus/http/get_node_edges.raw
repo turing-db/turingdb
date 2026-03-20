@@ -1,3 +1,0 @@
-GET /get_node_edges/default?id=0 HTTP/1.1
-Host: localhost
-

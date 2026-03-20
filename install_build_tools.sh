@@ -5,7 +5,8 @@ SOURCE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 DEPENDENCIES_DIR=$SOURCE_DIR/external/dependencies
 MACOS_SETENV=$DEPENDENCIES_DIR/macos_setenv.sh
 
-BREW_LLVM_VERSION=llvm@21
+LLVM_MAJOR_VERSION=21
+BREW_LLVM_VERSION=llvm@${LLVM_MAJOR_VERSION}
 
 mkdir -p $DEPENDENCIES_DIR
 
@@ -37,7 +38,7 @@ else
     fi
 fi
 
-# LLVM for macos
+# LLVM 21
 if [[ "$(uname)" == "Darwin" ]]; then
     if ! brew list $BREW_LLVM_VERSION &> /dev/null; then
         echo "Installing llvm via Homebrew..."
@@ -75,4 +76,23 @@ if [[ "$(uname)" == "Darwin" ]]; then
     done
     echo "export LLVM_PREFIX=${LLVM_PREFIX}" > "$MACOS_SETENV"
     echo "export CMAKE_ARGS=\"${QUOTED_ARGS[*]}\"" >> "$MACOS_SETENV"
+else
+    # Linux - install LLVM 21 via apt.llvm.org
+    if command -v apt-get &> /dev/null; then
+        if ! command -v "llvm-config-${LLVM_MAJOR_VERSION}" &> /dev/null; then
+            echo "Installing LLVM ${LLVM_MAJOR_VERSION} via apt.llvm.org..."
+            wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+            CODENAME=$(lsb_release -cs)
+            echo "deb http://apt.llvm.org/${CODENAME}/ llvm-toolchain-${CODENAME}-${LLVM_MAJOR_VERSION} main" \
+                | sudo tee /etc/apt/sources.list.d/llvm-${LLVM_MAJOR_VERSION}.list >/dev/null
+            sudo apt-get update
+            sudo apt-get install -y clang-${LLVM_MAJOR_VERSION} llvm-${LLVM_MAJOR_VERSION}-dev lld-${LLVM_MAJOR_VERSION}
+        else
+            echo "LLVM ${LLVM_MAJOR_VERSION} is already installed"
+        fi
+    else
+        echo "LLVM ${LLVM_MAJOR_VERSION} auto-install is only supported on apt-based distros."
+        echo "Please install LLVM ${LLVM_MAJOR_VERSION} manually."
+        exit 1
+    fi
 fi

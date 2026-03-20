@@ -32,24 +32,40 @@ if [[ "$(uname)" == "Linux" ]]; then
     )
 fi
 
-# On macOS, load toolchain variables written by install_build_tools.sh
+# Clang build mode: always on macOS, opt-in on Linux via CLANG_BUILD=1.
+# When active, all dependencies are compiled with the LLVM 21 toolchain and
+# libomp is built from source (needed for Faiss / OpenMP).
+USE_CLANG=0
 if [[ "$(uname)" == "Darwin" ]]; then
+    USE_CLANG=1
     if [[ ! -f "$MACOS_SETENV" ]]; then
         echo "Error: $MACOS_SETENV not found. Run install_build_tools.sh first."
         exit 1
     fi
     source "$MACOS_SETENV"
+elif [[ "${CLANG_BUILD:-}" == "1" ]]; then
+    USE_CLANG=1
+    LLVM_PREFIX=$(llvm-config-21 --prefix 2>/dev/null || true)
+    if [[ -z "$LLVM_PREFIX" ]] || [[ ! -d "$LLVM_PREFIX" ]]; then
+        echo "Error: llvm-config-21 not found. Run install_build_tools.sh first."
+        exit 1
+    fi
+fi
 
-    MACOS_SDK_PATH=$(xcrun --show-sdk-path 2>/dev/null)
-
-    MACOS_COMPILER_ARGS=(
+if [[ $USE_CLANG -eq 1 ]]; then
+    CLANG_COMPILER_ARGS=(
         "-DCMAKE_C_COMPILER=${LLVM_PREFIX}/bin/clang"
         "-DCMAKE_CXX_COMPILER=${LLVM_PREFIX}/bin/clang++"
-        "-DCMAKE_CXX_FLAGS=-stdlib=libc++"
-        "-DCMAKE_OSX_SYSROOT=${MACOS_SDK_PATH}"
-        "-DCMAKE_EXE_LINKER_FLAGS=-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++"
-        "-DCMAKE_SHARED_LINKER_FLAGS=-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++"
     )
+    if [[ "$(uname)" == "Darwin" ]]; then
+        MACOS_SDK_PATH=$(xcrun --show-sdk-path 2>/dev/null)
+        CLANG_COMPILER_ARGS+=(
+            "-DCMAKE_CXX_FLAGS=-stdlib=libc++"
+            "-DCMAKE_OSX_SYSROOT=${MACOS_SDK_PATH}"
+            "-DCMAKE_EXE_LINKER_FLAGS=-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++"
+            "-DCMAKE_SHARED_LINKER_FLAGS=-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++"
+        )
+    fi
 fi
 
 # Skip building if cache was hit (set by CI)
@@ -73,10 +89,8 @@ ZLIB_CMAKE_ARGS=(
     -DZLIB_BUILD_EXAMPLES=OFF
 )
 
-if [[ "$(uname)" == "Darwin" ]]; then
-    ZLIB_CMAKE_ARGS+=(
-        "${MACOS_COMPILER_ARGS[@]}"
-    )
+if [[ $USE_CLANG -eq 1 ]]; then
+    ZLIB_CMAKE_ARGS+=("${CLANG_COMPILER_ARGS[@]}")
 fi
 
 if [[ "$(uname)" == "Linux" ]]; then
@@ -116,6 +130,11 @@ if [[ "$(uname)" == "Darwin" ]]; then
     CFLAGS="-isysroot ${MACOS_SDK_PATH} -fPIC" \
         ./Configure darwin64-arm64-cc no-shared no-module no-tests \
             --prefix=$DEPENDENCIES_DIR --openssldir=$DEPENDENCIES_DIR/ssl --libdir=lib
+elif [[ $USE_CLANG -eq 1 ]]; then
+    CC="${LLVM_PREFIX}/bin/clang" \
+    CFLAGS="-fPIC ${ARCH_FLAG}" \
+        ./Configure linux-x86_64 no-shared no-module no-tests \
+            --prefix=$DEPENDENCIES_DIR --openssldir=$DEPENDENCIES_DIR/ssl --libdir=lib
 else
     CFLAGS="-fPIC ${ARCH_FLAG}" \
         ./Configure linux-x86_64 no-shared no-module no-tests \
@@ -142,10 +161,8 @@ OPENBLAS_CMAKE_ARGS=(
     -DNOFORTRAN=1
 )
 
-if [[ "$(uname)" == "Darwin" ]]; then
-    OPENBLAS_CMAKE_ARGS+=(
-        "${MACOS_COMPILER_ARGS[@]}"
-    )
+if [[ $USE_CLANG -eq 1 ]]; then
+    OPENBLAS_CMAKE_ARGS+=("${CLANG_COMPILER_ARGS[@]}")
 fi
 
 if [[ "$(uname)" == "Linux" ]]; then
@@ -160,10 +177,10 @@ cmake --build $BUILD_DIR/OpenBLAS -j $NUM_JOBS
 cmake --install $BUILD_DIR/OpenBLAS
 
 # ============================================================
-# Build libomp from source (macOS only — Linux uses libgomp)
+# Build libomp from source (clang builds — gcc uses libgomp)
 # ============================================================
-if [[ "$(uname)" == "Darwin" ]]; then
-    # Detect the LLVM version to download the matching openmp tarball
+if [[ $USE_CLANG -eq 1 ]]; then
+    # Detect the LLVM version to find the matching openmp tarball
     LLVM_VERSION=$($LLVM_PREFIX/bin/clang --version | head -1 | sed 's/.*version \([0-9.]*\).*/\1/')
     LLVM_MAJOR=$(echo $LLVM_VERSION | cut -d. -f1)
     OPENMP_TARBALL="openmp-${LLVM_VERSION}.src.tar.xz"
@@ -193,7 +210,7 @@ if [[ "$(uname)" == "Darwin" ]]; then
         -DOPENMP_STANDALONE_BUILD=ON
         -DLIBOMP_ENABLE_SHARED=OFF
         -DOPENMP_ENABLE_LIBOMPTARGET=OFF
-        "${MACOS_COMPILER_ARGS[@]}"
+        "${CLANG_COMPILER_ARGS[@]}"
     )
 
     cmake "${LIBOMP_CMAKE_ARGS[@]}" $OPENMP_SRC_DIR
@@ -217,7 +234,7 @@ fi
 echo "Building bison..."
 cd $BISON_SRC_DIR
 
-if [[ "$(uname)" == "Darwin" ]]; then
+if [[ $USE_CLANG -eq 1 ]]; then
     CC="${LLVM_PREFIX}/bin/clang" CXX="${LLVM_PREFIX}/bin/clang++" \
         ./configure --prefix=$DEPENDENCIES_DIR
 else
@@ -243,7 +260,7 @@ fi
 echo "Building flex..."
 cd $FLEX_SRC_DIR
 
-if [[ "$(uname)" == "Darwin" ]]; then
+if [[ $USE_CLANG -eq 1 ]]; then
     CC="${LLVM_PREFIX}/bin/clang" \
         ./configure --prefix=$DEPENDENCIES_DIR
 else
@@ -282,10 +299,8 @@ CURL_CMAKE_ARGS+=(
     "-DOPENSSL_ROOT_DIR=${DEPENDENCIES_DIR}"
 )
 
-if [[ "$(uname)" == "Darwin" ]]; then
-    CURL_CMAKE_ARGS+=(
-        "${MACOS_COMPILER_ARGS[@]}"
-    )
+if [[ $USE_CLANG -eq 1 ]]; then
+    CURL_CMAKE_ARGS+=("${CLANG_COMPILER_ARGS[@]}")
 fi
 
 if [[ "$(uname)" == "Linux" ]]; then
@@ -319,12 +334,20 @@ FAISS_CMAKE_ARGS=(
     "-DLAPACK_LIBRARIES=$DEPENDENCIES_DIR/lib/libopenblas.a"
 )
 
-if [[ "$(uname)" == "Darwin" ]]; then
+if [[ $USE_CLANG -eq 1 ]]; then
+    if [[ "$(uname)" == "Darwin" ]]; then
+        FAISS_CMAKE_ARGS+=(
+            "-DOpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp -I${DEPENDENCIES_DIR}/include"
+        )
+    else
+        FAISS_CMAKE_ARGS+=(
+            "-DOpenMP_CXX_FLAGS=-fopenmp -I${DEPENDENCIES_DIR}/include"
+        )
+    fi
     FAISS_CMAKE_ARGS+=(
-        "-DOpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp -I${DEPENDENCIES_DIR}/include"
         -DOpenMP_CXX_LIB_NAMES=omp
         "-DOpenMP_omp_LIBRARY=${DEPENDENCIES_DIR}/lib/libomp.a"
-        "${MACOS_COMPILER_ARGS[@]}"
+        "${CLANG_COMPILER_ARGS[@]}"
     )
 fi
 
@@ -349,10 +372,8 @@ NLOHMANN_CMAKE_ARGS=(
     -DJSON_BuildTests=OFF
 )
 
-if [[ "$(uname)" == "Darwin" ]]; then
-    NLOHMANN_CMAKE_ARGS+=(
-        "${MACOS_COMPILER_ARGS[@]}"
-    )
+if [[ $USE_CLANG -eq 1 ]]; then
+    NLOHMANN_CMAKE_ARGS+=("${CLANG_COMPILER_ARGS[@]}")
 fi
 
 if [[ "$(uname)" == "Linux" ]]; then
@@ -379,10 +400,8 @@ MINIO_CMAKE_ARGS=(
     -DMINIO_CPP_TEST=OFF
 )
 
-if [[ "$(uname)" == "Darwin" ]]; then
-    MINIO_CMAKE_ARGS+=(
-        "${MACOS_COMPILER_ARGS[@]}"
-    )
+if [[ $USE_CLANG -eq 1 ]]; then
+    MINIO_CMAKE_ARGS+=("${CLANG_COMPILER_ARGS[@]}")
 fi
 
 if [[ "$(uname)" == "Linux" ]]; then

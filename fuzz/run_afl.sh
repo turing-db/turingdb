@@ -2,7 +2,8 @@
 # ==========================================================================
 # TuringDB AFL++ Fuzzing
 # ==========================================================================
-# Builds instrumented harnesses with afl-g++ and runs AFL++ on them.
+# Builds AFL++ from source (external/AFLplusplus) and compiles instrumented
+# harnesses with afl-cc (LLVM mode). Requires LLVM 21.
 #
 # Usage: ./fuzz/run_afl.sh [OPTIONS] [HARNESS...]
 #
@@ -13,6 +14,7 @@
 #   --nostop         Run until Ctrl+C (ignores --time)
 #   --build-only     Build harnesses but don't run AFL
 #   --skip-build     Skip building, use existing harnesses
+#   --rebuild-afl    Force rebuild of AFL++ itself
 # ==========================================================================
 
 set -uo pipefail
@@ -21,12 +23,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FUZZ_DIR="$SCRIPT_DIR/fuzz"
 BUILD_AFL="$SCRIPT_DIR/build_afl"
 RESULTS_DIR="$SCRIPT_DIR/fuzz_results/afl_findings"
+AFL_SRC="$SCRIPT_DIR/external/AFLplusplus"
+
+LLVM_MAJOR_VERSION=21
 
 # Defaults
 AFL_TIME=300
 BUILD_ONLY=0
 SKIP_BUILD=0
 NOSTOP=0
+REBUILD_AFL=0
 RUN_CYPHER=0
 RUN_CSV=0
 RUN_GML=0
@@ -35,16 +41,17 @@ ANY_SELECTED=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --cypher)     RUN_CYPHER=1; ANY_SELECTED=1; shift ;;
-        --csv)        RUN_CSV=1; ANY_SELECTED=1; shift ;;
-        --gml)        RUN_GML=1; ANY_SELECTED=1; shift ;;
-        --http)       RUN_HTTP=1; ANY_SELECTED=1; shift ;;
-        --time)       AFL_TIME="$2"; shift 2 ;;
-        --nostop)     NOSTOP=1; shift ;;
-        --build-only) BUILD_ONLY=1; shift ;;
-        --skip-build) SKIP_BUILD=1; shift ;;
+        --cypher)      RUN_CYPHER=1; ANY_SELECTED=1; shift ;;
+        --csv)         RUN_CSV=1; ANY_SELECTED=1; shift ;;
+        --gml)         RUN_GML=1; ANY_SELECTED=1; shift ;;
+        --http)        RUN_HTTP=1; ANY_SELECTED=1; shift ;;
+        --time)        AFL_TIME="$2"; shift 2 ;;
+        --nostop)      NOSTOP=1; shift ;;
+        --build-only)  BUILD_ONLY=1; shift ;;
+        --skip-build)  SKIP_BUILD=1; shift ;;
+        --rebuild-afl) REBUILD_AFL=1; shift ;;
         -h|--help)
-            echo "Usage: $0 [--cypher] [--csv] [--gml] [--http] [--time SECS] [--nostop] [--build-only] [--skip-build]"
+            echo "Usage: $0 [--cypher] [--csv] [--gml] [--http] [--time SECS] [--nostop] [--build-only] [--skip-build] [--rebuild-afl]"
             echo ""
             echo "  --cypher       Fuzz the Cypher parser"
             echo "  --csv          Fuzz the CSV parser"
@@ -54,6 +61,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --nostop       Run forever until Ctrl+C (ignores --time)"
             echo "  --build-only   Build but don't run"
             echo "  --skip-build   Use existing build"
+            echo "  --rebuild-afl  Force rebuild of AFL++ from source"
             echo ""
             echo "If no harness is specified, all are run."
             exit 0
@@ -76,129 +84,98 @@ if [[ $RUN_GML -eq 1 ]];    then HARNESSES+=(fuzz_gml_importer);  CORPORA+=("$FU
 if [[ $RUN_HTTP -eq 1 ]];   then HARNESSES+=(fuzz_http_parser);   CORPORA+=("$FUZZ_DIR/corpus/http"); fi
 
 # =========================================================================
-# Build
+# Require LLVM 21
 # =========================================================================
-if [[ $SKIP_BUILD -eq 0 ]]; then
-    AFL_GCC=$(command -v afl-gcc 2>/dev/null)
-    AFL_GXX=$(command -v afl-g++ 2>/dev/null)
+LLVM_CONFIG_PATH=""
+if [[ "$(uname)" == "Darwin" ]]; then
+    MACOS_SETENV="$SCRIPT_DIR/external/dependencies/macos_setenv.sh"
+    if [[ ! -f "$MACOS_SETENV" ]]; then
+        echo "ERROR: $MACOS_SETENV not found. Run install_build_tools.sh first."
+        exit 1
+    fi
+    source "$MACOS_SETENV"
+    LLVM_CONFIG_PATH="$LLVM_PREFIX/bin/llvm-config"
+else
+    LLVM_CONFIG_PATH=$(command -v "llvm-config-${LLVM_MAJOR_VERSION}" 2>/dev/null || true)
+fi
 
-    if [[ -z "$AFL_GXX" ]]; then
-        echo "ERROR: afl-g++ not found. Install afl++: sudo apt-get install -y afl++"
+if [[ -z "$LLVM_CONFIG_PATH" ]] || [[ ! -x "$LLVM_CONFIG_PATH" ]]; then
+    echo "ERROR: LLVM ${LLVM_MAJOR_VERSION} not found (need llvm-config-${LLVM_MAJOR_VERSION})."
+    echo "  Run: ./install_build_tools.sh"
+    exit 1
+fi
+
+echo "LLVM: $($LLVM_CONFIG_PATH --version) ($LLVM_CONFIG_PATH)"
+
+# =========================================================================
+# Build AFL++ from source (external/AFLplusplus)
+# =========================================================================
+AFL_CC_BIN="$AFL_SRC/afl-cc"
+AFL_CXX_BIN="$AFL_SRC/afl-c++"
+AFL_FUZZ_BIN="$AFL_SRC/afl-fuzz"
+
+if [[ $REBUILD_AFL -eq 1 ]] || [[ ! -x "$AFL_CC_BIN" ]]; then
+    if [[ ! -f "$AFL_SRC/GNUmakefile" ]]; then
+        echo "ERROR: AFL++ source not found at $AFL_SRC"
+        echo "  Run: git submodule update --init external/AFLplusplus"
         exit 1
     fi
 
+    echo "Building AFL++ from source..."
+    cd "$AFL_SRC"
+    [[ $REBUILD_AFL -eq 1 ]] && make clean 2>/dev/null || true
+    LLVM_CONFIG="$LLVM_CONFIG_PATH" make -j$(nproc) source-only 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "ERROR: AFL++ build failed."
+        exit 1
+    fi
+    cd "$SCRIPT_DIR"
+
+    if [[ ! -x "$AFL_CC_BIN" ]]; then
+        echo "ERROR: afl-cc not found after build. LLVM mode may have failed."
+        exit 1
+    fi
+    echo "AFL++ build OK: $($AFL_CC_BIN --version 2>&1 | head -1)"
+else
+    echo "AFL++: $($AFL_CC_BIN --version 2>&1 | head -1) (cached)"
+fi
+
+# =========================================================================
+# Build dependencies with clang (if not already built)
+# =========================================================================
+DEPS_LIBOMP="$SCRIPT_DIR/external/dependencies/lib/libomp.a"
+if [[ $SKIP_BUILD -eq 0 ]] && [[ ! -f "$DEPS_LIBOMP" ]]; then
+    echo "Building dependencies with CLANG_BUILD=1..."
+    CLANG_BUILD=1 "$SCRIPT_DIR/dependencies.sh"
+fi
+
+# =========================================================================
+# Build harnesses with afl-cc (LLVM instrumentation)
+# =========================================================================
+if [[ $SKIP_BUILD -eq 0 ]]; then
     mkdir -p "$BUILD_AFL"
     cd "$BUILD_AFL"
 
-    # Step 1: Build everything with normal gcc.
-    echo "Step 1/3: Building with gcc..."
-    cmake "$SCRIPT_DIR" \
-        -DAFL_CXX_FLAGS="-Wno-error=maybe-uninitialized" \
-        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    echo "Building harnesses with afl-cc..."
+    # AFL_PATH: absolute path so afl-cc finds SanitizerCoveragePCGUARD.so
+    #           regardless of the working directory (cmake builds from build_afl/).
+    # AFL_QUIET: suppresses afl-cc banners during cmake's test compiles, which
+    #            would otherwise confuse find_package() checks (e.g. OpenMP).
+    # AFL_BUILD: tells CMakeLists.txt to skip -fcf-protection=none, which afl-cc
+    #            misinterprets as CFI sanitizer (adds -flto, breaking PCGUARD).
+    export AFL_PATH="$AFL_SRC"
+    AFL_QUIET=1 cmake "$SCRIPT_DIR" \
+        -DCMAKE_C_COMPILER="$AFL_CC_BIN" \
+        -DCMAKE_CXX_COMPILER="$AFL_CXX_BIN" \
+        -DAFL_BUILD=ON \
         2>&1 | tail -5
-    make -j8 "${HARNESSES[@]}" 2>&1 | tail -10
+    make -j$(nproc) "${HARNESSES[@]}" 2>&1 | tail -10
     if [[ $? -ne 0 ]]; then
-        echo "ERROR: gcc build failed."
+        echo "ERROR: afl-cc build failed."
         exit 1
     fi
 
-    # Verify generated parser files exist if the query engine harness is being built.
-    if [[ $RUN_CYPHER -eq 1 ]]; then
-        for f in query/parser/GeneratedCypherParser.h query/parser/GeneratedCypherLexer.h; do
-            if [[ ! -f "$f" ]]; then
-                echo "ERROR: $f not found. Step 1 build incomplete."
-                exit 1
-            fi
-        done
-    fi
-
-    # Step 2: Recompile query/, net/, server/, io/, import/, fuzz/ with afl-g++.
-    # This instruments only the attack surface code for accurate coverage.
-    echo "Step 2/3: Recompiling query/, net/, server/, io/, import/, fuzz/ with afl-g++..."
-    AFL_GXX_PATH="$AFL_GXX" python3 -c "
-import json, subprocess, sys, os
-
-afl_gxx = os.environ['AFL_GXX_PATH']
-
-with open('compile_commands.json') as f:
-    cmds = json.load(f)
-
-targets = ('/query/', '/net/', '/server/', '/fuzz/', '/io/', '/import/')
-count = 0
-failed = 0
-skipped = 0
-
-for entry in cmds:
-    src = entry['file']
-    if not any(t in src for t in targets):
-        continue
-    if not os.path.exists(src):
-        skipped += 1
-        continue
-    # Only recompile if the .o file exists (i.e. step 1 actually compiled it).
-    # This avoids recompiling files for harnesses that weren't selected.
-    cmd = entry['command']
-    output_flag = ' -o '
-    if output_flag in cmd:
-        o_file = cmd.split(output_flag)[1].split(' ')[0]
-        o_path = os.path.join(entry['directory'], o_file)
-        if not os.path.exists(o_path):
-            skipped += 1
-            continue
-    directory = entry['directory']
-    parts = cmd.split(' ', 1)
-    new_cmd = afl_gxx + ' ' + parts[1]
-    rc = subprocess.run(new_cmd, shell=True, cwd=directory,
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    count += 1
-    if rc.returncode != 0:
-        print(f'  FAIL: {os.path.basename(src)}', file=sys.stderr)
-        print(rc.stderr.decode()[-300:], file=sys.stderr)
-        failed += 1
-
-print(f'  Recompiled {count - failed}/{count} files ({skipped} skipped, {failed} failures)')
-if failed > 0:
-    sys.exit(1)
-"
-    if [[ $? -ne 0 ]]; then
-        echo "ERROR: afl-g++ recompilation failed."
-        exit 1
-    fi
-
-    # Step 3: Re-archive .a files and re-link harnesses with afl-g++.
-    echo "Step 3/3: Re-archiving and re-linking with afl-g++..."
-    # Delete .a files for instrumented libraries so make re-archives them.
-    find . -path "*/query/*" -name "*.a" -delete 2>/dev/null
-    find . -path "*/net/*" -name "*.a" -delete 2>/dev/null
-    find . -path "*/server/*" -name "*.a" -delete 2>/dev/null
-    find . -path "*/io/*" -name "*.a" -delete 2>/dev/null
-    find . -path "*/import/*" -name "*.a" -delete 2>/dev/null
-    # Let make re-archive (it uses `ar`, no compiler needed for that).
-    make -j8 "${HARNESSES[@]}" 2>&1 | tail -10
-
-    # Now re-link each harness with afl-g++ so the AFL runtime is included.
-    # Read cmake's link.txt and replace the linker with afl-g++.
-    for h in "${HARNESSES[@]}"; do
-        LINK_FILE="fuzz/CMakeFiles/${h}.dir/link.txt"
-        if [[ ! -f "$LINK_FILE" ]]; then
-            echo "  WARN: $LINK_FILE not found, skipping $h"
-            continue
-        fi
-        LINK_CMD=$(cat "$LINK_FILE")
-        # Replace /usr/bin/c++ or /usr/bin/g++ with afl-g++
-        LINK_CMD=$(echo "$LINK_CMD" | sed "s|/usr/bin/c++|$AFL_GXX|g; s|/usr/bin/g++|$AFL_GXX|g")
-        echo "  Linking $h with afl-g++..."
-        (cd fuzz && eval "$LINK_CMD") 2>&1
-        if [[ $? -ne 0 ]]; then
-            echo "  ERROR: Failed to link $h"
-        fi
-    done
-    if [[ $? -ne 0 ]]; then
-        echo "ERROR: Re-link failed."
-        exit 1
-    fi
-
-    echo "Build OK. Only query/, net/, server/ are instrumented."
+    echo "Build OK."
     cd "$SCRIPT_DIR"
 fi
 
@@ -287,42 +264,31 @@ run_one() {
         USE_TIMEOUT=0
     fi
 
+    local AFL_ARGS=(
+        "$INPUT_FLAG"
+    )
+    if [[ -n "$INPUT_DIR" ]]; then
+        AFL_ARGS+=("$INPUT_DIR")
+    fi
+    AFL_ARGS+=(
+        -o "$FINDINGS"
+        -m none
+        -t 100
+    )
+    if [[ -n "$DICT_FLAG" ]]; then
+        AFL_ARGS+=($DICT_FLAG)
+    fi
     if [[ $USE_TIMEOUT -eq 1 ]]; then
-        if [[ -n "$INPUT_DIR" ]]; then
-            AFL_SKIP_CPUFREQ=1 timeout -k 10 "${DURATION}" afl-fuzz \
-                "$INPUT_FLAG" "$INPUT_DIR" \
-                -o "$FINDINGS" \
-                -m none \
-                -t 100 \
-                -V "${DURATION}" \
-                -- "$BIN" &
-        else
-            AFL_SKIP_CPUFREQ=1 timeout -k 10 "${DURATION}" afl-fuzz \
-                "$INPUT_FLAG" \
-                -o "$FINDINGS" \
-                -m none \
-                -t 100 \
-                $DICT_FLAG \
-                -- "$BIN" &
-        fi
+        AFL_ARGS+=(-V "${DURATION}")
+    fi
+    AFL_ARGS+=(-- "$BIN")
+
+    if [[ $USE_TIMEOUT -eq 1 ]]; then
+        AFL_SKIP_CPUFREQ=1 timeout -k 10 "${DURATION}" "$AFL_FUZZ_BIN" \
+            "${AFL_ARGS[@]}" &
     else
-        if [[ -n "$INPUT_DIR" ]]; then
-            AFL_SKIP_CPUFREQ=1 afl-fuzz \
-                "$INPUT_FLAG" "$INPUT_DIR" \
-                -o "$FINDINGS" \
-                -m none \
-                -t 100 \
-                $DICT_FLAG \
-                -- "$BIN" &
-        else
-            AFL_SKIP_CPUFREQ=1 afl-fuzz \
-                "$INPUT_FLAG" \
-                -o "$FINDINGS" \
-                -m none \
-                -t 100 \
-                $DICT_FLAG \
-                -- "$BIN" &
-        fi
+        AFL_SKIP_CPUFREQ=1 "$AFL_FUZZ_BIN" \
+            "${AFL_ARGS[@]}" &
     fi
     AFL_PID=$!
     wait "$AFL_PID" 2>/dev/null || true

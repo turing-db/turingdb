@@ -22,3 +22,6 @@
 [submodule "external/curl"]
 	path = external/curl
 	url = https://github.com/curl/curl.git
+[submodule "external/AFLplusplus"]
+	path = external/AFLplusplus
+	url = https://github.com/AFLplusplus/AFLplusplus.git

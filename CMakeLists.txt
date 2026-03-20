@@ -99,13 +99,23 @@ if ($ENV{TURING_PROFILE})
 endif()
 
 # Debug settings
+# -fcf-protection=none is skipped for AFL builds because afl-cc misinterprets
+# any -fcf-protection flag as CFI sanitizer, causing it to inject -flto which
+# breaks PCGUARD instrumentation.
+set(AFL_BUILD OFF CACHE BOOL "Set by fuzz/run_afl.sh to disable -fcf-protection")
+if(AFL_BUILD)
+    set(CFP_FLAG "")
+else()
+    set(CFP_FLAG "-fcf-protection=none")
+endif()
+
 if (${DEBUG_BUILD})
     message(STATUS "Debug build")
-    set(OPTIMIZE_FLAGS "-O0 -g -fcf-protection=none")
+    set(OPTIMIZE_FLAGS "-O0 -g ${CFP_FLAG}")
 else()
     message(STATUS "Optimized build")
     add_definitions(-DNDEBUG)
-    set(OPTIMIZE_FLAGS "-O3 -fcf-protection=none")
+    set(OPTIMIZE_FLAGS "-O3 ${CFP_FLAG}")
 
     if (${RELDEBUG})
         set(OPTIMIZE_FLAGS "${OPTIMIZE_FLAGS} -g")
@@ -205,12 +215,19 @@ find_package(nlohmann_json REQUIRED)
 find_package(Faiss REQUIRED)
 
 # OpenMP (required by Faiss)
-# On macOS, use libomp built from source in external/dependencies
-if(APPLE AND NOT NIX_BUILD)
-    set(LIBOMP_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies")
-    set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
+# When libomp was built from source (clang builds: macOS always, Linux via
+# CLANG_BUILD=1), point FindOpenMP at it.  The -Xpreprocessor flag is only
+# needed on macOS; Linux clang accepts -fopenmp directly.
+set(LIBOMP_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies")
+if(NOT NIX_BUILD AND EXISTS "${LIBOMP_PREFIX}/lib/libomp.a")
+    if(APPLE)
+        set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
+        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
+    else()
+        set(OpenMP_C_FLAGS "-fopenmp -I${LIBOMP_PREFIX}/include")
+        set(OpenMP_CXX_FLAGS "-fopenmp -I${LIBOMP_PREFIX}/include")
+    endif()
     set(OpenMP_C_LIB_NAMES "omp")
-    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
     set(OpenMP_CXX_LIB_NAMES "omp")
     set(OpenMP_omp_LIBRARY "${LIBOMP_PREFIX}/lib/libomp.a")
 endif()
