@@ -209,6 +209,14 @@ private:
 
     void applyNodeUpdates(DataPartBuilder& builder);
     void applyEdgeUpdates(DataPartBuilder& builder);
+
+    void addExistingEdgeUpdate(DataPartBuilder& builder,
+                               const EdgeRecord& record,
+                               const CommitWriteBuffer::UntypedProperty& prop);
+
+    void addPendingEdgeUpdate(DataPartBuilder& builder,
+                              EdgeID edgeID,
+                              const CommitWriteBuffer::UntypedProperty& prop);
 };
 
 class CommitWriteBufferRebaser {

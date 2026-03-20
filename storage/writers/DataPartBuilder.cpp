@@ -2,6 +2,7 @@
 
 #include "Graph.h"
 #include "ID.h"
+#include "metadata/LabelSetHandle.h"
 #include "properties/PropertyManager.h"
 #include "writers/MetadataBuilder.h"
 
@@ -63,13 +64,14 @@ void DataPartBuilder::addNodeProperty(NodeID nodeID,
 template <SupportedType T>
 void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
                                       PropertyTypeID ptID,
-                                      T::Primitive value) {
+                                      T::Primitive value,
+                                      LabelSetHandle srcLblSet) {
     if (!_edgeProperties->hasPropertyType(ptID)) {
         _edgeProperties->registerPropertyType<T>(ptID);
     }
     if (edge._edgeID < _firstEdgeID) {
         _patchedEdges.emplace(edge._edgeID, edge);
-        _patchNodeLabelSets.emplace(edge._nodeID, LabelSetHandle {});
+        _patchNodeLabelSets.emplace(edge._nodeID, srcLblSet);
     }
     _edgeProperties->add<T>(ptID, edge._edgeID.getValue(), std::move(value));
 }
@@ -127,13 +129,14 @@ void DataPartBuilder::addNodeProperty<types::Embedding>(NodeID nodeID,
 template <>
 void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
                                                         PropertyTypeID ptID,
-                                                        types::Embedding::Primitive value) {
+                                                        types::Embedding::Primitive value,
+                                                        LabelSetHandle srcLblSet/*={}*/) {
     if (!_edgeProperties->hasPropertyType(ptID)) {
         _edgeProperties->registerEmbeddingPropertyType(ptID, value.size());
     }
     if (edge._edgeID < _firstEdgeID) {
         _patchedEdges.emplace(edge._edgeID, edge);
-        _patchNodeLabelSets.emplace(edge._nodeID, LabelSetHandle {});
+        _patchNodeLabelSets.emplace(edge._nodeID, srcLblSet);
     }
     _edgeProperties->add<types::Embedding>(ptID, edge._edgeID.getValue(), value);
 }
@@ -144,7 +147,8 @@ void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
                                                           PType::Primitive); \
     template void DataPartBuilder::addEdgeProperty<PType>(const EdgeRecord&, \
                                                           PropertyTypeID,    \
-                                                          PType::Primitive); \
+                                                          PType::Primitive,  \
+                                                          LabelSetHandle);   \
     template bool DataPartBuilder::hasProperty<PType>(NodeID id, PropertyTypeID pid);             \
     template bool DataPartBuilder::hasProperty<PType>(EdgeID id, PropertyTypeID pid);             \
 
