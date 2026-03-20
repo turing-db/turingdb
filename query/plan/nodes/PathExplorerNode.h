@@ -35,8 +35,8 @@ private:
     PathExplorationDir _dir {PathExplorationDir::BOTH};
     const VarDecl* _edgeDecl {nullptr};
     const VarDecl* _targetDecl {nullptr};
-    uint64_t _minHops {0};
-    uint64_t _maxHops {0};
+    int64_t _minHops {0};
+    int64_t _maxHops {0};
 };
 
 }
