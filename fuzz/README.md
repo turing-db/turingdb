@@ -5,15 +5,16 @@ AFL++ fuzzing harnesses for finding crashes and bugs in TuringDB.
 ## Prerequisites
 
 ```bash
-sudo apt-get install -y afl++
-```
+# Install LLVM 21 (needed by AFL++ and the clang dependency build)
+./install_build_tools.sh
 
-This provides `afl-fuzz`, `afl-gcc`, `afl-g++`, and `afl-showmap`.
+# Build dependencies with clang (one-time, builds libomp from source)
+CLANG_BUILD=1 ./dependencies.sh
+```
 
 ## Quick Start
 
 ```bash
-
 # Build and run all harnesses (5 min each)
 ./fuzz/run_afl.sh
 
@@ -38,21 +39,22 @@ If no flag is specified, all harnesses are run.
 ## Options
 
 ```
---time SECS    Time per harness in timed mode (default: 300)
---nostop       Run forever until Ctrl+C (no restarts between rounds)
---build-only   Build harnesses without running AFL
---skip-build   Use existing build in build_afl/
+--time SECS      Time per harness in timed mode (default: 300)
+--nostop         Run forever until Ctrl+C (no restarts between rounds)
+--build-only     Build harnesses without running AFL
+--skip-build     Use existing build in build_afl/
+--rebuild-afl    Force rebuild of AFL++ from source
 ```
 
 ## How the Build Works
 
-The build is a 3-step process:
+`run_afl.sh` handles three stages automatically:
 
-1. **gcc** — builds the entire project normally
-2. **afl-g++** — recompiles only `query/`, `net/`, `server/`, `fuzz/` for AFL instrumentation
-3. **afl-g++ link** — re-links harnesses with the AFL runtime
+1. **AFL++ from source** — builds `external/AFLplusplus` with LLVM 21 (cached after first run)
+2. **Dependencies** — runs `CLANG_BUILD=1 ./dependencies.sh` if libomp is missing
+3. **Harnesses** — cmake with `afl-cc`/`afl-c++` (LLVM PCGUARD instrumentation)
 
-This gives accurate coverage data focused on the attack surface, without instrumenting storage/vector/common code.
+All code is instrumented. The build output goes to `build_afl/`.
 
 ## Crash Results
 
@@ -99,6 +101,6 @@ These are automatically loaded by `run_afl.sh` for the corresponding harness.
 ## Seed Corpus
 
 - `fuzz/corpus/cypher/` — 312 Cypher queries extracted from the test suite
-- `fuzz/corpus/http/` — 20 HTTP requests covering all TuringDB endpoints
+- `fuzz/corpus/http/` — 272 HTTP inputs (AFL++-generated corpus covering all parser edges)
 - `fuzz/corpus/csv/` — 3 CSV files (basic, quoted, no headers)
 - `fuzz/corpus/gml/` — 1 GML graph file
