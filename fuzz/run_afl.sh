@@ -141,12 +141,45 @@ else
 fi
 
 # =========================================================================
-# Build dependencies with clang (if not already built)
+# Build libomp from source (afl-cc wraps clang, which needs libomp for OpenMP)
 # =========================================================================
-DEPS_LIBOMP="$SCRIPT_DIR/external/dependencies/lib/libomp.a"
+DEPS_DIR="$SCRIPT_DIR/external/dependencies"
+DEPS_LIBOMP="$DEPS_DIR/lib/libomp.a"
 if [[ $SKIP_BUILD -eq 0 ]] && [[ ! -f "$DEPS_LIBOMP" ]]; then
-    echo "Building dependencies with CLANG_BUILD=1..."
-    CLANG_BUILD=1 "$SCRIPT_DIR/dependencies.sh"
+    LLVM_PREFIX=$("$LLVM_CONFIG_PATH" --prefix)
+    LLVM_VERSION=$("$LLVM_PREFIX/bin/clang" --version | head -1 | sed 's/.*version \([0-9.]*\).*/\1/')
+
+    BUILD_DIR="$DEPS_DIR/build"
+    OPENMP_SRC_DIR="$BUILD_DIR/openmp-${LLVM_VERSION}.src"
+
+    if [[ ! -d "$OPENMP_SRC_DIR" ]]; then
+        echo "Extracting LLVM OpenMP ${LLVM_VERSION}..."
+        cd "$BUILD_DIR"
+        tar xf "$SCRIPT_DIR/external/openmp-${LLVM_VERSION}.src.tar.xz"
+
+        # LLVM cmake modules required for standalone openmp build
+        tar xf "$SCRIPT_DIR/external/cmake-${LLVM_VERSION}.src.tar.xz"
+        rm -rf cmake
+        mv "cmake-${LLVM_VERSION}.src" cmake
+    fi
+
+    echo "Building libomp..."
+    mkdir -p "$BUILD_DIR/libomp"
+    cd "$BUILD_DIR/libomp"
+
+    cmake \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$DEPS_DIR" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DOPENMP_STANDALONE_BUILD=ON \
+        -DLIBOMP_ENABLE_SHARED=OFF \
+        -DOPENMP_ENABLE_LIBOMPTARGET=OFF \
+        -DCMAKE_C_COMPILER="$LLVM_PREFIX/bin/clang" \
+        -DCMAKE_CXX_COMPILER="$LLVM_PREFIX/bin/clang++" \
+        "$OPENMP_SRC_DIR"
+    cmake --build "$BUILD_DIR/libomp" -j$(nproc)
+    cmake --install "$BUILD_DIR/libomp"
+    cd "$SCRIPT_DIR"
 fi
 
 # =========================================================================
