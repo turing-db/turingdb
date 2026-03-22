@@ -81,9 +81,18 @@ echo "Building zlib..."
 mkdir -p $BUILD_DIR/zlib
 cd $BUILD_DIR/zlib
 
+# Force INSTALL_*_DIR: zlib's CMakeLists.txt defines these as CACHE variables
+# derived from CMAKE_INSTALL_PREFIX, but cmake only sets CACHE vars on the first
+# run.  If the build dir has a stale cache from a different prefix, the install
+# paths won't update — force them here so they always match.
 ZLIB_CMAKE_ARGS=(
     -DCMAKE_BUILD_TYPE=Release
     -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
+    -DINSTALL_BIN_DIR=$DEPENDENCIES_DIR/bin
+    -DINSTALL_LIB_DIR=$DEPENDENCIES_DIR/lib
+    -DINSTALL_INC_DIR=$DEPENDENCIES_DIR/include
+    -DINSTALL_MAN_DIR=$DEPENDENCIES_DIR/share/man
+    -DINSTALL_PKGCONFIG_DIR=$DEPENDENCIES_DIR/share/pkgconfig
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     -DBUILD_SHARED_LIBS=OFF
     -DZLIB_BUILD_EXAMPLES=OFF
