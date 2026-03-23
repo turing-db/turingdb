@@ -18,6 +18,34 @@
 
 namespace db {
 
+/**
+ * @brief Generic function to apply a generic invokable to two possibly-optional
+ * operands, where either operand being nullopt results in the final result being
+ * nullopt, and the result of applying the invokable otherwise.
+ */
+template <typename Func, typename T, typename U>
+    requires OptionallyInvokable<Func, T, U>
+auto optionalGenericFunc(T&& a, U&& b) -> TypeUtils::optional_invoke_result<Func, T, U> {
+    if constexpr (TypeUtils::is_optional_v<T>) {
+        if (!a.has_value()) {
+            return std::nullopt;
+        }
+    }
+
+    if constexpr (TypeUtils::is_optional_v<U>) {
+        if (!b.has_value()) {
+            return std::nullopt;
+        }
+    }
+
+    // a and b are both either engaged optionals or values, so safe to unwrap
+
+    auto&& av = TypeUtils::unwrap(a);
+    auto&& bv = TypeUtils::unwrap(b);
+
+    return Func {}(av, bv);
+}
+
 class LabelsFunction {
 public:
     using ResultType = std::string;
@@ -218,26 +246,23 @@ struct FunctionExecutor<EdgeTypesFunction, Res, Arg> {
     }
 };
 
-/// Binary function executor for two-argument functions.
-/// unwrap() is needed because column inner types may be optional (e.g. optional<span>)
-/// while function operators take non-optional arguments.
 template <typename Op, typename Res, typename ArgA, typename ArgB>
 struct BinaryFunctionExecutor {
     static void apply(ColumnVector<Res>* res,
                       const ColumnVector<ArgA>* lhs,
                       const ColumnVector<ArgB>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
-
         const size_t size = lhs->size();
 
         res->resize(size);
-        auto op = Op {};
 
         const auto& lhsRaw = lhs->getRaw();
         const auto& rhsRaw = rhs->getRaw();
         auto& resRaw = res->getRaw();
+
+        auto op = Op {};
         for (size_t i = 0; i < size; i++) {
-            resRaw[i] = op(TypeUtils::unwrap(lhsRaw[i]), TypeUtils::unwrap(rhsRaw[i]));
+            resRaw[i] = op(lhsRaw[i], rhsRaw[i]);
         }
     }
 
@@ -246,11 +271,12 @@ struct BinaryFunctionExecutor {
                       const ColumnConst<ArgB>* rhs) {
         const size_t size = lhs->size();
         res->resize(size);
-        auto op = Op {};
 
         const auto& lhsRaw = lhs->getRaw();
         const auto& val = rhs->getRaw();
         auto& resRaw = res->getRaw();
+
+        auto op = Op {};
         for (size_t i = 0; i < size; i++) {
             resRaw[i] = op(TypeUtils::unwrap(lhsRaw[i]), TypeUtils::unwrap(val));
         }
@@ -261,11 +287,13 @@ struct BinaryFunctionExecutor {
                       const ColumnVector<ArgB>* rhs) {
         const size_t size = rhs->size();
         res->resize(size);
-        auto op = Op {};
+
 
         const auto& val = lhs->getRaw();
         const auto& rhsRaw = rhs->getRaw();
         auto& resRaw = res->getRaw();
+
+        auto op = Op {};
         for (size_t i = 0; i < size; i++) {
             resRaw[i] = op(TypeUtils::unwrap(val), TypeUtils::unwrap(rhsRaw[i]));
         }
@@ -275,8 +303,26 @@ struct BinaryFunctionExecutor {
                       const ColumnConst<ArgA>* lhs,
                       const ColumnConst<ArgB>* rhs) {
         auto op = Op {};
-        res->set(op(TypeUtils::unwrap(lhs->getRaw()), TypeUtils::unwrap(rhs->getRaw())));
+        const Res& result = op(lhs->getRaw(), rhs->getRaw());
+        res->set(result);
     }
 };
+
+template <typename F>
+struct BinaryFunc {
+    template <typename T, typename U>
+        requires TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>
+    inline decltype(auto) operator()(T&& a, U&& b) {
+        return optionalGeneric<F>(std::forward<T>(a), std::forward<U>(b));
+    }
+
+    template <typename T, typename U>
+    inline decltype(auto) operator()(T&& a, U&& b) {
+        return F {}(std::forward<T>(a), std::forward<U>(b));
+    }
+};
+
+using CosineSimilarity = BinaryFunc<CosineSimilarityFunction>;
+using EuclideanDistance = BinaryFunc<EuclideanDistanceFunction>;
 
 }
