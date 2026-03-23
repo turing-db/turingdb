@@ -186,10 +186,13 @@ template <ColumnOperator Op>
     requires (Op == OP_GREATER_THAN_OR_EQUAL) || (Op == OP_LESS_THAN_OR_EQUAL)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
-        // Standard ordering of numeric types - excluding doubles
+        // Standard ordering of numeric types
         OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
         OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
-        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs
+        OptionalKindPairs<types::Int64::Primitive, types::Double::Primitive>::Pairs,
+        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
+        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;
