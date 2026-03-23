@@ -146,13 +146,19 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            // Allows NodeID <-> NodeID and NodeID <-> Integer comparisons
             if (pair == TypePairBitset(EvaluatedType::NodePattern,
-                                       EvaluatedType::NodePattern)) {
+                                       EvaluatedType::NodePattern)
+                || pair == TypePairBitset(EvaluatedType::Integer,
+                                          EvaluatedType::NodePattern)) {
                 break;
             }
 
+            // Allows EdgeID <-> EdgeID and EdgeID <-> Integer comparisons
             if (pair == TypePairBitset(EvaluatedType::EdgePattern,
-                                       EvaluatedType::EdgePattern)) {
+                                       EvaluatedType::EdgePattern)
+                || pair == TypePairBitset(EvaluatedType::Integer,
+                                          EvaluatedType::EdgePattern)) {
                 break;
             }
 

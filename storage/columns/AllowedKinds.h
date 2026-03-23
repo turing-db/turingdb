@@ -141,7 +141,12 @@ struct PairRestrictions<Op> {
             KindPair<std::optional<types::Double::Primitive>, PropertyNull>,
             KindPair<std::optional<types::String::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Bool::Primitive>, PropertyNull>,
-            KindPair<std::optional<types::Embedding::Primitive>, PropertyNull>
+            KindPair<std::optional<types::Embedding::Primitive>, PropertyNull>,
+
+            KindPair<NodeID, types::Int64::Primitive>,                // WHERE n = 1
+            KindPair<NodeID, std::optional<types::Int64::Primitive>>, // WHERE e = e.age
+            KindPair<EdgeID, types::Int64::Primitive>,                // WHERE n = 1
+            KindPair<EdgeID, std::optional<types::Int64::Primitive>>  // WHERE e = e.dur
         >
     >;
 

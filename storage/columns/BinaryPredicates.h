@@ -5,11 +5,15 @@
 #include <functional>
 #include <type_traits>
 
+#include "ID.h"
 #include "TypeUtils.h"
 #include "ColumnMask.h"
 #include "metadata/PropertyType.h"
 
+#include "TuringException.h"
+
 namespace db {
+
 
 namespace {
 
@@ -298,6 +302,26 @@ struct TuringEqual {
         return equal;
     }
 
+    /// Specialisations to allow for ID <-> int, e.g  (n) = 42, (e) = n.age, etc.
+    template <TypedInternalID IDT>
+    bool operator()(IDT n, types::Int64::Primitive i) {
+        if (i < 0) {
+            throw TuringException("Cannot compare ID with negative integer.");
+        }
+        const types::UInt64::Primitive id = i;
+        return n.getValue() == id;
+    }
+
+    template <TypedInternalID IDT>
+    bool operator()(types::Int64::Primitive i, IDT n) {
+        if (i < 0) {
+            throw TuringException("compare ID with negative integer.");
+        }
+        const types::UInt64::Primitive id = i;
+        return n.getValue() == id;
+    }
+
+    // Generalist fallback for all other types
     template <typename T, typename U>
     bool operator()(const T& a, const U& b) {
         return std::equal_to<> {}(a, b);
@@ -305,15 +329,9 @@ struct TuringEqual {
 };
 
 struct TuringNotEqual {
-    bool operator()(const types::Embedding::Primitive& a, const types::Embedding::Primitive& b) {
-        const bool equal =
-            (a.size() == b.size()) && std::equal(a.begin(), a.end(), b.begin());
-        return !equal;
-    }
-
     template <typename T, typename U>
-    bool operator()(const T& a, const U& b) {
-        return std::not_equal_to<> {}(a, b);
+    bool operator()(T&& a, U&& b) {
+        return !TuringEqual {}(std::forward<T>(a), std::forward<U>(b));
     }
 };
 
