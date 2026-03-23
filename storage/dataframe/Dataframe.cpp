@@ -22,32 +22,12 @@ void Dataframe::addColumn(NamedColumn* column) {
 }
 
 size_t Dataframe::getLogicalRowCount() const {
-    if (_cols.size() == 0) {
-        return 0;
-    }
-
-    // Nullopt until we find a non-ColumnConst to take size of
-    std::optional<size_t> foundSize(std::nullopt);
-
-    constexpr ContainerKind::Code colConstKind =
-        ColumnKind::extractContainerKind(ColumnConst<int>::staticKind());
-
+    size_t maxSize = 0;
     for (const NamedColumn* ncol : _cols) {
         const Column* col = ncol->getColumn();
-        // Ignore ColumnConsts
-        if (col->getContainerKind() == colConstKind) {
-            continue;
-        }
-        foundSize = col->size();
+        maxSize = std::max(maxSize, col->size());
     }
-
-    // We have at least 1 column, but all were ColumnConst => optional not set
-    // => logical size = 1
-    if (!foundSize.has_value()) {
-        return 1;
-    }
-
-    return foundSize.value();
+    return maxSize;
 }
 
 bool Dataframe::isRectangular() const {
