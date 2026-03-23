@@ -53,6 +53,7 @@ enum class PlanGraphOpcode {
     INSTALL_EXTENSION,
     SHOW_EXTENSIONS,
     PATH_EXPLORER,
+    CONST_SCAN,
     _SIZE
 };
 
@@ -102,7 +103,8 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::LOAD_COMMIT, "LOAD_COMMIT">,
     EnumStringPair<PlanGraphOpcode::INSTALL_EXTENSION, "INSTALL_EXTENSION">,
     EnumStringPair<PlanGraphOpcode::SHOW_EXTENSIONS, "SHOW_EXTENSIONS">,
-    EnumStringPair<PlanGraphOpcode::PATH_EXPLORER, "PATH_EXPLORER">>;
+    EnumStringPair<PlanGraphOpcode::PATH_EXPLORER, "PATH_EXPLORER">,
+    EnumStringPair<PlanGraphOpcode::CONST_SCAN, "CONST_SCAN">>;
 
 class PlanGraphNode {
 public:
