@@ -11,6 +11,7 @@
 #include "processors/OrderByProcessor.h"
 #include "processors/ScanNodesProcessor.h"
 #include "processors/ScanNodesByLabelProcessor.h"
+#include "processors/ConstScanProcessor.h"
 #include "processors/GetInEdgesProcessor.h"
 #include "processors/GetEdgesProcessor.h"
 #include "processors/GetOutEdgesProcessor.h"
@@ -710,6 +711,22 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodesByLabel(const LabelSet
 
     _pendingOutput.updateInterface(&outNodeIDs);
 
+    _lastProc = proc;
+    return outNodeIDs;
+}
+
+PipelineNodeOutputInterface& PipelineBuilder::addConstScanNodes(std::span<const NodeID> nodeIDs) {
+    ConstScanProcessor* proc = ConstScanProcessor::create(_pipeline, nodeIDs);
+    PipelineNodeOutputInterface& outNodeIDs = proc->outNodeIDs();
+
+    // Allocate output node IDs column
+    NamedColumn* col = allocColumn<ColumnNodeIDs>(outNodeIDs.getDataframe());
+    outNodeIDs.setNodeIDs(col);
+
+    // Register output in materialize data
+    _matProc->getMaterializeData().addToStep<ColumnNodeIDs>(col);
+
+    _pendingOutput.updateInterface(&outNodeIDs);
     _lastProc = proc;
     return outNodeIDs;
 }

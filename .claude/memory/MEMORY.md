@@ -50,6 +50,7 @@
 - [Private member ordering](feedback_private_member_ordering.md) — Variables before functions in private sections
 - [Return type same line](feedback_return_type_same_line.md) — Return type and function name on one line
 - [Code spacing](feedback_code_spacing.md) — Blank lines between logical groups, don't write compact code
+- [Const and span preferences](feedback_const_and_span.md) — const on locals, std::span for non-owning references
 
 ## Workflow Preferences
 - [Test-first: write failing test before fix](feedback_test_first.md)

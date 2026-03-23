@@ -1,9 +1,11 @@
 #pragma once
 
+#include <span>
 #include <string_view>
 
 #include "ChangeOp.h"
 #include "EntityType.h"
+#include "ID.h"
 #include "Path.h"
 #include "PathExplorationDir.h"
 #include "PipelineV2.h"
@@ -60,6 +62,7 @@ public:
     // Sources
     PipelineNodeOutputInterface& addScanNodes();
     PipelineNodeOutputInterface& addScanNodesByLabel(const LabelSet* labelset);
+    PipelineNodeOutputInterface& addConstScanNodes(std::span<const NodeID> nodeIDs);
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
     PipelineBlockOutputInterface& addCallProcedure(const Procedure* procedure,
                                                    std::span<const Procedure::Argument> args,
