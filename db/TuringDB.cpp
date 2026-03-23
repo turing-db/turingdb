@@ -138,8 +138,10 @@ void TuringDB::init() {
     // Configure default query config from environment
     const char* vhjEnv = getenv("TURING_VALUE_HASH_JOIN");
     if (vhjEnv) {
-        const bool enabled = std::string(vhjEnv) != "0";
-        _defaultQueryConfig.getPlanGenConfig().setUseValueHashJoin(enabled);
+
+        if(strcmp(vhjEnv, "0") == 0) {
+            _defaultQueryConfig.getPlanGenConfig().setUseValueHashJoin(false);
+        }
     }
 }
 

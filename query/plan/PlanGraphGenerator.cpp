@@ -226,7 +226,7 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
         readGenerator.placeJoinsOnVars();
 
         // Place joins based on predicates
-        readGenerator.placePredicateJoins();
+        readGenerator.placePredicates();
 
         // Place joins based on procedures calls
         readGenerator.placeJoinsOnProcedures();

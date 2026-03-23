@@ -15,36 +15,36 @@ enum class JoinType : uint8_t {
 class JoinNode : public PlanGraphNode {
 public:
     JoinNode() = delete;
-    JoinNode(const VarDecl* leftJoinKeyVar,
-             const VarDecl* rightJoinKeyVar,
+    JoinNode(const VarDecl* joinKeyVar1,
+             const VarDecl* joinKeyVar2,
              JoinType type)
         : PlanGraphNode(PlanGraphOpcode::JOIN),
-        _leftJoinKeyVar(leftJoinKeyVar),
-        _rightJoinKeyVar(rightJoinKeyVar),
+        _fstJoinKeyVar(joinKeyVar1),
+        _sndJoinKeyVar(joinKeyVar2),
         _type(type)
     {
     }
 
-    JoinNode(const VarDecl* leftJoinKeyVar,
-             const VarDecl* rightJoinKeyVar,
-             const VarDecl* dependencyTag,
+    JoinNode(const VarDecl* joinKeyVar1,
+             const VarDecl* joinKeyVar2,
+             const VarDecl* dependencyDecl,
              JoinType type)
         : PlanGraphNode(PlanGraphOpcode::JOIN),
-        _leftJoinKeyVar(leftJoinKeyVar),
-        _rightJoinKeyVar(rightJoinKeyVar),
-        _dependencyVarDecl(dependencyTag),
+        _fstJoinKeyVar(joinKeyVar1),
+        _sndJoinKeyVar(joinKeyVar2),
+        _dependencyVarDecl(dependencyDecl),
         _type(type)
     {
     }
 
-    const VarDecl* getLeftVarDecl() const { return _leftJoinKeyVar; }
-    const VarDecl* getRightVarDecl() const { return _rightJoinKeyVar; }
+    const VarDecl* getFirstJoinKey() const { return _fstJoinKeyVar; }
+    const VarDecl* getSecondJoinKey() const { return _sndJoinKeyVar; }
     const VarDecl* getDependencyVarDecl() const { return _dependencyVarDecl; }
     JoinType getJoinType() const { return _type; };
 
 private:
-    const VarDecl* _leftJoinKeyVar {nullptr};
-    const VarDecl* _rightJoinKeyVar {nullptr};
+    const VarDecl* _fstJoinKeyVar {nullptr};
+    const VarDecl* _sndJoinKeyVar {nullptr};
 
     const VarDecl* _dependencyVarDecl {nullptr};
 

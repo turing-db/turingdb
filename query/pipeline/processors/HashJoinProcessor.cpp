@@ -12,6 +12,9 @@ using namespace db;
 
 namespace {
 
+template <typename Key>
+using UnwrappedKey = TypeUtils::unwrap_optional_t<Key>;
+
 template <typename T>
     requires std::is_base_of_v<Column, T>
 void fillOutputColumn(T* outputColumn,
@@ -26,36 +29,36 @@ void fillOutputColumn(T* outputColumn,
                 (*inputColumn)[rowIndex]);
 }
 
-template <typename Key, bool IsOptional>
-bool isNonNullKey(Column* col, size_t index) {
-    if constexpr (!IsOptional) {
-        return true;
-    } else {
-        auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
-        return (*typedCol)[index].has_value();
-    }
-}
+template <typename Key>
+using LookupKey = std::conditional_t<StringLike<UnwrappedKey<Key>>,
+                                     std::string_view,
+                                     UnwrappedKey<Key>>;
 
 // Extracts the join key from the column as a lightweight value suitable for
 // map lookups. For string-like keys returns std::string_view (no allocation).
-// Caller must ensure the key at index is non-null (via isNonNullKey) for optionals.
-template <typename Key, bool IsOptional>
-auto extractKeyView(Column* col, size_t index) {
-    if constexpr (StringLike<Key>) {
-        if constexpr (IsOptional) {
-            auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
-            return std::string_view(*(*typedCol)[index]);
+// If the join key is null we return a nullopt to the user to allow them to skip this key
+template <typename Key>
+[[nodiscard]] std::optional<LookupKey<Key>> tryExtractKeyView(Column* col, size_t index) {
+    const auto* typedCol = static_cast<const ColumnVector<Key>*>(col);
+
+    if constexpr (TypeUtils::is_optional_v<Key>) {
+        const auto& optional = (*typedCol)[index];
+        if (!optional.has_value()) {
+            return std::nullopt;
+        }
+
+        if constexpr (StringLike<UnwrappedKey<Key>>) {
+            return std::string_view(*optional);
         } else {
-            auto* typedCol = static_cast<const ColumnVector<Key>*>(col);
-            return std::string_view((*typedCol)[index]);
+            return *optional;
         }
     } else {
-        if constexpr (IsOptional) {
-            auto* typedCol = static_cast<ColumnVector<std::optional<Key>>*>(col);
-            return *(*typedCol)[index];
+        const auto& value = (*typedCol)[index];
+
+        if constexpr (StringLike<UnwrappedKey<Key>>) {
+            return std::string_view(value);
         } else {
-            auto* typedCol = static_cast<const ColumnVector<Key>*>(col);
-            return (*typedCol)[index];
+            return value;
         }
     }
 }
@@ -69,7 +72,8 @@ std::vector<RowOffset>& getMap(auto& map, const auto& key) {
         if (it != map.end()) {
             return it->second;
         }
-        return map.emplace(std::string(key), std::vector<RowOffset>()).first->second;
+        auto constructedEntry = map.try_emplace(std::string(key)).first;
+        return constructedEntry->second;
     } else {
         return map[key];
     }
@@ -84,23 +88,22 @@ void fillJoinColumn(Column* outputColumn,
                     size_t offset,
                     size_t rowsToCopy) {
     dispatchColumnVector(outputColumn, [&](auto* outCol) {
-        auto* typedOut = static_cast<decltype(outCol)>(outputColumn);
         using OutVal = typename std::decay_t<decltype(*outCol)>::ValueType;
 
         dispatchColumnVector(inputColumn, [&](auto* inCol) {
-            auto* typedIn = static_cast<decltype(inCol)>(inputColumn);
             using InVal = typename std::decay_t<decltype(*inCol)>::ValueType;
 
             if constexpr (std::is_constructible_v<OutVal, const InVal&>) {
-                bioassert(typedOut->size() >= offset + rowsToCopy,
+                bioassert(outCol->size() >= offset + rowsToCopy,
                           "rows to copy do not fit in output column");
-                std::fill_n(typedOut->begin() + offset, rowsToCopy,
-                            OutVal((*typedIn)[rowIndex]));
+                std::fill_n(outCol->begin() + offset, rowsToCopy,
+                            OutVal((*inCol)[rowIndex]));
+            } else {
+                throw PipelineException("Cannot fill input and output column of differing types");
             }
         });
     });
 }
-
 }
 
 template <typename LeftKey, typename RightKey>
@@ -117,10 +120,9 @@ HashJoinProcessor<LeftKey, RightKey>::HashJoinProcessor(const ColumnTag leftJoin
 }
 
 template <typename LeftKey, typename RightKey>
-auto HashJoinProcessor<LeftKey, RightKey>::create(PipelineV2* pipeline,
+HashJoinProcessor<LeftKey,RightKey>* HashJoinProcessor<LeftKey, RightKey>::create(PipelineV2* pipeline,
                                                   const ColumnTag leftJoinKey,
-                                                  const ColumnTag rightJoinKey)
-    -> HashJoinProcessor* {
+                                                  const ColumnTag rightJoinKey) {
     HashJoinProcessor* hashJoin = new HashJoinProcessor(leftJoinKey, rightJoinKey);
 
     PipelineInputPort* leftInput = PipelineInputPort::create(pipeline, hashJoin);
@@ -147,6 +149,7 @@ void HashJoinProcessor<LeftKey, RightKey>::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
     const auto* leftDf = _leftInput.getDataframe();
+    const auto* rightDf = _rightInput.getDataframe();
     const auto* outDf = _output.getDataframe();
 
     // The stored rows do not contain the join column
@@ -162,6 +165,7 @@ void HashJoinProcessor<LeftKey, RightKey>::prepare(ExecutionContext* ctxt) {
     // Compute actual byte sizes of rows stored in the RowStore
     _leftRowByteSize = 0;
     for (const auto* namedCol : leftDf->cols()) {
+        // RowStore doesn't store the join value so skip
         if (namedCol->getTag() == _leftJoinKey) {
             continue;
         }
@@ -170,14 +174,16 @@ void HashJoinProcessor<LeftKey, RightKey>::prepare(ExecutionContext* ctxt) {
             using ValType = typename ColType::ValueType;
             if constexpr (std::is_trivially_copyable_v<ValType>) {
                 _leftRowByteSize += sizeof(ValType);
+            } else {
+                throw PipelineException("Left input column is not trivially copyable");
             }
         });
     }
 
-    const auto* rightDf = _rightInput.getDataframe();
-
     _rightRowByteSize = 0;
     for (const auto* namedCol : rightDf->cols()) {
+        // skip the join value and any columns that are already stored in the left
+        // RowStore
         if (leftDf->getColumn(namedCol->getTag()) != nullptr ||
             namedCol->getTag() == _rightJoinKey) {
             continue;
@@ -187,22 +193,12 @@ void HashJoinProcessor<LeftKey, RightKey>::prepare(ExecutionContext* ctxt) {
             using ValType = typename ColType::ValueType;
             if constexpr (std::is_trivially_copyable_v<ValType>) {
                 _rightRowByteSize += sizeof(ValType);
+            } else {
+                throw PipelineException("Right input column is not trivially copyable");
             }
         });
     }
 
-    // Detect if the join key columns are optional (nullable)
-    {
-        auto* leftKeyCol = leftDf->getColumn(_leftJoinKey)->getColumn();
-        const auto leftKind = leftKeyCol->getKind();
-        _isLeftOptionalKey = (leftKind == ColumnVector<std::optional<LeftKey>>::staticKind());
-    }
-
-    {
-        auto* rightKeyCol = rightDf->getColumn(_rightJoinKey)->getColumn();
-        const auto rightKind = rightKeyCol->getKind();
-        _isRightOptionalKey = (rightKind == ColumnVector<std::optional<RightKey>>::staticKind());
-    }
 
     markAsPrepared();
 }
@@ -233,8 +229,7 @@ void HashJoinProcessor<LeftKey, RightKey>::execute() {
         for (const auto& namedCol : outDf->cols()) {
             dispatchColumnVector(namedCol->getColumn(),
                                  [&](auto* col) {
-                                     auto* colVector = static_cast<decltype(col)>(col);
-                                     colVector->resize(newOutputSize);
+                                     col->resize(newOutputSize);
                                  });
         }
 
@@ -268,11 +263,7 @@ void HashJoinProcessor<LeftKey, RightKey>::execute() {
     }
 
     if (_leftInput.getPort()->hasData()) {
-        if (_isLeftOptionalKey) {
-            processLeftStream<true>(rowsRemaining, totalRowsInserted);
-        } else {
-            processLeftStream<false>(rowsRemaining, totalRowsInserted);
-        }
+        processLeftStream(rowsRemaining, totalRowsInserted);
 
         if (rowsRemaining == 0) {
             // If there are no rows remaining in our output chunk we can write the output
@@ -298,11 +289,7 @@ void HashJoinProcessor<LeftKey, RightKey>::execute() {
     }
 
     if (_rightInput.getPort()->hasData()) {
-        if (_isRightOptionalKey) {
-            processRightStream<true>(rowsRemaining, totalRowsInserted);
-        } else {
-            processRightStream<false>(rowsRemaining, totalRowsInserted);
-        }
+        processRightStream(rowsRemaining, totalRowsInserted);
 
         // if we aren't paused mid-row vector (no _copyState)
         // and we don't have any more columns to read we can consume
@@ -319,8 +306,7 @@ void HashJoinProcessor<LeftKey, RightKey>::execute() {
         for (const auto* namedCol : outDf->cols()) {
             dispatchColumnVector(namedCol->getColumn(),
                                  [&](auto* col) {
-                                     auto* colVector = static_cast<decltype(col)>(col);
-                                     colVector->resize(totalRowsInserted);
+                                     col->resize(totalRowsInserted);
                                  });
         }
         _output.getPort()->writeData();
@@ -335,8 +321,7 @@ void HashJoinProcessor<LeftKey, RightKey>::execute() {
             for (const auto* namedCol : outDf->cols()) {
                 dispatchColumnVector(namedCol->getColumn(),
                                      [&](auto* col) {
-                                         auto* colVector = static_cast<decltype(col)>(col);
-                                         colVector->resize(0);
+                                         col->resize(0);
                                      });
             }
             _output.getPort()->writeData();
@@ -353,7 +338,6 @@ void HashJoinProcessor<LeftKey, RightKey>::execute() {
 }
 
 template <typename LeftKey, typename RightKey>
-template <bool IsOptional>
 void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaining,
                                                              size_t& totalRowsInserted) {
     const Dataframe* leftDf = _leftInput.getDataframe();
@@ -368,22 +352,21 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
         for (const auto* namedCol : outDf->cols()) {
             dispatchColumnVector(namedCol->getColumn(),
                                  [&](auto* col) {
-                                     auto* colVector = static_cast<decltype(col)>(col);
-                                     if (colVector->size() < chunkSize) {
-                                         colVector->resize(chunkSize);
+                                     if (col->size() < chunkSize) {
+                                         col->resize(chunkSize);
                                      }
                                  });
         }
     }
 
     for (; _leftInputIdx < leftRowCount; ++_leftInputIdx) {
+        const auto leftKey = tryExtractKeyView<LeftKey>(leftCol, _leftInputIdx);
         // Skip null keys - NULL != NULL semantics
-        if (!isNonNullKey<LeftKey, IsOptional>(leftCol, _leftInputIdx)) {
+        if (!leftKey) {
             continue;
         }
 
-        const auto leftKey = extractKeyView<LeftKey, IsOptional>(leftCol, _leftInputIdx);
-        const auto it = _rightMap.find(leftKey);
+        const auto it = _rightMap.find(*leftKey);
         if (it != _rightMap.end()) {
             const auto& rows = it->second;
             const auto& cols = leftDf->cols();
@@ -410,10 +393,9 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
                 auto* inputColumn = cols[j]->getColumn();
                 auto* outputColumn = outCols[outColIdx]->getColumn();
 
-                dispatchColumnVector(outputColumn, [&](auto* col) {
-                    auto* typedOutCol = static_cast<decltype(col)>(outputColumn);
-                    const auto* typedInCol = static_cast<decltype(col)>(inputColumn);
-                    fillOutputColumn(typedOutCol,
+                dispatchColumnVector(outputColumn, [&](auto* outCol) {
+                    const auto* typedInCol = static_cast<decltype(outCol)>(inputColumn);
+                    fillOutputColumn(outCol,
                                      typedInCol,
                                      _leftInputIdx,
                                      totalRowsInserted,
@@ -427,9 +409,8 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
             auto* outputColumn = outCols.back()->getColumn();
 
             dispatchColumnVector(outputColumn, [&](auto* col) {
-                auto* typedOutCol = static_cast<decltype(col)>(outputColumn);
                 const auto* typedInCol = static_cast<decltype(col)>(inputColumn);
-                fillOutputColumn(typedOutCol,
+                fillOutputColumn(col,
                                  typedInCol,
                                  _leftInputIdx,
                                  totalRowsInserted,
@@ -449,7 +430,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
         }
 
         // Create a hash table entry for the input
-        auto& offsetVec = getMap(_leftMap, leftKey);
+        auto& offsetVec = getMap(_leftMap, *leftKey);
         offsetVec.emplace_back(_store.insertRow(leftDf,
                                                 _leftJoinKey,
                                                 _leftRowByteSize,
@@ -466,13 +447,14 @@ void HashJoinProcessor<LeftKey, RightKey>::processLeftStream(size_t& rowsRemaini
     // from next row on the next cycle. We don't do this if we
     // still have to finish processing a retreived vector of row offsets,
     // or if we have fully processed the input
-    if (!_rowOffsetState.hasRowOffsets() && _leftInputIdx != leftRowCount) {
+    const bool finishedProcessingInput = _leftInputIdx == leftRowCount;
+    const bool needToCopyRowOffsets = _rowOffsetState.hasRowOffsets();
+    if (!needToCopyRowOffsets && !finishedProcessingInput) {
         _leftInputIdx += 1;
     }
 }
 
 template <typename LeftKey, typename RightKey>
-template <bool IsOptional>
 void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemaining,
                                                               size_t& totalRowsInserted) {
     const Dataframe* rightDf = _rightInput.getDataframe();
@@ -488,9 +470,8 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
         for (const auto* namedCol : outDf->cols()) {
             dispatchColumnVector(namedCol->getColumn(),
                                  [&](auto* col) {
-                                     auto* colVector = static_cast<decltype(col)>(col);
-                                     if (colVector->size() < chunkSize) {
-                                         colVector->resize(chunkSize);
+                                     if (col->size() < chunkSize) {
+                                         col->resize(chunkSize);
                                      }
                                  });
         }
@@ -498,12 +479,12 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
 
     for (; _rightInputIdx < rightRowCount; ++_rightInputIdx) {
         // Skip null keys - NULL != NULL semantics
-        if (!isNonNullKey<RightKey, IsOptional>(rightCol, _rightInputIdx)) {
+        const auto rightKey = tryExtractKeyView<RightKey>(rightCol, _rightInputIdx);
+        if (!rightKey) {
             continue;
         }
 
-        const auto rightKey = extractKeyView<RightKey, IsOptional>(rightCol, _rightInputIdx);
-        const auto it = _leftMap.find(rightKey);
+        const auto it = _leftMap.find(*rightKey);
         if (it != _leftMap.end()) {
             const auto& rows = it->second;
             const auto& cols = rightDf->cols();
@@ -533,9 +514,8 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
                 auto* inputColumn = cols[j]->getColumn();
                 auto* outputColumn = outCols[columnOffset]->getColumn();
                 dispatchColumnVector(outputColumn, [&](auto* col) {
-                    auto* typedOutCol = static_cast<decltype(col)>(outputColumn);
                     const auto* typedInCol = static_cast<decltype(col)>(inputColumn);
-                    fillOutputColumn(typedOutCol,
+                    fillOutputColumn(col,
                                      typedInCol,
                                      _rightInputIdx,
                                      totalRowsInserted,
@@ -561,7 +541,7 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
             totalRowsInserted += rowsToCopy;
         }
 
-        auto& offsetVec = getMap(_rightMap, rightKey);
+        auto& offsetVec = getMap(_rightMap, *rightKey);
 
         offsetVec.emplace_back(_store.insertRow(rightDf,
                                                 leftDf,
@@ -577,7 +557,9 @@ void HashJoinProcessor<LeftKey, RightKey>::processRightStream(size_t& rowsRemain
 
     // if we don't need to finish of copying a row offset vector
     // we can start from the next index
-    if (!_rowOffsetState.hasRowOffsets() && _rightInputIdx != rightRowCount) {
+    const bool finishedProcessingInput = _rightInputIdx == rightRowCount;
+    const bool needToCopyRowOffsets = _rowOffsetState.hasRowOffsets();
+    if (!needToCopyRowOffsets && !finishedProcessingInput) {
         _rightInputIdx += 1;
     }
 }
@@ -608,9 +590,8 @@ void HashJoinProcessor<LeftKey, RightKey>::flushRightStream(size_t& rowsRemainin
         auto* inputColumn = cols[j]->getColumn();
         auto* outputColumn = outCols[columnOffset]->getColumn();
         dispatchColumnVector(outputColumn, [&](auto* col) {
-            auto* typedOutCol = static_cast<decltype(col)>(outputColumn);
             const auto* typedInCol = static_cast<decltype(col)>(inputColumn);
-            fillOutputColumn(typedOutCol,
+            fillOutputColumn(col,
                              typedInCol,
                              _rightInputIdx,
                              totalRowsInserted,
@@ -671,9 +652,8 @@ void HashJoinProcessor<LeftKey, RightKey>::flushLeftStream(size_t& rowsRemaining
         auto* inputColumn = cols[j]->getColumn();
         auto* outputColumn = outCols[outColIdx]->getColumn();
         dispatchColumnVector(outputColumn, [&](auto* col) {
-            auto* typedOutCol = static_cast<decltype(col)>(outputColumn);
             const auto* typedInCol = static_cast<decltype(col)>(inputColumn);
-            fillOutputColumn(typedOutCol,
+            fillOutputColumn(col,
                              typedInCol,
                              _leftInputIdx,
                              totalRowsInserted,
@@ -686,9 +666,8 @@ void HashJoinProcessor<LeftKey, RightKey>::flushLeftStream(size_t& rowsRemaining
     auto* outputColumn = outCols.back()->getColumn();
 
     dispatchColumnVector(outputColumn, [&](auto* col) {
-        auto* typedOutCol = static_cast<decltype(col)>(outputColumn);
         const auto* typedInCol = static_cast<decltype(col)>(inputColumn);
-        fillOutputColumn(typedOutCol,
+        fillOutputColumn(col,
                          typedInCol,
                          _leftInputIdx,
                          totalRowsInserted,
@@ -717,13 +696,32 @@ void HashJoinProcessor<LeftKey, RightKey>::flushLeftStream(size_t& rowsRemaining
     rowsRemaining -= rowsToCopy;
 }
 
-template class db::HashJoinProcessor<NodeID>;
-template class db::HashJoinProcessor<EdgeID>;
-template class db::HashJoinProcessor<int64_t>;
-template class db::HashJoinProcessor<uint64_t>;
-template class db::HashJoinProcessor<double>;
-template class db::HashJoinProcessor<std::string_view>;
-template class db::HashJoinProcessor<std::string>;
+#define HASH_JOIN_KEY_TYPES(X) \
+    X(NodeID)                  \
+    X(EdgeID)                  \
+    X(int64_t)                 \
+    X(uint64_t)                \
+    X(double)                  \
+    X(std::string_view)        \
+    X(std::string)             \
+    X(CustomBool)
+
+#define INSTANTIATE_SAME(T)                  \
+    template class db::HashJoinProcessor<T>; \
+    template class db::HashJoinProcessor<std::optional<T>>;
+
+#define INSTANTIATE_MIXED(T)                                   \
+    template class db::HashJoinProcessor<T, std::optional<T>>; \
+    template class db::HashJoinProcessor<std::optional<T>, T>;
+
+HASH_JOIN_KEY_TYPES(INSTANTIATE_SAME)
+HASH_JOIN_KEY_TYPES(INSTANTIATE_MIXED)
+
 template class db::HashJoinProcessor<std::string_view, std::string>;
 template class db::HashJoinProcessor<std::string, std::string_view>;
-template class db::HashJoinProcessor<CustomBool>;
+template class db::HashJoinProcessor<std::optional<std::string_view>, std::string>;
+template class db::HashJoinProcessor<std::string_view, std::optional<std::string>>;
+template class db::HashJoinProcessor<std::optional<std::string_view>, std::optional<std::string>>;
+template class db::HashJoinProcessor<std::optional<std::string>, std::string_view>;
+template class db::HashJoinProcessor<std::string, std::optional<std::string_view>>;
+template class db::HashJoinProcessor<std::optional<std::string>, std::optional<std::string_view>>;

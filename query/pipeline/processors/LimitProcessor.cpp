@@ -36,7 +36,6 @@ LimitProcessor* LimitProcessor::create(PipelineV2* pipeline, size_t limit) {
 }
 
 void LimitProcessor::prepare(ExecutionContext* ctxt) {
-    ctxt->setChunkSize(std::min(ctxt->getChunkSize(), _limit));
     markAsPrepared();
 }
 

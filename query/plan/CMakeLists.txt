@@ -10,6 +10,7 @@ set(plan_sources
     ExprDependencies.cpp
     ReturnStmtGenerator.cpp
     PipelineGenerator.cpp
+    TranslateJoinHelpers.cpp
     ExprProgramGenerator.cpp
     PredicateProgramGenerator.cpp
     PlannerException.cpp

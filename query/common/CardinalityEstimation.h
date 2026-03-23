@@ -26,8 +26,10 @@ public:
     // because a small LIMIT makes early-termination effective.
     bool shouldPreferCartesian(const LabelSet& left, const LabelSet& right, size_t queryLimit) const;
 
+    // Covers the case rhs expression is not var node ( e.g. a yielded item)
+    bool shouldPreferCartesian(const LabelSet& left, size_t rightCardinality, size_t queryLimit) const;
+
 private:
     GraphView _graphView;
 };
-
 }

@@ -50,7 +50,7 @@ struct RowOffsetsCopyState {
 
     // If we have a df pointer there is some
     //  uncopied RowOffsets
-    bool hasRowOffsets() { return _df != nullptr; };
+    bool hasRowOffsets() const { return _df != nullptr; };
 
     void reset() {
         _df = nullptr;
@@ -68,18 +68,23 @@ struct RowOffsetsCopyState {
 
     void incrementRowOffsetIdx(size_t increment) { _rowOffsetIdx += increment; };
 
-    size_t numRemainingOffsets() { return _offsetVec->size() - _rowOffsetIdx; };
+    size_t numRemainingOffsets() const { return _offsetVec->size() - _rowOffsetIdx; };
 };
 
 template <typename LeftKey, typename RightKey = LeftKey>
 class HashJoinProcessor : public Processor {
 public:
-    static_assert(std::is_same_v<LeftKey, RightKey> ||
-                  (StringLike<LeftKey> && StringLike<RightKey>),
-                  "LeftKey and RightKey must be the same type or both string-like");
+    template <typename T>
+    using UnwrapOptional = TypeUtils::unwrap_optional_t<T>;
 
-    using LeftHashJoinMap = typename HashJoinMapType<LeftKey>::Type;
-    using RightHashJoinMap = typename HashJoinMapType<RightKey>::Type;
+    using UnwrappedLeftKey = UnwrapOptional<LeftKey>;
+    using UnwrappedRightKey = UnwrapOptional<RightKey>;
+    static_assert(std::is_same_v<UnwrappedLeftKey, UnwrappedRightKey> ||
+                  (Stringy<UnwrappedLeftKey,UnwrappedRightKey>),
+                  "LeftKey and RightKey must be the same type or both stringy");
+
+    using LeftHashJoinMap = typename HashJoinMapType<UnwrappedLeftKey>::Type;
+    using RightHashJoinMap = typename HashJoinMapType<UnwrappedRightKey>::Type;
 
     static HashJoinProcessor* create(PipelineV2* pipeline,
                                      ColumnTag leftJoinKey,
@@ -124,16 +129,12 @@ private:
     size_t _rightInputIdx {0};
 
     bool _hasWritten {false};
-    bool _isLeftOptionalKey {false};
-    bool _isRightOptionalKey {false};
 
     // Stores Information To Finish Off A Join
     // Mid RowOffset Vector.
     RowOffsetsCopyState _rowOffsetState;
 
-    template <bool IsOptional>
     void processRightStream(size_t& rowsRemaining, size_t& totalRowsInserted);
-    template <bool IsOptional>
     void processLeftStream(size_t& rowsRemaining, size_t& totalRowsInserted);
 
     void flushRightStream(size_t& rowsRemaining, size_t& totalRowsInserted);
@@ -142,5 +143,4 @@ private:
     HashJoinProcessor(ColumnTag leftJoinKey, ColumnTag rightJoinKey);
     ~HashJoinProcessor() override = default;
 };
-
 }

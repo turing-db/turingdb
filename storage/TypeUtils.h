@@ -15,10 +15,10 @@ template <typename T>
 concept StringLike = std::same_as<T, std::string> || std::same_as<T, std::string_view>;
 
 template <typename T, typename U>
-concept Stringy = (
-    (std::same_as<T, std::string_view> && std::same_as<std::string, U>) ||
-    (std::same_as<std::string_view, U> && std::same_as<T, std::string>)
-);
+concept Stringy = (std::same_as<T, std::string_view> && std::same_as<std::string, U>)
+               || (std::same_as<std::string_view, U> && std::same_as<T, std::string>)
+               || (std::same_as<std::string_view, U> && std::same_as<T, std::string_view>)
+               || (std::same_as<std::string, U> && std::same_as<T, std::string>);
 
 struct TypeUtils {
     template <typename T>
@@ -28,7 +28,7 @@ struct TypeUtils {
     struct is_optional<std::optional<U>> : std::true_type {};
 
     template <typename T>
-    inline static constexpr bool is_optional_v = is_optional<std::remove_cvref_t<T>>::value;
+    static constexpr bool is_optional_v = is_optional<std::remove_cvref_t<T>>::value;
 
     template <typename T>
     struct unwrap_optional {
@@ -69,7 +69,6 @@ struct TypeUtils {
             return std::forward<T>(t);
         }
     }
-
 };
 
 namespace TypeConcepts {
