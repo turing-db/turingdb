@@ -81,6 +81,8 @@
 #include "nodes/FuncEvalNode.h"
 #include "nodes/PathExplorerNode.h"
 
+#include "TranslateJoinHelpers.h"
+
 #include "processors/CreateVectorIndexProcessor.h"
 #include "processors/LoadVectorProcessor.h"
 #include "processors/VectorSearchProcessor.h"
@@ -865,123 +867,27 @@ PipelineOutputInterface* PipelineGenerator::translateJoinNode(JoinNode* node) {
     // LHS is implicit in @ref _pendingOutput
     _builder.getPendingOutput().updateInterface(lhs);
 
-    const auto visitor = Overloaded {
-        [](const EntityOutputStream::NodeStream& stream) -> ColumnTag {
-            return stream._nodeIDsTag;
-        },
-        [](const EntityOutputStream::EdgeStream& stream) -> ColumnTag {
-            return stream._otherIDsTag;
-        },
-    };
+    // Determine what the join tags need to be
+    // leftJoinTag - will be used to identify the join key in the lhs input
+    // rightJoinTag - will be used to identify the join key in the rhs input
 
-    ColumnTag leftJoinTag;
-    ColumnTag rightJoinTag;
-
-    switch (node->getJoinType()) {
-        case JoinType::COMMON_ANCESTOR: {
-            leftJoinTag = _declToColumn.find(node->getLeftVarDecl())->second;
-            rightJoinTag = _declToColumn.find(node->getRightVarDecl())->second;
-            break;
-        }
-        case JoinType::COMMON_SUCCESSOR: {
-            if (node->getLeftVarDecl()->getType() == EvaluatedType::EdgePattern) {
-                const auto edgeVisitor = Overloaded {
-                    [](const EntityOutputStream::NodeStream& stream) -> ColumnTag {
-                        return stream._nodeIDsTag;
-                    },
-                    [](const EntityOutputStream::EdgeStream& stream) -> ColumnTag {
-                        return stream._edgeIDsTag;
-                    },
-                };
-                leftJoinTag = lhs->getStream().visit(edgeVisitor);
-                rightJoinTag = rhs->getStream().visit(edgeVisitor);
-            } else {
-                leftJoinTag = lhs->getStream().visit(visitor);
-                rightJoinTag = rhs->getStream().visit(visitor);
-            }
-            break;
-        }
-        case JoinType::DIAMOND: {
-            throw PlannerException("Common Successor Joins With Common Ancestor Unsupported");
-        }
-        case JoinType::PREDICATE: {
-            // The left VarDecl (local dep) may not be in _declToColumn when
-            // the JoinNode sits before that VarNode's filter.  In that case
-            // the entity ID tag is still available from the LHS stream.
-            // The right VarDecl (remote dep) is always fully processed.
-            const auto leftIt = _declToColumn.find(node->getLeftVarDecl());
-            if (leftIt != _declToColumn.end()) {
-                leftJoinTag = leftIt->second;
-            } else {
-                const auto entityVisitor = Overloaded {
-                    [](const EntityOutputStream::NodeStream& s) -> ColumnTag {
-                        return s._nodeIDsTag;
-                    },
-                    [](const EntityOutputStream::EdgeStream& s) -> ColumnTag {
-                        return s._edgeIDsTag;
-                    },
-                };
-                leftJoinTag = lhs->getStream().visit(entityVisitor);
-            }
-            rightJoinTag = _declToColumn.find(node->getRightVarDecl())->second;
-            break;
-        }
-    }
+    auto [leftJoinTag, rightJoinTag] = TranslateJoinHelpers::getJoinKeyTags(node,
+                                                                            lhs,
+                                                                            rhs,
+                                                                            _declToColumn);
 
     auto& outputIf = _builder.addHashJoin(rhs, leftJoinTag, rightJoinTag);
 
-    // For predicate joins, remap both key VarDecls to the merged join column
-    // tag since the original tags are no longer in the output dataframe.
-    // When the left key was resolved from the LHS stream (entity-type join
-    // where the VarNode is downstream), create a fresh stream with the merged
-    // tag so the downstream VarNode can pick it up.  Otherwise preserve the
-    // LHS stream (property value joins or entity joins whose VarDecl was
-    // already registered).
-    if (node->getJoinType() == JoinType::PREDICATE) {
-        const auto joinTag = outputIf.getDataframe()->cols().back()->getTag();
-        const bool leftFromStream = !_declToColumn.contains(node->getLeftVarDecl());
-        if (leftFromStream) {
-            const auto leftType = node->getLeftVarDecl()->getType();
-            if (leftType == EvaluatedType::EdgePattern) {
-                const auto& es = lhs->getStream().asEdgeStream();
-                const auto merged = EntityOutputStream::createEdgeStream(joinTag,
-                                                                         es._otherIDsTag,
-                                                                         es._edgeTypesTag);
-                outputIf.setStream(merged);
-            } else {
-                outputIf.setStream(EntityOutputStream::createNodeStream(joinTag));
-            }
-        } else {
-            outputIf.setStream(lhs->getStream());
-        }
-        _declToColumn.insert_or_assign(node->getLeftVarDecl(), joinTag);
-        _declToColumn.insert_or_assign(node->getRightVarDecl(), joinTag);
-    } else if (node->getJoinType() == JoinType::COMMON_SUCCESSOR &&
-               node->getLeftVarDecl()->getType() == EvaluatedType::EdgePattern) {
-        // Restore EdgeStream so downstream GetEdgeTarget can project to target node.
-        // Use the merged join key tag (last column) as the edgeIDsTag since the
-        // original tags from each side were replaced during the join.
-        const auto& edgeStream = lhs->getStream().asEdgeStream();
-        ColumnTag mergedEdgeIDsTag = outputIf.getDataframe()->cols().back()->getTag();
-        auto stream = EntityOutputStream::createEdgeStream(mergedEdgeIDsTag,
-                                                           edgeStream._otherIDsTag,
-                                                           edgeStream._edgeTypesTag);
-        outputIf.setStream(stream);
-    } else {
-        ColumnTag streamedTag = outputIf.getDataframe()->cols().back()->getTag();
-        if (node->getDependencyVarDecl()) {
-            const auto it = _declToColumn.find(node->getDependencyVarDecl());
-            if (it == _declToColumn.end()) {
-                throw PlannerException("Join Dependency VarDecl Not Found");
-            }
-            if (!lhs->getDataframe()->hasColumn(it->second)) {
-                streamedTag = lhs->getStream().visit(visitor);
-            } else {
-                streamedTag = rhs->getStream().visit(visitor);
-            }
-        }
-        outputIf.setStream(EntityOutputStream::createNodeStream(streamedTag));
-    }
+    const auto& outputCols = outputIf.getDataframe()->cols();
+    bioassert(!outputCols.empty(), "Join output column is empty");
+    ColumnTag joinTag = outputCols.back()->getTag();
+
+    const auto stream = TranslateJoinHelpers::resolveStream(node,
+                                                            lhs,
+                                                            rhs,
+                                                            joinTag,
+                                                            _declToColumn);
+    outputIf.setStream(stream);
 
     _builder.setMaterializeProc(MaterializeProcessor::createFromDf(_pipeline,
                                                                    _mem,
@@ -1597,7 +1503,6 @@ PipelineOutputInterface* PipelineGenerator::translateShowVectorIndexesNode(ShowV
     _builder.addShowVectorIndexes();
     return _builder.getPendingOutputInterface();
 }
-
 
 PipelineOutputInterface* PipelineGenerator::translatePathExplorerNode(PathExplorerNode* node) {
     const uint64_t minHops = node->getMinHops();

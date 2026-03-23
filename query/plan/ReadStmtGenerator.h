@@ -32,8 +32,6 @@ class EdgePattern;
 class PropertyExpr;
 class EntityTypeExpr;
 class VarDecl;
-
-class ExprDependencies;
 class PlanGenConfig;
 class Predicate;
 
@@ -68,11 +66,11 @@ public:
     void unwrapWhereExpr(Expr*);
 
     void placeJoinsOnVars();
-    void placePredicateJoins();
+    void placePredicates();
     void placeJoinsOnProcedures();
     PlanGraphNode* generateEndpoint();
 
-    void insertDataFlowNode(VarNode* node, PlanGraphNode* dependency);
+    bool insertDataFlowNode(VarNode* node, PlanGraphNode* dependency, Predicate* pred);
 
     void insertShortestPathNode(VarNode* source,
                                 VarNode* target,
@@ -97,7 +95,8 @@ private:
 
     void generateDependency(PlanGraphNode* producer, Expr* rawExpr);
 
-    bool tryPlaceValueHashJoin(Predicate* pred, ExprDependencies& deps, VarNode* var);
+    bool shouldPlaceValueHashJoin(VarNode* localVar, PlanGraphNode* remoteNode);
+    bool tryPlaceValueHashJoin(FilterNode* filter, VarNode* node, PlanGraphNode* dependency, Predicate* pred);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

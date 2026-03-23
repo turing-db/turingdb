@@ -1,6 +1,9 @@
 #pragma once
 
 #include <stdexcept>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 #include <variant>
 
 #include "PipelineException.h"
@@ -73,31 +76,41 @@ public:
         return std::get<EdgeStream>(_stream);
     }
 
-    template <typename T>
-        requires requires(T visitor) {
-            { visitor(NodeStream {}) };
-            { visitor(EdgeStream {}) };
+    // Args can be any other input parameters letting us do more things with streams.
+    template <typename VisitorFunc, typename... Args>
+        requires requires(VisitorFunc visitor) {
+            visitor(std::declval<const NodeStream&>(), std::declval<const Args&>()...);
+            visitor(std::declval<const EdgeStream&>(), std::declval<const Args&>()...);
         }
     struct StreamVisitor {
-        T _visitor;
+        VisitorFunc _visitor;
+        std::tuple<Args...> _args;
 
-        using ReturnType = decltype(_visitor(std::declval<const NodeStream&>()));
+        using ReturnType = decltype(std::declval<VisitorFunc&>()(
+            std::declval<const NodeStream&>(),
+            std::declval<const Args&>()...));
 
-        [[noreturn]] ReturnType operator()(const std::monostate& stream) const {
+        [[noreturn]] ReturnType operator()(const std::monostate&) const {
             throw std::runtime_error("Called StreamVisitor::operator() on empty stream");
         }
 
-        ReturnType operator()(const NodeStream& stream) const {
-            return _visitor(stream);
-        }
-
-        ReturnType operator()(const EdgeStream& stream) const {
-            return _visitor(stream);
+        template <typename Stream>
+        ReturnType operator()(const Stream& stream) const {
+            return std::apply(
+                [&](const auto&... args) -> ReturnType {
+                    return _visitor(stream, args...);
+                },
+                _args);
         }
     };
 
-    auto visit(const auto& visitor) const {
-        return std::visit(StreamVisitor<decltype(visitor)> {visitor}, _stream);
+    template <typename Visitor, typename... Args>
+    auto visit(Visitor&& visitor, Args&&... args) const {
+        return std::visit(
+            StreamVisitor<std::decay_t<Visitor>, std::decay_t<Args>...> {
+                std::forward<Visitor>(visitor),
+                std::tuple<std::decay_t<Args>...> {std::forward<Args>(args)...}},
+            _stream);
     }
 
 private:

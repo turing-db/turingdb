@@ -246,7 +246,9 @@ void ReadStmtGenerator::generatePatternElement(const PatternElement* element) {
             throwError("Pattern element edge must be an edge pattern", element);
         }
 
-        if (e->getDecl() && !_edgesInPattern.insert(e->getDecl()).second) {
+        auto insertRes = _edgesInPattern.insert(e->getDecl());
+        bool existsInSet = !insertRes.second;
+        if (e->getDecl() && existsInSet) {
             throwError("Re-using the same edge variable in a single pattern is not supported", edge);
         }
 
@@ -615,10 +617,7 @@ void ReadStmtGenerator::placeJoinsOnVars() {
     }
 }
 
-void ReadStmtGenerator::placePredicateJoins() {
-    const bool useValueHashJoin = _config->getUseValueHashJoin();
-    std::vector<FilterNode*> vhjFilters;
-
+void ReadStmtGenerator::placePredicates() {
     for (auto& pred : _tree->getPredicates()) {
         ExprDependencies& deps = pred->getDependencies();
 
@@ -633,152 +632,63 @@ void ReadStmtGenerator::placePredicateJoins() {
             throwError("Unknown error. Could not place predicate");
         }
 
-        // Try to place a value hash join instead of cartesian product + filter
-        if (useValueHashJoin) {
-            if (tryPlaceValueHashJoin(pred.get(), deps, var)) {
-                vhjFilters.push_back(_variables->getNodeFilter(var));
-                continue;
-            }
-        }
-
-        // Step 2: Place joins
+        // Step 2: Place joins. insertDataFlowNode also adds the predicate to the filter
+        // for any dep requiring a join (UndirectedPath/NoPath).
+        bool vhjPlaced = false;
         for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
             generateDependency(dep._producerNode, dep._expr);
-            insertDataFlowNode(var, dep._producerNode);
+            vhjPlaced |= insertDataFlowNode(var, dep._producerNode, pred.get());
         }
 
-        // Step 3: Place the constraint
+        // Step 3: For single-var and common sucessor predicates
+        // all deps return early (SameVar/BackwardPath) and never add the predicate,
+        // so add it directly here if not already present.
         FilterNode* filterNode = _variables->getNodeFilter(var);
-        filterNode->addPredicate(pred.get());
-        pred->setFilterNode(filterNode);
-    }
-
-    // Bypass filters left empty by value hash joins.
-    // We do this here rather than in a general optimizer pass to avoid
-    // masking planner bugs that accidentally produce empty filters.
-    for (FilterNode* filterNode : vhjFilters) {
-        if (!filterNode->isEmpty()) {
-            continue;
+        const auto& filterPreds = filterNode->getPredicates();
+        const bool beenPlaced = std::ranges::find(filterPreds.begin(), filterPreds.end(), pred.get()) != filterPreds.end();
+        if (!vhjPlaced && !beenPlaced) {
+            filterNode->addPredicate(pred.get());
+            pred->setFilterNode(filterNode);
         }
-
-        const auto inputs = filterNode->inputs();
-        const auto outputs = filterNode->outputs();
-
-        filterNode->clearInputs();
-        filterNode->clearOutputs();
-
-        for (PlanGraphNode* input : inputs) {
-            for (PlanGraphNode* output : outputs) {
-                input->connectOut(output);
-            }
-        }
-
-        _tree->removeNode(filterNode);
     }
 }
 
-bool ReadStmtGenerator::tryPlaceValueHashJoin(Predicate* pred,
-                                               ExprDependencies& deps,
-                                               VarNode* var) {
-    // Must have exactly 2 variable dependencies and no function dependencies
-    auto& varDeps = deps.getVarDeps();
-    if (varDeps.size() != 2 || !deps.getFuncDeps().empty()) {
+bool ReadStmtGenerator::shouldPlaceValueHashJoin(VarNode* localVar, PlanGraphNode* remoteNode) {
+    if (_config->getForceValueHashJoin()) {
+        return true;
+    }
+
+    if (!_config->getUseValueHashJoin()) {
         return false;
     }
 
-    // Must be a BinaryExpr with Equal operator
-    const Expr* expr = pred->getExpr();
-    if (expr->getKind() != Expr::Kind::BINARY) {
-        return false;
-    }
-    const auto* binExpr = static_cast<const BinaryExpr*>(expr);
-    if (binExpr->getOperator() != BinaryOperator::Equal) {
-        return false;
-    }
+    LabelSet leftLabels;
+    LabelSet rightLabels;
 
-    // Both dep expressions must resolve to a single VarDecl (simple property/symbol)
-    auto& dep0 = varDeps[0];
-    auto& dep1 = varDeps[1];
-
-    if (!dep0._expr->getExprVarDecl() || !dep1._expr->getExprVarDecl()) {
-        return false;
-    }
-
-    // Both producers must be VarNodes (graph pattern traversals)
-    if (dep0._producerNode->getOpcode() != PlanGraphOpcode::VAR ||
-        dep1._producerNode->getOpcode() != PlanGraphOpcode::VAR) {
-        return false;
-    }
-
-    // Check which dep is on a different island from var (NoPath = remote)
-    const auto [path0, ancestor0] = _topology->getShortestPath(var, dep0._producerNode);
-    const auto [path1, ancestor1] = _topology->getShortestPath(var, dep1._producerNode);
-
-    ExprDependencies::VarDependency* localDep = nullptr;
-    ExprDependencies::VarDependency* remoteDep = nullptr;
-
-    if (path0 == PlanGraphTopology::PathToDependency::NoPath &&
-        path1 != PlanGraphTopology::PathToDependency::NoPath) {
-        remoteDep = &dep0;
-        localDep = &dep1;
-    } else if (path1 == PlanGraphTopology::PathToDependency::NoPath &&
-               path0 != PlanGraphTopology::PathToDependency::NoPath) {
-        remoteDep = &dep1;
-        localDep = &dep0;
-    } else {
-        // Both on same island or both remote - fall back to cartesian product
-        return false;
-    }
-
-    // Skip VHJ when the cartesian product is small enough to be cheap
-    if (!_config->getForceValueHashJoin()) {
-        auto* localVar = dynamic_cast<VarNode*>(localDep->_producerNode);
-        auto* remoteVar = dynamic_cast<VarNode*>(remoteDep->_producerNode);
-        if (localVar && remoteVar) {
-            LabelSet leftLabels;
-            LabelSet rightLabels;
-
-            FilterNode* localFilter = _variables->getNodeFilter(localVar);
-            if (localFilter) {
-                if (auto* nf = localFilter->asNodeFilter()) {
-                    leftLabels = nf->getLabelConstraints();
-                }
-            }
-
-            FilterNode* remoteFilter = _variables->getNodeFilter(remoteVar);
-            if (remoteFilter) {
-                if (auto* nf = remoteFilter->asNodeFilter()) {
-                    rightLabels = nf->getLabelConstraints();
-                }
-            }
-
-            CardinalityEstimation estimation(_graphView);
-            if (estimation.shouldPreferCartesian(leftLabels, rightLabels, _queryLimit)) {
-                return false;
-            }
+    FilterNode* localFilter = _variables->getNodeFilter(localVar);
+    if (localFilter) {
+        if (auto* nf = localFilter->asNodeFilter()) {
+            leftLabels = nf->getLabelConstraints();
         }
     }
 
-    // Generate property dependencies (place GetPropertyNodes)
-    generateDependency(localDep->_producerNode, localDep->_expr);
-    generateDependency(remoteDep->_producerNode, remoteDep->_expr);
+    CardinalityEstimation estimation(_graphView);
 
-    // Handle local dep's data flow (may need a join within its island)
-    insertDataFlowNode(var, localDep->_producerNode);
-
-    // Create PREDICATE join instead of CartesianProduct for the remote dep
-    const VarDecl* leftDecl = localDep->_expr->getExprVarDecl();
-    const VarDecl* rightDecl = remoteDep->_expr->getExprVarDecl();
-
-    FilterNode* filterNode = _variables->getNodeFilter(var);
-    JoinNode* joinNode = _tree->insertBefore<JoinNode>(filterNode,
-                                                        leftDecl,
-                                                        rightDecl,
-                                                        JoinType::PREDICATE);
-    PlanGraphNode* remoteBranchTip = _topology->getBranchTip(remoteDep->_producerNode);
-    remoteBranchTip->connectOut(joinNode);
-
-    return true;
+    const auto* rightVar = dynamic_cast<VarNode*>(remoteNode);
+    if (rightVar) {
+        FilterNode* remoteFilter = _variables->getNodeFilter(rightVar);
+        if (remoteFilter) {
+            if (auto* nf = dynamic_cast<NodeFilterNode*>(remoteFilter)) {
+                rightLabels = nf->getLabelConstraints();
+            }
+        }
+        return !estimation.shouldPreferCartesian(leftLabels, rightLabels, _queryLimit);
+    } else {
+        // In the case where we have a Call procedure yield in the expression (for now
+        // this would only work if the yield item is on the rhs), we default the
+        // right side cardinality to 10
+        return !estimation.shouldPreferCartesian(leftLabels, 10, _queryLimit);
+    }
 }
 
 void ReadStmtGenerator::placeJoinsOnProcedures() {
@@ -950,7 +860,9 @@ void ReadStmtGenerator::insertShortestPathNode(VarNode* source,
     _variables->setProducer(pathDecl, node);
 }
 
-void ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* dependency) {
+// returns true if a Value Hash Join has been place - indicating to the caller that the
+// predicate does not need to be added to the filter
+bool ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* dependency, Predicate* pred) {
     FilterNode* filter = _variables->getNodeFilter(node);
     const auto* dependencyVarDecl = static_cast<VarDeclProviderNode*>(dependency)->getVarDecl();
     const auto [path, ancestorNode] = _topology->getShortestPath(node, dependency);
@@ -958,7 +870,7 @@ void ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* depende
     switch (path) {
         case PlanGraphTopology::PathToDependency::SameVar:
         case PlanGraphTopology::PathToDependency::BackwardPath: {
-            return;
+            return false;
         }
 
         case PlanGraphTopology::PathToDependency::UndirectedPath: {
@@ -971,17 +883,20 @@ void ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* depende
 
             PlanGraphNode* depBranchTip = _topology->getBranchTip(dependency);
             depBranchTip->connectOut(join);
-            return;
+            return false;
         }
 
         case PlanGraphTopology::PathToDependency::NoPath: {
-            // If nodes are on two different islands
-            // Cartesian product. This can be optimized in the future into a ValueHashJoin
+            if (tryPlaceValueHashJoin(filter, node, dependency, pred)) {
+                return true;
+            }
             CartesianProductNode* join = _tree->insertBefore<CartesianProductNode>(filter);
             PlanGraphNode* depBranchTip = _topology->getBranchTip(dependency);
             depBranchTip->connectOut(join);
-            return;
+            return false;
         }
+        default:
+            throwError("No Path Found Between Dataflow Dependency");
     }
 }
 
@@ -1037,6 +952,44 @@ void ReadStmtGenerator::generateDependency(PlanGraphNode* producer, Expr* rawExp
     } else {
         throwError("Expression dependency could not be handled in the predicate evaluation");
     }
+}
+
+bool ReadStmtGenerator::tryPlaceValueHashJoin(FilterNode* filter, VarNode* node,
+                                              PlanGraphNode* dependency, Predicate* pred) {
+    const BinaryExpr* binExpr = dynamic_cast<const BinaryExpr*>(pred->getExpr());
+    if (!binExpr) {
+        return false;
+    }
+
+    const Expr* lhs = binExpr->getLHS();
+    const Expr* rhs = binExpr->getRHS();
+
+    const bool isValidLhs = lhs->getKind() == Expr::Kind::SYMBOL || lhs->getKind() == Expr::Kind::PROPERTY;
+    const bool isValidRhs = rhs->getKind() == Expr::Kind::SYMBOL || rhs->getKind() == Expr::Kind::PROPERTY;
+    const bool isEqualityPred = binExpr->getOperator() == BinaryOperator::Equal;
+    const bool noFunctionDependencies = pred->getDependencies().getFuncDeps().empty();
+
+    const bool canPlaceValueHashJoin = isEqualityPred && isValidLhs && isValidRhs && noFunctionDependencies;
+
+    if (!canPlaceValueHashJoin || !shouldPlaceValueHashJoin(node, dependency)) {
+        return false;
+    }
+
+    const VarDecl* firstJoinKeyDecl = lhs->getExprVarDecl();
+    const VarDecl* secondJoinKeyDecl = rhs->getExprVarDecl();
+    bioassert(firstJoinKeyDecl && secondJoinKeyDecl, "Both lhs and rhs of join need to have VarDecls");
+
+    // By convention the right hand side of the expression is the dependency var decl
+    const VarDecl* dependencyVarDecl = rhs->getExprVarDecl();
+
+    JoinNode* join = _tree->insertBefore<JoinNode>(filter,
+                                                   firstJoinKeyDecl,
+                                                   secondJoinKeyDecl,
+                                                   dependencyVarDecl,
+                                                   JoinType::PREDICATE);
+    PlanGraphNode* depBranchTip = _topology->getBranchTip(dependency);
+    depBranchTip->connectOut(join);
+    return true;
 }
 
 void ReadStmtGenerator::throwError(std::string_view msg, const void* obj) const {

@@ -60,6 +60,8 @@ static int fuzzOne(const char* data, size_t size) {
     db::SystemManager& sysMan = g_env->getSystemManager();
     const db::ProcedureManager* procedures = db.getProcedures();
 
+    const db::QueryConfig queryConfig;
+
     // Open transaction
     auto txRes = sysMan.openTransaction(g_graphName,
                                         db::CommitHash::head(),
@@ -92,7 +94,7 @@ static int fuzzOne(const char* data, size_t size) {
     }
 
     // Plan
-    db::PlanGraphGenerator planGen(ast, view);
+    db::PlanGraphGenerator planGen(ast, view, &queryConfig.getPlanGenConfig());
     try {
         planGen.generate(ast.queries().front());
     } catch (const db::CompilerException&) {
