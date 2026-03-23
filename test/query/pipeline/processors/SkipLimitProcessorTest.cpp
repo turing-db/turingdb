@@ -5,6 +5,9 @@
 #include "SystemManager.h"
 #include "SimpleGraph.h"
 
+#include "columns/ColumnConst.h"
+#include "dataframe/Dataframe.h"
+
 class SkipLimitProcessorTest : public ProcessorTester {
 public:
     void initialize() override {

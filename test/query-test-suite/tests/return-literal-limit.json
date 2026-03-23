@@ -1,11 +1,11 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "RETURN 5 LIMIT 0",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n __expr__: v1\n    `\"]\n    1[\"`\n        __LIMIT__\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1\n    1-->2",
-    "result": "5\n103095004895344",
-    "resultJson": "{\"header\":{\"column_names\":[\"5\"],\"column_types\":[\"Int64\"]},\"data\":[[[103095004895344]]]}"
+    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v1\n    `\"]\n    1[\"`\n        __LIMIT__\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1\n    1-->2",
+    "result": "5",
+    "resultJson": "{\"header\":{\"column_names\":[\"5\"],\"column_types\":[\"Int64\"]},\"data\":[]}"
   },
   "tags": [
     "projection",
@@ -13,6 +13,5 @@
     "literal",
     "return"
   ],
-  "write-required": false,
-  "disabled-reason": "LIMIT 0 doesn't work if the dataframe contains only ColumnConst columns (no way to specify the dataframe row count)"
+  "write-required": false
 }
