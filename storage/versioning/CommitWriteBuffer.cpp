@@ -243,7 +243,7 @@ void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
     }
 }
 
-void CommitWriteBuffer::addExistingEdgeUpdate(DataPartBuilder& builder,
+void CommitWriteBuffer::applyExistingEdgeUpdate(DataPartBuilder& builder,
                                   const EdgeRecord& record,
                                   const CommitWriteBuffer::UntypedProperty& prop) {
     const auto& [pid, val] = prop;
@@ -262,7 +262,7 @@ void CommitWriteBuffer::addExistingEdgeUpdate(DataPartBuilder& builder,
     _journal.addWrittenEdge(record._edgeID);
 }
 
-void CommitWriteBuffer::addPendingEdgeUpdate(DataPartBuilder& builder,
+void CommitWriteBuffer::applyPendingEdgeUpdate(DataPartBuilder& builder,
                                              EdgeID edgeID,
                                              const CommitWriteBuffer::UntypedProperty& prop) {
     const auto& [pid, val] = prop;
@@ -330,9 +330,9 @@ void CommitWriteBuffer::applyEdgeUpdates(DataPartBuilder& builder) {
     // Iterate newest → oldest so the first registration wins.
     for (const auto& [edgeID, property] : rv::reverse(_updatedEdges)) {
         if (const EdgeRecord* existingEdge = _view.read().getEdge(edgeID)) {
-            addExistingEdgeUpdate(builder, *existingEdge, property);
+            applyExistingEdgeUpdate(builder, *existingEdge, property);
         } else {
-            addPendingEdgeUpdate(builder, edgeID, property);
+            applyPendingEdgeUpdate(builder, edgeID, property);
         }
     }
 }
@@ -359,10 +359,10 @@ void CommitWriteBufferRebaser::rebase() {
     // We need to rebase pending edges which have a concrete NodeID as src or tgt.
     for (CommitWriteBuffer::PendingEdge& edge : _buffer->pendingEdges()) {
         // We only care about edges that refer to NodeIDs
-        if (NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
+        if (const NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
             edge.src = NodeID {_idRebaser->rebaseNodeID(*oldSrcID)};
         }
-        if (NodeID* oldTgtID = std::get_if<NodeID>(&edge.tgt)) {
+        if (const NodeID* oldTgtID = std::get_if<NodeID>(&edge.tgt)) {
             edge.tgt = NodeID {_idRebaser->rebaseNodeID(*oldTgtID)};
         }
     }
