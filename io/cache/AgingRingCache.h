@@ -142,10 +142,13 @@ public:
                     return it2->second._state != AgingRingCacheState::LOADING;
                 });
 
-                // The state of the entry has changed, check if the loading succeeded
-                if (!_map.contains(key)) {
-                    return AgingRingCacheError::result(AgingRingCacheErrorCode::COULD_NOT_LOAD);
-                }
+                // At this point, there are three possibilities:
+                // 1. The loading succeeded, we can retry and we should get a cache hit
+                // 2. The loading failed, we can retry to have a cache miss
+                //    this will trigger a new attempt to load again.
+                //    If it fails again, it will return COULD_NOT_LOAD
+                // 3. The loading succeeded, but got evicted immediately.
+                //    We can retry to have a cache miss which will trigger a new load attempt.
 
                 continue; // -> Retry
             }

@@ -410,7 +410,8 @@ TEST_F(AgingRingCacheTest, MT_ConcurrentAcquireWithEviction) {
 
     std::vector<std::thread> threads;
     threads.reserve(kThreads);
-    std::atomic<int> errorCount {0};
+    std::mutex errorCountsMutex;
+    std::unordered_map<AgingRingCacheErrorCode, size_t> errorCounts;
 
     for (int t = 0; t < kThreads; t++) {
         threads.emplace_back([&, t] {
@@ -418,7 +419,8 @@ TEST_F(AgingRingCacheTest, MT_ConcurrentAcquireWithEviction) {
                 const int key = (t * kIters + i) % 15; // limited key space forces eviction
                 auto res = cache.acquire(key);
                 if (!res && res.error().getType() != AgingRingCacheErrorCode::NOTHING_TO_EVICT) {
-                    errorCount++;
+                    const std::unique_lock lock(errorCountsMutex);
+                    errorCounts[res.error().getType()]++;
                 }
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
             }
@@ -429,7 +431,10 @@ TEST_F(AgingRingCacheTest, MT_ConcurrentAcquireWithEviction) {
         th.join();
     }
 
-    EXPECT_EQ(errorCount.load(), 0);
+    for (const auto& [code, count] : errorCounts) {
+        EXPECT_EQ(count, 0) << "error: " << AgingRingCacheErrorTypeDescription::value(code);
+    }
+
     cache.shutdown();
 }
 
