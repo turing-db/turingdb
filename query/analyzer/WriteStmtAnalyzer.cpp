@@ -63,12 +63,16 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
 }
 
 void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
+    _hasCreate = true;
     if (createStmt->getPattern()) {
         analyze(createStmt->getPattern());
     }
 }
 
 void WriteStmtAnalyzer::analyze(const SetStmt* setStmt) {
+    if (_hasCreate) {
+        throwError("CREATE ... SET is not yet supported. Please use brace initialisation.", setStmt);
+    }
     for (SetItem* item : setStmt->getItems()) {
         analyze(item);
     }

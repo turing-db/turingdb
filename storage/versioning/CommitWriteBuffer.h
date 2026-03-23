@@ -211,12 +211,12 @@ private:
     void applyEdgeUpdates(DataPartBuilder& builder);
 
     /// Updates a property of an edge which is already committed
-    void addExistingEdgeUpdate(DataPartBuilder& builder,
+    void applyExistingEdgeUpdate(DataPartBuilder& builder,
                                const EdgeRecord& record,
                                const CommitWriteBuffer::UntypedProperty& prop);
 
     /// Updates a property of an edge which is not yet committed
-    void addPendingEdgeUpdate(DataPartBuilder& builder,
+    void applyPendingEdgeUpdate(DataPartBuilder& builder,
                               EdgeID edgeID,
                               const CommitWriteBuffer::UntypedProperty& prop);
 };

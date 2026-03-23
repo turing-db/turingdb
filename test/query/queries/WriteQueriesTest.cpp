@@ -1894,7 +1894,8 @@ TEST_F(WriteQueriesTest, writeAndSetNodesEdges) {
 
     newChange();
     {
-        constexpr std::string_view createSetQuery = R"(CREATE (n:Person)-[e:LIKES]->(m:Language) SET n.name = "Cyrus", e.amount = "a lot", m.name ="C++")";
+        // constexpr std::string_view createSetQuery = R"(CREATE (n:Person)-[e:LIKES]->(m:Language) SET n.name = "Cyrus", e.amount = "a lot", m.name ="C++")";
+        constexpr std::string_view createSetQuery = R"(CREATE (n:Person{name:"Cyrus"})-[e:LIKES{amount:"a lot"}]->(m:Language{name:"C++"}))";
 
         auto res = query(createSetQuery, [](const Dataframe* df) {
             ASSERT_TRUE(df);
