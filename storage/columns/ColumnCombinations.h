@@ -202,22 +202,40 @@ public:
     using ResultColumnType = FunctionResultImpl<DecayedColT, InternalT>::ResultColumnType;
 };
 
-template <typename T>
-struct IsBinaryFuncVector : std::false_type {};
+template <typename ColT, typename ColU, typename InternalT>
+class BinaryFunctionResultImpl;
 
-template <typename T>
-struct IsBinaryFuncVector<ColumnVector<T>> : std::true_type {};
+template <typename AnyT, typename AnyU, typename InternalT>
+class BinaryFunctionResultImpl<ColumnVector<AnyT>, ColumnVector<AnyU>, InternalT> {
+public:
+    using ResultColumnType = ColumnVector<InternalT>;
+};
+
+template <typename AnyT, typename AnyU, typename InternalT>
+class BinaryFunctionResultImpl<ColumnVector<AnyT>, ColumnConst<AnyU>, InternalT> {
+public:
+    using ResultColumnType = ColumnVector<InternalT>;
+};
+
+template <typename AnyT, typename AnyU, typename InternalT>
+class BinaryFunctionResultImpl<ColumnConst<AnyT>, ColumnVector<AnyU>, InternalT> {
+public:
+    using ResultColumnType = ColumnVector<InternalT>;
+};
+
+template <typename AnyT, typename AnyU, typename InternalT>
+class BinaryFunctionResultImpl<ColumnConst<AnyT>, ColumnConst<AnyU>, InternalT> {
+public:
+    using ResultColumnType = ColumnConst<InternalT>;
+};
 
 template <typename Op, typename PColT, typename PColU>
 class BinaryFunctionColumnResult {
     using InternalRes = typename Op::ResultType;
     using DecayT = TypeUtils::decay_col_t<PColT>;
     using DecayU = TypeUtils::decay_col_t<PColU>;
-    static constexpr bool isVector = IsBinaryFuncVector<DecayT>::value
-                                  || IsBinaryFuncVector<DecayU>::value;
 public:
-    using ResultColumnType = std::conditional_t<isVector,
-        ColumnVector<InternalRes>, ColumnConst<InternalRes>>;
+    using ResultColumnType = BinaryFunctionResultImpl<DecayT, DecayU, InternalRes>::ResultColumnType;
 };
 
 template <typename Op, typename ColT, typename ColU, typename ColRes>
