@@ -3692,6 +3692,16 @@ TEST_F(QueriesTest, returnLiteralLimitZero) {
     EXPECT_FALSE(lambdaCalled);
 }
 
+TEST_F(QueriesTest, matchReturnLimitZero) {
+    bool lambdaCalled = false;
+    auto result = query("MATCH (n) RETURN n LIMIT 0", [&](const Dataframe* df) -> void {
+        lambdaCalled = true;
+    });
+
+    EXPECT_TRUE(result.isOk());
+    EXPECT_FALSE(lambdaCalled);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
