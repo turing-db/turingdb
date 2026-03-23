@@ -2148,8 +2148,8 @@ TEST_F(WriteQueriesTest, createNodeAndSetAllProperties) {
 
     newChange();
     {
-        constexpr std::string_view createSetQuery =
-            R"(CREATE (n:Person) SET n.name = "Bob", n.age = 55, n.hasPhD = false)";
+        // constexpr std::string_view createSetQuery = R"(CREATE (n:Person) SET n.name = "Bob", n.age = 55, n.hasPhD = false)";
+        constexpr std::string_view createSetQuery = R"(CREATE (n:Person{name:"Bob", age:55, hasPhD:false}))";
 
         auto res = query(createSetQuery, [](const Dataframe* df) {
             ASSERT_TRUE(df);
@@ -2197,8 +2197,10 @@ TEST_F(WriteQueriesTest, createMultipleNodesAndSetProperties) {
 
     newChange();
     {
-        constexpr std::string_view createQuery1 = R"(CREATE (n:Person) SET n.name = "Carol", n.age = 28, n.hasPhD = false)";
-        constexpr std::string_view createQuery2 = R"(CREATE (n:Person) SET n.name = "Dave",  n.age = 35, n.hasPhD = true)";
+        // constexpr std::string_view createQuery1 = R"(CREATE (n:Person) SET n.name = "Carol", n.age = 28, n.hasPhD = false)";
+        constexpr std::string_view createQuery1 = R"(CREATE (n:Person{name:"Carol", age:28, hasPhD:false}))";
+        // constexpr std::string_view createQuery2 = R"(CREATE (n:Person) SET n.name = "Dave",  n.age = 35, n.hasPhD = true)";
+        constexpr std::string_view createQuery2 = R"(CREATE (n:Person{name:"Dave",age:35,hasPhD:true}))";
 
         {
             auto res = query(createQuery1, [](const Dataframe* df) {
@@ -2249,8 +2251,8 @@ TEST_F(WriteQueriesTest, createRelationshipAndSetEdgeProperties) {
 
     newChange();
     {
-        constexpr std::string_view createSetQuery =
-            R"(CREATE (n:Person)-[e:KNOWS_WELL]->(m:Person) SET n.name = "Eve", m.name = "Frank", e.age = 7, e.hasPhD = false)";
+        // constexpr std::string_view createSetQuery = R"(CREATE (n:Person)-[e:KNOWS_WELL]->(m:Person) SET n.name = "Eve", m.name = "Frank", e.age = 7, e.hasPhD = false)";
+        constexpr std::string_view createSetQuery = R"(CREATE (n:Person{name:"Eve"})-[e:KNOWS_WELL{age:7, hasPhD:false}]->(m:Person{name:"Frank"}))";
 
         auto res = query(createSetQuery, [](const Dataframe* df) {
             ASSERT_TRUE(df);
