@@ -39,7 +39,7 @@ ConstScanProcessor* ConstScanProcessor::create(PipelineV2* pipeline,
 void ConstScanProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
-    _outCol = dynamic_cast<ColumnNodeIDs*>(_outNodeIDs.getNodeIDs()->getColumn());
+    _outCol = static_cast<ColumnNodeIDs*>(_outNodeIDs.getNodeIDs()->getColumn());
     _offset = 0;
 
     markAsPrepared();
@@ -47,6 +47,7 @@ void ConstScanProcessor::prepare(ExecutionContext* ctxt) {
 
 void ConstScanProcessor::reset() {
     _offset = 0;
+    markAsReset();
 }
 
 void ConstScanProcessor::execute() {
