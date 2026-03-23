@@ -149,11 +149,14 @@ struct ColumnFunctions {
     template <typename Op, typename ColW, typename ColT, typename ColU>
     static void exec(ColW* res, const ColT* lhs, const ColU* rhs) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using DecayColU = TypeUtils::decay_col_t<ColU>;
-        using DecayColW = TypeUtils::decay_col_t<ColW>;
         using InternalT = InnerTypeHelper<DecayColT>::type;
+
+        using DecayColU = TypeUtils::decay_col_t<ColU>;
         using InternalU = InnerTypeHelper<DecayColU>::type;
+
+        using DecayColW = TypeUtils::decay_col_t<ColW>;
         using InternalRes = InnerTypeHelper<DecayColW>::type;
+
         BinaryFunctionExecutor<Op, InternalRes, InternalT, InternalU>::apply(res, lhs, rhs);
     }
 };

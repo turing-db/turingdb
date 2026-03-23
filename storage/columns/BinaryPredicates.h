@@ -13,13 +13,17 @@ namespace db {
 
 namespace {
 
+struct TuringEqual;
+struct TuringNotEqual;
+
 template <typename T>
 concept BooleanOpt = std::same_as<TypeUtils::unwrap_optional_t<T>, types::Bool::Primitive>
                   || std::same_as<ColumnMask::Bool_t, T>;
 
 template <typename F>
 concept TestsEquality =
-    (std::is_same_v<F, std::equal_to<>> || std::is_same_v<F, std::not_equal_to<>>);
+    (std::is_same_v<F, std::equal_to<>> || std::is_same_v<F, std::not_equal_to<>>
+     || std::is_same_v<F, TuringEqual> || std::is_same_v<F, TuringNotEqual>);
 
 // The following Boolean operators have unique semantics for 3-way logic (i.e.
 // short-circuiting) so are defined explicitly rather than generically
@@ -279,32 +283,6 @@ struct BinaryPredicate {
         return F{}(std::forward<T>(a), std::forward<U>(b));
     }
     
-    // Non-optional embedding equality/inequality
-    inline ColumnMask::Bool_t operator()(const types::Embedding::Primitive& a,
-                                         const types::Embedding::Primitive& b)
-    requires TestsEquality<F>
-    {
-        const bool equal = (a.size() == b.size())
-                           && std::equal(a.begin(), a.end(), b.begin());
-        if constexpr (std::is_same_v<F, std::equal_to<>>) {
-            return ColumnMask::Bool_t{equal};
-        } else {
-            return ColumnMask::Bool_t{!equal};
-        }
-    }
-
-    // Optional embedding equality/inequality: delegate null-handling to optionalPredicate
-    template <typename T, typename U>
-    requires TestsEquality<F>
-          && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
-          && std::same_as<TypeUtils::unwrap_optional_t<T>, types::Embedding::Primitive>
-          && std::same_as<TypeUtils::unwrap_optional_t<U>, types::Embedding::Primitive>
-    inline std::optional<CustomBool> operator()(const T& a, const U& b) {
-        const auto result = optionalPredicate<BinaryPredicate<F>>(a, b);
-        if (!result) return std::nullopt;
-        return CustomBool{bool(*result)};
-    }
-
     // Specialisation for IS NOT NULL and IS NULL
     template <typename T>
     requires(TypeUtils::is_optional_v<T> && TestsEquality<F>)
@@ -313,10 +291,36 @@ struct BinaryPredicate {
     }
 };
 
+struct TuringEqual {
+    bool operator()(const types::Embedding::Primitive& a, const types::Embedding::Primitive& b) {
+        const bool equal =
+            (a.size() == b.size()) && std::equal(a.begin(), a.end(), b.begin());
+        return equal;
+    }
+
+    template <typename T, typename U>
+    bool operator()(const T& a, const U& b) {
+        return std::equal_to<> {}(a, b);
+    }
+};
+
+struct TuringNotEqual {
+    bool operator()(const types::Embedding::Primitive& a, const types::Embedding::Primitive& b) {
+        const bool equal =
+            (a.size() == b.size()) && std::equal(a.begin(), a.end(), b.begin());
+        return !equal;
+    }
+
+    template <typename T, typename U>
+    bool operator()(const T& a, const U& b) {
+        return std::not_equal_to<> {}(a, b);
+    }
+};
+
 }
 
-using Eq = BinaryPredicate<std::equal_to<>>;
-using Ne = BinaryPredicate<std::not_equal_to<>>;
+using Eq = BinaryPredicate<TuringEqual>;
+using Ne = BinaryPredicate<TuringNotEqual>;
 
 using Gt = BinaryPredicate<std::greater<>>;
 using Lt = BinaryPredicate<std::less<>>;
