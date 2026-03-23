@@ -3680,6 +3680,18 @@ TEST_F(QueriesTest, DISABLED_predicateJoinDivergentNameNeq) {
     EXPECT_TRUE(expected.equals(actual));
 }
 
+// Regression test for https://github.com/turing-db/turingdb/issues/485
+// LIMIT 0 must return no rows when the dataframe contains only ColumnConst columns.
+TEST_F(QueriesTest, returnLiteralLimitZero) {
+    bool lambdaCalled = false;
+    auto result = query("RETURN 5 LIMIT 0", [&](const Dataframe* df) -> void {
+        lambdaCalled = true;
+    });
+
+    EXPECT_TRUE(result.isOk());
+    EXPECT_FALSE(lambdaCalled);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
