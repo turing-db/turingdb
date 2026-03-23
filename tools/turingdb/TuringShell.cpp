@@ -485,12 +485,16 @@ void tabulateWrite(tabulate::RowStream& rs, const PropertyNull) {
 
 void tabulateWrite(tabulate::RowStream& rs, const std::span<const float>& embedding) {
     std::string result = "[";
-    for (size_t i = 0; i < embedding.size(); ++i) {
-        if (i > 0) {
+
+    if (embedding.size() > 0) {
+        result += fmt::format("{}", embedding[0]);
+
+        for (size_t i = 1; i < embedding.size(); ++i) {
             result += ", ";
+            result += fmt::format("{}", embedding[i]);
         }
-        result += fmt::format("{}", embedding[i]);
     }
+
     result += "]";
     rs << result;
 }
