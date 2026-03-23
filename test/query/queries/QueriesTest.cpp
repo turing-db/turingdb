@@ -542,6 +542,55 @@ TEST_F(QueriesTest, scanEdges) {
     ASSERT_TRUE(returnedLines.equals(expectedLines));
 }
 
+TEST_F(QueriesTest, undirectedAnonymousEdge) {
+    const std::string queryStr = "MATCH (n)-[]-(m) RETURN n, m";
+
+    LineContainer<NodeID, NodeID> returned;
+    LineContainer<NodeID, NodeID> expected;
+    auto res = query(queryStr, [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        ASSERT_EQ(df->cols().size(), 2);
+        ASSERT_EQ(df->size(), 2);
+
+        const ColumnNodeIDs* ns = nullptr;
+        const ColumnNodeIDs* ms = nullptr;
+        for (auto col : df->cols()) {
+            const auto name = col->getName();
+            if (name == "n") {
+                ns = col->as<ColumnNodeIDs>();
+            } else if (name == "m") {
+                ms = col->as<ColumnNodeIDs>();
+            }
+        }
+
+        ASSERT_TRUE(ns);
+        ASSERT_TRUE(ms);
+        ASSERT_FALSE(ns->empty());
+
+        for (size_t i = 0; i < ns->size(); i++) {
+            returned.add({ns->at(i), ms->at(i)});
+        }
+    });
+    ASSERT_TRUE(res);
+
+    // Undirected: each edge appears in both directions
+    {
+        auto transaction = _graph->openTransaction();
+        auto reader = transaction.readGraph();
+        for (auto node : reader.scanNodes()) {
+            const auto edgeView = reader.getNodeView(node).edges();
+            for (auto edge : edgeView.inEdges()) {
+                expected.add({edge._nodeID, edge._otherID});
+            }
+            for (auto edge : edgeView.outEdges()) {
+                expected.add({edge._nodeID, edge._otherID});
+            }
+        }
+    }
+
+    ASSERT_TRUE(expected.equals(returned));
+}
+
 TEST_F(QueriesTest, scanPropertiesWithNull) {
     const std::string query = "MATCH (n)-[e]->(m) RETURN n.age, e.name, m.age";
     using Lines = LineContainer<
