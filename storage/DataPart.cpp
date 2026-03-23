@@ -163,6 +163,8 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
 
     jobs.wait();
 
+    _nodeProperties->buildTypeMapping();
+
     // EdgeContainer
     _edges = EdgeContainer::create(_firstNodeID,
                                    _firstEdgeID,
@@ -239,6 +241,8 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
                                        builder.getInPatchEdgeCount());
 
     jobs.wait();
+
+    _edgeProperties->buildTypeMapping();
 
     _initialized = true;
 
