@@ -113,12 +113,12 @@ struct BinaryEval {
             using ResultType = typename BinaryFunctionColumnResult<CosineSimilarityFunction, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid cast for cosine_similarity result.");
-            ColumnFunctions::exec<CosineSimilarityFunction>(result, lhs, rhs);
+            ColumnFunctions::exec<CosineSimilarity>(result, lhs, rhs);
         } else if constexpr (Op == OP_FUNC_EUCLIDEAN_DISTANCE) {
             using ResultType = typename BinaryFunctionColumnResult<EuclideanDistanceFunction, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid cast for euclidean_distance result.");
-            ColumnFunctions::exec<EuclideanDistanceFunction>(result, lhs, rhs);
+            ColumnFunctions::exec<EuclideanDistance>(result, lhs, rhs);
         } else {
             COMPILE_ERROR("Invalid binary function.");
         }

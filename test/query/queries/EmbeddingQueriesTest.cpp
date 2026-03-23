@@ -481,15 +481,16 @@ TEST_F(EmbeddingQueriesTest, cosineSimilarity) {
             ASSERT_EQ(df->size(), 2);
 
             const auto* nameCol = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
-            const auto* scoreCol = df->cols()[1]->as<ColumnVector<double>>();
+            const auto* scoreCol = df->cols()[1]->as<ColumnOptVector<double>>();
             ASSERT_TRUE(nameCol);
             ASSERT_TRUE(scoreCol);
 
             const size_t rowCount = df->getLogicalRowCount();
             for (size_t i = 0; i < rowCount; i++) {
                 ASSERT_TRUE(nameCol->at(i));
+                ASSERT_TRUE(scoreCol->at(i));
                 names.emplace_back(*nameCol->at(i));
-                scores.push_back(scoreCol->at(i));
+                scores.push_back(*scoreCol->at(i));
             }
         });
         ASSERT_TRUE(res);
@@ -552,15 +553,16 @@ TEST_F(EmbeddingQueriesTest, euclideanDistance) {
             ASSERT_EQ(df->size(), 2);
 
             const auto* nameCol = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
-            const auto* distCol = df->cols()[1]->as<ColumnVector<double>>();
+            const auto* distCol = df->cols()[1]->as<ColumnOptVector<double>>();
             ASSERT_TRUE(nameCol);
             ASSERT_TRUE(distCol);
 
             const size_t rowCount = df->getLogicalRowCount();
             for (size_t i = 0; i < rowCount; i++) {
                 ASSERT_TRUE(nameCol->at(i));
+                ASSERT_TRUE(distCol->at(i));
                 names.emplace_back(*nameCol->at(i));
-                distances.push_back(distCol->at(i));
+                distances.push_back(*distCol->at(i));
             }
         });
         ASSERT_TRUE(res);

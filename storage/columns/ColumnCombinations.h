@@ -5,7 +5,6 @@
 #include "ColumnVector.h"
 #include "ColumnMask.h"
 #include "TypeUtils.h"
-#include "columns/AllowedKinds.h"
 
 namespace db {
 
@@ -202,40 +201,16 @@ public:
     using ResultColumnType = FunctionResultImpl<DecayedColT, InternalT>::ResultColumnType;
 };
 
-template <typename ColT, typename ColU, typename InternalT>
-class BinaryFunctionResultImpl;
-
-template <typename AnyT, typename AnyU, typename InternalT>
-class BinaryFunctionResultImpl<ColumnVector<AnyT>, ColumnVector<AnyU>, InternalT> {
-public:
-    using ResultColumnType = ColumnVector<InternalT>;
-};
-
-template <typename AnyT, typename AnyU, typename InternalT>
-class BinaryFunctionResultImpl<ColumnVector<AnyT>, ColumnConst<AnyU>, InternalT> {
-public:
-    using ResultColumnType = ColumnVector<InternalT>;
-};
-
-template <typename AnyT, typename AnyU, typename InternalT>
-class BinaryFunctionResultImpl<ColumnConst<AnyT>, ColumnVector<AnyU>, InternalT> {
-public:
-    using ResultColumnType = ColumnVector<InternalT>;
-};
-
-template <typename AnyT, typename AnyU, typename InternalT>
-class BinaryFunctionResultImpl<ColumnConst<AnyT>, ColumnConst<AnyU>, InternalT> {
-public:
-    using ResultColumnType = ColumnConst<InternalT>;
-};
+/// Binary functions
 
 template <typename Op, typename PColT, typename PColU>
 class BinaryFunctionColumnResult {
-    using InternalRes = typename Op::ResultType;
-    using DecayT = TypeUtils::decay_col_t<PColT>;
-    using DecayU = TypeUtils::decay_col_t<PColU>;
+private:
+    using ResultType = ColumnCombination<Op, TypeUtils::decay_col_t<PColT>,
+                                         TypeUtils::decay_col_t<PColU>>::ResultColumnType;
+
 public:
-    using ResultColumnType = BinaryFunctionResultImpl<DecayT, DecayU, InternalRes>::ResultColumnType;
+    using ResultColumnType = ResultType;
 };
 
 template <typename Op, typename ColT, typename ColU, typename ColRes>
