@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n)-[e]->(m) WHERE m = n.age / 16 RETURN n, e, m, n.name, e.name, m.name",
+  "expect": {
+    "plan": "",
+    "result": ""
+  },
+  "tags": [
+    "match",
+    "filter",
+    "predicate",
+    "expression"
+  ],
+  "write-required": false
+}
