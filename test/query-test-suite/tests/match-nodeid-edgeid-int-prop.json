@@ -3,8 +3,9 @@
   "graph": "simpledb",
   "query": "MATCH (n)-[e]->(m) WHERE m = n.age / 16 RETURN n, e, m, n.name, e.name, m.name",
   "expect": {
-    "plan": "",
-    "result": ""
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: e\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n        __has predicate__\n        __dep__ _n_._age_ (Integer)\n    `\"]\n    9[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ age\n    `\"]\n    10[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    11[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ e\n        __prop__ name\n    `\"]\n    12[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ m\n        __prop__ name\n    `\"]\n    13[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->9\n    1-->3\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->8\n    7-->10\n    8-->7\n    9-->2\n    10-->11\n    11-->12\n    12-->13",
+    "result": "n,e,m,n.name,e.name,m.name\n0,2,2,Remy,Remy -> Computers,Computers",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\",\"e\",\"m\",\"n.name\",\"e.name\",\"m.name\"],\"column_types\":[\"UInt64\",\"UInt64\",\"UInt64\",\"String\",\"String\",\"String\"]},\"data\":[[[0],[2],[2],[\"Remy\"],[\"Remy -> Computers\"],[\"Computers\"]]]}"
   },
   "tags": [
     "match",
