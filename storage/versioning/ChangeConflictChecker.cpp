@@ -127,8 +127,6 @@ void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& lat
                     edgeID, record._nodeID);
                 throw VersionControlException(std::move(errorMsg));
             }
-
-            inEdgesIt.next();
         }
     }
 }
