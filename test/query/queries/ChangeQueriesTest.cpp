@@ -1295,7 +1295,7 @@ TEST_F(ChangeQueriesTest, setThenRebase) {
 
     {
         newChange(), change1 = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Interest) SET n.name = "Dogs")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Interest{name:"Dogs"}))";
         constexpr std::string_view SET_QUERY = R"(MATCH (n) WHERE n.name = "Dogs" SET n.name = "Cats")";
 
         {
@@ -1312,7 +1312,7 @@ TEST_F(ChangeQueriesTest, setThenRebase) {
 
     {
         newChange(), change2 = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Interest) SET n.name = "Music")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Interest{name:"Music"}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
         submitCurrentChange();
@@ -1350,7 +1350,7 @@ TEST_F(ChangeQueriesTest, setIntPropertyThenRebase) {
     ChangeID changeB;
     {
         newChange(), changeA = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.age = 1)";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{age:1}))";
         constexpr std::string_view SET_QUERY = R"(MATCH (n:Person) WHERE n.age = 1 SET n.age = 2)";
         {
             const auto res = query(CREATE_QUERY, emptyCallback);
@@ -1364,7 +1364,7 @@ TEST_F(ChangeQueriesTest, setIntPropertyThenRebase) {
     }
     {
         newChange(), changeB = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.age = 99)";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{age:99}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
         submitCurrentChange();
@@ -1395,7 +1395,7 @@ TEST_F(ChangeQueriesTest, threeChangesSetThenRebaseLastSubmit) {
     ChangeID changeC;
     {
         newChange(), changeA = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Alpha")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"Alpha"}))";
         constexpr std::string_view SET_QUERY    = R"(MATCH (n:Person) WHERE n.name = "Alpha" SET n.name = "Beta")";
         {
             const auto res = query(CREATE_QUERY, emptyCallback);
@@ -1409,22 +1409,27 @@ TEST_F(ChangeQueriesTest, threeChangesSetThenRebaseLastSubmit) {
     }
     {
         newChange(), changeB = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Gamma")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"Gamma"}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
     }
     {
         newChange(), changeC = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Delta")";
-        const auto res = query(CREATE_QUERY, emptyCallback);
-        ASSERT_TRUE(res) << res.getError();
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"Delta"}))";
+        constexpr std::string_view SET_QUERY = R"(MATCH (n) WHERE n.name = "Delta" SET n.name = "Mu")";
+        {
+            const auto res = query(CREATE_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+            ASSERT_TRUE(query("commit", emptyCallback));
+        }
+        {
+            const auto res = query(SET_QUERY, emptyCallback);
+            ASSERT_TRUE(res) << res.getError();
+        }
     }
-    setChange(changeB);
-    submitCurrentChange();
-    setChange(changeC);
-    submitCurrentChange();
-    setChange(changeA);
-    submitCurrentChange();
+    submitChange(changeB);
+    submitChange(changeC);
+    submitChange(changeA);
     {
         constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n, n.name)";
         const auto res = query(MATCH_QUERY, [](const Dataframe* df) {
@@ -1436,7 +1441,7 @@ TEST_F(ChangeQueriesTest, threeChangesSetThenRebaseLastSubmit) {
             ASSERT_FALSE(ns->empty());
             ASSERT_FALSE(names->empty());
             EXPECT_EQ((std::vector<NodeID>{ 0, 1, 2}), ns->getRaw()) << dump(df);
-            EXPECT_EQ((std::vector<std::optional<std::string_view>>{ "Gamma", "Delta", "Beta"}), names->getRaw()) << dump(df);
+            EXPECT_EQ((std::vector<std::optional<std::string_view>>{ "Gamma", "Mu", "Beta"}), names->getRaw()) << dump(df);
         });
         ASSERT_TRUE(res) << res.getError();
     }
@@ -1448,7 +1453,7 @@ TEST_F(ChangeQueriesTest, setPropertyTwiceThenRebase) {
     ChangeID changeB;
     {
         newChange(), changeA = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "V1")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"V1"}))";
         constexpr std::string_view SET_QUERY_1  = R"(MATCH (n:Person) WHERE n.name = "V1" SET n.name = "V2")";
         constexpr std::string_view SET_QUERY_2  = R"(MATCH (n:Person) WHERE n.name = "V2" SET n.name = "V3")";
         {
@@ -1468,7 +1473,7 @@ TEST_F(ChangeQueriesTest, setPropertyTwiceThenRebase) {
     }
     {
         newChange(), changeB = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Other")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"Other"}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
     }
@@ -1497,8 +1502,8 @@ TEST_F(ChangeQueriesTest, setTwoCreatedNodesThenRebase) {
     ChangeID changeB;
     {
         newChange(), changeA = _currentChange;
-        constexpr std::string_view CREATE_1  = R"(CREATE (n:Person) SET n.name = "First")";
-        constexpr std::string_view CREATE_2  = R"(CREATE (n:Person) SET n.name = "Second")";
+        constexpr std::string_view CREATE_1  = R"(CREATE (n:Person{name:"First"}))";
+        constexpr std::string_view CREATE_2  = R"(CREATE (n:Person{name:"First"}))";
         constexpr std::string_view SET_QUERY = R"(MATCH (n:Person) WHERE n.name = "First" OR n.name = "Second" SET n.name = "Updated")";
         {
             const auto res = query(CREATE_1, emptyCallback);
@@ -1517,7 +1522,7 @@ TEST_F(ChangeQueriesTest, setTwoCreatedNodesThenRebase) {
     }
     {
         newChange(), changeB = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Third")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"Third"}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
     }
@@ -1549,7 +1554,7 @@ TEST_F(ChangeQueriesTest, threeChangesAllPropertyTypesThenRebase) {
     ChangeID changeC;
     {
         newChange(), changeA = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Alice", n.age = 30, n.hasPhD = true)";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"Alice", age:30, hasPhD:true}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
         ASSERT_TRUE(query("commit", emptyCallback));
@@ -1559,7 +1564,7 @@ TEST_F(ChangeQueriesTest, threeChangesAllPropertyTypesThenRebase) {
     }
     {
         newChange(), changeB = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Bob", n.age = 25, n.hasPhD = false)";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"Bob", age:25, hasPhD:false}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
         ASSERT_TRUE(query("commit", emptyCallback));
@@ -1569,7 +1574,7 @@ TEST_F(ChangeQueriesTest, threeChangesAllPropertyTypesThenRebase) {
     }
     {
         newChange(), changeC = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Carol")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"Carol"}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
     }
@@ -1606,7 +1611,7 @@ TEST_F(ChangeQueriesTest, setNodeAndEdgePropertiesThenRebase) {
     {
         newChange(), changeA = _currentChange;
         constexpr std::string_view CREATE_QUERY =
-            R"(CREATE (n:Person)-[e:KNOWS]->(m:Person) SET n.name = "Eve", m.name = "Frank", e.age = 5)";
+            R"(CREATE (n:Person{name:"Eve"})-[e:KNOWS{age:5}]->(m:Person{name:"Frank"}))";
         constexpr std::string_view SET_QUERY =
             R"(MATCH (n:Person)-[e:KNOWS]->(m:Person) WHERE n.name = "Eve" SET e.age = 10, n.hasPhD = true)";
         {
@@ -1622,7 +1627,7 @@ TEST_F(ChangeQueriesTest, setNodeAndEdgePropertiesThenRebase) {
     {
         newChange(), changeB = _currentChange;
         constexpr std::string_view CREATE_QUERY =
-            R"(CREATE (n:Person)-[e:KNOWS]->(m:Person) SET n.name = "Grace", m.name = "Henry", e.age = 99)";
+            R"(CREATE (n:Person{name:"Grace"})-[e:KNOWS{age:99}]->(m:Person{name:"Henry"}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
     }
@@ -1664,7 +1669,7 @@ TEST_F(ChangeQueriesTest, fourChangesReverseSubmitOrder) {
     ChangeID changeD;
     {
         newChange(), changeA = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "A-Node")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"A-Node"}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
         ASSERT_TRUE(query("commit", emptyCallback));
@@ -1674,7 +1679,7 @@ TEST_F(ChangeQueriesTest, fourChangesReverseSubmitOrder) {
     }
     {
         newChange(), changeB = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "B-Node")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"B-Node"}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
         ASSERT_TRUE(query("commit", emptyCallback));
@@ -1684,7 +1689,7 @@ TEST_F(ChangeQueriesTest, fourChangesReverseSubmitOrder) {
     }
     {
         newChange(), changeC = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "C-Node")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"C-Node"}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
         ASSERT_TRUE(query("commit", emptyCallback));
@@ -1694,7 +1699,7 @@ TEST_F(ChangeQueriesTest, fourChangesReverseSubmitOrder) {
     }
     {
         newChange(), changeD = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "D-Node")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"D-Node"}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
         ASSERT_TRUE(query("commit", emptyCallback));
@@ -1776,8 +1781,7 @@ TEST_F(ChangeQueriesTest, setChainedNodesThenRebase) {
     {
         newChange(), changeA = _currentChange;
         constexpr std::string_view CREATE_QUERY =
-            R"(CREATE (n1:Person)-[:FOLLOWS]->(n2:Person)-[:FOLLOWS]->(n3:Person)
-               SET n1.name = "Head", n2.name = "Mid", n3.name = "Tail")";
+            R"(CREATE (n1:Person{name:"Head"})-[:FOLLOWS]->(n2:Person{name:"Mid"})-[:FOLLOWS]->(n3:Person{name:"Tail"}))";
         constexpr std::string_view SET_QUERY =
             R"(MATCH (n:Person) WHERE n.name = "Mid" SET n.hasPhD = true)";
         {
@@ -1791,7 +1795,7 @@ TEST_F(ChangeQueriesTest, setChainedNodesThenRebase) {
     }
     {
         newChange(), changeB = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "Lone", n.hasPhD = true)";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"Lone", hasPhD:true}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
     }
@@ -1841,7 +1845,7 @@ TEST_F(ChangeQueriesTest, setAllPropertiesTwiceThenRebase) {
     ChangeID changeC;
     {
         newChange(), changeA = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "AFirst", n.age = 1, n.hasPhD = false)";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"AFirst", age:1, hasPhD:false}))";
         constexpr std::string_view SET_QUERY = R"(MATCH (n:Person) WHERE n.name = "AFirst" SET n.name = "ASecond", n.age = 2, n.hasPhD = true)";
         {
             const auto res = query(CREATE_QUERY, emptyCallback);
@@ -1855,13 +1859,13 @@ TEST_F(ChangeQueriesTest, setAllPropertiesTwiceThenRebase) {
     }
     {
         newChange(), changeB = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "BNode", n.age = 50, n.hasPhD = false)";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"BNode", age:50, hasPhD:false}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
     }
     {
         newChange(), changeC = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person) SET n.name = "CNode")";
+        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"CNode"}))";
         const auto res = query(CREATE_QUERY, emptyCallback);
         ASSERT_TRUE(res) << res.getError();
     }
@@ -1896,7 +1900,7 @@ TEST_F(ChangeQueriesTest, threeChangesSubgraphsComplexRebase) {
     {
         newChange(), changeA = _currentChange;
         constexpr std::string_view CREATE_QUERY =
-            R"(CREATE (n:Person)-[e:KNOWS]->(m:Person) SET n.name = "Ava", m.name = "Ben", e.age = 1, n.hasPhD = true)";
+            R"(CREATE (n:Person{name:"Ava", hasPhD:true})-[e:KNOWS{age:1}]->(m:Person{name:"Ben"}))";
         constexpr std::string_view SET_QUERY =
             R"(MATCH (n:Person)-[e:KNOWS]->(m:Person) WHERE n.name = "Ava" SET n.age = 10, m.age = 11)";
         {
@@ -1912,7 +1916,7 @@ TEST_F(ChangeQueriesTest, threeChangesSubgraphsComplexRebase) {
     {
         newChange(), changeB = _currentChange;
         constexpr std::string_view CREATE_QUERY =
-            R"(CREATE (n:Person)-[e:KNOWS]->(m:Person) SET n.name = "Cat", m.name = "Dan", e.age = 2, n.hasPhD = false)";
+            R"(CREATE (n:Person{name:"Cat", hasPhD:false})-[e:KNOWS{age:2}]->(m:Person{name:"Dan"}))";
         constexpr std::string_view SET_QUERY =
             R"(MATCH (n:Person)-[e:KNOWS]->(m:Person) WHERE n.name = "Cat" SET n.age = 20, m.age = 21)";
         {
@@ -1928,7 +1932,7 @@ TEST_F(ChangeQueriesTest, threeChangesSubgraphsComplexRebase) {
     {
         newChange(), changeC = _currentChange;
         constexpr std::string_view CREATE_QUERY =
-            R"(CREATE (n:Person)-[e:KNOWS]->(m:Person) SET n.name = "Eve", m.name = "Fox", e.age = 3, n.hasPhD = true)";
+            R"(CREATE (n:Person{name:"Eve", hasPhD:true})-[e:KNOWS{age:3}]->(m:Person{name:"Fox"}))";
         constexpr std::string_view SET_QUERY =
             R"(MATCH (n:Person)-[e:KNOWS]->(m:Person) WHERE n.name = "Eve" SET n.age = 30, m.age = 31)";
         {

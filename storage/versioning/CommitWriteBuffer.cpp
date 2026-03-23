@@ -327,7 +327,7 @@ void CommitWriteBuffer::applyEdgeUpdates(DataPartBuilder& builder) {
     // 1. An edge that already exists (MATCH ... e ... SET e ...)
     // 2. A pending edge, yet to be created (CREATE ... e ... SET e ...)
 
-    // Iterate newest → oldest so the first registration wins.
+    // Iterate newest -> oldest so the first registration wins.
     for (const auto& [edgeID, property] : rv::reverse(_updatedEdges)) {
         if (const EdgeRecord* existingEdge = _view.read().getEdge(edgeID)) {
             applyExistingEdgeUpdate(builder, *existingEdge, property);
