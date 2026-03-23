@@ -44,28 +44,25 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
     part._edgeIndexer->_firstNodeID = newFirstNodeID;
     part._edgeIndexer->_firstEdgeID = newFirstEdgeID;
 
-    // Nodes
-    if (metadata.labelsetsChanged()) {
+    { // @ref MetadataRebaser::rebase updates the Label(Set)Maps, so get new mapping
         for (auto& n : nodes->_nodes) {
             n._labelset = metadata.getLabelSetMapping(n._labelset.getID());
         }
 
-        LabelSetIndexer<NodeRange> newRanges;
-        for (const auto& [labelset, range] : nodes->_ranges) {
-            const auto newLabelSet = metadata.getLabelSetMapping(labelset.getID());
-            auto& r = newRanges[newLabelSet];
-            r = range;
-            r._first = _idRebaser->rebaseNodeID(r._first);
-        }
-        nodes->_ranges = std::move(newRanges);
-    } else {
-        for (auto& [labelset, range] : nodes->_ranges) {
-            range._first = _idRebaser->rebaseNodeID(range._first);
+        {
+            LabelSetIndexer<NodeRange> newRanges;
+            for (const auto& [labelset, range] : nodes->_ranges) {
+                const auto newLabelSet = metadata.getLabelSetMapping(labelset.getID());
+                auto& r = newRanges[newLabelSet];
+                r = range;
+                r._first = _idRebaser->rebaseNodeID(r._first);
+            }
+            nodes->_ranges = std::move(newRanges);
         }
     }
 
-    // Edges
-    if (metadata.edgeTypesChanged()) {
+
+    { // @ref MetadataRebaser::rebase updates EdgeTypeMap, so get new mapping
         for (auto& e : edges->_outEdges) {
             e._edgeTypeID = metadata.getEdgeTypeMapping(e._edgeTypeID);
         }
@@ -75,19 +72,16 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         }
     }
 
-    if (_nodeOffset != 0 && _edgeOffset != 0) {
+    { // Rebase all source, target, and edge IDs
         for (auto& e : edges->_outEdges) {
             e._nodeID = _idRebaser->rebaseNodeID(e._nodeID);
             e._otherID = _idRebaser->rebaseNodeID(e._otherID);
             e._edgeID = _idRebaser->rebaseEdgeID(e._edgeID);
         }
-    } else if (_nodeOffset != 0) {
-        for (auto& e : edges->_outEdges) {
+
+        for (auto& e : edges->_inEdges) {
             e._nodeID = _idRebaser->rebaseNodeID(e._nodeID);
             e._otherID = _idRebaser->rebaseNodeID(e._otherID);
-        }
-    } else if (_edgeOffset != 0) {
-        for (auto& e : edges->_outEdges) {
             e._edgeID = _idRebaser->rebaseEdgeID(e._edgeID);
         }
     }
@@ -101,7 +95,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         edgeIndexer->_patchNodeOffsets.swap(newPatchOffsets);
     }
 
-    if (metadata.labelsetsChanged()) {
+    { // Update spans for edge indexers, according to new LabelSetMap
         using EdgeSpan = std::span<const EdgeRecord>;
         using EdgeSpans = std::vector<EdgeSpan>;
 
@@ -123,60 +117,60 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
     }
 
     // Node properties
-    {
-        if (metadata.propTypesChanged()) {
-            std::unordered_map<PropertyTypeID, std::unique_ptr<PropertyContainer>> newContainers;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> uint64s;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> int64s;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> doubles;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> strings;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> bools;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> embeddings;
+    { // @ref MetadataRebaser::rebase updates PropTypeMap, so get new mapping
+        std::unordered_map<PropertyTypeID, std::unique_ptr<PropertyContainer>> newContainers;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> uint64s;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> int64s;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> doubles;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> strings;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> bools;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> embeddings;
 
-            for (auto& [ptID, container] : nodeProperties->_map) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                newContainers[newPT._id] = std::unique_ptr<PropertyContainer> {container.release()};
-            }
-
-            for (const auto& [ptID, container] : nodeProperties->_uint64s) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                uint64s[newPT._id] = container;
-            }
-
-            for (const auto& [ptID, container] : nodeProperties->_int64s) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                int64s[newPT._id] = container;
-            }
-
-            for (const auto& [ptID, container] : nodeProperties->_doubles) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                doubles[newPT._id] = container;
-            }
-
-            for (const auto& [ptID, container] : nodeProperties->_strings) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                strings[newPT._id] = container;
-            }
-
-            for (const auto& [ptID, container] : nodeProperties->_bools) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                bools[newPT._id] = container;
-            }
-
-            for (const auto& [ptID, container] : nodeProperties->_embeddings) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                embeddings[newPT._id] = container;
-            }
-
-            nodeProperties->_map = std::move(newContainers);
-            nodeProperties->_uint64s = std::move(uint64s);
-            nodeProperties->_int64s = std::move(int64s);
-            nodeProperties->_doubles = std::move(doubles);
-            nodeProperties->_strings = std::move(strings);
-            nodeProperties->_bools = std::move(bools);
-            nodeProperties->_embeddings = std::move(embeddings);
-            static_assert((size_t)ValueType::_SIZE == 7 && "A value type was added");
+        for (auto& [ptID, container] : nodeProperties->_map) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            newContainers[newPT._id] =
+                std::unique_ptr<PropertyContainer> {container.release()};
         }
+
+        for (const auto& [ptID, container] : nodeProperties->_uint64s) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            uint64s[newPT._id] = container;
+        }
+
+        for (const auto& [ptID, container] : nodeProperties->_int64s) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            int64s[newPT._id] = container;
+        }
+
+        for (const auto& [ptID, container] : nodeProperties->_doubles) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            doubles[newPT._id] = container;
+        }
+
+        for (const auto& [ptID, container] : nodeProperties->_strings) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            strings[newPT._id] = container;
+        }
+
+        for (const auto& [ptID, container] : nodeProperties->_bools) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            bools[newPT._id] = container;
+        }
+
+        for (const auto& [ptID, container] : nodeProperties->_embeddings) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            embeddings[newPT._id] = container;
+        }
+
+        nodeProperties->_map = std::move(newContainers);
+        nodeProperties->_uint64s = std::move(uint64s);
+        nodeProperties->_int64s = std::move(int64s);
+        nodeProperties->_doubles = std::move(doubles);
+        nodeProperties->_strings = std::move(strings);
+        nodeProperties->_bools = std::move(bools);
+        nodeProperties->_embeddings = std::move(embeddings);
+        static_assert((size_t)ValueType::_SIZE == 7 && "A value type was added");
+
 
         if (metadata.labelsetsChanged() || metadata.propTypesChanged()) {
             PropertyIndexer newIndexers;
@@ -205,61 +199,60 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
 
     // Edge properties
     {
-        if (metadata.propTypesChanged()) {
-            std::unordered_map<PropertyTypeID, std::unique_ptr<PropertyContainer>> newContainers;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> uint64s;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> int64s;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> doubles;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> strings;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> bools;
-            std::unordered_map<PropertyTypeID, PropertyContainer*> embeddings;
+        std::unordered_map<PropertyTypeID, std::unique_ptr<PropertyContainer>> newContainers;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> uint64s;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> int64s;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> doubles;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> strings;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> bools;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> embeddings;
 
-            for (auto& [ptID, container] : edgeProperties->_map) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                newContainers[newPT._id] = std::unique_ptr<PropertyContainer> {container.release()};
-            }
-
-            for (const auto& [ptID, container] : edgeProperties->_uint64s) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                uint64s[newPT._id] = container;
-            }
-
-            for (const auto& [ptID, container] : edgeProperties->_int64s) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                int64s[newPT._id] = container;
-            }
-
-            for (const auto& [ptID, container] : edgeProperties->_doubles) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                doubles[newPT._id] = container;
-            }
-
-            for (const auto& [ptID, container] : edgeProperties->_strings) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                strings[newPT._id] = container;
-            }
-
-            for (const auto& [ptID, container] : edgeProperties->_bools) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                bools[newPT._id] = container;
-            }
-
-            for (const auto& [ptID, container] : edgeProperties->_embeddings) {
-                const auto newPT = metadata.getPropertyTypeMapping(ptID);
-                embeddings[newPT._id] = container;
-            }
-
-            edgeProperties->_map = std::move(newContainers);
-            edgeProperties->_uint64s = std::move(uint64s);
-            edgeProperties->_int64s = std::move(int64s);
-            edgeProperties->_doubles = std::move(doubles);
-            edgeProperties->_strings = std::move(strings);
-            edgeProperties->_bools = std::move(bools);
-            edgeProperties->_embeddings = std::move(embeddings);
-            static_assert((size_t)ValueType::_SIZE == 7 && "A value type was added");
+        for (auto& [ptID, container] : edgeProperties->_map) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            newContainers[newPT._id] =
+                std::unique_ptr<PropertyContainer> {container.release()};
         }
 
-        if (metadata.labelsetsChanged() || metadata.propTypesChanged()) {
+        for (const auto& [ptID, container] : edgeProperties->_uint64s) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            uint64s[newPT._id] = container;
+        }
+
+        for (const auto& [ptID, container] : edgeProperties->_int64s) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            int64s[newPT._id] = container;
+        }
+
+        for (const auto& [ptID, container] : edgeProperties->_doubles) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            doubles[newPT._id] = container;
+        }
+
+        for (const auto& [ptID, container] : edgeProperties->_strings) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            strings[newPT._id] = container;
+        }
+
+        for (const auto& [ptID, container] : edgeProperties->_bools) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            bools[newPT._id] = container;
+        }
+
+        for (const auto& [ptID, container] : edgeProperties->_embeddings) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            embeddings[newPT._id] = container;
+        }
+
+        edgeProperties->_map = std::move(newContainers);
+        edgeProperties->_uint64s = std::move(uint64s);
+        edgeProperties->_int64s = std::move(int64s);
+        edgeProperties->_doubles = std::move(doubles);
+        edgeProperties->_strings = std::move(strings);
+        edgeProperties->_bools = std::move(bools);
+        edgeProperties->_embeddings = std::move(embeddings);
+        static_assert((size_t)ValueType::_SIZE == 7 && "A value type was added");
+
+        { // Update property indexers based on our new LabelSetMapping
             PropertyIndexer newIndexers;
 
             for (const auto& [ptID, indexer] : edgeProperties->_indexers) {
