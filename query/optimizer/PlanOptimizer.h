@@ -15,6 +15,7 @@ private:
     PlanGraph* _plan {nullptr};
 
     void rewriteScanByLabels();
+    void rewriteScanByConstIDs();
 };
 
 }

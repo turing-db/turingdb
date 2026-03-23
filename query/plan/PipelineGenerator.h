@@ -59,6 +59,7 @@ class LoadCommitNode;
 class InstallExtensionNode;
 class ShowExtensionsNode;
 class PathExplorerNode;
+class ConstScanNode;
 
 class PipelineGenerator {
 public:
@@ -158,6 +159,7 @@ private:
     PipelineOutputInterface* translateInstallExtensionNode(InstallExtensionNode* node);
     PipelineOutputInterface* translateShowExtensionsNode(ShowExtensionsNode* node);
     PipelineOutputInterface* translatePathExplorerNode(PathExplorerNode* node);
+    PipelineOutputInterface* translateConstScanNode(ConstScanNode* node);
 
     std::vector<std::string> _csvHeaders;
 };

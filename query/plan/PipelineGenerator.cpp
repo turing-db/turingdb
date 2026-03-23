@@ -82,6 +82,7 @@
 #include "nodes/OrderByNode.h"
 #include "nodes/FuncEvalNode.h"
 #include "nodes/PathExplorerNode.h"
+#include "nodes/ConstScanNode.h"
 
 #include "TranslateJoinHelpers.h"
 
@@ -314,6 +315,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateScanNodesByLabelNode(static_cast<ScanNodesByLabelNode*>(node));
         break;
 
+        case PlanGraphOpcode::CONST_SCAN:
+            return translateConstScanNode(static_cast<ConstScanNode*>(node));
+        break;
+
         case PlanGraphOpcode::GET_OUT_EDGES:
             return translateGetOutEdgesNode(static_cast<GetOutEdgesNode*>(node));
         break;
@@ -522,6 +527,11 @@ PipelineOutputInterface* PipelineGenerator::translateScanNodesNode(ScanNodesNode
 
 PipelineOutputInterface* PipelineGenerator::translateScanNodesByLabelNode(ScanNodesByLabelNode* node) {
     _builder.addScanNodesByLabel(&node->getLabelSet());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateConstScanNode(ConstScanNode* node) {
+    _builder.addConstScanNodes(node->getNodeIDs());
     return _builder.getPendingOutputInterface();
 }
 
