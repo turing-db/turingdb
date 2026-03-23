@@ -218,7 +218,9 @@ struct FunctionExecutor<EdgeTypesFunction, Res, Arg> {
     }
 };
 
-/// Binary function executor for two-argument functions
+/// Binary function executor for two-argument functions.
+/// unwrap() is needed because column inner types may be optional (e.g. optional<span>)
+/// while function operators take non-optional arguments.
 template <typename Op, typename Res, typename ArgA, typename ArgB>
 struct BinaryFunctionExecutor {
     static void apply(ColumnVector<Res>* res,

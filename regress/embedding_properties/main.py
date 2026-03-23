@@ -75,7 +75,7 @@ def main():
 
     for i, name in enumerate(cos_names):
         expected_cos = cosine_similarity(expected_vecs[name], cos_ref)
-        assert abs(cos_scores[i] - expected_cos) < 1e-4, \
+        assert abs(cos_scores[i] - expected_cos) < 1e-5, \
             f"Cosine mismatch for {name}: expected {expected_cos:.6f}, got {cos_scores[i]:.6f}"
 
     print("  Passed: cosine_similarity function")
@@ -93,7 +93,7 @@ def main():
 
     for i, name in enumerate(euc_names):
         expected_euc = euclidean_distance(expected_vecs[name], euc_ref)
-        assert abs(euc_distances[i] - expected_euc) < 1e-4, \
+        assert abs(euc_distances[i] - expected_euc) < 1e-5, \
             f"Euclidean mismatch for {name}: expected {expected_euc:.6f}, got {euc_distances[i]:.6f}"
 
     print("  Passed: euclidean_distance function")

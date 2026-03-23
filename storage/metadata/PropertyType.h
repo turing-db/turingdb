@@ -110,6 +110,7 @@ struct Bool : public PropertyType {
 
 struct Embedding : public PropertyType {
     using Primitive = std::span<const float>;
+    using OwningPrimitive = std::vector<float>;
     using MandatorySpan = std::span<const Primitive>;
     using OptionalSpan = std::span<const std::optional<Primitive>>;
     static constexpr auto _valueType = ValueType::Embedding;

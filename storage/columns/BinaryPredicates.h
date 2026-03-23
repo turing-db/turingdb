@@ -293,56 +293,16 @@ struct BinaryPredicate {
         }
     }
 
-    // Optional embedding equality/inequality
-    inline std::optional<CustomBool> operator()(const std::optional<types::Embedding::Primitive>& a,
-                                                const types::Embedding::Primitive& b)
+    // Optional embedding equality/inequality: delegate null-handling to optionalPredicate
+    template <typename T, typename U>
     requires TestsEquality<F>
-    {
-        if (!a.has_value()) {
-            return std::nullopt;
-        }
-
-        const bool equal = (a->size() == b.size())
-                           && std::equal(a->begin(), a->end(), b.begin());
-        if constexpr (std::is_same_v<F, std::equal_to<>>) {
-            return CustomBool{equal};
-        } else {
-            return CustomBool{!equal};
-        }
-    }
-
-    inline std::optional<CustomBool> operator()(const types::Embedding::Primitive& a,
-                                                const std::optional<types::Embedding::Primitive>& b)
-    requires TestsEquality<F> 
-    {
-        if (!b.has_value()) {
-            return std::nullopt;
-        }
-
-        const bool equal = (a.size() == b->size())
-                           && std::equal(a.begin(), a.end(), b->begin());
-        if constexpr (std::is_same_v<F, std::equal_to<>>) {
-            return CustomBool{equal};
-        } else {
-            return CustomBool{!equal};
-        }
-    }
-
-    inline std::optional<CustomBool> operator()(const std::optional<types::Embedding::Primitive>& a,
-                                                const std::optional<types::Embedding::Primitive>& b)
-    requires TestsEquality<F>
-    {
-        if (!a.has_value() || !b.has_value()) {
-            return std::nullopt;
-        }
-
-        const bool equal = (a->size() == b->size())
-                           && std::equal(a->begin(), a->end(), b->begin());
-        if constexpr (std::is_same_v<F, std::equal_to<>>) {
-            return CustomBool{equal};
-        } else {
-            return CustomBool{!equal};
-        }
+          && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
+          && std::same_as<TypeUtils::unwrap_optional_t<T>, types::Embedding::Primitive>
+          && std::same_as<TypeUtils::unwrap_optional_t<U>, types::Embedding::Primitive>
+    inline std::optional<CustomBool> operator()(const T& a, const U& b) {
+        const auto result = optionalPredicate<BinaryPredicate<F>>(a, b);
+        if (!result) return std::nullopt;
+        return CustomBool{bool(*result)};
     }
 
     // Specialisation for IS NOT NULL and IS NULL

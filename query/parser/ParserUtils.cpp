@@ -1,5 +1,10 @@
 #include "ParserUtils.h"
 
+#include <limits>
+#include <math.h>
+
+#include <spdlog/fmt/bundled/format.h>
+
 #include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
 #include "Literal.h"
@@ -18,7 +23,12 @@ void ParserUtils::listExprToFloatVector(const ListExpr* list, std::vector<float>
             out.push_back(static_cast<float>(doubleLit->getValue()));
         } else if (lit->getKind() == Literal::Kind::INTEGER) {
             const auto* intLit = static_cast<const IntegerLiteral*>(lit);
-            out.push_back(static_cast<float>(intLit->getValue()));
+            const int64_t val = intLit->getValue();
+            const int64_t floatLimit = static_cast<int64_t>(floorf(std::numeric_limits<float>::max()));
+            if (val > floatLimit || val < -floatLimit) {
+                throw ParserException(fmt::format("Integer {} exceeds float representable range", val));
+            }
+            out.push_back(static_cast<float>(val));
         }
     }
 }
