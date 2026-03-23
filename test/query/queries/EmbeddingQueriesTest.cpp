@@ -7,6 +7,7 @@
 #include "Graph.h"
 #include "SystemManager.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Change.h"
@@ -621,6 +622,27 @@ TEST_F(EmbeddingQueriesTest, createNodeWithEmptyEmbeddingFails) {
     newChange();
     auto res = query(CREATE_QUERY, [](const Dataframe*) {});
     ASSERT_FALSE(res);
+}
+
+TEST_F(EmbeddingQueriesTest, returnVectorLiteral) {
+    constexpr std::string_view QUERY = R"(RETURN [1.0, 2.0, 3.0])";
+
+    std::vector<float> actual;
+    {
+        auto res = query(QUERY, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 1);
+
+            const auto* col = df->cols().front()->as<ColumnConst<types::Embedding::Primitive>>();
+            ASSERT_TRUE(col);
+
+            const auto& emb = col->at(0);
+            actual.assign(emb.begin(), emb.end());
+        });
+        ASSERT_TRUE(res);
+    }
+
+    expectEmbedding(actual, {1.0f, 2.0f, 3.0f});
 }
 
 TEST_F(EmbeddingQueriesTest, equalityDimensionMismatchReturnsEmpty) {
