@@ -51,6 +51,7 @@
 - [Return type same line](feedback_return_type_same_line.md) — Return type and function name on one line
 - [Code spacing](feedback_code_spacing.md) — Blank lines between logical groups, don't write compact code
 - [Const and span preferences](feedback_const_and_span.md) — const on locals, std::span for non-owning references
+- [No auto for casts](feedback_no_auto_for_casts.md) — Explicit types at static_cast sites, hoist getters into locals
 
 ## Workflow Preferences
 - [Test-first: write failing test before fix](feedback_test_first.md)
