@@ -1,7 +1,8 @@
 #include "ParserUtils.h"
 
-#include <limits>
-#include <math.h>
+#include <bit>
+#include <float.h>
+#include <stdlib.h>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -24,9 +25,10 @@ void ParserUtils::listExprToFloatVector(const ListExpr* list, std::vector<float>
         } else if (lit->getKind() == Literal::Kind::INTEGER) {
             const auto* intLit = static_cast<const IntegerLiteral*>(lit);
             const int64_t val = intLit->getValue();
-            const int64_t floatLimit = static_cast<int64_t>(floorf(std::numeric_limits<float>::max()));
-            if (val > floatLimit || val < -floatLimit) {
-                throw ParserException(fmt::format("Integer {} exceeds float representable range", val));
+            const uint64_t absVal = static_cast<uint64_t>(llabs(val));
+            const int sigBits = 64 - std::countl_zero(absVal) - std::countr_zero(absVal);
+            if (sigBits > FLT_MANT_DIG) {
+                throw ParserException(fmt::format("Integer {} cannot be exactly represented as float", val));
             }
             out.push_back(static_cast<float>(val));
         }
