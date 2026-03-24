@@ -108,7 +108,7 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
     }
 
     // Rebase WriteBuffer node metadata
-    auto& pendingNodes = cwb.pendingNodes();
+    auto& pendingNodes = cwb._pendingNodes;
     for (auto&& node : pendingNodes) {
         // Get the LabelIDs that made up the node's LabelSetHandle
         std::vector<LabelID> nodeLabelSetLabels;
@@ -117,7 +117,7 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
         newLabelset = LabelSet {};
 
         // Check each LabelID, map it over to the new ID if it exists
-        for (LabelID id : nodeLabelSetLabels) {
+        for (const LabelID id : nodeLabelSetLabels) {
             if (_labelMapping.contains(id)) {
                 newLabelset.set(_labelMapping.at(id));
             }
@@ -130,11 +130,31 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
     }
 
     // Rebase WriteBuffer edge metadata
-    auto& pendingEdges = cwb.pendingEdges();
+    auto& pendingEdges = cwb._pendingEdges;
     for (auto&& edge : pendingEdges) {
         edge.edgeType = _edgeTypeMapping[edge.edgeType]; // EdgeTypes remapped
         for (auto& [id, value] : edge.properties) {
             id = _propTypeMapping[id]._id; // PropertyTypeIDs remapped
+        }
+    }
+
+    { // Rebase WriteBuffer node updates
+        auto& updatedNodes = cwb._updatedNodes;
+        for (auto& node : updatedNodes) {
+            CommitWriteBuffer::UntypedProperty& prop = node._updatedValue;
+
+            auto& [id, _] = prop;
+            id = _propTypeMapping[id]._id;
+        }
+    }
+
+    { // Rebase WriteBuffer node updates
+        auto& updatedEdges = cwb._updatedEdges;
+        for (auto& edge : updatedEdges) {
+            CommitWriteBuffer::UntypedProperty& prop = edge._updatedValue;
+
+            auto& [id, _] = prop;
+            id = _propTypeMapping[id]._id;
         }
     }
 
