@@ -1343,7 +1343,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
 
             const ColumnTag tagToUpdate = findIt->second;
 
-            std::optional<PropertyType> maybePropType = propMap.get(name);
+            const std::optional<PropertyType> maybePropType = propMap.get(name);
 
             ValueType valType {_SIZE};
             PropertyTypeID propID;

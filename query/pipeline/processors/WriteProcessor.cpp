@@ -630,7 +630,7 @@ void WriteProcessor::updateEdges() {
         } else { // Column(Opt)Vector -> unique property for each edge
             getUntypedProperties(valueColumn, propsBuffer, pid);
             bioassert(source->size() == propsBuffer.size(),
-                      "Mismatch in dimensions of nodes to updates and property values.");
+                      "Mismatch in dimensions of edges to updates and property values.");
 
             for (const auto& [edgeID, update] : rv::zip(*source, propsBuffer)) {
                 _writeBuffer->addEdgeUpdate(edgeID, update);

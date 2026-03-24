@@ -266,9 +266,9 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             const EvaluatedType rhsType = rhs->getType();
 
             constexpr bool ALLOW_CREATES = true;
-            const ValueType lhsEvaluatedVt = _exprAnalyzer->analyzePropertyExpr(
-                lhs, ALLOW_CREATES, evaluatedToValueType(rhsType)
-            );
+            const ValueType valType = evaluatedToValueType(rhsType);
+            const ValueType lhsEvaluatedVt =
+                _exprAnalyzer->analyzePropertyExpr(lhs, ALLOW_CREATES, valType);
 
             _exprAnalyzer->analyzeRootExpr(v._propValueExpr);
 
