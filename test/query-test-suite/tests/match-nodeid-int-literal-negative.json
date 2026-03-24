@@ -4,8 +4,8 @@
   "query": "MATCH (n) WHERE n = -1 RETURN n.name",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __has predicate__\n    `\"]\n    3[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    4[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4",
-    "result": "EXEC ERROR\nUnexpected exception: Cannot compare ID with negative integer.",
-    "resultJson": "{\"header\":{\"column_names\":[\"n.name\"],\"column_types\":[\"String\"]},\"data\":[],\"error\":\"EXEC_ERROR\",\"error_details\":\"Unexpected exception: Cannot compare ID with negative integer.\"}"
+    "result": "EXEC ERROR\nCannot compare ID with negative integer.",
+    "resultJson": "{\"header\":{\"column_names\":[\"n.name\"],\"column_types\":[\"String\"]},\"data\":[],\"error\":\"EXEC_ERROR\",\"error_details\":\"Cannot compare ID with negative integer.\"}"
   },
   "tags": [
     "errors",
