@@ -178,6 +178,8 @@ private:
     bool _flushed {false};
 
     CommitJournal& _journal;
+
+    // NOTE: This view is NOT updated by CommitWriteBuffer::rebase
     GraphView _view;
 
     // Nodes to be created when this commit commits
