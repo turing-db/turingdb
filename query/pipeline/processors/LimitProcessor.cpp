@@ -69,8 +69,6 @@ void LimitProcessor::execute() {
 
         _currentRowCount += rowsToWrite;
 
-        if (_currentRowCount > 0) {
-            _output.getPort()->writeData();
-        }
+        _output.getPort()->writeData();
     }
 }
