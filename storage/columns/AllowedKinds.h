@@ -389,14 +389,18 @@ struct PropertyTypes {
         types::UInt64::Primitive,
         types::Double::Primitive,
         types::String::Primitive,
-        types::Bool::Primitive
+        types::Bool::Primitive,
+        types::Embedding::Primitive
     >>;
+
+    // Used for specialised dispatching logic for only vectors
     using ExcludedVector = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
         ContainerKind::code<ColumnConst>(),
         ContainerKind::code<ColumnMask>()
     >;
 
+    // Used for specialised dispatching logic for only consts
     using ExcludedConst = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
         ContainerKind::code<ColumnVector>(),
