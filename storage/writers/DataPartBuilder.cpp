@@ -3,6 +3,7 @@
 #include "Graph.h"
 #include "ID.h"
 #include "metadata/LabelSetHandle.h"
+#include "metadata/PropertyType.h"
 #include "properties/PropertyManager.h"
 #include "writers/MetadataBuilder.h"
 
@@ -147,6 +148,9 @@ void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
     }
     _edgeProperties->add<types::Embedding>(ptID, edge._edgeID.getValue(), value);
 }
+
+template bool DataPartBuilder::hasProperty<types::Embedding>(NodeID id, PropertyTypeID pid);
+template bool DataPartBuilder::hasProperty<types::Embedding>(EdgeID id, PropertyTypeID pid);
 
 #define INSTANTIATE(PType)                                                   \
     template void DataPartBuilder::addNodeProperty<PType>(NodeID,            \

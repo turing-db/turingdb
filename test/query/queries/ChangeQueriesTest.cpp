@@ -1588,9 +1588,9 @@ TEST_F(ChangeQueriesTest, threeChangesAllPropertyTypesThenRebase) {
         const auto res = query(MATCH_QUERY, [](const Dataframe* df) {
             ASSERT_TRUE(df);
             ASSERT_EQ(4, df->size());
-            const auto* ns      = findColumn(df, "n")->as<ColumnNodeIDs>();
-            const auto* names   = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
-            const auto* ages    = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            const auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
             const auto* hasPhDs = findColumn(df, "n.hasPhD")->as<ColumnOptVector<types::Bool::Primitive>>();
             ASSERT_TRUE(ns && names && ages && hasPhDs);
             ASSERT_FALSE(ns->empty());
@@ -1726,51 +1726,6 @@ TEST_F(ChangeQueriesTest, fourChangesReverseSubmitOrder) {
             EXPECT_EQ((std::vector<std::optional<types::Int64::Primitive>>{4, 3, 2, 1}), ages->getRaw()) << dump(df);
         });
         ASSERT_TRUE(res) << res.getError();
-    }
-}
-
-// Almost identical to setChainedNodesThenRebase but with a commit, causes non-deterministic rebase bug
-TEST_F(ChangeQueriesTest, DISABLED_FLAKYLabelSetsCommitRebase) {
-    setWorkingGraph("default");
-    ChangeID changeA;
-    ChangeID changeB;
-    {
-        newChange(), changeA = _currentChange;
-        constexpr std::string_view CREATE_QUERY =
-            R"(CREATE (n1:Person{name:"Head"})-[:FOLLOWS]->(n2:Person{name:"Mid"})-[:FOLLOWS]->(n3:Person{name:"Tail"}))";
-        {
-            const auto res = query(CREATE_QUERY, emptyCallback);
-            ASSERT_TRUE(res) << res.getError();
-            ASSERT_TRUE(query("commit", emptyCallback));
-        }
-    }
-    {
-        newChange(), changeB = _currentChange;
-        constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Person{name:"Lone"}))";
-        const auto res = query(CREATE_QUERY, emptyCallback);
-        ASSERT_TRUE(res) << res.getError();
-    }
-
-    submitChange(changeB);
-    submitChange(changeA);
-
-    {
-        constexpr std::string_view CHAIN_QUERY = R"(MATCH (n1:Person)-[:FOLLOWS]->(n2:Person)-[:FOLLOWS]->(n3:Person) RETURN n1.name, n2.name, n3.name)";
-        const auto res2 = query(CHAIN_QUERY, [](const Dataframe* df) {
-            ASSERT_TRUE(df);
-            ASSERT_EQ(3, df->size());
-            const auto* n1Names = findColumn(df, "n1.name")->as<ColumnOptVector<types::String::Primitive>>();
-            const auto* n2Names = findColumn(df, "n2.name")->as<ColumnOptVector<types::String::Primitive>>();
-            const auto* n3Names = findColumn(df, "n3.name")->as<ColumnOptVector<types::String::Primitive>>();
-            ASSERT_TRUE(n1Names && n2Names && n3Names);
-
-            ASSERT_FALSE(n1Names->empty() || n2Names->empty() || n3Names->empty());
-
-            EXPECT_EQ((std::vector<std::optional<std::string_view>>{ "Head" }), n1Names->getRaw()) << dump(df);
-            EXPECT_EQ((std::vector<std::optional<std::string_view>>{ "Mid" }), n2Names->getRaw()) << dump(df);
-            EXPECT_EQ((std::vector<std::optional<std::string_view>>{ "Tail" }), n3Names->getRaw()) << dump(df);
-        });
-        ASSERT_TRUE(res2) << res2.getError();
     }
 }
 

@@ -172,7 +172,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         static_assert((size_t)ValueType::_SIZE == 7 && "A value type was added");
 
 
-        if (metadata.labelsetsChanged() || metadata.propTypesChanged()) {
+        {
             PropertyIndexer newIndexers;
 
             for (const auto& [ptID, indexer] : nodeProperties->_indexers) {
@@ -187,13 +187,11 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
             nodeProperties->_indexers = std::move(newIndexers);
         }
 
-        if (_nodeOffset != 0) {
-            for (auto& [ptID, container] : nodeProperties->_map) {
-                for (auto& id : container->ids()) {
-                    id = _idRebaser->rebaseNodeID(id.getValue()).getValue();
-                }
-                container->sort();
+        for (auto& [ptID, container] : nodeProperties->_map) {
+            for (auto& id : container->ids()) {
+                id = _idRebaser->rebaseNodeID(id.getValue()).getValue();
             }
+            container->sort();
         }
     }
 
@@ -267,13 +265,11 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
             edgeProperties->_indexers = std::move(newIndexers);
         }
 
-        if (_edgeOffset != 0) {
-            for (auto& [ptID, container] : edgeProperties->_map) {
-                for (auto& id : container->ids()) {
-                    id = _idRebaser->rebaseEdgeID(id.getValue()).getValue();
-                }
-                container->sort();
+        for (auto& [ptID, container] : edgeProperties->_map) {
+            for (auto& id : container->ids()) {
+                id = _idRebaser->rebaseEdgeID(id.getValue()).getValue();
             }
+            container->sort();
         }
     }
 
