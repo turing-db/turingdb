@@ -1,0 +1,423 @@
+#include <gtest/gtest.h>
+
+#include <set>
+#include <string>
+
+#include "TuringDB.h"
+#include "Graph.h"
+#include "SystemManager.h"
+#include "columns/ColumnIDs.h"
+#include "columns/ColumnOptVector.h"
+#include "versioning/Change.h"
+#include "versioning/Transaction.h"
+#include "reader/GraphReader.h"
+#include "dataframe/Dataframe.h"
+#include "EdgeRecord.h"
+
+#include "CypherAST.h"
+#include "CypherParser.h"
+#include "CypherAnalyzer.h"
+#include "PlanGraph.h"
+#include "PlanGraphGenerator.h"
+#include "PlanOptimizer.h"
+#include "PipelineGenerator.h"
+#include "PipelineV2.h"
+#include "PipelineExecutor.h"
+#include "ExecutionContext.h"
+#include "procedures/ProcedureManager.h"
+#include "nodes/PlanGraphNode.h"
+
+#include "LineContainer.h"
+#include "TuringTestEnv.h"
+#include "TuringTest.h"
+#include "TuringConfig.h"
+
+using namespace turing::test;
+
+// Custom interpreter that exposes the optimized plan graph.
+class TestQueryInterpreter {
+public:
+    TestQueryInterpreter(db::SystemManager* sysMan, db::Graph* graph, std::string_view graphName)
+        : _sysMan(sysMan),
+        _graph(graph),
+        _graphName(graphName)
+    {
+    }
+
+    void execute(std::string_view cypher, auto callback) {
+        _procedures = db::ProcedureManager::create();
+        _procedures->init();
+
+        auto txRes = _sysMan->openTransaction(_graphName,
+                                              db::CommitHash::head(),
+                                              db::ChangeID::head());
+        _tx.emplace(std::move(txRes.value()));
+        const db::GraphView view = _tx->viewGraph();
+
+        _ast.emplace(_procedures.get(), cypher);
+        db::CypherParser parser(&*_ast);
+        parser.parse(cypher);
+
+        db::CypherAnalyzer analyzer(&*_ast, view);
+        analyzer.analyze();
+
+        _planGen.emplace(*_ast, view);
+        _planGen->generate(_ast->queries().front());
+
+        db::PlanGraph& plan = _planGen->getPlanGraph();
+
+        db::PlanOptimizer opt(&plan);
+        opt.optimize();
+
+        db::QueryCallbacks callbacks;
+        callbacks.setOnOutputData([&callback](const db::Dataframe* df) {
+            callback(df);
+        });
+
+        db::PipelineV2 pipeline;
+        db::LocalMemory mem;
+        db::PipelineGenerator pipelineGen(&plan, view, &pipeline, &mem,
+                                          _sysMan, _procedures.get(), &callbacks);
+        pipelineGen.generate();
+
+        db::ExecutionContext execCtxt(_sysMan, view);
+        execCtxt.setTransaction(&*_tx);
+        execCtxt.setGraphName(_graphName);
+        execCtxt.setProcedures(_procedures.get());
+
+        db::PipelineExecutor executor(&pipeline, &execCtxt);
+        executor.execute();
+    }
+
+    bool planHasOpcode(db::PlanGraphOpcode opcode) {
+        if (!_planGen) {
+            return false;
+        }
+        for (const auto& node : _planGen->getPlanGraph().nodes()) {
+            if (node->getOpcode() == opcode) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+private:
+    db::SystemManager* _sysMan {nullptr};
+    db::Graph* _graph {nullptr};
+    std::string_view _graphName;
+
+    std::unique_ptr<db::ProcedureManager> _procedures;
+    std::optional<db::Transaction> _tx;
+    std::optional<db::CypherAST> _ast;
+    std::optional<db::PlanGraphGenerator> _planGen;
+};
+
+// ---------------------------------------------------------------------------
+// Build a connected graph that resembles a small reactome:
+//
+//   100 Pathway nodes, 200 Reaction nodes, 300 Entity nodes
+//
+//   Edges:
+//     Pathway spine:     pathway_i --hasEvent--> pathway_i+1
+//     Pathway->Reaction: each pathway fans out to 2 reactions
+//     Reaction->Entity:  each reaction fans out to 2 entities
+//     Entity ring:       entity_i --surroundedBy--> entity_(i+1) mod 300
+//
+//   Total: 600 nodes, ~1100 edges
+// ---------------------------------------------------------------------------
+
+class ConstScanOptTest : public TuringTest {
+    void initialize() override {
+        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+        _env->getConfig().setSyncedOnDisk(false);
+        _env->getSystemManager().createGraph("default");
+        _graph = _env->getSystemManager().createGraph(_graphName);
+        _db = &_env->getDB();
+
+        buildGraph();
+    }
+
+protected:
+    const std::string _graphName = "biograph";
+    std::unique_ptr<TuringTestEnv> _env;
+    TuringDB* _db {nullptr};
+    Graph* _graph {nullptr};
+    ChangeID _currentChange {ChangeID::head()};
+
+    GraphReader read() { return _graph->openTransaction().readGraph(); }
+
+    void newChange() {
+        auto res = _env->getSystemManager().newChange(_graphName);
+        ASSERT_TRUE(res);
+        _currentChange = res.value()->id();
+    }
+
+    void submitCurrentChange() {
+        auto res = _db->query("change submit", _graphName, &_env->getMem(),
+                              CommitHash::head(), _currentChange);
+        ASSERT_TRUE(res);
+        _currentChange = ChangeID::head();
+    }
+
+    auto query(std::string_view query, auto callback) {
+        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
+                              CommitHash::head(), _currentChange);
+        return res;
+    }
+
+    static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {
+        for (auto* col : df->cols()) {
+            if (col->getName() == name) {
+                return col;
+            }
+        }
+        return nullptr;
+    }
+
+    void exec(std::string_view q) {
+        auto res = _db->query(q, _graphName, &_env->getMem(),
+                              [](const Dataframe*) {},
+                              CommitHash::head(), _currentChange);
+        ASSERT_TRUE(res);
+    }
+
+    void buildGraph() {
+        newChange();
+
+        for (int i = 0; i < 100; ++i) {
+            exec(fmt::format(R"(CREATE (:Pathway{{idx:{}}}))", i));
+        }
+        for (int i = 0; i < 200; ++i) {
+            exec(fmt::format(R"(CREATE (:Reaction{{idx:{}}}))", i));
+        }
+        for (int i = 0; i < 300; ++i) {
+            exec(fmt::format(R"(CREATE (:Entity{{idx:{}}}))", i));
+        }
+
+        submitCurrentChange();
+        newChange();
+
+        // Pathway spine: pathway_i -> pathway_i+1
+        for (int i = 0; i < 99; ++i) {
+            exec(fmt::format(
+                R"(MATCH (a:Pathway{{idx:{}}}), (b:Pathway{{idx:{}}}) CREATE (a)-[:hasEvent]->(b))",
+                i, i + 1));
+        }
+
+        submitCurrentChange();
+        newChange();
+
+        // Pathway -> 2 Reactions each
+        for (int p = 0; p < 100; ++p) {
+            const int r0 = (p * 2) % 200;
+            const int r1 = (p * 2 + 1) % 200;
+            exec(fmt::format(
+                R"(MATCH (a:Pathway{{idx:{}}}), (b:Reaction{{idx:{}}}) CREATE (a)-[:hasEvent]->(b))",
+                p, r0));
+            exec(fmt::format(
+                R"(MATCH (a:Pathway{{idx:{}}}), (b:Reaction{{idx:{}}}) CREATE (a)-[:hasEvent]->(b))",
+                p, r1));
+        }
+
+        submitCurrentChange();
+        newChange();
+
+        // Reaction -> 2 Entities each
+        for (int r = 0; r < 200; ++r) {
+            const int e0 = (r * 3) % 300;
+            const int e1 = (r * 3 + 1) % 300;
+            exec(fmt::format(
+                R"(MATCH (a:Reaction{{idx:{}}}), (b:Entity{{idx:{}}}) CREATE (a)-[:output]->(b))",
+                r, e0));
+            exec(fmt::format(
+                R"(MATCH (a:Reaction{{idx:{}}}), (b:Entity{{idx:{}}}) CREATE (a)-[:output]->(b))",
+                r, e1));
+        }
+
+        submitCurrentChange();
+        newChange();
+
+        // Entity ring: entity_i -> entity_(i+1) mod 300
+        for (int i = 0; i < 300; ++i) {
+            exec(fmt::format(
+                R"(MATCH (a:Entity{{idx:{}}}), (b:Entity{{idx:{}}}) CREATE (a)-[:surroundedBy]->(b))",
+                i, (i + 1) % 300));
+        }
+
+        submitCurrentChange();
+    }
+
+    // Expand one hop: for each source, append all out-edge targets.
+    // Preserves per-path multiplicity.
+    void expandOneHop(std::vector<NodeID>& out, const std::vector<NodeID>& sources) {
+        const GraphReader reader = read();
+        for (const NodeID src : sources) {
+            const NodeView view = reader.getNodeView(src);
+            for (const EdgeRecord& e : view.edges().outEdges()) {
+                out.push_back(e._otherID);
+            }
+        }
+    }
+
+    static std::string makeOrChain(std::string_view var,
+                                   const std::vector<NodeID>& seeds) {
+        std::string chain;
+        for (size_t i = 0; i < seeds.size(); ++i) {
+            if (i > 0) {
+                chain += " OR ";
+            }
+            chain += fmt::format("{} = {}", var, seeds[i].getValue());
+        }
+        return chain;
+    }
+};
+
+TEST_F(ConstScanOptTest, multiHopSeeds) {
+    // Grab the first 10 Pathway NodeIDs by scanning the graph
+    const LabelID pathwayLabel = read().getView().metadata().labels().get("Pathway").value();
+    LabelSet pathwayLabelSet;
+    pathwayLabelSet.set(pathwayLabel);
+    const LabelSetHandle pathwayHandle(pathwayLabelSet);
+
+    std::vector<NodeID> seeds;
+    for (const NodeID nid : read().scanNodesByLabel(pathwayHandle)) {
+        seeds.push_back(nid);
+        if (seeds.size() == 10) {
+            break;
+        }
+    }
+    ASSERT_EQ(seeds.size(), 10);
+
+    const std::string orChain = makeOrChain("n", seeds);
+
+    // Queries to test at each hop depth
+    const std::string q0 = fmt::format("MATCH (n) WHERE {} RETURN n", orChain);
+    const std::string q1 = fmt::format("MATCH (n)-->(m) WHERE {} RETURN m", orChain);
+    const std::string q2 = fmt::format("MATCH (n)-->(m)-->(p) WHERE {} RETURN p", orChain);
+    const std::string q3 = fmt::format("MATCH (n)-->(m)-->(p)-->(q) WHERE {} RETURN q", orChain);
+
+    // === Zero hops ===
+    {
+        using Rows = LineContainer<NodeID>;
+        Rows expected;
+        for (const NodeID nid : seeds) {
+            expected.add({nid});
+        }
+
+        Rows actual;
+        TestQueryInterpreter interp(&_env->getSystemManager(), _graph, _graphName);
+        interp.execute(q0, [&](const Dataframe* df) {
+            const ColumnNodeIDs* col = findColumn(df, "n")->as<ColumnNodeIDs>();
+            for (size_t i = 0; i < col->size(); ++i) {
+                actual.add({(*col)[i]});
+            }
+        });
+
+        EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
+        EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::SCAN_NODES));
+        EXPECT_TRUE(expected.equals(actual));
+    }
+
+    // === 1 hop ===
+    {
+        using Rows = LineContainer<NodeID>;
+        Rows expected;
+
+        std::vector<NodeID> hop1;
+        expandOneHop(hop1, seeds);
+        ASSERT_FALSE(hop1.empty());
+
+        for (const NodeID nid : hop1) {
+            expected.add({nid});
+        }
+
+        Rows actual;
+        TestQueryInterpreter interp(&_env->getSystemManager(), _graph, _graphName);
+        interp.execute(q1, [&](const Dataframe* df) {
+            const ColumnNodeIDs* col = findColumn(df, "m")->as<ColumnNodeIDs>();
+            for (size_t i = 0; i < col->size(); ++i) {
+                actual.add({(*col)[i]});
+            }
+        });
+
+        EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
+        EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::SCAN_NODES));
+        EXPECT_TRUE(expected.equals(actual));
+    }
+
+    // === 2 hops ===
+    {
+        using Rows = LineContainer<NodeID>;
+        Rows expected;
+
+        std::vector<NodeID> hop1;
+        expandOneHop(hop1, seeds);
+
+        std::vector<NodeID> hop2;
+        expandOneHop(hop2, hop1);
+        ASSERT_FALSE(hop2.empty());
+
+        for (const NodeID nid : hop2) {
+            expected.add({nid});
+        }
+
+        Rows actual;
+        TestQueryInterpreter interp(&_env->getSystemManager(), _graph, _graphName);
+        interp.execute(q2, [&](const Dataframe* df) {
+            const ColumnNodeIDs* col = findColumn(df, "p")->as<ColumnNodeIDs>();
+            for (size_t i = 0; i < col->size(); ++i) {
+                actual.add({(*col)[i]});
+            }
+        });
+
+        EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
+        EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::SCAN_NODES));
+        EXPECT_TRUE(expected.equals(actual));
+    }
+
+    // === 3 hops ===
+    {
+        using Rows = LineContainer<NodeID>;
+        Rows expected;
+
+        std::vector<NodeID> hop1;
+        expandOneHop(hop1, seeds);
+
+        std::vector<NodeID> hop2;
+        expandOneHop(hop2, hop1);
+
+        std::vector<NodeID> hop3;
+        expandOneHop(hop3, hop2);
+        ASSERT_FALSE(hop3.empty());
+
+        for (const NodeID nid : hop3) {
+            expected.add({nid});
+        }
+
+        Rows actual;
+        TestQueryInterpreter interp(&_env->getSystemManager(), _graph, _graphName);
+        interp.execute(q3, [&](const Dataframe* df) {
+            const ColumnNodeIDs* col = findColumn(df, "q")->as<ColumnNodeIDs>();
+            for (size_t i = 0; i < col->size(); ++i) {
+                actual.add({(*col)[i]});
+            }
+        });
+
+        EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
+        EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::SCAN_NODES));
+        EXPECT_TRUE(expected.equals(actual));
+    }
+}
+
+// When the predicate mixes NodeID equalities with a property filter,
+// the optimizer must NOT rewrite to ConstScan.
+TEST_F(ConstScanOptTest, mixedPredicateNoConstScan) {
+    const std::string q =
+        "MATCH (n) WHERE n = 0 OR n = 1 OR n.idx = 5 RETURN n";
+
+    TestQueryInterpreter interp(&_env->getSystemManager(), _graph, _graphName);
+    interp.execute(q, [](const Dataframe*) {});
+
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
+    EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::SCAN_NODES));
+}

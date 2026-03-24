@@ -18,6 +18,7 @@
 #include "PlanGraphDebug.h"
 #include "QueryConfig.h"
 #include "PlanGraphGenerator.h"
+#include "PlanOptimizer.h"
 #include "QueryCallbacks.h"
 #include "QueryStatus.h"
 #include "SimpleGraph.h"
@@ -297,7 +298,11 @@ void generatePlanGraph(std::string_view query,
         return;
     }
 
-    const db::PlanGraph& planGraph = planGen.getPlanGraph();
+    db::PlanGraph& planGraph = planGen.getPlanGraph();
+
+    db::PlanOptimizer planOpt(&planGraph);
+    planOpt.optimize();
+
     db::PlanGraphDebug::dumpMermaidContent(out, view, planGraph);
 }
 
