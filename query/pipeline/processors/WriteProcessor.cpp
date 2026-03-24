@@ -93,7 +93,7 @@ public:
     }
 
     /// Convert view to owning string; required as WriteBuffer outlives any one query
-    void operator()(const ColumnVector<std::string_view>* typed) {
+    void operator()(const ColumnVector<types::String::Primitive>* typed) {
         _buf.clear();
 
         std::string tmp;
@@ -115,20 +115,44 @@ public:
     }
 
     /// Convert view to owning string; required as WriteBuffer outlives any one query
-    void operator()(const ColumnVector<std::optional<std::string_view>>* typed) {
+    void operator()(const ColumnVector<std::optional<types::String::Primitive>>* typed) {
         _buf.clear();
 
         std::string tmp;
-        for (const std::optional<std::string_view> val : *typed) {
+        for (const std::optional<types::String::Primitive> val : *typed) {
             bioassert(val.has_value(), "Column had nullopt."); // FIXME: Remove/handle
-            const std::string_view v = *val;
+            const types::String::Primitive v = *val;
 
             tmp.assign(begin(v), end(v));
             _buf.emplace_back(_propID, tmp);
         }
     }
 
-    // TODO: @cyrusknopf add specialisations for types::Embedding
+    /// Convert view to owning vector; required as WriteBuffer outlives any one query
+    void operator()(const ColumnVector<types::Embedding::Primitive>* typed) {
+        _buf.clear();
+
+        types::Embedding::OwningPrimitive tmp;
+        for (const types::Embedding::Primitive val : *typed) {
+            tmp.assign(begin(val), end(val));
+
+            _buf.emplace_back(_propID, tmp);
+        }
+    }
+
+    /// Convert view to owning vector; required as WriteBuffer outlives any one query
+    void operator()(const ColumnOptVector<types::Embedding::Primitive>* typed) {
+        _buf.clear();
+
+        types::Embedding::OwningPrimitive tmp;
+        for (const std::optional<types::Embedding::Primitive> val : *typed) {
+            bioassert(val.has_value(), "Column had nullopt.");
+            const types::Embedding::Primitive v = *val;
+
+            tmp.assign(begin(v), end(v));
+            _buf.emplace_back(_propID, tmp);
+        }
+    }
 
 private:
     CommitWriteBuffer::UntypedProperties& _buf;
@@ -165,13 +189,18 @@ public:
     }
 
     /// Convert view to owning string; required as WriteBuffer outlives any one query
-    void operator()(const ColumnConst<std::string_view>* typed) {
+    void operator()(const ColumnConst<types::String::Primitive>* typed) {
         const std::string strv(typed->getRaw());
         _prop.value = strv;
         _prop.propertyID = _propID;
     }
 
-    // TODO: @cyrusknopf add specialisation for types::Embedding
+    void operator()(const ColumnConst<types::Embedding::Primitive>* typed) {
+        const types::Embedding::Primitive span = typed->getRaw();
+        const types::Embedding::OwningPrimitive vec(begin(span), end(span));
+        _prop.value = vec;
+        _prop.propertyID = _propID;
+    }
 
 private:
     CommitWriteBuffer::UntypedProperty& _prop;

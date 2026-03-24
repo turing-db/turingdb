@@ -65,6 +65,13 @@ protected:
             EXPECT_FLOAT_EQ(actual[i], expected[i]);
         }
     }
+
+    constexpr static auto dump = [](const Dataframe* df) {
+        std::ostringstream out;
+        df->dump(out);
+        return out.str();
+    };
+
 };
 
 TEST_F(EmbeddingQueriesTest, createNodeWithEmbedding) {
@@ -78,7 +85,7 @@ TEST_F(EmbeddingQueriesTest, createNodeWithEmbedding) {
         auto res = query(CREATE_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
         });
-        ASSERT_TRUE(res);
+        ASSERT_TRUE(res) << res.getError();
         submitCurrentChange();
     }
 
@@ -87,12 +94,12 @@ TEST_F(EmbeddingQueriesTest, createNodeWithEmbedding) {
     {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
-            ASSERT_EQ(df->size(), 2);
+            ASSERT_EQ(df->size(), 2) << dump(df);
 
             const auto* names = df->cols().front()->as<ColumnOptVector<types::String::Primitive>>();
             const auto* vecs = df->cols().back()->as<ColumnOptVector<types::Embedding::Primitive>>();
-            ASSERT_TRUE(names);
-            ASSERT_TRUE(vecs);
+            ASSERT_TRUE(names) << dump(df);
+            ASSERT_TRUE(vecs) << dump(df);
 
             const size_t rowCount = df->getLogicalRowCount();
             for (size_t i = 0; i < rowCount; i++) {
@@ -103,7 +110,7 @@ TEST_F(EmbeddingQueriesTest, createNodeWithEmbedding) {
                 actualVecs.emplace_back(emb.begin(), emb.end());
             }
         });
-        ASSERT_TRUE(res);
+        ASSERT_TRUE(res) << res.getError();
     }
 
     ASSERT_EQ(actualNames.size(), 1);
