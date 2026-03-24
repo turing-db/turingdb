@@ -62,8 +62,6 @@
 #include "dataframe/NamedColumn.h"
 #include "versioning/ChangeID.h"
 
-#include "TuringException.h"
-
 using namespace db;
 
 namespace {
@@ -444,7 +442,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addLimit(size_t count) {
 
 PipelineValueOutputInterface& PipelineBuilder::addCount(ColumnTag colTag) {
     if (!_pendingOutput.getInterface()) {
-        throw TuringException("COUNT had no input.");
+        throw FatalException("COUNT had no input.");
     }
 
     CountProcessor* count = CountProcessor::create(_pipeline, colTag);
