@@ -37,9 +37,8 @@ using namespace turing::test;
 // Custom interpreter that exposes the optimized plan graph.
 class TestQueryInterpreter {
 public:
-    TestQueryInterpreter(db::SystemManager* sysMan, db::Graph* graph, std::string_view graphName)
+    TestQueryInterpreter(db::SystemManager* sysMan, std::string_view graphName)
         : _sysMan(sysMan),
-        _graph(graph),
         _graphName(graphName)
     {
     }
@@ -103,7 +102,6 @@ public:
 
 private:
     db::SystemManager* _sysMan {nullptr};
-    db::Graph* _graph {nullptr};
     std::string_view _graphName;
 
     std::unique_ptr<db::ProcedureManager> _procedures;
@@ -305,7 +303,7 @@ TEST_F(ConstScanOptTest, multiHopSeeds) {
         }
 
         Rows actual;
-        TestQueryInterpreter interp(&_env->getSystemManager(), _graph, _graphName);
+        TestQueryInterpreter interp(&_env->getSystemManager(), _graphName);
         interp.execute(q0, [&](const Dataframe* df) {
             const ColumnNodeIDs* col = findColumn(df, "n")->as<ColumnNodeIDs>();
             for (size_t i = 0; i < col->size(); ++i) {
@@ -332,7 +330,7 @@ TEST_F(ConstScanOptTest, multiHopSeeds) {
         }
 
         Rows actual;
-        TestQueryInterpreter interp(&_env->getSystemManager(), _graph, _graphName);
+        TestQueryInterpreter interp(&_env->getSystemManager(), _graphName);
         interp.execute(q1, [&](const Dataframe* df) {
             const ColumnNodeIDs* col = findColumn(df, "m")->as<ColumnNodeIDs>();
             for (size_t i = 0; i < col->size(); ++i) {
@@ -362,7 +360,7 @@ TEST_F(ConstScanOptTest, multiHopSeeds) {
         }
 
         Rows actual;
-        TestQueryInterpreter interp(&_env->getSystemManager(), _graph, _graphName);
+        TestQueryInterpreter interp(&_env->getSystemManager(), _graphName);
         interp.execute(q2, [&](const Dataframe* df) {
             const ColumnNodeIDs* col = findColumn(df, "p")->as<ColumnNodeIDs>();
             for (size_t i = 0; i < col->size(); ++i) {
@@ -395,7 +393,7 @@ TEST_F(ConstScanOptTest, multiHopSeeds) {
         }
 
         Rows actual;
-        TestQueryInterpreter interp(&_env->getSystemManager(), _graph, _graphName);
+        TestQueryInterpreter interp(&_env->getSystemManager(), _graphName);
         interp.execute(q3, [&](const Dataframe* df) {
             const ColumnNodeIDs* col = findColumn(df, "q")->as<ColumnNodeIDs>();
             for (size_t i = 0; i < col->size(); ++i) {
@@ -415,7 +413,7 @@ TEST_F(ConstScanOptTest, mixedPredicateNoConstScan) {
     const std::string q =
         "MATCH (n) WHERE n = 0 OR n = 1 OR n.idx = 5 RETURN n";
 
-    TestQueryInterpreter interp(&_env->getSystemManager(), _graph, _graphName);
+    TestQueryInterpreter interp(&_env->getSystemManager(), _graphName);
     interp.execute(q, [](const Dataframe*) {});
 
     EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
