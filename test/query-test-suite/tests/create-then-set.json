@@ -3,9 +3,9 @@
   "graph": "simpledb",
   "query": "CREATE (n:Person) SET n.age = 32 RETURN n, n.age",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __WRITE__\n        __node__ (0:Person)\n    `\"]\n    1[\"`\n        __WRITE__\n        __node_update__ age\n    `\"]\n    2[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ age\n    `\"]\n    3[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1\n    1-->2\n    2-->3",
-    "result": "n,n.age\n18,null",
-    "resultJson": "{\"header\":{\"column_names\":[\"n\",\"n.age\"],\"column_types\":[\"UInt64\",\"Int64\"]},\"data\":[[[18],[null]]]}"
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = 32 RETURN n, n.age\n       |                   ^^^^^^^^^^^^^^\n-------* CREATE ... SET is not yet supported. Please use brace initialisation.",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = 32 RETURN n, n.age\n       |                   ^^^^^^^^^^^^^^\n-------* CREATE ... SET is not yet supported. Please use brace initialisation.",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n:Person) SET n.age = 32 RETURN n, n.age\\n       |                   ^^^^^^^^^^^^^^\\n-------* CREATE ... SET is not yet supported. Please use brace initialisation.\"}"
   },
   "tags": [
     "create",
