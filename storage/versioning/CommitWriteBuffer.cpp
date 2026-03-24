@@ -332,6 +332,7 @@ void CommitWriteBuffer::applyEdgeUpdates(DataPartBuilder& builder) {
         if (const EdgeRecord* existingEdge = _view.read().getEdge(edgeID)) {
             applyExistingEdgeUpdate(builder, *existingEdge, property);
         } else {
+            // NOTE: Currently disabled in Analyzer.
             applyPendingEdgeUpdate(builder, edgeID, property);
         }
     }

@@ -24,6 +24,6 @@ def run(client :TuringDB) -> None:
   try:
     submit_current_change(client)
   except Exception as e:
-    assert str(e) == "EXEC_ERROR: This change attempted to update Node 0 (which is now Node 0 on main) which has been modified on main."
+    assert str(e) == "EXEC_ERROR: This change attempted to update Node 1 (which is now Node 1 on main) which has been modified on main."
   else:
     assert False # Submit should be rejected: if not, violates snapshot isolation
