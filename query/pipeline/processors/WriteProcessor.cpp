@@ -107,7 +107,7 @@ public:
     void operator()(const ColumnVector<std::optional<T>>* typed) {
         _buf.clear();
 
-        for (const T& val : *typed) {
+        for (const std::optional<T>& val : *typed) {
             bioassert(val.has_value(), "Column had nullopt."); // FIXME: Remove/handle
 
             _buf.emplace_back(_propID, *val);
@@ -162,9 +162,9 @@ private:
 void getUntypedProperties(const Column* valueColumn,
                           CommitWriteBuffer::UntypedProperties& props,
                           PropertyTypeID pid) {
-    using Types = PropertyTypes;
+    using Types = WriteProcessorPropertyTypes;
     using Dispatcher =
-        ColumnSingleDispatcher<Types::Allowed,
+        ColumnSingleDispatcher<Types::AllowedVector,
                                ColumnVectorToUntypedProperties,
                                Types::ExcludedVector>;
     // Determines type of property values and fills @ref propBuffer with variants
@@ -210,8 +210,8 @@ private:
 void getConstantUntypedProperty(const Column* valueColumn,
                                 CommitWriteBuffer::UntypedProperty& prop,
                                 PropertyTypeID pid) {
-    using Types = PropertyTypes;
-    using Dispatcher = ColumnSingleDispatcher<Types::Allowed,
+    using Types = WriteProcessorPropertyTypes;
+    using Dispatcher = ColumnSingleDispatcher<Types::AllowedConst,
                                               ColumnConstToUntypedProperty,
                                               Types::ExcludedConst>;
     ColumnConstToUntypedProperty toProp(prop, pid);

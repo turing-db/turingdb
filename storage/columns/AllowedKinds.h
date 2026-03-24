@@ -383,8 +383,26 @@ struct OrderedTypes {
     >;
 };
 
-struct PropertyTypes {
-    using Allowed = GenerateKindList<std::tuple<
+struct WriteProcessorPropertyTypes {
+    // Used for specialised dispatching logic for only vectors (can hold optional)
+    using AllowedVector = GenerateKindList<std::tuple<
+        types::Int64::Primitive,
+        types::UInt64::Primitive,
+        types::Double::Primitive,
+        types::String::Primitive,
+        types::Bool::Primitive,
+        types::Embedding::Primitive,
+
+        std::optional<types::Int64::Primitive>,
+        std::optional<types::UInt64::Primitive>,
+        std::optional<types::Double::Primitive>,
+        std::optional<types::String::Primitive>,
+        std::optional<types::Bool::Primitive>,
+        std::optional<types::Embedding::Primitive>
+    >>;
+
+    // Used for specialised dispatching logic for only consts (shouldn't hold optional)
+    using AllowedConst = GenerateKindList<std::tuple<
         types::Int64::Primitive,
         types::UInt64::Primitive,
         types::Double::Primitive,
