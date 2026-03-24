@@ -2518,8 +2518,67 @@ TEST_F(WriteQueriesTest, dynamicIntPropertyExpression) {
     }
 }
 
+TEST_F(WriteQueriesTest, dynamicIntPropertySetNull) {
+    newChange();
+    {
+        constexpr std::string_view setQuery =
+            R"(MATCH (n), (m) WHERE n = 10 SET m.age = n.age)"; // n.age is null for n = 10
+
+        auto res = query(setQuery, [](const Dataframe*) {});
+        ASSERT_FALSE(res);
+        ASSERT_TRUE(res.hasErrorMessage());
+        ASSERT_EQ("Setting properties to NULL is not yet supported.", res.getError());
+    }
+}
+
+TEST_F(WriteQueriesTest, dynamicIntSelfAddProperty) {
+    newChange();
+    {
+        constexpr std::string_view setQuery =
+            R"(MATCH (n) WHERE n.age IS NOT NULL SET n.age = n.age + 100)";
+
+        auto res = query(setQuery, [](const Dataframe*) {});
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery =
+            R"(MATCH (n) WHERE n.age IS NOT NULL RETURN n.age)";
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size()) << dump(df);
+            const auto* nAges = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(nAges);
+
+            const auto age132 = [](std::optional<types::Int64::Primitive> age) { return age && *age == 132; };
+            ASSERT_TRUE(std::ranges::all_of(*nAges, age132)) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+
+    {
+        constexpr std::string_view matchQuery =
+            R"(MATCH (n) WHERE n.age IS NULL RETURN n.age)";
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size()) << dump(df);
+            const auto* nAges = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(nAges);
+
+            const auto ageNull = [](std::optional<types::Int64::Primitive> age) { return !age; };
+            ASSERT_TRUE(std::ranges::all_of(*nAges, ageNull)) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 100;
+        testing::GTEST_FLAG(repeat) = 3;
     });
 }

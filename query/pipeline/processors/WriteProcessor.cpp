@@ -108,7 +108,10 @@ public:
         _buf.clear();
 
         for (const std::optional<T>& val : *typed) {
-            bioassert(val.has_value(), "Column had nullopt."); // FIXME: Remove/handle
+            if (!val.has_value()) {
+                throw PipelineException(
+                    "Setting properties to NULL is not yet supported.");
+            }
 
             _buf.emplace_back(_propID, *val);
         }
@@ -120,7 +123,11 @@ public:
 
         std::string tmp;
         for (const std::optional<types::String::Primitive> val : *typed) {
-            bioassert(val.has_value(), "Column had nullopt."); // FIXME: Remove/handle
+            if (!val.has_value()) {
+                throw PipelineException(
+                    "Setting properties to NULL is not yet supported.");
+            }
+
             const types::String::Primitive v = *val;
 
             tmp.assign(begin(v), end(v));
@@ -146,7 +153,10 @@ public:
 
         types::Embedding::OwningPrimitive tmp;
         for (const std::optional<types::Embedding::Primitive> val : *typed) {
-            bioassert(val.has_value(), "Column had nullopt.");
+            if (!val.has_value()) {
+                throw PipelineException(
+                    "Setting properties to NULL is not yet supported.");
+            }
             const types::Embedding::Primitive v = *val;
 
             tmp.assign(begin(v), end(v));
@@ -310,7 +320,7 @@ void WriteProcessor::performDeletions() {
         }
 
         const auto* edgeColumn = inDf->getColumn(deletedTag)->as<ColumnEdgeIDs>();
-        if (!edgeColumn) { // @ref as<> performs dynamic_cast
+        if (!edgeColumn) {
             throw FatalException(fmt::format("Column {} was marked as a column of"
                                              " deleted edges, but is not an EdgeID"
                                              " column.", deletedTag.getValue()));
