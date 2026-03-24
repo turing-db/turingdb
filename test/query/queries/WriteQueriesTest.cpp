@@ -2437,8 +2437,59 @@ TEST_F(WriteQueriesTest, multipleNodeSetQueriesTypesWithCommit) {
     }
 }
 
+TEST_F(WriteQueriesTest, copyStringPropertyAcrossSingleEdge) {
+    newChange();
+    {
+        constexpr std::string_view setQuery =
+            R"(MATCH (n)-[:KNOWS_WELL]->(m) SET m.name = n.name)";
+
+        auto res = query(setQuery, [](const Dataframe*) {});
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    // 0 (Remy) -> 1 (Adam)   : 1 (Adam) is now Remy
+    // 1 (Adam) -> 0 (Remy)   : 0 (Remy) is now 1 (Adam)
+    // 6 (Ghosts) -> 0 (Remy) : 0 (Remy, then Adam) is now Ghosts
+    // 0 = Ghosts
+    // 1 = Remy
+
+    // Result should be
+    // Ghosts -> Remy
+    // Remy -> Ghosts
+    // Ghosts -> Ghosts
+
+    const std::vector<std::string_view> expectedNs {"Ghosts", "Remy", "Ghosts"};
+    const std::vector<std::string_view> expectedMs {"Remy", "Ghosts", "Ghosts"};
+    const auto expected = rv::zip(expectedNs, expectedMs);
+
+    {
+        constexpr std::string_view matchQuery =
+            R"(MATCH (n)-[:KNOWS_WELL]->(m) RETURN n.name, m.name)";
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(2, df->size()) << dump(df);
+            const auto* nNames = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* mNames = findColumn(df, "m.name")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(nNames && mNames);
+
+            const auto actual = rv::zip(*nNames, *mNames);
+            ASSERT_EQ(expected.size(), actual.size());
+
+            for (size_t i = 0; i < expected.size(); i++) {
+                const auto& [expN, expM] = expected[i];
+                const auto& [accN, accM] = expected[i];
+                EXPECT_EQ(expN, accN) << dump(df);
+                EXPECT_EQ(expM, accM) << dump(df);
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 3;
+        testing::GTEST_FLAG(repeat) = 100;
     });
 }
