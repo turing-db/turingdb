@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) WHERE n = 0 OR n = 1 OR n.name = 'Remy' RETURN n",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __has predicate__\n        __dep__ _n_._name_ (String)\n    `\"]\n    3[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    4[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->3\n    1-->4\n    2-->1\n    3-->2",
+    "result": "n\n0\n1",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\"],\"column_types\":[\"UInt64\"]},\"data\":[[[0,1]]]}"
+  },
+  "tags": [
+    "match",
+    "where",
+    "nodes",
+    "properties",
+    "predicates",
+    "filters"
+  ],
+  "write-required": false
+}
