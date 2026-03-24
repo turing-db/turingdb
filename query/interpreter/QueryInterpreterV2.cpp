@@ -186,10 +186,6 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
         status.setStatus(QueryStatus::Status::PLAN_ERROR);
         status.setMessage(e.what());
         return;
-    } catch (const TuringException& e) {
-        status.setStatus(QueryStatus::Status::PLAN_ERROR);
-        status.setMessage(e.what());
-        return;
     } catch (const std::exception& e) {
         status.setStatus(QueryStatus::Status::PLAN_ERROR);
         status.setMessage(std::string("Unexpected exception: ") + e.what());

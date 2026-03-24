@@ -4,8 +4,8 @@
   "query": "RETURN COUNT(*)",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: count\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": "PLAN ERROR\nCOUNT had no input.",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"COUNT had no input.\"}"
+    "result": "PLAN ERROR\nUnexpected exception: COUNT had no input.",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"Unexpected exception: COUNT had no input.\"}"
   },
   "tags": [
     "errors",
