@@ -60,6 +60,31 @@ public:
     using ResultColumnType = ColumnVector<T>;
 };
 
+/// Const and a mask, e.g. MASK && TRUE
+template <typename Op, typename T>
+class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnMask> {
+public:
+    using ResultColumnType = ColumnMask;
+};
+
+template <typename Op, typename T>
+class ColumnCombinationImpl<Op, ColumnMask, ColumnConst<T>> {
+public:
+    using ResultColumnType = ColumnMask;
+};
+
+template <typename Op, typename T>
+class ColumnCombinationImpl<Op, ColumnMask, ColumnConst<std::optional<T>>> {
+public:
+    using ResultColumnType = ColumnOptMask;
+};
+
+template <typename Op, typename T>
+class ColumnCombinationImpl<Op, ColumnConst<std::optional<T>>, ColumnMask> {
+public:
+    using ResultColumnType = ColumnOptMask;
+};
+
 /*
  * @brief Predicate Operations (non-optional)
  * @detail Predicates applied to two non-optional operands produce a @ref ColumnMask

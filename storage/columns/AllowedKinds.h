@@ -174,7 +174,10 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs
     >;
 
-    using AllowedMixed = AllowedMixedList<>;
+    using AllowedMixed = AllowedMixedList<
+        MixedKind<ColumnMask, CustomBool>,
+        MixedKind<ColumnMask, std::optional<CustomBool>>
+    >;
 
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
@@ -195,7 +198,10 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs
     >;
 
-    using AllowedMixed = AllowedMixedList<>;
+    using AllowedMixed = AllowedMixedList<
+        MixedKind<ColumnMask, CustomBool>,
+        MixedKind<ColumnMask, std::optional<CustomBool>>
+    >;
 
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
@@ -211,7 +217,10 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs
     >;
 
-    using AllowedMixed = AllowedMixedList<>;
+    using AllowedMixed = AllowedMixedList<
+        MixedKind<ColumnMask, CustomBool>,
+        MixedKind<ColumnMask, std::optional<CustomBool>>
+    >;
 
     // Mask operations also included
     using Excluded = ExcludedContainers<

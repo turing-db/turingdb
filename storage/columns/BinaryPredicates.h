@@ -8,6 +8,7 @@
 #include "ID.h"
 #include "TypeUtils.h"
 #include "ColumnMask.h"
+#include "ColumnConst.h"
 #include "metadata/PropertyType.h"
 
 #include "TuringException.h"
@@ -256,6 +257,108 @@ struct BinaryPredicateExecutor {
             resd[i] = op(lhsd[i], rhsd[i]);
        }
     }
+
+    /// Specialisations when filtering IDs by literals, e.g. n = 1
+    static void apply(ColumnVector<CustomBool>* res,
+                      const ColumnVector<CustomBool>* lhs,
+                      const ColumnMask* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
+
+        const size_t size = lhs->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        auto op = Op {};
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = op(lhsd[i], rhsd[i]);
+       }
+    }
+
+    static void apply(ColumnVector<CustomBool>* res,
+                      const ColumnMask* lhs,
+                      const ColumnVector<CustomBool>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
+
+        const size_t size = lhs->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        auto op = Op {};
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = op(lhsd[i], rhsd[i]);
+       }
+    }
+
+    static void apply(ColumnMask* res,
+                      const ColumnConst<CustomBool>* lhs,
+                      const ColumnMask* rhs) {
+        const size_t size = rhs->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const CustomBool& val = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        auto op = Op {};
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = op(val, rhsd[i]);
+        }
+    }
+
+    static void apply(ColumnMask* res,
+                      const ColumnMask* lhs,
+                      const ColumnConst<CustomBool>* rhs) {
+        const size_t size = lhs->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const CustomBool& val = rhs->getRaw();
+
+        auto op = Op {};
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = op(lhsd[i], val);
+        }
+    }
+
+    static void apply(ColumnOptMask* res,
+                      const ColumnMask* lhs,
+                      const ColumnConst<U>* rhs) {
+        const size_t size = lhs->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& val = rhs->getRaw();
+
+        auto op = Op {};
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = op(lhsd[i], val);
+        }
+    }
+
+    static void apply(ColumnOptMask* res,
+                      const ColumnConst<T>* lhs,
+                      const ColumnMask* rhs) {
+        const size_t size = rhs->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& val = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        auto op = Op {};
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = op(val, rhsd[i]);
+        }
+    }
+
 };
 
 /**
