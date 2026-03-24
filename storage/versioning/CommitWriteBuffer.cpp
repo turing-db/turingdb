@@ -45,10 +45,10 @@ template <>
 struct PrimitiveToTag<types::Bool::Primitive> {
     using Type = types::Bool;
 };
-/* template <>
+template <>
 struct PrimitiveToTag<types::Embedding::OwningPrimitive> {
     using Type = types::Embedding;
-}; */
+};
 
 }
 

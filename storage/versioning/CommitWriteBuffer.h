@@ -34,8 +34,8 @@ public:
                      types::UInt64::Primitive,
                      types::Double::Primitive,
                      std::string, /// Needs to be owning to outlive the query
-                     types::Bool::Primitive
-                     // types::Embedding::OwningPrimitive
+                     types::Bool::Primitive,
+                     types::Embedding::OwningPrimitive
      >;
      using UntypedProperties = std::vector<UntypedProperty>;
      using PendingNodeOffset = size_t;

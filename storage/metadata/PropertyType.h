@@ -113,7 +113,6 @@ struct Embedding : public PropertyType {
     using OwningPrimitive = std::vector<float>;
     using MandatorySpan = std::span<const Primitive>;
     using OptionalSpan = std::span<const std::optional<Primitive>>;
-    using OwningPrimitive = std::vector<float>;
     static constexpr auto _valueType = ValueType::Embedding;
 };
 
