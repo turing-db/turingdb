@@ -14,7 +14,6 @@
 
 namespace db {
 
-
 namespace {
 
 struct TuringEqual;
