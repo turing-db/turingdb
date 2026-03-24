@@ -2488,6 +2488,36 @@ TEST_F(WriteQueriesTest, copyStringPropertyAcrossSingleEdge) {
     }
 }
 
+TEST_F(WriteQueriesTest, dynamicIntPropertyExpression) {
+    newChange();
+    {
+        constexpr std::string_view setQuery =
+            R"(MATCH (n), (m) WHERE n = 1 SET m.age = n.age + 100 / 2)";
+
+        auto res = query(setQuery, [](const Dataframe*) {});
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    // n.age = 32; 32 + 100 / 2 = 82
+
+    {
+        constexpr std::string_view matchQuery =
+            R"(MATCH (n) RETURN n.age)";
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            ASSERT_EQ(1, df->size()) << dump(df);
+            const auto* nAges = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(nAges);
+
+            const auto age82 = [](std::optional<types::Int64::Primitive> age) { return age && *age == 82; };
+            ASSERT_TRUE(std::ranges::all_of(*nAges, age82)) << dump(df);
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 100;
