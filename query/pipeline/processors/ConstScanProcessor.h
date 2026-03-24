@@ -1,6 +1,7 @@
 #pragma once
 
 #include <span>
+#include <vector>
 
 #include "Processor.h"
 
@@ -25,6 +26,7 @@ public:
 
 private:
     std::span<const NodeID> _nodeIDs;
+    std::vector<NodeID> _sortedNodeIDs;
     PipelineNodeOutputInterface _outNodeIDs;
 
     ColumnNodeIDs* _outCol {nullptr};
