@@ -9,6 +9,8 @@
 #include "ExecutionContext.h"
 #include "columns/ColumnIDs.h"
 #include "dataframe/NamedColumn.h"
+#include "views/GraphView.h"
+#include "reader/GraphReader.h"
 
 using namespace db;
 
@@ -39,6 +41,17 @@ ConstScanProcessor* ConstScanProcessor::create(PipelineV2* pipeline,
 void ConstScanProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
+    // Filter out deleted/invalid IDs and sort for cache-friendly access.
+    const GraphReader reader = _ctxt->getGraphView().read();
+    _sortedNodeIDs.clear();
+    _sortedNodeIDs.reserve(_nodeIDs.size());
+    for (const NodeID nid : _nodeIDs) {
+        if (reader.graphHasNode(nid)) {
+            _sortedNodeIDs.push_back(nid);
+        }
+    }
+    std::sort(_sortedNodeIDs.begin(), _sortedNodeIDs.end());
+
     _outCol = static_cast<ColumnNodeIDs*>(_outNodeIDs.getNodeIDs()->getColumn());
     _offset = 0;
 
@@ -53,14 +66,14 @@ void ConstScanProcessor::reset() {
 void ConstScanProcessor::execute() {
     _outCol->clear();
 
-    const size_t remaining = _nodeIDs.size() - _offset;
+    const size_t remaining = _sortedNodeIDs.size() - _offset;
     const size_t chunkSize = std::min(remaining, _ctxt->getChunkSize());
 
     _outCol->resize(chunkSize);
-    std::copy_n(_nodeIDs.data() + _offset, chunkSize, _outCol->data());
+    std::copy_n(_sortedNodeIDs.data() + _offset, chunkSize, _outCol->data());
     _offset += chunkSize;
 
-    if (_offset >= _nodeIDs.size()) {
+    if (_offset >= _sortedNodeIDs.size()) {
         finish();
     }
 
