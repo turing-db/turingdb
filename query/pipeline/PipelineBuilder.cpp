@@ -1,5 +1,7 @@
 #include "PipelineBuilder.h"
 
+#include "PipelinePort.h"
+#include "interfaces/PipelineOutputInterface.h"
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
@@ -59,6 +61,8 @@
 #include "dataframe/ColumnTag.h"
 #include "dataframe/NamedColumn.h"
 #include "versioning/ChangeID.h"
+
+#include "TuringException.h"
 
 using namespace db;
 
@@ -439,6 +443,10 @@ PipelineBlockOutputInterface& PipelineBuilder::addLimit(size_t count) {
 }
 
 PipelineValueOutputInterface& PipelineBuilder::addCount(ColumnTag colTag) {
+    if (!_pendingOutput.getInterface()) {
+        throw TuringException("COUNT had no input.");
+    }
+
     CountProcessor* count = CountProcessor::create(_pipeline, colTag);
 
     PipelineBlockInputInterface countIn = count->input();
@@ -474,7 +482,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
         NamedColumn* col = inDf->getColumn(item._tag);
 
         if (!col) {
-            throw PipelineException(fmt::format("projection variable {} not found in output column", item._name));
+            throw FatalException(fmt::format("projection variable {} not found in output column", item._name));
         }
 
         if (NamedColumn* existingCol = outDf->getColumn(col->getTag())) {

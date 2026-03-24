@@ -350,9 +350,13 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 output << "        __exprs__\n";
                 for (const Expr* expr : n->getExprs()) {
                     const VarDecl* var = expr->getExprVarDecl();
-                    const std::string_view name = var->getName();
-                    const Expr::Kind kind = expr->getKind();
-                    const std::string_view kindDesc = ExprKindDescription::value(kind);
+                    std::string_view name = "unknown";
+                    std::string_view kindDesc = "unknown";
+                    if (var) {
+                        name = var->getName();
+                        const Expr::Kind kind = expr->getKind();
+                        kindDesc = ExprKindDescription::value(kind);
+                    }
 
                     const std::string out =  fmt::format("__expr__ ({}): {}", kindDesc, name);
                     output << out << '\n';

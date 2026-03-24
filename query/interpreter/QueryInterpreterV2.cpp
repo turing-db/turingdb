@@ -16,6 +16,7 @@
 
 #include "PipelineException.h"
 #include "CompilerException.h"
+#include "TuringException.h"
 
 #include "Profiler.h"
 #include "versioning/VersionControlException.h"
@@ -179,6 +180,10 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     try {
         pipelineGen.generate();
     } catch (const CompilerException& e) {
+        status.setStatus(QueryStatus::Status::PLAN_ERROR);
+        status.setMessage(e.what());
+        return;
+    } catch (const TuringException& e) {
         status.setStatus(QueryStatus::Status::PLAN_ERROR);
         status.setMessage(e.what());
         return;
