@@ -1,17 +1,21 @@
 #pragma once
 
 #include <memory>
-#include <string>
 #include <unordered_map>
 
-#include "Index.h"
 #include "ArcManager.h"
+#include "ID.h"
+#include "Index.h"
 
 namespace db {
 
 class IndexManager {
 public:
-    using PropertyIndexMap = std::unordered_map<std::string, Index*>;
+    using PropertyIndexMap = std::unordered_map<PropertyTypeID, Index*>;
+
+    // TODO: Ensure label set handles are rebased
+    using NodeIndexMap = std::unordered_map<LabelSetHandle, PropertyIndexMap>;
+    using EdgeIndexMap = std::unordered_map<EdgeTypeID, PropertyIndexMap>;
 private:
     PropertyIndexMap _nodeIndexes;
     PropertyIndexMap _edgeIndexes;
