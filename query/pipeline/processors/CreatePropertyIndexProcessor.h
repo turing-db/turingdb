@@ -12,7 +12,7 @@ class PipelineV2;
 class ExecutionContext;
 
 class CreatePropertyIndexProcessor final : public Processor {
-
+public:
     static CreatePropertyIndexProcessor* create(PipelineV2* pipeline,
                                                 std::string_view propertyName);
 
@@ -21,6 +21,8 @@ class CreatePropertyIndexProcessor final : public Processor {
     void prepare(ExecutionContext* ctxt) final;
     void reset() final;
     void execute() final;
+
+    PipelineBlockOutputInterface& output() { return _output; }
 
 protected:
     std::string_view _propertyName;

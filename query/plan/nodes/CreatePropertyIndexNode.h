@@ -12,6 +12,8 @@ public:
     {
     }
 
+    std::string_view propertyName() const { return _propertyName; }
+
 private:
     std::string_view _propertyName;
 };

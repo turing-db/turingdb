@@ -8,11 +8,19 @@
 #include "PipelineExecutor.h"
 #include "PipelinePort.h"
 
+#include "versioning/Transaction.h"
+
+#include "FatalException.h"
+
 using namespace db;
 
 CreatePropertyIndexProcessor::CreatePropertyIndexProcessor(std::string_view propertyName)
     : _propertyName(propertyName)
 {
+}
+
+std::string CreatePropertyIndexProcessor::describe() const {
+    return fmt::format("CreatePropertyIndexProcessor @={}", fmt::ptr(this));
 }
 
 CreatePropertyIndexProcessor* CreatePropertyIndexProcessor::create(PipelineV2* pipeline,
@@ -33,6 +41,16 @@ CreatePropertyIndexProcessor* CreatePropertyIndexProcessor::create(PipelineV2* p
 
 void CreatePropertyIndexProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
+
+    const Transaction* rawTx = ctxt->getTransaction();
+    if (!rawTx) {
+        throw FatalException("Attempted to prepare WriteProcessor in execution context "
+                             "without transaction.");
+    }
+
+    if (!rawTx->writingPendingCommit()) {
+        throw PipelineException("WriteProcessor: Cannot perform writes outside of a write transaction");
+    }
     markAsPrepared();
 }
 

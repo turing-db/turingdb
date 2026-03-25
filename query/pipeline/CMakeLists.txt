@@ -68,6 +68,7 @@ set(processors_sources
     processors/InstallExtensionProcessor.cpp
     processors/ShowExtensionsProcessor.cpp
     processors/EvalFunction.cpp
+    processors/CreatePropertyIndexProcessor.cpp
 )
 
 set(procedures_sources

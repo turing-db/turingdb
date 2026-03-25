@@ -29,6 +29,7 @@
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
+#include "nodes/CreatePropertyIndexNode.h"
 #include "procedures/ProcedureManager.h"
 #include "processors/OrderByProcessor.h"
 #include "processors/PathExplorerProcessor.h"
@@ -491,7 +492,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         break;
 
         case PlanGraphOpcode::CREATE_PROPERTY_INDEX:
-            throw FatalException("Not implemented.");
+            return translateCreatePropertyIndexNode(static_cast<CreatePropertyIndexNode*>(node));
         break;
 
         case PlanGraphOpcode::FUNC_EVAL:
@@ -1509,8 +1510,8 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
     return _builder.getPendingOutputInterface();
 }
 
-PipelineOutputInterface* PipelineGenerator::translateLoadGraph(LoadGraphNode* loadGraph) {
-    _builder.addLoadGraph(loadGraph->getGraphName());
+PipelineOutputInterface* PipelineGenerator::translateLoadGraph(LoadGraphNode* node) {
+    _builder.addLoadGraph(node->getGraphName());
     return _builder.getPendingOutputInterface();
 }
 
@@ -1529,8 +1530,8 @@ PipelineOutputInterface* PipelineGenerator::translateCommitNode(CommitNode* node
     return _builder.getPendingOutputInterface();
 }
 
-PipelineOutputInterface* PipelineGenerator::translateLoadGML(LoadGMLNode* loadGML) {
-    _builder.addLoadGML(loadGML->getGraphName(), loadGML->getFilePath());
+PipelineOutputInterface* PipelineGenerator::translateLoadGML(LoadGMLNode* node) {
+    _builder.addLoadGML(node->getGraphName(), node->getFilePath());
     return _builder.getPendingOutputInterface();
 }
 
@@ -1800,6 +1801,14 @@ PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* no
     // input of this processor.
     auto* newMatProc = MaterializeProcessor::createFromDf(_pipeline, _mem, outputDf);
     _builder.setMaterializeProc(newMatProc);
+
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateCreatePropertyIndexNode(CreatePropertyIndexNode* node) {
+    const std::string_view propertyName = node->propertyName();
+
+    _builder.addCreatePropertyIndex(propertyName);
 
     return _builder.getPendingOutputInterface();
 }
