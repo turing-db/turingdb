@@ -11,8 +11,7 @@ class DeclContext;
 
 class CreatePropertyIndexQuery final : public QueryCommand {
 public:
-    static CreatePropertyIndexQuery* create(CypherAST* ast,
-                                            std::string_view propertyName);
+    static CreatePropertyIndexQuery* create(CypherAST* ast);
 
     Kind getKind() const final { return Kind::CREATE_PROPERTY_INDEX_QUERY; }
 
