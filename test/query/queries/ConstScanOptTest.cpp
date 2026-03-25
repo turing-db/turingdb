@@ -47,12 +47,21 @@ public:
     }
 
     void execute(std::string_view cypher, auto callback) {
+        executeImpl(cypher, db::ChangeID::head(), callback);
+    }
+
+    void execute(std::string_view cypher, db::ChangeID change, auto callback) {
+        executeImpl(cypher, change, callback);
+    }
+
+private:
+    void executeImpl(std::string_view cypher, db::ChangeID change, auto callback) {
         _procedures = db::ProcedureManager::create();
         _procedures->init();
 
         auto txRes = _sysMan->openTransaction(_graphName,
                                               db::CommitHash::head(),
-                                              db::ChangeID::head());
+                                              change);
         _tx.emplace(std::move(txRes.value()));
         const db::GraphView view = _tx->viewGraph();
 
@@ -91,6 +100,7 @@ public:
         executor.execute();
     }
 
+public:
     bool planHasOpcode(db::PlanGraphOpcode opcode) {
         if (!_planGen) {
             return false;
@@ -420,6 +430,25 @@ TEST_F(ConstScanOptTest, multiHopSeeds) {
         EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::SCAN_NODES));
         EXPECT_TRUE(expected.equals(actual));
     }
+}
+
+// A SET query with a single NodeID equality must use ConstScan.
+TEST_F(ConstScanOptTest, setPropertyUsesConstScan) {
+    const NodeID nid = *read().scanNodes().begin();
+
+    const std::string q = fmt::format(
+        "MATCH (n) WHERE n = {} SET n.emb = [1.0, 0.0, 0.0, 0.0]",
+        nid.getValue());
+
+    newChange();
+
+    TestQueryInterpreter interp(&_env->getSystemManager(),
+                                _graphName,
+                                &_db->getDefaultQueryConfig());
+    interp.execute(q, _currentChange, [](const Dataframe*) {});
+
+    EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::SCAN_NODES));
 }
 
 // When the predicate mixes NodeID equalities with a property filter,
