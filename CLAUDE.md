@@ -87,9 +87,12 @@ Key points:
 **Formatting:**
 - 4 spaces indentation, no tabs
 - Opening brace on same line (except constructors)
+- All control structures (`if`, `for`, `while`) must have braces, even for single-statement bodies
 - `public`/`private` aligned with `class`
 - Do not overwrap: prefer keeping statements on one line when they fit. A slightly long line is better than an ugly split.
+- Return type must be on the same line as the function name, never on a separate line — even if the line is long
 - Function calls: first argument must start on the same line as the function name, never on the next line. If arguments must wrap, align them under the first argument.
+- Use blank lines between logical groups of statements in function bodies; don't write overly compact code
 
 **Naming:**
 - Private members prefixed with underscore: `_member`
@@ -111,6 +114,7 @@ Key points:
 **Member variables:**
 - POD/scalar members must always have a default value: `size_t _count {0};`
 - Getter methods use `getX()` style: `getDimension()`, `getCapacity()`
+- In the `private` section, member variables come before private member functions
 
 **Headers vs implementation:**
 - Keep headers declaration-only; put non-trivial implementations in `.cpp` files
@@ -130,6 +134,10 @@ Key points:
 - Exceptions must derive from `TuringException`
 - No move semantics/RVO; pass by pointer or reference
 - Prefer `enum class` with trailing comma
+
+## Design Conventions
+
+- Embedding operations (cosine_similarity, euclidean_distance) are implemented as functions through the EvalFunction path, not as binary operators. New computation operations on embeddings should follow the function pattern (Functions.h, EvalFunction, ColumnFunctions).
 
 ## Commit style
 
