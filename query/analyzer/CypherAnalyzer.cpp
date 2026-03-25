@@ -35,6 +35,7 @@
 #include "stmt/Skip.h"
 #include "stmt/CallStmt.h"
 #include "stmt/Limit.h"
+#include "CreatePropertyIndexQuery.h"
 
 #include "FunctionDecls.h"
 
@@ -108,6 +109,10 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<const InstallExtensionQuery*>(query));
             break;
 
+            case QueryCommand::Kind::CREATE_PROPERTY_INDEX_QUERY:
+                analyze(static_cast<const CreatePropertyIndexQuery*>(query));
+            break;
+
             // Nothing to analyze
             case QueryCommand::Kind::CHANGE_QUERY:
             case QueryCommand::Kind::COMMIT_QUERY:
@@ -119,9 +124,6 @@ void CypherAnalyzer::analyze() {
             case QueryCommand::Kind::SHOW_EXTENSIONS_QUERY:
             break;
 
-            default:
-                throwError("Unsupported query type", query);
-            break;
         }
     }
 }
@@ -474,6 +476,18 @@ void CypherAnalyzer::analyze(const InstallExtensionQuery* query) {
                        query);
         }
     }
+}
+
+void CypherAnalyzer::analyze(const CreatePropertyIndexQuery* query) {
+    const std::string_view propertyName = query->getPropertyName();
+
+    const PropertyTypeMap& propTypes = _graphMetadata.propTypes();
+    std::optional<PropertyType> got = propTypes.get(propertyName);
+    if (!got.has_value()) {
+        throwError("Property to index does not exist.", query);
+    }
+
+    throwError("Property Indexes not yet supported.", query);
 }
 
 void CypherAnalyzer::throwError(std::string_view msg, const void* obj) const {

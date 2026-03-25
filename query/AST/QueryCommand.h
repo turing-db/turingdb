@@ -28,6 +28,7 @@ public:
         LOAD_COMMIT_QUERY,
         INSTALL_EXTENSION_QUERY,
         SHOW_EXTENSIONS_QUERY,
+        CREATE_PROPERTY_INDEX_QUERY,
     };
 
     virtual Kind getKind() const = 0;
