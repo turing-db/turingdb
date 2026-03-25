@@ -20,6 +20,7 @@
 #include "nodes/ChangeNode.h"
 #include "nodes/CommitNode.h"
 #include "Literal.h"
+#include "nodes/CreatePropertyIndexNode.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/ReturnStmt.h"
@@ -80,6 +81,7 @@
 #include "LoadCommitQuery.h"
 #include "InstallExtensionQuery.h"
 #include "ShowExtensionsQuery.h"
+#include "CreatePropertyIndexQuery.h"
 
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
@@ -175,8 +177,8 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
             generateShowExtensionsQuery(static_cast<const ShowExtensionsQuery*>(query));
         break;
 
-        default:
-            throwError(fmt::format("Unsupported query command of type {}", (uint64_t)query->getKind()), query);
+        case QueryCommand::Kind::CREATE_PROPERTY_INDEX_QUERY:
+            generateCreatePropertyIndexQuery(static_cast<const CreatePropertyIndexQuery*>(query));
         break;
     }
 
@@ -397,6 +399,14 @@ PlanGraphNode* PlanGraphGenerator::generateReturnNone(PlanGraphNode* prevNode) {
     ProduceResultsNode* prodResults = _tree.newOut<ProduceResultsNode>(prevNode);
     prodResults->setProduceNone(true);
     return prodResults;
+}
+
+void PlanGraphGenerator::generateCreatePropertyIndexQuery(const CreatePropertyIndexQuery* query) {
+    const std::string_view propertyName = query->getPropertyName();
+
+    CreatePropertyIndexNode* node = _tree.create<CreatePropertyIndexNode>(propertyName);
+
+    _tree.newOut<ProduceResultsNode>(node);
 }
 
 void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {

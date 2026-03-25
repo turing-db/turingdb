@@ -490,6 +490,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translatePathExplorerNode(static_cast<PathExplorerNode*>(node));
         break;
 
+        case PlanGraphOpcode::CREATE_PROPERTY_INDEX:
+            throw FatalException("Not implemented.");
+        break;
+
         case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
