@@ -1,4 +1,4 @@
-#include "CreatePropertyIndexProcessor.h"
+#include "CreateNodePropertyIndexProcessor.h"
 
 #include <string_view>
 
@@ -14,18 +14,18 @@
 
 using namespace db;
 
-CreatePropertyIndexProcessor::CreatePropertyIndexProcessor(std::string_view propertyName)
-    : _propertyName(propertyName)
+CreateNodePropertyIndexProcessor::CreateNodePropertyIndexProcessor(std::string_view indexName)
+    : _indexName(indexName)
 {
 }
 
-std::string CreatePropertyIndexProcessor::describe() const {
+std::string CreateNodePropertyIndexProcessor::describe() const {
     return fmt::format("CreatePropertyIndexProcessor @={}", fmt::ptr(this));
 }
 
-CreatePropertyIndexProcessor* CreatePropertyIndexProcessor::create(PipelineV2* pipeline,
-                                                                   std::string_view propertyName) {
-    CreatePropertyIndexProcessor* proc = new CreatePropertyIndexProcessor(propertyName);
+CreateNodePropertyIndexProcessor* CreateNodePropertyIndexProcessor::create(PipelineV2* pipeline,
+                                                                           std::string_view indexName) {
+    CreateNodePropertyIndexProcessor* proc = new CreateNodePropertyIndexProcessor(indexName);
 
     {
         PipelineOutputPort* out = PipelineOutputPort::create(pipeline, proc);
@@ -39,7 +39,7 @@ CreatePropertyIndexProcessor* CreatePropertyIndexProcessor::create(PipelineV2* p
     return proc;
 }
 
-void CreatePropertyIndexProcessor::prepare(ExecutionContext* ctxt) {
+void CreateNodePropertyIndexProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
     const Transaction* rawTx = ctxt->getTransaction();
@@ -54,10 +54,10 @@ void CreatePropertyIndexProcessor::prepare(ExecutionContext* ctxt) {
     markAsPrepared();
 }
 
-void CreatePropertyIndexProcessor::reset() {
+void CreateNodePropertyIndexProcessor::reset() {
     markAsReset();
 }
 
-void CreatePropertyIndexProcessor::execute() {
+void CreateNodePropertyIndexProcessor::execute() {
     throw PipelineException("Property indexes are not yet supported.");
 }

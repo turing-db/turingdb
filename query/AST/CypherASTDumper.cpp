@@ -159,8 +159,8 @@ void CypherASTDumper::dump(std::ostream& out) {
                 out << "    script ||--o{ SHOW_EXTENSIONS : \"\"\n";
             break;
 
-            case QueryCommand::Kind::CREATE_PROPERTY_INDEX_QUERY:
-                out << "    script ||--o{ CREATE_PROPERTY_INDEX : \"\"\n";
+            case QueryCommand::Kind::CREATE_NODE_PROPERTY_INDEX_QUERY:
+                out << "    script ||--o{ CREATE_NODE_PROPERTY_INDEX : \"\"\n";
             break;
         }
     }

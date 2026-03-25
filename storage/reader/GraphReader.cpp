@@ -1,6 +1,7 @@
 #include "GraphReader.h"
 
 #include "DataPart.h"
+#include "ID.h"
 #include "NodeContainer.h"
 #include "EdgeContainer.h"
 #include "indexers/EdgeIndexer.h"
@@ -8,6 +9,7 @@
 #include "properties/PropertyManager.h"
 
 #include "BioAssert.h"
+#include <algorithm>
 
 using namespace db;
 
@@ -307,6 +309,32 @@ const T::Primitive* GraphReader::tryGetEdgeProperty(PropertyTypeID ptID, EdgeID 
     }
 
     return nullptr;
+}
+
+bool GraphReader::isNodeProperty(PropertyTypeID ptID) const {
+    const DataPartSpan& parts = _view.dataparts();
+
+    const auto hasProperty = [ptID](const WeakArc<DataPart>& part) {
+        const PropertyManager& nodeProps = part->nodeProperties();
+        return nodeProps.hasPropertyType(ptID);
+    };
+
+    const bool isNodeProperty = std::ranges::any_of(parts, hasProperty);
+
+    return isNodeProperty;
+}
+
+bool GraphReader::isEdgeProperty(PropertyTypeID ptID) const {
+    const DataPartSpan& parts = _view.dataparts();
+
+    const auto hasProperty = [ptID](const WeakArc<DataPart>& part) {
+        const PropertyManager& edgeProps = part->edgeProperties();
+        return edgeProps.hasPropertyType(ptID);
+    };
+
+    const bool isEdgeProperty = std::ranges::any_of(parts, hasProperty);
+
+    return isEdgeProperty;
 }
 
 template const types::UInt64::Primitive* GraphReader::tryGetNodeProperty<types::UInt64>(PropertyTypeID ptID, NodeID nodeID) const;

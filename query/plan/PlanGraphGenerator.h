@@ -35,7 +35,7 @@ class ShowVectorIndexesQuery;
 class InstallExtensionQuery;
 class ShowExtensionsQuery;
 class QueryCommand;
-class CreatePropertyIndexQuery;
+class CreateNodePropertyIndexQuery;
 
 class PlanGraphGenerator {
 public:
@@ -76,7 +76,7 @@ private:
     void generateLoadCommitQuery(const LoadCommitQuery* query);
     void generateInstallExtensionQuery(const InstallExtensionQuery* query);
     void generateShowExtensionsQuery(const ShowExtensionsQuery* query);
-    void generateCreatePropertyIndexQuery(const CreatePropertyIndexQuery* query);
+    void generateCreateNodePropertyIndexQuery(const CreateNodePropertyIndexQuery* query);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

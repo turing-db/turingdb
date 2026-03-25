@@ -1,4 +1,4 @@
-#include "CreatePropertyIndexQuery.h"
+#include "CreateNodePropertyIndexQuery.h"
 
 #include <string_view>
 
@@ -8,19 +8,26 @@
 
 using namespace db;
 
-CreatePropertyIndexQuery::CreatePropertyIndexQuery(DeclContext* declCtxt,
-                                                   std::string_view propertyName)
+CreateNodePropertyIndexQuery::CreateNodePropertyIndexQuery(DeclContext* declCtxt,
+                                                   std::string_view indexName,
+                                                   NodePattern* node,
+                                                   PropertyExpr* property)
     : QueryCommand(declCtxt),
-    _propName(propertyName)
+    _indexName(indexName),
+    _nodePattern(node),
+    _propertyExpr(property)
 {
 }
 
-CreatePropertyIndexQuery* CreatePropertyIndexQuery::create(CypherAST* ast, std::string_view propertyName) {
+CreateNodePropertyIndexQuery* CreateNodePropertyIndexQuery::create(CypherAST* ast,
+                                                           std::string_view indexName,
+                                                           NodePattern* node,
+                                                           PropertyExpr* property) {
     constexpr DeclContext* parent = nullptr;
     DeclContext* declCtxt = DeclContext::create(ast, parent);
 
-    CreatePropertyIndexQuery* query =
-        new CreatePropertyIndexQuery(declCtxt, propertyName);
+    CreateNodePropertyIndexQuery* query =
+        new CreateNodePropertyIndexQuery(declCtxt, indexName, node, property);
 
     ast->addQuery(query);
 

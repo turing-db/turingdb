@@ -74,7 +74,7 @@
     #include "stmt/VectorSearchStmt.h"
     #include "expr/ListExpr.h"
     #include "VecLibMetadata.h"
-    #include "CreatePropertyIndexQuery.h"
+    #include "CreateNodePropertyIndexQuery.h"
 
     namespace db {
         class YCypherScanner;
@@ -355,7 +355,7 @@
 %type<db::OrderBy*> opt_orderBySSt
 %type<db::OrderByItem*> orderByItem
 %type<bool> opt_distinct
-%type<db::CreatePropertyIndexQuery*> createPropertyIndexQuery
+%type<db::CreateNodePropertyIndexQuery*> createNodePropertyIndexQuery
 
 %expect 0
 
@@ -400,7 +400,7 @@ singleQuery
     | s3TransferQuery { $$ = $1; }
     | showProceduresQuery { $$ = $1; }
     | createVectorIndexQuery { $$ = $1; }
-    | createPropertyIndexQuery { $$ = $1; }
+    | createNodePropertyIndexQuery { $$ = $1; }
     | loadVectorQuery { $$ = $1; }
     | deleteVectorIndexQuery { $$ = $1; }
     | showVectorIndexesQuery { $$ = $1; }
@@ -445,12 +445,19 @@ createVectorIndexQuery
       }
     ;
 
-createPropertyIndexQuery
+createNodePropertyIndexQuery
     : CREATE INDEX ID FOR nodePattern ON propertyExpr {
-        $$ = CreatePropertyIndexQuery::create(ast, $4, $8);
+        $$ = CreateNodePropertyIndexQuery::create(ast, $3, $5, dynamic_cast<PropertyExpr*>($7));
         LOC($$, @$);
       }
     ;
+
+//createEdgePropertyIndexQuery
+//  : CREATE INDEX ID FOR edgePattern ON propertyExpr {
+//      $$ = CreatePropertyIndexQuery::create(ast, $3, $5, $7);
+//      LOC($$, @$);
+//  }
+//  ;
 
 distanceMetric
     : EUCLID { $$ = vec::DistanceMetric::EUCLIDEAN_DIST; }

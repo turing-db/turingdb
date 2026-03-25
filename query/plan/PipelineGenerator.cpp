@@ -29,7 +29,6 @@
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
-#include "nodes/CreatePropertyIndexNode.h"
 #include "procedures/ProcedureManager.h"
 #include "processors/OrderByProcessor.h"
 #include "processors/PathExplorerProcessor.h"
@@ -88,6 +87,7 @@
 #include "nodes/PathExplorerNode.h"
 #include "nodes/ConstScanNode.h"
 #include "nodes/ConstWriteSourceNode.h"
+#include "nodes/CreateNodePropertyIndexNode.h"
 
 #include "TranslateJoinHelpers.h"
 
@@ -491,8 +491,8 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translatePathExplorerNode(static_cast<PathExplorerNode*>(node));
         break;
 
-        case PlanGraphOpcode::CREATE_PROPERTY_INDEX:
-            return translateCreatePropertyIndexNode(static_cast<CreatePropertyIndexNode*>(node));
+        case PlanGraphOpcode::CREATE_NODE_PROPERTY_INDEX:
+            return translateCreateNodePropertyIndexNode(static_cast<CreateNodePropertyIndexNode*>(node));
         break;
 
         case PlanGraphOpcode::FUNC_EVAL:
@@ -1805,10 +1805,9 @@ PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* no
     return _builder.getPendingOutputInterface();
 }
 
-PipelineOutputInterface* PipelineGenerator::translateCreatePropertyIndexNode(CreatePropertyIndexNode* node) {
-    const std::string_view propertyName = node->propertyName();
+PipelineOutputInterface* PipelineGenerator::translateCreateNodePropertyIndexNode(CreateNodePropertyIndexNode* node) {
+    const std::string_view indexName = node->indexName();
 
-    _builder.addCreatePropertyIndex(propertyName);
-
+    _builder.addCreateNodePropertyIndex(indexName);
     return _builder.getPendingOutputInterface();
 }

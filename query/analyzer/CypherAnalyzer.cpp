@@ -1,9 +1,15 @@
 #include "CypherAnalyzer.h"
 
 #include <spdlog/fmt/bundled/core.h>
+#include <string_view>
 
+#include "BioAssert.h"
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
+#include "EdgePattern.h"
+#include "EntityPattern.h"
+#include "NodePattern.h"
+#include "QualifiedName.h"
 #include "ReadStmtAnalyzer.h"
 #include "Symbol.h"
 #include "SourceManager.h"
@@ -24,7 +30,11 @@
 #include "InstallExtensionQuery.h"
 #include "Projection.h"
 #include "decl/DeclContext.h"
+#include "decl/EvaluatedType.h"
 #include "expr/Expr.h"
+#include "expr/PropertyExpr.h"
+#include "metadata/PropertyType.h"
+#include "reader/GraphReader.h"
 #include "stmt/ShortestPathStmt.h"
 #include "decl/VarDecl.h"
 #include "expr/SymbolExpr.h"
@@ -35,7 +45,7 @@
 #include "stmt/Skip.h"
 #include "stmt/CallStmt.h"
 #include "stmt/Limit.h"
-#include "CreatePropertyIndexQuery.h"
+#include "CreateNodePropertyIndexQuery.h"
 
 #include "FunctionDecls.h"
 
@@ -109,8 +119,8 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<const InstallExtensionQuery*>(query));
             break;
 
-            case QueryCommand::Kind::CREATE_PROPERTY_INDEX_QUERY:
-                analyze(static_cast<const CreatePropertyIndexQuery*>(query));
+            case QueryCommand::Kind::CREATE_NODE_PROPERTY_INDEX_QUERY:
+                analyze(static_cast<const CreateNodePropertyIndexQuery*>(query));
             break;
 
             // Nothing to analyze
@@ -478,13 +488,33 @@ void CypherAnalyzer::analyze(const InstallExtensionQuery* query) {
     }
 }
 
-void CypherAnalyzer::analyze(const CreatePropertyIndexQuery* query) {
-    const std::string_view propertyName = query->getPropertyName();
+void CypherAnalyzer::analyze(const CreateNodePropertyIndexQuery* query) {
+    const NodePattern* node = query->nodePattern();
+    bioassert(node, "Failed to get node pattern.");
+
+    PropertyExpr* propertyExpr = query->propertyExpr();
+    bioassert(propertyExpr, "Failed to get property expression.");
+
+    _exprAnalyzer->registerNodePatternDeclaration(node);
+    _exprAnalyzer->analyzePropertyExpr(propertyExpr);
 
     const PropertyTypeMap& propTypes = _graphMetadata.propTypes();
-    std::optional<PropertyType> got = propTypes.get(propertyName);
-    if (!got.has_value()) {
-        throwError("Property to index does not exist.", query);
+
+    const std::string_view propName = propertyExpr->getPropName();
+
+    const std::optional<PropertyType> maybePropType = propTypes.get(propName);
+
+    if (!maybePropType) {
+        const std::string err = fmt::format("Property {} to index does not exist.", propName);
+        throwError(std::move(err), propertyExpr);
+    }
+
+    const PropertyType propType = *maybePropType;
+
+    const GraphReader reader = _graphView.read();
+
+    if (!reader.isNodeProperty(propType._id)) {
+        throwError("Property is not a node property.", propertyExpr);
     }
 }
 

@@ -8,7 +8,6 @@
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
-#include "processors/CreatePropertyIndexProcessor.h"
 #include "processors/LoadCommitProcessor.h"
 #include "processors/CallProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
@@ -54,6 +53,7 @@
 #include "processors/InstallExtensionProcessor.h"
 #include "processors/PathExplorerProcessor.h"
 #include "processors/ConstWriteSourceProcessor.h"
+#include "processors/CreateNodePropertyIndexProcessor.h"
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
@@ -1343,9 +1343,9 @@ PipelineValuesOutputInterface& PipelineBuilder::addShowVectorIndexes() {
     return output;
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addCreatePropertyIndex(std::string_view propertyName) {
-    CreatePropertyIndexProcessor* proc =
-        CreatePropertyIndexProcessor::create(_pipeline, propertyName);
+PipelineBlockOutputInterface& PipelineBuilder::addCreateNodePropertyIndex(std::string_view propertyName) {
+    CreateNodePropertyIndexProcessor* proc =
+        CreateNodePropertyIndexProcessor::create(_pipeline, propertyName);
 
     PipelineBlockOutputInterface& output = proc->output();
 
