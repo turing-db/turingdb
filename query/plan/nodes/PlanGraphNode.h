@@ -56,6 +56,8 @@ enum class PlanGraphOpcode {
     PATH_EXPLORER,
     CONST_SCAN,
     CONST_WRITE_SOURCE,
+    CREATE_PROPERTY_INDEX,
+
     _SIZE
 };
 
@@ -108,7 +110,9 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::SHOW_EXTENSIONS, "SHOW_EXTENSIONS">,
     EnumStringPair<PlanGraphOpcode::PATH_EXPLORER, "PATH_EXPLORER">,
     EnumStringPair<PlanGraphOpcode::CONST_SCAN, "CONST_SCAN">,
-    EnumStringPair<PlanGraphOpcode::CONST_WRITE_SOURCE, "CONST_WRITE_SOURCE">>;
+    EnumStringPair<PlanGraphOpcode::CONST_WRITE_SOURCE, "CONST_WRITE_SOURCE">,
+    EnumStringPair<PlanGraphOpcode::CREATE_PROPERTY_INDEX, "CREATE_PROPERTY_INDEX">
+>;
 
 class PlanGraphNode {
 public:

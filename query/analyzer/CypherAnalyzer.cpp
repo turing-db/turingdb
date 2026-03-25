@@ -486,8 +486,6 @@ void CypherAnalyzer::analyze(const CreatePropertyIndexQuery* query) {
     if (!got.has_value()) {
         throwError("Property to index does not exist.", query);
     }
-
-    throwError("Property Indexes not yet supported.", query);
 }
 
 void CypherAnalyzer::throwError(std::string_view msg, const void* obj) const {
