@@ -128,6 +128,10 @@ static bool collectNodeIDsFromOrChain(const Expr* expr,
     }
 
     const IntegerLiteral* intLiteral = static_cast<const IntegerLiteral*>(literal);
+    if (intLiteral->getValue() < 0) {
+        return false;
+    }
+
     nodeIDs.emplace_back(static_cast<uint64_t>(intLiteral->getValue()));
     return true;
 }
