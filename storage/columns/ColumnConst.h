@@ -6,6 +6,7 @@
 #include "DebugDump.h"
 #include "BioAssert.h"
 #include "NameOf.h"
+#include "FatalException.h"
 
 namespace db {
 
@@ -39,7 +40,12 @@ public:
 
     /// Subscript operators to match API of ColumnVector
     const T& operator[](size_t /*unused*/) const { return _value; }
-    const T& at(size_t /*unused*/) const { return _value; }
+    const T& at(size_t /*unused*/) const {
+        if (_empty) {
+            throw FatalException("ColumnConst::at called on empty column");
+        }
+        return _value;
+    }
 
     size_t size() const override { return _empty ? 0 : 1; }
 
