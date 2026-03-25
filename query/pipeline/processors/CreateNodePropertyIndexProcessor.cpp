@@ -14,8 +14,10 @@
 
 using namespace db;
 
-CreateNodePropertyIndexProcessor::CreateNodePropertyIndexProcessor(std::string_view indexName)
-    : _indexName(indexName)
+CreateNodePropertyIndexProcessor::CreateNodePropertyIndexProcessor(std::string_view indexName,
+                                                                   std::string_view propName)
+    : _indexName(indexName),
+    _propertyName(propName)
 {
 }
 
@@ -24,8 +26,9 @@ std::string CreateNodePropertyIndexProcessor::describe() const {
 }
 
 CreateNodePropertyIndexProcessor* CreateNodePropertyIndexProcessor::create(PipelineV2* pipeline,
-                                                                           std::string_view indexName) {
-    CreateNodePropertyIndexProcessor* proc = new CreateNodePropertyIndexProcessor(indexName);
+                                                                           std::string_view indexName,
+                                                                           std::string_view propName) {
+    CreateNodePropertyIndexProcessor* proc = new CreateNodePropertyIndexProcessor(indexName, propName);
 
     {
         PipelineOutputPort* out = PipelineOutputPort::create(pipeline, proc);

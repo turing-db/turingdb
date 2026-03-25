@@ -14,7 +14,8 @@ class ExecutionContext;
 class CreateNodePropertyIndexProcessor final : public Processor {
 public:
     static CreateNodePropertyIndexProcessor* create(PipelineV2* pipeline,
-                                                std::string_view indexName);
+                                                    std::string_view indexName,
+                                                    std::string_view propName);
 
     std::string describe() const final;
 
@@ -25,13 +26,14 @@ public:
     PipelineBlockOutputInterface& output() { return _output; }
 
 protected:
-    std::string_view _indexName;
+    ExecutionContext* _ctxt {nullptr};
 
     PipelineBlockOutputInterface _output;
 
-    ExecutionContext* _ctxt {nullptr};
+    std::string_view _indexName;
+    std::string_view _propertyName;
 
-    explicit CreateNodePropertyIndexProcessor(std::string_view indexName);
+    explicit CreateNodePropertyIndexProcessor(std::string_view indexName, std::string_view propName);
     ~CreateNodePropertyIndexProcessor() final = default;
 };
 
