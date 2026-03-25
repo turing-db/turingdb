@@ -446,8 +446,8 @@ createVectorIndexQuery
     ;
 
 createPropertyIndexQuery
-    : CREATE UNIQUE INDEX ON ID {
-        $$ = CreatePropertyIndexQuery::create(ast, $5);
+    : CREATE INDEX ID FOR nodePattern ON propertyExpr {
+        $$ = CreatePropertyIndexQuery::create(ast, $4, $8);
         LOC($$, @$);
       }
     ;
