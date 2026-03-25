@@ -74,6 +74,7 @@
     #include "stmt/VectorSearchStmt.h"
     #include "expr/ListExpr.h"
     #include "VecLibMetadata.h"
+    #include "CreatePropertyIndexQuery.h"
 
     namespace db {
         class YCypherScanner;
@@ -354,6 +355,7 @@
 %type<db::OrderBy*> opt_orderBySSt
 %type<db::OrderByItem*> orderByItem
 %type<bool> opt_distinct
+%type<db::CreatePropertyIndexQuery*> createPropertyIndexQuery
 
 %expect 0
 
@@ -398,7 +400,7 @@ singleQuery
     | s3TransferQuery { $$ = $1; }
     | showProceduresQuery { $$ = $1; }
     | createVectorIndexQuery { $$ = $1; }
-    | createIndexQuery {}
+    | createPropertyIndexQuery { $$ = $1; }
     | loadVectorQuery { $$ = $1; }
     | deleteVectorIndexQuery { $$ = $1; }
     | showVectorIndexesQuery { $$ = $1; }
@@ -443,8 +445,11 @@ createVectorIndexQuery
       }
     ;
 
-createIndexQuery
-    : CREATE UNIQUE INDEX ON propertyExpr { std::cout << "creating index\n"; throw std::runtime_error("Indexes not yet implemented."); }
+createPropertyIndexQuery
+    : CREATE UNIQUE INDEX ON ID {
+        $$ = CreatePropertyIndexQuery::create(ast, $5);
+        LOC($$, @$);
+      }
     ;
 
 distanceMetric
