@@ -356,6 +356,7 @@
 %type<db::OrderByItem*> orderByItem
 %type<bool> opt_distinct
 %type<db::CreateNodePropertyIndexQuery*> createNodePropertyIndexQuery
+%type<db::CreateEdgePropertyIndexQuery*> createEdgePropertyIndexQuery
 
 %expect 0
 
@@ -453,11 +454,11 @@ createNodePropertyIndexQuery
     ;
 
 //createEdgePropertyIndexQuery
-//  : CREATE INDEX ID FOR edgePattern ON propertyExpr {
-//      $$ = CreatePropertyIndexQuery::create(ast, $3, $5, $7);
-//      LOC($$, @$);
-//  }
-//  ;
+//    : CREATE INDEX ID FOR edgePattern ON propertyExpr {
+//        $$ = CreateEdgePropertyIndexQuery::create(ast, $3, $5, $7);
+//        LOC($$, @$);
+//    }
+//    ;
 
 distanceMetric
     : EUCLID { $$ = vec::DistanceMetric::EUCLIDEAN_DIST; }

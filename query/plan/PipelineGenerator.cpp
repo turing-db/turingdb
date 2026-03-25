@@ -24,6 +24,7 @@
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
+#include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineNodeOutputInterface.h"
@@ -1807,7 +1808,11 @@ PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* no
 
 PipelineOutputInterface* PipelineGenerator::translateCreateNodePropertyIndexNode(CreateNodePropertyIndexNode* node) {
     const std::string_view indexName = node->indexName();
+    const PropertyExpr* propExpr = node->propExpr();
 
-    _builder.addCreateNodePropertyIndex(indexName);
+    const std::string_view propertyName = propExpr->getPropName();
+
+    _builder.addCreateNodePropertyIndex(indexName, propertyName);
+
     return _builder.getPendingOutputInterface();
 }

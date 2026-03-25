@@ -63,6 +63,7 @@ public:
 
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
 
+    /// Adds an empty declaration for the given NodePattern
     void registerNodePatternDeclaration(const NodePattern* node);
 
 private:

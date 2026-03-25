@@ -162,6 +162,10 @@ void CypherASTDumper::dump(std::ostream& out) {
             case QueryCommand::Kind::CREATE_NODE_PROPERTY_INDEX_QUERY:
                 out << "    script ||--o{ CREATE_NODE_PROPERTY_INDEX : \"\"\n";
             break;
+
+            case QueryCommand::Kind::CREATE_EDGE_PROPERTY_INDEX_QUERY:
+                out << "    script ||--o{ CREATE_EDGE_PROPERTY_INDEX : \"\"\n";
+            break;
         }
     }
 }

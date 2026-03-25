@@ -181,6 +181,11 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
         case QueryCommand::Kind::CREATE_NODE_PROPERTY_INDEX_QUERY:
             generateCreateNodePropertyIndexQuery(static_cast<const CreateNodePropertyIndexQuery*>(query));
         break;
+
+        case QueryCommand::Kind::CREATE_EDGE_PROPERTY_INDEX_QUERY:
+            throwError("Edge indexes are not yet supported.", query);
+        break;
+
     }
 
     _tree.removeIsolatedNodes();

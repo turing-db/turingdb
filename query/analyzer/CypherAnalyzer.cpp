@@ -123,6 +123,10 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<const CreateNodePropertyIndexQuery*>(query));
             break;
 
+            case QueryCommand::Kind::CREATE_EDGE_PROPERTY_INDEX_QUERY:
+                throwError("Edge indexes not yet supported.", query);
+            break;
+
             // Nothing to analyze
             case QueryCommand::Kind::CHANGE_QUERY:
             case QueryCommand::Kind::COMMIT_QUERY:
@@ -495,6 +499,7 @@ void CypherAnalyzer::analyze(const CreateNodePropertyIndexQuery* query) {
     PropertyExpr* propertyExpr = query->propertyExpr();
     bioassert(propertyExpr, "Failed to get property expression.");
 
+    // Register an empty decl for the node of the query
     _exprAnalyzer->registerNodePatternDeclaration(node);
     _exprAnalyzer->analyzePropertyExpr(propertyExpr);
 

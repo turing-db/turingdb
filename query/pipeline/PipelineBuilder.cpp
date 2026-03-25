@@ -1343,9 +1343,10 @@ PipelineValuesOutputInterface& PipelineBuilder::addShowVectorIndexes() {
     return output;
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addCreateNodePropertyIndex(std::string_view propertyName) {
-    CreateNodePropertyIndexProcessor* proc =
-        CreateNodePropertyIndexProcessor::create(_pipeline, propertyName);
+PipelineBlockOutputInterface& PipelineBuilder::addCreateNodePropertyIndex(std::string_view indexName,
+                                                                          std::string_view propName) {
+
+    auto* proc = CreateNodePropertyIndexProcessor::create(_pipeline, indexName, propName);
 
     PipelineBlockOutputInterface& output = proc->output();
 
