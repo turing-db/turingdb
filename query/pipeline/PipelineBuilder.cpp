@@ -8,6 +8,7 @@
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
+#include "processors/CreatePropertyIndexProcessor.h"
 #include "processors/LoadCommitProcessor.h"
 #include "processors/CallProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
@@ -1339,6 +1340,17 @@ PipelineValuesOutputInterface& PipelineBuilder::addShowVectorIndexes() {
     dimsOutput.setValues(dimsCol);
 
     _pendingOutput.setInterface(&output);
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addCreatePropertyIndex(std::string_view propertyName) {
+    CreatePropertyIndexProcessor* proc =
+        CreatePropertyIndexProcessor::create(_pipeline, propertyName);
+
+    PipelineBlockOutputInterface& output = proc->output();
+
+    _pendingOutput.setInterface(&output);
+    _lastProc = proc;
     return output;
 }
 

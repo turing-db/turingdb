@@ -227,6 +227,8 @@ public:
     PipelineValueOutputInterface& addDeleteVectorIndex(std::string_view indexName);
     PipelineValuesOutputInterface& addShowVectorIndexes();
 
+    PipelineBlockOutputInterface& addCreatePropertyIndex(std::string_view propertyName);
+
     // Helper to add a column of a given type to the current output dataframe
     template <typename ColumnType>
     NamedColumn* addColumnToOutput(ColumnTag tag) {
