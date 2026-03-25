@@ -6,14 +6,16 @@
 #include <sys/socket.h>
 #include <errno.h>
 
-#include "ContentType.h"
-#include "HTTP.h"
-#include "Utils.h"
 #include "ConnectionHeader.h"
+#include "ContentType.h"
+#include "EnumToString.h"
+#include "HTTP.h"
+#include "AbstractTCPWriter.h"
+#include "SocketUtils.h"
 
 namespace net {
 
-class NetWriter {
+class HTTPWriter : public AbstractTCPWriter {
 public:
     enum class Status : uint8_t {
         Ok = 0,
@@ -34,11 +36,9 @@ public:
         EnumStringPair<Status::SendFailed, "Could not send data">,
         EnumStringPair<Status::SentZeroBytes, "Send zero bytes which is not supposed to happen">>;
 
-    explicit NetWriter(utils::DataSocket socket)
+    explicit HTTPWriter(net::utils::DataSocket socket = 0)
         : _socket(socket)
     {
-        // - First 8 bytes are saved to store the chunk size
-        // - We need to send \r\n after the size of the chunk
         memcpy(_chunk._content.data() + 8, "\r\n", 2);
     }
 
@@ -189,14 +189,13 @@ public:
         _header.reset();
     }
 
-    void flush() {
+    void flush() override {
         if (errorOccured()) {
             return;
         }
 
         hexString(_chunk._size, _chunk._content.data());
 
-        // Delimit ending of chunk
         memcpy(_chunk._content.data() + _chunk._position, "\r\n", 2);
         send(_chunk._content.data(), _chunk._size + 12);
 
@@ -208,11 +207,7 @@ public:
     }
 
     void write(std::string_view content) {
-        if (errorOccured()) {
-            return;
-        }
-
-        if (content.empty()) {
+        if (errorOccured() || content.empty()) {
             return;
         }
 
@@ -224,9 +219,6 @@ public:
             const size_t copySize = std::min(content.size(), _chunk._remaining);
             memcpy(_chunk._content.data() + _chunk._position, content.data(), copySize);
             _chunk.increment(copySize);
-
-            // If string was too large to fit in chunk, send the remaining parts
-            // in subsequent chunks
             content.remove_prefix(copySize);
         }
     }
@@ -302,26 +294,26 @@ public:
         _chunk.increment(actualSize);
     }
 
-    void reset() {
+    void reset() override {
         _chunk.reset();
         _header.reset();
         _wroteNonEmptyChunk = false;
         _status = Status::Ok;
     }
 
-    void setSocket(utils::DataSocket socket) {
+    void setSocket(int socket) override {
         _socket = socket;
     }
 
-    size_t getBytesWritten() const {
+    size_t getBytesWritten() const override {
         return _chunk._size;
     }
 
-    bool wroteNonEmptyChunk() const {
+    bool wroteNonEmptyChunk() const override {
         return _wroteNonEmptyChunk;
     }
 
-    bool errorOccured() const {
+    bool errorOccured() const override {
         return _status != Status::Ok;
     }
 
@@ -332,9 +324,9 @@ public:
 private:
     static inline constexpr size_t _maxHeaderSize = 512;
     static inline constexpr size_t _maxChunkSize = 1024ul * 32ul;
-    static inline constexpr size_t _safety = 64; // Includes the size + opening/closing \r\n tokens
+    static inline constexpr size_t _safety = 64;
 
-    utils::DataSocket _socket {0};
+    int _socket {0};
     Status _status {Status::Ok};
     bool _wroteNonEmptyChunk {false};
 
@@ -360,17 +352,12 @@ private:
             memcpy(_content.data() + _position, "\r\n", 2);
             increment(2);
         }
-
-        void endHeader() {
-            memcpy(_content.data() + _position, "\r\n\r\n", 4);
-            increment(4);
-        }
     } _header;
 
     struct Chunk {
         std::array<char, _maxChunkSize + _safety> _content {};
         size_t _size {0};
-        size_t _position {10}; // First 10 bytes are size + \r\n
+        size_t _position {10};
         size_t _remaining {_maxChunkSize};
 
         void increment(size_t count) {
@@ -429,7 +416,7 @@ private:
 
             if (sent == -1) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    continue; // Try again
+                    continue;
                 }
 
                 _status = Status::SendFailed;
@@ -437,7 +424,6 @@ private:
             }
 
             if (sent == 0) {
-                // This is never supposed to happen, unless we pass size == 0
                 _status = Status::SentZeroBytes;
                 return;
             }
@@ -448,5 +434,6 @@ private:
     }
 };
 
-}
+using NetWriter = HTTPWriter;
 
+}

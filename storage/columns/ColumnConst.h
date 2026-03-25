@@ -3,6 +3,8 @@
 #include "Column.h"
 #include "ColumnKind.h"
 
+#include "metadata/PropertyNull.h"
+
 #include "DebugDump.h"
 #include "BioAssert.h"
 #include "NameOf.h"
@@ -17,7 +19,8 @@ public:
     static constexpr ContainerKind::Code BaseKind = ContainerKind::code<ColumnConst<T>>();
 
     ColumnConst()
-        : Column(_staticKind)
+        : Column(_staticKind),
+        _empty(true)
     {
     }
 
@@ -48,6 +51,7 @@ public:
     }
 
     size_t size() const override { return _empty ? 0 : 1; }
+    void clear() override { _empty = true; }
 
     void assign(const Column* other) override {
         const ColumnConst<T>* otherCol = dynamic_cast<const ColumnConst<T>*>(other);
@@ -70,6 +74,7 @@ public:
     }
 
     void set(const T& value) { _value = value; _empty = false; }
+    void set(T&& value) { _value = std::move(value); _empty = false; }
 
     void dump(std::ostream& out) const override {
         DebugDump::dump(out, _value);
@@ -92,7 +97,9 @@ private:
     static constexpr auto _staticKind = ColumnKind::code<ColumnConst<T>>();
 };
 
+template <>
+ColumnConst<PropertyNull>::ColumnConst();
+
 template <class T>
 struct ColumnSupportFor<ColumnConst<T>> : std::true_type {};
-
 }

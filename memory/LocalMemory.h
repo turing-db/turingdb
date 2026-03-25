@@ -64,6 +64,7 @@ public:
         MakeMemoryPool<ColumnConst<types::UInt64::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::Double::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::String::Primitive>>::type,
+        MakeMemoryPool<ColumnConst<std::string>>::type,
         MakeMemoryPool<ColumnConst<types::Bool::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::Embedding::Primitive>>::type,
         MakeMemoryPool<ColumnConst<ListView>>::type,
@@ -73,6 +74,7 @@ public:
         MakeMemoryPool<ColumnConst<std::optional<types::UInt64::Primitive>>>::type,
         MakeMemoryPool<ColumnConst<std::optional<types::Double::Primitive>>>::type,
         MakeMemoryPool<ColumnConst<std::optional<types::String::Primitive>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<std::string>>>::type,
         MakeMemoryPool<ColumnConst<std::optional<types::Bool::Primitive>>>::type,
         MakeMemoryPool<ColumnConst<std::optional<types::Embedding::Primitive>>>::type,
 
@@ -92,6 +94,7 @@ public:
         MakeMemoryPool<ColumnOptVector<types::Double::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<types::String::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<types::Bool::Primitive>>::type,
+        MakeMemoryPool<ColumnOptVector<std::string>>::type,
         MakeMemoryPool<ColumnOptVector<types::Embedding::Primitive>>::type,
         MakeMemoryPool<ColumnSet<NodeID>>::type,
         MakeMemoryPool<ColumnSet<EdgeID>>::type,

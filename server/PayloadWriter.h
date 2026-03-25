@@ -9,7 +9,7 @@
 #include "views/NodeView.h"
 #include "views/EdgeView.h"
 #include "metadata/PropertyType.h"
-#include "NetWriter.h"
+#include "HTTPWriter.h"
 #include "ControlCharacters.h"
 
 namespace db {

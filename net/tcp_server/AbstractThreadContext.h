@@ -4,7 +4,7 @@
 
 namespace net {
 
-class HTTPServer;
+class TCPServer;
 
 class AbstractThreadContext {
 public:
@@ -21,7 +21,7 @@ public:
 private:
     size_t _threadID {0};
 
-    friend HTTPServer;
+    friend TCPServer;
     void setThreadID(size_t threadID) { _threadID = threadID; }
 };
 

@@ -4,7 +4,7 @@
 #include <thread>
 
 namespace net {
-    class HTTPServer;
+class TCPServer;
 }
 
 namespace db {
@@ -21,11 +21,11 @@ public:
 
     void wait();
     void stop();
-    
+
 private:
     const DBServerConfig& _config;
     TuringDB& _db;
-    std::unique_ptr<net::HTTPServer> _server;
+    std::unique_ptr<net::TCPServer> _server;
     std::thread _serverThread;
 };
 

@@ -4,7 +4,7 @@
 #include <curl/curl.h>
 #include <spdlog/spdlog.h>
 
-#include "HTTPServer.h"
+#include "TCPServer.h"
 #include "HTTPParser.h"
 #include "UriParser.h"
 #include "AbstractThreadContext.h"
@@ -82,105 +82,109 @@ void VisualizerProxy::start() {
     const char* visEnv = getenv("TURINGDB_VIS_URL");
     const std::string visBaseUrl = visEnv ? visEnv : "https://vis.turingdb.org";
 
-    net::HTTPServer::Functions functions;
+    net::TCPServer::Functions functions;
     functions._processor =
-            [dbBaseUrl, visBaseUrl](net::AbstractThreadContext*, net::TCPConnection& connection) {
-                auto& parser = connection.getParser<net::HTTPParser<net::URIParser>>();
-                const auto& httpInfo = parser.getHttpInfo();
+        [dbBaseUrl, visBaseUrl](net::AbstractThreadContext*, net::TCPConnection& connection) {
+            auto& parser = connection.getParser<net::HTTPParser<net::URIParser>>();
+            const auto& httpInfo = parser.getHttpInfo();
 
-                const std::string_view path = httpInfo._path;
-                const std::string_view uri = httpInfo._uri;
-                const std::string_view payload = httpInfo._payload;
-                const bool isPost = (httpInfo._method == net::HTTP::Method::POST);
+            const std::string_view path = httpInfo._path;
+            const std::string_view uri = httpInfo._uri;
+            const std::string_view payload = httpInfo._payload;
+            const bool isPost = (httpInfo._method == net::HTTP::Method::POST);
 
-                // Build target URL (use uri to preserve query parameters)
-                std::string targetUrl;
-                static constexpr std::string_view apiPrefix = "/api/";
-                static constexpr std::string_view apiPrefixExact = "/api";
+            // Build target URL (use uri to preserve query parameters)
+            std::string targetUrl;
+            static constexpr std::string_view apiPrefix = "/api/";
+            static constexpr std::string_view apiPrefixExact = "/api";
 
-                if (path.starts_with(apiPrefix)) {
-                    // /api/foo?bar=baz → <dbBaseUrl>/foo?bar=baz
-                    targetUrl = dbBaseUrl + "/" + std::string(uri.substr(apiPrefix.size()));
-                } else if (path == apiPrefixExact) {
-                    targetUrl = dbBaseUrl + "/" + std::string(uri.substr(apiPrefixExact.size()));
-                } else {
-                    targetUrl = visBaseUrl + std::string(uri);
-                }
+            if (path.starts_with(apiPrefix)) {
+                // /api/foo?bar=baz → <dbBaseUrl>/foo?bar=baz
+                targetUrl = dbBaseUrl + "/" + std::string(uri.substr(apiPrefix.size()));
+            } else if (path == apiPrefixExact) {
+                targetUrl = dbBaseUrl + "/" + std::string(uri.substr(apiPrefixExact.size()));
+            } else {
+                targetUrl = visBaseUrl + std::string(uri);
+            }
 
-                // Perform curl request
-                CURL* curl = curl_easy_init();
-                if (!curl) {
-                    auto& writer = connection.getWriter();
-                    writer.setFirstLine(net::HTTP::Status::INTERNAL_SERVER_ERROR);
-                    writer.addConnection(net::ConnectionHeader::CLOSE);
-                    writer.addChunkedTransferEncoding();
-                    writer.flushHeader();
-                    writer.flush();
-                    return;
-                }
-
-                CurlResponse response;
-
-                curl_easy_setopt(curl, CURLOPT_URL, targetUrl.c_str());
-                curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
-                curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-                curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerCallback);
-                curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response);
-                curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-                curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
-
-                if (isPost) {
-                    curl_easy_setopt(curl, CURLOPT_POST, 1L);
-                    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.data());
-                    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)payload.size());
-                }
-
-                const CURLcode res = curl_easy_perform(curl);
-                auto& writer = connection.getWriter();
-
-                if (res != CURLE_OK) {
-                    spdlog::warn("Proxy curl error: {}", curl_easy_strerror(res));
-                    curl_easy_cleanup(curl);
-
-                    writer.setFirstLine(net::HTTP::Status::BAD_GATEWAY);
-                    writer.addConnection(net::ConnectionHeader::CLOSE);
-                    writer.addChunkedTransferEncoding();
-                    writer.flushHeader();
-                    writer.flush();
-                    return;
-                }
-
-                curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response._statusCode);
-                curl_easy_cleanup(curl);
-
-                // Write response
-                const auto status = net::HTTP::codeToStatus(response._statusCode);
-                writer.setFirstLine(status);
+            // Perform curl request
+            CURL* curl = curl_easy_init();
+            if (!curl) {
+                auto& writer = connection.getWriter<net::HTTPWriter>();
+                writer.setFirstLine(net::HTTP::Status::INTERNAL_SERVER_ERROR);
                 writer.addConnection(net::ConnectionHeader::CLOSE);
-
-                if (!response._contentType.empty()) {
-                    const std::string header = "Content-type: " + response._contentType;
-                    writer.addRawHeader(header);
-                }
-
                 writer.addChunkedTransferEncoding();
                 writer.flushHeader();
-                writer.write(response._body);
                 writer.flush();
-            };
+                return;
+            }
+
+            CurlResponse response;
+
+            curl_easy_setopt(curl, CURLOPT_URL, targetUrl.c_str());
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+            curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerCallback);
+            curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response);
+            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+
+            if (isPost) {
+                curl_easy_setopt(curl, CURLOPT_POST, 1L);
+                curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.data());
+                curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)payload.size());
+            }
+
+            const CURLcode res = curl_easy_perform(curl);
+            auto& writer = connection.getWriter<net::HTTPWriter>();
+
+            if (res != CURLE_OK) {
+                spdlog::warn("Proxy curl error: {}", curl_easy_strerror(res));
+                curl_easy_cleanup(curl);
+
+                writer.setFirstLine(net::HTTP::Status::BAD_GATEWAY);
+                writer.addConnection(net::ConnectionHeader::CLOSE);
+                writer.addChunkedTransferEncoding();
+                writer.flushHeader();
+                writer.flush();
+                return;
+            }
+
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response._statusCode);
+            curl_easy_cleanup(curl);
+
+            // Write response
+            const auto status = net::HTTP::codeToStatus(response._statusCode);
+            writer.setFirstLine(status);
+            writer.addConnection(net::ConnectionHeader::CLOSE);
+
+            if (!response._contentType.empty()) {
+                const std::string header = "Content-type: " + response._contentType;
+                writer.addRawHeader(header);
+            }
+
+            writer.addChunkedTransferEncoding();
+            writer.flushHeader();
+            writer.write(response._body);
+            writer.flush();
+        };
 
     functions._createThreadContext =
-            [] {
-                return std::make_unique<net::AbstractThreadContext>();
-            };
+        [] {
+            return std::make_unique<net::AbstractThreadContext>();
+        };
 
-    functions._createHttpParser =
-            [](net::NetBuffer* inputBuffer) {
-                return std::unique_ptr<net::AbstractHTTPParser>(
-                    new net::HTTPParser<net::URIParser>(inputBuffer));
-            };
+    functions._createParser =
+        [](net::NetBuffer* inputBuffer) {
+            return std::unique_ptr<net::AbstractTCPParser>(
+                new net::HTTPParser<net::URIParser>(inputBuffer));
+        };
+    functions._createWriter =
+        [] {
+            return std::make_unique<net::HTTPWriter>();
+        };
 
-    _server = std::make_unique<net::HTTPServer>(std::move(functions));
+    _server = std::make_unique<net::TCPServer>(std::move(functions));
     _server->setName("Visualizer");
     _server->setAddress(_address.c_str());
     _server->setPort(_proxyPort);

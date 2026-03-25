@@ -11,6 +11,8 @@
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
 
+#include "TuringClient.h"
+
 namespace db {
 
 class TuringDB;
@@ -34,19 +36,27 @@ public:
     bool setChangeID(ChangeID changeID);
     void setQuiet(bool quiet) { _quiet = quiet; }
     void startLoop();
+    void connectRemote(const std::string& address, const std::string& port);
+    void disconnectRemote();
+    [[nodiscard]] bool isRemoteConnected() const { return _remoteConnected; }
 
     void printHelp() const;
     void stop();
 
     [[nodiscard]] CommitHash getCommitHash() const { return _hash; }
     [[nodiscard]] ChangeID getChangeID() const { return _changeID; }
+    net::proto::TuringClient& getTuringClient() { return _client; }
 
 private:
     TuringDB& _turingDB;
+    net::proto::TuringClient _client;
     LocalMemory* _mem {nullptr};
     std::string _graphName {"default"};
     CommitHash _hash {CommitHash::head()};
     ChangeID _changeID {ChangeID::head()};
+    std::string _remoteAddress;
+    std::string _remotePort;
+    bool _remoteConnected {false};
     bool _quiet {false};
     pthread_t _threadID {};
     std::atomic<bool> _running {true};

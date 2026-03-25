@@ -3,9 +3,9 @@
 #include <mutex>
 #include <vector>
 
-#include "AbstractHTTPParser.h"
+#include "AbstractTCPParser.h"
 #include "TCPConnection.h"
-#include "Utils.h"
+#include "SocketUtils.h"
 
 namespace net {
 
@@ -19,13 +19,15 @@ public:
     TCPConnectionStorage& operator=(const TCPConnectionStorage&) = delete;
     TCPConnectionStorage& operator=(TCPConnectionStorage&&) = delete;
 
-    void initialize(CreateAbstractHTTPParserFunc&& createParser) {
+    void initialize(CreateAbstractTCPParserFunc& createParser,
+                    CreateAbstractTCPWriterFunc& createWriter) {
         _free.resize(_maxConnections);
         for (size_t i = 0; i < _maxConnections; i++) {
             _free[i] = i;
 
             auto& inputBuffer = _connections[i].getInputBuffer();
-            _connections[i].setHTTPParser(createParser(&inputBuffer));
+            _connections[i].setParser(createParser(&inputBuffer));
+            _connections[i].setWriter(createWriter());
             _connections[i].setStorageIndex(i);
             _connections[i].setStorage(this);
         }

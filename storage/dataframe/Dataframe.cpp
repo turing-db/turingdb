@@ -16,6 +16,12 @@ Dataframe::Dataframe() = default;
 
 Dataframe::~Dataframe() = default;
 
+void Dataframe::clear() {
+    for (const NamedColumn* ncols : _cols) {
+        ncols->getColumn()->clear();
+    }
+}
+
 void Dataframe::addColumn(NamedColumn* column) {
     _cols.push_back(column);
     _tagToColumnMap.insert(column->getTag().getValue(), column);

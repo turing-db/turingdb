@@ -123,7 +123,7 @@ public:
         _data.assign(otherStart, otherStart + rowCount);
     }
 
-    void clear() { _data.clear(); }
+    void clear() override { _data.clear(); }
 
     void resize(size_t size) { _data.resize(size); }
 

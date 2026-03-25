@@ -74,7 +74,7 @@ public:
         bioassert(false, "ColumnSet::assignFromLine: not implemented for ColumnSet");
     }
 
-    void clear() noexcept { _data.clear(); }
+    void clear() override { _data.clear(); }
 
     std::pair<Iterator, bool> insert(const T& val) { return _data.insert(val); }
 

@@ -1,15 +1,15 @@
 #pragma once
 
 #include "HTTPParsingInfo.h"
-#include "AbstractHTTPParser.h"
+#include "AbstractTCPParser.h"
 #include "UriParser.h"
 #include "NetBuffer.h"
-#include "HTTPParsingInfo.h"
+#include "HTTPWriter.h"
 
 namespace net {
 
 template <std::derived_from<URIParser> URIParserT>
-class HTTPParser : public AbstractHTTPParser {
+class HTTPParser : public AbstractTCPParser {
 public:
     explicit HTTPParser(NetBuffer* inputBuffer)
         : _reader(inputBuffer->getReader()),
@@ -22,7 +22,76 @@ public:
      * The HTTP header must be received in one chunk.
      * Only the payload is allowed to be received in multiple chunks
      * */
-    [[nodiscard]] HTTP::Result<Finished> analyze() override {
+    [[nodiscard]] AnalyzeResult analyze() override {
+        const auto res = analyzeHTTP();
+        if (!res) {
+            return BadResult(static_cast<AnalyzeError>(res.error()));
+        }
+
+        return res.value();
+    }
+
+    void handleAnalyzeError(AnalyzeError error, AbstractTCPWriter& writer) override {
+        handleAnalyzeError(error, static_cast<HTTPWriter&>(writer));
+    }
+
+    void handleAnalyzeError(AnalyzeError error, HTTPWriter& httpWriter) {
+        switch (static_cast<HTTP::Error>(error)) {
+            case net::HTTP::Error::REQUEST_TOO_BIG:
+                httpWriter.setFirstLine(net::HTTP::Status::CONTENT_TOO_LARGE);
+            break;
+
+            case net::HTTP::Error::HEADER_INCOMPLETE:
+                httpWriter.setFirstLine(net::HTTP::Status::BAD_REQUEST);
+            break;
+
+            case net::HTTP::Error::TOO_MANY_PARAMS:
+                httpWriter.setFirstLine(net::HTTP::Status::CONTENT_TOO_LARGE);
+            break;
+
+            case net::HTTP::Error::UNKNOWN_ENDPOINT:
+                httpWriter.setFirstLine(net::HTTP::Status::NOT_FOUND);
+            break;
+
+            case net::HTTP::Error::INVALID_METHOD:
+                httpWriter.setFirstLine(net::HTTP::Status::METHOD_NOT_ALLOWED);
+            break;
+
+            case net::HTTP::Error::NO_METHOD:
+            case net::HTTP::Error::NO_URI:
+            case net::HTTP::Error::UNKNOWN:
+            case net::HTTP::Error::INVALID_URI:
+            case net::HTTP::Error::_SIZE:
+                httpWriter.setFirstLine(net::HTTP::Status::BAD_REQUEST);
+            break;
+        }
+
+        httpWriter.addConnection(net::getConnectionHeader(true));
+        httpWriter.addChunkedTransferEncoding();
+        httpWriter.addContentType(net::ContentType::JSON);
+        httpWriter.flushHeader();
+        httpWriter.flush();
+    }
+
+    [[nodiscard]] const HTTP::Info& getHttpInfo() const { return _info; }
+
+    void reset() override {
+        _info.reset();
+        _currentPtr = _reader.getData();
+        _payloadSize = 0;
+        _payloadBegin = nullptr;
+        _parsedHeader = false;
+    }
+
+private:
+    HTTP::Info _info;
+    NetBuffer::Reader _reader;
+    char* _currentPtr {nullptr};
+    char* _payloadBegin {nullptr};
+    uint64_t _payloadSize {0};
+    bool _parsedHeader {false};
+
+    [[nodiscard]] HTTP::Result<Finished> analyzeHTTP() {
         if (getSize() == 0) {
             return true;
         }
@@ -56,21 +125,6 @@ public:
 
         return finished;
     }
-
-    void reset() override {
-        AbstractHTTPParser::reset();
-        _currentPtr = _reader.getData();
-        _payloadSize = 0;
-        _payloadBegin = nullptr;
-        _parsedHeader = false;
-    }
-
-private:
-    NetBuffer::Reader _reader;
-    char* _currentPtr {nullptr};
-    char* _payloadBegin {nullptr};
-    uint64_t _payloadSize {0};
-    bool _parsedHeader {false};
 
     size_t getSize() { return getEndPtr() - _currentPtr; }
     char* getEndPtr() { return _reader.getData() + _reader.getSize(); }

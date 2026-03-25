@@ -1,4 +1,4 @@
-#include "HTTPServer.h"
+#include "TCPServer.h"
 
 #include <thread>
 #include <netinet/in.h>
@@ -10,7 +10,7 @@
 #include "TCPConnectionManager.h"
 #include "TCPConnectionStorage.h"
 #include "TCPListener.h"
-#include "Utils.h"
+#include "SocketUtils.h"
 
 #include "BioAssert.h"
 #include "ThreadName.h"
@@ -23,12 +23,12 @@ constexpr const char* THREAD_NAME = "turingdb.http";
 
 }
 
-HTTPServer::HTTPServer(Functions&& functions)
+TCPServer::TCPServer(Functions&& functions)
     : _functions(std::move(functions))
 {
 }
 
-HTTPServer::~HTTPServer() {
+TCPServer::~TCPServer() {
     if (_shutdownPipe[0] != -1) {
         ::close(_shutdownPipe[0]);
     }
@@ -38,7 +38,7 @@ HTTPServer::~HTTPServer() {
     }
 }
 
-FlowStatus HTTPServer::initialize() {
+FlowStatus TCPServer::initialize() {
     _serverSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
     if (_serverSocket == -1) {
@@ -68,7 +68,7 @@ FlowStatus HTTPServer::initialize() {
 
     _epollInstance = utils::createEventInstance();
     _connections = std::make_unique<TCPConnectionStorage>(_maxConnections);
-    _connections->initialize(std::move(_functions._createHttpParser));
+    _connections->initialize(_functions._createParser,_functions._createWriter);
     _serverConnection = _connections->alloc(_serverSocket);
 
     // Registering server socket in epoll list
@@ -118,7 +118,7 @@ FlowStatus HTTPServer::initialize() {
     return FlowStatus::OK;
 }
 
-FlowStatus HTTPServer::start() {
+FlowStatus TCPServer::start() {
     _running.store(true);
 
     ServerContext ctxt {
@@ -152,7 +152,7 @@ FlowStatus HTTPServer::start() {
     return FlowStatus::OK;
 }
 
-void HTTPServer::terminate() {
+void TCPServer::terminate() {
     if (!_running.load()) {
         return;
     }
@@ -172,7 +172,7 @@ void HTTPServer::terminate() {
     }
 }
 
-void HTTPServer::runThread(size_t threadID, ServerContext& ctxt) {
+void TCPServer::runThread(size_t threadID, ServerContext& ctxt) {
     constexpr size_t eventCount = 5;
     std::vector<utils::EpollEvent> events(eventCount);
 
