@@ -398,6 +398,7 @@ singleQuery
     | s3TransferQuery { $$ = $1; }
     | showProceduresQuery { $$ = $1; }
     | createVectorIndexQuery { $$ = $1; }
+    | createIndexQuery {}
     | loadVectorQuery { $$ = $1; }
     | deleteVectorIndexQuery { $$ = $1; }
     | showVectorIndexesQuery { $$ = $1; }
@@ -440,6 +441,10 @@ createVectorIndexQuery
         $$ = CreateVectorIndexQuery::create(ast, $4, static_cast<uint64_t>($7), $9);
         LOC($$, @$);
       }
+    ;
+
+createIndexQuery
+    : CREATE UNIQUE INDEX ON propertyExpr { std::cout << "creating index\n"; throw std::runtime_error("Indexes not yet implemented."); }
     ;
 
 distanceMetric
