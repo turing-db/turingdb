@@ -11,10 +11,10 @@ namespace db {
 class PipelineV2;
 class ExecutionContext;
 
-class CreatePropertyIndexProcessor final : public Processor {
+class CreateNodePropertyIndexProcessor final : public Processor {
 public:
-    static CreatePropertyIndexProcessor* create(PipelineV2* pipeline,
-                                                std::string_view propertyName);
+    static CreateNodePropertyIndexProcessor* create(PipelineV2* pipeline,
+                                                std::string_view indexName);
 
     std::string describe() const final;
 
@@ -25,14 +25,14 @@ public:
     PipelineBlockOutputInterface& output() { return _output; }
 
 protected:
-    std::string_view _propertyName;
+    std::string_view _indexName;
 
     PipelineBlockOutputInterface _output;
 
     ExecutionContext* _ctxt {nullptr};
 
-    explicit CreatePropertyIndexProcessor(std::string_view propertyName);
-    ~CreatePropertyIndexProcessor() final = default;
+    explicit CreateNodePropertyIndexProcessor(std::string_view indexName);
+    ~CreateNodePropertyIndexProcessor() final = default;
 };
 
 }

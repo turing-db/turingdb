@@ -28,6 +28,7 @@ class PathExpr;
 class FunctionInvocationExpr;
 class IndexExpr;
 class Symbol;
+class NodePattern;
 
 class ExprAnalyzer {
 public:
@@ -61,6 +62,8 @@ public:
     void addToBeCreatedType(std::string_view name, ValueType type, const void* obj = nullptr);
 
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
+
+    void registerNodePatternDeclaration(const NodePattern* node);
 
 private:
     CypherAST* _ast {nullptr};

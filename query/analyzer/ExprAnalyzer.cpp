@@ -6,6 +6,7 @@
 #include "FunctionDecls.h"
 #include "FunctionResolver.h"
 #include "FunctionInvocation.h"
+#include "NodePattern.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
 #include "Literal.h"
@@ -711,6 +712,24 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
 
     return false;
 }
+
+void ExprAnalyzer::registerNodePatternDeclaration(const NodePattern* node) {
+    const Symbol* nodeSymbol = node->getSymbol();
+    if (!nodeSymbol) {
+        throwError("Failed to get symbol to register NodePattern.", node);
+    }
+
+    const std::string_view nodeName = nodeSymbol->getName();
+
+    const bool alreadyExists = _ctxt->hasDecl(nodeName);
+
+    if (alreadyExists) {
+        throwError("Attempted to register NodePattern which was already defined.", node);
+    }
+
+    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, nodeName);
+}
+
 
 void ExprAnalyzer::throwError(std::string_view msg, const void* obj) const {
     std::string errorStr;

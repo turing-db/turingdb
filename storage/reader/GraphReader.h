@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ID.h"
 #include "views/EdgeView.h"
 #include "views/GraphView.h"
 #include "iterators/GetPropertiesIterator.h"
@@ -93,6 +94,9 @@ public:
     [[nodiscard]] bool graphHasEdge(EdgeID edgeID) const;
     [[nodiscard]] bool nodeIsDeleted(NodeID nodeID) const;
     [[nodiscard]] bool edgeIsDeleted(EdgeID edgeID) const;
+
+    bool isNodeProperty(PropertyTypeID ptID) const;
+    bool isEdgeProperty(PropertyTypeID ptID) const;
 
     template <SupportedType T>
     [[nodiscard]] const T::Primitive* tryGetNodeProperty(PropertyTypeID ptID,

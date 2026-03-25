@@ -26,7 +26,7 @@ class OrderBy;
 class Skip;
 class Limit;
 class ReturnStmt;
-class CreatePropertyIndexQuery;
+class CreateNodePropertyIndexQuery;
 
 class CypherAnalyzer {
 public:
@@ -54,7 +54,7 @@ public:
     void analyze(const CreateVectorIndexQuery* query);
     void analyze(const LoadVectorQuery* query);
     void analyze(const InstallExtensionQuery* query);
-    void analyze(const CreatePropertyIndexQuery* query);
+    void analyze(const CreateNodePropertyIndexQuery* query);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt);
