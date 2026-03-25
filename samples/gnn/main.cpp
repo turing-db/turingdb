@@ -165,27 +165,38 @@ int main(int argc, const char** argv) {
     };
 
     // -----------------------------------------------------------------
-    // 2. Discover all node names
+    // 2. Discover all nodes by NodeID
     // -----------------------------------------------------------------
+    std::vector<NodeID> nodeIDs;
+    std::unordered_map<uint64_t, size_t> idToIdx;
+
+    // Also keep names for final display of test pairs
     std::vector<std::string> nodeNames;
     std::unordered_map<std::string, size_t> nameToIdx;
 
     queryWithCb(
-        R"(MATCH (n) RETURN n.name)",
+        R"(MATCH (n) RETURN n, n.name)",
         [&](const Dataframe* df) {
-            const auto* col = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
-            if (!col) return;
+            const auto* idCol = df->cols()[0]->as<ColumnNodeIDs>();
+            const auto* nameCol = df->cols()[1]->as<ColumnOptVector<types::String::Primitive>>();
+            if (!idCol || !nameCol) {
+                return;
+            }
+
             for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
-                if (!col->at(i)) continue;
-                std::string name(*col->at(i));
-                if (nameToIdx.find(name) == nameToIdx.end()) {
-                    nameToIdx[name] = nodeNames.size();
-                    nodeNames.push_back(name);
-                }
+                const NodeID nid = (*idCol)[i];
+                const size_t idx = nodeIDs.size();
+                const std::string name = nameCol->at(i) ? std::string(*nameCol->at(i)) : "";
+
+                idToIdx[nid.getValue()] = idx;
+                nodeIDs.push_back(nid);
+
+                nameToIdx[name] = idx;
+                nodeNames.push_back(name);
             }
         });
 
-    const size_t N = nodeNames.size();
+    const size_t N = nodeIDs.size();
     spdlog::info("Found {} nodes", N);
 
     // -----------------------------------------------------------------
@@ -206,27 +217,27 @@ int main(int argc, const char** argv) {
     }
 
     queryWithCb(
-        R"(MATCH (a)-[]->(b) RETURN a.name, b.name)",
+        R"(MATCH (a)-[]->(b) RETURN a, b)",
         [&](const Dataframe* df) {
-            const auto* srcCol = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
-            const auto* dstCol = df->cols()[1]->as<ColumnOptVector<types::String::Primitive>>();
-            if (!srcCol || !dstCol) return;
+            const auto* srcCol = df->cols()[0]->as<ColumnNodeIDs>();
+            const auto* dstCol = df->cols()[1]->as<ColumnNodeIDs>();
+            if (!srcCol || !dstCol) {
+                return;
+            }
 
             for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
-                if (!srcCol->at(i) || !dstCol->at(i)) continue;
-                std::string sn(*srcCol->at(i));
-                std::string dn(*dstCol->at(i));
+                const auto si = idToIdx.find((*srcCol)[i].getValue());
+                const auto di = idToIdx.find((*dstCol)[i].getValue());
+                if (si == idToIdx.end() || di == idToIdx.end()) {
+                    continue;
+                }
 
-                auto si = nameToIdx.find(sn);
-                auto di = nameToIdx.find(dn);
-                if (si == nameToIdx.end() || di == nameToIdx.end()) continue;
-
-                size_t s = si->second;
-                size_t d = di->second;
+                const size_t s = si->second;
+                const size_t d = di->second;
 
                 adj[s].push_back(d);
 
-                uint64_t key = edgeKey(s, d);
+                const uint64_t key = edgeKey(s, d);
                 if (edgeSet.find(key) == edgeSet.end()) {
                     edgeSet.insert(key);
                     positiveEdges.push_back({s, d});
@@ -254,8 +265,8 @@ int main(int argc, const char** argv) {
 
         for (size_t i = 0; i < N; i++) {
             std::string q = fmt::format(
-                R"(MATCH (n {{name: "{}"}}) SET n.emb = {})",
-                nodeNames[i], embeddingToLiteral(embeddings, i));
+                R"(MATCH (n) WHERE n = {} SET n.emb = {})",
+                nodeIDs[i].getValue(), embeddingToLiteral(embeddings, i));
             mustQuery(q, chg);
         }
 
@@ -435,20 +446,27 @@ int main(int argc, const char** argv) {
 
         // --- Read current embeddings from DB ---
         queryWithCb(
-            R"(MATCH (n) RETURN n.name, n.emb)",
+            R"(MATCH (n) RETURN n, n.emb)",
             [&](const Dataframe* df) {
-                const auto* nameCol = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
+                const auto* idCol = df->cols()[0]->as<ColumnNodeIDs>();
                 const auto* embCol = df->cols()[1]->as<ColumnOptVector<types::Embedding::Primitive>>();
-                if (!nameCol || !embCol) return;
+                if (!idCol || !embCol) {
+                    return;
+                }
 
                 for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
-                    if (!nameCol->at(i) || !embCol->at(i)) continue;
-                    auto it = nameToIdx.find(std::string(*nameCol->at(i)));
-                    if (it == nameToIdx.end()) continue;
-                    size_t idx = it->second;
+                    if (!embCol->at(i)) {
+                        continue;
+                    }
 
+                    const auto it = idToIdx.find((*idCol)[i].getValue());
+                    if (it == idToIdx.end()) {
+                        continue;
+                    }
+
+                    const size_t idx = it->second;
                     const auto& emb = *embCol->at(i);
-                    size_t copyDim = std::min(emb.size(), DIM);
+                    const size_t copyDim = std::min(emb.size(), DIM);
                     for (size_t d = 0; d < copyDim; d++) {
                         embeddings.at(idx, d) = emb[d];
                     }
@@ -537,8 +555,8 @@ int main(int argc, const char** argv) {
 
             for (size_t i = 0; i < N; i++) {
                 std::string q = fmt::format(
-                    R"(MATCH (n {{name: "{}"}}) SET n.emb = {})",
-                    nodeNames[i], embeddingToLiteral(embeddings, i));
+                    R"(MATCH (n) WHERE n = {} SET n.emb = {})",
+                    nodeIDs[i].getValue(), embeddingToLiteral(embeddings, i));
                 mustQuery(q, trainChg);
             }
 
@@ -570,16 +588,23 @@ int main(int argc, const char** argv) {
 
     // Read final embeddings
     queryWithCb(
-        R"(MATCH (n) RETURN n.name, n.emb)",
+        R"(MATCH (n) RETURN n, n.emb)",
         [&](const Dataframe* df) {
-            const auto* nameCol = df->cols()[0]->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* idCol = df->cols()[0]->as<ColumnNodeIDs>();
             const auto* embCol = df->cols()[1]->as<ColumnOptVector<types::Embedding::Primitive>>();
-            if (!nameCol || !embCol) return;
+            if (!idCol || !embCol) {
+                return;
+            }
 
             for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
-                if (!nameCol->at(i) || !embCol->at(i)) continue;
-                auto it = nameToIdx.find(std::string(*nameCol->at(i)));
-                if (it == nameToIdx.end()) continue;
+                if (!embCol->at(i)) {
+                    continue;
+                }
+
+                const auto it = idToIdx.find((*idCol)[i].getValue());
+                if (it == idToIdx.end()) {
+                    continue;
+                }
 
                 const auto& emb = *embCol->at(i);
                 for (size_t d = 0; d < std::min(emb.size(), DIM); d++) {
@@ -603,7 +628,9 @@ int main(int argc, const char** argv) {
     for (const auto& [a, b] : testPairs) {
         auto ia = nameToIdx.find(a);
         auto ib = nameToIdx.find(b);
-        if (ia == nameToIdx.end() || ib == nameToIdx.end()) continue;
+        if (ia == nameToIdx.end() || ib == nameToIdx.end()) {
+            continue;
+        }
 
         float score = sigmoid(dot(h2, ia->second, ib->second));
         bool actual = originalEdges.count(edgeKey(ia->second, ib->second)) > 0;
