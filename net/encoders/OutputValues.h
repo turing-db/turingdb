@@ -45,8 +45,10 @@ concept IsFloat64 = std::floating_point<T>
 
 template <typename T>
 concept IsString = std::is_convertible_v<T, std::string_view>
-                || OptionalString<T>
-                || std::is_same_v<T, ValueType>;
+                || OptionalString<T>;
+
+template <typename T>
+concept IsValueType = std::is_same_v<T, ValueType>;
 
 template <typename T>
 concept IsBool = std::is_same_v<T, CustomBool>
@@ -79,6 +81,8 @@ struct ColumnTypeGenerator {
         } else if constexpr (IsFloat64<T>) {
             _name = fmt::format("Double");
         } else if constexpr (IsString<T>) {
+            _name = fmt::format("String");
+        } else if constexpr (IsValueType<T>) {
             _name = fmt::format("String");
         } else if constexpr (IsBool<T>) {
             _name = fmt::format("Bool");

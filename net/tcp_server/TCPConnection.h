@@ -5,10 +5,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "AbstractHTTPParser.h"
-#include "NetWriter.h"
+#include "AbstractTCPParser.h"
 #include "NetBuffer.h"
-#include "Utils.h"
+#include "SocketUtils.h"
+
+#include "BioAssert.h"
 
 namespace net {
 
@@ -28,11 +29,13 @@ public:
     void dealloc();
 
     void setSocket(utils::DataSocket socket) {
+        bioassert(_writer, "Wrtier Needs To Be Set For The Connection"); 
         _socket = socket;
-        _writer.setSocket(socket);
+        _writer->setSocket(socket);
     }
 
-    void setHTTPParser(std::unique_ptr<AbstractHTTPParser> parser) { _parser = std::move(parser); }
+    void setParser(std::unique_ptr<AbstractTCPParser> parser) { _parser = std::move(parser); }
+    void setWriter(std::unique_ptr<AbstractTCPWriter> writer) { _writer = std::move(writer); }
     void setStorage(TCPConnectionStorage* storage) { _storage = storage; }
     void setStorageIndex(size_t index) { _storageIndex = index; }
     void setCloseRequired(bool v) { _closeRequired = v; }
@@ -42,20 +45,36 @@ public:
     bool isCloseRequired() const { return _closeRequired; }
     size_t getStorageIndex() const { return _storageIndex; }
     NetBuffer& getInputBuffer() { return _inputBuffer; }
-    NetWriter& getWriter() { return _writer; }
-    AbstractHTTPParser* getParser() { return _parser.get(); }
 
-    template <std::derived_from<AbstractHTTPParser> ParserT>
-    ParserT& getParser() { return *static_cast<ParserT*>(_parser.get()); }
+    AbstractTCPWriter& getWriter() {
+        bioassert(_writer, "Writer not initialized");
+        return *_writer;
+    }
+
+    AbstractTCPParser& getParser() {
+        bioassert(_parser, "Parser not initialized");
+        return *_parser;
+    }
+
+    template <std::derived_from<AbstractTCPParser> ParserT>
+    ParserT& getParser() {
+        bioassert(_parser, "Parser not initialized");
+        return *static_cast<ParserT*>(_parser.get());
+    }
+
+    template <std::derived_from<AbstractTCPWriter> WriterT>
+    WriterT& getWriter() {
+        bioassert(_writer, "Writer not initialized");
+        return *static_cast<WriterT*>(_writer.get());
+    }
 
 private:
     utils::DataSocket _socket {0};
     TCPConnectionStorage* _storage {nullptr};
     size_t _storageIndex {0};
     NetBuffer _inputBuffer;
-    NetWriter _writer {_socket};
-    std::unique_ptr<AbstractHTTPParser> _parser {nullptr};
+    std::unique_ptr<AbstractTCPWriter> _writer;
+    std::unique_ptr<AbstractTCPParser> _parser;
     bool _closeRequired {false};
 };
-
 }

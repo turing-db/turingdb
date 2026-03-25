@@ -4,31 +4,32 @@
 #include <memory>
 #include <thread>
 
-#include "AbstractHTTPParser.h"
+#include "AbstractTCPParser.h"
 #include "FlowStatus.h"
 #include "ServerContext.h"
-#include "Utils.h"
+#include "SocketUtils.h"
 
 namespace net {
 
 class TCPConnectionStorage;
 class TCPConnection;
 
-class HTTPServer {
+class TCPServer {
 public:
     struct Functions {
         ServerProcessor _processor;
         CreateThreadContext _createThreadContext;
-        CreateAbstractHTTPParserFunc _createHttpParser;
+        CreateAbstractTCPParserFunc _createParser;
+        CreateAbstractTCPWriterFunc _createWriter;
     };
-    
-    explicit HTTPServer(Functions&&);
-    ~HTTPServer();
 
-    HTTPServer(const HTTPServer&) = delete;
-    HTTPServer(HTTPServer&&) = delete;
-    HTTPServer& operator=(const HTTPServer&) = delete;
-    HTTPServer& operator=(HTTPServer&&) = delete;
+    explicit TCPServer(Functions&&);
+    ~TCPServer();
+
+    TCPServer(const TCPServer&) = delete;
+    TCPServer(TCPServer&&) = delete;
+    TCPServer& operator=(const TCPServer&) = delete;
+    TCPServer& operator=(TCPServer&&) = delete;
 
     FlowStatus initialize();
     FlowStatus start();
@@ -63,5 +64,4 @@ private:
 
     static void runThread(size_t threadID, ServerContext& ctxt);
 };
-
 }

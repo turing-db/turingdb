@@ -23,7 +23,12 @@ static net::HTTP::Result<bool> feedAndAnalyze(const char* data, size_t size) {
     net::HTTPParser<net::URIParser> parser(&buffer);
 
     try {
-        return parser.analyze();
+        const auto result = parser.analyze();
+        if (!result) {
+            return BadResult(static_cast<net::HTTP::Error>(result.error()));
+        }
+
+        return result.value();
     } catch (const FatalException&) {
         throw;
     } catch (...) {

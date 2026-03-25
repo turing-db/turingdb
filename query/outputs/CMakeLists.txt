@@ -1,8 +1,0 @@
-
-add_library(turing_db_query_outputs_s INTERFACE)
-
-target_include_directories(turing_db_query_outputs_s INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-
-target_link_libraries(turing_db_query_outputs_s
-    INTERFACE turing_db_storage_s
-              turing_db_base_s)

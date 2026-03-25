@@ -48,6 +48,7 @@ set(storage_sources
 
         columns/Block.cpp
         columns/Column.cpp
+        columns/ColumnConst.cpp
         columns/ColumnStringTable.cpp
         columns/Functions.cpp
 

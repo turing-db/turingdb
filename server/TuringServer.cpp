@@ -1,22 +1,32 @@
 #include "TuringServer.h"
 
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include <spdlog/spdlog.h>
 
-#include "HTTPServer.h"
-#include "HTTPParser.h"
+#include "TCPServer.h"
 #include "DBThreadContext.h"
-#include "DBServerProcessor.h"
-#include "DBURIParser.h"
 #include "DBServerConfig.h"
 #include "ThreadName.h"
+#include "HTTPParser.h"
+#include "DBURIParser.h"
+#include "DBServerProcessor.h"
+#include "TuringProtoParser.h"
+#include "TuringProtoServerProcessor.h"
+#include "TuringProtoWriter.h"
 
 using namespace db;
 
 namespace {
 
 constexpr const char* THREAD_NAME = "turingdb.server";
+
+bool isProtoEnabled() {
+    const char* val = getenv("USE_TURING_PROTO");
+    return val && strcmp(val, "1") == 0;
+}
 
 }
 
@@ -33,22 +43,45 @@ TuringServer::~TuringServer() {
 }
 
 void TuringServer::start() {
-    net::HTTPServer::Functions functions;
-    functions._processor =
+    const bool useProto = isProtoEnabled();
+
+    net::TCPServer::Functions functions;
+    functions._createThreadContext =
+        [] {
+            return std::unique_ptr<net::AbstractThreadContext>(new DBThreadContext());
+        };
+
+    if (useProto) {
+        functions._processor =
+            [&](net::AbstractThreadContext* threadContext, net::TCPConnection& connection) {
+                TuringProtoServerProcessor processor(_db, connection);
+                processor.process(threadContext);
+            };
+        functions._createParser =
+            [](net::NetBuffer* inputBuffer) {
+                return std::unique_ptr<net::AbstractTCPParser>(new net::proto::TuringProtoParser(inputBuffer));
+            };
+        functions._createWriter =
+            [] {
+                return std::make_unique<net::proto::TuringProtoWriter>();
+            };
+    } else {
+        functions._processor =
             [&](net::AbstractThreadContext* threadContext, net::TCPConnection& connection) {
                 DBServerProcessor processor(_db, connection);
                 processor.process(threadContext);
             };
-    functions._createThreadContext =
-            [] {
-                return std::unique_ptr<net::AbstractThreadContext>(new DBThreadContext());
-            };
-    functions._createHttpParser =
+        functions._createParser =
             [](net::NetBuffer* inputBuffer) {
-                return std::unique_ptr<net::AbstractHTTPParser>(new net::HTTPParser<DBURIParser>(inputBuffer));
+                return std::unique_ptr<net::AbstractTCPParser>(new net::HTTPParser<DBURIParser>(inputBuffer));
             };
+        functions._createWriter =
+            [] {
+                return std::make_unique<net::HTTPWriter>();
+            };
+    }
 
-    _server = std::make_unique<net::HTTPServer>(std::move(functions));
+    _server = std::make_unique<net::TCPServer>(std::move(functions));
     _server->setAddress(_config.getAddress().c_str());
     _server->setPort(_config.getPort());
     _server->setWorkerCount(_config.getWorkerCount());
@@ -72,9 +105,10 @@ void TuringServer::start() {
 
     _serverThread = std::thread(serverFunc);
 
-    spdlog::info("  - Server listening on address: {}:{}",
+    spdlog::info("  - Server listening on address: {}:{} ({})",
                  _server->getAddress(),
-                 _server->getPort());
+                 _server->getPort(),
+                 useProto ? "proto" : "http");
 }
 
 void TuringServer::wait() {

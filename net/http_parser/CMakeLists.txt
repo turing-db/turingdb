@@ -6,4 +6,6 @@ target_include_directories(turing_db_http_parser_s
   INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(turing_db_http_parser_s
-  INTERFACE turing_common_s)
+  INTERFACE turing_db_tcp_common_s
+            turing_db_http_common_s
+            turing_common_s)

@@ -26,7 +26,7 @@ using namespace db;
 
 DBServerProcessor::DBServerProcessor(TuringDB& db,
                                      net::TCPConnection& connection)
-    : _writer(&connection.getWriter()),
+    : _writer(&connection.getWriter<net::HTTPWriter>()),
     _db(db),
     _connection(connection)
 {

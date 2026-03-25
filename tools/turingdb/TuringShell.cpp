@@ -241,6 +241,49 @@ void readCommand(const TuringShell::Command::Words& args, TuringShell& shell, st
     }
 }
 
+void connectCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
+    std::string address;
+    std::string port;
+
+    argparse::ArgumentParser argParser("connect", "", argparse::default_arguments::help, false);
+    argParser.add_description("Connect to a remote turingdb server");
+    argParser.add_argument("address")
+        .nargs(1)
+        .metavar("addr")
+        .default_value("127.0.0.1")
+        .help("The address of the server you want to connect to")
+        .store_into(address);
+
+    argParser.add_argument("port")
+        .nargs(1)
+        .metavar("port")
+        .default_value("6666")
+        .help("The port of the server you want to connect to")
+        .store_into(port);
+
+    try {
+        argParser.parse_args(args);
+    } catch (const std::exception& e) {
+        spdlog::error("Error parsing arguments: {}", e.what());
+        return;
+    }
+
+    try {
+        shell.connectRemote(address, port);
+    } catch (const TuringException& e) {
+        spdlog::error("Could not connect to client: {}", e.what());
+    }
+}
+
+void disconnectCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
+    if (args.size() != 1) {
+        spdlog::error("The disconnect command does not accept any argument");
+        return;
+    }
+
+    shell.disconnectRemote();
+}
+
 void shCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
     // Get the user's shell from $SHELL, fallback to /bin/bash
     const char* shellPath = getenv("SHELL");
@@ -295,6 +338,7 @@ TuringShell::TuringShell(TuringDB& turingDB,
                          LocalMemory* mem,
                          LineNoiseHandle* lineNoiseHandle)
     : _turingDB(turingDB),
+    _client("127.0.0.1", "6666", mem),
     _mem(mem),
     _lineNoiseHandle(lineNoiseHandle)
 {
@@ -309,6 +353,8 @@ TuringShell::TuringShell(TuringDB& turingDB,
     _localCommands.emplace("read", Command {readCommand});
     _localCommands.emplace("sh", Command {shCommand});
     _localCommands.emplace("shell", Command {shCommand});
+    _localCommands.emplace("connect", Command {connectCommand});
+    _localCommands.emplace("disconnect", Command {disconnectCommand});
 }
 
 TuringShell::~TuringShell() {
@@ -393,6 +439,14 @@ void TuringShell::startLoop() {
 }
 
 std::string TuringShell::composePrompt() {
+    if (_remoteConnected) {
+        const auto remoteCommit = _client.getCommitHash();
+        const auto remoteGraph = _client.getGraphName();
+        return remoteCommit == CommitHash::head()
+                 ? fmt::format("{}:{}> ", _remoteAddress, remoteGraph)
+                 : fmt::format("{}:{}(detached {:x})> ", _remoteAddress, remoteGraph, remoteCommit.get());
+    }
+
     const std::string basePrompt = "turing";
     if (_changeID == ChangeID::head()) {
         return _hash == CommitHash::head()
@@ -601,6 +655,7 @@ void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table
                 TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, i)
                 TABULATE_COL_CASE(ColumnOptVector<types::Embedding::Primitive>, i)
                 TABULATE_COL_CASE(ColumnVector<std::string>, i)
+                TABULATE_COL_CASE(ColumnOptVector<std::string>, i)
                 TABULATE_COL_CASE(ColumnVector<const CommitBuilder*>, i)
                 TABULATE_COL_CASE(ColumnVector<const Change*>, i)
                 TABULATE_COL_CASE(ColumnConst<EntityID>, i)
@@ -671,11 +726,11 @@ void TuringShell::processLine(std::string& line) {
     size_t rowCount = 0;
 
     QueryStatus res;
+    Milliseconds remoteQueryTime {0};
     {
         size_t execCount = 0;
 
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
+        auto shellOutPutCallBack = [&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
             rowCount += df->getLogicalRowCount();
 
             if (_quiet) {
@@ -683,10 +738,28 @@ void TuringShell::processLine(std::string& line) {
             }
 
             queryCallback(execCount++, df, table);
-        });
+        };
 
-        const QueryState state(_graphName, _mem, &_turingDB.getDefaultQueryConfig(), &callbacks, _hash, _changeID);
-        res = _turingDB.query(line, state);
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(shellOutPutCallBack);
+
+        if (_remoteConnected) {
+            try {
+                const TimePoint start = Clock::now();
+                res = _client.sendQuery(line, shellOutPutCallBack);
+                const TimePoint end = Clock::now();
+
+                remoteQueryTime = end - start;
+
+            } catch (const TuringException& e) {
+                spdlog::error("Remote query failed: {}", e.what());
+                disconnectRemote();
+            }
+
+        } else {
+            const QueryState state(_graphName, _mem, &_turingDB.getDefaultQueryConfig(), &callbacks, _hash, _changeID);
+            res = _turingDB.query(line, state);
+        }
     }
 
     checkShellContext();
@@ -721,9 +794,19 @@ void TuringShell::processLine(std::string& line) {
 
     std::cout << "Query returned " << rowCount << " rows.\n";
     std::cout << "Query executed in " << res.getTotalTime().count() << " ms.\n";
+
+    if (_remoteConnected) {
+        std::cout << "Remote query executed in " << remoteQueryTime.count() << " ms.\n";
+    }
 }
 
 bool TuringShell::setGraphName(const std::string& graphName) {
+    if (_remoteConnected) {
+        _client.setGraphName(graphName);
+        _client.setCommitHash(CommitHash::head());
+        return true;
+    }
+
     if (_turingDB.getSystemManager().getGraph(graphName) == nullptr) {
         return false;
     }
@@ -735,6 +818,12 @@ bool TuringShell::setGraphName(const std::string& graphName) {
 
 bool TuringShell::setChangeID(ChangeID changeID) {
     _hash = CommitHash::head();
+
+    if (_remoteConnected) {
+        _client.setChangeID(changeID);
+        _client.setCommitHash(CommitHash::head());
+        return true;
+    }
 
     auto tx = _turingDB.getSystemManager().openTransaction(_graphName, _hash, changeID);
     if (!tx) {
@@ -752,6 +841,11 @@ bool TuringShell::setChangeID(ChangeID changeID) {
 }
 
 bool TuringShell::setCommitHash(CommitHash hash) {
+    if (_remoteConnected) {
+        _client.setCommitHash(hash);
+        return true;
+    }
+
     auto tx = _turingDB.getSystemManager().openTransaction(_graphName, hash, _changeID);
 
     if (!tx) {
@@ -793,6 +887,27 @@ void TuringShell::printHelp() const {
 void TuringShell::stop() {
     _running.store(false);
     ::pthread_kill(_threadID, SIGUSR1);
+}
+
+void TuringShell::connectRemote(const std::string& address, const std::string& port) {
+    _client.disconnect();
+    _client.setRemoteAddress(address);
+    _client.setRemotePort(port);
+    _client.setGraphName(_graphName);
+    _client.setCommitHash(_hash);
+    _client.setChangeID(_changeID);
+    _client.connect();
+
+    _remoteAddress = address;
+    _remotePort = port;
+    _remoteConnected = true;
+}
+
+void TuringShell::disconnectRemote() {
+    _client.disconnect();
+    _remoteAddress.clear();
+    _remotePort.clear();
+    _remoteConnected = false;
 }
 
 void TuringShell::checkShellContext() {

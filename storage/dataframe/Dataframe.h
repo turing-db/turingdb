@@ -22,10 +22,11 @@ public:
 
     Dataframe(const Dataframe&) = delete;
     Dataframe& operator=(const Dataframe&) = delete;
-    
+
     ~Dataframe();
 
     size_t size() const { return _cols.size(); }
+    void clear();
 
     /**
      * @brief Determines the logical length of a dataframe.

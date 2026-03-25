@@ -30,6 +30,14 @@ public:
         _entries.emplace_back(type, id);
     }
 
+    void add() {
+        _entries.emplace_back();
+    }
+
+    Entry& back() {
+        return _entries.back();
+    }
+
     void assign(Container::const_iterator first, Container::const_iterator last) {
         _entries.assign(first, last);
     }
@@ -42,12 +50,17 @@ public:
         _entries.resize(size);
     }
 
+    void reserve(size_t size) {
+        _entries.reserve(size);
+    }
+
     EntityList::Entry& operator[](size_t idx) {
         return _entries[idx];
     }
 
     bool empty() const { return _entries.empty(); }
     size_t size() const { return _entries.size(); }
+    size_t capacity() const { return _entries.capacity(); }
     const Container& getEntries() const { return _entries; }
 
     Container::const_iterator begin() const { return _entries.begin(); }

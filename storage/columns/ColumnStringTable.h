@@ -31,7 +31,7 @@ public:
     void setHeaders(Headers& headers);
     const Headers& getHeaders() const { return _headers; }
 
-    void clear();
+    void clear() override;
     void assign(const Column* other) override;
     void assignFromLine(const Column* other, size_t startLine, size_t rowCount) override;
 
