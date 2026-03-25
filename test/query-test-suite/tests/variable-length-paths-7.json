@@ -1,18 +1,18 @@
 {
-  "enabled": true,
-  "graph": "simpledb",
-  "query": "MATCH (i:Supernatural)-->(n:Person)-[e]->*(m:Person) RETURN i.name, n.name, e, m.name",
-  "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: i\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __label__: Supernatural\n    `\"]\n    3[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: v0\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n        __label__: Person\n    `\"]\n    9[\"`\n        __PATH_EXPLORER__\n    `\"]\n    10[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    11[\"`\n        __FILTER_NODE__\n        __label__: Person\n    `\"]\n    12[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ i\n        __prop__ name\n    `\"]\n    13[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    14[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ m\n        __prop__ name\n    `\"]\n    15[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->8\n    7-->9\n    8-->7\n    9-->11\n    10-->12\n    11-->10\n    12-->13\n    13-->14\n    14-->15",
-    "result": "i.name,n.name,e,m.name\nGhosts,Remy,[],Remy\nGhosts,Remy,[[0]],Adam\nGhosts,Remy,\"[[0], [4]]\",Remy\nGhosts,Remy,\"[[1], [7]]\",Remy\nGhosts,Remy,\"[[1], [7], [0]]\",Adam\nGhosts,Remy,\"[[0], [4], [1], [7]]\",Remy\nGhosts,Remy,\"[[1], [7], [0], [4]]\",Remy",
-    "resultJson": "{\"header\":{\"column_names\":[\"i.name\",\"n.name\",\"e\",\"m.name\"],\"column_types\":[\"String\",\"String\",\"List\",\"String\"]},\"data\":[[[\"Ghosts\",\"Ghosts\"],[\"Remy\",\"Remy\"],[[],[{\"type\":\"edge\",\"id\":0}]],[\"Remy\",\"Adam\"]],[[\"Ghosts\",\"Ghosts\"],[\"Remy\",\"Remy\"],[[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4}],[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}]],[\"Remy\",\"Remy\"]],[[\"Ghosts\"],[\"Remy\"],[[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0}]],[\"Adam\"]],[[\"Ghosts\",\"Ghosts\"],[\"Remy\",\"Remy\"],[[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}],[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4}]],[\"Remy\",\"Remy\"]],[[],[],[],[]]]}"
-  },
-  "tags": [
-    "variable",
-    "quantified-path",
-    "variable-length",
-    "bfs",
-    "unbounded"
-  ],
-  "write-required": false
+    "enabled": true,
+    "graph": "simpledb",
+    "query": "MATCH (i:Supernatural)-->(n:Person)-[e]->*(m:Person) RETURN i.name, n.name, e, m.name",
+    "expect": {
+        "plan": "flowchart TD\n    0[\"`\n        __VAR__\n        __name__: i\n    `\"]\n    1[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    2[\"`\n        __VAR__\n        __name__: v0\n    `\"]\n    3[\"`\n        __FILTER_EDGE__\n    `\"]\n    4[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    5[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    6[\"`\n        __FILTER_NODE__\n        __label__: Person\n    `\"]\n    7[\"`\n        __PATH_EXPLORER__\n    `\"]\n    8[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    9[\"`\n        __FILTER_NODE__\n        __label__: Person\n    `\"]\n    10[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ i\n        __prop__ name\n    `\"]\n    11[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    12[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ m\n        __prop__ name\n    `\"]\n    13[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    14[\"`\n        __SCAN_NODES_BY_LABEL__\n        __label__: Supernatural\n    `\"]\n    0-->1\n    1-->3\n    2-->4\n    3-->2\n    4-->6\n    5-->7\n    6-->5\n    7-->9\n    8-->10\n    9-->8\n    10-->11\n    11-->12\n    12-->13\n    14-->0",
+        "result": "i.name,n.name,e,m.name\nGhosts,Remy,[],Remy\nGhosts,Remy,[[0]],Adam\nGhosts,Remy,\"[[0], [4]]\",Remy\nGhosts,Remy,\"[[1], [7]]\",Remy\nGhosts,Remy,\"[[1], [7], [0]]\",Adam\nGhosts,Remy,\"[[0], [4], [1], [7]]\",Remy\nGhosts,Remy,\"[[1], [7], [0], [4]]\",Remy",
+        "resultJson": "{\"header\":{\"column_names\":[\"i.name\",\"n.name\",\"e\",\"m.name\"],\"column_types\":[\"String\",\"String\",\"List\",\"String\"]},\"data\":[[[\"Ghosts\",\"Ghosts\"],[\"Remy\",\"Remy\"],[[],[{\"type\":\"edge\",\"id\":0}]],[\"Remy\",\"Adam\"]],[[\"Ghosts\",\"Ghosts\"],[\"Remy\",\"Remy\"],[[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4}],[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}]],[\"Remy\",\"Remy\"]],[[\"Ghosts\"],[\"Remy\"],[[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0}]],[\"Adam\"]],[[\"Ghosts\",\"Ghosts\"],[\"Remy\",\"Remy\"],[[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}],[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4}]],[\"Remy\",\"Remy\"]],[[],[],[],[]]]}"
+    },
+    "tags": [
+        "variable",
+        "quantified-path",
+        "variable-length",
+        "bfs",
+        "unbounded"
+    ],
+    "write-required": false
 }

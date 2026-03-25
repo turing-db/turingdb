@@ -37,9 +37,12 @@ using namespace turing::test;
 // Custom interpreter that exposes the optimized plan graph.
 class TestQueryInterpreter {
 public:
-    TestQueryInterpreter(db::SystemManager* sysMan, std::string_view graphName)
+    TestQueryInterpreter(db::SystemManager* sysMan,
+                         std::string_view graphName,
+                         const db::QueryConfig* queryConfig)
         : _sysMan(sysMan),
-        _graphName(graphName)
+        _graphName(graphName),
+        _queryConfig(queryConfig)
     {
     }
 
@@ -60,7 +63,7 @@ public:
         db::CypherAnalyzer analyzer(&*_ast, view);
         analyzer.analyze();
 
-        _planGen.emplace(*_ast, view);
+        _planGen.emplace(*_ast, view, &_queryConfig->getPlanGenConfig());
         _planGen->generate(_ast->queries().front());
 
         db::PlanGraph& plan = _planGen->getPlanGraph();
@@ -103,6 +106,7 @@ public:
 private:
     db::SystemManager* _sysMan {nullptr};
     std::string_view _graphName;
+    const db::QueryConfig* _queryConfig {nullptr};
 
     std::unique_ptr<db::ProcedureManager> _procedures;
     std::optional<db::Transaction> _tx;
@@ -152,14 +156,16 @@ protected:
 
     void submitCurrentChange() {
         auto res = _db->query("change submit", _graphName, &_env->getMem(),
+                              &_db->getDefaultQueryConfig(),
                               CommitHash::head(), _currentChange);
         ASSERT_TRUE(res);
         _currentChange = ChangeID::head();
     }
 
     auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), callback,
-                              CommitHash::head(), _currentChange);
+        auto res = _db->query(query, _graphName, &_env->getMem(),
+                              &_db->getDefaultQueryConfig(),
+                              callback, CommitHash::head(), _currentChange);
         return res;
     }
 
@@ -174,6 +180,7 @@ protected:
 
     void exec(std::string_view q) {
         auto res = _db->query(q, _graphName, &_env->getMem(),
+                              &_db->getDefaultQueryConfig(),
                               [](const Dataframe*) {},
                               CommitHash::head(), _currentChange);
         ASSERT_TRUE(res);
@@ -303,7 +310,9 @@ TEST_F(ConstScanOptTest, multiHopSeeds) {
         }
 
         Rows actual;
-        TestQueryInterpreter interp(&_env->getSystemManager(), _graphName);
+        TestQueryInterpreter interp(&_env->getSystemManager(),
+                                    _graphName,
+                                    &_db->getDefaultQueryConfig());
         interp.execute(q0, [&](const Dataframe* df) {
             const ColumnNodeIDs* col = findColumn(df, "n")->as<ColumnNodeIDs>();
             for (size_t i = 0; i < col->size(); ++i) {
@@ -330,7 +339,9 @@ TEST_F(ConstScanOptTest, multiHopSeeds) {
         }
 
         Rows actual;
-        TestQueryInterpreter interp(&_env->getSystemManager(), _graphName);
+        TestQueryInterpreter interp(&_env->getSystemManager(),
+                                    _graphName,
+                                    &_db->getDefaultQueryConfig());
         interp.execute(q1, [&](const Dataframe* df) {
             const ColumnNodeIDs* col = findColumn(df, "m")->as<ColumnNodeIDs>();
             for (size_t i = 0; i < col->size(); ++i) {
@@ -360,7 +371,9 @@ TEST_F(ConstScanOptTest, multiHopSeeds) {
         }
 
         Rows actual;
-        TestQueryInterpreter interp(&_env->getSystemManager(), _graphName);
+        TestQueryInterpreter interp(&_env->getSystemManager(),
+                                    _graphName,
+                                    &_db->getDefaultQueryConfig());
         interp.execute(q2, [&](const Dataframe* df) {
             const ColumnNodeIDs* col = findColumn(df, "p")->as<ColumnNodeIDs>();
             for (size_t i = 0; i < col->size(); ++i) {
@@ -393,7 +406,9 @@ TEST_F(ConstScanOptTest, multiHopSeeds) {
         }
 
         Rows actual;
-        TestQueryInterpreter interp(&_env->getSystemManager(), _graphName);
+        TestQueryInterpreter interp(&_env->getSystemManager(),
+                                    _graphName,
+                                    &_db->getDefaultQueryConfig());
         interp.execute(q3, [&](const Dataframe* df) {
             const ColumnNodeIDs* col = findColumn(df, "q")->as<ColumnNodeIDs>();
             for (size_t i = 0; i < col->size(); ++i) {
@@ -413,7 +428,9 @@ TEST_F(ConstScanOptTest, mixedPredicateNoConstScan) {
     const std::string q =
         "MATCH (n) WHERE n = 0 OR n = 1 OR n.idx = 5 RETURN n";
 
-    TestQueryInterpreter interp(&_env->getSystemManager(), _graphName);
+    TestQueryInterpreter interp(&_env->getSystemManager(),
+                                _graphName,
+                                &_db->getDefaultQueryConfig());
     interp.execute(q, [](const Dataframe*) {});
 
     EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
