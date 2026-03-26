@@ -27,7 +27,8 @@ public:
 
     void init(GraphView view) final;
 
-    const Column* query(const Column* col) final;
+    void query(const Column* query, Column* result) final;
+
 private:
     std::string _propName;
     PropertyTypeID _propID;

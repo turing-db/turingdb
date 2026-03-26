@@ -17,7 +17,7 @@ public:
     Index& operator=(Index&&) = delete;
 
     virtual void init(GraphView view) = 0;
-    virtual const Column* query(const Column* input) = 0;
+    virtual void query(const Column* query, Column* result) = 0;
 
     // MAYBE: DataParts which it indexes
 };

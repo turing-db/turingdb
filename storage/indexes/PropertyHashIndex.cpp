@@ -41,19 +41,7 @@ void PropertyHashIndex<P, I>::init(GraphView view) {
 }
 
 template <SupportedType P, TypedInternalID I>
-const Column* PropertyHashIndex<P, I>::query(const Column* col) {
-    const auto* query = dynamic_cast<const ColumnConst<PropertyPrimitive>*>(col);
-    bioassert(query, "Invalid argument to PropertyHashIndex::query.");
-
-    const PropertyPrimitive& val = query->getRaw();
-
-    const auto findIt = _data.find(val);
-
-    if (findIt == end(_data)) {
-        return &_empty;
-    }
-
-    return &findIt->second;
+void PropertyHashIndex<P, I>::query(const Column* query, Column* result) {
 }
 
 namespace db {
