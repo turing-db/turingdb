@@ -31,10 +31,11 @@ namespace rv = ranges::views;
 namespace rg = ranges;
 
 DataPart::DataPart(NodeID firstNodeID,
-                   EdgeID firstEdgeID)
+                   EdgeID firstEdgeID,
+                   DataPartID id)
     : _firstNodeID(firstNodeID),
     _firstEdgeID(firstEdgeID),
-    _id(DataPartID::create()),
+    _id(id),
     _nodeStrPropIdx(std::make_unique<StringPropertyIndexer>()),
     _edgeStrPropIdx(std::make_unique<StringPropertyIndexer>())
     

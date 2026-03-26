@@ -33,7 +33,8 @@ class StringPropertyIndexer;
 class DataPart {
 public:
     DataPart(NodeID firstNodeID,
-             EdgeID firstEdgeID);
+             EdgeID firstEdgeID,
+             DataPartID id = DataPartID::create());
 
     DataPart(const DataPart&) = delete;
     DataPart& operator=(const DataPart&) = delete;

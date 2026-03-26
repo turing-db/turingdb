@@ -17,6 +17,7 @@
 #include "versioning/CommitHash.h"
 #include "versioning/Transaction.h"
 #include "versioning/VersionController.h"
+#include "writers/GraphWriter.h"
 
 using namespace db;
 using namespace turing::test;
