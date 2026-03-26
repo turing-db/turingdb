@@ -135,6 +135,13 @@ struct PropertyTypeInfo {
 
 using PropertyTypeInfos = std::map<PropertyTypeID, PropertyTypeInfo>;
 
+struct EmbeddingEqual {
+    bool operator()(types::Embedding::Primitive a,
+                    types::Embedding::Primitive b) const noexcept {
+        return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin());
+    }
+};
+
 }
 
 template <>
