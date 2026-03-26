@@ -5,6 +5,8 @@
 
 #include "Index.h"
 
+#include "columns/ColumnVector.h"
+
 #include "ID.h"
 #include "metadata/SupportedType.h"
 
@@ -23,14 +25,13 @@ public:
     using PropertyPrimitive = P::Primitive;
     using PropertyValueHash = std::unordered_map<PropertyPrimitive, IDContainer>;
 
-    PropertyHashIndex(std::string_view propertyName, PropertyTypeID propertyID);
+    explicit PropertyHashIndex(PropertyTypeID propertyID);
 
     void init(GraphView view) final;
 
     void query(const Column* query, Column* result) final;
 
 private:
-    std::string _propName;
     PropertyTypeID _propID;
     PropertyValueHash _data;
 

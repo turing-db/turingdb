@@ -9,8 +9,8 @@ using namespace db;
 
 template <SupportedType P>
 WeakArc<Index> IndexManager::createNodeIndex(PropertyTypeID ptID, LabelSetID lblSet) {
-    const WeakArc<Index> newIndex = _indexes->takeOwnership(new PropertyHashIndex<P, NodeID>);
-    const Index* raw =newIndex.get();
+    const WeakArc<Index> newIndex = _indexes->takeOwnership(new PropertyHashIndex<P, NodeID>(ptID));
+    const Index* raw = newIndex.get();
 
     // Get the map for nodes of this label set, to register this index
     PropertyIndexMap thisLblSetMap = _nodeIndexes[lblSet];
@@ -21,6 +21,7 @@ WeakArc<Index> IndexManager::createNodeIndex(PropertyTypeID ptID, LabelSetID lbl
     return newIndex;
 }
 
+/*
 template <SupportedType P>
 WeakArc<Index> IndexManager::createEdgeIndex(PropertyTypeID ptID, EdgeTypeID type) {
     const WeakArc<Index> newIndex = _indexes->takeOwnership(new PropertyHashIndex<P, EdgeID>);
@@ -33,4 +34,14 @@ WeakArc<Index> IndexManager::createEdgeIndex(PropertyTypeID ptID, EdgeTypeID typ
     thisLblSetMap.emplace(ptID, raw);
 
     return newIndex;
+}
+*/
+
+namespace db {
+template WeakArc<Index> IndexManager::createNodeIndex<types::Int64>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> IndexManager::createNodeIndex<types::UInt64>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> IndexManager::createNodeIndex<types::Double>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> IndexManager::createNodeIndex<types::String>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> IndexManager::createNodeIndex<types::Bool>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> IndexManager::createNodeIndex<types::Embedding>(PropertyTypeID ptID, LabelSetID lblset);
 }

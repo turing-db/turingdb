@@ -2,6 +2,10 @@
 
 #include <range/v3/view/enumerate.hpp>
 
+#include "ID.h"
+#include "metadata/LabelSet.h"
+#include "metadata/PropertyType.h"
+#include "metadata/SupportedType.h"
 #include "reader/GraphReader.h"
 #include "Graph.h"
 #include "spdlog/spdlog.h"
@@ -75,6 +79,12 @@ DataPartBuilder& CommitBuilder::newBuilder() {
                                                                     partIndex));
 
     return *builder;
+}
+
+template <SupportedType P>
+WeakArc<Index> CommitBuilder::newNodePropertyIndex(PropertyTypeID ptID,
+                                                   LabelSetID lblset) {
+    return _controller->createNodePropertyIndex<P>(ptID, lblset);
 }
 
 CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
@@ -221,4 +231,13 @@ void CommitBuilder::initializeMerge(const Commit* prevCommit) {
 
     // Create the write buffer for this commit
     _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal(), _view);
+}
+
+namespace db {
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Int64>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::UInt64>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Double>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::String>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Bool>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Embedding>(PropertyTypeID ptID, LabelSetID lblset);
 }

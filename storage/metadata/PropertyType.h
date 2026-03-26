@@ -153,3 +153,19 @@ struct std::hash<db::PropertyType> {
     }
 };
 
+// TODO: Better hash function
+template <>
+struct std::hash<db::types::Embedding::Primitive> {
+    std::size_t operator()(const db::types::Embedding::Primitive& emb) const noexcept {
+        const std::hash<float> hasher = std::hash<float> {};
+        const size_t sz = emb.size();
+
+        size_t hash = hasher(emb.front());
+
+        for (size_t i = 1; i < sz; i++) {
+            hash ^= hasher(emb[i]);
+        }
+
+        return hash;
+    }
+};

@@ -4,6 +4,9 @@
 #include <vector>
 #include <memory>
 
+#include "indexes/Index.h"
+#include "indexes/IndexManager.h"
+
 #include "ID.h"
 #include "versioning/CommitResult.h"
 #include "versioning/CommitWriteBuffer.h"
@@ -54,6 +57,10 @@ public:
     }
 
     DataPartBuilder& newBuilder();
+
+    template <SupportedType P>
+    WeakArc<Index> newNodePropertyIndex(PropertyTypeID ptID,
+                                        LabelSetID lblset = LabelSetID::max());
 
     void appendBuilder(std::unique_ptr<DataPartBuilder> builder);
 

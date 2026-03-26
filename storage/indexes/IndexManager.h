@@ -14,7 +14,7 @@ namespace db {
 class IndexManager {
 public:
     // TODO: Ensure property type IDs are rebased
-    using PropertyIndexMap = std::unordered_map<PropertyTypeID, Index*>;
+    using PropertyIndexMap = std::unordered_map<PropertyTypeID, const Index*>;
 
     // TODO: Ensure IDs are rebased
     using NodeIndexMap = std::unordered_map<LabelSetID, PropertyIndexMap>;

@@ -310,6 +310,8 @@ public:
         return _values;
     }
 
+    auto zipped() const { return ranges::views::zip(_ids, _values.get()); }
+
     size_t size() const override { return _values.size(); }
 
     void sort() override;

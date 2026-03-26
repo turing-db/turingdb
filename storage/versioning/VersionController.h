@@ -9,6 +9,7 @@
 #include "Path.h"
 #include "Profiler.h"
 #include "indexes/IndexManager.h"
+#include "metadata/SupportedType.h"
 #include "versioning/Change.h"
 #include "versioning/CommitResult.h"
 #include "mergers/DataPartMergeResult.h"
@@ -72,6 +73,9 @@ public:
     }
 
     DataPartMap& getPartMap() { return _partMap; }
+
+    template <SupportedType P>
+    WeakArc<Index> createNodePropertyIndex(PropertyTypeID ptID, LabelSetID lblset);
 
 private:
     friend GraphLoader;

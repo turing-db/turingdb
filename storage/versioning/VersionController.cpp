@@ -229,3 +229,20 @@ DumpResult<void> VersionController::loadCommit(CommitHash hash,
     }
     return {};
 }
+
+
+template <SupportedType P>
+WeakArc<Index> VersionController::createNodePropertyIndex(PropertyTypeID ptID,
+                                                          LabelSetID lblset) {
+    return _indexManager.createNodeIndex<P>(ptID, lblset);
+}
+
+
+namespace db {
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Int64>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::UInt64>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Double>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::String>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Bool>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Embedding>(PropertyTypeID ptID, LabelSetID lblset);
+}
