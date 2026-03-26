@@ -199,6 +199,20 @@ void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause
 
         yieldItemExpr->setExprVarDecl(decl);
     }
+
+    // Step 4. Analyze WHERE clause on YIELD items
+    WhereClause* where = yieldItems->getWhereClause();
+    if (where) {
+        Expr* whereExpr = where->getExpr();
+        _exprAnalyzer->analyzeRootExpr(whereExpr);
+
+        if (whereExpr->isAggregate()) {
+            throwError("Invalid use of aggregate expression in this context", yield);
+        }
+        if (whereExpr->getType() != EvaluatedType::Bool) {
+            throwError("WHERE expression must be a boolean", yield);
+        }
+    }
 }
 
 void ReadStmtAnalyzer::analyze(OrderBy* orderBySt) {

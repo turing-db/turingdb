@@ -153,9 +153,12 @@ void createHashJoinDataFrameShape(LocalMemory* mem,
 
 //The left and right key  need to be of the same type unless they are string/string_view
 template<typename LeftJoinKeyType,typename RightJoinKeyType>
-concept isValidHashJoinTypes = 
+concept isValidHashJoinTypes =
 (std::is_same_v<LeftJoinKeyType, NodeID> ||
 std::is_same_v<LeftJoinKeyType, EdgeID> ||
+std::is_same_v<LeftJoinKeyType, LabelID> ||
+std::is_same_v<LeftJoinKeyType, EdgeTypeID> ||
+std::is_same_v<LeftJoinKeyType, PropertyTypeID> ||
 std::is_same_v<LeftJoinKeyType, int64_t> ||
 std::is_same_v<LeftJoinKeyType, uint64_t> ||
 std::is_same_v<LeftJoinKeyType, double> ||
