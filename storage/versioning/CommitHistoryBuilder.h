@@ -9,6 +9,8 @@ class DataPart;
 template <typename T>
 class WeakArc;
 
+class Index;
+
 class CommitHistoryBuilder {
 public:
     explicit CommitHistoryBuilder(CommitHistory& history)
@@ -17,6 +19,8 @@ public:
     }
 
     void addDatapart(const WeakArc<DataPart>& datapart);
+
+    void addValidIndex(const WeakArc<Index>& index);
 
     void setCommitDatapartCount(size_t count);
 

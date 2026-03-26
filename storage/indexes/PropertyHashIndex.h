@@ -46,6 +46,7 @@ private:
     static constexpr bool isNode = std::is_same_v<I, NodeID>;
 };
 
+// Implementation of the underlying hashtable used for retrieval
 template <typename K, typename V, typename HashMap>
 class PropertyHashMap {
 public:
@@ -55,12 +56,13 @@ private:
     HashMap _hashMap;
 };
 
+// Generic implementation
 template <typename K, typename V>
 struct PropertyHashMapImpl {
     using type = std::unordered_map<K, V>;
 };
 
-
+// Specialisation to which we pass a custom equality function for embeddings
 template <typename V>
 struct PropertyHashMapImpl<types::Embedding::Primitive, V> {
     using type = std::unordered_map<types::Embedding::Primitive, V,
