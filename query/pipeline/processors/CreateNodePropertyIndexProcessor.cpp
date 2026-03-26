@@ -86,25 +86,26 @@ void CreateNodePropertyIndexProcessor::execute() {
     const ValueType valueType = prop._valueType;
     const PropertyTypeID propID = prop._id;
 
-    switch (valueType) {
+    WeakArc<Index> newIndex {};
 
+    switch (valueType) {
         case ValueType::Int64:
-            _commitBuilder->newNodePropertyIndex<types::Int64>(propID);
+            newIndex =_commitBuilder->newNodePropertyIndex<types::Int64>(propID);
         break;
         case ValueType::UInt64:
-            _commitBuilder->newNodePropertyIndex<types::UInt64>(propID);
+            newIndex =_commitBuilder->newNodePropertyIndex<types::UInt64>(propID);
         break;
         case ValueType::Double:
-            _commitBuilder->newNodePropertyIndex<types::Double>(propID);
+            newIndex =_commitBuilder->newNodePropertyIndex<types::Double>(propID);
         break;
         case ValueType::String:
-            _commitBuilder->newNodePropertyIndex<types::String>(propID);
+            newIndex =_commitBuilder->newNodePropertyIndex<types::String>(propID);
         break;
         case ValueType::Bool:
-            _commitBuilder->newNodePropertyIndex<types::Bool>(propID);
+            newIndex =_commitBuilder->newNodePropertyIndex<types::Bool>(propID);
         break;
         case ValueType::Embedding:
-            _commitBuilder->newNodePropertyIndex<types::Embedding>(propID);
+            newIndex = _commitBuilder->newNodePropertyIndex<types::Embedding>(propID);
         break;
 
         case ValueType::_SIZE:
@@ -113,4 +114,11 @@ void CreateNodePropertyIndexProcessor::execute() {
         break;
     }
 
+    bioassert(newIndex, "Failed to create new index.");
+
+    CommitWriteBuffer& wb = _commitBuilder->writeBuffer();
+
+    wb.addPendingIndex(newIndex);
+
+    finish();
 }
