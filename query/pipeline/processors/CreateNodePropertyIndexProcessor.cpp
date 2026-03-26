@@ -47,12 +47,13 @@ void CreateNodePropertyIndexProcessor::prepare(ExecutionContext* ctxt) {
 
     const Transaction* rawTx = ctxt->getTransaction();
     if (!rawTx) {
-        throw FatalException("Attempted to prepare WriteProcessor in execution context "
-                             "without transaction.");
+        throw FatalException(
+            "Attempted to create node property index without transaction.");
     }
 
     if (!rawTx->writingPendingCommit()) {
-        throw PipelineException("WriteProcessor: Cannot perform writes outside of a write transaction");
+        throw PipelineException(
+            "Create index: Cannot perform writes outside of a write transaction");
     }
     markAsPrepared();
 }
