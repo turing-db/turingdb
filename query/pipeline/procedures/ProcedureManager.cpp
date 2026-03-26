@@ -8,6 +8,7 @@
 #include "HistoryProcedure.h"
 #include "DescribeCommitProcedure.h"
 #include "ProceduresProcedure.h"
+#include "procedures/ShowIndexesProcedure.h"
 
 using namespace db;
 
@@ -35,6 +36,7 @@ void ProcedureManager::init() {
     HistoryProcedure::registerProcedure(db);
     DescribeCommitProcedure::registerProcedure(db);
     ProceduresProcedure::registerProcedure(db);
+    ShowIndexesProcedure::registerProcedure(db);
 }
 
 void ProcedureManager::getNamespaces(Namespaces& result) const {

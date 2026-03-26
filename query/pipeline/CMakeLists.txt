@@ -83,6 +83,7 @@ set(procedures_sources
     procedures/HistoryProcedure.cpp
     procedures/DescribeCommitProcedure.cpp
     procedures/ProceduresProcedure.cpp
+    procedures/ShowIndexesProcedure.cpp
 )
 
 add_library(turing_db_pipeline_s

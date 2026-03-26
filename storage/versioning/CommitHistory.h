@@ -15,6 +15,7 @@ class Index;
 class CommitHistory {
 public:
     using CommitViewSpan = std::span<const CommitView>;
+    using IndexSpan = std::span<const WeakArc<Index>>;
 
     CommitHistory();
     ~CommitHistory();
@@ -31,6 +32,8 @@ public:
     void newMergeCommitHistory();
 
     const CommitJournal& journal() const { return *_journal; }
+
+    IndexSpan validIndexes() const { return _validIndexes; }
 
 private:
     friend class CommitHistoryBuilder;
