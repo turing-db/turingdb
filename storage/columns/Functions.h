@@ -188,18 +188,21 @@ public:
 };
 
 template <TypedInternalID ID>
-static void getPropertyTypesString(std::string& out, const GraphView view, ID n) {
+static void getPropertyTypesString(std::string& out,
+                                   const GraphView view,
+                                   std::unordered_set<PropertyTypeID>& seen,
+                                   ID id) {
     out.clear();
+    seen.clear();
     const PropertyTypeMap& ptMap = view.metadata().propTypes();
     bool first = true;
-    std::unordered_set<PropertyTypeID> seen;
 
     for (const auto& part : view.dataparts()) {
         const PropertyManager& props = std::same_as<ID, NodeID>
-            ? part->nodeProperties()
-            : part->edgeProperties();
+                                         ? part->nodeProperties()
+                                         : part->edgeProperties();
 
-        const PropertyTypeSet* set = props.tryGetPropertyTypeSet(n.getValue());
+        const PropertyTypeSet* set = props.tryGetPropertyTypeSet(id.getValue());
         if (!set) {
             continue;
         }
@@ -225,6 +228,7 @@ static void getPropertyTypesString(std::string& out, const GraphView view, ID n)
 class PropertyTypesFunction {
 public:
     using ResultType = std::string;
+    std::unordered_set<PropertyTypeID> _seen;
 
     explicit PropertyTypesFunction(GraphView view)
         : _view(view)
@@ -232,12 +236,12 @@ public:
     }
 
     ResultType operator()(const NodeID n) {
-        getPropertyTypesString(_tmp, _view, n);
+        getPropertyTypesString(_tmp, _view, _seen, n);
         return _tmp;
     }
 
     ResultType operator()(const EdgeID e) {
-        getPropertyTypesString(_tmp, _view, e);
+        getPropertyTypesString(_tmp, _view, _seen, e);
         return _tmp;
     }
 
@@ -401,6 +405,8 @@ struct FunctionExecutor<PropertyTypesFunction, Res, Arg> {
 
         const auto& argd = arg->getRaw();
         auto& resd = res->getRaw();
+
+
 
         PropertyTypesFunction propertyTypes(view);
         for (size_t i = 0; i < size; i++) {
