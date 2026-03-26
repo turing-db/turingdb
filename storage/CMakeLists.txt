@@ -57,6 +57,7 @@ set(storage_sources
         indexers/StringPropertyIndexer.cpp
 
         properties/PropertyContainer.cpp
+        properties/PropertyTypeSet.cpp
         properties/PropertyManager.cpp
 
         writers/DataPartBuilder.cpp

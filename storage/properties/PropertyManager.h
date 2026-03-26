@@ -57,7 +57,7 @@ public:
     }
 
     void registerEmbeddingPropertyType(PropertyTypeID ptID, size_t dimension) {
-        if (_map.find(ptID) != _map.end()) {
+        if (_map.contains(ptID)) {
             throw FatalException("Trying to register a type that was already registered");
         }
 
@@ -79,18 +79,12 @@ public:
     }
 
     bool has(PropertyTypeID ptID, EntityID entityID) const {
-        if (_typeMapping) {
-            const PropertyTypeSet* set = _typeMapping->tryGetPropertyTypeSet(entityID);
-            if (!set) {
-                return false;
-            }
-            return std::binary_search(set->begin(), set->end(), ptID);
-        }
-        auto containerIt = _map.find(ptID);
-        if (containerIt == _map.end()) {
+        const PropertyTypeSet* set = _typeMapping->tryGetPropertyTypeSet(entityID);
+        if (!set) {
             return false;
         }
-        return containerIt->second->has(entityID);
+
+        return set->contains(ptID);
     }
 
     template <SupportedType T>
@@ -107,18 +101,16 @@ public:
 
     template <SupportedType T>
     const T::Primitive* tryGet(PropertyTypeID ptID, EntityID entityID) const {
-        if (_typeMapping) {
-            const PropertyTypeSet* set = _typeMapping->tryGetPropertyTypeSet(entityID);
-            if (!set || !std::binary_search(set->begin(), set->end(), ptID)) {
-                return nullptr;
-            }
-            return &getContainer<T>(ptID).get(entityID);
-        }
-        const TypedPropertyContainer<T>* container = tryGetContainer<T>(ptID);
-        if (!container) {
+        const PropertyTypeSet* set = _typeMapping->tryGetPropertyTypeSet(entityID);
+        if (!set) {
             return nullptr;
         }
-        return container->tryGet(entityID);
+
+        if (!set->contains(ptID)) {
+            return nullptr;
+        }
+
+        return &getContainer<T>(ptID).get(entityID);
     }
 
     template <SupportedType T>

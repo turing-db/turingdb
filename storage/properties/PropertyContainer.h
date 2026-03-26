@@ -278,12 +278,12 @@ public:
         return _entityIndexMap.contains(entityID);
     }
 
-    types::Embedding::Primitive get(EntityID entityID) const {
+    const types::Embedding::Primitive& get(EntityID entityID) const {
         const auto it = _entityIndexMap.find(entityID);
         return _values.getView(it->second);
     }
 
-    types::Embedding::Primitive get(size_t offset) const {
+    const types::Embedding::Primitive& get(size_t offset) const {
         return _values.getView(offset);
     }
 

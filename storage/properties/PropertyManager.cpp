@@ -46,31 +46,55 @@ void PropertyManager::fillEntityPropertyView(EntityID entityID,
     };
 
     for (const auto& [ptID, rawContainer] : _uint64s) {
+        if (!has(ptID, entityID)) {
+            continue;
+        }
+
         const auto& container = rawContainer->cast<types::UInt64>();
         fill(container, ptID);
     }
 
     for (const auto& [ptID, rawContainer] : _int64s) {
+        if (!has(ptID, entityID)) {
+            continue;
+        }
+
         const auto& container = rawContainer->cast<types::Int64>();
         fill(container, ptID);
     }
 
     for (const auto& [ptID, rawContainer] : _doubles) {
+        if (!has(ptID, entityID)) {
+            continue;
+        }
+
         const auto& container = rawContainer->cast<types::Double>();
         fill(container, ptID);
     }
 
     for (const auto& [ptID, rawContainer] : _strings) {
+        if (!has(ptID, entityID)) {
+            continue;
+        }
+
         const auto& container = rawContainer->cast<types::String>();
         fill(container, ptID);
     }
 
     for (const auto& [ptID, rawContainer] : _bools) {
+        if (!has(ptID, entityID)) {
+            continue;
+        }
+
         const auto& container = rawContainer->cast<types::Bool>();
         fill(container, ptID);
     }
 
     for (const auto& [ptID, rawContainer] : _embeddings) {
+        if (!has(ptID, entityID)) {
+            continue;
+        }
+
         const auto& container = rawContainer->cast<types::Embedding>();
         fill(container, ptID);
     }
@@ -82,6 +106,7 @@ const LabelSetPropertyIndexer* PropertyManager::tryGetIndexer(PropertyTypeID ptI
     if (it != _indexers.end()) {
         return &(it->second);
     }
+
     return nullptr;
 }
 
