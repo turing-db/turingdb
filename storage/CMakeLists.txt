@@ -58,6 +58,7 @@ set(storage_sources
 
         properties/PropertyContainer.cpp
         properties/PropertyTypeSet.cpp
+        properties/PropertyTypeTrie.cpp
         properties/PropertyManager.cpp
 
         writers/DataPartBuilder.cpp
