@@ -880,7 +880,8 @@ void ReadStmtGenerator::insertShortestPathNode(VarNode* source,
 bool ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* dependency, Predicate* pred) {
     FilterNode* filter = _variables->getNodeFilter(node);
     auto* depProvider = dynamic_cast<VarDeclProviderNode*>(dependency);
-    const VarDecl* dependencyVarDecl = depProvider ? depProvider->getVarDecl() : nullptr;
+    bioassert(depProvider, "Dependency node must be a VarDeclProviderNode");
+    const VarDecl* dependencyVarDecl = depProvider->getVarDecl();
     const auto [path, ancestorNode] = _topology->getShortestPath(node, dependency);
 
     switch (path) {
