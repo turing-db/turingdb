@@ -33,6 +33,7 @@ add_queries_gtest(test_greeter_extension GreeterExtensionTest.cpp)
 add_queries_gtest(test_show_extensions ShowExtensionsTest.cpp)
 add_queries_gtest(test_reactome ReactomeTest.cpp)
 add_queries_gtest(test_mixed_predicate_or MixedPredicateOrTest.cpp)
+add_queries_gtest(test_index_queries IndexQueriesTest.cpp)
 add_queries_gtest(test_const_scan_opt ConstScanOptTest.cpp)
 target_link_libraries(test_const_scan_opt
     PRIVATE turing_db_parser_s

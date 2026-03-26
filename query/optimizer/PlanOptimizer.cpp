@@ -3,6 +3,8 @@
 #include "LocalMemory.h"
 #include "PlanGraph.h"
 #include "CypherAST.h"
+#include "expr/Expr.h"
+#include "expr/Operators.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/ScanNodesByLabelNode.h"
@@ -480,5 +482,65 @@ void PlanOptimizer::rewriteConstWriteSources() {
                                                             nodeIDDecl,
                                                             valuesDecl);
         cwsNode->connectOut(writeNode);
+    }
+}
+/*
+ * Looks for
+ */
+void PlanOptimizer::rewritePropertyFilterWithIndex() {
+    rewriteNodePropertyFilterWithIndex();
+}
+
+void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
+    // DFS from ScanNodes. Break on VarNode (node has no filters)
+
+    std::vector<PlanGraphNode*> roots;
+    _plan->getRoots(roots);
+    for (PlanGraphNode* root : roots) {
+        auto* scanNodes = dynamic_cast<ScanNodesNode*>(root);
+        if (!scanNodes) {
+            continue;
+        }
+
+        const auto& scanNodesOutput = scanNodes->outputs();
+        bioassert(scanNodesOutput.size() != 1, "ScanNodes had non-singular output.");
+
+        PlanGraphNode* output = scanNodesOutput.front();
+        NodeFilterNode* filterNode = dynamic_cast<NodeFilterNode*>(output);
+        if (!filterNode) {
+            continue;
+        }
+
+        // TODO: Support label-constrained indexes
+        const LabelSet& labelsetConstraint = filterNode->getLabelConstraints();
+        if (!labelsetConstraint.empty()) {
+            continue;
+        }
+
+        [[maybe_unused]] const std::vector<Predicate*>& predicates =
+            filterNode->getPredicates();
+        [[maybe_unused]] const auto isIndexableConstraint = [](Predicate* pred) -> bool {
+            if (!pred) {
+                return false;
+            }
+            const Expr* expr = pred->getExpr();
+            if (!expr) {
+                return false;
+            }
+
+            const Expr::Kind kind = expr->getKind();
+            if (kind != Expr::Kind::BINARY) {
+                return false;
+            }
+
+            const auto* binExpr = dynamic_cast<const BinaryExpr*>(expr);
+            bioassert(binExpr, "Failed to get binary expression in predicate.");
+
+            const BinaryOperator op = binExpr->getOperator();
+            if (op != BinaryOperator::Equal) {
+            }
+
+            return true;
+        };
     }
 }
