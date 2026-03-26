@@ -198,7 +198,7 @@ TEST_F(IndexQueriesTest, indexPersistsAfterSubsequentCommit) {
     EXPECT_TRUE(found) << "Index 'persistindex' should still be visible after a subsequent commit";
 }
 
-TEST_F(IndexQueriesTest, indexGoneAfterRebase) {
+TEST_F(IndexQueriesTest, indexGoneAfterRebaseWriteBuffer) {
     ChangeID change1, change2;
 
     newChange(), change1 = _currentChange;
@@ -214,3 +214,22 @@ TEST_F(IndexQueriesTest, indexGoneAfterRebase) {
     EXPECT_EQ(0, countIndexes())
         << "After rebase, all indexes should be reset and showIndexes should return 0 rows";
 }
+
+TEST_F(IndexQueriesTest, indexGoneAfterRebaseDataPart) {
+    ChangeID change1, change2;
+
+    newChange(), change1 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX rebaseindex FOR (n) ON n.age", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    newChange(), change2 = _currentChange;
+    ASSERT_TRUE(query("CREATE (n:RebaseTestNode { val: 99 })", emptyCallback));
+
+    // Submit change2 first so that change1 must rebase when submitted
+    submitChange(change2);
+    submitChange(change1);
+
+    EXPECT_EQ(0, countIndexes())
+        << "After rebase, all indexes should be reset and showIndexes should return 0 rows";
+}
+

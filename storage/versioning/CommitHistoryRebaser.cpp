@@ -1,12 +1,13 @@
 #include "CommitHistoryRebaser.h"
 
+#include <spdlog/spdlog.h>
+
 #include "CommitView.h"
 #include "CommitHistory.h"
 #include "DataPartRebaser.h"
 
 #include "versioning/EntityIDRebaser.h"
 #include "versioning/MetadataRebaser.h"
-#include "spdlog/spdlog.h"
 
 using namespace db;
 

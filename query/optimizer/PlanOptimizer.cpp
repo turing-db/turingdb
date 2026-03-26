@@ -5,6 +5,7 @@
 #include "CypherAST.h"
 #include "expr/Expr.h"
 #include "expr/Operators.h"
+#include "expr/PropertyExpr.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/ScanNodesByLabelNode.h"
@@ -517,9 +518,13 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
             continue;
         }
 
-        [[maybe_unused]] const std::vector<Predicate*>& predicates =
-            filterNode->getPredicates();
-        [[maybe_unused]] const auto isIndexableConstraint = [](Predicate* pred) -> bool {
+        const std::vector<Predicate*>& predicates = filterNode->getPredicates();
+        // TODO check if all equality in disjunctive normal form, not just single equality
+        if (predicates.size() != 1) {
+            continue;
+        }
+
+        const auto isIndexableConstraint = [](Predicate* pred) -> bool {
             if (!pred) {
                 return false;
             }
@@ -538,9 +543,42 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
 
             const BinaryOperator op = binExpr->getOperator();
             if (op != BinaryOperator::Equal) {
+                return false;
+            }
+
+            const Expr* lhs = binExpr->getLHS();
+            const Expr* rhs = binExpr->getRHS();
+
+            const Expr::Kind lhsKind = lhs->getKind();
+            const Expr::Kind rhsKind = rhs->getKind();
+
+            const bool pel =
+                lhsKind == Expr::Kind::PROPERTY && rhsKind == Expr::Kind::LITERAL;
+
+            const bool lep =
+                lhsKind == Expr::Kind::LITERAL && rhsKind == Expr::Kind::PROPERTY;
+
+            if (!pel && !lep) {
+                return false;
             }
 
             return true;
         };
+
+        if (!isIndexableConstraint(predicates.front())) {
+            continue;
+        }
+
+        const Predicate* pred = predicates.front();
+        const auto* binExpr = dynamic_cast<const BinaryExpr*>(pred->getExpr());
+        const Expr* lhs = binExpr->getLHS();
+        const Expr* rhs = binExpr->getRHS();
+
+        if (lhs->getKind() == Expr::Kind::PROPERTY) {
+            [[maybe_unused]] const auto* propExpr = dynamic_cast<const PropertyExpr*>(lhs);
+
+            const auto* literal = dynamic_cast<const Literal*>(rhs);
+            [[maybe_unused]] const auto x = literal->getType();
+        }
     }
 }

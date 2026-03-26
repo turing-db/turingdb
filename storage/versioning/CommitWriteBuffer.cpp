@@ -5,6 +5,8 @@
 
 #include <range/v3/view/reverse.hpp>
 
+#include <spdlog/spdlog.h>
+
 #include "Graph.h"
 #include "ID.h"
 #include "columns/ColumnVector.h"
@@ -433,5 +435,12 @@ void CommitWriteBufferRebaser::rebase() {
         for (auto& [e, _]  : updatedEdges) {
             e = _idRebaser->rebaseEdgeID(e);
         }
+    }
+
+    // TODO: Rebase indexes, don't reset
+    static constexpr bool RESET_INDEXES_ON_REBASE = true;
+    if (RESET_INDEXES_ON_REBASE) {
+        spdlog::warn("Rebase: resetting indexes.");
+        _buffer->_pendingIndexes.clear();
     }
 }
