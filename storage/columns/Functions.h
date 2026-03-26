@@ -187,53 +187,27 @@ public:
                           const types::Embedding::Primitive& b);
 };
 
-static void getPropertyTypesString(std::string& out, const GraphView view, NodeID n) {
+template <TypedInternalID ID>
+static void getPropertyTypesString(std::string& out, const GraphView view, ID n) {
     out.clear();
     const PropertyTypeMap& ptMap = view.metadata().propTypes();
     bool first = true;
     std::unordered_set<PropertyTypeID> seen;
 
     for (const auto& part : view.dataparts()) {
-        const PropertyManager& props = part->nodeProperties();
-        for (const auto& entry : props) {
-            const PropertyTypeID ptId = entry.first;
-            if (seen.contains(ptId)) {
-                continue;
-            }
-            if (!props.has(ptId, n.getValue())) {
-                continue;
-            }
-            seen.insert(ptId);
+        const PropertyManager& props = std::same_as<ID, NodeID>
+            ? part->nodeProperties()
+            : part->edgeProperties();
 
-            const std::optional<std::string_view> name = ptMap.getName(ptId);
-            bioassert(name, "Could not get name of PropertyTypeID {}.", ptId.getValue());
-
-            if (!first) {
-                out += ", ";
-            }
-            out += *name;
-            first = false;
+        const PropertyTypeSet* set = props.tryGetPropertyTypeSet(n.getValue());
+        if (!set) {
+            continue;
         }
-    }
-}
 
-static void getPropertyTypesString(std::string& out, const GraphView view, EdgeID e) {
-    out.clear();
-    const PropertyTypeMap& ptMap = view.metadata().propTypes();
-    bool first = true;
-    std::unordered_set<PropertyTypeID> seen;
-
-    for (const auto& part : view.dataparts()) {
-        const PropertyManager& props = part->edgeProperties();
-        for (const auto& entry : props) {
-            const PropertyTypeID ptId = entry.first;
-            if (seen.contains(ptId)) {
+        for (const PropertyTypeID ptId : set->get()) {
+            if (!seen.insert(ptId).second) {
                 continue;
             }
-            if (!props.has(ptId, e.getValue())) {
-                continue;
-            }
-            seen.insert(ptId);
 
             const std::optional<std::string_view> name = ptMap.getName(ptId);
             bioassert(name, "Could not get name of PropertyTypeID {}.", ptId.getValue());
@@ -241,6 +215,7 @@ static void getPropertyTypesString(std::string& out, const GraphView view, EdgeI
             if (!first) {
                 out += ", ";
             }
+
             out += *name;
             first = false;
         }

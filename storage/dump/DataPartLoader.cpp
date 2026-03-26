@@ -298,8 +298,10 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(DataPartID partID,
         }
     }
 
-    part->_nodeProperties->buildTypeMapping();
-    part->_edgeProperties->buildTypeMapping();
+    part->_nodeProperties->buildTypeMapping(part->_firstNodeID.getValue(),
+                                            part->getNodeContainerSize());
+    part->_edgeProperties->buildTypeMapping(part->_firstEdgeID.getValue(),
+                                            part->getEdgeContainerSize());
 
 #ifndef DISABLE_STRING_INDEX
     // Load node StringIndexer

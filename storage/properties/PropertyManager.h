@@ -1,6 +1,5 @@
 #pragma once
 
-#include <algorithm>
 #include <memory>
 #include <unordered_map>
 
@@ -66,7 +65,7 @@ public:
         _embeddings.emplace(ptID, static_cast<PropertyContainer*>(ptr));
     }
 
-    void buildTypeMapping();
+    void buildTypeMapping(EntityID firstCoreEntityID, size_t coreEntityCount);
 
     template <SupportedType T, typename... Args>
     void add(PropertyTypeID ptID, EntityID entityID, Args&&... args) {
@@ -79,18 +78,22 @@ public:
     }
 
     bool has(PropertyTypeID ptID, EntityID entityID) const {
-        const PropertyTypeSet* set = _typeMapping->tryGetPropertyTypeSet(entityID);
-        if (!set) {
+        const auto containerIt = _map.find(ptID);
+        if (containerIt == _map.end()) {
             return false;
         }
 
-        return set->contains(ptID);
+        return containerIt->second->has(entityID);
     }
 
     template <SupportedType T>
     const T::Pritimive& get(PropertyTypeID ptID, EntityID entityID) const {
         const TypedPropertyContainer<T>& container = getContainer<T>(ptID);
         return container.get(entityID);
+    }
+
+    const PropertyTypeSet* tryGetPropertyTypeSet(EntityID entityID) const {
+        return _typeMapping->tryGetPropertyTypeSet(entityID);
     }
 
     template <SupportedType T>
@@ -101,16 +104,12 @@ public:
 
     template <SupportedType T>
     const T::Primitive* tryGet(PropertyTypeID ptID, EntityID entityID) const {
-        const PropertyTypeSet* set = _typeMapping->tryGetPropertyTypeSet(entityID);
-        if (!set) {
+        const TypedPropertyContainer<T>* container = tryGetContainer<T>(ptID);
+        if (!container) {
             return nullptr;
         }
 
-        if (!set->contains(ptID)) {
-            return nullptr;
-        }
-
-        return &getContainer<T>(ptID).get(entityID);
+        return container->tryGet(entityID);
     }
 
     template <SupportedType T>

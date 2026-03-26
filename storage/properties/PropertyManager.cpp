@@ -16,7 +16,8 @@ PropertyManager::PropertyManager()
 PropertyManager::~PropertyManager() {
 }
 
-void PropertyManager::buildTypeMapping() {
+void PropertyManager::buildTypeMapping(EntityID firstCoreEntityID,
+                                       size_t coreEntityCount) {
     _typeMapping = std::make_unique<PropertyTypeTrie>();
 
     std::unordered_map<PropertyTypeID, std::span<const EntityID>> map;
@@ -24,7 +25,7 @@ void PropertyManager::buildTypeMapping() {
         map.emplace(ptID, container->ids());
     }
 
-    _typeMapping->build(map);
+    _typeMapping->build(map, firstCoreEntityID, coreEntityCount);
 }
 
 void PropertyManager::fillEntityPropertyView(EntityID entityID,
