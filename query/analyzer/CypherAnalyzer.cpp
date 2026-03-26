@@ -8,11 +8,13 @@
 #include "DiagnosticsManager.h"
 #include "EdgePattern.h"
 #include "EntityPattern.h"
+#include "Literal.h"
 #include "NodePattern.h"
 #include "QualifiedName.h"
 #include "ReadStmtAnalyzer.h"
 #include "Symbol.h"
 #include "SourceManager.h"
+#include "SymbolChain.h"
 #include "WriteStmtAnalyzer.h"
 #include "ExprAnalyzer.h"
 #include "QueryCommand.h"
@@ -495,6 +497,15 @@ void CypherAnalyzer::analyze(const InstallExtensionQuery* query) {
 void CypherAnalyzer::analyze(const CreateNodePropertyIndexQuery* query) {
     const NodePattern* node = query->nodePattern();
     bioassert(node, "Failed to get node pattern.");
+
+    const SymbolChain* labels = node->labels();
+    const MapLiteral* properties = node->getProperties();
+
+    const bool haveLabelConstraints = labels && !labels->empty();
+    const bool havePropertyConstraints = properties && !properties->empty();
+    if (haveLabelConstraints || havePropertyConstraints) {
+        throwError("Constrained node indexes are not yet supported.", node);
+    }
 
     PropertyExpr* propertyExpr = query->propertyExpr();
     bioassert(propertyExpr, "Failed to get property expression.");
