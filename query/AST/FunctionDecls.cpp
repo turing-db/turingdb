@@ -15,6 +15,10 @@ void FunctionDecls::initDefault() {
     edgeType->setArguments({EvaluatedType::EdgePattern});
     edgeType->setReturnTypes({{EvaluatedType::String}});
 
+    FunctionSignature* type = createFunction("type");
+    type->setArguments({EvaluatedType::EdgePattern});
+    type->setReturnTypes({{EvaluatedType::String}});
+
     FunctionSignature* labels = createFunction("labels");
     labels->setArguments({EvaluatedType::NodePattern});
     labels->setReturnTypes({{EvaluatedType::String}});
