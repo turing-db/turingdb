@@ -24,6 +24,8 @@ private:
     void rewriteScanByLabels();
     void rewriteScanByConstIDs();
     void rewriteConstWriteSources();
+    void rewritePropertyFilterWithIndex();
+    void rewriteNodePropertyFilterWithIndex();
 };
 
 }
