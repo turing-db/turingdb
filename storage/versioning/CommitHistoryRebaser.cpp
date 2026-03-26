@@ -6,6 +6,7 @@
 
 #include "versioning/EntityIDRebaser.h"
 #include "versioning/MetadataRebaser.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -13,6 +14,15 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
                                   const EntityIDRebaser& entityRebaser,
                                   DataPartRebaser& dataPartRebaser,
                                   const CommitHistory& prevHistory) {
+    // Clear the journal: WriteSets may change on reflush after rebase
+    _history.journal().clear();
+
+    // TODO: Rebase indexes, don't reset
+    static constexpr bool RESET_INDEXES_ON_REBASE = true;
+    if (RESET_INDEXES_ON_REBASE) {
+        spdlog::warn("Rebase: resetting indexes.");
+        _history._validIndexes.clear();
+    }
     // Dataparts
     auto newDataparts = prevHistory._allDataparts;
 
