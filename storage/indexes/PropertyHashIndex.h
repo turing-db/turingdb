@@ -38,6 +38,8 @@ public:
 
     void query(const Column* query, Column* result) final;
 
+    size_t size() const final { return _hashTable.size(); }
+
 private:
     PropertyTypeID _propID;
     PropertyHashMap<PropertyPrimitive, IDContainer, MapType> _hashTable;
@@ -51,6 +53,8 @@ template <typename K, typename V, typename HashMap>
 class PropertyHashMap {
 public:
     V& operator[](const K& key) { return _hashMap[key]; }
+
+    size_t size() const { return _hashMap.size(); }
 
 private:
     HashMap _hashMap;
