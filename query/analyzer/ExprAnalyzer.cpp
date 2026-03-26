@@ -698,6 +698,10 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::Tuple:
         case EvaluatedType::GraphPath:
         case EvaluatedType::ValueType:
+        case EvaluatedType::Label:
+        case EvaluatedType::LabelSet:
+        case EvaluatedType::PropertyType:
+        case EvaluatedType::EdgeType:
         case EvaluatedType::_SIZE:
             return false;
     }

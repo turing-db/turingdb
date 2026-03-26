@@ -145,6 +145,10 @@ ValueType evaluatedToValueType(EvaluatedType type) {
         case EvaluatedType::GraphPath:
         case EvaluatedType::Tuple:
         case EvaluatedType::ValueType:
+        case EvaluatedType::Label:
+        case EvaluatedType::LabelSet:
+        case EvaluatedType::PropertyType:
+        case EvaluatedType::EdgeType:
         case EvaluatedType::_SIZE:
             return ValueType::Invalid;
     }
