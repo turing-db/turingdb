@@ -57,7 +57,67 @@ size_t PropertyHashIndex<P, I>::size() const {
 }
 
 template <SupportedType P, TypedInternalID I>
-void PropertyHashIndex<P, I>::query(const Column* query, Column* result) {
+void PropertyHashIndex<P, I>::query(const Column* input, Column* result) {
+    auto* output = dynamic_cast<ColumnVector<I>*>(result);
+    bioassert(output, "Invalid output column to property index query.");
+
+    auto* vecInput = dynamic_cast<const ColumnVector<PropertyPrimitive>*>(input);
+
+    if (vecInput) {
+        query(vecInput, output);
+        return;
+    }
+
+    auto* constInput = dynamic_cast<const ColumnConst<PropertyPrimitive>*>(input);
+
+    if (constInput) {
+        query(constInput, output);
+        return;
+    }
+
+    bioassert(false, "Invalid input column to PropertyHashIndex query.");
+}
+
+template <SupportedType P, TypedInternalID I>
+void PropertyHashIndex<P, I>::query(const ColumnVector<PropertyPrimitive>* input,
+                                    ColumnVector<I>* result) {
+    result->clear();
+
+    for (const PropertyPrimitive propValue : *input) {
+        const auto findIt = _hashTable.find(propValue);
+        const bool contains = findIt == _hashTable.end();
+        if (!contains) {
+            continue;
+        }
+
+        const IDContainer& matches = findIt->second;
+        const size_t sz = matches.size();
+
+        for (size_t i = 0; i < sz; i++) {
+            result->push_back(matches[i]);
+        }
+    }
+}
+
+template <SupportedType P, TypedInternalID I>
+void PropertyHashIndex<P, I>::query(const ColumnConst<PropertyPrimitive>* input,
+                                    ColumnVector<I>* result) {
+    result->clear();
+
+    const PropertyPrimitive propValue = input->getRaw();
+
+    const auto findIt = _hashTable.find(propValue);
+    const bool contains = findIt == _hashTable.end();
+    if (!contains) {
+        return;
+    }
+
+    const IDContainer& matches = findIt->second;
+    const size_t sz = matches.size();
+
+    for (size_t i = 0; i < sz; i++) {
+        result->push_back(matches[i]);
+    }
 }
 
 namespace db {
