@@ -133,7 +133,10 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char)
                 || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Char)
                 || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)
-                || pair == TypePairBitset(EvaluatedType::Embedding, EvaluatedType::Embedding)) {
+                || pair == TypePairBitset(EvaluatedType::Embedding, EvaluatedType::Embedding)
+                || pair == TypePairBitset(EvaluatedType::Label, EvaluatedType::Label)
+                || pair == TypePairBitset(EvaluatedType::EdgeType, EvaluatedType::EdgeType)
+                || pair == TypePairBitset(EvaluatedType::PropertyType, EvaluatedType::PropertyType)) {
                 break;
             }
 
