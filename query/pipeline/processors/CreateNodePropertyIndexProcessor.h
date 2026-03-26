@@ -10,6 +10,7 @@ namespace db {
 
 class PipelineV2;
 class ExecutionContext;
+class CommitBuilder;
 
 class CreateNodePropertyIndexProcessor final : public Processor {
 public:
@@ -27,6 +28,7 @@ public:
 
 protected:
     ExecutionContext* _ctxt {nullptr};
+    CommitBuilder* _commitBuilder {nullptr};
 
     PipelineBlockOutputInterface _output;
 

@@ -56,6 +56,8 @@ set(storage_sources
         indexes/StringIndex.cpp
         indexers/StringPropertyIndexer.cpp
 
+        indexes/IndexManager.cpp
+
         properties/PropertyContainer.cpp
         properties/PropertyManager.cpp
 
