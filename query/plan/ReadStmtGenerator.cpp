@@ -156,6 +156,11 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
         for (SymbolExpr* item : yieldItems->getItems()) {
             _variables->setProducer(item->getDecl(), procNode);
         }
+
+        WhereClause* where = yieldItems->getWhereClause();
+        if (where) {
+            generateWhereClause(where);
+        }
     }
 
     if (callStmt->isStandaloneCall()) {
@@ -625,6 +630,16 @@ void ReadStmtGenerator::placePredicates() {
             throwError("Predicates without dependencies are not supported yet", pred->getExpr());
         }
 
+        // Check if all dependencies are from procedure producers (no VarNodes)
+        bool allProcedureDeps = std::ranges::all_of(deps.getVarDeps(), [](const auto& dep) {
+            return dep._producerNode->getOpcode() == PlanGraphOpcode::PROCEDURE_EVAL;
+        });
+
+        if (allProcedureDeps) {
+            placeProcedurePredicate(pred.get());
+            continue;
+        }
+
         // Step 1: find the earliest point on the graph where to place the join
         VarNode* var = deps.findCommonSuccessor(_topology.get(), nullptr);
 
@@ -864,7 +879,8 @@ void ReadStmtGenerator::insertShortestPathNode(VarNode* source,
 // predicate does not need to be added to the filter
 bool ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* dependency, Predicate* pred) {
     FilterNode* filter = _variables->getNodeFilter(node);
-    const auto* dependencyVarDecl = static_cast<VarDeclProviderNode*>(dependency)->getVarDecl();
+    auto* depProvider = dynamic_cast<VarDeclProviderNode*>(dependency);
+    const VarDecl* dependencyVarDecl = depProvider ? depProvider->getVarDecl() : nullptr;
     const auto [path, ancestorNode] = _topology->getShortestPath(node, dependency);
 
     switch (path) {
@@ -990,6 +1006,53 @@ bool ReadStmtGenerator::tryPlaceValueHashJoin(FilterNode* filter, VarNode* node,
     PlanGraphNode* depBranchTip = _topology->getBranchTip(dependency);
     depBranchTip->connectOut(join);
     return true;
+}
+
+void ReadStmtGenerator::placeProcedurePredicate(Predicate* pred) {
+    ExprDependencies& deps = pred->getDependencies();
+    const auto& varDeps = deps.getVarDeps();
+
+    // Try VHJ for binary equality predicates
+    const BinaryExpr* binExpr = dynamic_cast<const BinaryExpr*>(pred->getExpr());
+    if (binExpr && binExpr->getOperator() == BinaryOperator::Equal
+        && varDeps.size() == 2 && deps.getFuncDeps().empty()) {
+
+        const Expr* lhs = binExpr->getLHS();
+        const Expr* rhs = binExpr->getRHS();
+        const bool validLhs = lhs->getKind() == Expr::Kind::SYMBOL || lhs->getKind() == Expr::Kind::PROPERTY;
+        const bool validRhs = rhs->getKind() == Expr::Kind::SYMBOL || rhs->getKind() == Expr::Kind::PROPERTY;
+
+        if (validLhs && validRhs) {
+            const VarDecl* firstKey = lhs->getExprVarDecl();
+            const VarDecl* secondKey = rhs->getExprVarDecl();
+
+            JoinNode* join = _tree->create<JoinNode>(firstKey,
+                                                     secondKey,
+                                                     secondKey,
+                                                     JoinType::PREDICATE);
+
+            for (const auto& dep : varDeps) {
+                generateDependency(dep._producerNode, dep._expr);
+                PlanGraphNode* tip = _topology->getBranchTip(dep._producerNode);
+                tip->connectOut(join);
+            }
+            return;
+        }
+    }
+
+    // Fallback: CartesianProduct + NodeFilterNode for non-equality predicates
+    NodeFilterNode* filter = _tree->create<NodeFilterNode>();
+    filter->addPredicate(pred);
+    pred->setFilterNode(filter);
+
+    CartesianProductNode* cart = _tree->create<CartesianProductNode>();
+    cart->connectOut(filter);
+
+    for (const auto& dep : varDeps) {
+        generateDependency(dep._producerNode, dep._expr);
+        PlanGraphNode* tip = _topology->getBranchTip(dep._producerNode);
+        tip->connectOut(cart);
+    }
 }
 
 void ReadStmtGenerator::throwError(std::string_view msg, const void* obj) const {

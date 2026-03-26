@@ -97,6 +97,7 @@ private:
 
     bool shouldPlaceValueHashJoin(VarNode* localVar, PlanGraphNode* remoteNode);
     bool tryPlaceValueHashJoin(FilterNode* filter, VarNode* node, PlanGraphNode* dependency, Predicate* pred);
+    void placeProcedurePredicate(Predicate* pred);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

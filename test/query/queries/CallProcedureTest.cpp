@@ -3,7 +3,9 @@
 #include "SystemManager.h"
 #include "TuringDB.h"
 #include "QueryConfig.h"
+#include "QueryStatus.h"
 #include "SimpleGraph.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
@@ -133,6 +135,96 @@ TEST_F(CallProcedureTest, DescribeCommit) {
 
     ASSERT_TRUE(res.isOk());
     ASSERT_TRUE(executed);
+}
+
+TEST_F(CallProcedureTest, YieldWhereSelfJoin) {
+    // Self-join on label names: CALL db.labels() twice with WHERE a = b
+    // Should return 9 (one per label), not 81 (9 * 9 cartesian)
+    bool executed = false;
+    const auto res = _db->query(
+        "CALL db.labels() YIELD label AS a "
+        "CALL db.labels() YIELD label AS b "
+        "WHERE a = b RETURN count(*)",
+        "simpledb",
+        &_env->getMem(), &_queryConfig,
+        [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df != nullptr);
+            ASSERT_EQ(df->cols().size(), 1);
+
+            const auto* col = df->cols().at(0)->as<ColumnConst<uint64_t>>();
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_EQ(col->at(0), 9u);
+
+            executed = true;
+        });
+
+    ASSERT_TRUE(res) << res.getError();
+    ASSERT_TRUE(executed);
+}
+
+TEST_F(CallProcedureTest, YieldWhereCrossJoin) {
+    // Cross-join between labels and propertyTypes on their string columns
+    // Labels: 9 entries (label), PropertyTypes: 8 entries (propertyType)
+    // WHERE a = b should only match where a label name equals a property type name
+    bool executed = false;
+    const auto res = _db->query(
+        "CALL db.labels() YIELD label AS a "
+        "CALL db.propertyTypes() YIELD propertyType AS b "
+        "WHERE a = b RETURN count(*)",
+        "simpledb",
+        &_env->getMem(), &_queryConfig,
+        [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df != nullptr);
+            ASSERT_EQ(df->cols().size(), 1);
+
+            const auto* col = df->cols().at(0)->as<ColumnConst<uint64_t>>();
+            ASSERT_TRUE(col != nullptr);
+            // Result must be less than 9 * 8 = 72 (cartesian product)
+            EXPECT_LT(col->at(0), 72u);
+
+            executed = true;
+        });
+
+    ASSERT_TRUE(res) << res.getError();
+    ASSERT_TRUE(executed);
+}
+
+TEST_F(CallProcedureTest, YieldWhereSelfJoinByID) {
+    // Self-join on label IDs: both sides are LabelID, so hash join works
+    // Should return 9 (one per label), not 81 (9 * 9 cartesian)
+    bool executed = false;
+    const auto res = _db->query(
+        "CALL db.labels() YIELD id AS l "
+        "CALL db.labels() YIELD id AS m "
+        "WHERE l = m RETURN count(*)",
+        "simpledb",
+        &_env->getMem(), &_queryConfig,
+        [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df != nullptr);
+            ASSERT_EQ(df->cols().size(), 1);
+
+            const auto* col = df->cols().at(0)->as<ColumnConst<uint64_t>>();
+            ASSERT_TRUE(col != nullptr);
+            ASSERT_EQ(col->at(0), 9u);
+
+            executed = true;
+        });
+
+    ASSERT_TRUE(res) << res.getError();
+    ASSERT_TRUE(executed);
+}
+
+TEST_F(CallProcedureTest, YieldWhereCrossJoinIncompatibleTypes) {
+    // Exact query from issue #549: LabelID != PropertyTypeID
+    const auto res = _db->query(
+        "CALL db.labels() YIELD id AS l "
+        "CALL db.propertyTypes() YIELD id AS p "
+        "WHERE l = p RETURN count(*)",
+        "simpledb",
+        &_env->getMem(), &_queryConfig,
+        [&](const Dataframe*) -> void {});
+
+    EXPECT_EQ(res.getStatus(), QueryStatus::Status::ANALYZE_ERROR);
 }
 
 int main(int argc, char** argv) {

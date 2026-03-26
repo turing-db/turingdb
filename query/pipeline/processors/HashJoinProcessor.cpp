@@ -699,6 +699,9 @@ void HashJoinProcessor<LeftKey, RightKey>::flushLeftStream(size_t& rowsRemaining
 #define HASH_JOIN_KEY_TYPES(X) \
     X(NodeID)                  \
     X(EdgeID)                  \
+    X(LabelID)                 \
+    X(EdgeTypeID)              \
+    X(PropertyTypeID)          \
     X(int64_t)                 \
     X(uint64_t)                \
     X(double)                  \
