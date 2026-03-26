@@ -45,7 +45,7 @@ CreateNodePropertyIndexProcessor* CreateNodePropertyIndexProcessor::create(Pipel
 void CreateNodePropertyIndexProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
-    const Transaction* rawTx = ctxt->getTransaction();
+    Transaction* rawTx = ctxt->getTransaction();
     if (!rawTx) {
         throw FatalException(
             "Attempted to create node property index without transaction.");
@@ -55,6 +55,13 @@ void CreateNodePropertyIndexProcessor::prepare(ExecutionContext* ctxt) {
         throw PipelineException(
             "Create index: Cannot perform writes outside of a write transaction");
     }
+
+    auto& tx = rawTx->get<PendingCommitWriteTx>();
+    _commitBuilder = tx.commitBuilder();
+
+    bioassert(_commitBuilder,
+              "Could not get commit builder to create node property index.");
+
     markAsPrepared();
 }
 
