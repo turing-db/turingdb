@@ -4,8 +4,10 @@
 #include <variant>
 #include <vector>
 
+#include "ArcManager.h"
 #include "DataPart.h"
 #include "ID.h"
+#include "indexes/Index.h"
 #include "metadata/PropertyType.h"
 #include "views/GraphView.h"
 #include "writers/DataPartBuilder.h"
@@ -48,6 +50,7 @@ public:
      using DeletedEdges = std::unordered_set<EdgeID>;
      using UpdatedNodes = std::vector<NodeUpdate>;
      using UpdatedEdges = std::vector<EdgeUpdate>;
+     using PendingIndexes = std::vector<WeakArc<Index>>;
 
      explicit CommitWriteBuffer(CommitJournal& journal, GraphView view);
 
@@ -163,6 +166,8 @@ public:
 
     void addHangingEdges(const GraphView& view);
 
+    void addPendingIndex(const WeakArc<Index>& index);
+
     void setFlushed() { _flushed = true; }
     void setUnflushed() { _flushed = false; }
     bool isFlushed() const { return _flushed; }
@@ -197,6 +202,8 @@ private:
     UpdatedNodes _updatedNodes;
     UpdatedEdges _updatedEdges;
 
+    PendingIndexes _pendingIndexes;
+
     PendingNodes& pendingNodes() { return _pendingNodes; }
     PendingEdges& pendingEdges() { return _pendingEdges; }
 
@@ -214,13 +221,13 @@ private:
 
     /// Updates a property of an edge which is already committed
     void applyExistingEdgeUpdate(DataPartBuilder& builder,
-                               const EdgeRecord& record,
-                               const CommitWriteBuffer::UntypedProperty& prop);
+                                 const EdgeRecord& record,
+                                 const CommitWriteBuffer::UntypedProperty& prop);
 
     /// Updates a property of an edge which is not yet committed
     void applyPendingEdgeUpdate(DataPartBuilder& builder,
-                              EdgeID edgeID,
-                              const CommitWriteBuffer::UntypedProperty& prop);
+                                EdgeID edgeID,
+                                const CommitWriteBuffer::UntypedProperty& prop);
 };
 
 class CommitWriteBufferRebaser {

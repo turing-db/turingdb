@@ -20,6 +20,8 @@ public:
     using NodeIndexMap = std::unordered_map<LabelSetID, PropertyIndexMap>;
     using EdgeIndexMap = std::unordered_map<EdgeTypeID, PropertyIndexMap>;
 
+    IndexManager();
+    ~IndexManager();
 
     template <SupportedType P>
     WeakArc<Index> createNodeIndex(PropertyTypeID ptID,

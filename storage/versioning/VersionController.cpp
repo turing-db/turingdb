@@ -37,6 +37,7 @@ VersionController::~VersionController() {
     _commits.clear();
     _dataManager.reset();
     _partManager.reset();
+    // @ref ~IndexManager() calls reset() on its arc manager
 }
 
 void VersionController::createFirstCommit() {

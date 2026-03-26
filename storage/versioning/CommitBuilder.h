@@ -59,8 +59,8 @@ public:
     DataPartBuilder& newBuilder();
 
     template <SupportedType P>
-    WeakArc<Index> newNodePropertyIndex(PropertyTypeID ptID,
-                                        LabelSetID lblset = LabelSetID::max());
+    [[nodiscard]] WeakArc<Index> newNodePropertyIndex(PropertyTypeID ptID,
+                                                      LabelSetID lblset = LabelSetID::max());
 
     void appendBuilder(std::unique_ptr<DataPartBuilder> builder);
 

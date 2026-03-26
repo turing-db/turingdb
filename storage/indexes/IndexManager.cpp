@@ -1,11 +1,22 @@
 #include "IndexManager.h"
 
+#include <memory>
+
 #include "ArcManager.h"
 #include "indexes/PropertyHashIndex.h"
 
 #include "metadata/SupportedType.h"
 
 using namespace db;
+
+IndexManager::IndexManager()
+    : _indexes(std::make_unique<ArcManager<Index>>())
+{
+}
+
+IndexManager::~IndexManager() {
+    _indexes.reset();
+}
 
 template <SupportedType P>
 WeakArc<Index> IndexManager::createNodeIndex(PropertyTypeID ptID, LabelSetID lblSet) {

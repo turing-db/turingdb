@@ -382,6 +382,10 @@ void CommitWriteBuffer::applyDeletions(Tombstones& tombstones) {
     }
 }
 
+void CommitWriteBuffer::addPendingIndex(const WeakArc<Index>& index) {
+    _pendingIndexes.push_back(index);
+}
+
 void CommitWriteBufferRebaser::rebase() {
     bioassert(_idRebaser, "Invalid _idRebaser");
     // We only need to rebase things which refer to a concrete NodeID or EdgeID.
