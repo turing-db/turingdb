@@ -631,9 +631,11 @@ void ReadStmtGenerator::placePredicates() {
         }
 
         // Check if all dependencies are from procedure producers (no VarNodes)
-        bool allProcedureDeps = std::ranges::all_of(deps.getVarDeps(), [](const auto& dep) {
-            return dep._producerNode->getOpcode() == PlanGraphOpcode::PROCEDURE_EVAL;
-        });
+        const bool allProcedureDeps = std::ranges::all_of(deps.getVarDeps(), 
+            [](const auto& dep) {
+                return dep._producerNode->getOpcode() == PlanGraphOpcode::PROCEDURE_EVAL;
+            }
+        );
 
         if (allProcedureDeps) {
             placeProcedurePredicate(pred.get());
@@ -1015,29 +1017,37 @@ void ReadStmtGenerator::placeProcedurePredicate(Predicate* pred) {
 
     // Try VHJ for binary equality predicates
     const BinaryExpr* binExpr = dynamic_cast<const BinaryExpr*>(pred->getExpr());
-    if (binExpr && binExpr->getOperator() == BinaryOperator::Equal
-        && varDeps.size() == 2 && deps.getFuncDeps().empty()) {
+    if (binExpr) {
+        const bool isEqual = (binExpr->getOperator() == BinaryOperator::Equal);
+        const bool hasTwoDependencies = (varDeps.size() == 2);
+        const bool noFuncDeps = deps.getFuncDeps().empty();
+        if (isEqual && hasTwoDependencies && noFuncDeps) {
+            const Expr* lhs = binExpr->getLHS();
+            const Expr* rhs = binExpr->getRHS();
+            const Expr::Kind lhsKind = lhs->getKind();
+            const Expr::Kind rhsKind = rhs->getKind();
+            const bool validLhs = (lhsKind == Expr::Kind::SYMBOL || lhsKind == Expr::Kind::PROPERTY);
+            const bool validRhs = (rhsKind == Expr::Kind::SYMBOL || rhsKind == Expr::Kind::PROPERTY);
 
-        const Expr* lhs = binExpr->getLHS();
-        const Expr* rhs = binExpr->getRHS();
-        const bool validLhs = lhs->getKind() == Expr::Kind::SYMBOL || lhs->getKind() == Expr::Kind::PROPERTY;
-        const bool validRhs = rhs->getKind() == Expr::Kind::SYMBOL || rhs->getKind() == Expr::Kind::PROPERTY;
+            if (validLhs && validRhs) {
+                const VarDecl* firstKey = lhs->getExprVarDecl();
+                const VarDecl* secondKey = rhs->getExprVarDecl();
 
-        if (validLhs && validRhs) {
-            const VarDecl* firstKey = lhs->getExprVarDecl();
-            const VarDecl* secondKey = rhs->getExprVarDecl();
+                // Insert a ValueHashJoin between the two procedure branches.
+                // Both branch tips are connected as inputs to the JoinNode,
+                // which will be translated to a HashJoinProcessor in the pipeline.
+                JoinNode* join = _tree->create<JoinNode>(firstKey,
+                                                         secondKey,
+                                                         secondKey,
+                                                         JoinType::PREDICATE);
+                for (const auto& dep : varDeps) {
+                    generateDependency(dep._producerNode, dep._expr);
+                    PlanGraphNode* tip = _topology->getBranchTip(dep._producerNode);
+                    tip->connectOut(join);
+                }
 
-            JoinNode* join = _tree->create<JoinNode>(firstKey,
-                                                     secondKey,
-                                                     secondKey,
-                                                     JoinType::PREDICATE);
-
-            for (const auto& dep : varDeps) {
-                generateDependency(dep._producerNode, dep._expr);
-                PlanGraphNode* tip = _topology->getBranchTip(dep._producerNode);
-                tip->connectOut(join);
+                return;
             }
-            return;
         }
     }
 
