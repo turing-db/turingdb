@@ -32,7 +32,7 @@ public:
     using PropertyPrimitive = P::Primitive;
     using MapType = PropertyHashMapImpl<PropertyPrimitive, IDContainer>::type;
 
-    explicit PropertyHashIndex(PropertyTypeID propertyID);
+    PropertyHashIndex(std::string_view name, PropertyTypeID propertyID);
 
     void init(GraphView view) final;
 

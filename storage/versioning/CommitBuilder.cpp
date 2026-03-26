@@ -82,9 +82,10 @@ DataPartBuilder& CommitBuilder::newBuilder() {
 }
 
 template <SupportedType P>
-WeakArc<Index> CommitBuilder::newNodePropertyIndex(PropertyTypeID ptID,
+WeakArc<Index> CommitBuilder::newNodePropertyIndex(std::string_view indexName,
+                                                   PropertyTypeID ptID,
                                                    LabelSetID lblset) {
-    return _controller->createNodePropertyIndex<P>(ptID, lblset);
+    return _controller->createNodePropertyIndex<P>(indexName, ptID, lblset);
 }
 
 CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
@@ -240,10 +241,10 @@ void CommitBuilder::initializeMerge(const Commit* prevCommit) {
 }
 
 namespace db {
-template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Int64>(PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::UInt64>(PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Double>(PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::String>(PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Bool>(PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Embedding>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Int64>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::UInt64>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Double>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::String>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Bool>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Embedding>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
 }

@@ -8,7 +8,11 @@ class Column;
 
 class Index {
 public:
-    Index() = default;
+    explicit Index(std::string_view name)
+        : _name(name)
+    {
+    }
+
     virtual ~Index() = default;
 
     Index(const Index&) = delete;

@@ -56,10 +56,11 @@ public:
         return _builders.empty() ? newBuilder() : *_builders.back();
     }
 
-    DataPartBuilder& newBuilder();
+    [[nodiscard]] DataPartBuilder& newBuilder();
 
     template <SupportedType P>
-    [[nodiscard]] WeakArc<Index> newNodePropertyIndex(PropertyTypeID ptID,
+    [[nodiscard]] WeakArc<Index> newNodePropertyIndex(std::string_view indexName,
+                                                      PropertyTypeID ptID,
                                                       LabelSetID lblset = LabelSetID::max());
 
     void appendBuilder(std::unique_ptr<DataPartBuilder> builder);
