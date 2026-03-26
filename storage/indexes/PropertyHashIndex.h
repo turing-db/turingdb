@@ -17,7 +17,7 @@ template <typename T>
 class ColumnConst;
 
 template <SupportedType P, TypedInternalID I>
-class PropertyHashIndex final : Index {
+class PropertyHashIndex final : public Index {
 public:
     using IDContainer = ColumnVector<I>;
     using PropertyPrimitive = P::Primitive;
