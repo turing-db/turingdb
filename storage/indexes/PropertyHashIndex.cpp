@@ -31,15 +31,29 @@ void PropertyHashIndex<P, I>::init(GraphView view) {
         bioassert(propManPtr, "Failed to get PropertyManager while initialising index.");
 
         const PropertyManager& propMan = *propManPtr;
-        const TypedPropertyContainer<P>& container = propMan.getContainer<P>(_propID);
+        const TypedPropertyContainer<P>* container = propMan.tryGetContainer<P>(_propID);
 
-        for (const auto& [id, val] : container.zipped()) {
+        if (!container) { // This DP doesn't have this property
+            continue;
+        }
+
+        for (const auto& [id, val] : container->zipped()) {
             IDContainer& assoc = _hashTable[val];
             assoc.emplace_back(id.getValue());
         }
     }
 
     _initialised = true;
+}
+
+template <SupportedType P, TypedInternalID I>
+size_t PropertyHashIndex<P, I>::size() const {
+    size_t size {0};
+    for (auto& [_, v] : _hashTable) {
+        const PropertyHashIndex::IDContainer& col = v;
+        size += col.size();
+    }
+    return size;
 }
 
 template <SupportedType P, TypedInternalID I>

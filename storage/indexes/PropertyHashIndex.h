@@ -38,7 +38,7 @@ public:
 
     void query(const Column* query, Column* result) final;
 
-    size_t size() const final { return _hashTable.size(); }
+    size_t size() const final;
 
 private:
     PropertyTypeID _propID;
@@ -55,6 +55,9 @@ public:
     V& operator[](const K& key) { return _hashMap[key]; }
 
     size_t size() const { return _hashMap.size(); }
+
+    auto begin() const { return _hashMap.begin(); }
+    auto end() const { return _hashMap.end(); }
 
 private:
     HashMap _hashMap;
