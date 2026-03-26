@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <math.h>
+#include <stdio.h>
 #include <algorithm>
+#include <charconv>
 #include <numeric>
 #include <random>
 #include <string>
@@ -97,14 +99,34 @@ static float dot(const Matrix& m, size_t rowA, size_t rowB) {
     return sum;
 }
 
-static std::string embeddingToLiteral(const Matrix& m, size_t row) {
-    std::string s = "[";
+static void appendEmbeddingLiteral(std::string& s,
+                                   const Matrix& m,
+                                   size_t row) {
+    char buf[32];
+    s += '[';
     for (size_t d = 0; d < m._cols; d++) {
         if (d > 0) s += ", ";
-        s += fmt::format("{:.6f}", m.at(row, d));
+        int n = snprintf(buf, sizeof(buf), "%.6f", m.at(row, d));
+        s.append(buf, n);
     }
-    s += "]";
-    return s;
+    s += ']';
+}
+
+static void appendUInt64(std::string& s, uint64_t v) {
+    char buf[24];
+    auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), v);
+    s.append(buf, ptr - buf);
+}
+
+static void buildSetQuery(std::string& q,
+                          uint64_t nodeID,
+                          const Matrix& embeddings,
+                          size_t row) {
+    q.clear();
+    q.append("MATCH (n) WHERE n = ");
+    appendUInt64(q, nodeID);
+    q.append(" SET n.emb = ");
+    appendEmbeddingLiteral(q, embeddings, row);
 }
 
 int main(int argc, const char** argv) {
@@ -146,8 +168,10 @@ int main(int argc, const char** argv) {
     // -----------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------
+    std::string q;
+
     const auto mustQuery = [&](std::string_view q, ChangeID chg = ChangeID::head()) {
-        auto res = db.query(q, graphName, &mem, &queryConfig, CommitHash::head(), chg);
+        const auto res = db.query(q, graphName, &mem, &queryConfig, CommitHash::head(), chg);
         if (!res.isOk()) {
             spdlog::error("Query failed: {}\n  {}", q, res.getError());
             exit(EXIT_FAILURE);
@@ -157,7 +181,7 @@ int main(int argc, const char** argv) {
     const auto queryWithCb = [&](std::string_view q,
                                  const QueryCallbacks::OnOutputData& cb,
                                  ChangeID chg = ChangeID::head()) {
-        auto res = db.query(q, graphName, &mem, &queryConfig, cb, CommitHash::head(), chg);
+        const auto res = db.query(q, graphName, &mem, &queryConfig, cb, CommitHash::head(), chg);
         if (!res.isOk()) {
             spdlog::error("Query failed: {}\n  {}", q, res.getError());
             exit(EXIT_FAILURE);
@@ -259,14 +283,12 @@ int main(int argc, const char** argv) {
     }
 
     {
-        auto changeRes = db.getSystemManager().newChange(graphName);
+        const auto changeRes = db.getSystemManager().newChange(graphName);
         Change* change = changeRes.value();
         ChangeID chg = change->id();
 
         for (size_t i = 0; i < N; i++) {
-            std::string q = fmt::format(
-                R"(MATCH (n) WHERE n = {} SET n.emb = {})",
-                nodeIDs[i].getValue(), embeddingToLiteral(embeddings, i));
+            buildSetQuery(q, nodeIDs[i].getValue(), embeddings, i);
             mustQuery(q, chg);
         }
 
@@ -292,8 +314,8 @@ int main(int argc, const char** argv) {
 
     std::unordered_set<uint64_t> reservedPairs;
     for (const auto& [a, b] : testPairs) {
-        auto ia = nameToIdx.find(a);
-        auto ib = nameToIdx.find(b);
+        const auto ia = nameToIdx.find(a);
+        const auto ib = nameToIdx.find(b);
         if (ia != nameToIdx.end() && ib != nameToIdx.end()) {
             reservedPairs.insert(edgeKey(ia->second, ib->second));
         }
@@ -302,12 +324,12 @@ int main(int argc, const char** argv) {
     std::vector<Edge> negativeEdges;
     {
         std::uniform_int_distribution<size_t> nodeDist(0, N - 1);
-        size_t target = positiveEdges.size();
+        const size_t target = positiveEdges.size();
         size_t attempts = 0;
         while (negativeEdges.size() < target && attempts < target * 20) {
-            size_t a = nodeDist(rng);
-            size_t b = nodeDist(rng);
-            uint64_t key = edgeKey(a, b);
+            const size_t a = nodeDist(rng);
+            const size_t b = nodeDist(rng);
+            const uint64_t key = edgeKey(a, b);
             if (a != b && edgeSet.find(key) == edgeSet.end()
                        && reservedPairs.find(key) == reservedPairs.end()) {
                 negativeEdges.push_back({a, b});
@@ -438,7 +460,7 @@ int main(int argc, const char** argv) {
     };
 
     // Open a single change for all epochs; COMMIT after each, SUBMIT at the end
-    auto trainChangeRes = db.getSystemManager().newChange(graphName);
+    const auto trainChangeRes = db.getSystemManager().newChange(graphName);
     Change* trainChange = trainChangeRes.value();
     ChangeID trainChg = trainChange->id();
 
@@ -486,13 +508,13 @@ int main(int argc, const char** argv) {
         size_t correct = 0;
 
         for (const auto& [u, v] : positiveEdges) {
-            float score = sigmoid(dot(h2, u, v));
+            const float score = sigmoid(dot(h2, u, v));
             loss -= logf(std::max(score, 1e-7f));
             if (score > 0.5f) correct++;
         }
 
         for (const auto& [u, v] : negativeEdges) {
-            float score = sigmoid(dot(h2, u, v));
+            const float score = sigmoid(dot(h2, u, v));
             loss -= logf(std::max(1.0f - score, 1e-7f));
             if (score <= 0.5f) correct++;
         }
@@ -509,8 +531,8 @@ int main(int argc, const char** argv) {
         dH2.zero();
 
         for (const auto& [u, v] : positiveEdges) {
-            float score = sigmoid(dot(h2, u, v));
-            float dScore = (score - 1.0f) / (float)totalEdges;
+            const float score = sigmoid(dot(h2, u, v));
+            const float dScore = (score - 1.0f) / (float)totalEdges;
             for (size_t d = 0; d < DIM; d++) {
                 dH2.at(u, d) += dScore * h2.at(v, d);
                 dH2.at(v, d) += dScore * h2.at(u, d);
@@ -518,8 +540,8 @@ int main(int argc, const char** argv) {
         }
 
         for (const auto& [u, v] : negativeEdges) {
-            float score = sigmoid(dot(h2, u, v));
-            float dScore = score / (float)totalEdges;
+            const float score = sigmoid(dot(h2, u, v));
+            const float dScore = score / (float)totalEdges;
             for (size_t d = 0; d < DIM; d++) {
                 dH2.at(u, d) += dScore * h2.at(v, d);
                 dH2.at(v, d) += dScore * h2.at(u, d);
@@ -554,9 +576,7 @@ int main(int argc, const char** argv) {
             const TimePoint t0Set = Clock::now();
 
             for (size_t i = 0; i < N; i++) {
-                std::string q = fmt::format(
-                    R"(MATCH (n) WHERE n = {} SET n.emb = {})",
-                    nodeIDs[i].getValue(), embeddingToLiteral(embeddings, i));
+                buildSetQuery(q, nodeIDs[i].getValue(), embeddings, i);
                 mustQuery(q, trainChg);
             }
 
@@ -626,14 +646,14 @@ int main(int argc, const char** argv) {
     }
 
     for (const auto& [a, b] : testPairs) {
-        auto ia = nameToIdx.find(a);
-        auto ib = nameToIdx.find(b);
+        const auto ia = nameToIdx.find(a);
+        const auto ib = nameToIdx.find(b);
         if (ia == nameToIdx.end() || ib == nameToIdx.end()) {
             continue;
         }
 
-        float score = sigmoid(dot(h2, ia->second, ib->second));
-        bool actual = originalEdges.count(edgeKey(ia->second, ib->second)) > 0;
+        const float score = sigmoid(dot(h2, ia->second, ib->second));
+        const bool actual = originalEdges.count(edgeKey(ia->second, ib->second)) > 0;
 
         fmt::print("  {} <-> {}  score={:.4f}  actual={}\n",
                    a, b, score, actual ? "EDGE" : "no edge");
