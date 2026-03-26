@@ -11,8 +11,11 @@
 using namespace db;
 
 template <SupportedType P, TypedInternalID I>
-PropertyHashIndex<P, I>::PropertyHashIndex(PropertyTypeID propertyID)
-    : _propID(propertyID) {
+PropertyHashIndex<P, I>::PropertyHashIndex(std::string_view name,
+                                           PropertyTypeID propertyID)
+    : Index(name),
+    _propID(propertyID)
+{
 }
 
 template <SupportedType P, TypedInternalID I>

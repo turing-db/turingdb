@@ -90,22 +90,22 @@ void CreateNodePropertyIndexProcessor::execute() {
 
     switch (valueType) {
         case ValueType::Int64:
-            newIndex =_commitBuilder->newNodePropertyIndex<types::Int64>(propID);
+            newIndex =_commitBuilder->newNodePropertyIndex<types::Int64>(_indexName, propID);
         break;
         case ValueType::UInt64:
-            newIndex =_commitBuilder->newNodePropertyIndex<types::UInt64>(propID);
+            newIndex =_commitBuilder->newNodePropertyIndex<types::UInt64>(_indexName, propID);
         break;
         case ValueType::Double:
-            newIndex =_commitBuilder->newNodePropertyIndex<types::Double>(propID);
+            newIndex =_commitBuilder->newNodePropertyIndex<types::Double>(_indexName, propID);
         break;
         case ValueType::String:
-            newIndex =_commitBuilder->newNodePropertyIndex<types::String>(propID);
+            newIndex =_commitBuilder->newNodePropertyIndex<types::String>(_indexName, propID);
         break;
         case ValueType::Bool:
-            newIndex =_commitBuilder->newNodePropertyIndex<types::Bool>(propID);
+            newIndex =_commitBuilder->newNodePropertyIndex<types::Bool>(_indexName, propID);
         break;
         case ValueType::Embedding:
-            newIndex = _commitBuilder->newNodePropertyIndex<types::Embedding>(propID);
+            newIndex = _commitBuilder->newNodePropertyIndex<types::Embedding>(_indexName, propID);
         break;
 
         case ValueType::_SIZE:

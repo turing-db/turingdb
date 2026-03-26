@@ -24,11 +24,13 @@ public:
     ~IndexManager();
 
     template <SupportedType P>
-    WeakArc<Index> createNodeIndex(PropertyTypeID ptID,
+    WeakArc<Index> createNodeIndex(std::string_view indexName,
+                                   PropertyTypeID ptID,
                                    LabelSetID lblset = _unconstrainedLabels);
 
     template <SupportedType P>
-    WeakArc<Index> createEdgeIndex(PropertyTypeID ptID,
+    WeakArc<Index> createEdgeIndex(std::string_view indexName,
+                                   PropertyTypeID ptID,
                                    EdgeTypeID type = _unconstrainedType);
 
 private:

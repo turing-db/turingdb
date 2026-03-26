@@ -233,17 +233,18 @@ DumpResult<void> VersionController::loadCommit(CommitHash hash,
 
 
 template <SupportedType P>
-WeakArc<Index> VersionController::createNodePropertyIndex(PropertyTypeID ptID,
+WeakArc<Index> VersionController::createNodePropertyIndex(std::string_view indexName,
+                                                          PropertyTypeID ptID,
                                                           LabelSetID lblset) {
-    return _indexManager.createNodeIndex<P>(ptID, lblset);
+    return _indexManager.createNodeIndex<P>(indexName, ptID, lblset);
 }
 
 
 namespace db {
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::Int64>(PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::UInt64>(PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::Double>(PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::String>(PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::Bool>(PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::Embedding>(PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Int64>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::UInt64>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Double>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::String>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Bool>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Embedding>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
 }

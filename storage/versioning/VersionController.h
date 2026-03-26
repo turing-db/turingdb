@@ -75,7 +75,9 @@ public:
     DataPartMap& getPartMap() { return _partMap; }
 
     template <SupportedType P>
-    WeakArc<Index> createNodePropertyIndex(PropertyTypeID ptID, LabelSetID lblset);
+    [[nodiscard]] WeakArc<Index> createNodePropertyIndex(std::string_view indexName,
+                                                         PropertyTypeID ptID,
+                                                         LabelSetID lblset);
 
 private:
     friend GraphLoader;
