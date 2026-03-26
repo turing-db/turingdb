@@ -881,6 +881,11 @@ void ReadStmtGenerator::insertShortestPathNode(VarNode* source,
 // predicate does not need to be added to the filter
 bool ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* dependency, Predicate* pred) {
     FilterNode* filter = _variables->getNodeFilter(node);
+
+    // dependencyVarDecl may be null when the dependency is a ProcedureEvalNode
+    // (which does not inherit from VarDeclProviderNode). This is valid in the
+    // mixed MATCH + CALL case: the procedure dependency takes the NoPath branch
+    // below, which does not use dependencyVarDecl.
     auto* depProvider = dynamic_cast<VarDeclProviderNode*>(dependency);
     const VarDecl* dependencyVarDecl = depProvider ? depProvider->getVarDecl() : nullptr;
     const auto [path, ancestorNode] = _topology->getShortestPath(node, dependency);
@@ -892,6 +897,7 @@ bool ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* depende
         }
 
         case PlanGraphTopology::PathToDependency::UndirectedPath: {
+            bioassert(dependencyVarDecl, "UndirectedPath requires a VarDeclProviderNode dependency");
             const auto* varDecl = static_cast<VarNode*>(ancestorNode)->getVarDecl();
             JoinNode* join = _tree->insertBefore<JoinNode>(filter,
                                                            varDecl,
