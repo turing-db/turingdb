@@ -174,7 +174,6 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     CommitHistory& history = _commitData->history();
     CommitHistoryBuilder historyBuilder {history};
     for (const WeakArc<Index>& index : wb.pendingIndexes()) {
-        fmt::println("Adding valid index {}", index->name());
         historyBuilder.addValidIndex(index);
     }
 
