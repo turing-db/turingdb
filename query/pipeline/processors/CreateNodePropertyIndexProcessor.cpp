@@ -113,8 +113,9 @@ void CreateNodePropertyIndexProcessor::execute() {
             throw FatalException("Attempted to create index on invalid property type.");
         break;
     }
-
     bioassert(newIndex, "Failed to create new index.");
+
+    newIndex->init(view);
 
     CommitWriteBuffer& wb = _commitBuilder->writeBuffer();
 
