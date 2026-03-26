@@ -1,8 +1,8 @@
 #pragma once
 
 #include <algorithm>
+#include <limits>
 #include <map>
-#include <memory>
 #include <span>
 #include <stdexcept>
 #include <unordered_map>
@@ -11,11 +11,14 @@
 #include "ID.h"
 #include "PropertyTypeSet.h"
 
+#include "BioAssert.h"
 #include "Profiler.h"
 
 namespace db {
 
 class PropertyTypeTrie {
+    static constexpr uint16_t kNoNode = std::numeric_limits<uint16_t>::max();
+
 public:
     void build(const std::unordered_map<PropertyTypeID, std::span<const EntityID>>& typesToEntities,
                EntityID firstCoreEntityID,
@@ -41,20 +44,21 @@ public:
         }
 
         // Step 2. Create the root node (empty PropertyTypeSet) and register every
-        //         entity that has at least one property type, mapping it to _root.
+        //         entity that has at least one property type, mapping it to the root (index 0).
         //         Patch entities (id < firstCoreEntityID) go into a sorted map;
         //         core entities go into a vector indexed by (id - firstCoreEntityID).
-        _root = std::make_unique<TrieNode>();
-        _coreEntityToNode.resize(coreEntityCount, nullptr);
+        _nodes.clear();
+        _nodes.emplace_back(); // root is always index 0
+        _coreEntityToNode.assign(coreEntityCount, kNoNode);
 
         for (const auto& [ptId, entities] : typesToEntities) {
             for (const EntityID e : entities) {
                 if (e < firstCoreEntityID) {
-                    _patchEntityToNode.emplace(e, _root.get());
+                    _patchEntityToNode.emplace(e, 0);
                 } else {
                     const size_t idx = (e - firstCoreEntityID).getValue();
-                    if (idx < coreEntityCount && _coreEntityToNode[idx] == nullptr) {
-                        _coreEntityToNode[idx] = _root.get();
+                    if (idx < coreEntityCount && _coreEntityToNode[idx] == kNoNode) {
+                        _coreEntityToNode[idx] = 0;
                     }
                 }
             }
@@ -71,35 +75,40 @@ public:
             const std::span<const EntityID> span = typesToEntities.at(ptId);
             auto spanIt = span.begin();
 
-            for (auto& [e, nodePtr] : _patchEntityToNode) {
+            for (auto& [e, nodeIdx] : _patchEntityToNode) {
                 while (spanIt != span.end() && *spanIt < e) {
                     ++spanIt;
                 }
 
-                TrieNode* cur = nodePtr;
+                const uint16_t curIdx = nodeIdx;
                 const bool hasIt = (spanIt != span.end() && *spanIt == e);
 
                 if (hasIt) {
-                    if (!cur->hasPt) {
-                        cur->hasPt = std::make_unique<TrieNode>();
-                        cur->hasPt->propertyTypeSet = cur->propertyTypeSet;
-                        cur->hasPt->propertyTypeSet.add(ptId); // sorted: ptId > all previous
+                    if (_nodes[curIdx].hasPt == kNoNode) {
+                        // Copy before allocNode(): push_back may reallocate _nodes.
+                        const PropertyTypeSet ptsCopy = _nodes[curIdx].propertyTypeSet;
+                        const uint16_t newIdx = allocNode();
+                        _nodes[newIdx].propertyTypeSet = ptsCopy;
+                        _nodes[newIdx].propertyTypeSet.add(ptId); // sorted: ptId > all previous
+                        _nodes[curIdx].hasPt = newIdx;
                     }
 
-                    nodePtr = cur->hasPt.get();
+                    nodeIdx = _nodes[curIdx].hasPt;
                     ++spanIt;
                 } else {
-                    if (!cur->lacksPt) {
-                        cur->lacksPt = std::make_unique<TrieNode>();
-                        cur->lacksPt->propertyTypeSet = cur->propertyTypeSet;
+                    if (_nodes[curIdx].lacksPt == kNoNode) {
+                        const PropertyTypeSet ptsCopy = _nodes[curIdx].propertyTypeSet;
+                        const uint16_t newIdx = allocNode();
+                        _nodes[newIdx].propertyTypeSet = ptsCopy;
+                        _nodes[curIdx].lacksPt = newIdx;
                     }
 
-                    nodePtr = cur->lacksPt.get();
+                    nodeIdx = _nodes[curIdx].lacksPt;
                 }
             }
 
             for (size_t idx = 0; idx < coreEntityCount; ++idx) {
-                if (_coreEntityToNode[idx] == nullptr) {
+                if (_coreEntityToNode[idx] == kNoNode) {
                     continue;
                 }
 
@@ -109,23 +118,27 @@ public:
                     ++spanIt;
                 }
 
-                TrieNode* cur = _coreEntityToNode[idx];
+                const uint16_t curIdx = _coreEntityToNode[idx];
                 const bool hasIt = (spanIt != span.end() && *spanIt == e);
 
                 if (hasIt) {
-                    if (!cur->hasPt) {
-                        cur->hasPt = std::make_unique<TrieNode>();
-                        cur->hasPt->propertyTypeSet = cur->propertyTypeSet;
-                        cur->hasPt->propertyTypeSet.add(ptId); // sorted: ptId > all previous
+                    if (_nodes[curIdx].hasPt == kNoNode) {
+                        const PropertyTypeSet ptsCopy = _nodes[curIdx].propertyTypeSet;
+                        const uint16_t newIdx = allocNode();
+                        _nodes[newIdx].propertyTypeSet = ptsCopy;
+                        _nodes[newIdx].propertyTypeSet.add(ptId); // sorted: ptId > all previous
+                        _nodes[curIdx].hasPt = newIdx;
                     }
-                    _coreEntityToNode[idx] = cur->hasPt.get();
+                    _coreEntityToNode[idx] = _nodes[curIdx].hasPt;
                     ++spanIt;
                 } else {
-                    if (!cur->lacksPt) {
-                        cur->lacksPt = std::make_unique<TrieNode>();
-                        cur->lacksPt->propertyTypeSet = cur->propertyTypeSet;
+                    if (_nodes[curIdx].lacksPt == kNoNode) {
+                        const PropertyTypeSet ptsCopy = _nodes[curIdx].propertyTypeSet;
+                        const uint16_t newIdx = allocNode();
+                        _nodes[newIdx].propertyTypeSet = ptsCopy;
+                        _nodes[curIdx].lacksPt = newIdx;
                     }
-                    _coreEntityToNode[idx] = cur->lacksPt.get();
+                    _coreEntityToNode[idx] = _nodes[curIdx].lacksPt;
                 }
             }
         }
@@ -139,15 +152,15 @@ public:
      * */
     const PropertyTypeSet& getPropertyTypeSet(EntityID entityId) const {
         if (entityId < _firstCoreEntityID) {
-            return _patchEntityToNode.at(entityId)->propertyTypeSet;
+            return _nodes[_patchEntityToNode.at(entityId)].propertyTypeSet;
         }
 
         const size_t idx = (entityId - _firstCoreEntityID).getValue();
-        if (idx >= _coreEntityCount || _coreEntityToNode[idx] == nullptr) {
+        if (idx >= _coreEntityCount || _coreEntityToNode[idx] == kNoNode) {
             throw std::out_of_range("Entity not found in PropertyTypeTrie");
         }
 
-        return _coreEntityToNode[idx]->propertyTypeSet;
+        return _nodes[_coreEntityToNode[idx]].propertyTypeSet;
     }
 
     /** @brief Returns the PropertyTypeSet for the given entity, or nullptr if
@@ -163,15 +176,15 @@ public:
                 return nullptr;
             }
 
-            return &it->second->propertyTypeSet;
+            return &_nodes[it->second].propertyTypeSet;
         }
 
         const size_t idx = (entityId - _firstCoreEntityID).getValue();
-        if (idx >= _coreEntityCount || _coreEntityToNode[idx] == nullptr) {
+        if (idx >= _coreEntityCount || _coreEntityToNode[idx] == kNoNode) {
             return nullptr;
         }
 
-        return &_coreEntityToNode[idx]->propertyTypeSet;
+        return &_nodes[_coreEntityToNode[idx]].propertyTypeSet;
     }
 
     /** @brief Returns true if the given entity has the given property type. O(log P).
@@ -182,15 +195,15 @@ public:
      * */
     bool hasPropertyType(EntityID entityId, PropertyTypeID ptId) const {
         if (entityId < _firstCoreEntityID) {
-            return _patchEntityToNode.at(entityId)->propertyTypeSet.contains(ptId);
+            return _nodes[_patchEntityToNode.at(entityId)].propertyTypeSet.contains(ptId);
         }
 
         const size_t idx = (entityId - _firstCoreEntityID).getValue();
-        if (idx >= _coreEntityCount || _coreEntityToNode[idx] == nullptr) {
+        if (idx >= _coreEntityCount || _coreEntityToNode[idx] == kNoNode) {
             throw std::out_of_range("Entity not found in PropertyTypeTrie");
         }
 
-        return _coreEntityToNode[idx]->propertyTypeSet.contains(ptId);
+        return _nodes[_coreEntityToNode[idx]].propertyTypeSet.contains(ptId);
     }
 
     /** @brief Returns the number of entities registered (i.e. with at least one property type).
@@ -200,8 +213,8 @@ public:
     size_t entityCount() const {
         size_t coreCount = 0;
 
-        for (const TrieNode* node : _coreEntityToNode) {
-            if (node != nullptr) {
+        for (const uint16_t nodeIdx : _coreEntityToNode) {
+            if (nodeIdx != kNoNode) {
                 ++coreCount;
             }
         }
@@ -217,7 +230,11 @@ public:
      * */
     template <typename Remapper>
     void rebasePropertyTypes(const Remapper& remapper) {
-        rebaseNodePropertyTypes(_root.get(), remapper);
+        for (TrieNode& node : _nodes) {
+            for (PropertyTypeID& id : node.propertyTypeSet.get()) {
+                id = remapper(id);
+            }
+        }
     }
 
     /** @brief Remaps all EntityIDs in the entity-to-node mappings in-place.
@@ -228,9 +245,9 @@ public:
      * */
     template <typename Remapper>
     void rebaseEntityIDs(const Remapper& remapper) {
-        std::map<EntityID, TrieNode*> newMap;
-        for (auto& [e, node] : _patchEntityToNode) {
-            newMap[remapper(e)] = node;
+        std::map<EntityID, uint16_t> newMap;
+        for (auto& [e, nodeIdx] : _patchEntityToNode) {
+            newMap[remapper(e)] = nodeIdx;
         }
 
         _patchEntityToNode = std::move(newMap);
@@ -240,28 +257,19 @@ public:
 private:
     struct TrieNode {
         PropertyTypeSet propertyTypeSet;
-        std::unique_ptr<TrieNode> lacksPt;
-        std::unique_ptr<TrieNode> hasPt;
+        uint16_t lacksPt {kNoNode};
+        uint16_t hasPt {kNoNode};
     };
 
-    template <typename Remapper>
-    static void rebaseNodePropertyTypes(TrieNode* node, const Remapper& remapper) {
-        for (PropertyTypeID& id : node->propertyTypeSet.get()) {
-            id = remapper(id);
-        }
-
-        if (node->hasPt) {
-            rebaseNodePropertyTypes(node->hasPt.get(), remapper);
-        }
-
-        if (node->lacksPt) {
-            rebaseNodePropertyTypes(node->lacksPt.get(), remapper);
-        }
+    uint16_t allocNode() {
+        bioassert(_nodes.size() < kNoNode, "PropertyTypeTrie node count exceeds uint16_t capacity");
+        _nodes.push_back(TrieNode{});
+        return static_cast<uint16_t>(_nodes.size() - 1);
     }
 
-    std::unique_ptr<TrieNode> _root;
-    std::map<EntityID, TrieNode*> _patchEntityToNode;
-    std::vector<TrieNode*> _coreEntityToNode;
+    std::vector<TrieNode> _nodes;
+    std::map<EntityID, uint16_t> _patchEntityToNode;
+    std::vector<uint16_t> _coreEntityToNode;
     EntityID _firstCoreEntityID {0};
     size_t _coreEntityCount {0};
 };
