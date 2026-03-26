@@ -209,6 +209,7 @@ void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause
         if (whereExpr->isAggregate()) {
             throwError("Invalid use of aggregate expression in this context", yield);
         }
+
         if (whereExpr->getType() != EvaluatedType::Bool) {
             throwError("WHERE expression must be a boolean", yield);
         }
