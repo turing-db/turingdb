@@ -11,11 +11,8 @@
 using namespace db;
 
 template <SupportedType P, TypedInternalID I>
-PropertyHashIndex<P, I>::PropertyHashIndex(std::string_view propertyName,
-                                           PropertyTypeID propertyID)
-    : _propName(propertyName),
-    _propID(propertyID)
-{
+PropertyHashIndex<P, I>::PropertyHashIndex(PropertyTypeID propertyID)
+    : _propID(propertyID) {
 }
 
 template <SupportedType P, TypedInternalID I>
@@ -47,15 +44,17 @@ void PropertyHashIndex<P, I>::query(const Column* query, Column* result) {
 }
 
 namespace db {
-template class PropertyHashIndex<types::Int64,  NodeID>;
+template class PropertyHashIndex<types::Int64, NodeID>;
 template class PropertyHashIndex<types::UInt64, NodeID>;
 template class PropertyHashIndex<types::Double, NodeID>;
 template class PropertyHashIndex<types::String, NodeID>;
-template class PropertyHashIndex<types::Bool,   NodeID>;
+template class PropertyHashIndex<types::Bool, NodeID>;
+template class PropertyHashIndex<types::Embedding, NodeID>;
 
 template class PropertyHashIndex<types::Int64,  EdgeID>;
 template class PropertyHashIndex<types::UInt64, EdgeID>;
 template class PropertyHashIndex<types::Double, EdgeID>;
 template class PropertyHashIndex<types::String, EdgeID>;
 template class PropertyHashIndex<types::Bool,   EdgeID>;
+template class PropertyHashIndex<types::Embedding, EdgeID>;
 }
