@@ -191,6 +191,7 @@ void CommitBuilder::initialize(const Commit* prevCommit) {
     Profile profile ("CommitBuilder::initialize");
 
     const auto reader = _view.read();
+    const CommitHistory& prevHistory = prevCommit->history();
 
     // The first ID of this commit will be one more than the max ID in the graph
     _firstNodeID = reader.getTotalNodesAllocated();
@@ -209,13 +210,19 @@ void CommitBuilder::initialize(const Commit* prevCommit) {
     // Create metadata builder
     _metadataBuilder = MetadataBuilder::create(_view.metadata(), &_commitData->_metadata);
 
-    _commitData->_history._journal = CommitJournal::emptyJournal();
+    CommitHistory& history = _commitData->_history;
+    history._journal = CommitJournal::emptyJournal();
     bioassert(_commitData->_history._journal, "Invalid journal");
 
     // Create the write buffer for this commit
     _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal(), _view);
     // Copy tombstones from previous commit
     _commitData->_tombstones = _view.tombstones();
+
+    static constexpr bool indexConflicts = false;
+    if (!indexConflicts) { // Indexes all still valid => carry them over
+        history._validIndexes = prevHistory._validIndexes;
+    }
 }
 
 void CommitBuilder::initializeMerge(const Commit* prevCommit) {
