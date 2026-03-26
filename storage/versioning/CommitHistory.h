@@ -10,6 +10,8 @@
 
 namespace db {
 
+class Index;
+
 class CommitHistory {
 public:
     using CommitViewSpan = std::span<const CommitView>;
@@ -41,6 +43,8 @@ private:
 
     /// Stores the data parts that belong to the last commit.
     std::span<WeakArc<DataPart>> _commitDataparts;
+
+    std::vector<WeakArc<Index>> _validIndexes;
 
     /// Stores the write information of this commit
     std::unique_ptr<CommitJournal> _journal {CommitJournal::emptyJournal()};

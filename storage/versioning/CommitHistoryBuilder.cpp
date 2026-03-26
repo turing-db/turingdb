@@ -8,6 +8,10 @@ void CommitHistoryBuilder::addDatapart(const WeakArc<DataPart>& datapart) {
         _history._allDataparts.push_back(datapart);
 }
 
+void CommitHistoryBuilder::addValidIndex(const WeakArc<Index>& index) {
+    _history._validIndexes.push_back(index);
+}
+
 void CommitHistoryBuilder::setCommitDatapartCount(size_t count) {
     WeakArc<DataPart>* begin = _history._allDataparts.data();
     const size_t totalCount = _history._allDataparts.size();

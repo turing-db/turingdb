@@ -175,6 +175,8 @@ public:
     PendingNode& getPendingNode(size_t idx) { return _pendingNodes.at(idx); }
     PendingEdge& getPendingEdge(size_t idx) { return _pendingEdges.at(idx); }
 
+    const PendingIndexes& pendingIndexes() const { return _pendingIndexes; }
+
 private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;

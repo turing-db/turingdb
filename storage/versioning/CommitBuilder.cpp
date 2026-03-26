@@ -170,6 +170,12 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         wb.applyUpdates(dpBuilder);
     }
 
+    CommitHistory& history = _commitData->history();
+    CommitHistoryBuilder historyBuilder{history};
+    for (const WeakArc<Index>& index : wb.pendingIndexes()) {
+        historyBuilder.addValidIndex(index);
+    }
+
     wb.setFlushed();
 }
 
