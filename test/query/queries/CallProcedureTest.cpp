@@ -158,7 +158,7 @@ TEST_F(CallProcedureTest, YieldWhereSelfJoin) {
             executed = true;
         });
 
-    ASSERT_TRUE(res) << res.getError();
+    ASSERT_TRUE(res.isOk());
     ASSERT_TRUE(executed);
 }
 
@@ -185,7 +185,7 @@ TEST_F(CallProcedureTest, YieldWhereCrossJoin) {
             executed = true;
         });
 
-    ASSERT_TRUE(res) << res.getError();
+    ASSERT_TRUE(res.isOk());
     ASSERT_TRUE(executed);
 }
 
@@ -210,7 +210,7 @@ TEST_F(CallProcedureTest, YieldWhereSelfJoinByID) {
             executed = true;
         });
 
-    ASSERT_TRUE(res) << res.getError();
+    ASSERT_TRUE(res.isOk());
     ASSERT_TRUE(executed);
 }
 
