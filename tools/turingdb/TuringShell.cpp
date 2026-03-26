@@ -21,6 +21,7 @@
 #include "SystemManager.h"
 #include "ChangeManager.h"
 #include "LineNoiseHandle.h"
+#include "LocalMemory.h"
 
 #include "columns/Block.h"
 #include "columns/Column.h"
@@ -648,6 +649,10 @@ void TuringShell::processLine(std::string& line) {
 
     checkShellContext();
 
+    if (_mem) {
+        _mem->clear();
+    }
+
     if (!res.isOk()) {
         if (res.hasErrorMessage()) {
             std::string errorMsg = res.getError();
@@ -778,4 +783,3 @@ void TuringShell::checkShellContext() {
     fmt::print("No commit matches hash {:x}, switching back to head\n", _hash.get());
     setCommitHash(CommitHash::head());
 }
-
