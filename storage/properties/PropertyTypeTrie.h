@@ -220,6 +220,23 @@ public:
         rebaseNodePropertyTypes(_root.get(), remapper);
     }
 
+    /** @brief Remaps all EntityIDs in the entity-to-node mappings in-place.
+     *  The trie node structure is unchanged; only the keys in _patchEntityToNode
+     *  and the _firstCoreEntityID base are updated.
+     *
+     * @param remapper A callable (EntityID) -> EntityID applied to every stored entity ID.
+     * */
+    template <typename Remapper>
+    void rebaseEntityIDs(const Remapper& remapper) {
+        std::map<EntityID, TrieNode*> newMap;
+        for (auto& [e, node] : _patchEntityToNode) {
+            newMap[remapper(e)] = node;
+        }
+
+        _patchEntityToNode = std::move(newMap);
+        _firstCoreEntityID = remapper(_firstCoreEntityID);
+    }
+
 private:
     struct TrieNode {
         PropertyTypeSet propertyTypeSet;
