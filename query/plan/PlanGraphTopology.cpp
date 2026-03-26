@@ -14,7 +14,16 @@ PlanGraphTopology::~PlanGraphTopology() = default;
 
 PlanGraphTopology::PathInfo PlanGraphTopology::getShortestPath(PlanGraphNode* origin,
                                                                PlanGraphNode* target) {
-    // Finds the shortest path type between two nodes
+    // Finds the best path type between two nodes.
+    //
+    // BackwardPath is always preferred over UndirectedPath because it means
+    // the dependency's data already flows into the origin (no join needed).
+    //
+    // To achieve this, the target is never added to the visited set or queue.
+    // Instead it is checked inline during neighbor enumeration:
+    //   - Found via backward path  -> return immediately
+    //   - Found via undirected path -> save, keep searching for a backward path
+    //   - BFS exhausts             -> return saved undirected result, or NoPath
     if (origin == target) {
         return {PathToDependency::SameVar, nullptr};
     }
@@ -23,22 +32,31 @@ PlanGraphTopology::PathInfo PlanGraphTopology::getShortestPath(PlanGraphNode* or
     std::queue<std::tuple<PlanGraphNode*, PathToDependency, PlanGraphNode*>> q;
     _visited.clear();
 
+    bool foundUndirected = false;
+    PlanGraphNode* undirectedAncestor = nullptr;
+
     // Step 2. Add the origin to the queue
     q.emplace(origin, PathToDependency::BackwardPath, nullptr);
     _visited.insert(origin);
 
-    // Step 3. Phase 1 of the algorithm
-    //    - Explore the graph breadth-first from the origin node, going upward
-    //    - If target is found: BackwardPath
+    // Step 3. BFS exploring both inputs (backward) and outputs (undirected)
     while (!q.empty()) {
         auto [node, path, commonAncestor] = q.front();
         q.pop();
 
-        if (node == target) {
-            return {path, commonAncestor};
-        }
-
         for (const auto& in : node->inputs()) {
+            if (in == target) {
+                if (path == PathToDependency::BackwardPath) {
+                    return {PathToDependency::BackwardPath, commonAncestor};
+                }
+
+                if (!foundUndirected) {
+                    foundUndirected = true;
+                    undirectedAncestor = commonAncestor;
+                }
+                continue;
+            }
+
             if (!_visited.insert(in).second) {
                 continue; // Already visited
             }
@@ -47,6 +65,14 @@ PlanGraphTopology::PathInfo PlanGraphTopology::getShortestPath(PlanGraphNode* or
         }
 
         for (const auto& out : node->outputs()) {
+            if (out == target) {
+                if (!foundUndirected) {
+                    foundUndirected = true;
+                    undirectedAncestor = commonAncestor ? commonAncestor : node;
+                }
+                continue;
+            }
+
             if (!_visited.insert(out).second) {
                 continue; // Already visited
             }
@@ -62,7 +88,10 @@ PlanGraphTopology::PathInfo PlanGraphTopology::getShortestPath(PlanGraphNode* or
         }
     }
 
-    // If we reach here, we did not find a path
+    if (foundUndirected) {
+        return {PathToDependency::UndirectedPath, undirectedAncestor};
+    }
+
     return {PathToDependency::NoPath, nullptr};
 }
 
