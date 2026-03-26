@@ -17,8 +17,17 @@ static EvaluatedType toEvaluatedType(ProcedureType type) {
         break;
 
         case ProcedureType::LABEL_ID:
+            return EvaluatedType::Label;
+        break;
+
         case ProcedureType::EDGE_TYPE_ID:
+            return EvaluatedType::EdgeType;
+        break;
+
         case ProcedureType::PROPERTY_TYPE_ID:
+            return EvaluatedType::PropertyType;
+        break;
+
         case ProcedureType::UINT_64:
         case ProcedureType::INT64:
             return EvaluatedType::Integer;

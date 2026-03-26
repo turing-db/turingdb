@@ -27,6 +27,10 @@ enum class EvaluatedType : uint8_t {
     ValueType,
     StringTable,
     Embedding,
+    Label,
+    LabelSet,
+    PropertyType,
+    EdgeType,
 
     _SIZE,
 };
@@ -37,20 +41,20 @@ public:
 
     constexpr TypePairBitset(EvaluatedType a, EvaluatedType b)
     {
-        _bitset |= (static_cast<uint16_t>(1) << static_cast<uint16_t>(a));
-        _bitset |= (static_cast<uint16_t>(1) << static_cast<uint16_t>(b));
+        _bitset |= (static_cast<uint32_t>(1) << static_cast<uint32_t>(a));
+        _bitset |= (static_cast<uint32_t>(1) << static_cast<uint32_t>(b));
     }
 
     constexpr bool operator==(const TypePairBitset& other) const {
         return _bitset == other._bitset;
     }
 
-    uint16_t getBitset() const {
+    uint32_t getBitset() const {
         return _bitset;
     }
 
 private:
-    uint16_t _bitset {0};
+    uint32_t _bitset {0};
 };
 
 using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
@@ -70,5 +74,9 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::Tuple, "Tuple">,
     EnumStringPair<EvaluatedType::ValueType, "ValueType">,
     EnumStringPair<EvaluatedType::StringTable, "StringTable">,
-    EnumStringPair<EvaluatedType::Embedding, "Embedding">>;
+    EnumStringPair<EvaluatedType::Embedding, "Embedding">,
+    EnumStringPair<EvaluatedType::Label, "Label">,
+    EnumStringPair<EvaluatedType::LabelSet, "LabelSet">,
+    EnumStringPair<EvaluatedType::PropertyType, "PropertyType">,
+    EnumStringPair<EvaluatedType::EdgeType, "EdgeType">>;
 }
