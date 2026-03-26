@@ -20,6 +20,9 @@ public:
     virtual void query(const Column* query, Column* result) = 0;
 
     // MAYBE: DataParts which it indexes
+
+protected:
+    bool _initialised {false};
 };
 
 }

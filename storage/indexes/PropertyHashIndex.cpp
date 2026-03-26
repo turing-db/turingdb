@@ -38,6 +38,8 @@ void PropertyHashIndex<P, I>::init(GraphView view) {
             assoc.emplace_back(id.getValue());
         }
     }
+
+    _initialised = true;
 }
 
 template <SupportedType P, TypedInternalID I>
