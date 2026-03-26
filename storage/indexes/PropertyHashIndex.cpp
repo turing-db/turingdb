@@ -31,7 +31,7 @@ void PropertyHashIndex<P, I>::init(GraphView view) {
         const TypedPropertyContainer<P>& container = propMan.getContainer<P>(_propID);
 
         for (const auto& [id, val] : container.zipped()) {
-            IDContainer& assoc = _data[val];
+            IDContainer& assoc = _hashTable[val];
             assoc.emplace_back(id.getValue());
         }
     }

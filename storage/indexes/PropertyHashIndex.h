@@ -8,6 +8,7 @@
 #include "columns/ColumnVector.h"
 
 #include "ID.h"
+#include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
 
 namespace db {
@@ -18,12 +19,18 @@ class ColumnVector;
 template <typename T>
 class ColumnConst;
 
+template <typename K, typename V, typename Map>
+class PropertyHashMap;
+
+template <typename K, typename V>
+struct PropertyHashMapImpl;
+
 template <SupportedType P, TypedInternalID I>
 class PropertyHashIndex final : public Index {
 public:
     using IDContainer = ColumnVector<I>;
     using PropertyPrimitive = P::Primitive;
-    using PropertyValueHash = std::unordered_map<PropertyPrimitive, IDContainer>;
+    using MapType = PropertyHashMapImpl<PropertyPrimitive, IDContainer>::type;
 
     explicit PropertyHashIndex(PropertyTypeID propertyID);
 
@@ -33,10 +40,32 @@ public:
 
 private:
     PropertyTypeID _propID;
-    PropertyValueHash _data;
+    PropertyHashMap<PropertyPrimitive, IDContainer, MapType> _hashTable;
 
     IDContainer _empty {};
     static constexpr bool isNode = std::is_same_v<I, NodeID>;
+};
+
+template <typename K, typename V, typename HashMap>
+class PropertyHashMap {
+public:
+    V& operator[](const K& key) { return _hashMap[key]; }
+
+private:
+    HashMap _hashMap;
+};
+
+template <typename K, typename V>
+struct PropertyHashMapImpl {
+    using type = std::unordered_map<K, V>;
+};
+
+
+template <typename V>
+struct PropertyHashMapImpl<types::Embedding::Primitive, V> {
+    using type = std::unordered_map<types::Embedding::Primitive, V,
+                                    std::hash<types::Embedding::Primitive>,
+                                    EmbeddingEqual>;
 };
 
 }
