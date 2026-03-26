@@ -43,6 +43,7 @@ add_subdirectory(vector_serialization)
 add_subdirectory(start-stop)
 add_subdirectory(load_jsonl_reactome)
 add_subdirectory(history_on_change)
+add_subdirectory(reload_submit_edge)
 
 # write run_regress target
 # The script finds the wheel at runtime to avoid needing to re-run cmake after wheel build

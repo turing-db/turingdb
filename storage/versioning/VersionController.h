@@ -63,9 +63,11 @@ public:
         return _dataManager->create(hash);
     }
 
-    WeakArc<DataPart> createDataPart(NodeID firstNodeID, EdgeID firstEdgeID) {
+    WeakArc<DataPart> createDataPart(NodeID firstNodeID,
+                                     EdgeID firstEdgeID,
+                                     DataPartID id = DataPartID::create()) {
         Profile profile("VersionController::createDataPart");
-        return _partManager->create(firstNodeID, firstEdgeID);
+        return _partManager->create(firstNodeID, firstEdgeID, id);
     }
 
     DataPartMap& getPartMap() { return _partMap; }

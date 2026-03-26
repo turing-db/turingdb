@@ -97,5 +97,9 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& graphDir) {
                                       graph,
                                       headCommit);
 
+    if (!res) {
+        return res.get_unexpected();
+    }
+
     return {};
 }

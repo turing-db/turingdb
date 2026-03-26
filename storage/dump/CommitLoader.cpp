@@ -128,7 +128,8 @@ DumpResult<void> CommitLoader::loadData(const fs::Path& commitDir,
 
             const fs::Path partDir = partsDir / std::to_string(dataPartID);
 
-            auto res = DataPartLoader::load(partDir,
+            auto res = DataPartLoader::load(DataPartID{dataPartID},
+                                            partDir,
                                             metadata,
                                             controller);
 

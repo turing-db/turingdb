@@ -1,5 +1,6 @@
 #pragma once
 
+#include "versioning/DataPartID.h"
 #include "Path.h"
 #include "DumpResult.h"
 #include "ArcManager.h"
@@ -13,7 +14,8 @@ class GraphMetadata;
 
 class DataPartLoader {
 public:
-    [[nodiscard]] static DumpResult<WeakArc<DataPart>> load(const fs::Path& dataPartDir,
+    [[nodiscard]] static DumpResult<WeakArc<DataPart>> load(DataPartID partID,
+                                                            const fs::Path& dataPartDir,
                                                             const GraphMetadata& metadata,
                                                             VersionController* versionController);
 
