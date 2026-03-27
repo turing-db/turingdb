@@ -1430,3 +1430,6 @@ template PipelineBlockOutputInterface& PipelineBuilder::addShortestPath<db::type
 template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::BOTH>(uint64_t, uint64_t);
 template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::FORWARD>(uint64_t, uint64_t);
 template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::BACKWARD>(uint64_t, uint64_t);
+
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Int64::Primitive, NodeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::String::Primitive, NodeID>(const Index*);

@@ -85,7 +85,7 @@ void PropertyHashIndex<P, I>::query(const ColumnVector<PropertyPrimitive>* input
 
     for (const PropertyPrimitive propValue : *input) {
         const auto findIt = _hashTable.find(propValue);
-        const bool contains = findIt == _hashTable.end();
+        const bool contains = findIt != _hashTable.end();
         if (!contains) {
             continue;
         }
@@ -107,7 +107,7 @@ void PropertyHashIndex<P, I>::query(const ColumnConst<PropertyPrimitive>* input,
     const PropertyPrimitive propValue = input->getRaw();
 
     const auto findIt = _hashTable.find(propValue);
-    const bool contains = findIt == _hashTable.end();
+    const bool contains = findIt != _hashTable.end();
     if (!contains) {
         return;
     }
@@ -128,10 +128,10 @@ template class PropertyHashIndex<types::String, NodeID>;
 template class PropertyHashIndex<types::Bool, NodeID>;
 template class PropertyHashIndex<types::Embedding, NodeID>;
 
-template class PropertyHashIndex<types::Int64,  EdgeID>;
+template class PropertyHashIndex<types::Int64, EdgeID>;
 template class PropertyHashIndex<types::UInt64, EdgeID>;
 template class PropertyHashIndex<types::Double, EdgeID>;
 template class PropertyHashIndex<types::String, EdgeID>;
-template class PropertyHashIndex<types::Bool,   EdgeID>;
+template class PropertyHashIndex<types::Bool, EdgeID>;
 template class PropertyHashIndex<types::Embedding, EdgeID>;
 }

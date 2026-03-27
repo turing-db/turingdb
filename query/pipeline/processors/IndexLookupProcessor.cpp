@@ -63,18 +63,21 @@ template <typename Q, typename R>
 void IndexLookupProcessor<Q, R>::execute() {
     const NamedColumn* queryNCol = _input.getValues();
     const NamedColumn* resultNCol = _output.getValues();
-    bioassert(queryNCol && resultNCol, "Null named columns.");
+    bioassert(queryNCol && resultNCol, "Null named value columns.");
 
     const ColumnVector<Q>* query = queryNCol->as<ColumnVector<Q>>();
     ColumnVector<R>* result = resultNCol->as<ColumnVector<R>>();
-    bioassert(query && result, "Null columns.");
+    bioassert(query && result, "Null value columns.");
 
     _index->query(query, result);
+    _output.getPort()->writeData();
 
-    throw FatalException("IdexLookupProcessor::execute");
+    // TODO: Chunk
+    finish();
 }
 
 namespace db {
 template class IndexLookupProcessor<types::Int64::Primitive, NodeID>;
+template class IndexLookupProcessor<types::String::Primitive, NodeID>;
 }
 
