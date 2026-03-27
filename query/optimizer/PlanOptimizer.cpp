@@ -11,7 +11,9 @@
 #include "expr/Operators.h"
 #include "expr/PropertyExpr.h"
 #include "metadata/PropertyType.h"
+#include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/IndexLookupNode.h"
+#include "nodes/PlanGraphNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/ScanNodesByLabelNode.h"
@@ -74,13 +76,11 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
             auto* node =
                 _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
             return node;
-        } break;
-
-        case EvaluatedType::Double: {}
+        }
         break;
 
-        case EvaluatedType::String: {
-            const ValueType vt = ValueType::Int64;
+        case EvaluatedType::Double: {
+            const ValueType vt = ValueType::Double;
 
             auto* node =
                 _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
@@ -88,10 +88,31 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
         }
         break;
 
-        case EvaluatedType::Bool: {}
+        case EvaluatedType::String: {
+            const ValueType vt = ValueType::String;
+
+            auto* node =
+                _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
+            return node;
+        }
         break;
 
-        case EvaluatedType::Embedding: {}
+        case EvaluatedType::Bool: {
+            const ValueType vt = ValueType::Bool;
+
+            auto* node =
+                _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
+            return node;
+        }
+        break;
+
+        case EvaluatedType::Embedding: {
+            const ValueType vt = ValueType::Embedding;
+
+            auto* node =
+                _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
+            return node;
+        }
         break;
 
         case EvaluatedType::Null:
@@ -129,6 +150,7 @@ void PlanOptimizer::optimize() {
 
     rewriteScanByLabels();
     rewriteScanByConstIDs();
+    rewriteNodePropertyFilterWithIndex();
 
     _plan->removeIsolatedNodes();
 }
@@ -650,10 +672,19 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
         }
 
         const auto& scanNodesOutput = scanNodes->outputs();
-        bioassert(scanNodesOutput.size() != 1, "ScanNodes had non-singular output.");
+        bioassert(scanNodesOutput.size() == 1, "ScanNodes had non-singular output.");
 
-        PlanGraphNode* output = scanNodesOutput.front();
-        const NodeFilterNode* filterNode = dynamic_cast<NodeFilterNode*>(output);
+        PlanGraphNode* scanOutput = scanNodesOutput.front();
+        auto* getPropsNode = dynamic_cast<GetPropertyWithNullNode*>(scanOutput);
+        if (!getPropsNode) {
+            continue;
+        }
+
+        const auto& gpOutputs = getPropsNode->outputs();
+        bioassert(gpOutputs.size() == 1, "GetPropertiesWithNull had non-singular output.");
+
+        PlanGraphNode* gpOutput = gpOutputs.front();
+        auto* filterNode = dynamic_cast<NodeFilterNode*>(gpOutput);
         if (!filterNode) {
             continue;
         }
@@ -700,6 +731,22 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
         // Not a literal property constraint
         if (!literalExpr || !propExpr)  {
             continue;
+        }
+
+        IndexLookupNode* indexNode = addIndexLookup(propExpr, literalExpr);
+
+        if (!indexNode) {
+            return;
+        }
+
+        { // Rewire plan graph
+            const auto& filterSuccessors = filterNode->outputs();
+            for (PlanGraphNode* successor : filterSuccessors) {
+                indexNode->connectOut(successor);
+            }
+            scanNodes->clearOutputs();
+            filterNode->clearOutputs();
+            getPropsNode->clearOutputs();
         }
     }
 }
