@@ -4,9 +4,11 @@
 
 #include "ID.h"
 #include "Literal.h"
+#include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/Operators.h"
+#include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"
 
 namespace db {
@@ -24,13 +26,21 @@ public:
      */
     template <typename Traits>
     static bool collectFromHomogeneousBinaryChain(const Expr* root,
-                                                  const VarDecl* var,
+                                                  typename Traits::ValidatorType var,
                                                   std::vector<typename Traits::ResultType>& result);
 
+    // Used for extracting `n = 10 OR n = 15`, etc. to rewrite a ScanNodes with a
+    // ConstScan
     struct NodeIDEqualsOR;
+
+    // Used for extracting `n.age = 10 OR n.age = 20`, etc. to rewrite a Filter with a
+    // IndexLookup
+    struct PropertyEqualsOR;
 };
 
 struct ExprUtils::NodeIDEqualsOR {
+    using ValidatorType = const VarDecl*;
+
     // The operator used to connect each leaf (e.g. x = 10 *OR* x = 20)
     static constexpr BinaryOperator chainOp = BinaryOperator::Or;
     // The operator used in each leaf comparison (e.g. x *=* 10 OR x *=* 20)
@@ -53,6 +63,50 @@ struct ExprUtils::NodeIDEqualsOR {
     /// Ensures the var decl is the same for all leaf expressions
     static bool validateAnchor(const AnchorExpr* anchor, const VarDecl* varDecl) {
         return anchor->getDecl() == varDecl;
+    }
+
+    /// Extracts the value from each leaf expression
+    static bool extractValue(const ValueExpr* valueExpr, ResultType& out) {
+        const Literal* literal = valueExpr->getLiteral();
+        if (literal->getKind() != Literal::Kind::INTEGER) {
+            return false;
+        }
+
+        const auto* intLit = static_cast<const IntegerLiteral*>(literal);
+        if (intLit->getValue() < 0) {
+            return false;
+        }
+
+        out = NodeID(static_cast<uint64_t>(intLit->getValue()));
+        return true;
+    }
+};
+
+struct ExprUtils::PropertyEqualsOR {
+    using ValidatorType = PropertyExpr*;
+
+    // The operator used to connect each leaf (e.g. x = 10 *OR* x = 20)
+    static constexpr BinaryOperator chainOp = BinaryOperator::Or;
+    // The operator used in each leaf comparison (e.g. x *=* 10 OR x *=* 20)
+    static constexpr BinaryOperator matchOp = BinaryOperator::Equal;
+
+    // The Expr::Kind and corresponding type of the "anchor" operand (the one validated
+    // against varDecl) The operator used in each leaf comparison
+    // (e.g. *x* = 10 OR *x* = 20)
+    static constexpr Expr::Kind anchorKind = Expr::Kind::PROPERTY;
+    using AnchorExpr = PropertyExpr;
+
+    // The Expr::Kind and concrete type of the "value" operand (the one we extract values
+    // from) (e.g. x = *10* OR x = *20* )
+    static constexpr Expr::Kind valueKind = Expr::Kind::LITERAL;
+    using ValueExpr = LiteralExpr;
+
+    // The type collected into the result vector
+    using ResultType = NodeID;
+
+    /// Ensures the var decl is the same for all leaf expressions
+    static bool validateAnchor(const AnchorExpr* anchor, const VarDecl* varDecl) {
+        return true;
     }
 
     /// Extracts the value from each leaf expression
