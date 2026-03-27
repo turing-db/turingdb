@@ -35,7 +35,7 @@ protected:
     std::string_view _indexName;
     std::string_view _propertyName;
 
-    explicit CreateNodePropertyIndexProcessor(std::string_view indexName, std::string_view propName);
+    CreateNodePropertyIndexProcessor(std::string_view indexName, std::string_view propName);
     ~CreateNodePropertyIndexProcessor() final = default;
 };
 
