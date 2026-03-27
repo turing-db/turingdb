@@ -15,6 +15,7 @@
 #include "nodes/WriteNode.h"
 #include "nodes/VarNode.h"
 
+#include "ExprUtils.h"
 #include "expr/BinaryExpr.h"
 #include "expr/SymbolExpr.h"
 #include "expr/LiteralExpr.h"
