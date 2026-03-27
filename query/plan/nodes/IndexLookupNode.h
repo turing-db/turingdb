@@ -7,6 +7,7 @@ namespace db {
 class Index;
 class Column;
 
+template <typename Q, typename R>
 class IndexLookupNode : public PlanGraphNode {
 public:
     explicit IndexLookupNode(const Index* index, const Column* query)
@@ -15,6 +16,8 @@ public:
         _query(query)
     {
     }
+
+    const Index* index() const { return _index; }
 
 private:
     const Index* _index {nullptr};

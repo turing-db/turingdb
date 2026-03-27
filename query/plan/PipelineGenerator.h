@@ -1,11 +1,17 @@
 #pragma once
 
-#include "QueryCallbacks.h"
 
 #include <vector>
 
+#include "QueryCallbacks.h"
+
 #include "PipelineBuilder.h"
+#include "interfaces/PipelineBlockOutputInterface.h"
 #include "views/GraphView.h"
+
+#include "PlannerException.h"
+
+#include "nodes/IndexLookupNode.h"
 
 namespace db {
 
@@ -64,6 +70,8 @@ class ConstScanNode;
 class ConstWriteSourceNode;
 class CreatePropertyIndexNode;
 class CreateNodePropertyIndexNode;
+
+template <typename Q, typename R>
 class IndexLookupNode;
 
 class PipelineGenerator {
@@ -169,9 +177,24 @@ private:
     PipelineOutputInterface* translateConstWriteSourceNode(ConstWriteSourceNode* node);
     PipelineOutputInterface* translateCreatePropertyIndexNode(CreatePropertyIndexNode* node);
     PipelineOutputInterface* translateCreateNodePropertyIndexNode(CreateNodePropertyIndexNode* node);
-    PipelineOutputInterface* translateIndexLookupNode(IndexLookupNode* node);
+    template <typename Q, typename R>
+    PipelineOutputInterface* translateIndexLookupNode(IndexLookupNode<Q, R>* node);
 
     std::vector<std::string> _csvHeaders;
 };
+
+template <typename Q, typename R>
+PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookupNode<Q, R>* node) {
+    if (!_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    const Index* index = node->index();
+    bioassert(index, "Null index.");
+
+    _builder.addIndexLookup<Q, R>(node->index());
+
+    return _builder.getPendingOutputInterface();
+}
 
 }

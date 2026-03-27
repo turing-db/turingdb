@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ID.h"
+
 #include "views/GraphView.h"
 
 namespace db {
@@ -21,9 +23,9 @@ public:
     Index& operator=(Index&&) = delete;
 
     virtual void init(GraphView view) = 0;
-    virtual void query(const Column* query, Column* result) = 0;
-
+    virtual void query(const Column* query, Column* result) const = 0;
     virtual size_t size() const = 0;
+    virtual PropertyTypeID property() const = 0;
 
     std::string_view name() const { return _name; }
 

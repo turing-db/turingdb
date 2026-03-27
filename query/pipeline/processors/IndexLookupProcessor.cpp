@@ -2,22 +2,34 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include "FatalException.h"
 #include "PipelinePort.h"
+
+#include "indexes/Index.h"
+
+#include "columns/ColumnVector.h"
+#include "dataframe/NamedColumn.h"
+#include "metadata/PropertyType.h"
+
+#include "BioAssert.h"
 
 using namespace db;
 
-IndexLookupProcessor::IndexLookupProcessor(const Index* index)
+template <typename Q, typename R>
+IndexLookupProcessor<Q, R>::IndexLookupProcessor(const Index* index)
     : _index(index)
 {
 }
 
-std::string IndexLookupProcessor::describe() const  {
+template <typename Q, typename R>
+std::string IndexLookupProcessor<Q, R>::describe() const  {
     return fmt::format("IndexLookupProcessor @={}, Index @={}", fmt::ptr(this), fmt::ptr(_index));
 }
 
-IndexLookupProcessor* IndexLookupProcessor::create(PipelineV2* pipeline,
-                                                   const Index* index) {
-    IndexLookupProcessor* proc = new IndexLookupProcessor(index);
+template <typename Q, typename R>
+IndexLookupProcessor<Q, R>* IndexLookupProcessor<Q, R>::create(PipelineV2* pipeline,
+                                                               const Index* index) {
+    IndexLookupProcessor<Q, R>* proc = new IndexLookupProcessor<Q, R>(index);
 
     {
         PipelineInputPort* in = PipelineInputPort::create(pipeline, proc);
@@ -36,15 +48,33 @@ IndexLookupProcessor* IndexLookupProcessor::create(PipelineV2* pipeline,
     return proc;
 }
 
-void IndexLookupProcessor::prepare(ExecutionContext* ctxt){
+template <typename Q, typename R>
+void IndexLookupProcessor<Q, R>::prepare(ExecutionContext* ctxt){
     // TODO: Check validity of idex
     markAsPrepared();
 }
 
-void IndexLookupProcessor::reset() {
+template <typename Q, typename R>
+void IndexLookupProcessor<Q, R>::reset() {
     markAsReset();
 }
 
-void IndexLookupProcessor::execute() {
+template <typename Q, typename R>
+void IndexLookupProcessor<Q, R>::execute() {
+    const NamedColumn* queryNCol = _input.getValues();
+    const NamedColumn* resultNCol = _output.getValues();
+    bioassert(queryNCol && resultNCol, "Null named columns.");
+
+    const ColumnVector<Q>* query = queryNCol->as<ColumnVector<Q>>();
+    ColumnVector<R>* result = resultNCol->as<ColumnVector<R>>();
+    bioassert(query && result, "Null columns.");
+
+    _index->query(query, result);
+
+    throw FatalException("IdexLookupProcessor::execute");
+}
+
+namespace db {
+template class IndexLookupProcessor<types::Int64::Primitive, NodeID>;
 }
 

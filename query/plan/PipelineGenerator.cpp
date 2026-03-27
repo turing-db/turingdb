@@ -1819,7 +1819,3 @@ PipelineOutputInterface* PipelineGenerator::translateCreateNodePropertyIndexNode
 
     return _builder.getPendingOutputInterface();
 }
-
-PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookupNode* node) {
-    throw PlannerException("IndexLookup is not yet supported.");
-}

@@ -1,12 +1,16 @@
 #include "PlanOptimizer.h"
 
 #include "LocalMemory.h"
+#include <string_view>
+
+#include "ID.h"
 #include "PlanGraph.h"
 #include "CypherAST.h"
 #include "expr/Expr.h"
 #include "expr/Operators.h"
 #include "expr/PropertyExpr.h"
 #include "metadata/PropertyType.h"
+#include "nodes/IndexLookupNode.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/ScanNodesByLabelNode.h"
@@ -16,6 +20,7 @@
 #include "nodes/WriteNode.h"
 #include "nodes/VarNode.h"
 
+#include "indexes/Index.h"
 #include "ExprUtils.h"
 #include "expr/BinaryExpr.h"
 #include "expr/SymbolExpr.h"
@@ -34,28 +39,51 @@
 
 using namespace db;
 
-namespace {
 
-[[maybe_unused]] void* addIndexLookup(const LiteralExpr* lit) {
-    switch (lit->getType()) {
+template <typename Q, typename R>
+IndexLookupNode<Q, R>* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr, const LiteralExpr* litExpr) {
+    const Literal* lit = litExpr->getLiteral();
+    bioassert(lit, "Null literal.");
+
+    const std::string_view propName = propExpr->getPropName();
+    const GraphMetadata& md = _view.metadata();
+    const PropertyTypeMap& props = md.propTypes();
+    const std::optional<PropertyType> maybeProp = props.get(propName);
+    bioassert(maybeProp.has_value(), "Invalid property to index.");
+    const PropertyType prop = *maybeProp;
+    const PropertyTypeID propID = prop._id;
+
+    const Index* matchingIndex = nullptr;
+    for (const WeakArc<Index>& index : _view.indexes()) {
+        const PropertyTypeID indexedProp = index->property();
+        if (propID == indexedProp) {
+            matchingIndex = index.get();
+            break;
+        }
+    }
+
+    if (!matchingIndex) {
+        return nullptr;
+    }
+
+    switch (litExpr->getType()) {
         case EvaluatedType::Integer: {
-            using Type = types::Int64::Primitive;
+            using Type = types::Int64;
 
-            const auto* intLit = dynamic_cast<const IntegerLiteral*>(lit);
-            bioassert(intLit, "Failed to get integer literal.");
-            const Type val = intLit->getValue();
+            const auto* intLit = static_cast<const IntegerLiteral*>(lit);
+            const Type::Primitive val = intLit->getValue();
 
-            const std::vector<Type> input {val};
+            const std::vector<Type::Primitive> input {val};
 
-
+            // IndexLookupNode<Q,R>* lookup = _plan->create<IndexLookupNode<Q,R>>(matchingIndex, input);
+            return nullptr;
         }
         break;
 
         case EvaluatedType::Double: {
             using Type = types::Double::Primitive;
 
-            const auto* dblLit = dynamic_cast<const DoubleLiteral*>(lit);
-            bioassert(dblLit, "Failed to get double literal.");
+            const auto* dblLit = static_cast<const DoubleLiteral*>(lit);
             const Type val = dblLit->getValue();
 
             const std::vector<Type> input {val};
@@ -65,8 +93,7 @@ namespace {
         case EvaluatedType::String: {
             using Type = types::String::Primitive;
 
-            const auto* strLit = dynamic_cast<const StringLiteral*>(lit);
-            bioassert(strLit, "Failed to get string literal.");
+            const auto* strLit = static_cast<const StringLiteral*>(lit);
             const Type val = strLit->getValue();
 
             const std::vector<Type> input {val};
@@ -76,8 +103,7 @@ namespace {
         case EvaluatedType::Bool: {
             using Type = types::Bool::Primitive;
 
-            const auto* boolLit = dynamic_cast<const BoolLiteral*>(lit);
-            bioassert(boolLit, "Failed to get Boolean literal.");
+            const auto* boolLit = static_cast<const BoolLiteral*>(lit);
             const Type val = boolLit->getValue();
 
             const std::vector<Type> input {val};
@@ -87,8 +113,7 @@ namespace {
         case EvaluatedType::Embedding: {
             using Type = types::Embedding::Primitive;
 
-            const auto* embLit = dynamic_cast<const EmbeddingLiteral*>(lit);
-            bioassert(embLit, "Failed to get embedding literal.");
+            const auto* embLit = static_cast<const EmbeddingLiteral*>(lit);
             const Type val = embLit->getValue();
 
             const std::vector<Type> input {val};
@@ -113,8 +138,6 @@ namespace {
     }
 
     return nullptr;
-}
-
 }
 
 PlanOptimizer::PlanOptimizer(PlanGraph* plan, GraphView view, LocalMemory* mem)
@@ -705,4 +728,8 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
             continue;
         }
     }
+}
+
+namespace db{
+template IndexLookupNode<types::Int64::Primitive, NodeID>* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr, const LiteralExpr* litExpr);
 }
