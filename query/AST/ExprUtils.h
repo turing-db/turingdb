@@ -1,0 +1,75 @@
+#pragma once
+
+#include <vector>
+
+#include "ID.h"
+#include "Literal.h"
+#include "expr/Expr.h"
+#include "expr/LiteralExpr.h"
+#include "expr/Operators.h"
+#include "expr/SymbolExpr.h"
+
+namespace db {
+
+class ExprUtils {
+public:
+    ExprUtils() = delete;
+    ~ExprUtils() = delete;
+
+    /**
+     * @brief Helper to collect from a binary chain of homogeneous operations, e.g.
+     * a disjunction of equalities (x = 10 OR x = 20 OR x = 30)
+     * @param Traits struct defining the required necessary types and values to perform
+     * extraction. See implementation for examples.
+     */
+    template <typename Traits>
+    static bool collectFromHomogeneousBinaryChain(const Expr* root,
+                                                  const VarDecl* var,
+                                                  std::vector<typename Traits::ResultType>& result);
+
+    struct NodeIDEqualsOR;
+};
+
+struct ExprUtils::NodeIDEqualsOR {
+    // The operator used to connect each leaf (e.g. x = 10 *OR* x = 20)
+    static constexpr BinaryOperator chainOp = BinaryOperator::Or;
+    // The operator used in each leaf comparison (e.g. x *=* 10 OR x *=* 20)
+    static constexpr BinaryOperator matchOp = BinaryOperator::Equal;
+
+    // The Expr::Kind and corresponding type of the "anchor" operand (the one validated
+    // against varDecl) The operator used in each leaf comparison
+    // (e.g. *x* = 10 OR *x* = 20)
+    static constexpr Expr::Kind anchorKind = Expr::Kind::SYMBOL;
+    using AnchorExpr = SymbolExpr;
+
+    // The Expr::Kind and concrete type of the "value" operand (the one we extract values
+    // from) (e.g. x = *10* OR x = *20* )
+    static constexpr Expr::Kind valueKind = Expr::Kind::LITERAL;
+    using ValueExpr = LiteralExpr;
+
+    // The type collected into the result vector
+    using ResultType = NodeID;
+
+    /// Ensures the var decl is the same for all leaf expressions
+    static bool validateAnchor(const AnchorExpr* anchor, const VarDecl* varDecl) {
+        return anchor->getDecl() == varDecl;
+    }
+
+    /// Extracts the value from each leaf expression
+    static bool extractValue(const ValueExpr* valueExpr, ResultType& out) {
+        const Literal* literal = valueExpr->getLiteral();
+        if (literal->getKind() != Literal::Kind::INTEGER) {
+            return false;
+        }
+
+        const auto* intLit = static_cast<const IntegerLiteral*>(literal);
+        if (intLit->getValue() < 0) {
+            return false;
+        }
+
+        out = NodeID(static_cast<uint64_t>(intLit->getValue()));
+        return true;
+    }
+};
+
+}

@@ -77,6 +77,8 @@ set(ast_sources
     YieldClause.cpp
     YieldItems.cpp
     CreatePropertyIndexQuery.cpp
+
+    ExprUtils.cpp
   )
 
 add_library(turing_db_ast_s STATIC ${ast_sources})
