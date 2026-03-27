@@ -499,8 +499,11 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateCreateNodePropertyIndexNode(static_cast<CreateNodePropertyIndexNode*>(node));
         break;
 
-        case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::INDEX_LOOKUP:
+            return translateIndexLookupNode(static_cast<IndexLookupNode*>(node));
+        break;
+
+        case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::UNKNOWN:
@@ -1840,31 +1843,27 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
     const LiteralExpr* litExpr = node->literal();
     bioassert(litExpr, "Null literal.");
 
-    PipelineValuesOutputInterface* output = nullptr;
-
     const EvaluatedType evaluatedType = entityDecl->getType();
 
     switch (evaluatedType) {
         case EvaluatedType::NodePattern: {
-            const auto process =[&]<SupportedType Type> {
-                output = &_builder.addIndexLookup<typename Type::Primitive, NodeID>(index);
+            const auto process = [&]<SupportedType Type> {
+                _builder.addIndexLookup<typename Type::Primitive, NodeID>(index);
             };
             PropertyTypeDispatcher {propType}.execute(process);
-        }
-        break;
+        } break;
 
         case EvaluatedType::EdgePattern: {
             const auto process = [&]<SupportedType Type> {
-                output = &_builder.addIndexLookup<typename Type::Primitive, EdgeID>(index);
+                _builder.addIndexLookup<typename Type::Primitive, EdgeID>(index);
             };
             PropertyTypeDispatcher {propType}.execute(process);
-        }
-        break;
+        } break;
 
         default: {
             const std::string_view typeName = EvaluatedTypeName::value(evaluatedType);
             throw PlannerException(fmt::format(
-                "IndexLookup must act on a Node/EdgePattern. Instead acting on {}",
+                "IndexLookup must act on a Node/EdgePattern. Instead acting on {}.",
                 typeName));
         }
     }

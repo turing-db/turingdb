@@ -2,7 +2,6 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
-#include "FatalException.h"
 #include "PipelinePort.h"
 
 #include "indexes/Index.h"
