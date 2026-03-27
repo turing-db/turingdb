@@ -412,7 +412,7 @@ VarNode* ReadStmtGenerator::generatePatternElementTarget(PlanGraphNode* prevNode
         }
     }
 
-    auto* nodeFilter = static_cast<NodeFilterNode*>(filter);
+    NodeFilterNode* nodeFilter = static_cast<NodeFilterNode*>(filter);
 
     // Type constraints
     LabelSet labelset;
@@ -684,18 +684,18 @@ bool ReadStmtGenerator::shouldPlaceValueHashJoin(VarNode* localVar, PlanGraphNod
 
     FilterNode* localFilter = _variables->getNodeFilter(localVar);
     if (localFilter) {
-        if (auto* nf = localFilter->asNodeFilter()) {
+        if (NodeFilterNode* nf = localFilter->asNodeFilter()) {
             leftLabels = nf->getLabelConstraints();
         }
     }
 
     CardinalityEstimation estimation(_graphView);
 
-    const auto* rightVar = dynamic_cast<VarNode*>(remoteNode);
+    const VarNode* rightVar = dynamic_cast<VarNode*>(remoteNode);
     if (rightVar) {
         FilterNode* remoteFilter = _variables->getNodeFilter(rightVar);
         if (remoteFilter) {
-            if (auto* nf = dynamic_cast<NodeFilterNode*>(remoteFilter)) {
+            if (NodeFilterNode* nf = dynamic_cast<NodeFilterNode*>(remoteFilter)) {
                 rightLabels = nf->getLabelConstraints();
             }
         }
@@ -711,7 +711,7 @@ bool ReadStmtGenerator::shouldPlaceValueHashJoin(VarNode* localVar, PlanGraphNod
 void ReadStmtGenerator::placeJoinsOnProcedures() {
     for (const auto& node : _tree->nodes()) {
         if (node->getOpcode() == PlanGraphOpcode::PROCEDURE_EVAL) {
-            auto* n = static_cast<ProcedureEvalNode*>(node.get());
+            ProcedureEvalNode* n = static_cast<ProcedureEvalNode*>(node.get());
             const ExprChain* args = n->getFuncExpr()->getFunctionInvocation()->getArguments();
 
             for (Expr* arg : *args) {
@@ -928,8 +928,8 @@ void ReadStmtGenerator::generateDependency(PlanGraphNode* producer, Expr* rawExp
     auto& getPropertyCache = _tree->getGetPropertyCache();
     auto& getEntityTypeCache = _tree->getGetEntityTypeCache();
 
-    if (auto* expr = dynamic_cast<PropertyExpr*>(rawExpr)) {
-        auto* varNode = dynamic_cast<VarNode*>(producer);
+    if (PropertyExpr* expr = dynamic_cast<PropertyExpr*>(rawExpr)) {
+        VarNode* varNode = dynamic_cast<VarNode*>(producer);
         FilterNode* filter = _variables->getNodeFilter(varNode);
 
         const VarDecl* entityDecl = expr->getEntityVarDecl();
@@ -950,8 +950,8 @@ void ReadStmtGenerator::generateDependency(PlanGraphNode* producer, Expr* rawExp
             n->setExpr(expr);
         }
 
-    } else if (auto* expr = dynamic_cast<EntityTypeExpr*>(rawExpr)) {
-        auto* varNode = dynamic_cast<VarNode*>(producer);
+    } else if (EntityTypeExpr* expr = dynamic_cast<EntityTypeExpr*>(rawExpr)) {
+        VarNode* varNode = dynamic_cast<VarNode*>(producer);
         FilterNode* filter = _variables->getNodeFilter(varNode);
         const VarDecl* entityDecl = expr->getEntityVarDecl();
         const VarDecl* exprDecl = expr->getExprVarDecl();
