@@ -6,6 +6,7 @@
 #include "ID.h"
 #include "PlanGraph.h"
 #include "CypherAST.h"
+#include "columns/ColumnVector.h"
 #include "expr/Expr.h"
 #include "expr/Operators.h"
 #include "expr/PropertyExpr.h"
@@ -39,9 +40,8 @@
 
 using namespace db;
 
-
-template <typename Q, typename R>
-IndexLookupNode<Q, R>* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr, const LiteralExpr* litExpr) {
+IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
+                                                     const LiteralExpr* litExpr) {
     const Literal* lit = litExpr->getLiteral();
     bioassert(lit, "Null literal.");
 
@@ -54,6 +54,7 @@ IndexLookupNode<Q, R>* PlanOptimizer::addIndexLookup(const PropertyExpr* propExp
     const PropertyTypeID propID = prop._id;
 
     const Index* matchingIndex = nullptr;
+    // TODO: Check if there is more than one index
     for (const WeakArc<Index>& index : _view.indexes()) {
         const PropertyTypeID indexedProp = index->property();
         if (propID == indexedProp) {
@@ -68,56 +69,29 @@ IndexLookupNode<Q, R>* PlanOptimizer::addIndexLookup(const PropertyExpr* propExp
 
     switch (litExpr->getType()) {
         case EvaluatedType::Integer: {
-            using Type = types::Int64;
+            const ValueType vt = ValueType::Int64;
 
-            const auto* intLit = static_cast<const IntegerLiteral*>(lit);
-            const Type::Primitive val = intLit->getValue();
+            auto* node =
+                _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
+            return node;
+        } break;
 
-            const std::vector<Type::Primitive> input {val};
-
-            // IndexLookupNode<Q,R>* lookup = _plan->create<IndexLookupNode<Q,R>>(matchingIndex, input);
-            return nullptr;
-        }
-        break;
-
-        case EvaluatedType::Double: {
-            using Type = types::Double::Primitive;
-
-            const auto* dblLit = static_cast<const DoubleLiteral*>(lit);
-            const Type val = dblLit->getValue();
-
-            const std::vector<Type> input {val};
-        }
+        case EvaluatedType::Double: {}
         break;
 
         case EvaluatedType::String: {
-            using Type = types::String::Primitive;
+            const ValueType vt = ValueType::Int64;
 
-            const auto* strLit = static_cast<const StringLiteral*>(lit);
-            const Type val = strLit->getValue();
-
-            const std::vector<Type> input {val};
+            auto* node =
+                _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
+            return node;
         }
         break;
 
-        case EvaluatedType::Bool: {
-            using Type = types::Bool::Primitive;
-
-            const auto* boolLit = static_cast<const BoolLiteral*>(lit);
-            const Type val = boolLit->getValue();
-
-            const std::vector<Type> input {val};
-        }
+        case EvaluatedType::Bool: {}
         break;
 
-        case EvaluatedType::Embedding: {
-            using Type = types::Embedding::Primitive;
-
-            const auto* embLit = static_cast<const EmbeddingLiteral*>(lit);
-            const Type val = embLit->getValue();
-
-            const std::vector<Type> input {val};
-        }
+        case EvaluatedType::Embedding: {}
         break;
 
         case EvaluatedType::Null:
@@ -730,6 +704,3 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
     }
 }
 
-namespace db{
-template IndexLookupNode<types::Int64::Primitive, NodeID>* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr, const LiteralExpr* litExpr);
-}

@@ -2,26 +2,38 @@
 
 #include "nodes/PlanGraphNode.h"
 
+#include "metadata/PropertyType.h"
+
 namespace db {
 
 class Index;
-class Column;
+class PropertyExpr;
+class LiteralExpr;
 
-template <typename Q, typename R>
 class IndexLookupNode : public PlanGraphNode {
 public:
-    explicit IndexLookupNode(const Index* index, const Column* query)
+    explicit IndexLookupNode(const Index* index,
+                             const PropertyExpr* prop,
+                             ValueType vt,
+                             const LiteralExpr* lit)
         : PlanGraphNode(PlanGraphOpcode::INDEX_LOOKUP),
-        _index(index),
-        _query(query)
+          _index(index),
+          _prop(prop),
+          _valueType(vt),
+          _lit(lit)
     {
     }
 
     const Index* index() const { return _index; }
+    const PropertyExpr* property() const { return _prop; }
+    ValueType valueType() const { return _valueType; }
+    const LiteralExpr* literal() { return _lit; }
 
 private:
     const Index* _index {nullptr};
-    const Column* _query {nullptr};
+    const PropertyExpr* _prop {nullptr};
+    ValueType _valueType;
+    const LiteralExpr* _lit {nullptr};
 };
 
 }

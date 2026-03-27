@@ -30,7 +30,7 @@
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
-#include "nodes/IndexLookupNode.h"
+#include "metadata/SupportedType.h"
 #include "procedures/ProcedureManager.h"
 #include "processors/OrderByProcessor.h"
 #include "processors/PathExplorerProcessor.h"
@@ -90,6 +90,7 @@
 #include "nodes/ConstScanNode.h"
 #include "nodes/ConstWriteSourceNode.h"
 #include "nodes/CreateNodePropertyIndexNode.h"
+#include "nodes/IndexLookupNode.h"
 
 #include "TranslateJoinHelpers.h"
 
@@ -1816,6 +1817,59 @@ PipelineOutputInterface* PipelineGenerator::translateCreateNodePropertyIndexNode
     const std::string_view propertyName = propExpr->getPropName();
 
     _builder.addCreateNodePropertyIndex(indexName, propertyName);
+
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookupNode* node) {
+    if (!_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    const Index* index = node->index();
+    bioassert(index, "Null index.");
+
+    const PropertyExpr* propExpr = node->property();
+    bioassert(propExpr, "Null property.");
+
+    const VarDecl* entityDecl = propExpr->getEntityVarDecl();
+    bioassert(entityDecl, "Null entity.");
+
+    const ValueType propType = node->valueType();
+
+    const LiteralExpr* litExpr = node->literal();
+    bioassert(litExpr, "Null literal.");
+
+    PipelineValuesOutputInterface* output = nullptr;
+
+    const EvaluatedType evaluatedType = entityDecl->getType();
+
+    switch (evaluatedType) {
+        case EvaluatedType::NodePattern: {
+            const auto process =[&]<SupportedType Type> {
+                output = &_builder.addIndexLookup<typename Type::Primitive, NodeID>(index);
+            };
+            PropertyTypeDispatcher {propType}.execute(process);
+        }
+        break;
+
+        case EvaluatedType::EdgePattern: {
+            const auto process = [&]<SupportedType Type> {
+                output = &_builder.addIndexLookup<typename Type::Primitive, EdgeID>(index);
+            };
+            PropertyTypeDispatcher {propType}.execute(process);
+        }
+        break;
+
+        default: {
+            const std::string_view typeName = EvaluatedTypeName::value(evaluatedType);
+            throw PlannerException(fmt::format(
+                "IndexLookup must act on a Node/EdgePattern. Instead acting on {}",
+                typeName));
+        }
+    }
+
+    // TODO: update decl column map
 
     return _builder.getPendingOutputInterface();
 }

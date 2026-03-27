@@ -31,9 +31,8 @@ private:
     void rewritePropertyFilterWithIndex();
     void rewriteNodePropertyFilterWithIndex();
 
-    template <typename Q, typename R>
-    IndexLookupNode<Q, R>* addIndexLookup(const PropertyExpr* propExpr,
-                                          const LiteralExpr* litExpr);
+    IndexLookupNode* addIndexLookup(const PropertyExpr* propExpr,
+                                    const LiteralExpr* litExpr);
 };
 
 }

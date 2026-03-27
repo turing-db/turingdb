@@ -6,6 +6,7 @@
 #include "columns/ColumnOperatorDispatcher.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesInputInterface.h"
+#include "metadata/PropertyType.h"
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
@@ -1432,4 +1433,15 @@ template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExpl
 template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::BACKWARD>(uint64_t, uint64_t);
 
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Int64::Primitive, NodeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::UInt64::Primitive, NodeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Double::Primitive, NodeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Bool::Primitive, NodeID>(const Index*);
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::String::Primitive, NodeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Embedding::Primitive, NodeID>(const Index*);
+
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Int64::Primitive, EdgeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::UInt64::Primitive, EdgeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Double::Primitive, EdgeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Bool::Primitive, EdgeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::String::Primitive, EdgeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Embedding::Primitive, EdgeID>(const Index*);
