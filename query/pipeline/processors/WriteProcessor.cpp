@@ -1,6 +1,7 @@
 #include "WriteProcessor.h"
 
 #include <algorithm>
+#include <exception>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -48,9 +49,9 @@ bool isColumnConst(const Column* col) {
 }
 
 template <TypedInternalID IDT>
-void validateDeletions(const GraphReader reader, const ColumnVector<IDT>* col) {
+WriteResult validateDeletions(const GraphReader reader, const ColumnVector<IDT>* col) {
     if (!col) {
-        throw FatalException("Attempted to delete null column.");
+        return WriteError {"Attempted to delete null column."};
     }
 
     constexpr bool isNode = std::is_same_v<IDT, NodeID>;
@@ -64,15 +65,17 @@ void validateDeletions(const GraphReader reader, const ColumnVector<IDT>* col) {
             existsAndNotDeleted = reader.graphHasEdge(id);
         }
 
-        if (!existsAndNotDeleted) [[unlikely]] {
-            throw PipelineException(fmt::format("Graph does not contain {} with ID: {}.",
-                                                isNode ? "node" : "edge", id.getValue()));
+        if (!existsAndNotDeleted) {
+            return WriteError {fmt::format("Graph does not contain {} with ID: {}.",
+                                           isNode ? "node" : "edge", id.getValue())};
         }
     }
+
+    return {};
 }
 
-template void validateDeletions<NodeID>(const GraphReader reader, const ColumnVector<NodeID>* col);
-template void validateDeletions<EdgeID>(const GraphReader reader, const ColumnVector<EdgeID>* col);
+template WriteResult validateDeletions<NodeID>(const GraphReader reader, const ColumnVector<NodeID>* col);
+template WriteResult validateDeletions<EdgeID>(const GraphReader reader, const ColumnVector<EdgeID>* col);
 
 class ColumnVectorToUntypedProperties {
 public:
@@ -169,7 +172,7 @@ private:
     PropertyTypeID _propID;
 };
 
-void getUntypedProperties(const Column* valueColumn,
+WriteResult getUntypedProperties(const Column* valueColumn,
                           CommitWriteBuffer::UntypedProperties& props,
                           PropertyTypeID pid) {
     using Types = WriteProcessorPropertyTypes;
@@ -179,7 +182,16 @@ void getUntypedProperties(const Column* valueColumn,
                                Types::ExcludedVector>;
     // Determines type of property values and fills @ref propBuffer with variants
     ColumnVectorToUntypedProperties toVec(props, pid);
-    Dispatcher::dispatch(valueColumn, toVec);
+
+    try {
+        Dispatcher::dispatch(valueColumn, toVec);
+    } catch (const std::exception& e) {
+        return WriteError {e.what()};
+    } catch (...) {
+        return WriteError {"Unknown error."};
+    }
+
+    return {};
 }
 
 class ColumnConstToUntypedProperty {
@@ -277,6 +289,7 @@ void WriteProcessor::prepare(ExecutionContext* ctxt) {
 
     _metadataBuilder = &commitBuilder->metadata();
     _writeBuffer = &commitBuilder->writeBuffer();
+    _localCopy = std::make_unique<CommitWriteBuffer>(*_writeBuffer);
 
     bioassert(_metadataBuilder, "Failed to get MetadataBuilder in WriteProcessor");
     bioassert(_writeBuffer, "Failed to get CommitWriteBuffer in WriteProcessor");
@@ -286,26 +299,31 @@ void WriteProcessor::reset() {
     markAsReset();
 }
 
-void WriteProcessor::performDeletions() {
+WriteResult WriteProcessor::performDeletions() {
     const GraphReader reader = _ctxt->getGraphView().read();
     const Dataframe* inDf = _input->getDataframe();
 
     for (const ColumnTag deletedTag : _deletedNodes) {
         if (!inDf->hasColumn(deletedTag)) {
-            throw FatalException(fmt::format(
+            return WriteError {fmt::format(
                 "Attempted to delete nodes in Column {}, but found no such column "
                 "in the input Dataframe.",
-                deletedTag.getValue()));
+                deletedTag.getValue())};
         }
 
         const auto* nodeColumn = inDf->getColumn(deletedTag)->as<ColumnNodeIDs>();
         if (!nodeColumn) { // @ref as<> performs dynamic_cast
-            throw FatalException(fmt::format("Column {} was marked as a column of"
-                                             " deleted nodes, but is not a NodeID"
-                                             " column.", deletedTag.getValue()));
+            return WriteError {fmt::format("Column {} was marked as a column of"
+                                           " deleted nodes, but is not a NodeID"
+                                           " column.",
+                                           deletedTag.getValue())};
         }
 
-        validateDeletions(reader, nodeColumn);
+        WriteResult res = validateDeletions(reader, nodeColumn);
+        if (!res) {
+            return res;
+        }
+
         _writeBuffer->addDeletedNodes(nodeColumn->getRaw());
         // TODO: Guard around if the query is DETACH or NODETACH
         _writeBuffer->addHangingEdges(_ctxt->getGraphView());
@@ -313,22 +331,29 @@ void WriteProcessor::performDeletions() {
 
     for (const ColumnTag deletedTag : _deletedEdges) {
         if (!inDf->hasColumn(deletedTag)) {
-            throw FatalException(fmt::format(
+            return WriteError {fmt::format(
                 "Attempted to delete edges in Column {}, but found no such column "
                 "in the input Dataframe.",
-                deletedTag.getValue()));
+                deletedTag.getValue())};
         }
 
         const auto* edgeColumn = inDf->getColumn(deletedTag)->as<ColumnEdgeIDs>();
         if (!edgeColumn) {
-            throw FatalException(fmt::format("Column {} was marked as a column of"
-                                             " deleted edges, but is not an EdgeID"
-                                             " column.", deletedTag.getValue()));
+            return WriteError {fmt::format("Column {} was marked as a column of"
+                                           " deleted edges, but is not an EdgeID"
+                                           " column.",
+                                           deletedTag.getValue())};
         }
 
-        validateDeletions(reader, edgeColumn);
+        WriteResult res = validateDeletions(reader, edgeColumn);
+        if (!res) {
+            return res;
+        }
+
         _writeBuffer->addDeletedEdges(edgeColumn->getRaw());
     }
+
+    return {};
 }
 
 LabelSet WriteProcessor::getLabelSet(std::span<const std::string_view> labels) {
@@ -340,7 +365,7 @@ LabelSet WriteProcessor::getLabelSet(std::span<const std::string_view> labels) {
     return labelset;
 }
 
-void WriteProcessor::createNodes(size_t numIters) {
+WriteResult WriteProcessor::createNodes(size_t numIters) {
     NodeID nextNodeID = _writeBuffer->numPendingNodes();
     const Dataframe* outDf = _output.getDataframe();
 
@@ -357,7 +382,7 @@ void WriteProcessor::createNodes(size_t numIters) {
         const std::span labels = node._labels;
 
         if (labels.empty()) {
-            throw PipelineException("Nodes require at least 1 label.");
+            return WriteError {"Nodes require at least 1 label."};
         }
         lblset = getLabelSet(labels);
 
@@ -412,10 +437,12 @@ void WriteProcessor::createNodes(size_t numIters) {
 
         nextNodeID += numIters;
     }
+
+    return {};
 }
 
 // @warn assumes all pending nodes have already been created
-void WriteProcessor::createEdges(size_t numIters) {
+WriteResult WriteProcessor::createEdges(size_t numIters) {
     EdgeID nextEdgeID = _writeBuffer->numPendingEdges();
     const Dataframe* inDf = _input ? _input->getDataframe() : nullptr;
     const Dataframe* outDf = _output.getDataframe();
@@ -440,16 +467,16 @@ void WriteProcessor::createEdges(size_t numIters) {
         // always retrieve the column from the output dataframe, regardless of whether
         // the source node was the result of a CREATE or a MATCH
         if (!outDf->hasColumn(srcTag)) {
-            throw FatalException(fmt::format("Attempted to create edge {} with "
-                                             "source node with no such column: {}",
-                                             edge._name, edge._srcTag.getValue()));
+            return WriteError {fmt::format("Attempted to create edge {} with "
+                                           "source node with no such column: {}",
+                                           edge._name, edge._srcTag.getValue())};
         }
         srcCol = outDf->getColumn(srcTag)->as<ColumnNodeIDs>();
         if (!srcCol) { // @ref as<> performs dynamic_cast
-            throw FatalException(fmt::format("Column {} was marked as a column of"
-                                             " pending source nodes, but is not a NodeID"
-                                             " column.",
-                                             srcTag.getValue()));
+            return WriteError {fmt::format("Column {} was marked as a column of"
+                                           " pending source nodes, but is not a NodeID"
+                                           " column.",
+                                           srcTag.getValue())};
         }
 
         ColumnNodeIDs* tgtCol = nullptr;
@@ -457,16 +484,16 @@ void WriteProcessor::createEdges(size_t numIters) {
         const bool tgtIsPending = !inDf || inDf->getColumn(tgtTag) == nullptr;
 
         if (!outDf->hasColumn(tgtTag)) {
-            throw FatalException(fmt::format("Attempted to create edge {} with "
-                                             "target node with no such column: {}",
-                                             edge._name, edge._tgtTag.getValue()));
+            return WriteError {fmt::format("Attempted to create edge {} with "
+                                           "target node with no such column: {}",
+                                           edge._name, edge._tgtTag.getValue())};
         }
         tgtCol = outDf->getColumn(tgtTag)->as<ColumnNodeIDs>();
         if (!tgtCol) { // @ref as<> performs dynamic_cast
-            throw FatalException(fmt::format("Column {} was marked as a column of"
-                                             " pending target nodes, but is not a NodeID"
-                                             " column.",
-                                             tgtTag.getValue()));
+            return WriteError {fmt::format("Column {} was marked as a column of"
+                                           " pending target nodes, but is not a NodeID"
+                                           " column.",
+                                           tgtTag.getValue())};
         }
 
         bioassert(tgtCol->size() == srcCol->size(), "src and target column should have same dimension");
@@ -542,6 +569,8 @@ void WriteProcessor::createEdges(size_t numIters) {
 
         nextEdgeID += numIters;
     }
+
+    return {};
 }
 
 void WriteProcessor::postProcessTempIDs() {
@@ -569,7 +598,7 @@ void WriteProcessor::postProcessTempIDs() {
     }
 }
 
-void WriteProcessor::updateNodes() {
+WriteResult WriteProcessor::updateNodes() {
     const Dataframe* inDf = tryGetInput().getDataframe();
 
     // Temporary buffers, reused over iterations, to add write buffer updates
@@ -598,7 +627,11 @@ void WriteProcessor::updateNodes() {
                 _writeBuffer->addNodeUpdate(n, propBuffer);
             }
         } else { // Column(Opt)Vector -> unique property for each node
-            getUntypedProperties(valueColumn, propsBuffer, pid);
+            WriteResult res = getUntypedProperties(valueColumn, propsBuffer, pid);
+            if (!res) {
+                return res;
+            }
+
             bioassert(source->size() == propsBuffer.size(),
                       "Mismatch in dimensions of nodes to update and property values.");
 
@@ -607,9 +640,11 @@ void WriteProcessor::updateNodes() {
             }
         }
     }
+
+    return {};
 }
 
-void WriteProcessor::updateEdges() {
+WriteResult WriteProcessor::updateEdges() {
     const Dataframe* inDf = tryGetInput().getDataframe();
 
     // Temporary buffers, reused over iterations, to add write buffer updates
@@ -638,7 +673,11 @@ void WriteProcessor::updateEdges() {
                 _writeBuffer->addEdgeUpdate(e, propBuffer);
             }
         } else { // Column(Opt)Vector -> unique property for each edge
-            getUntypedProperties(valueColumn, propsBuffer, pid);
+            WriteResult res = getUntypedProperties(valueColumn, propsBuffer, pid);
+            if (!res) {
+                return res;
+            }
+
             bioassert(source->size() == propsBuffer.size(),
                       "Mismatch in dimensions of edges to updates and property values.");
 
@@ -647,25 +686,52 @@ void WriteProcessor::updateEdges() {
             }
         }
     }
+
+    return {};
 }
 
-void WriteProcessor::performCreations() {
+WriteResult WriteProcessor::performCreations() {
     // We apply the CREATE command for each row in the input, or just a single row if we
     // have no inputs
     const size_t numIters = _input ? _input->getDataframe()->getLogicalRowCount() : 1;
     if (numIters == 0) {
-        return;
+        return {};
     }
 
-    createNodes(numIters);
-    createEdges(numIters);
+    {
+        WriteResult res = createNodes(numIters);
+        if (!res) {
+            return res;
+        }
+    }
+    {
+        WriteResult res = createEdges(numIters);
+        if (!res) {
+            return res;
+        }
+    }
 
     postProcessTempIDs();
+
+    return {};
 }
 
-void WriteProcessor::performUpdates() {
-    updateNodes();
-    updateEdges();
+WriteResult WriteProcessor::performUpdates() {
+    {
+        WriteResult res = updateNodes();
+        if (!res) {
+            return res;
+        }
+    }
+
+    {
+        WriteResult res = updateEdges();
+        if (!res) {
+            return res;
+        }
+    }
+
+    return {};
 }
 
 void WriteProcessor::setup() {
@@ -722,18 +788,30 @@ void WriteProcessor::execute() {
         if (!_input) {
             throw PipelineException("Cannot delete pending entity: DELETE queries require a MATCH input.");
         }
-        performDeletions();
+        WriteResult res = performDeletions();
+        if (!res) {
+            *_writeBuffer = *_localCopy;
+            throw PipelineException(std::move(res.error()));
+        }
     }
 
     // Evaluate instructions so that property columns are populated with their
     // evaluated value
     _exprProgram->evaluateInstructions();
     if (!_pendingNodes.empty() || !_pendingEdges.empty()) {
-        performCreations();
+        WriteResult res = performCreations();
+        if (!res) {
+            *_writeBuffer = *_localCopy;
+            throw PipelineException(std::move(res.error()));
+        }
     }
 
     if (!_updatedNodes.empty() || !_updatedEdges.empty()) {
-        performUpdates();
+        WriteResult res = performUpdates();
+        if (!res) {
+            *_writeBuffer = *_localCopy;
+            throw PipelineException(std::move(res.error()));
+        }
     }
 
     if (_input) {

@@ -177,7 +177,7 @@ private:
 
     bool _flushed {false};
 
-    CommitJournal& _journal;
+    CommitJournal* _journal {nullptr};
 
     // NOTE: This view is NOT updated by CommitWriteBuffer::rebase
     GraphView _view;

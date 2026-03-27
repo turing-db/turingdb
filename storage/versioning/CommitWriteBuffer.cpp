@@ -7,15 +7,15 @@
 
 #include "Graph.h"
 #include "ID.h"
+
 #include "columns/ColumnVector.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
-#include "versioning/MetadataRebaser.h"
 #include "versioning/EntityIDRebaser.h"
+#include "versioning/MetadataRebaser.h"
 #include "writers/DataPartBuilder.h"
-#include "Tombstones.h"
 
 using namespace db;
 namespace rg = ranges;
@@ -53,7 +53,7 @@ struct PrimitiveToTag<types::Embedding::OwningPrimitive> {
 }
 
 CommitWriteBuffer::CommitWriteBuffer(CommitJournal& journal, GraphView view)
-    : _journal(journal),
+    : _journal(&journal),
     _view(view)
 {
 }
@@ -148,7 +148,7 @@ void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
             value);
     }
 
-    _journal.addWrittenNode(nodeID);
+    _journal->addWrittenNode(nodeID);
 }
 
 void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder) {
@@ -209,7 +209,7 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
             value);
     }
 
-    _journal.addWrittenEdge(newEdgeID);
+    _journal->addWrittenEdge(newEdgeID);
 }
 
 void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder) {
@@ -239,7 +239,7 @@ void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
             },
             value);
 
-        _journal.addWrittenNode(nodeID);
+        _journal->addWrittenNode(nodeID);
     }
 }
 
@@ -259,7 +259,7 @@ void CommitWriteBuffer::applyExistingEdgeUpdate(DataPartBuilder& builder,
         },
         val);
 
-    _journal.addWrittenEdge(record._edgeID);
+    _journal->addWrittenEdge(record._edgeID);
 }
 
 void CommitWriteBuffer::applyPendingEdgeUpdate(DataPartBuilder& builder,
@@ -348,8 +348,8 @@ void CommitWriteBuffer::applyDeletions(Tombstones& tombstones) {
     tombstones.addNodeTombstones(_deletedNodes);
     tombstones.addEdgeTombstones(_deletedEdges);
     // Delete nodes/edges should be in the "write set" of this commit
-    _journal.addWrittenNodes(_deletedNodes);
-    _journal.addWrittenEdges(_deletedEdges);
+    _journal->addWrittenNodes(_deletedNodes);
+    _journal->addWrittenEdges(_deletedEdges);
 }
 
 void CommitWriteBufferRebaser::rebase() {

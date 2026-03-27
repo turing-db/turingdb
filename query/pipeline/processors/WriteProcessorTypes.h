@@ -1,5 +1,6 @@
 #pragma once
 
+#include <expected>
 #include <stddef.h>
 #include <string_view>
 
@@ -8,6 +9,9 @@
 #include "metadata/PropertyType.h"
 
 namespace db {
+
+using WriteResult = std::expected<void, std::string>;
+using WriteError = std::unexpected<std::string>;
 
 class Column;
 

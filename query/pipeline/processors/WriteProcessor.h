@@ -1,17 +1,19 @@
 #pragma once
 
 #include <math.h>
+#include <memory>
 #include <optional>
 #include <string_view>
 
 #include "Processor.h"
 #include "WriteProcessorTypes.h"
 
+#include "dataframe/ColumnTag.h"
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
-#include "dataframe/ColumnTag.h"
 #include "interfaces/PipelineInputInterface.h"
 #include "metadata/LabelSet.h"
+#include "versioning/CommitWriteBuffer.h"
 
 #include "FatalException.h"
 
@@ -19,7 +21,6 @@ namespace db {
 
 class Dataframe;
 class MetadataBuilder;
-class CommitWriteBuffer;
 
 }
 
@@ -77,6 +78,8 @@ private:
     MetadataBuilder* _metadataBuilder {nullptr};
     CommitWriteBuffer* _writeBuffer {nullptr};
 
+    std::unique_ptr<CommitWriteBuffer> _localCopy;
+
     DeletedNodes _deletedNodes;
     DeletedEdges _deletedEdges;
 
@@ -103,7 +106,7 @@ private:
      * _writeBuffer.
      * @warn Currently always deletes any edges which are incident to a deleted node.
      */
-    void performDeletions();
+    WriteResult performDeletions();
 
     /**
      * @brief Adds pending nodes and edges to @ref _writeBuffer, one copy for each input
@@ -111,23 +114,23 @@ private:
      * (where "estimation" is an estimation of what each node/edge ID will be once
      * committed).
      */
-    void performCreations();
+    WriteResult performCreations();
 
     /**
      * @brief Adds node and edge updates to @ref _writeBuffer.
      */
-    void performUpdates();
+    WriteResult performUpdates();
 
-    void updateNodes();
+    WriteResult updateNodes();
 
-    void updateEdges();
+    WriteResult updateEdges();
 
     /**
      * @brief Adds @param numIters copies of each element of @ref _pendingNodes to @ref
      * _writeBuffer. Fills @ref _output dataframe with the index in @ref
      * _writeBuffer::_pendingNodes for which each node can be found.
      */
-    void createNodes(size_t numIters);
+    WriteResult createNodes(size_t numIters);
 
     /**
      * @brief Adds @param numIters copies of each element of @ref _pendingEdges to
@@ -135,7 +138,7 @@ private:
      * _writeBuffer::_pendingEdges for which each node can be found.
      * @warn Requires @ref createNodes to have been called prior
      */
-    void createEdges(size_t numIters);
+    WriteResult createEdges(size_t numIters);
 
     /**
      * @brief Transforms each column in @ref _output dataframe which has a tag belonging
