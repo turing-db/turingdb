@@ -775,20 +775,23 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodesByLabel(const LabelSet
     return outNodeIDs;
 }
 
-PipelineNodeOutputInterface& PipelineBuilder::addConstScanNodes(std::span<const NodeID> nodeIDs) {
-    ConstScanProcessor* proc = ConstScanProcessor::create(_pipeline, nodeIDs);
-    PipelineNodeOutputInterface& outNodeIDs = proc->outNodeIDs();
+template <typename T>
+PipelineValuesOutputInterface& PipelineBuilder::addConstScan(std::span<const T> values) {
+    using ColumnValueType = ColumnVector<T>;
+
+    ConstScanProcessor<T>* proc = ConstScanProcessor<T>::create(_pipeline, values);
+    PipelineValuesOutputInterface& outValues = proc->values();
 
     // Allocate output node IDs column
-    NamedColumn* col = allocColumn<ColumnNodeIDs>(outNodeIDs.getDataframe());
-    outNodeIDs.setNodeIDs(col);
+    NamedColumn* col = allocColumn<ColumnNodeIDs>(outValues.getDataframe());
+    outValues.setValues(col);
 
     // Register output in materialize data
-    _matProc->getMaterializeData().addToStep<ColumnNodeIDs>(col);
+    _matProc->getMaterializeData().addToStep<ColumnValueType>(col);
 
-    _pendingOutput.updateInterface(&outNodeIDs);
+    _pendingOutput.updateInterface(&outValues);
     _lastProc = proc;
-    return outNodeIDs;
+    return outValues;
 }
 
 PipelineValueOutputInterface& PipelineBuilder::addLoadGraph(std::string_view graphName) {

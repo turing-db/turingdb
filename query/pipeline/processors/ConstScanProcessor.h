@@ -5,35 +5,38 @@
 
 #include "Processor.h"
 
-#include "ID.h"
-#include "columns/ColumnIDs.h"
-#include "interfaces/PipelineNodeOutputInterface.h"
+#include "interfaces/PipelineValuesOutputInterface.h"
+
+#include "columns/ColumnVector.h"
 
 namespace db {
 
-class ConstScanProcessor : public Processor {
+template <typename T>
+class ConstScanProcessor final : public Processor {
 public:
-    static ConstScanProcessor* create(PipelineV2* pipeline,
-                                      std::span<const NodeID> nodeIDs);
+    using ColumnValues = ColumnVector<T>;
 
-    std::string describe() const override;
+    static ConstScanProcessor<T>* create(PipelineV2* pipeline, std::span<const T> values);
 
-    void prepare(ExecutionContext* ctxt) override;
-    void reset() override;
-    void execute() override;
+    std::string describe() const final;
 
-    PipelineNodeOutputInterface& outNodeIDs() { return _outNodeIDs; }
+    void prepare(ExecutionContext* ctxt) final;
+    void reset() final;
+    void execute() final;
+
+    PipelineValuesOutputInterface& output() { return _output; }
 
 private:
-    std::span<const NodeID> _nodeIDs;
-    std::vector<NodeID> _sortedNodeIDs;
-    PipelineNodeOutputInterface _outNodeIDs;
+    PipelineValuesOutputInterface _output;
 
-    ColumnNodeIDs* _outCol {nullptr};
+    std::span<const T> _values;
+    std::vector<T> _sortedValues;
+
+    ColumnValues* _outCol {nullptr};
     size_t _offset {0};
 
-    ConstScanProcessor(std::span<const NodeID> nodeIDs);
-    ~ConstScanProcessor();
+    explicit ConstScanProcessor(std::span<const T> values);
+    ~ConstScanProcessor() final;
 };
 
 }
