@@ -203,6 +203,7 @@ void PipelineValuesOutputInterface::connectTo(PipelineNodeInputInterface& input)
 
 void PipelineValuesOutputInterface::connectTo(PipelineValuesInputInterface& input) {
     input.setStream(_stream);
+    input.setValues(_values);
     _port->connectTo(input.getPort());
 }
 
