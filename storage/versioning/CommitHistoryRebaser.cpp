@@ -30,7 +30,7 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
 
     const auto& prevDataParts = prevHistory._allDataparts;
 
-    if (prevDataParts.empty()){
+    if (prevDataParts.empty()) {
         return;
     }
 
