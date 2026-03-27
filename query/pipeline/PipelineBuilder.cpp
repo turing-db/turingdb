@@ -159,6 +159,7 @@ std::is_same_v<LeftJoinKeyType, EdgeID> ||
 std::is_same_v<LeftJoinKeyType, LabelID> ||
 std::is_same_v<LeftJoinKeyType, EdgeTypeID> ||
 std::is_same_v<LeftJoinKeyType, PropertyTypeID> ||
+std::is_same_v<LeftJoinKeyType, ValueType> ||
 std::is_same_v<LeftJoinKeyType, int64_t> ||
 std::is_same_v<LeftJoinKeyType, uint64_t> ||
 std::is_same_v<LeftJoinKeyType, double> ||

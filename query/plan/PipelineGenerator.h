@@ -25,6 +25,7 @@ class GetEdgesNode;
 class GetEdgeTargetNode;
 class GetPropertyNode;
 class GetPropertyWithNullNode;
+class DataframeFilterNode;
 class NodeFilterNode;
 class EdgeFilterNode;
 class ProduceResultsNode;
@@ -125,6 +126,7 @@ private:
     PipelineOutputInterface* translateGetEdgeTargetNode(GetEdgeTargetNode* node);
     PipelineOutputInterface* translateGetPropertyNode(GetPropertyNode* node);
     PipelineOutputInterface* translateGetPropertyWithNullNode(GetPropertyWithNullNode* node);
+    PipelineOutputInterface* translateDataframeFilterNode(DataframeFilterNode* node);
     PipelineOutputInterface* translateNodeFilterNode(NodeFilterNode* node);
     PipelineOutputInterface* translateEdgeFilterNode(EdgeFilterNode* node);
     PipelineOutputInterface* translateProduceResultsNode(ProduceResultsNode* node);

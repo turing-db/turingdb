@@ -14,26 +14,19 @@ class Predicate;
 
 class FilterNode : public PlanGraphNode {
 public:
-    explicit FilterNode(PlanGraphOpcode opcode)
-        : PlanGraphNode(opcode)
-    {
-    }
+    using Predicates = std::vector<Predicate*>;
 
     void setVarNode(VarNode* varNode) {
         _varNode = varNode;
     }
 
-    VarNode* getVarNode() {
-        return _varNode;
-    }
+    VarNode* getVarNode() const { return _varNode; }
 
     void addPredicate(Predicate* pred) {
         _predicates.push_back(pred);
     }
 
-    const std::vector<Predicate*>& getPredicates() const {
-        return _predicates;
-    }
+    const Predicates& getPredicates() const { return _predicates; }
 
     NodeFilterNode* asNodeFilter();
     const NodeFilterNode* asNodeFilter() const;
@@ -45,9 +38,25 @@ public:
         return _predicates.empty();
     }
 
+protected:
+    explicit FilterNode(PlanGraphOpcode opcode)
+        : PlanGraphNode(opcode)
+    {
+    }
+
+    ~FilterNode() = default;
+
 private:
     VarNode* _varNode {nullptr};
-    std::vector<Predicate*> _predicates;
+    Predicates _predicates;
+};
+
+class DataframeFilterNode : public FilterNode {
+public:
+    DataframeFilterNode()
+        : FilterNode(PlanGraphOpcode::FILTER_DATAFRAME)
+    {
+    }
 };
 
 class NodeFilterNode : public FilterNode {

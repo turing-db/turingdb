@@ -339,6 +339,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateEdgeFilterNode(static_cast<EdgeFilterNode*>(node));
         break;
 
+        case PlanGraphOpcode::FILTER_DATAFRAME:
+            return translateDataframeFilterNode(static_cast<DataframeFilterNode*>(node));
+        break;
+
         case PlanGraphOpcode::SKIP:
             return translateSkipNode(static_cast<SkipNode*>(node));
         break;
@@ -682,6 +686,33 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
     }
 
     _declToColumn[exprDecl] = output->getValues()->getTag();
+
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateDataframeFilterNode(DataframeFilterNode* node) {
+    if (!_builder.isSingleMaterializeStep()) {
+        _builder.addMaterialize();
+    }
+
+    if (node->isEmpty()) {
+        return _builder.getPendingOutputInterface();
+    }
+
+    const auto& predicates = node->getPredicates();
+
+    PredicateProgram* predProg = PredicateProgram::create(_pipeline);
+    PredicateProgramGenerator predGen(this, predProg, _builder.getPendingOutput());
+
+    for (const Predicate* pred : predicates) {
+        predGen.generatePredicate(pred);
+    }
+
+    const auto& output = _builder.addFilter(predProg);
+    Dataframe* outputDf = output.getDataframe();
+
+    auto* newMatProc = MaterializeProcessor::createFromDf(_pipeline, _mem, outputDf);
+    _builder.setMaterializeProc(newMatProc);
 
     return _builder.getPendingOutputInterface();
 }

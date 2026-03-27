@@ -1056,8 +1056,8 @@ void ReadStmtGenerator::placeProcedurePredicate(Predicate* pred) {
         }
     }
 
-    // Fallback: CartesianProduct + NodeFilterNode for non-equality predicates
-    NodeFilterNode* filter = _tree->create<NodeFilterNode>();
+    // Fallback: CartesianProduct + DataframeFilterNode for non-equality predicates
+    DataframeFilterNode* filter = _tree->create<DataframeFilterNode>();
     filter->addPredicate(pred);
     pred->setFilterNode(filter);
 
