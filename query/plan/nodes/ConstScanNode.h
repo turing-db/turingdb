@@ -4,22 +4,21 @@
 
 #include <vector>
 
-#include "ID.h"
-
 namespace db {
 
+template <typename T>
 class ConstScanNode : public PlanGraphNode {
 public:
-    explicit ConstScanNode(const std::vector<NodeID>& nodeIDs)
+    explicit ConstScanNode(const std::vector<T>& values)
         : PlanGraphNode(PlanGraphOpcode::CONST_SCAN),
-        _nodeIDs(nodeIDs)
+        _values(values)
     {
     }
 
-    const std::vector<NodeID>& getNodeIDs() const { return _nodeIDs; }
+    const std::vector<T>& getValues() const { return _values; }
 
 private:
-    std::vector<NodeID> _nodeIDs;
+    std::vector<T> _values;
 };
 
 }

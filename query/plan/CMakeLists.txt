@@ -17,6 +17,7 @@ set(plan_sources
     nodes/LoadCSVNode.cpp
     nodes/VarDeclProviderNode.cpp
     nodes/ExprEvalNode.cpp
+    nodes/ConstScanNode.cpp
 )
 
 add_library(turing_db_plan_s STATIC ${plan_sources})
