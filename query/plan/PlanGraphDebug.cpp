@@ -168,6 +168,13 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 }
             } break;
 
+            case PlanGraphOpcode::FILTER_DATAFRAME: {
+                const auto* n = dynamic_cast<DataframeFilterNode*>(node.get());
+                for (const auto& pred : n->getPredicates()) {
+                    outputPredicate(output, pred);
+                }
+            } break;
+
             case PlanGraphOpcode::FILTER_EDGE: {
                 const auto* e = dynamic_cast<EdgeFilterNode*>(node.get());
                 for (const auto& edgeType : e->getEdgeTypeConstraints()) {
