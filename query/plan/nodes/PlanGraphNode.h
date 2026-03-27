@@ -57,6 +57,7 @@ enum class PlanGraphOpcode {
     CONST_SCAN,
     CONST_WRITE_SOURCE,
     CREATE_PROPERTY_INDEX,
+    INDEX_LOOKUP,
 
     _SIZE
 };
@@ -111,7 +112,8 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::PATH_EXPLORER, "PATH_EXPLORER">,
     EnumStringPair<PlanGraphOpcode::CONST_SCAN, "CONST_SCAN">,
     EnumStringPair<PlanGraphOpcode::CONST_WRITE_SOURCE, "CONST_WRITE_SOURCE">,
-    EnumStringPair<PlanGraphOpcode::CREATE_PROPERTY_INDEX, "CREATE_PROPERTY_INDEX">
+    EnumStringPair<PlanGraphOpcode::CREATE_PROPERTY_INDEX, "CREATE_PROPERTY_INDEX">,
+    EnumStringPair<PlanGraphOpcode::INDEX_LOOKUP, "INDEX_LOOKUP">
 >;
 
 class PlanGraphNode {
