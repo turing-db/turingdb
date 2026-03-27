@@ -1848,14 +1848,24 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
     switch (evaluatedType) {
         case EvaluatedType::NodePattern: {
             const auto process = [&]<SupportedType Type> {
-                _builder.addIndexLookup<typename Type::Primitive, NodeID>(index);
+                const PipelineValuesOutputInterface& output =
+                    _builder.addIndexLookup<typename Type::Primitive, NodeID>(index);
+                const NamedColumn* nodeOutput = output.getValues();
+                const ColumnTag nodeTag = nodeOutput->getTag();
+
+                const EntityOutputStream nodeStream =
+                    EntityOutputStream::createNodeStream(nodeTag);
+
+                _builder.getPendingOutputInterface()->setStream(nodeStream);
             };
             PropertyTypeDispatcher {propType}.execute(process);
         } break;
 
         case EvaluatedType::EdgePattern: {
             const auto process = [&]<SupportedType Type> {
-                _builder.addIndexLookup<typename Type::Primitive, EdgeID>(index);
+                [[maybe_unused]] const PipelineValuesOutputInterface& output =
+                    _builder.addIndexLookup<typename Type::Primitive, EdgeID>(index);
+                // TODO: Make stream
             };
             PropertyTypeDispatcher {propType}.execute(process);
         } break;

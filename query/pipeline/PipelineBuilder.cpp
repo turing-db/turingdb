@@ -73,6 +73,8 @@
 #include "dataframe/NamedColumn.h"
 #include "versioning/ChangeID.h"
 
+#include "FatalException.h"
+
 using namespace db;
 
 namespace {
@@ -1364,6 +1366,10 @@ PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup(const Index* inde
 
     PipelineValuesInputInterface& input = proc->input();
     PipelineValuesOutputInterface& output = proc->output();
+
+    if (!_pendingOutput.getInterface()) {
+        throw FatalException("Index had no input.");
+    }
 
     _pendingOutput.connectTo(input);
     input.propagateColumns(output);
