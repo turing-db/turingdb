@@ -43,6 +43,7 @@ class ExprProgram;
 class PredicateProgram;
 class ProcedureManager;
 struct AllocOutputColumn;
+class Index;
 
 class PipelineBuilder {
 public:
@@ -229,6 +230,9 @@ public:
 
     PipelineBlockOutputInterface& addCreateNodePropertyIndex(std::string_view indexName,
                                                              std::string_view propName);
+
+    template <typename Q, typename R>
+    PipelineValuesOutputInterface& addIndexLookup(const Index* index);
 
     // Helper to add a column of a given type to the current output dataframe
     template <typename ColumnType>

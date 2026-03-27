@@ -57,7 +57,7 @@ size_t PropertyHashIndex<P, I>::size() const {
 }
 
 template <SupportedType P, TypedInternalID I>
-void PropertyHashIndex<P, I>::query(const Column* input, Column* result) {
+void PropertyHashIndex<P, I>::query(const Column* input, Column* result) const {
     auto* output = dynamic_cast<ColumnVector<I>*>(result);
     bioassert(output, "Invalid output column to property index query.");
 
@@ -80,7 +80,7 @@ void PropertyHashIndex<P, I>::query(const Column* input, Column* result) {
 
 template <SupportedType P, TypedInternalID I>
 void PropertyHashIndex<P, I>::query(const ColumnVector<PropertyPrimitive>* input,
-                                    ColumnVector<I>* result) {
+                                    ColumnVector<I>* result) const {
     result->clear();
 
     for (const PropertyPrimitive propValue : *input) {
@@ -101,7 +101,7 @@ void PropertyHashIndex<P, I>::query(const ColumnVector<PropertyPrimitive>* input
 
 template <SupportedType P, TypedInternalID I>
 void PropertyHashIndex<P, I>::query(const ColumnConst<PropertyPrimitive>* input,
-                                    ColumnVector<I>* result) {
+                                    ColumnVector<I>* result) const {
     result->clear();
 
     const PropertyPrimitive propValue = input->getRaw();

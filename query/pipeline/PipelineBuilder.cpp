@@ -5,9 +5,11 @@
 #include "columns/Column.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "interfaces/PipelineOutputInterface.h"
+#include "interfaces/PipelineValuesInputInterface.h"
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
+#include "processors/IndexLookupProcessor.h"
 #include "processors/LoadCommitProcessor.h"
 #include "processors/CallProcedureProcessor.h"
 #include "processors/ForkProcessor.h"
@@ -540,7 +542,6 @@ PipelineBlockOutputInterface& PipelineBuilder::addOrderBy(std::span<const OrderB
     // Do not sort in place: input remains immutable, copy sorted columns into output of
     // same shape
     duplicateDataframeShape(_mem, _dfMan, inputDf, outputDf);
-
 
     // Allocate a column to store the indices for sort projection. No need to store it in
     // any dataframe.
@@ -1345,12 +1346,34 @@ PipelineValuesOutputInterface& PipelineBuilder::addShowVectorIndexes() {
 
 PipelineBlockOutputInterface& PipelineBuilder::addCreateNodePropertyIndex(std::string_view indexName,
                                                                           std::string_view propName) {
-
     auto* proc = CreateNodePropertyIndexProcessor::create(_pipeline, indexName, propName);
 
     PipelineBlockOutputInterface& output = proc->output();
 
     _pendingOutput.setInterface(&output);
+    _lastProc = proc;
+    return output;
+}
+
+template <typename Q, typename R>
+PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup(const Index* index) {
+    using ResultColumn = ColumnVector<R>;
+
+    auto* proc = IndexLookupProcessor<Q, R>::create(_pipeline, index);
+
+    PipelineValuesInputInterface& input = proc->input();
+    PipelineValuesOutputInterface& output = proc->output();
+
+    _pendingOutput.connectTo(input);
+    input.propagateColumns(output);
+
+    {
+        Dataframe* outputDF = output.getDataframe();
+        NamedColumn* result = allocColumn<ResultColumn>(outputDF);
+        output.setValues(result);
+    }
+
+    _pendingOutput.updateInterface(&output);
     _lastProc = proc;
     return output;
 }

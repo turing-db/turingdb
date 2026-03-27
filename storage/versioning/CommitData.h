@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ArcManager.h"
 #include "versioning/CommitHash.h"
 #include "versioning/CommitHistory.h"
 #include "metadata/GraphMetadata.h"
@@ -36,6 +37,7 @@ public:
     [[nodiscard]] CommitHistory& history() { return _history; }
     [[nodiscard]] CommitHash hash() const { return _hash; }
     [[nodiscard]] const Tombstones& tombstones() const { return _tombstones; }
+    std::span<const WeakArc<Index>> indexes() const { return _history.validIndexes(); }
 
 private:
     friend CommitBuilder;

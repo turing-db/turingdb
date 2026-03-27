@@ -36,7 +36,9 @@ public:
 
     void init(GraphView view) final;
 
-    void query(const Column* input, Column* result) final;
+    void query(const Column* input, Column* result) const final;
+
+    PropertyTypeID property() const final { return _propID; }
 
     size_t size() const final;
 
@@ -46,8 +48,8 @@ private:
 
     static constexpr bool isNode = std::is_same_v<I, NodeID>;
 
-    void query(const ColumnVector<PropertyPrimitive>* input, ColumnVector<I>* result);
-    void query(const ColumnConst<PropertyPrimitive>* input, ColumnVector<I>* result);
+    void query(const ColumnVector<PropertyPrimitive>* input, ColumnVector<I>* result) const;
+    void query(const ColumnConst<PropertyPrimitive>* input, ColumnVector<I>* result) const;
 };
 
 // Implementation of the underlying hashtable used for retrieval

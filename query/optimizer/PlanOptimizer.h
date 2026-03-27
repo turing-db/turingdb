@@ -7,6 +7,10 @@ namespace db {
 class PlanGraph;
 class LocalMemory;
 class CypherAST;
+template <typename Q, typename R>
+class IndexLookupNode;
+class PropertyExpr;
+class LiteralExpr;
 
 class PlanOptimizer {
 public:
@@ -26,6 +30,10 @@ private:
     void rewriteConstWriteSources();
     void rewritePropertyFilterWithIndex();
     void rewriteNodePropertyFilterWithIndex();
+
+    template <typename Q, typename R>
+    IndexLookupNode<Q, R>* addIndexLookup(const PropertyExpr* propExpr,
+                                          const LiteralExpr* litExpr);
 };
 
 }
