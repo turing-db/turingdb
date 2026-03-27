@@ -78,6 +78,17 @@ void IndexLookupProcessor<Q, R>::execute() {
 
 namespace db {
 template class IndexLookupProcessor<types::Int64::Primitive, NodeID>;
+template class IndexLookupProcessor<types::UInt64::Primitive, NodeID>;
+template class IndexLookupProcessor<types::Double::Primitive, NodeID>;
 template class IndexLookupProcessor<types::String::Primitive, NodeID>;
+template class IndexLookupProcessor<types::Bool::Primitive, NodeID>;
+template class IndexLookupProcessor<types::Embedding::Primitive, NodeID>;
+
+template class IndexLookupProcessor<types::Int64::Primitive, EdgeID>;
+template class IndexLookupProcessor<types::UInt64::Primitive, EdgeID>;
+template class IndexLookupProcessor<types::Double::Primitive, EdgeID>;
+template class IndexLookupProcessor<types::String::Primitive, EdgeID>;
+template class IndexLookupProcessor<types::Bool::Primitive, EdgeID>;
+template class IndexLookupProcessor<types::Embedding::Primitive, EdgeID>;
 }
 
