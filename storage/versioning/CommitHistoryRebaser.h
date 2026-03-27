@@ -7,6 +7,7 @@ namespace db {
 class CommitHistory;
 class MetadataRebaser;
 class DataPartRebaser;
+class EntityIDRebaser;
 
 class CommitHistoryRebaser {
 public:
@@ -16,6 +17,7 @@ public:
     }
 
     void rebase(const MetadataRebaser& metadataRebaser,
+                const EntityIDRebaser& entityRebaser,
                 DataPartRebaser& dataPartRebaser,
                 const CommitHistory& prevHistory);
 

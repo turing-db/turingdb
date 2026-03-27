@@ -17,6 +17,9 @@ class CommitJournal {
 public:
     using NodeWriteSet = WriteSet<NodeID>;
     using EdgeWriteSet = WriteSet<EdgeID>;
+    // TODO Rebase these property types
+    using NodePropertyWriteSet = WriteSet<PropertyTypeID>;
+    using EdgePropertyWriteSet = WriteSet<PropertyTypeID>;
 
     /**
      * @brief Creates a new journal with an empty write set
@@ -29,6 +32,9 @@ public:
     void addWrittenNode(NodeID node);
     void addWrittenEdge(EdgeID edge);
 
+    void addWrittenNodeProperty(PropertyTypeID prop);
+    void addWrittenEdgeProperty(PropertyTypeID prop);
+
     template <std::ranges::input_range Range>
         requires std::same_as<std::ranges::range_value_t<Range>, NodeID>
     void addWrittenNodes(const Range& nodes);
@@ -39,6 +45,10 @@ public:
 
     NodeWriteSet& nodeWriteSet() { return _nodeWriteSet; }
     EdgeWriteSet& edgeWriteSet() { return _edgeWriteSet; }
+
+    NodePropertyWriteSet& nodePropertyWriteSet() { return _nodePropertyWriteSet; }
+    EdgePropertyWriteSet& edgePropertyWriteSet() { return _edgePropertyWriteSet; }
+
 
     const NodeWriteSet& nodeWriteSet() const { return _nodeWriteSet; }
     const EdgeWriteSet& edgeWriteSet() const { return _edgeWriteSet; }
@@ -52,6 +62,9 @@ private:
 
     NodeWriteSet _nodeWriteSet;
     EdgeWriteSet _edgeWriteSet;
+
+    NodePropertyWriteSet _nodePropertyWriteSet;
+    EdgePropertyWriteSet _edgePropertyWriteSet;
 
     CommitJournal() = default;
 

@@ -4,14 +4,15 @@
 #include "CommitHistory.h"
 #include "DataPartRebaser.h"
 
+#include "versioning/EntityIDRebaser.h"
+#include "versioning/MetadataRebaser.h"
+
 using namespace db;
 
 void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
+                                  const EntityIDRebaser& entityRebaser,
                                   DataPartRebaser& dataPartRebaser,
                                   const CommitHistory& prevHistory) {
-    // Clear the journal: WriteSets may change on reflush after rebase
-    _history.journal().clear();
-
     // Dataparts
     auto newDataparts = prevHistory._allDataparts;
 
@@ -37,6 +38,30 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
     for (auto& part : _history._commitDataparts) {
         dataPartRebaser.rebase(metadataRebaser, *prevPart, *part);
         prevPart = part.get();
+    }
+
+    CommitJournal& journal = _history.journal();
+
+    { // Rebase written nodes
+        for (NodeID& n : journal.nodeWriteSet()) {
+            n = entityRebaser.rebaseNodeID(n);
+        }
+
+        for (EdgeID& e : journal.edgeWriteSet()) {
+            e = entityRebaser.rebaseEdgeID(e);
+        }
+    }
+
+    { // Rebase written property types
+        for (PropertyTypeID& p : journal.nodePropertyWriteSet()) {
+            const PropertyType& remapped = metadataRebaser.getPropertyTypeMapping(p);
+            p = remapped._id;
+        }
+
+        for (PropertyTypeID& p : journal.edgePropertyWriteSet()) {
+            const PropertyType& remapped = metadataRebaser.getPropertyTypeMapping(p);
+            p = remapped._id;
+        }
     }
 }
 
