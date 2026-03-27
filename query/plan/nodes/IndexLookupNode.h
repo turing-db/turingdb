@@ -9,7 +9,7 @@ class Column;
 
 class IndexLookupNode : public PlanGraphNode {
 public:
-    explicit IndexLookupNode(Index* index, Column* query)
+    explicit IndexLookupNode(const Index* index, const Column* query)
         : PlanGraphNode(PlanGraphOpcode::INDEX_LOOKUP),
         _index(index),
         _query(query)
@@ -17,8 +17,8 @@ public:
     }
 
 private:
-    Index* _index {nullptr};
-    Column* _query {nullptr};
+    const Index* _index {nullptr};
+    const Column* _query {nullptr};
 };
 
 }

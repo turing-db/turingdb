@@ -30,6 +30,7 @@
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
+#include "nodes/IndexLookupNode.h"
 #include "procedures/ProcedureManager.h"
 #include "processors/OrderByProcessor.h"
 #include "processors/PathExplorerProcessor.h"
@@ -1817,4 +1818,8 @@ PipelineOutputInterface* PipelineGenerator::translateCreateNodePropertyIndexNode
     _builder.addCreateNodePropertyIndex(indexName, propertyName);
 
     return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookupNode* node) {
+    throw PlannerException("IndexLookup is not yet supported.");
 }
