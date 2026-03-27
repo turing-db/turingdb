@@ -14,6 +14,7 @@
 #include "reader/GraphReader.h"
 #include "versioning/MetadataRebaser.h"
 #include "versioning/EntityIDRebaser.h"
+#include "views/PropertyView.h"
 #include "writers/DataPartBuilder.h"
 #include "Tombstones.h"
 
@@ -355,6 +356,30 @@ void CommitWriteBuffer::applyDeletions(Tombstones& tombstones) {
     // Delete nodes/edges should be in the "write set" of this commit
     _journal.addWrittenNodes(_deletedNodes);
     _journal.addWrittenEdges(_deletedEdges);
+
+    const GraphReader reader = _view.read();
+
+    {
+        for (const NodeID deletedNode : _deletedNodes) {
+            const NodeView nv = reader.getNodeView(deletedNode);
+            const EntityPropertyView& properties = nv.properties();
+
+            for (const auto& [pid, _] : properties) {
+                _journal.addWrittenNodeProperty(pid);
+            }
+        }
+    }
+
+    {
+        for (const EdgeID deletedEdge : _deletedEdges) {
+            const EdgeView ev = reader.getEdgeView(deletedEdge);
+            const EntityPropertyView& properties = ev.properties();
+
+            for (const auto& [pid, _] : properties) {
+                _journal.addWrittenEdgeProperty(pid);
+            }
+        }
+    }
 }
 
 void CommitWriteBufferRebaser::rebase() {
