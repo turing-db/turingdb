@@ -33,7 +33,7 @@ TEST_F(ShowProceduresTest, showProcedures) {
                                 [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 2);
-        ASSERT_EQ(df->getLogicalRowCount(), 7);
+        ASSERT_EQ(df->getLogicalRowCount(), 8);
 
         const auto& cols = df->cols();
         const auto* colName = cols.at(0)->as<ColumnVector<types::String::Primitive>>();
@@ -49,6 +49,8 @@ TEST_F(ShowProceduresTest, showProcedures) {
         ASSERT_EQ(colName->at(3), "db.history");
         ASSERT_EQ(colName->at(4), "db.describeCommit");
         ASSERT_EQ(colName->at(5), "db.procedures");
+        ASSERT_EQ(colName->at(6), "db.showIndexes");
+        ASSERT_EQ(colName->at(7), "greeter.hello");
 
         // Check exact signatures
         ASSERT_EQ(colSignature->at(0), "db.labels() :: (id :: INTEGER, label :: STRING)");
@@ -61,8 +63,8 @@ TEST_F(ShowProceduresTest, showProcedures) {
         ASSERT_EQ(colSignature->at(4), "db.describeCommit(commit :: STRING)"
                                        " :: (nodeCount :: INTEGER, edgeCount :: INTEGER, partCount :: INTEGER)");
         ASSERT_EQ(colSignature->at(5), "db.procedures() :: (name :: STRING, signature :: STRING)");
-        ASSERT_EQ(colName->at(6), "greeter.hello");
-        ASSERT_EQ(colSignature->at(6), "greeter.hello() :: (message :: STRING)");
+        ASSERT_EQ(colSignature->at(6), "db.showIndexes() :: (name :: STRING, size :: INTEGER)");
+        ASSERT_EQ(colSignature->at(7), "greeter.hello() :: (message :: STRING)");
 
         executed = true;
     });
