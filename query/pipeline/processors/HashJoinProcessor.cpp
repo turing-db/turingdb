@@ -702,6 +702,7 @@ void HashJoinProcessor<LeftKey, RightKey>::flushLeftStream(size_t& rowsRemaining
     X(LabelID)                 \
     X(EdgeTypeID)              \
     X(PropertyTypeID)          \
+    X(ValueType)               \
     X(int64_t)                 \
     X(uint64_t)                \
     X(double)                  \
