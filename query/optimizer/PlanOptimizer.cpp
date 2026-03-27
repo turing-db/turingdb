@@ -6,6 +6,7 @@
 #include "expr/Expr.h"
 #include "expr/Operators.h"
 #include "expr/PropertyExpr.h"
+#include "metadata/PropertyType.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/ScanNodesByLabelNode.h"
@@ -26,13 +27,160 @@
 #include "decl/DeclContext.h"
 
 #include "columns/ColumnIDs.h"
-#include "columns/ColumnVector.h"
 
 #include "BioAssert.h"
+#include "columns/Column.h"
+#include "columns/ColumnVector.h"
 
 using namespace db;
 
 namespace {
+
+[[maybe_unused]] void* addIndexLookup(const LiteralExpr* lit) {
+    switch (lit->getType()) {
+        case EvaluatedType::Integer: {
+            using Type = types::Int64::Primitive;
+
+            const auto* intLit = dynamic_cast<const IntegerLiteral*>(lit);
+            bioassert(intLit, "Failed to get integer literal.");
+            const Type val = intLit->getValue();
+
+            const std::vector<Type> input {val};
+
+
+        }
+        break;
+
+        case EvaluatedType::Double: {
+            using Type = types::Double::Primitive;
+
+            const auto* dblLit = dynamic_cast<const DoubleLiteral*>(lit);
+            bioassert(dblLit, "Failed to get double literal.");
+            const Type val = dblLit->getValue();
+
+            const std::vector<Type> input {val};
+        }
+        break;
+
+        case EvaluatedType::String: {
+            using Type = types::String::Primitive;
+
+            const auto* strLit = dynamic_cast<const StringLiteral*>(lit);
+            bioassert(strLit, "Failed to get string literal.");
+            const Type val = strLit->getValue();
+
+            const std::vector<Type> input {val};
+        }
+        break;
+
+        case EvaluatedType::Bool: {
+            using Type = types::Bool::Primitive;
+
+            const auto* boolLit = dynamic_cast<const BoolLiteral*>(lit);
+            bioassert(boolLit, "Failed to get Boolean literal.");
+            const Type val = boolLit->getValue();
+
+            const std::vector<Type> input {val};
+        }
+        break;
+
+        case EvaluatedType::Embedding: {
+            using Type = types::Embedding::Primitive;
+
+            const auto* embLit = dynamic_cast<const EmbeddingLiteral*>(lit);
+            bioassert(embLit, "Failed to get embedding literal.");
+            const Type val = embLit->getValue();
+
+            const std::vector<Type> input {val};
+        }
+        break;
+
+        case EvaluatedType::Null:
+        case EvaluatedType::Char:
+        case EvaluatedType::List:
+        case EvaluatedType::Map:
+        case EvaluatedType::Wildcard:
+        case EvaluatedType::Tuple:
+        case EvaluatedType::ValueType:
+        case EvaluatedType::StringTable:
+        case EvaluatedType::Invalid:
+        case EvaluatedType::NodePattern:
+        case EvaluatedType::EdgePattern:
+        case EvaluatedType::GraphPath:
+        case EvaluatedType::_SIZE:
+            return nullptr;
+        break;
+    }
+
+    return nullptr;
+}
+
+}
+
+PlanOptimizer::PlanOptimizer(PlanGraph* plan, GraphView view, LocalMemory* mem)
+    : _plan(plan),
+    _view(view),
+    _mem(mem)
+{
+}
+
+PlanOptimizer::~PlanOptimizer() {
+}
+
+void PlanOptimizer::optimize() {
+    // Do some very simple plan rewriting
+
+    rewriteScanByLabels();
+    rewriteScanByConstIDs();
+
+    _plan->removeIsolatedNodes();
+}
+
+void PlanOptimizer::rewriteScanByLabels() {
+    std::vector<PlanGraphNode*> roots;
+    _plan->getRoots(roots);
+
+    for (PlanGraphNode* root : roots) {
+        // === Check rewrite rule precondition === 
+        // We are looking for pairs:
+        // [root] ScanNodesNode --> NodeFilterNode (label, no predicates)
+        //
+        // We don't rewrite if ScanNodesNode has multiple successors
+        ScanNodesNode* scanNodes = dynamic_cast<ScanNodesNode*>(root);
+        if (!scanNodes) {
+            continue;
+        } 
+
+        const auto& scanNodesOutputs = scanNodes->outputs();
+        if (scanNodesOutputs.size() != 1) {
+            continue;
+        }
+
+        NodeFilterNode* filterNode = dynamic_cast<NodeFilterNode*>(scanNodesOutputs[0]);
+        if (!filterNode) {
+            continue;
+        }
+
+        // The filter node must have a label constraint and no predicates
+        const LabelSet& labelset = filterNode->getLabelConstraints();
+        if (labelset.empty() || !filterNode->getPredicates().empty()) {
+            continue;
+        }
+        
+        // === Rewrite ===
+        
+        // Create ScanNodesByLabel
+        ScanNodesByLabelNode* scanNodesByLabel = _plan->create<ScanNodesByLabelNode>(labelset);
+
+        // Connect ScanNodesByLabel to the successors of the filter node
+        for (PlanGraphNode* filterNodeNext : filterNode->outputs()) {
+            scanNodesByLabel->connectOut(filterNodeNext);
+        }
+        
+        scanNodes->clearOutputs();
+        filterNode->clearOutputs();
+    }
+}
 
 // Returns true if expr is a chain of OR'd equalities (var = integer_literal),
 // and appends the extracted NodeIDs to nodeIDs.
@@ -508,7 +656,7 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
         bioassert(scanNodesOutput.size() != 1, "ScanNodes had non-singular output.");
 
         PlanGraphNode* output = scanNodesOutput.front();
-        NodeFilterNode* filterNode = dynamic_cast<NodeFilterNode*>(output);
+        const NodeFilterNode* filterNode = dynamic_cast<NodeFilterNode*>(output);
         if (!filterNode) {
             continue;
         }
@@ -522,6 +670,38 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
         const std::vector<Predicate*>& predicates = filterNode->getPredicates();
         // TODO check if all equality in disjunctive normal form, not just single equality
         if (predicates.size() != 1) {
+            continue;
+        }
+
+        const Predicate* pred = predicates.front();
+        const auto* binExpr = dynamic_cast<const BinaryExpr*>(pred->getExpr());
+        bioassert(binExpr, "Failed to get predicate expression.");
+
+        // Index only supports equality
+        if (binExpr->getOperator() != BinaryOperator::Equal) {
+            continue;
+        }
+
+        PropertyExpr* propExpr {nullptr};
+        LiteralExpr* literalExpr {nullptr};
+
+        Expr* lhs = binExpr->getLHS();
+        Expr* rhs = binExpr->getRHS();
+
+        // Ensure some permutation of {property, literal}
+        if (lhs->getKind() == Expr::Kind::LITERAL) {
+            literalExpr = static_cast<LiteralExpr*>(lhs);
+        } else if (rhs->getKind() == Expr::Kind::LITERAL) {
+            literalExpr = static_cast<LiteralExpr*>(rhs);
+        }
+        if (lhs->getKind() == Expr::Kind::PROPERTY) {
+            propExpr = static_cast<PropertyExpr*>(lhs);
+        } else if (lhs->getKind() == Expr::Kind::PROPERTY) {
+            propExpr = static_cast<PropertyExpr*>(rhs);
+        }
+
+        // Not a literal property constraint
+        if (!literalExpr || !propExpr)  {
             continue;
         }
     }
