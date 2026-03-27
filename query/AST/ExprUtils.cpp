@@ -9,8 +9,11 @@ using namespace db;
 
 template <typename Traits>
 bool ExprUtils::collectFromHomogeneousBinaryChain(const Expr* root,
-                                                  const VarDecl* var,
+                                                  typename Traits::ValidatorType var,
                                                   std::vector<typename Traits::ResultType>& result) {
+    using AnchorExpr = typename Traits::AnchorExpr;
+    using ValueExpr = typename Traits::ValueExpr;
+
     if (root->getKind() != Expr::Kind::BINARY) {
         return false;
     }
@@ -32,15 +35,15 @@ bool ExprUtils::collectFromHomogeneousBinaryChain(const Expr* root,
     const Expr* lhs = binExpr->getLHS();
     const Expr* rhs = binExpr->getRHS();
 
-    const typename Traits::AnchorExpr* anchorExpr = nullptr;
-    const typename Traits::ValueExpr*  valueExpr  = nullptr;
+    const AnchorExpr* anchorExpr = nullptr;
+    const ValueExpr*  valueExpr  = nullptr;
 
     if (lhs->getKind() == Traits::anchorKind && rhs->getKind() == Traits::valueKind) {
-        anchorExpr = static_cast<const typename Traits::AnchorExpr*>(lhs);
-        valueExpr  = static_cast<const typename Traits::ValueExpr*>(rhs);
+        anchorExpr = static_cast<const AnchorExpr*>(lhs);
+        valueExpr  = static_cast<const ValueExpr*>(rhs);
     } else if (rhs->getKind() == Traits::anchorKind && lhs->getKind() == Traits::valueKind) {
-        anchorExpr = static_cast<const typename Traits::AnchorExpr*>(rhs);
-        valueExpr  = static_cast<const typename Traits::ValueExpr*>(lhs);
+        anchorExpr = static_cast<const AnchorExpr*>(rhs);
+        valueExpr  = static_cast<const ValueExpr*>(lhs);
     } else {
         return false;
     }
@@ -59,5 +62,5 @@ bool ExprUtils::collectFromHomogeneousBinaryChain(const Expr* root,
 }
 
 namespace db {
-template bool ExprUtils::collectFromHomogeneousBinaryChain<ExprUtils::NodeIDEqualsOR>(const Expr *root, const VarDecl *var, std::vector<typename NodeIDEqualsOR::ResultType> &result);
+template bool ExprUtils::collectFromHomogeneousBinaryChain<ExprUtils::NodeIDEqualsOR>(const Expr *root, typename NodeIDEqualsOR::ValidatorType var, std::vector<typename NodeIDEqualsOR::ResultType> &result);
 }
