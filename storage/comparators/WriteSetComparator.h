@@ -4,10 +4,10 @@
 
 namespace db {
 
-template <TypedInternalID IDT>
+template <typename IDT>
 class WriteSet;
 
-template <TypedInternalID IDT>
+template <typename IDT>
 class WriteSetComparator {
 public:
     [[nodiscard]] static bool same(const WriteSet<IDT>& setA, const WriteSet<IDT>& setB);

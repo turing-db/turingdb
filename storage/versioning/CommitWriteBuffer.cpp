@@ -146,6 +146,7 @@ void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
                 builder.addNodeProperty<Type>(nodeID, propID, val);
             },
             value);
+        _journal.addWrittenNodeProperty(propID);
     }
 
     _journal.addWrittenNode(nodeID);
@@ -207,6 +208,7 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
                                               propID, val);
             },
             value);
+        _journal.addWrittenEdgeProperty(propID);
     }
 
     _journal.addWrittenEdge(newEdgeID);
@@ -240,6 +242,7 @@ void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
             value);
 
         _journal.addWrittenNode(nodeID);
+        _journal.addWrittenNodeProperty(propID);
     }
 }
 
@@ -260,6 +263,7 @@ void CommitWriteBuffer::applyExistingEdgeUpdate(DataPartBuilder& builder,
         val);
 
     _journal.addWrittenEdge(record._edgeID);
+    _journal.addWrittenEdgeProperty(pid);
 }
 
 void CommitWriteBuffer::applyPendingEdgeUpdate(DataPartBuilder& builder,
@@ -320,6 +324,7 @@ void CommitWriteBuffer::applyPendingEdgeUpdate(DataPartBuilder& builder,
             builder.addEdgeProperty<Type>(pendingEdgeRecord, pid, value, srcLblSet);
         },
         val);
+    _journal.addWrittenEdgeProperty(pid);
 }
 
 void CommitWriteBuffer::applyEdgeUpdates(DataPartBuilder& builder) {

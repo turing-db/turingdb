@@ -12,7 +12,7 @@ namespace db {
  * is faster than a hashtable-based datastructure. Source:
  * https://lemire.me/blog/2017/01/27/how-expensive-are-the-union-and-intersection-of-two-unordered_set-in-c/
  */
-template <TypedInternalID IDT>
+template <typename IDT>
 class WriteSet {
 public:
     bool contains(IDT id) const;
@@ -65,7 +65,7 @@ private:
     std::vector<IDT>& getRaw() { return _set; }
 };
 
-template <TypedInternalID IDT>
+template <typename IDT>
 template <std::ranges::input_range Range>
     requires std::same_as<std::ranges::range_value_t<Range>, IDT>
 void WriteSet<IDT>::insert(Range&& range) {

@@ -2,11 +2,13 @@
 
 #include <spdlog/spdlog.h>
 
+#include "ID.h"
+
 #include "versioning/WriteSet.h"
 
 namespace db {
 
-template <TypedInternalID IDT>
+template <typename IDT>
 bool WriteSetComparator<IDT>::same(const WriteSet<IDT>& setA , const WriteSet<IDT>& setB) {
     constexpr std::string_view type = std::is_same_v<IDT, NodeID> ? "Node" : "Edge";
 
@@ -36,5 +38,6 @@ bool WriteSetComparator<IDT>::same(const WriteSet<IDT>& setA , const WriteSet<ID
 // Explicit template instantiations
 template class WriteSetComparator<NodeID>;
 template class WriteSetComparator<EdgeID>;
+template class WriteSetComparator<PropertyTypeID>;
 
 } // namespace db
