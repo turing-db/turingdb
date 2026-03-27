@@ -11,6 +11,8 @@
 #include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"
 
+#include "BioAssert.h"
+
 namespace db {
 
 class ExprUtils {
@@ -83,7 +85,7 @@ struct ExprUtils::NodeIDEqualsOR {
 };
 
 struct ExprUtils::PropertyEqualsOR {
-    using ValidatorType = PropertyExpr*;
+    using ValidatorType = const PropertyExpr*;
 
     // The operator used to connect each leaf (e.g. x = 10 *OR* x = 20)
     static constexpr BinaryOperator chainOp = BinaryOperator::Or;
@@ -104,9 +106,24 @@ struct ExprUtils::PropertyEqualsOR {
     // The type collected into the result vector
     using ResultType = NodeID;
 
-    /// Ensures the var decl is the same for all leaf expressions
-    static bool validateAnchor(const AnchorExpr* anchor, const VarDecl* varDecl) {
-        return true;
+    /// Ensures the property expression is the same for all leaf expressions
+    static bool validateAnchor(const AnchorExpr* propAnchor, ValidatorType propertyExpr) {
+        const VarDecl* anchEntity = propAnchor->getEntityVarDecl();
+        const VarDecl* newEntity = propertyExpr->getEntityVarDecl();
+        bioassert(anchEntity && newEntity, "Invalid entity variables.");
+
+        // Ensure both properties refer to the same variable
+        const std::string_view anchName = anchEntity->getName();
+        const std::string_view newName = newEntity->getName();
+        if (anchName != newName) {
+            return false;
+        }
+
+        // Ensure both properties refer to the same property
+        const std::string_view anchProp = propAnchor->getPropName();
+        const std::string_view newProp = propertyExpr->getPropName();
+
+        return anchProp == newProp;
     }
 
     /// Extracts the value from each leaf expression
