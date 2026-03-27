@@ -6,7 +6,7 @@ class PlanGraph;
 
 class PlanOptimizer {
 public:
-    explicit PlanOptimizer(PlanGraph* plan);
+    explicit PlanOptimizer(PlanGraph* plan, GraphView view);
     ~PlanOptimizer();
 
     void optimize();

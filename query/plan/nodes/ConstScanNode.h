@@ -2,23 +2,22 @@
 
 #include "PlanGraphNode.h"
 
-#include <vector>
-
 namespace db {
 
-template <typename T>
+class Column;
+
 class ConstScanNode : public PlanGraphNode {
 public:
-    explicit ConstScanNode(const std::vector<T>& values)
+    explicit ConstScanNode(const Column* values)
         : PlanGraphNode(PlanGraphOpcode::CONST_SCAN),
         _values(values)
     {
     }
 
-    const std::vector<T>& getValues() const { return _values; }
+    const Column* values() const { return _values; }
 
 private:
-    std::vector<T> _values;
+    const Column* _values;
 };
 
 }
