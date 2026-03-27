@@ -376,6 +376,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         case PlanGraphOpcode::CARTESIAN_PRODUCT:
             return translateCartesianProductNode(static_cast<CartesianProductNode*>(node));
         break;
+
         case PlanGraphOpcode::JOIN:
             return translateJoinNode(static_cast<JoinNode*>(node));
         break;
@@ -497,6 +498,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         break;
 
         case PlanGraphOpcode::FUNC_EVAL:
+        case PlanGraphOpcode::INDEX_LOOKUP:
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
         case PlanGraphOpcode::UNKNOWN:
