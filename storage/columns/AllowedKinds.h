@@ -436,4 +436,16 @@ struct WriteProcessorPropertyTypes {
 
 };
 
+struct ConstScanTypes {
+    using Allowed = GenerateKindList<std::tuple<
+        NodeID
+    >>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnConst>(),
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
 }

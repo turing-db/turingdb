@@ -1,22 +1,16 @@
 #pragma once
 
-#include <span>
-#include <vector>
-
 #include "Processor.h"
 
 #include "interfaces/PipelineValuesOutputInterface.h"
 
-#include "columns/ColumnVector.h"
-
 namespace db {
 
-template <typename T>
+class Column;
+
 class ConstScanProcessor final : public Processor {
 public:
-    using ColumnValues = ColumnVector<T>;
-
-    static ConstScanProcessor<T>* create(PipelineV2* pipeline, std::span<const T> values);
+    static ConstScanProcessor* create(PipelineV2* pipeline, Column* values);
 
     std::string describe() const final;
 
@@ -26,16 +20,16 @@ public:
 
     PipelineValuesOutputInterface& output() { return _output; }
 
+    const Column* values() { return _values; }
+
 private:
     PipelineValuesOutputInterface _output;
 
-    std::span<const T> _values;
-    std::vector<T> _sortedValues;
+    Column* _values;
 
-    ColumnValues* _outCol {nullptr};
     size_t _offset {0};
 
-    explicit ConstScanProcessor(std::span<const T> values);
+    explicit ConstScanProcessor(Column* values);
     ~ConstScanProcessor() final;
 };
 

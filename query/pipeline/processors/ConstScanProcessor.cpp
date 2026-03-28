@@ -10,31 +10,65 @@
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
+#include "columns/AllowedKinds.h"
+#include "columns/ColumnOperatorDispatcher.h"
 #include "dataframe/NamedColumn.h"
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 
 using namespace db;
 
-template <typename T>
-ConstScanProcessor<T>::ConstScanProcessor(std::span<const T> values)
+namespace {
+
+struct SortAndFilterID {
+    // Node and Edge IDs need to be valid: filter invalids and then sort
+    template <TypedInternalID IDT>
+    void operator()(ColumnVector<IDT>* col) {
+        const GraphReader reader = _ctxt->getGraphView().read();
+
+        const auto invalid = [&reader](IDT id) -> bool {
+            if constexpr (std::is_same_v<NodeID, IDT>) {
+                return !reader.graphHasNode(id);
+            }
+            if constexpr (std::is_same_v<EdgeID, IDT>) {
+                return !reader.graphHasEdge(id);
+            }
+            return false;
+        };
+
+        std::vector<IDT>& raw = col->getRaw();
+        
+        // Remove invalid IDs
+        std::erase_if(begin(raw), end(raw), invalid);
+
+        // Sort for better access patterns in subsequent processors
+        std::sort(begin(raw), end(raw));
+    }
+
+    // Otherwise: no need to do anything
+    template <typename T>
+    void operator()(ColumnVector<T>*) {
+    }
+
+    ExecutionContext* _ctxt {nullptr};
+};
+
+}
+
+ConstScanProcessor::ConstScanProcessor(Column* values)
     : _values(values)
 {
 }
 
-template <typename T>
-ConstScanProcessor<T>::~ConstScanProcessor() {
+ConstScanProcessor::~ConstScanProcessor() {
 }
 
-template <typename T>
-std::string ConstScanProcessor<T>::describe() const {
-    return fmt::format("ConstScanProcessor n={} @={}", _values.size(), fmt::ptr(this));
+std::string ConstScanProcessor::describe() const {
+    return fmt::format("ConstScanProcessor n={} @={}", _values->size(), fmt::ptr(this));
 }
 
-template <typename T>
-ConstScanProcessor<T>* ConstScanProcessor<T>::create(PipelineV2* pipeline,
-                                                     std::span<const T> values) {
-    ConstScanProcessor<T>* proc = new ConstScanProcessor<T>(values);
+ConstScanProcessor* ConstScanProcessor::create(PipelineV2* pipeline, Column* values) {
+    ConstScanProcessor* proc = new ConstScanProcessor(values);
 
     PipelineOutputPort* output = PipelineOutputPort::create(pipeline, proc);
     proc->_output.setPort(output);
@@ -44,55 +78,37 @@ ConstScanProcessor<T>* ConstScanProcessor<T>::create(PipelineV2* pipeline,
     return proc;
 }
 
-template <typename T>
-void ConstScanProcessor<T>::prepare(ExecutionContext* ctxt) {
+void ConstScanProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
-    // Filter out deleted/invalid IDs and sort for cache-friendly access.
-    _sortedValues.clear();
-    _sortedValues.reserve(_values.size());
+    bioassert(_values, "Null values column");
 
-    // Specialisation for Node/EdgeIDs: ensures all are valid
-    if constexpr (TypedInternalID<T>) {
-        const GraphReader reader = _ctxt->getGraphView().read();
+    using Types = ConstScanTypes;
+    using ValidateSortIDs =
+        ColumnSingleDispatcher<Types::Allowed, SortAndFilterID, Types::Excluded>;
 
-        for (const T v : _values) {
-            bool entityExists = false;
-            if constexpr (std::is_same_v<NodeID, T>) {
-                entityExists = reader.graphHasNode(v);
-            } else if constexpr (std::is_same_v<EdgeID, T>) {
-                entityExists = reader.graphHasEdge(v);
-            }
+    SortAndFilterID preprocessor {._ctxt = _ctxt};
+    ValidateSortIDs::dispatch(_values, preprocessor);
 
-            if (entityExists) {
-                _sortedValues.push_back(v);
-            }
-        }
-    }
-
-    // FIXME: Does it make sense to sort in the general case?
-    std::sort(_sortedValues.begin(), _sortedValues.end());
-
-    ColumnValues* values = _output.getValues()->as<ColumnValues>();
-    bioassert(values, "Null values in output");
-
-    _outCol = values;
     _offset = 0;
 
     markAsPrepared();
 }
 
-template <typename T>
-void ConstScanProcessor<T>::reset() {
+void ConstScanProcessor::reset() {
     _offset = 0;
     markAsReset();
 }
 
-template <typename T>
-void ConstScanProcessor<T>::execute() {
-    _outCol->clear();
+struct ExecuteCycle {
+    
+};
 
-    const size_t remaining = _sortedValues.size() - _offset;
+void ConstScanProcessor::execute() {
+    const NamedColumn* namedValues = _output.getValues();
+    Column* outCol = namedValues->getColumn();
+
+    const size_t remaining = _values->size() - _offset;
     const size_t chunkSize = std::min(remaining, _ctxt->getChunkSize());
 
     _outCol->resize(chunkSize);
