@@ -4,13 +4,13 @@
   "query": "RETURN COUNT(*)",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: count\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": "PLAN ERROR\nUnexpected exception: COUNT had no input.",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"Unexpected exception: COUNT had no input.\"}"
+    "result": "COUNT(*)\n0",
+    "resultJson": "{\"header\":{\"column_names\":[\"COUNT(*)\"],\"column_types\":[\"UInt64\"]},\"data\":[[[0]]]}"
   },
   "tags": [
-    "errors",
     "count",
-    "wildcard"
+    "wildcard",
+    "standalone-return"
   ],
   "write-required": false
 }
