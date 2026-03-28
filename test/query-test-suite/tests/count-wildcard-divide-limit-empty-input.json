@@ -4,13 +4,14 @@
   "query": "RETURN COUNT(*) / 999 LIMIT 2",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (BINARY): v4\n__expr__ (LITERAL): v3\n    `\"]\n    1[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: count\n    `\"]\n    2[\"`\n        __LIMIT__\n    `\"]\n    3[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->0\n    2-->3",
-    "result": "PLAN ERROR\nUnexpected exception: COUNT had no input.",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"Unexpected exception: COUNT had no input.\"}"
+    "result": "COUNT(*) / 999\n0",
+    "resultJson": "{\"header\":{\"column_names\":[\"COUNT(*) / 999\"],\"column_types\":[\"UInt64\"]},\"data\":[[[0]]]}"
   },
   "tags": [
-    "errors",
     "count",
-    "wildcard"
+    "wildcard",
+    "standalone-return",
+    "limit"
   ],
   "write-required": false
 }

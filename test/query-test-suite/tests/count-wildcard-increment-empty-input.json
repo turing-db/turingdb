@@ -4,13 +4,14 @@
   "query": "RETURN ++++++++++++++++++++++++++++++++COUNT(*)++++++++9++++++++++++++++++++++++++++++99",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (BINARY): v5\n__expr__ (BINARY): v3\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (LITERAL): v2\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (LITERAL): v4\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n__expr__ (unknown): unknown\n    `\"]\n    1[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: count\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->0",
-    "result": "PLAN ERROR\nUnexpected exception: COUNT had no input.",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"Unexpected exception: COUNT had no input.\"}"
+    "result": "PLAN ERROR\nUnary operator PLUS is not yet supported (cannot allocate).",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"Unary operator PLUS is not yet supported (cannot allocate).\"}"
   },
   "tags": [
     "errors",
     "count",
-    "wildcard"
+    "wildcard",
+    "standalone-return"
   ],
   "write-required": false
 }
