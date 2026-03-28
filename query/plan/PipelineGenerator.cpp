@@ -38,6 +38,9 @@
 #include "reader/GraphReader.h"
 
 #include "processors/MaterializeProcessor.h"
+#include "processors/CountProcessor.h"
+#include "processors/LambdaSourceProcessor.h"
+#include "columns/ColumnConst.h"
 
 #include "nodes/ChangeNode.h"
 #include "nodes/CommitNode.h"
@@ -1082,41 +1085,63 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
         }
 
         if (signature->getFullName() == "count") {
-            PipelineValueOutputInterface* output = nullptr;
-            if (args->empty()) {
-                // e.g. count() Not supported yet
-                output = &_builder.addCount();
-
-            } else if (args->size() == 1) {
-                // e.g. count(expr)
-                const Expr* arg = args->front();
-                const VarDecl* argDecl = arg->getExprVarDecl();
-                if (arg->getType() == EvaluatedType::Wildcard) {
-                    // count(*)
-                    output = &_builder.addCount();
-                } else {
-                    // count(<some var>)
-                    const auto findIt = _declToColumn.find(argDecl);
-                    if (findIt == _declToColumn.end()) {
-                        throw FatalException(fmt::format(
-                            "Failed to get column for variable {}.", argDecl->getName()));
-                    }
-                    const ColumnTag argTag = findIt->second;
-                    output = &_builder.addCount(argTag);
-                }
-
-            } else [[unlikely]] {
-                // Already checked in the planner
-                throw PlannerException("Invalid arguments for count()");
-            }
-
             const VarDecl* exprDecl = func->getExprVarDecl();
 
             if (!exprDecl) [[unlikely]] {
                 throw PlannerException("Count() expression does not have an expression variable declaration");
             }
 
-            _declToColumn[exprDecl] = output->getValue()->getTag();
+            const bool hasInput = _builder.getPendingOutputInterface() != nullptr;
+
+            // Standalone COUNT (e.g. `RETURN COUNT(*)`) has no input rows.
+            // Produce a lambda source that emits a single ColumnConst<UInt64>
+            // with value 0, since count over zero rows is always zero.
+            if (!hasInput) {
+                using CountType = CountProcessor::CountType;
+                _builder.addLambdaSource(
+                    [](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation op) {
+                        if (op == LambdaSourceProcessor::Operation::EXECUTE) {
+                            isFinished = true;
+                        }
+                    });
+
+                auto* zeroCol = _mem->alloc<ColumnConst<CountType>>();
+                zeroCol->set(0);
+                NamedColumn* countColumn = _builder.addColumnToOutput(zeroCol);
+
+                _declToColumn[exprDecl] = countColumn->getTag();
+
+            } else {
+                PipelineValueOutputInterface* output = nullptr;
+                if (args->empty()) {
+                    // e.g. count()
+                    output = &_builder.addCount();
+
+                } else if (args->size() == 1) {
+                    // e.g. count(expr)
+                    const Expr* arg = args->front();
+                    const VarDecl* argDecl = arg->getExprVarDecl();
+                    if (arg->getType() == EvaluatedType::Wildcard) {
+                        // count(*)
+                        output = &_builder.addCount();
+                    } else {
+                        // count(<some var>)
+                        const auto findIt = _declToColumn.find(argDecl);
+                        if (findIt == _declToColumn.end()) {
+                            throw FatalException(fmt::format(
+                                "Failed to get column for variable {}.", argDecl->getName()));
+                        }
+                        const ColumnTag argTag = findIt->second;
+                        output = &_builder.addCount(argTag);
+                    }
+
+                } else [[unlikely]] {
+                    // Already checked in the planner
+                    throw PlannerException("Invalid arguments for count()");
+                }
+
+                _declToColumn[exprDecl] = output->getValue()->getTag();
+            }
         } else {
             throw PlannerException(fmt::format("Aggregate function '{}' is not implemented yet", signature->getFullName()));
         }

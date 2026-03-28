@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN ++++++++++++++++++++++++++++++++COUNT(*)++++++++9++++++++++++++++++++++++++++++99",
+  "expect": {
+    "result": "PLAN ERROR\nUnary operator PLUS is not yet supported (cannot allocate).",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"Unary operator PLUS is not yet supported (cannot allocate).\"}"
+  },
+  "tags": [
+    "count",
+    "wildcard",
+    "standalone-return",
+    "arithmetic",
+    "errors"
+  ],
+  "write-required": false
+}
