@@ -49,7 +49,8 @@ TEST_F(ConstScanProcessorTest, constScanGetOutEdges) {
     // Pipeline: ConstScan -> GetOutEdges -> Materialize -> Lambda
     _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
 
-    const ColumnTag originIDsTag = _builder->addConstScanNodes(inputNodeIDs).getNodeIDs()->getTag();
+    const ColumnTag originIDsTag =
+        _builder->addConstScan<NodeID>(inputNodeIDs).getValues()->getTag();
 
     const auto& edgeInterface = _builder->addGetOutEdges();
     const ColumnTag edgeIDsTag = edgeInterface.getEdgeIDs()->getTag();

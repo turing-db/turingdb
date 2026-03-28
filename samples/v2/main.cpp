@@ -127,12 +127,13 @@ int main(int argc, char** argv) {
         PlanGraphDebug::dumpMermaid(std::cout, view, planGraph);
     }
 
+    LocalMemory mem;
     if (planOptEnabled) {
         fmt::print("\n=== Query plan optimisation ===\n\n");
 
         try {
             auto t0 = Clock::now();
-            PlanOptimizer planOpt(&planGraph);
+            PlanOptimizer planOpt(&planGraph, view, &mem);
             planOpt.optimize();
             auto t1 = Clock::now();
             fmt::print("Query plan optimised in {} us\n", duration<Microseconds>(t0, t1));
@@ -145,7 +146,6 @@ int main(int argc, char** argv) {
     }
 
     if (pipelineGenEnabled) {
-        LocalMemory mem;
         PipelineV2 pipeline;
         {
             fmt::print("\n=== Pipeline generation ===\n\n");

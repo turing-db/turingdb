@@ -77,7 +77,8 @@ private:
 
         db::PlanGraph& plan = _planGen->getPlanGraph();
 
-        db::PlanOptimizer opt(&plan);
+        db::LocalMemory mem;
+        db::PlanOptimizer opt(&plan, view, &mem);
         opt.optimize();
 
         db::QueryCallbacks callbacks;
@@ -86,7 +87,6 @@ private:
         });
 
         db::PipelineV2 pipeline;
-        db::LocalMemory mem;
         db::PipelineGenerator pipelineGen(&plan, view, &pipeline, &mem,
                                           _sysMan, _procedures.get(), &callbacks);
         pipelineGen.generate();

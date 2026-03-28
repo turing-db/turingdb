@@ -776,7 +776,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addConstScan(std::span<const T> 
     using ColumnValueType = ColumnVector<T>;
 
     ConstScanProcessor<T>* proc = ConstScanProcessor<T>::create(_pipeline, values);
-    PipelineValuesOutputInterface& outValues = proc->values();
+    PipelineValuesOutputInterface& outValues = proc->output();
 
     // Allocate output node IDs column
     NamedColumn* col = allocColumn<ColumnNodeIDs>(outValues.getDataframe());
@@ -1290,3 +1290,6 @@ template PipelineBlockOutputInterface& PipelineBuilder::addShortestPath<db::type
 template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::BOTH>(uint64_t, uint64_t);
 template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::FORWARD>(uint64_t, uint64_t);
 template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::BACKWARD>(uint64_t, uint64_t);
+
+template PipelineValuesOutputInterface&
+    PipelineBuilder::addConstScan<NodeID>(std::span<const NodeID>);

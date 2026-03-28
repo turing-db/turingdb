@@ -1,5 +1,6 @@
 #include "PlanOptimizer.h"
 
+#include "LocalMemory.h"
 #include "PlanGraph.h"
 #include "nodes/ScanNodesNode.h"
 #include "nodes/FilterNode.h"
@@ -13,10 +14,14 @@
 #include "Literal.h"
 #include "Predicate.h"
 
+#include "columns/ColumnIDs.h"
+
 using namespace db;
 
-PlanOptimizer::PlanOptimizer(PlanGraph* plan)
-    : _plan(plan)
+PlanOptimizer::PlanOptimizer(PlanGraph* plan, GraphView view, LocalMemory* mem)
+    : _plan(plan),
+    _view(view),
+    _mem(mem)
 {
 }
 
@@ -82,7 +87,7 @@ void PlanOptimizer::rewriteScanByLabels() {
 // and appends the extracted NodeIDs to nodeIDs.
 static bool collectNodeIDsFromOrChain(const Expr* expr,
                                       const VarDecl* varDecl,
-                                      std::vector<NodeID>& nodeIDs) {
+                                      ColumnNodeIDs& nodeIDs) {
     if (expr->getKind() != Expr::Kind::BINARY) {
         return false;
     }
@@ -140,7 +145,7 @@ void PlanOptimizer::rewriteScanByConstIDs() {
     std::vector<PlanGraphNode*> roots;
     _plan->getRoots(roots);
 
-    std::vector<NodeID> nodeIDs;
+    ColumnNodeIDs* nodeIDs  = _mem->alloc<ColumnNodeIDs>();
 
     for (PlanGraphNode* root : roots) {
         // === Check rewrite rule precondition ===
@@ -176,8 +181,8 @@ void PlanOptimizer::rewriteScanByConstIDs() {
         const VarDecl* varDecl = filterNode->getVarNode()->getVarDecl();
         const Expr* predExpr = predicates[0]->getExpr();
 
-        nodeIDs.clear();
-        if (!collectNodeIDsFromOrChain(predExpr, varDecl, nodeIDs)) {
+        nodeIDs->clear();
+        if (!collectNodeIDsFromOrChain(predExpr, varDecl, *nodeIDs)) {
             continue;
         }
 
