@@ -104,7 +104,8 @@ static int fuzzOne(const char* data, size_t size) {
     db::PlanGraph& planGraph = planGen.getPlanGraph();
 
     // Optimize
-    db::PlanOptimizer planOpt(&planGraph);
+    db::LocalMemory mem;
+    db::PlanOptimizer planOpt(&planGraph, view, &mem);
     try {
         planOpt.optimize();
     } catch (const db::CompilerException&) {
@@ -112,7 +113,6 @@ static int fuzzOne(const char* data, size_t size) {
     }
 
     // Generate pipeline
-    db::LocalMemory mem;
     db::PipelineV2 pipeline;
     db::QueryCallbacks callbacks;
     db::PipelineGenerator pipelineGen(&planGraph,
