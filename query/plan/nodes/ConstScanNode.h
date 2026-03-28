@@ -8,16 +8,16 @@ class Column;
 
 class ConstScanNode : public PlanGraphNode {
 public:
-    explicit ConstScanNode(const Column* values)
+    explicit ConstScanNode(Column* values)
         : PlanGraphNode(PlanGraphOpcode::CONST_SCAN),
         _values(values)
     {
     }
 
-    const Column* values() const { return _values; }
+    Column* values() const { return _values; }
 
 private:
-    const Column* _values;
+    Column* _values;
 };
 
 }

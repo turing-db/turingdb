@@ -1,6 +1,9 @@
 #include "PipelineBuilder.h"
 
 #include "PipelinePort.h"
+#include "columns/AllowedKinds.h"
+#include "columns/Column.h"
+#include "columns/ColumnOperatorDispatcher.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
@@ -771,19 +774,58 @@ PipelineNodeOutputInterface& PipelineBuilder::addScanNodesByLabel(const LabelSet
     return outNodeIDs;
 }
 
-template <typename T>
-PipelineValuesOutputInterface& PipelineBuilder::addConstScan(std::span<const T> values) {
-    using ColumnValueType = ColumnVector<T>;
+struct AddMaterializeStep {
+    template <typename T>
+    void operator()(const ColumnVector<T>*) {
+        bioassert(_matProc, "Null MaterializeProcessor.");
+        bioassert(_namedCol, "Null NamedColumn.");
+        _matProc->getMaterializeData().addToStep<ColumnVector<T>>(_namedCol);
+    }
 
-    ConstScanProcessor<T>* proc = ConstScanProcessor<T>::create(_pipeline, values);
+    MaterializeProcessor* _matProc {nullptr};
+    NamedColumn* _namedCol {nullptr};
+};
+
+struct AllocOutputColumn {
+    template <typename T>
+    void operator()(const ColumnVector<T>*) {
+        bioassert(_outputDF, "Null output dataframe.");
+        bioassert(_builder, "Null PipelineBuilder.");
+        
+        _newCol = _builder->allocColumn<ColumnVector<T>>(_outputDF);
+    }
+
+    PipelineBuilder* _builder {nullptr};
+    Dataframe* _outputDF {nullptr};
+    NamedColumn*& _newCol;
+};
+
+PipelineValuesOutputInterface& PipelineBuilder::addConstScan(Column* values) {
+
+    ConstScanProcessor* proc = ConstScanProcessor::create(_pipeline, values);
+
     PipelineValuesOutputInterface& outValues = proc->output();
 
-    // Allocate output node IDs column
-    NamedColumn* col = allocColumn<ColumnNodeIDs>(outValues.getDataframe());
-    outValues.setValues(col);
+    // Allocate output column
+    NamedColumn* outputCol {nullptr};
+    {
+        using Types = ConstScanTypes;
+        using Dispatcher =
+            ColumnSingleDispatcher<Types::Allowed, AllocOutputColumn, Types::Excluded>;
+        AllocOutputColumn allocator {._builder = this,
+                                     ._outputDF = outValues.getDataframe(),
+                                     ._newCol = outputCol};
+        Dispatcher::dispatch(values, allocator);
+    }
+    outValues.setValues(outputCol);
 
-    // Register output in materialize data
-    _matProc->getMaterializeData().addToStep<ColumnValueType>(col);
+    { // Register output in materialize data
+        using Types = ConstScanTypes;
+        using Dispatcher =
+            ColumnSingleDispatcher<Types::Allowed, AddMaterializeStep, Types::Excluded>;
+        AddMaterializeStep matStep {._matProc = _matProc, ._namedCol = outputCol};
+        Dispatcher::dispatch(values, matStep);
+    }
 
     _pendingOutput.updateInterface(&outValues);
     _lastProc = proc;
@@ -1290,6 +1332,3 @@ template PipelineBlockOutputInterface& PipelineBuilder::addShortestPath<db::type
 template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::BOTH>(uint64_t, uint64_t);
 template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::FORWARD>(uint64_t, uint64_t);
 template PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer<PathExplorationDir::BACKWARD>(uint64_t, uint64_t);
-
-template PipelineValuesOutputInterface&
-    PipelineBuilder::addConstScan<NodeID>(std::span<const NodeID>);

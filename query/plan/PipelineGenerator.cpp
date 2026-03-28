@@ -535,8 +535,8 @@ PipelineOutputInterface* PipelineGenerator::translateScanNodesByLabelNode(ScanNo
 }
 
 PipelineOutputInterface* PipelineGenerator::translateConstScanNode(ConstScanNode* node) {
-    [[maybe_unused]] const Column* values = node->values();
-    _builder.addConstScan<NodeID>(std::span<const NodeID> {});
+    Column* values = node->values();
+    _builder.addConstScan(values);
     return _builder.getPendingOutputInterface();
 }
 

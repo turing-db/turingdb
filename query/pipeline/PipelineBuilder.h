@@ -62,8 +62,7 @@ public:
     // Sources
     PipelineNodeOutputInterface& addScanNodes();
     PipelineNodeOutputInterface& addScanNodesByLabel(const LabelSet* labelset);
-    template <typename T>
-    PipelineValuesOutputInterface& addConstScan(std::span<const T> values);
+    PipelineValuesOutputInterface& addConstScan(Column* values);
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
     PipelineBlockOutputInterface& addCallProcedure(const Procedure* procedure,
                                                    std::span<const Procedure::Argument> args,
