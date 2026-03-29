@@ -22,7 +22,7 @@ TEST_F(ConstScanProcessorTest, constScanGetOutEdges) {
     auto [transaction, view, reader] = readGraph();
 
     // Pick a subset of nodes to use as constant input
-    std::vector<NodeID> inputNodeIDs;
+    ColumnNodeIDs inputNodeIDs;
     inputNodeIDs.push_back(SimpleGraph::findNodeID(_graph, "Remy"));
     inputNodeIDs.push_back(SimpleGraph::findNodeID(_graph, "Adam"));
     inputNodeIDs.push_back(SimpleGraph::findNodeID(_graph, "Luc"));
@@ -50,7 +50,7 @@ TEST_F(ConstScanProcessorTest, constScanGetOutEdges) {
     _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
 
     const ColumnTag originIDsTag =
-        _builder->addConstScan<NodeID>(inputNodeIDs).getValues()->getTag();
+        _builder->addConstScan(&inputNodeIDs).getValues()->getTag();
 
     const auto& edgeInterface = _builder->addGetOutEdges();
     const ColumnTag edgeIDsTag = edgeInterface.getEdgeIDs()->getTag();

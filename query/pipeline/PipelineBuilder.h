@@ -42,6 +42,7 @@ class MaterializeProcessor;
 class ExprProgram;
 class PredicateProgram;
 class ProcedureManager;
+struct AllocOutputColumn;
 
 class PipelineBuilder {
 public:
@@ -236,6 +237,8 @@ public:
     Processor* getLastProc() const { return _lastProc; }
 
 private:
+    friend AllocOutputColumn;
+
     LocalMemory* _mem {nullptr};
     PipelineV2* _pipeline {nullptr};
     DataframeManager* _dfMan {nullptr};

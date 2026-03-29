@@ -47,8 +47,7 @@ struct SortAndFilterID {
 
     // Otherwise: no need to do anything
     template <typename T>
-    void operator()(ColumnVector<T>*) {
-    }
+    void operator()(ColumnVector<T>*) {}
 
     ExecutionContext* _ctxt {nullptr};
 };
@@ -83,12 +82,12 @@ void ConstScanProcessor::prepare(ExecutionContext* ctxt) {
 
     bioassert(_values, "Null values column");
 
-    using Types = ConstScanTypes;
-    using ValidateSortIDs =
-        ColumnSingleDispatcher<Types::Allowed, SortAndFilterID, Types::Excluded>;
+    // using Types = ConstScanTypes;
+    // using ValidateSortIDs =
+    //     ColumnSingleDispatcher<Types::Allowed, SortAndFilterID, Types::Excluded>;
 
-    SortAndFilterID preprocessor {._ctxt = _ctxt};
-    ValidateSortIDs::dispatch(_values, preprocessor);
+    // SortAndFilterID preprocessor {._ctxt = _ctxt};
+    // ValidateSortIDs::dispatch(_values, preprocessor);
 
     _offset = 0;
 
@@ -101,27 +100,41 @@ void ConstScanProcessor::reset() {
 }
 
 struct ExecuteCycle {
-    
+    template <typename T>
+    void operator()(const ColumnVector<T>* src) {
+        const size_t remaining = src->size() - _offset;
+        const size_t chunkSize = std::min(remaining, chunkSize);
+
+        auto* casted = dynamic_cast<ColumnVector<T>*>(_out);
+
+        casted->resize(chunkSize);
+
+        std::copy_n(src->begin() + _offset, chunkSize, casted->data());
+        _offset += chunkSize;
+    }
+
+    Column* _out {nullptr};
+    size_t& _offset;
+    size_t _chunkSize {0};
 };
 
 void ConstScanProcessor::execute() {
     const NamedColumn* namedValues = _output.getValues();
     Column* outCol = namedValues->getColumn();
 
-    const size_t remaining = _values->size() - _offset;
-    const size_t chunkSize = std::min(remaining, _ctxt->getChunkSize());
+    using Types = ConstScanTypes;
+    using Dispatcher =
+        ColumnSingleDispatcher<Types::Allowed, ExecuteCycle, Types::Excluded>;
 
-    _outCol->resize(chunkSize);
-    std::copy_n(_sortedValues.data() + _offset, chunkSize, _outCol->data());
-    _offset += chunkSize;
+    ExecuteCycle exctor {
+        ._out = outCol, ._offset = _offset, ._chunkSize = _ctxt->getChunkSize()};
+
+    Dispatcher::dispatch(_values, exctor);
 
     _output.getPort()->writeData();
 
-    if (_offset >= _sortedValues.size()) {
+    if (_offset >= _values->size()) {
         finish();
     }
 }
 
-namespace db {
-template class ConstScanProcessor<NodeID>;
-}
