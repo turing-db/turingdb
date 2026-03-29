@@ -108,14 +108,14 @@ struct ExecuteCycle {
     template <typename T>
     void operator()(const ColumnVector<T>* src) {
         const size_t remaining = src->size() - _offset;
-        const size_t chunkSize = std::min(remaining, chunkSize);
+        const size_t canWrite = std::min(remaining, _chunkSize);
 
         auto* casted = dynamic_cast<ColumnVector<T>*>(_out);
 
-        casted->resize(chunkSize);
+        casted->resize(canWrite);
 
-        std::copy_n(src->begin() + _offset, chunkSize, casted->data());
-        _offset += chunkSize;
+        std::copy_n(src->begin() + _offset, canWrite, casted->data());
+        _offset += canWrite;
     }
 
     Column* _out {nullptr};
