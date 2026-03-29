@@ -56,6 +56,7 @@
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
+#include "EntityOutputStream.h"
 
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
@@ -786,7 +787,7 @@ struct AddMaterializeStep {
     NamedColumn* _namedCol {nullptr};
 };
 
-struct AllocOutputColumn {
+struct db::AllocOutputColumn {
     template <typename T>
     void operator()(const ColumnVector<T>*) {
         bioassert(_outputDF, "Null output dataframe.");
@@ -798,6 +799,21 @@ struct AllocOutputColumn {
     PipelineBuilder* _builder {nullptr};
     Dataframe* _outputDF {nullptr};
     NamedColumn*& _newCol;
+};
+
+struct SetStream {
+    void operator()(const ColumnVector<NodeID>*) {
+        const EntityOutputStream stream = EntityOutputStream::createNodeStream(_tag);
+        _out->setStream(stream);
+    }
+
+    // NOTE: If we support const edge scan, we need to set a node stream here
+
+    template <typename T>
+    void operator()(const ColumnVector<T>*) {}
+
+    PipelineOutputInterface* _out {nullptr};
+    ColumnTag _tag;
 };
 
 PipelineValuesOutputInterface& PipelineBuilder::addConstScan(Column* values) {
@@ -825,6 +841,16 @@ PipelineValuesOutputInterface& PipelineBuilder::addConstScan(Column* values) {
             ColumnSingleDispatcher<Types::Allowed, AddMaterializeStep, Types::Excluded>;
         AddMaterializeStep matStep {._matProc = _matProc, ._namedCol = outputCol};
         Dispatcher::dispatch(values, matStep);
+    }
+
+    { // Set the stream if we need to (e.g. a ConstScan of NodeIDs)
+        using Types = ConstScanTypes;
+        using Dispatcher =
+            ColumnSingleDispatcher<Types::Allowed, SetStream, Types::Excluded>;
+
+        SetStream stream {._out = &outValues, ._tag = outputCol->getTag()};
+
+        Dispatcher::dispatch(values, stream);
     }
 
     _pendingOutput.updateInterface(&outValues);
