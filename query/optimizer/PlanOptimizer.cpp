@@ -3,6 +3,8 @@
 #include "LocalMemory.h"
 #include <string_view>
 
+#include "LocalMemory.h"
+
 #include "ID.h"
 #include "PlanGraph.h"
 #include "CypherAST.h"
@@ -128,8 +130,11 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
         case EvaluatedType::EdgePattern:
         case EvaluatedType::GraphPath:
         case EvaluatedType::_SIZE:
-            return nullptr;
-        break;
+        case EvaluatedType::Label:
+        case EvaluatedType::LabelSet:
+        case EvaluatedType::PropertyType:
+        case EvaluatedType::EdgeType:
+            break;
     }
 
     return nullptr;
@@ -672,7 +677,9 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
         }
 
         const auto& scanNodesOutput = scanNodes->outputs();
-        bioassert(scanNodesOutput.size() == 1, "ScanNodes had non-singular output.");
+        if(scanNodesOutput.size() != 1) {
+            return;
+        }
 
         PlanGraphNode* scanOutput = scanNodesOutput.front();
         auto* getPropsNode = dynamic_cast<GetPropertyWithNullNode*>(scanOutput);
@@ -681,7 +688,9 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
         }
 
         const auto& gpOutputs = getPropsNode->outputs();
-        bioassert(gpOutputs.size() == 1, "GetPropertiesWithNull had non-singular output.");
+        if (gpOutputs.size() != 1) {
+            return;
+        }
 
         PlanGraphNode* gpOutput = gpOutputs.front();
         auto* filterNode = dynamic_cast<NodeFilterNode*>(gpOutput);
@@ -703,7 +712,9 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
 
         const Predicate* pred = predicates.front();
         const auto* binExpr = dynamic_cast<const BinaryExpr*>(pred->getExpr());
-        bioassert(binExpr, "Failed to get predicate expression.");
+        if (!binExpr) {
+            return; // Can occur with Boolean propertyies as predicates e.g. NOT isFrench
+        }
 
         // Index only supports equality
         if (binExpr->getOperator() != BinaryOperator::Equal) {
