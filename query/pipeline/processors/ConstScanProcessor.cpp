@@ -5,7 +5,6 @@
 #include <spdlog/fmt/fmt.h>
 #include <type_traits>
 
-#include "BioAssert.h"
 #include "ID.h"
 #include "PipelineV2.h"
 #include "PipelinePort.h"
@@ -16,6 +15,8 @@
 #include "views/GraphView.h"
 #include "reader/GraphReader.h"
 
+#include "BioAssert.h"
+
 using namespace db;
 
 namespace {
@@ -23,7 +24,10 @@ namespace {
 struct SortAndFilterID {
     // Node and Edge IDs need to be valid: filter invalids and then sort
     template <TypedInternalID IDT>
-    void operator()(ColumnVector<IDT>* col) {
+    void operator()(const ColumnVector<IDT>*) {
+        auto* col = dynamic_cast<ColumnVector<IDT>*>(_values);
+        bioassert(_values, "Null values column");
+
         const GraphReader reader = _ctxt->getGraphView().read();
 
         const auto invalid = [&reader](IDT id) -> bool {
@@ -39,10 +43,10 @@ struct SortAndFilterID {
         std::vector<IDT>& raw = col->getRaw();
         
         // Remove invalid IDs
-        std::erase_if(begin(raw), end(raw), invalid);
+        std::erase_if(raw, invalid);
 
         // Sort for better access patterns in subsequent processors
-        std::sort(begin(raw), end(raw));
+        std::ranges::sort(raw);
     }
 
     // Otherwise: no need to do anything
@@ -50,6 +54,7 @@ struct SortAndFilterID {
     void operator()(ColumnVector<T>*) {}
 
     ExecutionContext* _ctxt {nullptr};
+    Column* _values {nullptr};
 };
 
 }
@@ -82,12 +87,12 @@ void ConstScanProcessor::prepare(ExecutionContext* ctxt) {
 
     bioassert(_values, "Null values column");
 
-    // using Types = ConstScanTypes;
-    // using ValidateSortIDs =
-    //     ColumnSingleDispatcher<Types::Allowed, SortAndFilterID, Types::Excluded>;
+    using Types = ConstScanTypes;
+    using ValidateSortIDs =
+        ColumnSingleDispatcher<Types::Allowed, SortAndFilterID, Types::Excluded>;
 
-    // SortAndFilterID preprocessor {._ctxt = _ctxt};
-    // ValidateSortIDs::dispatch(_values, preprocessor);
+    SortAndFilterID preprocessor {._ctxt = _ctxt, ._values = _values};
+    ValidateSortIDs::dispatch(_values, preprocessor);
 
     _offset = 0;
 
