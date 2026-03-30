@@ -24,24 +24,17 @@ namespace {
 
 struct Data : public ProcedureData {
     const Commit* _commit {nullptr};
+    size_t _written {0};
 };
 
 void writeChunk(Data* data, ProcedureState* procedure, size_t chunkSize) {
     auto* names = dynamic_cast<ColumnVector<std::string_view>*>(data->getReturnColumn(0));
-    // auto* propIDs = dynamic_cast<ColumnVector<PropertyTypeID>*>(data->getReturnColumn(1));
-    // auto* propNames = dynamic_cast<ColumnVector<std::string>*>(data->getReturnColumn(2));
     auto* sizes = dynamic_cast<ColumnVector<types::UInt64::Primitive>*>(data->getReturnColumn(1));
 
-    // Not all columns may be YIELDed
+    // Not all columns may be YIELDed, only fill those which are
     if (names) {
         names->clear();
     }
-    // if (propIDs) {
-    //     propIDs->clear();
-    // }
-    // if (propNames) {
-    //     propNames->clear();
-    // }
     if (sizes) {
         sizes->clear();
     }
@@ -52,12 +45,8 @@ void writeChunk(Data* data, ProcedureState* procedure, size_t chunkSize) {
     const CommitHistory& history = commit->history();
     const CommitHistory::IndexSpan indexes = history.validIndexes();
 
-    // TODO: Add chunking approach
-    if (indexes.size() > chunkSize) {
-        throw FatalException("Too many indexes.");
-    }
-
-    for (const WeakArc<Index>& index : indexes) {
+    for (size_t i = data->_written; i < indexes.size(); i++) {
+        const WeakArc<Index>& index = indexes[i];
         if (names) {
             const std::string_view name = index->name();
             names->push_back(name);
@@ -125,8 +114,6 @@ void ShowIndexesProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->setDeallocCallback(&deallocData);
 
     proc->addReturnValue("name", ProcedureType::STRING_VIEW);
-    // proc->addReturnValue("propertyTypeID", ProcedureType::PROPERTY_TYPE_ID);
-    // proc->addReturnValue("propertyName", ProcedureType::STRING);
     proc->addReturnValue("size", ProcedureType::UINT_64);
 
     ns->addProcedure(proc);

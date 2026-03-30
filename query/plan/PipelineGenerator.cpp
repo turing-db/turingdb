@@ -1859,7 +1859,8 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
                 _builder.getPendingOutputInterface()->setStream(nodeStream);
             };
             PropertyTypeDispatcher {propType}.execute(process);
-        } break;
+        }
+        break;
 
         case EvaluatedType::EdgePattern: {
             const auto process = [&]<SupportedType Type> {
@@ -1868,7 +1869,8 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
                 // TODO: Make stream
             };
             PropertyTypeDispatcher {propType}.execute(process);
-        } break;
+        }
+        break;
 
         default: {
             const std::string_view typeName = EvaluatedTypeName::value(evaluatedType);
@@ -1876,9 +1878,8 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
                 "IndexLookup must act on a Node/EdgePattern. Instead acting on {}.",
                 typeName));
         }
+        break;
     }
-
-    // TODO: update decl column map
 
     return _builder.getPendingOutputInterface();
 }
