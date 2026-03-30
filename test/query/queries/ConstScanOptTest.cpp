@@ -466,6 +466,67 @@ TEST_F(ConstScanOptTest, mixedPredicateNoConstScan) {
     EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::SCAN_NODES));
 }
 
+// Two independent const-scan roots each followed by a 1-hop expansion.
+// Verifies that each root keeps its own seed after the optimiser rewrites.
+TEST_F(ConstScanOptTest, multipleRootsWithHops) {
+    // Pick two Pathway seeds with different IDs.
+    const LabelID pathwayLabel = read().getView().metadata().labels().get("Pathway").value();
+    LabelSet pathwayLabelSet;
+    pathwayLabelSet.set(pathwayLabel);
+    const LabelSetHandle pathwayHandle(pathwayLabelSet);
+
+    std::vector<NodeID> pathways;
+    for (const NodeID nid : read().scanNodesByLabel(pathwayHandle)) {
+        pathways.push_back(nid);
+        if (pathways.size() == 2) {
+            break;
+        }
+    }
+    ASSERT_EQ(2, pathways.size());
+    ASSERT_NE(pathways[0], pathways[1]);
+
+    const NodeID seedN = pathways[0];
+    const NodeID seedM = pathways[1];
+
+    // Expected: Cartesian product of outgoing neighbours of each seed.
+    std::vector<NodeID> nbrsN;
+    expandOneHop(nbrsN, {seedN});
+    ASSERT_FALSE(nbrsN.empty());
+
+    std::vector<NodeID> nbrsM;
+    expandOneHop(nbrsM, {seedM});
+    ASSERT_FALSE(nbrsM.empty());
+
+    using Rows = LineContainer<NodeID, NodeID>;
+    Rows expected;
+    for (const NodeID a : nbrsN) {
+        for (const NodeID b : nbrsM) {
+            expected.add({a, b});
+        }
+    }
+
+    const std::string q = fmt::format(
+        "MATCH (n)-->(a), (m)-->(b) WHERE n = {} AND m = {} RETURN a, b",
+        seedN.getValue(), seedM.getValue());
+
+    Rows actual;
+    TestQueryInterpreter interp(&_env->getSystemManager(),
+                                _graphName,
+                                &_db->getDefaultQueryConfig());
+    interp.execute(q, [&](const Dataframe* df) {
+        auto* aCol = findColumn(df, "a")->as<ColumnNodeIDs>();
+        auto* bCol = findColumn(df, "b")->as<ColumnNodeIDs>();
+        ASSERT_TRUE(aCol && bCol);
+        for (size_t i = 0; i < aCol->size(); ++i) {
+            actual.add({aCol->at(i), bCol->at(i)});
+        }
+    });
+
+    EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::SCAN_NODES));
+    EXPECT_TRUE(expected.equals(actual));
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 10;
