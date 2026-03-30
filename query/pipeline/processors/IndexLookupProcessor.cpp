@@ -1,6 +1,5 @@
 #include "IndexLookupProcessor.h"
 
-#include <iostream>
 #include <spdlog/fmt/bundled/format.h>
 
 #include "PipelinePort.h"
@@ -8,7 +7,6 @@
 #include "indexes/Index.h"
 #include "ExecutionContext.h"
 
-#include "dataframe/Dataframe.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/NamedColumn.h"
 #include "metadata/PropertyType.h"
@@ -86,7 +84,6 @@ void IndexLookupProcessor<Q, R>::execute() {
     if (wroteData || inputClosed) {
         _output.getPort()->writeData();
     }
-    _output.getDataframe()->dump(std::cout);
 
     const bool finishedThisQuery = _state._finished;
     // Prepare for the next query, if we are to receive one
