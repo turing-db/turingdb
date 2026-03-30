@@ -36,9 +36,26 @@ public:
 
     void init(GraphView view) final;
 
+    // Unbounded queries
     void query(const Column* input, Column* result) const final;
     void query(const ColumnVector<PropertyPrimitive>* input, ColumnVector<I>* result) const;
     void query(const ColumnConst<PropertyPrimitive>* input, ColumnVector<I>* result) const;
+
+    // Bounded queries
+    /**
+     * @brief Overload of parent type @ref Index.Returns at most @param limit rows in
+     * @param result, updating @param state in-place.
+     */
+    void boundedQuery(const Column* input,
+                Column* result,
+                Index::QueryState& state,
+                size_t limit) const final;
+
+    /// Local specialisation for ColumnVectors
+    void boundedQuery(const ColumnVector<PropertyPrimitive>* input,
+                      ColumnVector<I>* result,
+                      Index::QueryState& state,
+                      size_t limit = 0) const;
 
     PropertyTypeID property() const final { return _propID; }
 

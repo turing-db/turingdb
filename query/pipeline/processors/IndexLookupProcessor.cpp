@@ -1,11 +1,14 @@
 #include "IndexLookupProcessor.h"
 
+#include <iostream>
 #include <spdlog/fmt/bundled/format.h>
 
 #include "PipelinePort.h"
 
 #include "indexes/Index.h"
+#include "ExecutionContext.h"
 
+#include "dataframe/Dataframe.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/NamedColumn.h"
 #include "metadata/PropertyType.h"
@@ -48,13 +51,16 @@ IndexLookupProcessor<Q, R>* IndexLookupProcessor<Q, R>::create(PipelineV2* pipel
 }
 
 template <typename Q, typename R>
-void IndexLookupProcessor<Q, R>::prepare(ExecutionContext*) {
+void IndexLookupProcessor<Q, R>::prepare(ExecutionContext* ctxt) {
     bioassert(_index, "Null index.");
+    _ctxt = ctxt;
     markAsPrepared();
 }
 
 template <typename Q, typename R>
 void IndexLookupProcessor<Q, R>::reset() {
+    _state.reset();
+
     markAsReset();
 }
 
@@ -68,11 +74,31 @@ void IndexLookupProcessor<Q, R>::execute() {
     ColumnVector<R>* result = resultNCol->as<ColumnVector<R>>();
     bioassert(query && result, "Null value columns.");
 
-    _index->query(query, result);
-    _output.getPort()->writeData();
+    const size_t chunkSize = _ctxt->getChunkSize();
 
-    // TODO: Chunk
-    finish();
+    _index->boundedQuery(query, result, _state, chunkSize);
+
+    const bool wroteData = !result->empty();
+    const bool inputClosed = _input.getPort()->isClosed();
+
+    // Write data iff we have rows to output, or we have no rows to output but our input
+    // is now closed (we will never have any more rows to write).
+    if (wroteData || inputClosed) {
+        _output.getPort()->writeData();
+    }
+    _output.getDataframe()->dump(std::cout);
+
+    const bool finishedThisQuery = _state._finished;
+    // Prepare for the next query, if we are to receive one
+    if (finishedThisQuery) {
+        _input.getPort()->consume();
+        _state.reset();
+    }
+
+    // If we finished this query, and we are never going to receive more, finished
+    if (finishedThisQuery && inputClosed) {
+        finish();
+    }
 }
 
 namespace db {

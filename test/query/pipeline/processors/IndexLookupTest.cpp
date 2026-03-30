@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "columns/AllowedKinds.h"
+#include "iterators/ChunkConfig.h"
 #include "processors/ProcessorTester.h"
 #include "processors/IndexLookupProcessor.h"
 #include "processors/LambdaProcessor.h"
@@ -20,7 +21,7 @@
 using namespace db;
 using namespace turing::test;
 
-class IndexLookupProcessorTest : public ProcessorTester {
+class IndexLookupTest : public ProcessorTester {
 public:
     void initialize() override {
         ProcessorTester::initialize();
@@ -29,7 +30,7 @@ public:
     }
 };
 
-TEST_F(IndexLookupProcessorTest, intIndexInit) {
+TEST_F(IndexLookupTest, intIndexInit) {
     auto [transaction, view, reader] = readGraph();
 
     const PropertyType agePropType = view.metadata().propTypes().get("age").value();
@@ -41,7 +42,7 @@ TEST_F(IndexLookupProcessorTest, intIndexInit) {
     EXPECT_EQ(ageIndex.size(), 2u);
 }
 
-TEST_F(IndexLookupProcessorTest, stringIndexInit) {
+TEST_F(IndexLookupTest, stringIndexInit) {
     auto [transaction, view, reader] = readGraph();
 
     const PropertyType namePropType = view.metadata().propTypes().get("name").value();
@@ -53,7 +54,7 @@ TEST_F(IndexLookupProcessorTest, stringIndexInit) {
     EXPECT_EQ(nameIndex.size(), 18u);
 }
 
-TEST_F(IndexLookupProcessorTest, intIndexQueryByAge) {
+TEST_F(IndexLookupTest, intIndexQueryByAge) {
     auto [transaction, view, reader] = readGraph();
 
     const PropertyType agePropType = view.metadata().propTypes().get("age").value();
@@ -75,7 +76,7 @@ TEST_F(IndexLookupProcessorTest, intIndexQueryByAge) {
     EXPECT_NE(std::find(results.begin(), results.end(), NodeID(1)), results.end());
 }
 
-TEST_F(IndexLookupProcessorTest, stringIndexQueryByName) {
+TEST_F(IndexLookupTest, stringIndexQueryByName) {
     auto [transaction, view, reader] = readGraph();
 
     const PropertyType namePropType = view.metadata().propTypes().get("name").value();
@@ -93,7 +94,7 @@ TEST_F(IndexLookupProcessorTest, stringIndexQueryByName) {
     EXPECT_EQ(resultCol.front(), NodeID(1)); // Adam is NodeID 1
 }
 
-TEST_F(IndexLookupProcessorTest, pipelineLambdaSourceThenIntLookup) {
+TEST_F(IndexLookupTest, pipelineLambdaSourceThenIntLookup) {
     auto [transaction, view, reader] = readGraph();
 
     const PropertyType agePropType = view.metadata().propTypes().get("age").value();
@@ -153,11 +154,11 @@ TEST_F(IndexLookupProcessorTest, pipelineLambdaSourceThenIntLookup) {
     };
 
     _builder->addLambda(VERIFY_CALLBACK);
-    EXECUTE(view, 1);
+    EXECUTE(view, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(executed);
 }
 
-TEST_F(IndexLookupProcessorTest, pipelineLambdaSourceThenStringLookup) {
+TEST_F(IndexLookupTest, pipelineLambdaSourceThenStringLookup) {
     auto [transaction, view, reader] = readGraph();
 
     const PropertyType namePropType = view.metadata().propTypes().get("name").value();
@@ -210,4 +211,81 @@ TEST_F(IndexLookupProcessorTest, pipelineLambdaSourceThenStringLookup) {
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, 1);
     ASSERT_TRUE(executed);
+}
+
+// Verifies that IndexLookupProcessor handles a multi-chunk source correctly:
+// execute() is invoked once per input chunk, and each invocation writes at most
+// one output chunk (bounded by chunkSize).
+TEST_F(IndexLookupTest, chunkedInputOutput) {
+    auto [transaction, view, reader] = readGraph();
+
+    const PropertyType namePropType = view.metadata().propTypes().get("name").value();
+
+    PropertyHashIndex<types::String, NodeID> nameIndex("name_idx", namePropType._id);
+    nameIndex.init(view);
+
+    // Three source chunks: Remy (0), Adam (1), Luc (9) — each emitted separately.
+    // Each name is unique in the graph, so each lookup returns exactly one match.
+    const std::vector<NodeID> sourceNodes = {NodeID(0), NodeID(1), NodeID(9)};
+    size_t chunkIdx = 0;
+
+    const auto multiChunkSource = [&](Dataframe* df, bool& isFinished,
+                                      LambdaSourceProcessor::Operation op) {
+        if (op != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        ASSERT_LT(chunkIdx, sourceNodes.size());
+        auto* nodeIDs = dynamic_cast<ColumnNodeIDs*>(df->cols().front()->getColumn());
+        ASSERT_TRUE(nodeIDs != nullptr);
+        nodeIDs->clear();
+        nodeIDs->emplace_back(sourceNodes[chunkIdx]);
+        isFinished = (chunkIdx == sourceNodes.size() - 1);
+        chunkIdx++;
+    };
+
+    _builder->setMaterializeProc(MaterializeProcessor::create(&_pipeline, &_env->getMem()));
+
+    const ColumnTag sourceTag = _pipeline.getDataframeManager()->allocTag();
+    auto& lambdaOutput = _builder->addLambdaSource(multiChunkSource);
+    _builder->addColumnToOutput<ColumnNodeIDs>(sourceTag);
+    lambdaOutput.setStream(EntityOutputStream::createNodeStream(sourceTag));
+
+    // Extract the name property from each source node.
+    _builder->addGetNodeProperties<types::String>(namePropType);
+
+    // Look up all nodes whose name matches the extracted value.
+    const auto& lookupOutput = _builder->addIndexLookup<types::String::Primitive, NodeID>(&nameIndex);
+    const ColumnTag resultTag = lookupOutput.getValues()->getTag();
+
+    size_t callbackCount = 0;
+    std::vector<NodeID> allResults;
+
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        callbackCount++;
+
+        const auto* results = df->getColumn<ColumnNodeIDs>(resultTag);
+        ASSERT_TRUE(results != nullptr);
+
+        // Each call to execute() must produce at most one chunk (chunkSize = 1).
+        EXPECT_LE(results->size(), 1u);
+
+        allResults.insert(allResults.end(), results->begin(), results->end());
+    };
+
+    _builder->addLambda(VERIFY_CALLBACK);
+
+    // chunkSize = 1 enforces that at most one result is emitted per execute() call.
+    EXECUTE(view, 1);
+
+    // The callback must be invoked once per source chunk.
+    EXPECT_EQ(callbackCount, sourceNodes.size());
+
+    // Each source node's name was unique, so each lookup returns exactly one match.
+    ASSERT_EQ(allResults.size(), sourceNodes.size());
+    EXPECT_NE(std::find(allResults.begin(), allResults.end(), NodeID(0)), allResults.end()); // Remy
+    EXPECT_NE(std::find(allResults.begin(), allResults.end(), NodeID(1)), allResults.end()); // Adam
+    EXPECT_NE(std::find(allResults.begin(), allResults.end(), NodeID(9)), allResults.end()); // Luc
 }

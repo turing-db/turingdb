@@ -39,7 +39,6 @@ protected:
 
     static constexpr auto emptyCallback = [](const Dataframe*) -> void {};
 
-    // Return the name column from the showIndexes Dataframe
     static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {
         for (auto* col : df->cols()) {
             if (col->getName() == name) {
@@ -81,7 +80,6 @@ protected:
     }
 
     // Counts the total number of indexes visible at the current head.
-    // Returns 0 if the callback is never invoked (empty result set).
     size_t countIndexes() {
         size_t count = 0;
         auto res = query("CALL db.showIndexes() YIELD name", [&](const Dataframe* df) {
