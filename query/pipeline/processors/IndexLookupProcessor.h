@@ -2,12 +2,13 @@
 
 #include "Processor.h"
 
+#include "indexes/Index.h"
+
 #include "interfaces/PipelineValuesInputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
 
 namespace db {
 
-class Index;
 class Column;
 class PipelineV2;
 
@@ -28,6 +29,8 @@ public:
 private:
     PipelineValuesInputInterface _input;
     PipelineValuesOutputInterface _output;
+
+    Index::QueryState _state;
 
     const Index* _index;
 

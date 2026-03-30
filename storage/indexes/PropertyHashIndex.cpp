@@ -120,6 +120,68 @@ void PropertyHashIndex<P, I>::query(const ColumnConst<PropertyPrimitive>* input,
     }
 }
 
+template <SupportedType P, TypedInternalID I>
+void PropertyHashIndex<P, I>::boundedQuery(const Column* input, Column* result, Index::QueryState& state, size_t limit) const {
+    auto* output = dynamic_cast<ColumnVector<I>*>(result);
+    bioassert(output, "Invalid output column to property index query.");
+
+    const auto* vecInput = dynamic_cast<const ColumnVector<PropertyPrimitive>*>(input);
+
+    if (vecInput) {
+        boundedQuery(vecInput, output, state, limit);
+        return;
+    }
+
+    bioassert(false, "Invalid input column to PropertyHashIndex query.");
+}
+
+
+template <SupportedType P, TypedInternalID I>
+void PropertyHashIndex<P, I>::boundedQuery(const ColumnVector<PropertyPrimitive>* input,
+                                     ColumnVector<I>* result,
+                                     Index::QueryState& state,
+                                     size_t limit) const {
+    result->clear();
+    size_t remaining = limit;
+
+    size_t& keyOffset = state._keyIndex;
+    size_t& valueOffset = state._valueIndex;
+
+    bioassert(keyOffset < input->size(), "Key offset exceeded input size.");
+
+    for (size_t i = keyOffset; i < input->size(); i++) {
+        const PropertyPrimitive& currentKey = input->operator[](i);
+        const auto findIt = _hashTable.find(currentKey);
+        const bool contains = findIt != end(_hashTable);
+
+        if (!contains) {
+            keyOffset = i + 1; // Start from next key...
+            valueOffset = 0;   // ... at the beginning
+            continue;
+        }
+
+        const IDContainer& matches = findIt->second;
+        const size_t sz = matches.size();
+
+        bioassert(valueOffset < sz, "Value offset exceeded match size.");
+
+        for (size_t j = valueOffset; j < sz; j++) {
+            if (remaining == 0) {
+                return;
+            }
+            const I id = matches[j];
+            result->push_back(id);
+
+            valueOffset++;
+            remaining--;
+        }
+
+        keyOffset = i + 1; // Start at next key...
+        valueOffset = 0;   // ... at the beginning
+    }
+    state._finished = true;
+}
+
 namespace db {
 template class PropertyHashIndex<types::Int64, NodeID>;
 template class PropertyHashIndex<types::UInt64, NodeID>;
