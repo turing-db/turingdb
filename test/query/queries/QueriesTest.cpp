@@ -3568,7 +3568,7 @@ TEST_F(QueriesTest, predicateJoinWithInequalityFilter) {
 
 // Divergent pattern with equality predicate on age (GitHub issue #397).
 //   MATCH (x)-->(a), (x)-->(b) WHERE a.age = b.age RETURN a, b, x
-TEST_F(QueriesTest, DISABLED_predicateJoinDivergentAge) {
+TEST_F(QueriesTest, predicateJoinDivergentAge) {
     _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
 
     using Rows = LineContainer<NodeID, NodeID, NodeID>;
@@ -3627,7 +3627,7 @@ TEST_F(QueriesTest, DISABLED_predicateJoinDivergentAge) {
 
 // Variant of #397 with inequality predicate that produces non-empty results.
 //   MATCH (x)-->(a), (x)-->(b) WHERE a.name <> b.name RETURN a, b, x
-TEST_F(QueriesTest, DISABLED_predicateJoinDivergentNameNeq) {
+TEST_F(QueriesTest, predicateJoinDivergentNameNeq) {
     _queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
 
     using Rows = LineContainer<NodeID, NodeID, NodeID>;
@@ -3682,6 +3682,35 @@ TEST_F(QueriesTest, DISABLED_predicateJoinDivergentNameNeq) {
 
 // Regression test for https://github.com/turing-db/turingdb/issues/485
 // LIMIT 0 must return no rows when the dataframe contains only ColumnConst columns.
+TEST_F(QueriesTest, threeNodeCartProdFilterByID) {
+    constexpr std::string_view MATCH_QUERY =
+        "MATCH (n), (m), (o) WHERE n = 0 AND m = 10 AND o = 11 RETURN n, m, o";
+
+    using Rows = LineContainer<NodeID, NodeID, NodeID>;
+
+    Rows actual;
+    {
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(3, df->size());
+            auto* nCol = findColumn(df, "n")->as<ColumnNodeIDs>();
+            auto* mCol = findColumn(df, "m")->as<ColumnNodeIDs>();
+            auto* oCol = findColumn(df, "o")->as<ColumnNodeIDs>();
+            ASSERT_TRUE(nCol && mCol && oCol);
+            for (size_t row = 0; row < nCol->size(); row++) {
+                actual.add({nCol->at(row), mCol->at(row), oCol->at(row)});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    ASSERT_EQ(1, actual.size());
+
+    Rows expected;
+    expected.add({NodeID {0}, NodeID {10}, NodeID {11}});
+    EXPECT_TRUE(expected.equals(actual));
+}
+
 TEST_F(QueriesTest, returnLiteralLimitZero) {
     size_t totalRows = 0;
     auto result = query("RETURN 5 LIMIT 0", [&](const Dataframe* df) -> void {

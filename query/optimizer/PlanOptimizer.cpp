@@ -145,8 +145,6 @@ void PlanOptimizer::rewriteScanByConstIDs() {
     std::vector<PlanGraphNode*> roots;
     _plan->getRoots(roots);
 
-    ColumnNodeIDs* nodeIDs  = _mem->alloc<ColumnNodeIDs>();
-
     for (PlanGraphNode* root : roots) {
         // === Check rewrite rule precondition ===
         // We are looking for pairs:
@@ -181,7 +179,7 @@ void PlanOptimizer::rewriteScanByConstIDs() {
         const VarDecl* varDecl = filterNode->getVarNode()->getVarDecl();
         const Expr* predExpr = predicates[0]->getExpr();
 
-        nodeIDs->clear();
+        ColumnNodeIDs* nodeIDs = _mem->alloc<ColumnNodeIDs>();
         if (!collectNodeIDsFromOrChain(predExpr, varDecl, *nodeIDs)) {
             continue;
         }
