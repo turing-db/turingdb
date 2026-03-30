@@ -23,7 +23,7 @@ void PropertyHashIndex<P, I>::init(GraphView view) {
     for (const WeakArc<DataPart>& part : view.dataparts()) {
         const PropertyManager* propManPtr = nullptr;
 
-        if constexpr (isNode) {
+        if constexpr (_isNode) {
             propManPtr = &part->nodeProperties();
         } else {
             propManPtr = &part->edgeProperties();
