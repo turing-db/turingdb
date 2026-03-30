@@ -45,7 +45,7 @@
 using namespace db;
 
 IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
-                                                     const LiteralExpr* litExpr) {
+                                               const LiteralExpr* litExpr) {
     const Literal* lit = litExpr->getLiteral();
     bioassert(lit, "Null literal.");
 
@@ -74,45 +74,78 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
     switch (litExpr->getType()) {
         case EvaluatedType::Integer: {
             const ValueType vt = ValueType::Int64;
+            const auto* intLit = static_cast<const IntegerLiteral*>(litExpr->getLiteral());
 
-            auto* node =
-                _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
+            const int64_t intVal = intLit->getValue();
+            auto* queryCol = _mem->alloc<ColumnVector<types::Int64::Primitive>>(1, intVal);
+
+            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
+
+            auto* node = _plan->newOut<IndexLookupNode>(queryNode, matchingIndex,
+                                                        propExpr, vt, litExpr);
             return node;
         }
         break;
 
         case EvaluatedType::Double: {
             const ValueType vt = ValueType::Double;
+            const auto* dblLit =
+                static_cast<const DoubleLiteral*>(litExpr->getLiteral());
 
-            auto* node =
-                _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
+            const double dblVal = dblLit->getValue();
+            auto* queryCol =
+                _mem->alloc<ColumnVector<types::Double::Primitive>>(1, dblVal);
+
+            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
+
+            auto* node = _plan->newOut<IndexLookupNode>(queryNode, matchingIndex,
+                                                        propExpr, vt, litExpr);
             return node;
         }
         break;
 
         case EvaluatedType::String: {
             const ValueType vt = ValueType::String;
+            const auto* strLit = static_cast<const StringLiteral*>(litExpr->getLiteral());
 
-            auto* node =
-                _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
+            const std::string_view strVal = strLit->getValue();
+            auto* queryCol = _mem->alloc<ColumnVector<types::String::Primitive>>(1, strVal);
+
+            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
+
+            auto* node = _plan->newOut<IndexLookupNode>(queryNode, matchingIndex,
+                                                        propExpr, vt, litExpr);
             return node;
         }
         break;
 
         case EvaluatedType::Bool: {
             const ValueType vt = ValueType::Bool;
+            const auto* boolLit = static_cast<const BoolLiteral*>(litExpr->getLiteral());
+
+            const bool boolVal = boolLit->getValue();
+            auto* queryCol =
+                _mem->alloc<ColumnVector<types::Bool::Primitive>>(1, boolVal);
+
+            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
 
             auto* node =
-                _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
+                _plan->newOut<IndexLookupNode>(queryNode, matchingIndex, propExpr, vt, litExpr);
             return node;
         }
         break;
 
         case EvaluatedType::Embedding: {
             const ValueType vt = ValueType::Embedding;
+            const auto* embLit = static_cast<const EmbeddingLiteral*>(litExpr->getLiteral());
 
-            auto* node =
-                _plan->create<IndexLookupNode>(matchingIndex, propExpr, vt, litExpr);
+            const std::span<const float> embVal = embLit->getValue();
+            auto* queryCol = _mem->alloc<ColumnVector<types::Embedding::Primitive>>(1, embVal);
+
+            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
+
+            auto* node = _plan->newOut<IndexLookupNode>(queryNode, matchingIndex,
+                                                        propExpr, vt, litExpr);
             return node;
         }
         break;
