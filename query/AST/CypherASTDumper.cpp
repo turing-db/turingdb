@@ -909,6 +909,17 @@ void CypherASTDumper::dump(std::ostream& out, const LiteralExpr* expr) {
             out << "        MapLiteral _" << mapLiteral << "\n";
             break;
         }
+        case Literal::Kind::EMBEDDING: {
+            const EmbeddingLiteral* embLiteral = dynamic_cast<const EmbeddingLiteral*>(literal);
+            out << "        EmbeddingLiteral [";
+            const auto data = embLiteral->getValue();
+            for (size_t i = 0; i < data.size(); i++) {
+                if (i > 0) out << ", ";
+                out << data[i];
+            }
+            out << "]\n";
+            break;
+        }
         default: {
             throw CompilerException("Unknown literal type");
             break;
