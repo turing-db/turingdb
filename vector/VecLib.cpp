@@ -108,8 +108,7 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
             VecLibShard& shardRef = shard.get();
 
             const size_t count = data._externalIDs.size();
-            const faiss::idx_t* ids = reinterpret_cast<const faiss::idx_t*>(data._externalIDs.data());
-            shardRef._index->add_with_ids(count, data._embeddings.data(), ids);
+            shardRef._index->add_with_ids(count, data._embeddings.data(), data._externalIDs.data());
         }
     }
 
@@ -149,7 +148,7 @@ VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchRe
                 break;
             }
 
-            results->addResult(signature, static_cast<uint64_t>(indices[i]), distances[i]);
+            results->addResult(signature, indices[i], distances[i]);
         }
     }
 

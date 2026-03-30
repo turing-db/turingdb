@@ -80,10 +80,10 @@ void VectorSearchProcessor::execute() {
     }
 
     // Output result IDs to column
-    using ColumnUInt = ColumnVector<types::UInt64::Primitive>;
-    ColumnUInt* colIds = _outIds.getValues()->as<ColumnUInt>();
+    using ColumnInt = ColumnVector<types::Int64::Primitive>;
+    ColumnInt* colIds = _outIds.getValues()->as<ColumnInt>();
 
-    for (uint64_t id : result.ids()) {
+    for (int64_t id : result.ids()) {
         colIds->push_back(id);
     }
 

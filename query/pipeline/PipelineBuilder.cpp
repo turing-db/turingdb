@@ -1266,7 +1266,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addVectorSearch(std::string_view
     PipelineValuesOutputInterface& output = proc->outIds();
     Dataframe* df = output.getDataframe();
 
-    NamedColumn* idsCol = allocColumn<ColumnVector<types::UInt64::Primitive>>(df);
+    NamedColumn* idsCol = allocColumn<ColumnVector<types::Int64::Primitive>>(df);
     idsCol->rename("ids");
     output.setValues(idsCol);
 

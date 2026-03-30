@@ -24,7 +24,7 @@ namespace {
 
 // Helper struct to hold a vector with its ID
 struct TestVector {
-    uint64_t _id {0};
+    int64_t _id {0};
     std::vector<float> values;
 };
 
@@ -40,12 +40,12 @@ float euclideanDistanceSquared(const std::vector<float>& a, const std::vector<fl
 }
 
 // Find k nearest neighbors using Euclidean distance
-void findKNearestNeighbors(std::vector<uint64_t>& result,
+void findKNearestNeighbors(std::vector<int64_t>& result,
                            const std::vector<TestVector>& vectors,
                            const std::vector<float>& query,
                            size_t k) {
     // Compute distances for all vectors
-    std::vector<std::pair<float, uint64_t>> distances;
+    std::vector<std::pair<float, int64_t>> distances;
     for (const auto& vec : vectors) {
         const float dist = euclideanDistanceSquared(vec.values, query);
         distances.emplace_back(dist, vec._id);
@@ -387,7 +387,7 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
     // Define query vector and compute expected results
     std::vector<float> queryVector = {1.0f, 0.0f, 0.0f, 0.0f};
     const size_t k = 3;
-    std::vector<uint64_t> expectedIds;
+    std::vector<int64_t> expectedIds;
     findKNearestNeighbors(expectedIds, testVectors, queryVector, k);
 
     // Search for vectors closest to query
@@ -401,7 +401,7 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
             ASSERT_EQ(df->getLogicalRowCount(), k);
 
             const auto& cols = df->cols();
-            const auto* colIds = cols.at(0)->as<ColumnVector<types::UInt64::Primitive>>();
+            const auto* colIds = cols.at(0)->as<ColumnVector<types::Int64::Primitive>>();
             ASSERT_TRUE(colIds != nullptr);
 
             // Verify results match expected nearest neighbors
@@ -456,7 +456,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
     // Define query vector and compute expected results for k=2
     std::vector<float> queryVector = {1.0f, 0.0f, 0.0f, 0.0f};
     const size_t k = 2;
-    std::vector<uint64_t> expectedIds;
+    std::vector<int64_t> expectedIds;
     findKNearestNeighbors(expectedIds, testVectors, queryVector, k);
 
     // Search for top 2
@@ -469,7 +469,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
             ASSERT_EQ(df->getLogicalRowCount(), k);
 
             const auto& cols = df->cols();
-            const auto* colIds = cols.at(0)->as<ColumnVector<types::UInt64::Primitive>>();
+            const auto* colIds = cols.at(0)->as<ColumnVector<types::Int64::Primitive>>();
             ASSERT_TRUE(colIds != nullptr);
 
             // Verify results match expected nearest neighbors
@@ -525,7 +525,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
     // Define query vector (matches vector 100 exactly) and compute expected results
     std::vector<float> queryVector = {0.123456f, 0.678901f, 0.111111f, 0.222222f};
     const size_t k = 3;
-    std::vector<uint64_t> expectedIds;
+    std::vector<int64_t> expectedIds;
     findKNearestNeighbors(expectedIds, testVectors, queryVector, k);
 
     // Search for vectors closest to query
@@ -540,7 +540,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
             ASSERT_EQ(df->getLogicalRowCount(), k);
 
             const auto& cols = df->cols();
-            const auto* colIds = cols.at(0)->as<ColumnVector<types::UInt64::Primitive>>();
+            const auto* colIds = cols.at(0)->as<ColumnVector<types::Int64::Primitive>>();
             ASSERT_TRUE(colIds != nullptr);
 
             // Verify results match expected nearest neighbors
@@ -656,7 +656,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
     const size_t k = 3;
 
     // Compute expected results using helper function
-    std::vector<uint64_t> expectedIds;
+    std::vector<int64_t> expectedIds;
     findKNearestNeighbors(expectedIds, testVectors, queryVector, k);
 
     // Expected titles corresponding to the expected IDs
@@ -692,7 +692,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
                 // Check id value
                 ASSERT_TRUE(idCol->at(i).has_value())
                     << "n.id is null at row " << i;
-                ASSERT_EQ(static_cast<uint64_t>(*idCol->at(i)), expectedIds[i])
+                ASSERT_EQ(*idCol->at(i), expectedIds[i])
                     << "ID mismatch at row " << i << ": expected " << expectedIds[i]
                     << ", got " << *idCol->at(i);
 
