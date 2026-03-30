@@ -918,12 +918,12 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
         _builder.addProjection(noItems);
     }
 
-    auto lambdaCallback = [this](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+    auto lambdaCallback = [callbacks = _callbacks](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
         if (operation == LambdaProcessor::Operation::RESET) {
             return;
         }
 
-        _callbacks->onOutputData(df);
+        callbacks->onOutputData(df);
     };
 
     const Dataframe* df = _builder.getPendingOutputInterface()->getDataframe();
