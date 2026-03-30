@@ -48,8 +48,8 @@ IndexLookupProcessor<Q, R>* IndexLookupProcessor<Q, R>::create(PipelineV2* pipel
 }
 
 template <typename Q, typename R>
-void IndexLookupProcessor<Q, R>::prepare(ExecutionContext* ctxt){
-    // TODO: Check validity of idex
+void IndexLookupProcessor<Q, R>::prepare(ExecutionContext*) {
+    bioassert(_index, "Null index.");
     markAsPrepared();
 }
 

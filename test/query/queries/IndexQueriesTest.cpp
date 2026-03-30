@@ -91,6 +91,25 @@ protected:
         EXPECT_TRUE(res) << res.getError();
         return count;
     }
+
+    // Returns true if an index with the given name is visible at the current head.
+    bool hasIndex(std::string_view indexName) {
+        bool found = false;
+        auto res = query("CALL db.showIndexes() YIELD name", [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* col = findColumn(df, "name");
+            ASSERT_TRUE(col);
+            auto* vec = col->as<ColumnVector<std::string_view>>();
+            ASSERT_TRUE(vec);
+            for (auto name : *vec) {
+                if (name == indexName) {
+                    found = true;
+                }
+            }
+        });
+        EXPECT_TRUE(res) << res.getError();
+        return found;
+    }
 };
 
 TEST_F(IndexQueriesTest, noIndexesInitially) {
@@ -198,7 +217,7 @@ TEST_F(IndexQueriesTest, indexPersistsAfterSubsequentCommit) {
     EXPECT_TRUE(found) << "Index 'persistindex' should still be visible after a subsequent commit";
 }
 
-TEST_F(IndexQueriesTest, indexGoneAfterRebaseWriteBuffer) {
+TEST_F(IndexQueriesTest, indexSurvivesWriteBufferRebase) {
     ChangeID change1, change2;
 
     newChange(), change1 = _currentChange;
@@ -211,11 +230,10 @@ TEST_F(IndexQueriesTest, indexGoneAfterRebaseWriteBuffer) {
     submitChange(change2);
     submitChange(change1);
 
-    EXPECT_EQ(0, countIndexes())
-        << "After rebase, all indexes should be reset and showIndexes should return 0 rows";
+    EXPECT_EQ(1, countIndexes());
 }
 
-TEST_F(IndexQueriesTest, indexGoneAfterRebaseDataPart) {
+TEST_F(IndexQueriesTest, validIndexSurvivesRebase) {
     ChangeID change1, change2;
 
     newChange(), change1 = _currentChange;
@@ -229,8 +247,7 @@ TEST_F(IndexQueriesTest, indexGoneAfterRebaseDataPart) {
     submitChange(change2);
     submitChange(change1);
 
-    EXPECT_EQ(0, countIndexes())
-        << "After rebase, all indexes should be reset and showIndexes should return 0 rows";
+    EXPECT_EQ(1, countIndexes());
 }
 
 TEST_F(IndexQueriesTest, indexDroppedAfterPropSETConflict) {
@@ -265,3 +282,133 @@ TEST_F(IndexQueriesTest, indexDroppedAfterPropCREATEConflict) {
     }
 }
 
+// A committed edge index survives rebase when no intervening commit writes the indexed property
+TEST_F(IndexQueriesTest, edgeIndexSurvivesRebase) {
+    ChangeID change1, change2;
+
+    newChange(), change1 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX durationidx FOR [e] ON e.duration", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    newChange(), change2 = _currentChange;
+    // Creates a node with a new property — does not update the property indexed
+    ASSERT_TRUE(query("CREATE (n:TestNode { val: 99 })", emptyCallback));
+
+    submitChange(change2);
+    submitChange(change1);
+
+    EXPECT_TRUE(hasIndex("durationidx"));
+}
+
+// A committed edge index is dropped after rebase when an intervening commit writes
+// the same edge property
+TEST_F(IndexQueriesTest, edgeIndexDroppedAfterEdgePropConflict) {
+    ChangeID change1, change2;
+
+    newChange(), change1 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX durationidx FOR [e] ON e.duration", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    newChange(), change2 = _currentChange;
+    // Write to the exact edge property the index covers.
+    ASSERT_TRUE(query("MATCH ()-[e:KNOWS_WELL]->() SET e.duration = 25", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    // Submit change2 first so change1 must rebase. The rebaser sees that 'duration'
+    // was written to an edge by change2, so durationidx must be invalidated.
+    submitChange(change2);
+    submitChange(change1);
+
+    EXPECT_FALSE(hasIndex("durationidx"));
+}
+
+// addValidIndexes uses Index::isNodeIndex() to separate node and edge write sets.
+// Writing an edge property must NOT invalidate a node index that covers a property
+// of the same name (same PropertyTypeID, but different entity kind).
+TEST_F(IndexQueriesTest, nodeIndexNotInvalidatedByEdgePropWrite) {
+    ChangeID change1, change2;
+
+    newChange(), change1 = _currentChange;
+    // 'name' exists on both nodes and edges in the simple graph.
+    ASSERT_TRUE(query("CREATE INDEX nameidx FOR (n) ON n.name", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    newChange(), change2 = _currentChange;
+    // Write to the edge 'name' property — same PropertyTypeID as node 'name',
+    // but this goes into edgePropertyWriteSet, not nodePropertyWriteSet.
+    ASSERT_TRUE(query("MATCH ()-[e:KNOWS_WELL]->() SET e.name = \"Updated\"", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    submitChange(change2);
+    submitChange(change1);
+
+    EXPECT_TRUE(hasIndex("nameidx"));
+}
+
+// The symmetric case: writing a node property must NOT invalidate an edge index
+// that covers a property of the same name.
+TEST_F(IndexQueriesTest, edgeIndexNotInvalidatedByNodePropWrite) {
+    ChangeID change1, change2;
+
+    newChange(), change1 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX nameidx FOR [e] ON e.name", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    newChange(), change2 = _currentChange;
+    // Write to the node 'name' property — goes into nodePropertyWriteSet only.
+    ASSERT_TRUE(query(R"(MATCH (n) WHERE n.name = "Remy" SET n.name = "Remy2")", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    submitChange(change2);
+    submitChange(change1);
+
+    EXPECT_TRUE(hasIndex("nameidx"));
+}
+
+// When a change is rebased, addValidIndexes also pulls in any indexes that live on
+// the new head. Verify this merging works across node and edge indexes.
+TEST_F(IndexQueriesTest, headIndexesMergedAfterRebase) {
+    ChangeID change1, change2;
+
+    // change1 creates an edge index and commits it.
+    newChange(), change1 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX durationidx FOR [e] ON e.duration", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    // change2 creates a node index and commits it.
+    newChange(), change2 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX ageidx FOR (n) ON n.age", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    // Submit change1 first — it becomes the new head with durationidx.
+    // Submit change2 second — it must rebase. addValidIndexes should:
+    //   - keep ageidx (no conflict with change1)
+    //   - pull in durationidx from the new head
+    submitChange(change1);
+    submitChange(change2);
+
+    EXPECT_TRUE(hasIndex("ageidx"));
+    EXPECT_TRUE(hasIndex("durationidx"));
+}
+
+// A change that commits both a node index and an edge index should have both survive
+// rebase against an unrelated change.
+TEST_F(IndexQueriesTest, bothNodeAndEdgeIndexesSurviveUnrelatedRebase) {
+    ChangeID change1, change2;
+
+    newChange(), change1 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX ageidx FOR (n) ON n.age", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    ASSERT_TRUE(query("CREATE INDEX durationidx FOR [e] ON e.duration", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    newChange(), change2 = _currentChange;
+    // Writes only a fresh property not covered by either index.
+    ASSERT_TRUE(query("CREATE (n:TestNode { val: 1 })", emptyCallback));
+
+    submitChange(change2);
+    submitChange(change1);
+
+    EXPECT_TRUE(hasIndex("ageidx"));
+    EXPECT_TRUE(hasIndex("durationidx"));
+}

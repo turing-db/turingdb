@@ -36,6 +36,7 @@ class InstallExtensionQuery;
 class ShowExtensionsQuery;
 class QueryCommand;
 class CreateNodePropertyIndexQuery;
+class CreateEdgePropertyIndexQuery;
 
 class PlanGraphGenerator {
 public:
@@ -77,6 +78,7 @@ private:
     void generateInstallExtensionQuery(const InstallExtensionQuery* query);
     void generateShowExtensionsQuery(const ShowExtensionsQuery* query);
     void generateCreateNodePropertyIndexQuery(const CreateNodePropertyIndexQuery* query);
+    void generateCreateEdgePropertyIndexQuery(const CreateEdgePropertyIndexQuery* query);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

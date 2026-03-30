@@ -56,7 +56,7 @@
 #include "processors/InstallExtensionProcessor.h"
 #include "processors/PathExplorerProcessor.h"
 #include "processors/ConstWriteSourceProcessor.h"
-#include "processors/CreateNodePropertyIndexProcessor.h"
+#include "processors/CreatePropertyIndexProcessor.h"
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
@@ -1347,9 +1347,10 @@ PipelineValuesOutputInterface& PipelineBuilder::addShowVectorIndexes() {
     return output;
 }
 
-PipelineBlockOutputInterface& PipelineBuilder::addCreateNodePropertyIndex(std::string_view indexName,
-                                                                          std::string_view propName) {
-    auto* proc = CreateNodePropertyIndexProcessor::create(_pipeline, indexName, propName);
+PipelineBlockOutputInterface& PipelineBuilder::addCreatePropertyIndex(std::string_view indexName,
+                                                                      std::string_view propName,
+                                                                      bool isNodeIndex) {
+    auto* proc = CreatePropertyIndexProcessor::create(_pipeline, indexName, propName, isNodeIndex);
 
     PipelineBlockOutputInterface& output = proc->output();
 

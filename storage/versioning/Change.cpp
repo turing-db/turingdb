@@ -119,7 +119,7 @@ CommitResult<void> Change::rebase([[maybe_unused]] JobSystem& jobsystem) {
     // modifying the CommitBuilders, CommitWriteBuffers, etc. - as there is no chance that
     // we need to rollback to our pre-submit state.
     for (auto& commitBuilder : _commits) {
-        rebaser.rebaseCommitBuilder(*commitBuilder);
+        rebaser.rebaseCommitBuilder(*commitBuilder, commitsSinceBranch);
     }
 
     // The previous commit of the first commit needs to be changed to

@@ -228,8 +228,9 @@ public:
     PipelineValueOutputInterface& addDeleteVectorIndex(std::string_view indexName);
     PipelineValuesOutputInterface& addShowVectorIndexes();
 
-    PipelineBlockOutputInterface& addCreateNodePropertyIndex(std::string_view indexName,
-                                                             std::string_view propName);
+    PipelineBlockOutputInterface& addCreatePropertyIndex(std::string_view indexName,
+                                                         std::string_view propName,
+                                                         bool isNodeIndex);
 
     template <typename Q, typename R>
     PipelineValuesOutputInterface& addIndexLookup(const Index* index);

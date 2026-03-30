@@ -27,6 +27,7 @@ class Skip;
 class Limit;
 class ReturnStmt;
 class CreateNodePropertyIndexQuery;
+class CreateEdgePropertyIndexQuery;
 
 class CypherAnalyzer {
 public:
@@ -55,6 +56,7 @@ public:
     void analyze(const LoadVectorQuery* query);
     void analyze(const InstallExtensionQuery* query);
     void analyze(const CreateNodePropertyIndexQuery* query);
+    void analyze(const CreateEdgePropertyIndexQuery* query);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt);

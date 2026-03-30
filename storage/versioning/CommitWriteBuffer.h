@@ -4,6 +4,7 @@
 #include <variant>
 #include <vector>
 
+#include "Commit.h"
 #include "ArcManager.h"
 #include "DataPart.h"
 #include "ID.h"
@@ -241,6 +242,8 @@ public:
     }
 
     void rebase();
+
+    void rebaseIndexes(Commit::CommitSpan commitsSinceBranch);
 
 private:
     EntityIDRebaser* _idRebaser {nullptr};

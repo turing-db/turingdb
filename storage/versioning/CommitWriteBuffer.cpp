@@ -436,11 +436,51 @@ void CommitWriteBufferRebaser::rebase() {
             e = _idRebaser->rebaseEdgeID(e);
         }
     }
+}
 
-    // TODO: Rebase indexes, don't reset
-    static constexpr bool RESET_INDEXES_ON_REBASE = true;
-    if (RESET_INDEXES_ON_REBASE) {
-        spdlog::warn("Rebase: resetting indexes.");
-        _buffer->_pendingIndexes.clear();
+void CommitWriteBufferRebaser::rebaseIndexes(Commit::CommitSpan commitsSinceBranch) {
+    bioassert(!commitsSinceBranch.empty(), "No commits provided to rebase");
+
+    std::vector<WeakArc<Index>>& incomingIndexes = _buffer->_pendingIndexes;
+    const std::unique_ptr<Commit>& newHeadCommit = commitsSinceBranch.back();
+    const CommitHistory& newHeadHistory = newHeadCommit->history();
+
+    // Combine the indexes on the change under rebase with the indexes on main
+    // TODO: Leaves the same property possibly indexed by multiple indexers; find
+    // resolution strategy
+    const CommitHistory::IndexSpan newHeadIndexes = newHeadHistory.validIndexes();
+    for (const WeakArc<Index>& newHeadIndex : newHeadIndexes) {
+        incomingIndexes.push_back(newHeadIndex);
     }
+
+    // Find all the properties that are now invalid due to property updates
+    WriteSet<PropertyTypeID> modifiedNodeProperties;
+    WriteSet<PropertyTypeID> modifiedEdgeProperties;
+    for (const auto& commit : commitsSinceBranch) {
+        const CommitHistory& pastHistory = commit->history();
+        const CommitJournal& pastJournal = pastHistory.journal();
+
+        const WriteSet<PropertyTypeID>& pastNodeProps = pastJournal.nodePropertyWriteSet();
+        const WriteSet<PropertyTypeID>& pastEdgeProps = pastJournal.edgePropertyWriteSet();
+
+        WriteSet<PropertyTypeID>::setUnion(modifiedNodeProperties, pastNodeProps);
+        WriteSet<PropertyTypeID>::setUnion(modifiedEdgeProperties, pastEdgeProps);
+    }
+
+    const auto invalidatedIndex = [&](const WeakArc<Index>& index){
+        const bool isNode = index->isNodeIndex();
+        const PropertyTypeID indexedProp = index->property();
+
+        const WriteSet<PropertyTypeID>& invalidSet =
+            isNode ? modifiedNodeProperties : modifiedEdgeProperties;
+
+        return invalidSet.contains(indexedProp);
+    };
+
+    // Remove indexes that are now invalid
+    std::erase_if(incomingIndexes, invalidatedIndex);
+
+    // Remove any duplicates that might be added due to intermediate COMMITs
+    auto [newEnd, oldEnd] = std::ranges::unique(incomingIndexes);
+    incomingIndexes.erase(newEnd, oldEnd);
 }

@@ -29,6 +29,7 @@ class FunctionInvocationExpr;
 class IndexExpr;
 class Symbol;
 class NodePattern;
+class EdgePattern;
 
 class ExprAnalyzer {
 public:
@@ -65,6 +66,9 @@ public:
 
     /// Adds an empty declaration for the given NodePattern
     void registerNodePatternDeclaration(const NodePattern* node);
+
+    /// Adds an empty declaration for the given EdgePattern
+    void registerEdgePatternDeclaration(const EdgePattern* edge);
 
 private:
     CypherAST* _ast {nullptr};

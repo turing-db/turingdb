@@ -63,6 +63,11 @@ public:
                                                       PropertyTypeID ptID,
                                                       LabelSetID lblset = LabelSetID::max());
 
+    template <SupportedType P>
+    [[nodiscard]] WeakArc<Index> newEdgePropertyIndex(std::string_view indexName,
+                                                      PropertyTypeID ptID,
+                                                      EdgeTypeID edgeType = EdgeTypeID::max());
+
     void appendBuilder(std::unique_ptr<DataPartBuilder> builder);
 
     [[nodiscard]] CommitResult<std::unique_ptr<Commit>> build(JobSystem& jobsystem);

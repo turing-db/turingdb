@@ -38,7 +38,8 @@ public:
      * @brief Rebases the provided @param commitBuilder according to the views of @ref
      * _branchTimeReader and @ref _newMainReader
      */
-    void rebaseCommitBuilder(CommitBuilder& commitBuilder);
+    void rebaseCommitBuilder(CommitBuilder& commitBuilder,
+                             Commit::CommitSpan commitsSinceBranch);
 
 private:
     Change* _change {nullptr};

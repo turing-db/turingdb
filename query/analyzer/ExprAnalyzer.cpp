@@ -6,6 +6,7 @@
 #include "FunctionDecls.h"
 #include "FunctionResolver.h"
 #include "FunctionInvocation.h"
+#include "EdgePattern.h"
 #include "NodePattern.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
@@ -728,6 +729,23 @@ void ExprAnalyzer::registerNodePatternDeclaration(const NodePattern* node) {
     }
 
     _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, nodeName);
+}
+
+void ExprAnalyzer::registerEdgePatternDeclaration(const EdgePattern* edge) {
+    const Symbol* edgeSymbol = edge->getSymbol();
+    if (!edgeSymbol) {
+        throwError("Failed to get symbol to register EdgePattern.", edge);
+    }
+
+    const std::string_view edgeName = edgeSymbol->getName();
+
+    const bool alreadyExists = _ctxt->hasDecl(edgeName);
+
+    if (alreadyExists) {
+        throwError("Attempted to register EdgePattern which was already defined.", edge);
+    }
+
+    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, edgeName);
 }
 
 

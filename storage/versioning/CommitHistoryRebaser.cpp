@@ -2,14 +2,18 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+
 #include "CommitView.h"
 #include "CommitHistory.h"
 #include "DataPartRebaser.h"
 
+#include "ID.h"
 #include "versioning/EntityIDRebaser.h"
 #include "versioning/MetadataRebaser.h"
 
 #include "indexes/Index.h"
+#include "versioning/WriteSet.h"
 
 using namespace db;
 
@@ -31,28 +35,6 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
         _history._allDataparts.data() + _history._allDataparts.size() - commitDatapartCount,
         commitDatapartCount,
     };
-
-    // FIXME: this is wrong, need to walk commits added
-    { // Only carry forward indexes that are still valid
-        const CommitJournal& journal = prevHistory.journal();
-        const auto& nodePropUpdates = journal.nodePropertyWriteSet();
-        const auto& edgePropUpdates = journal.edgePropertyWriteSet();
-
-        for (const WeakArc<Index>& prevIndex : prevHistory.validIndexes()) {
-            const bool isNode = prevIndex->isNodeIndex();
-            const PropertyTypeID indexedProp = prevIndex->property();
-            const WriteSet<PropertyTypeID>& propUpdates =
-                isNode ? nodePropUpdates : edgePropUpdates;
-            const bool propertyInvalidated = propUpdates.contains(indexedProp);
-
-            if (!propertyInvalidated) {
-                _history._validIndexes.push_back(prevIndex);
-            } else {
-                spdlog::warn("Dropping index {} because property {} was updated.",
-                             prevIndex->name(), indexedProp.getValue());
-            }
-        }
-    }
 
     const auto& prevDataParts = prevHistory._allDataparts;
 
@@ -89,6 +71,51 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
             p = remapped._id;
         }
     }
+}
+
+void CommitHistoryRebaser::addValidIndexes(const CommitHistory& prevHistory,
+                                           Commit::CommitSpan commitsSinceBranch) {
+    std::vector<WeakArc<Index>>& incomingIndexes = _history._validIndexes;
+
+    // Combine the indexes on the change under rebase with the indexes on main
+    // TODO: Leaves the same property possibly indexed by multiple indexers; find
+    // resolution strategy
+    const CommitHistory::IndexSpan newHeadIndexes = prevHistory.validIndexes();
+    for (const WeakArc<Index>& newHeadIndex : newHeadIndexes) {
+        const auto findIt = std::ranges::find(incomingIndexes, newHeadIndex);
+        const bool alreadyTracked = findIt != end(incomingIndexes);
+
+        if (!alreadyTracked) {
+            incomingIndexes.push_back(newHeadIndex);
+        }
+    }
+
+    // Find all the properties that are now invalid due to property updates
+    WriteSet<PropertyTypeID> modifiedNodeProperties;
+    WriteSet<PropertyTypeID> modifiedEdgeProperties;
+    for (const auto& commit : commitsSinceBranch) {
+        const CommitHistory& pastHistory = commit->history();
+        const CommitJournal& pastJournal = pastHistory.journal();
+
+        const WriteSet<PropertyTypeID>& pastNodeProps = pastJournal.nodePropertyWriteSet();
+        const WriteSet<PropertyTypeID>& pastEdgeProps = pastJournal.edgePropertyWriteSet();
+
+        WriteSet<PropertyTypeID>::setUnion(modifiedNodeProperties, pastNodeProps);
+        WriteSet<PropertyTypeID>::setUnion(modifiedEdgeProperties, pastEdgeProps);
+    }
+
+    const auto invalidatedIndex = [&](const WeakArc<Index>& index){
+        const bool isNode = index->isNodeIndex();
+        const PropertyTypeID indexedProp = index->property();
+
+        const WriteSet<PropertyTypeID>& invalidSet =
+            isNode ? modifiedNodeProperties : modifiedEdgeProperties;
+
+        return invalidSet.contains(indexedProp);
+    };
+
+    // Remove indexes that are now invalid
+    std::erase_if(incomingIndexes, invalidatedIndex);
 }
 
 void CommitHistoryRebaser::removeCreatedDataParts() {
