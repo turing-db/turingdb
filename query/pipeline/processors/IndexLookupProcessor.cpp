@@ -7,6 +7,7 @@
 #include "indexes/Index.h"
 #include "ExecutionContext.h"
 
+#include "dataframe/Dataframe.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/NamedColumn.h"
 #include "metadata/PropertyType.h"
@@ -74,7 +75,10 @@ void IndexLookupProcessor<Q, R>::execute() {
 
     const size_t chunkSize = _ctxt->getChunkSize();
 
-    _index->boundedQuery(query, result, _state, chunkSize);
+    ColumnIndices* indices = _output.getIndices()->as<ColumnIndices>();
+    bioassert(indices, "Invalid indices.");
+
+    _index->boundedQuery(query, result, indices, _state, chunkSize);
 
     const bool wroteData = !result->empty();
     const bool inputClosed = _input.getPort()->isClosed();

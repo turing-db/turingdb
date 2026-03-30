@@ -121,14 +121,18 @@ void PropertyHashIndex<P, I>::query(const ColumnConst<PropertyPrimitive>* input,
 }
 
 template <SupportedType P, TypedInternalID I>
-void PropertyHashIndex<P, I>::boundedQuery(const Column* input, Column* result, Index::QueryState& state, size_t limit) const {
+void PropertyHashIndex<P, I>::boundedQuery(const Column* input,
+                                           Column* result,
+                                           ColumnIndices* indices,
+                                           Index::QueryState& state,
+                                           size_t limit) const {
     auto* output = dynamic_cast<ColumnVector<I>*>(result);
     bioassert(output, "Invalid output column to property index query.");
 
     const auto* vecInput = dynamic_cast<const ColumnVector<PropertyPrimitive>*>(input);
 
     if (vecInput) {
-        boundedQuery(vecInput, output, state, limit);
+        boundedQuery(vecInput, output, indices, state, limit);
         return;
     }
 
@@ -138,10 +142,12 @@ void PropertyHashIndex<P, I>::boundedQuery(const Column* input, Column* result, 
 
 template <SupportedType P, TypedInternalID I>
 void PropertyHashIndex<P, I>::boundedQuery(const ColumnVector<PropertyPrimitive>* input,
-                                     ColumnVector<I>* result,
-                                     Index::QueryState& state,
-                                     size_t limit) const {
+                                           ColumnVector<I>* result,
+                                           ColumnIndices* indices,
+                                           Index::QueryState& state,
+                                           size_t limit) const {
     result->clear();
+    indices->clear();
     size_t remaining = limit;
 
     size_t& keyOffset = state._keyIndex;
@@ -171,6 +177,7 @@ void PropertyHashIndex<P, I>::boundedQuery(const ColumnVector<PropertyPrimitive>
             }
             const I id = matches[j];
             result->push_back(id);
+            indices->push_back(keyOffset);
 
             valueOffset++;
             remaining--;

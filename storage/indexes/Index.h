@@ -4,6 +4,8 @@
 
 #include "views/GraphView.h"
 
+#include "columns/ColumnIndices.h"
+
 namespace db {
 
 class Column;
@@ -38,6 +40,7 @@ public:
      */
     virtual void boundedQuery(const Column* query,
                               Column* result,
+                              ColumnIndices* indices,
                               QueryState& state,
                               size_t limit) const = 0;
 

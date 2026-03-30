@@ -842,6 +842,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addConstScan(Column* values) {
                                      ._outputDF = outValues.getDataframe(),
                                      ._newCol = outputCol};
         Dispatcher::dispatch(values, allocator);
+        bioassert(outputCol, "Failed to alloc output column.");
     }
     outValues.setValues(outputCol);
 
@@ -1375,10 +1376,18 @@ PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup(const Index* inde
     _pendingOutput.connectTo(input);
     input.propagateColumns(output);
 
-    {
-        Dataframe* outputDF = output.getDataframe();
-        NamedColumn* result = allocColumn<ResultColumn>(outputDF);
-        output.setValues(result);
+    // Allocate the result column in the output DF
+    Dataframe* outputDF = output.getDataframe();
+    NamedColumn* result = allocColumn<ResultColumn>(outputDF);
+    output.setValues(result);
+
+    { // Use indices to map <query rows -> matched rows>
+        NamedColumn* indices = allocColumn<ColumnIndices>(outputDF);
+        output.setIndices(indices);
+
+        MaterializeData& matData = _matProc->getMaterializeData();
+        matData.createStep(indices);
+        matData.addToStep<ResultColumn>(result);
     }
 
     _pendingOutput.updateInterface(&output);
