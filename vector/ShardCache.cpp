@@ -38,32 +38,16 @@ bool onEvict(const ShardIdentifier& id,
 bool onLoad(const ShardIdentifier& id,
             std::unique_ptr<VecLibShard>& shard,
             void* data) {
-    shard = std::make_unique<VecLibShard>();
-
     const auto& [storageManager, meta] = *static_cast<LoadData*>(data);
 
     const fs::Path indexPath = storageManager.getShardPath(id._libID, id._signature);
-    const fs::Path idsPath = storageManager.getExternalIDsPath(id._libID, id._signature);
 
     shard = std::make_unique<VecLibShard>();
     shard->_indexPath = indexPath;
 
-    if (auto res = fs::File::createAndOpen(idsPath); !res) {
-        spdlog::error(fmt::format("Could not open shard ids file '{}'.\n{}",
-                                  idsPath.c_str(), res.error().fmtMessage()));
-        return false;
-    } else {
-        shard->_idsFile = std::move(res.value());
-    }
-
-    shard->_idsWriter = fs::FileWriter<4096>();
-    shard->_idsReader = fs::FileReader();
-    shard->_idsReader.setFile(&shard->_idsFile);
-    shard->_idsWriter.setFile(&shard->_idsFile);
-
     if (auto res = shard->load(meta); !res) {
-        spdlog::error(fmt::format("Could not load shard ids file '{}'.\n{}",
-                                  idsPath.c_str(), res.error().fmtMessage()));
+        spdlog::error(fmt::format("Could not load shard '{}'.\n{}",
+                                  indexPath.c_str(), res.error().fmtMessage()));
         return false;
     }
 

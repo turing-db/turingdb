@@ -137,10 +137,6 @@ fs::Path StorageManager::getMetadataPath(const VecLibID& libID) const {
     return getLibraryPath(libID) / "metadata.json";
 }
 
-fs::Path StorageManager::getExternalIDsPath(const VecLibID& libID, LSHSignature sig) const {
-    return getLibraryPath(libID) / "external_ids-" + std::to_string(sig) + ".bin";
-}
-
 fs::Path StorageManager::getShardRouterPath(const VecLibID& libID) const {
     return getLibraryPath(libID) / "shard_router.bin";
 }

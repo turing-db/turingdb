@@ -2,6 +2,7 @@
 
 #include <faiss/Index.h>
 #include <faiss/IndexFlat.h>
+#include <faiss/IndexIDMap.h>
 #include <faiss/index_io.h>
 
 #include "ShardCache.h"
@@ -106,13 +107,9 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
             VecLibShardAccessor shard = _shardCache->getShard(_metadata, signature);
             VecLibShard& shardRef = shard.get();
 
-            // Add all ids to the shard
-            shardRef._ids.insert(shardRef._ids.end(),
-                               data._externalIDs.begin(),
-                               data._externalIDs.end());
-
-            // Add vectors to index
-            shardRef._index->add(data._externalIDs.size(), data._embeddings.data());
+            const size_t count = data._externalIDs.size();
+            const faiss::idx_t* ids = reinterpret_cast<const faiss::idx_t*>(data._externalIDs.data());
+            shardRef._index->add_with_ids(count, data._embeddings.data(), ids);
         }
     }
 
@@ -152,7 +149,7 @@ VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchRe
                 break;
             }
 
-            results->addResult(signature, shardRef._ids.at(indices[i]), distances[i]);
+            results->addResult(signature, static_cast<uint64_t>(indices[i]), distances[i]);
         }
     }
 

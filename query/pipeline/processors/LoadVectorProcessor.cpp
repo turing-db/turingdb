@@ -1,6 +1,7 @@
 #include "LoadVectorProcessor.h"
 
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <span>
 
@@ -107,6 +108,12 @@ void LoadVectorProcessor::execute() {
             throw PipelineException("Invalid vector file format: missing ID");
         }
         const uint64_t id = std::stoull(token);
+
+        if (id > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+            throw PipelineException(fmt::format(
+                "Vector ID {} exceeds maximum allowed value ({})",
+                id, std::numeric_limits<int64_t>::max()));
+        }
 
         // Read vector values
         values.clear();

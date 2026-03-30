@@ -40,7 +40,6 @@ public:
     [[nodiscard]] fs::Path getLibraryPath(const VecLibID& libID) const;
     [[nodiscard]] fs::Path getMetadataPath(const VecLibID& libID) const;
     [[nodiscard]] fs::Path getShardRouterPath(const VecLibID& libID) const;
-    [[nodiscard]] fs::Path getExternalIDsPath(const VecLibID& libID, LSHSignature sig) const;
     [[nodiscard]] fs::Path getShardPath(const VecLibID& libID, LSHSignature sig) const;
 
     [[nodiscard]] StorageMap::const_iterator begin() const {
