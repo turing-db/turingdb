@@ -14,7 +14,7 @@ namespace vec {
 class BatchVectorCreate {
 public:
     struct Data {
-        std::vector<uint64_t> _externalIDs;
+        std::vector<int64_t> _externalIDs;
         std::vector<float> _embeddings;
     };
 
@@ -41,7 +41,7 @@ public:
         }
     }
 
-    void addPoint(uint64_t externalID, std::span<const float> newPoint) {
+    void addPoint(int64_t externalID, std::span<const float> newPoint) {
         if (newPoint.size() != _dimension) [[unlikely]] {
             throw VectorException("Vector dimension mismatch");
         }

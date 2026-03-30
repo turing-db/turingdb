@@ -28,7 +28,7 @@ public:
         return _shardSig;
     }
 
-    [[nodiscard]] std::span<const uint64_t> ids() const {
+    [[nodiscard]] std::span<const int64_t> ids() const {
         return _ids;
     }
 
@@ -47,7 +47,7 @@ public:
         _resultCount = 0;
     }
 
-    void addResult(LSHSignature shardSig, uint64_t id, float distance) {
+    void addResult(LSHSignature shardSig, int64_t id, float distance) {
         _shardSig.push_back(shardSig);
         _ids.push_back(id);
         _distances.push_back(distance);
@@ -64,7 +64,7 @@ public:
         });
 
         std::vector<LSHSignature> shardIdx(_shardSig.size());
-        std::vector<uint64_t> ids(_ids.size());
+        std::vector<int64_t> ids(_ids.size());
         std::vector<float> distances(_distances.size());
 
         for (size_t i = 0; i < _distances.size(); i++) {
@@ -89,7 +89,7 @@ public:
 
 private:
     std::vector<LSHSignature> _shardSig;
-    std::vector<uint64_t> _ids;
+    std::vector<int64_t> _ids;
     std::vector<float> _distances;
     size_t _resultCount {0};
 
