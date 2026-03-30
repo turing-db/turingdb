@@ -46,17 +46,17 @@ public:
     NodeWriteSet& nodeWriteSet() { return _nodeWriteSet; }
     EdgeWriteSet& edgeWriteSet() { return _edgeWriteSet; }
 
-    NodePropertyWriteSet& nodePropertyWriteSet() { return _nodePropertyWriteSet; }
-    EdgePropertyWriteSet& edgePropertyWriteSet() { return _edgePropertyWriteSet; }
-
-
     const NodeWriteSet& nodeWriteSet() const { return _nodeWriteSet; }
     const EdgeWriteSet& edgeWriteSet() const { return _edgeWriteSet; }
+
+    const NodePropertyWriteSet& nodePropertyWriteSet() const { return _nodePropertyWriteSet; }
+    const EdgePropertyWriteSet& edgePropertyWriteSet() const { return _edgePropertyWriteSet; }
 
     void finalise();
 
 private:
     friend class CommitJournalLoader;
+    friend class CommitHistoryRebaser;
 
     bool _initialised {false};
 
@@ -70,6 +70,9 @@ private:
 
     std::vector<NodeID>& rawNodeWriteSet() { return _nodeWriteSet.getRaw(); }
     std::vector<EdgeID>& rawEdgeWriteSet() { return _edgeWriteSet.getRaw(); }
+
+    NodePropertyWriteSet& nodePropertyWriteSet() { return _nodePropertyWriteSet; }
+    EdgePropertyWriteSet& edgePropertyWriteSet() { return _edgePropertyWriteSet; }
 };
 
 template <std::ranges::input_range Range>

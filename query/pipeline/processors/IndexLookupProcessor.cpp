@@ -11,7 +11,6 @@
 #include "metadata/PropertyType.h"
 
 #include "BioAssert.h"
-#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -61,7 +60,6 @@ void IndexLookupProcessor<Q, R>::reset() {
 
 template <typename Q, typename R>
 void IndexLookupProcessor<Q, R>::execute() {
-    spdlog::info("IndexLookupProcessor::execute()");
     const NamedColumn* queryNCol = _input.getValues();
     const NamedColumn* resultNCol = _output.getValues();
     bioassert(queryNCol && resultNCol, "Null named value columns.");

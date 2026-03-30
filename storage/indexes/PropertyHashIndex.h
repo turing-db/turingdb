@@ -44,11 +44,14 @@ public:
 
     size_t size() const final;
 
+    bool isNodeIndex() const final { return _isNode; }
+
 private:
     PropertyTypeID _propID;
     PropertyHashMap<PropertyPrimitive, IDContainer, MapType> _hashTable;
 
-    static constexpr bool isNode = std::is_same_v<I, NodeID>;
+    /// Valid since we are constrained by TypedInteralID
+    static constexpr bool _isNode = std::is_same_v<I, NodeID>;
 };
 
 // Implementation of the underlying hashtable used for retrieval

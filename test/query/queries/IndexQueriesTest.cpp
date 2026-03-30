@@ -233,3 +233,35 @@ TEST_F(IndexQueriesTest, indexGoneAfterRebaseDataPart) {
         << "After rebase, all indexes should be reset and showIndexes should return 0 rows";
 }
 
+TEST_F(IndexQueriesTest, indexDroppedAfterPropSETConflict) {
+    newChange();
+
+    {
+        ASSERT_TRUE(query("CREATE INDEX rebaseindex FOR (n) ON n.age", emptyCallback));
+        ASSERT_TRUE(query("commit", emptyCallback));
+        ASSERT_EQ(1, countIndexes());
+
+        // Update the age property, so invalidate it
+        ASSERT_TRUE(
+            query(R"(MATCH (n) WHERE n.name = "Cyrus" SET n.age = 32)", emptyCallback));
+        ASSERT_TRUE(query("commit", emptyCallback));
+        ASSERT_EQ(0, countIndexes());
+    }
+}
+
+TEST_F(IndexQueriesTest, indexDroppedAfterPropCREATEConflict) {
+    newChange();
+
+    {
+        ASSERT_TRUE(query("CREATE INDEX rebaseindex FOR (n) ON n.age", emptyCallback));
+        ASSERT_TRUE(query("commit", emptyCallback));
+        ASSERT_EQ(1, countIndexes());
+
+        // Update the age property, so invalidate it
+        ASSERT_TRUE(
+            query(R"(CREATE (n:Person{age:100}))", emptyCallback));
+        ASSERT_TRUE(query("commit", emptyCallback));
+        ASSERT_EQ(0, countIndexes());
+    }
+}
+
