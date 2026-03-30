@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string_view>
+#include <vector>
 
 #include "TuringDB.h"
 #include "QueryConfig.h"
@@ -12,6 +14,7 @@
 #include "versioning/ChangeID.h"
 #include "versioning/Transaction.h"
 #include "dataframe/Dataframe.h"
+#include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "ID.h"
 
@@ -88,6 +91,23 @@ protected:
         });
         EXPECT_TRUE(res) << res.getError();
         return count;
+    }
+
+    // Collect all NodeIDs from the named column across all result chunks.
+    std::vector<NodeID> collectNodes(std::string_view queryStr, std::string_view colName) {
+        std::vector<NodeID> results;
+        auto res = query(queryStr, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* col = findColumn(df, colName);
+            ASSERT_TRUE(col) << "Column '" << colName << "' not found";
+            auto* nodes = col->as<ColumnNodeIDs>();
+            ASSERT_TRUE(nodes);
+            for (NodeID id : *nodes) {
+                results.push_back(id);
+            }
+        });
+        EXPECT_TRUE(res) << res.getError();
+        return results;
     }
 
     // Returns true if an index with the given name is visible at the current head.
@@ -409,4 +429,130 @@ TEST_F(IndexQueriesTest, bothNodeAndEdgeIndexesSurviveUnrelatedRebase) {
 
     EXPECT_TRUE(hasIndex("ageidx"));
     EXPECT_TRUE(hasIndex("durationidx"));
+}
+
+TEST_F(IndexQueriesTest, ageIndexUsedInTraversal) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX ageindex FOR (n) ON n.age", emptyCallback));
+    submitCurrentChange();
+
+    ASSERT_TRUE(hasIndex("ageindex"));
+
+    const std::vector<NodeID> results =
+        collectNodes("MATCH (n)-->(m) WHERE n.age = 32 RETURN m", "m");
+
+    ASSERT_EQ(7u, results.size());
+
+    // Spot-check a sample of the expected neighbours.
+    const NodeID adamID   = SimpleGraph::findNodeID(_graph, "Adam");
+    const NodeID ghostsID = SimpleGraph::findNodeID(_graph, "Ghosts");
+    const NodeID remyID   = SimpleGraph::findNodeID(_graph, "Remy");
+    const NodeID bioID    = SimpleGraph::findNodeID(_graph, "Bio");
+
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), adamID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), ghostsID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), remyID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), bioID));
+}
+
+TEST_F(IndexQueriesTest, ageIndexUsedInTwoHopTraversal) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX ageindex FOR (n) ON n.age", emptyCallback));
+    submitCurrentChange();
+
+    ASSERT_TRUE(hasIndex("ageindex"));
+
+    const std::vector<NodeID> results =
+        collectNodes("MATCH (n)-->(m)-->(p) WHERE n.age = 32 RETURN p", "p");
+
+    ASSERT_EQ(8u, results.size());
+
+    const NodeID remyID      = SimpleGraph::findNodeID(_graph, "Remy");
+    const NodeID adamID      = SimpleGraph::findNodeID(_graph, "Adam");
+    const NodeID ghostsID    = SimpleGraph::findNodeID(_graph, "Ghosts");
+    const NodeID computersID = SimpleGraph::findNodeID(_graph, "Computers");
+    const NodeID bioID       = SimpleGraph::findNodeID(_graph, "Bio");
+    const NodeID cookingID   = SimpleGraph::findNodeID(_graph, "Cooking");
+
+    // Remy and Adam both appear more than once.
+    EXPECT_GE(std::count(results.begin(), results.end(), remyID), 1);
+    EXPECT_GE(std::count(results.begin(), results.end(), adamID), 1);
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), ghostsID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), computersID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), bioID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), cookingID));
+}
+
+TEST_F(IndexQueriesTest, ageIndexUsedInBidirectionalTraversal) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX ageindex FOR (n) ON n.age", emptyCallback));
+    submitCurrentChange();
+
+    ASSERT_TRUE(hasIndex("ageindex"));
+
+    const std::vector<NodeID> results =
+        collectNodes("MATCH (n)--(m) WHERE n.age = 32 RETURN m", "m");
+
+    ASSERT_EQ(10u, results.size());
+
+    const NodeID remyID      = SimpleGraph::findNodeID(_graph, "Remy");
+    const NodeID adamID      = SimpleGraph::findNodeID(_graph, "Adam");
+    const NodeID ghostsID    = SimpleGraph::findNodeID(_graph, "Ghosts");
+    const NodeID computersID = SimpleGraph::findNodeID(_graph, "Computers");
+    const NodeID bioID       = SimpleGraph::findNodeID(_graph, "Bio");
+
+    // Adam and Ghosts each appear twice (once as Remy's neighbour via each edge direction).
+    EXPECT_GE(std::count(results.begin(), results.end(), adamID), 2);
+    EXPECT_GE(std::count(results.begin(), results.end(), ghostsID), 2);
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), remyID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), computersID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), bioID));
+}
+
+TEST_F(IndexQueriesTest, ageIndexUsedInReverseTraversal) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX ageindex FOR (n) ON n.age", emptyCallback));
+    submitCurrentChange();
+
+    ASSERT_TRUE(hasIndex("ageindex"));
+
+    const std::vector<NodeID> results =
+        collectNodes("MATCH (n)<--(m) WHERE n.age = 32 RETURN m", "m");
+
+    ASSERT_EQ(3u, results.size());
+
+    const NodeID remyID   = SimpleGraph::findNodeID(_graph, "Remy");
+    const NodeID adamID   = SimpleGraph::findNodeID(_graph, "Adam");
+    const NodeID ghostsID = SimpleGraph::findNodeID(_graph, "Ghosts");
+
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), remyID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), adamID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), ghostsID));
+}
+
+TEST_F(IndexQueriesTest, ageIndexTypedTwoHopTraversal) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX ageindex FOR (n) ON n.age", emptyCallback));
+    submitCurrentChange();
+
+    ASSERT_TRUE(hasIndex("ageindex"));
+
+    const std::vector<NodeID> results =
+        collectNodes("MATCH (n)-[:KNOWS_WELL]->(m)-->(p) WHERE n.age = 32 RETURN p", "p");
+
+    ASSERT_EQ(7u, results.size());
+
+    const NodeID remyID      = SimpleGraph::findNodeID(_graph, "Remy");
+    const NodeID adamID      = SimpleGraph::findNodeID(_graph, "Adam");
+    const NodeID ghostsID    = SimpleGraph::findNodeID(_graph, "Ghosts");
+    const NodeID computersID = SimpleGraph::findNodeID(_graph, "Computers");
+    const NodeID bioID       = SimpleGraph::findNodeID(_graph, "Bio");
+    const NodeID cookingID   = SimpleGraph::findNodeID(_graph, "Cooking");
+
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), remyID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), adamID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), ghostsID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), computersID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), bioID));
+    EXPECT_NE(results.end(), std::find(results.begin(), results.end(), cookingID));
 }

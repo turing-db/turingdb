@@ -5,6 +5,7 @@
 
 #include "Index.h"
 
+#include "columns/ColumnIndices.h"
 #include "columns/ColumnVector.h"
 
 #include "ID.h"
@@ -47,13 +48,15 @@ public:
      * @param result, updating @param state in-place.
      */
     void boundedQuery(const Column* input,
-                Column* result,
-                Index::QueryState& state,
-                size_t limit) const final;
+                      Column* result,
+                      ColumnIndices* indices,
+                      Index::QueryState& state,
+                      size_t limit) const final;
 
     /// Local specialisation for ColumnVectors
     void boundedQuery(const ColumnVector<PropertyPrimitive>* input,
                       ColumnVector<I>* result,
+                      ColumnIndices* indices,
                       Index::QueryState& state,
                       size_t limit = 0) const;
 

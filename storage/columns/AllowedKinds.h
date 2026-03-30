@@ -455,4 +455,21 @@ struct ConstScanTypes {
     >;
 };
 
+/// Types that are used as the Key in indexes
+struct IndexedTypes {
+    using Allowed = GenerateKindList<std::tuple<
+        types::Int64::Primitive,
+        types::UInt64::Primitive,
+        types::Double::Primitive,
+        types::String::Primitive,
+        types::Bool::Primitive,
+        types::Embedding::Primitive
+    >>;
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnConst>(),
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
 }
