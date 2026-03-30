@@ -32,7 +32,6 @@ enum class VectorErrorCode : uint8_t {
     CouldNotDeleteLibraryStorage,
     CouldNotCreateShardRouterStorage,
     CouldNotCreateMetadataStorage,
-    CouldNotCreateExternalIDsStorage,
     CouldNotCreateEmbeddingsStorage,
     LibraryStorageAlreadyExists,
     LibraryStorageAlreadyLoaded,
@@ -44,13 +43,6 @@ enum class VectorErrorCode : uint8_t {
     CouldNotClearShardRouterFile,
     CouldNotClearMetadataFile,
 
-    CouldNotOpenExternalIDsFile,
-    CouldNotWriteExternalIDsFile,
-    CouldNotClearExternalIDsFile,
-    CouldNotSeekBeginningOfExternalIDsFile,
-    CouldNotReadExternalIDsFile,
-    ExternalIDsFileInvalid,
-
     CouldNotLoadShardRouterFile,
     ShardRouterFileEmpty,
     ShardRouterInvalidDimension,
@@ -59,7 +51,6 @@ enum class VectorErrorCode : uint8_t {
     ShardRouterInvalidShardIDs,
 
     CouldNotLoadMetadataFile,
-    CouldNotLoadNodeIdsFile,
 
     _SIZE,
 };
@@ -88,7 +79,6 @@ using VectorErrorTypeDescription = EnumToString<VectorErrorCode>::Create<
     EnumStringPair<VectorErrorCode::CouldNotDeleteLibraryStorage, "Could not delete library storage">,
     EnumStringPair<VectorErrorCode::CouldNotCreateShardRouterStorage, "Could not create shard router storage">,
     EnumStringPair<VectorErrorCode::CouldNotCreateMetadataStorage, "Could not create metadata storage">,
-    EnumStringPair<VectorErrorCode::CouldNotCreateExternalIDsStorage, "Could not create node IDs storage">,
     EnumStringPair<VectorErrorCode::CouldNotCreateEmbeddingsStorage, "Could not create embeddings storage">,
     EnumStringPair<VectorErrorCode::LibraryStorageAlreadyExists, "Library storage already exists">,
     EnumStringPair<VectorErrorCode::LibraryStorageAlreadyLoaded, "Library storage already loaded">,
@@ -100,13 +90,6 @@ using VectorErrorTypeDescription = EnumToString<VectorErrorCode>::Create<
     EnumStringPair<VectorErrorCode::CouldNotClearShardRouterFile, "Could not clear shard router file">,
     EnumStringPair<VectorErrorCode::CouldNotClearMetadataFile, "Could not clear metadata file">,
 
-    EnumStringPair<VectorErrorCode::CouldNotOpenExternalIDsFile, "Could not open node IDs file">,
-    EnumStringPair<VectorErrorCode::CouldNotWriteExternalIDsFile, "Could not write node IDs file">,
-    EnumStringPair<VectorErrorCode::CouldNotClearExternalIDsFile, "Could not clear node IDs file">,
-    EnumStringPair<VectorErrorCode::CouldNotSeekBeginningOfExternalIDsFile, "Could not seek beginning of node IDs file">,
-    EnumStringPair<VectorErrorCode::CouldNotReadExternalIDsFile, "Could not read node IDs file">,
-    EnumStringPair<VectorErrorCode::ExternalIDsFileInvalid, "Node IDs file has invalid format">,
-
     EnumStringPair<VectorErrorCode::CouldNotLoadShardRouterFile, "Could not load shard router file">,
     EnumStringPair<VectorErrorCode::ShardRouterFileEmpty, "Shard router file is empty">,
     EnumStringPair<VectorErrorCode::ShardRouterInvalidDimension, "Shard router file has invalid dimension">,
@@ -114,8 +97,7 @@ using VectorErrorTypeDescription = EnumToString<VectorErrorCode>::Create<
     EnumStringPair<VectorErrorCode::ShardRouterInvalidHyperplanes, "Shard router file has invalid hyperplanes">,
     EnumStringPair<VectorErrorCode::ShardRouterInvalidShardIDs, "Shard router file has invalid shard IDs">,
 
-    EnumStringPair<VectorErrorCode::CouldNotLoadMetadataFile, "Could not load metadata file">,
-    EnumStringPair<VectorErrorCode::CouldNotLoadNodeIdsFile, "Could not load node IDs file">>;
+    EnumStringPair<VectorErrorCode::CouldNotLoadMetadataFile, "Could not load metadata file">>;
 
 class VectorError {
 public:
