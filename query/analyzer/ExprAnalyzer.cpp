@@ -714,6 +714,8 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
     return false;
 }
 
+// Used to generate a "fake" variable (n) in index creation queries, such as
+// CREATE INDEX _ FOR (n) ON n._
 void ExprAnalyzer::registerNodePatternDeclaration(const NodePattern* node) {
     const Symbol* nodeSymbol = node->getSymbol();
     if (!nodeSymbol) {
@@ -731,6 +733,8 @@ void ExprAnalyzer::registerNodePatternDeclaration(const NodePattern* node) {
     _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, nodeName);
 }
 
+// Used to generate a "fake" variable [e] in index creation queries, such as
+// CREATE INDEX _ FOR [e] ON e._
 void ExprAnalyzer::registerEdgePatternDeclaration(const EdgePattern* edge) {
     const Symbol* edgeSymbol = edge->getSymbol();
     if (!edgeSymbol) {

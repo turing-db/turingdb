@@ -76,7 +76,7 @@ set(ast_sources
     WhereClause.cpp
     YieldClause.cpp
     YieldItems.cpp
-    CreatePropertyIndexQuery.cpp
+    CreateNodePropertyIndexQuery.cpp
     CreateEdgePropertyIndexQuery.cpp
 
     ExprUtils.cpp
