@@ -9,21 +9,14 @@
 #include "versioning/EntityIDRebaser.h"
 #include "versioning/MetadataRebaser.h"
 
+#include "indexes/Index.h"
+
 using namespace db;
 
 void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
                                   const EntityIDRebaser& entityRebaser,
                                   DataPartRebaser& dataPartRebaser,
                                   const CommitHistory& prevHistory) {
-    // Clear the journal: WriteSets may change on reflush after rebase
-    _history.journal().clear();
-
-    // TODO: Rebase indexes, don't reset
-    static constexpr bool RESET_INDEXES_ON_REBASE = true;
-    if (RESET_INDEXES_ON_REBASE) {
-        spdlog::warn("Rebase: resetting indexes.");
-        _history._validIndexes.clear();
-    }
     // Dataparts
     auto newDataparts = prevHistory._allDataparts;
 
@@ -38,6 +31,28 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
         _history._allDataparts.data() + _history._allDataparts.size() - commitDatapartCount,
         commitDatapartCount,
     };
+
+    // FIXME: this is wrong, need to walk commits added
+    { // Only carry forward indexes that are still valid
+        const CommitJournal& journal = prevHistory.journal();
+        const auto& nodePropUpdates = journal.nodePropertyWriteSet();
+        const auto& edgePropUpdates = journal.edgePropertyWriteSet();
+
+        for (const WeakArc<Index>& prevIndex : prevHistory.validIndexes()) {
+            const bool isNode = prevIndex->isNodeIndex();
+            const PropertyTypeID indexedProp = prevIndex->property();
+            const WriteSet<PropertyTypeID>& propUpdates =
+                isNode ? nodePropUpdates : edgePropUpdates;
+            const bool propertyInvalidated = propUpdates.contains(indexedProp);
+
+            if (!propertyInvalidated) {
+                _history._validIndexes.push_back(prevIndex);
+            } else {
+                spdlog::warn("Dropping index {} because property {} was updated.",
+                             prevIndex->name(), indexedProp.getValue());
+            }
+        }
+    }
 
     const auto& prevDataParts = prevHistory._allDataparts;
 
