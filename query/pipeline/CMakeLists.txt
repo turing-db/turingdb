@@ -68,7 +68,7 @@ set(processors_sources
     processors/InstallExtensionProcessor.cpp
     processors/ShowExtensionsProcessor.cpp
     processors/EvalFunction.cpp
-    processors/CreateNodePropertyIndexProcessor.cpp
+    processors/CreatePropertyIndexProcessor.cpp
     processors/IndexLookupProcessor.cpp
 )
 

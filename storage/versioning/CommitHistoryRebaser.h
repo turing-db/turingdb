@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 
+#include "Commit.h"
+
 namespace db {
 
 class CommitHistory;
@@ -22,6 +24,9 @@ public:
                 const CommitHistory& prevHistory);
 
     void removeCreatedDataParts();
+
+    void addValidIndexes(const CommitHistory& prevHistory,
+                         Commit::CommitSpan commitsSinceBranch);
 
 private:
     CommitHistory& _history;

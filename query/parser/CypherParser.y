@@ -75,6 +75,7 @@
     #include "expr/ListExpr.h"
     #include "VecLibMetadata.h"
     #include "CreateNodePropertyIndexQuery.h"
+    #include "CreateEdgePropertyIndexQuery.h"
 
     namespace db {
         class YCypherScanner;
@@ -402,6 +403,7 @@ singleQuery
     | showProceduresQuery { $$ = $1; }
     | createVectorIndexQuery { $$ = $1; }
     | createNodePropertyIndexQuery { $$ = $1; }
+    | createEdgePropertyIndexQuery { $$ = $1; }
     | loadVectorQuery { $$ = $1; }
     | deleteVectorIndexQuery { $$ = $1; }
     | showVectorIndexesQuery { $$ = $1; }
@@ -453,12 +455,12 @@ createNodePropertyIndexQuery
       }
     ;
 
-//createEdgePropertyIndexQuery
-//    : CREATE INDEX ID FOR edgePattern ON propertyExpr {
-//        $$ = CreateEdgePropertyIndexQuery::create(ast, $3, $5, $7);
-//        LOC($$, @$);
-//    }
-//    ;
+createEdgePropertyIndexQuery
+    : CREATE INDEX ID FOR OBRACK edgeDetail CBRACK ON propertyExpr {
+        $$ = CreateEdgePropertyIndexQuery::create(ast, $3, $6, dynamic_cast<PropertyExpr*>($9));
+        LOC($$, @$);
+      }
+    ;
 
 distanceMetric
     : EUCLID { $$ = vec::DistanceMetric::EUCLIDEAN_DIST; }

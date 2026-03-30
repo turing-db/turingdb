@@ -48,6 +48,7 @@
 #include "stmt/CallStmt.h"
 #include "stmt/Limit.h"
 #include "CreateNodePropertyIndexQuery.h"
+#include "CreateEdgePropertyIndexQuery.h"
 
 #include "FunctionDecls.h"
 
@@ -126,7 +127,7 @@ void CypherAnalyzer::analyze() {
             break;
 
             case QueryCommand::Kind::CREATE_EDGE_PROPERTY_INDEX_QUERY:
-                throwError("Edge indexes not yet supported.", query);
+                analyze(static_cast<const CreateEdgePropertyIndexQuery*>(query));
             break;
 
             // Nothing to analyze
@@ -531,6 +532,45 @@ void CypherAnalyzer::analyze(const CreateNodePropertyIndexQuery* query) {
 
     if (!reader.isNodeProperty(propType._id)) {
         throwError("Property is not a node property.", propertyExpr);
+    }
+}
+
+void CypherAnalyzer::analyze(const CreateEdgePropertyIndexQuery* query) {
+    const EdgePattern* edge = query->edgePattern();
+    bioassert(edge, "Failed to get edge pattern.");
+
+    const SymbolChain* types = edge->types();
+    const MapLiteral* properties = edge->getProperties();
+
+    const bool haveTypeConstraints = types && !types->empty();
+    const bool havePropertyConstraints = properties && !properties->empty();
+    if (haveTypeConstraints || havePropertyConstraints) {
+        throwError("Constrained edge indexes are not yet supported.", edge);
+    }
+
+    PropertyExpr* propertyExpr = query->propertyExpr();
+    bioassert(propertyExpr, "Failed to get property expression.");
+
+    _exprAnalyzer->registerEdgePatternDeclaration(edge);
+    _exprAnalyzer->analyzePropertyExpr(propertyExpr);
+
+    const PropertyTypeMap& propTypes = _graphMetadata.propTypes();
+
+    const std::string_view propName = propertyExpr->getPropName();
+
+    const std::optional<PropertyType> maybePropType = propTypes.get(propName);
+
+    if (!maybePropType) {
+        const std::string err = fmt::format("Property {} to index does not exist.", propName);
+        throwError(std::move(err), propertyExpr);
+    }
+
+    const PropertyType propType = *maybePropType;
+
+    const GraphReader reader = _graphView.read();
+
+    if (!reader.isEdgeProperty(propType._id)) {
+        throwError("Property is not an edge property.", propertyExpr);
     }
 }
 

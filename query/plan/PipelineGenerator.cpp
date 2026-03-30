@@ -89,7 +89,7 @@
 #include "nodes/PathExplorerNode.h"
 #include "nodes/ConstScanNode.h"
 #include "nodes/ConstWriteSourceNode.h"
-#include "nodes/CreateNodePropertyIndexNode.h"
+#include "nodes/CreatePropertyIndexNode.h"
 #include "nodes/IndexLookupNode.h"
 
 #include "TranslateJoinHelpers.h"
@@ -495,8 +495,8 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translatePathExplorerNode(static_cast<PathExplorerNode*>(node));
         break;
 
-        case PlanGraphOpcode::CREATE_NODE_PROPERTY_INDEX:
-            return translateCreateNodePropertyIndexNode(static_cast<CreateNodePropertyIndexNode*>(node));
+        case PlanGraphOpcode::CREATE_PROPERTY_INDEX:
+            return translateCreatePropertyIndexNode(static_cast<CreatePropertyIndexNode*>(node));
         break;
 
         case PlanGraphOpcode::INDEX_LOOKUP:
@@ -1813,13 +1813,13 @@ PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* no
     return _builder.getPendingOutputInterface();
 }
 
-PipelineOutputInterface* PipelineGenerator::translateCreateNodePropertyIndexNode(CreateNodePropertyIndexNode* node) {
+PipelineOutputInterface* PipelineGenerator::translateCreatePropertyIndexNode(CreatePropertyIndexNode* node) {
     const std::string_view indexName = node->indexName();
     const PropertyExpr* propExpr = node->propExpr();
-
     const std::string_view propertyName = propExpr->getPropName();
+    const bool isNodeIndex = node->entityKind() == IndexEntityKind::Node;
 
-    _builder.addCreateNodePropertyIndex(indexName, propertyName);
+    _builder.addCreatePropertyIndex(indexName, propertyName, isNodeIndex);
 
     return _builder.getPendingOutputInterface();
 }

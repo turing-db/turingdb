@@ -61,7 +61,7 @@
 #include "nodes/ShowVectorIndexesNode.h"
 #include "nodes/InstallExtensionNode.h"
 #include "nodes/ShowExtensionsNode.h"
-#include "nodes/CreateNodePropertyIndexNode.h"
+#include "nodes/CreatePropertyIndexNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
@@ -83,6 +83,7 @@
 #include "InstallExtensionQuery.h"
 #include "ShowExtensionsQuery.h"
 #include "CreateNodePropertyIndexQuery.h"
+#include "CreateEdgePropertyIndexQuery.h"
 
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
@@ -183,7 +184,7 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
         break;
 
         case QueryCommand::Kind::CREATE_EDGE_PROPERTY_INDEX_QUERY:
-            throwError("Edge indexes are not yet supported.", query);
+            generateCreateEdgePropertyIndexQuery(static_cast<const CreateEdgePropertyIndexQuery*>(query));
         break;
 
     }
@@ -410,10 +411,17 @@ PlanGraphNode* PlanGraphGenerator::generateReturnNone(PlanGraphNode* prevNode) {
 void PlanGraphGenerator::generateCreateNodePropertyIndexQuery(const CreateNodePropertyIndexQuery* query) {
     const std::string_view indexName = query->indexName();
     const PropertyExpr* propExpr = query->propertyExpr();
-    const NodePattern* nodePattern = query->nodePattern();
 
-    auto* node =
-        _tree.create<CreateNodePropertyIndexNode>(indexName, nodePattern, propExpr);
+    auto* node = _tree.create<CreatePropertyIndexNode>(indexName, IndexEntityKind::Node, propExpr);
+
+    _tree.newOut<ProduceResultsNode>(node);
+}
+
+void PlanGraphGenerator::generateCreateEdgePropertyIndexQuery(const CreateEdgePropertyIndexQuery* query) {
+    const std::string_view indexName = query->indexName();
+    const PropertyExpr* propExpr = query->propertyExpr();
+
+    auto* node = _tree.create<CreatePropertyIndexNode>(indexName, IndexEntityKind::Edge, propExpr);
 
     _tree.newOut<ProduceResultsNode>(node);
 }

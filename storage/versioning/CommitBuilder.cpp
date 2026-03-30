@@ -88,6 +88,13 @@ WeakArc<Index> CommitBuilder::newNodePropertyIndex(std::string_view indexName,
     return _controller->createNodePropertyIndex<P>(indexName, ptID, lblset);
 }
 
+template <SupportedType P>
+WeakArc<Index> CommitBuilder::newEdgePropertyIndex(std::string_view indexName,
+                                                   PropertyTypeID ptID,
+                                                   EdgeTypeID edgeType) {
+    return _controller->createEdgePropertyIndex<P>(indexName, ptID, edgeType);
+}
+
 CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
     Profile profile("CommitBuilder::buildAllPending");
 
@@ -248,4 +255,11 @@ template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Double>(std::
 template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::String>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
 template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Bool>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
 template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Embedding>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+
+template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::Int64>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
+template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::UInt64>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
+template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::Double>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
+template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::String>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
+template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::Bool>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
+template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::Embedding>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
 }

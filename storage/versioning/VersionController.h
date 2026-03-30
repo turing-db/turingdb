@@ -79,6 +79,11 @@ public:
                                                          PropertyTypeID ptID,
                                                          LabelSetID lblset);
 
+    template <SupportedType P>
+    [[nodiscard]] WeakArc<Index> createEdgePropertyIndex(std::string_view indexName,
+                                                         PropertyTypeID ptID,
+                                                         EdgeTypeID edgeType);
+
 private:
     friend GraphLoader;
     friend CommitLoader;

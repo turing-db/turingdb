@@ -77,6 +77,7 @@ set(ast_sources
     YieldClause.cpp
     YieldItems.cpp
     CreatePropertyIndexQuery.cpp
+    CreateEdgePropertyIndexQuery.cpp
 
     ExprUtils.cpp
   )

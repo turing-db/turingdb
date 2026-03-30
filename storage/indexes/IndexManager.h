@@ -31,7 +31,7 @@ public:
     template <SupportedType P>
     WeakArc<Index> createEdgeIndex(std::string_view indexName,
                                    PropertyTypeID ptID,
-                                   EdgeTypeID type = _unconstrainedType);
+                                   EdgeTypeID edgeType = _unconstrainedType);
 
 private:
     NodeIndexMap _nodeIndexes;

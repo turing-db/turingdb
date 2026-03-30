@@ -5,7 +5,7 @@
 using namespace db;
 
 void CommitHistoryBuilder::addDatapart(const WeakArc<DataPart>& datapart) {
-        _history._allDataparts.push_back(datapart);
+    _history._allDataparts.push_back(datapart);
 }
 
 void CommitHistoryBuilder::addValidIndex(const WeakArc<Index>& index) {

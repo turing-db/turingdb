@@ -85,7 +85,8 @@ void ChangeRebaser::rebaseTombstones(Tombstones& tombstones) {
     Tombstones::EdgeTombstones::setUnion(edgeTombstones, mainEdgeTombstones);
 }
 
-void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
+void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder,
+                                        Commit::CommitSpan commitsSinceBranch) {
     CommitData& data = commitBuilder.commitData();
     CommitHistory& history = data.history();
 
@@ -103,11 +104,13 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder) {
 
     // Rebase the history, including any committed dataparts
     historyRebaser.rebase(_metadataRebaser, _entityIDRebaser, _dataPartRebaser, *_currentHeadHistory);
+    historyRebaser.addValidIndexes(*_currentHeadHistory, commitsSinceBranch);
 
     // If we have not yet flushed, we must rebase the write buffer prior to it being flushed
     if (!commitBuilder.writeBuffer().isFlushed()) {
         CommitWriteBufferRebaser wbRb(&_entityIDRebaser, commitBuilder.writeBuffer());
         wbRb.rebase();
+        wbRb.rebaseIndexes(commitsSinceBranch);
     }
 
     _currentHeadCommitData = &commitBuilder.commitData();

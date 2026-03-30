@@ -698,9 +698,9 @@ void PlanOptimizer::rewritePropertyFilterWithIndex() {
     rewriteNodePropertyFilterWithIndex();
 }
 
+// Finds ScanNodes -> GetProperties -> Filter
+// replaces with ConstScan -> IndexLookup
 void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
-    // DFS from ScanNodes. Break on VarNode (node has no filters)
-
     std::vector<PlanGraphNode*> roots;
     _plan->getRoots(roots);
     for (PlanGraphNode* root : roots) {
