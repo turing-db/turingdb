@@ -2635,6 +2635,47 @@ TEST_F(WriteQueriesTest, setEmbeddingOnTwoNodesByID) {
     }
 }
 
+TEST_F(WriteQueriesTest, setEmbeddingSameNodeTwice) {
+    const NodeID nid = *read().scanNodes().begin();
+
+    const std::string setQuery = fmt::format(
+        "MATCH (a), (b) WHERE a = {} AND b = {} SET a.emb = [0.0, 0.1], b.emb = [1.0, 0.0]",
+        nid.getValue(), nid.getValue());
+
+    newChange();
+    {
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        const std::string matchQuery = fmt::format(
+            "MATCH (n) WHERE n = {} RETURN n.emb", nid.getValue());
+
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(1, df->size()) << dump(df);
+
+            const auto* embs = findColumn(df, "n.emb")->as<ColumnOptVector<types::Embedding::Primitive>>();
+            ASSERT_TRUE(embs) << dump(df);
+
+            const size_t rowCount = df->getLogicalRowCount();
+            ASSERT_EQ(rowCount, 1) << dump(df);
+            ASSERT_TRUE(embs->at(0)) << dump(df);
+
+            const auto& emb = *embs->at(0);
+            ASSERT_EQ(emb.size(), 2);
+            EXPECT_FLOAT_EQ(emb[0], 1.0f);
+            EXPECT_FLOAT_EQ(emb[1], 0.0f);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
