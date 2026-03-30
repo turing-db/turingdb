@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(grep -r SimpleGraph /home/cyrus/turingdb/test --include=*.h -l)",
-      "Bash(grep -rn createSimpleGraph /home/cyrus/turingdb --include=*.cpp --include=*.h -l)"
-    ]
-  }
-}
