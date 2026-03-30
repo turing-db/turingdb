@@ -83,9 +83,8 @@ void VectorSearchProcessor::execute() {
     using ColumnInt = ColumnVector<types::Int64::Primitive>;
     ColumnInt* colIds = _outIds.getValues()->as<ColumnInt>();
 
-    for (int64_t id : result.ids()) {
-        colIds->push_back(id);
-    }
+    const std::span<const int64_t> ids = result.ids();
+    colIds->getRaw().assign(ids.begin(), ids.end());
 
     _outIds.getPort()->writeData();
     finish();
