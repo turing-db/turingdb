@@ -438,7 +438,14 @@ struct WriteProcessorPropertyTypes {
 
 struct ConstScanTypes {
     using Allowed = GenerateKindList<std::tuple<
-        NodeID
+        NodeID,
+
+        types::Int64::Primitive,
+        types::UInt64::Primitive,
+        types::Double::Primitive,
+        types::String::Primitive,
+        types::Bool::Primitive,
+        types::Embedding::Primitive
     >>;
 
     using Excluded = ExcludedContainers<

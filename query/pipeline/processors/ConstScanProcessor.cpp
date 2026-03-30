@@ -51,7 +51,7 @@ struct SortAndFilterID {
 
     // Otherwise: no need to do anything
     template <typename T>
-    void operator()(ColumnVector<T>*) {}
+    void operator()(const ColumnVector<T>*) {}
 
     ExecutionContext* _ctxt {nullptr};
     Column* _values {nullptr};
