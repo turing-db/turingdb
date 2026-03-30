@@ -12,13 +12,14 @@
 namespace db {
 
 class PropertyTypeTrie {
+public:
+    using TypeToIDsMap = std::unordered_map<PropertyTypeID, std::span<const EntityID>>;
     static constexpr uint16_t INVALID_NODE = std::numeric_limits<uint16_t>::max();
 
-public:
     PropertyTypeTrie();
     ~PropertyTypeTrie();
 
-    void build(const std::unordered_map<PropertyTypeID, std::span<const EntityID>>& typesToEntities,
+    void build(const TypeToIDsMap& typesToEntities,
                EntityID firstCoreEntityID,
                size_t coreEntityCount);
 

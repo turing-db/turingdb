@@ -10,7 +10,7 @@ PropertyTypeTrie::PropertyTypeTrie() = default;
 
 PropertyTypeTrie::~PropertyTypeTrie() = default;
 
-void PropertyTypeTrie::build(const std::unordered_map<PropertyTypeID, std::span<const EntityID>>& typesToEntities,
+void PropertyTypeTrie::build(const TypeToIDsMap& typesToEntities,
                              EntityID firstCoreEntityID,
                              size_t coreEntityCount) {
     const Profile profile("PropertyTypeTrie::build");

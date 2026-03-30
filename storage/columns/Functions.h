@@ -228,7 +228,6 @@ static void getPropertyTypesString(std::string& out,
 class PropertyTypesFunction {
 public:
     using ResultType = std::string;
-    std::unordered_set<PropertyTypeID> _seen;
 
     explicit PropertyTypesFunction(GraphView view)
         : _view(view)
@@ -248,6 +247,7 @@ public:
 private:
     GraphView _view;
     std::string _tmp;
+    std::unordered_set<PropertyTypeID> _seen;
 };
 
 /// Generic function executor; default constructible operator
@@ -405,8 +405,6 @@ struct FunctionExecutor<PropertyTypesFunction, Res, Arg> {
 
         const auto& argd = arg->getRaw();
         auto& resd = res->getRaw();
-
-
 
         PropertyTypesFunction propertyTypes(view);
         for (size_t i = 0; i < size; i++) {

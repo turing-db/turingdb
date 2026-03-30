@@ -8,6 +8,8 @@ namespace db {
 
 class PropertyTypeSet {
 public:
+    using PropertyTypeIDVector = std::vector<PropertyTypeID>;
+
     PropertyTypeSet();
     ~PropertyTypeSet();
 
@@ -26,17 +28,17 @@ public:
         return std::find(begin(), end(), ptID) != end();
     }
 
-    std::vector<PropertyTypeID>::const_iterator begin() const { return _ids.begin(); }
-    std::vector<PropertyTypeID>::const_iterator end() const { return _ids.end(); }
+    PropertyTypeIDVector::const_iterator begin() const { return _ids.begin(); }
+    PropertyTypeIDVector::const_iterator end() const { return _ids.end(); }
 
     size_t size() const { return _ids.size(); }
     void clear() { _ids.clear(); }
 
-    const std::vector<PropertyTypeID>& get() const { return _ids; }
-    std::vector<PropertyTypeID>& get() { return _ids; }
+    const PropertyTypeIDVector& get() const { return _ids; }
+    PropertyTypeIDVector& get() { return _ids; }
 
 private:
-    std::vector<PropertyTypeID> _ids;
+    PropertyTypeIDVector _ids;
 };
 
 }
