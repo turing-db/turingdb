@@ -289,13 +289,15 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
                 j = 0;
                 for (const auto& node : n->nodeUpdates()) {
-                    output << "        __node_update__ " << node._propTypeName << "\n";
+                    output << "        __node_update__ " << node._decl->getName()
+                           << "." << node._propTypeName << "\n";
                     j++;
                 }
 
                 j = 0;
                 for (const auto& edge : n->edgeUpdates()) {
-                    output << "        __edge_update__ " << edge._propTypeName << "\n";
+                    output << "        __edge_update__ " << edge._decl->getName()
+                           << "." << edge._propTypeName << "\n";
                     j++;
                 }
             } break;
