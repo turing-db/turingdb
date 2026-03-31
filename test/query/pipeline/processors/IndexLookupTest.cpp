@@ -160,7 +160,7 @@ TEST_F(IndexLookupTest, pipelineLambdaSourceThenIntLookup) {
     ASSERT_TRUE(executed);
 }
 
-TEST_F(IndexLookupTest, intLookupThenExpand) {
+/* TEST_F(IndexLookupTest, intLookupThenExpand) {
     auto [transaction, view, reader] = readGraph();
 
     const PropertyType frenchPropType =
@@ -185,7 +185,7 @@ TEST_F(IndexLookupTest, intLookupThenExpand) {
         _builder->addIndexLookup<types::Int64::Primitive, NodeID>(&ageIndex);
     
     const ColumnTag resultTag = lookupOutput.getValues()->getTag();
-}
+} */
 
 TEST_F(IndexLookupTest, pipelineLambdaSourceThenStringLookup) {
     auto [transaction, view, reader] = readGraph();

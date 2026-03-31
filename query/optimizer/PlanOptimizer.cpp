@@ -107,7 +107,7 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
             auto& raw = queryCol->getRaw();
             std::ranges::transform(litExprs, std::back_inserter(raw), litToVal);
 
-            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
+            auto* queryNode = _plan->create<ConstScanNode>(queryCol, propExpr->getExprVarDecl());
 
             auto* node =
                 _plan->newOut<IndexLookupNode>(queryNode, matchingIndex, propExpr, vt);
@@ -599,7 +599,7 @@ void PlanOptimizer::rewriteScanByConstIDs() {
 
         // === Rewrite ===
 
-        ConstScanNode* constScan = _plan->create<ConstScanNode>(nodeIDs);
+        ConstScanNode* constScan = _plan->create<ConstScanNode>(nodeIDs, varDecl);
 
         for (PlanGraphNode* filterNodeNext : filterNode->outputs()) {
             constScan->connectOut(filterNodeNext);
