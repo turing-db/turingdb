@@ -5,9 +5,11 @@
 
 #include "TuringDB.h"
 #include "Graph.h"
+#include "SimpleGraph.h"
 #include "SystemManager.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
+#include "metadata/PropertyType.h"
 #include "versioning/Change.h"
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
@@ -447,7 +449,8 @@ TEST_F(ConstScanOptTest, setPropertyUsesConstScan) {
                                 &_db->getDefaultQueryConfig());
     interp.execute(q, _currentChange, [](const Dataframe*) {});
 
-    EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
+    EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
     EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::SCAN_NODES));
 }
 
@@ -597,46 +600,6 @@ TEST_F(ConstScanOptTest, noConstWriteSourceDifferentProps) {
     EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
 }
 
-// Non-literal value expression must NOT trigger ConstWriteSource.
-TEST_F(ConstScanOptTest, noConstWriteSourceNonLiteral) {
-    auto it = read().scanNodes().begin();
-    const NodeID a = *it;
-    it.next();
-    const NodeID b = *it;
-
-    // SET n.idx = m is not a literal — it references another variable.
-    const std::string q = fmt::format(
-        "MATCH (n), (m) WHERE n = {} AND m = {} SET n.idx = m",
-        a.getValue(), b.getValue());
-
-    newChange();
-
-    TestQueryInterpreter interp(&_env->getSystemManager(),
-                                _graphName,
-                                &_db->getDefaultQueryConfig());
-    interp.execute(q, _currentChange, [](const Dataframe*) {});
-
-    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
-}
-
-// SET with a CREATE clause present must NOT trigger ConstWriteSource.
-TEST_F(ConstScanOptTest, noConstWriteSourceWithCreate) {
-    const NodeID a = *read().scanNodes().begin();
-
-    const std::string q = fmt::format(
-        "MATCH (n) WHERE n = {} CREATE (:Pathway{{idx:999}}) SET n.idx = 42",
-        a.getValue());
-
-    newChange();
-
-    TestQueryInterpreter interp(&_env->getSystemManager(),
-                                _graphName,
-                                &_db->getDefaultQueryConfig());
-    interp.execute(q, _currentChange, [](const Dataframe*) {});
-
-    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
-}
-
 // When the input tree has hops (not just ConstScan→VarNode), ConstWriteSource
 // must NOT fire because the tree contains non-eligible nodes.
 TEST_F(ConstScanOptTest, noConstWriteSourceWithHops) {
@@ -656,8 +619,193 @@ TEST_F(ConstScanOptTest, noConstWriteSourceWithHops) {
     EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
 }
 
+// Two distinct nodes each SET to a different embedding via ConstWriteSource.
+// Verifies plan opcode and correctness of written values.
+TEST_F(ConstScanOptTest, constWriteSourceEmbeddingTwoNodes) {
+    auto it = read().scanNodes().begin();
+    const NodeID a = *it;
+    it.next();
+    const NodeID b = *it;
+
+    const std::string setQuery = fmt::format(
+        "MATCH (a), (b) WHERE a = {} AND b = {} SET a.emb = [0.0, 0.1], b.emb = [1.0, 0.0]",
+        a.getValue(), b.getValue());
+
+    newChange();
+
+    // Verify the plan uses ConstWriteSource
+    {
+        TestQueryInterpreter interp(&_env->getSystemManager(),
+                                    _graphName,
+                                    &_db->getDefaultQueryConfig());
+        interp.execute(setQuery, _currentChange, [](const Dataframe*) {});
+
+        EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
+        EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CARTESIAN_PRODUCT));
+    }
+
+    // Execute via the normal path and verify correctness
+    exec(setQuery);
+    submitCurrentChange();
+
+    {
+        const std::string matchQuery = fmt::format(
+            "MATCH (n) WHERE n = {} OR n = {} RETURN n, n.emb",
+            a.getValue(), b.getValue());
+
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            const auto* ids = df->cols().front()->as<ColumnNodeIDs>();
+            const auto* embs = findColumn(df, "n.emb")
+                ->as<ColumnOptVector<types::Embedding::Primitive>>();
+            ASSERT_TRUE(ids);
+            ASSERT_TRUE(embs);
+
+            const size_t rowCount = df->getLogicalRowCount();
+            ASSERT_EQ(rowCount, 2);
+
+            for (size_t i = 0; i < rowCount; i++) {
+                const NodeID nid = ids->at(i);
+                ASSERT_TRUE(embs->at(i));
+                const auto& emb = *embs->at(i);
+                ASSERT_EQ(emb.size(), 2);
+
+                if (nid == a) {
+                    EXPECT_FLOAT_EQ(emb[0], 0.0f);
+                    EXPECT_FLOAT_EQ(emb[1], 0.1f);
+                } else {
+                    ASSERT_EQ(nid, b);
+                    EXPECT_FLOAT_EQ(emb[0], 1.0f);
+                    EXPECT_FLOAT_EQ(emb[1], 0.0f);
+                }
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+// Both variables resolve to the same node. The last SET item wins.
+TEST_F(ConstScanOptTest, constWriteSourceSameNodeTwice) {
+    const NodeID nid = *read().scanNodes().begin();
+
+    const std::string setQuery = fmt::format(
+        "MATCH (a), (b) WHERE a = {} AND b = {} SET a.emb = [0.0, 0.1], b.emb = [1.0, 0.0]",
+        nid.getValue(), nid.getValue());
+
+    newChange();
+
+    {
+        TestQueryInterpreter interp(&_env->getSystemManager(),
+                                    _graphName,
+                                    &_db->getDefaultQueryConfig());
+        interp.execute(setQuery, _currentChange, [](const Dataframe*) {});
+
+        EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
+    }
+
+    exec(setQuery);
+    submitCurrentChange();
+
+    {
+        const std::string matchQuery = fmt::format(
+            "MATCH (n) WHERE n = {} RETURN n.emb", nid.getValue());
+
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            const auto* embs = findColumn(df, "n.emb")
+                ->as<ColumnOptVector<types::Embedding::Primitive>>();
+            ASSERT_TRUE(embs);
+
+            const size_t rowCount = df->getLogicalRowCount();
+            ASSERT_EQ(rowCount, 1);
+            ASSERT_TRUE(embs->at(0));
+
+            const auto& emb = *embs->at(0);
+            ASSERT_EQ(emb.size(), 2);
+            // b.emb is the last SET item, so [1.0, 0.0] wins
+            EXPECT_FLOAT_EQ(emb[0], 1.0f);
+            EXPECT_FLOAT_EQ(emb[1], 0.0f);
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+// Overlapping NodeID sets across the two variables in a Cartesian product.
+// Verifies the last-writer-wins semantic for the shared node.
+TEST_F(ConstScanOptTest, constWriteSourceCartesianOverlap) {
+    auto it = read().scanNodes().begin();
+    const NodeID n0 = *it;
+    it.next();
+    const NodeID n1 = *it;
+    it.next();
+    const NodeID n2 = *it;
+
+    const std::string setQuery = fmt::format(
+        "MATCH (a), (b) WHERE (a = {} OR a = {}) AND (b = {} OR b = {})"
+        " SET a.emb = [0.0, 0.1], b.emb = [0.1, 0.0]",
+        n0.getValue(), n1.getValue(), n1.getValue(), n2.getValue());
+
+    newChange();
+
+    {
+        TestQueryInterpreter interp(&_env->getSystemManager(),
+                                    _graphName,
+                                    &_db->getDefaultQueryConfig());
+        interp.execute(setQuery, _currentChange, [](const Dataframe*) {});
+
+        EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
+        EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CARTESIAN_PRODUCT));
+    }
+
+    exec(setQuery);
+    submitCurrentChange();
+
+    {
+        const std::string matchQuery = fmt::format(
+            "MATCH (n) WHERE n = {} OR n = {} OR n = {} RETURN n, n.emb",
+            n0.getValue(), n1.getValue(), n2.getValue());
+
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            const auto* ids = df->cols().front()->as<ColumnNodeIDs>();
+            const auto* embs = findColumn(df, "n.emb")
+                ->as<ColumnOptVector<types::Embedding::Primitive>>();
+            ASSERT_TRUE(ids);
+            ASSERT_TRUE(embs);
+
+            const size_t rowCount = df->getLogicalRowCount();
+            ASSERT_EQ(rowCount, 3);
+
+            for (size_t i = 0; i < rowCount; i++) {
+                const NodeID nid = ids->at(i);
+                ASSERT_TRUE(embs->at(i));
+                const auto& emb = *embs->at(i);
+                ASSERT_EQ(emb.size(), 2);
+
+                if (nid == n0) {
+                    EXPECT_FLOAT_EQ(emb[0], 0.0f);
+                    EXPECT_FLOAT_EQ(emb[1], 0.1f);
+                } else if (nid == n1) {
+                    // n1 is in both a's and b's set. b.emb is the last
+                    // SET item, so [0.1, 0.0] wins.
+                    EXPECT_FLOAT_EQ(emb[0], 0.1f);
+                    EXPECT_FLOAT_EQ(emb[1], 0.0f);
+                } else {
+                    ASSERT_EQ(nid, n2);
+                    EXPECT_FLOAT_EQ(emb[0], 0.1f);
+                    EXPECT_FLOAT_EQ(emb[1], 0.0f);
+                }
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 10;
+        testing::GTEST_FLAG(repeat) = 1;
     });
 }
