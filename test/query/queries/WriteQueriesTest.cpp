@@ -2676,6 +2676,71 @@ TEST_F(WriteQueriesTest, setEmbeddingSameNodeTwice) {
     }
 }
 
+TEST_F(WriteQueriesTest, setEmbeddingCartesianOverlap) {
+    auto it = read().scanNodes().begin();
+    const NodeID n0 = *it;
+    it.next();
+    const NodeID n1 = *it;
+    it.next();
+    const NodeID n2 = *it;
+
+    const std::string setQuery = fmt::format(
+        "MATCH (a), (b) WHERE (a = {} OR a = {}) AND (b = {} OR b = {})"
+        " SET a.emb = [0.0, 0.1], b.emb = [0.1, 0.0]",
+        n0.getValue(), n1.getValue(), n1.getValue(), n2.getValue());
+
+    newChange();
+    {
+        auto res = query(setQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(0, df->size());
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        const std::string matchQuery = fmt::format(
+            "MATCH (n) WHERE n = {} OR n = {} OR n = {} RETURN n, n.emb",
+            n0.getValue(), n1.getValue(), n2.getValue());
+
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(2, df->size()) << dump(df);
+
+            const auto* ids = df->cols().front()->as<ColumnNodeIDs>();
+            const auto* embs = findColumn(df, "n.emb")->as<ColumnOptVector<types::Embedding::Primitive>>();
+            ASSERT_TRUE(ids) << dump(df);
+            ASSERT_TRUE(embs) << dump(df);
+
+            const size_t rowCount = df->getLogicalRowCount();
+            ASSERT_EQ(rowCount, 3) << dump(df);
+
+            for (size_t i = 0; i < rowCount; i++) {
+                const NodeID nid = ids->at(i);
+                ASSERT_TRUE(embs->at(i)) << dump(df);
+                const auto& emb = *embs->at(i);
+                ASSERT_EQ(emb.size(), 2) << dump(df);
+
+                if (nid == n0) {
+                    EXPECT_FLOAT_EQ(emb[0], 0.0f);
+                    EXPECT_FLOAT_EQ(emb[1], 0.1f);
+                } else if (nid == n1) {
+                    // Node 1 is written by both a and b across the cartesian
+                    // product. The last SET item (b.emb) wins.
+                    EXPECT_FLOAT_EQ(emb[0], 0.1f);
+                    EXPECT_FLOAT_EQ(emb[1], 0.0f);
+                } else {
+                    ASSERT_EQ(nid, n2);
+                    EXPECT_FLOAT_EQ(emb[0], 0.1f);
+                    EXPECT_FLOAT_EQ(emb[1], 0.0f);
+                }
+            }
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 3;
