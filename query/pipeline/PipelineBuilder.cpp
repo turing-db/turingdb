@@ -875,8 +875,7 @@ PipelineBuilder::ConstWriteSourceOutput PipelineBuilder::addConstWriteSource(Col
     NamedColumn* valuesCol {nullptr};
     {
         using Types = WriteProcessorPropertyTypes;
-        using Dispatcher =
-            ColumnSingleDispatcher<Types::AllowedVector, AllocOutputColumn, Types::ExcludedVector>;
+        using Dispatcher = ColumnSingleDispatcher<Types::AllowedVector, AllocOutputColumn, Types::ExcludedVector>;
         AllocOutputColumn allocator {._builder = this,
                                      ._outputDF = out.getDataframe(),
                                      ._newCol = valuesCol};

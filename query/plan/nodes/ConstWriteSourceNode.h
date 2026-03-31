@@ -29,10 +29,10 @@ public:
     const VarDecl* valuesDecl() const { return _valuesDecl; }
 
 private:
-    Column* _nodeIDs;
-    Column* _values;
-    const VarDecl* _nodeIDDecl;
-    const VarDecl* _valuesDecl;
+    Column* _nodeIDs {nullptr};
+    Column* _values {nullptr};
+    const VarDecl* _nodeIDDecl {nullptr};
+    const VarDecl* _valuesDecl {nullptr};
 };
 
 }
