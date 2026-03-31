@@ -10,6 +10,7 @@
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
+#include "metadata/PropertyType.h"
 #include "versioning/Change.h"
 #include "versioning/ChangeID.h"
 #include "versioning/Transaction.h"
@@ -284,6 +285,22 @@ TEST_F(IndexQueriesTest, indexDroppedAfterPropSETConflict) {
     }
 }
 
+TEST_F(IndexQueriesTest, indexDroppedAfterPropSETConflictSubmit) {
+    newChange();
+
+    {
+        ASSERT_TRUE(query("CREATE INDEX rebaseindex FOR (n) ON n.age", emptyCallback));
+        ASSERT_TRUE(query("commit", emptyCallback));
+        ASSERT_EQ(1, countIndexes());
+
+        // Update the age property, so invalidate it
+        ASSERT_TRUE(
+            query(R"(MATCH (n) WHERE n.name = "Cyrus" SET n.age = 32)", emptyCallback));
+        submitCurrentChange();
+        ASSERT_EQ(0, countIndexes());
+    }
+}
+
 TEST_F(IndexQueriesTest, indexDroppedAfterPropCREATEConflict) {
     newChange();
 
@@ -296,6 +313,22 @@ TEST_F(IndexQueriesTest, indexDroppedAfterPropCREATEConflict) {
         ASSERT_TRUE(
             query(R"(CREATE (n:Person{age:100}))", emptyCallback));
         ASSERT_TRUE(query("commit", emptyCallback));
+        ASSERT_EQ(0, countIndexes());
+    }
+}
+
+TEST_F(IndexQueriesTest, indexDroppedAfterPropCREATEConflictSubmit) {
+    newChange();
+
+    {
+        ASSERT_TRUE(query("CREATE INDEX rebaseindex FOR (n) ON n.age", emptyCallback));
+        ASSERT_TRUE(query("commit", emptyCallback));
+        ASSERT_EQ(1, countIndexes());
+
+        // Update the age property, so invalidate it
+        ASSERT_TRUE(
+            query(R"(CREATE (n:Person{age:100}))", emptyCallback));
+        submitCurrentChange();
         ASSERT_EQ(0, countIndexes());
     }
 }
@@ -573,10 +606,11 @@ TEST_F(IndexQueriesTest, ageIndexReturnPropertyOnIndexedNode) {
         ASSERT_TRUE(df);
         auto* col = findColumn(df, "n.name");
         ASSERT_TRUE(col) << "Column 'n.name' not found";
-        auto* vec = col->as<ColumnVector<std::string_view>>();
+        auto* vec = col->as<ColumnOptVector<types::String::Primitive>>();
         ASSERT_TRUE(vec);
-        for (std::string_view name : *vec) {
-            names.emplace_back(name);
+        for (auto name : *vec) {
+            ASSERT_TRUE(name);
+            names.emplace_back(*name);
         }
     });
     EXPECT_TRUE(res) << res.getError();
