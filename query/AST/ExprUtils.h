@@ -4,6 +4,7 @@
 
 #include "ID.h"
 #include "Literal.h"
+#include "columns/ColumnVector.h"
 #include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "expr/LiteralExpr.h"
@@ -104,7 +105,7 @@ struct ExprUtils::PropertyEqualsOR {
     using ValueExpr = LiteralExpr;
 
     // The type collected into the result vector
-    using ResultType = NodeID;
+    using ResultType = const LiteralExpr*;
 
     /// Ensures the property expression is the same for all leaf expressions
     static bool validateAnchor(const AnchorExpr* propAnchor, ValidatorType propertyExpr) {
@@ -123,22 +124,14 @@ struct ExprUtils::PropertyEqualsOR {
         const std::string_view anchProp = propAnchor->getPropName();
         const std::string_view newProp = propertyExpr->getPropName();
 
-        return anchProp == newProp;
+        const bool sameProperty = anchProp == newProp;
+
+        return sameProperty;
     }
 
     /// Extracts the value from each leaf expression
     static bool extractValue(const ValueExpr* valueExpr, ResultType& out) {
-        const Literal* literal = valueExpr->getLiteral();
-        if (literal->getKind() != Literal::Kind::INTEGER) {
-            return false;
-        }
-
-        const auto* intLit = static_cast<const IntegerLiteral*>(literal);
-        if (intLit->getValue() < 0) {
-            return false;
-        }
-
-        out = NodeID(static_cast<uint64_t>(intLit->getValue()));
+        out = valueExpr;
         return true;
     }
 };

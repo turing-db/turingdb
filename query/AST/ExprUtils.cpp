@@ -36,14 +36,14 @@ bool ExprUtils::collectFromHomogeneousBinaryChain(const Expr* root,
     const Expr* rhs = binExpr->getRHS();
 
     const AnchorExpr* anchorExpr = nullptr;
-    const ValueExpr*  valueExpr  = nullptr;
+    const ValueExpr* valueExpr = nullptr;
 
     if (lhs->getKind() == Traits::anchorKind && rhs->getKind() == Traits::valueKind) {
         anchorExpr = static_cast<const AnchorExpr*>(lhs);
-        valueExpr  = static_cast<const ValueExpr*>(rhs);
+        valueExpr = static_cast<const ValueExpr*>(rhs);
     } else if (rhs->getKind() == Traits::anchorKind && lhs->getKind() == Traits::valueKind) {
         anchorExpr = static_cast<const AnchorExpr*>(rhs);
-        valueExpr  = static_cast<const ValueExpr*>(lhs);
+        valueExpr = static_cast<const ValueExpr*>(lhs);
     } else {
         return false;
     }
@@ -62,5 +62,8 @@ bool ExprUtils::collectFromHomogeneousBinaryChain(const Expr* root,
 }
 
 namespace db {
-template bool ExprUtils::collectFromHomogeneousBinaryChain<ExprUtils::NodeIDEqualsOR>(const Expr *root, typename NodeIDEqualsOR::ValidatorType var, std::vector<typename NodeIDEqualsOR::ResultType> &result);
+template bool ExprUtils::collectFromHomogeneousBinaryChain<ExprUtils::NodeIDEqualsOR>(const Expr *root, typename NodeIDEqualsOR::ValidatorType var, std::vector<typename NodeIDEqualsOR::ResultType>& result);
+
+template bool ExprUtils::collectFromHomogeneousBinaryChain<ExprUtils::PropertyEqualsOR>(const Expr *root, typename PropertyEqualsOR::ValidatorType var, std::vector<typename PropertyEqualsOR::ResultType>& result);
+
 }
