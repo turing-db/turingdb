@@ -22,7 +22,7 @@ EdgeIndexer::EdgeIndexer(const EdgeContainer& edges)
 std::unique_ptr<EdgeIndexer> EdgeIndexer::create(const EdgeContainer& edges,
                                                  const NodeContainer& nodeContainer,
                                                  size_t patchNodeCount,
-                                                 const std::map<NodeID, LabelSetHandle>& patchNodeLabelSets,
+                                                 const std::unordered_map<NodeID, LabelSetHandle>& patchNodeLabelSets,
                                                  size_t patchOutEdgeCount,
                                                  size_t patchInEdgeCount) {
     Profile profile("EdgeIndexer::create");

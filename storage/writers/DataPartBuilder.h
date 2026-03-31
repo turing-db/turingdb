@@ -100,7 +100,7 @@ private:
      */
     std::unordered_map<EdgeID, EdgeRecord> _patchedEdges;
     std::unordered_set<NodeID> _nodeHasPatchEdges;
-    std::map<NodeID, LabelSetHandle> _patchNodeLabelSets;
+    std::unordered_map<NodeID, LabelSetHandle> _patchNodeLabelSets;
     std::unique_ptr<PropertyManager> _nodeProperties;
     std::unique_ptr<PropertyManager> _edgeProperties;
 
@@ -108,7 +108,7 @@ private:
     std::vector<EdgeRecord>& edges() { return _edges; }
     std::unique_ptr<PropertyManager>& nodeProperties() { return _nodeProperties; }
     std::unique_ptr<PropertyManager>& edgeProperties() { return _edgeProperties; }
-    std::map<NodeID, LabelSetHandle>& patchNodeLabelSets() { return _patchNodeLabelSets; }
+    std::unordered_map<NodeID, LabelSetHandle>& patchNodeLabelSets() { return _patchNodeLabelSets; }
     std::unordered_map<EdgeID, EdgeRecord>& patchedEdges() { return _patchedEdges; }
     size_t patchNodeEdgeDataCount() const {
         return _nodeHasPatchEdges.size();
