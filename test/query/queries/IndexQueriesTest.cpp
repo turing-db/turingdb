@@ -556,3 +556,32 @@ TEST_F(IndexQueriesTest, ageIndexTypedTwoHopTraversal) {
     EXPECT_NE(results.end(), std::find(results.begin(), results.end(), bioID));
     EXPECT_NE(results.end(), std::find(results.begin(), results.end(), cookingID));
 }
+
+// MATCH (n) WHERE n.age = 32 RETURN n.name
+// The age index identifies Remy and Adam; the query then reads and returns
+// the name property from those same nodes.
+// Expected: exactly the two names "Remy" and "Adam" (order not guaranteed).
+TEST_F(IndexQueriesTest, ageIndexReturnPropertyOnIndexedNode) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX ageindex FOR (n) ON n.age", emptyCallback));
+    submitCurrentChange();
+
+    ASSERT_TRUE(hasIndex("ageindex"));
+
+    std::vector<std::string> names;
+    auto res = query("MATCH (n) WHERE n.age = 32 RETURN n.name", [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        auto* col = findColumn(df, "n.name");
+        ASSERT_TRUE(col) << "Column 'n.name' not found";
+        auto* vec = col->as<ColumnVector<std::string_view>>();
+        ASSERT_TRUE(vec);
+        for (std::string_view name : *vec) {
+            names.emplace_back(name);
+        }
+    });
+    EXPECT_TRUE(res) << res.getError();
+
+    ASSERT_EQ(2u, names.size());
+    EXPECT_NE(names.end(), std::find(names.begin(), names.end(), "Remy"));
+    EXPECT_NE(names.end(), std::find(names.begin(), names.end(), "Adam"));
+}
