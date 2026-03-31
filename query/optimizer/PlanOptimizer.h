@@ -11,6 +11,8 @@ template <typename Q, typename R>
 class IndexLookupNode;
 class PropertyExpr;
 class LiteralExpr;
+template <typename T>
+class ColumnVector;
 
 class PlanOptimizer {
 public:
@@ -32,7 +34,7 @@ private:
     void rewriteNodePropertyFilterWithIndex();
 
     IndexLookupNode* addIndexLookup(const PropertyExpr* propExpr,
-                                    const LiteralExpr* litExpr);
+                                    const std::vector<const LiteralExpr*>& litExprs);
 };
 
 }

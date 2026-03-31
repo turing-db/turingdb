@@ -14,26 +14,22 @@ class IndexLookupNode : public PlanGraphNode {
 public:
     explicit IndexLookupNode(const Index* index,
                              const PropertyExpr* prop,
-                             ValueType vt,
-                             const LiteralExpr* lit)
+                             ValueType vt)
         : PlanGraphNode(PlanGraphOpcode::INDEX_LOOKUP),
           _index(index),
           _prop(prop),
-          _valueType(vt),
-          _lit(lit)
+          _valueType(vt)
     {
     }
 
     const Index* index() const { return _index; }
     const PropertyExpr* property() const { return _prop; }
     ValueType valueType() const { return _valueType; }
-    const LiteralExpr* literal() { return _lit; }
 
 private:
     const Index* _index {nullptr};
     const PropertyExpr* _prop {nullptr};
     ValueType _valueType;
-    const LiteralExpr* _lit {nullptr};
 };
 
 }

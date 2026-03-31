@@ -1840,9 +1840,6 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
 
     const ValueType propType = node->valueType();
 
-    const LiteralExpr* litExpr = node->literal();
-    bioassert(litExpr, "Null literal.");
-
     const EvaluatedType evaluatedType = entityDecl->getType();
 
     switch (evaluatedType) {

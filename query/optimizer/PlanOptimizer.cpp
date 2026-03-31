@@ -1,6 +1,7 @@
 #include "PlanOptimizer.h"
 
 #include "LocalMemory.h"
+#include <algorithm>
 #include <string_view>
 
 #include "LocalMemory.h"
@@ -9,10 +10,12 @@
 #include "PlanGraph.h"
 #include "CypherAST.h"
 #include "columns/ColumnVector.h"
+#include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "expr/Operators.h"
 #include "expr/PropertyExpr.h"
 #include "metadata/PropertyType.h"
+#include "metadata/SupportedType.h"
 #include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/IndexLookupNode.h"
 #include "nodes/PlanGraphNode.h"
@@ -45,8 +48,12 @@
 using namespace db;
 
 IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
-                                               const LiteralExpr* litExpr) {
-    const Literal* lit = litExpr->getLiteral();
+                                               const std::vector<const LiteralExpr*>& litExprs) {
+    if (litExprs.empty()) {
+        return nullptr;
+    }
+
+    const Literal* lit = litExprs.front()->getLiteral();
     bioassert(lit, "Null literal.");
 
     const std::string_view propName = propExpr->getPropName();
@@ -71,6 +78,70 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
         return nullptr;
     }
 
+    // Ensure that all the literals are the same type. This should be guaranteed by the
+    // analyzer (since they are being assigned to the same property), but check to be sure
+    const EvaluatedType type = litExprs.front()->getType();
+    {
+        const auto sametype = [type](const LiteralExpr* x) {
+            return x->getType() == type;
+        };
+
+        const bool allSameType = std::ranges::all_of(litExprs, sametype);
+        if (!allSameType) {
+            return nullptr;
+        }
+    }
+
+    // Column* queryCol {nullptr};
+    switch (type) {
+        case EvaluatedType::Integer: {
+            const ValueType vt = ValueType::Int64;
+            auto* queryCol = _mem->alloc<ColumnVector<types::Int64::Primitive>>();
+            const auto litToVal = [&](const LiteralExpr* lit) -> types::Int64::Primitive {
+                auto* typedLit = dynamic_cast<const IntegerLiteral*>(lit->getLiteral());
+                bioassert(typedLit, "Invalid literal."); // TODO: try and remove this
+                const types::Int64::Primitive value = typedLit->getValue();
+                return value;
+            };
+
+            auto& raw = queryCol->getRaw();
+            std::ranges::transform(litExprs, std::back_inserter(raw), litToVal);
+
+            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
+
+            auto* node =
+                _plan->newOut<IndexLookupNode>(queryNode, matchingIndex, propExpr, vt);
+            return node;
+        }
+        break;
+
+        case EvaluatedType::Double:
+        case EvaluatedType::String:
+        case EvaluatedType::Bool:
+        case EvaluatedType::Embedding:
+
+        case EvaluatedType::Invalid:
+        case EvaluatedType::NodePattern:
+        case EvaluatedType::EdgePattern:
+        case EvaluatedType::GraphPath:
+        case EvaluatedType::Null:
+        case EvaluatedType::Char:
+        case EvaluatedType::List:
+        case EvaluatedType::Map:
+        case EvaluatedType::Wildcard:
+        case EvaluatedType::Tuple:
+        case EvaluatedType::ValueType:
+        case EvaluatedType::StringTable:
+        case EvaluatedType::Label:
+        case EvaluatedType::LabelSet:
+        case EvaluatedType::PropertyType:
+        case EvaluatedType::EdgeType:
+        case EvaluatedType::_SIZE:
+            return nullptr;
+        break;
+    }
+
+    /*
     switch (litExpr->getType()) {
         case EvaluatedType::Integer: {
             const ValueType vt = ValueType::Int64;
@@ -81,8 +152,8 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
 
             auto* queryNode = _plan->create<ConstScanNode>(queryCol);
 
-            auto* node = _plan->newOut<IndexLookupNode>(queryNode, matchingIndex,
-                                                        propExpr, vt, litExpr);
+            auto* node =
+                _plan->newOut<IndexLookupNode>(queryNode, matchingIndex, propExpr, vt);
             return node;
         }
         break;
@@ -99,7 +170,7 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
             auto* queryNode = _plan->create<ConstScanNode>(queryCol);
 
             auto* node = _plan->newOut<IndexLookupNode>(queryNode, matchingIndex,
-                                                        propExpr, vt, litExpr);
+                                                        propExpr, vt);
             return node;
         }
         break;
@@ -169,6 +240,7 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
         case EvaluatedType::EdgeType:
             break;
     }
+    */
 
     return nullptr;
 }
@@ -520,7 +592,8 @@ void PlanOptimizer::rewriteScanByConstIDs() {
         const Expr* predExpr = predicates[0]->getExpr();
 
         ColumnNodeIDs* nodeIDs = _mem->alloc<ColumnNodeIDs>();
-        if (!collectNodeIDsFromOrChain(predExpr, varDecl, *nodeIDs)) {
+        if (!ExprUtils::collectFromHomogeneousBinaryChain<ExprUtils::NodeIDEqualsOR>(
+                predExpr, varDecl, nodeIDs->getRaw())) {
             continue;
         }
 
@@ -743,41 +816,40 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
             continue;
         }
 
-        const Predicate* pred = predicates.front();
-        const auto* binExpr = dynamic_cast<const BinaryExpr*>(pred->getExpr());
-        if (!binExpr) {
-            return; // Can occur with Boolean propertyies as predicates e.g. NOT isFrench
-        }
-
-        // Index only supports equality
-        if (binExpr->getOperator() != BinaryOperator::Equal) {
-            continue;
-        }
-
+        const Expr* firstPredicate = predicates.front()->getExpr();
         PropertyExpr* propExpr {nullptr};
-        LiteralExpr* literalExpr {nullptr};
+        {
+            const auto* binExpr = dynamic_cast<const BinaryExpr*>(firstPredicate);
+            if (!binExpr) {
+                return; // Can occur with Boolean propertyies as predicates e.g. NOT
+                        // isFrench
+            }
 
-        Expr* lhs = binExpr->getLHS();
-        Expr* rhs = binExpr->getRHS();
+            // Index only supports equality
+            if (binExpr->getOperator() != BinaryOperator::Equal) {
+                continue;
+            }
 
-        // Ensure some permutation of {property, literal}
-        if (lhs->getKind() == Expr::Kind::LITERAL) {
-            literalExpr = static_cast<LiteralExpr*>(lhs);
-        } else if (rhs->getKind() == Expr::Kind::LITERAL) {
-            literalExpr = static_cast<LiteralExpr*>(rhs);
+            Expr* lhs = binExpr->getLHS();
+            Expr* rhs = binExpr->getRHS();
+
+            if (lhs->getKind() == Expr::Kind::PROPERTY) {
+                propExpr = static_cast<PropertyExpr*>(lhs);
+            } else if (lhs->getKind() == Expr::Kind::PROPERTY) {
+                propExpr = static_cast<PropertyExpr*>(rhs);
+            }
         }
-        if (lhs->getKind() == Expr::Kind::PROPERTY) {
-            propExpr = static_cast<PropertyExpr*>(lhs);
-        } else if (lhs->getKind() == Expr::Kind::PROPERTY) {
-            propExpr = static_cast<PropertyExpr*>(rhs);
-        }
-
-        // Not a literal property constraint
-        if (!literalExpr || !propExpr)  {
+        if (!propExpr) {
             continue;
         }
 
-        IndexLookupNode* indexNode = addIndexLookup(propExpr, literalExpr);
+        std::vector<const LiteralExpr*> lookupValueLiterals;
+
+        if (!ExprUtils::collectFromHomogeneousBinaryChain<ExprUtils::PropertyEqualsOR>(firstPredicate, propExpr, lookupValueLiterals)) {
+            continue;
+        }
+
+        IndexLookupNode* indexNode = addIndexLookup(propExpr, lookupValueLiterals);
 
         if (!indexNode) {
             return;
