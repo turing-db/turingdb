@@ -52,7 +52,7 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
 
     std::vector<LabelSetHandle>& coreNodeLabelSets = builder.coreNodeLabelSets();
     std::vector<EdgeRecord>& outEdges = builder.edges();
-    std::map<NodeID, LabelSetHandle>& patchNodeLabelSets = builder.patchNodeLabelSets();
+    std::unordered_map<NodeID, LabelSetHandle>& patchNodeLabelSets = builder.patchNodeLabelSets();
     std::unordered_map<EdgeID, EdgeRecord>& patchedEdges = builder.patchedEdges();
     std::unique_ptr<PropertyManager>& nodeProperties = builder.nodeProperties();
     std::unique_ptr<PropertyManager>& edgeProperties = builder.edgeProperties();
