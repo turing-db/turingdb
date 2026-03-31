@@ -120,7 +120,7 @@ Key points:
 - Keep headers declaration-only; put non-trivial implementations in `.cpp` files
 - Only trivial one-liner getters should be inline in headers
 - Destructors: declare `~ClassName();` in header, define in `.cpp` (not `= default` in header)
-- Helper functions that don't need to be in the public API should be anonymous/static functions in the `.cpp`
+- Helper functions that don't need to be in the public API should be in an anonymous namespace in the `.cpp` (not `static`)
 
 **Error handling and return values:**
 - Don't return large/non-trivial objects by value from factory methods; use fill/output reference patterns instead
