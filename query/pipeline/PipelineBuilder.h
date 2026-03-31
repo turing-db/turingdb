@@ -64,6 +64,13 @@ public:
     PipelineNodeOutputInterface& addScanNodes();
     PipelineNodeOutputInterface& addScanNodesByLabel(const LabelSet* labelset);
     PipelineValuesOutputInterface& addConstScan(Column* values);
+
+    struct ConstWriteSourceOutput {
+        NamedColumn* _nodeIDCol {nullptr};
+        NamedColumn* _valuesCol {nullptr};
+    };
+    ConstWriteSourceOutput addConstWriteSource(Column* nodeIDs, Column* values);
+
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);
     PipelineBlockOutputInterface& addCallProcedure(const Procedure* procedure,
                                                    std::span<const Procedure::Argument> args,

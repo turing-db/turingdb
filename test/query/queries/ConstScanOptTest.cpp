@@ -78,7 +78,7 @@ private:
         db::PlanGraph& plan = _planGen->getPlanGraph();
 
         db::LocalMemory mem;
-        db::PlanOptimizer opt(&plan, view, &mem);
+        db::PlanOptimizer opt(&plan, view, &mem, &*_ast);
         opt.optimize();
 
         db::QueryCallbacks callbacks;
@@ -525,6 +525,135 @@ TEST_F(ConstScanOptTest, multipleRootsWithHops) {
     EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
     EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::SCAN_NODES));
     EXPECT_TRUE(expected.equals(actual));
+}
+
+// --- ConstWriteSource optimization tests ---
+
+// Single-variable SET with literal value triggers ConstWriteSource.
+TEST_F(ConstScanOptTest, singleVarConstWriteSource) {
+    auto it = read().scanNodes().begin();
+    const NodeID a = *it;
+    it.next();
+    const NodeID b = *it;
+
+    const std::string q = fmt::format(
+        "MATCH (n) WHERE n = {} OR n = {} SET n.idx = 999",
+        a.getValue(), b.getValue());
+
+    newChange();
+
+    TestQueryInterpreter interp(&_env->getSystemManager(),
+                                _graphName,
+                                &_db->getDefaultQueryConfig());
+    interp.execute(q, _currentChange, [](const Dataframe*) {});
+
+    EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CARTESIAN_PRODUCT));
+}
+
+// Multi-variable SET with same property and literal values triggers ConstWriteSource.
+TEST_F(ConstScanOptTest, multiVarConstWriteSource) {
+    auto it = read().scanNodes().begin();
+    const NodeID a = *it;
+    it.next();
+    const NodeID b = *it;
+
+    const std::string q = fmt::format(
+        "MATCH (n), (m) WHERE n = {} AND m = {} SET n.idx = 10, m.idx = 20",
+        a.getValue(), b.getValue());
+
+    newChange();
+
+    TestQueryInterpreter interp(&_env->getSystemManager(),
+                                _graphName,
+                                &_db->getDefaultQueryConfig());
+    interp.execute(q, _currentChange, [](const Dataframe*) {});
+
+    EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CARTESIAN_PRODUCT));
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
+}
+
+// Different property names across SET items must NOT trigger ConstWriteSource.
+TEST_F(ConstScanOptTest, noConstWriteSourceDifferentProps) {
+    auto it = read().scanNodes().begin();
+    const NodeID a = *it;
+    it.next();
+    const NodeID b = *it;
+
+    const std::string q = fmt::format(
+        "MATCH (n), (m) WHERE n = {} AND m = {} SET n.idx = 10, m.score = 20",
+        a.getValue(), b.getValue());
+
+    newChange();
+
+    TestQueryInterpreter interp(&_env->getSystemManager(),
+                                _graphName,
+                                &_db->getDefaultQueryConfig());
+    interp.execute(q, _currentChange, [](const Dataframe*) {});
+
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
+    EXPECT_TRUE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_SCAN));
+}
+
+// Non-literal value expression must NOT trigger ConstWriteSource.
+TEST_F(ConstScanOptTest, noConstWriteSourceNonLiteral) {
+    auto it = read().scanNodes().begin();
+    const NodeID a = *it;
+    it.next();
+    const NodeID b = *it;
+
+    // SET n.idx = m is not a literal — it references another variable.
+    const std::string q = fmt::format(
+        "MATCH (n), (m) WHERE n = {} AND m = {} SET n.idx = m",
+        a.getValue(), b.getValue());
+
+    newChange();
+
+    TestQueryInterpreter interp(&_env->getSystemManager(),
+                                _graphName,
+                                &_db->getDefaultQueryConfig());
+    interp.execute(q, _currentChange, [](const Dataframe*) {});
+
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
+}
+
+// SET with a CREATE clause present must NOT trigger ConstWriteSource.
+TEST_F(ConstScanOptTest, noConstWriteSourceWithCreate) {
+    const NodeID a = *read().scanNodes().begin();
+
+    const std::string q = fmt::format(
+        "MATCH (n) WHERE n = {} CREATE (:Pathway{{idx:999}}) SET n.idx = 42",
+        a.getValue());
+
+    newChange();
+
+    TestQueryInterpreter interp(&_env->getSystemManager(),
+                                _graphName,
+                                &_db->getDefaultQueryConfig());
+    interp.execute(q, _currentChange, [](const Dataframe*) {});
+
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
+}
+
+// When the input tree has hops (not just ConstScan→VarNode), ConstWriteSource
+// must NOT fire because the tree contains non-eligible nodes.
+TEST_F(ConstScanOptTest, noConstWriteSourceWithHops) {
+    const NodeID a = *read().scanNodes().begin();
+
+    const std::string q = fmt::format(
+        "MATCH (n)-->(m) WHERE n = {} SET m.idx = 42",
+        a.getValue());
+
+    newChange();
+
+    TestQueryInterpreter interp(&_env->getSystemManager(),
+                                _graphName,
+                                &_db->getDefaultQueryConfig());
+    interp.execute(q, _currentChange, [](const Dataframe*) {});
+
+    EXPECT_FALSE(interp.planHasOpcode(db::PlanGraphOpcode::CONST_WRITE_SOURCE));
 }
 
 int main(int argc, char** argv) {

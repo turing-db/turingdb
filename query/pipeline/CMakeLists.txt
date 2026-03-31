@@ -17,6 +17,7 @@ set(processors_sources
     processors/ScanNodesProcessor.cpp
     processors/ScanNodesByLabelProcessor.cpp
     processors/ConstScanProcessor.cpp
+    processors/ConstWriteSourceProcessor.cpp
     processors/GetInEdgesProcessor.cpp
     processors/GetEdgesProcessor.cpp
     processors/GetOutEdgesProcessor.cpp

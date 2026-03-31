@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
 
         try {
             auto t0 = Clock::now();
-            PlanOptimizer planOpt(&planGraph, view, &mem);
+            PlanOptimizer planOpt(&planGraph, view, &mem, &ast);
             planOpt.optimize();
             auto t1 = Clock::now();
             fmt::print("Query plan optimised in {} us\n", duration<Microseconds>(t0, t1));

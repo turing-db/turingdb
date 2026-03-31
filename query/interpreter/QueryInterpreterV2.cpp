@@ -153,7 +153,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     PlanGraph& planGraph = planGen.getPlanGraph();
 
     // Optimize plan graph
-    PlanOptimizer planOpt(&planGraph, view, ctxt.getLocalMemory());
+    PlanOptimizer planOpt(&planGraph, view, ctxt.getLocalMemory(), &ast);
     try {
         planOpt.optimize();
     } catch (const CompilerException& e) {

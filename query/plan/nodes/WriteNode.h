@@ -126,6 +126,8 @@ public:
     NodeUpdateSpan nodeUpdates() const { return _nodeUpdates; }
     EdgeUpdateSpan edgeUpdates() const { return _edgeUpdates; }
 
+    void clearNodeUpdates() { _nodeUpdates.clear(); }
+
 private:
     /// @brief Maps the VarDecl of a new node to its offset in the _newNodes vector
     std::unordered_map<const VarDecl*, size_t> _newNodeDeclMapping;
