@@ -178,10 +178,32 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         wb.applyUpdates(dpBuilder);
     }
 
-    CommitHistory& history = _commitData->history();
-    CommitHistoryBuilder historyBuilder {history};
-    for (const WeakArc<Index>& index : wb.pendingIndexes()) {
-        historyBuilder.addValidIndex(index);
+    {
+        CommitHistory& history = _commitData->history();
+        CommitHistoryBuilder historyBuilder {history};
+
+        // Add the indexes that this commit creates
+        for (const WeakArc<Index>& index : wb.pendingIndexes()) {
+            historyBuilder.addValidIndex(index);
+        }
+
+        const CommitJournal* ourJournal = history._journal.get();
+        auto& ourIndexes = history._validIndexes;
+        const auto& nodePropUpdates = ourJournal->nodePropertyWriteSet();
+        const auto& edgePropUpdates = ourJournal->edgePropertyWriteSet();
+
+        const auto invalidated = [&](const WeakArc<Index>& index) -> bool {
+            const bool isNode = index->isNodeIndex();
+            const PropertyTypeID indexedProp = index->property();
+            const WriteSet<PropertyTypeID>& propUpdates =
+                isNode ? nodePropUpdates : edgePropUpdates;
+            const bool propertyInvalidated = propUpdates.contains(indexedProp);
+            return propertyInvalidated;
+        };
+
+        // By default we carry over the previous commit's indexes. Remove any that have
+        // become invalidated due to the writes (SETs, CREATEs) of this commit
+        std::erase_if(ourIndexes, invalidated);
     }
 
     wb.setFlushed();
