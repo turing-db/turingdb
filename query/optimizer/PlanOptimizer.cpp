@@ -413,11 +413,11 @@ void PlanOptimizer::rewriteConstWriteSources() {
         }
 
         // Build lookup map and verify every nodeUpdate VarDecl is covered
+        varToScan.clear();
         for (const auto& [decl, scan] : pairs) {
             varToScan[decl] = scan;
         }
 
-        varToScan.clear();
         for (const auto& update : updates) {
             if (!varToScan.contains(update._decl)) {
                 allValid = false;
