@@ -30,12 +30,17 @@
 #include "SymbolChain.h"
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
+#include "expr/BinaryExpr.h"
 #include "expr/EntityTypeExpr.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
+#include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
+#include "expr/StringExpr.h"
 #include "expr/SymbolExpr.h"
+#include "expr/UnaryExpr.h"
 #include "FunctionInvocation.h"
+#include "Literal.h"
 
 #include "metadata/LabelSet.h"
 
@@ -61,8 +66,94 @@ void outputDependency(std::ostream& output, const ExprDependencies::VarDependenc
     }
 }
 
+void dumpExpr(std::ostream& out, const Expr* expr) {
+    switch (expr->getKind()) {
+        case Expr::Kind::BINARY: {
+            const auto* bin = static_cast<const BinaryExpr*>(expr);
+            const auto op = bin->getOperator();
+            const bool isLogical = (op == BinaryOperator::And || op == BinaryOperator::Or);
+
+            if (isLogical) out << "(";
+            dumpExpr(out, bin->getLHS());
+            out << " " << BinaryOperatorDescription::value(op) << " ";
+            dumpExpr(out, bin->getRHS());
+            if (isLogical) out << ")";
+        } break;
+
+        case Expr::Kind::UNARY: {
+            const auto* un = static_cast<const UnaryExpr*>(expr);
+            out << UnaryOperatorDescription::value(un->getOperator()) << " ";
+            dumpExpr(out, un->getSubExpr());
+        } break;
+
+        case Expr::Kind::STRING: {
+            const auto* str = static_cast<const StringExpr*>(expr);
+            dumpExpr(out, str->getLHS());
+            out << " " << StringOperatorDescription::value(str->getStringOperator()) << " ";
+            dumpExpr(out, str->getRHS());
+        } break;
+
+        case Expr::Kind::SYMBOL: {
+            const auto* sym = static_cast<const SymbolExpr*>(expr);
+            out << sym->getSymbol()->getName();
+        } break;
+
+        case Expr::Kind::PROPERTY: {
+            const auto* prop = static_cast<const PropertyExpr*>(expr);
+            out << prop->getEntityVarDecl()->getName() << "." << prop->getPropName();
+        } break;
+
+        case Expr::Kind::LITERAL: {
+            const auto* lit = static_cast<const LiteralExpr*>(expr);
+            const Literal* literal = lit->getLiteral();
+
+            switch (literal->getKind()) {
+                case Literal::Kind::NULL_LITERAL:
+                    out << "NULL";
+                    break;
+                case Literal::Kind::BOOL:
+                    out << (static_cast<const BoolLiteral*>(literal)->getValue() ? "true" : "false");
+                    break;
+                case Literal::Kind::INTEGER:
+                    fmt::print(out, "{}", static_cast<const IntegerLiteral*>(literal)->getValue());
+                    break;
+                case Literal::Kind::DOUBLE:
+                    fmt::print(out, "{}", static_cast<const DoubleLiteral*>(literal)->getValue());
+                    break;
+                case Literal::Kind::STRING:
+                    out << "'" << static_cast<const StringLiteral*>(literal)->getValue() << "'";
+                    break;
+                case Literal::Kind::EMBEDDING: {
+                    const auto data = static_cast<const EmbeddingLiteral*>(literal)->getValue();
+                    out << "[";
+                    for (size_t i = 0; i < data.size(); i++) {
+                        if (i > 0) out << ", ";
+                        out << data[i];
+                    }
+                    out << "]";
+                } break;
+                default:
+                    out << "?";
+                    break;
+            }
+        } break;
+
+        case Expr::Kind::FUNCTION_INVOCATION: {
+            const auto* fn = static_cast<const FunctionInvocationExpr*>(expr);
+            const auto* sig = fn->getFunctionInvocation()->getSignature();
+            out << sig->getFullName() << "(...)";
+        } break;
+
+        default:
+            out << "?";
+            break;
+    }
+}
+
 void outputPredicate(std::ostream& output, const Predicate* pred) {
-    output << "        __has predicate__" << "\n";
+    output << "        __predicate__ ";
+    dumpExpr(output, pred->getExpr());
+    output << "\n";
 
     for (const auto& dep : pred->getDependencies().getVarDeps()) {
         outputDependency(output, dep);
