@@ -211,9 +211,11 @@ void PlanOptimizer::rewriteScanByConstIDs() {
 
 // Recursively walks the input tree of a WriteNode, accepting only
 // VarNode, ConstScanNode, and CartesianProductNode. Collects
-// (VarDecl, ConstScanNode) pairs from VarNode→ConstScan edges.
+// (VarDecl, ConstScanNode) pairs from VarNode→ConstScan edges,
+// and appends every visited node to oldNodes for later disconnection.
 static bool collectConstWriteInputs(PlanGraphNode* node,
-                                    std::vector<std::pair<const VarDecl*, ConstScanNode*>>& pairs) {
+                                    std::vector<std::pair<const VarDecl*, ConstScanNode*>>& pairs,
+                                    std::vector<PlanGraphNode*>& oldNodes) {
     if (auto* varNode = dynamic_cast<VarNode*>(node)) {
         const auto& inputs = varNode->inputs();
         if (inputs.size() != 1) {
@@ -226,12 +228,15 @@ static bool collectConstWriteInputs(PlanGraphNode* node,
         }
 
         pairs.emplace_back(varNode->getVarDecl(), constScan);
+        oldNodes.push_back(varNode);
+        oldNodes.push_back(constScan);
         return true;
     }
 
     if (dynamic_cast<CartesianProductNode*>(node)) {
+        oldNodes.push_back(node);
         for (PlanGraphNode* input : node->inputs()) {
-            if (!collectConstWriteInputs(input, pairs)) {
+            if (!collectConstWriteInputs(input, pairs, oldNodes)) {
                 return false;
             }
         }
@@ -362,7 +367,8 @@ void PlanOptimizer::rewriteConstWriteSources() {
         }
 
         std::vector<std::pair<const VarDecl*, ConstScanNode*>> pairs;
-        if (!collectConstWriteInputs(writeNode->inputs()[0], pairs)) {
+        std::vector<PlanGraphNode*> oldNodes;
+        if (!collectConstWriteInputs(writeNode->inputs()[0], pairs, oldNodes)) {
             continue;
         }
 
@@ -423,6 +429,12 @@ void PlanOptimizer::rewriteConstWriteSources() {
         // === Rewrite the plan ===
 
         writeNode->clearInputs();
+
+        for (PlanGraphNode* old : oldNodes) {
+            old->clearInputs();
+            old->clearOutputs();
+        }
+
         writeNode->clearNodeUpdates();
         writeNode->addNodeUpdate(nodeIDDecl, propName, valuesExpr);
 
