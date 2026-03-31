@@ -33,8 +33,8 @@ private:
     void rewritePropertyFilterWithIndex();
     void rewriteNodePropertyFilterWithIndex();
 
+    /// Attempts to add a ConstScan -> IndexLookup with query contained in @param litExprs
     IndexLookupNode* addIndexLookup(const PropertyExpr* propExpr,
                                     const std::vector<const LiteralExpr*>& litExprs);
 };
-
 }

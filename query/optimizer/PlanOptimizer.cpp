@@ -811,47 +811,79 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
         }
 
         const std::vector<Predicate*>& predicates = filterNode->getPredicates();
-        // TODO check if all equality in disjunctive normal form, not just single equality
+        // Any number of ORs chained together is evaluated as 1 predicate. If we have any
+        // more than one predicate, we must have an AND somewhere, which means we cannot
+        // use the index
         if (predicates.size() != 1) {
             continue;
         }
 
+        // We can do an index lookup iff we have a chain of
+        // x.prop1 = LITERAL OR x.prop1 = LITERAL  OR...
+        // We must ensure all property constraints are on the same property, and that all
+        // values on the constraints are literals (interpret-time evaluatable)
         const Expr* firstPredicate = predicates.front()->getExpr();
         PropertyExpr* propExpr {nullptr};
-        {
+        { // Search the expression chain for the leftmost (arbitrary choice) leaf
+          // i.e. property expression x.prop = y
             const auto* binExpr = dynamic_cast<const BinaryExpr*>(firstPredicate);
             if (!binExpr) {
-                return; // Can occur with Boolean propertyies as predicates e.g. NOT
-                        // isFrench
+                // Can occur with Boolean props as predicates e.g. NOT isFrench, but we
+                // cannot use index here
+                return;
             }
 
-            // Index only supports equality
-            if (binExpr->getOperator() != BinaryOperator::Equal) {
+            // Walk down the left side of any OR chain to find the first leaf equality,
+            // from which we extract the property expression used to "anchor" the full
+            // chain i.e. assert that all other expressions are on the same property.
+            // Since all we need to assertis that all property expressions are on the same
+            // property, we can chose any expresion (here the leftmos) as the "anchor".
+            const BinaryExpr* leafExpr = binExpr;
+            while (leafExpr->getOperator() == BinaryOperator::Or) {
+                const auto* lhsBin = dynamic_cast<const BinaryExpr*>(leafExpr->getLHS());
+                if (!lhsBin) {
+                    break;
+                }
+                leafExpr = lhsBin;
+            }
+
+            if (leafExpr->getOperator() != BinaryOperator::Equal) {
                 continue;
             }
 
-            Expr* lhs = binExpr->getLHS();
-            Expr* rhs = binExpr->getRHS();
+            Expr* lhs = leafExpr->getLHS();
+            Expr* rhs = leafExpr->getRHS();
 
+            // At least one side of this equality needs to be a property expr
             if (lhs->getKind() == Expr::Kind::PROPERTY) {
                 propExpr = static_cast<PropertyExpr*>(lhs);
-            } else if (lhs->getKind() == Expr::Kind::PROPERTY) {
+            } else if (rhs->getKind() == Expr::Kind::PROPERTY) {
                 propExpr = static_cast<PropertyExpr*>(rhs);
             }
         }
+        // The leaf wasnt a property expr, we cannot use the index
         if (!propExpr) {
             continue;
         }
+        // @ref propExpr now contains the property constraint (e.g n.age) which all other
+        // expressions need also have
 
+        // Traverse the expression tree, asserting that all property expressions are the
+        // same as @ref propExpr, and that all constraint values are literals.
+        // Store the literal values into @ref lookupValueLiterals.
         std::vector<const LiteralExpr*> lookupValueLiterals;
-
-        if (!ExprUtils::collectFromHomogeneousBinaryChain<ExprUtils::PropertyEqualsOR>(firstPredicate, propExpr, lookupValueLiterals)) {
+        if (!ExprUtils::collectFromHomogeneousBinaryChain<ExprUtils::PropertyEqualsOR>(
+                firstPredicate, propExpr, lookupValueLiterals)) {
             continue;
         }
 
+        // Attempt to translate all the literals in @ref lookupValueLiterals to a query
+        // for the index lookup. NOTE: Also adds a ConstScan prior to any IndexLookup
+        // added.
         IndexLookupNode* indexNode = addIndexLookup(propExpr, lookupValueLiterals);
 
         if (!indexNode) {
+            // Failed to make index query: can't use lookup
             return;
         }
 

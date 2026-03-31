@@ -1,5 +1,7 @@
 #include "PropertyHashIndex.h"
 
+#include <range/v3/view/reverse.hpp>
+
 #include "DataPart.h"
 #include "metadata/PropertyType.h"
 #include "properties/PropertyManager.h"
@@ -9,6 +11,9 @@
 #include "ID.h"
 
 using namespace db;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 template <SupportedType P, TypedInternalID I>
 PropertyHashIndex<P, I>::PropertyHashIndex(std::string_view name,
@@ -20,7 +25,11 @@ PropertyHashIndex<P, I>::PropertyHashIndex(std::string_view name,
 
 template <SupportedType P, TypedInternalID I>
 void PropertyHashIndex<P, I>::init(GraphView view) {
-    for (const WeakArc<DataPart>& part : view.dataparts()) {
+    // Store which IDs we have indexed for this property, so that we do not store both the
+    // pre and post SET values, and instead only store the most recent value, since we
+    // iterate backwards.
+    std::unordered_set<I> indexedIDs;
+    for (const WeakArc<DataPart>& part : rv::reverse(view.dataparts())) {
         const PropertyManager* propManPtr = nullptr;
 
         if constexpr (_isNode) {
@@ -37,9 +46,15 @@ void PropertyHashIndex<P, I>::init(GraphView view) {
             continue;
         }
 
-        for (const auto& [id, val] : container->zipped()) {
+        for (const auto& [entID, val] : container->zipped()) {
+            const I id {entID.getValue()};
+            if (indexedIDs.contains(id)) {
+                continue;
+            }
+            indexedIDs.emplace(id);
+
             IDContainer& assoc = _hashTable[val];
-            assoc.emplace_back(id.getValue());
+            assoc.emplace_back(id);
         }
     }
 
