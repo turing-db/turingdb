@@ -1,7 +1,6 @@
 #include "ConstWriteSourceProcessor.h"
 
 #include <algorithm>
-#include <numeric>
 
 #include <spdlog/fmt/fmt.h>
 
@@ -96,20 +95,14 @@ void ConstWriteSourceProcessor::prepare(ExecutionContext* ctxt) {
     const GraphReader reader = ctxt->getGraphView().read();
     std::vector<NodeID>& raw = nodeCol->getRaw();
 
-    // Build index permutation, filter out invalid NodeIDs, then sort
-    std::vector<size_t> perm(raw.size());
-    std::iota(perm.begin(), perm.end(), 0);
-
-    // Remove entries for invalid NodeIDs
-    auto newEnd = std::remove_if(perm.begin(), perm.end(), [&](size_t idx) {
-        return !reader.graphHasNode(raw[idx]);
-    });
-    perm.erase(newEnd, perm.end());
-
-    // Sort by NodeID for better access patterns
-    std::sort(perm.begin(), perm.end(), [&](size_t a, size_t b) {
-        return raw[a] < raw[b];
-    });
+    // Build index permutation, filter out invalid NodeIDs
+    std::vector<size_t> perm;
+    perm.reserve(raw.size());
+    for (size_t i = 0; i < raw.size(); ++i) {
+        if (reader.graphHasNode(raw[i])) {
+            perm.push_back(i);
+        }
+    }
 
     // Apply permutation to NodeIDs
     ColumnNodeIDs sortedNodeIDs;
