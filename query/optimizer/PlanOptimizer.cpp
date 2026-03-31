@@ -95,11 +95,13 @@ void PlanOptimizer::rewriteScanByLabels() {
     }
 }
 
+namespace {
+
 // Returns true if expr is a chain of OR'd equalities (var = integer_literal),
 // and appends the extracted NodeIDs to nodeIDs.
-static bool collectNodeIDsFromOrChain(const Expr* expr,
-                                      const VarDecl* varDecl,
-                                      ColumnNodeIDs& nodeIDs) {
+bool collectNodeIDsFromOrChain(const Expr* expr,
+                               const VarDecl* varDecl,
+                               ColumnNodeIDs& nodeIDs) {
     if (expr->getKind() != Expr::Kind::BINARY) {
         return false;
     }
@@ -213,9 +215,9 @@ void PlanOptimizer::rewriteScanByConstIDs() {
 // VarNode, ConstScanNode, and CartesianProductNode. Collects
 // (VarDecl, ConstScanNode) pairs from VarNode→ConstScan edges,
 // and appends every visited node to oldNodes for later disconnection.
-static bool collectConstWriteInputs(PlanGraphNode* node,
-                                    std::vector<std::pair<const VarDecl*, ConstScanNode*>>& pairs,
-                                    std::vector<PlanGraphNode*>& oldNodes) {
+bool collectConstWriteInputs(PlanGraphNode* node,
+                             std::vector<std::pair<const VarDecl*, ConstScanNode*>>& pairs,
+                             std::vector<PlanGraphNode*>& oldNodes) {
     if (auto* varNode = dynamic_cast<VarNode*>(node)) {
         const auto& inputs = varNode->inputs();
         if (inputs.size() != 1) {
@@ -231,9 +233,7 @@ static bool collectConstWriteInputs(PlanGraphNode* node,
         oldNodes.push_back(varNode);
         oldNodes.push_back(constScan);
         return true;
-    }
-
-    if (dynamic_cast<CartesianProductNode*>(node)) {
+    } else if (dynamic_cast<CartesianProductNode*>(node)) {
         oldNodes.push_back(node);
         for (PlanGraphNode* input : node->inputs()) {
             if (!collectConstWriteInputs(input, pairs, oldNodes)) {
@@ -247,9 +247,9 @@ static bool collectConstWriteInputs(PlanGraphNode* node,
 }
 
 template <typename ColT, typename LitT>
-static Column* buildTypedValuesColumn(LocalMemory* mem,
-                                      const WriteNode::NodeUpdateSpan& updates,
-                                      const std::unordered_map<const VarDecl*, ConstScanNode*>& varToScan) {
+Column* buildTypedValuesColumn(LocalMemory* mem,
+                               const WriteNode::NodeUpdateSpan& updates,
+                               const std::unordered_map<const VarDecl*, ConstScanNode*>& varToScan) {
     auto* col = mem->alloc<ColumnVector<ColT>>();
     for (const auto& [decl, propName, expr] : updates) {
         auto* lit = static_cast<const LitT*>(
@@ -264,9 +264,9 @@ static Column* buildTypedValuesColumn(LocalMemory* mem,
 
 // Build a typed values column by repeating each literal for every NodeID
 // in the corresponding ConstScan. Dispatches on the first literal's kind.
-static Column* buildValuesColumn(LocalMemory* mem,
-                                 const WriteNode::NodeUpdateSpan& updates,
-                                 const std::unordered_map<const VarDecl*, ConstScanNode*>& varToScan) {
+Column* buildValuesColumn(LocalMemory* mem,
+                          const WriteNode::NodeUpdateSpan& updates,
+                          const std::unordered_map<const VarDecl*, ConstScanNode*>& varToScan) {
 
     const auto* firstLitExpr = static_cast<const LiteralExpr*>(updates[0]._propValueExpr);
     const Literal::Kind kind = firstLitExpr->getLiteral()->getKind();
@@ -287,7 +287,7 @@ static Column* buildValuesColumn(LocalMemory* mem,
     }
 }
 
-static EvaluatedType literalKindToEvaluatedType(Literal::Kind kind) {
+EvaluatedType literalKindToEvaluatedType(Literal::Kind kind) {
     switch (kind) {
         case Literal::Kind::INTEGER:   return EvaluatedType::Integer;
         case Literal::Kind::DOUBLE:    return EvaluatedType::Double;
@@ -296,6 +296,8 @@ static EvaluatedType literalKindToEvaluatedType(Literal::Kind kind) {
         case Literal::Kind::EMBEDDING: return EvaluatedType::Embedding;
         default:                       return EvaluatedType::Invalid;
     }
+}
+
 }
 
 void PlanOptimizer::rewriteConstWriteSources() {
