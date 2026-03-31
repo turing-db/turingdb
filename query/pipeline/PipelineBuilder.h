@@ -69,6 +69,7 @@ public:
         NamedColumn* _nodeIDCol {nullptr};
         NamedColumn* _valuesCol {nullptr};
     };
+
     ConstWriteSourceOutput addConstWriteSource(Column* nodeIDs, Column* values);
 
     PipelineBlockOutputInterface& addLambdaSource(const LambdaSourceProcessor::Callback& callback);

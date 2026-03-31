@@ -31,8 +31,8 @@ private:
 
     PipelineBlockOutputInterface _output;
 
-    Column* _nodeIDs;
-    Column* _values;
+    Column* _nodeIDs {nullptr};
+    Column* _values {nullptr};
     NamedColumn* _nodeIDOutputCol {nullptr};
     NamedColumn* _valuesOutputCol {nullptr};
 
