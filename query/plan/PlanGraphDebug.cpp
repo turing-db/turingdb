@@ -17,6 +17,7 @@
 #include "nodes/ScanNodesByLabelNode.h"
 #include "nodes/LoadGraphNode.h"
 #include "nodes/LoadGMLNode.h"
+#include "nodes/ConstScanNode.h"
 #include "nodes/ExprEvalNode.h"
 
 #include "stmt/OrderByItem.h"
@@ -42,6 +43,7 @@
 #include "FunctionInvocation.h"
 #include "Literal.h"
 
+#include "columns/ColumnIDs.h"
 #include "metadata/LabelSet.h"
 
 using namespace db;
@@ -198,6 +200,19 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             } break;
 
             case PlanGraphOpcode::SCAN_NODES: {
+            } break;
+
+            case PlanGraphOpcode::CONST_SCAN: {
+                const auto* n = dynamic_cast<ConstScanNode*>(node.get());
+                const auto* col = dynamic_cast<const ColumnNodeIDs*>(n->values());
+                if (col) {
+                    output << "        __values__ [";
+                    for (size_t j = 0; j < col->size(); j++) {
+                        if (j > 0) output << ", ";
+                        fmt::print(output, "{}", (*col)[j].getValue());
+                    }
+                    output << "]\n";
+                }
             } break;
 
             case PlanGraphOpcode::SCAN_NODES_BY_LABEL: {

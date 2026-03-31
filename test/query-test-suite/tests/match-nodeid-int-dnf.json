@@ -3,7 +3,7 @@
     "graph": "simpledb",
     "query": "MATCH (n) WHERE n = 10 OR n = 11 RETURN n.name",
     "expect": {
-        "plan": "flowchart TD\n    0[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    1[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    3[\"`\n        __CONST_SCAN__\n    `\"]\n    0-->1\n    1-->2\n    3-->0",
+        "plan": "flowchart TD\n    0[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    1[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    3[\"`\n        __CONST_SCAN__\n        __values__ [10, 11]\n    `\"]\n    0-->1\n    1-->2\n    3-->0",
         "result": "n.name\nAnimals\nMartina",
         "resultJson": "{\"header\":{\"column_names\":[\"n.name\"],\"column_types\":[\"String\"]},\"data\":[[[\"Animals\",\"Martina\"]]]}"
     },
