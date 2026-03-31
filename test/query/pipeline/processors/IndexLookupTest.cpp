@@ -4,6 +4,7 @@
 
 #include "columns/AllowedKinds.h"
 #include "iterators/ChunkConfig.h"
+#include "metadata/PropertyType.h"
 #include "processors/ProcessorTester.h"
 #include "processors/IndexLookupProcessor.h"
 #include "processors/LambdaProcessor.h"
@@ -25,6 +26,7 @@ class IndexLookupTest : public ProcessorTester {
 public:
     void initialize() override {
         ProcessorTester::initialize();
+        _graph = _env->getSystemManager().createGraph("default");
         _graph = _env->getSystemManager().createGraph("simpledb");
         SimpleGraph::createSimpleGraph(_graph);
     }
@@ -156,6 +158,33 @@ TEST_F(IndexLookupTest, pipelineLambdaSourceThenIntLookup) {
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(executed);
+}
+
+TEST_F(IndexLookupTest, intLookupThenExpand) {
+    auto [transaction, view, reader] = readGraph();
+
+    const PropertyType frenchPropType =
+        view.metadata().propTypes().get("isFrench").value();
+
+    PropertyHashIndex<types::Bool, NodeID> ageIndex("french_idx", frenchPropType._id);
+    ageIndex.init(view);
+
+    using ColumnBools = ColumnVector<types::Bool::Primitive>;
+    ColumnBools trueThenFalse {true, false};
+    auto& scanOutput = _builder->addConstScan(&trueThenFalse);
+
+    // Extract the age property from the source node
+    PipelineValuesOutputInterface& propOutput =
+        _builder->addGetNodeProperties<types::Int64>(frenchPropType);
+    const ColumnTag ageTag = propOutput.getValues()->getTag();
+    NamedColumn* values = propOutput.getDataframe()->getColumn(ageTag);
+    propOutput.setValues(values);
+
+    // Look up all nodes whose age matches the extracted value
+    const PipelineValuesOutputInterface& lookupOutput =
+        _builder->addIndexLookup<types::Int64::Primitive, NodeID>(&ageIndex);
+    
+    const ColumnTag resultTag = lookupOutput.getValues()->getTag();
 }
 
 TEST_F(IndexLookupTest, pipelineLambdaSourceThenStringLookup) {
