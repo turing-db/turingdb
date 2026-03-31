@@ -560,8 +560,12 @@ PipelineOutputInterface* PipelineGenerator::translateScanNodesByLabelNode(ScanNo
 }
 
 PipelineOutputInterface* PipelineGenerator::translateConstScanNode(ConstScanNode* node) {
+    const VarDecl* var = node->var();
+    bioassert(var, "Invalid variable declaration");
     Column* values = node->values();
-    _builder.addConstScan(values);
+    const PipelineValuesOutputInterface& output = _builder.addConstScan(values);
+    const NamedColumn* outputColumn = output.getValues();
+    _declToColumn[var] = outputColumn->getTag();
     return _builder.getPendingOutputInterface();
 }
 
@@ -1853,6 +1857,8 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
                 const EntityOutputStream nodeStream =
                     EntityOutputStream::createNodeStream(nodeTag);
 
+                _declToColumn[entityDecl] = nodeTag;
+
                 _builder.getPendingOutputInterface()->setStream(nodeStream);
             };
             PropertyTypeDispatcher {propType}.execute(process);
@@ -1877,6 +1883,7 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
         }
         break;
     }
+
 
     return _builder.getPendingOutputInterface();
 }
