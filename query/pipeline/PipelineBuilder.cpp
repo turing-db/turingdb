@@ -52,6 +52,7 @@
 #include "processors/ShowVectorIndexesProcessor.h"
 #include "processors/InstallExtensionProcessor.h"
 #include "processors/PathExplorerProcessor.h"
+#include "processors/ConstWriteSourceProcessor.h"
 
 #include "interfaces/PipelineBlockOutputInterface.h"
 #include "interfaces/PipelineEdgeInputInterface.h"
@@ -860,6 +861,38 @@ PipelineValuesOutputInterface& PipelineBuilder::addConstScan(Column* values) {
     _pendingOutput.updateInterface(&outValues);
     _lastProc = proc;
     return outValues;
+}
+
+PipelineBuilder::ConstWriteSourceOutput PipelineBuilder::addConstWriteSource(Column* nodeIDs,
+                                                                             Column* values) {
+    auto* proc = ConstWriteSourceProcessor::create(_pipeline, nodeIDs, values);
+    PipelineBlockOutputInterface& out = proc->output();
+
+    // Allocate NodeID output column
+    NamedColumn* nodeIDCol = allocColumn<ColumnNodeIDs>(out.getDataframe());
+
+    // Allocate values output column (dispatch on input type)
+    NamedColumn* valuesCol {nullptr};
+    {
+        using Types = WriteProcessorPropertyTypes;
+        using Dispatcher =
+            ColumnSingleDispatcher<Types::AllowedVector, AllocOutputColumn, Types::ExcludedVector>;
+        AllocOutputColumn allocator {._builder = this,
+                                     ._outputDF = out.getDataframe(),
+                                     ._newCol = valuesCol};
+        Dispatcher::dispatch(values, allocator);
+    }
+
+    proc->_nodeIDOutputCol = nodeIDCol;
+    proc->_valuesOutputCol = valuesCol;
+
+    // Set stream as a node stream
+    const EntityOutputStream stream = EntityOutputStream::createNodeStream(nodeIDCol->getTag());
+    out.setStream(stream);
+
+    _pendingOutput.updateInterface(&out);
+    _lastProc = proc;
+    return {nodeIDCol, valuesCol};
 }
 
 PipelineValueOutputInterface& PipelineBuilder::addLoadGraph(std::string_view graphName) {

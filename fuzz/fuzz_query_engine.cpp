@@ -105,7 +105,7 @@ static int fuzzOne(const char* data, size_t size) {
 
     // Optimize
     db::LocalMemory mem;
-    db::PlanOptimizer planOpt(&planGraph, view, &mem);
+    db::PlanOptimizer planOpt(&planGraph, view, &mem, &ast);
     try {
         planOpt.optimize();
     } catch (const db::CompilerException&) {

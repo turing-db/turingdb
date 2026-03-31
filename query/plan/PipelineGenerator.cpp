@@ -86,6 +86,7 @@
 #include "nodes/FuncEvalNode.h"
 #include "nodes/PathExplorerNode.h"
 #include "nodes/ConstScanNode.h"
+#include "nodes/ConstWriteSourceNode.h"
 
 #include "TranslateJoinHelpers.h"
 
@@ -326,6 +327,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateConstScanNode(static_cast<ConstScanNode*>(node));
         break;
 
+        case PlanGraphOpcode::CONST_WRITE_SOURCE:
+            return translateConstWriteSourceNode(static_cast<ConstWriteSourceNode*>(node));
+        break;
+
         case PlanGraphOpcode::GET_OUT_EDGES:
             return translateGetOutEdgesNode(static_cast<GetOutEdgesNode*>(node));
         break;
@@ -544,6 +549,16 @@ PipelineOutputInterface* PipelineGenerator::translateScanNodesByLabelNode(ScanNo
 PipelineOutputInterface* PipelineGenerator::translateConstScanNode(ConstScanNode* node) {
     Column* values = node->values();
     _builder.addConstScan(values);
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateConstWriteSourceNode(ConstWriteSourceNode* node) {
+    auto [nodeIDCol, valuesCol] = _builder.addConstWriteSource(node->nodeIDs(),
+                                                               node->values());
+
+    _declToColumn[node->nodeIDDecl()] = nodeIDCol->getTag();
+    _declToColumn[node->valuesDecl()] = valuesCol->getTag();
+
     return _builder.getPendingOutputInterface();
 }
 

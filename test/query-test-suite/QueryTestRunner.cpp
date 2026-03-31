@@ -301,7 +301,7 @@ void generatePlanGraph(std::string_view query,
     db::PlanGraph& planGraph = planGen.getPlanGraph();
 
     db::LocalMemory mem;
-    db::PlanOptimizer planOpt(&planGraph, view, &mem);
+    db::PlanOptimizer planOpt(&planGraph, view, &mem, &ast);
     planOpt.optimize();
 
     db::PlanGraphDebug::dumpMermaidContent(out, view, planGraph);

@@ -18,6 +18,7 @@
 #include "nodes/LoadGraphNode.h"
 #include "nodes/LoadGMLNode.h"
 #include "nodes/ConstScanNode.h"
+#include "nodes/ConstWriteSourceNode.h"
 #include "nodes/ExprEvalNode.h"
 
 #include "stmt/OrderByItem.h"
@@ -212,6 +213,14 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                         fmt::print(output, "{}", (*col)[j].getValue());
                     }
                     output << "]\n";
+                }
+            } break;
+
+            case PlanGraphOpcode::CONST_WRITE_SOURCE: {
+                const auto* n = dynamic_cast<ConstWriteSourceNode*>(node.get());
+                const auto* col = dynamic_cast<const ColumnNodeIDs*>(n->nodeIDs());
+                if (col) {
+                    fmt::print(output, "        __nodeIDs__ n={}\n", col->size());
                 }
             } break;
 
