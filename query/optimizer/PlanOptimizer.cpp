@@ -510,6 +510,9 @@ void PlanOptimizer::rewritePropertyFilterWithIndex() {
 void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
     std::vector<PlanGraphNode*> roots;
     _plan->getRoots(roots);
+
+    // Vector to store literal values for lookups
+    std::vector<const LiteralExpr*> lookupValueLiterals;
     for (PlanGraphNode* root : roots) {
         auto* scanNodes = dynamic_cast<ScanNodesNode*>(root);
         if (!scanNodes) {
@@ -570,7 +573,7 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
             // Walk down the left side of any OR chain to find the first leaf equality,
             // from which we extract the property expression used to "anchor" the full
             // chain i.e. assert that all other expressions are on the same property.
-            // Since all we need to assertis that all property expressions are on the same
+            // Since all we need to assert is that all property expressions are on the same
             // property, we can chose any expresion (here the leftmost) as the "anchor".
             const BinaryExpr* leafExpr = binExpr;
             while (leafExpr->getOperator() == BinaryOperator::Or) {
@@ -605,7 +608,7 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
         // Traverse the expression tree, asserting that all property expressions are the
         // same as @ref propExpr, and that all constraint values are literals.
         // Store the literal values into @ref lookupValueLiterals.
-        std::vector<const LiteralExpr*> lookupValueLiterals;
+        lookupValueLiterals.clear();
         if (!ExprUtils::collectFromHomogeneousBinaryChain<ExprUtils::PropertyEqualsOR>(
                 firstPredicate, propExpr, lookupValueLiterals)) {
             continue;
@@ -639,9 +642,6 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
         return nullptr;
     }
 
-    const Literal* lit = litExprs.front()->getLiteral();
-    bioassert(lit, "Null literal.");
-
     const std::string_view propName = propExpr->getPropName();
     const GraphMetadata& md = _view.metadata();
     const PropertyTypeMap& props = md.propTypes();
@@ -666,9 +666,13 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
 
     // Ensure that all the literals are the same type. This should be guaranteed by the
     // analyzer (since they are being assigned to the same property), but check to be sure
+    const Literal* lit = litExprs.front()->getLiteral();
+    bioassert(lit, "Null literal.");
+
     const EvaluatedType type = litExprs.front()->getType();
     {
         const auto sametype = [type](const LiteralExpr* x) {
+            bioassert(x, "Null literal");
             return x->getType() == type;
         };
 

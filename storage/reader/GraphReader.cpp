@@ -1,5 +1,7 @@
 #include "GraphReader.h"
 
+#include <algorithm>
+
 #include "DataPart.h"
 #include "ID.h"
 #include "NodeContainer.h"
@@ -9,7 +11,6 @@
 #include "properties/PropertyManager.h"
 
 #include "BioAssert.h"
-#include <algorithm>
 
 using namespace db;
 
