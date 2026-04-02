@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.labels() YIELD id AS l CALL db.propertyTypes() YIELD id AS p WHERE l = p RETURN count(*)",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | CALL db.labels() YIELD id AS l CALL db.propertyTypes() YIELD id AS p WHERE l = p RETURN count(*)\n       |                                                                            ^^^^^\n-------* Operands are not valid or compatible types: 'Label' and 'PropertyType'",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CALL db.labels() YIELD id AS l CALL db.propertyTypes() YIELD id AS p WHERE l = p RETURN count(*)\n       |                                                                            ^^^^^\n-------* Operands are not valid or compatible types: 'Label' and 'PropertyType'",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CALL db.labels() YIELD id AS l CALL db.propertyTypes() YIELD id AS p WHERE l = p RETURN count(*)\\n       |                                                                            ^^^^^\\n-------* Operands are not valid or compatible types: 'Label' and 'PropertyType'\"}"
+  },
+  "tags": [
+    "call",
+    "yield",
+    "where",
+    "procedure",
+    "issue-549"
+  ],
+  "write-required": false
+}
