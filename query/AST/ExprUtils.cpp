@@ -3,7 +3,6 @@
 #include "Literal.h"
 #include "expr/BinaryExpr.h"
 #include "expr/Operators.h"
-#include "expr/SymbolExpr.h"
 
 using namespace db;
 

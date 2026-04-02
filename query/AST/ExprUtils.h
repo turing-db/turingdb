@@ -4,7 +4,6 @@
 
 #include "ID.h"
 #include "Literal.h"
-#include "columns/ColumnVector.h"
 #include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "expr/LiteralExpr.h"
@@ -41,6 +40,7 @@ public:
     struct PropertyEqualsOR;
 };
 
+/// Extract NodeIDs from a chain of n = ID0 OR n = ID1 OR ...
 struct ExprUtils::NodeIDEqualsOR {
     using ValidatorType = const VarDecl*;
 
@@ -85,6 +85,7 @@ struct ExprUtils::NodeIDEqualsOR {
     }
 };
 
+/// Extract literals from a chain of x.prop = LIT0 OR x.prop = LIT1 OR ...
 struct ExprUtils::PropertyEqualsOR {
     using ValidatorType = const PropertyExpr*;
 
@@ -135,5 +136,4 @@ struct ExprUtils::PropertyEqualsOR {
         return true;
     }
 };
-
 }
