@@ -2,6 +2,7 @@
 
 #include <set>
 #include <string>
+#include <string_view>
 
 #include "TuringDB.h"
 #include "Graph.h"
@@ -801,6 +802,65 @@ TEST_F(ConstScanOptTest, constWriteSourceCartesianOverlap) {
             }
         });
         ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(ConstScanOptTest, nodeIndexUsedSimple) {
+    SystemManager& sysMan = _env->getSystemManager();
+    const QueryConfig& config = _db->getDefaultQueryConfig();
+
+    constexpr auto nocallback = [](const Dataframe*) {};
+
+    newChange();
+    {
+        constexpr std::string_view createIndex = "CREATE INDEX myindex FOR (n) ON n.idx";
+        TestQueryInterpreter interp(&sysMan, _graphName, &config);
+        interp.execute(createIndex, _currentChange, nocallback);
+    }
+    submitCurrentChange();
+
+    { // Cases where the optimisation should take place
+        auto genQueries = []() constexpr -> std::array<std::string_view, 5> {
+            std::array<std::string_view, 5> queries;
+
+            queries[0] = "MATCH (n) WHERE n.idx = 10 RETURN n";
+            queries[1] = "MATCH (n) WHERE n.idx = 10 OR n.idx = 100 RETURN n";
+            queries[2] = "MATCH (n) WHERE n.idx = 10 OR n.idx = 100 OR n.idx = 1250 RETURN n";
+            queries[3] = "MATCH (n) WHERE n.idx = 10 OR n.idx = 100 OR n.idx = 1250 OR n.idx = 9 RETURN n";
+            queries[4] = "MATCH (n) WHERE n.idx = 10 OR n.idx = 100 OR n.idx = 1250 OR n.idx = 9 OR n.idx = 10 RETURN n";
+            return queries;
+        };
+
+        constexpr auto queries = genQueries();
+        for (const auto query : queries) {
+            TestQueryInterpreter interp(&sysMan, _graphName, &config);
+            interp.execute(query, _currentChange, nocallback);
+
+            EXPECT_TRUE(interp.planHasOpcode(PlanGraphOpcode::CONST_SCAN));
+            EXPECT_TRUE(interp.planHasOpcode(PlanGraphOpcode::INDEX_LOOKUP));
+        }
+    }
+
+    { // Cases where the optimisation should not take place
+        auto genQueries = []() constexpr -> std::array<std::string_view, 5> {
+            std::array<std::string_view, 5> queries;
+
+            queries[0] = "MATCH (n) RETURN n";
+            queries[1] = "MATCH (n) WHERE n.idx = 10 OR NOT n.idx = 1 RETURN n";
+            queries[2] = "MATCH (n) WHERE n.idx = 10 AND n.idx = 20 RETURN n";
+            queries[3] = "MATCH (n) WHERE n.idx = 10 AND NOT n.idx = 20 RETURN n";
+            queries[4] = "MATCH (n) WHERE n.idx = 19 OR n.idx <> 20 RETURN n";
+            return queries;
+        };
+
+        constexpr auto queries = genQueries();
+        for (const auto query : queries) {
+            TestQueryInterpreter interp(&sysMan, _graphName, &config);
+            interp.execute(query, _currentChange, nocallback);
+
+            EXPECT_FALSE(interp.planHasOpcode(PlanGraphOpcode::CONST_SCAN));
+            EXPECT_FALSE(interp.planHasOpcode(PlanGraphOpcode::INDEX_LOOKUP));
+        }
     }
 }
 
