@@ -51,18 +51,29 @@ void LabelsProcedure::execute(ProcedureState* proc) {
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
-            data._it = std::make_unique<ScanLabelsChunkWriter>(
-                view.metadata().labels());
-            data._it->setIDs(idsCol);
-            data._it->setNames(namesCol);
+            data._it = std::make_unique<ScanLabelsChunkWriter>(view.metadata().labels());
+
+            if (idsCol) {
+                data._it->setIDs(idsCol);
+            }
+
+            if (namesCol) {
+                data._it->setNames(namesCol);
+            }
         }
         break;
 
-        case ProcedureState::Step::RESET:
+        case ProcedureState::Step::RESET: {
             data._it->reset();
+        }
         break;
 
         case ProcedureState::Step::EXECUTE: {
+            if (!idsCol && !namesCol) {
+                proc->finish();
+                break;
+            }
+
             data._it->fill(proc->getContext()->getChunkSize());
 
             if (!data._it->isValid()) {
