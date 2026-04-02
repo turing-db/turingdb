@@ -8,8 +8,6 @@
 #include "PipelineBuilder.h"
 #include "views/GraphView.h"
 
-#include "nodes/IndexLookupNode.h"
-
 namespace db {
 
 class LocalMemory;

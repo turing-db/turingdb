@@ -53,6 +53,7 @@ public:
 
     std::string_view name() const { return _name; }
 
+    /// Struct to track state in calls to @ref boundedQuery
     struct QueryState {
         void reset() {
             _keyIndex = 0;

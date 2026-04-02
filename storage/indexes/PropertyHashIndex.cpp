@@ -108,8 +108,9 @@ void PropertyHashIndex<P, I>::query(const ColumnVector<PropertyPrimitive>* input
         const IDContainer& matches = findIt->second;
         const size_t sz = matches.size();
 
+        result->resize(sz);
         for (size_t i = 0; i < sz; i++) {
-            result->push_back(matches[i]);
+            result->operator[](i) = matches[i];
         }
     }
 }
@@ -130,8 +131,9 @@ void PropertyHashIndex<P, I>::query(const ColumnConst<PropertyPrimitive>* input,
     const IDContainer& matches = findIt->second;
     const size_t sz = matches.size();
 
+    result->resize(sz);
     for (size_t i = 0; i < sz; i++) {
-        result->push_back(matches[i]);
+        result->operator[](i) = matches[i];
     }
 }
 
@@ -163,6 +165,7 @@ void PropertyHashIndex<P, I>::boundedQuery(const ColumnVector<PropertyPrimitive>
                                            size_t limit) const {
     result->clear();
     indices->clear();
+
     size_t remaining = limit;
 
     // Start the query where it last left off: stored in the @param state.

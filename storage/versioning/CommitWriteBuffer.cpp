@@ -5,8 +5,6 @@
 
 #include <range/v3/view/reverse.hpp>
 
-#include <spdlog/spdlog.h>
-
 #include "Graph.h"
 #include "ID.h"
 #include "columns/ColumnVector.h"
@@ -16,7 +14,6 @@
 #include "reader/GraphReader.h"
 #include "versioning/MetadataRebaser.h"
 #include "versioning/EntityIDRebaser.h"
-#include "views/PropertyView.h"
 #include "writers/DataPartBuilder.h"
 #include "Tombstones.h"
 

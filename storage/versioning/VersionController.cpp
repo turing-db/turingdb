@@ -244,7 +244,6 @@ WeakArc<Index> VersionController::createEdgePropertyIndex(std::string_view index
     return _indexManager.createEdgeIndex<P>(indexName, ptID);
 }
 
-
 namespace db {
 template WeakArc<Index> VersionController::createNodePropertyIndex<types::Int64>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> VersionController::createNodePropertyIndex<types::UInt64>(std::string_view indexName, PropertyTypeID ptID);
