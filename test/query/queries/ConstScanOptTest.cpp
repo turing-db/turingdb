@@ -812,7 +812,15 @@ TEST_F(ConstScanOptTest, nodeIndexUsedSimple) {
     constexpr auto nocallback = [](const Dataframe*) {};
 
     newChange();
-    {
+    { // Create a new property, just for testing
+        constexpr std::string_view setQuery = "MATCH (n) SET n.new = true";
+        TestQueryInterpreter interp(&sysMan, _graphName, &config);
+        interp.execute(setQuery, _currentChange, nocallback);
+    }
+    submitCurrentChange();
+
+    newChange();
+    { // Create the index
         constexpr std::string_view createIndex = "CREATE INDEX myindex FOR (n) ON n.idx";
         TestQueryInterpreter interp(&sysMan, _graphName, &config);
         interp.execute(createIndex, _currentChange, nocallback);
@@ -846,7 +854,7 @@ TEST_F(ConstScanOptTest, nodeIndexUsedSimple) {
             std::array<std::string_view, 5> queries;
 
             queries[0] = "MATCH (n) RETURN n";
-            queries[1] = "MATCH (n) WHERE n.idx = 10 OR NOT n.idx = 1 RETURN n";
+            queries[1] = "MATCH (n) WHERE n.idx = 10 OR n.new = true RETURN n";
             queries[2] = "MATCH (n) WHERE n.idx = 10 AND n.idx = 20 RETURN n";
             queries[3] = "MATCH (n) WHERE n.idx = 10 AND NOT n.idx = 20 RETURN n";
             queries[4] = "MATCH (n) WHERE n.idx = 19 OR n.idx <> 20 RETURN n";
