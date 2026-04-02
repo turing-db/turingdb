@@ -1,6 +1,7 @@
 #include "PlanOptimizer.h"
 
 #include <algorithm>
+#include <iterator>
 #include <string_view>
 
 #include "LocalMemory.h"
@@ -43,204 +44,6 @@
 #include "columns/Column.h"
 
 using namespace db;
-
-IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
-                                               const std::vector<const LiteralExpr*>& litExprs) {
-    if (litExprs.empty()) {
-        return nullptr;
-    }
-
-    const Literal* lit = litExprs.front()->getLiteral();
-    bioassert(lit, "Null literal.");
-
-    const std::string_view propName = propExpr->getPropName();
-    const GraphMetadata& md = _view.metadata();
-    const PropertyTypeMap& props = md.propTypes();
-    const std::optional<PropertyType> maybeProp = props.get(propName);
-    bioassert(maybeProp.has_value(), "Invalid property to index.");
-    const PropertyType prop = *maybeProp;
-    const PropertyTypeID propID = prop._id;
-
-    const Index* matchingIndex = nullptr;
-    // TODO: Check if there is more than one index
-    for (const WeakArc<Index>& index : _view.indexes()) {
-        const PropertyTypeID indexedProp = index->property();
-        if (propID == indexedProp) {
-            matchingIndex = index.get();
-            break;
-        }
-    }
-
-    if (!matchingIndex) {
-        return nullptr;
-    }
-
-    // Ensure that all the literals are the same type. This should be guaranteed by the
-    // analyzer (since they are being assigned to the same property), but check to be sure
-    const EvaluatedType type = litExprs.front()->getType();
-    {
-        const auto sametype = [type](const LiteralExpr* x) {
-            return x->getType() == type;
-        };
-
-        const bool allSameType = std::ranges::all_of(litExprs, sametype);
-        if (!allSameType) {
-            return nullptr;
-        }
-    }
-
-    // Column* queryCol {nullptr};
-    switch (type) {
-        case EvaluatedType::Integer: {
-            const ValueType vt = ValueType::Int64;
-            auto* queryCol = _mem->alloc<ColumnVector<types::Int64::Primitive>>();
-            const auto litToVal = [&](const LiteralExpr* lit) -> types::Int64::Primitive {
-                auto* typedLit = dynamic_cast<const IntegerLiteral*>(lit->getLiteral());
-                bioassert(typedLit, "Invalid literal."); // TODO: try and remove this
-                const types::Int64::Primitive value = typedLit->getValue();
-                return value;
-            };
-
-            auto& raw = queryCol->getRaw();
-            std::ranges::transform(litExprs, std::back_inserter(raw), litToVal);
-
-            auto* queryNode = _plan->create<ConstScanNode>(queryCol, propExpr->getExprVarDecl());
-
-            auto* node =
-                _plan->newOut<IndexLookupNode>(queryNode, matchingIndex, propExpr, vt);
-            return node;
-        }
-        break;
-
-        case EvaluatedType::Double:
-        case EvaluatedType::String:
-        case EvaluatedType::Bool:
-        case EvaluatedType::Embedding:
-
-        case EvaluatedType::Invalid:
-        case EvaluatedType::NodePattern:
-        case EvaluatedType::EdgePattern:
-        case EvaluatedType::GraphPath:
-        case EvaluatedType::Null:
-        case EvaluatedType::Char:
-        case EvaluatedType::List:
-        case EvaluatedType::Map:
-        case EvaluatedType::Wildcard:
-        case EvaluatedType::Tuple:
-        case EvaluatedType::ValueType:
-        case EvaluatedType::StringTable:
-        case EvaluatedType::Label:
-        case EvaluatedType::LabelSet:
-        case EvaluatedType::PropertyType:
-        case EvaluatedType::EdgeType:
-        case EvaluatedType::_SIZE:
-            return nullptr;
-        break;
-    }
-
-    /*
-    switch (litExpr->getType()) {
-        case EvaluatedType::Integer: {
-            const ValueType vt = ValueType::Int64;
-            const auto* intLit = static_cast<const IntegerLiteral*>(litExpr->getLiteral());
-
-            const int64_t intVal = intLit->getValue();
-            auto* queryCol = _mem->alloc<ColumnVector<types::Int64::Primitive>>(1, intVal);
-
-            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
-
-            auto* node =
-                _plan->newOut<IndexLookupNode>(queryNode, matchingIndex, propExpr, vt);
-            return node;
-        }
-        break;
-
-        case EvaluatedType::Double: {
-            const ValueType vt = ValueType::Double;
-            const auto* dblLit =
-                static_cast<const DoubleLiteral*>(litExpr->getLiteral());
-
-            const double dblVal = dblLit->getValue();
-            auto* queryCol =
-                _mem->alloc<ColumnVector<types::Double::Primitive>>(1, dblVal);
-
-            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
-
-            auto* node = _plan->newOut<IndexLookupNode>(queryNode, matchingIndex,
-                                                        propExpr, vt);
-            return node;
-        }
-        break;
-
-        case EvaluatedType::String: {
-            const ValueType vt = ValueType::String;
-            const auto* strLit = static_cast<const StringLiteral*>(litExpr->getLiteral());
-
-            const std::string_view strVal = strLit->getValue();
-            auto* queryCol = _mem->alloc<ColumnVector<types::String::Primitive>>(1, strVal);
-
-            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
-
-            auto* node = _plan->newOut<IndexLookupNode>(queryNode, matchingIndex,
-                                                        propExpr, vt, litExpr);
-            return node;
-        }
-        break;
-
-        case EvaluatedType::Bool: {
-            const ValueType vt = ValueType::Bool;
-            const auto* boolLit = static_cast<const BoolLiteral*>(litExpr->getLiteral());
-
-            const bool boolVal = boolLit->getValue();
-            auto* queryCol =
-                _mem->alloc<ColumnVector<types::Bool::Primitive>>(1, boolVal);
-
-            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
-
-            auto* node =
-                _plan->newOut<IndexLookupNode>(queryNode, matchingIndex, propExpr, vt, litExpr);
-            return node;
-        }
-        break;
-
-        case EvaluatedType::Embedding: {
-            const ValueType vt = ValueType::Embedding;
-            const auto* embLit = static_cast<const EmbeddingLiteral*>(litExpr->getLiteral());
-
-            const std::span<const float> embVal = embLit->getValue();
-            auto* queryCol = _mem->alloc<ColumnVector<types::Embedding::Primitive>>(1, embVal);
-
-            auto* queryNode = _plan->create<ConstScanNode>(queryCol);
-
-            auto* node = _plan->newOut<IndexLookupNode>(queryNode, matchingIndex,
-                                                        propExpr, vt, litExpr);
-            return node;
-        }
-        break;
-
-        case EvaluatedType::Null:
-        case EvaluatedType::Char:
-        case EvaluatedType::List:
-        case EvaluatedType::Map:
-        case EvaluatedType::Wildcard:
-        case EvaluatedType::Tuple:
-        case EvaluatedType::ValueType:
-        case EvaluatedType::StringTable:
-        case EvaluatedType::Invalid:
-        case EvaluatedType::NodePattern:
-        case EvaluatedType::EdgePattern:
-        case EvaluatedType::GraphPath:
-        case EvaluatedType::_SIZE:
-        case EvaluatedType::Label:
-        case EvaluatedType::LabelSet:
-        case EvaluatedType::PropertyType:
-        case EvaluatedType::EdgeType:
-            break;
-    }
-    */
-
-    return nullptr;
-}
 
 PlanOptimizer::PlanOptimizer(PlanGraph* plan,
                              GraphView view,
@@ -762,7 +565,7 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
             const auto* binExpr = dynamic_cast<const BinaryExpr*>(firstPredicate);
             if (!binExpr) {
                 // Can occur with Boolean props as predicates e.g. NOT isFrench, but we
-                // cannot use index here
+                // cannot use index in such a case
                 return;
             }
 
@@ -770,7 +573,7 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
             // from which we extract the property expression used to "anchor" the full
             // chain i.e. assert that all other expressions are on the same property.
             // Since all we need to assertis that all property expressions are on the same
-            // property, we can chose any expresion (here the leftmos) as the "anchor".
+            // property, we can chose any expresion (here the leftmost) as the "anchor".
             const BinaryExpr* leafExpr = binExpr;
             while (leafExpr->getOperator() == BinaryOperator::Or) {
                 const auto* lhsBin = dynamic_cast<const BinaryExpr*>(leafExpr->getLHS());
@@ -832,3 +635,123 @@ void PlanOptimizer::rewriteNodePropertyFilterWithIndex() {
     }
 }
 
+IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
+                                               const std::vector<const LiteralExpr*>& litExprs) {
+    if (litExprs.empty()) {
+        return nullptr;
+    }
+
+    const Literal* lit = litExprs.front()->getLiteral();
+    bioassert(lit, "Null literal.");
+
+    const std::string_view propName = propExpr->getPropName();
+    const GraphMetadata& md = _view.metadata();
+    const PropertyTypeMap& props = md.propTypes();
+    const std::optional<PropertyType> maybeProp = props.get(propName);
+    bioassert(maybeProp.has_value(), "Invalid property to index.");
+    const PropertyType prop = *maybeProp;
+    const PropertyTypeID propID = prop._id;
+
+    const Index* matchingIndex = nullptr;
+    // TODO: Check if there is more than one index
+    for (const WeakArc<Index>& index : _view.indexes()) {
+        const PropertyTypeID indexedProp = index->property();
+        if (propID == indexedProp) {
+            matchingIndex = index.get();
+            break;
+        }
+    }
+
+    if (!matchingIndex) {
+        return nullptr;
+    }
+
+    // Ensure that all the literals are the same type. This should be guaranteed by the
+    // analyzer (since they are being assigned to the same property), but check to be sure
+    const EvaluatedType type = litExprs.front()->getType();
+    {
+        const auto sametype = [type](const LiteralExpr* x) {
+            return x->getType() == type;
+        };
+
+        const bool allSameType = std::ranges::all_of(litExprs, sametype);
+        if (!allSameType) {
+            return nullptr;
+        }
+    }
+
+    // Helper to convert literals into a column used to query the index,
+    // add a const scan to emit that column as input to the index,
+    // and add the index node itself. Returns the index node.
+    const auto addIndex = [&]<SupportedType PropertyType, typename LiteralType>(const ValueType valueType) -> IndexLookupNode* {
+        using PropertyPrimitive = typename PropertyType::Primitive;
+        using PropertyValueColumn = ColumnVector<PropertyPrimitive>;
+
+        // Allocate the query column
+        auto* queryCol = _mem->alloc<PropertyValueColumn>();
+
+        // Helper to convert a LiteralExpr* of known derived type (@param LiteralType)
+        // to its corresponding value of type @param PropertyPrimitive
+        const auto litToVal = [](const LiteralExpr* lit) -> PropertyPrimitive {
+            auto* typedLit = dynamic_cast<const LiteralType*>(lit->getLiteral());
+            bioassert(typedLit, "Invalid literal."); // TODO: try and remove this
+            const PropertyPrimitive value = typedLit->getValue();
+            return value;
+        };
+
+        std::vector<PropertyPrimitive>& raw = queryCol->getRaw();
+        // Generate the column of values from the literals
+        std::ranges::transform(litExprs, std::back_inserter(raw), litToVal);
+
+        // Add a const scan node which emits that column of literals
+        auto* queryNode = _plan->create<ConstScanNode>(queryCol, propExpr->getExprVarDecl());
+
+        // Wire up an index node, taking hte column of literals as its query to lookup
+        auto* indexNode = _plan->newOut<IndexLookupNode>(queryNode, matchingIndex, propExpr, valueType);
+
+        return indexNode;
+    };
+
+    switch (type) {
+        case EvaluatedType::Integer:
+            return addIndex.template operator()<types::Int64, IntegerLiteral>(ValueType::Int64);
+        break;
+
+        case EvaluatedType::Double:
+            return addIndex.template operator()<types::Double, DoubleLiteral>(ValueType::Double);
+        break;
+
+        case EvaluatedType::String:
+            return addIndex.template operator()<types::String, StringLiteral>(ValueType::String);
+        break;
+
+        case EvaluatedType::Bool:
+            return addIndex.template operator()<types::Bool, BoolLiteral>(ValueType::Bool);
+        break;
+
+        case EvaluatedType::Embedding:
+            return addIndex.template operator()<types::Embedding, EmbeddingLiteral>(ValueType::Embedding);
+        break;
+
+        case EvaluatedType::Invalid:
+        case EvaluatedType::NodePattern:
+        case EvaluatedType::EdgePattern:
+        case EvaluatedType::GraphPath:
+        case EvaluatedType::Null:
+        case EvaluatedType::Char:
+        case EvaluatedType::List:
+        case EvaluatedType::Map:
+        case EvaluatedType::Wildcard:
+        case EvaluatedType::Tuple:
+        case EvaluatedType::ValueType:
+        case EvaluatedType::StringTable:
+        case EvaluatedType::Label:
+        case EvaluatedType::LabelSet:
+        case EvaluatedType::PropertyType:
+        case EvaluatedType::EdgeType:
+        case EvaluatedType::_SIZE:
+            return nullptr;
+        break;
+    }
+    return nullptr;
+}
