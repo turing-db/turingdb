@@ -376,13 +376,13 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     const QualifiedName* qualifiedName = expr->getFullName();
 
     if (qualifiedName->size() != 2) {
-        const std::string error = fmt::format("Only length 2 property expressions are supported, not '{}'",
-                                              qualifiedName->size());
+        constexpr std::string_view error =
+            R"(Property expressions must have the form {variable}.{property name}.)";
         throwError(error, expr);
     }
 
-    const Symbol* varName = qualifiedName->get(0);
-    const Symbol* propName = qualifiedName->get(1);
+    const Symbol* varName = qualifiedName->front();
+    const Symbol* propName = qualifiedName->back();
 
     VarDecl* varDecl = _ctxt->getDecl(varName->getName());
     if (!varDecl) {

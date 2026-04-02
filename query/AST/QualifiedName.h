@@ -20,6 +20,9 @@ public:
 
     Symbol* get(size_t index) const { return _names[index]; }
 
+    Symbol* front() const { return _names.front(); }
+    Symbol* back() const { return _names.back(); }
+
     void addName(Symbol* symbol);
 
 private:
