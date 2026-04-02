@@ -563,9 +563,14 @@ PipelineOutputInterface* PipelineGenerator::translateConstScanNode(ConstScanNode
     const VarDecl* var = node->var();
     bioassert(var, "Invalid variable declaration");
     Column* values = node->values();
+
     const PipelineValuesOutputInterface& output = _builder.addConstScan(values);
+
+    // Update the var -> col map, so that the column produced by this node may be used in
+    // e.g. return projections
     const NamedColumn* outputColumn = output.getValues();
     _declToColumn[var] = outputColumn->getTag();
+
     return _builder.getPendingOutputInterface();
 }
 
@@ -1820,6 +1825,8 @@ PipelineOutputInterface* PipelineGenerator::translateOrderByNode(OrderByNode* no
 PipelineOutputInterface* PipelineGenerator::translateCreatePropertyIndexNode(CreatePropertyIndexNode* node) {
     const std::string_view indexName = node->indexName();
     const PropertyExpr* propExpr = node->propExpr();
+    bioassert(propExpr, "Invalid property expression.");
+
     const std::string_view propertyName = propExpr->getPropName();
     const bool isNodeIndex = node->entityKind() == IndexEntityKind::Node;
 
@@ -1843,7 +1850,6 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
     bioassert(entityDecl, "Null entity.");
 
     const ValueType propType = node->valueType();
-
     const EvaluatedType evaluatedType = entityDecl->getType();
 
     switch (evaluatedType) {

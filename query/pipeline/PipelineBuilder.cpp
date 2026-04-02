@@ -812,7 +812,7 @@ struct db::AllocOutputColumn {
 };
 
 struct SetStream {
-    void operator()(const ColumnVector<NodeID>*) {
+    void operator()(const ColumnVector<NodeID>*) const {
         const EntityOutputStream stream = EntityOutputStream::createNodeStream(_tag);
         _out->setStream(stream);
     }
@@ -820,7 +820,7 @@ struct SetStream {
     // NOTE: If we support const edge scan, we need to set a node stream here
 
     template <typename T>
-    void operator()(const ColumnVector<T>*) {}
+    void operator()(const ColumnVector<T>*) const {}
 
     PipelineOutputInterface* _out {nullptr};
     ColumnTag _tag;
@@ -855,6 +855,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addConstScan(Column* values) {
     }
 
     { // Set the stream if we need to (e.g. a ConstScan of NodeIDs)
+        // NOTE: Currently does not set EdgeStream
         using Types = ConstScanTypes;
         using Dispatcher =
             ColumnSingleDispatcher<Types::Allowed, SetStream, Types::Excluded>;

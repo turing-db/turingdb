@@ -21,6 +21,7 @@ public:
 
 private:
     Column* _values {nullptr};
+    /// The var used to track VarDecl -> ColumnTag correspondence
     const VarDecl* _var {nullptr};
 };
 
