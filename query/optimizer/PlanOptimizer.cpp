@@ -1,6 +1,5 @@
 #include "PlanOptimizer.h"
 
-#include "LocalMemory.h"
 #include <algorithm>
 #include <string_view>
 
@@ -36,14 +35,12 @@
 #include "Literal.h"
 #include "Predicate.h"
 #include "Symbol.h"
-#include "decl/VarDecl.h"
 #include "decl/DeclContext.h"
 
 #include "columns/ColumnIDs.h"
 
 #include "BioAssert.h"
 #include "columns/Column.h"
-#include "columns/ColumnVector.h"
 
 using namespace db;
 
@@ -245,10 +242,14 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
     return nullptr;
 }
 
-PlanOptimizer::PlanOptimizer(PlanGraph* plan, GraphView view, LocalMemory* mem)
+PlanOptimizer::PlanOptimizer(PlanGraph* plan,
+                             GraphView view,
+                             LocalMemory* mem,
+                             CypherAST* ast)
     : _plan(plan),
-    _view(view),
-    _mem(mem)
+      _view(view),
+      _mem(mem),
+      _ast(ast)
 {
 }
 
@@ -260,6 +261,7 @@ void PlanOptimizer::optimize() {
 
     rewriteScanByLabels();
     rewriteScanByConstIDs();
+    rewriteConstWriteSources();
     rewriteNodePropertyFilterWithIndex();
 
     _plan->removeIsolatedNodes();
@@ -481,75 +483,6 @@ EvaluatedType literalKindToEvaluatedType(Literal::Kind kind) {
         default:
             return EvaluatedType::Invalid;
         break;
-    }
-}
-
-}
-
-PlanOptimizer::PlanOptimizer(PlanGraph* plan, GraphView view, LocalMemory* mem, CypherAST* ast)
-    : _plan(plan),
-    _view(view),
-    _mem(mem),
-    _ast(ast)
-{
-}
-
-PlanOptimizer::~PlanOptimizer() {
-}
-
-void PlanOptimizer::optimize() {
-    // Do some very simple plan rewriting
-
-    rewriteScanByLabels();
-    rewriteScanByConstIDs();
-    rewriteConstWriteSources();
-
-    _plan->removeIsolatedNodes();
-}
-
-void PlanOptimizer::rewriteScanByLabels() {
-    std::vector<PlanGraphNode*> roots;
-    _plan->getRoots(roots);
-
-    for (PlanGraphNode* root : roots) {
-        // === Check rewrite rule precondition === 
-        // We are looking for pairs:
-        // [root] ScanNodesNode --> NodeFilterNode (label, no predicates)
-        //
-        // We don't rewrite if ScanNodesNode has multiple successors
-        ScanNodesNode* scanNodes = dynamic_cast<ScanNodesNode*>(root);
-        if (!scanNodes) {
-            continue;
-        } 
-
-        const auto& scanNodesOutputs = scanNodes->outputs();
-        if (scanNodesOutputs.size() != 1) {
-            continue;
-        }
-
-        NodeFilterNode* filterNode = dynamic_cast<NodeFilterNode*>(scanNodesOutputs[0]);
-        if (!filterNode) {
-            continue;
-        }
-
-        // The filter node must have a label constraint and no predicates
-        const LabelSet& labelset = filterNode->getLabelConstraints();
-        if (labelset.empty() || !filterNode->getPredicates().empty()) {
-            continue;
-        }
-        
-        // === Rewrite ===
-        
-        // Create ScanNodesByLabel
-        ScanNodesByLabelNode* scanNodesByLabel = _plan->create<ScanNodesByLabelNode>(labelset);
-
-        // Connect ScanNodesByLabel to the successors of the filter node
-        for (PlanGraphNode* filterNodeNext : filterNode->outputs()) {
-            scanNodesByLabel->connectOut(filterNodeNext);
-        }
-        
-        scanNodes->clearOutputs();
-        filterNode->clearOutputs();
     }
 }
 
