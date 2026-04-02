@@ -7,7 +7,6 @@ namespace db {
 class PlanGraph;
 class LocalMemory;
 class CypherAST;
-template <typename Q, typename R>
 class IndexLookupNode;
 class PropertyExpr;
 class LiteralExpr;
