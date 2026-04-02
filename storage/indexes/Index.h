@@ -37,6 +37,9 @@ public:
     /**
      * @brief A generic interface to recieve a bounded number of results in @param result
      * from a stateful query.
+     * @detail Indices in @param indices are use to track correspondence between which
+     * rows in the @param query column produces which rows in the @ref result column.
+     * @param indices may be used in @ref MaterializeProcessor during the pipeline.
      */
     virtual void boundedQuery(const Column* query,
                               Column* result,

@@ -165,6 +165,7 @@ void PropertyHashIndex<P, I>::boundedQuery(const ColumnVector<PropertyPrimitive>
     indices->clear();
     size_t remaining = limit;
 
+    // Start the query where it last left off: stored in the @param state.
     size_t& keyOffset = state._keyIndex;
     size_t& valueOffset = state._valueIndex;
 
@@ -188,6 +189,7 @@ void PropertyHashIndex<P, I>::boundedQuery(const ColumnVector<PropertyPrimitive>
 
         for (size_t j = valueOffset; j < sz; j++) {
             if (remaining == 0) {
+                // We have reached the bound limit for this call: return
                 return;
             }
             const I id = matches[j];
