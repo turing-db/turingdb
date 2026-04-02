@@ -3,7 +3,6 @@
 #include <spdlog/fmt/bundled/core.h>
 #include <string_view>
 
-#include "BioAssert.h"
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
 #include "EdgePattern.h"
@@ -52,6 +51,7 @@
 
 #include "FunctionDecls.h"
 
+#include "BioAssert.h"
 #include "AnalyzeException.h"
 
 using namespace db;
@@ -496,79 +496,72 @@ void CypherAnalyzer::analyze(const InstallExtensionQuery* query) {
 }
 
 void CypherAnalyzer::analyze(const CreateNodePropertyIndexQuery* query) {
+    // CREATE INDEX _ FOR *(n)* ON n._
     const NodePattern* node = query->nodePattern();
     bioassert(node, "Failed to get node pattern.");
 
     const SymbolChain* labels = node->labels();
     const MapLiteral* properties = node->getProperties();
-
     const bool haveLabelConstraints = labels && !labels->empty();
     const bool havePropertyConstraints = properties && !properties->empty();
     if (haveLabelConstraints || havePropertyConstraints) {
         throwError("Constrained node indexes are not yet supported.", node);
     }
-
     PropertyExpr* propertyExpr = query->propertyExpr();
     bioassert(propertyExpr, "Failed to get property expression.");
 
-    // Register an empty decl for the node of the query
+    // Register an empty decl for the node of the query, so we can analyze the property
+    // expression. The decl cannot be used anywhere aside from the property expr, so an
+    // empty/invalid decl is fine.
     _exprAnalyzer->registerNodePatternDeclaration(node);
     _exprAnalyzer->analyzePropertyExpr(propertyExpr);
 
     const PropertyTypeMap& propTypes = _graphMetadata.propTypes();
-
     const std::string_view propName = propertyExpr->getPropName();
-
     const std::optional<PropertyType> maybePropType = propTypes.get(propName);
-
     if (!maybePropType) {
         const std::string err = fmt::format("Property {} to index does not exist.", propName);
         throwError(std::move(err), propertyExpr);
     }
 
     const PropertyType propType = *maybePropType;
-
     const GraphReader reader = _graphView.read();
-
     if (!reader.isNodeProperty(propType._id)) {
         throwError("Property is not a node property.", propertyExpr);
     }
 }
 
 void CypherAnalyzer::analyze(const CreateEdgePropertyIndexQuery* query) {
+    // CREATE INDEX _ FOR *[e]* ON e._
     const EdgePattern* edge = query->edgePattern();
     bioassert(edge, "Failed to get edge pattern.");
 
     const SymbolChain* types = edge->types();
     const MapLiteral* properties = edge->getProperties();
-
     const bool haveTypeConstraints = types && !types->empty();
     const bool havePropertyConstraints = properties && !properties->empty();
     if (haveTypeConstraints || havePropertyConstraints) {
         throwError("Constrained edge indexes are not yet supported.", edge);
     }
-
     PropertyExpr* propertyExpr = query->propertyExpr();
     bioassert(propertyExpr, "Failed to get property expression.");
 
+    // Register an empty decl for the edge of the query, so we can analyze the property
+    // expression. The decl cannot be used anywhere aside from the property expr, so an
+    // empty/invalid decl is fine.
     _exprAnalyzer->registerEdgePatternDeclaration(edge);
     _exprAnalyzer->analyzePropertyExpr(propertyExpr);
 
     const PropertyTypeMap& propTypes = _graphMetadata.propTypes();
-
     const std::string_view propName = propertyExpr->getPropName();
-
     const std::optional<PropertyType> maybePropType = propTypes.get(propName);
-
     if (!maybePropType) {
         const std::string err = fmt::format("Property {} to index does not exist.", propName);
         throwError(std::move(err), propertyExpr);
     }
 
     const PropertyType propType = *maybePropType;
-
     const GraphReader reader = _graphView.read();
-
     if (!reader.isEdgeProperty(propType._id)) {
         throwError("Property is not an edge property.", propertyExpr);
     }
