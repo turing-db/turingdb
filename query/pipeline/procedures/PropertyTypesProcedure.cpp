@@ -54,11 +54,19 @@ void PropertyTypesProcedure::execute(ProcedureState* proc) {
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
-            data._it = std::make_unique<ScanPropertyTypesChunkWriter>(
-                view.metadata().propTypes());
-            data._it->setPropertyTypes(idsCol);
-            data._it->setNames(namesCol);
-            data._it->setValueTypes(valueTypesCol);
+            data._it = std::make_unique<ScanPropertyTypesChunkWriter>(view.metadata().propTypes());
+
+            if (idsCol) {
+                data._it->setPropertyTypes(idsCol);
+            }
+
+            if (namesCol) {
+                data._it->setNames(namesCol);
+            }
+
+            if (valueTypesCol) {
+                data._it->setValueTypes(valueTypesCol);
+            }
         }
         break;
 
@@ -68,6 +76,11 @@ void PropertyTypesProcedure::execute(ProcedureState* proc) {
         break;
 
         case ProcedureState::Step::EXECUTE: {
+            if (!idsCol && !namesCol && !valueTypesCol) {
+                proc->finish();
+                break;
+            }
+
             data._it->fill(proc->getContext()->getChunkSize());
 
             if (!data._it->isValid()) {

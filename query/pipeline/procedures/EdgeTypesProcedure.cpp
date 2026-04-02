@@ -51,10 +51,15 @@ void EdgeTypesProcedure::execute(ProcedureState* proc) {
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
-            data._it = std::make_unique<ScanEdgeTypesChunkWriter>(
-                view.metadata().edgeTypes());
-            data._it->setIDs(idsCol);
-            data._it->setNames(namesCol);
+            data._it = std::make_unique<ScanEdgeTypesChunkWriter>(view.metadata().edgeTypes());
+
+            if (idsCol) {
+                data._it->setIDs(idsCol);
+            }
+
+            if (namesCol) {
+                data._it->setNames(namesCol);
+            }
         }
         break;
 
@@ -64,6 +69,11 @@ void EdgeTypesProcedure::execute(ProcedureState* proc) {
         break;
 
         case ProcedureState::Step::EXECUTE: {
+            if (!idsCol && !namesCol) {
+                proc->finish();
+                break;
+            }
+
             data._it->fill(proc->getContext()->getChunkSize());
 
             if (!data._it->isValid()) {
