@@ -76,13 +76,11 @@ public:
 
     template <SupportedType P>
     [[nodiscard]] WeakArc<Index> createNodePropertyIndex(std::string_view indexName,
-                                                         PropertyTypeID ptID,
-                                                         LabelSetID lblset);
+                                                         PropertyTypeID ptID);
 
     template <SupportedType P>
     [[nodiscard]] WeakArc<Index> createEdgePropertyIndex(std::string_view indexName,
-                                                         PropertyTypeID ptID,
-                                                         EdgeTypeID edgeType);
+                                                         PropertyTypeID ptID);
 
 private:
     friend GraphLoader;

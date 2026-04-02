@@ -147,7 +147,9 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)) {
+                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::Embedding, EvaluatedType::Null)
+            ) {
                 break;
             }
 

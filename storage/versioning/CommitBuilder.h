@@ -60,13 +60,12 @@ public:
 
     template <SupportedType P>
     [[nodiscard]] WeakArc<Index> newNodePropertyIndex(std::string_view indexName,
-                                                      PropertyTypeID ptID,
-                                                      LabelSetID lblset = LabelSetID::max());
+                                                      PropertyTypeID ptID);
+
 
     template <SupportedType P>
     [[nodiscard]] WeakArc<Index> newEdgePropertyIndex(std::string_view indexName,
-                                                      PropertyTypeID ptID,
-                                                      EdgeTypeID edgeType = EdgeTypeID::max());
+                                                      PropertyTypeID ptID);
 
     void appendBuilder(std::unique_ptr<DataPartBuilder> builder);
 
