@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <unordered_map>
 
 #include "ArcManager.h"
 #include "ID.h"
@@ -13,36 +12,20 @@ namespace db {
 
 class IndexManager {
 public:
-    // TODO: Ensure property type IDs are rebased
-    using PropertyIndexMap = std::unordered_map<PropertyTypeID, const Index*>;
-
-    // TODO: Ensure IDs are rebased
-    using NodeIndexMap = std::unordered_map<LabelSetID, PropertyIndexMap>;
-    using EdgeIndexMap = std::unordered_map<EdgeTypeID, PropertyIndexMap>;
-
     IndexManager();
     ~IndexManager();
 
     template <SupportedType P>
-    WeakArc<Index> createNodeIndex(std::string_view indexName,
-                                   PropertyTypeID ptID,
-                                   LabelSetID lblset = _unconstrainedLabels);
+    WeakArc<Index> createNodeIndex(std::string_view indexName, PropertyTypeID ptID);
 
     template <SupportedType P>
-    WeakArc<Index> createEdgeIndex(std::string_view indexName,
-                                   PropertyTypeID ptID,
-                                   EdgeTypeID edgeType = _unconstrainedType);
+    WeakArc<Index> createEdgeIndex(std::string_view indexName, PropertyTypeID ptID);
 
 private:
-    NodeIndexMap _nodeIndexes;
-    EdgeIndexMap _edgeIndexes;
+    std::vector<WeakArc<Index>> _nodeIndexes;
+    std::vector<WeakArc<Index>>_edgeIndexes;
 
     std::unique_ptr<ArcManager<Index>> _indexes;
-
-    // Use the invalid labelset/edge ID to denote an index on a node/edge with any
-    // labels/type
-    constexpr static LabelSetID _unconstrainedLabels = LabelSetID::max();
-    constexpr static EdgeTypeID _unconstrainedType = EdgeTypeID::max();
 };
 
 }

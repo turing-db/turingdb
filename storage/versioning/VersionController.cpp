@@ -234,31 +234,29 @@ DumpResult<void> VersionController::loadCommit(CommitHash hash,
 
 template <SupportedType P>
 WeakArc<Index> VersionController::createNodePropertyIndex(std::string_view indexName,
-                                                          PropertyTypeID ptID,
-                                                          LabelSetID lblset) {
-    return _indexManager.createNodeIndex<P>(indexName, ptID, lblset);
+                                                          PropertyTypeID ptID) {
+    return _indexManager.createNodeIndex<P>(indexName, ptID);
 }
 
 template <SupportedType P>
 WeakArc<Index> VersionController::createEdgePropertyIndex(std::string_view indexName,
-                                                          PropertyTypeID ptID,
-                                                          EdgeTypeID edgeType) {
-    return _indexManager.createEdgeIndex<P>(indexName, ptID, edgeType);
+                                                          PropertyTypeID ptID) {
+    return _indexManager.createEdgeIndex<P>(indexName, ptID);
 }
 
 
 namespace db {
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::Int64>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::UInt64>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::Double>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::String>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::Bool>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
-template WeakArc<Index> VersionController::createNodePropertyIndex<types::Embedding>(std::string_view indexName, PropertyTypeID ptID, LabelSetID lblset);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Int64>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::UInt64>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Double>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::String>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Bool>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::Embedding>(std::string_view indexName, PropertyTypeID ptID);
 
-template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Int64>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
-template WeakArc<Index> VersionController::createEdgePropertyIndex<types::UInt64>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
-template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Double>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
-template WeakArc<Index> VersionController::createEdgePropertyIndex<types::String>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
-template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Bool>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
-template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Embedding>(std::string_view indexName, PropertyTypeID ptID, EdgeTypeID edgeType);
+template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Int64>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createEdgePropertyIndex<types::UInt64>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Double>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createEdgePropertyIndex<types::String>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Bool>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Embedding>(std::string_view indexName, PropertyTypeID ptID);
 }
