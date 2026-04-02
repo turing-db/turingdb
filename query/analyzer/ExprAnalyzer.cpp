@@ -754,7 +754,6 @@ void ExprAnalyzer::registerEdgePatternDeclaration(const EdgePattern* edge) {
     _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, edgeName);
 }
 
-
 void ExprAnalyzer::throwError(std::string_view msg, const void* obj) const {
     std::string errorStr;
     _ast->getDiagnosticsManager()->createErrorString(msg, obj, errorStr);
