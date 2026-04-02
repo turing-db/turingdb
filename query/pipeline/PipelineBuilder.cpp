@@ -1370,7 +1370,7 @@ PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup(const Index* inde
     PipelineValuesOutputInterface& output = proc->output();
 
     if (!_pendingOutput.getInterface()) {
-        throw FatalException("Index had no input.");
+        throw FatalException("Index lookup had no input.");
     }
 
     _pendingOutput.connectTo(input);

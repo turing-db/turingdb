@@ -500,9 +500,7 @@ void PlanOptimizer::rewriteConstWriteSources() {
         cwsNode->connectOut(writeNode);
     }
 }
-/*
- * Looks for
- */
+
 void PlanOptimizer::rewritePropertyFilterWithIndex() {
     rewriteNodePropertyFilterWithIndex();
 }

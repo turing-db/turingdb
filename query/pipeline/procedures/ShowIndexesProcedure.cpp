@@ -45,7 +45,20 @@ void writeChunk(Data* data, ProcedureState* procedure, size_t chunkSize) {
     const CommitHistory& history = commit->history();
     const CommitHistory::IndexSpan indexes = history.validIndexes();
 
-    for (size_t i = data->_written; i < indexes.size(); i++) {
+    if (indexes.empty()) {
+        return;
+    }
+
+    bioassert(indexes.size() > data->_written, "Invalid state.");
+
+    const size_t remaining = indexes.size() - data->_written;
+    const size_t canWrite = std::min(remaining, chunkSize);
+    size_t& from = data->_written;
+    const size_t to = from + canWrite;
+
+    for (; from < to; from++) {
+        const size_t i = from;
+
         const WeakArc<Index>& index = indexes[i];
         if (names) {
             const std::string_view name = index->name();

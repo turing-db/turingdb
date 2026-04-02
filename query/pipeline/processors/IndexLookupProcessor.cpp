@@ -65,7 +65,6 @@ void IndexLookupProcessor<Q, R>::reset() {
 
 template <typename Q, typename R>
 void IndexLookupProcessor<Q, R>::execute() {
-    fmt::println("IndexLookupProcessor::execute");
     const NamedColumn* queryNCol = _input.getValues();
     const NamedColumn* resultNCol = _output.getValues();
     bioassert(queryNCol && resultNCol, "Null named value columns.");
