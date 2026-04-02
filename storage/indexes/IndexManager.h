@@ -3,8 +3,9 @@
 #include <memory>
 
 #include "ArcManager.h"
-#include "ID.h"
 #include "Index.h"
+
+#include "ID.h"
 
 #include "metadata/SupportedType.h"
 
@@ -16,10 +17,10 @@ public:
     ~IndexManager();
 
     template <SupportedType P>
-    WeakArc<Index> createNodeIndex(std::string_view indexName, PropertyTypeID ptID);
+    [[nodiscard]] WeakArc<Index> createNodeIndex(std::string_view indexName, PropertyTypeID ptID);
 
     template <SupportedType P>
-    WeakArc<Index> createEdgeIndex(std::string_view indexName, PropertyTypeID ptID);
+    [[nodiscard]] WeakArc<Index> createEdgeIndex(std::string_view indexName, PropertyTypeID ptID);
 
 private:
     std::vector<WeakArc<Index>> _nodeIndexes;

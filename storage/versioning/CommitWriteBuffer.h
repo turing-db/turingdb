@@ -4,14 +4,18 @@
 #include <variant>
 #include <vector>
 
-#include "Commit.h"
 #include "ArcManager.h"
+
+#include "Commit.h"
 #include "DataPart.h"
-#include "ID.h"
+#include "writers/DataPartBuilder.h"
+
 #include "indexes/Index.h"
 #include "metadata/PropertyType.h"
+
 #include "views/GraphView.h"
-#include "writers/DataPartBuilder.h"
+
+#include "ID.h"
 
 namespace db {
 

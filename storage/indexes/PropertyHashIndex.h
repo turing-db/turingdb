@@ -46,6 +46,10 @@ public:
     /**
      * @brief Overload of parent type @ref Index.Returns at most @param limit rows in
      * @param result, updating @param state in-place.
+     * @detail Indices in @param indices are use to track correspondence between which
+     * rows in the @param query column produces which rows in the @ref result column.
+     * @param indices may be used in @ref MaterializeProcessor during the pipeline.
+
      */
     void boundedQuery(const Column* input,
                       Column* result,

@@ -78,8 +78,6 @@ void CommitHistoryRebaser::addValidIndexes(const CommitHistory& prevHistory,
     std::vector<WeakArc<Index>>& incomingIndexes = _history._validIndexes;
 
     // Combine the indexes on the change under rebase with the indexes on main
-    // TODO: Leaves the same property possibly indexed by multiple indexers; find
-    // resolution strategy
     const CommitHistory::IndexSpan newHeadIndexes = prevHistory.validIndexes();
     for (const WeakArc<Index>& newHeadIndex : newHeadIndexes) {
         const auto findIt = std::ranges::find(incomingIndexes, newHeadIndex);

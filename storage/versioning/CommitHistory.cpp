@@ -1,7 +1,5 @@
 #include "CommitHistory.h"
 
-#include <spdlog/spdlog.h>
-
 #include "CommitHistoryRebaser.h"
 #include "CommitView.h"
 
