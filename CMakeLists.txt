@@ -102,8 +102,9 @@ endif()
 # -fcf-protection=none is skipped for AFL builds because afl-cc misinterprets
 # any -fcf-protection flag as CFI sanitizer, causing it to inject -flto which
 # breaks PCGUARD instrumentation.
+# -fcf-protection is x86-only (Intel CET); skip on ARM.
 set(AFL_BUILD OFF CACHE BOOL "Set by fuzz/run_afl.sh to disable -fcf-protection")
-if(AFL_BUILD)
+if(AFL_BUILD OR CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     set(CFP_FLAG "")
 else()
     set(CFP_FLAG "-fcf-protection=none")
@@ -122,12 +123,16 @@ else()
     endif()
 endif()
 
-# x86-64 architecture targeting for portable PyPI wheels (Linux only).
+# Architecture targeting for portable PyPI wheels (Linux only).
+# x86_64: -march=haswell (AVX2, FMA, BMI1/2)
+# aarch64: -march=armv8-a (baseline ARMv8)
 # TURING_NATIVE_BUILD=1 uses -march=native for local development.
 if(NOT APPLE)
     if(DEFINED ENV{TURING_NATIVE_BUILD}
        AND "$ENV{TURING_NATIVE_BUILD}" STREQUAL "1")
         set(OPTIMIZE_FLAGS "${OPTIMIZE_FLAGS} -march=native")
+    elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+        set(OPTIMIZE_FLAGS "${OPTIMIZE_FLAGS} -march=armv8-a")
     else()
         set(OPTIMIZE_FLAGS "${OPTIMIZE_FLAGS} -march=haswell")
     endif()
