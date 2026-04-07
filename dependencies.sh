@@ -16,12 +16,15 @@ MACOS_SETENV=$DEPENDENCIES_DIR/macos_setenv.sh
 mkdir -p $DEPENDENCIES_DIR
 mkdir -p $BUILD_DIR
 
-# Linux x86_64 architecture targeting for portable PyPI wheels.
-# Default: -march=haswell (AVX2, FMA, BMI1/2)
+# Linux architecture targeting for portable PyPI wheels.
+# x86_64 default: -march=haswell (AVX2, FMA, BMI1/2)
+# aarch64 default: -march=armv8-a (baseline ARMv8)
 # Set TURING_NATIVE_BUILD=1 to use -march=native for local development.
 if [[ "$(uname)" == "Linux" ]]; then
     if [[ "${TURING_NATIVE_BUILD:-}" == "1" ]]; then
         ARCH_FLAG="-march=native"
+    elif [[ "$(uname -m)" == "aarch64" ]]; then
+        ARCH_FLAG="-march=armv8-a"
     else
         ARCH_FLAG="-march=haswell"
     fi
@@ -139,15 +142,22 @@ if [[ "$(uname)" == "Darwin" ]]; then
     CFLAGS="-isysroot ${MACOS_SDK_PATH} -fPIC" \
         ./Configure darwin64-arm64-cc no-shared no-module no-tests \
             --prefix=$DEPENDENCIES_DIR --openssldir=$DEPENDENCIES_DIR/ssl --libdir=lib
-elif [[ $USE_CLANG -eq 1 ]]; then
-    CC="${LLVM_PREFIX}/bin/clang" \
-    CFLAGS="-fPIC ${ARCH_FLAG}" \
-        ./Configure linux-x86_64 no-shared no-module no-tests \
-            --prefix=$DEPENDENCIES_DIR --openssldir=$DEPENDENCIES_DIR/ssl --libdir=lib
 else
-    CFLAGS="-fPIC ${ARCH_FLAG}" \
-        ./Configure linux-x86_64 no-shared no-module no-tests \
-            --prefix=$DEPENDENCIES_DIR --openssldir=$DEPENDENCIES_DIR/ssl --libdir=lib
+    if [[ "$(uname -m)" == "aarch64" ]]; then
+        OPENSSL_TARGET="linux-aarch64"
+    else
+        OPENSSL_TARGET="linux-x86_64"
+    fi
+    if [[ $USE_CLANG -eq 1 ]]; then
+        CC="${LLVM_PREFIX}/bin/clang" \
+        CFLAGS="-fPIC ${ARCH_FLAG}" \
+            ./Configure $OPENSSL_TARGET no-shared no-module no-tests \
+                --prefix=$DEPENDENCIES_DIR --openssldir=$DEPENDENCIES_DIR/ssl --libdir=lib
+    else
+        CFLAGS="-fPIC ${ARCH_FLAG}" \
+            ./Configure $OPENSSL_TARGET no-shared no-module no-tests \
+                --prefix=$DEPENDENCIES_DIR --openssldir=$DEPENDENCIES_DIR/ssl --libdir=lib
+    fi
 fi
 
 make -j $NUM_JOBS
@@ -176,7 +186,11 @@ fi
 
 if [[ "$(uname)" == "Linux" ]]; then
     if [[ "${TURING_NATIVE_BUILD:-}" != "1" ]]; then
-        OPENBLAS_CMAKE_ARGS+=(-DTARGET=HASWELL)
+        if [[ "$(uname -m)" == "aarch64" ]]; then
+            OPENBLAS_CMAKE_ARGS+=(-DTARGET=ARMV8)
+        else
+            OPENBLAS_CMAKE_ARGS+=(-DTARGET=HASWELL)
+        fi
     fi
     OPENBLAS_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
 fi
