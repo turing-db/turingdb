@@ -91,6 +91,7 @@
 #include "nodes/ConstWriteSourceNode.h"
 #include "nodes/CreatePropertyIndexNode.h"
 #include "nodes/IndexLookupNode.h"
+#include "nodes/DropIndexNode.h"
 
 #include "TranslateJoinHelpers.h"
 

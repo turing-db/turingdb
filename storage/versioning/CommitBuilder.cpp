@@ -191,17 +191,24 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         const auto& nodePropUpdates = ourJournal->nodePropertyWriteSet();
         const auto& edgePropUpdates = ourJournal->edgePropertyWriteSet();
 
+        const CommitWriteBuffer::DroppedIndexes& droppedIndexes = wb.droppedIndexes();
+
         const auto invalidated = [&](const WeakArc<Index>& index) -> bool {
             const bool isNode = index->isNodeIndex();
             const PropertyTypeID indexedProp = index->property();
             const WriteSet<PropertyTypeID>& propUpdates =
                 isNode ? nodePropUpdates : edgePropUpdates;
             const bool propertyInvalidated = propUpdates.contains(indexedProp);
-            return propertyInvalidated;
+
+            const auto findIt = std::ranges::find(droppedIndexes, index);
+            const auto dropped = findIt != end(droppedIndexes);
+
+            return propertyInvalidated | dropped;
         };
 
         // By default we carry over the previous commit's indexes. Remove any that have
-        // become invalidated due to the writes (SETs, CREATEs) of this commit
+        // become invalidated due to the writes (SETs, CREATEs) of this commit, or dropped
+        // by a DROP INDEX command
         std::erase_if(ourIndexes, invalidated);
     }
 
