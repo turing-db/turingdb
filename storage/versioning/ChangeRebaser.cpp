@@ -104,11 +104,14 @@ void ChangeRebaser::rebaseCommitBuilder(CommitBuilder& commitBuilder,
 
     // Rebase the history, including any committed dataparts
     historyRebaser.rebase(_metadataRebaser, _entityIDRebaser, _dataPartRebaser, *_currentHeadHistory);
-    historyRebaser.addValidIndexes(*_currentHeadHistory, commitsSinceBranch);
+
+    CommitWriteBuffer& wb = commitBuilder.writeBuffer();
+    const CommitWriteBuffer::DroppedIndexes& dropped = wb.droppedIndexes();
+    historyRebaser.addValidIndexes(*_currentHeadHistory, commitsSinceBranch, dropped);
 
     // If we have not yet flushed, we must rebase the write buffer prior to it being flushed
-    if (!commitBuilder.writeBuffer().isFlushed()) {
-        CommitWriteBufferRebaser wbRb(&_entityIDRebaser, commitBuilder.writeBuffer());
+    if (!wb.isFlushed()) {
+        CommitWriteBufferRebaser wbRb(&_entityIDRebaser, wb);
         wbRb.rebase();
         wbRb.rebaseIndexes(commitsSinceBranch);
     }

@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 #include "Commit.h"
+#include "CommitWriteBuffer.h"
 
 namespace db {
 
@@ -26,7 +27,8 @@ public:
     void removeCreatedDataParts();
 
     void addValidIndexes(const CommitHistory& prevHistory,
-                         Commit::CommitSpan commitsSinceBranch);
+                         Commit::CommitSpan commitsSinceBranch,
+                         const CommitWriteBuffer::DroppedIndexes& droppedIndexes);
 
 private:
     CommitHistory& _history;
