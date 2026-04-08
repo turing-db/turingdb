@@ -1,15 +1,15 @@
 #include "FilterProcessor.h"
 
 #include <spdlog/fmt/fmt.h>
-#include <range/v3/view/drop.hpp>
 
 #include "ApplyMask.h"
+
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnKind.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOperators.h"
-#include "dataframe/NamedColumn.h"
 #include "dataframe/Dataframe.h"
+#include "dataframe/NamedColumn.h"
 
 #include "PipelinePort.h"
 
@@ -20,66 +20,17 @@
 
 using namespace db;
 
-namespace rg = ranges;
-namespace rv = rg::views;
-
-namespace {
-
-#define APPLY_MASK_CASE(Type)                                              \
-    case Type::staticKind(): {                                             \
-        MaskOperators::exec<ApplyMask>(static_cast<Type*>(dest),           \
-                                       static_cast<const Type*>(src),      \
-                                       mask);                              \
-    }                                                                      \
-    break;
-
-
-void applyMask(const Column* src,
-               const ColumnMask* mask,
-               Column* dest) {
-    switch (src->getKind()) {
-        APPLY_MASK_CASE(ColumnVector<types::Bool::Primitive>)
-        APPLY_MASK_CASE(ColumnVector<types::Int64::Primitive>)
-        APPLY_MASK_CASE(ColumnVector<types::String::Primitive>) // Also covers string_view
-        APPLY_MASK_CASE(ColumnVector<types::UInt64::Primitive>) // Also covers size_t
-        APPLY_MASK_CASE(ColumnVector<types::Double::Primitive>)
-
-        APPLY_MASK_CASE(ColumnOptVector<types::Bool::Primitive>)
-        APPLY_MASK_CASE(ColumnOptVector<types::Int64::Primitive>)
-        APPLY_MASK_CASE(ColumnOptVector<types::String::Primitive>) // Also covers string_view
-        APPLY_MASK_CASE(ColumnOptVector<types::UInt64::Primitive>) // Also covers size_t
-        APPLY_MASK_CASE(ColumnOptVector<types::Double::Primitive>)
-        APPLY_MASK_CASE(ColumnOptVector<types::Embedding::Primitive>)
-
-        APPLY_MASK_CASE(ColumnVector<EntityID>)
-        APPLY_MASK_CASE(ColumnVector<NodeID>)
-        APPLY_MASK_CASE(ColumnVector<EdgeID>)
-        APPLY_MASK_CASE(ColumnVector<LabelSetID>)
-        APPLY_MASK_CASE(ColumnVector<EdgeTypeID>)
-        APPLY_MASK_CASE(ColumnVector<PropertyTypeID>)
-        APPLY_MASK_CASE(ColumnVector<std::string>)
-        APPLY_MASK_CASE(ColumnVector<EntityList>)
-
-        default: {
-            throw PipelineException(fmt::format("Unsupported mask application for column type {}",
-                                                src->getTypeName()));
-        }
-    }
-}
-
-}
-
 std::string FilterProcessor::describe() const {
     return fmt::format("FilterProcessor @={}", fmt::ptr(this));
 }
 
-FilterProcessor::FilterProcessor(PredicateProgram* predProg)
-    : _predProg(predProg)
+FilterProcessor::FilterProcessor(PredicateProgram* prog)
+    : _prog(prog)
 {
 }
 
-FilterProcessor* FilterProcessor::create(PipelineV2* pipeline, PredicateProgram* predProg) {
-    auto* proc = new FilterProcessor(predProg);
+FilterProcessor* FilterProcessor::create(PipelineV2* pipeline, PredicateProgram* prog) {
+    auto* proc = new FilterProcessor(prog);
 
     {
         PipelineInputPort* filterInput = PipelineInputPort::create(pipeline, proc);
@@ -117,8 +68,8 @@ void FilterProcessor::execute() {
     const Dataframe* srcDF = _input.getDataframe();
     Dataframe* destDF = _output.getDataframe();
 
-    _predProg->evaluateInstructions();
-    const std::vector<Column*>& predResults = _predProg->getTopLevelPredicates();
+    _prog->evaluateInstructions();
+    const std::vector<Column*>& predResults = _prog->getTopLevelPredicates();
 
     // XXX: Should this be an error, or should we just not apply any filters?
     if (predResults.empty()) {
@@ -150,7 +101,7 @@ void FilterProcessor::execute() {
     // null values
     ColumnOptMask finalOptMask(maskSize, true);
     {
-        for (Column* predicateResult : _predProg->getTopLevelPredicates()) {
+        for (Column* predicateResult : _prog->getTopLevelPredicates()) {
             if (const auto* predResOptMask = dynamic_cast<ColumnOptMask*>(predicateResult);
                     predResOptMask) {
                 BinaryPredicates::exec<And>(&finalOptMask, &finalOptMask, predResOptMask);
