@@ -682,6 +682,74 @@ TEST_F(IndexQueriesTest, dropEdgeIndex) {
     EXPECT_FALSE(hasIndex("durationidx"));
 }
 
+// A drop in change1 survives rebase when change2 (submitted first) is unrelated.
+TEST_F(IndexQueriesTest, dropIndexSurvivesUnrelatedRebase) {
+    ChangeID change1, change2;
+
+    newChange(), change1 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX dropme FOR (n) ON n.age", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    ASSERT_TRUE(query("DROP INDEX dropme", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    EXPECT_EQ(0, countIndexes());
+    EXPECT_FALSE(hasIndex("dropme"));
+
+    newChange(), change2 = _currentChange;
+    // Unrelated write — creates a node with a property not covered by the index.
+    ASSERT_TRUE(query("CREATE (n:TestNode { val: 1 })", emptyCallback));
+
+    // Submit change2 first so change1 must rebase against it.
+    submitChange(change2);
+    submitChange(change1);
+
+    EXPECT_EQ(0, countIndexes());
+    EXPECT_FALSE(hasIndex("dropme"));
+}
+
+TEST_F(IndexQueriesTest, createRebasedOnTopOfDrop) {
+    ChangeID change1, change2;
+
+    newChange(), change1 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX myindex FOR (n) ON n.age", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    newChange(), change2 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX myindex FOR (n) ON n.age", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    ASSERT_TRUE(query("DROP INDEX myindex", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    submitChange(change2);
+    submitChange(change1);
+
+    EXPECT_EQ(1, countIndexes());
+    EXPECT_TRUE(hasIndex("myindex"));
+}
+
+// change1 drops an index; change2 (submitted first) creates an unrelated index.
+// After rebase both the drop and the unrelated index should be reflected.
+TEST_F(IndexQueriesTest, dropAndUnrelatedIndexMergedAfterRebase) {
+    ChangeID change1, change2;
+
+    newChange(), change1 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX ageidx FOR (n) ON n.age", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    ASSERT_TRUE(query("DROP INDEX ageidx", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    newChange(), change2 = _currentChange;
+    ASSERT_TRUE(query("CREATE INDEX nameidx FOR (n) ON n.name", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    // Submit change2 first — head gains nameidx.
+    // change1 rebases: its drop of ageidx should survive; nameidx from the head should be kept.
+    submitChange(change2);
+    submitChange(change1);
+
+    EXPECT_FALSE(hasIndex("ageidx"));
+    EXPECT_TRUE(hasIndex("nameidx"));
+}
+
 TEST_F(IndexQueriesTest, ageIndexReturnPropertyOnIndexedNode) {
     newChange();
     ASSERT_TRUE(query("CREATE INDEX ageindex FOR (n) ON n.age", emptyCallback));

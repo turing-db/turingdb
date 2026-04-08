@@ -9,6 +9,7 @@
 #include "DataPartRebaser.h"
 
 #include "ID.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "versioning/EntityIDRebaser.h"
 #include "versioning/MetadataRebaser.h"
 
@@ -74,7 +75,8 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
 }
 
 void CommitHistoryRebaser::addValidIndexes(const CommitHistory& prevHistory,
-                                           Commit::CommitSpan commitsSinceBranch) {
+                                           Commit::CommitSpan commitsSinceBranch,
+                                           const CommitWriteBuffer::DroppedIndexes& droppedIndexes) {
     std::vector<WeakArc<Index>>& incomingIndexes = _history._validIndexes;
 
     // Combine the indexes on the change under rebase with the indexes on main
@@ -83,9 +85,18 @@ void CommitHistoryRebaser::addValidIndexes(const CommitHistory& prevHistory,
         const auto findIt = std::ranges::find(incomingIndexes, newHeadIndex);
         const bool alreadyTracked = findIt != end(incomingIndexes);
 
-        if (!alreadyTracked) {
-            incomingIndexes.push_back(newHeadIndex);
+        if (alreadyTracked) {
+            continue;
         }
+
+        const auto droppedIt = std::ranges::find(droppedIndexes, newHeadIndex);
+        const bool dropped = droppedIt == std::end(droppedIndexes);
+
+        if (dropped) {
+            continue;
+        }
+
+        incomingIndexes.push_back(newHeadIndex);
     }
 
     // Find all the properties that are now invalid due to property updates
