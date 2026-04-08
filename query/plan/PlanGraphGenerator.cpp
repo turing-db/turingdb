@@ -62,6 +62,8 @@
 #include "nodes/InstallExtensionNode.h"
 #include "nodes/ShowExtensionsNode.h"
 #include "nodes/CreatePropertyIndexNode.h"
+#include "nodes/DropIndexNode.h"
+#include "nodes/PlanGraphNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
@@ -84,6 +86,7 @@
 #include "ShowExtensionsQuery.h"
 #include "CreateNodePropertyIndexQuery.h"
 #include "CreateEdgePropertyIndexQuery.h"
+#include "DropIndexQuery.h"
 
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
@@ -188,7 +191,7 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
         break;
 
         case QueryCommand::Kind::DROP_INDEX_QUERY:
-            throwError("Not implemented (generator).");
+            generateDropIndexQuery(static_cast<const DropIndexQuery*>(query));
         break;
     }
 
@@ -425,6 +428,14 @@ void PlanGraphGenerator::generateCreateEdgePropertyIndexQuery(const CreateEdgePr
     const PropertyExpr* propExpr = query->propertyExpr();
 
     auto* node = _tree.create<CreatePropertyIndexNode>(indexName, IndexEntityKind::Edge, propExpr);
+
+    _tree.newOut<ProduceResultsNode>(node);
+}
+
+void PlanGraphGenerator::generateDropIndexQuery(const DropIndexQuery* query) {
+    const std::string_view indexName = query->indexName();
+
+    auto* node = _tree.create<DropIndexNode>(indexName);
 
     _tree.newOut<ProduceResultsNode>(node);
 }

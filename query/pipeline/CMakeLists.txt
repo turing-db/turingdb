@@ -71,6 +71,7 @@ set(processors_sources
     processors/CreatePropertyIndexProcessor.cpp
     processors/IndexLookupProcessor.cpp
     processors/ApplyMask.cpp
+    processors/DropIndexProcessor.cpp
 )
 
 set(procedures_sources

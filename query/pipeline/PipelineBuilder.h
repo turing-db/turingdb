@@ -232,6 +232,8 @@ public:
                                                          std::string_view propName,
                                                          bool isNodeIndex);
 
+    PipelineBlockOutputInterface& addDropIndex(std::string_view indexName);
+
     template <typename Q, typename R>
     PipelineValuesOutputInterface& addIndexLookup(const Index* index);
 

@@ -173,6 +173,7 @@ public:
     void addHangingEdges(const GraphView& view);
 
     void addPendingIndex(const WeakArc<Index>& index);
+    void addDroppedIndex(const WeakArc<Index>& index);
 
     void setFlushed() { _flushed = true; }
     void setUnflushed() { _flushed = false; }
