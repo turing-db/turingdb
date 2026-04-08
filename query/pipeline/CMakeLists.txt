@@ -70,6 +70,7 @@ set(processors_sources
     processors/EvalFunction.cpp
     processors/CreatePropertyIndexProcessor.cpp
     processors/IndexLookupProcessor.cpp
+    processors/ApplyMask.cpp
 )
 
 set(procedures_sources
