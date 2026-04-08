@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) SET NOT_A_PROPERTY = 42",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) SET NOT_A_PROPERTY = 42\n       |               ^^^^^^^^^^^^^^\n-------* Invalid property expression.",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) SET NOT_A_PROPERTY = 42\n       |               ^^^^^^^^^^^^^^\n-------* Invalid property expression.",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) SET NOT_A_PROPERTY = 42\\n       |               ^^^^^^^^^^^^^^\\n-------* Invalid property expression.\"}"
+  },
+  "tags": [
+    "errors",
+    "set",
+    "property",
+    "expressions"
+  ],
+  "write-required": false
+}
