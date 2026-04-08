@@ -183,6 +183,7 @@ public:
     PendingEdge& getPendingEdge(size_t idx) { return _pendingEdges.at(idx); }
 
     const PendingIndexes& pendingIndexes() const { return _pendingIndexes; }
+    const DroppedIndexes& droppedIndexes() const { return _droppedIndexes; }
 
 private:
     friend DataPartBuilder;

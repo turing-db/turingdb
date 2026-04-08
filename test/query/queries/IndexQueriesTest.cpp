@@ -590,10 +590,98 @@ TEST_F(IndexQueriesTest, ageIndexTypedTwoHopTraversal) {
     EXPECT_NE(results.end(), std::find(results.begin(), results.end(), cookingID));
 }
 
-// MATCH (n) WHERE n.age = 32 RETURN n.name
-// The age index identifies Remy and Adam; the query then reads and returns
-// the name property from those same nodes.
-// Expected: exactly the two names "Remy" and "Adam" (order not guaranteed).
+TEST_F(IndexQueriesTest, dropIndexRemovedAfterCommit) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX dropme FOR (n) ON n.age", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    ASSERT_EQ(1, countIndexes());
+
+    ASSERT_TRUE(query("DROP INDEX dropme", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    EXPECT_EQ(0, countIndexes());
+    EXPECT_FALSE(hasIndex("dropme"));
+}
+
+TEST_F(IndexQueriesTest, dropIndexRemovedAfterSubmit) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX dropme FOR (n) ON n.age", emptyCallback));
+    submitCurrentChange();
+    ASSERT_EQ(1, countIndexes());
+
+    newChange();
+    ASSERT_TRUE(query("DROP INDEX dropme", emptyCallback));
+    submitCurrentChange();
+
+    EXPECT_EQ(0, countIndexes());
+    EXPECT_FALSE(hasIndex("dropme"));
+}
+
+TEST_F(IndexQueriesTest, dropIndexOnlyRemovesNamedIndex) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX keepme FOR (n) ON n.name", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    ASSERT_TRUE(query("CREATE INDEX dropme FOR (n) ON n.age", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    submitCurrentChange();
+    ASSERT_EQ(2, countIndexes());
+
+    newChange();
+    ASSERT_TRUE(query("DROP INDEX dropme", emptyCallback));
+    submitCurrentChange();
+
+    EXPECT_EQ(1, countIndexes());
+    EXPECT_TRUE(hasIndex("keepme"));
+    EXPECT_FALSE(hasIndex("dropme"));
+}
+
+TEST_F(IndexQueriesTest, droppedIndexNotVisibleBeforeCommit) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX dropme FOR (n) ON n.age", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    ASSERT_EQ(1, countIndexes());
+
+    // DROP without committing — index should still be visible
+    ASSERT_TRUE(query("DROP INDEX dropme", emptyCallback));
+    EXPECT_EQ(1, countIndexes());
+    EXPECT_TRUE(hasIndex("dropme"));
+
+    ASSERT_TRUE(query("commit", emptyCallback));
+    EXPECT_EQ(0, countIndexes());
+    EXPECT_FALSE(hasIndex("dropme"));
+}
+
+TEST_F(IndexQueriesTest, recreateIndexAfterDrop) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX myindex FOR (n) ON n.age", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    ASSERT_TRUE(query("DROP INDEX myindex", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    submitCurrentChange();
+
+    ASSERT_EQ(0, countIndexes());
+
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX myindex FOR (n) ON n.age", emptyCallback));
+    submitCurrentChange();
+
+    EXPECT_EQ(1, countIndexes());
+    EXPECT_TRUE(hasIndex("myindex"));
+}
+
+TEST_F(IndexQueriesTest, dropEdgeIndex) {
+    newChange();
+    ASSERT_TRUE(query("CREATE INDEX durationidx FOR [e] ON e.duration", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+    ASSERT_EQ(1, countIndexes());
+
+    ASSERT_TRUE(query("DROP INDEX durationidx", emptyCallback));
+    ASSERT_TRUE(query("commit", emptyCallback));
+
+    EXPECT_EQ(0, countIndexes());
+    EXPECT_FALSE(hasIndex("durationidx"));
+}
+
 TEST_F(IndexQueriesTest, ageIndexReturnPropertyOnIndexedNode) {
     newChange();
     ASSERT_TRUE(query("CREATE INDEX ageindex FOR (n) ON n.age", emptyCallback));
