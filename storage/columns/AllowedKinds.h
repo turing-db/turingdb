@@ -281,7 +281,8 @@ struct MaskedPairs {
         MixedKind<ColumnMask, CommitHash>,
         MixedKind<ColumnMask, ChangeID>,
         MixedKind<ColumnMask, std::string>,
-        MixedKind<ColumnMask, size_t>
+        MixedKind<ColumnMask, size_t>,
+        MixedKind<ColumnMask, EntityList>
     >;
 
     using Excluded = ExcludedContainers<
