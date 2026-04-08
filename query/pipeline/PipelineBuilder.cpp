@@ -10,6 +10,7 @@
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
+#include "processors/DropIndexProcessor.h"
 #include "processors/IndexLookupProcessor.h"
 #include "processors/LoadCommitProcessor.h"
 #include "processors/CallProcedureProcessor.h"
@@ -1392,6 +1393,17 @@ PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup(const Index* inde
     }
 
     _pendingOutput.updateInterface(&output);
+    _lastProc = proc;
+    return output;
+}
+
+
+PipelineBlockOutputInterface& PipelineBuilder::addDropIndex(std::string_view indexName) {
+    auto* proc = DropIndexProcessor::create(_pipeline, indexName);
+
+    PipelineBlockOutputInterface& output = proc->output();
+
+    _pendingOutput.setInterface(&output);
     _lastProc = proc;
     return output;
 }

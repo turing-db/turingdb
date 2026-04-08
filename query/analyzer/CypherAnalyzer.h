@@ -58,7 +58,6 @@ public:
     void analyze(const InstallExtensionQuery* query);
     void analyze(const CreateNodePropertyIndexQuery* query);
     void analyze(const CreateEdgePropertyIndexQuery* query);
-    void analyze(const DropIndexQuery* query);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt);

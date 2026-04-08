@@ -133,10 +133,6 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<const CreateEdgePropertyIndexQuery*>(query));
             break;
 
-            case QueryCommand::Kind::DROP_INDEX_QUERY:
-                analyze(static_cast<const DropIndexQuery*>(query));
-            break;
-
             // Nothing to analyze
             case QueryCommand::Kind::CHANGE_QUERY:
             case QueryCommand::Kind::COMMIT_QUERY:
@@ -146,6 +142,7 @@ void CypherAnalyzer::analyze() {
             case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
             case QueryCommand::Kind::LOAD_COMMIT_QUERY:
             case QueryCommand::Kind::SHOW_EXTENSIONS_QUERY:
+            case QueryCommand::Kind::DROP_INDEX_QUERY:
             break;
 
         }
@@ -571,22 +568,6 @@ void CypherAnalyzer::analyze(const CreateEdgePropertyIndexQuery* query) {
     const GraphReader reader = _graphView.read();
     if (!reader.isEdgeProperty(propType._id)) {
         throwError("Property is not an edge property.", propertyExpr);
-    }
-}
-
-void CypherAnalyzer::analyze(const DropIndexQuery* query) {
-    const std::string_view toDrop = query->indexName();
-
-    const std::span indexes = _graphView.indexes();
-
-    const auto matches = [&](const WeakArc<Index>& index) -> bool {
-        return index->name() == toDrop;
-    };
-
-    const bool toDropExists = !std::ranges::none_of(indexes, matches);
-
-    if (!toDropExists) {
-        throwError("Index not found", query);
     }
 }
 

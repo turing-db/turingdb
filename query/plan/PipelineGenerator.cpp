@@ -503,6 +503,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateIndexLookupNode(static_cast<IndexLookupNode*>(node));
         break;
 
+        case PlanGraphOpcode::DROP_INDEX:
+            return translateDropIndexNode(static_cast<DropIndexNode*>(node));
+        break;
+
         case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
@@ -1891,5 +1895,11 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
     }
 
 
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateDropIndexNode(DropIndexNode* node) {
+    const std::string_view indexName = node->indexName();
+    _builder.addDropIndex(indexName);
     return _builder.getPendingOutputInterface();
 }
