@@ -94,6 +94,7 @@ class ShowExtensionsQuery;
 class VectorSearchStmt;
 class CreateNodePropertyIndexQuery;
 class CreateEdgePropertyIndexQuery;
+class DropIndexQuery;
 
 class CypherAST {
 public:
@@ -173,6 +174,7 @@ public:
     friend YCypherParser;
     friend CreateNodePropertyIndexQuery;
     friend CreateEdgePropertyIndexQuery;
+    friend DropIndexQuery;
 
     using QueryCommands = std::vector<QueryCommand*>;
 

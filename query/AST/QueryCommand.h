@@ -30,6 +30,7 @@ public:
         SHOW_EXTENSIONS_QUERY,
         CREATE_NODE_PROPERTY_INDEX_QUERY,
         CREATE_EDGE_PROPERTY_INDEX_QUERY,
+        DROP_INDEX_QUERY,
     };
 
     virtual Kind getKind() const = 0;

@@ -130,6 +130,10 @@ void CypherAnalyzer::analyze() {
                 analyze(static_cast<const CreateEdgePropertyIndexQuery*>(query));
             break;
 
+            case QueryCommand::Kind::DROP_INDEX_QUERY:
+                throwError("Not implemented (analyzer).");
+            break;
+
             // Nothing to analyze
             case QueryCommand::Kind::CHANGE_QUERY:
             case QueryCommand::Kind::COMMIT_QUERY:
