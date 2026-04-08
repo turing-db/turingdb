@@ -56,6 +56,7 @@ public:
      using UpdatedNodes = std::vector<NodeUpdate>;
      using UpdatedEdges = std::vector<EdgeUpdate>;
      using PendingIndexes = std::vector<WeakArc<Index>>;
+     using DroppedIndexes = std::vector<WeakArc<Index>>;
 
      explicit CommitWriteBuffer(CommitJournal& journal, GraphView view);
 
@@ -210,6 +211,7 @@ private:
     UpdatedEdges _updatedEdges;
 
     PendingIndexes _pendingIndexes;
+    DroppedIndexes _droppedIndexes;
 
     PendingNodes& pendingNodes() { return _pendingNodes; }
     PendingEdges& pendingEdges() { return _pendingEdges; }

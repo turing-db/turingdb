@@ -187,6 +187,9 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
             generateCreateEdgePropertyIndexQuery(static_cast<const CreateEdgePropertyIndexQuery*>(query));
         break;
 
+        case QueryCommand::Kind::DROP_INDEX_QUERY:
+            throwError("Not implemented (generator).");
+        break;
     }
 
     _tree.removeIsolatedNodes();

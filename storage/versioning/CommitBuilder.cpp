@@ -149,9 +149,10 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
 
     bioassert(_commit->history().journal().empty(), "Journal must be empty on flush.");
 
+    // At this point, any conflict checking should have already been done in @ref
+    // Change::rebase, so all writes are valid.
+
     if (wb.containsDeletes()) {
-        // At this point, conflict checking should have already been done in @ref
-        // Change::rebase, so all deletes are valid
         wb.applyDeletions(tombstones);
     }
 

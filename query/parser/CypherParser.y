@@ -76,6 +76,7 @@
     #include "VecLibMetadata.h"
     #include "CreateNodePropertyIndexQuery.h"
     #include "CreateEdgePropertyIndexQuery.h"
+    #include "DropIndexQuery.h"
 
     namespace db {
         class YCypherScanner;
@@ -358,6 +359,7 @@
 %type<bool> opt_distinct
 %type<db::CreateNodePropertyIndexQuery*> createNodePropertyIndexQuery
 %type<db::CreateEdgePropertyIndexQuery*> createEdgePropertyIndexQuery
+%type<db::DropIndexQuery*> dropIndexQuery
 
 %expect 0
 
@@ -404,6 +406,7 @@ singleQuery
     | createVectorIndexQuery { $$ = $1; }
     | createNodePropertyIndexQuery { $$ = $1; }
     | createEdgePropertyIndexQuery { $$ = $1; }
+    | dropIndexQuery { $$ = $1; }
     | loadVectorQuery { $$ = $1; }
     | deleteVectorIndexQuery { $$ = $1; }
     | showVectorIndexesQuery { $$ = $1; }
@@ -461,6 +464,9 @@ createEdgePropertyIndexQuery
         LOC($$, @$);
       }
     ;
+
+dropIndexQuery
+    : DROP INDEX ID { $$ = DropIndexQuery::create(ast, $3); LOC($$, @$); }
 
 distanceMetric
     : EUCLID { $$ = vec::DistanceMetric::EUCLIDEAN_DIST; }
