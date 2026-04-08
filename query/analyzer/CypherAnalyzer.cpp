@@ -1,5 +1,6 @@
 #include "CypherAnalyzer.h"
 
+#include <algorithm>
 #include <spdlog/fmt/bundled/core.h>
 #include <string_view>
 
@@ -34,6 +35,7 @@
 #include "decl/EvaluatedType.h"
 #include "expr/Expr.h"
 #include "expr/PropertyExpr.h"
+#include "indexes/Index.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "stmt/ShortestPathStmt.h"
@@ -48,6 +50,7 @@
 #include "stmt/Limit.h"
 #include "CreateNodePropertyIndexQuery.h"
 #include "CreateEdgePropertyIndexQuery.h"
+#include "DropIndexQuery.h"
 
 #include "FunctionDecls.h"
 
@@ -131,7 +134,7 @@ void CypherAnalyzer::analyze() {
             break;
 
             case QueryCommand::Kind::DROP_INDEX_QUERY:
-                throwError("Not implemented (analyzer).");
+                analyze(static_cast<const DropIndexQuery*>(query));
             break;
 
             // Nothing to analyze
@@ -568,6 +571,22 @@ void CypherAnalyzer::analyze(const CreateEdgePropertyIndexQuery* query) {
     const GraphReader reader = _graphView.read();
     if (!reader.isEdgeProperty(propType._id)) {
         throwError("Property is not an edge property.", propertyExpr);
+    }
+}
+
+void CypherAnalyzer::analyze(const DropIndexQuery* query) {
+    const std::string_view toDrop = query->indexName();
+
+    const std::span indexes = _graphView.indexes();
+
+    const auto matches = [&](const WeakArc<Index>& index) -> bool {
+        return index->name() == toDrop;
+    };
+
+    const bool toDropExists = !std::ranges::none_of(indexes, matches);
+
+    if (!toDropExists) {
+        throwError("Index not found", query);
     }
 }
 
