@@ -376,9 +376,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     const QualifiedName* qualifiedName = expr->getFullName();
 
     if (qualifiedName->size() != 2) {
-        constexpr std::string_view error =
-            R"(Property expressions must have the form {variable}.{property name}.)";
-        throwError(error, expr);
+        throwError("Invalid property expression.", expr);
     }
 
     const Symbol* varName = qualifiedName->front();
