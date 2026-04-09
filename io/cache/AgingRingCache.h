@@ -226,17 +226,23 @@ public:
                 victimPayload = entry._payload.get();
             }
 
-            _onEvict(*victimKey, **victimPayload);
+            const auto evictRes = _onEvict(*victimKey, **victimPayload);
 
             {
                 std::unique_lock lock(_mutex);
 
-                // Find the entry again since the map may be have been modified
-                // during the eviction callback execution (invalidated iterators)
                 const auto it = _map.find(*victimKey);
-                if (it != _map.end()) {
-                    _map.erase(it);
+                if (it == _map.end()) {
+                    continue;
                 }
+
+                if (!evictRes) {
+                    // Save failed, put back in ring and retry on next iteration
+                    putInRingLocked(*victimKey, it->second);
+                    continue;
+                }
+
+                _map.erase(it);
             }
         }
     }
@@ -252,6 +258,14 @@ public:
 
         Entry& entry = it->second;
         bioassert(entry._state == AgingRingCacheState::RESIDENT, "Unexpected cache entry state");
+
+        if (entry._pinCount > 0) {
+            return;
+        }
+
+        entry._state = AgingRingCacheState::EVICTING;
+        removeFromRingLocked(entry._ringIt);
+
         Payload& victimPayload = *entry._payload;
         _inFlightIoCount++;
 
@@ -262,7 +276,7 @@ public:
         onIoFinishedLocked();
 
         if (!evictRes) {
-            // Put back the victim in the cache since the eviction failed and return an error
+            // Put back the victim in the cache since the eviction failed
 
             it = _map.find(key);
             if (it == _map.end()) {
@@ -358,7 +372,7 @@ private:
     void release(Handle& handle) {
         std::unique_lock lock(_mutex);
 
-        if (handle._entry == nullptr || handle._entry->_state != AgingRingCacheState::RESIDENT) {
+        if (handle._entry == nullptr || handle._entry->_pinCount == 0) {
             return;
         }
 
@@ -537,6 +551,17 @@ private:
             }
         }
         return std::nullopt;
+    }
+
+    void removeFromRingLocked(RingIterator ringIt) {
+        if (_clockHand == ringIt) {
+            _clockHand = _ring.erase(ringIt);
+            if (_clockHand == _ring.end() && !_ring.empty()) {
+                _clockHand = _ring.begin();
+            }
+        } else {
+            _ring.erase(ringIt);
+        }
     }
 
     void putInRingLocked(const Key& key, Entry& entry) {
