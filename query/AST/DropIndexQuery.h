@@ -17,6 +17,8 @@ public:
 
 private:
     DropIndexQuery(DeclContext* declCtxt, std::string_view indexName);
+    ~DropIndexQuery() final;
+
     std::string_view _indexName;
 };
 

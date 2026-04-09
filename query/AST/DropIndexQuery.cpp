@@ -10,6 +10,9 @@ DropIndexQuery::DropIndexQuery(DeclContext* declCtxt, std::string_view indexName
 {
 }
 
+DropIndexQuery::~DropIndexQuery() {
+}
+
 DropIndexQuery* DropIndexQuery::create(CypherAST *ast, std::string_view indexName) {
     constexpr DeclContext* parent = nullptr;
     DeclContext* declCtxt = DeclContext::create(ast, parent);
