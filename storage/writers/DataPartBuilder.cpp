@@ -51,7 +51,7 @@ NodeID DataPartBuilder::addNode(const LabelSet& labelset) {
 template <SupportedType T>
 void DataPartBuilder::addNodeProperty(NodeID nodeID,
                                       PropertyTypeID ptID,
-                                      T::Primitive value) {
+                                      std::optional<typename T::Primitive> value) {
     if (!_nodeProperties->hasPropertyType(ptID)) {
         _nodeProperties->registerPropertyType<T>(ptID);
     }
@@ -123,9 +123,10 @@ const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, Node
 template <>
 void DataPartBuilder::addNodeProperty<types::Embedding>(NodeID nodeID,
                                                         PropertyTypeID ptID,
-                                                        types::Embedding::Primitive value) {
+                                                        std::optional<types::Embedding::Primitive> value) {
     if (!_nodeProperties->hasPropertyType(ptID)) {
-        _nodeProperties->registerEmbeddingPropertyType(ptID, value.size());
+        bioassert(value.has_value(), "Null embedding on register.");
+        _nodeProperties->registerEmbeddingPropertyType(ptID, value->size());
     }
 
     if (nodeID < _firstNodeID) {
@@ -155,7 +156,7 @@ template bool DataPartBuilder::hasProperty<types::Embedding>(EdgeID id, Property
 #define INSTANTIATE(PType)                                                   \
     template void DataPartBuilder::addNodeProperty<PType>(NodeID,            \
                                                           PropertyTypeID,    \
-                                                          PType::Primitive); \
+                                                          std::optional<PType::Primitive>); \
     template void DataPartBuilder::addEdgeProperty<PType>(const EdgeRecord&, \
                                                           PropertyTypeID,    \
                                                           PType::Primitive,  \

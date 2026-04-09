@@ -83,16 +83,15 @@ public:
     TypedPropertyContainer& operator=(TypedPropertyContainer&&) noexcept = default;
     ~TypedPropertyContainer() override = default;
 
-    template <typename... Args>
-    void add(EntityID entityID, Args&&... args) {
-        const size_t index = _values.size();
-        _values.emplace_back(std::forward<Args>(args)...);
-        _ids.emplace_back(entityID);
-        _entityIndexMap[entityID] = index;
-    }
-
-    void add(EntityID entityID, const PropertyNull&) {
-        _entityIndexMap[entityID] = NULL_INDEX;
+    void add(EntityID entityID, const std::optional<typename T::Primitive>& arg) {
+        if (arg.has_value()) {
+            const size_t index = _values.size();
+            _values.push_back(*arg);
+            _ids.emplace_back(entityID);
+            _entityIndexMap[entityID] = index;
+        } else {
+            _entityIndexMap[entityID] = NULL_INDEX;
+        }
     }
 
     bool has(EntityID entityID) const override {
@@ -191,11 +190,15 @@ public:
     TypedPropertyContainer& operator=(TypedPropertyContainer&&) noexcept = default;
     ~TypedPropertyContainer() override = default;
 
-    void add(EntityID entityID, std::string_view v) {
-        const size_t index = _values.size();
-        _values.alloc(v);
-        _ids.emplace_back(entityID);
-        _entityIndexMap[entityID] = index;
+    void add(EntityID entityID, const std::optional<types::String::Primitive>& arg) {
+        if (arg.has_value()) {
+            const size_t index = _values.size();
+            _values.alloc(*arg);
+            _ids.emplace_back(entityID);
+            _entityIndexMap[entityID] = index;
+        } else {
+            _entityIndexMap[entityID] = NULL_INDEX;
+        }
     }
 
     bool has(EntityID entityID) const override {
@@ -277,11 +280,14 @@ public:
     TypedPropertyContainer& operator=(TypedPropertyContainer&&) noexcept = default;
     ~TypedPropertyContainer() override = default;
 
-    void add(EntityID entityID, std::span<const float> v) {
-        const size_t index = _values.size();
-        _values.alloc(v);
-        _ids.emplace_back(entityID);
-        _entityIndexMap[entityID] = index;
+    void add(EntityID entityID, const std::optional<types::Embedding::Primitive>& arg) {
+        if (arg.has_value()) {
+            _entityIndexMap[entityID] = _ids.size();
+            _values.alloc(*arg);
+            _ids.emplace_back(entityID);
+        } else {
+            _entityIndexMap[entityID] = NULL_INDEX;
+        }
     }
 
     bool has(EntityID entityID) const override {
