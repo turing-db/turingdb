@@ -1,6 +1,6 @@
 #pragma once
 
-#include <numeric>
+#include <limits>
 #include <unordered_map>
 
 #include <range/v3/algorithm/sort.hpp>
