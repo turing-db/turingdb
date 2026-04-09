@@ -37,12 +37,12 @@ public:
     struct EdgeUpdate;
 
     using SupportedTypeVariant = std::variant<
-                     types::Int64::Primitive,
-                     types::UInt64::Primitive,
-                     types::Double::Primitive,
-                     std::string, /// Needs to be owning to outlive the query
-                     types::Bool::Primitive,
-                     types::Embedding::OwningPrimitive
+        std::optional<types::Int64::Primitive>,
+        std::optional<types::UInt64::Primitive>,
+        std::optional<types::Double::Primitive>,
+        std::optional<std::string>, /// Needs to be owning to outlive the query
+        std::optional<types::Bool::Primitive>,
+        std::optional<types::Embedding::OwningPrimitive>
      >;
      using UntypedProperties = std::vector<UntypedProperty>;
      using PendingNodeOffset = size_t;
@@ -269,12 +269,12 @@ private:
     /// Updates a property of an edge which is already committed
     void applyExistingEdgeUpdate(DataPartBuilder& builder,
                                  const EdgeRecord& record,
-                                 const CommitWriteBuffer::UntypedProperty& prop);
+                                 CommitWriteBuffer::UntypedProperty& prop);
 
     /// Updates a property of an edge which is not yet committed
     void applyPendingEdgeUpdate(DataPartBuilder& builder,
                                 EdgeID edgeID,
-                                const CommitWriteBuffer::UntypedProperty& prop);
+                                CommitWriteBuffer::UntypedProperty& prop);
 };
 
 class CommitWriteBufferRebaser {

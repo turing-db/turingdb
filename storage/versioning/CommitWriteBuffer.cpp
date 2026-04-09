@@ -147,16 +147,16 @@ NodeID CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
     }
 
     // Adding node properties
-    for (const auto& [propID, value] : node.properties) {
+    for (auto& [propID, value] : node.properties) {
         std::visit(
-            [&](const auto& val) {
+            [&](auto&& val) {
                 using T = std::decay_t<decltype(val)>;
                 using Type = typename PrimitiveToTag<T>::Type;
                 // A more recent update already registered this property; skip.
                 if (builder.hasProperty<Type>(nodeID, propID)) {
                     return;
                 }
-                builder.addNodeProperty<Type>(nodeID, propID, val);
+                builder.addNodeProperty<Type>(nodeID, propID, std::forward<T>(val));
             },
             value);
         _journal.addWrittenNodeProperty(propID);
@@ -227,7 +227,7 @@ EdgeID CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
 
     for (const auto& [propID, value] : edge.properties) {
         std::visit(
-            [&](const auto& val) {
+            [&](auto&& val) {
                 using T = std::decay_t<decltype(val)>;
                 using Type = typename PrimitiveToTag<T>::Type;
                 // A more recent update already registered this property; skip.
@@ -235,7 +235,7 @@ EdgeID CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
                     return;
                 }
                 builder.addEdgeProperty<Type>({newEdgeID, srcID, tgtID, edgeTypeID},
-                                              propID, val);
+                                              propID, std::forward<T>(val));
             },
             value);
         _journal.addWrittenEdgeProperty(propID);
@@ -315,14 +315,14 @@ void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
         const auto& [nodeID, property] = _updatedNodes.back();
         const auto& [propID, value] = property;
         std::visit(
-            [&](const auto& val) {
+            [&](auto&& val) {
                 using T = std::decay_t<decltype(val)>;
                 using Type = typename PrimitiveToTag<T>::Type;
                 // A more recent update already registered this property; skip.
                 if (builder.hasProperty<Type>(nodeID, propID)) {
                     return;
                 }
-                builder.addNodeProperty<Type>(nodeID, propID, val);
+                builder.addNodeProperty<Type>(nodeID, propID, std::forward<T>(val));
             },
             value);
 
@@ -334,17 +334,17 @@ void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
 
 void CommitWriteBuffer::applyExistingEdgeUpdate(DataPartBuilder& builder,
                                   const EdgeRecord& record,
-                                  const CommitWriteBuffer::UntypedProperty& prop) {
-    const auto& [pid, val] = prop;
+                                  CommitWriteBuffer::UntypedProperty& prop) {
+    auto& [pid, val] = prop;
     std::visit(
-        [&](const auto& value) {
+        [&](auto&& value) {
             using T = std::decay_t<decltype(value)>;
             using Type = typename PrimitiveToTag<T>::Type;
             // A more recent update already registered this property; skip.
             if (builder.hasProperty<Type>(record._edgeID, pid)) {
                 return;
             }
-            builder.addEdgeProperty<Type>(record, pid, value);
+            builder.addEdgeProperty<Type>(record, pid, std::forward<T>(value));
         },
         val);
 
@@ -354,8 +354,8 @@ void CommitWriteBuffer::applyExistingEdgeUpdate(DataPartBuilder& builder,
 
 void CommitWriteBuffer::applyPendingEdgeUpdate(DataPartBuilder& builder,
                                              EdgeID edgeID,
-                                             const CommitWriteBuffer::UntypedProperty& prop) {
-    const auto& [pid, val] = prop;
+                                             CommitWriteBuffer::UntypedProperty& prop) {
+    auto& [pid, val] = prop;
 
     // The edge is pending: find the index of this pending edge in the write buffer
     const size_t pendingIndex = edgeID.getValue() - _view.read().getTotalEdgesAllocated();
@@ -400,14 +400,15 @@ void CommitWriteBuffer::applyPendingEdgeUpdate(DataPartBuilder& builder,
     bioassert(srcLblSet.isValid(), "Failed to get LabelSet for pending node.");
 
     std::visit(
-        [&](const auto& value) {
+        [&](auto&& value) {
             using T = std::decay_t<decltype(value)>;
             using Type = typename PrimitiveToTag<T>::Type;
             // A more recent update already registered this property; skip.
             if (builder.hasProperty<Type>(pendingEdgeRecord._edgeID, pid)) {
                 return;
             }
-            builder.addEdgeProperty<Type>(pendingEdgeRecord, pid, value, srcLblSet);
+            builder.addEdgeProperty<Type>(pendingEdgeRecord, pid, std::forward<T>(value),
+                                          srcLblSet);
         },
         val);
     _journal.addWrittenEdgeProperty(pid);
@@ -419,7 +420,7 @@ void CommitWriteBuffer::applyEdgeUpdates(DataPartBuilder& builder) {
     // 2. A pending edge, yet to be created (CREATE ... e ... SET e ...)
 
     // Iterate newest -> oldest so the first registration wins.
-    for (const auto& [edgeID, property] : rv::reverse(_updatedEdges)) {
+    for (auto& [edgeID, property] : rv::reverse(_updatedEdges)) {
         if (const EdgeRecord* existingEdge = _view.read().getEdge(edgeID)) {
             applyExistingEdgeUpdate(builder, *existingEdge, property);
         } else {
