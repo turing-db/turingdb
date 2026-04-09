@@ -25,6 +25,12 @@ namespace {
 
 template <typename T>
 struct PrimitiveToTag;
+
+template <typename T>
+struct PrimitiveToTag<std::optional<T>> {
+    using Type = PrimitiveToTag<T>::Type;
+};
+
 template <>
 struct PrimitiveToTag<types::Int64::Primitive> {
     using Type = types::Int64;

@@ -64,10 +64,16 @@ public:
         _embeddings.emplace(ptID, static_cast<PropertyContainer*>(ptr));
     }
 
-    template <SupportedType T, typename... Args>
-    void add(PropertyTypeID ptID, EntityID entityID, Args&&... args) {
+    template <SupportedType T>
+    void add(PropertyTypeID ptID, EntityID entityID, const T::Primitive& arg) {
         TypedPropertyContainer<T>& container = getMutableContainer<T>(ptID);
-        container.add(entityID, std::forward<Args>(args)...);
+        container.add(entityID, arg);
+    }
+
+    template <SupportedType T>
+    void add(PropertyTypeID ptID, EntityID entityID, const std::optional<typename T::Primitive>& arg) {
+        TypedPropertyContainer<T>& container = getMutableContainer<T>(ptID);
+        container.add(entityID, arg);
     }
 
     bool hasPropertyType(PropertyTypeID ptID) const {
