@@ -48,8 +48,7 @@ void DropIndexProcessor::prepare(ExecutionContext* ctxt) {
 
     Transaction* rawTx = ctxt->getTransaction();
     if (!rawTx) {
-        throw FatalException(
-            "Attempted to create property index without transaction.");
+        throw FatalException("Attempted to drop index without transaction.");
     }
 
     if (!rawTx->writingPendingCommit()) {
