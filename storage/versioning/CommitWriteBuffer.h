@@ -40,7 +40,7 @@ public:
         std::optional<types::Int64::Primitive>,
         std::optional<types::UInt64::Primitive>,
         std::optional<types::Double::Primitive>,
-        std::optional<std::string>, /// Needs to be owning to outlive the query
+        std::optional<types::String::OwningPrimitive>, /// Needs to be owning to outlive the query
         std::optional<types::Bool::Primitive>,
         std::optional<types::Embedding::OwningPrimitive>
      >;
