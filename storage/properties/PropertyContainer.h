@@ -9,6 +9,7 @@
 #include "embedding/EmbeddingContainer.h"
 #include "list/ListContainer.h"
 #include "StringContainer.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 #include "ID.h"
@@ -71,6 +72,7 @@ protected:
     IDs _ids;
     bool _sorted {false};
     std::unordered_map<EntityID, size_t> _entityIndexMap;
+    static constexpr size_t NULL_INDEX = std::numeric_limits<size_t>::max();
 
 private:
     ValueType _valueType {ValueType::Invalid};
@@ -101,6 +103,10 @@ public:
         _sorted = false;
     }
 
+    void add(EntityID entityID, const PropertyNull&) {
+        _entityIndexMap[entityID] = NULL_INDEX;
+    }
+
     bool has(EntityID entityID) const override {
         auto it = find(entityID);
         return it != _values.end();
@@ -114,6 +120,10 @@ public:
         }
 
         const size_t offset = it->second;
+
+        if (offset == NULL_INDEX) {
+            return _values.end();
+        }
 
         return _values.begin() + offset;
     }
