@@ -3298,13 +3298,28 @@ TEST_F(WriteQueriesTest, dynamicIntPropertyExpression) {
 TEST_F(WriteQueriesTest, dynamicIntPropertySetNull) {
     newChange();
     {
-        constexpr std::string_view setQuery =
+        std::string_view setQuery =
             R"(MATCH (n), (m) WHERE n = 10 SET m.age = n.age)"; // n.age is null for n = 10
 
         auto res = query(setQuery, [](const Dataframe*) {});
-        ASSERT_FALSE(res);
-        ASSERT_TRUE(res.hasErrorMessage());
-        ASSERT_EQ("Setting properties to NULL is not yet supported.", res.getError());
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        std::string_view matchQuery = "MATCH (n) RETURN n.age";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(ages);
+
+            const bool allNull = std::ranges::all_of(*ages, [](auto&& x) { return !x; });
+
+            ASSERT_TRUE(allNull) << dump(df);
+        });
+        ASSERT_TRUE(res);
     }
 }
 
