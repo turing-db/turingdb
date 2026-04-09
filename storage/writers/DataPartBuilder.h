@@ -44,12 +44,12 @@ public:
     template <SupportedType T>
     void addNodeProperty(NodeID nodeID,
                          PropertyTypeID ptID,
-                         std::optional<typename T::Primitive> value);
+                         std::optional<typename T::Primitive>&& value);
 
     template <SupportedType T>
     void addEdgeProperty(const EdgeRecord& edge,
                          PropertyTypeID ptID,
-                         T::Primitive value,
+                         std::optional<typename T::Primitive>&& value,
                          LabelSetHandle srcLblSet = {});
 
     // A list arrives from the write buffer as its owning encoding rather than as a
