@@ -63,7 +63,6 @@
 #include "nodes/ShowExtensionsNode.h"
 #include "nodes/CreatePropertyIndexNode.h"
 #include "nodes/DropIndexNode.h"
-#include "nodes/PlanGraphNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"

@@ -1,6 +1,5 @@
 #include "CypherAnalyzer.h"
 
-#include <algorithm>
 #include <spdlog/fmt/bundled/core.h>
 #include <string_view>
 
@@ -35,7 +34,6 @@
 #include "decl/EvaluatedType.h"
 #include "expr/Expr.h"
 #include "expr/PropertyExpr.h"
-#include "indexes/Index.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "stmt/ShortestPathStmt.h"
@@ -50,7 +48,6 @@
 #include "stmt/Limit.h"
 #include "CreateNodePropertyIndexQuery.h"
 #include "CreateEdgePropertyIndexQuery.h"
-#include "DropIndexQuery.h"
 
 #include "FunctionDecls.h"
 

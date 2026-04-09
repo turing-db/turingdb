@@ -4,7 +4,6 @@
 
 using namespace db;
 
-
 DropIndexQuery::DropIndexQuery(DeclContext* declCtxt, std::string_view indexName)
     : QueryCommand(declCtxt),
     _indexName(indexName)
