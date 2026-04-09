@@ -45,7 +45,7 @@ Determine whether there exists an index on property `Y` visible to the current c
 
 ### Immutability of Indexes
 
-To preserve lock-free, indexes will be immutable just as dataparts are.
+To preserve lock-free reads, indexes will be immutable just as dataparts are.
 
 The immutability allows multiple commits to hold references to the same index, and
 read them without a lock, since they will never change.
@@ -87,10 +87,28 @@ to linear search through indexes to find all matches. This is in line with our c
 philosophy as we already consider it bad practices to split nodes and edges over many
 dataparts/commits.
 
+## Updating indexes
+Since indexes need to be kept up to date with new commits, we need some notion of an ordering
+of precedence of indexes.
+
+For example, assuming we have an index on the property `age`:
+~~~
+MATCH (n) WHERE n = 42 SET n.age = 0
+COMMIT
+MATCH (n) WHERE n = 42 SET n.age = 10
+COMMIT
+~~~
+
+since we wish to keep indexes automatically updated with new dataparts, we would then have multiple
+indexes which claim to hold the value of `age` for node `42` - how do we know which value is correct?
+
+Similarly to how we search from most recent to earliest dataparts to ensure we get the most recent
+property values in `GetProperties`, we can query the most recent indexes first, and stop when we get a
+match, so that we get the most recent values.
+
+
 # Serialisation
 All indexes need to be able to dumped to disk and loaded.
 
 Indexes should be dumped "flat" just as dataparts, so that an arbitrary commit can be
 loaded, along with all of the indexes it requires.
-
-# Summary of operations
