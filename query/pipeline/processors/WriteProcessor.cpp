@@ -89,7 +89,7 @@ public:
         _buf.clear();
 
         for (const T& val : *typed) {
-            _buf.emplace_back(_propID, val);
+            _buf.emplace_back(_propID, std::make_optional(val));
         }
     }
 
@@ -100,7 +100,7 @@ public:
         std::string tmp;
         for (const std::string_view val : *typed) {
             tmp.assign(begin(val), end(val));
-            _buf.emplace_back(_propID, tmp);
+            _buf.emplace_back(_propID, std::make_optional(tmp));
         }
     }
 
@@ -109,12 +109,7 @@ public:
         _buf.clear();
 
         for (const std::optional<T>& val : *typed) {
-            if (!val.has_value()) {
-                throw PipelineException(
-                    "Setting properties to NULL is not yet supported.");
-            }
-
-            _buf.emplace_back(_propID, *val);
+            _buf.emplace_back(_propID, val);
         }
     }
 
@@ -125,14 +120,14 @@ public:
         std::string tmp;
         for (const std::optional<types::String::Primitive> val : *typed) {
             if (!val.has_value()) {
-                throw PipelineException(
-                    "Setting properties to NULL is not yet supported.");
+                using Disengaged = std::optional<types::String::OwningPrimitive>;
+                _buf.emplace_back(_propID, Disengaged {});
             }
 
             const types::String::Primitive v = *val;
 
             tmp.assign(begin(v), end(v));
-            _buf.emplace_back(_propID, tmp);
+            _buf.emplace_back(_propID, std::make_optional(tmp));
         }
     }
 
@@ -155,13 +150,13 @@ public:
         types::Embedding::OwningPrimitive tmp;
         for (const std::optional<types::Embedding::Primitive> val : *typed) {
             if (!val.has_value()) {
-                throw PipelineException(
-                    "Setting properties to NULL is not yet supported.");
+                using Disengaged = std::optional<types::Embedding::OwningPrimitive>;
+                _buf.emplace_back(_propID, Disengaged {});
             }
             const types::Embedding::Primitive v = *val;
 
             tmp.assign(begin(v), end(v));
-            _buf.emplace_back(_propID, tmp);
+            _buf.emplace_back(_propID, std::make_optional(tmp));
         }
     }
 
@@ -195,7 +190,7 @@ public:
     template <typename T>
     void operator()(const ColumnConst<T>* typed) {
         const T& val = typed->getRaw();
-        _prop.value = val;
+        _prop.value = std::make_optional(val);
         _prop.propertyID = _propID;
     }
 
