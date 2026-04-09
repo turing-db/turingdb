@@ -1,5 +1,6 @@
 #include "WriteProcessor.h"
 
+#include <numeric>
 #include <algorithm>
 #include <optional>
 #include <string_view>
