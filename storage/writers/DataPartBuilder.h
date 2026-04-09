@@ -44,7 +44,7 @@ public:
     template <SupportedType T>
     void addNodeProperty(NodeID nodeID,
                          PropertyTypeID ptID,
-                         T::Primitive value);
+                         std::optional<typename T::Primitive> value);
 
     template <SupportedType T>
     void addEdgeProperty(const EdgeRecord& edge,
