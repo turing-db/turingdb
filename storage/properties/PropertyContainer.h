@@ -68,6 +68,7 @@ public:
 protected:
     IDs _ids;
     bool _sorted {false};
+    std::unordered_map<EntityID, size_t> _entityIndexMap;
 
 private:
     ValueType _valueType {ValueType::Invalid};
@@ -177,7 +178,6 @@ private:
     friend TrivialPropertyContainerLoader<T>;
 
     Values _values;
-    std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
 
 template <>
@@ -268,7 +268,6 @@ private:
     friend DataPartMerger;
 
     StringContainer _values;
-    std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
 
 template <>
@@ -341,7 +340,6 @@ private:
     friend DataPartMerger;
 
     EmbeddingContainer _values;
-    std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
 
 }
