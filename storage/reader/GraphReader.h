@@ -4,6 +4,7 @@
 #include "views/EdgeView.h"
 #include "views/GraphView.h"
 #include "iterators/GetPropertiesIterator.h"
+#include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetEdgesIterator.h"
 #include "iterators/GetNodeViewsIterator.h"
