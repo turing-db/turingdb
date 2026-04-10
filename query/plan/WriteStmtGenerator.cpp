@@ -47,10 +47,6 @@ void checkDependencies(PlanGraphVariables& variables, T data) {
     for (auto&& d : data->exprConstraints()) {
         deps.genExprDependencies(variables, d._expr);
     }
-    if (!deps.empty()) {
-        throw PlannerException("CREATE statements with entity dependencies "
-                               "are not yet supported.");
-    }
 }
 
 }

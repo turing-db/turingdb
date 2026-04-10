@@ -364,20 +364,26 @@ void WriteProcessor::createNodes(size_t numIters) {
         // Get all properties: this can throw, so we do this BEFORE adding PendingNodes to
         // CommitWriteBuffer, as otherwise after throwing this could leave it in invalid
         // state.
-        std::vector<CommitWriteBuffer::UntypedProperty> constProps;
-        constProps.reserve(node._properties.size());
+        std::vector<CommitWriteBuffer::UntypedProperty> properties;
+        properties.reserve(node._properties.size());
 
-        // Temporary buffer, reused across iterations, to add properties to the WriteBuffer
+        // Temporary buffers, reused across iterations, to add properties to the WriteBuffer
         CommitWriteBuffer::UntypedProperty propBuffer;
+        CommitWriteBuffer::UntypedProperties propsBuffer;
 
         for (const auto& [name, type, valueCol] : node._properties) {
             const PropertyTypeID propID =
                 _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
-            // Extract the constant value from the value column
-            getConstantUntypedProperty(valueCol, propBuffer, propID);
-
-            constProps.emplace_back(propBuffer);
+            if (isColumnConst(valueCol)) {
+                getConstantUntypedProperty(valueCol, propBuffer, propID);
+                properties.emplace_back(propBuffer);
+            } else {
+                getUntypedProperties(valueCol, propsBuffer, propID);
+                for (const CommitWriteBuffer::UntypedProperty& x : propsBuffer) {
+                    properties.emplace_back(x);
+                }
+            }
         }
 
         {
@@ -389,10 +395,8 @@ void WriteProcessor::createNodes(size_t numIters) {
                 newNode.labelsetHandle = hdl;
             }
 
-            // Add each property; NOTE: for now all ColumnConst, so all same value.
             // Extract the value first, then add that value to each node to create.
-            // TODO: More cache friendly access patterns
-            for (const CommitWriteBuffer::UntypedProperty& prop : constProps) {
+            for (const CommitWriteBuffer::UntypedProperty& prop : properties) {
                 for (size_t i = 0; i < numIters; i++) {
                     auto& pendingNode = _writeBuffer->getPendingNode(numPendingNodesPrior + i);
                     pendingNode.properties.emplace_back(prop);
