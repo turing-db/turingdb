@@ -60,10 +60,11 @@ private:
 
     void prepareWriteNode();
 
-    void checkDependencies(PlanGraphVariables& variables, const PatternData* data);
+    void supplyPropertyDependencies(PlanGraphVariables& variables,
+                                    const PatternData* data);
     void fetchOrGenerateProperty(PropertyExpr* prop);
 
-    [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
+    [[noreturn]] void throwError(std::string_view msg, const void* obj = nullptr) const;
 
     static constexpr bool DELETE_PENDING_SUPPORTED {false};
 };
