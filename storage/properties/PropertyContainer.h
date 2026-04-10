@@ -269,9 +269,10 @@ public:
     ~TypedPropertyContainer() override = default;
 
     void add(EntityID entityID, std::span<const float> v) {
-        _entityIndexMap[entityID] = _ids.size();
+        const size_t index = _values.size();
         _values.alloc(v);
         _ids.emplace_back(entityID);
+        _entityIndexMap[entityID] = index;
     }
 
     bool has(EntityID entityID) const override {
