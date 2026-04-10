@@ -1018,6 +1018,232 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeDynamicProp) {
     }
 }
 
+TEST_F(WriteQueriesTest, createNodesFromPersonSubsetDynamicName) {
+    constexpr std::string_view CREATE_QUERY = R"(MATCH (n:Person) CREATE (m:Copy{name:n.name}))";
+    constexpr std::string_view MATCH_QUERY = R"(MATCH (n:Copy) RETURN n, n.name)";
+
+    PropertyTypeID NAME_PROP_ID(0);
+
+    const size_t numNodesPrior = read().getTotalNodesAllocated();
+
+    using Rows = LineContainer<NodeID, types::String::Primitive>;
+
+    Rows expected;
+    {
+        constexpr std::string_view preQuery = R"(MATCH (n:Person) RETURN n, n.name)";
+        size_t pendingIdx = 0;
+        auto res = query(preQuery, [&](const Dataframe* df) {
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns && names);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r));
+                expected.add({NodeID(numNodesPrior + pendingIdx), *names->at(r)});
+                ++pendingIdx;
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    {
+        newChange();
+        auto res = query(CREATE_QUERY, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 0);
+        });
+        ASSERT_TRUE(res);
+        submitCurrentChange();
+    }
+
+    {
+        Rows actual;
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 2);
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns && names);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r));
+                actual.add({ns->at(r), *names->at(r)});
+            }
+        });
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(expected.equals(actual)) << "Dynamic name property was not preserved "
+                                                "across DataPart::load for same-label-set nodes.";
+    }
+}
+
+TEST_F(WriteQueriesTest, createNodesDynamicNameAndDob) {
+    constexpr std::string_view CREATE_QUERY =
+        R"(MATCH (n:Person) WHERE n.dob IS NOT NULL CREATE (m:PersonCopy{name:n.name, dob:n.dob}))";
+
+    PropertyTypeID NAME_PROP_ID(0);
+    PropertyTypeID DOB_PROP_ID(1); // 'dob' is the second property added in SimpleGraph
+
+    const size_t numNodesPrior = read().getTotalNodesAllocated();
+
+    using Rows = LineContainer<NodeID, types::String::Primitive, types::String::Primitive>;
+
+    Rows expected;
+    {
+        constexpr std::string_view preQuery = R"(MATCH (n:Person) WHERE n.dob IS NOT NULL RETURN n, n.name, n.dob)";
+        size_t pendingIdx = 0;
+        auto res = query(preQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 3);
+            auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            auto* dobs  = findColumn(df, "n.dob")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(names && dobs);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                if (!names->at(r) || !dobs->at(r)) { ++pendingIdx; continue; }
+                expected.add({NodeID(numNodesPrior + pendingIdx),
+                              *names->at(r),
+                              *dobs->at(r)});
+                ++pendingIdx;
+            }
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+    {
+        newChange();
+        auto res = query(CREATE_QUERY, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 0);
+        });
+        ASSERT_TRUE(res);
+        submitCurrentChange();
+    }
+
+    {
+        Rows actual;
+        constexpr std::string_view matchQuery =
+            R"(MATCH (n:PersonCopy) RETURN n, n.name, n.dob)";
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* ns   = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            auto* dobs  = findColumn(df, "n.dob")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns && names && dobs);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r)) << "New node " << ns->at(r).getValue()
+                                          << " is missing name";
+                ASSERT_TRUE(dobs->at(r))  << "New node " << ns->at(r).getValue()
+                                          << " is missing dob";
+                actual.add({ns->at(r), *names->at(r), *dobs->at(r)});
+            }
+        });
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(expected.equals(actual)) << "One or more dynamic properties were "
+                                                "permuted across same-label-set nodes.";
+    }
+}
+
+TEST_F(WriteQueriesTest, setDynamicNameOnNewNodes) {
+    setWorkingGraph("default");
+
+    newChange();
+
+    for (const auto& name : {"Alpha", "Beta", "Gamma", "Delta"}) {
+        const std::string q = fmt::format(R"(CREATE (n:Source{{name:"{}"}}))", name);
+        ASSERT_TRUE(query(q, [](const Dataframe*) {}));
+    }
+
+    ASSERT_TRUE(query("commit", [](const Dataframe*) {}));
+
+    constexpr std::string_view copyQuery =
+        R"(MATCH (n:Source) CREATE (m:Copy{name:n.name}))";
+    ASSERT_TRUE(query(copyQuery, [](const Dataframe*) {}));
+
+    submitCurrentChange();
+
+    // Every :Copy node must have a name that belongs to a :Source node, and
+    // each name must appear exactly once.
+    using Rows = LineContainer<types::String::Primitive>;
+    const Rows expected = [] {
+        Rows r;
+        for (const auto& n : {"Alpha", "Beta", "Gamma", "Delta"}) {
+            r.add({n});
+        }
+        return r;
+    }();
+
+    Rows actual;
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n:Copy) RETURN n.name)";
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(names);
+            ASSERT_EQ(names->size(), 4);
+            for (auto& name : *names) {
+                ASSERT_TRUE(name);
+                actual.add({*name});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+    ASSERT_TRUE(expected.equals(actual));
+}
+
+TEST_F(WriteQueriesTest, dynamicNamePreservedAcrossCommit) {
+    constexpr std::string_view CREATE_QUERY =
+        R"(MATCH (n) CREATE (m:Snapshot{name:n.name}))";
+
+    PropertyTypeID NAME_PROP_ID(0);
+    const size_t numNodesPrior = read().getTotalNodesAllocated();
+
+    using Rows = LineContainer<NodeID, types::String::Primitive>;
+    Rows expected;
+    {
+        size_t i = 0;
+        for (const NodeID n : read().scanNodes()) {
+            const types::String::Primitive* name =
+                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
+            ASSERT_TRUE(name);
+            expected.add({NodeID(numNodesPrior + i), *name});
+            ++i;
+        }
+    }
+
+    newChange();
+    {
+        auto res = query(CREATE_QUERY, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 0);
+        });
+        ASSERT_TRUE(res);
+    }
+
+    ASSERT_TRUE(query("commit", [](const Dataframe*) {}));
+    submitCurrentChange();
+
+    {
+        Rows actual;
+        constexpr std::string_view matchQuery = R"(MATCH (n:Snapshot) RETURN n, n.name)";
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* ns    = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns && names);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r)) << "Node " << ns->at(r).getValue()
+                                          << " lost its name across DataPart boundary";
+                actual.add({ns->at(r), *names->at(r)});
+            }
+        });
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(expected.equals(actual)) << "Names were permuted when DataPart was "
+                                                "reloaded after explicit commit.";
+    }
+}
+
 TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
     setWorkingGraph("default");
     // NOTE: Returning properties of just-created nodes is not yet supported
