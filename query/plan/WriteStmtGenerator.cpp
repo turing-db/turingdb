@@ -274,9 +274,7 @@ void WriteStmtGenerator::supplyPropertyDependencies(PlanGraphVariables& variable
 
             if (e->getKind() == Expr::Kind::PROPERTY) {
                 fetchOrGenerateProperty(static_cast<PropertyExpr*>(e));
-            } else {
-                throwError(fmt::format("Unknown dependency of kind {}.", ExprKindDescription::value(e->getKind())), e);
-            }
+            } // Other dependencies are handled elsewhere (e.g. in an ExprProgram)
         }
     }
 }
