@@ -38,19 +38,6 @@
 
 using namespace db;
 
-namespace {
-
-template <typename T>
-    requires (std::is_same_v<const NodePatternData*, T>) || (std::is_same_v<const EdgePatternData*, T>)
-void checkDependencies(PlanGraphVariables& variables, T data) {
-    ExprDependencies deps;
-    for (auto&& d : data->exprConstraints()) {
-        deps.genExprDependencies(variables, d._expr);
-    }
-}
-
-}
-
 WriteStmtGenerator::WriteStmtGenerator(const CypherAST* ast,
                                        PlanGraph* tree,
                                        PlanGraphVariables* variables,
@@ -270,6 +257,20 @@ void WriteStmtGenerator::prepareWriteNode() {
     } else {
         // Previous node is not a write node, create a new one
         _writeNode = _tree->newOut<WriteNode>(_prevNode);
+    }
+}
+
+void WriteStmtGenerator::checkDependencies(PlanGraphVariables& variables, const PatternData* data) {
+    ExprDependencies deps;
+    for (auto&& d : data->exprConstraints()) {
+        deps.genExprDependencies(variables, d._expr);
+
+        for (const ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
+            Expr* e = dep._expr;
+            if (e->getKind() == Expr::Kind::PROPERTY) {
+                fetchOrGenerateProperty(static_cast<PropertyExpr*>(e));
+            }
+        }
     }
 }
 
