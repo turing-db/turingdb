@@ -36,6 +36,8 @@
 #include "stmt/CreateStmt.h"
 #include "stmt/DeleteStmt.h"
 
+#include "BioAssert.h"
+
 using namespace db;
 
 WriteStmtGenerator::WriteStmtGenerator(const CypherAST* ast,
@@ -202,7 +204,7 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
 
     if (!_writeNode->hasPendingNode(originDecl) && varNode == nullptr) {
         // Node is not created yet and is not an input
-        checkDependencies(*_variables, data);
+        supplyPropertyDependencies(*_variables, data);
         _writeNode->addNode(originDecl, data);
 
         _variables->setProducer(originDecl, _writeNode);
@@ -219,7 +221,7 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
 
         if (!_writeNode->hasPendingNode(rhs) && rhsVarNode == nullptr) {
             // Node is not created yet and is not an input
-            checkDependencies(*_variables, rhsData);
+            supplyPropertyDependencies(*_variables, rhsData);
             _writeNode->addNode(rhs, rhsData);
             _variables->setProducer(rhs, _writeNode);
         }
@@ -228,7 +230,7 @@ void WriteStmtGenerator::generateCreatePatternElement(const PatternElement* elem
         const VarDecl* edgeDecl = edge->getDecl();
         {
             const EdgePatternData* edgeData = edge->getData();
-            checkDependencies(*_variables, edgeData);
+            supplyPropertyDependencies(*_variables, edgeData);
             _variables->setProducer(edgeDecl, _writeNode);
         }
 
@@ -260,15 +262,20 @@ void WriteStmtGenerator::prepareWriteNode() {
     }
 }
 
-void WriteStmtGenerator::checkDependencies(PlanGraphVariables& variables, const PatternData* data) {
+void WriteStmtGenerator::supplyPropertyDependencies(PlanGraphVariables& variables,
+                                                    const PatternData* data) {
     ExprDependencies deps;
-    for (auto&& d : data->exprConstraints()) {
+    for (const EntityPropertyConstraint& d : data->exprConstraints()) {
         deps.genExprDependencies(variables, d._expr);
 
         for (const ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
             Expr* e = dep._expr;
+            bioassert(e, "Null dependency.");
+
             if (e->getKind() == Expr::Kind::PROPERTY) {
                 fetchOrGenerateProperty(static_cast<PropertyExpr*>(e));
+            } else {
+                throwError("Unknown dependency.", e);
             }
         }
     }
