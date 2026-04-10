@@ -33,8 +33,11 @@ void verifyAllColumnVectors(const Dataframe* df) {
         constexpr ContainerKind::Code ColumnVectorKind = ContainerKind::code<ColumnVector<size_t>>();
 
         if (containerKind != ColumnVectorKind) {
-            throw FatalException("Attempt to calulate the CartesianProduct of a "
-                                 "Dataframe whose column is not a ColumnVector.");
+            std::string err =
+                fmt::format("Attempt to calulate the CartesianProduct of a "
+                            "Dataframe whose column is not a ColumnVector, but a {}.",
+                            col->getTypeName());
+            throw FatalException(std::move(err));
         }
     }
 }
