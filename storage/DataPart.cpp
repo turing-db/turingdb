@@ -5,6 +5,7 @@
 #include <string>
 
 #include <range/v3/action/sort.hpp>
+#include <range/v3/action/stable_sort.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/transform.hpp>
 
@@ -76,7 +77,7 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
     }
 
     // Sorting based on the labelset
-    rg::sort(rv::zip(coreNodeLabelSets, tmpNodeIDs),
+    rg::stable_sort(rv::zip(coreNodeLabelSets, tmpNodeIDs),
              [](const auto& data1, const auto& data2) {
                  const LabelSetHandle& lset1 = std::get<0>(data1);
                  const LabelSetHandle& lset2 = std::get<0>(data2);
