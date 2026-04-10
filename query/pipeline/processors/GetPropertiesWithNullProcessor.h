@@ -12,7 +12,7 @@
 
 #include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
-#include "iterators/GetPropertiesIterator.h"
+#include "iterators/GetPropertiesWithNullIterator.h"
 
 namespace db {
 

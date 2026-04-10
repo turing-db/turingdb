@@ -44,4 +44,7 @@ protected:
     }
 };
 
+template <typename T>
+concept IteratedID = std::is_same_v<T, NodeID> || std::is_same_v<T, EdgeID>;
+
 }

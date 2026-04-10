@@ -23,6 +23,7 @@ set(storage_sources
 
         iterators/GetInEdgesIterator.cpp
         iterators/GetPropertiesIterator.cpp
+        iterators/GetPropertiesWithNullIterator.cpp
         iterators/GetOutEdgesIterator.cpp
         iterators/GetEdgesIterator.cpp
         iterators/GetNodeViewsIterator.cpp
