@@ -1244,6 +1244,188 @@ TEST_F(WriteQueriesTest, dynamicNamePreservedAcrossCommit) {
     }
 }
 
+TEST_F(WriteQueriesTest, createInterleavedLabelSetsBatch) {
+    setWorkingGraph("default");
+
+    constexpr std::string_view CREATE_QUERY =
+        R"(CREATE (:TypeAlpha{name:"A0"}), (:TypeBeta{name:"B0"}), (:TypeAlpha{name:"A1"}), (:TypeBeta{name:"B1"}), (:TypeAlpha{name:"A2"}), (:TypeBeta{name:"B2"}))";
+
+    using Rows = LineContainer<NodeID, types::String::Primitive>;
+    Rows expected;
+    // Ensures sorted by labelset; even when not provided in labelset order
+    expected.add({NodeID(0), "A0"});
+    expected.add({NodeID(1), "A1"});
+    expected.add({NodeID(2), "A2"});
+    expected.add({NodeID(3), "B0"});
+    expected.add({NodeID(4), "B1"});
+    expected.add({NodeID(5), "B2"});
+
+    newChange();
+    ASSERT_TRUE(query(CREATE_QUERY, [](const Dataframe*) {}));
+    ASSERT_TRUE(query("commit", [](const Dataframe*) {}));
+    submitCurrentChange();
+
+    Rows actual;
+    auto res = query(R"(MATCH (n) RETURN n, n.name)", [&](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        auto* ns    = df->cols().front()->as<ColumnNodeIDs>();
+        auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+        ASSERT_TRUE(ns && names);
+        const size_t rowCount = df->getLogicalRowCount();
+        for (size_t r = 0; r < rowCount; r++) {
+            ASSERT_TRUE(names->at(r)) << "Node " << ns->at(r).getValue() << " has null name";
+            actual.add({ns->at(r), *names->at(r)});
+        }
+    });
+    ASSERT_TRUE(res) << res.getError();
+    ASSERT_TRUE(expected.equals(actual));
+}
+
+TEST_F(WriteQueriesTest, matchCreateTwoLabelSetsInterleaved) {
+    constexpr std::string_view CREATE_QUERY =
+        R"(MATCH (n:Person) CREATE (a:AlphaType{name:n.name}), (b:BetaType{name:n.name}))";
+
+    const size_t numNodesPrior = read().getTotalNodesAllocated();
+
+    using Rows = LineContainer<NodeID, types::String::Primitive>;
+    Rows alphaExpected;
+    Rows betaExpected;
+
+    {
+        constexpr std::string_view preQuery = R"(MATCH (n:Person) RETURN n, n.name)";
+        size_t pendingIdx = 0;
+        auto res = query(preQuery, [&](const Dataframe* df) {
+            auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(names);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r));
+                alphaExpected.add({NodeID(numNodesPrior + pendingIdx), *names->at(r)});
+                betaExpected.add({NodeID(numNodesPrior + pendingIdx + names->size()), *names->at(r)});
+                ++pendingIdx;
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    newChange();
+    ASSERT_TRUE(query(CREATE_QUERY, [](const Dataframe*) {}));
+    ASSERT_TRUE(query("commit", [](const Dataframe*) {}));
+    submitCurrentChange();
+
+    {
+        Rows actual;
+        auto res = query(R"(MATCH (n:AlphaType) RETURN n, n.name)", [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* ns    = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns && names);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r));
+                actual.add({ns->at(r), *names->at(r)});
+            }
+        });
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(alphaExpected.equals(actual)) << [alphaExpected, actual] {
+            std::ostringstream out;
+            out << "expected:\n";
+            alphaExpected.print(out);
+            out << "actual:\n";
+            actual.print(out);
+            return out.str();
+        }();
+    }
+
+    {
+        Rows actual;
+        auto res = query(R"(MATCH (n:BetaType) RETURN n, n.name)", [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* ns    = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns && names);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r));
+                actual.add({ns->at(r), *names->at(r)});
+            }
+        });
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(betaExpected.equals(actual)) << [betaExpected, actual] {
+            std::ostringstream out;
+            out << "expected:\n";
+            betaExpected.print(out);
+            out << "actual:\n";
+            actual.print(out);
+            return out.str();
+        }();
+    }
+}
+
+TEST_F(WriteQueriesTest, matchCreateThreeLabelSetsInterleaved) {
+    constexpr std::string_view CREATE_QUERY =
+        R"(MATCH (n:Person) CREATE (r:RedType{name:n.name}), (g:GreenType{name:n.name}), (b:BlueType{name:n.name}))";
+
+    const size_t numNodesPrior = read().getTotalNodesAllocated();
+
+    using Rows = LineContainer<NodeID, types::String::Primitive>;
+    Rows redExpected;
+    Rows greenExpected;
+    Rows blueExpected;
+
+    {
+        constexpr std::string_view preQuery = R"(MATCH (n:Person) RETURN n, n.name)";
+        size_t pendingIdx = 0;
+        auto res = query(preQuery, [&](const Dataframe* df) {
+            auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(names);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r));
+                redExpected.add(  {NodeID(numNodesPrior + pendingIdx), *names->at(r)});
+                greenExpected.add({NodeID(numNodesPrior + pendingIdx + names->size()), *names->at(r)});
+                blueExpected.add( {NodeID(numNodesPrior + pendingIdx + (2 * names->size())), *names->at(r)});
+                ++pendingIdx;
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    newChange();
+    ASSERT_TRUE(query(CREATE_QUERY, [](const Dataframe*) {}));
+    ASSERT_TRUE(query("commit", [](const Dataframe*) {}));
+    submitCurrentChange();
+
+    auto verify = [this](std::string_view matchQuery, const Rows& expected, const char* label) {
+        Rows actual;
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* ns    = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns && names);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r));
+                actual.add({ns->at(r), *names->at(r)});
+            }
+        });
+        ASSERT_TRUE(res);
+        EXPECT_TRUE(expected.equals(actual)) << [expected, actual, &label] {
+            std::ostringstream out;
+            out << label << '\n';
+            out << "expected:\n";
+            expected.print(out);
+            out << "actual:\n";
+            actual.print(out);
+            return out.str();
+        }();
+    };
+
+    verify(R"(MATCH (n:RedType) RETURN n, n.name)",   redExpected,   "RedType");
+    verify(R"(MATCH (n:GreenType) RETURN n, n.name)", greenExpected, "GreenType");
+    verify(R"(MATCH (n:BlueType) RETURN n, n.name)",  blueExpected,  "BlueType");
+}
+
 TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
     setWorkingGraph("default");
     // NOTE: Returning properties of just-created nodes is not yet supported
@@ -1793,7 +1975,7 @@ TEST_F(WriteQueriesTest, multipleEdgeSetsSameProperty) {
 
             ASSERT_TRUE(std::ranges::all_of(*duration,
                 [](std::optional<types::Int64::Primitive> dur) { return *dur == 100; })
-            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();;
+            ) << [df]{ std::ostringstream out; df->dump(out); return out.str(); }();
         });
         ASSERT_TRUE(res);
     }
