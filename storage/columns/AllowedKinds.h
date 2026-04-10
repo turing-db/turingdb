@@ -449,7 +449,9 @@ struct WriteProcessorPropertyTypes {
         std::optional<types::Double::Primitive>,
         std::optional<types::String::Primitive>,
         std::optional<types::Bool::Primitive>,
-        std::optional<types::Embedding::Primitive>
+        std::optional<types::Embedding::Primitive>,
+
+        std::string // For LOAD CSV inputs
     >>;
 
     // Used for specialised dispatching logic for only consts (shouldn't hold optional)
@@ -459,7 +461,9 @@ struct WriteProcessorPropertyTypes {
         types::Double::Primitive,
         types::String::Primitive,
         types::Bool::Primitive,
-        types::Embedding::Primitive
+        types::Embedding::Primitive,
+
+        std::string // For LOAD CSV inputs
     >>;
 
     // Used for specialised dispatching logic for only vectors
