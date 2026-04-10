@@ -962,6 +962,62 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeConstProp) {
     }
 }
 
+TEST_F(WriteQueriesTest, scanNodesCreateNodeDynamicProp) {
+    constexpr std::string_view CREATE_QUERY = R"(MATCH (n) CREATE (m:Person{name:n.name}))";
+    constexpr std::string_view MATCH_QUERY = "MATCH (n) RETURN n, n.name";
+
+    const size_t numNodesPrior = read().getTotalNodesAllocated();
+
+    PropertyTypeID NAME_PROP_ID(0); // 'name' is the first property type registered
+
+    using Rows = LineContainer<NodeID, types::String::Primitive>;
+
+    Rows expected;
+    {
+        for (const NodeID n : read().scanNodes()) {
+            const types::String::Primitive* name =
+                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
+            ASSERT_TRUE(name);
+            // Original node keeps its name
+            expected.add({n, *name});
+            // New Person node created from matching n gets n.name
+            expected.add({n + numNodesPrior, *name});
+        }
+    }
+
+    {
+        newChange();
+        auto res = query(CREATE_QUERY, [](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 0);
+        });
+        ASSERT_TRUE(res);
+        submitCurrentChange();
+    }
+
+    {
+        Rows actual;
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 2);
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(ns);
+            ASSERT_TRUE(names);
+            ASSERT_EQ(ns->size(), numNodesPrior * 2);
+            ASSERT_EQ(names->size(), numNodesPrior * 2);
+
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
+                ASSERT_TRUE(names->at(rowPtr));
+                actual.add({ns->at(rowPtr), *names->at(rowPtr)});
+            }
+        });
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(expected.equals(actual));
+    }
+}
+
 TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
     setWorkingGraph("default");
     // NOTE: Returning properties of just-created nodes is not yet supported

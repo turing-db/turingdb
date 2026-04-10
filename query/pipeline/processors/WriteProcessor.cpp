@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 #include <range/v3/view/zip.hpp>
 
@@ -364,8 +366,8 @@ void WriteProcessor::createNodes(size_t numIters) {
         // Get all properties: this can throw, so we do this BEFORE adding PendingNodes to
         // CommitWriteBuffer, as otherwise after throwing this could leave it in invalid
         // state.
-        std::vector<CommitWriteBuffer::UntypedProperty> properties;
-        properties.reserve(node._properties.size());
+        using PerNodeProperties = std::vector<CommitWriteBuffer::UntypedProperty>;
+        std::vector<PerNodeProperties> properties;
 
         // Temporary buffers, reused across iterations, to add properties to the WriteBuffer
         CommitWriteBuffer::UntypedProperty propBuffer;
@@ -377,11 +379,12 @@ void WriteProcessor::createNodes(size_t numIters) {
 
             if (isColumnConst(valueCol)) {
                 getConstantUntypedProperty(valueCol, propBuffer, propID);
-                properties.emplace_back(propBuffer);
+                properties.emplace_back(PerNodeProperties {propBuffer});
             } else {
                 getUntypedProperties(valueCol, propsBuffer, propID);
+                PerNodeProperties& newProps = properties.emplace_back();
                 for (const CommitWriteBuffer::UntypedProperty& x : propsBuffer) {
-                    properties.emplace_back(x);
+                    newProps.emplace_back(x);
                 }
             }
         }
@@ -396,10 +399,29 @@ void WriteProcessor::createNodes(size_t numIters) {
             }
 
             // Extract the value first, then add that value to each node to create.
-            for (const CommitWriteBuffer::UntypedProperty& prop : properties) {
-                for (size_t i = 0; i < numIters; i++) {
-                    auto& pendingNode = _writeBuffer->getPendingNode(numPendingNodesPrior + i);
-                    pendingNode.properties.emplace_back(prop);
+            for (const PerNodeProperties& props : properties) {
+                const size_t numProps = props.size();
+
+                const bool isDynamic = numProps == numIters;
+                const bool isStatic = !isDynamic && numProps == 1;
+
+                if (isStatic) {
+                    const auto& propValue = props.front();
+
+                    for (size_t i = 0; i < numIters; i++) {
+                        const size_t pendingNodeIdx = numPendingNodesPrior + i;
+                        auto& pendingNode = _writeBuffer->getPendingNode(pendingNodeIdx);
+
+                        pendingNode.properties.emplace_back(propValue);
+                    }
+                } else if (isDynamic) {
+                    for (size_t i = 0; i < numIters; i++) {
+                        const size_t pendingNodeIdx = numPendingNodesPrior + i;
+                        auto& pendingNode = _writeBuffer->getPendingNode(pendingNodeIdx);
+                        const auto& propValue = props.at(i);
+
+                        pendingNode.properties.emplace_back(propValue);
+                    }
                 }
             }
         }
