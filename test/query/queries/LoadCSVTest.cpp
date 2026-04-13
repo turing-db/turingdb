@@ -13,6 +13,7 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnIDs.h"
 #include "metadata/PropertyType.h"
+#include "versioning/Change.h"
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
 #include "dataframe/Dataframe.h"
@@ -38,13 +39,15 @@ protected:
     TuringDB* _db {nullptr};
     Graph* _graph {nullptr};
     QueryConfig _queryConfig;
+    ChangeID _currentChange {ChangeID::head()};
+
+    static constexpr auto emptyCallback = [](const Dataframe*) -> void {};
 
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig,
-                              callback, CommitHash::head(),
-                              ChangeID::head());
+        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callback,
+                              CommitHash::head(), _currentChange);
         return res;
     }
 
@@ -60,6 +63,37 @@ protected:
 
     NodeID findNode(std::string_view name) {
         return SimpleGraph::findNodeID(_graph, name);
+    }
+
+    void setWorkingGraph(std::string_view name) {
+        _graphName = name;
+        _graph = _env->getSystemManager().getGraph(std::string {name});
+        ASSERT_TRUE(_graph);
+    }
+
+    static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {
+        for (auto* col : df->cols()) {
+            std::string_view n = col->getName();
+            if (n == name) {
+                return col;
+            }
+        }
+        return nullptr;
+    }
+
+    void newChange() {
+        auto res = _env->getSystemManager().newChange(_graphName);
+        ASSERT_TRUE(res);
+
+        Change* change = res.value();
+        _currentChange = change->id();
+    }
+
+    void submitCurrentChange() {
+        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), &_queryConfig,
+                                emptyCallback, CommitHash::head(), _currentChange);
+        ASSERT_TRUE(res);
+        _currentChange = ChangeID::head();
     }
 };
 
@@ -316,4 +350,49 @@ TEST_F(LoadCSVTest, DISABLED_loadCSVMatchNoResults) {
     if (res) {
         EXPECT_EQ(totalRows, 0);
     }
+}
+
+TEST_F(LoadCSVTest, loadCreateNodes) {
+    setWorkingGraph("default");
+
+    const std::string csvName = writeTempCSV("match.csv", "Remy\n"
+                                                          "Adam\n"
+                                                          "Luc\n");
+    using Rows = LineContainer<std::string>;
+    Rows expected;
+    {
+        expected.add({"Remy"});
+        expected.add({"Adam"});
+        expected.add({"Luc"});
+    }
+
+    {
+        newChange();
+
+        const std::string createQuery =
+            fmt::format("LOAD CSV '{}' AS row CREATE (n:New{{name:row[0]}})", csvName);
+        const auto res = query(createQuery, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+
+        submitCurrentChange();
+    }
+
+    Rows actual;
+    {
+        const std::string_view matchQuery = "MATCH (n) RETURN n.name";
+
+        const auto res = query(matchQuery, [&actual](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(names);
+
+            for (auto& name : *names) {
+                actual.add({std::string {*name}});
+            }
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+    EXPECT_TRUE(expected.equals(actual));
 }
