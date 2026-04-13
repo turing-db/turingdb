@@ -93,6 +93,8 @@ private:
     size_t _queryLimit {0};
     std::unordered_set<const VarDecl*> _edgesInPattern;
 
+    bool _hasCSVLoad {false};
+
     void generateDependency(PlanGraphNode* producer, Expr* rawExpr);
 
     bool shouldPlaceValueHashJoin(VarNode* localVar, PlanGraphNode* remoteNode);

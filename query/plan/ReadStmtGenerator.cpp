@@ -83,26 +83,30 @@ ReadStmtGenerator::~ReadStmtGenerator() {
 }
 
 void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
+    if (_hasCSVLoad) {
+        throwError("Non-standalone LOAD CSV in read statements not yet supported.", stmt);
+    }
     switch (stmt->getKind()) {
         case Stmt::Kind::MATCH:
             generateMatchStmt(static_cast<const MatchStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::CALL:
             generateCallStmt(static_cast<const CallStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::LOAD_CSV:
+            _hasCSVLoad = true;
             generateLoadCSVStmt(static_cast<const LoadCSVStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::VECTOR_SEARCH:
             generateVectorSearchStmt(static_cast<const VectorSearchStmt*>(stmt));
-            break;
+        break;
 
         default:
             throwError(fmt::format("Unsupported read statement type: {}", (uint64_t)stmt->getKind()), stmt);
-            break;
+        break;
     }
 }
 
