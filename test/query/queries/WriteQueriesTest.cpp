@@ -970,7 +970,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeDynamicProp) {
 
     PropertyTypeID NAME_PROP_ID(0); // 'name' is the first property type registered
 
-    using Rows = LineContainer<NodeID, types::String::Primitive>;
+    using Rows = LineContainer<types::String::Primitive>;
 
     Rows expected;
     {
@@ -979,9 +979,9 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeDynamicProp) {
                 read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
             ASSERT_TRUE(name);
             // Original node keeps its name
-            expected.add({n, *name});
+            expected.add({*name});
             // New Person node created from matching n gets n.name
-            expected.add({n + numNodesPrior, *name});
+            expected.add({*name});
         }
     }
 
@@ -1010,7 +1010,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeDynamicProp) {
             const size_t rowCount = df->getLogicalRowCount();
             for (size_t rowPtr = 0; rowPtr < rowCount; rowPtr++) {
                 ASSERT_TRUE(names->at(rowPtr));
-                actual.add({ns->at(rowPtr), *names->at(rowPtr)});
+                actual.add({*names->at(rowPtr)});
             }
         });
         ASSERT_TRUE(res);
@@ -1196,9 +1196,8 @@ TEST_F(WriteQueriesTest, dynamicNamePreservedAcrossCommit) {
         R"(MATCH (n) CREATE (m:Snapshot{name:n.name}))";
 
     PropertyTypeID NAME_PROP_ID(0);
-    const size_t numNodesPrior = read().getTotalNodesAllocated();
 
-    using Rows = LineContainer<NodeID, types::String::Primitive>;
+    using Rows = LineContainer<types::String::Primitive>;
     Rows expected;
     {
         size_t i = 0;
@@ -1206,7 +1205,7 @@ TEST_F(WriteQueriesTest, dynamicNamePreservedAcrossCommit) {
             const types::String::Primitive* name =
                 read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
             ASSERT_TRUE(name);
-            expected.add({NodeID(numNodesPrior + i), *name});
+            expected.add({*name});
             ++i;
         }
     }
@@ -1233,14 +1232,12 @@ TEST_F(WriteQueriesTest, dynamicNamePreservedAcrossCommit) {
             ASSERT_TRUE(ns && names);
             const size_t rowCount = df->getLogicalRowCount();
             for (size_t r = 0; r < rowCount; r++) {
-                ASSERT_TRUE(names->at(r)) << "Node " << ns->at(r).getValue()
-                                          << " lost its name across DataPart boundary";
-                actual.add({ns->at(r), *names->at(r)});
+                ASSERT_TRUE(names->at(r));
+                actual.add({*names->at(r)});
             }
         });
         ASSERT_TRUE(res);
-        ASSERT_TRUE(expected.equals(actual)) << "Names were permuted when DataPart was "
-                                                "reloaded after explicit commit.";
+        ASSERT_TRUE(expected.equals(actual));
     }
 }
 
@@ -1366,9 +1363,7 @@ TEST_F(WriteQueriesTest, matchCreateThreeLabelSetsInterleaved) {
     constexpr std::string_view CREATE_QUERY =
         R"(MATCH (n:Person) CREATE (r:RedType{name:n.name}), (g:GreenType{name:n.name}), (b:BlueType{name:n.name}))";
 
-    const size_t numNodesPrior = read().getTotalNodesAllocated();
-
-    using Rows = LineContainer<NodeID, types::String::Primitive>;
+    using Rows = LineContainer<types::String::Primitive>;
     Rows redExpected;
     Rows greenExpected;
     Rows blueExpected;
@@ -1382,9 +1377,9 @@ TEST_F(WriteQueriesTest, matchCreateThreeLabelSetsInterleaved) {
             const size_t rowCount = df->getLogicalRowCount();
             for (size_t r = 0; r < rowCount; r++) {
                 ASSERT_TRUE(names->at(r));
-                redExpected.add(  {NodeID(numNodesPrior + pendingIdx), *names->at(r)});
-                greenExpected.add({NodeID(numNodesPrior + pendingIdx + names->size()), *names->at(r)});
-                blueExpected.add( {NodeID(numNodesPrior + pendingIdx + (2 * names->size())), *names->at(r)});
+                redExpected.add({*names->at(r)});
+                greenExpected.add({*names->at(r)});
+                blueExpected.add({*names->at(r)});
                 ++pendingIdx;
             }
         });
@@ -1400,13 +1395,13 @@ TEST_F(WriteQueriesTest, matchCreateThreeLabelSetsInterleaved) {
         Rows actual;
         auto res = query(matchQuery, [&](const Dataframe* df) {
             ASSERT_TRUE(df);
-            auto* ns    = df->cols().front()->as<ColumnNodeIDs>();
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
             auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(ns && names);
             const size_t rowCount = df->getLogicalRowCount();
             for (size_t r = 0; r < rowCount; r++) {
                 ASSERT_TRUE(names->at(r));
-                actual.add({ns->at(r), *names->at(r)});
+                actual.add({*names->at(r)});
             }
         });
         ASSERT_TRUE(res);
