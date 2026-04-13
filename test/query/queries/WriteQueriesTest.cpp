@@ -1426,6 +1426,109 @@ TEST_F(WriteQueriesTest, matchCreateThreeLabelSetsInterleaved) {
     verify(R"(MATCH (n:BlueType) RETURN n, n.name)",  blueExpected,  "BlueType");
 }
 
+TEST_F(WriteQueriesTest, scanEdgesCreateEdgeDynamicName) {
+    constexpr std::string_view CREATE_QUERY =
+        R"(MATCH (n)-[e]->(m) CREATE (n)-[f:COPYEDGE{name:e.name}]->(m))";
+    constexpr std::string_view MATCH_QUERY =
+        R"(MATCH (n)-[f:COPYEDGE]->(m) RETURN n, f.name, m)";
+
+    using Rows = LineContainer<NodeID, types::String::Primitive, NodeID>;
+    Rows expected;
+
+    {
+        constexpr std::string_view preQuery = R"(MATCH (n)-[e]->(m) RETURN n, e.name, m)";
+        auto res = query(preQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 3);
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
+            auto* ms = df->cols().back()->as<ColumnNodeIDs>();
+            ASSERT_TRUE(ns && names && ms);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r));
+                expected.add({ns->at(r), *names->at(r), ms->at(r)});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    newChange();
+    ASSERT_TRUE(query(CREATE_QUERY, [](const Dataframe*) {}));
+    ASSERT_TRUE(query("commit", [](const Dataframe*) {}));
+    submitCurrentChange();
+
+    {
+        Rows actual;
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 3);
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
+            auto* names = df->cols().at(1)->as<ColumnOptVector<types::String::Primitive>>();
+            auto* ms = df->cols().back()->as<ColumnNodeIDs>();
+            ASSERT_TRUE(ns && names && ms);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r));
+                actual.add({ns->at(r), *names->at(r), ms->at(r)});
+            }
+        });
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(expected.equals(actual));
+    }
+}
+
+TEST_F(WriteQueriesTest, createEdgesFromNodesDynamicName) {
+    constexpr std::string_view CREATE_QUERY =
+        R"(MATCH (n:Person) CREATE (n)-[e:SELFEDGE{name:n.name}]->(n))";
+    constexpr std::string_view MATCH_QUERY =
+        R"(MATCH ()-[e:SELFEDGE]->() RETURN e, e.name)";
+
+    const size_t totalEdgesPrior = read().getTotalEdgesAllocated();
+
+    using Rows = LineContainer<EdgeID, types::String::Primitive>;
+    Rows expected;
+
+    {
+        constexpr std::string_view preQuery = R"(MATCH (n:Person) RETURN n, n.name)";
+        size_t pendingIdx = 0;
+        auto res = query(preQuery, [&](const Dataframe* df) {
+            auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(names);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r));
+                expected.add({EdgeID(totalEdgesPrior + pendingIdx), *names->at(r)});
+                ++pendingIdx;
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    newChange();
+    ASSERT_TRUE(query(CREATE_QUERY, [](const Dataframe*) {}));
+    ASSERT_TRUE(query("commit", [](const Dataframe*) {}));
+    submitCurrentChange();
+
+    {
+        Rows actual;
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 2);
+            auto* es    = df->cols().front()->as<ColumnEdgeIDs>();
+            auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(es && names);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(names->at(r));
+                actual.add({es->at(r), *names->at(r)});
+            }
+        });
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(expected.equals(actual));
+    }
+}
+
 TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
     setWorkingGraph("default");
     // NOTE: Returning properties of just-created nodes is not yet supported

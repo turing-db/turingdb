@@ -5,7 +5,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <variant>
 
 #include <range/v3/view/zip.hpp>
 
@@ -366,6 +365,16 @@ void WriteProcessor::createNodes(size_t numIters) {
         // Get all properties: this can throw, so we do this BEFORE adding PendingNodes to
         // CommitWriteBuffer, as otherwise after throwing this could leave it in invalid
         // state.
+
+        // A single @ref WriteProcessorTypes::PendingNode refers to a column of nodes to
+        // be created. This means that a single PendingNode can materialise into some
+        // number, k, nodes in the db. For a property type T, each of these k nodes may
+        // have the same value for that property, or dynamic differing values.
+        // e.g. `MATCH (m) CREATE (n:X{name: m.name, age: 100})` - name is dynamic but age
+        // is static.
+        // Thus we need to store single static valued or an arbitrary number of dynamic
+        // values, per PendingNode. PerNodeProperties is a singleton vector in the case of
+        // a static property, and otherwise is of dynamic length.
         using PerNodeProperties = std::vector<CommitWriteBuffer::UntypedProperty>;
         std::vector<PerNodeProperties> properties;
 
@@ -377,10 +386,10 @@ void WriteProcessor::createNodes(size_t numIters) {
             const PropertyTypeID propID =
                 _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
-            if (isColumnConst(valueCol)) {
+            if (isColumnConst(valueCol)) { // static: single value for all nodes to create
                 getConstantUntypedProperty(valueCol, propBuffer, propID);
                 properties.emplace_back(PerNodeProperties {propBuffer});
-            } else {
+            } else { // dynamic: differing value for each node to create
                 getUntypedProperties(valueCol, propsBuffer, propID);
                 PerNodeProperties& newProps = properties.emplace_back();
                 for (const CommitWriteBuffer::UntypedProperty& x : propsBuffer) {
@@ -402,6 +411,7 @@ void WriteProcessor::createNodes(size_t numIters) {
             for (const PerNodeProperties& props : properties) {
                 const size_t numProps = props.size();
 
+                // TODO: test with empty MATCH into CREATE
                 const bool isDynamic = numProps == numIters;
                 const bool isStatic = !isDynamic && numProps == 1;
 
@@ -422,6 +432,8 @@ void WriteProcessor::createNodes(size_t numIters) {
 
                         pendingNode.properties.emplace_back(propValue);
                     }
+                } else {
+                    throw FatalException("Incorrectly fetched node properties.");
                 }
             }
         }
@@ -465,35 +477,21 @@ void WriteProcessor::createEdges(size_t numIters) {
         // However, all input columns are also propagated to the output, so we can
         // always retrieve the column from the output dataframe, regardless of whether
         // the source node was the result of a CREATE or a MATCH
-        if (!outDf->hasColumn(srcTag)) {
-            throw FatalException(fmt::format("Attempted to create edge {} with "
-                                             "source node with no such column: {}",
-                                             edge._name, edge._srcTag.getValue()));
-        }
+        const bool outputHasSrc = outDf->hasColumn(srcTag);
+        bioassert(outputHasSrc, "Output missing source {}", srcTag.getValue());
+
         srcCol = outDf->getColumn(srcTag)->as<ColumnNodeIDs>();
-        if (!srcCol) { // @ref as<> performs dynamic_cast
-            throw FatalException(fmt::format("Column {} was marked as a column of"
-                                             " pending source nodes, but is not a NodeID"
-                                             " column.",
-                                             srcTag.getValue()));
-        }
+        bioassert(srcCol, "Invalid source column, {}.", srcTag.getValue());
 
         ColumnNodeIDs* tgtCol = nullptr;
         const ColumnTag tgtTag = edge._tgtTag;
         const bool tgtIsPending = !inDf || inDf->getColumn(tgtTag) == nullptr;
 
-        if (!outDf->hasColumn(tgtTag)) {
-            throw FatalException(fmt::format("Attempted to create edge {} with "
-                                             "target node with no such column: {}",
-                                             edge._name, edge._tgtTag.getValue()));
-        }
+        const bool outputHasTgt = outDf->hasColumn(tgtTag);
+        bioassert(outputHasTgt, "Output missing target {}", tgtTag.getValue());
+
         tgtCol = outDf->getColumn(tgtTag)->as<ColumnNodeIDs>();
-        if (!tgtCol) { // @ref as<> performs dynamic_cast
-            throw FatalException(fmt::format("Column {} was marked as a column of"
-                                             " pending target nodes, but is not a NodeID"
-                                             " column.",
-                                             tgtTag.getValue()));
-        }
+        bioassert(tgtCol, "Invalid target column {}.", tgtTag.getValue());
 
         bioassert(tgtCol->size() == srcCol->size(), "src and target column should have same dimension");
         bioassert(tgtCol->size() == numIters, "invalid size of target column");
@@ -501,20 +499,27 @@ void WriteProcessor::createEdges(size_t numIters) {
         // Get all properties: this can throw, so we do this BEFORE adding PendingEdges to
         // CommitWriteBuffer, as otherwise after throwing this could leave it in invalid
         // state.
-        std::vector<CommitWriteBuffer::UntypedProperty> constProps;
-        constProps.reserve(edge._properties.size());
+        using PerEdgeProperties = std::vector<CommitWriteBuffer::UntypedProperty>;
+        std::vector<PerEdgeProperties> properties;
 
-        // Temporary buffer, reused across iterations, to add properties to the WriteBuffer
+        // Temporary buffers, reused across iterations, to add properties to the WriteBuffer
         CommitWriteBuffer::UntypedProperty propBuffer;
+        CommitWriteBuffer::UntypedProperties propsBuffer;
 
         for (const auto& [name, type, valueCol] : edge._properties) {
             const PropertyTypeID propID =
                 _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
-            // Extract the constant value from the value column
-            getConstantUntypedProperty(valueCol, propBuffer, propID);
-
-            constProps.emplace_back(std::move(propBuffer));
+            if (isColumnConst(valueCol)) { // static: single value for all edges to create
+                getConstantUntypedProperty(valueCol, propBuffer, propID);
+                properties.emplace_back(PerEdgeProperties {propBuffer});
+            } else { // dynamic: differing value for each edge to create
+                getUntypedProperties(valueCol, propsBuffer, propID);
+                PerEdgeProperties& newProps = properties.emplace_back();
+                for (const CommitWriteBuffer::UntypedProperty& x : propsBuffer) {
+                    newProps.emplace_back(x);
+                }
+            }
         }
 
         const size_t numPendingEdgesPrior = _writeBuffer->numPendingEdges();
@@ -546,13 +551,31 @@ void WriteProcessor::createEdges(size_t numIters) {
             pendingEdge.edgeType = typeID;
         }
 
-        // Add each property; NOTE: for now all ColumnConst, so all same value.
-        // Extract the value first, then add that value to each node to create.
-        // TODO: More cache friendly access patterns
-        for (const CommitWriteBuffer::UntypedProperty& prop : constProps) {
-            for (size_t i = 0; i < numIters; i++) {
-                auto& pendingEdge = _writeBuffer->getPendingEdge(numPendingEdgesPrior + i);
-                pendingEdge.properties.emplace_back(prop);
+        for (const PerEdgeProperties& props : properties) {
+            const size_t numProps = props.size();
+
+            const bool isDynamic = numProps == numIters;
+            const bool isStatic = !isDynamic && numProps == 1;
+
+            if (isStatic) {
+                const auto& propValue = props.front();
+
+                for (size_t i = 0; i < numIters; i++) {
+                    const size_t pendingEdgeIdx = numPendingEdgesPrior + i;
+                    auto& pendingEdge = _writeBuffer->getPendingEdge(pendingEdgeIdx);
+
+                    pendingEdge.properties.emplace_back(propValue);
+                }
+            } else if (isDynamic) {
+                for (size_t i = 0; i < numIters; i++) {
+                    const size_t pendingEdgeIdx = numPendingEdgesPrior + i;
+                    auto& pendingEdge = _writeBuffer->getPendingEdge(pendingEdgeIdx);
+                    const auto& propValue = props.at(i);
+
+                    pendingEdge.properties.emplace_back(propValue);
+                }
+            } else {
+                throw FatalException("Incorrectly fetched edge properties.");
             }
         }
 
