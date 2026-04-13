@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <optional>
-#include <string>
 #include <string_view>
 #include <utility>
 
@@ -413,7 +412,6 @@ void WriteProcessor::createNodes(size_t numIters) {
             for (const PerNodeProperties& props : properties) {
                 const size_t numProps = props.size();
 
-                // TODO: test with empty MATCH into CREATE
                 const bool isDynamic = numProps == numIters;
                 const bool isStatic = !isDynamic && numProps == 1;
 
