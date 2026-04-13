@@ -1529,6 +1529,104 @@ TEST_F(WriteQueriesTest, createEdgesFromNodesDynamicName) {
     }
 }
 
+TEST_F(WriteQueriesTest, createEdgeCrossProductDynamicTwoProps) {
+    constexpr std::string_view CREATE_QUERY =
+        R"(MATCH (n), (m) WHERE n.age = 32 AND m.hasPhD AND NOT m.isFrench)"
+        R"( CREATE (n)-[e:NEW{name1:n.name, name2:m.name}]->(m))";
+
+    using Rows = LineContainer<NodeID, types::String::Primitive, types::String::Primitive, NodeID>;
+    Rows expected;
+
+    {
+        // Mirror the same MATCH/WHERE to build the expected (src, name1, name2, dst) set
+        // without hardcoding node IDs.
+        constexpr std::string_view preQuery =
+            R"(MATCH (n), (m) WHERE n.age = 32 AND m.hasPhD AND NOT m.isFrench)"
+            R"( RETURN n, n.name, m.name, m)";
+        auto res = query(preQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 4);
+            auto* ns     = df->cols().front()->as<ColumnNodeIDs>();
+            auto* name1s = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            auto* name2s = findColumn(df, "m.name")->as<ColumnOptVector<types::String::Primitive>>();
+            auto* ms     = df->cols().back()->as<ColumnNodeIDs>();
+            ASSERT_TRUE(ns && name1s && name2s && ms);
+            const size_t rowCount = df->getLogicalRowCount();
+            ASSERT_NE(rowCount, 0) << "Pre-query matched no rows; check SimpleGraph predicates";
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(name1s->at(r));
+                ASSERT_TRUE(name2s->at(r));
+                expected.add({ns->at(r), *name1s->at(r), *name2s->at(r), ms->at(r)});
+            }
+        });
+        ASSERT_TRUE(res);
+    }
+
+    newChange();
+    ASSERT_TRUE(query(CREATE_QUERY, [](const Dataframe*) {}));
+    ASSERT_TRUE(query("commit", [](const Dataframe*) {}));
+    submitCurrentChange();
+
+    {
+        Rows actual;
+        constexpr std::string_view matchQuery =
+            R"(MATCH (n)-[e:NEW]->(m) RETURN n, e.name1, e.name2, m)";
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 4);
+            auto* ns     = df->cols().front()->as<ColumnNodeIDs>();
+            auto* name1s = findColumn(df, "e.name1")->as<ColumnOptVector<types::String::Primitive>>();
+            auto* name2s = findColumn(df, "e.name2")->as<ColumnOptVector<types::String::Primitive>>();
+            auto* ms     = df->cols().back()->as<ColumnNodeIDs>();
+            ASSERT_TRUE(ns && name1s && name2s && ms);
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t r = 0; r < rowCount; r++) {
+                ASSERT_TRUE(name1s->at(r));
+                ASSERT_TRUE(name2s->at(r));
+                actual.add({ns->at(r), *name1s->at(r), *name2s->at(r), ms->at(r)});
+            }
+        });
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(expected.equals(actual));
+    }
+}
+
+TEST_F(WriteQueriesTest, createNodeEmptyMatch) {
+    // MATCH returns zero rows; CREATE must not produce any nodes.
+    constexpr std::string_view CREATE_QUERY =
+        R"(MATCH (n) WHERE n.age = 9999 CREATE (m:Ghost{name:n.name}))";
+
+    const size_t numNodesPrior = read().getTotalNodesAllocated();
+
+    newChange();
+    ASSERT_TRUE(query(CREATE_QUERY, [](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        ASSERT_EQ(df->getLogicalRowCount(), 0);
+    }));
+    submitCurrentChange();
+
+    ASSERT_EQ(read().getTotalNodesAllocated(), numNodesPrior);
+}
+
+TEST_F(WriteQueriesTest, createEdgeEmptyMatch) {
+    // MATCH returns zero rows; CREATE must not produce any edges or nodes.
+    constexpr std::string_view CREATE_QUERY =
+        R"(MATCH (n)-[e]->() WHERE n.age = 9999 CREATE (n)-[f:COPY{name:e.name}]->(n))";
+
+    const size_t totalEdgesPrior = read().getTotalEdgesAllocated();
+    const size_t totalNodesPrior = read().getTotalNodesAllocated();
+
+    newChange();
+    ASSERT_TRUE(query(CREATE_QUERY, [](const Dataframe* df) {
+        ASSERT_TRUE(df);
+        ASSERT_EQ(df->getLogicalRowCount(), 0);
+    }));
+    submitCurrentChange();
+
+    ASSERT_EQ(read().getTotalEdgesAllocated(), totalEdgesPrior);
+    ASSERT_EQ(read().getTotalNodesAllocated(), totalNodesPrior);
+}
+
 TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
     setWorkingGraph("default");
     // NOTE: Returning properties of just-created nodes is not yet supported
