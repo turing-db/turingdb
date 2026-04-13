@@ -458,3 +458,61 @@ TEST_F(LoadCSVTest, loadCreateNodesEdges) {
         return out.str();
     }();
 }
+
+TEST_F(LoadCSVTest, loadCreateNodesEdgesWithHeaders) {
+    setWorkingGraph("default");
+
+    const std::string csvName = writeTempCSV("match.csv","source,edge,target\n"
+                                                          "Remy,Remy -> Doruk,Doruk\n"
+                                                          "Adam,Adam -> Cyrus,Cyrus\n"
+                                                          "Luc,Luc -> Suhas,Suhas\n");
+    using Rows = LineContainer<std::string, std::string, std::string>;
+    Rows expected;
+    {
+        expected.add({"Remy", "Remy -> Doruk", "Doruk"});
+        expected.add({"Adam", "Adam -> Cyrus", "Cyrus"});
+        expected.add({"Luc", "Luc -> Suhas", "Suhas"});
+    }
+
+    {
+        newChange();
+
+        const std::string createQuery = fmt::format(
+            "LOAD CSV '{}' WITH HEADERS AS row "
+            "CREATE (n:New{{name: row.source }})-[e:New{{name: row.edge }}]->(m:New{{name: row.target }})",
+            csvName);
+        const auto res = query(createQuery, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+
+        submitCurrentChange();
+    }
+
+    Rows actual;
+    {
+        const std::string_view matchQuery = "MATCH (n)-[e]->(m) RETURN n.name, e.name, m.name";
+
+        const auto res = query(matchQuery, [&actual](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            auto* nnames = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            auto* enames = findColumn(df, "e.name")->as<ColumnOptVector<types::String::Primitive>>();
+            auto* mnames = findColumn(df, "m.name")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(nnames && enames && mnames);
+
+            for (size_t i {0}; i < nnames->size(); i++) {
+                actual.add({std::string {*nnames->at(i)}, std::string {*enames->at(i)},
+                            std::string {*mnames->at(i)}});
+            }
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+    EXPECT_TRUE(expected.equals(actual)) << [expected, actual] {
+        std::ostringstream out;
+        out << "expected:\n";
+        expected.print(out);
+        out << "actual:\n";
+        actual.print(out);
+        return out.str();
+    }();
+}
