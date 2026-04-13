@@ -386,7 +386,9 @@ void WriteProcessor::createNodes(size_t numIters) {
             const PropertyTypeID propID =
                 _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
-            if (isColumnConst(valueCol)) { // static: single value for all nodes to create
+            const bool isStatic = isColumnConst(valueCol);
+
+            if (isStatic) { // static: single value for all nodes to create
                 getConstantUntypedProperty(valueCol, propBuffer, propID);
                 properties.emplace_back(PerNodeProperties {propBuffer});
             } else { // dynamic: differing value for each node to create
@@ -510,7 +512,9 @@ void WriteProcessor::createEdges(size_t numIters) {
             const PropertyTypeID propID =
                 _metadataBuilder->getOrCreatePropertyType(name, type)._id;
 
-            if (isColumnConst(valueCol)) { // static: single value for all edges to create
+            const bool isStatic = isColumnConst(valueCol);
+
+            if (isStatic) { // static: single value for all edges to create
                 getConstantUntypedProperty(valueCol, propBuffer, propID);
                 properties.emplace_back(PerEdgeProperties {propBuffer});
             } else { // dynamic: differing value for each edge to create
