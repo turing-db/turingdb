@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "LOAD CSV 'test.csv' AS row MATCH (n) where n.name = row[0] RETURN n",
+  "expect": {
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | LOAD CSV 'test.csv' AS row MATCH (n) where n.name = row[0] RETURN n\n       |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Non-standalone LOAD CSV in read statements not yet supported.",
+    "result": "PLAN ERROR\n-------* Query error\n     1 | LOAD CSV 'test.csv' AS row MATCH (n) where n.name = row[0] RETURN n\n       |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Non-standalone LOAD CSV in read statements not yet supported.",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | LOAD CSV 'test.csv' AS row MATCH (n) where n.name = row[0] RETURN n\\n       |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n-------* Non-standalone LOAD CSV in read statements not yet supported.\"}"
+  },
+  "tags": [
+    "csv",
+    "where"
+  ],
+  "write-required": false
+}
