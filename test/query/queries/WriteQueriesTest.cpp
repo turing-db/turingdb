@@ -1200,13 +1200,11 @@ TEST_F(WriteQueriesTest, dynamicNamePreservedAcrossCommit) {
     using Rows = LineContainer<types::String::Primitive>;
     Rows expected;
     {
-        size_t i = 0;
         for (const NodeID n : read().scanNodes()) {
             const types::String::Primitive* name =
                 read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
             ASSERT_TRUE(name);
             expected.add({*name});
-            ++i;
         }
     }
 
@@ -1265,7 +1263,7 @@ TEST_F(WriteQueriesTest, createInterleavedLabelSetsBatch) {
     Rows actual;
     auto res = query(R"(MATCH (n) RETURN n, n.name)", [&](const Dataframe* df) {
         ASSERT_TRUE(df);
-        auto* ns    = df->cols().front()->as<ColumnNodeIDs>();
+        auto* ns = df->cols().front()->as<ColumnNodeIDs>();
         auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
         ASSERT_TRUE(ns && names);
         const size_t rowCount = df->getLogicalRowCount();
@@ -1338,7 +1336,7 @@ TEST_F(WriteQueriesTest, matchCreateTwoLabelSetsInterleaved) {
         Rows actual;
         auto res = query(R"(MATCH (n:BetaType) RETURN n, n.name)", [&](const Dataframe* df) {
             ASSERT_TRUE(df);
-            auto* ns    = df->cols().front()->as<ColumnNodeIDs>();
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
             auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(ns && names);
             const size_t rowCount = df->getLogicalRowCount();
@@ -1370,7 +1368,6 @@ TEST_F(WriteQueriesTest, matchCreateThreeLabelSetsInterleaved) {
 
     {
         constexpr std::string_view preQuery = R"(MATCH (n:Person) RETURN n, n.name)";
-        size_t pendingIdx = 0;
         auto res = query(preQuery, [&](const Dataframe* df) {
             auto* names = df->cols().back()->as<ColumnOptVector<types::String::Primitive>>();
             ASSERT_TRUE(names);
@@ -1380,7 +1377,6 @@ TEST_F(WriteQueriesTest, matchCreateThreeLabelSetsInterleaved) {
                 redExpected.add({*names->at(r)});
                 greenExpected.add({*names->at(r)});
                 blueExpected.add({*names->at(r)});
-                ++pendingIdx;
             }
         });
         ASSERT_TRUE(res);
@@ -1541,10 +1537,10 @@ TEST_F(WriteQueriesTest, createEdgeCrossProductDynamicTwoProps) {
         auto res = query(preQuery, [&](const Dataframe* df) {
             ASSERT_TRUE(df);
             ASSERT_EQ(df->size(), 4);
-            auto* ns     = df->cols().front()->as<ColumnNodeIDs>();
+            auto* ns = df->cols().front()->as<ColumnNodeIDs>();
             auto* name1s = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
             auto* name2s = findColumn(df, "m.name")->as<ColumnOptVector<types::String::Primitive>>();
-            auto* ms     = df->cols().back()->as<ColumnNodeIDs>();
+            auto* ms = df->cols().back()->as<ColumnNodeIDs>();
             ASSERT_TRUE(ns && name1s && name2s && ms);
             const size_t rowCount = df->getLogicalRowCount();
             ASSERT_NE(rowCount, 0) << "Pre-query matched no rows; check SimpleGraph predicates";
