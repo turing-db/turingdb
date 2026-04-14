@@ -362,10 +362,11 @@ public:
             return;
         }
 
-        _entityIndexMap[entityID] = _ids.size();
+        const size_t index = _values.size();
         _values.alloc(*arg);
         _ids.emplace_back(entityID);
         _sorted = false;
+        _entityIndexMap[entityID] = index;
     }
 
     bool has(EntityID entityID) const override {
