@@ -116,6 +116,17 @@ public:
     }
 
     template <SupportedType T>
+    std::optional<const typename T::Primitive*> tryGetWithNull(PropertyTypeID ptID,
+                                                               EntityID entityID) const {
+        const TypedPropertyContainer<T>* container = tryGetContainer<T>(ptID);
+        if (!container) {
+            return nullptr;
+        }
+
+        return container->tryGetWithNull(entityID);
+    }
+
+    template <SupportedType T>
     TypedPropertyContainer<T>& getMutableContainer(PropertyTypeID ptID) {
         const auto it = _map.find(ptID);
         if (it == _map.end()) {

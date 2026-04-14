@@ -1,6 +1,7 @@
 #pragma once
 
 #include <limits>
+#include <optional>
 #include <unordered_map>
 
 #include <range/v3/algorithm/sort.hpp>
@@ -136,6 +137,26 @@ public:
         return &(*it);
     }
 
+    std::optional<const typename T::Primitive*> tryGetWithNull(EntityID entityID) const {
+        const auto findIt = _entityIndexMap.find(entityID);
+
+        const bool present = findIt != _entityIndexMap.end();
+        if (!present) {
+            return nullptr;
+        }
+
+        const size_t offset = findIt->second;
+
+        const bool explicitNull = offset == NULL_INDEX;
+        if (explicitNull) {
+            return std::nullopt;
+        }
+
+        const auto valueIt = _values.begin() + offset;
+
+        return &(*valueIt);
+    }
+
     std::span<const typename T::Primitive> getSpan(size_t first, size_t count) const {
         return std::span {_values}.subspan(first, count);
     }
@@ -243,6 +264,26 @@ public:
         return &(*it);
     }
 
+    std::optional<const types::String::Primitive*> tryGetWithNull(EntityID entityID) const {
+        const auto findIt = _entityIndexMap.find(entityID);
+
+        const bool present = findIt != _entityIndexMap.end();
+        if (!present) {
+            return nullptr;
+        }
+
+        const size_t offset = findIt->second;
+
+        const bool explicitNull = offset == NULL_INDEX;
+        if (explicitNull) {
+            return std::nullopt;
+        }
+
+        const auto valueIt = _values.begin() + offset;
+
+        return &(*valueIt);
+    }
+
     std::span<const std::string_view> getSpan(size_t first, size_t count) const {
         return std::span {_values.get()}.subspan(first, count);
     }
@@ -310,6 +351,26 @@ public:
         }
         const auto& views = _values.get();
         return &views[it->second];
+    }
+
+    std::optional<const types::Embedding::Primitive*> tryGetWithNull(EntityID entityID) const {
+        const auto findIt = _entityIndexMap.find(entityID);
+
+        const bool present = findIt != _entityIndexMap.end();
+        if (!present) {
+            return nullptr;
+        }
+
+        const size_t offset = findIt->second;
+
+        const bool explicitNull = offset == NULL_INDEX;
+        if (explicitNull) {
+            return std::nullopt;
+        }
+
+        const auto& views = _values.get();
+
+        return &views[offset];
     }
 
     std::span<const types::Embedding::Primitive> all() const {
