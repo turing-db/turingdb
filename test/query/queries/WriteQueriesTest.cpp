@@ -86,6 +86,8 @@ protected:
         df->dump(out);
         return out.str();
     };
+
+    static constexpr auto _emptyCallback = [](const Dataframe*) -> void {};
 };
 
 TEST_F(WriteQueriesTest, scanNodesCreateNode) {
@@ -1144,7 +1146,7 @@ TEST_F(WriteQueriesTest, createNodesDynamicNameAndDob) {
     }
 }
 
-TEST_F(WriteQueriesTest, setDynamicNameOnNewNodes) {
+TEST_F(WriteQueriesTest, dynamicNameOnNewNodes) {
     setWorkingGraph("default");
 
     newChange();
@@ -1616,6 +1618,65 @@ TEST_F(WriteQueriesTest, createEdgeEmptyMatch) {
 
     ASSERT_EQ(read().getTotalEdgesAllocated(), totalEdgesPrior);
     ASSERT_EQ(read().getTotalNodesAllocated(), totalNodesPrior);
+}
+
+TEST_F(WriteQueriesTest, dynamicPropExpression) {
+    std::string_view CREATE_QUERY = R"(MATCH (n) WHERE n.age IS NOT NULL CREATE (m:Clone{name: n.name, age: n.age + 10}) )";
+
+    using Rows = LineContainer<types::String::Primitive, types::Int64::Primitive>;
+
+    Rows expected;
+    {
+        std::string_view q = R"(MATCH (n) WHERE n.age IS NOT NULL RETURN n.name, n.age)";
+
+        auto res = query(q, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(names && ages);
+
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t i = 0; i < rowCount; i++) {
+                const types::String::Primitive name = *names->operator[](i);
+                const types::Int64::Primitive age = *ages->operator[](i);
+                expected.add({name, age + 10});
+            }
+        });
+    }
+
+    {
+        newChange();
+        const auto res = query(CREATE_QUERY, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+        submitCurrentChange();
+    }
+
+    Rows actual;
+    {
+        std::string_view MATCH_QUERY = R"(MATCH (n:Clone) RETURN n.name, n.age)";
+        auto res = query(MATCH_QUERY, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(names && ages);
+
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t i = 0; i < rowCount; i++) {
+                const types::String::Primitive name = *names->operator[](i);
+                const types::Int64::Primitive age = *ages->operator[](i);
+                actual.add({name, age});
+            }
+        });
+    }
+
+    ASSERT_TRUE(expected.equals(actual)) << [expected, actual] {
+        std::ostringstream out;
+        out << "expected:\n";
+        expected.print(out);
+        out << "actual:\n";
+        actual.print(out);
+        return out.str();
+    }();
 }
 
 TEST_F(WriteQueriesTest, createSingleNodeConstProps) {
