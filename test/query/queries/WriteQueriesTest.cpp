@@ -3,6 +3,7 @@
 #include <optional>
 #include <algorithm>
 #include <range/v3/view/enumerate.hpp>
+#include <string_view>
 
 #include "EdgeRecord.h"
 #include "TuringDB.h"
@@ -11,6 +12,7 @@
 #include "SimpleGraph.h"
 #include "SystemManager.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Change.h"
 #include "versioning/Transaction.h"
@@ -1646,8 +1648,7 @@ TEST_F(WriteQueriesTest, dynamicPropExpression) {
 
     {
         newChange();
-        const auto res = query(CREATE_QUERY, _emptyCallback);
-        ASSERT_TRUE(res) << res.getError();
+        ASSERT_TRUE(query(CREATE_QUERY, _emptyCallback));
         submitCurrentChange();
     }
 
@@ -1665,6 +1666,65 @@ TEST_F(WriteQueriesTest, dynamicPropExpression) {
                 const types::String::Primitive name = *names->operator[](i);
                 const types::Int64::Primitive age = *ages->operator[](i);
                 actual.add({name, age});
+            }
+        });
+    }
+
+    ASSERT_TRUE(expected.equals(actual)) << [expected, actual] {
+        std::ostringstream out;
+        out << "expected:\n";
+        expected.print(out);
+        out << "actual:\n";
+        actual.print(out);
+        return out.str();
+    }();
+}
+
+TEST_F(WriteQueriesTest, doubleDynamicExpression) {
+    std::string_view CREATE_QUERY =
+        R"(MATCH (n)-->(m) WHERE n.age IS NOT NULL AND m.age IS NOT NULL CREATE (n)-[e:NEW{age_prod: n.age * m.age}]->(m))";
+
+    using Rows = LineContainer<types::Int64::Primitive>;
+
+    Rows expected;
+    {
+        std::string_view q = "MATCH (n)-->(m) WHERE n.age IS NOT NULL AND m.age IS NOT "
+                             "NULL RETURN n.age, m.age";
+
+        auto res = query(q, [&expected](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            auto* nages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            auto* mages = findColumn(df, "m.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(nages && mages);
+
+            const size_t rows = df->getLogicalRowCount();
+            for (size_t i = 0; i < rows; i++) {
+                const auto nage = *nages->at(i);
+                const auto mage = *mages->at(i);
+                expected.add({nage * mage});
+            }
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+    {
+        newChange();
+        ASSERT_TRUE(query(CREATE_QUERY, _emptyCallback));
+        submitCurrentChange();
+    }
+
+    Rows actual;
+    {
+        std::string_view MATCH_QUERY = R"(MATCH ()-[e:NEW]->() RETURN e.age_prod)";
+        auto res = query(MATCH_QUERY, [&actual](const Dataframe* df){
+            ASSERT_TRUE(df);
+            auto* eprods = findColumn(df, "e.age_prod")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(eprods);
+
+            const size_t rows = df->getLogicalRowCount();
+            for (size_t i = 0; i < rows; i++) {
+                const auto prod = *eprods->at(i);
+                actual.add({prod});
             }
         });
     }
