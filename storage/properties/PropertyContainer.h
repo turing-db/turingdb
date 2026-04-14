@@ -59,8 +59,12 @@ public:
     IDs& ids() { return _ids; }
     const IDs& ids() const { return _ids; }
 
+    IDs& nullIds() { return _nullIds; }
+    const IDs& nullIds() const { return _nullIds; }
+
 protected:
     IDs _ids;
+    IDs _nullIds;
     std::unordered_map<EntityID, size_t> _entityIndexMap;
     static constexpr size_t NULL_INDEX = std::numeric_limits<size_t>::max();
 
@@ -85,14 +89,16 @@ public:
     ~TypedPropertyContainer() override = default;
 
     void add(EntityID entityID, const std::optional<typename T::Primitive>& arg) {
-        if (arg.has_value()) {
-            const size_t index = _values.size();
-            _values.push_back(*arg);
-            _ids.emplace_back(entityID);
-            _entityIndexMap[entityID] = index;
-        } else {
+        if (!arg.has_value()) {
+            _nullIds.emplace_back(entityID);
             _entityIndexMap[entityID] = NULL_INDEX;
+            return;
         }
+
+        const size_t index = _values.size();
+        _values.push_back(*arg);
+        _ids.emplace_back(entityID);
+        _entityIndexMap[entityID] = index;
     }
 
     bool has(EntityID entityID) const override {
@@ -180,9 +186,12 @@ public:
             });
 
         _entityIndexMap.clear();
-        _entityIndexMap.reserve(_ids.size());
+        _entityIndexMap.reserve(_ids.size() + _nullIds.size());
         for (size_t i = 0; i < _ids.size(); i++) {
             _entityIndexMap[_ids[i]] = i;
+        }
+        for (const EntityID id : _nullIds) {
+            _entityIndexMap[id] = NULL_INDEX;
         }
     }
 
@@ -212,14 +221,16 @@ public:
     ~TypedPropertyContainer() override = default;
 
     void add(EntityID entityID, const std::optional<types::String::Primitive>& arg) {
-        if (arg.has_value()) {
-            const size_t index = _values.size();
-            _values.alloc(*arg);
-            _ids.emplace_back(entityID);
-            _entityIndexMap[entityID] = index;
-        } else {
+        if (!arg.has_value()) {
+            _nullIds.emplace_back(entityID);
             _entityIndexMap[entityID] = NULL_INDEX;
+            return;
         }
+
+        const size_t index = _values.size();
+        _values.alloc(*arg);
+        _ids.emplace_back(entityID);
+        _entityIndexMap[entityID] = index;
     }
 
     bool has(EntityID entityID) const override {
@@ -322,13 +333,15 @@ public:
     ~TypedPropertyContainer() override = default;
 
     void add(EntityID entityID, const std::optional<types::Embedding::Primitive>& arg) {
-        if (arg.has_value()) {
-            _entityIndexMap[entityID] = _ids.size();
-            _values.alloc(*arg);
-            _ids.emplace_back(entityID);
-        } else {
+        if (!arg.has_value()) {
+            _nullIds.emplace_back(entityID);
             _entityIndexMap[entityID] = NULL_INDEX;
+            return;
         }
+
+        _entityIndexMap[entityID] = _ids.size();
+        _values.alloc(*arg);
+        _ids.emplace_back(entityID);
     }
 
     bool has(EntityID entityID) const override {
