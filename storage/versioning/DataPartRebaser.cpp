@@ -178,7 +178,6 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         nodeProperties->_lists = std::move(lists);
         static_assert((size_t)ValueType::_SIZE == 8 && "A value type was added");
 
-
         {
             PropertyIndexer newIndexers;
 
@@ -196,6 +195,9 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
 
         for (auto& [ptID, container] : nodeProperties->_map) {
             for (auto& id : container->getMutableIDs()) {
+                id = _idRebaser->rebaseNodeID(id.getValue()).getValue();
+            }
+            for (auto& id : container->nullIds()) {
                 id = _idRebaser->rebaseNodeID(id.getValue()).getValue();
             }
             container->sort();
@@ -281,6 +283,9 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
 
         for (auto& [ptID, container] : edgeProperties->_map) {
             for (auto& id : container->getMutableIDs()) {
+                id = _idRebaser->rebaseEdgeID(id.getValue()).getValue();
+            }
+            for (auto& id : container->nullIds()) {
                 id = _idRebaser->rebaseEdgeID(id.getValue()).getValue();
             }
             container->sort();
