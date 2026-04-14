@@ -2,8 +2,8 @@ import os
 import shutil
 import turingdb
 
-BUCKET = "turingdb-external"
-S3_KEY = "bench-datasets/reactome.jsonl"
+BUCKET = "turingdb-public"
+S3_KEY = "data/reactome.jsonl"
 GRAPH_NAME = "reactome"
 TURING_DIR = ".turing"
 LOCAL_FILENAME = "reactome.jsonl"
