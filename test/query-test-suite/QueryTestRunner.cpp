@@ -16,24 +16,27 @@
 #include "File.h"
 #include "Graph.h"
 #include "ID.h"
+#include "JsonEncoder.h"
 #include "ListElementView.h"
 #include "ListView.h"
 #include "PlanGraph.h"
 #include "PlanGraphDebug.h"
-#include "QueryConfig.h"
 #include "PlanGraphGenerator.h"
 #include "PlanOptimizer.h"
 #include "QueryCallbacks.h"
+#include "QueryConfig.h"
+#include "QueryResultFormatter.h"
 #include "QueryStatus.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
 #include "TuringDB.h"
 #include "TuringTestEnv.h"
+#include "TuringTime.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
-#include "JsonEncoder.h"
 #include "ProcedureManager.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
@@ -86,224 +89,6 @@ void trimTrailingEmptyLines(std::string& trimmed,
     }
 
     trimmed = out.str();
-}
-
-[[maybe_unused]] std::string valueToString(const std::string& value) {
-    return value;
-}
-
-[[maybe_unused]] std::string valueToString(const Path& value) {
-    std::string result;
-
-    if (value.empty()) {
-        return  "";
-    }
-
-    const auto reversed = value | std::views::reverse;
-    size_t i = 0;
-    for (auto val : reversed) {
-        if (i % 2 == 0) {
-            // NodeID
-            result += fmt::format("({})", val.getValue());
-        } else {
-            // EdgeID
-            result += fmt::format("-[{}]->", val.getValue());
-        }
-        ++i;
-    }
-    return result;
-}
-
-[[maybe_unused]] std::string valueToString(const std::string_view& value) {
-    return std::string(value);
-}
-
-[[maybe_unused]] std::string valueToString(const db::ValueType& value) {
-    return std::string(db::ValueTypeName::value(value));
-}
-
-template <IntegralType T, int tag>
-[[maybe_unused]] std::string valueToString(const db::ID<T, tag> value) {
-    return std::to_string(value.getValue());
-}
-
-template <int I>
-[[maybe_unused]] std::string valueToString(const TemplateCommitHash<I>& value) {
-    return std::to_string(value.get());
-}
-
-[[maybe_unused]] std::string valueToString(const db::CommitBuilder* value) {
-    return value ? "commit_builder_ptr" : "null";
-}
-
-[[maybe_unused]] std::string valueToString(const db::Change* value) {
-    return value ? "change_ptr" : "null";
-}
-
-[[maybe_unused]] std::string valueToString(const PropertyNull) {
-    return "null";
-}
-
-[[maybe_unused]] std::string valueToString(const std::span<const float>& value) {
-    std::string result = "[";
-    if (value.size() > 0) {
-        result += std::to_string(value[0]);
-        for (size_t i = 1; i < value.size(); i++) {
-            result += ",";
-            result += std::to_string(value[i]);
-        }
-    }
-    result += "]";
-    return result;
-}
-
-template <typename T>
-[[maybe_unused]] std::string valueToString(const T& value) {
-    if constexpr (std::same_as<T, db::CustomBool>) {
-        return value ? "true" : "false";
-    } else {
-        return fmt::format("{}", value);
-    }
-}
-
-template <typename T>
-[[maybe_unused]] std::string valueToString(const std::optional<T>& value) {
-    if (!value.has_value()) {
-        return "null";
-    }
-
-    return valueToString(*value);
-}
-
-[[maybe_unused]] std::string valueToString(const EntityList& value) {
-    std::string s = "[";
-    size_t i = 0;
-
-    for (const auto& entry : value) {
-        if (i++ > 0) {
-            s += ", ";
-        }
-
-        if (entry._type == EntityType::Node) {
-            s += fmt::format("({})", entry._id.getValue());
-        } else {
-            s += fmt::format("[{}]", entry._id.getValue());
-        }
-    }
-
-    s += "]";
-
-    return s;
-}
-
-// Forward declare so ListElementView overload sees this: an element may be a ListView itself
-[[maybe_unused]] std::string valueToString(ListView view);
-
-[[maybe_unused]] std::string valueToString(const ListElementView ele) {
-    const auto writeTyped = []<typename T>(const ListElementView ele) -> std::string {
-        const T typed = ele.getAs<T>();
-        return valueToString(typed);
-    };
-
-    const ListBufferTypeTag tag = ele.getTag();
-    ListTagDispatcher writer {._tag = tag};
-
-    return writer.execute(writeTyped, ele);
-}
-
-[[maybe_unused]] std::string valueToString(const ListView view) {
-    if (view.empty()) {
-        return "[]";
-    }
-
-    std::string out;
-
-    out += '[';
-
-    const ListElementView fst = view.front();
-    out += valueToString(fst);
-
-    for (const ListElementView ele : view.elements() | rv::drop(1)) {
-        out += ", ";
-        out += valueToString(ele);
-    }
-
-    out += ']';
-
-    return out;
-}
-
-struct Stringify {
-    std::string& _string;
-    size_t _row {0};
-
-    template <typename T>
-    void operator()(const ColumnVector<T>* typed) {
-        const T& value = typed->at(_row);
-        _string = valueToString(value);
-    }
-
-    template <typename T>
-    void operator()(const ColumnConst<T>* typed) {
-        const T& value = typed->at(_row);
-        _string = valueToString(value);
-    }
-};
-
-std::string columnValueToString(const db::Column* column, size_t row) {
-    std::string string;
-    Stringify stringify(string, row);
-
-    using Types = OutputtedTypes;
-    using Dispatcher = ColumnSingleDispatcher<Types::Allowed, Stringify, Types::Excluded>;
-
-    Dispatcher::dispatch(column, stringify);
-
-    return string;
-}
-
-void escapeCsv(std::string& escaped, std::string_view value) {
-    escaped.clear();
-
-    bool needsQuotes = false;
-    escaped.reserve(value.size());
-
-    for (char ch : value) {
-        if (ch == '"') {
-            escaped.push_back('"');
-            escaped.push_back('"');
-            needsQuotes = true;
-            continue;
-        }
-
-        if (ch == ',' || ch == '\n' || ch == '\r') {
-            needsQuotes = true;
-        }
-        escaped.push_back(ch);
-    }
-
-    if (!needsQuotes) {
-        escaped = value;
-    } else {
-        escaped = "\"" + escaped + "\"";
-    }
-}
-
-std::string formatStatusError(db::QueryStatus::Status status,
-                              std::string_view message) {
-    std::string statusName(db::QueryStatusDescription::value(status));
-
-    for (char& ch : statusName) {
-        if (ch == '_') {
-            ch = ' ';
-        }
-    }
-
-    if (message.empty()) {
-        return statusName;
-    }
-
-    return fmt::format("{}\n{}", statusName, message);
 }
 
 void generatePlanGraph(std::string_view query,
@@ -453,7 +238,7 @@ bool validateResultJson(std::string& error, std::string_view jsonStr) {
     return true;
 }
 
-}
+} // namespace
 
 void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs,
                                        const fs::Path& dir) {
@@ -498,8 +283,10 @@ void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs,
         spec._graphName = doc.value("graph", spec._graphName);
         spec._query = doc.value("query", "");
         spec._enabled = doc.value("enabled", true);
+        spec._remoteEnabled = doc.value("remote-enabled", true);
         spec._writeRequired = doc.value("write-required", false);
         spec._disabledReason = doc.value("disabled-reason", "");
+        spec._remoteDisabledReason = doc.value("remote-disabled-reason", "");
 
         if (doc.contains("tags") && doc["tags"].is_array()) {
             for (const auto& tag : doc["tags"]) {
@@ -531,7 +318,9 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     db::TuringDB* db = &env->getDB();
 
     db::QueryConfig queryConfig;
-    const bool forceVHJ = std::find(spec._tags.begin(), spec._tags.end(), "value-hash-join") != spec._tags.end();
+    const bool forceVHJ = std::find(spec._tags.begin(), spec._tags.end(),
+                                    "value-hash-join")
+                       != spec._tags.end();
     if (forceVHJ) {
         queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
     }
@@ -540,7 +329,8 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     {
         const db::Transaction tx = graph->openTransaction();
         const db::GraphView view = tx.viewGraph();
-        generatePlanGraph(spec._query, view, planOut, &queryConfig.getPlanGenConfig());
+        generatePlanGraph(spec._query, view, planOut,
+                          &queryConfig.getPlanGenConfig());
     }
 
     std::vector<std::vector<std::string>> rows;
@@ -561,10 +351,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
         // Write the header in the JSON output
         jsonEncoder.writeDataframeHeader(*df);
 
-        // Write the header in the CSV output
-        for (auto* col : df->cols()) {
-            columnNames.emplace_back(col->getName());
-        }
+        QueryResultFormatter::appendHeader(columnNames, df);
     });
 
     std::vector<std::string> values;
@@ -575,20 +362,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
         // Write the data in the JSON output
         jsonEncoder.writeDataframe(*df);
 
-        // Write the data in the CSV output
-        values.clear();
-        const size_t rowCount = df->getLogicalRowCount();
-
-        for (size_t row = 0; row < rowCount; ++row) {
-            values.clear();
-            values.reserve(df->cols().size());
-
-            for (auto* col : df->cols()) {
-                values.push_back(columnValueToString(col->getColumn(), row));
-            }
-
-            rows.push_back(std::move(values));
-        }
+        QueryResultFormatter::appendRows(rows, values, df);
     });
 
     queryCallbacks.setOnError([&](const db::QueryStatus& qs) {
@@ -610,11 +384,14 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
             changeID = c[0];
         });
 
-        const db::QueryState changeNewState(spec._graphName, &env->getMem(), &queryConfig, &changeNewCallbacks);
+        const db::QueryState changeNewState(spec._graphName, &env->getMem(),
+                                            &queryConfig, &changeNewCallbacks);
         db->query("CHANGE NEW", changeNewState);
     }
 
-    const db::QueryState queryState(spec._graphName, &env->getMem(), &queryConfig, &queryCallbacks, db::CommitHash::head(), changeID);
+    const db::QueryState queryState(spec._graphName, &env->getMem(), &queryConfig,
+                                    &queryCallbacks, db::CommitHash::head(),
+                                    changeID);
     const auto queryStart = Clock::now();
     const db::QueryStatus status = db->query(spec._query, queryState);
     const auto queryEnd = Clock::now();
@@ -624,43 +401,21 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     }
 
     jsonEncoder.finish();
-    result._timeUs = static_cast<uint64_t>(duration<Microseconds>(queryStart, queryEnd));
-
-    std::stringstream resultOut;
-    std::string escaped;
-
-    if (!status.isOk()) {
-        resultOut << formatStatusError(status.getStatus(), status.getError());
-    } else {
-        for (size_t i = 0; i < columnNames.size(); ++i) {
-            if (i > 0) {
-                resultOut << ",";
-            }
-
-            escapeCsv(escaped, columnNames[i]);
-            resultOut << escaped;
-        }
-        for (const auto& row : rows) {
-            resultOut << "\n";
-            for (size_t col = 0; col < row.size(); ++col) {
-                if (col > 0) {
-                    resultOut << ",";
-                }
-
-                escapeCsv(escaped, row[col]);
-                resultOut << escaped;
-            }
-        }
-    }
+    result._timeUs =
+        static_cast<uint64_t>(duration<Microseconds>(queryStart, queryEnd));
 
     if (spec._writeRequired) {
         db::QueryCallbacks submitCallbacks;
-        const db::QueryState submitState(spec._graphName, &env->getMem(), &queryConfig, &submitCallbacks, db::CommitHash::head(), changeID);
+        const db::QueryState submitState(spec._graphName, &env->getMem(),
+                                         &queryConfig, &submitCallbacks,
+                                         db::CommitHash::head(), changeID);
         db->query("CHANGE SUBMIT", submitState);
     }
 
     normalizeOutput(result._planOutput, planOut.str());
-    normalizeOutput(result._resultOutput, resultOut.str());
+    normalizeOutput(
+        result._resultOutput,
+        QueryResultFormatter::formatResultOutput(status, columnNames, rows));
     result._resultJsonOutput = jsonOutput;
 
     std::string expected;
@@ -671,8 +426,10 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     normalizeOutput(expected, spec._expectResult);
     result._resultMatched = expected == result._resultOutput;
 
-    result._resultJsonValid = validateResultJson(result._resultJsonError, result._resultJsonOutput);
-    result._resultJsonMatched = spec._expectResultJson == result._resultJsonOutput;
+    result._resultJsonValid =
+        validateResultJson(result._resultJsonError, result._resultJsonOutput);
+    result._resultJsonMatched =
+        spec._expectResultJson == result._resultJsonOutput;
 
     return result;
 }
@@ -718,4 +475,4 @@ void QueryTestRunner::readFile(std::string& content, const fs::Path& path) {
     }
 }
 
-}
+} // namespace turing::test

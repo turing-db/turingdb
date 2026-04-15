@@ -9,6 +9,12 @@
 using namespace db;
 
 TuringDB::TuringDB(const TuringConfig* config)
+    : TuringDB(config, QueryConfig{})
+{
+}
+
+TuringDB::TuringDB(const TuringConfig* config, const QueryConfig& defaultQueryConfig)
+    : _defaultQueryConfig(defaultQueryConfig)
 {
     _systemManager = std::make_unique<SystemManager>(config);
 }

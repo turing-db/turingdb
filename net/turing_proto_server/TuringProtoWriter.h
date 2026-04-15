@@ -20,14 +20,18 @@ namespace net::proto {
 
 class TuringProtoWriter : public AbstractTCPWriter {
 public:
-    TuringProtoWriter();
+    explicit TuringProtoWriter(size_t bufferCapacity = DEFAULT_BUFFER_CAPACITY);
     ~TuringProtoWriter() override;
 
     void flush() override;
     void reset() override;
     void setSocket(int socket) override { _socket = socket; }
-    [[nodiscard]] size_t getBytesWritten() const override { return _pendingBytes; }
-    [[nodiscard]] bool wroteNonEmptyChunk() const override { return _hasPendingPacket; }
+    [[nodiscard]] size_t getBytesWritten() const override {
+        return _pendingBytes;
+    }
+    [[nodiscard]] bool wroteNonEmptyChunk() const override {
+        return _hasPendingPacket;
+    }
     [[nodiscard]] bool errorOccured() const override { return _errorOccured; }
 
     void writeDataframeHeader(const db::Dataframe*);
@@ -50,5 +54,4 @@ private:
     void netErrorOccurred();
     void netErrorOccurred(std::string& msg);
 };
-
 }

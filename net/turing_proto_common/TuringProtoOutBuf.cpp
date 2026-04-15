@@ -64,7 +64,7 @@ void TuringProtoOutBuf::copyVarLenData(const void* data, size_t len) {
     size_t offset = 0;
     while (offset < len) {
         const size_t toCopy = std::min(len - offset, remaining());
-        copy(static_cast<const char*>(data) + offset, toCopy);
+        copy(static_cast<const uint8_t*>(data) + offset, toCopy);
 
         if (remaining() == 0) {
             _onBufferFull();

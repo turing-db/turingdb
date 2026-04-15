@@ -1,5 +1,6 @@
 add_library(turing_testutils_s
-    STATIC  TuringTestMain.cpp)
+    STATIC  TuringTestMain.cpp
+            RemoteTestUtils.cpp)
 
 target_link_libraries(turing_testutils_s
     PUBLIC  GTest::gtest

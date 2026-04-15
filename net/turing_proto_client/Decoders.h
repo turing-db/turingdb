@@ -346,6 +346,17 @@ inline bool decodeConst<std::string>(TuringProtoDecoder::DecodeContext* ctx,
         ctx->_bufferState._offset = numBytesToRead;
 
         typedCol->set(std::move(val));
+        // Const columns have no row dimension, so queueing a body-resume via
+        // _bufferState means the whole column is decoded once that resume
+        // finishes. Mark this column complete now (advance _colIndex; reset
+        // _rowIndex for the next column) so when more bytes arrive,
+        // decodeIncomingChunk drains the body via _bufferState and then
+        // decodeIncomingData proceeds to the *next* column instead of
+        // re-entering this decoder and reading the next column's bytes as
+        // fresh framing. Mirrors how decodeOptVector advances _rowIndex
+        // before its own buffer-state queue.
+        ++ctx->_colIndex;
+        ctx->_rowIndex = 0;
         return false;
     }
     return true;
@@ -376,6 +387,12 @@ inline bool decodeConst<db::Path>(TuringProtoDecoder::DecodeContext* ctx,
         ctx->_bufferState._offset = numBytesToRead;
 
         typedCol->set(std::move(path));
+        // See decodeConst<std::string>: const columns have no row dimension,
+        // so completing this body via _bufferState completes the column.
+        // Advance _colIndex to keep decodeIncomingData from re-entering and
+        // misreading the next column's bytes as path framing.
+        ++ctx->_colIndex;
+        ctx->_rowIndex = 0;
         return false;
     }
     return true;
@@ -393,7 +410,8 @@ inline bool decodeConst<db::types::Embedding::Primitive>(TuringProtoDecoder::Dec
     const size_t numFloats = embeddingSize / sizeof(float);
 
     auto* data = ctx->_embeddingBuffer->alloc(numFloats);
-    const std::span<const float> span = ctx->_embeddingBuffer->getSpan(data, numFloats);
+    const std::span<const float> span =
+        ctx->_embeddingBuffer->getSpan(data, numFloats);
 
     if (embeddingSize <= ctx->_inBuf->readable()) {
         ctx->_inBuf->readData(data, embeddingSize);
@@ -408,6 +426,12 @@ inline bool decodeConst<db::types::Embedding::Primitive>(TuringProtoDecoder::Dec
         ctx->_bufferState._len = embeddingSize;
         ctx->_bufferState._offset = numBytesToRead;
 
+        // See decodeConst<std::string>: const columns have no row dimension,
+        // so completing this body via _bufferState completes the column.
+        // Advance _colIndex to keep decodeIncomingData from re-entering and
+        // misreading the next column's bytes as embedding framing.
+        ++ctx->_colIndex;
+        ctx->_rowIndex = 0;
         return false;
     }
     return true;
@@ -481,6 +505,13 @@ inline bool decodeOptConst<std::string>(TuringProtoDecoder::DecodeContext* ctx,
         ctx->_bufferState._offset = numBytesToRead;
 
         typedCol->set(std::move(val));
+        // See decodeConst<std::string>: const columns have no row dimension,
+        // so completing this body via _bufferState completes the column.
+        // Advance _colIndex to keep decodeIncomingData from re-entering and
+        // misreading the next column's hasValue/length bytes as this column's
+        // framing.
+        ++ctx->_colIndex;
+        ctx->_rowIndex = 0;
         return false;
     }
     return true;
@@ -525,6 +556,12 @@ inline bool decodeOptConst<db::types::Embedding::Primitive>(TuringProtoDecoder::
         ctx->_bufferState._len = embeddingSize;
         ctx->_bufferState._offset = numBytesToRead;
 
+        // See decodeConst<std::string>: const columns have no row dimension,
+        // so completing this body via _bufferState completes the column.
+        // Advance _colIndex to keep decodeIncomingData from re-entering and
+        // misreading the next column's bytes as embedding framing.
+        ++ctx->_colIndex;
+        ctx->_rowIndex = 0;
         return false;
     }
     return true;

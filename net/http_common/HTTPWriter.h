@@ -36,7 +36,7 @@ public:
         EnumStringPair<Status::SendFailed, "Could not send data">,
         EnumStringPair<Status::SentZeroBytes, "Send zero bytes which is not supposed to happen">>;
 
-    explicit HTTPWriter(net::utils::DataSocket socket = 0)
+    explicit HTTPWriter(net::utils::DataSocket socket = -1)
         : _socket(socket)
     {
         memcpy(_chunk._content.data() + 8, "\r\n", 2);
@@ -326,7 +326,7 @@ private:
     static inline constexpr size_t _maxChunkSize = 1024ul * 32ul;
     static inline constexpr size_t _safety = 64;
 
-    int _socket {0};
+    int _socket {-1};
     Status _status {Status::Ok};
     bool _wroteNonEmptyChunk {false};
 

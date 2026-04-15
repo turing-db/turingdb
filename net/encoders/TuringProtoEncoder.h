@@ -125,6 +125,12 @@ struct ColumnHeaderWriter {
         const auto typeCode = ColInternalKindToProtoEnum::map<T>();
         writeColumnSchema(typeCode, net::proto::ColumnKind::CONSTANT);
     }
+
+    template <typename T>
+    void operator()(const db::ColumnConst<std::optional<T>>* col) {
+        const auto typeCode = ColInternalKindToProtoEnum::map<T>();
+        writeColumnSchema(typeCode, net::proto::ColumnKind::OPTIONAL_CONSTANT);
+    }
 };
 
 class DataWriter {

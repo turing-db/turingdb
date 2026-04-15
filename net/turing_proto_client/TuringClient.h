@@ -25,7 +25,8 @@ class TuringClient {
 public:
     TuringClient(const std::string& remoteAddress,
                  const std::string& remotePort,
-                 db::LocalMemory* localMem);
+                 db::LocalMemory* localMem,
+                 size_t bufferCapacity = DEFAULT_BUFFER_CAPACITY);
     ~TuringClient();
 
     void connect();
@@ -34,9 +35,11 @@ public:
     bool setUpConnection();
     db::QueryStatus sendQuery(const std::string& query,
                               const db::QueryCallbacks::OnOutputData& callback);
-    void setRemoteAddress(const std::string& remoteAddress) { _remoteAddress = remoteAddress; }
+    void setRemoteAddress(const std::string& remoteAddress) {
+        _remoteAddress = remoteAddress;
+    }
     void setRemotePort(const std::string& remotePort) { _remotePort = remotePort; }
-    void setGraphName(std::string graphName) { _graphName = std::move(graphName); }
+    void setGraphName(const std::string& graphName) { _graphName = graphName; }
     void setCommitHash(db::CommitHash commitHash) { _commitHash = commitHash; }
     void setChangeID(db::ChangeID changeID) { _changeID = changeID; }
 
@@ -58,13 +61,12 @@ private:
     db::ChangeID _changeID {db::ChangeID::head()};
     int _socket {-1};
     db::LocalMemory* _localMem {nullptr};
-    TuringProtoOutBuf _outBuf {DEFAULT_BUFFER_CAPACITY};
-    TuringProtoInBuf _inBuf {DEFAULT_BUFFER_CAPACITY};
+    TuringProtoOutBuf _outBuf;
+    TuringProtoInBuf _inBuf;
     EmbeddingBuffer _embeddingBuffer;
 
     ProtoHeader send();
     void recvAll(size_t recvLen);
     ProtoHeader recvMsgHeader();
 };
-
 }

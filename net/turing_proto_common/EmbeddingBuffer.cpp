@@ -9,8 +9,9 @@ EmbeddingBuffer::~EmbeddingBuffer() {
 }
 
 std::vector<float>& EmbeddingBuffer::ensureCapacity(size_t count) {
-    const auto chunksHaveBeenAllocated = !_chunks.empty();
-    const auto hasCapacity = _chunks.back().size() + count <= _chunks.back().capacity();
+    const bool chunksHaveBeenAllocated = !_chunks.empty();
+    const bool hasCapacity = chunksHaveBeenAllocated
+                          && _chunks.back().size() + count <= _chunks.back().capacity();
 
     if (!chunksHaveBeenAllocated || !hasCapacity) {
         _chunks.emplace_back();

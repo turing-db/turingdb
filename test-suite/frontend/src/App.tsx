@@ -33,6 +33,8 @@ import { AlertTriangle, Ban, Bug, CheckCircle2, Clock3, Copy, FilePlus, GitCompa
 type TestMeta = {
   name: string;
   enabled: boolean;
+  remoteEnabled?: boolean;
+  remoteDisabledReason?: string;
   query?: string;
   tags?: string[];
   writeRequired?: boolean;
@@ -115,6 +117,7 @@ export default function App() {
   const [tests, setTests] = React.useState<TestMeta[]>([]);
   const [selected, setSelected] = React.useState<TestMeta | null>(null);
   const [results, setResults] = React.useState<Record<string, TestResult>>({});
+  const [remoteResults, setRemoteResults] = React.useState<Record<string, TestResult>>({});
   const [search, setSearch] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -138,6 +141,7 @@ export default function App() {
   const [planSvgMain, setPlanSvgMain] = React.useState<string | null>(null);
   const renderSeq = React.useRef(0);
   const [parsedResult, setParsedResult] = React.useState<string[][] | null>(null);
+  const [parsedRemoteResult, setParsedRemoteResult] = React.useState<string[][] | null>(null);
   const [parsedExpectedResult, setParsedExpectedResult] = React.useState<string[][] | null>(null);
   const [parsedMainResult, setParsedMainResult] = React.useState<string[][] | null>(null);
   const [disabledReasonDraft, setDisabledReasonDraft] = React.useState("");
@@ -154,6 +158,7 @@ export default function App() {
   const [resultTab, setResultTab] = React.useState<"actual" | "expected" | "main">("actual");
   const [planTab, setPlanTab] = React.useState<"actual" | "expected" | "main">("actual");
   const [jsonTab, setJsonTab] = React.useState<"actual" | "expected" | "main">("actual");
+  const [remoteResultTab, setRemoteResultTab] = React.useState<"actual" | "expected" | "main">("actual");
 
   const loadTests = React.useCallback(async (preferName?: string) => {
     try {
@@ -203,6 +208,7 @@ export default function App() {
     setResultTab("actual");
     setPlanTab("actual");
     setJsonTab("actual");
+    setRemoteResultTab("actual");
   }, [selected]);
 
   React.useEffect(() => {
@@ -263,22 +269,61 @@ export default function App() {
     window.history.replaceState({}, "", url.toString());
   }, [selected?.name]);
 
+  const isLocalPass = React.useCallback(
+    (result: TestResult) =>
+      result.planMatched && result.resultMatched && result.resultJsonMatched === true,
+    []
+  );
+
+  const isRemotePass = React.useCallback(
+    (result: TestResult) =>
+      result.resultMatched === true,
+    []
+  );
+
+  const readApiErrorMessage = React.useCallback(async (res: Response, fallback: string) => {
+    const payload = (await res.json().catch(() => null)) as { error?: unknown; details?: unknown } | null;
+    if (typeof payload?.error === "string" && payload.error.trim()) {
+      if (typeof payload.details === "string" && payload.details.trim()) {
+        return `${payload.error}: ${payload.details}`;
+      }
+      return payload.error;
+    }
+    return fallback;
+  }, []);
+
+  const fetchApiJson = React.useCallback(
+    async <T,>(url: string, fallback: string): Promise<T> => {
+      let res: Response;
+      try {
+        res = await fetch(url);
+      } catch (err) {
+        const message = err instanceof Error && err.message ? err.message : "Unable to reach runner backend";
+        throw new Error(`Failed to reach runner backend: ${message}`);
+      }
+      if (!res.ok) {
+        throw new Error(await readApiErrorMessage(res, fallback));
+      }
+      return (await res.json()) as T;
+    },
+    [readApiErrorMessage]
+  );
+
   const runTest = async (name: string) => {
     setLoading(true);
     setError(null);
     setResults((prev) => ({ ...prev }));
     try {
-      const res = await fetch(`${API_BASE}/run?test=${encodeURIComponent(name)}`);
-      if (!res.ok) {
-        throw new Error("Runner API unavailable");
-      }
-      const data = (await res.json()) as TestResult;
+      const data = await fetchApiJson<TestResult>(
+        `${API_BASE}/run?test=${encodeURIComponent(name)}`,
+        "Failed to run test"
+      );
       setResults((prev) => ({ ...prev, [data.name]: data }));
-      if (!data.planMatched || !data.resultMatched || !data.resultJsonMatched) {
-        showFailToast(1);
+      if (!isLocalPass(data)) {
+        showFailToast("1 test failed");
       }
     } catch (err) {
-      setError("Runner API unavailable. Build and run query_test_suite_cli to wire this up.");
+      setError(err instanceof Error ? err.message : "Failed to run test");
     } finally {
       setLoading(false);
     }
@@ -288,23 +333,36 @@ export default function App() {
     setLoading(true);
     setError(null);
     setResults((prev) => ({ ...prev }));
+    setRemoteResults((prev) => ({ ...prev }));
     try {
-      const res = await fetch(`${API_BASE}/run-all`);
-      if (!res.ok) {
-        throw new Error("Runner API unavailable");
+      const [localData, remoteData] = await Promise.all([
+        fetchApiJson<TestResult[]>(`${API_BASE}/run-all`, "Failed to run all tests"),
+        fetchApiJson<TestResult[]>(`${API_BASE}/run-all-remote`, "Failed to run all remote tests")
+      ]);
+      const nextLocal: Record<string, TestResult> = {};
+      for (const entry of localData) {
+        nextLocal[entry.name] = entry;
       }
-      const data = (await res.json()) as TestResult[];
-      const next: Record<string, TestResult> = {};
-      for (const entry of data) {
-        next[entry.name] = entry;
+      const nextRemote: Record<string, TestResult> = {};
+      for (const entry of remoteData) {
+        nextRemote[entry.name] = entry;
       }
-      setResults(next);
-      const failed = data.filter((entry) => !entry.planMatched || !entry.resultMatched || !entry.resultJsonMatched).length;
-      if (failed > 0) {
-        showFailToast(failed);
+      setResults(nextLocal);
+      setRemoteResults(nextRemote);
+      const localFailed = localData.filter((entry) => !isLocalPass(entry)).length;
+      const remoteFailed = remoteData.filter((entry) => !isRemotePass(entry)).length;
+      const notices: string[] = [];
+      if (localFailed > 0) {
+        notices.push(`${localFailed} local test${localFailed === 1 ? "" : "s"} failed`);
+      }
+      if (remoteFailed > 0) {
+        notices.push(`${remoteFailed} remote test${remoteFailed === 1 ? "" : "s"} failed`);
+      }
+      if (notices.length > 0) {
+        showFailToast(notices.join(" / "));
       }
     } catch (err) {
-      setError("Runner API unavailable. Build and run query_test_suite_cli to wire this up.");
+      setError(err instanceof Error ? err.message : "Failed to run test suite");
     } finally {
       setLoading(false);
     }
@@ -781,6 +839,19 @@ export default function App() {
   };
 
   const selectedResult = selected ? results[selected.name] : undefined;
+  const selectedRemoteResult = selected ? remoteResults[selected.name] : undefined;
+  const getTestRunStatus = React.useCallback(
+    (test: TestMeta) => {
+      if (!test.enabled) return "disabled" as const;
+      const localResult = results[test.name];
+      if (!localResult) return "pending" as const;
+      if (!isLocalPass(localResult)) return "fail" as const;
+      const remoteResult = remoteResults[test.name];
+      if (remoteResult && !isRemotePass(remoteResult)) return "fail" as const;
+      return "pass" as const;
+    },
+    [isLocalPass, isRemotePass, remoteResults, results]
+  );
   const allTags = React.useMemo(() => {
     const set = new Set<string>();
     for (const test of tests) {
@@ -807,13 +878,12 @@ export default function App() {
       });
     }
     return next.filter((test) => {
-      if (!test.enabled) return showDisabled;
-      const testResult = results[test.name];
-      if (!testResult) return showNotRun;
-      const isPass = testResult.planMatched && testResult.resultMatched && testResult.resultJsonMatched;
-      return isPass ? showPassing : showFailing;
+      const status = getTestRunStatus(test);
+      if (status === "disabled") return showDisabled;
+      if (status === "pending") return showNotRun;
+      return status === "pass" ? showPassing : showFailing;
     });
-  }, [filteredTests, tagFilters, results, showDisabled, showFailing, showNotRun, showPassing]);
+  }, [filteredTests, getTestRunStatus, tagFilters, showDisabled, showFailing, showNotRun, showPassing]);
 
   const stats = React.useMemo(() => {
     let passed = 0;
@@ -821,28 +891,28 @@ export default function App() {
     let disabled = 0;
     let notRun = 0;
     for (const test of tests) {
-      if (!test.enabled) {
+      const status = getTestRunStatus(test);
+      switch (status) {
+      case "disabled":
         disabled += 1;
-        continue;
-      }
-      const result = results[test.name];
-      if (!result) {
+        break;
+      case "pending":
         notRun += 1;
-        continue;
-      }
-      const isPass = result.planMatched && result.resultMatched && result.resultJsonMatched;
-      if (isPass) {
+        break;
+      case "pass":
         passed += 1;
-      } else {
+        break;
+      case "fail":
         failed += 1;
+        break;
       }
     }
     return { passed, failed, disabled, notRun };
-  }, [tests, results]);
+  }, [getTestRunStatus, tests]);
 
-  const showFailToast = React.useCallback((failedCount: number) => {
-    if (failedCount <= 0) return;
-    setFailNotice(`${failedCount} test${failedCount === 1 ? "" : "s"} failed`);
+  const showFailToast = React.useCallback((message: string) => {
+    if (!message) return;
+    setFailNotice(message);
     if (failTimerRef.current) {
       window.clearTimeout(failTimerRef.current);
     }
@@ -1010,9 +1080,65 @@ export default function App() {
     };
 
     setParsedResult(parseCsv(selectedResult?.resultOutput ?? ""));
+    setParsedRemoteResult(parseCsv(selectedRemoteResult?.resultOutput ?? ""));
     setParsedExpectedResult(parseCsv(expectedResult));
     setParsedMainResult(parseCsv(mainResult));
-  }, [selectedResult?.resultOutput, expectedResult, mainResult]);
+  }, [selectedRemoteResult?.resultOutput, selectedResult?.resultOutput, expectedResult, mainResult]);
+
+  const renderTableResult = React.useCallback((rows: string[][]) => (
+    <div className="mt-3 max-h-[48rem] overflow-auto rounded-xl border border-white/5 bg-paper">
+      <table className="w-full border-collapse text-left text-xs text-ink">
+        <thead className="sticky top-0 bg-steel/60 text-ink/80">
+          <tr>
+            {rows[0].map((cell, idx) => (
+              <th key={idx} className="border-b border-white/5 px-3 py-2 font-semibold">
+                {cell}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(1).map((row, rowIdx) => (
+            <tr key={rowIdx} className="odd:bg-white/5">
+              {row.map((cell, cellIdx) => (
+                <td key={cellIdx} className="border-b border-white/5 px-3 py-2">
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ), []);
+
+  const renderTextResult = React.useCallback((value?: string, heightClass = "max-h-[48rem]") => (
+    <pre className={`mt-3 overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink ${heightClass}`}>
+      {value || "(empty)"}
+    </pre>
+  ), []);
+
+  const renderCsvOrText = React.useCallback(
+    (rows: string[][] | null, value?: string, heightClass = "max-h-[48rem]") =>
+      rows && rows.length > 0 ? renderTableResult(rows) : renderTextResult(value, heightClass),
+    [renderTableResult, renderTextResult]
+  );
+
+  const renderJsonOutput = React.useCallback((raw?: string) => {
+    if (!raw) {
+      return renderTextResult(undefined, "max-h-[36rem]");
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return (
+        <div className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3 text-xs font-mono">
+          <JsonView data={parsed} style={darkStyles} />
+        </div>
+      );
+    } catch {
+      return renderTextResult(raw, "max-h-[36rem]");
+    }
+  }, [renderTextResult]);
 
   return (
     <SidebarProvider ref={sidebarRef} defaultOpen sidebarWidth={sidebarWidth}>
@@ -1114,9 +1240,12 @@ export default function App() {
               <SidebarMenu>
                 {visibleTests.map((test) => {
                   const testResult = results[test.name];
-                  const isPending = !testResult;
-                  const isDisabled = !test.enabled;
-                  const isPass = !!testResult && testResult.planMatched && testResult.resultMatched && testResult.resultJsonMatched;
+                  const remoteResult = remoteResults[test.name];
+                  const status = getTestRunStatus(test);
+                  const isPending = status === "pending";
+                  const isDisabled = status === "disabled";
+                  const isPass = status === "pass";
+                  const remoteFailed = !!remoteResult && !isRemotePass(remoteResult);
                   const statusClass = isDisabled
                     ? "text-amber-400"
                     : isPass
@@ -1160,7 +1289,9 @@ export default function App() {
                               ? "pending"
                               : isPass
                                 ? timingLabel ?? "pass"
-                                : "fail"}
+                                : remoteFailed
+                                  ? "remote fail"
+                                  : "fail"}
                         </span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -1500,98 +1631,11 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                {resultTab === "actual" ? (
-                  parsedResult && parsedResult.length > 0 ? (
-                    <div className="mt-3 max-h-[48rem] overflow-auto rounded-xl border border-white/5 bg-paper">
-                      <table className="w-full border-collapse text-left text-xs text-ink">
-                        <thead className="sticky top-0 bg-steel/60 text-ink/80">
-                          <tr>
-                            {parsedResult[0].map((cell, idx) => (
-                              <th key={idx} className="border-b border-white/5 px-3 py-2 font-semibold">
-                                {cell}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {parsedResult.slice(1).map((row, rowIdx) => (
-                            <tr key={rowIdx} className="odd:bg-white/5">
-                              {row.map((cell, cellIdx) => (
-                                <td key={cellIdx} className="border-b border-white/5 px-3 py-2">
-                                  {cell}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <pre className="mt-3 max-h-[48rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-{selectedResult.resultOutput || "(empty)"}
-                    </pre>
-                  )
-                ) : resultTab === "expected" ? (
-                  parsedExpectedResult && parsedExpectedResult.length > 0 ? (
-                    <div className="mt-3 max-h-[48rem] overflow-auto rounded-xl border border-white/5 bg-paper">
-                      <table className="w-full border-collapse text-left text-xs text-ink">
-                        <thead className="sticky top-0 bg-steel/60 text-ink/80">
-                          <tr>
-                            {parsedExpectedResult[0].map((cell, idx) => (
-                              <th key={idx} className="border-b border-white/5 px-3 py-2 font-semibold">
-                                {cell}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {parsedExpectedResult.slice(1).map((row, rowIdx) => (
-                            <tr key={rowIdx} className="odd:bg-white/5">
-                              {row.map((cell, cellIdx) => (
-                                <td key={cellIdx} className="border-b border-white/5 px-3 py-2">
-                                  {cell}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <pre className="mt-3 max-h-[48rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-{expectedResult || "(empty)"}
-                    </pre>
-                  )
-                ) : parsedMainResult && parsedMainResult.length > 0 ? (
-                  <div className="mt-3 max-h-[48rem] overflow-auto rounded-xl border border-white/5 bg-paper">
-                    <table className="w-full border-collapse text-left text-xs text-ink">
-                      <thead className="sticky top-0 bg-steel/60 text-ink/80">
-                        <tr>
-                          {parsedExpectedResult[0].map((cell, idx) => (
-                            <th key={idx} className="border-b border-white/5 px-3 py-2 font-semibold">
-                              {cell}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {parsedExpectedResult.slice(1).map((row, rowIdx) => (
-                          <tr key={rowIdx} className="odd:bg-white/5">
-                            {row.map((cell, cellIdx) => (
-                              <td key={cellIdx} className="border-b border-white/5 px-3 py-2">
-                                {cell}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <pre className="mt-3 max-h-[48rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-{mainResult || "(empty)"}
-                  </pre>
-                )}
+                {resultTab === "actual"
+                  ? renderCsvOrText(parsedResult, selectedResult.resultOutput)
+                  : resultTab === "expected"
+                    ? renderCsvOrText(parsedExpectedResult, expectedResult)
+                    : renderCsvOrText(parsedMainResult, mainResult)}
               </div>
               <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
                 <div className="flex items-center justify-between">
@@ -1731,41 +1775,94 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                {(() => {
-                  const raw = jsonTab === "actual"
+                {renderJsonOutput(
+                  jsonTab === "actual"
                     ? selectedResult.resultJsonOutput
                     : jsonTab === "expected"
                       ? expectedResultJson
-                      : mainResultJson;
-                  if (!raw) {
-                    return (
-                      <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-                        (empty)
-                      </pre>
-                    );
-                  }
-                  try {
-                    const parsed = JSON.parse(raw);
-                    return (
-                      <div className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3 text-xs font-mono">
-                        <JsonView data={parsed} style={darkStyles} />
-                      </div>
-                    );
-                  } catch {
-                    return (
-                      <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-                        {raw}
-                      </pre>
-                    );
-                  }
-                })()}
+                      : mainResultJson
+                )}
               </div>
+            </div>
+          )}
+
+          {selected && (
+            <div className="mt-6 grid gap-4">
+              <div className="rounded-2xl border border-sky-400/20 bg-sky-500/5 p-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-sky-200/80">Remote Query Output</p>
+                  <p className="mt-1 text-sm text-ink/70">
+                    <code>Run All</code> also runs this test through the binary protocol client/server path. It compares the same
+                    plain-text result corpus as the local suite.
+                  </p>
+                </div>
+              </div>
+
+              {selectedRemoteResult ? (
+                <>
+                  <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Remote Result Output</p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center rounded-full border border-white/10 bg-paper/60 p-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
+                          <button
+                            className={`rounded-full px-2 py-1 ${remoteResultTab === "actual" ? "bg-white/10 text-ink" : ""}`}
+                            onClick={() => setRemoteResultTab("actual")}
+                          >
+                            Actual
+                          </button>
+                          <button
+                            className={`rounded-full px-2 py-1 ${remoteResultTab === "expected" ? "bg-white/10 text-ink" : ""}`}
+                            onClick={() => setRemoteResultTab("expected")}
+                          >
+                            Expected
+                          </button>
+                          <button
+                            className={`rounded-full px-2 py-1 ${remoteResultTab === "main" ? "bg-white/10 text-ink" : ""}`}
+                            onClick={() => setRemoteResultTab("main")}
+                            disabled={!selected?.changed}
+                          >
+                            Main
+                          </button>
+                        </div>
+                        <span
+                          className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
+                            selectedRemoteResult.resultMatched
+                              ? "bg-moss/15 text-moss"
+                              : "bg-accent/15 text-accent"
+                          }`}
+                        >
+                          {selectedRemoteResult.resultMatched ? "match" : "mismatch"}
+                        </span>
+                        {typeof selectedRemoteResult.timeUs === "number" && (
+                          <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
+                            {selectedRemoteResult.timeUs} us
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {remoteResultTab === "actual"
+                      ? renderCsvOrText(parsedRemoteResult, selectedRemoteResult.resultOutput)
+                      : remoteResultTab === "expected"
+                        ? renderCsvOrText(parsedExpectedResult, expectedResult)
+                        : renderCsvOrText(parsedMainResult, mainResult)}
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-2xl border border-white/10 bg-steel/40 p-4 text-sm text-ink/70">
+                  {selected?.remoteEnabled === false
+                    ? `Remote run disabled${selected.remoteDisabledReason ? `: ${selected.remoteDisabledReason}` : "."}`
+                    : <>Use <code>Run All</code> to populate remote output for this test.</>}
+                </div>
+              )}
             </div>
           )}
 
           {(!selected || !selectedResult) && !loading && !error && (
             <div className="mt-6 rounded-2xl border border-white/10 bg-steel/40 p-4 text-sm text-ink/70">
-              Connect the C++ runner API to populate plan/result output.
+              {selected
+                ? "Run the local query path to populate local plan/result output."
+                : "Connect the C++ runner API to populate plan/result output."}
             </div>
           )}
         </section>

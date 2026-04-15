@@ -52,6 +52,22 @@ if (!(await Bun.file(cliBinary).exists())) {
 const sourceTestsDir = join(turingSrc, "test", "query-test-suite", "tests");
 const testsRelDir = "test/query-test-suite/tests";
 
+async function runCliJsonResponse(
+    args: string[],
+    runErrorMessage: string,
+    parseErrorMessage: string,
+    ): Promise<Response> {
+  const {stdout, stderr, exitCode} = await runCli(cliBinary, args);
+  if (exitCode !== 0) {
+    return errorResponse(runErrorMessage, 500, stderr || stdout);
+  }
+  try {
+    return jsonResponse(parseJsonFromStdout(stdout));
+  } catch {
+    return errorResponse(parseErrorMessage, 500, stdout);
+  }
+}
+
 Bun.serve({
 	port: PORT,
 	async fetch(req) {
@@ -126,51 +142,59 @@ Bun.serve({
 				return errorResponse("Test not found in main", 404);
 			}
 			return jsonResponse(expected);
+                }
+
+                if (pathname === "/api/test-json") {
+                  const name =
+                      searchParams.get("name") ?? searchParams.get("test");
+                  if (!name) {
+                    return errorResponse("Missing test parameter", 400);
+                  }
+                  const data = await loadTestJsonFromFile(sourceTestsDir, name);
+                  if (!data) {
+                    return errorResponse("Test not found", 404);
+                  }
+                  return jsonResponse(data);
+                }
+
+                if (pathname === "/api/run") {
+                  const testId = searchParams.get("test");
+                  if (!testId) {
+                    return errorResponse("Missing test parameter", 400);
+                  }
+                  return runCliJsonResponse(
+                      [ "--run", testId ],
+                      "Failed to run test",
+                      "Invalid run response",
+                  );
+                }
+
+                if (pathname === "/api/run-remote") {
+                  const testId = searchParams.get("test");
+                  if (!testId) {
+                    return errorResponse("Missing test parameter", 400);
+                  }
+                  return runCliJsonResponse(
+                      [ "--run-remote", testId ],
+                      "Failed to run remote test",
+                      "Invalid remote run response",
+                  );
+                }
+
+                if (pathname === "/api/run-all") {
+			return runCliJsonResponse(
+				["--run-all"],
+				"Failed to run all tests",
+				"Invalid run-all response",
+			);
 		}
 
-		if (pathname === "/api/test-json") {
-			const name = searchParams.get("name") ?? searchParams.get("test");
-			if (!name) {
-				return errorResponse("Missing test parameter", 400);
-			}
-			const data = await loadTestJsonFromFile(sourceTestsDir, name);
-			if (!data) {
-				return errorResponse("Test not found", 404);
-			}
-			return jsonResponse(data);
-		}
-
-		if (pathname === "/api/run") {
-			const testId = searchParams.get("test");
-			if (!testId) {
-				return errorResponse("Missing test parameter", 400);
-			}
-			const { stdout, stderr, exitCode } = await runCli(cliBinary, [
-				"--run",
-				testId,
-			]);
-			if (exitCode !== 0) {
-				return errorResponse("Failed to run test", 500, stderr || stdout);
-			}
-			try {
-				return jsonResponse(parseJsonFromStdout(stdout));
-			} catch (err) {
-				return errorResponse("Invalid run response", 500, stdout);
-			}
-		}
-
-		if (pathname === "/api/run-all") {
-			const { stdout, stderr, exitCode } = await runCli(cliBinary, [
-				"--run-all",
-			]);
-			if (exitCode !== 0) {
-				return errorResponse("Failed to run all tests", 500, stderr || stdout);
-			}
-			try {
-				return jsonResponse(parseJsonFromStdout(stdout));
-			} catch (err) {
-				return errorResponse("Invalid run-all response", 500, stdout);
-			}
+		if (pathname === "/api/run-all-remote") {
+			return runCliJsonResponse(
+				["--run-all-remote"],
+				"Failed to run all remote tests",
+				"Invalid remote run-all response",
+			);
 		}
 
 		if (pathname === "/api/update" && req.method === "POST") {

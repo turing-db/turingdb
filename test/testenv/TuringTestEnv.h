@@ -15,6 +15,7 @@ namespace turing::test {
 class TuringTestEnv {
 public:
     TuringTestEnv();
+    explicit TuringTestEnv(const QueryConfig& defaultQueryConfig);
     ~TuringTestEnv();
 
     TuringTestEnv(const TuringTestEnv&) = delete;
@@ -22,20 +23,18 @@ public:
     TuringTestEnv& operator=(const TuringTestEnv&) = delete;
     TuringTestEnv& operator=(TuringTestEnv&&) = delete;
 
-    [[nodiscard]] static std::unique_ptr<TuringTestEnv> create(const fs::Path& turingDir);
-    [[nodiscard]] static std::unique_ptr<TuringTestEnv> createSyncedOnDisk(const fs::Path& turingDir);
+    [[nodiscard]] static std::unique_ptr<TuringTestEnv>
+    create(const fs::Path& turingDir);
+    [[nodiscard]] static std::unique_ptr<TuringTestEnv>
+    create(const fs::Path& turingDir, const QueryConfig& defaultQueryConfig);
+    [[nodiscard]] static std::unique_ptr<TuringTestEnv>
+    createSyncedOnDisk(const fs::Path& turingDir);
 
-    [[nodiscard]] TuringConfig& getConfig() {
-        return _config;
-    }
+    [[nodiscard]] TuringConfig& getConfig() { return _config; }
 
-    [[nodiscard]] TuringDB& getDB() {
-        return _db;
-    }
+    [[nodiscard]] TuringDB& getDB() { return _db; }
 
-    [[nodiscard]] LocalMemory& getMem() {
-        return _mem;
-    }
+    [[nodiscard]] LocalMemory& getMem() { return _mem; }
 
     [[nodiscard]] JobSystem* getJobSystem() {
         return _db.getSystemManager().getJobSystem();
@@ -47,8 +46,7 @@ public:
 
 private:
     TuringConfig _config;
-    TuringDB _db {&_config};
+    TuringDB _db;
     LocalMemory _mem;
 };
-
 }
