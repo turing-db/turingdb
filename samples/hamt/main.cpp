@@ -1,4 +1,4 @@
-#include "hamt.h"
+#include "HAMTIndex.h"
 
 using namespace db;
 
