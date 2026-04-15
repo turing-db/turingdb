@@ -113,6 +113,7 @@ public:
     void resize(size_t size) { _data.resize(size); }
 
     void push_back(const T& v) { _data.push_back(v); }
+    void push_back(T&& v) { _data.push_back(std::move(v)); }
     void reserve(size_t capacity) { _data.reserve(capacity); }
 
     size_t capacity() const { return _data.capacity(); }
