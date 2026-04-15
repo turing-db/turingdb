@@ -1,5 +1,5 @@
 set(SAMPLE_NAME hamt)
-set(SOURCES main.cpp hamt.h)
+set(SOURCES main.cpp HAMTIndex.cpp)
 
 turing_sample(${SAMPLE_NAME} ${SOURCES})
 
