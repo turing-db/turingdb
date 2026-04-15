@@ -143,6 +143,14 @@ public:
         return &(*it);
     }
 
+    /**
+     * @brief Gets the (possibly null) value of the property associated with @param
+     * entityID.
+     * @returns
+     * - std::nullopt: if the value is explicitly null;
+     * - nullptr:      if there is no associated value;
+     * - the value:    otherwise.
+     */
     std::optional<const typename T::Primitive*> tryGetWithNull(EntityID entityID) const {
         const auto findIt = _entityIndexMap.find(entityID);
 

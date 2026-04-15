@@ -115,6 +115,14 @@ public:
         return container->tryGet(entityID);
     }
 
+    /**
+     * @brief Gets the (possibly null) value of the property with ID @param ptID
+     * associated with @param entityID.
+     * @returns
+     * - std::nullopt: if the value is explicitly null;
+     * - nullptr:      if there is no associated value;
+     * - the value:    otherwise.
+     */
     template <SupportedType T>
     std::optional<const typename T::Primitive*> tryGetWithNull(PropertyTypeID ptID,
                                                                EntityID entityID) const {
