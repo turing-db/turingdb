@@ -79,6 +79,7 @@ set(ast_sources
     CreateNodePropertyIndexQuery.cpp
     CreateEdgePropertyIndexQuery.cpp
     DropIndexQuery.cpp
+    MergeDataPartsQuery.cpp
 
     ExprUtils.cpp
   )

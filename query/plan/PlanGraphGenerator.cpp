@@ -63,6 +63,7 @@
 #include "nodes/ShowExtensionsNode.h"
 #include "nodes/CreatePropertyIndexNode.h"
 #include "nodes/DropIndexNode.h"
+#include "nodes/MergeDataPartsNode.h"
 
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
@@ -86,6 +87,7 @@
 #include "CreateNodePropertyIndexQuery.h"
 #include "CreateEdgePropertyIndexQuery.h"
 #include "DropIndexQuery.h"
+#include "MergeDataPartsQuery.h"
 
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
@@ -191,6 +193,10 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::DROP_INDEX_QUERY:
             generateDropIndexQuery(static_cast<const DropIndexQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::MERGE_DATA_PARTS_QUERY:
+            generateMergeDataPartsQuery(static_cast<const MergeDataPartsQuery*>(query));
         break;
     }
 
@@ -437,6 +443,11 @@ void PlanGraphGenerator::generateDropIndexQuery(const DropIndexQuery* query) {
     auto* node = _tree.create<DropIndexNode>(indexName);
 
     _tree.newOut<ProduceResultsNode>(node);
+}
+
+void PlanGraphGenerator::generateMergeDataPartsQuery(const MergeDataPartsQuery* query) {
+    auto* n = _tree.create<MergeDataPartsNode>();
+    _tree.newOut<ProduceResultsNode>(n);
 }
 
 void PlanGraphGenerator::throwError(std::string_view msg, const void* obj) const {

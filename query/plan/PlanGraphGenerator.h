@@ -38,6 +38,7 @@ class QueryCommand;
 class CreateNodePropertyIndexQuery;
 class CreateEdgePropertyIndexQuery;
 class DropIndexQuery;
+class MergeDataPartsQuery;
 
 class PlanGraphGenerator {
 public:
@@ -81,6 +82,7 @@ private:
     void generateCreateNodePropertyIndexQuery(const CreateNodePropertyIndexQuery* query);
     void generateCreateEdgePropertyIndexQuery(const CreateEdgePropertyIndexQuery* query);
     void generateDropIndexQuery(const DropIndexQuery* query);
+    void generateMergeDataPartsQuery(const MergeDataPartsQuery* query);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

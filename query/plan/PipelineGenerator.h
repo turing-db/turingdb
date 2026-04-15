@@ -66,6 +66,7 @@ class ConstWriteSourceNode;
 class CreatePropertyIndexNode;
 class IndexLookupNode;
 class DropIndexNode;
+class MergeDataPartsNode;
 
 class PipelineGenerator {
 public:
@@ -171,6 +172,7 @@ private:
     PipelineOutputInterface* translateCreatePropertyIndexNode(CreatePropertyIndexNode* node);
     PipelineOutputInterface* translateIndexLookupNode(IndexLookupNode* node);
     PipelineOutputInterface* translateDropIndexNode(DropIndexNode* node);
+    PipelineOutputInterface* translateMergeDataPartsNode(MergeDataPartsNode* node);
 
     std::vector<std::string> _csvHeaders;
 };
