@@ -77,6 +77,7 @@
     #include "CreateNodePropertyIndexQuery.h"
     #include "CreateEdgePropertyIndexQuery.h"
     #include "DropIndexQuery.h"
+    #include "MergeDataPartsQuery.h"
 
     namespace db {
         class YCypherScanner;
@@ -168,6 +169,7 @@
 %token<std::string_view> YIELD
 %token<std::string_view> MATCH
 %token<std::string_view> MERGE
+%token<std::string_view> PARTS
 %token<std::string_view> ORDER
 %token<std::string_view> WHERE
 %token<std::string_view> UNION
@@ -195,6 +197,7 @@
 %token<std::string_view> SKIP
 %token<std::string_view> WITH
 %token<std::string_view> LOAD
+%token<std::string_view> DATA
 %token<std::string_view> PUSH
 %token<std::string_view> PULL
 %token<std::string_view> NEW
@@ -313,6 +316,7 @@
 %type<db::SinglePartQuery*> singlePartQuery
 %type<db::ChangeQuery*> changeQuery
 %type<db::CommitQuery*> commitQuery
+%type<db::MergeDataPartsQuery*> mergeDataPartsQuery
 %type<db::ListGraphQuery*> listGraphQuery
 %type<db::CreateGraphQuery*> createGraphQuery
 %type<db::InstallExtensionQuery*> installExtensionQuery
@@ -412,6 +416,7 @@ singleQuery
     | showVectorIndexesQuery { $$ = $1; }
     | installExtensionQuery { $$ = $1; }
     | showExtensionsQuery { $$ = $1; }
+    | mergeDataPartsQuery { $$ = $1; }
     ;
 
 loadGraph
@@ -656,6 +661,10 @@ changeOp
 
 commitQuery
     : COMMIT { $$ = CommitQuery::create(ast); LOC($$, @$); }
+    ;
+
+mergeDataPartsQuery
+    : MERGE DATA PARTS { $$ = MergeDataPartsQuery::create(ast); LOC($$, @$); }
     ;
 
 readingStatements
@@ -1491,6 +1500,7 @@ reservedWord
     | COUNT { $$ = Symbol::create(ast, $1); }
     | HEADERS { $$ = Symbol::create(ast, $1); }
     | JSONL { $$ = Symbol::create(ast, $1); }
+    | PARTS { $$ = Symbol::create(ast, $1); }
     | CSV { $$ = Symbol::create(ast, $1); }
     | FAIL { $$ = Symbol::create(ast, $1); }
     | ERROR_ { $$ = Symbol::create(ast, $1); }
@@ -1506,6 +1516,7 @@ reservedWord
     | CASE { $$ = Symbol::create(ast, $1); }
     | ENDS { $$ = Symbol::create(ast, $1); }
     | DROP { $$ = Symbol::create(ast, $1); }
+    | DATA { $$ = Symbol::create(ast, $1); }
     | SHOW { $$ = Symbol::create(ast, $1); }
     | INSTALL { $$ = Symbol::create(ast, $1); }
     | EXTENSIONS { $$ = Symbol::create(ast, $1); }

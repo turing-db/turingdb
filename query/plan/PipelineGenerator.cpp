@@ -92,6 +92,7 @@
 #include "nodes/CreatePropertyIndexNode.h"
 #include "nodes/IndexLookupNode.h"
 #include "nodes/DropIndexNode.h"
+#include "nodes/MergeDataPartsNode.h"
 
 #include "TranslateJoinHelpers.h"
 
@@ -506,6 +507,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::DROP_INDEX:
             return translateDropIndexNode(static_cast<DropIndexNode*>(node));
+        break;
+
+        case PlanGraphOpcode::MERGE_DATA_PARTS:
+            return translateMergeDataPartsNode(static_cast<MergeDataPartsNode*>(node));
         break;
 
         case PlanGraphOpcode::FUNC_EVAL:
@@ -1545,6 +1550,11 @@ PipelineOutputInterface* PipelineGenerator::translateChangeNode(ChangeNode* node
 
 PipelineOutputInterface* PipelineGenerator::translateCommitNode(CommitNode* node) {
     _builder.addCommit();
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateMergeDataPartsNode(MergeDataPartsNode* node) {
+    _builder.addMergeDataParts();
     return _builder.getPendingOutputInterface();
 }
 

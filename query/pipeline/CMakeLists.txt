@@ -72,6 +72,7 @@ set(processors_sources
     processors/IndexLookupProcessor.cpp
     processors/ApplyMask.cpp
     processors/DropIndexProcessor.cpp
+    processors/DataPartMergeProcessor.cpp
 )
 
 set(procedures_sources

@@ -10,6 +10,7 @@
 #include "processors/CartesianProductProcessor.h"
 #include "processors/ChangeProcessor.h"
 #include "processors/CommitProcessor.h"
+#include "processors/DataPartMergeProcessor.h"
 #include "processors/DropIndexProcessor.h"
 #include "processors/IndexLookupProcessor.h"
 #include "processors/LoadCommitProcessor.h"
@@ -676,6 +677,16 @@ PipelineBlockOutputInterface& PipelineBuilder::addChangeOp(ChangeOp op) {
 
 PipelineBlockOutputInterface& PipelineBuilder::addCommit() {
     CommitProcessor* proc = CommitProcessor::create(_pipeline);
+    auto& output = proc->output();
+
+    _pendingOutput.updateInterface(&output);
+
+    _lastProc = proc;
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addMergeDataParts() {
+    DataPartMergeProcessor* proc = DataPartMergeProcessor::create(_pipeline);
     auto& output = proc->output();
 
     _pendingOutput.updateInterface(&output);

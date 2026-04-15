@@ -59,6 +59,7 @@ enum class PlanGraphOpcode {
     CREATE_PROPERTY_INDEX,
     INDEX_LOOKUP,
     DROP_INDEX,
+    MERGE_DATA_PARTS,
 
     _SIZE
 };
@@ -115,7 +116,8 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::CONST_WRITE_SOURCE, "CONST_WRITE_SOURCE">,
     EnumStringPair<PlanGraphOpcode::CREATE_PROPERTY_INDEX, "CREATE_PROPERTY_INDEX">,
     EnumStringPair<PlanGraphOpcode::INDEX_LOOKUP, "INDEX_LOOKUP">,
-    EnumStringPair<PlanGraphOpcode::DROP_INDEX, "DROP_INDEX">
+    EnumStringPair<PlanGraphOpcode::DROP_INDEX, "DROP_INDEX">,
+    EnumStringPair<PlanGraphOpcode::MERGE_DATA_PARTS, "MERGE_DATA_PARTS">
 >;
 
 class PlanGraphNode {

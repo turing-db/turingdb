@@ -4,6 +4,7 @@
 #include "SinglePartQuery.h"
 #include "ChangeQuery.h"
 #include "CommitQuery.h"
+#include "MergeDataPartsQuery.h"
 #include "SymbolChain.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/MatchStmt.h"
@@ -170,6 +171,10 @@ void CypherASTDumper::dump(std::ostream& out) {
             case QueryCommand::Kind::DROP_INDEX_QUERY:
                 out << "    script ||--o{ DROP_INDEX : \"\"\n";
             break;
+
+            case QueryCommand::Kind::MERGE_DATA_PARTS_QUERY:
+                dump(out, static_cast<const MergeDataPartsQuery*>(query));
+            break;
         }
     }
 }
@@ -306,6 +311,13 @@ void CypherASTDumper::dump(std::ostream& out, const CommitQuery* query) {
     out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
     out << "    _" << std::hex << query << " {\n";
     out << "        ASTType CommitQuery\n";
+    out << "    }\n";
+}
+
+void CypherASTDumper::dump(std::ostream& out, const MergeDataPartsQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType MergeDataPartsQuery\n";
     out << "    }\n";
 }
 
