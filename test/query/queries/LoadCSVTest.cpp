@@ -17,6 +17,7 @@
 #include "columns/ColumnIDs.h"
 #include "iterators/ChunkConfig.h"
 #include "metadata/PropertyType.h"
+#include "processors/CountProcessor.h"
 #include "versioning/Change.h"
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
@@ -553,7 +554,7 @@ TEST_F(LoadCSVTest, exceedChunkWrites) {
         size_t sz = std::numeric_limits<size_t>::max();
         const auto res = query(matchQuery, [&sz](const Dataframe* df) {
             ASSERT_TRUE(df);
-            const auto* cnt = findColumn(df, "count(n)")->as<ColumnConst<size_t>>();
+            const auto* cnt = findColumn(df, "count(n)")->as<ColumnConst<CountProcessor::CountType>>();
             ASSERT_TRUE(cnt);
             sz = cnt->getRaw();
         });
