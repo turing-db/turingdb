@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <range/v3/view/zip.hpp>
 
 #include <fstream>
@@ -14,6 +15,7 @@
 #include "columns/ColumnVector.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnIDs.h"
+#include "iterators/ChunkConfig.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Change.h"
 #include "versioning/Transaction.h"
@@ -515,4 +517,53 @@ TEST_F(LoadCSVTest, loadCreateNodesEdgesWithHeaders) {
         actual.print(out);
         return out.str();
     }();
+}
+
+TEST_F(LoadCSVTest, exceedChunkWrites) {
+    setWorkingGraph("default");
+
+    constexpr size_t numRows = ChunkConfig::CHUNK_SIZE + 103;
+    static const std::string csv = []() {
+        std::string s;
+        s.reserve(numRows * 6);
+        for (size_t row = 0; row < numRows; row++) {
+            s += "name";
+            s += ('0' + (row % 10));
+            s += '\n';
+        }
+        return s;
+    }();
+
+    const std::string csvName = writeTempCSV("large.csv", csv);
+
+    {
+        newChange();
+
+        const std::string createQuery =
+            fmt::format("LOAD CSV '{}' AS row CREATE (n:New{{name:row[0]}})", csvName);
+        const auto res = query(createQuery, emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+
+        submitCurrentChange();
+    }
+
+    {
+        const std::string_view matchQuery = "MATCH (n) RETURN count(n)";
+
+        size_t sz = std::numeric_limits<size_t>::max();
+        const auto res = query(matchQuery, [&sz](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            const auto* cnt = findColumn(df, "count(n)")->as<ColumnConst<size_t>>();
+            ASSERT_TRUE(cnt);
+            sz = cnt->getRaw();
+        });
+
+        ASSERT_EQ(sz, numRows);
+    }
+}
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 3;
+    });
 }
