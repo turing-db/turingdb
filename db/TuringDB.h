@@ -14,6 +14,7 @@ class SystemManager;
 class TuringDB {
 public:
     TuringDB(const TuringConfig* config);
+    TuringDB(const TuringConfig* config, const QueryConfig& defaultQueryConfig);
     ~TuringDB();
 
     void init();
@@ -29,5 +30,4 @@ private:
 
     std::unique_ptr<SystemManager> _systemManager;
 };
-
 }

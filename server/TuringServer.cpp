@@ -57,28 +57,24 @@ void TuringServer::start() {
                 TuringProtoServerProcessor processor(_db, connection);
                 processor.process(threadContext);
             };
-        functions._createParser =
-            [](net::NetBuffer* inputBuffer) {
-                return std::unique_ptr<net::AbstractTCPParser>(new net::proto::TuringProtoParser(inputBuffer));
-            };
-        functions._createWriter =
-            [] {
-                return std::make_unique<net::proto::TuringProtoWriter>();
-            };
+        functions._createParser = [](net::NetBuffer* inputBuffer) {
+            return std::unique_ptr<net::AbstractTCPParser>(new net::proto::TuringProtoParser(inputBuffer));
+        };
+        functions._createWriter = [bufferCapacity = _config.getProtoBufferCapacity()] {
+            return std::make_unique<net::proto::TuringProtoWriter>(bufferCapacity);
+        };
     } else {
-        functions._processor =
-            [&](net::AbstractThreadContext* threadContext, net::TCPConnection& connection) {
-                DBServerProcessor processor(_db, connection);
-                processor.process(threadContext);
-            };
-        functions._createParser =
-            [](net::NetBuffer* inputBuffer) {
-                return std::unique_ptr<net::AbstractTCPParser>(new net::HTTPParser<DBURIParser>(inputBuffer));
-            };
-        functions._createWriter =
-            [] {
-                return std::make_unique<net::HTTPWriter>();
-            };
+        functions._processor = [&](net::AbstractThreadContext* threadContext,
+                                   net::TCPConnection& connection) {
+            DBServerProcessor processor(_db, connection);
+            processor.process(threadContext);
+        };
+        functions._createParser = [](net::NetBuffer* inputBuffer) {
+            return std::unique_ptr<net::AbstractTCPParser>(new net::HTTPParser<DBURIParser>(inputBuffer));
+        };
+        functions._createWriter = [] {
+            return std::make_unique<net::HTTPWriter>();
+        };
     }
 
     _server = std::make_unique<net::TCPServer>(std::move(functions));

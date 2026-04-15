@@ -178,7 +178,7 @@ TEST_F(StringFilterTest, filterOnInterestName) {
         foundResult = true;
     });
     ASSERT_TRUE(res) << "Query failed with status: "
-                      << db::QueryStatusDescription::value(res.getStatus())
+                      << QueryStatusDescription::value(res.getStatus())
                       << " Error: " << res.getError();
     EXPECT_TRUE(foundResult) << "Should find result (A, Unique)";
 }
@@ -209,7 +209,7 @@ TEST_F(StringFilterTest, filterOnPersonName) {
         }
     });
     ASSERT_TRUE(res) << "Query failed with status: "
-                      << db::QueryStatusDescription::value(res.getStatus())
+                      << QueryStatusDescription::value(res.getStatus())
                       << " Error: " << res.getError();
     // A is connected to: Shared, Unique, MegaHub
     EXPECT_EQ(foundInterests.size(), 3) << "Person A should have 3 interests";

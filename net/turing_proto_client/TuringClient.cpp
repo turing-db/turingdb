@@ -20,11 +20,13 @@ using namespace net::proto;
 
 TuringClient::TuringClient(const std::string& remoteAddress,
                            const std::string& remotePort,
-                           db::LocalMemory* localMem)
+                           db::LocalMemory* localMem, size_t bufferCapacity)
     : _remoteAddress(remoteAddress),
     _remotePort(remotePort),
     _socket(-1),
-    _localMem(localMem)
+    _localMem(localMem),
+    _outBuf(bufferCapacity),
+    _inBuf(bufferCapacity)
 {
 }
 

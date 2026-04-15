@@ -1,5 +1,7 @@
 {
   "enabled": true,
+  "remote-enabled": false,
+  "remote-disabled-reason": "Remote protocol does not support list-typed result values yet.",
   "graph": "simpledb",
   "query": "RETURN [10, true, [\"this is a nested list\", 33.33, [0, false, \"this is a doubly nested list!\"]]] AS biglist",
   "expect": {

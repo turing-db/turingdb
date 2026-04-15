@@ -12,8 +12,8 @@
 
 using namespace net::proto;
 
-TuringProtoWriter::TuringProtoWriter()
-    : _buffer(DEFAULT_BUFFER_CAPACITY),
+TuringProtoWriter::TuringProtoWriter(size_t bufferCapacity)
+    : _buffer(bufferCapacity),
     _headerBuf(ProtoHeader::wireSize())
 {
 }
