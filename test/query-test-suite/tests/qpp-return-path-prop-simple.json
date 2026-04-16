@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n)-[e]->+(m) RETURN n, e.name, m",
+  "expect": {
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n)-[e]->+(m) RETURN n, e.name, m\n       |                               ^^^^^^\n-------* Returning properties from a variable lengthed path is not yet supported.",
+    "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n)-[e]->+(m) RETURN n, e.name, m\n       |                               ^^^^^^\n-------* Returning properties from a variable lengthed path is not yet supported.",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n)-[e]->+(m) RETURN n, e.name, m\\n       |                               ^^^^^^\\n-------* Returning properties from a variable lengthed path is not yet supported.\"}"
+  },
+  "tags": [
+    "qpp",
+    "errors"
+  ],
+  "write-required": false
+}
