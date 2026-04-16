@@ -2,10 +2,11 @@
 
 #include <spdlog/fmt/fmt.h>
 
-#include "PipelineException.h"
 #include "columns/ColumnIDs.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
+
+#include "PipelineException.h"
 
 namespace db {
 
@@ -56,6 +57,7 @@ void GetPropertiesWithNullProcessor<Entity, T>::prepare(ExecutionContext* ctxt) 
         const Column* idsCol = _input.getDataframe()->getColumn(_entityTag)->getColumn();
         ids = dynamic_cast<const ColumnEdgeIDs*>(idsCol);
     }
+    bioassert(ids, "Could not get input IDs column.");
 
     _propWriter = std::make_unique<ChunkWriter>(ctxt->getGraphView(), _propType._id, ids);
 
