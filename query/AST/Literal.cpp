@@ -138,7 +138,8 @@ DoubleLiteral* DoubleLiteral::create(CypherAST* ast, double value) {
     return literal;
 }
 
-StringLiteral::StringLiteral() {
+StringLiteral::StringLiteral()
+{
 }
 
 StringLiteral::~StringLiteral() {
