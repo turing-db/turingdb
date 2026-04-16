@@ -1,9 +1,10 @@
 from turingdb import TuringDB
 
-import create_after_delete_test as CaD_test
-import delete_after_create_test as DaC_test
-import delete_after_delete_test as DaD_test
-import set_after_set_test       as SAS_test
+import create_after_delete_test        as CaD_test
+import delete_after_create_test        as DaC_test
+import delete_after_delete_test        as DaD_test
+import delete_node_after_update_edge_test as DNaUE_test
+import set_after_set_test              as SAS_test
 
 
 def main():
@@ -22,6 +23,10 @@ def main():
     print("Running DELETE-after-DELETE test")
     DaD_test.run(client)
     print("Passed DELETE-after-DELETE test")
+
+    print("Running DELETE-NODE-after-UPDATE-EDGE test")
+    DNaUE_test.run(client)
+    print("Passed DELETE-NODE-after-UPDATE-EDGE test")
 
     print("Running SET-after-SET test")
     SAS_test.run(client)
