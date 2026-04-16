@@ -5,6 +5,7 @@
 #include "ColumnConst.h"
 #include "ColumnOptVector.h"
 #include "ColumnKind.h"
+#include "EntityList.h"
 #include "metadata/PropertyType.h"
 
 #include "FatalException.h"
@@ -41,7 +42,8 @@ using AllValueTypes = TypeList<
     std::optional<types::Embedding::Primitive>,
     std::string,
     const CommitBuilder*,
-    const Change*
+    const Change*,
+    EntityList
 >;
 template <ColumnKind::Code K, typename... TypeList>
 struct ColumnTypeFromKindImpl;
@@ -130,6 +132,7 @@ struct ColumnTypeFromKind {
         COL_CASE(ColumnVector<std::string>)                                              \
         COL_CASE(ColumnVector<const CommitBuilder*>)                                     \
         COL_CASE(ColumnVector<const Change*>)                                            \
+        COL_CASE(ColumnVector<EntityList>)                                               \
                                                                                          \
         default: {                                                                       \
             throw FatalException(fmt::format(                                            \
@@ -162,6 +165,7 @@ struct ColumnTypeFromKind {
         CONST_COL_CASE(ColumnVector<std::string>)                                        \
         CONST_COL_CASE(ColumnVector<const CommitBuilder*>)                               \
         CONST_COL_CASE(ColumnVector<const Change*>)                                      \
+        CONST_COL_CASE(ColumnVector<EntityList>)                                         \
                                                                                          \
         default: {                                                                       \
             throw FatalException(fmt::format(                                            \
