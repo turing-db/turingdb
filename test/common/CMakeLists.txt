@@ -1,2 +1,3 @@
 add_turing_test(test_common_perfstat PerfStatTest.cpp)
 add_turing_test(test_common_smallvector SmallVectorTest.cpp)
+add_turing_test(test_common_hybridstring HybridStringTest.cpp)

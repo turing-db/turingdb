@@ -60,26 +60,34 @@ bool hasSurrogatePairAt(std::string_view raw, size_t pos) {
     return hasEscapePrefix && hasHexDigitsAt(raw, pos + 2, 4);
 }
 
-void unescapeString(std::string_view raw, std::string& out) {
-    out.clear();
-    out.reserve(raw.size());
+void unescapeString(std::string_view raw, HybridString& out) {
+    const size_t firstEscape = raw.find('\\');
+    if (firstEscape == std::string_view::npos) {
+        out.setView(raw);
+        return;
+    }
 
-    for (size_t i = 0; i < raw.size(); i++) {
+    std::string& buf = out.mutate();
+    buf.clear();
+    buf.reserve(raw.size());
+    buf.append(raw.substr(0, firstEscape));
+
+    for (size_t i = firstEscape; i < raw.size(); i++) {
         if (raw[i] == '\\' && i + 1 < raw.size()) {
             const char next = raw[i + 1];
             switch (next) {
-                case '\\': out.push_back('\\'); i++; break;
-                case '\'': out.push_back('\''); i++; break;
-                case '"':  out.push_back('"');  i++; break;
-                case 't':  out.push_back('\t'); i++; break;
-                case 'n':  out.push_back('\n'); i++; break;
-                case 'r':  out.push_back('\r'); i++; break;
-                case 'b':  out.push_back('\b'); i++; break;
-                case 'f':  out.push_back('\f'); i++; break;
+                case '\\': buf.push_back('\\'); i++; break;
+                case '\'': buf.push_back('\''); i++; break;
+                case '"':  buf.push_back('"');  i++; break;
+                case 't':  buf.push_back('\t'); i++; break;
+                case 'n':  buf.push_back('\n'); i++; break;
+                case 'r':  buf.push_back('\r'); i++; break;
+                case 'b':  buf.push_back('\b'); i++; break;
+                case 'f':  buf.push_back('\f'); i++; break;
                 case 'u': {
                     const bool validEscape = hasHexDigitsAt(raw, i + 2, 4);
                     if (!validEscape) {
-                        out.push_back(next);
+                        buf.push_back(next);
                         i++;
                         break;
                     }
@@ -93,13 +101,13 @@ void unescapeString(std::string_view raw, std::string& out) {
                     const uint32_t cp = validLow ? 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00) : high;
                     i += validLow ? 11 : 5;
 
-                    encodeUTF8(cp, out);
+                    encodeUTF8(cp, buf);
                     break;
                 }
-                default: out.push_back(next); i++; break;
+                default: buf.push_back(next); i++; break;
             }
         } else {
-            out.push_back(raw[i]);
+            buf.push_back(raw[i]);
         }
     }
 }

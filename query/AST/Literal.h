@@ -7,6 +7,8 @@
 #include <span>
 #include <vector>
 
+#include "HybridString.h"
+
 #include "decl/EvaluatedType.h"
 
 namespace db {
@@ -124,10 +126,10 @@ public:
 
     constexpr EvaluatedType getType() const override { return EvaluatedType::String; }
 
-    std::string_view getValue() const { return _value; }
+    std::string_view getValue() const { return _value.getView(); }
 
 private:
-    std::string _value;
+    HybridString _value;
 
     StringLiteral();
 
