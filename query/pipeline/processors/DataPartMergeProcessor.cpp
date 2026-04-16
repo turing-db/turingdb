@@ -13,7 +13,8 @@
 
 using namespace db;
 
-DataPartMergeProcessor::DataPartMergeProcessor() {
+DataPartMergeProcessor::DataPartMergeProcessor()
+{
 }
 
 DataPartMergeProcessor::~DataPartMergeProcessor() {
