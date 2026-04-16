@@ -169,7 +169,7 @@
 %token<std::string_view> YIELD
 %token<std::string_view> MATCH
 %token<std::string_view> MERGE
-%token<std::string_view> PARTS
+%token<std::string_view> MERGE_DATA_PARTS
 %token<std::string_view> ORDER
 %token<std::string_view> WHERE
 %token<std::string_view> UNION
@@ -197,7 +197,6 @@
 %token<std::string_view> SKIP
 %token<std::string_view> WITH
 %token<std::string_view> LOAD
-%token<std::string_view> DATA
 %token<std::string_view> PUSH
 %token<std::string_view> PULL
 %token<std::string_view> NEW
@@ -664,7 +663,7 @@ commitQuery
     ;
 
 mergeDataPartsQuery
-    : MERGE DATA PARTS { $$ = MergeDataPartsQuery::create(ast); LOC($$, @$); }
+    : MERGE_DATA_PARTS { $$ = MergeDataPartsQuery::create(ast); LOC($$, @$); }
     ;
 
 readingStatements
@@ -1500,7 +1499,6 @@ reservedWord
     | COUNT { $$ = Symbol::create(ast, $1); }
     | HEADERS { $$ = Symbol::create(ast, $1); }
     | JSONL { $$ = Symbol::create(ast, $1); }
-    | PARTS { $$ = Symbol::create(ast, $1); }
     | CSV { $$ = Symbol::create(ast, $1); }
     | FAIL { $$ = Symbol::create(ast, $1); }
     | ERROR_ { $$ = Symbol::create(ast, $1); }
@@ -1516,7 +1514,6 @@ reservedWord
     | CASE { $$ = Symbol::create(ast, $1); }
     | ENDS { $$ = Symbol::create(ast, $1); }
     | DROP { $$ = Symbol::create(ast, $1); }
-    | DATA { $$ = Symbol::create(ast, $1); }
     | SHOW { $$ = Symbol::create(ast, $1); }
     | INSTALL { $$ = Symbol::create(ast, $1); }
     | EXTENSIONS { $$ = Symbol::create(ast, $1); }
