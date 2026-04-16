@@ -669,10 +669,6 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
 }
 
 PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(GetPropertyWithNullNode* node) {
-    if (!_builder.isSingleMaterializeStep()) {
-        _builder.addMaterialize();
-    }
-
     const VarDecl* entityDecl = node->getEntityVarDecl();
     if (!entityDecl) {
         throw PlannerException("GetPropertyWithNullNode does not have an entity variable declaration");
