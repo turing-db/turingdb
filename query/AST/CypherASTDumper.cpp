@@ -172,7 +172,7 @@ void CypherASTDumper::dump(std::ostream& out) {
                 out << "    script ||--o{ DROP_INDEX : \"\"\n";
             break;
 
-            case QueryCommand::Kind::MERGE_DATA_PARTS_QUERY:
+            case QueryCommand::Kind::MERGE_DATAPARTS_QUERY:
                 dump(out, static_cast<const MergeDataPartsQuery*>(query));
             break;
         }
