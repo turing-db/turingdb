@@ -457,17 +457,17 @@ PlanGraphNode* ReadStmtGenerator::generatePatternElementVariableLengthPath(PlanG
     auto [edgeVar, edgeFilter] = _variables->getVarNodeAndFilter(edgeDecl);
 
     if (edgeVar) {
-        throwError("Re-using the same edge variable, this is not supported", edge);
+        throwError("Attempted to reuse edge variable.", edge);
     }
 
     const VarDecl* nodeDecl = target->getDecl();
 
     if (minHops < 0) {
-        throwError("Variable-length path minimum hops must be greater than or equal to 0", edge);
+        throwError("Variable-length path minimum hops must be greater than or equal to 0.", edge);
     }
 
     if (maxHops < 1) {
-        throwError("Variable-length path maximum hops must be greater than or equal to 1", edge);
+        throwError("Variable-length path maximum hops must be greater than or equal to 1.", edge);
     }
 
     PathExplorerNode* expandNode = _tree->newOut<PathExplorerNode>(prevNode,

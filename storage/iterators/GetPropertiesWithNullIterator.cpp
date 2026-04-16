@@ -18,6 +18,8 @@ GetPropertiesIteratorWithNull<ID, T>::GetPropertiesIteratorWithNull(const GraphV
 
 template <IteratedID ID, SupportedType T>
 void GetPropertiesIteratorWithNull<ID, T>::init() {
+    bioassert(_inputIDs, "Null input column.");
+
     if (_inputIDs->empty()) {
         return;
     }
