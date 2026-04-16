@@ -50,14 +50,11 @@ void DataPartMergeProcessor::execute() {
 
     SystemManager* sysMan = _ctxt->getSystemManager();
     bioassert(sysMan, "DataPartMergeProcessor: SystemManager must be set");
+    bioassert(!_ctxt->getGraphName().empty(), "DataPartMergeProcessor: Graph name must be set");
 
     const std::string graphName(_ctxt->getGraphName());
-    Graph* graph = graphName.empty() ? sysMan->getDefaultGraph()
-                                     : sysMan->getGraph(graphName);
-
-    if (!graph) {
-        throw PipelineException("DataPartMergeProcessor: No graph loaded");
-    }
+    Graph* graph = sysMan->getGraph(graphName);
+    bioassert(graph, "DataPartMergeProcessor: Graph must exist");
 
     JobSystem* jobSystem = _ctxt->getJobSystem();
     bioassert(jobSystem, "DataPartMergeProcessor: Job system must be set");
