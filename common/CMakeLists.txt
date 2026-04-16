@@ -19,6 +19,7 @@ set(common_sources
         StringUtils.cpp
         Profiler.cpp
         ThreadName.cpp
+        HybridString.cpp
 
         log/LogSetup.cpp
         log/LogUtils.cpp)
