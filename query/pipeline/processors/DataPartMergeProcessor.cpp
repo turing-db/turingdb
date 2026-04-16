@@ -42,6 +42,7 @@ void DataPartMergeProcessor::prepare(ExecutionContext* ctxt) {
 }
 
 void DataPartMergeProcessor::reset() {
+    markAsReset();
 }
 
 void DataPartMergeProcessor::execute() {
