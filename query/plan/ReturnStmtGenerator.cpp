@@ -52,11 +52,13 @@ namespace rg = ranges;
 namespace rv = rg::views;
 
 ReturnStmtGenerator::ReturnStmtGenerator(const CypherAST* ast,
+                                         PlanGraphVariables* vars,
                                          const ReturnStmt* rtnStmt,
                                          PlanGraph* tree,
                                          PlanGraphNode* prevNode,
                                          GetPropertyCache& propCache)
     : _ast(ast),
+    _vars(vars),
     _stmt(rtnStmt),
     _tree(tree),
     _prevNode(prevNode),

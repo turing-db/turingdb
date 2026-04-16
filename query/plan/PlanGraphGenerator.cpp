@@ -393,10 +393,12 @@ void PlanGraphGenerator::generateShowExtensionsQuery(const ShowExtensionsQuery* 
     _tree.newOut<ProduceResultsNode>(node);
 }
 
-PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt, PlanGraphNode* prevNode) {
+PlanGraphNode* PlanGraphGenerator::generateReturnStmt(const ReturnStmt* stmt,
+                                                      PlanGraphNode* prevNode) {
     GetPropertyCache& propCache = _tree.getGetPropertyCache();
 
     ReturnStmtGenerator stmtGen(_ast,
+                                _variables.get(),
                                 stmt,
                                 &_tree,
                                 prevNode,

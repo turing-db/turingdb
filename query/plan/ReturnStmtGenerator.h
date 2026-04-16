@@ -28,6 +28,7 @@ class GetPropertyWithNullNode;
 class ReturnStmtGenerator {
 public:
     ReturnStmtGenerator(const CypherAST* ast,
+                        PlanGraphVariables* vars,
                         const ReturnStmt* rtnStmt,
                         PlanGraph* tree,
                         PlanGraphNode* prevNode,
@@ -65,6 +66,7 @@ private:
         std::variant<ExprEvalNode*, AggregateEvalNode*, GetPropertyWithNullNode*>;
 
     const CypherAST* _ast {nullptr};
+    PlanGraphVariables* _vars {nullptr};
 
     const ReturnStmt* _stmt {nullptr};
     Projection* _proj {nullptr};
