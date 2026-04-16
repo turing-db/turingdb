@@ -129,7 +129,8 @@ Key points:
 **Other rules:**
 - Never `using namespace` in headers
 - Never `using namespace std`
-- Use `const` extensively
+- Use `const` extensively — all local variables should be `const` unless they need mutation
+- When a conditional expression is long or compound, extract each part into a descriptively named `const bool` before the `if` statement
 - Use `bioassert` for assertions (from BioAssert.h)
 - Exceptions must derive from `TuringException`
 - No move semantics/RVO; pass by pointer or reference
