@@ -84,22 +84,14 @@ void unescapeString(std::string_view raw, std::string& out) {
                         break;
                     }
 
-                    uint32_t cp = hexToCodepoint(raw.substr(i + 2, 4));
-                    const bool isHighSurrogate = cp >= 0xD800 && cp <= 0xDBFF;
+                    const uint32_t high = hexToCodepoint(raw.substr(i + 2, 4));
+                    const bool isHighSurrogate = high >= 0xD800 && high <= 0xDBFF;
                     const bool hasLowSurrogate = isHighSurrogate && hasSurrogatePairAt(raw, i + 6);
+                    const uint32_t low = hasLowSurrogate ? hexToCodepoint(raw.substr(i + 8, 4)) : 0;
+                    const bool validLow = hasLowSurrogate && low >= 0xDC00 && low <= 0xDFFF;
 
-                    if (hasLowSurrogate) {
-                        const uint32_t low = hexToCodepoint(raw.substr(i + 8, 4));
-                        const bool validLow = low >= 0xDC00 && low <= 0xDFFF;
-                        if (validLow) {
-                            cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
-                            i += 11;
-                        } else {
-                            i += 5;
-                        }
-                    } else {
-                        i += 5;
-                    }
+                    const uint32_t cp = validLow ? 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00) : high;
+                    i += validLow ? 11 : 5;
 
                     encodeUTF8(cp, out);
                     break;
