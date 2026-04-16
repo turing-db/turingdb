@@ -456,9 +456,9 @@ void tabulateWrite(tabulate::RowStream& rs, const db::EntityList& list) {
         }
 
         if (type == EntityType::Node) {
-            result += fmt::format("({}:)", val);
+            result += fmt::format("({})", val);
         } else {
-            result += fmt::format("[{}:]", val);
+            result += fmt::format("[{}]", val);
         }
     }
     rs << result;
