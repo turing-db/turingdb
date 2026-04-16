@@ -99,7 +99,7 @@ TEST_F(MergeDataPartsTest, mergeReducesPartCount) {
     ASSERT_GT(partsBefore, 1u) << "Expected multiple data parts before merge";
 
     // Run MERGE DATA PARTS
-    auto mergeRes = query("MERGE_DATA_PARTS", emptyCallback);
+    auto mergeRes = query("MERGE_DATAPARTS", emptyCallback);
     ASSERT_TRUE(mergeRes) << mergeRes.getError();
 
     // After merge: should have exactly 1 data part
@@ -160,7 +160,7 @@ TEST_F(MergeDataPartsTest, mergePreservesData) {
     Rows beforeMerge = collectData();
 
     // Run MERGE DATA PARTS
-    auto mergeRes = query("MERGE_DATA_PARTS", emptyCallback);
+    auto mergeRes = query("MERGE_DATAPARTS", emptyCallback);
     ASSERT_TRUE(mergeRes) << mergeRes.getError();
 
     // Verify merge happened

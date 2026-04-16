@@ -509,7 +509,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateDropIndexNode(static_cast<DropIndexNode*>(node));
         break;
 
-        case PlanGraphOpcode::MERGE_DATA_PARTS:
+        case PlanGraphOpcode::MERGE_DATAPARTS:
             return translateMergeDataPartsNode(static_cast<MergeDataPartsNode*>(node));
         break;
 

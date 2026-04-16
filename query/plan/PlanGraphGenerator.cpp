@@ -195,7 +195,7 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
             generateDropIndexQuery(static_cast<const DropIndexQuery*>(query));
         break;
 
-        case QueryCommand::Kind::MERGE_DATA_PARTS_QUERY:
+        case QueryCommand::Kind::MERGE_DATAPARTS_QUERY:
             generateMergeDataPartsQuery(static_cast<const MergeDataPartsQuery*>(query));
         break;
     }

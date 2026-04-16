@@ -31,7 +31,7 @@ public:
         CREATE_NODE_PROPERTY_INDEX_QUERY,
         CREATE_EDGE_PROPERTY_INDEX_QUERY,
         DROP_INDEX_QUERY,
-        MERGE_DATA_PARTS_QUERY,
+        MERGE_DATAPARTS_QUERY,
     };
 
     virtual Kind getKind() const = 0;

@@ -7,7 +7,7 @@ namespace db {
 class MergeDataPartsNode : public PlanGraphNode {
 public:
     MergeDataPartsNode()
-        : PlanGraphNode(PlanGraphOpcode::MERGE_DATA_PARTS)
+        : PlanGraphNode(PlanGraphOpcode::MERGE_DATAPARTS)
     {
     }
 };

@@ -169,7 +169,7 @@
 %token<std::string_view> YIELD
 %token<std::string_view> MATCH
 %token<std::string_view> MERGE
-%token<std::string_view> MERGE_DATA_PARTS
+%token<std::string_view> MERGE_DATAPARTS
 %token<std::string_view> ORDER
 %token<std::string_view> WHERE
 %token<std::string_view> UNION
@@ -663,7 +663,7 @@ commitQuery
     ;
 
 mergeDataPartsQuery
-    : MERGE_DATA_PARTS { $$ = MergeDataPartsQuery::create(ast); LOC($$, @$); }
+    : MERGE_DATAPARTS { $$ = MergeDataPartsQuery::create(ast); LOC($$, @$); }
     ;
 
 readingStatements
