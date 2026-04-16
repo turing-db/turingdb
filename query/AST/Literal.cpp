@@ -4,6 +4,34 @@
 
 using namespace db;
 
+namespace {
+
+void unescapeString(std::string_view raw, std::string& out) {
+    out.clear();
+    out.reserve(raw.size());
+
+    for (size_t i = 0; i < raw.size(); i++) {
+        if (raw[i] == '\\' && i + 1 < raw.size()) {
+            char next = raw[i + 1];
+            switch (next) {
+                case '\\': out.push_back('\\'); i++; break;
+                case '\'': out.push_back('\''); i++; break;
+                case '"':  out.push_back('"');  i++; break;
+                case 't':  out.push_back('\t'); i++; break;
+                case 'n':  out.push_back('\n'); i++; break;
+                case 'r':  out.push_back('\r'); i++; break;
+                case 'b':  out.push_back('\b'); i++; break;
+                case 'f':  out.push_back('\f'); i++; break;
+                default:   out.push_back(raw[i]); break;
+            }
+        } else {
+            out.push_back(raw[i]);
+        }
+    }
+}
+
+} // anonymous namespace
+
 NullLiteral* NullLiteral::create(CypherAST* ast) {
     NullLiteral* literal = new NullLiteral();
     ast->addLiteral(literal);
@@ -28,31 +56,15 @@ DoubleLiteral* DoubleLiteral::create(CypherAST* ast, double value) {
     return literal;
 }
 
-StringLiteral::StringLiteral(std::string_view raw) {
-    _value.reserve(raw.size());
+StringLiteral::StringLiteral() {
+}
 
-    for (size_t i = 0; i < raw.size(); i++) {
-        if (raw[i] == '\\' && i + 1 < raw.size()) {
-            char next = raw[i + 1];
-            switch (next) {
-                case '\\': _value.push_back('\\'); i++; break;
-                case '\'': _value.push_back('\''); i++; break;
-                case '"':  _value.push_back('"');  i++; break;
-                case 't':  _value.push_back('\t'); i++; break;
-                case 'n':  _value.push_back('\n'); i++; break;
-                case 'r':  _value.push_back('\r'); i++; break;
-                case 'b':  _value.push_back('\b'); i++; break;
-                case 'f':  _value.push_back('\f'); i++; break;
-                default:   _value.push_back(raw[i]); break;
-            }
-        } else {
-            _value.push_back(raw[i]);
-        }
-    }
+StringLiteral::~StringLiteral() {
 }
 
 StringLiteral* StringLiteral::create(CypherAST* ast, std::string_view value) {
-    StringLiteral* literal = new StringLiteral(value);
+    StringLiteral* literal = new StringLiteral();
+    unescapeString(value, literal->_value);
     ast->addLiteral(literal);
     return literal;
 }

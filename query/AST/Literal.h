@@ -129,9 +129,9 @@ public:
 private:
     std::string _value;
 
-    StringLiteral(std::string_view value);
+    StringLiteral();
 
-    ~StringLiteral() override = default;
+    ~StringLiteral() override;
 };
 
 class CharLiteral : public Literal {
