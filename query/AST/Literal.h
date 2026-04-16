@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <string>
 #include <string_view>
 #include <stdint.h>
 #include <span>
@@ -126,12 +127,9 @@ public:
     std::string_view getValue() const { return _value; }
 
 private:
-    std::string_view _value;
+    std::string _value;
 
-    StringLiteral(std::string_view value)
-        : _value(value)
-    {
-    }
+    StringLiteral(std::string_view value);
 
     ~StringLiteral() override = default;
 };

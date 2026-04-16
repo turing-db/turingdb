@@ -28,6 +28,29 @@ DoubleLiteral* DoubleLiteral::create(CypherAST* ast, double value) {
     return literal;
 }
 
+StringLiteral::StringLiteral(std::string_view raw) {
+    _value.reserve(raw.size());
+
+    for (size_t i = 0; i < raw.size(); i++) {
+        if (raw[i] == '\\' && i + 1 < raw.size()) {
+            char next = raw[i + 1];
+            switch (next) {
+                case '\\': _value.push_back('\\'); i++; break;
+                case '\'': _value.push_back('\''); i++; break;
+                case '"':  _value.push_back('"');  i++; break;
+                case 't':  _value.push_back('\t'); i++; break;
+                case 'n':  _value.push_back('\n'); i++; break;
+                case 'r':  _value.push_back('\r'); i++; break;
+                case 'b':  _value.push_back('\b'); i++; break;
+                case 'f':  _value.push_back('\f'); i++; break;
+                default:   _value.push_back(raw[i]); break;
+            }
+        } else {
+            _value.push_back(raw[i]);
+        }
+    }
+}
+
 StringLiteral* StringLiteral::create(CypherAST* ast, std::string_view value) {
     StringLiteral* literal = new StringLiteral(value);
     ast->addLiteral(literal);

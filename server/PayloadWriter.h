@@ -10,6 +10,7 @@
 #include "views/EdgeView.h"
 #include "metadata/PropertyType.h"
 #include "NetWriter.h"
+#include "ControlCharacters.h"
 
 namespace db {
 
@@ -96,13 +97,12 @@ public:
 
     void key(std::string_view k) {
         if (_comma) {
-            _writer->write(",\"");
+            _writer->write(',');
             _comma = false;
-        } else {
-            _writer->write('"');
         }
-        write(k);
-        _writer->write("\":");
+        ControlCharactersEscaper::escapeAndSurroundByQuotes(k, _sanitized);
+        _writer->write(_sanitized);
+        _writer->write(':');
     }
 
     void key(JsonKey auto k) {
@@ -145,12 +145,10 @@ public:
 
     void value(std::string_view v) {
         if (_comma) {
-            _writer->write(",\"");
-        } else {
-            _writer->write('"');
+            _writer->write(',');
         }
-        write(v);
-        write('"');
+        ControlCharactersEscaper::escapeAndSurroundByQuotes(v, _sanitized);
+        _writer->write(_sanitized);
         _comma = true;
     }
 
@@ -224,6 +222,7 @@ private:
     const GraphMetadata* _metadata {nullptr};
     std::vector<char> _closingTokens;
     bool _comma {false};
+    std::string _sanitized;
 
     void write(std::signed_integral auto v) {
         _writer->write(v);
