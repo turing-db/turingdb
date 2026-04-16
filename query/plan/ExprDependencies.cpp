@@ -1,10 +1,13 @@
 #include "ExprDependencies.h"
 
 #include "FunctionInvocation.h"
+#include "PlanGraph.h"
 #include "PlannerException.h"
 #include "PlanGraphTopology.h"
+#include "decl/VarDecl.h"
 #include "expr/ExprChain.h"
 #include "expr/SymbolExpr.h"
+#include "nodes/PlanGraphNode.h"
 #include "nodes/VarNode.h"
 
 #include "expr/BinaryExpr.h"
@@ -67,13 +70,42 @@ void ExprDependencies::genExprDependencies(PlanGraphVariables& variables, Expr* 
                 break;
             }
 
+            {
+                // Check if a variable is produced by a processor such as @ref
+                // PathExplorerProcessor which does not produce a single entity column
+                const VarDecl* var = prop->getEntityVarDecl();
+                const PlanGraphNode* producer = variables.getProducer(var);
+                const PlanGraphOpcode code = producer->getOpcode();
+
+                const bool isFromExplorer = code == PlanGraphOpcode::PATH_EXPLORER;
+                if (isFromExplorer) {
+                    bioassert(var, "Null var.");
+                    const std::string_view varName = var->getName();
+                    std::string err =
+                        fmt::format("Fetching properties from an arbitrary path "
+                                    "({}) is not yet supported.",
+                                    varName);
+                    throw PlannerException(std::move(err));
+                }
+
+                // Check that the producer is a VarNode: well defined column to get
+                // properties from
+                const bool isFromVar = code == PlanGraphOpcode::VAR;
+                if (!isFromVar) {
+                    bioassert(var, "Null var.");
+                    const std::string_view varName = var->getName();
+                    std::string err = fmt::format(
+                        "Cannot fetch property from ambiguously sourced variable {}.",
+                        varName);
+                    throw PlannerException(std::move(err));
+                }
+            }
+
             PlanGraphNode* producer = variables.getProducer(prop->getEntityVarDecl());
-            bioassert(producer, "VarDecl not found");
+            bioassert(producer, "Variable source not found.");
 
             auto* p = dynamic_cast<VarNode*>(producer);
-            if (!p) {
-                throw PlannerException("Can only reference properties from matched variables");
-            }
+            bioassert(p, "Failed to validate VarNode.");
 
             _varDeps.emplace_back(p, expr);
         } break;
