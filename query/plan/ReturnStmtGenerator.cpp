@@ -20,6 +20,7 @@
 #include "expr/Expr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/UnaryExpr.h"
+#include "nodes/PlanGraphNode.h"
 #include "stmt/Limit.h"
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
@@ -355,6 +356,27 @@ void ReturnStmtGenerator::fetchOrGenerateProperty(PropertyExpr* prop) {
 
     if (!entityVar) {
         throwError("Property had no enitity variable declation.", prop);
+    }
+
+    {
+        // Check if a variable is produced by a processor such as @ref
+        // PathExplorerProcessor which does not produce a single entity column
+
+        const PlanGraphNode* producer = _vars->getProducer(entityVar);
+        const PlanGraphOpcode code = producer->getOpcode();
+
+        const bool isFromExplorer = code == PlanGraphOpcode::PATH_EXPLORER;
+        if (isFromExplorer) {
+            throwError("Returning properties from a variable lengthed path is not yet "
+                       "supported.",
+                       prop);
+        }
+
+        const bool isFromVar = code == PlanGraphOpcode::VAR;
+        if (!isFromVar) {
+            throwError("Could not return properties from variable with ambiguous source.",
+                       prop);
+        }
     }
 
     const auto* cached = _propCache.cacheOrRetrieve(entityVar, propVar, propName);
