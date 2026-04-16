@@ -6,6 +6,7 @@
 #include "metadata/PropertyTypeMap.h"
 #include "views/NodeView.h"
 #include "QueryStatus.h"
+#include "ControlCharacters.h"
 
 #include "BioAssert.h"
 
@@ -269,9 +270,8 @@ public:
     }
 
     void writeValue(std::string_view v) {
-        write('"');
-        write(v);
-        write('"');
+        ControlCharactersEscaper::escapeAndSurroundByQuotes(v, _sanitized);
+        write(_sanitized);
     }
 
     void writeValue(std::integral auto v) {
@@ -368,6 +368,7 @@ public:
 
 private:
     net::NetWriter* _writer {nullptr};
+    std::string _sanitized;
 };
 
 }
