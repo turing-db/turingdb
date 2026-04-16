@@ -6,13 +6,67 @@ using namespace db;
 
 namespace {
 
+bool isHexDigit(char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+uint32_t hexToCodepoint(std::string_view hex) {
+    uint32_t cp = 0;
+    for (const char c : hex) {
+        cp <<= 4;
+        if (c >= '0' && c <= '9') cp |= (c - '0');
+        else if (c >= 'a' && c <= 'f') cp |= (c - 'a' + 10);
+        else cp |= (c - 'A' + 10);
+    }
+    return cp;
+}
+
+void encodeUTF8(uint32_t cp, std::string& out) {
+    if (cp <= 0x7F) {
+        out.push_back(static_cast<char>(cp));
+    } else if (cp <= 0x7FF) {
+        out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else if (cp <= 0xFFFF) {
+        out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else if (cp <= 0x10FFFF) {
+        out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    }
+}
+
+bool hasHexDigitsAt(std::string_view raw, size_t pos, size_t count) {
+    if (pos + count > raw.size()) {
+        return false;
+    }
+    for (size_t j = 0; j < count; j++) {
+        if (!isHexDigit(raw[pos + j])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool hasSurrogatePairAt(std::string_view raw, size_t pos) {
+    const bool enoughRoom = pos + 5 < raw.size();
+    if (!enoughRoom) {
+        return false;
+    }
+    const bool hasEscapePrefix = raw[pos] == '\\' && raw[pos + 1] == 'u';
+    return hasEscapePrefix && hasHexDigitsAt(raw, pos + 2, 4);
+}
+
 void unescapeString(std::string_view raw, std::string& out) {
     out.clear();
     out.reserve(raw.size());
 
     for (size_t i = 0; i < raw.size(); i++) {
         if (raw[i] == '\\' && i + 1 < raw.size()) {
-            char next = raw[i + 1];
+            const char next = raw[i + 1];
             switch (next) {
                 case '\\': out.push_back('\\'); i++; break;
                 case '\'': out.push_back('\''); i++; break;
@@ -22,7 +76,35 @@ void unescapeString(std::string_view raw, std::string& out) {
                 case 'r':  out.push_back('\r'); i++; break;
                 case 'b':  out.push_back('\b'); i++; break;
                 case 'f':  out.push_back('\f'); i++; break;
-                default:   out.push_back(raw[i]); break;
+                case 'u': {
+                    const bool validEscape = hasHexDigitsAt(raw, i + 2, 4);
+                    if (!validEscape) {
+                        out.push_back(next);
+                        i++;
+                        break;
+                    }
+
+                    uint32_t cp = hexToCodepoint(raw.substr(i + 2, 4));
+                    const bool isHighSurrogate = cp >= 0xD800 && cp <= 0xDBFF;
+                    const bool hasLowSurrogate = isHighSurrogate && hasSurrogatePairAt(raw, i + 6);
+
+                    if (hasLowSurrogate) {
+                        const uint32_t low = hexToCodepoint(raw.substr(i + 8, 4));
+                        const bool validLow = low >= 0xDC00 && low <= 0xDFFF;
+                        if (validLow) {
+                            cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                            i += 11;
+                        } else {
+                            i += 5;
+                        }
+                    } else {
+                        i += 5;
+                    }
+
+                    encodeUTF8(cp, out);
+                    break;
+                }
+                default: out.push_back(next); i++; break;
             }
         } else {
             out.push_back(raw[i]);
