@@ -5,5 +5,6 @@ regress_test(snapshot_isolation
   create_after_delete_test.py
   delete_after_create_test.py
   delete_after_delete_test.py
+  delete_node_after_update_edge_test.py
   set_after_set_test.py
 )
