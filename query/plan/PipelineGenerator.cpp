@@ -667,6 +667,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
 
     _declToColumn[exprDecl] = output->getValues()->getTag();
 
+    // @ref GetPropertiesProcessor adds new columns: register them in MatProc
     _builder.addMaterialize();
 
     return _builder.getPendingOutputInterface();
@@ -733,6 +734,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
 
     _declToColumn[exprDecl] = output->getValues()->getTag();
 
+    // @ref GetPropertiesWithNullProcessor adds new columns: register them in MatProc
     _builder.addMaterialize();
 
     return _builder.getPendingOutputInterface();
@@ -1086,9 +1088,11 @@ PipelineOutputInterface* PipelineGenerator::translateCartesianProductNode(Cartes
     _builder.getPendingOutput().updateInterface(lhs);
 
     const auto& outputIf = _builder.addCartesianProduct(rhs);
-    _builder.setMaterializeProc(MaterializeProcessor::createFromDf(_pipeline,
-                                                                   _mem,
-                                                                   outputIf.getDataframe()));
+    auto* outDF = outputIf.getDataframe();
+
+    auto* newMatProc = MaterializeProcessor::createFromDf(_pipeline, _mem, outDF);
+    _builder.setMaterializeProc(newMatProc);
+
     return _builder.getPendingOutputInterface();
 }
 
