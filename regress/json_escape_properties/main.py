@@ -89,7 +89,6 @@ def main():
         ["node", "-e", "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'))"],
         input=raw_text.encode(),
         capture_output=True,
-        timeout=5,
     )
     if js_result.returncode != 0:
         stderr = js_result.stderr.decode().strip()
