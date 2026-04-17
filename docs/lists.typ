@@ -31,7 +31,7 @@ elements of lists.
 
 Moreover, since a column of lists is merely a vector of spans, operations which involve copying rows (e.g.
 Cartesian Product, Joins, etc.) have constant time complexities - as opposed to storing list data directly
-in the columns, which would scale with the size of the list.
+in the columns, which would scale with the size of the lists.
 
 
 Should we wish to support list properties in the future, the list property container could act as an
