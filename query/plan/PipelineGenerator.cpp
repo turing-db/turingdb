@@ -667,7 +667,6 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
 
     _declToColumn[exprDecl] = output->getValues()->getTag();
 
-    // Adding the materialize step
     _builder.addMaterialize();
 
     return _builder.getPendingOutputInterface();
@@ -733,6 +732,8 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
     }
 
     _declToColumn[exprDecl] = output->getValues()->getTag();
+
+    _builder.addMaterialize();
 
     return _builder.getPendingOutputInterface();
 }
