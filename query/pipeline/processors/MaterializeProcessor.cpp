@@ -41,12 +41,15 @@ inline void copyChunkImpl(const Column* srcPtr,
         COPY_CHUNK_CASE(ColumnVector<types::Double::Primitive>)
         COPY_CHUNK_CASE(ColumnVector<types::String::Primitive>)
         COPY_CHUNK_CASE(ColumnVector<types::Bool::Primitive>)
+        COPY_CHUNK_CASE(ColumnVector<types::Embedding::Primitive>)
         COPY_CHUNK_CASE(ColumnOptVector<types::UInt64::Primitive>)
         COPY_CHUNK_CASE(ColumnOptVector<types::Int64::Primitive>)
         COPY_CHUNK_CASE(ColumnOptVector<types::Double::Primitive>)
         COPY_CHUNK_CASE(ColumnOptVector<types::String::Primitive>)
         COPY_CHUNK_CASE(ColumnOptVector<types::Bool::Primitive>)
+        COPY_CHUNK_CASE(ColumnOptVector<types::Embedding::Primitive>)
         COPY_CHUNK_CASE(ColumnVector<EntityList>)
+        COPY_CHUNK_CASE(ColumnVector<ValueType>)
 
         default: {
             bioassert(false, "copyChunk operator not handled between columns of kind {} and {}",
@@ -79,12 +82,16 @@ inline void copyTransformedChunkImpl(const ColumnVector<size_t>* transform,
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::Double::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::String::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::Bool::Primitive>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<types::Embedding::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::UInt64::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::Int64::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::Double::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::String::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::Bool::Primitive>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<types::Embedding::Primitive>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<EntityList>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<ValueType>)
+
         default: {
             bioassert(false, "copyTransformedChunk operator not handled between columns of kind {} and {}",
                       srcPtr->getKind(), dstPtr->getKind());
