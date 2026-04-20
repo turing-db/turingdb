@@ -3,22 +3,11 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <span>
 #include <stddef.h>
 #include <type_traits>
 
-#include "metadata/PropertyType.h"
-
 using namespace db;
-
-ListBuffer::ListBufferTag ListBuffer::getTag(size_t i) {
-    const std::byte tagByte = _buf[i];
-
-    const ListBufferTag tag {std::to_integer<uint8_t>(tagByte)};
-
-    return tag;
-}
 
 ListBufferElementView::ListBufferElementView(std::byte* data, size_t size)
     : _data(data),
@@ -29,7 +18,7 @@ ListBufferElementView::ListBufferElementView(std::byte* data, size_t size)
 ListBufferElementView::ListBufferElementView(ListBuffer::iterator begin,
                                              ListBuffer::iterator end)
     : _data(&(*begin)),
-    _size(std::distance(begin, end))
+    _size(std::distance(begin, end) - _listBufferTagSize)
 {
 }
 
@@ -53,18 +42,20 @@ template <Listable L>
 ListBufferElementView ListBuffer::insert(const L& listItem) {
     static_assert(std::is_trivially_copyable<L>());
 
+    // We write the tag, and the value
     constexpr size_t sizeOfL = sizeof(L);
     constexpr size_t totalSize = sizeOfL + _tagSize;
 
     const size_t sizePrior = _buf.size();
     const size_t newSize = sizePrior + totalSize;
 
+    // Allocate space in the buffer for the new element
     _buf.resize(newSize);
 
     const auto startIt = begin(_buf) + sizePrior;
     auto writeIt = startIt;
 
-    { // copy tag into buffer
+    { // Copy tag into buffer
         using decayed = std::decay_t<L>;
         constexpr ListBuffer::ListBufferTag tag = TypeToListBufferTag<decayed>::Tag;
         static_assert(_tagSize == 1);

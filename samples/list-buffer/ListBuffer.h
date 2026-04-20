@@ -35,11 +35,6 @@ public:
 
     static_assert(sizeof(std::byte) == sizeof(ListBufferTag));
 
-    ListBufferTag getTag(size_t i);
-
-    template<typename T>
-    T get(size_t i, ListBufferTag tag);
-
     static constexpr size_t tagSize = sizeof(ListBufferTag);
     static_assert(tagSize == 1);
 

@@ -28,7 +28,6 @@ int main() {
         view.push_back(v);
     }
 
-
     for (const ListBufferElementView& v : view) {
         const ListBuffer::ListBufferTag tag = v.getTag();
         switch (tag) {
