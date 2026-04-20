@@ -36,3 +36,8 @@ in the columns, which would scale with the size of the lists.
 
 Should we wish to support list properties in the future, the list property container could act as an
 equivalent "list buffer" for the non-ephemeral case.
+
+
+Since a list buffer may have views into it, the data must be stable. Since we may need to add new lists to
+an existing buffer, it also need be dynamically sized. We cannot use `std::vector` as it does not guarantee
+pointer stability.
