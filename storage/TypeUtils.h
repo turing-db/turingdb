@@ -74,6 +74,16 @@ struct TypeUtils {
 namespace TypeConcepts {
 template <typename T>
 concept OptionalType = TypeUtils::is_optional_v<T>;
+
+/// Helpers to define a concept based on if a type is in a tuple
+template <typename T, typename... Ts>
+concept AnyOf = (std::same_as<T, Ts> or ...);
+
+template <typename T, typename Tuple>
+concept InTuple = []<typename... Ts>(std::type_identity<std::tuple<Ts...>>) {
+    return AnyOf<T, Ts...>;
+}(std::type_identity<std::remove_cv_t<Tuple>>{});
+
 }
 
 /**
