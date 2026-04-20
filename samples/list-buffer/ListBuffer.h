@@ -2,7 +2,6 @@
 
 #include <deque>
 #include <ranges>
-#include <vector>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -50,53 +49,6 @@ private:
     Storage _buf;
 
     static constexpr size_t _tagSize = sizeof(ListBufferTag);
-};
-
-class ListBufferElementView {
-public:
-    ListBufferElementView(std::byte* data, size_t size);
-
-    ListBufferElementView(ListBuffer::iterator begin,
-                          ListBuffer::iterator end);
-
-    ListBufferElementView() = default;
-
-    template <Listable L>
-    L getAs() const;
-
-    ListBuffer::ListBufferTag getTag() const;
-
-private:
-    // Pointer to the beginning of the data in the owning ListBuffer (including tag)
-    std::byte* _data {nullptr};
-    // Size of the data in the owning ListBuffer (excluding tag)
-    size_t _size {0};
-
-    static constexpr size_t _listBufferTagSize = sizeof(ListBuffer::ListBufferTag);
-};
-
-template <typename T>
-struct TypeToListBufferTag;
-
-template <>
-struct TypeToListBufferTag<types::Int64::Primitive> {
-    static constexpr ListBuffer::ListBufferTag Tag = ListBuffer::ListBufferTag::Int;
-};
-
-template <>
-struct TypeToListBufferTag<types::Double::Primitive> {
-    static constexpr ListBuffer::ListBufferTag Tag = ListBuffer::ListBufferTag::Double;
-};
-
-class ListView {
-public:
-    void push_back(const ListBufferElementView& element) { _elems.push_back(element); }
-
-    auto begin() { return std::begin(_elems); }
-    auto end() { return std::end(_elems); }
-
-private:
-    std::vector<ListBufferElementView> _elems;
 };
 
 }

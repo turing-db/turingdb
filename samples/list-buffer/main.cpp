@@ -3,6 +3,8 @@
 #include <spdlog/spdlog.h>
 
 #include "ListBuffer.h"
+#include "ListBufferElementView.h"
+#include "ListView.h"
 
 #include "metadata/PropertyType.h"
 
