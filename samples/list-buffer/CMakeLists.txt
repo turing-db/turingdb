@@ -1,5 +1,5 @@
 set(SAMPLE_NAME list-buffer)
-set(SOURCES main.cpp ListBuffer.cpp)
+set(SOURCES main.cpp ListBuffer.cpp ListBufferElementView.cpp ListView.cpp)
 
 turing_sample(${SAMPLE_NAME} ${SOURCES})
 
