@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <ranges>
 #include <vector>
 
 #include <stddef.h>
@@ -18,6 +19,7 @@ template <typename T>
 concept Listable = TypeConcepts::InTuple<std::decay_t<T>, decltype(ListableTypes)>;
 
 class ListBufferElementView;
+class ListView;
 
 class ListBuffer {
 public:
@@ -40,6 +42,9 @@ public:
 
     template <Listable L>
     ListBufferElementView insert(const L& listItem);
+
+    template <std::ranges::forward_range R>
+    ListView insert(const R& list);
 
 private:
     Storage _buf;
