@@ -1,8 +1,10 @@
 #include "ListBuffer.h"
+#include "metadata/PropertyType.h"
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <ranges>
 #include <span>
 #include <stddef.h>
 #include <type_traits>
@@ -73,10 +75,59 @@ ListBufferElementView ListBuffer::insert(const L& listItem) {
     return {startIt, end(_buf)};
 }
 
+template <std::ranges::forward_range R>
+ListView ListBuffer::insert(const R& list) {
+    ListView view;
+
+    size_t listSize = 0;
+
+    for (auto&& ele : list) {
+        using decayed = std::decay_t<decltype(ele)>;
+        static_assert(std::is_trivially_copyable<decayed>());
+        listSize += _tagSize;
+        listSize += sizeof(ele);
+    }
+
+    const size_t sizePrior = _buf.size();
+    const size_t newSize = sizePrior + listSize; 
+
+    _buf.resize(newSize);
+
+    auto writeIt = begin(_buf) + sizePrior;
+
+    for (auto&& ele : list) {
+        const auto startIt = writeIt;
+
+        using decayed = std::decay_t<decltype(ele)>;
+        constexpr ListBuffer::ListBufferTag tag = TypeToListBufferTag<decayed>::Tag;
+        static_assert(_tagSize == 1);
+
+        // Write the tag
+        auto* writePtr = &(*writeIt);
+        std::memcpy(writePtr, &tag, _tagSize);
+        writeIt++; // increment since we have just written one byte
+
+        // Write the value
+        std::span<const std::byte> itemBuf = std::as_bytes(std::span {&ele, 1});
+        std::ranges::copy(itemBuf, writeIt);
+
+        writeIt += itemBuf.size();
+
+        const auto endIt = writeIt++; // past-the-end of what we just wrote
+
+        view.push_back({startIt, endIt});
+    }
+
+    return view;
+}
+
 namespace db {
 template ListBufferElementView ListBuffer::insert<types::Int64::Primitive>(const long&);
 template ListBufferElementView ListBuffer::insert<types::Double::Primitive>(const double&);
 
 template types::Int64::Primitive ListBufferElementView::getAs<types::Int64::Primitive>() const;
 template types::Double::Primitive ListBufferElementView::getAs<types::Double::Primitive>() const;
+
+template ListView ListBuffer::insert(const std::vector<types::Int64::Primitive>&);
+
 }
