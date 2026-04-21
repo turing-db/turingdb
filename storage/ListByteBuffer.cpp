@@ -39,7 +39,7 @@ void ListByteBuffer<N>::reserveContiguous(size_t numBytes) {
 
 template <size_t N>
 template <typename T>
-void ListByteBuffer<N>::write(ListByteBuffer<N>::TypeTag tag, const T& val) {
+void ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
     static_assert(std::is_trivially_copyable<T>());
 
     std::array<std::byte, N>& buf = _last->_buf;
@@ -62,5 +62,5 @@ void ListByteBuffer<N>::write(ListByteBuffer<N>::TypeTag tag, const T& val) {
 }
 
 namespace db {
-template void ListByteBuffer<>::write(ListByteBuffer<>::TypeTag, const int&);
+template void ListByteBuffer<>::write(ListBufferTypeTag, const int&);
 }

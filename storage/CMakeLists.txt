@@ -11,6 +11,7 @@ set(storage_sources
         EmbeddingContainer.cpp
         EntityList.cpp
         ListByteBuffer.cpp
+        ListBuffer.cpp
 
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp
