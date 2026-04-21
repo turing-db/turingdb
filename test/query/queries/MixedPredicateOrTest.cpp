@@ -31,8 +31,10 @@ protected:
     Graph* _graph {nullptr};
 
     auto query(std::string_view query, auto callback) {
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
         auto res = _db->query(query, _graphName, &_env->getMem(),
-                              &_db->getDefaultQueryConfig(), callback,
+                              &_db->getDefaultQueryConfig(), callbacks,
                               CommitHash::head(), ChangeID::head());
         return res;
     }

@@ -574,12 +574,10 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(ROAD_NETWORK_CYPHER, _graphName, &_env->getMem(), &_queryConfig,
-                                     [](const Dataframe*) {}, CommitHash::head(), changeId);
+            auto status = runQuery(ROAD_NETWORK_CYPHER, _graphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create road network: " << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), &_queryConfig,
-                                           [](const Dataframe*) {}, CommitHash::head(), changeId);
+            auto submitStatus = runQuery("CHANGE SUBMIT", _graphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit change: "
                                              << submitStatus.getError();
         }
@@ -593,13 +591,11 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(NEGATIVE_WEIGHT_GRAPH_CYPHER, _negGraphName, &_env->getMem(), &_queryConfig,
-                                     [](const Dataframe*) {}, CommitHash::head(), changeId);
+            auto status = runQuery(NEGATIVE_WEIGHT_GRAPH_CYPHER, _negGraphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create negative weight graph: "
                                        << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _negGraphName, &_env->getMem(), &_queryConfig,
-                                           [](const Dataframe*) {}, CommitHash::head(), changeId);
+            auto submitStatus = runQuery("CHANGE SUBMIT", _negGraphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit negative weight change: "
                                              << submitStatus.getError();
         }
@@ -613,12 +609,10 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(DISJOINT_GRAPH_CYPHER, _disjGraphName, &_env->getMem(), &_queryConfig,
-                                     [](const Dataframe*) {}, CommitHash::head(), changeId);
+            auto status = runQuery(DISJOINT_GRAPH_CYPHER, _disjGraphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create disjoint graph: " << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _disjGraphName, &_env->getMem(), &_queryConfig,
-                                           [](const Dataframe*) {}, CommitHash::head(), changeId);
+            auto submitStatus = runQuery("CHANGE SUBMIT", _disjGraphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit disjoint change: "
                                              << submitStatus.getError();
         }
@@ -636,6 +630,16 @@ public:
         // Create per-test builder and pipeline (don't call ProcessorTester::initialize
         // since we use static _env)
         _builder = std::make_unique<PipelineBuilder>(&_env->getMem(), &_pipeline);
+    }
+
+    static QueryStatus runQuery(std::string_view q,
+                                std::string_view graphName,
+                                QueryCallbacks::OnOutputData onData = [](const Dataframe*) {},
+                                ChangeID changeId = ChangeID::head()) {
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(onData);
+        return _db->query(q, graphName, &_env->getMem(), &_queryConfig, callbacks,
+                          CommitHash::head(), changeId);
     }
 
 protected:
@@ -658,15 +662,14 @@ protected:
         std::string query = fmt::format(
             "MATCH (n:{}) WHERE n.id = '{}' RETURN n", label, nodeID);
 
-        auto status = _db->query(query, graphName, &_env->getMem(), &_queryConfig,
-                                 [&](const Dataframe* df) -> void {
-                                     if (df && !df->cols().empty()) {
-                                         const auto* nodeCol = df->cols()[0]->as<ColumnNodeIDs>();
-                                         if (nodeCol && !nodeCol->empty()) {
-                                             result = (*nodeCol)[0];
-                                         }
-                                     }
-                                 });
+        auto status = runQuery(query, graphName, [&](const Dataframe* df) -> void {
+            if (df && !df->cols().empty()) {
+                const auto* nodeCol = df->cols()[0]->as<ColumnNodeIDs>();
+                if (nodeCol && !nodeCol->empty()) {
+                    result = (*nodeCol)[0];
+                }
+            }
+        });
 
         if (!status.isOk() || !result.isValid()) {
             throw std::runtime_error(fmt::format("Node not found: {}", nodeID));
@@ -790,15 +793,15 @@ protected:
 TEST_F(ShortestPathProcessorTest, graphLoadedCorrectly) {
     // Verify node count
     uint64_t nodeCount = 0;
-    auto status = _db->query("MATCH (n:City) RETURN COUNT(n) AS cnt", _graphName, &_env->getMem(), &_queryConfig,
-                             [&](const Dataframe* df) -> void {
-                                 if (df && !df->cols().empty()) {
-                                     const auto* col = df->cols()[0]->as<ColumnConst<uint64_t>>();
-                                     if (col) {
-                                         nodeCount = col->getRaw();
-                                     }
-                                 }
-                             });
+    auto status = runQuery("MATCH (n:City) RETURN COUNT(n) AS cnt", _graphName,
+                           [&](const Dataframe* df) -> void {
+                               if (df && !df->cols().empty()) {
+                                   const auto* col = df->cols()[0]->as<ColumnConst<uint64_t>>();
+                                   if (col) {
+                                       nodeCount = col->getRaw();
+                                   }
+                               }
+                           });
 
     ASSERT_TRUE(status.isOk());
     ASSERT_EQ(nodeCount, 100) << "Expected 100 cities in the graph";
@@ -810,15 +813,15 @@ TEST_F(ShortestPathProcessorTest, graphLoadedCorrectly) {
 TEST_F(ShortestPathProcessorTest, edgesLoadedCorrectly) {
     // Count edges
     uint64_t edgeCount = 0;
-    auto status = _db->query("MATCH ()-[r:ROAD]->() RETURN COUNT(r) AS cnt", _graphName, &_env->getMem(), &_queryConfig,
-                             [&](const Dataframe* df) -> void {
-                                 if (df && !df->cols().empty()) {
-                                     const auto* col = df->cols()[0]->as<ColumnConst<uint64_t>>();
-                                     if (col) {
-                                         edgeCount = col->getRaw();
-                                     }
-                                 }
-                             });
+    auto status = runQuery("MATCH ()-[r:ROAD]->() RETURN COUNT(r) AS cnt", _graphName,
+                           [&](const Dataframe* df) -> void {
+                               if (df && !df->cols().empty()) {
+                                   const auto* col = df->cols()[0]->as<ColumnConst<uint64_t>>();
+                                   if (col) {
+                                       edgeCount = col->getRaw();
+                                   }
+                               }
+                           });
 
     ASSERT_TRUE(status.isOk());
     ASSERT_EQ(edgeCount, 400) << "Expected 400 roads in the graph";

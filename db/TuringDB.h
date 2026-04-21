@@ -19,10 +19,8 @@ class TuringConfig;
 class SystemManager;
 class LocalMemory;
 class JobSystem;
-class Block;
 class ExtensionManager;
 class ProcedureManager;
-class SystemEventHandler;
 
 class TuringDB {
 public:
@@ -30,6 +28,8 @@ public:
     ~TuringDB();
 
     void init();
+
+    void stop();
 
     QueryStatus query(std::string_view query,
                       std::string_view graphName,
@@ -39,29 +39,15 @@ public:
                       CommitHash hash = CommitHash::head(),
                       ChangeID change = ChangeID::head());
 
-    QueryStatus query(std::string_view query,
-                      std::string_view graphName,
-                      LocalMemory* mem,
-                      const QueryConfig* queryConfig,
-                      const QueryCallbacks::OnOutputData& callback,
-                      CommitHash hash = CommitHash::head(),
-                      ChangeID change = ChangeID::head());
-
-    QueryStatus query(std::string_view query,
-                      std::string_view graphName,
-                      LocalMemory* mem,
-                      const QueryConfig* queryConfig,
-                      CommitHash hash = CommitHash::head(),
-                      ChangeID change = ChangeID::head());
-
     const QueryConfig& getDefaultQueryConfig() const { return _defaultQueryConfig; }
 
     SystemManager& getSystemManager() { return *_systemManager; }
-    JobSystem& getJobSystem() { return *_jobSystem; }
-    const ProcedureManager* getProcedures() const { return _procedures.get(); }
-    ExtensionManager* getExtensions() { return _extensions.get(); }
 
-    void stop();
+    JobSystem& getJobSystem() { return *_jobSystem; }
+
+    const ProcedureManager* getProcedures() const { return _procedures.get(); }
+
+    ExtensionManager* getExtensions() { return _extensions.get(); }
 
 private:
     const TuringConfig* _config {nullptr};

@@ -33,7 +33,6 @@ public:
     }
 
     void populateAndDump() {
-        auto& db = _env->getDB();
         auto& sysMan = _env->getSystemManager();
 
         auto res = sysMan.newChange(_workingGraphName);
@@ -49,19 +48,14 @@ public:
             const std::string queryStr = "create (n:Person{id:"+std::to_string(origin)
                                       +"})-[e:FRIENDSWITH{id: "+std::to_string(i)
                                       +"}]->(m:Person{id:"+std::to_string(target)+"})";
-            const auto res = db.query(queryStr,
-                                      _workingGraphName,
-                                      &_env->getMem(), &_queryConfig,
-                                      CommitHash::head(),
-                                      change->id());
+            const auto res = query(queryStr, change->id());
             ASSERT_TRUE(res);
         }
 
         spdlog::info("Ran create queries");
 
         // implicit dump on change submit
-        ASSERT_TRUE(db.query("change submit", _workingGraphName, &_env->getMem(), &_queryConfig,
-                             CommitHash::head(), change->id()));
+        ASSERT_TRUE(query("change submit", change->id()));
         spdlog::info("Submitted change");
 
         const auto VERIFY = [](const Dataframe* df) {
@@ -73,14 +67,12 @@ public:
             }
         };
 
-        ASSERT_TRUE(db.query("match (n) return n", _workingGraphName, &_env->getMem(), &_queryConfig,
-                             VERIFY, CommitHash::head(), ChangeID::head()));
+        ASSERT_TRUE(query("match (n) return n", ChangeID::head(), VERIFY));
 
         spdlog::info("Successfully populated graph");
     }
 
     void applyDeletesAndDump() {
-        auto& db = _env->getDB();
         auto& sysMan = _env->getSystemManager();
 
         auto delRes = sysMan.newChange(_workingGraphName);
@@ -91,29 +83,28 @@ public:
 
         for (size_t node : DELETED_NODES) {
             const std::string queryStr = "match (n{id: " + std::to_string(node) + "}) delete n";
-            const auto res = db.query(queryStr,
-                                      _workingGraphName,
-                                      &_env->getMem(), &_queryConfig,
-                                      CommitHash::head(),
-                                      delChange->id());
+            const auto res = query(queryStr, delChange->id());
             spdlog::info(queryStr);
             ASSERT_TRUE(res);
         }
         for (size_t edge : DELETED_EDGES) {
             const std::string queryStr = "match (n)-[e{id: "+ std::to_string(edge)+"}]->(m) delete e";
-            const auto res = db.query(queryStr,
-                                      _workingGraphName,
-                                      &_env->getMem(), &_queryConfig,
-                                      CommitHash::head(),
-                                      delChange->id());
+            const auto res = query(queryStr, delChange->id());
             spdlog::info(queryStr);
             ASSERT_TRUE(res);
         }
         // implicit dump on change submit
-        ASSERT_TRUE(db.query("change submit", _workingGraphName, &_env->getMem(), &_queryConfig,
-                             CommitHash::head(), delChange->id()));
+        ASSERT_TRUE(query("change submit", delChange->id()));
 
         spdlog::info("Submitted deletions change");
+    }
+
+    QueryStatus query(std::string_view q, ChangeID changeID,
+                      QueryCallbacks::OnOutputData onData = [](const Dataframe*) {}) {
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(onData);
+        return _env->getDB().query(q, _workingGraphName, &_env->getMem(), &_queryConfig,
+                                   callbacks, CommitHash::head(), changeID);
     }
 
 protected:
@@ -171,8 +162,6 @@ TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
 
     // Get actual nodes & edges
     {
-        TuringDB& db = _env->getDB();
-
         using ColumnIDProp = ColumnOptVector<types::Int64::Primitive>;
         auto callback = [&actualNodes](const Dataframe* df) {
             ASSERT_TRUE(df->size() == 1);
@@ -184,17 +173,12 @@ TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
             }
         };
 
-        const auto res = db.query("match (n) return n.id",
-                                  _workingGraphName,
-                                  &_env->getMem(), &_queryConfig,
-                                  callback);
+        const auto res = query("match (n) return n.id", ChangeID::head(), callback);
         ASSERT_TRUE(res);
         ASSERT_TRUE(!actualNodes.empty());
         ASSERT_EQ(actualNodes.size(), NUM_NODES-DELETED_NODES.size());
     }
     {
-        TuringDB& db = _env->getDB();
-
         using ColumnIDProp = ColumnOptVector<types::Int64::Primitive>;
         auto callback = [&actualEdges](const Dataframe* df) {
             ASSERT_TRUE(df->size() == 1);
@@ -206,10 +190,7 @@ TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
             }
         };
 
-        const auto res = db.query("match (n)-[e]->(m) return e.id",
-                                  _workingGraphName,
-                                  &_env->getMem(), &_queryConfig,
-                                  callback);
+        const auto res = query("match (n)-[e]->(m) return e.id", ChangeID::head(), callback);
         ASSERT_TRUE(res);
         ASSERT_TRUE(!actualEdges.empty());
         ASSERT_EQ(actualEdges.size(), NUM_EDGES-DELETED_EDGES.size());

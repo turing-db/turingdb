@@ -251,8 +251,10 @@ protected:
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     auto query(std::string_view query, auto callback) {
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
         auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig,
-                              callback, CommitHash::head(), ChangeID::head());
+                              callbacks, CommitHash::head(), ChangeID::head());
         if (!res) {
             spdlog::error("Query failed: {}", res.getError());
         }

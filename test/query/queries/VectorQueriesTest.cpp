@@ -66,6 +66,14 @@ void findKNearestNeighbors(std::vector<int64_t>& result,
 
 class VectorQueriesTest : public TuringTest {
 public:
+    auto query(std::string_view q, std::string_view graphName, auto callback,
+               db::ChangeID change = db::ChangeID::head()) {
+        db::QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
+        return _db->query(q, graphName, &_env->getMem(), &_queryConfig, callbacks,
+                          db::CommitHash::head(), change);
+    }
+
     void initialize() override {
         const auto testTuringDir = fs::Path {_outDir} / "turing";
         _env = TuringTestEnv::createSyncedOnDisk(testTuringDir);
@@ -80,10 +88,7 @@ protected:
 
 TEST_F(VectorQueriesTest, createVectorIndex) {
     bool executed = false;
-    const auto res = _db->query(
-        "CREATE VECTOR INDEX embeddings WITH DIMENSION 128 METRIC EUCLID",
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query("CREATE VECTOR INDEX embeddings WITH DIMENSION 128 METRIC EUCLID", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
             ASSERT_EQ(df->getLogicalRowCount(), 1);
@@ -106,10 +111,7 @@ TEST_F(VectorQueriesTest, createVectorIndex) {
 
     // Verify the index was actually created by showing indexes
     bool showExecuted = false;
-    const auto showRes = _db->query(
-        "SHOW VECTOR INDEXES",
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto showRes = query("SHOW VECTOR INDEXES", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_GE(df->getLogicalRowCount(), 1);
 
@@ -139,17 +141,12 @@ TEST_F(VectorQueriesTest, createVectorIndex) {
 
 TEST_F(VectorQueriesTest, showVectorIndexes) {
     // First create an index
-    auto createRes = _db->query(
-        "CREATE VECTOR INDEX test_index WITH DIMENSION 64 METRIC COSINE",
-        "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {});
+    auto createRes = query("CREATE VECTOR INDEX test_index WITH DIMENSION 64 METRIC COSINE", "default", [](const Dataframe*) {});
     ASSERT_TRUE(createRes.isOk()) << "Create failed: " << createRes.getError();
 
     // Then show indexes
     bool executed = false;
-    const auto res = _db->query(
-        "SHOW VECTOR INDEXES",
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query("SHOW VECTOR INDEXES", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2);  // name and dimension columns
             ASSERT_GE(df->getLogicalRowCount(), 1);
@@ -186,17 +183,12 @@ TEST_F(VectorQueriesTest, showVectorIndexes) {
 
 TEST_F(VectorQueriesTest, deleteVectorIndex) {
     // First create an index
-    auto createRes = _db->query(
-        "CREATE VECTOR INDEX to_delete WITH DIMENSION 32 METRIC EUCLID",
-        "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {});
+    auto createRes = query("CREATE VECTOR INDEX to_delete WITH DIMENSION 32 METRIC EUCLID", "default", [](const Dataframe*) {});
     ASSERT_TRUE(createRes.isOk()) << "Create failed: " << createRes.getError();
 
     // Then delete it
     bool executed = false;
-    const auto res = _db->query(
-        "DELETE VECTOR INDEX to_delete",
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query("DELETE VECTOR INDEX to_delete", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
             ASSERT_EQ(df->getLogicalRowCount(), 1);
@@ -219,10 +211,7 @@ TEST_F(VectorQueriesTest, deleteVectorIndex) {
 
     // Verify the index was actually deleted by showing indexes
     bool showExecuted = false;
-    const auto showRes = _db->query(
-        "SHOW VECTOR INDEXES",
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto showRes = query("SHOW VECTOR INDEXES", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
 
             // Check that "to_delete" is NOT in the list
@@ -246,10 +235,7 @@ TEST_F(VectorQueriesTest, deleteVectorIndex) {
 
 TEST_F(VectorQueriesTest, createVectorIndexWithCosineMetric) {
     bool executed = false;
-    const auto res = _db->query(
-        "CREATE VECTOR INDEX cosine_index WITH DIMENSION 256 METRIC COSINE",
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query("CREATE VECTOR INDEX cosine_index WITH DIMENSION 256 METRIC COSINE", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
             ASSERT_EQ(df->getLogicalRowCount(), 1);
@@ -272,10 +258,7 @@ TEST_F(VectorQueriesTest, createVectorIndexWithCosineMetric) {
 
     // Verify the index was created with COSINE metric by showing indexes
     bool showExecuted = false;
-    const auto showRes = _db->query(
-        "SHOW VECTOR INDEXES",
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto showRes = query("SHOW VECTOR INDEXES", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
 
             const auto& cols = df->cols();
@@ -303,9 +286,7 @@ TEST_F(VectorQueriesTest, createVectorIndexWithCosineMetric) {
 
 TEST_F(VectorQueriesTest, loadVectorFromFile) {
     // Create a vector index with dimension 4
-    auto createRes = _db->query(
-        "CREATE VECTOR INDEX load_test WITH DIMENSION 4 METRIC EUCLID",
-        "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {});
+    auto createRes = query("CREATE VECTOR INDEX load_test WITH DIMENSION 4 METRIC EUCLID", "default", [](const Dataframe*) {});
     ASSERT_TRUE(createRes.isOk()) << "Create failed: " << createRes.getError();
 
     // Create a temporary CSV file with test vectors in the data directory
@@ -324,10 +305,7 @@ TEST_F(VectorQueriesTest, loadVectorFromFile) {
     // Load vectors from file (path relative to data directory)
     bool executed = false;
     std::string loadQuery = "LOAD VECTOR FROM \"test_vectors.csv\" IN load_test";
-    const auto res = _db->query(
-        loadQuery,
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query(loadQuery, "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
             ASSERT_EQ(df->getLogicalRowCount(), 1);
@@ -351,9 +329,7 @@ TEST_F(VectorQueriesTest, loadVectorFromFile) {
 
 TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
     // Create a vector index with dimension 4
-    auto createRes = _db->query(
-        "CREATE VECTOR INDEX search_test WITH DIMENSION 4 METRIC EUCLID",
-        "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {});
+    auto createRes = query("CREATE VECTOR INDEX search_test WITH DIMENSION 4 METRIC EUCLID", "default", [](const Dataframe*) {});
     ASSERT_TRUE(createRes.isOk()) << "Create failed: " << createRes.getError();
 
     // Define test vectors
@@ -381,7 +357,7 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
 
     // Load vectors (path relative to data directory)
     std::string loadQuery = "LOAD VECTOR FROM \"search_vectors.csv\" IN search_test";
-    auto loadRes = _db->query(loadQuery, "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {});
+    auto loadRes = query(loadQuery, "default", [](const Dataframe*) {});
     ASSERT_TRUE(loadRes.isOk()) << "Load failed: " << loadRes.getError();
 
     // Define query vector and compute expected results
@@ -392,10 +368,7 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
 
     // Search for vectors closest to query
     bool executed = false;
-    const auto res = _db->query(
-        "VECTOR SEARCH IN search_test FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids RETURN ids",
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query("VECTOR SEARCH IN search_test FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids RETURN ids", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
             ASSERT_EQ(df->getLogicalRowCount(), k);
@@ -420,9 +393,7 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
 
 TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
     // Create a vector index
-    auto createRes = _db->query(
-        "CREATE VECTOR INDEX k_test WITH DIMENSION 4 METRIC EUCLID",
-        "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {});
+    auto createRes = query("CREATE VECTOR INDEX k_test WITH DIMENSION 4 METRIC EUCLID", "default", [](const Dataframe*) {});
     ASSERT_TRUE(createRes.isOk()) << "Create failed: " << createRes.getError();
 
     // Define test vectors
@@ -450,7 +421,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
 
     // Load vectors (path relative to data directory)
     std::string loadQuery = "LOAD VECTOR FROM \"k_test_vectors.csv\" IN k_test";
-    auto loadRes = _db->query(loadQuery, "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {});
+    auto loadRes = query(loadQuery, "default", [](const Dataframe*) {});
     ASSERT_TRUE(loadRes.isOk()) << "Load failed: " << loadRes.getError();
 
     // Define query vector and compute expected results for k=2
@@ -461,10 +432,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
 
     // Search for top 2
     bool executed = false;
-    const auto res = _db->query(
-        "VECTOR SEARCH IN k_test FOR 2 [1.0, 0.0, 0.0, 0.0] YIELD ids RETURN ids",
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query("VECTOR SEARCH IN k_test FOR 2 [1.0, 0.0, 0.0, 0.0] YIELD ids RETURN ids", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->getLogicalRowCount(), k);
 
@@ -488,9 +456,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
 
 TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
     // Create a vector index with dimension 4
-    auto createRes = _db->query(
-        "CREATE VECTOR INDEX precision_test WITH DIMENSION 4 METRIC EUCLID",
-        "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {});
+    auto createRes = query("CREATE VECTOR INDEX precision_test WITH DIMENSION 4 METRIC EUCLID", "default", [](const Dataframe*) {});
     ASSERT_TRUE(createRes.isOk()) << "Create failed: " << createRes.getError();
 
     // Define test vectors with high-precision floating point values (6 decimals)
@@ -519,7 +485,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
 
     // Load vectors (path relative to data directory)
     std::string loadQuery = "LOAD VECTOR FROM \"precision_vectors.csv\" IN precision_test";
-    auto loadRes = _db->query(loadQuery, "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {});
+    auto loadRes = query(loadQuery, "default", [](const Dataframe*) {});
     ASSERT_TRUE(loadRes.isOk()) << "Load failed: " << loadRes.getError();
 
     // Define query vector (matches vector 100 exactly) and compute expected results
@@ -530,11 +496,8 @@ TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
 
     // Search for vectors closest to query
     bool executed = false;
-    const auto res = _db->query(
-        "VECTOR SEARCH IN precision_test FOR 3 [0.123456, 0.678901, 0.111111, 0.222222] "
-        "YIELD ids RETURN ids",
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query("VECTOR SEARCH IN precision_test FOR 3 [0.123456, 0.678901, 0.111111, 0.222222] "
+        "YIELD ids RETURN ids", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
             ASSERT_EQ(df->getLogicalRowCount(), k);
@@ -568,28 +531,21 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
         ASSERT_TRUE(changeRes) << "Failed to create change";
         const ChangeID changeId = changeRes.value()->id();
 
-        const auto createRes = _db->query(
-            R"(CREATE (n1:Document {id: 1, title: "Doc One"}),
+        const auto createRes = query(R"(CREATE (n1:Document {id: 1, title: "Doc One"}),
                       (n2:Document {id: 2, title: "Doc Two"}),
                       (n3:Document {id: 3, title: "Doc Three"}),
                       (n4:Document {id: 4, title: "Doc Four"}),
-                      (n5:Document {id: 5, title: "Doc Five"}))",
-            "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {},
-            CommitHash::head(), changeId);
+                      (n5:Document {id: 5, title: "Doc Five"}))", "default", [](const Dataframe*) {}, changeId);
         ASSERT_TRUE(createRes.isOk()) << "CREATE nodes failed: " << createRes.getError();
 
-        const auto commitRes = _db->query(
-            "change submit", "default", &_env->getMem(), &_queryConfig, CommitHash::head(), changeId);
+        const auto commitRes = query("change submit", "default", [](const Dataframe*) {}, changeId);
         ASSERT_TRUE(commitRes.isOk()) << "COMMIT failed: " << commitRes.getError();
     }
 
     // Step 1b: Verify nodes were created
     {
         size_t nodeCount = 0;
-        const auto matchRes = _db->query(
-            "MATCH (n:Document) RETURN n.id",
-            "default", &_env->getMem(), &_queryConfig,
-            [&](const Dataframe* df) -> void {
+        const auto matchRes = query("MATCH (n:Document) RETURN n.id", "default", [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
                 nodeCount = df->getLogicalRowCount();
             });
@@ -599,9 +555,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
 
     // Step 2: Create vector index
     {
-        const auto createIndexRes = _db->query(
-            "CREATE VECTOR INDEX doc_vectors WITH DIMENSION 4 METRIC EUCLID",
-            "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {});
+        const auto createIndexRes = query("CREATE VECTOR INDEX doc_vectors WITH DIMENSION 4 METRIC EUCLID", "default", [](const Dataframe*) {});
         ASSERT_TRUE(createIndexRes.isOk())
             << "Create index failed: " << createIndexRes.getError();
     }
@@ -636,15 +590,12 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
 
     const std::string loadQuery = "LOAD VECTOR FROM \"doc_vectors.csv\" IN doc_vectors";
     const auto loadRes =
-        _db->query(loadQuery, "default", &_env->getMem(), &_queryConfig, [](const Dataframe*) {});
+        query(loadQuery, "default", [](const Dataframe*) {});
     ASSERT_TRUE(loadRes.isOk()) << "Load vectors failed: " << loadRes.getError();
 
     // Step 3b: Verify vector search works standalone
     {
-        const auto searchRes = _db->query(
-            "VECTOR SEARCH IN doc_vectors FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids RETURN ids",
-            "default", &_env->getMem(), &_queryConfig,
-            [&](const Dataframe* df) -> void {
+        const auto searchRes = query("VECTOR SEARCH IN doc_vectors FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids RETURN ids", "default", [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
                 ASSERT_EQ(df->getLogicalRowCount(), 3) << "Expected 3 vector search results";
             });
@@ -663,12 +614,9 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
     const std::vector<std::string> expectedTitles = {"Doc One", "Doc Two", "Doc Three"};
 
     bool executed = false;
-    const auto res = _db->query(
-        "VECTOR SEARCH IN doc_vectors FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids "
+    const auto res = query("VECTOR SEARCH IN doc_vectors FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids "
         "MATCH (n:Document) WHERE n.id = ids "
-        "RETURN n.id, n.title",
-        "default", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+        "RETURN n.id, n.title", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2) << "Expected 2 columns (n.id, n.title)";
             ASSERT_EQ(df->getLogicalRowCount(), k) << "Expected " << k << " rows";

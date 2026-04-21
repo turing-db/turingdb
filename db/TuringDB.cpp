@@ -17,14 +17,14 @@
 using namespace db;
 
 TuringDB::TuringDB(const TuringConfig* config)
-    : _config(config),
-    _systemManager(std::make_unique<SystemManager>(config)),
-    _jobSystem(JobSystem::create()),
-    _procedures(ProcedureManager::create()),
-    _extensions(std::make_unique<ExtensionManager>(config->getUserExtensionsDir(),
-                                                   config->getInstallExtensionsDir(),
-                                                   _procedures.get()))
+    : _config(config)
 {
+    _systemManager = std::make_unique<SystemManager>(config);
+    _jobSystem = JobSystem::create();
+    _procedures = ProcedureManager::create();
+    _extensions = std::make_unique<ExtensionManager>(config->getUserExtensionsDir(),
+                                                     config->getInstallExtensionsDir(),
+                                                     _procedures.get());
 }
 
 TuringDB::~TuringDB() {
@@ -103,18 +103,18 @@ void TuringDB::init() {
         }
     }
 
-    // Create vector database
-    if (auto res = vec::VectorDatabase::create(vectorDir)) {
-        _vectorDatabase = std::move(res.value());
-    } else {
-        panic("Could not create vector database: {}", res.error().fmtMessage());
-    }
-
     // Acquire lock file
     _lockFile.setPath(fs::Path(_config->getLockFilePath()));
     const auto lockRes = _lockFile.tryLock();
     if (!lockRes) {
         panic("Could not acquire lock file: {}", lockRes.error().fmtMessage());
+    }
+
+    // Create vector database
+    if (auto res = vec::VectorDatabase::create(vectorDir)) {
+        _vectorDatabase = std::move(res.value());
+    } else {
+        panic("Could not create vector database: {}", res.error().fmtMessage());
     }
 
     // Initialize socket/signal communication system
@@ -166,28 +166,4 @@ QueryStatus TuringDB::query(std::string_view query,
     interp.execute(ctxt, status, query, graphName);
 
     return status;
-}
-
-QueryStatus TuringDB::query(std::string_view query,
-                            std::string_view graphName,
-                            LocalMemory* mem,
-                            const QueryConfig* queryConfig,
-                            const QueryCallbacks::OnOutputData& callback,
-                            CommitHash hash,
-                            ChangeID change) {
-    QueryCallbacks callbacks;
-    callbacks.setOnOutputData(callback);
-
-    return this->query(query, graphName, mem, queryConfig, callbacks, hash, change);
-}
-
-QueryStatus TuringDB::query(std::string_view query,
-                            std::string_view graphName,
-                            LocalMemory* mem,
-                            const QueryConfig* queryConfig,
-                            CommitHash hash,
-                            ChangeID change) {
-    const QueryCallbacks handler;
-
-    return this->query(query, graphName, mem, queryConfig, handler, hash, change);
 }

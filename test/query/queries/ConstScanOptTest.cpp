@@ -167,19 +167,19 @@ protected:
         _currentChange = res.value()->id();
     }
 
-    void submitCurrentChange() {
-        auto res = _db->query("change submit", _graphName, &_env->getMem(),
-                              &_db->getDefaultQueryConfig(),
-                              CommitHash::head(), _currentChange);
-        ASSERT_TRUE(res);
-        _currentChange = ChangeID::head();
-    }
-
     auto query(std::string_view query, auto callback) {
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
         auto res = _db->query(query, _graphName, &_env->getMem(),
                               &_db->getDefaultQueryConfig(),
-                              callback, CommitHash::head(), _currentChange);
+                              callbacks, CommitHash::head(), _currentChange);
         return res;
+    }
+
+    void submitCurrentChange() {
+        auto res = query("change submit", [](const Dataframe*) {});
+        ASSERT_TRUE(res);
+        _currentChange = ChangeID::head();
     }
 
     static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {
@@ -192,10 +192,7 @@ protected:
     }
 
     void exec(std::string_view q) {
-        auto res = _db->query(q, _graphName, &_env->getMem(),
-                              &_db->getDefaultQueryConfig(),
-                              [](const Dataframe*) {},
-                              CommitHash::head(), _currentChange);
+        auto res = query(q, [](const Dataframe*) {});
         ASSERT_TRUE(res);
     }
 

@@ -555,7 +555,8 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     db::ChangeID changeID = db::ChangeID::head();
 
     if (spec._writeRequired) {
-        const auto callback = [&](const db::Dataframe* df) {
+        db::QueryCallbacks changeNewCallbacks;
+        changeNewCallbacks.setOnOutputData([&](const db::Dataframe* df) {
             NamedColumn* col = df->getColumn(ColumnTag {0});
             bioassert(col, "Column not found");
 
@@ -563,13 +564,13 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
             bioassert(c.size() == 1, "Expected 1 change");
 
             changeID = c[0];
-        };
+        });
 
         db->query("CHANGE NEW",
                   spec._graphName,
                   &env->getMem(),
                   &queryConfig,
-                  callback,
+                  changeNewCallbacks,
                   CommitHash::head(),
                   ChangeID::head());
     }
@@ -619,10 +620,12 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     }
 
     if (spec._writeRequired) {
+        db::QueryCallbacks submitCallbacks;
         db->query("CHANGE SUBMIT",
                   spec._graphName,
                   &env->getMem(),
                   &queryConfig,
+                  submitCallbacks,
                   db::CommitHash::head(),
                   changeID);
     }

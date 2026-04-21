@@ -29,6 +29,13 @@ public:
         bioassert(dumpRes, "failed to dump simpledb graph");
     }
 
+    auto query(std::string_view q, std::string_view graphName, auto callback) {
+        db::QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
+        return _db->query(q, graphName, &_env->getMem(), &_queryConfig, callbacks,
+                          CommitHash::head(), ChangeID::head());
+    }
+
 protected:
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
@@ -40,7 +47,7 @@ protected:
 TEST_F(LoadGraphTest, loadGraph) {
     bool executed = false;
 
-    const auto res = _db->query("LOAD GRAPH simpledb", "default", &_env->getMem(), &_queryConfig, [&](const Dataframe* df) -> void {
+    const auto res = query("LOAD GRAPH simpledb", "default", [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 1);
         ASSERT_EQ(df->getLogicalRowCount(), 1);
