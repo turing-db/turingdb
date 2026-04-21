@@ -27,13 +27,14 @@ class Change;
 
 class SystemManager {
 public:
-    explicit SystemManager(const TuringConfig* config);
     ~SystemManager();
 
     SystemManager(const SystemManager&) = delete;
     SystemManager(SystemManager&&) = delete;
     SystemManager& operator=(const SystemManager&) = delete;
     SystemManager& operator=(SystemManager&&) = delete;
+
+    static std::unique_ptr<SystemManager> create(const TuringConfig* config);
 
     const TuringConfig* getConfig() const { return _config; }
 
@@ -96,6 +97,8 @@ private:
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
     std::unique_ptr<ChangeManager> _changes;
     GraphLoadStatus _graphLoadStatus;
+
+    explicit SystemManager(const TuringConfig* config);
 
     bool loadJsonlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadGmlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);

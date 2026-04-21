@@ -23,7 +23,7 @@ ProcedureManager::~ProcedureManager() {
 }
 
 std::unique_ptr<ProcedureManager> ProcedureManager::create() {
-    return std::make_unique<ProcedureManager>();
+    return std::unique_ptr<ProcedureManager>(new ProcedureManager());
 }
 
 void ProcedureManager::init() {

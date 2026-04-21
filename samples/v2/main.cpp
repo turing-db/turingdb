@@ -35,8 +35,8 @@ int main(int argc, char** argv) {
     config.setSyncedOnDisk(false);
 
     const auto jobSystem = JobSystem::create();
-    SystemManager sysMan(&config);
-    Graph* graph = sysMan.createGraph("simpledb");
+    auto sysMan = SystemManager::create(&config);
+    Graph* graph = sysMan->createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
 
     auto procedures = ProcedureManager::create();
@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
                                           view,
                                           &pipeline,
                                           &mem,
-                                          &sysMan,
+                                          sysMan.get(),
                                           procedures.get(),
                                           &callbacks);
             try {
@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
         {
             fmt::print("\n=== Execution ===\n\n");
 
-            ExecutionContext execCtxt(&sysMan, view);
+            ExecutionContext execCtxt(sysMan.get(), view);
             execCtxt.setTransaction(&transaction);
             execCtxt.setJobSystem(jobSystem.get());
 

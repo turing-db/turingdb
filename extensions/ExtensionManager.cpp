@@ -32,6 +32,12 @@ ExtensionManager::~ExtensionManager() {
     }
 }
 
+std::unique_ptr<ExtensionManager> ExtensionManager::create(const fs::Path& userExtensionsDir,
+                                                           const fs::Path& installExtensionsDir,
+                                                           ProcedureManager* procedures) {
+    return std::unique_ptr<ExtensionManager>(new ExtensionManager(userExtensionsDir, installExtensionsDir, procedures));
+}
+
 void ExtensionManager::installExtension(std::string_view name) {
     std::unique_lock<std::shared_mutex> lock(_mutex);
 

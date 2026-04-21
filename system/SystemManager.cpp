@@ -30,6 +30,10 @@ SystemManager::SystemManager(const TuringConfig* config)
 SystemManager::~SystemManager() {
 }
 
+std::unique_ptr<SystemManager> SystemManager::create(const TuringConfig* config) {
+    return std::unique_ptr<SystemManager>(new SystemManager(config));
+}
+
 void SystemManager::init() {
     const auto list = _config->getGraphsDir().listDir();
 
