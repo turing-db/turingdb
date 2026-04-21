@@ -34,7 +34,7 @@ T ListElementView::getAs() {
     {
         T* outAddr = &out;
         constexpr size_t sizeOfT = sizeof(T);
-        std::memcpy(out, dataPtr, sizeOfT);
+        std::memcpy(outAddr, dataPtr, sizeOfT);
     }
 
     return out;

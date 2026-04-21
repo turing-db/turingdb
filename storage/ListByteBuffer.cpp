@@ -2,13 +2,32 @@
 
 #include <type_traits>
 
+#include <spdlog/fmt/bundled/format.h>
+
 #include "FatalException.h"
 
 using namespace db;
 
 template <size_t N>
-[[nodiscard]] bool ListByteBuffer<N>::ByteChunk::canFit(size_t numBytes) {
-     return N - _size >= numBytes;
+ListByteBuffer<N>::ListByteBuffer()
+    : _first(new ByteChunk),
+    _last(_first)
+{
+}
+
+template <size_t N>
+ListByteBuffer<N>::~ListByteBuffer() {
+    auto* cur = _first;
+    while (cur) {
+        auto* next = cur->_next;
+        delete cur;
+        cur = next;
+    }
+}
+
+template <size_t N>
+[[nodiscard]] bool ListByteBuffer<N>::ByteChunk::canFit(size_t numBytes) const {
+    return N - _size >= numBytes;
 }
 
 template <size_t N>
@@ -24,15 +43,14 @@ void ListByteBuffer<N>::reserveContiguous(size_t numBytes) {
     // Ensure we can fit this many bytes in a single buffer
     const bool exceedsChunk = numBytes > N;
     if (exceedsChunk) {
-        std::string err = fmt::format(
-            "ListByteBuffer exceeded: attempted to reserve {} bytes.", numBytes);
-        throw FatalException(std::move(err));
+        throw FatalException(fmt::format(
+            "ListByteBuffer exceeded: attempted to reserve {} bytes.", numBytes));
     }
 
     // If we have enough space in current buffer, 
     const bool lastFits = _last->canFit(numBytes);
 
-    if (lastFits) {
+    if (!lastFits) {
         allocateNextChunk();
     }
 }
@@ -40,7 +58,7 @@ void ListByteBuffer<N>::reserveContiguous(size_t numBytes) {
 template <size_t N>
 template <typename T>
 void ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
-    static_assert(std::is_trivially_copyable<T>());
+    static_assert(std::is_trivially_copyable_v<T>);
 
     std::array<std::byte, N>& buf = _last->_buf;
     const size_t startingIndex = _last->_size;
@@ -66,5 +84,6 @@ void ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
 }
 
 namespace db {
+template class ListByteBuffer<>;
 template void ListByteBuffer<>::write(ListBufferTypeTag, const int&);
 }

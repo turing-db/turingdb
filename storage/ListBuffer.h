@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "ListByteBuffer.h"
+#include "ListElementViewBuffer.h"
 
 namespace db {
 
@@ -16,6 +17,7 @@ public:
 
 private:
     ListByteBuffer<N> _buf;
+    ListElementViewBuffer<N> _views;
 };
 
 }
