@@ -16,11 +16,13 @@ public:
     ~ListElementViewBuffer();
 
     /**
-     * @brief Ensures that after this call is complete, the current @ref ByteChunk
-     * contains at least @param numBytes of contiguous free space at the end of its
-     * internal buffer.
+     * @brief Ensures that after this call is complete, the current @ref Chunk
+     * contains at least enough free space at the end of the its interal buffer to store
+     * @param numViews @ref ListElementViews.
      */
     void reserveContiguous(size_t numViews);
+
+    void write(ListElementView view);
 
 private:
     class Chunk;
