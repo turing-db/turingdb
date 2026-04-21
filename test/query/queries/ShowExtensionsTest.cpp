@@ -18,6 +18,17 @@ public:
         _db = &_env->getDB();
     }
 
+    auto query(std::string_view q, std::string_view graphName, auto callback) {
+        db::QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
+        return _db->query(q, graphName, &_env->getMem(), &_queryConfig, callbacks,
+                          CommitHash::head(), ChangeID::head());
+    }
+
+    auto query(std::string_view q, std::string_view graphName) {
+        return query(q, graphName, [](const Dataframe*) {});
+    }
+
 protected:
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
@@ -25,11 +36,10 @@ protected:
 };
 
 TEST_F(ShowExtensionsTest, showExtensions) {
-    _db->query("INSTALL greeter", "default", &_env->getMem(), &_queryConfig);
+    query("INSTALL greeter", "default");
 
     bool executed = false;
-    const auto res = _db->query("SHOW EXTENSIONS", "default", &_env->getMem(), &_queryConfig,
-                                [&](const Dataframe* df) -> void {
+    const auto res = query("SHOW EXTENSIONS", "default", [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 1);
         ASSERT_GE(df->getLogicalRowCount(), 1);

@@ -55,16 +55,18 @@ protected:
         _currentChange = change->id();
     }
 
-    void submitCurrentChange() {
-        auto res = _db->query("change submit", _graphName, &_env->getMem(), &_queryConfig, CommitHash::head(), _currentChange);
-        ASSERT_TRUE(res) << res.getError();
-        _currentChange = ChangeID::head();
-    }
-
     auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callback,
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
+        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callbacks,
                               CommitHash::head(), _currentChange);
         return res;
+    }
+
+    void submitCurrentChange() {
+        auto res = query("change submit", [](const Dataframe*) {});
+        ASSERT_TRUE(res) << res.getError();
+        _currentChange = ChangeID::head();
     }
 
     void setWorkingGraph(std::string_view name) {

@@ -50,6 +50,18 @@ CREATE (n1:City {name: 'CityA'}),
 
 class ShortestPathQueryTest : public TuringTest {
 public:
+    static auto query(std::string_view query, std::string_view graphName, auto callback,
+                      ChangeID change = ChangeID::head()) {
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
+        auto res = _db->query(query, graphName, &_env->getMem(), &_queryConfig,
+                              callbacks, CommitHash::head(), change);
+        if (!res) {
+            spdlog::error("Query failed: {}", res.getError());
+        }
+        return res;
+    }
+
     static void SetUpTestSuite() {
         _suiteOutDir = "ShortestPathQueryTest_suite.out";
         if (FileUtils::exists(_suiteOutDir)) {
@@ -69,12 +81,10 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(TEST_GRAPH_CYPHER, _graphName, &_env->getMem(), &_queryConfig,
-                                     [](const Dataframe*) {}, CommitHash::head(), changeId);
+            auto status = query(TEST_GRAPH_CYPHER, _graphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create graph: " << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), &_queryConfig,
-                                           [](const Dataframe*) {}, CommitHash::head(), changeId);
+            auto submitStatus = query("CHANGE SUBMIT", _graphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit change: "
                                              << submitStatus.getError();
         }
@@ -88,12 +98,10 @@ public:
             Change* change = changeResult.value();
             auto changeId = change->id();
 
-            auto status = _db->query(TEST_STAR_GRAPH_CYPHER, _starGraphName, &_env->getMem(), &_queryConfig,
-                                     [](const Dataframe*) {}, CommitHash::head(), changeId);
+            auto status = query(TEST_STAR_GRAPH_CYPHER, _starGraphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create graph: " << status.getError();
 
-            auto submitStatus = _db->query("CHANGE SUBMIT", _starGraphName, &_env->getMem(), &_queryConfig,
-                                           [](const Dataframe*) {}, CommitHash::head(), changeId);
+            auto submitStatus = query("CHANGE SUBMIT", _starGraphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit change: "
                                              << submitStatus.getError();
         }
@@ -120,14 +128,6 @@ protected:
     static inline Graph* _stargraph = nullptr;
     static inline QueryConfig _queryConfig;
 
-    auto query(std::string_view query, std::string_view graphName, auto callback) {
-        auto res = _db->query(query, graphName, &_env->getMem(), &_queryConfig,
-                              callback, CommitHash::head(), ChangeID::head());
-        if (!res) {
-            spdlog::error("Query failed: {}", res.getError());
-        }
-        return res;
-    }
 };
 
 TEST_F(ShortestPathQueryTest, sucessfullTest) {

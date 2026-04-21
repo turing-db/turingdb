@@ -599,7 +599,6 @@ void TuringShell::formatMessage(std::string& msg) {
 }
 
 void TuringShell::processLine(std::string& line) {
-
     {
         std::string profilerOutput;
         Profiler::dumpAndClear(profilerOutput);
@@ -634,7 +633,8 @@ void TuringShell::processLine(std::string& line) {
     {
         size_t execCount = 0;
 
-        auto callback = [&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData([&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
             rowCount += df->getLogicalRowCount();
 
             if (_quiet) {
@@ -642,9 +642,9 @@ void TuringShell::processLine(std::string& line) {
             }
 
             queryCallback(execCount++, df, table);
-        };
+        });
 
-        res = _turingDB.query(line, _graphName, _mem, &_turingDB.getDefaultQueryConfig(), callback, _hash, _changeID);
+        res = _turingDB.query(line, _graphName, _mem, &_turingDB.getDefaultQueryConfig(), callbacks, _hash, _changeID);
     }
 
     checkShellContext();

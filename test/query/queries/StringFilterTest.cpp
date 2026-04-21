@@ -123,7 +123,9 @@ protected:
     QueryConfig _queryConfig;
 
     auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callback,
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
+        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callbacks,
                               CommitHash::head(), ChangeID::head());
         return res;
     }

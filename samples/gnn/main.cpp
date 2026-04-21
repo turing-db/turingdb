@@ -170,22 +170,21 @@ int main(int argc, const char** argv) {
     // -----------------------------------------------------------------
     std::string q;
 
-    const auto mustQuery = [&](std::string_view q, ChangeID chg = ChangeID::head()) {
-        const auto res = db.query(q, graphName, &mem, &queryConfig, CommitHash::head(), chg);
+    const auto queryWithCb = [&](std::string_view q,
+                                 const QueryCallbacks::OnOutputData& cb,
+                                 ChangeID chg = ChangeID::head()) {
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(cb);
+        const auto res = db.query(q, graphName, &mem, &queryConfig, callbacks,
+                                  CommitHash::head(), chg);
         if (!res.isOk()) {
             spdlog::error("Query failed: {}\n  {}", q, res.getError());
             exit(EXIT_FAILURE);
         }
     };
 
-    const auto queryWithCb = [&](std::string_view q,
-                                 const QueryCallbacks::OnOutputData& cb,
-                                 ChangeID chg = ChangeID::head()) {
-        const auto res = db.query(q, graphName, &mem, &queryConfig, cb, CommitHash::head(), chg);
-        if (!res.isOk()) {
-            spdlog::error("Query failed: {}\n  {}", q, res.getError());
-            exit(EXIT_FAILURE);
-        }
+    const auto mustQuery = [&](std::string_view q, ChangeID chg = ChangeID::head()) {
+        queryWithCb(q, [](const Dataframe*) {}, chg);
     };
 
     // -----------------------------------------------------------------

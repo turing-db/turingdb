@@ -251,8 +251,9 @@ int StartCmd::execute() {
 
         // Load graphs
         const auto& queryConfig = turingDB.getDefaultQueryConfig();
+        const QueryCallbacks callbacks;
         for (const auto& graphName : _graphsToLoad) {
-            const QueryStatus res = turingDB.query("load graph " + graphName, "", &mem, &queryConfig);
+            const QueryStatus res = turingDB.query("load graph " + graphName, "", &mem, &queryConfig, callbacks);
             if (!res.isOk()) {
                 return EXIT_FAILURE;
             }

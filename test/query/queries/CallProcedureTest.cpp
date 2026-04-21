@@ -25,6 +25,13 @@ public:
         _db = &_env->getDB();
     }
 
+    auto query(std::string_view q, std::string_view graphName, auto callback) {
+        db::QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
+        return _db->query(q, graphName, &_env->getMem(), &_queryConfig, callbacks,
+                          CommitHash::head(), ChangeID::head());
+    }
+
 protected:
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
@@ -33,9 +40,7 @@ protected:
 
 TEST_F(CallProcedureTest, Labels) {
     bool executed = false;
-    const auto res = _db->query(
-        "CALL db.labels()", "simpledb", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query("CALL db.labels()", "simpledb", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2);
             ASSERT_EQ(df->getLogicalRowCount(), 9);
@@ -49,9 +54,7 @@ TEST_F(CallProcedureTest, Labels) {
 
 TEST_F(CallProcedureTest, EdgeTypes) {
     bool executed = false;
-    const auto res = _db->query(
-        "CALL db.edgeTypes()", "simpledb", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query("CALL db.edgeTypes()", "simpledb", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2);
             ASSERT_EQ(df->getLogicalRowCount(), 2);
@@ -65,9 +68,7 @@ TEST_F(CallProcedureTest, EdgeTypes) {
 
 TEST_F(CallProcedureTest, PropertyTypes) {
     bool executed = false;
-    const auto res = _db->query(
-        "CALL db.propertyTypes()", "simpledb", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query("CALL db.propertyTypes()", "simpledb", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 3);
             ASSERT_EQ(df->getLogicalRowCount(), 8);
@@ -81,9 +82,7 @@ TEST_F(CallProcedureTest, PropertyTypes) {
 
 TEST_F(CallProcedureTest, History) {
     bool executed = false;
-    const auto res = _db->query(
-        "CALL db.propertyTypes()", "simpledb", &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+    const auto res = query("CALL db.propertyTypes()", "simpledb", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 3);
             ASSERT_EQ(df->getLogicalRowCount(), 8);
@@ -97,13 +96,9 @@ TEST_F(CallProcedureTest, History) {
 
 TEST_F(CallProcedureTest, DescribeCommit) {
     bool executed = false;
-    const auto res = _db->query(
-        "CALL db.history() YIELD commit AS c "
+    const auto res = query("CALL db.history() YIELD commit AS c "
         "CALL db.describeCommit(c) YIELD nodeCount, edgeCount "
-        "RETURN nodeCount, edgeCount",
-        "simpledb",
-        &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+        "RETURN nodeCount, edgeCount", "simpledb", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 2);
             ASSERT_EQ(df->getLogicalRowCount(), 8);
@@ -141,13 +136,9 @@ TEST_F(CallProcedureTest, YieldWhereSelfJoin) {
     // Self-join on label names: CALL db.labels() twice with WHERE a = b
     // Should return 9 (one per label), not 81 (9 * 9 cartesian)
     bool executed = false;
-    const auto res = _db->query(
-        "CALL db.labels() YIELD label AS a "
+    const auto res = query("CALL db.labels() YIELD label AS a "
         "CALL db.labels() YIELD label AS b "
-        "WHERE a = b RETURN count(*)",
-        "simpledb",
-        &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+        "WHERE a = b RETURN count(*)", "simpledb", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
 
@@ -167,13 +158,9 @@ TEST_F(CallProcedureTest, YieldWhereCrossJoin) {
     // Labels: 9 entries (label), PropertyTypes: 8 entries (propertyType)
     // WHERE a = b should only match where a label name equals a property type name
     bool executed = false;
-    const auto res = _db->query(
-        "CALL db.labels() YIELD label AS a "
+    const auto res = query("CALL db.labels() YIELD label AS a "
         "CALL db.propertyTypes() YIELD propertyType AS b "
-        "WHERE a = b RETURN count(*)",
-        "simpledb",
-        &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+        "WHERE a = b RETURN count(*)", "simpledb", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
 
@@ -193,13 +180,9 @@ TEST_F(CallProcedureTest, YieldWhereSelfJoinByID) {
     // Self-join on label IDs: both sides are LabelID, so hash join works
     // Should return 9 (one per label), not 81 (9 * 9 cartesian)
     bool executed = false;
-    const auto res = _db->query(
-        "CALL db.labels() YIELD id AS l "
+    const auto res = query("CALL db.labels() YIELD id AS l "
         "CALL db.labels() YIELD id AS m "
-        "WHERE l = m RETURN count(*)",
-        "simpledb",
-        &_env->getMem(), &_queryConfig,
-        [&](const Dataframe* df) -> void {
+        "WHERE l = m RETURN count(*)", "simpledb", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
 
@@ -216,13 +199,9 @@ TEST_F(CallProcedureTest, YieldWhereSelfJoinByID) {
 
 TEST_F(CallProcedureTest, YieldWhereCrossJoinIncompatibleTypes) {
     // Exact query from issue #549: LabelID != PropertyTypeID
-    const auto res = _db->query(
-        "CALL db.labels() YIELD id AS l "
+    const auto res = query("CALL db.labels() YIELD id AS l "
         "CALL db.propertyTypes() YIELD id AS p "
-        "WHERE l = p RETURN count(*)",
-        "simpledb",
-        &_env->getMem(), &_queryConfig,
-        [&](const Dataframe*) -> void {});
+        "WHERE l = p RETURN count(*)", "simpledb", [&](const Dataframe*) -> void {});
 
     EXPECT_EQ(res.getStatus(), QueryStatus::Status::ANALYZE_ERROR);
 }

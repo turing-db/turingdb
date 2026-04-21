@@ -92,7 +92,17 @@ int main(int argc, const char** argv) {
     std::set<std::string> stationSet;
 
     QueryConfig queryConfig;
-    const auto status = db.query(loadQuery, graphName, &mem, &queryConfig,
+
+    const auto runQuery = [&](std::string_view q,
+                              const QueryCallbacks::OnOutputData& cb,
+                              ChangeID chg = ChangeID::head()) {
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(cb);
+        return db.query(q, graphName, &mem, &queryConfig, callbacks,
+                        CommitHash::head(), chg);
+    };
+
+    const auto status = runQuery(loadQuery,
         [&](const Dataframe* df) {
             using StringCol = ColumnVector<std::string>;
 
@@ -265,15 +275,13 @@ int main(int argc, const char** argv) {
     }
     Change* change = changeRes.value();
 
-    const auto createStatus = db.query(createQuery, graphName, &mem, &queryConfig,
-                                        CommitHash::head(), change->id());
+    const auto createStatus = runQuery(createQuery, [](const Dataframe*) {}, change->id());
     if (!createStatus.isOk()) {
         spdlog::error("CREATE failed: {}", createStatus.getError());
         return EXIT_FAILURE;
     }
 
-    const auto submitStatus = db.query("CHANGE SUBMIT", graphName, &mem, &queryConfig,
-                                        CommitHash::head(), change->id());
+    const auto submitStatus = runQuery("CHANGE SUBMIT", [](const Dataframe*) {}, change->id());
     if (!submitStatus.isOk()) {
         spdlog::error("CHANGE SUBMIT failed: {}",
                       submitStatus.getError());
@@ -296,7 +304,7 @@ int main(int argc, const char** argv) {
     double distance = 0;
     Path pathResult;
 
-    const auto spStatus = db.query(spQuery, graphName, &mem, &queryConfig,
+    const auto spStatus = runQuery(spQuery,
         [&](const Dataframe* df) {
             auto* distCol =
                 df->cols()[0]->as<ColumnVector<double>>();

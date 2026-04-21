@@ -45,9 +45,10 @@ public:
             const ChangeID chid = changeRes.value()->id();
 
             QueryConfig buildQueryConfig;
+            QueryCallbacks submitCallbacks;
             const auto submitRes = buildEnv->getDB().query(
                 "CHANGE SUBMIT", "testdb", &buildEnv->getMem(), &buildQueryConfig,
-                CommitHash::head(), chid);
+                submitCallbacks, CommitHash::head(), chid);
             bioassert(submitRes, "change submit failed");
             _newHeadHash = graph->getHeadHash(); // HEAD commit (loaded after LOAD GRAPH)
 
@@ -58,8 +59,9 @@ public:
         }
 
         // Step 4: Load the graph via query so the SystemManager registers it.
+        QueryCallbacks loadCallbacks;
         auto loadRes = _db->query("LOAD GRAPH testdb", "default", &_env->getMem(), &_queryConfig,
-                                  [](const Dataframe*) {});
+                                  loadCallbacks, CommitHash::head(), ChangeID::head());
         bioassert(loadRes, "LOAD GRAPH failed");
     }
 
@@ -72,7 +74,8 @@ protected:
 
     QueryStatus query(std::string_view q,
                       CommitHash hash = CommitHash::head()) {
-        return _db->query(q, "testdb", &_env->getMem(), &_queryConfig, [](const Dataframe*) {}, hash, ChangeID::head());
+        QueryCallbacks callbacks;
+        return _db->query(q, "testdb", &_env->getMem(), &_queryConfig, callbacks, hash, ChangeID::head());
     }
 
     // Build the LOAD COMMIT query string for a given hash (hex-encoded).

@@ -62,6 +62,12 @@ protected:
         ChangeID changeID = change->id();
         return changeID;
     }
+
+    QueryStatus query(std::string_view q, std::string_view graphName, ChangeID changeID) {
+        QueryCallbacks callbacks;
+        return _env->getDB().query(q, graphName, &_env->getMem(), &_queryConfig,
+                                   callbacks, CommitHash::head(), changeID);
+    }
 };
 
 TEST_F(CommitJournalSerialisationTest, emptyOnCreation) {
@@ -113,12 +119,10 @@ TEST_F(CommitJournalSerialisationTest, createNodeThenLoad) {
     // Make a change to the graph
     {
         ChangeID changeID = newChange();
-        auto res1 = _env->getDB().query("create (n:NEWNODE)", graphName, &_env->getMem(), &_queryConfig,
-                                        CommitHash::head(), changeID);
+        auto res1 = query("create (n:NEWNODE)", graphName, changeID);
         ASSERT_TRUE(res1);
 
-        auto res2 = _env->getDB().query("change submit", graphName, &_env->getMem(), &_queryConfig,
-                                        CommitHash::head(), changeID);
+        auto res2 = query("change submit", graphName, changeID);
         ASSERT_TRUE(res2);
     }
 
@@ -171,16 +175,13 @@ TEST_F(CommitJournalSerialisationTest, createNodesAndEdgesThenLoad) {
     // Make a change to the graph
     {
         ChangeID changeID = newChange();
-        auto res1 = _env->getDB().query("create (n:NEWNODE)", graphName, &_env->getMem(), &_queryConfig,
-                                        CommitHash::head(), changeID);
-
+        auto res1 = query("create (n:NEWNODE)", graphName, changeID);
         ASSERT_TRUE(res1);
-        auto res2 = _env->getDB().query("create (n:NEWNODE)-[e:NEWEDGE]->(m:NEWNODE)", graphName,
-                                        &_env->getMem(), &_queryConfig, CommitHash::head(), changeID);
+
+        auto res2 = query("create (n:NEWNODE)-[e:NEWEDGE]->(m:NEWNODE)", graphName, changeID);
         ASSERT_TRUE(res2);
 
-        auto res3 = _env->getDB().query("change submit", graphName, &_env->getMem(), &_queryConfig,
-                                        CommitHash::head(), changeID);
+        auto res3 = query("change submit", graphName, changeID);
         ASSERT_TRUE(res3);
     }
 

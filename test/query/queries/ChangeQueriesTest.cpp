@@ -61,29 +61,32 @@ protected:
         _currentChange = change->id();
     }
 
+    auto query(std::string_view query, auto callback, ChangeID change) {
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
+        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callbacks,
+                                CommitHash::head(), change);
+        return res;
+    }
+
+    auto query(std::string_view q, auto callback) {
+        return query(q, callback, _currentChange);
+    }
+
     void submitCurrentChange() {
-        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), &_queryConfig,
-                                emptyCallback, CommitHash::head(), _currentChange);
+        auto res = query("CHANGE SUBMIT", emptyCallback);
         ASSERT_TRUE(res);
         _currentChange = ChangeID::head();
     }
 
     void submitChange(ChangeID chid) {
-        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), &_queryConfig,
-                                emptyCallback, CommitHash::head(), chid);
-
+        auto res = query("CHANGE SUBMIT", emptyCallback, chid);
         ASSERT_TRUE(res) << res.getError();
         _currentChange = ChangeID::head();
     }
 
     void setChange(ChangeID chid) {
         _currentChange = chid;
-    }
-
-    auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callback,
-                                CommitHash::head(), _currentChange);
-        return res;
     }
 
     void setWorkingGraph(std::string_view name) {

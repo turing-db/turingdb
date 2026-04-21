@@ -419,8 +419,10 @@ protected:
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     auto query(std::string_view query, auto callback) {
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
         auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig,
-                              callback, CommitHash::head(), ChangeID::head());
+                              callbacks, CommitHash::head(), ChangeID::head());
         if (!res) {
             spdlog::error("Query failed: {}", res.getError());
         }
@@ -1260,8 +1262,8 @@ TEST_F(ReactomeVHJTest, sameCompartmentReactionsMatchesNonVHJ) {
     QueryConfig noVhjConfig;
     noVhjConfig.getPlanGenConfig().setUseValueHashJoin(false);
     Rows nonVhjActual;
-    auto res2 = _db->query(QUERY, _graphName, &_env->getMem(), &noVhjConfig,
-                           [&](const Dataframe* df) {
+    QueryCallbacks noVhjCallbacks;
+    noVhjCallbacks.setOnOutputData([&](const Dataframe* df) {
         ASSERT_TRUE(df);
         auto* rCol = findColumn(df, "r.displayName")->as<ColumnOptVector<String>>();
         auto* r2Col = findColumn(df, "r2.displayName")->as<ColumnOptVector<String>>();
@@ -1270,7 +1272,9 @@ TEST_F(ReactomeVHJTest, sameCompartmentReactionsMatchesNonVHJ) {
         for (size_t i = 0; i < rCol->size(); i++) {
             nonVhjActual.add({rCol->at(i), r2Col->at(i), cCol->at(i)});
         }
-    }, CommitHash::head(), ChangeID::head());
+    });
+    auto res2 = _db->query(QUERY, _graphName, &_env->getMem(), &noVhjConfig,
+                           noVhjCallbacks, CommitHash::head(), ChangeID::head());
     ASSERT_TRUE(res2);
 
     EXPECT_TRUE(vhjActual.equals(nonVhjActual));

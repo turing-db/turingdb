@@ -54,7 +54,9 @@ protected:
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     auto query(std::string_view query, auto callback) {
-        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callback,
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData(callback);
+        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callbacks,
                               CommitHash::head(), _currentChange);
         return res;
     }
@@ -98,8 +100,7 @@ protected:
     }
 
     void submitCurrentChange() {
-        auto res = _db->query("CHANGE SUBMIT", _graphName, &_env->getMem(), &_queryConfig,
-                                emptyCallback, CommitHash::head(), _currentChange);
+        auto res = query("CHANGE SUBMIT", emptyCallback);
         ASSERT_TRUE(res);
         _currentChange = ChangeID::head();
     }
