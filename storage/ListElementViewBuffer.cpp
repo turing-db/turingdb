@@ -51,6 +51,11 @@ void ListElementViewBuffer<N>::reserveContiguous(size_t numViews) {
     }
 }
 
+template <size_t N>
+void ListElementViewBuffer<N>::write(ListElementView view) {
+  _last->_buf[_last->_size++] = view;
+}
+
 namespace db {
 template class ListElementViewBuffer<>;
-}    
+}

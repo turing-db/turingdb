@@ -6,6 +6,11 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include "ListBufferByteTag.h"
+#include "ListElementView.h"
+
+#include "metadata/PropertyType.h"
+
 namespace db {
 
 enum class ListBufferTypeTag : uint8_t;
@@ -14,7 +19,9 @@ template <size_t N = 4096>
 class ListByteBuffer {
 public:
     ListByteBuffer();
-    ~ListByteBuffer(); 
+    ~ListByteBuffer();
+
+    static consteval size_t tagSize() { return _tagSize; }
 
     /**
      * @brief Ensures that after this call is complete, the current @ref ByteChunk
@@ -28,7 +35,7 @@ public:
      * @ref _last byte buffer.
      */
     template <typename T>
-    void write(ListBufferTypeTag tag, const T& val);
+    ListElementView write(ListBufferTypeTag tag, const T& val);
 
 private:
     class ByteChunk;
@@ -45,13 +52,6 @@ private:
     static_assert(N < std::numeric_limits<int64_t>::max());
 };
 
-enum class ListBufferTypeTag : uint8_t {
-    Int = 0,
-    Double,
-
-    INVALID,
-};
-
 template <size_t N>
 class ListByteBuffer<N>::ByteChunk {
 public:
@@ -62,6 +62,20 @@ private:
     std::array<std::byte, N> _buf;
     size_t _size {0};
     ByteChunk* _next {nullptr};
+};
+
+/// Helpers to convert types to tags
+template <typename T>
+struct TypeToListBufferTag;
+
+template <>
+struct TypeToListBufferTag<types::Int64::Primitive> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Int;
+};
+
+template <>
+struct TypeToListBufferTag<types::Double::Primitive> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Double;
 };
 
 }

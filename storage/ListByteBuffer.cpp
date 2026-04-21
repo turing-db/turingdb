@@ -63,7 +63,8 @@ void ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
     std::array<std::byte, N>& buf = _last->_buf;
     const size_t startingIndex = _last->_size;
 
-    std::byte* writePtr = &buf[startingIndex];
+    const std::byte* startPtr = &buf[startingIndex];
+    std::byte* writePtr = startPtr;
     static_assert(_tagSize == 1);
 
     { // Write the tag
