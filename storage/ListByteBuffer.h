@@ -13,12 +13,17 @@
 template <size_t N = 4096>
 class ListByteBuffer {
 public:
+    enum class TypeTag : uint8_t;
+
     /**
      * @brief Ensures that after this call is complete, the current @ref ByteChunk
      * contains at least @param numBytes of contiguous free space at the end of its
      * internal buffer.
      */
     void reserveContiguous(size_t numBytes);
+
+    template <typename T>
+    void write(TypeTag tag, const T& val);
 
 private:
     class ByteChunk;
@@ -30,6 +35,14 @@ private:
 
     static_assert(N != 0);
     static_assert(N < std::numeric_limits<int64_t>::max());
+};
+
+template <size_t N>
+enum class ListByteBuffer<N>::TypeTag : uint8_t {
+    Int = 0,
+    Double,
+
+    INVALID,
 };
 
 template <size_t N>
