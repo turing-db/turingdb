@@ -52,12 +52,16 @@ void ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
         const auto* tagAddr = &tag;
         std::memcpy(writePtr, tagAddr, _tagSize);
         writePtr += _tagSize;
+
+        _last->_size += _tagSize;
     }
 
     { // Write the item bytes
         const auto* valAddr = &val;
         constexpr size_t valSize = sizeof(val);
         std::memcpy(writePtr, valAddr, valSize);
+
+        _last->_size += valSize;
     }
 }
 

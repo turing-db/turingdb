@@ -58,7 +58,7 @@ public:
 
     [[nodiscard]] bool canFit(size_t numBytes);
 private:
-    std::array<std::byte, N> _buf {};
+    std::array<std::byte, N> _buf;
     size_t _size {0};
     ByteChunk* _next {nullptr};
 };
