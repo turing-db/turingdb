@@ -48,7 +48,7 @@ add_subdirectory(jsonl-import)
 add_subdirectory(tfl)
 add_subdirectory(gnn)
 add_subdirectory(list-buffer)
-add_subdirectory(hamt)
+# add_subdirectory(hamt)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)
