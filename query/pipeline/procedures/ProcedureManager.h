@@ -16,7 +16,6 @@ class ProcedureManager {
 public:
     using Namespaces = std::vector<ProcedureNamespace*>;
 
-    ProcedureManager();
     ~ProcedureManager();
 
     void init();
@@ -35,6 +34,8 @@ private:
     mutable std::shared_mutex _mutex;
     Namespaces _namespaces;
     std::unordered_map<std::string_view, ProcedureNamespace*> _namespaceMap;
+
+    ProcedureManager();
 };
 
 }

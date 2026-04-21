@@ -19,12 +19,12 @@ using namespace db;
 TuringDB::TuringDB(const TuringConfig* config)
     : _config(config)
 {
-    _systemManager = std::make_unique<SystemManager>(config);
+    _systemManager = SystemManager::create(config);
     _jobSystem = JobSystem::create();
     _procedures = ProcedureManager::create();
-    _extensions = std::make_unique<ExtensionManager>(config->getUserExtensionsDir(),
-                                                     config->getInstallExtensionsDir(),
-                                                     _procedures.get());
+    _extensions = ExtensionManager::create(config->getUserExtensionsDir(),
+                                           config->getInstallExtensionsDir(),
+                                           _procedures.get());
 }
 
 TuringDB::~TuringDB() {
