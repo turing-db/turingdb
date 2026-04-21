@@ -8,7 +8,7 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
-#include "FatalException.h"
+namespace db {
 
 template <size_t N = 4096>
 class ListByteBuffer {
@@ -22,6 +22,10 @@ public:
      */
     void reserveContiguous(size_t numBytes);
 
+    /**
+     * @brief Writes the provided @param tag, followed by the bytes of @param val, in the
+     * @ref _last byte buffer.
+     */
     template <typename T>
     void write(TypeTag tag, const T& val);
 
@@ -33,6 +37,9 @@ private:
 
     ByteChunk* allocateNextChunk();
 
+    static constexpr size_t _tagSize = sizeof(TypeTag);
+
+    static_assert(_tagSize == 1);
     static_assert(N != 0);
     static_assert(N < std::numeric_limits<int64_t>::max());
 };
@@ -57,33 +64,4 @@ private:
     ByteChunk* _next {nullptr};
 };
 
-template <size_t N>
-[[nodiscard]] bool ListByteBuffer<N>::ByteChunk::canFit(size_t numBytes) {
-     return N - _size >= numBytes;
-}
-
-template <size_t N>
-ListByteBuffer<N>::ByteChunk* ListByteBuffer<N>::allocateNextChunk() {
-    auto* newChunk = new ByteChunk;
-    _last->_next = newChunk;
-    _last = newChunk;
-    return newChunk;
-}
-
-template <size_t N>
-void ListByteBuffer<N>::reserveContiguous(size_t numBytes) {
-    // Ensure we can fit this many bytes in a single buffer
-    const bool exceedsChunk = numBytes > N;
-    if (exceedsChunk) {
-        std::string err = fmt::format(
-            "ListByteBuffer exceeded: attempted to reserve {} bytes.", numBytes);
-        throw FatalException(std::move(err));
-    }
-
-    // If we have enough space in current buffer, 
-    const bool lastFits = _last->canFit(numBytes);
-
-    if (lastFits) {
-        allocateNextChunk();
-    }
 }
