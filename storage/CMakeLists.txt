@@ -12,6 +12,7 @@ set(storage_sources
         EntityList.cpp
         ListByteBuffer.cpp
         ListBuffer.cpp
+        ListElementViewBuffer.cpp
 
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp

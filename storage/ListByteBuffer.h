@@ -6,8 +6,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include <spdlog/fmt/bundled/format.h>
-
 namespace db {
 
 enum class ListBufferTypeTag : uint8_t;
@@ -15,6 +13,9 @@ enum class ListBufferTypeTag : uint8_t;
 template <size_t N = 4096>
 class ListByteBuffer {
 public:
+    ListByteBuffer();
+    ~ListByteBuffer(); 
+
     /**
      * @brief Ensures that after this call is complete, the current @ref ByteChunk
      * contains at least @param numBytes of contiguous free space at the end of its
@@ -56,7 +57,7 @@ class ListByteBuffer<N>::ByteChunk {
 public:
     friend ListByteBuffer;
 
-    [[nodiscard]] bool canFit(size_t numBytes);
+    [[nodiscard]] bool canFit(size_t numBytes) const ;
 private:
     std::array<std::byte, N> _buf;
     size_t _size {0};
