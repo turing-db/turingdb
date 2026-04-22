@@ -5,10 +5,8 @@
 #include "QueryStatus.h"
 
 namespace db {
-
 class SystemManager;
 class JobSystem;
-
 }
 
 namespace db {

@@ -50,9 +50,9 @@ void S3ConnectProcessor::reset() {
 void S3ConnectProcessor::execute() {
     SystemManager* sysMan = _ctxt->getSystemManager();
 
-    sysMan->setS3Client(std::string(_accessId),
-                        std::string(_secretKey),
-                        std::string(_region));
+    sysMan->createS3Client(std::string(_accessId),
+                           std::string(_secretKey),
+                           std::string(_region));
 
     spdlog::info("Sucesfully Connected To S3 Account!");
     _output.getPort()->writeData();

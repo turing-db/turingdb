@@ -23,7 +23,6 @@ public:
     const fs::Path& getLogsDir() const { return _logsDir; }
     const fs::Path& getLockFilePath() const { return _lockFilePath; }
     const fs::Path& getSocketPath() const { return _socketPath; }
-    const std::function<void()>& getOnStopRequest() const { return _onStopRequest; }
 
     bool isSyncedOnDisk() const { return _syncedOnDisk; }
     bool usingSystemEvents() const { return _systemEvents; }
@@ -32,6 +31,7 @@ public:
     void setSyncedOnDisk(bool syncedOnDisk) { _syncedOnDisk = syncedOnDisk; }
     void useSystemEvents(bool systemEvents) { _systemEvents = systemEvents; }
 
+    const std::function<void()>& getOnStopRequest() const { return _onStopRequest; }
     void setOnStopRequest(const std::function<void()>& onStopRequest) {
         _onStopRequest = onStopRequest;
     }
