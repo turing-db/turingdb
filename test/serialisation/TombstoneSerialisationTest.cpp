@@ -103,8 +103,8 @@ public:
                       QueryCallbacks::OnOutputData onData = [](const Dataframe*) {}) {
         QueryCallbacks callbacks;
         callbacks.setOnOutputData(onData);
-        return _env->getDB().query(q, _workingGraphName, &_env->getMem(), &_queryConfig,
-                                   callbacks, CommitHash::head(), changeID);
+        const QueryState state(_workingGraphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeID);
+        return _env->getDB().query(q, state);
     }
 
 protected:

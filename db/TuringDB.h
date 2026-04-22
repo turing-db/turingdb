@@ -4,10 +4,8 @@
 
 #include "LockFile.h"
 #include "QueryConfig.h"
+#include "QueryState.h"
 #include "QueryStatus.h"
-#include "QueryCallbacks.h"
-#include "versioning/CommitHash.h"
-#include "versioning/ChangeID.h"
 
 namespace vec {
 class VectorDatabase;
@@ -17,7 +15,6 @@ namespace db {
 
 class TuringConfig;
 class SystemManager;
-class LocalMemory;
 class JobSystem;
 class ExtensionManager;
 class ProcedureManager;
@@ -31,13 +28,7 @@ public:
 
     void stop();
 
-    QueryStatus query(std::string_view query,
-                      std::string_view graphName,
-                      LocalMemory* mem,
-                      const QueryConfig* queryConfig,
-                      const QueryCallbacks& callbacks,
-                      CommitHash hash = CommitHash::head(),
-                      ChangeID change = ChangeID::head());
+    QueryStatus query(std::string_view query, const QueryState& state);
 
     const QueryConfig& getDefaultQueryConfig() const { return _defaultQueryConfig; }
 

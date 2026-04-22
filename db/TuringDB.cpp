@@ -145,25 +145,19 @@ void TuringDB::init() {
     }
 }
 
-QueryStatus TuringDB::query(std::string_view query,
-                            std::string_view graphName,
-                            LocalMemory* mem,
-                            const QueryConfig* queryConfig,
-                            const QueryCallbacks& callbacks,
-                            CommitHash hash,
-                            ChangeID change) {
+QueryStatus TuringDB::query(std::string_view query, const QueryState& state) {
     QueryInterpreterV2 interp(_systemManager.get(), _jobSystem.get());
 
     QueryStatus status;
-    InterpreterContext ctxt(mem,
-                            &callbacks,
+    InterpreterContext ctxt(state.getMemory(),
+                            state.getCallbacks(),
                             _procedures.get(),
                             _extensions.get(),
                             _vectorDatabase.get(),
-                            hash,
-                            change);
-    ctxt.setQueryConfig(queryConfig);
-    interp.execute(ctxt, status, query, graphName);
+                            state.getCommitHash(),
+                            state.getChangeID());
+    ctxt.setQueryConfig(state.getQueryConfig());
+    interp.execute(ctxt, status, query, state.getGraphName());
 
     return status;
 }

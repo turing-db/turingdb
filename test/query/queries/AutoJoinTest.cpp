@@ -253,8 +253,8 @@ protected:
     auto query(std::string_view query, auto callback) {
         QueryCallbacks callbacks;
         callbacks.setOnOutputData(callback);
-        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig,
-                              callbacks, CommitHash::head(), ChangeID::head());
+        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &callbacks);
+        auto res = _db->query(query, state);
         if (!res) {
             spdlog::error("Query failed: {}", res.getError());
         }

@@ -33,8 +33,8 @@ protected:
 
     QueryStatus query(std::string_view q) {
         QueryCallbacks callbacks;
-        return _db->query(q, _graphName, &_env->getMem(), &_queryConfig, callbacks,
-                          CommitHash::head(), ChangeID::head());
+        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &callbacks);
+        return _db->query(q, state);
     }
 };
 
@@ -101,9 +101,8 @@ TEST_F(IncorrectQueryTest, validQuerySucceeds) {
 
 TEST_F(IncorrectQueryTest, queryNonExistentGraph) {
     QueryCallbacks callbacks;
-    auto result = _db->query("MATCH (n) RETURN n", "no_such_graph",
-                             &_env->getMem(), &_queryConfig, callbacks,
-                             CommitHash::head(), ChangeID::head());
+    const QueryState state("no_such_graph", &_env->getMem(), &_queryConfig, &callbacks);
+    auto result = _db->query("MATCH (n) RETURN n", state);
 
     EXPECT_FALSE(result);
     EXPECT_EQ(result.getStatus(), QueryStatus::Status::GRAPH_NOT_FOUND);

@@ -644,7 +644,8 @@ void TuringShell::processLine(std::string& line) {
             queryCallback(execCount++, df, table);
         });
 
-        res = _turingDB.query(line, _graphName, _mem, &_turingDB.getDefaultQueryConfig(), callbacks, _hash, _changeID);
+        const QueryState state(_graphName, _mem, &_turingDB.getDefaultQueryConfig(), &callbacks, _hash, _changeID);
+        res = _turingDB.query(line, state);
     }
 
     checkShellContext();

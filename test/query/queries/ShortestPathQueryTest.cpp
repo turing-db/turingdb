@@ -54,8 +54,8 @@ public:
                       ChangeID change = ChangeID::head()) {
         QueryCallbacks callbacks;
         callbacks.setOnOutputData(callback);
-        auto res = _db->query(query, graphName, &_env->getMem(), &_queryConfig,
-                              callbacks, CommitHash::head(), change);
+        const QueryState state(graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), change);
+        auto res = _db->query(query, state);
         if (!res) {
             spdlog::error("Query failed: {}", res.getError());
         }

@@ -70,8 +70,8 @@ public:
                db::ChangeID change = db::ChangeID::head()) {
         db::QueryCallbacks callbacks;
         callbacks.setOnOutputData(callback);
-        return _db->query(q, graphName, &_env->getMem(), &_queryConfig, callbacks,
-                          db::CommitHash::head(), change);
+        const db::QueryState state(graphName, &_env->getMem(), &_queryConfig, &callbacks, db::CommitHash::head(), change);
+        return _db->query(q, state);
     }
 
     void initialize() override {

@@ -638,8 +638,8 @@ public:
                                 ChangeID changeId = ChangeID::head()) {
         QueryCallbacks callbacks;
         callbacks.setOnOutputData(onData);
-        return _db->query(q, graphName, &_env->getMem(), &_queryConfig, callbacks,
-                          CommitHash::head(), changeId);
+        const QueryState state(graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeId);
+        return _db->query(q, state);
     }
 
 protected:

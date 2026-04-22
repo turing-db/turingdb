@@ -175,8 +175,8 @@ int main(int argc, const char** argv) {
                                  ChangeID chg = ChangeID::head()) {
         QueryCallbacks callbacks;
         callbacks.setOnOutputData(cb);
-        const auto res = db.query(q, graphName, &mem, &queryConfig, callbacks,
-                                  CommitHash::head(), chg);
+        const QueryState state(graphName, &mem, &queryConfig, &callbacks, CommitHash::head(), chg);
+        const auto res = db.query(q, state);
         if (!res.isOk()) {
             spdlog::error("Query failed: {}\n  {}", q, res.getError());
             exit(EXIT_FAILURE);

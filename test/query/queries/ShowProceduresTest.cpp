@@ -22,8 +22,8 @@ public:
     auto query(std::string_view q, std::string_view graphName, auto callback) {
         db::QueryCallbacks callbacks;
         callbacks.setOnOutputData(callback);
-        return _db->query(q, graphName, &_env->getMem(), &_queryConfig, callbacks,
-                          CommitHash::head(), ChangeID::head());
+        const db::QueryState state(graphName, &_env->getMem(), &_queryConfig, &callbacks);
+        return _db->query(q, state);
     }
 
     auto query(std::string_view q, std::string_view graphName) {
