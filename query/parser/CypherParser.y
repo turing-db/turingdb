@@ -1030,8 +1030,8 @@ entityTypeExpr
     ;
 
 propertyExpr
-    : atomExpr { $$ = $1; }
-    | qualifiedName DOT name { $1->addName($3); $$ = PropertyExpr::create(ast, $1); LOC($$, @$); }
+    : qualifiedName DOT name { $1->addName($3); $$ = PropertyExpr::create(ast, $1); LOC($$, @$); }
+    //| atomExpr { $$ = $1; }
     ;
 
 atomExpr
@@ -1391,17 +1391,19 @@ listLitItems
     ;
 
 listLitItem
-    : literal { $$ = LiteralExpr::create(ast, $1); LOC($$, @$); }
-    | parameter { scanner.notImplemented(@$, "Parameters"); }
-    | caseExpr { scanner.notImplemented(@$, "CASE"); }
-    | countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
-    | listComprehension { scanner.notImplemented(@$, "List comprehensions"); }
+    : //literal { $$ = LiteralExpr::create(ast, $1); LOC($$, @$); }
+    //| parameter { scanner.notImplemented(@$, "Parameters"); }
+    //| caseExpr { scanner.notImplemented(@$, "CASE"); }
+    //| countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
+    //| listComprehension { scanner.notImplemented(@$, "List comprehensions"); }
     //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
-    | filterWith { scanner.notImplemented(@$, "Filters"); }
-    | parenthesizedExpr { $$ = $1; }
-    | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
-    | symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
-    | subqueryExist { scanner.notImplemented(@$, "EXISTS"); }
+    //| filterWith { scanner.notImplemented(@$, "Filters"); }
+    //| parenthesizedExpr { $$ = $1; }
+    //| functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
+    //| symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
+    //| subqueryExist { scanner.notImplemented(@$, "EXISTS"); }
+     propertyExpr { $$ = $1; LOC($$, @$); }
+    | atomExpr { $$ = $1; LOC($$, @$); }
     ;
 
 mapLit
