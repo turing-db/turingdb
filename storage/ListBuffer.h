@@ -24,6 +24,9 @@ namespace db {
  *
  * @detail Stores list elements (in @ref _elements) alongside a non-owning view for each
  * element (in @ref ListElementViewBuffer).
+ *
+ * @tparam N size {in bytes, in elements} of each chunk of the underlying
+ * {@ref ListByteBuffer, @ref ListElementViewBuffer}.
  */
 template <size_t N = 4096>
 class ListBuffer {
@@ -75,6 +78,7 @@ constexpr std::tuple<types::Int64::Primitive, types::UInt64::Primitive,
 template <typename T>
 concept Listable = TypeConcepts::InTuple<T, decltype(ListableTypes)>;
 
+// Ensure we have a type tag for each listable type
 static_assert(std::tuple_size_v<decltype(ListableTypes)>
               == std::to_underlying(ListBufferTypeTag::INVALID));
 }

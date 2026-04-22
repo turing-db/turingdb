@@ -6,6 +6,7 @@
 
 #include "FatalException.h"
 #include "ListElementView.h"
+
 #include "metadata/PropertyType.h"
 
 using namespace db;
