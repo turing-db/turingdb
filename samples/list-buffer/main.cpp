@@ -52,9 +52,13 @@ int main() {
 
     {
         const std::string name {"Cyrus"};
-        std::string_view view {name};
 
-        ListView list = buf.insert(10UL, 11.1, CustomBool {true}, view);
+        const types::Int64::Primitive a = 10;
+        const types::Double::Primitive b = 11.1;
+        const types::Bool::Primitive c = true;
+        const types::String::Primitive d = name;
+
+        ListView list = buf.insert(a, b, c ,d);
 
         for (const ListElementView e : list) {
             LBEVDispatcher {._tag = e.getTag()}.execute(getT, e);
