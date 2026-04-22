@@ -212,6 +212,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
         if (outDf) {
             callbacks->onOutputHeader(outDf);
         }
+
         executor.execute();
     } catch (const PipelineException& e) {
         status.setStatus(QueryStatus::Status::EXEC_ERROR);
