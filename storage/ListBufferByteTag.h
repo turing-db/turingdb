@@ -4,6 +4,7 @@
 
 namespace db {
 
+/// @brief Tag used in @ref ListByteBuffer to store type information
 enum class ListBufferTypeTag : uint8_t {
     Int = 0,
     UInt,
@@ -14,5 +15,6 @@ enum class ListBufferTypeTag : uint8_t {
 
     INVALID,
 };
+
 
 }
