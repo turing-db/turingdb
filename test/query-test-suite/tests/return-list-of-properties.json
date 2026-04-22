@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN [n.name]",
+  "expect": {
+    "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) RETURN [n.name]\n       |                  ^^^^^^^^\n-------* Not implemented: Non-numeric list elements",
+    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) RETURN [n.name]\n       |                  ^^^^^^^^\n-------* Not implemented: Non-numeric list elements",
+    "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | MATCH (n) RETURN [n.name]\\n       |                  ^^^^^^^^\\n-------* Not implemented: Non-numeric list elements\"}"
+  },
+  "tags": [
+    "lists",
+    "return",
+    "properties",
+  ],
+  "write-required": false
+}
