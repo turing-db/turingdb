@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <type_traits>
 
@@ -10,7 +11,6 @@ namespace db {
 
 class ListElementView {
 public:
-
     ListElementView() = default;
 
     explicit ListElementView(const std::byte* data)
@@ -18,7 +18,14 @@ public:
     {
     }
 
-    ListBufferTypeTag getTag() const;
+    ListBufferTypeTag getTag() const {
+        static_assert(sizeof(ListBufferTypeTag) == 1,
+                      "TypeTag changed size: function may need modifying.");
+
+        const auto tagValue = std::to_integer<uint8_t>(*_tag);
+
+        return ListBufferTypeTag {tagValue};
+    }
 
     template <typename T>
     T getAs() const;
