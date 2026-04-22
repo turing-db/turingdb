@@ -4,7 +4,7 @@
 #include <type_traits>
 
 #include "ListBuffer.h"
-#include "ListBufferByteTag.h"
+#include "ListBufferTypeTag.h"
 #include "ListElementView.h"
 
 #include "metadata/PropertyType.h"

@@ -5,7 +5,7 @@
 #include <cstring>
 #include <type_traits>
 
-#include "ListBufferByteTag.h"
+#include "ListBufferTypeTag.h"
 
 namespace db {
 
