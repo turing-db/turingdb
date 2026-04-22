@@ -6,6 +6,10 @@
 
 namespace db {
 
+
+/**
+ * @brief Non-owning view into a series of contiguously-stored @ref ListElementViews.
+ */
 class ListView {
 public:
     std::span<const ListElementView> elements() const { return _elements; }
@@ -28,5 +32,4 @@ private:
 
     std::span<const ListElementView> _elements;
 };
-
 }
