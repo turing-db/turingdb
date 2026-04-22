@@ -456,3 +456,10 @@ DumpResult<void> SystemManager::loadCommit(std::string_view graphName, CommitHas
     }
     return graph->loadCommit(hash);
 }
+
+void SystemManager::createS3Client(const std::string& accessId,
+                                   const std::string& secretKey,
+                                   const std::string& region) {
+    auto wrapper = S3::MinioS3ClientWrapper(accessId, secretKey, region);
+    _s3Client = std::make_unique<S3::TuringS3Client<S3::MinioS3ClientWrapper>>(std::move(wrapper));
+}

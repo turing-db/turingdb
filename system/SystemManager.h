@@ -36,58 +36,57 @@ public:
 
     static std::unique_ptr<SystemManager> create(const TuringConfig* config);
 
-    const TuringConfig* getConfig() const { return _config; }
-
+    // Initialise system Manager
     void init();
 
-    Graph* loadGraph(const std::string& graphName);
+    // Get TuringConfig
+    const TuringConfig* getConfig() const { return _config; }
 
-    Graph* createGraph(const std::string& graphName);
-
-    void listAvailableGraphs(std::vector<fs::Path>& names);
-
-    void listGraphs(std::vector<std::string_view>& names);
-
+    // Graph access
     Graph* getDefaultGraph() const;
-
     Graph* getGraph(const std::string& graphName) const;
+    size_t getGraphCount() const { return _graphs.size(); }
 
-    size_t getGraphCount() const { return _graphs.size(); };
-
+    // Graph operations
+    Graph* createGraph(const std::string& graphName);
+    void listAvailableGraphs(std::vector<fs::Path>& names);
+    void listGraphs(std::vector<std::string_view>& names);
     void setDefaultGraph(const std::string& name);
 
-    void setGraphsDir(const fs::Path& dir);
+    // Import graph from file
+    bool importGraph(const std::string& graphName,
+                     const fs::Path& filePath,
+                     JobSystem& jobSystem);
+    std::optional<GraphFileType> getGraphFileType(const fs::Path& graphPath);
 
-    /// @brief Load a graph from a file (gml, jsonl)
-    bool importGraph(const std::string& graphName, const fs::Path& filePath, JobSystem& jobSystem);
+    // Loading a graph
+    bool isGraphLoading(const std::string& graphName) const;
+    DumpResult<void> loadCommit(std::string_view graphName, CommitHash hash);
+    Graph* loadGraph(const std::string& graphName);
 
+    // Dump an entire graph
     DumpResult<void> dumpGraph(const std::string& graphName);
 
-    bool isGraphLoading(const std::string& graphName) const;
-
+    // ChangeManager access and operations
     ChangeManager& getChangeManager() { return *_changes; }
     const ChangeManager& getChangeManager() const { return *_changes; }
+    ChangeResult<Change*> newChange(const std::string& graphName,
+                                    CommitHash baseHash = CommitHash::head());
 
-    ChangeResult<Change*> newChange(const std::string& graphName, CommitHash baseHash = CommitHash::head());
-
+    // DataPart merge
     DataPartMergeResult<void> mergeDataParts(Graph* graph, JobSystem& jobSystem);
 
+    // Transaction open
     ChangeResult<Transaction> openTransaction(std::string_view graphName,
                                               CommitHash commitHash,
                                               ChangeID changeID);
 
-    DumpResult<void> loadCommit(std::string_view graphName, CommitHash hash);
+    // S3 Client
+    void createS3Client(const std::string& accessId,
+                        const std::string& secretKey,
+                        const std::string& region);
 
-    void setS3Client(const std::string& accessId, const std::string& secretKey, const std::string& region) {
-        auto wrapper = S3::MinioS3ClientWrapper(accessId, secretKey, region);
-        _s3Client = std::make_unique<S3::TuringS3Client<S3::MinioS3ClientWrapper>>(std::move(wrapper));
-    }
-
-    S3::TuringS3Client<S3::MinioS3ClientWrapper>* getS3Client() {
-        return _s3Client.get();
-    }
-
-    std::optional<GraphFileType> getGraphFileType(const fs::Path& graphPath);
+    S3::TuringS3Client<S3::MinioS3ClientWrapper>* getS3Client() { return _s3Client.get(); }
 
 private:
     mutable RWSpinLock _graphsLock;
