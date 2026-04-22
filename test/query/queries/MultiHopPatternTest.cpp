@@ -52,9 +52,8 @@ protected:
     auto query(std::string_view query, auto callback) {
         QueryCallbacks callbacks;
         callbacks.setOnOutputData(callback);
-        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callbacks,
-                              CommitHash::head(), ChangeID::head());
-        return res;
+        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &callbacks);
+        return _db->query(query, state);
     }
 
     static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {

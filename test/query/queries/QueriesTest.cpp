@@ -55,8 +55,8 @@ protected:
                   ChangeID change = ChangeID::head()) {
         QueryCallbacks callbacks;
         callbacks.setOnOutputData(callback);
-        return _db->query(q, _graphName, &_env->getMem(), &_queryConfig,
-                          callbacks, hash, change);
+        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &callbacks, hash, change);
+        return _db->query(q, state);
     }
 
     static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {

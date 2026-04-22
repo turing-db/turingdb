@@ -566,23 +566,13 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
             changeID = c[0];
         });
 
-        db->query("CHANGE NEW",
-                  spec._graphName,
-                  &env->getMem(),
-                  &queryConfig,
-                  changeNewCallbacks,
-                  CommitHash::head(),
-                  ChangeID::head());
+        const db::QueryState changeNewState(spec._graphName, &env->getMem(), &queryConfig, &changeNewCallbacks);
+        db->query("CHANGE NEW", changeNewState);
     }
 
+    const db::QueryState queryState(spec._graphName, &env->getMem(), &queryConfig, &queryCallbacks, db::CommitHash::head(), changeID);
     const auto queryStart = Clock::now();
-    const db::QueryStatus status = db->query(spec._query,
-                                             spec._graphName,
-                                             &env->getMem(),
-                                             &queryConfig,
-                                             queryCallbacks,
-                                             db::CommitHash::head(),
-                                             changeID);
+    const db::QueryStatus status = db->query(spec._query, queryState);
     const auto queryEnd = Clock::now();
 
     if (!status.isOk() && !jsonErrorEncoded) {
@@ -621,13 +611,8 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
 
     if (spec._writeRequired) {
         db::QueryCallbacks submitCallbacks;
-        db->query("CHANGE SUBMIT",
-                  spec._graphName,
-                  &env->getMem(),
-                  &queryConfig,
-                  submitCallbacks,
-                  db::CommitHash::head(),
-                  changeID);
+        const db::QueryState submitState(spec._graphName, &env->getMem(), &queryConfig, &submitCallbacks, db::CommitHash::head(), changeID);
+        db->query("CHANGE SUBMIT", submitState);
     }
 
     normalizeOutput(result._planOutput, planOut.str());

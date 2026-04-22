@@ -64,9 +64,8 @@ protected:
     auto query(std::string_view query, auto callback, ChangeID change) {
         QueryCallbacks callbacks;
         callbacks.setOnOutputData(callback);
-        auto res = _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callbacks,
-                                CommitHash::head(), change);
-        return res;
+        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), change);
+        return _db->query(query, state);
     }
 
     auto query(std::string_view q, auto callback) {

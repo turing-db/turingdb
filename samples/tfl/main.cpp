@@ -98,8 +98,8 @@ int main(int argc, const char** argv) {
                               ChangeID chg = ChangeID::head()) {
         QueryCallbacks callbacks;
         callbacks.setOnOutputData(cb);
-        return db.query(q, graphName, &mem, &queryConfig, callbacks,
-                        CommitHash::head(), chg);
+        const QueryState state(graphName, &mem, &queryConfig, &callbacks, CommitHash::head(), chg);
+        return db.query(q, state);
     };
 
     const auto status = runQuery(loadQuery,

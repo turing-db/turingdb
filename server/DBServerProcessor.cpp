@@ -1395,5 +1395,6 @@ void DBServerProcessor::queryImpl(std::string_view query,
         encoder.finish();
     });
 
-    _db.query(query, graphName, &mem, &_db.getDefaultQueryConfig(), queryCallbacks, commit, change);
+    const QueryState state(graphName, &mem, &_db.getDefaultQueryConfig(), &queryCallbacks, commit, change);
+    _db.query(query, state);
 }

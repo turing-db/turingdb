@@ -50,8 +50,8 @@ protected:
     auto query(std::string_view query, auto callback) {
         QueryCallbacks callbacks;
         callbacks.setOnOutputData(callback);
-        return _db->query(query, _graphName, &_env->getMem(), &_queryConfig, callbacks,
-                          CommitHash::head(), _currentChange);
+        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), _currentChange);
+        return _db->query(query, state);
     }
 
     void submitCurrentChange() {
