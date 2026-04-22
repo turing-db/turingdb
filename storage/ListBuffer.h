@@ -1,10 +1,14 @@
 #pragma once
 
 #include <stddef.h>
+#include <utility>
 
 #include "ListByteBuffer.h"
-#include "ListElementView.h"
 #include "ListElementViewBuffer.h"
+
+#include "ListBufferByteTag.h"
+
+#include "ListElementView.h"
 #include "ListView.h"
 
 #include "metadata/PropertyType.h"
@@ -70,6 +74,7 @@ constexpr std::tuple<types::Int64::Primitive, types::UInt64::Primitive,
 
 template <typename T>
 concept Listable = TypeConcepts::InTuple<T, decltype(ListableTypes)>;
+
+static_assert(std::tuple_size_v<decltype(ListableTypes)>
+              == std::to_underlying(ListBufferTypeTag::INVALID));
 }
-
-
