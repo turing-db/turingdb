@@ -597,7 +597,7 @@ opt_limitSSt
     ;
 
 projectionItems
-    : MULT { $$ = Projection::create(ast); $$->setReturnAll(); LOC($$, @$); }
+    : MULT { $$ = Projection::create(ast); $$->setReturnAll(); LOC($$, @$); } // wildcard
     | projectionItem { $$ = Projection::create(ast); $$->addExpr($1); LOC($$, @$); }
     | projectionItems COMMA projectionItem { $$ = $1; $$->addExpr($3); LOC($$, @$); }
     ;
@@ -1010,6 +1010,7 @@ unaryAddSubExpr
 
 atomicExpr
     : propertyOrLabelExpr { $$ = $1; }
+    | atomExpr { $$ = $1; }
     | atomicExpr OBRACK expr CBRACK {
         $$ = IndexExpr::create(ast, $1, $3); LOC($$, @$);
       }
@@ -1391,18 +1392,7 @@ listLitItems
     ;
 
 listLitItem
-    : //literal { $$ = LiteralExpr::create(ast, $1); LOC($$, @$); }
-    //| parameter { scanner.notImplemented(@$, "Parameters"); }
-    //| caseExpr { scanner.notImplemented(@$, "CASE"); }
-    //| countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
-    //| listComprehension { scanner.notImplemented(@$, "List comprehensions"); }
-    //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
-    //| filterWith { scanner.notImplemented(@$, "Filters"); }
-    //| parenthesizedExpr { $$ = $1; }
-    //| functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
-    //| symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
-    //| subqueryExist { scanner.notImplemented(@$, "EXISTS"); }
-     propertyExpr { $$ = $1; LOC($$, @$); }
+    : propertyExpr { $$ = $1; LOC($$, @$); }
     | atomExpr { $$ = $1; LOC($$, @$); }
     ;
 
