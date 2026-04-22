@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <limits>
 
 #include <stddef.h>
@@ -24,6 +25,8 @@ public:
 
     void write(ListElementView view);
 
+    const ListElementView* nextPtr() const { return &_last->_buf[_last->_size]; }
+
 private:
     class Chunk;
 
@@ -45,6 +48,7 @@ public:
     friend ListElementViewBuffer;
 
     [[nodiscard]] bool canFit(size_t numViews) const;
+
 private:
     std::array<ListElementView, N> _buf;
     size_t _size {0};

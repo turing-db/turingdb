@@ -13,8 +13,6 @@
 
 namespace db {
 
-enum class ListBufferTypeTag : uint8_t;
-
 template <size_t N = 4096>
 class ListByteBuffer {
 public:
@@ -57,7 +55,8 @@ class ListByteBuffer<N>::ByteChunk {
 public:
     friend ListByteBuffer;
 
-    [[nodiscard]] bool canFit(size_t numBytes) const ;
+    [[nodiscard]] bool canFit(size_t numBytes) const;
+
 private:
     std::array<std::byte, N> _buf;
     size_t _size {0};
@@ -74,8 +73,23 @@ struct TypeToListBufferTag<types::Int64::Primitive> {
 };
 
 template <>
+struct TypeToListBufferTag<types::UInt64::Primitive> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::UInt;
+};
+
+template <>
 struct TypeToListBufferTag<types::Double::Primitive> {
     static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Double;
+};
+
+template <>
+struct TypeToListBufferTag<types::Bool::Primitive> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Bool;
+};
+
+template <>
+struct TypeToListBufferTag<types::String::Primitive> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::String;
 };
 
 }

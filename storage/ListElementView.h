@@ -10,19 +10,26 @@ namespace db {
 
 class ListElementView {
 public:
-    ListBufferTypeTag getTag();
+
+    ListElementView() = default;
+
+    explicit ListElementView(const std::byte* data)
+        : _tag(data)
+    {
+    }
+
+    ListBufferTypeTag getTag() const;
 
     template <typename T>
-    T getAs();
+    T getAs() const;
 
 private:
     /// Pointer to the tag of this element in a ListByteBuffer
-    std::byte* _tag {};
+    const std::byte* _tag {};
 };
 
-
 template <typename T>
-T ListElementView::getAs() {
+T ListElementView::getAs() const {
     static_assert(std::is_trivially_copyable_v<T>);
     static_assert(sizeof(ListBufferTypeTag) == 1,
                   "Tag size changed: function may need modifying.");
