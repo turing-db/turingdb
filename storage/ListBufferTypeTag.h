@@ -47,4 +47,9 @@ struct TypeToListBufferTag<types::String::Primitive> {
     static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::String;
 };
 
+template <>
+struct TypeToListBufferTag<types::Embedding::Primitive> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Embedding;
+};
+
 }
