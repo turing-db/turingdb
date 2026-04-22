@@ -5,6 +5,8 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "FatalException.h"
+#include "ListElementView.h"
+#include "metadata/PropertyType.h"
 
 using namespace db;
 
@@ -57,13 +59,14 @@ void ListByteBuffer<N>::reserveContiguous(size_t numBytes) {
 
 template <size_t N>
 template <typename T>
-void ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
+ListElementView ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
     static_assert(std::is_trivially_copyable_v<T>);
 
     std::array<std::byte, N>& buf = _last->_buf;
     const size_t startingIndex = _last->_size;
 
-    const std::byte* startPtr = &buf[startingIndex];
+    std::byte* const startPtr = &buf[startingIndex];
+
     std::byte* writePtr = startPtr;
     static_assert(_tagSize == 1);
 
@@ -82,9 +85,15 @@ void ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
 
         _last->_size += valSize;
     }
+
+    return ListElementView {startPtr};
 }
 
 namespace db {
 template class ListByteBuffer<>;
-template void ListByteBuffer<>::write(ListBufferTypeTag, const int&);
+template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Int64::Primitive&);
+template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::UInt64::Primitive&);
+template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Double::Primitive&);
+template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Bool::Primitive&);
+template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::String::Primitive&);
 }

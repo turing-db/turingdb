@@ -3,7 +3,9 @@
 #include <stddef.h>
 
 #include "ListByteBuffer.h"
+#include "ListElementView.h"
 #include "ListElementViewBuffer.h"
+#include "ListView.h"
 
 #include "metadata/PropertyType.h"
 
@@ -15,7 +17,7 @@ template <size_t N = 4096>
 class ListBuffer {
 public:
     template <typename... Elements>
-    void insert(const Elements&... elements);
+    ListView insert(const Elements&... elements);
 
 private:
     ListByteBuffer<N> _buf;
@@ -24,14 +26,18 @@ private:
 
 template <size_t N>
 template <typename... Elements>
-void ListBuffer<N>::insert(const Elements&... elements) {
+ListView ListBuffer<N>::insert(const Elements&... elements) {
     constexpr size_t numBytes = (... + (ListByteBuffer<N>::tagSize() + sizeof(Elements)));
     constexpr size_t numElements = sizeof...(elements);
 
     _buf.reserveContiguous(numBytes);
     _views.reserveContiguous(numElements);
 
-    (_views.write(_buf.write(tagFor<Elements>(), elements)), ...);
+    const ListElementView* listStart = _views.nextPtr();
+
+    (_views.write(_buf.write(TypeToListBufferTag<Elements>::Tag, elements)), ...);
+
+    return ListView {listStart, numElements};
 }
 
 namespace {
