@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
     }
 
     PlanGenConfig planGenConfig;
-    PlanGraphGenerator planGen(ast, view, &planGenConfig);
+    PlanGraphGenerator planGen(&planGenConfig, ast, view);
     PlanGraph& planGraph = planGen.getPlanGraph();
     {
         fmt::print("\n=== Query plan generation ===\n\n");
@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
 
         try {
             auto t0 = Clock::now();
-            PlanOptimizer planOpt(&planGraph, view, &mem, &ast);
+            PlanOptimizer planOpt(&mem, &planGraph, view, &ast);
             planOpt.optimize();
             auto t1 = Clock::now();
             fmt::print("Query plan optimised in {} us\n", duration<Microseconds>(t0, t1));
@@ -151,13 +151,13 @@ int main(int argc, char** argv) {
             fmt::print("\n=== Pipeline generation ===\n\n");
 
             const QueryCallbacks callbacks;
-            PipelineGenerator pipelineGen(&planGraph,
-                                          view,
-                                          &pipeline,
-                                          &mem,
+            PipelineGenerator pipelineGen(&mem,
                                           sysMan.get(),
                                           procedures.get(),
-                                          &callbacks);
+                                          &callbacks,
+                                          &planGraph,
+                                          view,
+                                          &pipeline);
             try {
                 auto t0 = Clock::now();
                 pipelineGen.generate();

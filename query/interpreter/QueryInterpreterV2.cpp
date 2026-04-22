@@ -133,7 +133,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
 
     // Generate plan graph
     const QueryConfig* queryConfig = ctxt.getQueryConfig();
-    PlanGraphGenerator planGen(ast, view, &queryConfig->getPlanGenConfig());
+    PlanGraphGenerator planGen(&queryConfig->getPlanGenConfig(), ast, view);
     try {
         planGen.generate(ast.queries().front());
     } catch (const CompilerException& e) {
@@ -153,7 +153,8 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     PlanGraph& planGraph = planGen.getPlanGraph();
 
     // Optimize plan graph
-    PlanOptimizer planOpt(&planGraph, view, ctxt.getLocalMemory(), &ast);
+    LocalMemory* mem = ctxt.getLocalMemory();
+    PlanOptimizer planOpt(mem, &planGraph, view, &ast);
     try {
         planOpt.optimize();
     } catch (const CompilerException& e) {
@@ -171,15 +172,14 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     }
 
     // Generate pipeline
-    LocalMemory* mem = ctxt.getLocalMemory();
     PipelineV2 pipeline;
-    PipelineGenerator pipelineGen(&planGraph,
-                                  view,
-                                  &pipeline,
-                                  mem,
+    PipelineGenerator pipelineGen(mem,
                                   _sysMan,
                                   ctxt.getProcedures(),
-                                  ctxt.getQueryCallbacks());
+                                  ctxt.getQueryCallbacks(),
+                                  &planGraph,
+                                  view,
+                                  &pipeline);
     try {
         pipelineGen.generate();
     } catch (const CompilerException& e) {

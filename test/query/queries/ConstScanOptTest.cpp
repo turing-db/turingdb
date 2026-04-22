@@ -75,13 +75,13 @@ private:
         db::CypherAnalyzer analyzer(&*_ast, view);
         analyzer.analyze();
 
-        _planGen.emplace(*_ast, view, &_queryConfig->getPlanGenConfig());
+        _planGen.emplace(&_queryConfig->getPlanGenConfig(), *_ast, view);
         _planGen->generate(_ast->queries().front());
 
         db::PlanGraph& plan = _planGen->getPlanGraph();
 
         db::LocalMemory mem;
-        db::PlanOptimizer opt(&plan, view, &mem, &*_ast);
+        db::PlanOptimizer opt(&mem, &plan, view, &*_ast);
         opt.optimize();
 
         db::QueryCallbacks callbacks;
@@ -90,8 +90,8 @@ private:
         });
 
         db::PipelineV2 pipeline;
-        db::PipelineGenerator pipelineGen(&plan, view, &pipeline, &mem,
-                                          _sysMan, _procedures.get(), &callbacks);
+        db::PipelineGenerator pipelineGen(&mem, _sysMan, _procedures.get(), &callbacks,
+                                          &plan, view, &pipeline);
         pipelineGen.generate();
 
         db::ExecutionContext execCtxt(_sysMan, view);

@@ -94,7 +94,7 @@ static int fuzzOne(const char* data, size_t size) {
     }
 
     // Plan
-    db::PlanGraphGenerator planGen(ast, view, &queryConfig.getPlanGenConfig());
+    db::PlanGraphGenerator planGen(&queryConfig.getPlanGenConfig(), ast, view);
     try {
         planGen.generate(ast.queries().front());
     } catch (const db::CompilerException&) {
@@ -105,7 +105,7 @@ static int fuzzOne(const char* data, size_t size) {
 
     // Optimize
     db::LocalMemory mem;
-    db::PlanOptimizer planOpt(&planGraph, view, &mem, &ast);
+    db::PlanOptimizer planOpt(&mem, &planGraph, view, &ast);
     try {
         planOpt.optimize();
     } catch (const db::CompilerException&) {
@@ -115,13 +115,13 @@ static int fuzzOne(const char* data, size_t size) {
     // Generate pipeline
     db::PipelineV2 pipeline;
     db::QueryCallbacks callbacks;
-    db::PipelineGenerator pipelineGen(&planGraph,
-                                      view,
-                                      &pipeline,
-                                      &mem,
+    db::PipelineGenerator pipelineGen(&mem,
                                       &sysMan,
                                       procedures,
-                                      &callbacks);
+                                      &callbacks,
+                                      &planGraph,
+                                      view,
+                                      &pipeline);
     try {
         pipelineGen.generate();
     } catch (const db::CompilerException&) {

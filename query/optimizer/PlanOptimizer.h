@@ -15,7 +15,7 @@ class ColumnVector;
 
 class PlanOptimizer {
 public:
-    explicit PlanOptimizer(PlanGraph* plan, GraphView view, LocalMemory* mem, CypherAST* ast);
+    explicit PlanOptimizer(LocalMemory* mem, PlanGraph* plan, GraphView view, CypherAST* ast);
     ~PlanOptimizer();
 
     void optimize();

@@ -99,7 +99,7 @@ void runPlan2(std::string_view query) {
     }
 
     PlanGenConfig planGenConfig;
-    PlanGraphGenerator planGen(ast, view, &planGenConfig);
+    PlanGraphGenerator planGen(&planGenConfig, ast, view);
     try {
         const auto t0 = Clock::now();
         planGen.generate(ast.queries().front());

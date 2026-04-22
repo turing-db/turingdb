@@ -272,7 +272,7 @@ void generatePlanGraph(std::string_view query,
     db::CypherAST ast(procedures.get(), query);
     db::CypherParser parser(&ast);
     db::CypherAnalyzer analyzer(&ast, view);
-    db::PlanGraphGenerator planGen(ast, view, planGenConfig);
+    db::PlanGraphGenerator planGen(planGenConfig, ast, view);
 
     try {
         parser.parse(query);
@@ -301,7 +301,7 @@ void generatePlanGraph(std::string_view query,
     db::PlanGraph& planGraph = planGen.getPlanGraph();
 
     db::LocalMemory mem;
-    db::PlanOptimizer planOpt(&planGraph, view, &mem, &ast);
+    db::PlanOptimizer planOpt(&mem, &planGraph, view, &ast);
     planOpt.optimize();
 
     db::PlanGraphDebug::dumpMermaidContent(out, view, planGraph);

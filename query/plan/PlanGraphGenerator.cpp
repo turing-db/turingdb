@@ -96,9 +96,9 @@
 
 using namespace db;
 
-PlanGraphGenerator::PlanGraphGenerator(const CypherAST& ast,
-                                       const GraphView& view,
-                                       const PlanGenConfig* config)
+PlanGraphGenerator::PlanGraphGenerator(const PlanGenConfig* config,
+                                       const CypherAST& ast,
+                                       const GraphView& view)
     : _ast(&ast),
     _view(view),
     _config(config),

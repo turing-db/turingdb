@@ -45,9 +45,9 @@
 
 using namespace db;
 
-PlanOptimizer::PlanOptimizer(PlanGraph* plan,
+PlanOptimizer::PlanOptimizer(LocalMemory* mem,
+                             PlanGraph* plan,
                              GraphView view,
-                             LocalMemory* mem,
                              CypherAST* ast)
     : _plan(plan),
       _view(view),

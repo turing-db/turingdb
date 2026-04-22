@@ -42,9 +42,9 @@ class MergeDataPartsQuery;
 
 class PlanGraphGenerator {
 public:
-    PlanGraphGenerator(const CypherAST& ast,
-                       const GraphView& view,
-                       const PlanGenConfig* config);
+    PlanGraphGenerator(const PlanGenConfig* config,
+                       const CypherAST& ast,
+                       const GraphView& view);
     ~PlanGraphGenerator();
 
     PlanGraph& getPlanGraph() { return _tree; }

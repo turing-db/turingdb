@@ -70,13 +70,13 @@ class MergeDataPartsNode;
 
 class PipelineGenerator {
 public:
-    PipelineGenerator(const PlanGraph* graph,
-                      const GraphView& view,
-                      PipelineV2* pipeline,
-                      LocalMemory* mem,
+    PipelineGenerator(LocalMemory* mem,
                       const SystemManager* sysMan,
                       const ProcedureManager* procedures,
-                      const QueryCallbacks* callbacks)
+                      const QueryCallbacks* callbacks,
+                      const PlanGraph* graph,
+                      const GraphView& view,
+                      PipelineV2* pipeline)
         : _graph(graph),
         _procedures(procedures),
         _view(view),
