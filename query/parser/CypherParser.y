@@ -1032,7 +1032,6 @@ entityTypeExpr
 
 propertyExpr
     : qualifiedName DOT name { $1->addName($3); $$ = PropertyExpr::create(ast, $1); LOC($$, @$); }
-    //| atomExpr { $$ = $1; }
     ;
 
 atomExpr
