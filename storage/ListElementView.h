@@ -22,7 +22,14 @@ public:
     }
 
     /// Returns the type tag of the viewed element.
-    ListBufferTypeTag getTag() const;
+    ListBufferTypeTag getTag() const {
+        static_assert(sizeof(ListBufferTypeTag) == 1,
+                      "TypeTag changed size: function may need modifying.");
+
+        const auto tagValue = std::to_integer<uint8_t>(*_tag);
+
+        return ListBufferTypeTag {tagValue};
+    }
 
     /**
      * @brief Attempts to read the viewed element as a @param T.
@@ -57,14 +64,5 @@ T ListElementView::getAs() const {
 
     return out;
 }
-
-ListBufferTypeTag ListElementView::getTag() const {
-        static_assert(sizeof(ListBufferTypeTag) == 1,
-                      "TypeTag changed size: function may need modifying.");
-
-        const auto tagValue = std::to_integer<uint8_t>(*_tag);
-
-        return ListBufferTypeTag {tagValue};
-    }
 
 }
