@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "ListBufferByteTag.h"
+#include "ListBufferTypeTag.h"
 #include "ListElementView.h"
 
 namespace db {
