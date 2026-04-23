@@ -14,7 +14,6 @@ enum class JoinType : uint8_t {
 
 class JoinNode : public PlanGraphNode {
 public:
-    JoinNode() = delete;
     JoinNode(const VarDecl* joinKeyVar1,
              const VarDecl* joinKeyVar2,
              JoinType type)
