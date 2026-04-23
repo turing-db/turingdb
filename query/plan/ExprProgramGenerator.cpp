@@ -253,6 +253,7 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
     }
 
     const VarDecl* exprVarDecl = propExpr->getExprVarDecl();
+    bioassert(exprVarDecl, "Null property variable");
 
     // Search exprVarDecl in column map
     const auto foundIt = _gen->varColMap().find(exprVarDecl);
@@ -311,10 +312,14 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
                 AddItem::dispatch(itemConst, listBuilder);
             }
 
-            [[maybe_unused]] auto* value = _gen->memory().alloc<ColumnConst<Type>>();
+            LocalMemory::DefaultListBuffer& buf = _gen->memory().listBuffer();
 
-            throw PlannerException("List literals are not supported.");
-            return nullptr;
+            const ListView view = buf.insert(items);
+
+            auto* value = _gen->memory().alloc<ColumnConst<Type>>();
+            value->set(view);
+
+            return value;
         }
         break;
 
