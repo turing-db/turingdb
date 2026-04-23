@@ -18,6 +18,8 @@
 #include "metadata/PropertyNull.h"
 #include "ID.h"
 #include "versioning/ChangeID.h"
+
+#include "ListBuffer.h"
 #include "ListView.h"
 
 namespace db {
@@ -27,6 +29,8 @@ class Change;
 
 class LocalMemory {
 public:
+    using DefaultListBuffer = ListBuffer<>;
+
     template <typename T>
     struct MakeMemoryPool {
         using type = TypeValueMapPair<T, MemoryPool<T>>;
@@ -121,9 +125,12 @@ public:
         _pools.transform<ClearTransform>();
     }
 
+    DefaultListBuffer& listBuffer() { return _listBuffer; }
+
 private:
     MemoryPools _pools;
     ColumnAllocatorMap _columnAllocators;
+    DefaultListBuffer _listBuffer;
 };
 
 }

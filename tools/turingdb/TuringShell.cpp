@@ -570,6 +570,7 @@ void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table
                 TABULATE_COL_CASE(ColumnConst<types::Double::Primitive>, i)
                 TABULATE_COL_CASE(ColumnConst<types::String::Primitive>, i)
                 TABULATE_COL_CASE(ColumnConst<types::Bool::Primitive>, i)
+                TABULATE_COL_CASE(ColumnConst<types::Embedding::Primitive>, i)
                 TABULATE_COL_CASE(ColumnConst<PropertyNull>, i)
 
                 default: {

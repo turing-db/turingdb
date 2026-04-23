@@ -36,8 +36,9 @@ struct LBEVDispatcher {
 };
 
 int main() {
-    ListBuffer buf;
+    [[maybe_unused]] ListBuffer buf;
 
+    /*
     const auto getT = [&]<typename T>(const ListElementView view) {
         const T value = view.getAs<T>();
 
@@ -64,4 +65,5 @@ int main() {
             LBEVDispatcher {._tag = e.getTag()}.execute(getT, e);
         }
     }
+    */
 }

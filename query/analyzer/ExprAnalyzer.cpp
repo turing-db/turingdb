@@ -759,27 +759,8 @@ void ExprAnalyzer::registerEdgePatternDeclaration(const EdgePattern* edge) {
 }
 
 void ExprAnalyzer::analyzeListExpr(ListExpr* expr) {
-    const auto isLiteral = [](Expr* expr) -> bool {
-        return expr->getKind() == Expr::Kind::LITERAL;
-    };
-
-    const auto isNumeric = [](LiteralExpr* lit) -> bool {
-        const Literal::Kind integralKind = Literal::Kind::INTEGER;
-        const Literal::Kind decimalKind = Literal::Kind::DOUBLE;
-        const Literal::Kind thisKind = lit->getLiteral()->getKind();
-
-        return (thisKind == integralKind) or (thisKind == decimalKind);
-    };
-
-    const auto isNumericLiteral = [&isLiteral, &isNumeric](Expr* expr) -> bool {
-        return isLiteral(expr) && isNumeric(static_cast<LiteralExpr*>(expr));
-    };
-
-    const ListExpr::Elements& elements = expr->getElements();
-    const bool isEmbeddingLiteral = std::ranges::all_of(elements, isNumericLiteral);
-
-    if (!isEmbeddingLiteral) {
-        throwError("Non-numeric lists are not supported.", expr);
+    for (Expr* item : *expr) {
+        analyzeExpr(item);
     }
 }
 

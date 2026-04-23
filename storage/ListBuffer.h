@@ -8,7 +8,6 @@
 
 #include "ListBufferTypeTag.h"
 
-#include "ListElementView.h"
 #include "ListView.h"
 
 #include "metadata/PropertyType.h"
@@ -45,8 +44,10 @@ public:
      * @brief Given the provided @param elements, stores those elements in contiguous,
      * stable memory, and returns a stable @ref ListView into each stored element.
      */
-    template <typename... Elements>
-    ListView insert(const Elements&... elements);
+    // template <typename... Elements>
+    // ListView insert(const Elements&... elements);
+
+    ListView insert(std::span<const ListItemVariant> elements);
 
 private:
     /// Container of raw bytes for each element
@@ -55,6 +56,7 @@ private:
     ListElementViewBuffer<N> _views;
 };
 
+/*
 template <size_t N>
 template <typename... Elements>
 ListView ListBuffer<N>::insert(const Elements&... elements) {
@@ -78,6 +80,7 @@ ListView ListBuffer<N>::insert(const Elements&... elements) {
     // Return a span-like @ref ListView over the views for each element we just wrote
     return ListView {listStart, numElements};
 }
+*/
 
 template <typename T>
 concept Listable = TypeConcepts::InTuple<T, ListableTypesImpl>;

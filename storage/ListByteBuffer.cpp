@@ -87,4 +87,5 @@ template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types:
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Double::Primitive&);
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Bool::Primitive&);
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::String::Primitive&);
+template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Embedding::Primitive&);
 }
