@@ -46,7 +46,7 @@ std::pair<ColumnTag, ColumnTag> TranslateJoinHelpers::getJoinKeyTags(const JoinN
             // Both the first and second join keys are the same in this case
             const VarDecl* joinKey = node->getFirstJoinKey();
             auto leftJoinIt = declMap.find(joinKey);
-            bioassert(leftJoinIt != declMap.end(), "Common Ancestor Join Key Not Found");
+            bioassert(leftJoinIt != declMap.end(), "Common ancestor join key not found.");
             leftJoinTag = leftJoinIt->second;
 
             {
@@ -57,7 +57,7 @@ std::pair<ColumnTag, ColumnTag> TranslateJoinHelpers::getJoinKeyTags(const JoinN
             }
 
             auto rightJoinIt = declMap.find(joinKey);
-            bioassert(rightJoinIt != declMap.end(), "Common Ancestor Join Key Not Found");
+            bioassert(rightJoinIt != declMap.end(), "Common ancestor join key not found.");
             rightJoinTag = rightJoinIt->second;
 
             {

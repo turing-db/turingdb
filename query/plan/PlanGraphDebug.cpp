@@ -8,6 +8,7 @@
 #include "nodes/GetEntityTypeNode.h"
 #include "nodes/GetPropertyNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
+#include "nodes/JoinNode.h"
 #include "nodes/LoadJsonlNode.h"
 #include "nodes/OrderByNode.h"
 #include "nodes/ProcedureEvalNode.h"
@@ -505,6 +506,18 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                     } break;
                 }
             } break;
+
+            case PlanGraphOpcode::JOIN: {
+                const auto* n = dynamic_cast<JoinNode*>(node.get());
+                bioassert(n, "Null join node.");
+
+                const std::string_view key1 = n->getFirstJoinKey()->getName();
+                const std::string_view key2 = n->getSecondJoinKey()->getName();
+
+                output << "        __key1__: " << key1<< '\n';
+                output << "        __key2__: " << key2 << '\n';
+            }
+            break;
 
             default: {
             } break;

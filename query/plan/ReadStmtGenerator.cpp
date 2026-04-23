@@ -583,7 +583,8 @@ void ReadStmtGenerator::placeJoinsOnVars() {
             }
             case PlanGraphTopology::PathToDependency::BackwardPath: {
                 // Should not happen
-                throwError("Unknown error. Cannot join if the lhs and rhs are on the same islands");
+                throwError(
+                    "Unknown error. Cannot join if both keys are on the same branch.");
             }
             case PlanGraphTopology::PathToDependency::NoPath: {
                 return _tree->create<JoinNode>(node->getVarDecl(),
