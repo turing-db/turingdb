@@ -1,7 +1,9 @@
 #include "ExprProgramGenerator.h"
 
 #include <spdlog/fmt/fmt.h>
+#include <utility>
 
+#include "ListView.h"
 #include "PipelineGenerator.h"
 #include "columns/AllowedKinds.h"
 #include "columns/BinaryOperators.h"
@@ -274,6 +276,15 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
         GEN_LITERAL_CASE(DOUBLE, Double, DoubleLiteral)
         GEN_LITERAL_CASE(EMBEDDING, Embedding, EmbeddingLiteral)
 
+        case Literal::Kind::LIST: {
+            using Type = ListView;
+            [[maybe_unused]] auto* value = _gen->memory().alloc<ColumnConst<Type>>();
+            throw PlannerException("List literals are not supported.");
+
+            return nullptr;
+        }
+        break;
+
         case Literal::Kind::NULL_LITERAL: {
             auto* value = _gen->memory().alloc<ColumnConst<PropertyNull>>();
             return value;
@@ -283,7 +294,7 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
         default:
             throw PlannerException(
                 fmt::format("ExprProgramGenerator: unsupported literal of type {}",
-                (size_t)literal->getKind()));
+                            std::to_underlying(literal->getKind())));
         break;
     }
 }

@@ -11,6 +11,7 @@
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
 #include "GraphPath.h"
+#include "ListView.h"
 
 namespace db {
 
@@ -71,6 +72,7 @@ public:
         types::Bool::Primitive,
         types::String::Primitive,
         types::Embedding::Primitive,
+        ListView,
         std::optional<EntityID>,
         std::optional<NodeID>,
         std::optional<EdgeID>,

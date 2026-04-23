@@ -18,6 +18,7 @@
 #include "metadata/PropertyNull.h"
 #include "ID.h"
 #include "versioning/ChangeID.h"
+#include "ListView.h"
 
 namespace db {
 
@@ -61,6 +62,7 @@ public:
         MakeMemoryPool<ColumnConst<types::String::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::Bool::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::Embedding::Primitive>>::type,
+        MakeMemoryPool<ColumnConst<ListView>>::type,
 
         MakeMemoryPool<ColumnConst<std::optional<types::Int64::Primitive>>>::type,
         MakeMemoryPool<ColumnConst<std::optional<types::Int64::Primitive>>>::type,
