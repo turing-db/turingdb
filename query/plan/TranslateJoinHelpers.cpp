@@ -1,12 +1,14 @@
 #include "TranslateJoinHelpers.h"
 
-#include "BioAssert.h"
 #include "PlannerException.h"
 #include "dataframe/Dataframe.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "nodes/JoinNode.h"
 
 #include "Overloaded.h"
+
+#include "BioAssert.h"
+#include "FatalException.h"
 
 using namespace db;
 
@@ -52,8 +54,10 @@ std::pair<ColumnTag, ColumnTag> TranslateJoinHelpers::getJoinKeyTags(const JoinN
             {
                 const Dataframe* lhsDf = lhs->getDataframe();
                 const bool hasColumn = lhsDf->hasColumn(leftJoinTag);
-                bioassert(hasColumn, "Join input did not have tag {}.",
-                          leftJoinTag.getValue());
+                if (!hasColumn) {
+                    throw FatalException(fmt::format("Join input did not have tag {}.",
+                                                     leftJoinTag.getValue()));
+                }
             }
 
             auto rightJoinIt = declMap.find(joinKey);
@@ -63,8 +67,10 @@ std::pair<ColumnTag, ColumnTag> TranslateJoinHelpers::getJoinKeyTags(const JoinN
             {
                 const Dataframe* rhsDf = rhs->getDataframe();
                 const bool hasColumn = rhsDf->hasColumn(rightJoinTag);
-                bioassert(hasColumn, "Join input did not have tag {}.",
-                          rightJoinTag.getValue());
+                if (!hasColumn) {
+                    throw FatalException(fmt::format("Join input did not have tag {}.",
+                                                     leftJoinTag.getValue()));
+                }
             }
         }
         break;
