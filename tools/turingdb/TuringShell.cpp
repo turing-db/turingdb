@@ -33,6 +33,7 @@
 #include "GraphPath.h"
 
 #include "metadata/PropertyNull.h"
+#include "metadata/PropertyType.h"
 #include "versioning/ChangeResult.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
@@ -396,116 +397,113 @@ std::string TuringShell::composePrompt() {
              : fmt::format("{}:{}@{:x}(detached {:x})> ", basePrompt, _graphName, _changeID.get(), _hash.get());
 }
 
-template <typename T>
-void tabulateWrite(tabulate::RowStream& rs, const T& value) {
-    // @_ref HistoryStep uses double escaped new line (\\n) so that it is valid JSON
-    // if the `/query -d "history"` endpoint is hit. When writing to CLI we replace double
-    // escaped with single escape so that it is rendered in terminal correctly.
-    if constexpr (std::same_as<T, std::string>) {
-        const std::regex re(R"(\\n)");
-        rs << std::regex_replace(value, re, "\n");
-        return;
-    }
-    rs << value;
-}
-
-template <typename T>
-void tabulateWrite(tabulate::RowStream& rs, const std::optional<T>& value) {
-    if (value) {
-        rs << *value;
-    } else {
-        rs << "null";
-    }
-}
-
-void tabulateWrite(tabulate::RowStream& rs, const db::Path& path) {
+void asString(std::string& out, const db::Path& path) {
     if (path.empty()) {
-        rs << "";
         return;
     }
 
-    std::string result;
     const auto reversed = path | std::views::reverse;
     size_t i = 0;
     for (auto val : reversed) {
         if (i % 2 == 0) {
             // NodeID
-            result += fmt::format("({})", val);
+            out += fmt::format("({})", val);
         } else {
             // EdgeID
-            result += fmt::format("-[{}]->", val);
+            out += fmt::format("-[{}]->", val);
         }
         ++i;
     }
-    rs << result;
 }
 
-void tabulateWrite(tabulate::RowStream& rs, const db::EntityList& list) {
+void asString(std::string& out, const db::EntityList& list) {
     if (list.empty()) {
-        rs << "";
         return;
     }
 
-    std::string result;
     const auto& entries = list.getEntries();
 
     size_t i = 0;
     for (const auto& [type, val] : entries) {
         if (i++ != 0) {
-            result += ", ";
+            out += ", ";
         }
 
         if (type == EntityType::Node) {
-            result += fmt::format("({})", val);
+            out += fmt::format("({})", val);
         } else {
-            result += fmt::format("[{}]", val);
+            out += fmt::format("[{}]", val);
         }
     }
-    rs << result;
 }
 
-void tabulateWrite(tabulate::RowStream& rs, db::ValueType v) {
-    rs << ValueTypeName::value(v);
+void asString(std::string& out, db::ValueType v) {
+    out += ValueTypeName::value(v);
 }
 
-void tabulateWrite(tabulate::RowStream& rs, ChangeID changeID) {
-    rs << fmt::format("{:x}", changeID.get());
+void asString(std::string& out, ChangeID changeID) {
+    out += fmt::format("{:x}", changeID.get());
 }
 
-void tabulateWrite(tabulate::RowStream& rs, const CommitBuilder* commit) {
-    rs << fmt::format("{:x}", commit->hash().get());
+void asString(std::string& out, const CommitBuilder* commit) {
+    out += fmt::format("{:x}", commit->hash().get());
 }
 
-void tabulateWrite(tabulate::RowStream& rs, const Change* change) {
-    rs << fmt::format("{:x}", change->id().get());
+void asString(std::string& out, const Change* change) {
+    out += fmt::format("{:x}", change->id().get());
 }
 
-void tabulateWrite(tabulate::RowStream& rs, const PropertyNull) {
-    rs << "null";
+void asString(std::string& out, const PropertyNull) {
+    out += "null";
 }
 
-void tabulateWrite(tabulate::RowStream& rs, const std::span<const float>& embedding) {
-    std::string result = "[";
+void asString(std::string& out, std::span<const float> embedding) {
+    out += "[";
 
     if (embedding.size() > 0) {
-        result += fmt::format("{}", embedding[0]);
+        out += fmt::format("{}", embedding[0]);
 
         for (size_t i = 1; i < embedding.size(); ++i) {
-            result += ", ";
-            result += fmt::format("{}", embedding[i]);
+            out += ", ";
+            out += fmt::format("{}", embedding[i]);
         }
     }
 
-    result += "]";
-    rs << result;
+    out += "]";
 }
 
-void tabulateWrite(tabulate::RowStream& rs, const std::optional<std::span<const float>>& embedding) {
-    if (embedding) {
-        tabulateWrite(rs, *embedding);
-    } else {
-        rs << "null";
+template <typename T>
+void asString(std::string& out, const T& value) {
+    // @_ref HistoryStep uses double escaped new line (\\n) so that it is valid JSON
+    // if the `/query -d "history"` endpoint is hit. When writing to CLI we replace double
+    // escaped with single escape so that it is rendered in terminal correctly.
+    if constexpr (std::same_as<T, std::string>) {
+        const std::regex re(R"(\\n)");
+        out += std::regex_replace(value, re, "\n");
+        return;
     }
+
+    if constexpr (std::same_as<T, CustomBool>) {
+        out += fmt::format("{}", value._boolean);
+    } else {
+        out += fmt::format("{}", value);
+    }
+}
+
+template <typename T>
+void asString(std::string& out, const std::optional<T>& value) {
+    if (value) {
+        asString(out, *value);
+    } else {
+        out += "null";
+    }
+}
+
+template <typename T>
+void tabulateWrite(tabulate::RowStream& rs, const T& value) {
+    std::string out;
+    asString(out, value);
+    rs << out;
 }
 
 #define TABULATE_COL_CASE(Type, i)                        \
