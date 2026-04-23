@@ -47,15 +47,28 @@ std::pair<ColumnTag, ColumnTag> TranslateJoinHelpers::getJoinKeyTags(const JoinN
             const VarDecl* joinKey = node->getFirstJoinKey();
             auto leftJoinIt = declMap.find(joinKey);
             bioassert(leftJoinIt != declMap.end(), "Common Ancestor Join Key Not Found");
+            leftJoinTag = leftJoinIt->second;
+
+            {
+                const Dataframe* lhsDf = lhs->getDataframe();
+                const bool hasColumn = lhsDf->hasColumn(leftJoinTag);
+                bioassert(hasColumn, "Join input did not have tag {}.",
+                          leftJoinTag.getValue());
+            }
 
             auto rightJoinIt = declMap.find(joinKey);
             bioassert(rightJoinIt != declMap.end(), "Common Ancestor Join Key Not Found");
-
-            leftJoinTag = leftJoinIt->second;
             rightJoinTag = rightJoinIt->second;
 
-            break;
+            {
+                const Dataframe* rhsDf = rhs->getDataframe();
+                const bool hasColumn = rhsDf->hasColumn(rightJoinTag);
+                bioassert(hasColumn, "Join input did not have tag {}.",
+                          rightJoinTag.getValue());
+            }
         }
+        break;
+
         // In the common sucessor case the streams going into the join node will have
         // the unamed VarDecl's that correspond to the join keys
         case JoinType::COMMON_SUCCESSOR: {
