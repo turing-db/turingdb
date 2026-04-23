@@ -12,6 +12,8 @@ namespace db {
  */
 class ListView {
 public:
+    ListView() = default;
+
     std::span<const ListElementView> elements() const { return _elements; }
 
     auto begin() { return std::begin(_elements); }
@@ -25,7 +27,7 @@ private:
     template <size_t N>
     friend class ListBuffer;
 
-    explicit ListView(const ListElementView* data, size_t size)
+    ListView(const ListElementView* data, size_t size)
         : _elements({data, size})
     {
     }

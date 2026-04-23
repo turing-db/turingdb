@@ -15,6 +15,13 @@
 
 #include "TypeUtils.h"
 
+namespace {
+using ListableTypesImpl =
+    std::tuple<db::types::Int64::Primitive, db::types::UInt64::Primitive,
+               db::types::Double::Primitive, db::types::String::Primitive,
+               db::types::Bool::Primitive, db::types::Embedding::Primitive>;
+}
+
 namespace db {
 
 /**
@@ -31,6 +38,9 @@ namespace db {
 template <size_t N = 4096>
 class ListBuffer {
 public:
+    using ListableTypes = ListableTypesImpl;
+    using ListItemVariant = TypeUtils::tuple_to_variant_t<ListableTypes>;
+
     /**
      * @brief Given the provided @param elements, stores those elements in contiguous,
      * stable memory, and returns a stable @ref ListView into each stored element.
@@ -69,16 +79,10 @@ ListView ListBuffer<N>::insert(const Elements&... elements) {
     return ListView {listStart, numElements};
 }
 
-namespace {
-constexpr std::tuple<types::Int64::Primitive, types::UInt64::Primitive,
-                     types::Double::Primitive, types::String::Primitive,
-                     types::Bool::Primitive, types::Embedding::Primitive> ListableTypes;
-}
-
 template <typename T>
-concept Listable = TypeConcepts::InTuple<T, decltype(ListableTypes)>;
+concept Listable = TypeConcepts::InTuple<T, ListableTypesImpl>;
 
 // Ensure we have a type tag for each listable type
-static_assert(std::tuple_size_v<decltype(ListableTypes)>
+static_assert(std::tuple_size_v<ListableTypesImpl>
               == std::to_underlying(ListBufferTypeTag::INVALID));
 }

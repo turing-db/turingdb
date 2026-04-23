@@ -39,12 +39,27 @@
 #include "dataframe/NamedColumn.h"
 #include "columns/ColumnOperator.h"
 
+#include "ListBuffer.h"
+
 #include "LocalMemory.h"
 
 #include "PlannerException.h"
 #include "FatalException.h"
 
 using namespace db;
+
+namespace {
+
+struct AddLiteralToList {
+    std::vector<ListBuffer<>::ListItemVariant>& _items;
+
+    template <typename T>
+    void operator()(const ColumnConst<T>* litCol) {
+        _items.emplace_back(litCol->getRaw());
+    }
+};
+
+}
 
 ColumnOperator ExprProgramGenerator::unaryOperatorToColumnOperator(UnaryOperator op) {
     switch (op) {
@@ -278,9 +293,27 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
 
         case Literal::Kind::LIST: {
             using Type = ListView;
-            [[maybe_unused]] auto* value = _gen->memory().alloc<ColumnConst<Type>>();
-            throw PlannerException("List literals are not supported.");
+            using Types = ListableTypes;
+            using AddItem = ColumnSingleDispatcher<Types::Allowed,
+                                                   AddLiteralToList,
+                                                   Types::LiteralExcluded>;
 
+            const Literal* lit = literalExpr->getLiteral();
+            const ListLiteral* list = static_cast<const ListLiteral*>(lit);
+
+            std::vector<ListBuffer<>::ListItemVariant> items;
+            items.reserve(list->size());
+
+            AddLiteralToList listBuilder {._items = items};
+
+            for (const Expr* item : list->items()) {
+                const Column* itemConst = generateExpr(item);
+                AddItem::dispatch(itemConst, listBuilder);
+            }
+
+            [[maybe_unused]] auto* value = _gen->memory().alloc<ColumnConst<Type>>();
+
+            throw PlannerException("List literals are not supported.");
             return nullptr;
         }
         break;
