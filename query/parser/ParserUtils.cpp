@@ -13,10 +13,10 @@
 
 using namespace db;
 
-void ParserUtils::listExprToFloatVector(const ListExpr* list, std::vector<float>& out) {
+void ParserUtils::listExprToFloatVector(const ListLiteral* list, std::vector<float>& out) {
     out.clear();
     out.reserve(list->size());
-    for (Expr* elem : *list) {
+    for (Expr* elem : list->items()) {
         const auto* litExpr = static_cast<const LiteralExpr*>(elem);
         const Literal* lit = litExpr->getLiteral();
         if (lit->getKind() == Literal::Kind::DOUBLE) {
@@ -35,12 +35,12 @@ void ParserUtils::listExprToFloatVector(const ListExpr* list, std::vector<float>
     }
 }
 
-EmbeddingLiteral* ParserUtils::listExprToEmbeddingLiteral(CypherAST* ast, const ListExpr* list) {
+EmbeddingLiteral* ParserUtils::listExprToEmbeddingLiteral(CypherAST* ast, const ListLiteral* list) {
     if (list->empty()) {
         throw ParserException("Empty embedding literals are not supported");
     }
 
-    for (Expr* elem : *list) {
+    for (Expr* elem : list->items()) {
         if (elem->getKind() != Expr::Kind::LITERAL) {
             throw ParserException("Non-literal list elements are not supported");
         }

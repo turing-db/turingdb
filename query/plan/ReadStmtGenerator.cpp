@@ -190,9 +190,9 @@ void ReadStmtGenerator::generateLoadCSVStmt(const LoadCSVStmt* stmt) {
 void ReadStmtGenerator::generateVectorSearchStmt(const VectorSearchStmt* stmt) {
     // Extract float values from ListExpr
     std::vector<float> queryVector;
-    const ListExpr* listExpr = stmt->getQueryVector();
+    const ListLiteral* listExpr = stmt->getQueryVector();
 
-    for (Expr* elem : listExpr->getElements()) {
+    for (Expr* elem : listExpr->items()) {
         if (elem->getKind() != Expr::Kind::LITERAL) {
             throwError("VECTOR SEARCH query vector elements must be literals", stmt);
         }

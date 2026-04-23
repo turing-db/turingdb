@@ -479,13 +479,13 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
     }
 
     // Validate vector has elements
-    const ListExpr* queryVector = stmt->getQueryVector();
+    const ListLiteral* queryVector = stmt->getQueryVector();
     if (!queryVector || queryVector->empty()) {
         throwError("VECTOR SEARCH query vector cannot be empty", stmt);
     }
 
     // Analyze each element in the query vector
-    for (Expr* elem : queryVector->getElements()) {
+    for (Expr* elem : queryVector->items()) {
         _exprAnalyzer->analyzeRootExpr(elem);
 
         const EvaluatedType elemType = elem->getType();

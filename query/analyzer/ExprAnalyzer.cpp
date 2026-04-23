@@ -355,6 +355,9 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
         case Literal::Kind::CHAR: {
             expr->setType(EvaluatedType::Char);
         } break;
+        case Literal::Kind::LIST: {
+            expr->setType(EvaluatedType::List);
+        } break;
         case Literal::Kind::MAP: {
             expr->setType(EvaluatedType::Map);
         } break;

@@ -8,7 +8,7 @@
 namespace db {
 
 class CypherAST;
-class ListExpr;
+class ListLiteral;
 class YieldClause;
 
 class VectorSearchStmt : public Stmt {
@@ -19,18 +19,18 @@ public:
 
     void setIndexName(std::string_view name) { _indexName = name; }
     void setK(uint64_t k) { _k = k; }
-    void setQueryVector(ListExpr* vec) { _queryVector = vec; }
+    void setQueryVector(ListLiteral* vec) { _queryVector = vec; }
     void setYield(YieldClause* yield) { _yield = yield; }
 
     std::string_view getIndexName() const { return _indexName; }
     uint64_t getK() const { return _k; }
-    ListExpr* getQueryVector() const { return _queryVector; }
+    ListLiteral* getQueryVector() const { return _queryVector; }
     YieldClause* getYield() const { return _yield; }
 
 private:
     std::string_view _indexName;
     uint64_t _k {10};
-    ListExpr* _queryVector {nullptr};
+    ListLiteral* _queryVector {nullptr};
     YieldClause* _yield {nullptr};
 
     VectorSearchStmt();
