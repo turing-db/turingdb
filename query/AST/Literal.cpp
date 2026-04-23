@@ -158,6 +158,23 @@ CharLiteral* CharLiteral::create(CypherAST* ast, char value) {
     return literal;
 }
 
+ListLiteral::ListLiteral()
+{
+}
+
+ListLiteral::~ListLiteral() {
+}
+
+ListLiteral* ListLiteral::create(CypherAST* ast) {
+    ListLiteral* literal = new ListLiteral();
+    ast->addLiteral(literal);
+    return literal;
+}
+
+void ListLiteral::addItem(Expr* item) {
+    _items.push_back(item);
+}
+
 MapLiteral::MapLiteral()
 {
 }

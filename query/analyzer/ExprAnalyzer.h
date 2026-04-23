@@ -30,6 +30,7 @@ class IndexExpr;
 class Symbol;
 class NodePattern;
 class EdgePattern;
+class ListExpr;
 
 class ExprAnalyzer {
 public:
@@ -50,6 +51,7 @@ public:
     void analyzeUnaryExpr(UnaryExpr* expr);
     void analyzeSymbolExpr(SymbolExpr* expr);
     void analyzeLiteralExpr(LiteralExpr* expr);
+    void analyzeListExpr(ListExpr* expr);
     void analyzeStringExpr(StringExpr* expr);
     void analyzeEntityTypeExpr(EntityTypeExpr* expr);
     void analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver);

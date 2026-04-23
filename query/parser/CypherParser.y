@@ -329,8 +329,8 @@
 %type<db::ShowVectorIndexesQuery*> showVectorIndexesQuery
 %type<db::VectorSearchStmt*> vectorSearchSt
 %type<vec::DistanceMetric> distanceMetric
-%type<db::ListExpr*> listLit
-%type<db::ListExpr*> listLitItems
+%type<db::ListLiteral*> listLit
+%type<db::ListLiteral*> listLitItems
 %type<db::Expr*> listLitItem
 %type<db::QueryCommand*> singleQuery
 %type<db::QueryCommand*> query
@@ -1358,7 +1358,7 @@ literal
         try {
             $$ = ParserUtils::listExprToEmbeddingLiteral(ast, $1);
         } catch (const ParserException&) {
-            scanner.notImplemented(@$, "Non-numeric list elements");
+            $$ = $1;
         }
     }
     | mapLit { $$ = $1; }
@@ -1380,13 +1380,13 @@ stringLit
 
 // List literal: build ListExpr directly
 listLit
-    : OBRACK CBRACK { $$ = ListExpr::create(ast); LOC($$, @$); }
+    : OBRACK CBRACK { $$ = ListLiteral::create(ast); LOC($$, @$); }
     | OBRACK listLitItems CBRACK { $$ = $2; LOC($$, @$); }
     ;
 
 // Build ListExpr recursively using addItem()
 listLitItems
-    : listLitItem { $$ = ListExpr::create(ast); $$->addItem($1); }
+    : listLitItem { $$ = ListLiteral::create(ast); $$->addItem($1); }
     | listLitItems COMMA listLitItem { $$ = $1; $$->addItem($3); }
     ;
 

@@ -21,6 +21,7 @@ class IntegerLiteral;
 class DoubleLiteral;
 class StringLiteral;
 class CharLiteral;
+class ListLiteral;
 class MapLiteral;
 class WildcardLiteral;
 class EmbeddingLiteral;
@@ -111,6 +112,7 @@ public:
     friend DoubleLiteral;
     friend StringLiteral;
     friend CharLiteral;
+    friend ListLiteral;
     friend MapLiteral;
     friend WildcardLiteral;
     friend EmbeddingLiteral;

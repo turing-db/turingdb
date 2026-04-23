@@ -28,6 +28,7 @@ public:
         DOUBLE,
         STRING,
         CHAR,
+        LIST,
         MAP,
         EMBEDDING,
         WILDCARD,
@@ -155,6 +156,27 @@ private:
     }
 
     ~CharLiteral() override = default;
+};
+
+class ListLiteral final : public Literal {
+public:
+    using Items = std::vector<Expr*>;
+
+    static ListLiteral* create(CypherAST* ast);
+
+    constexpr Kind getKind() const final { return Kind::LIST; }
+    constexpr EvaluatedType getType() const final { return EvaluatedType::List; }
+
+    void addItem(Expr* item);
+
+    bool empty() const { return _items.empty(); }
+    size_t size() const { return _items.size(); }
+
+private:
+    ListLiteral();
+    ~ListLiteral() final;
+
+    Items _items;
 };
 
 class MapLiteral : public Literal {

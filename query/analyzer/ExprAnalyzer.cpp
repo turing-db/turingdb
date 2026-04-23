@@ -1,5 +1,7 @@
 #include "ExprAnalyzer.h"
 
+#include <algorithm>
+
 #include "DiagnosticsManager.h"
 #include "AnalyzeException.h"
 #include "CypherAST.h"
@@ -19,6 +21,8 @@
 #include "StringBucket.h"
 
 #include "expr/All.h"
+#include "expr/ListExpr.h"
+#include "expr/LiteralExpr.h"
 
 using namespace db;
 
@@ -44,39 +48,38 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
     switch (expr->getKind()) {
         case Expr::Kind::BINARY:
             analyzeBinaryExpr(static_cast<BinaryExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::UNARY:
             analyzeUnaryExpr(static_cast<UnaryExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::STRING:
             analyzeStringExpr(static_cast<StringExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::ENTITY_TYPES:
             analyzeEntityTypeExpr(static_cast<EntityTypeExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::PROPERTY:
             analyzePropertyExpr(static_cast<PropertyExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::PATH:
             analyzePathExpr(static_cast<PathExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::SYMBOL:
             analyzeSymbolExpr(static_cast<SymbolExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::LITERAL:
             analyzeLiteralExpr(static_cast<LiteralExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::FUNCTION_INVOCATION:
             analyzeFuncInvocExpr(static_cast<FunctionInvocationExpr*>(expr),
                                 _ast->getFunctionDecls());
-            break;
+        break;
         case Expr::Kind::INDEX:
             analyzeIndexExpr(static_cast<IndexExpr*>(expr));
-            break;
+        break;
         case Expr::Kind::LIST:
-            // List expressions are handled specially in vector search context
-            // For now, just mark them as having no specific type
-            break;
+            analyzeListExpr(static_cast<ListExpr*>(expr));
+        break;
 
         case Expr::Kind::_SIZE:
             throwError("Unknown expression type in ExprAnalyzer.");
@@ -750,6 +753,31 @@ void ExprAnalyzer::registerEdgePatternDeclaration(const EdgePattern* edge) {
     }
 
     _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, edgeName);
+}
+
+void ExprAnalyzer::analyzeListExpr(ListExpr* expr) {
+    const auto isLiteral = [](Expr* expr) -> bool {
+        return expr->getKind() == Expr::Kind::LITERAL;
+    };
+
+    const auto isNumeric = [](LiteralExpr* lit) -> bool {
+        const Literal::Kind integralKind = Literal::Kind::INTEGER;
+        const Literal::Kind decimalKind = Literal::Kind::DOUBLE;
+        const Literal::Kind thisKind = lit->getLiteral()->getKind();
+
+        return (thisKind == integralKind) or (thisKind == decimalKind);
+    };
+
+    const auto isNumericLiteral = [&isLiteral, &isNumeric](Expr* expr) -> bool {
+        return isLiteral(expr) && isNumeric(static_cast<LiteralExpr*>(expr));
+    };
+
+    const ListExpr::Elements& elements = expr->getElements();
+    const bool isEmbeddingLiteral = std::ranges::all_of(elements, isNumericLiteral);
+
+    if (!isEmbeddingLiteral) {
+        throwError("Non-numeric lists are not supported.", expr);
+    }
 }
 
 void ExprAnalyzer::throwError(std::string_view msg, const void* obj) const {
