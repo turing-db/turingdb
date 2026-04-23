@@ -164,6 +164,8 @@ public:
 
     static ListLiteral* create(CypherAST* ast);
 
+    const Items& items() const { return _items; }
+
     constexpr Kind getKind() const final { return Kind::LIST; }
     constexpr EvaluatedType getType() const final { return EvaluatedType::List; }
 

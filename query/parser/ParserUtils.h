@@ -6,17 +6,17 @@ namespace db {
 
 class CypherAST;
 class EmbeddingLiteral;
-class ListExpr;
+class ListLiteral;
 
 class ParserUtils {
 public:
     ParserUtils() = delete;
     ~ParserUtils() = delete;
 
-    static EmbeddingLiteral* listExprToEmbeddingLiteral(CypherAST* ast, const ListExpr* list);
+    static EmbeddingLiteral* listExprToEmbeddingLiteral(CypherAST* ast, const ListLiteral* list);
 
 private:
-    static void listExprToFloatVector(const ListExpr* list, std::vector<float>& out);
+    static void listExprToFloatVector(const ListLiteral* list, std::vector<float>& out);
 };
 
 }
