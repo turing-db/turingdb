@@ -6,6 +6,7 @@
 #include "columns/AllowedKinds.h"
 #include "columns/BinaryOperators.h"
 #include "columns/BinaryPredicates.h"
+#include "columns/Column.h"
 #include "columns/ColumnCombinations.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/Functions.h"
@@ -271,14 +272,7 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
         GEN_LITERAL_CASE(INTEGER, Int64, IntegerLiteral)
         GEN_LITERAL_CASE(STRING, String, StringLiteral)
         GEN_LITERAL_CASE(DOUBLE, Double, DoubleLiteral)
-
-        case Literal::Kind::EMBEDDING: {
-            auto* value = _gen->memory().alloc<ColumnConst<types::Embedding::Primitive>>();
-            const auto* embLit = static_cast<const EmbeddingLiteral*>(literal);
-            value->set(embLit->getValue());
-            return value;
-        }
-        break;
+        GEN_LITERAL_CASE(EMBEDDING, Embedding, EmbeddingLiteral)
 
         case Literal::Kind::NULL_LITERAL: {
             auto* value = _gen->memory().alloc<ColumnConst<PropertyNull>>();
@@ -299,12 +293,6 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
     const EvaluatedType type = symbolExpr->getType();
     symbolExpr->getSymbol();
 
-    // TODO check, this probably breaks stuff
-    //if (type != EvaluatedType::NodePattern && type != EvaluatedType::EdgePattern) {
-    //    throw PlannerException(
-    //        "Attempted to generate SymbolExpr which was neither Node nor EdgePattern.");
-    //}
-
     // Search exprVarDecl in column map. It may not be present, in the case that this
     // variable is only manifested by a VarNode *after* this filter (see
     // `MATCH (n), (m) WHERE n <> m RETURN n, m` as an example). In this case, the
@@ -321,6 +309,9 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
     }
 
     const bool isNode = type == EvaluatedType::NodePattern;
+    const bool isEdge = type == EvaluatedType::EdgePattern;
+    bioassert(isNode || isEdge, "Unknown symbol type.");
+
     // Otherwise, var is not in the map, look in the current stream
     const auto& incomingStream = _pendingOut.getInterface()->getStream();
     const bool incStreamContainsVar = (isNode && incomingStream.isNodeStream())

@@ -3,9 +3,9 @@
   "graph": "simpledb",
   "query": "MATCH (n) RETURN [n.name]",
   "expect": {
-    "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) RETURN [n.name]\n       |                  ^^^^^^^^\n-------* Not implemented: Non-numeric list elements",
-    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) RETURN [n.name]\n       |                  ^^^^^^^^\n-------* Not implemented: Non-numeric list elements",
-    "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | MATCH (n) RETURN [n.name]\\n       |                  ^^^^^^^^\\n-------* Not implemented: Non-numeric list elements\"}"
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v0\n    `\"]\n    4[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4",
+    "result": "PLAN ERROR\nExprProgramGenerator: unsupported literal of type 6",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"ExprProgramGenerator: unsupported literal of type 6\"}"
   },
   "tags": [
     "lists",
