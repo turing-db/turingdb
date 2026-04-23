@@ -19,6 +19,9 @@ public:
     auto begin() { return std::begin(_elements); }
     auto end() { return std::end(_elements); }
 
+    auto begin() const { return std::begin(_elements); }
+    auto end() const { return std::end(_elements); }
+
     bool empty() const { return _elements.empty(); }
 
     size_t size() const { return _elements.size(); }

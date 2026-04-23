@@ -16,6 +16,7 @@
 #include <tabulate/table.hpp>
 #include <termcolor/termcolor.hpp>
 
+#include "JsonEncoder.h"
 #include "TuringDB.h"
 #include "Graph.h"
 #include "SystemManager.h"
@@ -34,6 +35,9 @@
 
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
+#include "ListBufferTypeTag.h"
+#include "ListElementView.h"
+
 #include "versioning/ChangeResult.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
@@ -571,6 +575,7 @@ void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table
                 TABULATE_COL_CASE(ColumnConst<types::String::Primitive>, i)
                 TABULATE_COL_CASE(ColumnConst<types::Bool::Primitive>, i)
                 TABULATE_COL_CASE(ColumnConst<types::Embedding::Primitive>, i)
+                TABULATE_COL_CASE(ColumnConst<ListView>, i)
                 TABULATE_COL_CASE(ColumnConst<PropertyNull>, i)
 
                 default: {
