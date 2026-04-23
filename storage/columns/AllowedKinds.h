@@ -4,6 +4,7 @@
 #include <optional>
 #include <type_traits>
 
+#include "ListBuffer.h"
 #include "ID.h"
 #include "versioning/ChangeID.h"
 #include "ColumnOperator.h"
@@ -513,6 +514,18 @@ struct IndexedTypes {
     >>;
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnConst>(),
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
+/// Types that are allowed in lists
+struct ListableTypes {
+    using Allowed = GenerateKindList<ListBuffer<>::ListableTypes>;
+
+    /// For constructing list literals: all elements should be const
+    using LiteralExcluded = ExcludedContainers<
+        ContainerKind::code<ColumnVector>(),
         ContainerKind::code<ColumnSet>(),
         ContainerKind::code<ColumnMask>()
     >;

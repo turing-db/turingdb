@@ -4,6 +4,7 @@
 #include <optional>
 #include <string_view>
 #include <type_traits>
+#include <variant>
 
 #include "columns/ColumnMask.h"
 #include "columns/KindTypes.h"
@@ -69,6 +70,18 @@ struct TypeUtils {
             return std::forward<T>(t);
         }
     }
+
+    /// Helpers to create a variant out of a tuple
+    template <typename Tuple>
+    struct tuple_to_variant;
+
+    template <typename... Ts>
+    struct tuple_to_variant<std::tuple<Ts...>> {
+        using type = std::variant<Ts...>;
+    };
+
+    template <typename Tuple>
+    using tuple_to_variant_t = typename tuple_to_variant<Tuple>::type;
 };
 
 namespace TypeConcepts {
