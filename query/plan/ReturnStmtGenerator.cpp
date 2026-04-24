@@ -10,11 +10,13 @@
 #include "CypherAST.h"
 #include "ExprDependencies.h"
 #include "FunctionInvocation.h"
+#include "Literal.h"
 #include "PlanGraph.h"
 #include "Projection.h"
 
 #include "QualifiedName.h"
 #include "Symbol.h"
+#include "decl/EvaluatedType.h"
 #include "decl/VarDecl.h"
 #include "expr/BinaryExpr.h"
 #include "expr/Expr.h"
@@ -247,8 +249,23 @@ void ReturnStmtGenerator::expandExpr(Expr* expr) {
         }
         break;
 
-        case Expr::Kind::LITERAL:
+        case Expr::Kind::LITERAL: {
             // Literals are added for eval in guarded call to @ref needsEvaluation
+            // But lists need expanding for each of their elements
+            const auto* lit = static_cast<const LiteralExpr*>(expr);
+            const EvaluatedType type = lit->getType();
+            const bool isList = type == EvaluatedType::List;
+            if (!isList) {
+                break;
+            }
+
+            const Literal* literal = lit->getLiteral();
+            const auto* list = static_cast<const ListLiteral*>(literal);
+
+            for (Expr* item : list->items()) {
+                expandExpr(item);
+            }
+        }
         break;
 
         case Expr::Kind::INDEX:
