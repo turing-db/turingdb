@@ -31,6 +31,44 @@ TMPDIR_INSTALL="$(mktemp -d)"
 cleanup() { rm -rf "$TMPDIR_INSTALL"; }
 trap cleanup EXIT
 
+ensure_pip() {
+    if "$PYTHON" -m pip --version >/dev/null 2>&1; then
+        return 0
+    fi
+    log "pip not found — bootstrapping"
+
+    if "$PYTHON" -m ensurepip --user --upgrade >/dev/null 2>&1; then
+        if "$PYTHON" -m pip --version >/dev/null 2>&1; then
+            log "pip bootstrapped via ensurepip"
+            return 0
+        fi
+    fi
+
+    local get_pip="$TMPDIR_INSTALL/get-pip.py"
+    log "ensurepip unavailable — downloading get-pip.py"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL https://bootstrap.pypa.io/get-pip.py -o "$get_pip" || return 1
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q https://bootstrap.pypa.io/get-pip.py -O "$get_pip" || return 1
+    else
+        err "Neither curl nor wget available to download get-pip.py"
+        return 1
+    fi
+
+    if "$PYTHON" "$get_pip" --user >/dev/null 2>&1; then
+        if "$PYTHON" -m pip --version >/dev/null 2>&1; then
+            log "pip bootstrapped via get-pip.py"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+if ! ensure_pip; then
+    err "Could not find or install pip. Install pip manually (e.g. 'apt install python3-pip') and retry."
+    exit 1
+fi
+
 is_writable() {
     local dir="$1"
     if [ -d "$dir" ]; then
