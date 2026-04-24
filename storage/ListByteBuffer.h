@@ -54,8 +54,8 @@ private:
     ByteChunk* _first {nullptr};
     ByteChunk* _last {nullptr};
 
-    /// Allocates a new chunk, updating @ref _last
-    ByteChunk* allocateNextChunk();
+    /// Allocates a new chunk, updating @ref _last, with @param capacity bytes
+    ByteChunk* allocateNextChunk(size_t capacity);
 
     static constexpr size_t _tagSize = sizeof(ListBufferTypeTag);
 
@@ -74,13 +74,30 @@ class ListByteBuffer<N>::ByteChunk {
 public:
     friend ListByteBuffer;
 
+    ByteChunk()
+        : _buf(new std::byte[N]),
+        _capacity(N)
+    {
+    }
+
+    explicit ByteChunk(size_t numBytes)
+        : _buf(new std::byte[numBytes]),
+        _capacity(numBytes)
+    {
+    }
+
+    ~ByteChunk() {
+        delete[] _buf;
+    }
+
     /// Returns true if @ref _buf has at least @param numBytes remaining capacity
     [[nodiscard]] bool canFit(size_t numBytes) const;
 
 private:
-    std::array<std::byte, N> _buf;
+    std::byte* _buf;
     /// The number of elements of @ref _buf that have been written to
     size_t _size {0};
+    size_t _capacity {0};
     ByteChunk* _next {nullptr};
 };
 
