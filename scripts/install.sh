@@ -52,10 +52,10 @@ install_ok=0
 
 if is_writable "$USER_SITE"; then
     log "User site is writable — installing via 'pip install --user turingdb'"
-    if "$PYTHON" -m pip install --user --upgrade turingdb; then
+    if "$PYTHON" -m pip install --user --upgrade turingdb >/dev/null 2>&1; then
         install_ok=1
     else
-        err "pip install failed — will try manual wheel install"
+        log "pip install failed — will try manual wheel install"
     fi
 else
     log "User site is not writable — will try manual wheel install"
@@ -120,15 +120,16 @@ fi
 if [ -d "$HOME/.claude" ]; then
     log "Detected $HOME/.claude — installing TuringDB Claude skill"
     if command -v npx >/dev/null 2>&1; then
-        # --yes avoids the npx package-install confirmation; `yes |` answers any
-        # downstream prompts from the skills CLI with "y".
-        if yes | npx --yes --quiet skills add https://github.com/turing-db/turingdb-skills >/dev/null 2>&1; then
+        # --yes skips the npx package-install confirmation. Stdin is redirected
+        # from /dev/null so the skills CLI detects a non-interactive shell and
+        # accepts defaults instead of blocking on a TTY prompt we can't answer.
+        if npx --yes skills add https://github.com/turing-db/turingdb-skills </dev/null; then
             log "TuringDB skill installed."
         else
-            err "Failed to install TuringDB skill (continuing)."
+            log "Failed to install TuringDB skill (continuing)."
         fi
     else
-        err "npx not found in PATH — skipping skill install."
+        log "npx not found in PATH — skipping skill install."
     fi
 fi
 
