@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <limits>
 
 #include <stddef.h>
@@ -52,8 +51,8 @@ private:
     Chunk* _first {nullptr};
     Chunk* _last {nullptr};
 
-    /// Allocates a new chunk, updating @ref _last
-    Chunk* allocateNextChunk();
+    /// Allocates a new chunk, updating @ref _last, with @param capacity views
+    Chunk* allocateNextChunk(size_t capacity);
 
     static constexpr size_t _viewSize = sizeof(ListElementView);
 
@@ -73,13 +72,30 @@ class ListElementViewBuffer<N>::Chunk {
 public:
     friend ListElementViewBuffer;
 
+    Chunk()
+        : _buf(new ListElementView[N]),
+        _capacity(N)
+    {
+    }
+
+    explicit Chunk(size_t numViews)
+        : _buf(new ListElementView[numViews]),
+        _capacity(numViews)
+    {
+    }
+
+    ~Chunk() {
+        delete[] _buf;
+    }
+
     /// Returns true if @ref _buf has at least @param numViews remaining capacity
     [[nodiscard]] bool canFit(size_t numViews) const;
 
 private:
-    std::array<ListElementView, N> _buf;
+    ListElementView* _buf;
     /// The number of elements of @ref _buf that have been written to
     size_t _size {0};
+    size_t _capacity {0};
     Chunk* _next {nullptr};
 };
 }

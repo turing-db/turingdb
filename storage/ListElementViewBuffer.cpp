@@ -1,8 +1,6 @@
 #include "ListElementViewBuffer.h"
 
-#include <spdlog/fmt/bundled/format.h>
-
-#include "FatalException.h"
+#include <algorithm>
 
 using namespace db;
 
@@ -25,12 +23,12 @@ ListElementViewBuffer<N>::~ListElementViewBuffer() {
 
 template <size_t N>
 [[nodiscard]] bool ListElementViewBuffer<N>::Chunk::canFit(size_t numViews) const {
-    return N -_size >= numViews;
+    return _capacity - _size >= numViews;
 }
 
 template <size_t N>
-ListElementViewBuffer<N>::Chunk* ListElementViewBuffer<N>::allocateNextChunk() {
-    auto* newChunk = new Chunk;
+ListElementViewBuffer<N>::Chunk* ListElementViewBuffer<N>::allocateNextChunk(size_t capacity) {
+    auto* newChunk = new Chunk(capacity);
     _last->_next = newChunk;
     _last = newChunk;
     return newChunk;
@@ -38,17 +36,14 @@ ListElementViewBuffer<N>::Chunk* ListElementViewBuffer<N>::allocateNextChunk() {
 
 template <size_t N>
 void ListElementViewBuffer<N>::reserveContiguous(size_t numViews) {
-    const bool exceedsChunk = numViews > N;
-    if (exceedsChunk) {
-        throw FatalException(fmt::format(
-            "ListElementViewBuffer exceeded: attempted to reserve {} views.", numViews));
-    }
-
+    // If we have enough space in current buffer, no need to allocate another
     const bool lastFits = _last->canFit(numViews);
-
-    if (!lastFits) {
-        allocateNextChunk();
+    if (lastFits) {
+        return;
     }
+
+    const size_t newCapacity = std::max(numViews, N);
+    allocateNextChunk(newCapacity);
 }
 
 template <size_t N>
