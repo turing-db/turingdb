@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "return [1,2,3,4] as embedding, [true, \"i love turingdb\", 20.3, embedding]",
+  "expect": {
+    "plan": "",
+    "result": ""
+  },
+  "tags": [
+  ],
+  "write-required": false
+}
