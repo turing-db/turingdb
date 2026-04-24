@@ -357,6 +357,10 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
         } break;
         case Literal::Kind::LIST: {
             expr->setType(EvaluatedType::List);
+            auto* list = static_cast<ListLiteral*>(expr->getLiteral());
+            for (Expr* item : list->items()) {
+                analyzeExpr(item);
+            }
         } break;
         case Literal::Kind::MAP: {
             expr->setType(EvaluatedType::Map);
