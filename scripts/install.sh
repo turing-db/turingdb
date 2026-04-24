@@ -37,7 +37,7 @@ ensure_pip() {
     fi
     log "pip not found — bootstrapping"
 
-    if "$PYTHON" -m ensurepip --user --upgrade >/dev/null 2>&1; then
+    if "$PYTHON" -m ensurepip --user --upgrade; then
         if "$PYTHON" -m pip --version >/dev/null 2>&1; then
             log "pip bootstrapped via ensurepip"
             return 0
@@ -55,17 +55,27 @@ ensure_pip() {
         return 1
     fi
 
-    if "$PYTHON" "$get_pip" --user >/dev/null 2>&1; then
-        if "$PYTHON" -m pip --version >/dev/null 2>&1; then
-            log "pip bootstrapped via get-pip.py"
-            return 0
-        fi
+    log "Running get-pip.py --user"
+    if "$PYTHON" "$get_pip" --user && "$PYTHON" -m pip --version >/dev/null 2>&1; then
+        log "pip bootstrapped via get-pip.py"
+        return 0
+    fi
+
+    # PEP 668 (EXTERNALLY-MANAGED) on Debian/Ubuntu blocks --user installs.
+    # Retry with --break-system-packages, which is safe here because it still
+    # lands in the user site-packages, not the system one.
+    log "Retrying get-pip.py with --break-system-packages"
+    if "$PYTHON" "$get_pip" --user --break-system-packages \
+            && "$PYTHON" -m pip --version >/dev/null 2>&1; then
+        log "pip bootstrapped via get-pip.py (--break-system-packages)"
+        return 0
     fi
     return 1
 }
 
 if ! ensure_pip; then
-    err "Could not find or install pip. Install pip manually (e.g. 'apt install python3-pip') and retry."
+    err "Could not find or install pip. On Ubuntu/Debian try:"
+    err "  sudo apt-get update && sudo apt-get install -y python3-pip"
     exit 1
 fi
 
