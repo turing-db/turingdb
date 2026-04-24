@@ -7,6 +7,8 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/fmt/bundled/format.h>
 
+#include <range/v3/view/drop.hpp>
+
 #include "CompilerException.h"
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
@@ -14,6 +16,8 @@
 #include "File.h"
 #include "Graph.h"
 #include "ID.h"
+#include "ListElementView.h"
+#include "ListView.h"
 #include "PlanGraph.h"
 #include "PlanGraphDebug.h"
 #include "QueryConfig.h"
@@ -33,6 +37,9 @@
 #include "procedures/ProcedureManager.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
+
+namespace rg = ranges;
+namespace rv = ranges::views;
 
 namespace db {
 
@@ -125,21 +132,12 @@ template <int I>
     return std::to_string(value.get());
 }
 
-[[maybe_unused]] std::string valueToString(const db::CustomBool& value) {
-    return value ? "true" : "false";
-}
-
 [[maybe_unused]] std::string valueToString(const db::CommitBuilder* value) {
     return value ? "commit_builder_ptr" : "null";
 }
 
 [[maybe_unused]] std::string valueToString(const db::Change* value) {
     return value ? "change_ptr" : "null";
-}
-
-template <typename T>
-[[maybe_unused]] std::string valueToString(const T& value) {
-    return fmt::format("{}", value);
 }
 
 [[maybe_unused]] std::string valueToString(const PropertyNull) {
@@ -157,6 +155,15 @@ template <typename T>
     }
     result += "]";
     return result;
+}
+
+template <typename T>
+[[maybe_unused]] std::string valueToString(const T& value) {
+    if constexpr (std::same_as<T, db::CustomBool>) {
+        return value ? "true" : "false";
+    } else {
+        return fmt::format("{}", value);
+    }
 }
 
 template <typename T>
@@ -187,6 +194,40 @@ template <typename T>
     s += "]";
 
     return s;
+}
+
+[[maybe_unused]] std::string valueToString(const ListElementView ele) {
+    const auto writeTyped = []<typename T>(const ListElementView ele) -> std::string {
+        const T typed = ele.getAs<T>();
+        return valueToString(typed);
+    };
+
+    const ListBufferTypeTag tag = ele.getTag();
+    ListTagDispatcher writer {._tag = tag};
+
+    return writer.execute(writeTyped, ele);
+}
+
+[[maybe_unused]] std::string valueToString(const ListView view) {
+    if (view.empty()) {
+        return "[]";
+    }
+
+    std::string out;
+
+    out += '[';
+
+    const ListElementView fst = view.front();
+    out += valueToString(fst);
+
+    for (const ListElementView ele : view.elements() | rv::drop(1)) {
+        out += ", ";
+        out += valueToString(ele);
+    }
+
+    out += ']';
+
+    return out;
 }
 
 struct Stringify {

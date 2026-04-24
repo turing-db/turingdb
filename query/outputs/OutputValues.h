@@ -49,14 +49,15 @@ concept IsString = std::is_convertible_v<T, std::string_view>
                 || std::is_same_v<T, ValueType>;
 
 template <typename T>
-concept IsBool = std::is_convertible_v<T, bool>
+concept IsBool = std::is_same_v<T, CustomBool>
+              || std::is_same_v<T, bool>
               || OptionalBool<T>;
 
 template <typename T>
 concept IsPath = std::is_same_v<T, Path>;
 
 template <typename T>
-concept IsList = std::is_same_v<T, EntityList>;
+concept IsList = std::is_same_v<T, EntityList> || std::is_same_v<T, ListView>;
 
 template <typename T>
 concept IsNull = std::is_same_v<T, PropertyNull>;

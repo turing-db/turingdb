@@ -91,11 +91,11 @@ struct ListTagDispatcher {
             case ListBufferTypeTag::Embedding:
                 return executor.template operator()<types::Embedding::Primitive>(view);
             break;
-            case ListBufferTypeTag::INVALID: {
-                throw FatalException("Unknown ListBufferTypeTag.");
+
+            case ListBufferTypeTag::INVALID:
             break;
-            }
         }
+        throw FatalException("Unknown ListBufferTypeTag.");
     }
 };
 

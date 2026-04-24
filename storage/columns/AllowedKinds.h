@@ -374,6 +374,7 @@ struct OutputtedTypes {
         types::String::Primitive,
         types::Bool::Primitive,
         types::Embedding::Primitive,
+        ListView,
         std::optional<types::Int64::Primitive>,
         std::optional<types::Int64::Primitive>,
         std::optional<types::UInt64::Primitive>,

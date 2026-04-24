@@ -2,7 +2,9 @@
 
 #include <ranges>
 #include <spdlog/fmt/bundled/format.h>
+#include <range/v3/view/drop.hpp>
 
+#include "ListElementView.h"
 #include "QueryStatus.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
@@ -10,6 +12,9 @@
 #include "OutputWriter.h"
 #include "OutputValues.h"
 #include "ControlCharacters.h"
+
+namespace rg = ranges;
+namespace rv = ranges::views;
 
 namespace db {
 
@@ -173,6 +178,36 @@ private:
             _writer.write('}');
         }
         _writer.write("]");
+    }
+
+    void encodeValue(const ListElementView ele) {
+        const auto writeTyped = [this]<typename T>(const ListElementView ele) {
+            const T typed = ele.getAs<T>();
+            encodeValue(typed);
+        };
+
+        const ListBufferTypeTag tag = ele.getTag();
+        ListTagDispatcher writer {._tag = tag};
+        writer.execute(writeTyped, ele);
+    }
+
+    void encodeValue(const ListView lv) {
+        if (lv.empty()) {
+            _writer.write("[]");
+            return;
+        }
+
+        _writer.write('[');
+
+        const ListElementView fst = lv.front();
+        encodeValue(fst);
+
+        for (const ListElementView ele : lv.elements() | rv::drop(1)) {
+            _writer.write(", ");
+            encodeValue(ele);
+        }
+
+        _writer.write(']');
     }
 };
 
