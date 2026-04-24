@@ -107,6 +107,8 @@ public:
     GraphView view() { return _view; }
 
 private:
+    friend class ExprProgramGenerator;
+
     const PlanGraph* _graph {nullptr};
     const ProcedureManager* _procedures {nullptr};
     GraphView _view;
