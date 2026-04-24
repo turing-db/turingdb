@@ -236,11 +236,14 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
         Expr* item = *exprPtr;
         std::string_view name;
+        // Explicit aliases via the AS keyword
+        bool hasExplicitAlias = false;
 
         if (auto* symbolExpr = dynamic_cast<SymbolExpr*>(item)) {
             Symbol* symbol = symbolExpr->getSymbol();
             name = symbol->getName();
         } else {
+            hasExplicitAlias = !item->getName().empty();
             name = item->getName();
             if (name.empty()) {
                 const std::string_view name =
@@ -258,6 +261,13 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         _exprAnalyzer->analyzeRootExpr(item);
 
         bioassert(!name.empty(), "All declared variable must have a name.");
+
+        // For exprs with explicit AS aliases, update their decl to be named
+        if (hasExplicitAlias) {
+            VarDecl* namedDecl =
+                _ctxt->getOrCreateNamedVariable(_ast, item->getType(), name);
+            item->setExprVarDecl(namedDecl);
+        }
 
         if (projection->hasName(name)) {
             throwError(fmt::format("Return items must have unique names; "

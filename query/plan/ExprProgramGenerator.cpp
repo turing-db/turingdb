@@ -286,10 +286,6 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
 Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr) {
     Literal* literal = literalExpr->getLiteral();
 
-    // PipelineOutputInterface* pendingOut = _gen->_builder.getPendingOutputInterface();
-    // Dataframe* pendingDf = pendingOut->getDataframe();
-    // DataframeManager* dfMan = _gen->_pipeline->getDataframeManager();
-
     Column* outCol = nullptr;
 
     switch (literal->getKind()) {
