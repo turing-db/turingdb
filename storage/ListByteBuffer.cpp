@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <type_traits>
 
+#include "ListBufferTypeTag.h"
 #include "ListElementView.h"
 
 using namespace db;
@@ -62,8 +63,8 @@ ListElementView ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
     static_assert(_tagSize == 1, "Tag size changed");
 
     { // Write the tag
-        const auto* tagAddr = &tag;
-        std::memcpy(writePtr, tagAddr, _tagSize);
+        ListBufferTypeTag* writeTagPtr = reinterpret_cast<ListBufferTypeTag*>(writePtr);
+        *writeTagPtr = tag;
         writePtr += _tagSize;
 
         _last->_size += _tagSize;
