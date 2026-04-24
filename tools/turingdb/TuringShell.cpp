@@ -15,8 +15,8 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <tabulate/table.hpp>
 #include <termcolor/termcolor.hpp>
+#include <range/v3/view/drop.hpp>
 
-#include "JsonEncoder.h"
 #include "TuringDB.h"
 #include "Graph.h"
 #include "SystemManager.h"
@@ -48,6 +48,9 @@
 #include "Profiler.h"
 
 using namespace db;
+
+namespace rg = ranges;
+namespace rv = ranges::views;
 
 namespace {
 
@@ -501,6 +504,36 @@ void asString(std::string& out, const std::optional<T>& value) {
     } else {
         out += "null";
     }
+}
+
+void asString(std::string& out, const ListElementView v) {
+    const auto writeTyped = [&out]<typename T>(const ListElementView ele) {
+        const T typed = ele.getAs<T>();
+        asString(out, typed);
+    };
+
+    const ListBufferTypeTag tag = v.getTag();
+    ListTagDispatcher writer {._tag = tag};
+    writer.execute(writeTyped, v);
+}
+
+void asString(std::string& out, const ListView lv) {
+    if (lv.empty()) {
+        out += "[]";
+        return;
+    }
+
+    out += '[';
+
+    const ListElementView fst = lv.front();
+    asString(out, fst);
+
+    for (const ListElementView ele : lv.elements() | rv::drop(1)) {
+        out += ", ";
+        asString(out, ele);
+    }
+
+    out += ']';
 }
 
 template <typename T>

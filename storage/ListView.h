@@ -26,6 +26,9 @@ public:
 
     size_t size() const { return _elements.size(); }
 
+    ListElementView front() const { return _elements.front(); }
+    ListElementView back() const { return _elements.back(); }
+
 private:
     template <size_t N>
     friend class ListBuffer;
