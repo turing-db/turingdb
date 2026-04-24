@@ -34,6 +34,7 @@ public:
      * @brief Ensures that after this call is complete, the current @ref ByteChunk
      * contains at least @param numBytes of contiguous free space at the end of its
      * internal buffer.
+     * @warn Can allocate unbounded amounts of memory; no size check is performed.
      */
     void reserveContiguous(size_t numBytes);
 

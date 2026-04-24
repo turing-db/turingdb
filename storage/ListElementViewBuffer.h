@@ -30,6 +30,7 @@ public:
      * @brief Ensures that after this call is complete, the current @ref Chunk
      * contains at least enough free space at the end of the its internal buffer to store
      * @param numViews @ref ListElementViews.
+     * @warn Can allocate unbounded amounts of memory; no size check is performed.
      */
     void reserveContiguous(size_t numViews);
 
