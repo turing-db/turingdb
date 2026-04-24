@@ -269,4 +269,18 @@ if [ -n "$BIN_DIR" ]; then
     echo "║                                                                      ║"
     echo "╚══════════════════════════════════════════════════════════════════════╝"
     echo
+
+    # Auto-refresh the shell by exec-ing a fresh login shell so PATH updates
+    # are picked up without the user having to source anything. Skipped when
+    # this script was sourced (would replace the user's live shell) or when
+    # no controlling tty is available (new shell would exit immediately on
+    # EOF from the pipe).
+    sourced=0
+    if [ "${BASH_SOURCE:-$0}" != "$0" ]; then
+        sourced=1
+    fi
+    if [ "$sourced" -eq 0 ] && [ -t 1 ] && [ -r /dev/tty ]; then
+        log "Starting a fresh shell (type 'exit' to return to your previous shell)."
+        exec "${SHELL:-/bin/bash}" -l </dev/tty
+    fi
 fi
