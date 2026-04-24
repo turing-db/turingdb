@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "match (n) return labels(n) as l limit 1",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (FUNCTION_INVOCATION): l\n    `\"]\n    4[\"`\n        __LIMIT__\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4\n    4-->5",
+    "result": "l\n\"Person, SoftwareEngineering, Founder\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"l\"],\"column_types\":[\"String\"]},\"data\":[[[\"Person, SoftwareEngineering, Founder\"]]]}"
+  },
+  "tags": [
+    "functions",
+    "labels",
+    "alias"
+  ],
+  "write-required": false
+}
