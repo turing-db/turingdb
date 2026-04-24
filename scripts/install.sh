@@ -97,11 +97,13 @@ USER_SITE="$("$PYTHON" -m site --user-site)"
 log "User site-packages: $USER_SITE"
 
 install_ok=0
+BIN_DIR=""
 
 if is_writable "$USER_SITE"; then
     log "User site is writable — installing via 'pip install --user turingdb'"
     if "$PYTHON" -m pip install --user --upgrade turingdb >/dev/null 2>&1; then
         install_ok=1
+        BIN_DIR="$("$PYTHON" -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='posix_user'))" 2>/dev/null || echo "$HOME/.local/bin")"
     else
         log "pip install failed — will try manual wheel install"
     fi
@@ -151,17 +153,62 @@ for p in paths:
         log "Installing wheel into site-packages: $TARGET_SITE"
         mkdir -p "$TARGET_SITE"
         "$PYTHON" -m zipfile -e "$WHEEL" "$TARGET_SITE"
+        BIN_DIR="$TARGET_SITE/turingdb/bin"
     else
         INSTALL_DIR="$HOME/.turing/install"
         log "No writable site-packages — extracting wheel payload to $INSTALL_DIR"
         mkdir -p "$INSTALL_DIR"
         "$PYTHON" -m zipfile -e "$WHEEL" "$INSTALL_DIR"
-        log "Add '$INSTALL_DIR/turingdb/bin' to your PATH to use the turingdb CLI."
+        BIN_DIR="$INSTALL_DIR/turingdb/bin"
     fi
     install_ok=1
 fi
 
+add_to_path() {
+    local bin_dir="$1"
+    local marker="# >>> turingdb installer >>>"
+    local end_marker="# <<< turingdb installer <<<"
+    local block="${marker}
+export PATH=\"${bin_dir}:\$PATH\"
+${end_marker}"
+
+    local updated=0
+    local rc
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+        [ -f "$rc" ] || continue
+        if grep -qF "$marker" "$rc"; then
+            # Replace existing block so the path stays up to date.
+            "$PYTHON" - "$rc" "$marker" "$end_marker" "$block" <<'PY'
+import sys, re
+path, start, end, block = sys.argv[1:]
+with open(path) as f:
+    text = f.read()
+pattern = re.compile(re.escape(start) + r".*?" + re.escape(end), re.DOTALL)
+new = pattern.sub(block, text)
+with open(path, "w") as f:
+    f.write(new)
+PY
+            log "Updated PATH block in $rc"
+        else
+            printf '\n%s\n' "$block" >> "$rc"
+            log "Appended PATH block to $rc"
+        fi
+        updated=1
+    done
+
+    # Export in the current process — effective if this script was sourced.
+    export PATH="${bin_dir}:$PATH"
+    hash -r 2>/dev/null || true
+
+    if [ "$updated" -eq 0 ]; then
+        log "No shell rc file found — add '${bin_dir}' to PATH manually."
+    fi
+}
+
 if [ "$install_ok" -eq 1 ]; then
+    if [ -n "$BIN_DIR" ] && [ -d "$BIN_DIR" ]; then
+        add_to_path "$BIN_DIR"
+    fi
     log "TuringDB install complete."
 fi
 
@@ -179,6 +226,15 @@ if [ -d "$HOME/.claude" ]; then
     else
         log "npx not found in PATH — skipping skill install."
     fi
+fi
+
+if [ -n "$BIN_DIR" ]; then
+    log "To use turingdb in your current shell, run:"
+    case "${SHELL:-}" in
+        */zsh) log "  source ~/.zshrc" ;;
+        */bash) log "  source ~/.bashrc" ;;
+        *) log "  source your shell rc file (or open a new terminal)" ;;
+    esac
 fi
 
 log "Done."
