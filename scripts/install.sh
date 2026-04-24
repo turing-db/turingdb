@@ -101,7 +101,8 @@ BIN_DIR=""
 
 if is_writable "$USER_SITE"; then
     log "User site is writable — installing via 'pip install --user turingdb'"
-    if "$PYTHON" -m pip install --user --upgrade turingdb >/dev/null 2>&1; then
+    if "$PYTHON" -m pip install --user --upgrade turingdb >/dev/null 2>&1 \
+            || "$PYTHON" -m pip install --user --upgrade --break-system-packages turingdb >/dev/null 2>&1; then
         install_ok=1
         BIN_DIR="$("$PYTHON" -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='posix_user'))" 2>/dev/null || echo "$HOME/.local/bin")"
     else
@@ -161,6 +162,10 @@ for p in paths:
         "$PYTHON" -m zipfile -e "$WHEEL" "$INSTALL_DIR"
         BIN_DIR="$INSTALL_DIR/turingdb/bin"
     fi
+    # python -m zipfile -e does not preserve the +x bit — restore it.
+    if [ -d "$BIN_DIR" ]; then
+        chmod +x "$BIN_DIR"/* 2>/dev/null || true
+    fi
     install_ok=1
 fi
 
@@ -209,6 +214,13 @@ if [ "$install_ok" -eq 1 ]; then
     if [ -n "$BIN_DIR" ] && [ -d "$BIN_DIR" ]; then
         add_to_path "$BIN_DIR"
     fi
+    if [ -n "$BIN_DIR" ] && [ -x "$BIN_DIR/turingdb" ]; then
+        log "turingdb binary: $BIN_DIR/turingdb"
+    else
+        err "Expected turingdb binary at '$BIN_DIR/turingdb' but it's missing or not executable."
+        err "Contents of '$BIN_DIR':"
+        ls -la "$BIN_DIR" >&2 2>/dev/null || err "  (directory does not exist)"
+    fi
     log "TuringDB install complete."
 fi
 
@@ -228,13 +240,26 @@ if [ -d "$HOME/.claude" ]; then
     fi
 fi
 
-if [ -n "$BIN_DIR" ]; then
-    log "To use turingdb in your current shell, run:"
-    case "${SHELL:-}" in
-        */zsh) log "  source ~/.zshrc" ;;
-        */bash) log "  source ~/.bashrc" ;;
-        *) log "  source your shell rc file (or open a new terminal)" ;;
-    esac
-fi
-
 log "Done."
+
+if [ -n "$BIN_DIR" ]; then
+    case "${SHELL:-}" in
+        */zsh)  source_cmd="source ~/.zshrc" ;;
+        */bash) source_cmd="source ~/.bashrc" ;;
+        *)      source_cmd="source your shell's rc file" ;;
+    esac
+    echo
+    echo "╔══════════════════════════════════════════════════════════════════════╗"
+    echo "║                                                                      ║"
+    echo "║                    >>>   ACTION REQUIRED   <<<                       ║"
+    echo "║                                                                      ║"
+    echo "║   turingdb is installed, but your CURRENT shell does not know        ║"
+    echo "║   about it yet. To start using it RIGHT NOW, run:                    ║"
+    echo "║                                                                      ║"
+    printf "║       %-63s║\n" "$source_cmd"
+    echo "║                                                                      ║"
+    echo "║   ...or just open a new terminal window.                             ║"
+    echo "║                                                                      ║"
+    echo "╚══════════════════════════════════════════════════════════════════════╝"
+    echo
+fi
