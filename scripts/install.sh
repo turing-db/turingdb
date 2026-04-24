@@ -98,6 +98,7 @@ log "User site-packages: $USER_SITE"
 
 install_ok=0
 BIN_DIR=""
+SDK_PARENT_DIR=""
 
 if is_writable "$USER_SITE"; then
     log "User site is writable — installing via 'pip install --user turingdb'"
@@ -161,6 +162,10 @@ for p in paths:
         mkdir -p "$INSTALL_DIR"
         "$PYTHON" -m zipfile -e "$WHEEL" "$INSTALL_DIR"
         BIN_DIR="$INSTALL_DIR/turingdb/bin"
+        # The wheel contains both the binary (turingdb/bin/turingdb) and the
+        # Python SDK (turingdb/*.py). The former is wired up via PATH below;
+        # the latter needs the wheel root on PYTHONPATH to be importable.
+        SDK_PARENT_DIR="$INSTALL_DIR"
     fi
     # python -m zipfile -e does not preserve the +x bit — restore it.
     if [ -d "$BIN_DIR" ]; then
@@ -171,10 +176,16 @@ fi
 
 add_to_path() {
     local bin_dir="$1"
+    local sdk_parent_dir="${2:-}"
     local marker="# >>> turingdb installer >>>"
     local end_marker="# <<< turingdb installer <<<"
     local block="${marker}
-export PATH=\"${bin_dir}:\$PATH\"
+export PATH=\"${bin_dir}:\$PATH\""
+    if [ -n "$sdk_parent_dir" ]; then
+        block="${block}
+export PYTHONPATH=\"${sdk_parent_dir}:\${PYTHONPATH:-}\""
+    fi
+    block="${block}
 ${end_marker}"
 
     local updated=0
@@ -203,6 +214,9 @@ PY
 
     # Export in the current process — effective if this script was sourced.
     export PATH="${bin_dir}:$PATH"
+    if [ -n "$sdk_parent_dir" ]; then
+        export PYTHONPATH="${sdk_parent_dir}:${PYTHONPATH:-}"
+    fi
     hash -r 2>/dev/null || true
 
     if [ "$updated" -eq 0 ]; then
@@ -225,7 +239,7 @@ if [ "$install_ok" -eq 1 ]; then
     fi
 
     if [ -n "$BIN_DIR" ] && [ -d "$BIN_DIR" ]; then
-        add_to_path "$BIN_DIR"
+        add_to_path "$BIN_DIR" "$SDK_PARENT_DIR"
     fi
     if [ -n "$BIN_DIR" ] && [ -x "$BIN_DIR/turingdb" ]; then
         log "turingdb binary: $BIN_DIR/turingdb"
