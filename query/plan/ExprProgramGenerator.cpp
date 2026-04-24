@@ -14,6 +14,7 @@
 #include "columns/Functions.h"
 #include "columns/UnaryPredicates.h"
 #include "dataframe/ColumnTag.h"
+#include "dataframe/DataframeManager.h"
 #include "decl/EvaluatedType.h"
 #include "expr/Operators.h"
 #include "expr/PropertyExpr.h"
@@ -278,13 +279,19 @@ Column* ExprProgramGenerator::generatePropertyExpr(const PropertyExpr* propExpr)
         ColumnConst<types::Type::Primitive>* value =                                     \
             _gen->memory().alloc<ColumnConst<types::Type::Primitive>>();                 \
         value->set(static_cast<const LiteralType*>(literal)->getValue());                \
-        return value;                                                                    \
+        outCol = value;                                                                  \
     }                                                                                    \
     break;
 
 Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr) {
     Literal* literal = literalExpr->getLiteral();
-    
+
+    // PipelineOutputInterface* pendingOut = _gen->_builder.getPendingOutputInterface();
+    // Dataframe* pendingDf = pendingOut->getDataframe();
+    // DataframeManager* dfMan = _gen->_pipeline->getDataframeManager();
+
+    Column* outCol = nullptr;
+
     switch (literal->getKind()) {
         GEN_LITERAL_CASE(BOOL, Bool, BoolLiteral)
         GEN_LITERAL_CASE(INTEGER, Int64, IntegerLiteral)
@@ -293,7 +300,6 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
         GEN_LITERAL_CASE(EMBEDDING, Embedding, EmbeddingLiteral)
 
         case Literal::Kind::LIST: {
-            using Type = ListView;
             using Types = ListableTypes;
             using AddItem = ColumnSingleDispatcher<Types::Allowed,
                                                    AddLiteralToList,
@@ -316,10 +322,11 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
 
             const ListView view = buf.insert(items);
 
-            auto* value = _gen->memory().alloc<ColumnConst<Type>>();
+            // TODO: Probably change to types::List::Primitive once we have list props
+            auto* value = _gen->memory().alloc<ColumnConst<ListView>>();
             value->set(view);
 
-            return value;
+            outCol = value;
         }
         break;
 
@@ -335,6 +342,9 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
                             std::to_underlying(literal->getKind())));
         break;
     }
+
+    bioassert(outCol, "Failed to allocate literal column");
+    return outCol;
 }
 
 Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
