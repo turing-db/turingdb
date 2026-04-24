@@ -211,11 +211,17 @@ PY
 }
 
 if [ "$install_ok" -eq 1 ]; then
-    # pip's wheel installer does not always preserve the +x bit on package
-    # data, so find the installed turingdb package's bin dir and restore it.
+    # Resolve the actual installed package location. This overrides whatever
+    # we guessed above: pip may skip the install when the package is already
+    # present elsewhere (e.g. in a Homebrew-owned site-packages), leaving the
+    # user scripts dir empty. We always want BIN_DIR to be the package's own
+    # bin/ dir, which is where the turingdb binary actually lives.
     PKG_BIN="$("$PYTHON" -c "import os, turingdb; print(os.path.join(os.path.dirname(turingdb.__file__), 'bin'))" 2>/dev/null || true)"
     if [ -n "$PKG_BIN" ] && [ -d "$PKG_BIN" ]; then
+        # pip's wheel installer does not always preserve the +x bit on
+        # package data.
         chmod +x "$PKG_BIN"/* 2>/dev/null || true
+        BIN_DIR="$PKG_BIN"
     fi
 
     if [ -n "$BIN_DIR" ] && [ -d "$BIN_DIR" ]; then
