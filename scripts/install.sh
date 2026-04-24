@@ -211,6 +211,13 @@ PY
 }
 
 if [ "$install_ok" -eq 1 ]; then
+    # pip's wheel installer does not always preserve the +x bit on package
+    # data, so find the installed turingdb package's bin dir and restore it.
+    PKG_BIN="$("$PYTHON" -c "import os, turingdb; print(os.path.join(os.path.dirname(turingdb.__file__), 'bin'))" 2>/dev/null || true)"
+    if [ -n "$PKG_BIN" ] && [ -d "$PKG_BIN" ]; then
+        chmod +x "$PKG_BIN"/* 2>/dev/null || true
+    fi
+
     if [ -n "$BIN_DIR" ] && [ -d "$BIN_DIR" ]; then
         add_to_path "$BIN_DIR"
     fi
