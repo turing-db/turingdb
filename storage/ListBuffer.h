@@ -46,6 +46,8 @@ public:
      */
     ListView insert(std::span<const ListItemVariant> elements);
 
+    void clear();
+
 private:
     /// Container of raw bytes for each element
     ListByteBuffer<N> _elements;

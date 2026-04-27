@@ -123,6 +123,7 @@ public:
 
     void clear() {
         _pools.transform<ClearTransform>();
+        _listBuffer.clear();
     }
 
     DefaultListBuffer& listBuffer() { return _listBuffer; }

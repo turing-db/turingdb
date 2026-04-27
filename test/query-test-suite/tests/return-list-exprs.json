@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "return [(10 + 3), (true AND false)]",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | return [(10 + 3), (true AND false)]\n       |         ^^^^^^^^\n-------* Non-literal list elements are not yet supported",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | return [(10 + 3), (true AND false)]\n       |         ^^^^^^^^\n-------* Non-literal list elements are not yet supported",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | return [(10 + 3), (true AND false)]\\n       |         ^^^^^^^^\\n-------* Non-literal list elements are not yet supported\"}"
+  },
+  "tags": [],
+  "write-required": false
+}
