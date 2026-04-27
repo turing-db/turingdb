@@ -1,44 +1,16 @@
-#include <string_view>
-
 #include <spdlog/spdlog.h>
 #include <type_traits>
 
 #include "ListBuffer.h"
-#include "ListBufferTypeTag.h"
 #include "ListElementView.h"
 
 #include "metadata/PropertyType.h"
 
 using namespace db;
 
-struct LBEVDispatcher {
-    ListBufferTypeTag _tag {ListBufferTypeTag::INVALID};
-
-    auto execute(const auto& executor, const ListElementView view) const {
-        switch (_tag) {
-            case ListBufferTypeTag::Int:
-                return executor.template operator()<types::Int64::Primitive>(view);
-            case ListBufferTypeTag::UInt:
-                return executor.template operator()<types::UInt64::Primitive>(view);
-            case ListBufferTypeTag::Double:
-                return executor.template operator()<types::Double::Primitive>(view);
-            case ListBufferTypeTag::Bool:
-                return executor.template operator()<types::Bool::Primitive>(view);
-            case ListBufferTypeTag::String:
-                return executor.template operator()<types::String::Primitive>(view);
-            case ListBufferTypeTag::Embedding:
-                return executor.template operator()<types::Embedding::Primitive>(view);
-            case ListBufferTypeTag::INVALID: {
-                std::abort();
-            }
-        }
-    }
-};
-
 int main() {
-    [[maybe_unused]] ListBuffer buf;
+    ListBuffer buf;
 
-    /*
     const auto getT = [&]<typename T>(const ListElementView view) {
         const T value = view.getAs<T>();
 
@@ -59,11 +31,12 @@ int main() {
         const types::Bool::Primitive c = true;
         const types::String::Primitive d = name;
 
-        ListView list = buf.insert(a, b, c ,d);
+        std::vector<ListBuffer<>::ListItemVariant> listIn {a, b, c, d};
+
+        ListView list = buf.insert(listIn);
 
         for (const ListElementView e : list) {
-            LBEVDispatcher {._tag = e.getTag()}.execute(getT, e);
+            ListTagDispatcher {._tag = e.getTag()}.execute(getT, e);
         }
     }
-    */
 }
