@@ -45,6 +45,8 @@ public:
     /// Returns a pointer to the next free available slot in the last buffer
     const ListElementView* nextPtr() const { return &_last->_buf[_last->_size]; }
 
+    void clear();
+
 private:
     class Chunk;
 

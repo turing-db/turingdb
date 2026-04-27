@@ -51,6 +51,21 @@ void ListElementViewBuffer<N>::write(ListElementView view) {
   _last->_buf[_last->_size++] = view;
 }
 
+template <size_t N>
+void ListElementViewBuffer<N>::clear() {
+    // Delete all chunks
+    auto* cur = _first;
+    while (cur) {
+        auto* next = cur->_next;
+        delete cur;
+        cur = next;
+    }
+
+    // Create new first chunk
+    _first = new Chunk;
+    _last = _first;
+}
+
 namespace db {
 template class ListElementViewBuffer<>;
 }

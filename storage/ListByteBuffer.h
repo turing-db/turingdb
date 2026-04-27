@@ -47,6 +47,8 @@ public:
     template <typename T>
     ListElementView write(ListBufferTypeTag tag, const T& val);
 
+    void clear();
+
 private:
     class ByteChunk;
 

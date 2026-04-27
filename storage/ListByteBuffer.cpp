@@ -81,6 +81,21 @@ ListElementView ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
     return ListElementView {startPtr};
 }
 
+template <size_t N>
+void ListByteBuffer<N>::clear() {
+    // Delete all chunks
+    auto* cur = _first;
+    while (cur) {
+        auto* next = cur->_next;
+        delete cur;
+        cur = next;
+    }
+
+    // Create new first chunk
+    _first = new ByteChunk;
+    _last = _first;
+}
+
 namespace db {
 template class ListByteBuffer<>;
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Int64::Primitive&);

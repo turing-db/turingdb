@@ -45,6 +45,12 @@ ListView ListBuffer<N>::insert(std::span<const ListItemVariant> elements) {
     return ListView {listStart, numElements};
 }
 
+template <size_t N>
+void ListBuffer<N>::clear() {
+    _elements.clear();
+    _views.clear();
+}
+
 namespace db {
 template class ListBuffer<>;
 }
