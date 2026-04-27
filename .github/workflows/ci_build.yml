@@ -43,12 +43,22 @@ jobs:
 
     - name: Checkout submodules (shallow)
       run: |
-        git submodule update --init --depth 1
-        git submodule foreach '
-            if [ "$name" != "external/AFLplusplus" ]; then
-                git submodule update --init --recursive --depth 1
+        attempt=1
+        max_attempts=3
+        until git submodule update --init --depth 1 && \
+              git submodule foreach '
+                if [ "$name" != "external/AFLplusplus" ]; then
+                    git submodule update --init --recursive --depth 1
+                fi
+              '; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "Submodule init failed after $attempt attempts"
+                exit 1
             fi
-        '
+            echo "Submodule init attempt $attempt failed; retrying after backoff"
+            sleep $((attempt * 10))
+            attempt=$((attempt + 1))
+        done
 
     - name: Install uv
       uses: astral-sh/setup-uv@v3
