@@ -73,6 +73,7 @@ ListElementView ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
         const auto* valAddr = &val;
         constexpr size_t valSize = sizeof(val);
         std::memcpy(writePtr, valAddr, valSize);
+        writePtr += valSize;
 
         _last->_size += valSize;
     }
