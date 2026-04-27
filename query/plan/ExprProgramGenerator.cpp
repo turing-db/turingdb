@@ -1,5 +1,6 @@
 #include "ExprProgramGenerator.h"
 
+#include <iostream>
 #include <spdlog/fmt/fmt.h>
 #include <utility>
 

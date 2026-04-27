@@ -1,20 +1,16 @@
 #include "ExprProgram.h"
 
-#include <stdint.h>
+#include <spdlog/fmt/fmt.h>
+
+#include "EvalBinaryExpr.h"
+#include "EvalFunction.h"
+#include "EvalUnaryExpr.h"
 
 #include "columns/ColumnOperator.h"
-#include "columns/ColumnOptVector.h"
-#include "EvalBinaryExpr.h"
-#include "EvalUnaryExpr.h"
-#include "metadata/SupportedType.h"
-#include "EvalFunction.h"
 
 #include "PipelineV2.h"
 
 #include "FatalException.h"
-#include "PipelineException.h"
-
-#include <spdlog/fmt/fmt.h>
 
 using namespace db;
 
