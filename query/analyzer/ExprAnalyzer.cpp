@@ -21,8 +21,6 @@
 #include "StringBucket.h"
 
 #include "expr/All.h"
-#include "expr/ListExpr.h"
-#include "expr/LiteralExpr.h"
 
 using namespace db;
 
@@ -359,6 +357,13 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
             expr->setType(EvaluatedType::List);
             auto* list = static_cast<ListLiteral*>(expr->getLiteral());
             for (Expr* item : list->items()) {
+                const Expr::Kind itemKind = item->getKind();
+                const bool itemLiteral = itemKind == Expr::Kind::LITERAL;
+
+                if (!itemLiteral) {
+                    throwError("Non-literal list elements are not yet supported", item);
+                }
+
                 analyzeExpr(item);
             }
         } break;
@@ -764,6 +769,13 @@ void ExprAnalyzer::registerEdgePatternDeclaration(const EdgePattern* edge) {
 
 void ExprAnalyzer::analyzeListExpr(ListExpr* expr) {
     for (Expr* item : *expr) {
+        const Expr::Kind itemKind = item->getKind();
+        const bool itemLiteral = itemKind == Expr::Kind::LITERAL;
+
+        if (!itemLiteral) {
+            throwError("Non-literal list elements are not yet supported", item);
+        }
+
         analyzeExpr(item);
     }
 }
