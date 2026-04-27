@@ -183,7 +183,7 @@ private:
     void encodeValue(const ListElementView ele) {
         const auto writeTyped = [this]<typename T>(const ListElementView ele) {
             const T typed = ele.getAs<T>();
-            encodeValue(typed);
+            this->encodeValue(typed);
         };
 
         const ListBufferTypeTag tag = ele.getTag();
