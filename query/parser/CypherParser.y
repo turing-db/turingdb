@@ -78,6 +78,7 @@
     #include "CreateEdgePropertyIndexQuery.h"
     #include "DropIndexQuery.h"
     #include "MergeDataPartsQuery.h"
+    #include "stmt/UnwindStmt.h"
 
     namespace db {
         class YCypherScanner;
@@ -366,6 +367,7 @@
 %type<db::CreateNodePropertyIndexQuery*> createNodePropertyIndexQuery
 %type<db::CreateEdgePropertyIndexQuery*> createEdgePropertyIndexQuery
 %type<db::DropIndexQuery*> dropIndexQuery
+%type<db::UnwindStmt*> unwindSt
 
 %expect 0
 
@@ -717,7 +719,7 @@ shortestPathSt
     ;
 
 unwindSt
-    : UNWIND expr AS symbol { scanner.notImplemented(@$, "UNWIND"); }
+    : UNWIND expr AS symbol { $$ = UnwindStmt::create(ast, $2, $4); }
     ;
 
 loadCSVSt
@@ -750,7 +752,7 @@ loadCSVSt
 
 readingStatement
     : matchSt { $$ = $1; }
-    | unwindSt { scanner.notImplemented(@$, "UNWIND"); }
+    | unwindSt { $$ = $1; }
     | callSt { $$ = $1; }
     | loadCSVSt { $$ = $1; }
     | vectorSearchSt { $$ = $1; }

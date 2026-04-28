@@ -97,6 +97,7 @@ class CreateNodePropertyIndexQuery;
 class CreateEdgePropertyIndexQuery;
 class DropIndexQuery;
 class MergeDataPartsQuery;
+class UnwindStmt;
 
 class CypherAST {
 public:
@@ -179,6 +180,7 @@ public:
     friend CreateEdgePropertyIndexQuery;
     friend DropIndexQuery;
     friend MergeDataPartsQuery;
+    friend UnwindStmt;
 
     using QueryCommands = std::vector<QueryCommand*>;
 

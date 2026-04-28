@@ -39,6 +39,7 @@ set(ast_sources
     stmt/OrderBy.cpp
     stmt/Limit.cpp
     stmt/Skip.cpp
+    stmt/UnwindStmt.cpp
 
     Pattern.cpp
     PatternElement.cpp
