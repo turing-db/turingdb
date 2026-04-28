@@ -15,6 +15,7 @@
 #include "decl/DeclContext.h"
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
+#include "spdlog/spdlog.h"
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
 #include "stmt/ShortestPathStmt.h"
@@ -23,6 +24,7 @@
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
 #include "stmt/LoadCSVStmt.h"
+#include "stmt/UnwindStmt.h"
 #include "stmt/VectorSearchStmt.h"
 #include "QualifiedName.h"
 #include "Pattern.h"
@@ -47,6 +49,7 @@
 #include "ProcedureLookup.h"
 
 #include "BioAssert.h"
+#include <utility>
 
 using namespace db;
 
@@ -83,7 +86,7 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
         break;
 
         case Stmt::Kind::UNWIND:
-            throwError("UNWIND is not yet supported.", stmt);
+            analyze(static_cast<const UnwindStmt*>(stmt));
         break;
 
         case Stmt::Kind::CREATE:
@@ -550,6 +553,35 @@ void ReadStmtAnalyzer::analyze(const ShortestPathStmt* spSt) {
 
     _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::Integer, distName);
     _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, pathName);
+}
+
+void ReadStmtAnalyzer::analyze(const UnwindStmt* unwind) {
+    const Expr* arg = unwind->arg();
+    bioassert(arg, "Invalid argument");
+
+    {
+        const Expr::Kind argKind = arg->getKind();
+        const bool isLiteral = argKind == Expr::Kind::LITERAL;
+
+        if (!isLiteral) {
+            throwError("Non-literal UNWIND expressions are not yet supported.", arg);
+        }
+    }
+
+    const auto* litArg = static_cast<const LiteralExpr*>(arg);
+
+    const Literal* lit = litArg->getLiteral();
+    bioassert(lit, "Invalid literal.");
+
+    const Literal::Kind litKind = lit->getKind();
+    spdlog::info("lit kind is {}", std::to_underlying(litKind));
+    const bool isList = litKind == Literal::Kind::LIST;
+
+    /// Non-lists can be unwound, it just turns the argument into a singleton list
+    if (!isList) {
+        // TODO: Implement
+        throwError("Non-list arguments to UNWIND are not yet supported", litArg);
+    }
 }
 
 void ReadStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {
