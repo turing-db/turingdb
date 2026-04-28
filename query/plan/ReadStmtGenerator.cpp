@@ -1,11 +1,14 @@
 #include "ReadStmtGenerator.h"
 
+#include <string_view>
+
 #include <spdlog/fmt/bundled/format.h>
 #include <spdlog/spdlog.h>
 
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
 #include "FunctionInvocation.h"
+#include "ID.h"
 #include "Literal.h"
 #include "Pattern.h"
 #include "PatternElement.h"
@@ -18,6 +21,7 @@
 #include "WhereClause.h"
 #include "YieldClause.h"
 #include "YieldItems.h"
+#include "decl/DeclContext.h"
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
 #include "expr/BinaryExpr.h"
@@ -51,6 +55,7 @@
 #include "CardinalityEstimation.h"
 #include "PlanGenConfig.h"
 
+#include "stmt/ShortestPathStmt.h"
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
@@ -68,14 +73,16 @@ ReadStmtGenerator::ReadStmtGenerator(const CypherAST* ast,
                                      GraphView graphView,
                                      const PlanGenConfig* config,
                                      PlanGraph* tree,
-                                     PlanGraphVariables* variables)
+                                     PlanGraphVariables* variables,
+                                     const DeclContext* declCtxt)
     : _ast(ast),
     _graphView(graphView),
     _config(config),
     _graphMetadata(graphView.metadata()),
     _tree(tree),
     _variables(variables),
-    _topology(std::make_unique<PlanGraphTopology>())
+    _topology(std::make_unique<PlanGraphTopology>()),
+    _declContext(declCtxt)
 {
 }
 
@@ -104,8 +111,15 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
             generateVectorSearchStmt(static_cast<const VectorSearchStmt*>(stmt));
         break;
 
-        default:
-            throwError(fmt::format("Unsupported read statement type: {}", (uint64_t)stmt->getKind()), stmt);
+        case Stmt::Kind::SHORTESTPATH:
+            generateShortestPathStmt(static_cast<const ShortestPathStmt*>(stmt));
+        break;
+
+        case Stmt::Kind::CREATE:
+        case Stmt::Kind::SET:
+        case Stmt::Kind::DELETE:
+        case Stmt::Kind::RETURN:
+        // Not read statements
         break;
     }
 }
@@ -1056,6 +1070,37 @@ void ReadStmtGenerator::placeProcedurePredicate(Predicate* pred) {
         PlanGraphNode* tip = _topology->getBranchTip(dep._producerNode);
         tip->connectOut(cart);
     }
+}
+
+void ReadStmtGenerator::generateShortestPathStmt(const ShortestPathStmt* stmt) {
+    const Symbol* source = stmt->getSource();
+    const Symbol* target = stmt->getTarget();
+    const Symbol* edgeProp = stmt->getEdgeProperty();
+    const Symbol* distance = stmt->getDistVar();
+    const Symbol* path = stmt->getPathVar();
+
+    const std::string_view sourceName = source->getName();
+    const std::string_view targetName = target->getName();
+    const std::string_view edgePropName = edgeProp->getName();
+    const std::string_view distName = distance->getName();
+    const std::string_view pathName = path->getName();
+
+    const GraphMetadata& metadata = _graphView.metadata();
+    const PropertyTypeMap& propMan = metadata.propTypes();
+    const auto maybeProp = propMan.get(edgePropName);
+    bioassert(maybeProp.has_value(), "Invalid property.");
+
+    const PropertyType propertyType = maybeProp.value();
+
+    const VarDecl* sourceDecl = _declContext->getDecl(sourceName);
+    const VarDecl* targetDecl = _declContext->getDecl(targetName);
+    const VarDecl* distDecl = _declContext->getDecl(distName);
+    const VarDecl* pathDecl = _declContext->getDecl(pathName);
+
+    VarNode* sourceNode = _variables->getVarNode(sourceDecl);
+    VarNode* targetNode = _variables->getVarNode(targetDecl);
+
+    insertShortestPathNode(sourceNode, targetNode, propertyType, distDecl, pathDecl);
 }
 
 void ReadStmtGenerator::throwError(std::string_view msg, const void* obj) const {

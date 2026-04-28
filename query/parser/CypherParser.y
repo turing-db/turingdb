@@ -645,7 +645,7 @@ singlePartQuery
     | readingStatements shortestPathSt returnSt {
         $$ = SinglePartQuery::create(ast);
         $$->setReadStmts($1);
-        $$->setShortestPathStmt($2);
+        $$->addReadStmt($2);
         $$->setReturnStmt($3);
         LOC($$, @$); }
     ;
