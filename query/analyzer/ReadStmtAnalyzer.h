@@ -24,6 +24,7 @@ class FunctionInvocation;
 class LoadCSVStmt;
 class ShortestPathStmt;
 class GraphMetadata;
+class UnwindStmt;
 
 class ReadStmtAnalyzer {
 public:
@@ -49,6 +50,7 @@ public:
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
     void analyze(const ShortestPathStmt* spSt);
+    void analyze(const UnwindStmt* unwind);
 
     // Pattern
     void analyze(const Pattern* pattern);
