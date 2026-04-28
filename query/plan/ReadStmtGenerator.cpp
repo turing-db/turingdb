@@ -115,6 +115,10 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
             generateShortestPathStmt(static_cast<const ShortestPathStmt*>(stmt));
         break;
 
+        case Stmt::Kind::UNWIND:
+            throwError("UNWIND is not yet implemented.", stmt);
+        break;
+
         case Stmt::Kind::CREATE:
         case Stmt::Kind::SET:
         case Stmt::Kind::DELETE:

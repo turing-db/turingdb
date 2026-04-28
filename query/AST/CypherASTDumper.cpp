@@ -37,6 +37,7 @@
 #include "YieldClause.h"
 #include "YieldItems.h"
 #include "stmt/SetItem.h"
+#include "stmt/UnwindStmt.h"
 
 #include "expr/All.h"
 
@@ -250,6 +251,13 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
                     out << "    _" << std::hex << stmt << " {\n";
                     out << "        ASTType VECTOR_SEARCH\n";
                     out << "    }\n";
+                }
+                break;
+
+                case Stmt::Kind::UNWIND: {
+                    const UnwindStmt* unwStmt = static_cast<const UnwindStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << unwStmt << " : \"\"\n";
+                    // TODO: Dump expr/symbol
                 }
                 break;
             }

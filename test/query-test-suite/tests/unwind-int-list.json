@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "UNWIND [1, 2, 3] AS mylist MATCH (n) RETURN n, mylist",
+  "expect": {
+    "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | UNWIND [1, 2, 3] AS mylist MATCH (n) RETURN n, mylist\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Not implemented: UNWIND",
+    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | UNWIND [1, 2, 3] AS mylist MATCH (n) RETURN n, mylist\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Not implemented: UNWIND",
+    "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | UNWIND [1, 2, 3] AS mylist MATCH (n) RETURN n, mylist\\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^^\\n-------* Not implemented: UNWIND\"}"
+  },
+  "tags": [
+    "lists",
+    "unwind",
+    "match",
+    "return",
+    "cartesian"
+  ],
+  "write-required": false
+}

@@ -82,8 +82,15 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
             analyze(static_cast<const ShortestPathStmt*>(stmt));
         break;
 
-        default:
-            throwError("Unsupported read statement type", stmt);
+        case Stmt::Kind::UNWIND:
+            throwError("UNWIND is not yet supported.", stmt);
+        break;
+
+        case Stmt::Kind::CREATE:
+        case Stmt::Kind::SET:
+        case Stmt::Kind::DELETE:
+        case Stmt::Kind::RETURN:
+        // Not a read statement
         break;
     }
 }
