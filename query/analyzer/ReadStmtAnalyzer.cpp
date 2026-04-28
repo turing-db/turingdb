@@ -1,5 +1,7 @@
 #include "ReadStmtAnalyzer.h"
 
+#include <string_view>
+
 #include "AnalyzeException.h"
 #include "ExprAnalyzer.h"
 #include "FunctionInvocation.h"
@@ -15,6 +17,7 @@
 #include "decl/PatternData.h"
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
+#include "stmt/ShortestPathStmt.h"
 #include "stmt/Skip.h"
 #include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
@@ -61,23 +64,27 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
     switch (stmt->getKind()) {
         case Stmt::Kind::MATCH:
             analyze(static_cast<const MatchStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::CALL:
             analyze(static_cast<const CallStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::LOAD_CSV:
             analyze(static_cast<LoadCSVStmt*>(stmt));
-            break;
+        break;
 
         case Stmt::Kind::VECTOR_SEARCH:
             analyze(static_cast<const VectorSearchStmt*>(stmt));
         break;
 
+        case Stmt::Kind::SHORTESTPATH:
+            analyze(static_cast<const ShortestPathStmt*>(stmt));
+        break;
+
         default:
             throwError("Unsupported read statement type", stmt);
-            break;
+        break;
     }
 }
 
@@ -524,6 +531,26 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
         yieldItemExpr->setDecl(decl);
         yieldItemExpr->setExprVarDecl(decl);
     }
+}
+
+void ReadStmtAnalyzer::analyze(const ShortestPathStmt* spSt) {
+    const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
+    const std::string_view propName = spSt->getEdgeProperty()->getName();
+
+    const std::optional<PropertyType> propType = propTypeMap.get(propName);
+    if (!propType) {
+        throwError(fmt::format("Unknown property: {}", propName));
+    }
+
+    const Symbol* distVar = spSt->getDistVar();
+    const Symbol* pathVar = spSt->getPathVar();
+    bioassert(distVar && pathVar, "Null variables.");
+
+    const std::string_view distName = distVar->getName();
+    const std::string_view pathName = pathVar->getName();
+
+    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::Integer, distName);
+    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, pathName);
 }
 
 void ReadStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {

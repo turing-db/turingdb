@@ -3,10 +3,6 @@
 #include "views/GraphView.h"
 
 namespace db {
-class GraphMetadata;
-}
-
-namespace db {
 
 class CypherAST;
 class ExprAnalyzer;
@@ -26,6 +22,8 @@ class NodePattern;
 class EdgePattern;
 class FunctionInvocation;
 class LoadCSVStmt;
+class ShortestPathStmt;
+class GraphMetadata;
 
 class ReadStmtAnalyzer {
 public:
@@ -50,6 +48,7 @@ public:
     void analyze(OrderBy* orderBySt);
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
+    void analyze(const ShortestPathStmt* spSt);
 
     // Pattern
     void analyze(const Pattern* pattern);

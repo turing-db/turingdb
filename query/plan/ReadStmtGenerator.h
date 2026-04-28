@@ -34,6 +34,8 @@ class EntityTypeExpr;
 class VarDecl;
 class PlanGenConfig;
 class Predicate;
+class ShortestPathStmt;
+class DeclContext;
 
 class ReadStmtGenerator {
 public:
@@ -41,7 +43,8 @@ public:
                       GraphView graphView,
                       const PlanGenConfig* config,
                       PlanGraph* tree,
-                      PlanGraphVariables* variables);
+                      PlanGraphVariables* variables,
+                      const DeclContext* declCtxt);
 
     ~ReadStmtGenerator();
 
@@ -57,6 +60,7 @@ public:
     void generateVectorSearchStmt(const VectorSearchStmt* stmt);
     void generateWhereClause(const WhereClause* where);
     void generatePatternElement(const PatternElement* element);
+    void generateShortestPathStmt(const ShortestPathStmt* stmt);
 
     VarNode* generatePatternElementOrigin(const NodePattern* origin);
     VarNode* generatePatternElementEdge(PlanGraphNode* prevNode, const EdgePattern* edge);
@@ -92,6 +96,7 @@ private:
     bool _isStandaloneCall {false};
     size_t _queryLimit {0};
     std::unordered_set<const VarDecl*> _edgesInPattern;
+    const DeclContext* _declContext {nullptr};
 
     bool _hasCSVLoad {false};
 

@@ -22,9 +22,7 @@
 #include "nodes/CommitNode.h"
 #include "Literal.h"
 #include "stmt/Limit.h"
-#include "stmt/OrderBy.h"
 #include "stmt/ReturnStmt.h"
-#include "stmt/ShortestPathStmt.h"
 #include "stmt/Skip.h"
 #include "stmt/StmtContainer.h"
 #include "views/GraphView.h"
@@ -53,7 +51,6 @@
 #include "nodes/S3TransferNode.h"
 #include "nodes/ShowProceduresNode.h"
 #include "nodes/LoadCommitNode.h"
-#include "nodes/ShortestPathNode.h"
 #include "nodes/ExprEvalNode.h"
 #include "nodes/CreateVectorIndexNode.h"
 #include "nodes/LoadVectorNode.h"
@@ -95,6 +92,28 @@
 #include "PlannerException.h"
 
 using namespace db;
+
+namespace {
+
+int64_t getLimit(const Projection* proj) {
+    const Expr* limitExpr = proj->getLimit()->getExpr();
+
+    const bool isLiteral = limitExpr->getKind() == Expr::Kind::LITERAL;
+    bioassert(isLiteral, "Planner failed to stop non-literal LIMIT.");
+
+    const auto* litExpr = static_cast<const LiteralExpr*>(limitExpr);
+    const Literal* lit = litExpr->getLiteral();
+
+    const bool isIntegral = lit->getKind() == Literal::Kind::INTEGER;
+    bioassert(isIntegral, "Planned failed to stop non-integral LIMIT.");
+
+    const auto* intLit = static_cast<const IntegerLiteral*>(lit);
+    const int64_t limit = intLit->getValue();
+
+    return limit;
+}
+
+}
 
 PlanGraphGenerator::PlanGraphGenerator(const PlanGenConfig* config,
                                        const CypherAST& ast,
@@ -216,26 +235,21 @@ void PlanGraphGenerator::generateCommitQuery(const CommitQuery* query) {
 void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
     const StmtContainer* readStmts = query->getReadStmts();
     const StmtContainer* updateStmts = query->getUpdateStmts();
-    const ShortestPathStmt* shortestPathStmt = query->getShortestPathStmt();
     const ReturnStmt* returnStmt = query->getReturnStmt();
+    const DeclContext* declCtxt = query->getDeclContext();
 
     PlanGraphNode* currentNode = nullptr;
 
     // Generate read statements (optional)
     if (readStmts) {
-        ReadStmtGenerator readGenerator(_ast, _view, _config, &_tree, _variables.get());
+        ReadStmtGenerator readGenerator(_ast, _view, _config, &_tree, _variables.get(), declCtxt);
 
         // Pass literal LIMIT to the read generator for join planning
         if (returnStmt) {
             const Projection* proj = returnStmt->getProjection();
             if (proj && proj->hasLimit()) {
-                const Expr* limitExpr = proj->getLimit()->getExpr();
-                if (limitExpr->getKind() == Expr::Kind::LITERAL) {
-                    const auto* lit = static_cast<const LiteralExpr*>(limitExpr)->getLiteral();
-                    if (lit->getKind() == Literal::Kind::INTEGER) {
-                        readGenerator.setQueryLimit(static_cast<const IntegerLiteral*>(lit)->getValue());
-                    }
-                }
+                const int64_t limit = getLimit(proj);
+                readGenerator.setQueryLimit(limit);
             }
         }
 
@@ -251,30 +265,6 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
 
         // Place joins based on procedures calls
         readGenerator.placeJoinsOnProcedures();
-
-        // Insert ShortestPath Node
-        if (shortestPathStmt) {
-            const auto* declContext = query->getDeclContext();
-            auto sourceName = shortestPathStmt->getSource()->getName();
-            auto targetName = shortestPathStmt->getTarget()->getName();
-            const auto propertyType = _view.metadata().propTypes().get(shortestPathStmt->getEdgeProperty()->getName()).value();
-            auto distName = shortestPathStmt->getDistVar()->getName();
-            auto pathName = shortestPathStmt->getPathVar()->getName();
-
-            const auto* sourceDecl = declContext->getDecl(sourceName);
-            const auto* targetDecl = declContext->getDecl(targetName);
-            const auto* distDecl = declContext->getDecl(distName);
-            const auto* pathDecl = declContext->getDecl(pathName);
-
-            auto* sourceNode = _variables->getVarNode(sourceDecl);
-            auto* targetNode = _variables->getVarNode(targetDecl);
-
-            readGenerator.insertShortestPathNode(sourceNode,
-                                                 targetNode,
-                                                 propertyType,
-                                                 distDecl,
-                                                 pathDecl);
-        }
 
         // Place joins that generate the endpoint, and retrieve it
         currentNode = readGenerator.generateEndpoint();

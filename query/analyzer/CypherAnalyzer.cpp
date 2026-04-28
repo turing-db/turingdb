@@ -148,11 +148,8 @@ void CypherAnalyzer::analyze() {
 }
 
 void CypherAnalyzer::analyze(const SinglePartQuery* query) {
-    DeclContext* ctxt = query->getDeclContext();
-
     const StmtContainer* readStmts = query->getReadStmts();
     const StmtContainer* updateStmts = query->getUpdateStmts();
-    const ShortestPathStmt* shortestPathStmt = query->getShortestPathStmt();
     const ReturnStmt* returnStmt = query->getReturnStmt();
 
     bool returnMandatory = updateStmts == nullptr;
@@ -167,22 +164,6 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
             }
             _readAnalyzer->analyze(stmt);
         }
-    }
-
-    if (shortestPathStmt) {
-        const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
-        auto propName = shortestPathStmt->getEdgeProperty()->getName();
-
-        const std::optional<PropertyType> propType = propTypeMap.get(propName);
-        if (!propType) {
-            throwError(fmt::format("Unknown property: {}", propName));
-        }
-        ctxt->getOrCreateNamedVariable(_ast,
-                                       EvaluatedType::Integer,
-                                       shortestPathStmt->getDistVar()->getName());
-        ctxt->getOrCreateNamedVariable(_ast,
-                                       EvaluatedType::GraphPath,
-                                       shortestPathStmt->getPathVar()->getName());
     }
 
     // Generate update statements (optional)
