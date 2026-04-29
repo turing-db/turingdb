@@ -329,6 +329,9 @@
 %type<db::ShowVectorIndexesQuery*> showVectorIndexesQuery
 %type<db::VectorSearchStmt*> vectorSearchSt
 %type<vec::DistanceMetric> distanceMetric
+%type<db::EmbeddingLiteral*> embeddingLit
+%type<db::EmbeddingLiteral*> embeddingLitItems
+%type<double> embeddingLitItem
 %type<db::ListLiteral*> listLit
 %type<db::ListLiteral*> listLitItems
 %type<db::Expr*> listLitItem
@@ -500,7 +503,7 @@ showVectorIndexesQuery
 
 // VECTOR SEARCH IN vector1 FOR 10 [0.1, 0.2, ...] YIELD ids
 vectorSearchSt
-    : VECTOR SEARCH IN ID FOR DIGIT listLit yieldClause {
+    : VECTOR SEARCH IN ID FOR DIGIT embeddingLit yieldClause {
         $$ = VectorSearchStmt::create(ast);
         $$->setIndexName($4);
         $$->setK(static_cast<uint64_t>($6));
@@ -1354,13 +1357,8 @@ literal
     | numLit { $$ = $1; }
     | NULL_ { $$ = NullLiteral::create(ast); }
     | stringLit { $$ = $1; }
-    | listLit {
-        try {
-            $$ = ParserUtils::listExprToEmbeddingLiteral(ast, $1);
-        } catch (const ParserException&) {
-            $$ = $1;
-        }
-    }
+    | embeddingLit { $$ = $1; }
+    | listLit { $$ = $1; }
     | mapLit { $$ = $1; }
     ;
 
@@ -1378,13 +1376,28 @@ stringLit
     : STRING_LITERAL { $$ = StringLiteral::create(ast, $1); }
     ;
 
-// List literal: build ListExpr directly
+embeddingLit
+    : LT GT { $$ = EmbeddingLiteral::create(ast); LOC($$, @$); }
+    | LT embeddingLitItems GT { $$ = $2; LOC($$, @$); }
+    ;
+
+embeddingLitItems
+    : embeddingLitItem { $$ = EmbeddingLiteral::create(ast); LOC($$, @$); }
+    | embeddingLitItems COMMA embeddingLitItem { $$ = $1; $$->addItem($3); }
+    ;
+
+embeddingLitItem
+    : DIGIT { $$ = $1, LOC($$, @$); }
+    | DOUBLE { $$ = $1, LOC($$, @$); }
+    ;
+
+// List literal: build directly
 listLit
     : OBRACK CBRACK { $$ = ListLiteral::create(ast); LOC($$, @$); }
     | OBRACK listLitItems CBRACK { $$ = $2; LOC($$, @$); }
     ;
 
-// Build ListExpr recursively using addItem()
+// Build recursively using addItem()
 listLitItems
     : listLitItem { $$ = ListLiteral::create(ast); $$->addItem($1); }
     | listLitItems COMMA listLitItem { $$ = $1; $$->addItem($3); }
