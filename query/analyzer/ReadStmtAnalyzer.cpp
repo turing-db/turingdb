@@ -574,7 +574,6 @@ void ReadStmtAnalyzer::analyze(const UnwindStmt* unwind) {
     bioassert(lit, "Invalid literal.");
 
     const Literal::Kind litKind = lit->getKind();
-    spdlog::info("lit kind is {}", std::to_underlying(litKind));
     const bool isList = litKind == Literal::Kind::LIST;
 
     /// Non-lists can be unwound, it just turns the argument into a singleton list
