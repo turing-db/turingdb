@@ -707,7 +707,9 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::PropertyType:
         case EvaluatedType::EdgeType:
         case EvaluatedType::_SIZE:
+        case EvaluatedType::ListItem:
             return false;
+        break;
     }
 
     return false;

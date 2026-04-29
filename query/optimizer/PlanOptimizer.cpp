@@ -752,6 +752,7 @@ IndexLookupNode* PlanOptimizer::addIndexLookup(const PropertyExpr* propExpr,
         case EvaluatedType::PropertyType:
         case EvaluatedType::EdgeType:
         case EvaluatedType::_SIZE:
+        case EvaluatedType::ListItem:
             return nullptr;
         break;
     }

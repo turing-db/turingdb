@@ -8,6 +8,7 @@
 #include "SymbolChain.h"
 #include "YieldClause.h"
 #include "YieldItems.h"
+#include "decl/EvaluatedType.h"
 #include "metadata/GraphMetadata.h"
 
 #include "DiagnosticsManager.h"
@@ -581,6 +582,13 @@ void ReadStmtAnalyzer::analyze(const UnwindStmt* unwind) {
         // TODO: Implement
         throwError("Non-list arguments to UNWIND are not yet supported", litArg);
     }
+
+    const Symbol* symbol = unwind->symbol();
+    bioassert(symbol, "Invalid symbol.");
+
+    const std::string_view symName = symbol->getName();
+
+    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::ListItem, symName);
 }
 
 void ReadStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {

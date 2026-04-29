@@ -36,6 +36,7 @@ class PlanGenConfig;
 class Predicate;
 class ShortestPathStmt;
 class DeclContext;
+class UnwindStmt;
 
 class ReadStmtGenerator {
 public:
@@ -61,6 +62,7 @@ public:
     void generateWhereClause(const WhereClause* where);
     void generatePatternElement(const PatternElement* element);
     void generateShortestPathStmt(const ShortestPathStmt* stmt);
+    void generateUnwindStmt(const UnwindStmt* stmt);
 
     VarNode* generatePatternElementOrigin(const NodePattern* origin);
     VarNode* generatePatternElementEdge(PlanGraphNode* prevNode, const EdgePattern* edge);

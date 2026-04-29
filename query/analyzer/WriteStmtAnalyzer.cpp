@@ -328,7 +328,9 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
         case EvaluatedType::PropertyType:
         case EvaluatedType::EdgeType:
         case EvaluatedType::_SIZE:
+        case EvaluatedType::ListItem:
             return ValueType::Invalid;
+        break;
     }
 
     return ValueType::Invalid;
