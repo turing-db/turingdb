@@ -32,6 +32,21 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+    - name: Free disk space
+      if: runner.os == 'Linux'
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: false
+        docker-images: true
+        swap-storage: false
+
+    - name: Disk usage (initial)
+      run: df -h
+
     - uses: actions/checkout@v4
       with:
         persist-credentials: true
@@ -139,9 +154,16 @@ jobs:
         path: external/datasets/reactome.jsonl
         key: dataset-reactome-v1
 
+    - name: Disk usage (before regress)
+      run: df -h
+
     - name: Run regress
       run: |
         ./run_regress.sh
+
+    - name: Disk usage (after regress)
+      if: always()
+      run: df -h
 
     - name: Upload wheel artifact
       uses: actions/upload-artifact@v4
