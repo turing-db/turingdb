@@ -368,7 +368,7 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
 
     // Search for vectors closest to query
     bool executed = false;
-    const auto res = query("VECTOR SEARCH IN search_test FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids RETURN ids", "default", [&](const Dataframe* df) -> void {
+    const auto res = query("VECTOR SEARCH IN search_test FOR 3 (1.0, 0.0, 0.0, 0.0) YIELD ids RETURN ids", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
             ASSERT_EQ(df->getLogicalRowCount(), k);
@@ -432,7 +432,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
 
     // Search for top 2
     bool executed = false;
-    const auto res = query("VECTOR SEARCH IN k_test FOR 2 [1.0, 0.0, 0.0, 0.0] YIELD ids RETURN ids", "default", [&](const Dataframe* df) -> void {
+    const auto res = query("VECTOR SEARCH IN k_test FOR 2 (1.0, 0.0, 0.0, 0.0) YIELD ids RETURN ids", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->getLogicalRowCount(), k);
 
@@ -496,7 +496,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithHighPrecisionFloats) {
 
     // Search for vectors closest to query
     bool executed = false;
-    const auto res = query("VECTOR SEARCH IN precision_test FOR 3 [0.123456, 0.678901, 0.111111, 0.222222] "
+    const auto res = query("VECTOR SEARCH IN precision_test FOR 3 (0.123456, 0.678901, 0.111111, 0.222222) "
         "YIELD ids RETURN ids", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
@@ -595,7 +595,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
 
     // Step 3b: Verify vector search works standalone
     {
-        const auto searchRes = query("VECTOR SEARCH IN doc_vectors FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids RETURN ids", "default", [&](const Dataframe* df) -> void {
+        const auto searchRes = query("VECTOR SEARCH IN doc_vectors FOR 3 (1.0, 0.0, 0.0, 0.0) YIELD ids RETURN ids", "default", [&](const Dataframe* df) -> void {
                 ASSERT_TRUE(df != nullptr);
                 ASSERT_EQ(df->getLogicalRowCount(), 3) << "Expected 3 vector search results";
             });
@@ -614,7 +614,7 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
     const std::vector<std::string> expectedTitles = {"Doc One", "Doc Two", "Doc Three"};
 
     bool executed = false;
-    const auto res = query("VECTOR SEARCH IN doc_vectors FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids "
+    const auto res = query("VECTOR SEARCH IN doc_vectors FOR 3 (1.0, 0.0, 0.0, 0.0) YIELD ids "
         "MATCH (n:Document) WHERE n.id = ids "
         "RETURN n.id, n.title", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);

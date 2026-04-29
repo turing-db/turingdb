@@ -1377,8 +1377,7 @@ stringLit
     ;
 
 embeddingLit
-    : OPAREN CPAREN { $$ = EmbeddingLiteral::create(ast); LOC($$, @$); }
-    | OPAREN embeddingLitItems CPAREN { $$ = $2; LOC($$, @$); }
+    : OPAREN embeddingLitItems CPAREN { $$ = $2; LOC($$, @$); }
     ;
 
 embeddingLitItems
