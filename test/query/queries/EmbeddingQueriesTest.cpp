@@ -76,7 +76,7 @@ protected:
 
 TEST_F(EmbeddingQueriesTest, createNodeWithEmbedding) {
     constexpr std::string_view CREATE_QUERY =
-        R"(CREATE (n:Vec {name: "a", vec: [1.0, 2.0, 3.0]}))";
+        R"(CREATE (n:Vec {name: "a", vec: (1.0, 2.0, 3.0)}))";
     constexpr std::string_view MATCH_QUERY =
         R"(MATCH (n) RETURN n.name, n.vec)";
 
@@ -119,9 +119,9 @@ TEST_F(EmbeddingQueriesTest, createNodeWithEmbedding) {
 }
 
 TEST_F(EmbeddingQueriesTest, createMultipleNodesWithEmbeddings) {
-    constexpr std::string_view CREATE_A = R"(CREATE (n:Vec {name: "a", vec: [1.0, 0.0, 0.0]}))";
-    constexpr std::string_view CREATE_B = R"(CREATE (n:Vec {name: "b", vec: [0.0, 1.0, 0.0]}))";
-    constexpr std::string_view CREATE_C = R"(CREATE (n:Vec {name: "c", vec: [1.0, 0.0, 0.0]}))";
+    constexpr std::string_view CREATE_A = R"(CREATE (n:Vec {name: "a", vec: (1.0, 0.0, 0.0)}))";
+    constexpr std::string_view CREATE_B = R"(CREATE (n:Vec {name: "b", vec: (0.0, 1.0, 0.0)}))";
+    constexpr std::string_view CREATE_C = R"(CREATE (n:Vec {name: "c", vec: (1.0, 0.0, 0.0)}))";
     constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n.name, n.vec)";
 
     {

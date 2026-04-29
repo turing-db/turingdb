@@ -1377,18 +1377,18 @@ stringLit
     ;
 
 embeddingLit
-    : LT GT { $$ = EmbeddingLiteral::create(ast); LOC($$, @$); }
-    | LT embeddingLitItems GT { $$ = $2; LOC($$, @$); }
+    : OPAREN CPAREN { $$ = EmbeddingLiteral::create(ast); LOC($$, @$); }
+    | OPAREN embeddingLitItems CPAREN { $$ = $2; LOC($$, @$); }
     ;
 
 embeddingLitItems
-    : embeddingLitItem { $$ = EmbeddingLiteral::create(ast); LOC($$, @$); }
+    : embeddingLitItem COMMA embeddingLitItem { $$ = EmbeddingLiteral::create(ast); $$->addItem($1); $$->addItem($3); LOC($$, @$); }
     | embeddingLitItems COMMA embeddingLitItem { $$ = $1; $$->addItem($3); }
     ;
 
 embeddingLitItem
-    : DIGIT { $$ = $1, LOC($$, @$); }
-    | DOUBLE { $$ = $1, LOC($$, @$); }
+    : DIGIT { $$ = $1; LOC($$, @$); }
+    | DOUBLE { $$ = $1; LOC($$, @$); }
     ;
 
 // List literal: build directly
