@@ -478,6 +478,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
             return translateMergeDataPartsNode(static_cast<MergeDataPartsNode*>(node));
         break;
 
+        case PlanGraphOpcode::UNWIND:
+            throw PlannerException("UNWIND is not yet implemented.");
+        break;
+
         case PlanGraphOpcode::FUNC_EVAL:
         case PlanGraphOpcode::GET_ENTITY_TYPE:
         case PlanGraphOpcode::PROJECT_RESULTS:
