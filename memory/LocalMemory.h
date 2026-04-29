@@ -5,8 +5,8 @@
 
 #include "MemoryPool.h"
 #include "TypeValueMap.h"
-#include "ColumnAllocator.h"
 
+#include "ColumnAllocator.h"
 #include "columns/ColumnSet.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
@@ -14,13 +14,13 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnStringTable.h"
 
+#include "ListBuffer.h"
+#include "ListView.h"
+
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
 #include "ID.h"
 #include "versioning/ChangeID.h"
-
-#include "ListBuffer.h"
-#include "ListView.h"
 
 namespace db {
 

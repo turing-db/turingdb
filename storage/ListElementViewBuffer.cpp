@@ -6,7 +6,7 @@ using namespace db;
 
 template <size_t N>
 ListElementViewBuffer<N>::ListElementViewBuffer()
-    : _first(new Chunk),
+    : _first(new Chunk()),
     _last(_first)
 {
 }
@@ -62,7 +62,7 @@ void ListElementViewBuffer<N>::clear() {
     }
 
     // Create new first chunk
-    _first = new Chunk;
+    _first = new Chunk();
     _last = _first;
 }
 
