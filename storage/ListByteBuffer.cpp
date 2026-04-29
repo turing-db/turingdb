@@ -9,7 +9,7 @@ using namespace db;
 
 template <size_t N>
 ListByteBuffer<N>::ListByteBuffer()
-    : _first(new ByteChunk),
+    : _first(new ByteChunk()),
     _last(_first)
 {
 }
@@ -92,7 +92,7 @@ void ListByteBuffer<N>::clear() {
     }
 
     // Create new first chunk
-    _first = new ByteChunk;
+    _first = new ByteChunk();
     _last = _first;
 }
 
