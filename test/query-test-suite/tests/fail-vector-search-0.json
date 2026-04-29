@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "VECTOR SEARCH IN embeddings FOR 3 [1.0, 0.0, 0.0, 0.0] YIELD ids RETURN ids",
+  "query": "VECTOR SEARCH IN embeddings FOR 3 (1.0, 0.0, 0.0, 0.0) YIELD ids RETURN ids",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __VECTOR_SEARCH__\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
     "result": "EXEC ERROR\nVector index 'embeddings' not found",

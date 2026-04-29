@@ -3362,7 +3362,7 @@ TEST_F(WriteQueriesTest, setEmbeddingOnTwoNodesByID) {
     const NodeID b = *it;
 
     const std::string setQuery = fmt::format(
-        "MATCH (a), (b) WHERE a = {} AND b = {} SET a.emb = [0.0, 0.1], b.emb = [1.0, 0.0]",
+        "MATCH (a), (b) WHERE a = {} AND b = {} SET a.emb = (0.0, 0.1), b.emb = (1.0, 0.0)",
         a.getValue(), b.getValue());
 
     newChange();
@@ -3417,7 +3417,7 @@ TEST_F(WriteQueriesTest, setEmbeddingSameNodeTwice) {
     const NodeID nid = *read().scanNodes().begin();
 
     const std::string setQuery = fmt::format(
-        "MATCH (a), (b) WHERE a = {} AND b = {} SET a.emb = [0.0, 0.1], b.emb = [1.0, 0.0]",
+        "MATCH (a), (b) WHERE a = {} AND b = {} SET a.emb = (0.0, 0.1), b.emb = (1.0, 0.0)",
         nid.getValue(), nid.getValue());
 
     newChange();
@@ -3464,7 +3464,7 @@ TEST_F(WriteQueriesTest, setEmbeddingCartesianOverlap) {
 
     const std::string setQuery = fmt::format(
         "MATCH (a), (b) WHERE (a = {} OR a = {}) AND (b = {} OR b = {})"
-        " SET a.emb = [0.0, 0.1], b.emb = [0.1, 0.0]",
+        " SET a.emb = (0.0, 0.1), b.emb = (0.1, 0.0)",
         n0.getValue(), n1.getValue(), n1.getValue(), n2.getValue());
 
     newChange();

@@ -167,7 +167,7 @@ TEST_F(EmbeddingQueriesTest, createMultipleNodesWithEmbeddings) {
 }
 
 TEST_F(EmbeddingQueriesTest, createNodeWithIntegerEmbedding) {
-    constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Vec {vec: [1, 2, 3]}))";
+    constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Vec {vec: (1, 2, 3)}))";
     constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n.vec)";
 
     {
@@ -203,7 +203,7 @@ TEST_F(EmbeddingQueriesTest, createNodeWithIntegerEmbedding) {
 }
 
 TEST_F(EmbeddingQueriesTest, createNodeWithMixedNumericEmbedding) {
-    constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Vec {vec: [1, 2.5, 3]}))";
+    constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Vec {vec: (1, 2.5, 3)}))";
     constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n.vec)";
 
     {
@@ -251,11 +251,11 @@ TEST_F(EmbeddingQueriesTest, multiCommitEmbeddingEqualityMatch) {
     {
         newChange();
         for (auto&& q : {
-            R"(CREATE (n:Vec {name: "n0",  vec: [1.0, 0.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "n1",  vec: [0.0, 1.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "n2",  vec: [1.0, 0.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "n3",  vec: [0.0, 0.0, 1.0]}))",
-            R"(CREATE (n:Vec {name: "n4",  vec: [1.0, 1.0, 0.0]}))",
+            R"(CREATE (n:Vec {name: "n0",  vec: (1.0, 0.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "n1",  vec: (0.0, 1.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "n2",  vec: (1.0, 0.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "n3",  vec: (0.0, 0.0, 1.0)}))",
+            R"(CREATE (n:Vec {name: "n4",  vec: (1.0, 1.0, 0.0)}))",
         }) {
             auto res = query(q, [](const Dataframe* df) { ASSERT_TRUE(df); });
             ASSERT_TRUE(res);
@@ -267,11 +267,11 @@ TEST_F(EmbeddingQueriesTest, multiCommitEmbeddingEqualityMatch) {
     {
         newChange();
         for (auto&& q : {
-            R"(CREATE (n:Vec {name: "n5",  vec: [0.0, 1.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "n6",  vec: [1.0, 0.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "n7",  vec: [0.0, 0.0, 1.0]}))",
-            R"(CREATE (n:Vec {name: "n8",  vec: [1.0, 1.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "n9",  vec: [1.0, 0.0, 0.0]}))",
+            R"(CREATE (n:Vec {name: "n5",  vec: (0.0, 1.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "n6",  vec: (1.0, 0.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "n7",  vec: (0.0, 0.0, 1.0)}))",
+            R"(CREATE (n:Vec {name: "n8",  vec: (1.0, 1.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "n9",  vec: (1.0, 0.0, 0.0)}))",
         }) {
             auto res = query(q, [](const Dataframe* df) { ASSERT_TRUE(df); });
             ASSERT_TRUE(res);
@@ -283,11 +283,11 @@ TEST_F(EmbeddingQueriesTest, multiCommitEmbeddingEqualityMatch) {
     {
         newChange();
         for (auto&& q : {
-            R"(CREATE (n:Vec {name: "n10", vec: [0.0, 1.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "n11", vec: [0.0, 0.0, 1.0]}))",
-            R"(CREATE (n:Vec {name: "n12", vec: [1.0, 0.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "n13", vec: [1.0, 1.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "n14", vec: [0.0, 1.0, 0.0]}))",
+            R"(CREATE (n:Vec {name: "n10", vec: (0.0, 1.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "n11", vec: (0.0, 0.0, 1.0)}))",
+            R"(CREATE (n:Vec {name: "n12", vec: (1.0, 0.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "n13", vec: (1.0, 1.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "n14", vec: (0.0, 1.0, 0.0)}))",
         }) {
             auto res = query(q, [](const Dataframe* df) { ASSERT_TRUE(df); });
             ASSERT_TRUE(res);
@@ -310,7 +310,7 @@ TEST_F(EmbeddingQueriesTest, multiCommitEmbeddingEqualityMatch) {
     // Expected: n0, n2, n6, n9, n12
     {
         constexpr std::string_view MATCH_A =
-            R"(MATCH (n:Vec {vec: [1.0, 0.0, 0.0]}) RETURN n.name)";
+            R"(MATCH (n:Vec {vec: (1.0, 0.0, 0.0)}) RETURN n.name)";
 
         std::vector<std::string> actualNames;
         auto res = query(MATCH_A, [&](const Dataframe* df) {
@@ -334,7 +334,7 @@ TEST_F(EmbeddingQueriesTest, multiCommitEmbeddingEqualityMatch) {
     // Expected: n1, n5, n10, n14
     {
         constexpr std::string_view MATCH_B =
-            R"(MATCH (n:Vec {vec: [0.0, 1.0, 0.0]}) RETURN n.name)";
+            R"(MATCH (n:Vec {vec: (0.0, 1.0, 0.0)}) RETURN n.name)";
 
         std::vector<std::string> actualNames;
         auto res = query(MATCH_B, [&](const Dataframe* df) {
@@ -358,7 +358,7 @@ TEST_F(EmbeddingQueriesTest, multiCommitEmbeddingEqualityMatch) {
     // Expected: n3, n7, n11
     {
         constexpr std::string_view MATCH_C =
-            R"(MATCH (n:Vec {vec: [0.0, 0.0, 1.0]}) RETURN n.name)";
+            R"(MATCH (n:Vec {vec: (0.0, 0.0, 1.0)}) RETURN n.name)";
 
         std::vector<std::string> actualNames;
         auto res = query(MATCH_C, [&](const Dataframe* df) {
@@ -382,7 +382,7 @@ TEST_F(EmbeddingQueriesTest, multiCommitEmbeddingEqualityMatch) {
     // Expected: n4, n8, n13
     {
         constexpr std::string_view MATCH_D =
-            R"(MATCH (n:Vec {vec: [1.0, 1.0, 0.0]}) RETURN n.name)";
+            R"(MATCH (n:Vec {vec: (1.0, 1.0, 0.0)}) RETURN n.name)";
 
         std::vector<std::string> actualNames;
         auto res = query(MATCH_D, [&](const Dataframe* df) {
@@ -410,11 +410,11 @@ TEST_F(EmbeddingQueriesTest, embeddingInequality) {
     {
         newChange();
         for (auto&& q : {
-            R"(CREATE (n:Vec {name: "a1", vec: [1.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "a2", vec: [1.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "b1", vec: [0.0, 1.0]}))",
-            R"(CREATE (n:Vec {name: "a3", vec: [1.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "b2", vec: [0.0, 1.0]}))",
+            R"(CREATE (n:Vec {name: "a1", vec: (1.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "a2", vec: (1.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "b1", vec: (0.0, 1.0)}))",
+            R"(CREATE (n:Vec {name: "a3", vec: (1.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "b2", vec: (0.0, 1.0)}))",
         }) {
             auto res = query(q, [](const Dataframe* df) { ASSERT_TRUE(df); });
             ASSERT_TRUE(res);
@@ -425,7 +425,7 @@ TEST_F(EmbeddingQueriesTest, embeddingInequality) {
     // n.vec <> [1.0, 0.0] should return b1, b2
     {
         constexpr std::string_view MATCH_NEQ =
-            R"(MATCH (n:Vec) WHERE n.vec <> [1.0, 0.0] RETURN n.name)";
+            R"(MATCH (n:Vec) WHERE n.vec <> (1.0, 0.0) RETURN n.name)";
 
         std::vector<std::string> actualNames;
         auto res = query(MATCH_NEQ, [&](const Dataframe* df) {
@@ -450,9 +450,9 @@ TEST_F(EmbeddingQueriesTest, cosineSimilarity) {
     {
         newChange();
         for (auto&& q : {
-            R"(CREATE (n:Vec {name: "a", vec: [0.3, 0.7, 0.5]}))",
-            R"(CREATE (n:Vec {name: "b", vec: [0.9, 0.2, 0.4]}))",
-            R"(CREATE (n:Vec {name: "c", vec: [0.1, 0.8, 0.6]}))",
+            R"(CREATE (n:Vec {name: "a", vec: (0.3, 0.7, 0.5)}))",
+            R"(CREATE (n:Vec {name: "b", vec: (0.9, 0.2, 0.4)}))",
+            R"(CREATE (n:Vec {name: "c", vec: (0.1, 0.8, 0.6)}))",
         }) {
             auto res = query(q, [](const Dataframe* df) { ASSERT_TRUE(df); });
             ASSERT_TRUE(res);
@@ -484,7 +484,7 @@ TEST_F(EmbeddingQueriesTest, cosineSimilarity) {
     std::vector<double> scores;
     {
         constexpr std::string_view QUERY =
-            R"(MATCH (n:Vec) RETURN n.name, cosine_similarity(n.vec, [0.4, 0.3, 0.8]))";
+            R"(MATCH (n:Vec) RETURN n.name, cosine_similarity(n.vec, (0.4, 0.3, 0.8)))";
 
         auto res = query(QUERY, [&](const Dataframe* df) {
             ASSERT_TRUE(df);
@@ -523,9 +523,9 @@ TEST_F(EmbeddingQueriesTest, euclideanDistance) {
     {
         newChange();
         for (auto&& q : {
-            R"(CREATE (n:Vec {name: "a", vec: [0.3, 0.7, 0.5]}))",
-            R"(CREATE (n:Vec {name: "b", vec: [0.9, 0.2, 0.4]}))",
-            R"(CREATE (n:Vec {name: "c", vec: [0.1, 0.8, 0.6]}))",
+            R"(CREATE (n:Vec {name: "a", vec: (0.3, 0.7, 0.5)}))",
+            R"(CREATE (n:Vec {name: "b", vec: (0.9, 0.2, 0.4)}))",
+            R"(CREATE (n:Vec {name: "c", vec: (0.1, 0.8, 0.6)}))",
         }) {
             auto res = query(q, [](const Dataframe* df) { ASSERT_TRUE(df); });
             ASSERT_TRUE(res);
@@ -556,7 +556,7 @@ TEST_F(EmbeddingQueriesTest, euclideanDistance) {
     std::vector<double> distances;
     {
         constexpr std::string_view QUERY =
-            R"(MATCH (n:Vec) RETURN n.name, euclidean_distance(n.vec, [0.2, 0.5, 0.3]))";
+            R"(MATCH (n:Vec) RETURN n.name, euclidean_distance(n.vec, (0.2, 0.5, 0.3)))";
 
         auto res = query(QUERY, [&](const Dataframe* df) {
             ASSERT_TRUE(df);
@@ -591,42 +591,8 @@ TEST_F(EmbeddingQueriesTest, euclideanDistance) {
     }
 }
 
-TEST_F(EmbeddingQueriesTest, createNodeWithSingleElementEmbedding) {
-    constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Vec {vec: [4.2]}))";
-    constexpr std::string_view MATCH_QUERY = R"(MATCH (n) RETURN n.vec)";
-
-    {
-        newChange();
-        auto res = query(CREATE_QUERY, [](const Dataframe* df) { ASSERT_TRUE(df); });
-        ASSERT_TRUE(res);
-        submitCurrentChange();
-    }
-
-    std::vector<std::vector<float>> actualVecs;
-    {
-        auto res = query(MATCH_QUERY, [&](const Dataframe* df) {
-            ASSERT_TRUE(df);
-            ASSERT_EQ(df->size(), 1);
-
-            const auto* vecs = df->cols().front()->as<ColumnOptVector<types::Embedding::Primitive>>();
-            ASSERT_TRUE(vecs);
-
-            const size_t rowCount = df->getLogicalRowCount();
-            for (size_t i = 0; i < rowCount; i++) {
-                ASSERT_TRUE(vecs->at(i));
-                const auto& emb = *vecs->at(i);
-                actualVecs.emplace_back(emb.begin(), emb.end());
-            }
-        });
-        ASSERT_TRUE(res);
-    }
-
-    ASSERT_EQ(actualVecs.size(), 1);
-    expectEmbedding(actualVecs[0], {4.2f});
-}
-
 TEST_F(EmbeddingQueriesTest, createNodeWithEmptyEmbeddingFails) {
-    constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Vec {vec: []}))";
+    constexpr std::string_view CREATE_QUERY = R"(CREATE (n:Vec {vec: ()}))";
 
     newChange();
     auto res = query(CREATE_QUERY, [](const Dataframe*) {});
@@ -634,7 +600,7 @@ TEST_F(EmbeddingQueriesTest, createNodeWithEmptyEmbeddingFails) {
 }
 
 TEST_F(EmbeddingQueriesTest, returnVectorLiteral) {
-    constexpr std::string_view QUERY = R"(RETURN [1.0, 2.0, 3.0])";
+    constexpr std::string_view QUERY = R"(RETURN (1.0, 2.0, 3.0))";
 
     std::vector<float> actual;
     {
@@ -661,8 +627,8 @@ TEST_F(EmbeddingQueriesTest, equalityDimensionMismatchReturnsEmpty) {
     {
         newChange();
         for (auto&& q : {
-            R"(CREATE (n:Vec {name: "a", vec: [1.0, 0.0, 0.0]}))",
-            R"(CREATE (n:Vec {name: "b", vec: [0.0, 1.0, 0.0]}))",
+            R"(CREATE (n:Vec {name: "a", vec: (1.0, 0.0, 0.0)}))",
+            R"(CREATE (n:Vec {name: "b", vec: (0.0, 1.0, 0.0)}))",
         }) {
             auto res = query(q, [](const Dataframe* df) { ASSERT_TRUE(df); });
             ASSERT_TRUE(res);
@@ -672,7 +638,7 @@ TEST_F(EmbeddingQueriesTest, equalityDimensionMismatchReturnsEmpty) {
 
     {
         constexpr std::string_view MATCH_SHORT =
-            R"(MATCH (n:Vec {vec: [1.0, 0.0]}) RETURN n.name)";
+            R"(MATCH (n:Vec {vec: (1.0, 0.0)}) RETURN n.name)";
 
         size_t rowCount = 0;
         auto res = query(MATCH_SHORT, [&](const Dataframe* df) {

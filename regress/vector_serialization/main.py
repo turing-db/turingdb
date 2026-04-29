@@ -116,13 +116,13 @@ if __name__ == "__main__":
 
         # Query for vector closest to [0,0,0,0,0,0,0,0] - should be ID 0
         results_before_1 = test_vector_search(
-            client, "[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]", 0, "Query for origin"
+            client, "(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)", 0, "Query for origin"
         )
 
         # Query for vector closest to [1,0,0,0,0,0,0,0] - should be ID 1
         results_before_2 = test_vector_search(
             client,
-            "[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]",
+            "(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)",
             1,
             "Query for [1,0,0,...]",
         )
@@ -130,7 +130,7 @@ if __name__ == "__main__":
         # Query for vector closest to [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8] - should be ID 6
         results_before_3 = test_vector_search(
             client,
-            "[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]",
+            "(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)",
             6,
             "Query for [0.1,0.2,...]",
         )
@@ -164,19 +164,19 @@ if __name__ == "__main__":
         print(f"- {BLUE}Testing vector search after restart{NC}")
 
         results_after_1 = test_vector_search(
-            client, "[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]", 0, "Query for origin"
+            client, "(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)", 0, "Query for origin"
         )
 
         results_after_2 = test_vector_search(
             client,
-            "[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]",
+            "(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)",
             1,
             "Query for [1,0,0,...]",
         )
 
         results_after_3 = test_vector_search(
             client,
-            "[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]",
+            "(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)",
             6,
             "Query for [0.1,0.2,...]",
         )

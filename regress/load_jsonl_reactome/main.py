@@ -68,7 +68,7 @@ def test_vector_search_match(client: turingdb.TuringDB, data_dir: str) -> None:
     # This query previously threw "Incompatible right key type for string hash join"
     # because ids was UInt64 and n.dbId was Int64
     result = client.query(
-        "VECTOR SEARCH IN reactome_index FOR 3 [1.0, 0.0, 0.0, 0.0] "
+        "VECTOR SEARCH IN reactome_index FOR 3 (1.0, 0.0, 0.0, 0.0) "
         "YIELD ids MATCH (n) WHERE n.dbId = ids "
         "RETURN n.dbId, n.displayName"
     )

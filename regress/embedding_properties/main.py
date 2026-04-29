@@ -29,9 +29,9 @@ def main():
     client.checkout(change=change)
 
     # Create nodes with embedding properties
-    client.query('CREATE (n:Vec {name: "a", vec: [0.3, 0.7, 0.5]})')
-    client.query('CREATE (n:Vec {name: "b", vec: [0.9, 0.2, 0.4]})')
-    client.query('CREATE (n:Vec {name: "c", vec: [0.1, 0.8, 0.6]})')
+    client.query('CREATE (n:Vec {name: "a", vec: (0.3, 0.7, 0.5)})')
+    client.query('CREATE (n:Vec {name: "b", vec: (0.9, 0.2, 0.4)})')
+    client.query('CREATE (n:Vec {name: "c", vec: (0.1, 0.8, 0.6)})')
 
     # Submit the change and checkout HEAD
     client.query("COMMIT")
@@ -65,7 +65,7 @@ def main():
     # --- Test 2: cosine_similarity function ---
     cos_ref = [0.4, 0.3, 0.8]
     result = client.query(
-        "MATCH (n:Vec) RETURN n.name, cosine_similarity(n.vec, [0.4, 0.3, 0.8])"
+        "MATCH (n:Vec) RETURN n.name, cosine_similarity(n.vec, (0.4, 0.3, 0.8))"
     )
     cos_names = list(result["n.name"])
     cos_col = [c for c in result.columns if c != "n.name"][0]
@@ -83,7 +83,7 @@ def main():
     # --- Test 3: euclidean_distance function ---
     euc_ref = [0.2, 0.5, 0.3]
     result = client.query(
-        "MATCH (n:Vec) RETURN n.name, euclidean_distance(n.vec, [0.2, 0.5, 0.3])"
+        "MATCH (n:Vec) RETURN n.name, euclidean_distance(n.vec, (0.2, 0.5, 0.3))"
     )
     euc_names = list(result["n.name"])
     euc_col = [c for c in result.columns if c != "n.name"][0]
