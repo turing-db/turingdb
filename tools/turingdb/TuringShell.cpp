@@ -37,6 +37,7 @@
 #include "metadata/PropertyType.h"
 #include "ListBufferTypeTag.h"
 #include "ListElementView.h"
+#include "ListUtils.h"
 
 #include "versioning/ChangeResult.h"
 #include "versioning/CommitBuilder.h"
@@ -505,6 +506,9 @@ void asString(std::string& out, const std::optional<T>& value) {
         out += "null";
     }
 }
+
+// Forward declare so ListElementView overload sees this: an element may be a ListView itself
+void asString(std::string& out, ListView lv);
 
 void asString(std::string& out, const ListElementView v) {
     const auto writeTyped = [&out]<typename T>(const ListElementView ele) {

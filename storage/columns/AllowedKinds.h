@@ -511,7 +511,7 @@ struct IndexedTypes {
         types::Double::Primitive,
         types::String::Primitive,
         types::Bool::Primitive,
-        types::Embedding::Primitive
+        ListView
     >>;
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnConst>(),

@@ -18,7 +18,7 @@ namespace {
 using ListableTypesImpl =
     std::tuple<db::types::Int64::Primitive, db::types::UInt64::Primitive,
                db::types::Double::Primitive, db::types::String::Primitive,
-               db::types::Bool::Primitive, db::types::Embedding::Primitive>;
+               db::types::Bool::Primitive, db::types::Embedding::Primitive, db::ListView>;
 }
 
 namespace db {

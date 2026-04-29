@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN [10, true, [\"this is a nested list\", 33.33, [0, false, \"this is a doubly nested list!\"]]] AS biglist",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): biglist\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "result": "biglist\n\"[10, true, [this is a nested list, 33.33, [0, false, this is a doubly nested list!]]]\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"biglist\"],\"column_types\":[\"List\"]},\"data\":[[[[10, true, [\"this is a nested list\", 33.330000, [0, false, \"this is a doubly nested list!\"]]]]]]}"
+  },
+  "tags": [
+    "lists",
+    "literals",
+    "return",
+    "projection"
+  ],
+  "write-required": false
+}
