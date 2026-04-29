@@ -7,6 +7,8 @@
 
 #include "ListBufferTypeTag.h"
 
+#include "metadata/PropertyType.h"
+
 #include "FatalException.h"
 
 namespace db {
@@ -66,37 +68,5 @@ T ListElementView::getAs() const {
 
     return out;
 }
-
-/// Helper to call a function on a type given a tag
-struct ListTagDispatcher {
-    ListBufferTypeTag _tag {ListBufferTypeTag::INVALID};
-
-    auto execute(const auto& executor, const ListElementView view) const {
-        switch (_tag) {
-            case ListBufferTypeTag::Int:
-                return executor.template operator()<types::Int64::Primitive>(view);
-            break;
-            case ListBufferTypeTag::UInt:
-                return executor.template operator()<types::UInt64::Primitive>(view);
-            break;
-            case ListBufferTypeTag::Double:
-                return executor.template operator()<types::Double::Primitive>(view);
-            break;
-            case ListBufferTypeTag::Bool:
-                return executor.template operator()<types::Bool::Primitive>(view);
-            break;
-            case ListBufferTypeTag::String:
-                return executor.template operator()<types::String::Primitive>(view);
-            break;
-            case ListBufferTypeTag::Embedding:
-                return executor.template operator()<types::Embedding::Primitive>(view);
-            break;
-
-            case ListBufferTypeTag::INVALID:
-            break;
-        }
-        throw FatalException("Unknown ListBufferTypeTag.");
-    }
-};
 
 }

@@ -4,13 +4,18 @@
 #include <spdlog/fmt/bundled/format.h>
 #include <range/v3/view/drop.hpp>
 
-#include "ListElementView.h"
 #include "QueryStatus.h"
+
+#include "ListElementView.h"
+#include "ListUtils.h"
+
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "dataframe/Dataframe.h"
+
 #include "OutputWriter.h"
 #include "OutputValues.h"
+
 #include "ControlCharacters.h"
 
 namespace rg = ranges;

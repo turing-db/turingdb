@@ -3,6 +3,7 @@
 
 #include "ListBuffer.h"
 #include "ListElementView.h"
+#include "ListUtils.h"
 
 #include "metadata/PropertyType.h"
 
@@ -18,6 +19,8 @@ int main() {
             spdlog::info("element: {}", value._boolean);
         } else if constexpr (std::is_same_v<T, types::Embedding::Primitive>) {
             spdlog::info("element: {}", "embedding");
+        } else if constexpr (std::is_same_v<T, ListView>) {
+            spdlog::info("element: {}", "list");
         } else {
             spdlog::info("element: {}", value);
         }

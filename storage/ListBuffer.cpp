@@ -5,6 +5,7 @@
 #include "ListBufferTypeTag.h"
 #include "ListByteBuffer.h"
 #include "ListElementView.h"
+#include "ListUtils.h"
 
 using namespace db;
 

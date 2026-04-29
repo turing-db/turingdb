@@ -196,6 +196,9 @@ template <typename T>
     return s;
 }
 
+// Forward declare so ListElementView overload sees this: an element may be a ListView itself
+[[maybe_unused]] std::string valueToString(ListView view);
+
 [[maybe_unused]] std::string valueToString(const ListElementView ele) {
     const auto writeTyped = []<typename T>(const ListElementView ele) -> std::string {
         const T typed = ele.getAs<T>();
