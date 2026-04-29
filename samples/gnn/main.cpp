@@ -103,13 +103,13 @@ static void appendEmbeddingLiteral(std::string& s,
                                    const Matrix& m,
                                    size_t row) {
     char buf[32];
-    s += '[';
+    s += '(';
     for (size_t d = 0; d < m._cols; d++) {
         if (d > 0) s += ", ";
         int n = snprintf(buf, sizeof(buf), "%.6f", m.at(row, d));
         s.append(buf, n);
     }
-    s += ']';
+    s += ')';
 }
 
 static void appendUInt64(std::string& s, uint64_t v) {
