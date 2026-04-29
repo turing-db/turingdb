@@ -479,19 +479,11 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
     }
 
     // Validate vector has elements
-    const ListLiteral* queryVector = stmt->getQueryVector();
-    if (!queryVector || queryVector->empty()) {
+    const EmbeddingLiteral* queryVector = stmt->getQueryVector();
+    const std::span<const float> query = queryVector->getValue();
+
+    if (!queryVector || query.empty()) {
         throwError("VECTOR SEARCH query vector cannot be empty", stmt);
-    }
-
-    // Analyze each element in the query vector
-    for (Expr* elem : queryVector->items()) {
-        _exprAnalyzer->analyzeRootExpr(elem);
-
-        const EvaluatedType elemType = elem->getType();
-        if (elemType != EvaluatedType::Integer && elemType != EvaluatedType::Double) {
-            throwError("VECTOR SEARCH query vector elements must be numeric", stmt);
-        }
     }
 
     // Process YIELD clause - create VarDecl for 'ids' variable

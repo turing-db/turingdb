@@ -192,12 +192,22 @@ void MapLiteral::set(Symbol* key, Expr* value) {
     _map[key] = value;
 }
 
+EmbeddingLiteral::EmbeddingLiteral()
+{
+}
+
 EmbeddingLiteral::EmbeddingLiteral(std::vector<float>&& data)
     : _data(std::move(data))
 {
 }
 
 EmbeddingLiteral::~EmbeddingLiteral() {
+}
+
+EmbeddingLiteral* EmbeddingLiteral::create(CypherAST* ast) {
+    EmbeddingLiteral* literal = new EmbeddingLiteral();
+    ast->addLiteral(literal);
+    return literal;
 }
 
 EmbeddingLiteral* EmbeddingLiteral::create(CypherAST* ast, std::vector<float>&& data) {

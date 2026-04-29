@@ -188,28 +188,10 @@ void ReadStmtGenerator::generateLoadCSVStmt(const LoadCSVStmt* stmt) {
 }
 
 void ReadStmtGenerator::generateVectorSearchStmt(const VectorSearchStmt* stmt) {
-    // Extract float values from ListExpr
-    std::vector<float> queryVector;
-    const ListLiteral* listExpr = stmt->getQueryVector();
+    const EmbeddingLiteral* embExpr = stmt->getQueryVector();
+    std::span<const float> querySpan = embExpr->getValue();
 
-    for (Expr* elem : listExpr->items()) {
-        if (elem->getKind() != Expr::Kind::LITERAL) {
-            throwError("VECTOR SEARCH query vector elements must be literals", stmt);
-        }
-
-        const LiteralExpr* litExpr = static_cast<const LiteralExpr*>(elem);
-        const Literal* lit = litExpr->getLiteral();
-
-        if (lit->getKind() == Literal::Kind::DOUBLE) {
-            const DoubleLiteral* doubleLit = static_cast<const DoubleLiteral*>(lit);
-            queryVector.push_back(static_cast<float>(doubleLit->getValue()));
-        } else if (lit->getKind() == Literal::Kind::INTEGER) {
-            const IntegerLiteral* intLit = static_cast<const IntegerLiteral*>(lit);
-            queryVector.push_back(static_cast<float>(intLit->getValue()));
-        } else {
-            throwError("VECTOR SEARCH query vector elements must be numeric", stmt);
-        }
-    }
+    std::vector<float> queryVector(begin(querySpan), end(querySpan));
 
     VectorSearchNode* node = _tree->create<VectorSearchNode>(
         stmt->getIndexName(),
