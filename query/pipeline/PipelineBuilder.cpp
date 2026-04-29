@@ -33,6 +33,7 @@
 #include "processors/SkipProcessor.h"
 #include "processors/LimitProcessor.h"
 #include "processors/CountProcessor.h"
+#include "processors/UnwindProcessor.h"
 #include "processors/WriteProcessor.h"
 #include "processors/ListGraphProcessor.h"
 #include "processors/ShowProceduresProcessor.h"
@@ -1413,6 +1414,16 @@ PipelineBlockOutputInterface& PipelineBuilder::addDropIndex(std::string_view ind
     auto* proc = DropIndexProcessor::create(_pipeline, indexName);
 
     PipelineBlockOutputInterface& output = proc->output();
+
+    _pendingOutput.setInterface(&output);
+    _lastProc = proc;
+    return output;
+}
+
+PipelineValuesOutputInterface& PipelineBuilder::addUnwind(ListView list) {
+    auto* proc = UnwindProcessor::create(_pipeline, list);
+
+    PipelineValuesOutputInterface& output = proc->output();
 
     _pendingOutput.setInterface(&output);
     _lastProc = proc;

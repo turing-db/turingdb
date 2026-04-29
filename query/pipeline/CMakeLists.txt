@@ -73,6 +73,7 @@ set(processors_sources
     processors/ApplyMask.cpp
     processors/DropIndexProcessor.cpp
     processors/DataPartMergeProcessor.cpp
+    processors/UnwindProcessor.cpp
 )
 
 add_library(turing_db_pipeline_s
