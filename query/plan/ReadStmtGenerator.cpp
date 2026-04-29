@@ -46,6 +46,7 @@
 #include "nodes/ProcedureEvalNode.h"
 #include "nodes/ProduceResultsNode.h"
 #include "nodes/ScanNodesNode.h"
+#include "nodes/UnwindNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/ShortestPathNode.h"
 #include "nodes/VectorSearchNode.h"
@@ -61,6 +62,7 @@
 #include "stmt/CallStmt.h"
 #include "stmt/LoadCSVStmt.h"
 #include "nodes/LoadCSVNode.h"
+#include "stmt/UnwindStmt.h"
 #include "stmt/VectorSearchStmt.h"
 
 #include "PlannerException.h"
@@ -116,7 +118,7 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
         break;
 
         case Stmt::Kind::UNWIND:
-            throwError("UNWIND is not yet implemented.", stmt);
+            generateUnwindStmt(static_cast<const UnwindStmt*>(stmt));
         break;
 
         case Stmt::Kind::CREATE:
@@ -1105,6 +1107,13 @@ void ReadStmtGenerator::generateShortestPathStmt(const ShortestPathStmt* stmt) {
     VarNode* targetNode = _variables->getVarNode(targetDecl);
 
     insertShortestPathNode(sourceNode, targetNode, propertyType, distDecl, pathDecl);
+}
+
+void ReadStmtGenerator::generateUnwindStmt(const UnwindStmt* stmt) {
+    const Expr* arg = stmt->arg();
+    const Symbol* sym = stmt->symbol();
+
+    _tree->create<UnwindNode>(arg, sym);
 }
 
 void ReadStmtGenerator::throwError(std::string_view msg, const void* obj) const {
