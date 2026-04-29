@@ -233,6 +233,8 @@ public:
                                                          std::string_view propName,
                                                          bool isNodeIndex);
 
+    PipelineValuesOutputInterface& addUnwind(ListView list);
+
     PipelineBlockOutputInterface& addDropIndex(std::string_view indexName);
 
     template <typename Q, typename R>

@@ -6,6 +6,7 @@
 #include "QueryCallbacks.h"
 
 #include "PipelineBuilder.h"
+#include "nodes/UnwindNode.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -67,6 +68,7 @@ class CreatePropertyIndexNode;
 class IndexLookupNode;
 class DropIndexNode;
 class MergeDataPartsNode;
+class UnwindNode;
 
 class PipelineGenerator {
 public:
@@ -172,6 +174,7 @@ private:
     PipelineOutputInterface* translateIndexLookupNode(IndexLookupNode* node);
     PipelineOutputInterface* translateDropIndexNode(DropIndexNode* node);
     PipelineOutputInterface* translateMergeDataPartsNode(MergeDataPartsNode* node);
+    PipelineOutputInterface* translateUnwindNode(UnwindNode* node);
 
     std::vector<std::string> _csvHeaders;
 };

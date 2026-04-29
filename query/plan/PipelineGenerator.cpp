@@ -93,6 +93,7 @@
 #include "nodes/IndexLookupNode.h"
 #include "nodes/DropIndexNode.h"
 #include "nodes/MergeDataPartsNode.h"
+#include "nodes/UnwindNode.h"
 
 #include "TranslateJoinHelpers.h"
 
@@ -479,7 +480,7 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
         break;
 
         case PlanGraphOpcode::UNWIND:
-            throw PlannerException("UNWIND is not yet implemented.");
+            return translateUnwindNode(static_cast<UnwindNode*>(node));
         break;
 
         case PlanGraphOpcode::FUNC_EVAL:
@@ -1892,4 +1893,8 @@ PipelineOutputInterface* PipelineGenerator::translateDropIndexNode(DropIndexNode
     const std::string_view indexName = node->indexName();
     _builder.addDropIndex(indexName);
     return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node) {
+    return nullptr;
 }

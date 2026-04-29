@@ -29,6 +29,8 @@ public:
     ListElementView front() const { return _elements.front(); }
     ListElementView back() const { return _elements.back(); }
 
+    explicit operator bool() { return _elements.data() != nullptr; }
+
 private:
     template <size_t N>
     friend class ListBuffer;
