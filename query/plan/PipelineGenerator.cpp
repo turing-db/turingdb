@@ -171,6 +171,25 @@ struct PropertyTypeDispatcher {
     }
 };
 
+struct AddLiteralToList {
+    std::vector<ListBuffer<>::ListItemVariant>& _items;
+
+    template <typename T>
+    void operator()(const ColumnConst<T>* litCol) {
+        _items.emplace_back(litCol->getRaw());
+    }
+};
+
+void fillList(const ListLiteral* list,
+              std::vector<ListBuffer<>::ListItemVariant>& items) {
+    using Types = ListableTypes;
+    using AddItem = ColumnSingleDispatcher<Types::Allowed,
+                                           AddLiteralToList,
+                                           Types::LiteralExcluded>;
+
+    items.clear();
+    items.reserve(list->size());
+}
 }
 
 ColumnTag PipelineGenerator::getCol(const VarDecl* var) {
@@ -1896,5 +1915,42 @@ PipelineOutputInterface* PipelineGenerator::translateDropIndexNode(DropIndexNode
 }
 
 PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node) {
-    return nullptr;
+    const Expr* argExpr = node->arg();
+
+    // 1. Allocate list to be unwound in the list buffer
+    // Current restrictions:
+    //     - Argument must be a literal
+    //     - Argument must be a list
+    {
+        const Expr::Kind kind = argExpr->getKind();
+        const bool isLiteral = kind == Expr::Kind::LITERAL;
+
+        if (!isLiteral) {
+            throw PlannerException(
+                "Non-literal arguments to UNWIND are not yet supported.");
+        }
+
+        const auto* litExp = static_cast<const LiteralExpr*>(argExpr);
+
+        const Literal* lit = litExp->getLiteral();
+        bioassert(lit, "Null literal.");
+
+        const Literal::Kind litKind = lit->getKind();
+        const bool isList = litKind == Literal::Kind::LIST;
+
+        if (!isList) {
+            throw PlannerException("Non-list arguments to UNWIND are not yet supported.");
+        }
+
+        const ListLiteral* list = static_cast<const ListLiteral*>(lit);
+
+        std::vector<ListBuffer<>::ListItemVariant> items;
+
+    }
+
+    // 2. Register symbol in decl map
+
+    _builder.addUnwind({});
+
+    return _builder.getPendingOutputInterface();
 }
