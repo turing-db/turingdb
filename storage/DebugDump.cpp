@@ -31,18 +31,29 @@ void DebugDump::dumpNull(std::ostream& out) {
 }
 
 void DebugDump::dump(std::ostream& out, ListElementView view, bool isInList) {
-    const auto dumpTyped = [&out]<typename T>(const ListElementView ele) {
+    const auto dumpTyped = [&out, isInList]<typename T>(const ListElementView ele) {
         const T typed = ele.getAs<T>();
-        dump(out, typed);
+
+        // Dumping a column of ListElementViews:
+        if (!isInList) {
+            dump(out, typed);
+            return;
+        }
+
+        // Dumping a column of ListViews: remove the \n after each element
+        std::ostringstream temp;
+        dump(temp, typed);
+        std::string dumped = temp.str();
+        if (!dumped.empty() && dumped.back() == '\n') {
+            dumped.pop_back();
+        }
+
+        out << dumped;
     };
 
     const ListBufferTypeTag tag = view.getTag();
     ListTagDispatcher dumper {._tag = tag};
     dumper.execute(dumpTyped, view);
-
-    if (isInList) {
-        out << '\n';
-    }
 }
 
 void DebugDump::dump(std::ostream& out, ListView list) {
@@ -59,6 +70,7 @@ void DebugDump::dump(std::ostream& out, ListView list) {
     dump(out, fst, isInList);
 
     for (const ListElementView ele : list | rv::drop(1)) {
+        out << ", ";
         dump(out, ele, isInList);
     }
 
