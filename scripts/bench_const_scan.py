@@ -130,7 +130,7 @@ SEED_DBIDS = [
 def main():
     print(f"Seed dbIds: {len(SEED_DBIDS)}")
 
-    client = TuringDB(host=HOST, timeout=300)
+    client = TuringDB(host=HOST)
     client.set_graph(GRAPH)
 
     # Step 1: Map dbId -> NodeID

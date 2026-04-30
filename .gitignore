@@ -9,6 +9,9 @@ __pycache__
 *.pyc
 node_modules
 python/turingdb/_version.py
+python/turingdb/_binary/*.so
+python/turingdb/_binary/*.pyd
+python/turingdb/_binary/*.dylib
 *.whl
 wheel/
 dist
