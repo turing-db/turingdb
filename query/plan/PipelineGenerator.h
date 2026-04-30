@@ -6,7 +6,6 @@
 #include "QueryCallbacks.h"
 
 #include "PipelineBuilder.h"
-#include "nodes/UnwindNode.h"
 #include "views/GraphView.h"
 
 namespace db {

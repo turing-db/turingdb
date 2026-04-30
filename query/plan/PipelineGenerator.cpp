@@ -11,12 +11,14 @@
 #include "FunctionInvocation.h"
 #include "FunctionSignature.h"
 #include "ID.h"
+#include "LocalMemory.h"
 #include "PendingOutputView.h"
 #include "PlanGraph.h"
 #include "Predicate.h"
 #include "Symbol.h"
 #include "YieldClause.h"
 #include "YieldItems.h"
+#include "columns/ColumnOperatorDispatcher.h"
 #include "dataframe/ColumnTag.h"
 #include "dataframe/NamedColumn.h"
 #include "decl/EvaluatedType.h"
@@ -125,6 +127,8 @@
 #include "columns/ColumnStringTable.h"
 #include "CSVParser.h"
 
+#include "columns/AllowedKinds.h"
+
 using namespace db;
 
 namespace rg = ranges;
@@ -181,6 +185,7 @@ struct AddLiteralToList {
 };
 
 void fillList(const ListLiteral* list,
+              ExprProgramGenerator* exprGen,
               std::vector<ListBuffer<>::ListItemVariant>& items) {
     using Types = ListableTypes;
     using AddItem = ColumnSingleDispatcher<Types::Allowed,
@@ -189,7 +194,15 @@ void fillList(const ListLiteral* list,
 
     items.clear();
     items.reserve(list->size());
+
+    AddLiteralToList listBuilder {._items = items};
+
+    for (const Expr* item : list->items()) {
+        const Column* itemConst = exprGen->generateExpr(item);
+        AddItem::dispatch(itemConst, listBuilder);
+    }
 }
+
 }
 
 ColumnTag PipelineGenerator::getCol(const VarDecl* var) {
@@ -1224,7 +1237,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
     if (!yield || !yield->getItems()) {
         procedure->returnAll(yieldItems);
     } else {
-        for (const auto* item : *yield->getItems()) {
+        for (const SymbolExpr* item : *yield->getItems()) {
             const Symbol* symbol = item->getSymbol();
 
             yieldItems.emplace_back(symbol->getOriginalName(), symbol->getName());
@@ -1942,15 +1955,29 @@ PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node
             throw PlannerException("Non-list arguments to UNWIND are not yet supported.");
         }
 
-        const ListLiteral* list = static_cast<const ListLiteral*>(lit);
+        const auto* list = static_cast<const ListLiteral*>(lit);
 
+        // Buffer to store values of items
         std::vector<ListBuffer<>::ListItemVariant> items;
+        { // Fill the list of items
+            ExprProgram* exprProg = ExprProgram::create(_pipeline);
+            /// @ref ExprProgramGenerator requires a pending view, but we don't use it.
+            /// Provide a null view
+            PendingOutputView invalidView {};
+            ExprProgramGenerator exprGen(this, exprProg, invalidView);
 
+            fillList(list, &exprGen, items);
+        }
+
+        LocalMemory::DefaultListBuffer& buf = memory().listBuffer();
+        const ListView view = buf.insert(items);
+        _builder.addUnwind(view);
     }
 
     // 2. Register symbol in decl map
+    const Symbol* sym = node->sym();
+    const std::string_view name = sym->getName();
 
-    _builder.addUnwind({});
 
     return _builder.getPendingOutputInterface();
 }
