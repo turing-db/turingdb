@@ -4,16 +4,20 @@
 #include <vector>
 #include <optional>
 
-#include "RWSpinLock.h"
-#include "GraphLoadStatus.h"
-#include "TuringS3Client.h"
-#include "MinioS3ClientWrapper.h"
-#include "Path.h"
-#include "GraphFileType.h"
 #include "versioning/ChangeID.h"
 #include "versioning/ChangeResult.h"
+
 #include "mergers/DataPartMergeResult.h"
+
+#include "TuringS3Client.h"
+#include "MinioS3ClientWrapper.h"
+
+#include "GraphFileType.h"
+#include "GraphLoadStatus.h"
 #include "dump/DumpResult.h"
+
+#include "Path.h"
+#include "RWSpinLock.h"
 
 namespace db {
 
@@ -21,18 +25,12 @@ class TuringConfig;
 class Graph;
 class ChangeManager;
 class JobSystem;
-class FrozenCommitTx;
 class Transaction;
 class Change;
 
 class SystemManager {
 public:
     ~SystemManager();
-
-    SystemManager(const SystemManager&) = delete;
-    SystemManager(SystemManager&&) = delete;
-    SystemManager& operator=(const SystemManager&) = delete;
-    SystemManager& operator=(SystemManager&&) = delete;
 
     static std::unique_ptr<SystemManager> create(const TuringConfig* config);
 
@@ -89,13 +87,21 @@ public:
     S3::TuringS3Client<S3::MinioS3ClientWrapper>* getS3Client() { return _s3Client.get(); }
 
 private:
-    mutable RWSpinLock _graphsLock;
     const TuringConfig* _config {nullptr};
+
+    // Graphs management
+    mutable RWSpinLock _graphsLock;
     Graph* _defaultGraph {nullptr};
-    std::unique_ptr<S3::TuringS3Client<S3::MinioS3ClientWrapper>> _s3Client {nullptr};
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
+
+    // Change management
     std::unique_ptr<ChangeManager> _changes;
+
+    // Graph load status
     GraphLoadStatus _graphLoadStatus;
+
+    // S3 Client
+    std::unique_ptr<S3::TuringS3Client<S3::MinioS3ClientWrapper>> _s3Client {nullptr};
 
     explicit SystemManager(const TuringConfig* config);
 
