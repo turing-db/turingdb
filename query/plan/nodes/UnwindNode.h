@@ -1,5 +1,6 @@
 #pragma once
 
+#include "decl/VarDecl.h"
 #include "nodes/PlanGraphNode.h"
 
 namespace db {
@@ -9,19 +10,19 @@ class Symbol;
 
 class UnwindNode final : public PlanGraphNode {
 public:
-    UnwindNode(const Expr* arg, const Symbol* sym)
+    UnwindNode(const Expr* arg, const VarDecl* var)
         : PlanGraphNode(PlanGraphOpcode::UNWIND),
         _arg(arg),
-        _sym(sym)
+        _var(var)
     {
     }
 
     const Expr* arg() const { return _arg; }
-    const Symbol* sym() const { return _sym; }
+    const VarDecl* var() const { return _var; }
 
 private:
     const Expr* _arg {nullptr};
-    const Symbol* _sym {nullptr};
+    const VarDecl* _var {nullptr};
 };
 
 }
