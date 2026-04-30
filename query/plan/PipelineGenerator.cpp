@@ -1934,6 +1934,7 @@ PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node
     // Current restrictions:
     //     - Argument must be a literal
     //     - Argument must be a list
+    ListView listView;
     {
         const Expr::Kind kind = argExpr->getKind();
         const bool isLiteral = kind == Expr::Kind::LITERAL;
@@ -1962,22 +1963,27 @@ PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node
         { // Fill the list of items
             ExprProgram* exprProg = ExprProgram::create(_pipeline);
             /// @ref ExprProgramGenerator requires a pending view, but we don't use it.
-            /// Provide a null view
-            PendingOutputView invalidView {};
-            ExprProgramGenerator exprGen(this, exprProg, invalidView);
+            /// Provide a null view for only this expr prog.
+            constexpr PendingOutputView unusedView {};
+            ExprProgramGenerator exprGen(this, exprProg, unusedView);
 
             fillList(list, &exprGen, items);
         }
 
         LocalMemory::DefaultListBuffer& buf = memory().listBuffer();
-        const ListView view = buf.insert(items);
-        _builder.addUnwind(view);
+        listView = buf.insert(items);
     }
+    bioassert(listView, "Failed to allocate ListView.");
+
+    const PipelineValuesOutputInterface& pendingOut = _builder.addUnwind(listView);
 
     // 2. Register symbol in decl map
-    const Symbol* sym = node->sym();
-    const std::string_view name = sym->getName();
-
+    {
+        const VarDecl* var = node->var();
+        const NamedColumn* unwoundCol = pendingOut.getValues();
+        const ColumnTag unwoundTag = unwoundCol->getTag();
+        _declToColumn[var] = unwoundTag;
+    }
 
     return _builder.getPendingOutputInterface();
 }

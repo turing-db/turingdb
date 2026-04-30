@@ -1425,6 +1425,17 @@ PipelineValuesOutputInterface& PipelineBuilder::addUnwind(ListView list) {
 
     PipelineValuesOutputInterface& output = proc->output();
 
+    {
+        auto* valuesCol = _mem->alloc<ColumnVector<ListElementView>>();
+        const ColumnTag newTag = _dfMan->allocTag();
+        NamedColumn* unwoundCol = NamedColumn::create(_dfMan, valuesCol, newTag);
+
+        Dataframe* outDf = output.getDataframe();
+        outDf->addColumn(unwoundCol);
+
+        output.setValues(unwoundCol);
+    }
+
     _pendingOutput.setInterface(&output);
     _lastProc = proc;
     return output;

@@ -107,8 +107,7 @@ private:
     template <typename T>
         requires std::is_base_of_v<Column, T>
               && std::is_trivially_copyable_v<typename T::ValueType>
-    void fillStore(T* inputCol,
-                   size_t rowNumber) {
+    void fillStore(T* inputCol, size_t rowNumber) {
         bioassert(rowNumber < inputCol->size(), "Invalid row number");
         const auto& val = inputCol->data()[rowNumber];
         _dataList.back().setValue<typename T::ValueType>(val);
