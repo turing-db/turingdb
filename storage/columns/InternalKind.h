@@ -72,7 +72,6 @@ public:
         types::Bool::Primitive,
         types::String::Primitive,
         types::Embedding::Primitive,
-        ListView,
         std::optional<EntityID>,
         std::optional<NodeID>,
         std::optional<EdgeID>,
@@ -94,7 +93,10 @@ public:
         NodeView,
         const CommitBuilder*,
         const Change*,
-        Column*>;
+        Column*,
+        ListView,
+        ListElementView
+    >;
 
     using Code = uint8_t;
 

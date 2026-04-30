@@ -67,7 +67,6 @@ public:
         MakeMemoryPool<ColumnConst<std::string>>::type,
         MakeMemoryPool<ColumnConst<types::Bool::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::Embedding::Primitive>>::type,
-        MakeMemoryPool<ColumnConst<ListView>>::type,
 
         MakeMemoryPool<ColumnConst<std::optional<types::Int64::Primitive>>>::type,
         MakeMemoryPool<ColumnConst<std::optional<types::Int64::Primitive>>>::type,
@@ -98,7 +97,11 @@ public:
         MakeMemoryPool<ColumnOptVector<types::Embedding::Primitive>>::type,
         MakeMemoryPool<ColumnSet<NodeID>>::type,
         MakeMemoryPool<ColumnSet<EdgeID>>::type,
-        MakeMemoryPool<ColumnStringTable>::type>;
+        MakeMemoryPool<ColumnStringTable>::type,
+
+        MakeMemoryPool<ColumnConst<ListView>>::type,
+        MakeMemoryPool<ColumnVector<ListElementView>>::type
+    >;
 
     template <typename KeyT, typename ValueT>
     struct ClearTransform {

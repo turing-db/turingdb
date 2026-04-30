@@ -5,8 +5,12 @@
 #include <ostream>
 
 #include "ID.h"
+
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
+
+#include "ListElementView.h"
+#include "ListView.h"
 
 namespace db {
 
@@ -53,6 +57,9 @@ public:
 
     static void dumpString(std::ostream& out, const std::string& str);
     static void dumpNull(std::ostream& out);
+
+    static void dump(std::ostream& out, ListView list);
+    static void dump(std::ostream& out, ListElementView view, bool isAlone = true);
 
 private:
     static void dumpImpl(std::ostream& out, uint64_t data);

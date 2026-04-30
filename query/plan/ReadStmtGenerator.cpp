@@ -1113,7 +1113,12 @@ void ReadStmtGenerator::generateUnwindStmt(const UnwindStmt* stmt) {
     const Expr* arg = stmt->arg();
     const Symbol* sym = stmt->symbol();
 
-    _tree->create<UnwindNode>(arg, sym);
+    const std::string_view symbolName = sym->getName();
+
+    const VarDecl* var = _declContext->getDecl(symbolName);
+    bioassert(var, "Null variable for UNWIND.");
+
+    _tree->create<UnwindNode>(arg, var);
 }
 
 void ReadStmtGenerator::throwError(std::string_view msg, const void* obj) const {

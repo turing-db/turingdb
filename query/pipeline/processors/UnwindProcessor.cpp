@@ -1,7 +1,16 @@
 #include "UnwindProcessor.h"
 
-#include "BioAssert.h"
+#include "ListElementView.h"
+
+#include "columns/Column.h"
+#include "columns/ColumnVector.h"
+
+#include "dataframe/Dataframe.h"
+#include "dataframe/NamedColumn.h"
+
 #include "PipelinePort.h"
+
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -37,4 +46,16 @@ void UnwindProcessor::reset() {
 
 void UnwindProcessor::execute() {
     bioassert(_list, "Invalid list in UNWIND.");
+
+    const NamedColumn* values = _output.getValues();
+    Column* valueCol = values->getColumn();
+
+    auto* typedCol = dynamic_cast<ColumnVector<ListElementView>*>(valueCol);
+    bioassert(typedCol, "Invalid column to UNWIND.");
+
+    for (const ListElementView item : _list) {
+        typedCol->push_back(item);
+    }
+
+    finish();
 }
