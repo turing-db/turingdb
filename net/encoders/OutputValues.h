@@ -5,6 +5,7 @@
 
 #include "GraphPath.h"
 #include "ID.h"
+#include "ListElementView.h"
 #include "OptionalLike.h"
 #include "TypeUtils.h"
 #include "metadata/PropertyNull.h"
@@ -62,6 +63,9 @@ template <typename T>
 concept IsList = std::is_same_v<T, EntityList> || std::is_same_v<T, ListView>;
 
 template <typename T>
+concept IsListElement = std::is_same_v<T, ListElementView>;
+
+template <typename T>
 concept IsNull = std::is_same_v<T, PropertyNull>;
 
 template <typename T>
@@ -92,6 +96,8 @@ struct ColumnTypeGenerator {
             _name = fmt::format("NULL");
         } else if constexpr (IsList<T>) {
             _name = fmt::format("List");
+        } else if constexpr (IsListElement<T>) {
+            _name = fmt::format("ListElement");
         } else {
             COMPILE_ERROR("Unknown column type");
         }
