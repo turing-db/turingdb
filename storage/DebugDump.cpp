@@ -30,7 +30,7 @@ void DebugDump::dumpNull(std::ostream& out) {
     out << "null\n";
 }
 
-void DebugDump::dump(std::ostream& out, ListElementView view, bool isAlone) {
+void DebugDump::dump(std::ostream& out, ListElementView view, bool isInList) {
     const auto dumpTyped = [&out]<typename T>(const ListElementView ele) {
         const T typed = ele.getAs<T>();
         dump(out, typed);
@@ -40,7 +40,7 @@ void DebugDump::dump(std::ostream& out, ListElementView view, bool isAlone) {
     ListTagDispatcher dumper {._tag = tag};
     dumper.execute(dumpTyped, view);
 
-    if (isAlone) {
+    if (isInList) {
         out << '\n';
     }
 }
@@ -53,13 +53,13 @@ void DebugDump::dump(std::ostream& out, ListView list) {
 
     out << "[";
 
-    constexpr bool isAlone = false;
+    constexpr bool isInList = true;
 
     const ListElementView fst = list.front();
-    dump(out, fst, isAlone);
+    dump(out, fst, isInList);
 
     for (const ListElementView ele : list | rv::drop(1)) {
-        dump(out, ele, isAlone);
+        dump(out, ele, isInList);
     }
 
     out << "]\n";

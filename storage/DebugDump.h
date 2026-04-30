@@ -59,7 +59,7 @@ public:
     static void dumpNull(std::ostream& out);
 
     static void dump(std::ostream& out, ListView list);
-    static void dump(std::ostream& out, ListElementView view, bool isAlone = true);
+    static void dump(std::ostream& out, ListElementView view, bool isInList = true);
 
 private:
     static void dumpImpl(std::ostream& out, uint64_t data);

@@ -11,6 +11,7 @@
 #include "PipelinePort.h"
 
 #include "BioAssert.h"
+#include <iostream>
 
 using namespace db;
 
@@ -56,6 +57,8 @@ void UnwindProcessor::execute() {
     for (const ListElementView item : _list) {
         typedCol->push_back(item);
     }
+
+    _output.getDataframe()->dump(std::cout);
 
     finish();
 }
