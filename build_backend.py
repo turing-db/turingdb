@@ -107,10 +107,16 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     """Build a wheel with the C++ binary included."""
     import setuptools.build_meta as backend
 
+    project_root = _get_project_root()
+    binary_dir = project_root / "python" / "turingdb" / "_binary"
+    binary_pre_existing = {
+        p.name
+        for p in list(binary_dir.glob("_turingproto*.so")) + list(binary_dir.glob("_turingproto*.pyd"))
+    }
+
     # Ensure the executable exists
     exe_path = _ensure_executable_built()
 
-    project_root = _get_project_root()
     bin_dir = project_root / "python" / "turingdb" / "bin"
     dest_exe = bin_dir / "turingdb"
     build_lib_dir = project_root / "build" / "lib"
@@ -152,6 +158,12 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             shutil.rmtree(bin_dir)
         if copied_extensions and ext_dest_dir.exists():
             shutil.rmtree(ext_dest_dir)
+        # Remove native .so/.pyd files we just produced (don't touch any that pre-existed,
+        # which would belong to a developer's editable install).
+        if binary_dir.exists():
+            for binary_file in list(binary_dir.glob("_turingproto*.so")) + list(binary_dir.glob("_turingproto*.pyd")):
+                if binary_file.name not in binary_pre_existing:
+                    binary_file.unlink()
 
 
 def build_sdist(sdist_directory, config_settings=None):

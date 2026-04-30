@@ -1,132 +1,100 @@
-import time
-from typing import Literal, Optional
+from __future__ import annotations
+
+import urllib.parse
+from typing import Literal, Optional, Union
+
+from pandas import DataFrame
 
 from .exceptions import TuringDBException
-from .s3 import S3Client
+from .http_client import HTTPClient
+from .binary_client import BinaryClient
+
+
+Transport = Literal["http", "binary"]
 
 
 class TuringDB:
-    DEFAULT_HEADERS = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
+    """Unified TuringDB client.
+
+    Pass ``transport="http"`` (default) for the REST/HTTP client or
+    ``transport="binary"`` for the in-process binary protocol client.
+
+    The facade exposes the methods that behave identically across both
+    transports. For transport-specific functionality (e.g.
+    ``list_available_graphs`` on HTTP, or the raw column-dict response from
+    the binary protocol) reach the underlying client via ``client.http`` or
+    ``client.binary``.
+    """
 
     def __init__(
         self,
-        instance_id: str = "",
-        auth_token: str = "",
         host: str = "http://localhost:6666",
-        timeout: Optional[int] = None,
+        transport: Transport = "http",
+        port: Optional[Union[int, str]] = None,
     ):
-        import copy
-
-        import httpx
-
-        self.host = host
-        self._client = httpx.Client(
-            auth=None,
-            verify=False,
-            timeout=timeout,
-        )
-        self._s3_client: Optional[S3Client] = None
-        self._query_exec_time: Optional[float] = None
-        self._total_exec_time: Optional[float] = None
-        self._t0: float = 0
-        self._t1: float = 0
-        self._timeout = timeout
-
-        self._params = {
-            "graph": "default",
-        }
-
-        self._headers = copy.deepcopy(TuringDB.DEFAULT_HEADERS)
-
-        if instance_id != "":
-            self._headers["Turing-Instance-Id"] = instance_id
-
-        if auth_token != "":
-            self._headers["Authorization"] = f"Bearer {auth_token}"
-
-    def try_reach(self, timeout: int = 5):
-        self._client.timeout = timeout
-        self.list_available_graphs()
-        self._client.timeout = self._timeout
-
-    def warmup(self, timeout: int = 5):
-        self._client.timeout = timeout
-        self.query("LIST GRAPH")
-        self._client.timeout = self._timeout
-
-    def list_available_graphs(self) -> list[str]:
-        return self._send_request("list_avail_graphs")["data"]
-
-    def list_loaded_graphs(self) -> list[str]:
-        return self._send_request("list_loaded_graphs")["data"][0][0]
-
-    def is_graph_loaded(self) -> bool:
-        return self._send_request(
-            "is_graph_loaded", params={"graph": self.get_graph()}
-        )["data"]
-
-    def load_graph(self, graph_name: str, raise_if_loaded: bool = True):
-        try:
-            return self._send_request("load_graph", params={"graph": graph_name})
-        except TuringDBException as e:
-            if raise_if_loaded or e.__str__() != "GRAPH_ALREADY_EXISTS":
-                raise e
-
-    def create_graph(self, graph_name: str):
-        return self.query(f"create graph {graph_name}")
-
-    def query(self, query: str):
-        json = self._send_request("query", data=query, params=self._params)
-
-        if not isinstance(json, dict):
-            raise TuringDBException("Invalid response from the server")
-
-        return self._parse_chunks(json)
-
-    def set_commit(self, commit: str):
-        self._params["commit"] = commit
-
-    def set_change(self, change: int | str):
-        if isinstance(change, int):
-            change = f"{change:x}"
-        self._params["change"] = change
-
-    def checkout(self, change: int | Literal["main"] = "main", commit: str = "HEAD"):
-        if change == "main":
-            if "change" in self._params:
-                del self._params["change"]
+        if transport == "http":
+            self._impl: Union[HTTPClient, BinaryClient] = HTTPClient(host=host)
+        elif transport == "binary":
+            binary_host, binary_port = _split_host_port(host, port)
+            self._impl = BinaryClient(host=binary_host, port=binary_port)
         else:
-            self.set_change(change)
+            raise TuringDBException(f"Unknown transport: {transport!r}")
 
-        if commit == "HEAD":
-            if "commit" in self._params:
-                del self._params["commit"]
-        else:
-            self.query(f"LOAD COMMIT '{commit}'")
-            self.set_commit(commit)
+        self._transport: Transport = transport
 
-    def new_change(self) -> int:
-        if self._params.get("change") is not None:
-            raise TuringDBException("Cannot create a new change while working on one")
+    @property
+    def transport(self) -> Transport:
+        return self._transport
 
-        if self._params.get("commit") is not None:
-            raise TuringDBException(
-                "Cannot create a new change while working on a commit"
-            )
+    @property
+    def http(self) -> Optional[HTTPClient]:
+        return self._impl if isinstance(self._impl, HTTPClient) else None
 
-        res = self.query("CHANGE NEW")
-        change_id = int(res.loc[0, "changeID"])
-        self.set_change(change_id)
-        return change_id
+    @property
+    def binary(self) -> Optional[BinaryClient]:
+        return self._impl if isinstance(self._impl, BinaryClient) else None
 
-    def set_graph(self, graph_name: str):
-        self._params["graph"] = graph_name
+    def query(self, query: str) -> DataFrame:
+        return self._impl.query(query)
+
+    def set_graph(self, graph_name: str) -> None:
+        self._impl.set_graph(graph_name)
 
     def get_graph(self) -> str:
-        return self._params["graph"]
+        return self._impl.get_graph()
+
+    def set_change(self, change: int | str) -> None:
+        self._impl.set_change(change)
+
+    def set_commit(self, commit: str) -> None:
+        self._impl.set_commit(commit)
+
+    def checkout(self, change: int | Literal["main"] = "main", commit: str = "HEAD") -> None:
+        self._impl.checkout(change, commit)
+
+    def new_change(self) -> int:
+        return self._impl.new_change()
+
+    def create_graph(self, graph_name: str):
+        return self._impl.create_graph(graph_name)
+
+    def list_loaded_graphs(self) -> list[str]:
+        return self._impl.list_loaded_graphs()
+
+    def is_graph_loaded(self) -> bool:
+        return self._impl.is_graph_loaded()
+
+    def load_graph(self, graph_name: str, raise_if_loaded: bool = True):
+        return self._impl.load_graph(graph_name, raise_if_loaded=raise_if_loaded)
+
+    def try_reach(self, timeout: int = 5) -> None:
+        # The ``timeout`` argument is honored on HTTP; the binary transport ignores
+        # it because the binary protocol's TuringClient has no socket-timeout API yet.
+        self._impl.try_reach(timeout)
+
+    def warmup(self, timeout: int = 5) -> None:
+        # Same caveat as try_reach about ``timeout``.
+        self._impl.warmup(timeout)
 
     def s3_connect(
         self,
@@ -136,126 +104,36 @@ class TuringDB:
         region: Optional[str] = None,
         use_scratch: bool = True,
     ):
-        from .s3 import S3Client
+        self._impl.s3_connect(bucket_name, access_key, secret_key, region, use_scratch)
 
-        self._s3_client = S3Client(
-            bucket_name, access_key, secret_key, region, use_scratch
-        )
-        self._s3_client.connect(self)
-
-    def transfer(self, src: str, dst: str):
-        if self._s3_client is None:
-            raise TuringDBException("S3 client is not connected")
-
-        self._s3_client.transfer(src, dst)
-
-    def _send_request(
-        self,
-        path: str,
-        data: Optional[dict | str] = None,
-        params: Optional[dict] = None,
-    ):
-        import orjson
-
-        self._query_exec_time = None
-        self._total_exec_time = None
-        self._t0 = time.time()
-
-        if data is None:
-            data = ""
-
-        url = f"{self.host}/{path}"
-
-        if isinstance(data, dict):
-            response = self._client.post(
-                url, json=data, params=params, headers=self._headers
-            )
-        else:
-            response = self._client.post(
-                url, content=data, params=params, headers=self._headers
-            )
-        response.raise_for_status()
-
-        try:
-            json = orjson.loads(response.text)
-        except orjson.JSONDecodeError as e:
-            # Grab a window around the error position
-            start = max(0, e.pos - 40)
-            end = min(len(e.doc), e.pos + 40)
-            snippet = e.doc[start:end]
-            pointer = " " * (e.pos - start) + "^"
-            raise TuringDBException(
-                f"Invalid response from the server: {e}.\n"
-                f"Context (line {e.lineno}, col {e.colno}):\n"
-                f"  {snippet}\n"
-                f"  {pointer}"
-            )
-
-        if isinstance(json, dict):
-            err = json.get("error")
-            if err is not None:
-                details = json.get("error_details")
-                if details is not None:
-                    err = f"{err}: {details}"
-                raise TuringDBException(err)
-
-        self._t1 = time.time()
-        self._total_exec_time = (self._t1 - self._t0) * 1000
-
-        return json
-
-    def _parse_chunks(self, json: dict):
-        import pandas as pd
-
-        self._query_exec_time = json["time"]
-
-        header = json["header"]
-        column_names = header["column_names"]
-        column_types = header["column_types"]
-
-        if len(column_names) != len(column_types):
-            raise Exception("Query response column names and types do not match")
-
-        dtype_map = {
-            "String": "string",
-            "Int64": "Int64",
-            "UInt64": "UInt64",
-            "Double": "float64",
-            "Bool": "boolean",
-        }
-
-        df = pd.DataFrame()
-
-        for chunk in json["data"]:
-            df_chunk = pd.DataFrame(
-                {
-                    cname: pd.Series(col, dtype=dtype_map.get(ctype, "object"))
-                    for (cname, ctype), col in zip(
-                        zip(column_names, column_types), chunk
-                    )
-                }
-            )
-            df = pd.concat([df, df_chunk], ignore_index=True)
-
-        self._t1 = time.time()
-        self._total_exec_time = (self._t1 - self._t0) * 1000
-
-        return df
+    def transfer(self, src: str, dst: str) -> None:
+        self._impl.transfer(src, dst)
 
     def get_query_exec_time(self) -> Optional[float]:
-        return self._query_exec_time
+        return self._impl.get_query_exec_time()
 
     def get_total_exec_time(self) -> Optional[float]:
-        return self._total_exec_time
+        return self._impl.get_total_exec_time()
 
     @property
     def current_graph(self) -> str:
-        return self._params["graph"]
+        return self._impl.current_graph
 
     @property
     def current_commit(self) -> str:
-        return self._params.get("commit") or "HEAD"
+        return self._impl.current_commit
 
     @property
     def current_change(self) -> str:
-        return self._params.get("change") or "main"
+        return self._impl.current_change
+
+
+def _split_host_port(host: str, port: Optional[Union[int, str]]) -> tuple[str, str]:
+    if "://" in host:
+        parsed = urllib.parse.urlparse(host)
+        resolved_host = parsed.hostname or "localhost"
+        resolved_port = parsed.port if parsed.port is not None else port
+    else:
+        resolved_host = host
+        resolved_port = port
+    return resolved_host, str(resolved_port if resolved_port is not None else 6666)

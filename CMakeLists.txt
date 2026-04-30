@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.15)
 
 project(turingdb)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 if (NIX_BUILD)
     message(STATUS Building with nix)
 endif()
@@ -298,6 +300,8 @@ add_subdirectory(server)
 add_subdirectory(tools)
 add_subdirectory(examples)
 add_subdirectory(test)
+
+add_subdirectory(python/turingdb/_binary)
 add_subdirectory(samples)
 add_subdirectory(regress)
 add_subdirectory(fuzz)

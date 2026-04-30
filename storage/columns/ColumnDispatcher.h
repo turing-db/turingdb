@@ -8,6 +8,7 @@
 #include "EntityList.h"
 #include "ListElementView.h"
 #include "metadata/PropertyType.h"
+#include "versioning/ChangeID.h"
 
 #include "FatalException.h"
 
@@ -28,6 +29,7 @@ using AllValueTypes = TypeList<
     EdgeTypeID,
     PropertyTypeID,
     LabelSetID,
+    ChangeID,
     ValueType,
     types::Int64::Primitive,
     types::UInt64::Primitive,
@@ -41,7 +43,10 @@ using AllValueTypes = TypeList<
     std::optional<types::String::Primitive>,
     std::optional<types::Bool::Primitive>,
     std::optional<types::Embedding::Primitive>,
+    std::optional<NodeID>,
+    std::optional<EdgeID>,
     std::string,
+    std::optional<std::string>,
     const CommitBuilder*,
     const Change*,
     EntityList,
@@ -119,6 +124,7 @@ struct ColumnTypeFromKind {
         COL_CASE(ColumnVector<EdgeTypeID>)                                               \
         COL_CASE(ColumnVector<PropertyTypeID>)                                           \
         COL_CASE(ColumnVector<LabelSetID>)                                               \
+        COL_CASE(ColumnVector<ChangeID>)                                                 \
         COL_CASE(ColumnVector<ValueType>)                                                \
         COL_CASE(ColumnVector<types::UInt64::Primitive>)                                 \
         COL_CASE(ColumnVector<types::Int64::Primitive>)                                  \
@@ -132,6 +138,9 @@ struct ColumnTypeFromKind {
         COL_CASE(ColumnOptVector<types::String::Primitive>)                              \
         COL_CASE(ColumnOptVector<types::Bool::Primitive>)                                \
         COL_CASE(ColumnOptVector<types::Embedding::Primitive>)                           \
+        COL_CASE(ColumnOptVector<NodeID>)                                                \
+        COL_CASE(ColumnOptVector<EdgeID>)                                                \
+        COL_CASE(ColumnOptVector<std::string>)                                           \
         COL_CASE(ColumnVector<std::string>)                                              \
         COL_CASE(ColumnVector<const CommitBuilder*>)                                     \
         COL_CASE(ColumnVector<const Change*>)                                            \
@@ -153,6 +162,7 @@ struct ColumnTypeFromKind {
         CONST_COL_CASE(ColumnVector<EdgeTypeID>)                                         \
         CONST_COL_CASE(ColumnVector<PropertyTypeID>)                                     \
         CONST_COL_CASE(ColumnVector<LabelSetID>)                                         \
+        CONST_COL_CASE(ColumnVector<ChangeID>)                                           \
         CONST_COL_CASE(ColumnVector<ValueType>)                                          \
         CONST_COL_CASE(ColumnVector<types::UInt64::Primitive>)                           \
         CONST_COL_CASE(ColumnVector<types::Int64::Primitive>)                            \
@@ -166,6 +176,9 @@ struct ColumnTypeFromKind {
         CONST_COL_CASE(ColumnOptVector<types::String::Primitive>)                        \
         CONST_COL_CASE(ColumnOptVector<types::Bool::Primitive>)                          \
         CONST_COL_CASE(ColumnOptVector<types::Embedding::Primitive>)                     \
+        CONST_COL_CASE(ColumnOptVector<NodeID>)                                          \
+        CONST_COL_CASE(ColumnOptVector<EdgeID>)                                          \
+        CONST_COL_CASE(ColumnOptVector<std::string>)                                     \
         CONST_COL_CASE(ColumnVector<std::string>)                                        \
         CONST_COL_CASE(ColumnVector<const CommitBuilder*>)                               \
         CONST_COL_CASE(ColumnVector<const Change*>)                                      \
