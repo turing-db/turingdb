@@ -57,5 +57,6 @@ void UnwindProcessor::execute() {
         typedCol->push_back(item);
     }
 
+    _output.getPort()->writeData();
     finish();
 }
