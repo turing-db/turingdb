@@ -41,6 +41,7 @@ void SystemManager::init() {
     initLockFile();
     initVectorDatabase();
     initSystemEvents();
+    _jobSystem.init();
     loadOrCreateDefaultGraph();
 
     _procedures.init();
