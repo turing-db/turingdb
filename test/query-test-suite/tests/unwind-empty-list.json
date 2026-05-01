@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "UNWIND [] AS empty MATCH (n)-[e]->(m) RETURN e.name, empty",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __UNWIND__\n        [] AS empty\n    `\"]\n    1[\"`\n        __SCAN_NODES__\n    `\"]\n    2[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    3[\"`\n        __FILTER_NODE__\n    `\"]\n    4[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    5[\"`\n        __VAR__\n        __name__: e\n    `\"]\n    6[\"`\n        __FILTER_EDGE__\n    `\"]\n    7[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    8[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    9[\"`\n        __FILTER_NODE__\n    `\"]\n    10[\"`\n        __CARTESIAN_PRODUCT__\n    `\"]\n    11[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ e\n        __prop__ name\n    `\"]\n    12[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->10\n    1-->3\n    2-->4\n    3-->2\n    4-->6\n    5-->7\n    6-->5\n    7-->9\n    8-->10\n    9-->8\n    10-->11\n    11-->12",
+    "result": "e.name,empty",
+    "resultJson": "{\"header\":{\"column_names\":[\"e.name\",\"empty\"],\"column_types\":[\"String\",\"ListElement\"]},\"data\":[[[],[]]]}"
+  },
+  "tags": [
+    "list",
+    "unwind"
+  ],
+  "write-required": false
+}
