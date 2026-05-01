@@ -14,9 +14,8 @@ namespace {
 constexpr const char* THREAD_NAME = "turingdb.worker";
 
 size_t getThreadCount(size_t requestedThreads) {
-    const size_t hardwareThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
     if (requestedThreads == 0) {
-        return hardwareThreads;
+        return std::thread::hardware_concurrency();
     } else {
         return requestedThreads;
     }
