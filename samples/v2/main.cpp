@@ -10,7 +10,7 @@
 #include "SimpleGraph.h"
 #include "CypherAST.h"
 #include "CompilerException.h"
-#include "procedures/ProcedureManager.h"
+#include "ProcedureManager.h"
 #include "versioning/Transaction.h"
 #include "PlanGenConfig.h"
 #include "PlanGraphGenerator.h"
@@ -34,12 +34,16 @@ int main(int argc, char** argv) {
     TuringConfig config;
     config.setSyncedOnDisk(false);
 
-    const auto jobSystem = JobSystem::create();
-    auto sysMan = SystemManager::create(&config);
+    auto jobSystem = std::make_unique<JobSystem>();
+    jobSystem->init();
+
+    auto sysMan = std::make_unique<SystemManager>(&config);
+    sysMan->init();
+
     Graph* graph = sysMan->createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
 
-    auto procedures = ProcedureManager::create();
+    auto procedures = std::make_unique<ProcedureManager>();
     procedures->init();
 
     Transaction transaction = graph->openTransaction();
@@ -153,7 +157,6 @@ int main(int argc, char** argv) {
             const QueryCallbacks callbacks;
             PipelineGenerator pipelineGen(&mem,
                                           sysMan.get(),
-                                          procedures.get(),
                                           &callbacks,
                                           &planGraph,
                                           view,
@@ -174,7 +177,6 @@ int main(int argc, char** argv) {
 
             ExecutionContext execCtxt(sysMan.get(), view);
             execCtxt.setTransaction(&transaction);
-            execCtxt.setJobSystem(jobSystem.get());
 
             PipelineExecutor executor(&pipeline, &execCtxt);
             try {

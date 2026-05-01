@@ -21,7 +21,8 @@ using namespace turing::test;
 class ScanNodesIteratorTest : public TuringTest {
 protected:
     void initialize() override {
-        _jobSystem = JobSystem::create();
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->init();
     }
 
     void terminate() override {

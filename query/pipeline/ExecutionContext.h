@@ -4,22 +4,13 @@
 
 #include "iterators/ChunkConfig.h"
 
-namespace vec {
-class VectorDatabase;
-}
+#include "SystemManager.h"
 
 namespace db {
-class SystemManager;
+
 class GraphView;
 class Transaction;
-class SystemManager;
-class JobSystem;
 class Graph;
-class ExtensionManager;
-class ProcedureManager;
-}
-
-namespace db {
 
 class ExecutionContext {
 public:
@@ -34,19 +25,15 @@ public:
     size_t getChunkSize() const { return _chunkSize; }
     Transaction* getTransaction() { return _tx; }
     std::string_view getGraphName() const { return _graphName; }
-    JobSystem* getJobSystem() const { return _jobSystem; }
     SystemManager* getSystemManager() const { return _sysMan; }
-    const ProcedureManager* getProcedures() const { return _procedures; }
-    ExtensionManager* getExtensions() const { return _extensions; }
-    vec::VectorDatabase* getVectorDatabase() const { return _vectorDatabase; }
+    JobSystem* getJobSystem() const { return _sysMan->getJobSystem(); }
+    const ProcedureManager* getProcedures() const { return _sysMan->getProcedures(); }
+    ExtensionManager* getExtensions() const { return _sysMan->getExtensions(); }
+    vec::VectorDatabase* getVectorDatabase() const { return _sysMan->getVectorDatabase(); }
 
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
     void setTransaction(Transaction* tx) { _tx = tx; }
     void setGraphName(std::string_view graphName) { _graphName = graphName; }
-    void setJobSystem(JobSystem* jobSystem) { _jobSystem = jobSystem; }
-    void setProcedures(const ProcedureManager* procedures) { _procedures = procedures; }
-    void setExtensions(ExtensionManager* extensions) { _extensions = extensions; }
-    void setVectorDatabase(vec::VectorDatabase* vectorDatabase) { _vectorDatabase = vectorDatabase; }
 
 private:
     SystemManager* _sysMan {nullptr};
@@ -54,10 +41,6 @@ private:
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
     Transaction* _tx {nullptr};
     std::string_view _graphName;
-    JobSystem* _jobSystem {nullptr};
-    const ProcedureManager* _procedures {nullptr};
-    ExtensionManager* _extensions {nullptr};
-    vec::VectorDatabase* _vectorDatabase {nullptr};
 };
 
 }

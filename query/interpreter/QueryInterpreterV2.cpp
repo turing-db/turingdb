@@ -23,10 +23,8 @@
 
 using namespace db;
 
-QueryInterpreterV2::QueryInterpreterV2(db::SystemManager* sysMan,
-                                       db::JobSystem* jobSystem)
-    : _sysMan(sysMan),
-    _jobSystem(jobSystem)
+QueryInterpreterV2::QueryInterpreterV2(SystemManager* sysMan)
+    : _sysMan(sysMan)
 {
 }
 
@@ -95,7 +93,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     const GraphView view = txRes->viewGraph();
 
     // Parsing query
-    CypherAST ast(ctxt.getProcedures(), query);
+    CypherAST ast(_sysMan->getProcedures(), query);
     CypherParser parser(&ast);
     try {
         parser.parse(query);
@@ -175,7 +173,6 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     PipelineV2 pipeline;
     PipelineGenerator pipelineGen(mem,
                                   _sysMan,
-                                  ctxt.getProcedures(),
                                   ctxt.getQueryCallbacks(),
                                   &planGraph,
                                   view,
@@ -201,10 +198,6 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     execCtxt.setChunkSize(queryConfig->getChunkSize());
     execCtxt.setTransaction(&txRes.value());
     execCtxt.setGraphName(graphName);
-    execCtxt.setJobSystem(_jobSystem);
-    execCtxt.setProcedures(ctxt.getProcedures());
-    execCtxt.setExtensions(ctxt.getExtensions());
-    execCtxt.setVectorDatabase(ctxt.getVectorDatabase());
 
     PipelineExecutor executor(&pipeline, &execCtxt);
     try {

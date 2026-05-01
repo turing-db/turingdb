@@ -4,6 +4,7 @@
 
 #include "TuringConfig.h"
 #include "TuringDB.h"
+#include "SystemManager.h"
 #include "LocalMemory.h"
 #include "Path.h"
 
@@ -36,8 +37,8 @@ public:
         return _mem;
     }
 
-    [[nodiscard]] JobSystem& getJobSystem() {
-        return _db.getJobSystem();
+    [[nodiscard]] JobSystem* getJobSystem() {
+        return _db.getSystemManager().getJobSystem();
     }
 
     [[nodiscard]] SystemManager& getSystemManager() {

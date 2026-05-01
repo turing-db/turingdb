@@ -1,17 +1,16 @@
 #include "ShowIndexesProcedure.h"
 
-#include "ExecutionContext.h"
+#include "ProcedureContext.h"
 #include "FatalException.h"
 #include "Graph.h"
 #include "ID.h"
 #include "ProcedureData.h"
 #include "ProcedureNamespace.h"
-#include "SystemManager.h"
 #include "columns/ColumnVector.h"
 #include "metadata/PropertyType.h"
-#include "procedures/Procedure.h"
-#include "procedures/ProcedureState.h"
-#include "procedures/ProcedureTypeVector.h"
+#include "Procedure.h"
+#include "ProcedureState.h"
+#include "ProcedureTypeVector.h"
 
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
@@ -73,15 +72,12 @@ void writeChunk(Data* data, ProcedureState* procedure, size_t chunkSize) {
 
 void prepare(ProcedureState* proc) {
     Data& data = proc->data<Data>();
-    ExecutionContext* ctxt = proc->getContext();
+    const ProcedureContext* ctxt = proc->getContext();
 
-    const std::string graphName = std::string(ctxt->getGraphName());
-
-    const SystemManager* sysMan = ctxt->getSystemManager();
-    const Graph* graph = sysMan->getGraph(graphName);
+    const Graph* graph = ctxt->getGraph();
     const VersionController& vc = graph->getVersionController();
 
-    Transaction * tx = ctxt->getTransaction();
+    Transaction* tx = ctxt->getTransaction();
     if (tx->readingFrozenCommit()) {
         const auto& frzTx = tx->get<FrozenCommitTx>();
         const CommitHash headHash = frzTx.getCommitHash();
@@ -141,7 +137,7 @@ void ShowIndexesProcedure::execute(ProcedureState* proc) {
         case ProcedureState::Step::RESET:
         break;
         case ProcedureState::Step::EXECUTE:
-            const ExecutionContext* ctxt = proc->getContext();
+            const ProcedureContext* ctxt = proc->getContext();
             Data& data = proc->data<Data>();
             const size_t chunkSize = ctxt->getChunkSize();
 

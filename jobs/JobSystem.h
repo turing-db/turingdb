@@ -14,14 +14,17 @@ class JobGroup;
 
 class JobSystem {
 public:
-    static std::unique_ptr<JobSystem> create();
-    static std::unique_ptr<JobSystem> create(size_t nthreads);
+    JobSystem();
+    explicit JobSystem(size_t nthreads);
 
     JobSystem(const JobSystem&) = delete;
     JobSystem(JobSystem&&) = delete;
     JobSystem& operator=(const JobSystem&) = delete;
     JobSystem& operator=(JobSystem&&) = delete;
+
     ~JobSystem();
+    
+    void init();
 
     /* @brief submits a job to be executed
      *
@@ -50,7 +53,7 @@ public:
      * */
     template <typename T>
     SharedFuture<T> submitShared(JobOperation&& operation) {
-        TypedPromise<T>* promise = new TypedPromise<T>;
+        TypedPromise<T>* promise = new TypedPromise<T>();
         SharedFuture<T> future(promise->get_future().share());
 
         Job job(
@@ -78,10 +81,6 @@ private:
     std::vector<std::jthread> _workers;
     std::atomic<bool> _stopRequested {false};
     bool _terminated {false};
-
-    JobSystem();
-    explicit JobSystem(size_t nThreads);
-    void initialize();
 };
 
 }

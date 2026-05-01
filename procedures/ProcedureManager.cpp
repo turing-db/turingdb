@@ -8,7 +8,7 @@
 #include "HistoryProcedure.h"
 #include "DescribeCommitProcedure.h"
 #include "ProceduresProcedure.h"
-#include "procedures/ShowIndexesProcedure.h"
+#include "ShowIndexesProcedure.h"
 
 using namespace db;
 
@@ -20,10 +20,6 @@ ProcedureManager::~ProcedureManager() {
     for (auto* ns : _namespaces) {
         delete ns;
     }
-}
-
-std::unique_ptr<ProcedureManager> ProcedureManager::create() {
-    return std::unique_ptr<ProcedureManager>(new ProcedureManager());
 }
 
 void ProcedureManager::init() {

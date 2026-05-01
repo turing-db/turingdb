@@ -1,11 +1,10 @@
 #include "HistoryProcedure.h"
 
-#include "ExecutionContext.h"
+#include "ProcedureContext.h"
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
 #include "Graph.h"
-#include "SystemManager.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 #include "versioning/VersionController.h"
@@ -97,9 +96,8 @@ void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
 
 void HistoryProcedure::execute(ProcedureState* proc) {
     Data& data = proc->data<Data>();
-    ExecutionContext* ctxt = proc->getContext();
-    const std::string& graphName = ctxt->getGraphName().data();
-    const VersionController& controller = ctxt->getSystemManager()->getGraph(graphName)->getVersionController();
+    const ProcedureContext* ctxt = proc->getContext();
+    const VersionController& controller = ctxt->getGraph()->getVersionController();
 
     const size_t chunkSize = ctxt->getChunkSize();
 

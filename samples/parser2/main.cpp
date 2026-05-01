@@ -6,12 +6,12 @@
 #include "TuringTime.h"
 #include "CompilerException.h"
 #include "FileReader.h"
-#include "procedures/ProcedureManager.h"
+#include "ProcedureManager.h"
 
 using namespace db;
 
 int main(int argc, char** argv) {
-    auto procedures = ProcedureManager::create();
+    auto procedures = std::make_unique<ProcedureManager>();
     procedures->init();
 
     std::string queryStr;

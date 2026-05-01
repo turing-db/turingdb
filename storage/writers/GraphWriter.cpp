@@ -11,11 +11,10 @@
 
 using namespace db;
 
-GraphWriter::GraphWriter(Graph* graph)
+GraphWriter::GraphWriter(Graph* graph, JobSystem* jobSystem)
     : _graph(graph),
-    _jobSystem(JobSystem::create())
+    _jobSystem(jobSystem)
 {
-
     if (_graph) {
         _change = _graph->newChange();
         _commitBuilder = _change->access().getTip();

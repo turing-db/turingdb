@@ -9,6 +9,8 @@
 #include "comparators/GraphComparator.h"
 #include "writers/GraphWriter.h"
 
+#include "JobSystem.h"
+
 using namespace db;
 using namespace turing::test;
 
@@ -25,7 +27,9 @@ TEST_F(EmbeddingGraphDumpLoadTest, NodeEmbeddings) {
 
     auto graph = Graph::create("embgraph", fs::Path {_outDir} / "original");
     {
-        GraphWriter writer(graph.get());
+        JobSystem jobSystem;
+        jobSystem.init();
+        GraphWriter writer(graph.get(), &jobSystem);
 
         std::vector<float> embedding(dimension);
         for (size_t i = 0; i < nodeCount; i++) {
@@ -65,7 +69,9 @@ TEST_F(EmbeddingGraphDumpLoadTest, NodeAndEdgeEmbeddings) {
 
     auto graph = Graph::create("embgraph2", fs::Path {_outDir} / "original");
     {
-        GraphWriter writer(graph.get());
+        JobSystem jobSystem;
+        jobSystem.init();
+        GraphWriter writer(graph.get(), &jobSystem);
 
         std::vector<float> emb(dimension);
         std::vector<NodeID> nodes;
@@ -115,7 +121,9 @@ TEST_F(EmbeddingGraphDumpLoadTest, SparseEmbeddings) {
 
     auto graph = Graph::create("sparse", fs::Path {_outDir} / "original");
     {
-        GraphWriter writer(graph.get());
+        JobSystem jobSystem;
+        jobSystem.init();
+        GraphWriter writer(graph.get(), &jobSystem);
 
         std::vector<float> embedding(dimension);
         for (size_t i = 0; i < nodeCount; i++) {
@@ -154,7 +162,9 @@ TEST_F(EmbeddingGraphDumpLoadTest, MultiCommitEmbeddings) {
 
     auto graph = Graph::create("multicommit", fs::Path {_outDir} / "original");
     {
-        GraphWriter writer(graph.get());
+        JobSystem jobSystem;
+        jobSystem.init();
+        GraphWriter writer(graph.get(), &jobSystem);
 
         std::vector<float> embedding(dimension);
 

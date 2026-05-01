@@ -10,7 +10,7 @@
 #include "SimpleGraph.h"
 #include "CypherAST.h"
 #include "CompilerException.h"
-#include "procedures/ProcedureManager.h"
+#include "ProcedureManager.h"
 #include "versioning/Transaction.h"
 
 using namespace db;
@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<Graph> graph = Graph::create();
     SimpleGraph::createSimpleGraph(graph.get());
 
-    auto procedures = ProcedureManager::create();
+    auto procedures = std::make_unique<ProcedureManager>();
     procedures->init();
 
     const Transaction transaction = graph->openTransaction();

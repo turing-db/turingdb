@@ -19,7 +19,7 @@ class PendingCommitWriteTx;
 
 class GraphWriter {
 public:
-    explicit GraphWriter(Graph* graph);
+    GraphWriter(Graph* graph, JobSystem* jobSystem);
     ~GraphWriter();
 
     GraphWriter(const GraphWriter&) = delete;
@@ -64,10 +64,10 @@ public:
 
 private:
     Graph* _graph {nullptr};
+    JobSystem* _jobSystem {nullptr};
     std::unique_ptr<Change> _change;
     CommitBuilder* _commitBuilder {nullptr};
     DataPartBuilder* _dataPartBuilder {nullptr};
-    std::unique_ptr<JobSystem> _jobSystem;
 };
 
 }

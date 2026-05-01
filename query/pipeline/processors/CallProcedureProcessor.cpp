@@ -5,7 +5,9 @@
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
-#include "procedures/Procedure.h"
+#include "Procedure.h"
+#include "ExecutionContext.h"
+#include "SystemManager.h"
 #include "LocalMemory.h"
 
 #include "PipelineException.h"
@@ -47,7 +49,16 @@ std::string CallProcedureProcessor::describe() const {
 }
 
 void CallProcedureProcessor::prepare(ExecutionContext* ctxt) {
-    _procedureState._ctxt = ctxt;
+    SystemManager* sysMan = ctxt->getSystemManager();
+    Graph* graph = sysMan->getGraph(std::string(ctxt->getGraphName()));
+
+    _procedureContext.setGraph(graph);
+    _procedureContext.setGraphView(&ctxt->getGraphView());
+    _procedureContext.setTransaction(ctxt->getTransaction());
+    _procedureContext.setProcedures(ctxt->getProcedures());
+    _procedureContext.setChunkSize(ctxt->getChunkSize());
+
+    _procedureState._ctxt = &_procedureContext;
     _procedureState._step = ProcedureState::Step::PREPARE;
     _procedure->getExecCallback()(&_procedureState);
 

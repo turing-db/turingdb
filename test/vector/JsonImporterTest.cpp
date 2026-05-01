@@ -21,20 +21,19 @@ public:
         }
 
         {
-            auto res = VectorDatabase::create(_rootDir);
+            auto res = _db.init(_rootDir);
             ASSERT_TRUE(res);
-            _db = std::move(res.value());
         }
 
         {
-            auto res = _db->createLibrary("mylib", 8, DistanceMetric::INNER_PRODUCT);
+            auto res = _db.createLibrary("mylib", 8, DistanceMetric::INNER_PRODUCT);
             ASSERT_TRUE(res);
             _mylibID = res.value();
         }
     }
 
 protected:
-    std::unique_ptr<VectorDatabase> _db;
+    VectorDatabase _db;
     VecLibID _mylibID {0};
     fs::Path _rootDir;
 };
@@ -50,7 +49,7 @@ protected:
     }
 
 TEST_F(JsonImporterTest, importInvalidJson) {
-    VecLibAccessor accessor = _db->getLibrary(_mylibID);
+    VecLibAccessor accessor = _db.getLibrary(_mylibID);
 
     BatchVectorCreate batch;
     accessor.prepareCreateBatch(&batch);
@@ -87,7 +86,7 @@ TEST_F(JsonImporterTest, importInvalidJson) {
 }
 
 TEST_F(JsonImporterTest, ValidJson) {
-    VecLibAccessor accessor = _db->getLibrary(_mylibID);
+    VecLibAccessor accessor = _db.getLibrary(_mylibID);
 
     BatchVectorCreate batch;
     accessor.prepareCreateBatch(&batch);

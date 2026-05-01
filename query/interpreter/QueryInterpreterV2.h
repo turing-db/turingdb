@@ -5,18 +5,13 @@
 #include "QueryStatus.h"
 
 namespace db {
+
 class SystemManager;
-class JobSystem;
-}
-
-namespace db {
-
 class InterpreterContext;
 
 class QueryInterpreterV2 {
 public:
-    QueryInterpreterV2(db::SystemManager* sysMan,
-                       db::JobSystem* jobSystem);
+    explicit QueryInterpreterV2(SystemManager* sysMan);
 
     ~QueryInterpreterV2();
 
@@ -27,7 +22,6 @@ public:
 
 private:
     SystemManager* _sysMan {nullptr};
-    JobSystem* _jobSystem {nullptr};
 
     void executeImpl(const InterpreterContext& ctxt,
                      QueryStatus& status,

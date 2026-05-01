@@ -7,7 +7,7 @@
 
 namespace db {
 
-class ExecutionContext;
+class ProcedureContext;
 
 class ProcedureState {
 public:
@@ -27,7 +27,7 @@ public:
 
     const ProcedureData& getData() const { return *_data; }
 
-    ExecutionContext* getContext() const { return _ctxt; }
+    const ProcedureContext* getContext() const { return _ctxt; }
 
     bool isFinished() const { return _finished; }
 
@@ -40,7 +40,7 @@ private:
 
     ProcedureData* _data {nullptr};
     const Procedure* _procedure {nullptr};
-    ExecutionContext* _ctxt {nullptr};
+    const ProcedureContext* _ctxt {nullptr};
     bool _finished {false};
     Step _step {Step::PREPARE};
 };

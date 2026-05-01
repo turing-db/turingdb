@@ -2,11 +2,12 @@
 
 #include <unordered_map>
 
-#include "RWSpinLock.h"
 #include "mergers/DataPartMergeResult.h"
 #include "versioning/ChangeResult.h"
 #include "versioning/ChangeID.h"
 #include "versioning/Change.h"
+
+#include "RWSpinLock.h"
 
 namespace db {
 
@@ -35,12 +36,13 @@ public:
     };
 
     ChangeManager();
-    ~ChangeManager();
 
     ChangeManager(const ChangeManager&) = delete;
     ChangeManager(ChangeManager&&) = delete;
     ChangeManager& operator=(const ChangeManager&) = delete;
     ChangeManager& operator=(ChangeManager&&) = delete;
+
+    ~ChangeManager();
 
     Change* createChange(Graph* graph, CommitHash baseHash);
     ChangeResult<Change*> getChange(const Graph* graph, ChangeID changeID);
@@ -59,8 +61,7 @@ private:
     std::unordered_map<GraphChangePair,
                        std::unique_ptr<Change>,
                        GraphChangePair::Hasher,
-                       GraphChangePair::Predicate>
-        _changes;
+                       GraphChangePair::Predicate> _changes;
 };
 
 }

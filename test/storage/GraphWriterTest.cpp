@@ -13,7 +13,10 @@ using namespace db;
 
 class GraphWriterTest : public TuringTest {
 protected:
-    void initialize() override { _jobSystem = JobSystem::create(); }
+    void initialize() override {
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->init();
+    }
 
     void terminate() override { _jobSystem->terminate(); }
 
@@ -22,7 +25,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> create1Graph() {
         auto graph = Graph::create();
-        GraphWriter writer(graph.get());
+        GraphWriter writer(graph.get(), _jobSystem.get());
 
         auto node = writer.addNode({"Object"});
         writer.addNodeProperty<types::String>(node, "Value", "1");

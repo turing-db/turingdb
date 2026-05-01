@@ -9,7 +9,7 @@
 #include <string>
 
 #include "CypherAST.h"
-#include "procedures/ProcedureManager.h"
+#include "ProcedureManager.h"
 
 #include "CompilerException.h"
 #include "FatalException.h"
@@ -20,7 +20,7 @@ static std::unique_ptr<db::ProcedureManager> g_procedures;
 
 static void initOnce() {
     if (!g_procedures) {
-        g_procedures = db::ProcedureManager::create();
+        g_procedures = std::make_unique<db::ProcedureManager>();
         g_procedures->init();
     }
 }

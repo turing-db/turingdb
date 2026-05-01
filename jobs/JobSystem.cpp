@@ -13,18 +13,25 @@ namespace {
 
 constexpr const char* THREAD_NAME = "turingdb.worker";
 
+size_t getThreadCount(size_t requestedThreads) {
+    const size_t hardwareThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
+    if (requestedThreads == 0) {
+        return hardwareThreads;
+    } else {
+        return requestedThreads;
+    }
+}
+
 }
 
 JobSystem::JobSystem()
-    : _nThreads(std::max(1ul, (size_t)std::thread::hardware_concurrency())),
+    : _nThreads(getThreadCount(0)),
     _jobs(_nThreads)
 {
 }
 
-JobSystem::JobSystem(size_t nThreads)
-    : _nThreads(nThreads == 0
-                    ? std::max(1ul, (size_t)std::thread::hardware_concurrency())
-                    : nThreads),
+JobSystem::JobSystem(size_t nthreads)
+    : _nThreads(getThreadCount(nthreads)),
     _jobs(_nThreads)
 {
 }
@@ -35,7 +42,7 @@ JobSystem::~JobSystem() {
     }
 }
 
-void JobSystem::initialize() {
+void JobSystem::init() {
     for (size_t i = 0; i < _nThreads; i++) {
         _workers.emplace_back([&] {
             ThreadName::set(THREAD_NAME);
@@ -72,16 +79,4 @@ void JobSystem::terminate() {
 
 JobGroup JobSystem::newGroup() {
     return JobGroup(this);
-}
-
-std::unique_ptr<JobSystem> JobSystem::create() {
-    auto jobSystem = std::unique_ptr<JobSystem>(new JobSystem());
-    jobSystem->initialize();
-    return jobSystem;
-}
-
-std::unique_ptr<JobSystem> JobSystem::create(size_t nthreads) {
-    auto jobSystem = std::unique_ptr<JobSystem>(new JobSystem(nthreads));
-    jobSystem->initialize();
-    return jobSystem;
 }

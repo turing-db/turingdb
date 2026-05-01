@@ -44,7 +44,8 @@ int main(int argc, const char** argv) {
         {"type":"relationship","id":"12","label":"INTERESTED_IN","properties":{"duration":10,"name":"Martina -> Cooking"},"start":{"id":"4","labels":["Bioinformatics","Person"],"prope rties":{"isFrench":false,"hasPhD":true,"name":"Martina"}},"end":{"id":"8","labels":["Interest"],"properties":{"name":"Cooking"}}}
     )");
 
-    std::unique_ptr<JobSystem> js = JobSystem::create();
+    auto js = std::make_unique<JobSystem>();
+    js->init();
 
     const fs::Path turingDir(SAMPLE_DIR "/.turing");
     if (turingDir.exists()) {

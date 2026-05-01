@@ -1,14 +1,12 @@
 #include "ProceduresProcedure.h"
 
-#include "ExecutionContext.h"
+#include "ProcedureContext.h"
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
 #include "ProcedureManager.h"
 #include "ProcedureTypeVector.h"
 #include "columns/ColumnVector.h"
-
-#include "PipelineException.h"
 
 using namespace db;
 
@@ -127,7 +125,7 @@ void ProceduresProcedure::registerProcedure(ProcedureNamespace* ns) {
 
 void ProceduresProcedure::execute(ProcedureState* proc) {
     Data& data = proc->data<Data>();
-    const ExecutionContext* ctxt = proc->getContext();
+    const ProcedureContext* ctxt = proc->getContext();
     const ProcedureManager* manager = ctxt->getProcedures();
 
     Column* rawNameCol = data.getReturnColumn(0);

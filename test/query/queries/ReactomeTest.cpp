@@ -17,6 +17,8 @@
 #include "dataframe/Dataframe.h"
 #include "writers/GraphWriter.h"
 
+#include "JobSystem.h"
+
 #include "LineContainer.h"
 #include "TuringException.h"
 #include "TuringTestEnv.h"
@@ -44,7 +46,10 @@ namespace {
 class ReactomeGraph {
 public:
     static void create(Graph* graph) {
-        GraphWriter writer(graph);
+        JobSystem jobSystem;
+        jobSystem.init();
+
+        GraphWriter writer(graph, &jobSystem);
         writer.setName("reactome");
 
         // =================================================================

@@ -1,6 +1,6 @@
 #include "Procedure.h"
 
-#include "PipelineException.h"
+#include "ProcedureException.h"
 
 #include "BioAssert.h"
 
@@ -41,7 +41,7 @@ size_t Procedure::getReturnValueIndex(std::string_view name) const {
         }
     }
 
-    throw PipelineException("Column is not returned by the procedure");
+    throw ProcedureException("Column is not returned by the procedure");
 }
 
 size_t Procedure::getArgumentIndex(std::string_view name) const {
@@ -51,7 +51,7 @@ size_t Procedure::getArgumentIndex(std::string_view name) const {
         }
     }
 
-    throw PipelineException("Column is not an argument of the procedure");
+    throw ProcedureException("Column is not an argument of the procedure");
 }
 
 void Procedure::returnAll(std::vector<YieldItem>& yieldItems) const {

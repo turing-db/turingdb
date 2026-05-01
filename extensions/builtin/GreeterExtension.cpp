@@ -1,8 +1,8 @@
 #include "ExtensionInterface.h"
 
-#include "procedures/ProcedureState.h"
-#include "procedures/Procedure.h"
-#include "procedures/ProcedureNamespace.h"
+#include "ProcedureState.h"
+#include "Procedure.h"
+#include "ProcedureNamespace.h"
 #include "columns/ColumnVector.h"
 
 using namespace db;

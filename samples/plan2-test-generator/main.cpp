@@ -8,7 +8,7 @@
 #include "PlanGraphDebug.h"
 #include "Graph.h"
 #include "SimpleGraph.h"
-#include "procedures/ProcedureManager.h"
+#include "ProcedureManager.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "PlanGenConfig.h"
@@ -64,7 +64,7 @@ void runPlan2(std::string_view query) {
     Graph* graph = db.getSystemManager().createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
     
-    auto procedures = ProcedureManager::create();
+    auto procedures = std::make_unique<ProcedureManager>();
     procedures->init();
 
     const Transaction transaction = graph->openTransaction();

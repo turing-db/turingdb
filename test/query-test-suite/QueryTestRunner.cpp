@@ -34,7 +34,7 @@
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
 #include "JsonEncoder.h"
-#include "procedures/ProcedureManager.h"
+#include "ProcedureManager.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
@@ -310,7 +310,7 @@ void generatePlanGraph(std::string_view query,
                        db::GraphView view,
                        std::ostream& out,
                        db::PlanGenConfig* planGenConfig) {
-    auto procedures = db::ProcedureManager::create();
+    auto procedures = std::make_unique<db::ProcedureManager>();
     procedures->init();
 
     db::CypherAST ast(procedures.get(), query);
