@@ -25,7 +25,6 @@ public:
     SystemManager& getSystemManager() { return *_systemManager; }
 
 private:
-    const TuringConfig* _config {nullptr};
     QueryConfig _defaultQueryConfig;
 
     std::unique_ptr<SystemManager> _systemManager;
