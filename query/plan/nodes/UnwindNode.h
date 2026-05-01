@@ -30,6 +30,9 @@ public:
     const Expr* arg() const { return _arg; }
     const VarDecl* var() const { return _var; }
 
+    bool isHomogeneous() const { return _homogeneity.has_value(); }
+    EvaluatedType homogeneity() const { return *_homogeneity; }
+
 private:
     const Expr* _arg {nullptr};
     const VarDecl* _var {nullptr};

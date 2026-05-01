@@ -5,7 +5,6 @@
 
 #include "ChangeOp.h"
 #include "EntityType.h"
-#include "ID.h"
 #include "Path.h"
 #include "PathExplorationDir.h"
 #include "PipelineV2.h"
@@ -233,6 +232,9 @@ public:
                                                          std::string_view propName,
                                                          bool isNodeIndex);
 
+    PipelineValuesOutputInterface& addUnwind(ListView list);
+
+    template <SupportedType T>
     PipelineValuesOutputInterface& addUnwind(ListView list);
 
     PipelineBlockOutputInterface& addDropIndex(std::string_view indexName);

@@ -144,31 +144,31 @@ struct TranslateNodeToken {
 
 using TranslateTokenStack = std::stack<TranslateNodeToken>;
 
-struct PropertyTypeDispatcher {
-    db::ValueType _valueType {db::ValueType::Invalid};
+struct ValueTypeDispatcher {
+    ValueType _valueType {ValueType::Invalid};
 
     void execute(const auto& executor) const {
         switch (_valueType) {
-            case db::ValueType::Int64:
-                executor.template operator()<db::types::Int64>();
+            case ValueType::Int64:
+                executor.template operator()<types::Int64>();
             break;
-            case db::ValueType::UInt64:
-                executor.template operator()<db::types::UInt64>();
+            case ValueType::UInt64:
+                executor.template operator()<types::UInt64>();
             break;
-            case db::ValueType::Double:
-                executor.template operator()<db::types::Double>();
+            case ValueType::Double:
+                executor.template operator()<types::Double>();
             break;
-            case db::ValueType::String:
-                executor.template operator()<db::types::String>();
+            case ValueType::String:
+                executor.template operator()<types::String>();
             break;
-            case db::ValueType::Bool:
-                executor.template operator()<db::types::Bool>();
+            case ValueType::Bool:
+                executor.template operator()<types::Bool>();
             break;
-            case db::ValueType::Embedding:
-                executor.template operator()<db::types::Embedding>();
+            case ValueType::Embedding:
+                executor.template operator()<types::Embedding>();
             break;
-            case db::ValueType::_SIZE:
-            case db::ValueType::Invalid: {
+            case ValueType::_SIZE:
+            case ValueType::Invalid: {
                 throw PlannerException("Unsupported property type");
             }
         }
@@ -638,7 +638,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
             const auto process = [&]<SupportedType Type> {
                 output = &_builder.addGetProperties<EntityType::Node, Type>(*foundProp);
             };
-            PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+            ValueTypeDispatcher {foundProp->_valueType}.execute(process);
         }
         break;
         case EvaluatedType::EdgePattern: {
@@ -646,7 +646,7 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyNode(GetProperty
                 output = &_builder.addGetProperties<EntityType::Edge, Type>(*foundProp);
             };
 
-            PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+            ValueTypeDispatcher {foundProp->_valueType}.execute(process);
         }
         break;
         default: {
@@ -711,13 +711,13 @@ PipelineOutputInterface* PipelineGenerator::translateGetPropertyWithNullNode(Get
             output = &_builder.addGetPropertiesWithNull<EntityType::Node, Type>(entityTag, *foundProp);
         };
 
-        PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+        ValueTypeDispatcher {foundProp->_valueType}.execute(process);
     } else if (entityDecl->getType() == EvaluatedType::EdgePattern) {
         const auto process = [&]<SupportedType Type> {
             output = &_builder.addGetPropertiesWithNull<EntityType::Edge, Type>(entityTag, *foundProp);
         };
 
-        PropertyTypeDispatcher {foundProp->_valueType}.execute(process);
+        ValueTypeDispatcher {foundProp->_valueType}.execute(process);
     } else {
         throw PlannerException(fmt::format(
             "GetPropertyWithNull must act on a Node/EdgePattern. Instead acting on {}",
@@ -1649,7 +1649,7 @@ PipelineOutputInterface* PipelineGenerator::translateShortestPathNode(ShortestPa
             throw PlannerException("Unsupported Edge Weight Type");
         }
     };
-    PropertyTypeDispatcher {edgeType._valueType}.execute(process);
+    ValueTypeDispatcher {edgeType._valueType}.execute(process);
 
     _declToColumn[node->getDistance()] = distCol->getTag();
     _declToColumn[node->getPath()] = pathCol->getTag();
@@ -1894,7 +1894,7 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
 
                 _builder.getPendingOutputInterface()->setStream(nodeStream);
             };
-            PropertyTypeDispatcher {propType}.execute(process);
+            ValueTypeDispatcher {propType}.execute(process);
         }
         break;
 
@@ -1904,7 +1904,7 @@ PipelineOutputInterface* PipelineGenerator::translateIndexLookupNode(IndexLookup
                     _builder.addIndexLookup<typename Type::Primitive, EdgeID>(index);
                 // TODO: Make stream
             };
-            PropertyTypeDispatcher {propType}.execute(process);
+            ValueTypeDispatcher {propType}.execute(process);
         }
         break;
 
@@ -1970,17 +1970,33 @@ PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node
             fillList(list, &exprGen, items);
         }
 
+        // Allocate the list in the query-long list buffer
         LocalMemory::DefaultListBuffer& buf = memory().listBuffer();
         listView = buf.insert(items);
     }
     bioassert(listView, "Failed to allocate ListView.");
 
-    const PipelineValuesOutputInterface& pendingOut = _builder.addUnwind(listView);
+    const PipelineValuesOutputInterface* unwindOut {nullptr};
+    if (!node->isHomogeneous()) {
+        const PipelineValuesOutputInterface& out = _builder.addUnwind(listView);
+        unwindOut = &out;
+    } else {
+        const auto addHomogeneousUnwind = [&]<SupportedType Type>() {
+            const PipelineValuesOutputInterface& out = _builder.addUnwind<Type>(listView);
+            unwindOut = &out;
+        };
+
+        const EvaluatedType homogeneity = node->homogeneity();
+        const ValueType valueHomogeneity = evaluatedToValueType(homogeneity);
+        ValueTypeDispatcher {valueHomogeneity}.execute(addHomogeneousUnwind);
+    }
+
+    bioassert(unwindOut, "Failed to add UNWIND.");
 
     // 2. Register symbol in decl map
     {
         const VarDecl* var = node->var();
-        const NamedColumn* unwoundCol = pendingOut.getValues();
+        const NamedColumn* unwoundCol = unwindOut->getValues();
         const ColumnTag unwoundTag = unwoundCol->getTag();
         _declToColumn[var] = unwoundTag;
     }
