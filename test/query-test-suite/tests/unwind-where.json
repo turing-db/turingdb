@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "UNWIND [32, 1] AS age MATCH (n) WHERE n.age = age RETURN n",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | UNWIND [32, 1] AS age MATCH (n) WHERE n.age = age RETURN n\n       |                                       ^^^^^^^^^^^\n-------* Operands are not valid or compatible types: 'Integer' and 'ListItem'",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | UNWIND [32, 1] AS age MATCH (n) WHERE n.age = age RETURN n\n       |                                       ^^^^^^^^^^^\n-------* Operands are not valid or compatible types: 'Integer' and 'ListItem'",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | UNWIND [32, 1] AS age MATCH (n) WHERE n.age = age RETURN n\\n       |                                       ^^^^^^^^^^^\\n-------* Operands are not valid or compatible types: 'Integer' and 'ListItem'\"}"
+  },
+  "tags": [
+    "lists",
+    "unwind",
+    "match",
+    "return"
+  ],
+  "write-required": false
+}
