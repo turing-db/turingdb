@@ -583,8 +583,35 @@ void ReadStmtAnalyzer::analyze(const UnwindStmt* unwind) {
     }
 
     const auto* list = static_cast<const ListLiteral*>(lit);
-    for (Expr* ele : list->items()) {
+    const ListLiteral::Items& items = list->items();
+    for (Expr* ele : items) {
         _exprAnalyzer->analyzeExpr(ele);
+    }
+
+    EvaluatedType itemType = EvaluatedType::ListItem;
+    if (!items.empty()) {
+        // Check for homogeneity: update evaluated type if found
+        const auto differingType = [](const Expr* a, const Expr* b) {
+            return a->getType() != b->getType();
+        };
+
+        const auto typeIt = std::ranges::adjacent_find(items, differingType);
+        const bool homogeneous = typeIt == end(items);
+
+        if (homogeneous) {
+            // List is homogeneous and non empty: perform type restriction
+            const Expr* item = items.front();
+            const EvaluatedType homogeneity = item->getType();
+            // Could be a list of lists: there is no ValueType::List -> do not treat as
+            // homogeneous
+            const bool isValueType = evalTypeIsValueType(homogeneity);
+
+            const bool canBeHomogeneous = isValueType;
+
+            if (canBeHomogeneous) {
+                itemType = homogeneity;
+            }
+        }
     }
 
     const Symbol* symbol = unwind->symbol();
@@ -592,7 +619,7 @@ void ReadStmtAnalyzer::analyze(const UnwindStmt* unwind) {
 
     const std::string_view symName = symbol->getName();
 
-    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::ListItem, symName);
+    _ctxt->getOrCreateNamedVariable(_ast, itemType, symName);
 }
 
 void ReadStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {
