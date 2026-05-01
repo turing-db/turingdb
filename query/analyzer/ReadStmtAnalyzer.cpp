@@ -50,7 +50,6 @@
 #include "ProcedureLookup.h"
 
 #include "BioAssert.h"
-#include <utility>
 
 using namespace db;
 

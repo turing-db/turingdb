@@ -1,5 +1,10 @@
 #include "UnwindProcessor.h"
 
+#include <range/v3/view/drop.hpp>
+#include <range/v3/view/take.hpp>
+
+#include "ExecutionContext.h"
+
 #include "ListElementView.h"
 
 #include "columns/Column.h"
@@ -13,6 +18,9 @@
 #include "BioAssert.h"
 
 using namespace db;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 UnwindProcessor::UnwindProcessor(ListView list)
     : _list(list)
@@ -36,11 +44,13 @@ UnwindProcessor* UnwindProcessor::create(PipelineV2* pipeline, ListView list) {
     return proc;
 }
 
-void UnwindProcessor::prepare(ExecutionContext*) {
+void UnwindProcessor::prepare(ExecutionContext* ctxt) {
+    _ctxt = ctxt;
     markAsPrepared();
 }
 
 void UnwindProcessor::reset() {
+    _index = 0;
     markAsReset();
 }
 
@@ -53,10 +63,18 @@ void UnwindProcessor::execute() {
     auto* typedCol = dynamic_cast<ColumnVector<ListElementView>*>(valueCol);
     bioassert(typedCol, "Invalid column to UNWIND.");
 
-    for (const ListElementView item : _list) {
-        typedCol->push_back(item);
-    }
+    // Get at most a chunks worth of elements, starting from @ref _index
+    const auto toEmit = _list | rv::drop(_index) | rv::take(_ctxt->getChunkSize());
+    const size_t count = toEmit.size();
 
+    typedCol->resize(count);
+    std::ranges::copy(toEmit, typedCol->begin());
     _output.getPort()->writeData();
-    finish();
+
+    _index += count;
+
+    const bool finished = _index == _list.size();
+    if (finished) {
+        finish();
+    }
 }

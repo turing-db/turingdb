@@ -256,10 +256,17 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
 
                 case Stmt::Kind::UNWIND: {
                     const UnwindStmt* unwStmt = static_cast<const UnwindStmt*>(stmt);
+                    const Expr* arg = unwStmt->arg();
+                    const Symbol* sym = unwStmt->symbol();
+
                     out << "    _" << std::hex << query << " ||--o{ _" << std::hex << unwStmt << " : \"\"\n";
-                    // TODO: Dump expr/symbol
-                }
-                break;
+                    out << "    _" << std::hex << unwStmt << " {\n";
+                    out << "        ASTType UNWIND\n";
+                    out << "        Symbol " << sym->getName() << "\n";
+                    out << "    }\n";
+                    out << "    _" << std::hex << unwStmt << " ||--o{ _" << std::hex << arg << " : \"\"\n";
+                    dump(out, arg);
+                } break;
             }
         }
     };

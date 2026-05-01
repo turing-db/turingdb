@@ -12,6 +12,7 @@
 #include "nodes/LoadJsonlNode.h"
 #include "nodes/OrderByNode.h"
 #include "nodes/ProcedureEvalNode.h"
+#include "nodes/UnwindNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/CreateGraphNode.h"
 #include "nodes/WriteNode.h"
@@ -136,6 +137,21 @@ void dumpExpr(std::ostream& out, const Expr* expr) {
                     }
                     out << "]";
                 } break;
+
+                case Literal::Kind::LIST: {
+                    const auto* data = static_cast<const ListLiteral*>(literal);
+                    out << "[";
+                    for (bool first {true}; const Expr* item : data->items()) {
+                        if (!first) {
+                            out << ", ";
+                        }
+                        dumpExpr(out, item);
+                        first = false;
+                    }
+                    out << "]";
+                }
+                break;
+
                 default:
                     out << "?";
                     break;
@@ -519,8 +535,56 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             }
             break;
 
-            default: {
-            } break;
+            case PlanGraphOpcode::UNWIND: {
+                const auto* n = dynamic_cast<UnwindNode*>(node.get());
+                bioassert(n, "Null unwind node.");
+
+                const Expr* arg = n->arg();
+                const VarDecl* var = n->var();
+                const std::string_view varName = var->getName();
+
+                output << "        ";
+                dumpExpr(output, arg);
+                output << " AS " << varName << '\n';
+            }
+            break;
+
+
+            case PlanGraphOpcode::GET_OUT_EDGES:
+            case PlanGraphOpcode::GET_IN_EDGES:
+            case PlanGraphOpcode::GET_EDGES:
+            case PlanGraphOpcode::GET_EDGE_TARGET:
+            case PlanGraphOpcode::PROJECT_RESULTS:
+            case PlanGraphOpcode::CARTESIAN_PRODUCT:
+            case PlanGraphOpcode::SKIP:
+            case PlanGraphOpcode::LIMIT:
+            case PlanGraphOpcode::PRODUCE_RESULTS:
+            case PlanGraphOpcode::LIST_GRAPH:
+            case PlanGraphOpcode::COMMIT:
+            case PlanGraphOpcode::S3_CONNECT:
+            case PlanGraphOpcode::S3_TRANSFER:
+            case PlanGraphOpcode::SHOW_PROCEDURES:
+            case PlanGraphOpcode::SHORTEST_PATH:
+            case PlanGraphOpcode::LOAD_CSV:
+            case PlanGraphOpcode::CREATE_VECTOR_INDEX:
+            case PlanGraphOpcode::LOAD_VECTOR:
+            case PlanGraphOpcode::VECTOR_SEARCH:
+            case PlanGraphOpcode::DELETE_VECTOR_INDEX:
+            case PlanGraphOpcode::SHOW_VECTOR_INDEXES:
+            case PlanGraphOpcode::LOAD_COMMIT:
+            case PlanGraphOpcode::INSTALL_EXTENSION:
+            case PlanGraphOpcode::SHOW_EXTENSIONS:
+            case PlanGraphOpcode::PATH_EXPLORER:
+            case PlanGraphOpcode::CREATE_PROPERTY_INDEX:
+            case PlanGraphOpcode::INDEX_LOOKUP:
+            case PlanGraphOpcode::DROP_INDEX:
+            case PlanGraphOpcode::MERGE_DATAPARTS:
+            // No extra info required
+            break;
+
+            case PlanGraphOpcode::_SIZE:
+            case PlanGraphOpcode::UNKNOWN:
+            break;
         }
 
         output << "    `\"]\n";

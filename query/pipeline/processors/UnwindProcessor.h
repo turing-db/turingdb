@@ -27,6 +27,9 @@ private:
     PipelineValuesOutputInterface _output;
 
     ListView _list;
+
+    /// If @ref _list::size > @ref ChunkConfig::CHUNK_SIZE, chunk outputs
+    size_t _index {0};
 };
 
 }
