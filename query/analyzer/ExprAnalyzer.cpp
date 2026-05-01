@@ -454,30 +454,14 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         expr->setPropertyName(propName->getName());
     }
 
-    EvaluatedType type = EvaluatedType::Invalid;
-
-    switch (vt) {
-        case ValueType::UInt64:
-        case ValueType::Int64: {
-            type = EvaluatedType::Integer;
-        } break;
-        case ValueType::Bool: {
-            type = EvaluatedType::Bool;
-        } break;
-        case ValueType::Double: {
-            type = EvaluatedType::Double;
-        } break;
-        case ValueType::String: {
-            type = EvaluatedType::String;
-        } break;
-        case ValueType::Embedding: {
-            type = EvaluatedType::Embedding;
-        } break;
-        default: {
-            const std::string error = fmt::format("Property type '{}' is invalid", propName->getName());
-            throwError(error, expr);
-        } break;
+    const auto maybeEvalType = toEvaluatedType(vt);
+    if (!maybeEvalType.has_value()) {
+        const std::string_view name = propName->getName();
+        const std::string error = fmt::format("Property type '{}' is invalid", name);
+        throwError(error, expr);
     }
+
+    EvaluatedType type = *maybeEvalType;
 
     expr->setEntityVarDecl(varDecl);
     expr->setType(type);
