@@ -16,7 +16,6 @@
 #include "decl/DeclContext.h"
 #include "decl/VarDecl.h"
 #include "decl/PatternData.h"
-#include "spdlog/spdlog.h"
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
 #include "stmt/ShortestPathStmt.h"
@@ -50,6 +49,7 @@
 #include "ProcedureLookup.h"
 
 #include "BioAssert.h"
+#include "FatalException.h"
 
 using namespace db;
 
@@ -93,7 +93,7 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
         case Stmt::Kind::SET:
         case Stmt::Kind::DELETE:
         case Stmt::Kind::RETURN:
-        // Not a read statement
+            throw FatalException("Attempted to evaluate invalid read statement.");
         break;
     }
 }
