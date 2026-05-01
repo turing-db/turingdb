@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "UNWIND [\"string\", true, 10, 333.3] AS elements RETURN elements",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __UNWIND__\n        ['string', true, 10, 333.3] AS elements\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "result": "elements\nstring\ntrue\n10\n333.3",
+    "resultJson": "{\"header\":{\"column_names\":[\"elements\"],\"column_types\":[\"ListElement\"]},\"data\":[[[\"string\",true,10,333.300000]]]}"
+  },
+  "tags": [],
+  "write-required": false
+}

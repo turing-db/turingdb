@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "UNWIND [a] AS bad RETURN bad",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | UNWIND [a] AS bad RETURN bad\n       |         ^\n-------* Variable 'a' not found",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | UNWIND [a] AS bad RETURN bad\n       |         ^\n-------* Variable 'a' not found",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | UNWIND [a] AS bad RETURN bad\\n       |         ^\\n-------* Variable 'a' not found\"}"
+  },
+  "tags": [
+    "errors",
+    "unwind",
+    "lists"
+  ],
+  "write-required": false
+}
