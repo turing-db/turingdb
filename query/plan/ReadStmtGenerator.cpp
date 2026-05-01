@@ -1130,7 +1130,8 @@ void ReadStmtGenerator::generateUnwindStmt(const UnwindStmt* stmt) {
 
     // Empty list -> no type restriction possible
     if (items.empty()) {
-        _tree->create<UnwindNode>(arg, var);
+        UnwindNode* uw = _tree->create<UnwindNode>(arg, var);
+        _variables->setProducer(var, uw);
         return;
     }
 
@@ -1143,7 +1144,8 @@ void ReadStmtGenerator::generateUnwindStmt(const UnwindStmt* stmt) {
 
     // List is not homogeneous: no possibility for type restriction
     if (!homogeneous) {
-        _tree->create<UnwindNode>(arg, var);
+        UnwindNode* uw = _tree->create<UnwindNode>(arg, var);
+        _variables->setProducer(var, uw);
         return;
     }
 
@@ -1151,7 +1153,8 @@ void ReadStmtGenerator::generateUnwindStmt(const UnwindStmt* stmt) {
     const Expr* item = items.front();
     const EvaluatedType homogeneity = item->getType();
 
-    _tree->create<UnwindNode>(arg, var, homogeneity);
+    UnwindNode* uw = _tree->create<UnwindNode>(arg, var, homogeneity);
+    _variables->setProducer(var, uw);
 }
 
 void ReadStmtGenerator::throwError(std::string_view msg, const void* obj) const {

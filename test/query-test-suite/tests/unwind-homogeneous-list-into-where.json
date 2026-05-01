@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "UNWIND [\"Remy\", \"Adam\"] AS name MATCH (n) WHERE n.name = name RETURN n, n.name, name",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __UNWIND__\n        ['Remy', 'Adam'] AS name\n    `\"]\n    1[\"`\n        __SCAN_NODES__\n    `\"]\n    2[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    3[\"`\n        __FILTER_NODE__\n        __predicate__ n.name EQUAL name\n        __dep__ _n_._name_ (String)\n    `\"]\n    4[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    5[\"`\n        __CARTESIAN_PRODUCT__\n    `\"]\n    6[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->5\n    1-->4\n    2-->6\n    3-->2\n    4-->5\n    5-->3",
+    "result": "n,n.name,name\n0,Remy,Remy\n1,Adam,Adam",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\",\"n.name\",\"name\"],\"column_types\":[\"UInt64\",\"String\",\"String\"]},\"data\":[[[0,1],[\"Remy\",\"Adam\"],[\"Remy\",\"Adam\"]]]}"
+  },
+  "tags": [
+    "list",
+    "unwind",
+    "homogeneous"
+  ],
+  "write-required": false
+}

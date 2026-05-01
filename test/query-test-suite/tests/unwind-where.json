@@ -2,11 +2,11 @@
   "enabled": true,
   "remote-enabled": false,
   "graph": "simpledb",
-  "query": "UNWIND [32, 1] AS age MATCH (n) WHERE n.age = age RETURN n",
+  "query": "UNWIND [32, 1] AS age MATCH (n) WHERE n.age = age RETURN n, n.name, n.age",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | UNWIND [32, 1] AS age MATCH (n) WHERE n.age = age RETURN n\n       |                                       ^^^^^^^^^^^\n-------* Operands are not valid or compatible types: 'Integer' and 'ListItem'",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | UNWIND [32, 1] AS age MATCH (n) WHERE n.age = age RETURN n\n       |                                       ^^^^^^^^^^^\n-------* Operands are not valid or compatible types: 'Integer' and 'ListItem'",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | UNWIND [32, 1] AS age MATCH (n) WHERE n.age = age RETURN n\\n       |                                       ^^^^^^^^^^^\\n-------* Operands are not valid or compatible types: 'Integer' and 'ListItem'\"}"
+    "plan": "flowchart TD\n    0[\"`\n        __UNWIND__\n        [32, 1] AS age\n    `\"]\n    1[\"`\n        __SCAN_NODES__\n    `\"]\n    2[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    3[\"`\n        __FILTER_NODE__\n        __predicate__ n.age EQUAL age\n        __dep__ _n_._age_ (Integer)\n    `\"]\n    4[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ age\n    `\"]\n    5[\"`\n        __CARTESIAN_PRODUCT__\n    `\"]\n    6[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    7[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->5\n    1-->4\n    2-->6\n    3-->2\n    4-->5\n    5-->3\n    6-->7",
+    "result": "n,n.name,n.age\n0,Remy,32\n1,Adam,32",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\",\"n.name\",\"n.age\"],\"column_types\":[\"UInt64\",\"String\",\"Int64\"]},\"data\":[[[0,1],[\"Remy\",\"Adam\"],[32,32]]]}"
   },
   "tags": [
     "lists",
