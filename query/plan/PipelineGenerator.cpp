@@ -131,41 +131,6 @@ namespace rv = rg::views;
 
 namespace {
 
-ValueType evaluatedToValueType(EvaluatedType type) {
-    switch (type) {
-        case EvaluatedType::Bool:
-            return ValueType::Bool;
-        case EvaluatedType::Char:
-        case EvaluatedType::String:
-            return ValueType::String;
-        case EvaluatedType::Double:
-            return ValueType::Double;
-        case EvaluatedType::Integer:
-            return ValueType::Int64;
-        case EvaluatedType::Embedding:
-            return ValueType::Embedding;
-        case EvaluatedType::Null:
-        case EvaluatedType::NodePattern:
-        case EvaluatedType::EdgePattern:
-        case EvaluatedType::StringTable:
-        case EvaluatedType::List:
-        case EvaluatedType::Map:
-        case EvaluatedType::Invalid:
-        case EvaluatedType::Wildcard:
-        case EvaluatedType::GraphPath:
-        case EvaluatedType::Tuple:
-        case EvaluatedType::ValueType:
-        case EvaluatedType::Label:
-        case EvaluatedType::LabelSet:
-        case EvaluatedType::PropertyType:
-        case EvaluatedType::EdgeType:
-        case EvaluatedType::_SIZE:
-            return ValueType::Invalid;
-    }
-
-    return ValueType::Invalid;
-}
-
 struct TranslateNodeToken {
     PlanGraphNode* _node {nullptr};
     PipelineOutputInterface* _previousInterface {nullptr};
@@ -1473,7 +1438,11 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             } else { // New property: get its type, use an invalid PropID (later updated
                      // in WriteProcessor::updateNodes)
                 const EvaluatedType propertyType = valueExpr->getType();
-                valType = evaluatedToValueType(propertyType);
+
+                auto maybeValueType = toValueType(propertyType);
+                bioassert(maybeValueType.has_value(), "Unknown property type.");
+
+                valType = *maybeValueType;
                 propID = PropertyTypeID::max();
             }
 
@@ -1508,7 +1477,11 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
             } else { // New property: get its type, use an invalid PropID (later updated
                      // in WriteProcessor::updateEdges)
                 const EvaluatedType propertyType = valueExpr->getType();
-                valType = evaluatedToValueType(propertyType);
+
+                const auto maybeValueType = toValueType(propertyType);
+                bioassert(maybeValueType.has_value(), "Unknown property type.");
+
+                valType = *maybeValueType;
                 propID = PropertyTypeID::max();
             }
 

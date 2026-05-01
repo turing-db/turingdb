@@ -6,7 +6,7 @@
 
 using namespace db;
 
-static EvaluatedType toEvaluatedType(ProcedureType type) {
+static EvaluatedType procTypeToEvaluatedType(ProcedureType type) {
     switch (type) {
         case ProcedureType::NODE:
             return EvaluatedType::NodePattern;
@@ -90,7 +90,7 @@ FunctionResolver::FunctionSignatureRange ProcedureLookup::lookup(std::string_vie
     std::vector<EvaluatedType> argTypes;
     argTypes.reserve(args.size());
     for (const auto& arg : args) {
-        argTypes.push_back(toEvaluatedType(arg._type));
+        argTypes.push_back(procTypeToEvaluatedType(arg._type));
     }
     sig->setArguments(std::move(argTypes));
 
@@ -99,7 +99,7 @@ FunctionResolver::FunctionSignatureRange ProcedureLookup::lookup(std::string_vie
     std::vector<FunctionReturnType> retTypes;
     retTypes.reserve(rets.size());
     for (const auto& ret : rets) {
-        FunctionReturnType retType = toEvaluatedType(ret._type);
+        FunctionReturnType retType = procTypeToEvaluatedType(ret._type);
         retType.setName(ret._name);
         retTypes.push_back(retType);
     }

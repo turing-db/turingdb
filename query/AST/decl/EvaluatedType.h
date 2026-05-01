@@ -1,8 +1,11 @@
 #pragma once
 
 #include <stdint.h>
+#include <utility>
 
 #include "EnumToString.h"
+
+#include "metadata/PropertyType.h"
 
 namespace db {
 
@@ -79,4 +82,47 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::LabelSet, "LabelSet">,
     EnumStringPair<EvaluatedType::PropertyType, "PropertyType">,
     EnumStringPair<EvaluatedType::EdgeType, "EdgeType">>;
+
+// Evaluated Type to ValueType conversion
+static constexpr size_t VALUE_TYPE_COUNT = std::to_underlying(ValueType::_SIZE);
+
+static constexpr std::pair<ValueType, EvaluatedType> EVConversions[VALUE_TYPE_COUNT + 1] = {
+    {ValueType::Int64,     EvaluatedType::Integer  },
+    {ValueType::UInt64,    EvaluatedType::Integer  },
+    {ValueType::Double,    EvaluatedType::Double   },
+    {ValueType::String,    EvaluatedType::String   },
+    {ValueType::Embedding, EvaluatedType::Embedding},
+    {ValueType::Bool,      EvaluatedType::Bool     },
+
+    {ValueType::Invalid,   EvaluatedType::Invalid  },
+    {ValueType::_SIZE,     EvaluatedType::Invalid  }
+};
+
+// EvaluatedType <-> ValueType conversions
+inline std::optional<EvaluatedType> toEvaluatedType(ValueType v) {
+    for (auto [from, to] : EVConversions) {
+        if (from == v) {
+            return to;
+        }
+    }
+    return std::nullopt;
+}
+
+inline std::optional<ValueType> toValueType(EvaluatedType e) {
+    for (auto [from, to] : EVConversions) {
+        if (to == e) {
+            return from;
+        }
+    }
+    return std::nullopt;
+}
+
+inline bool convertibleToEvaluatedType(ValueType v) {
+    return toEvaluatedType(v).has_value();
+}
+
+inline bool convertibleToValueType(EvaluatedType e) {
+    return toValueType(e).has_value();
+}
+
 }

@@ -51,8 +51,8 @@ struct TypeUtils {
     static constexpr bool neither_optional = !is_optional_v<T> && !is_optional_v<U>;
 
     template <typename Func, typename... Args>
-    using optional_invoke_result = std::optional<
-        typename std::invoke_result<Func, unwrap_optional_t<Args>...>::type>;
+    using optional_invoke_result =
+        std::optional<std::invoke_result_t<Func, unwrap_optional_t<Args>...>>;
 
     template <typename T>
     using decay_col_t = std::remove_cvref_t<std::remove_pointer_t<T>>;
