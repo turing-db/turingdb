@@ -235,7 +235,7 @@ public:
     PipelineValuesOutputInterface& addUnwind(ListView list);
 
     template <SupportedType T>
-    PipelineValuesOutputInterface& addUnwind(ListView list);
+    PipelineValuesOutputInterface& addUnwind(ListView list, ValueType homogeneity);
 
     PipelineBlockOutputInterface& addDropIndex(std::string_view indexName);
 

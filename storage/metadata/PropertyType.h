@@ -8,6 +8,8 @@
 #include "ID.h"
 #include "SupportedType.h"
 
+#include "FatalException.h"
+
 namespace db {
 
 enum class ValueType : uint8_t {
@@ -139,6 +141,37 @@ struct EmbeddingEqual {
     bool operator()(types::Embedding::Primitive a,
                     types::Embedding::Primitive b) const noexcept {
         return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin());
+    }
+};
+
+struct ValueTypeDispatcher {
+    ValueType _valueType {ValueType::Invalid};
+
+    void execute(const auto& executor) const {
+        switch (_valueType) {
+            case ValueType::Int64:
+                executor.template operator()<types::Int64>();
+            break;
+            case ValueType::UInt64:
+                executor.template operator()<types::UInt64>();
+            break;
+            case ValueType::Double:
+                executor.template operator()<types::Double>();
+            break;
+            case ValueType::String:
+                executor.template operator()<types::String>();
+            break;
+            case ValueType::Bool:
+                executor.template operator()<types::Bool>();
+            break;
+            case ValueType::Embedding:
+                executor.template operator()<types::Embedding>();
+            break;
+            case ValueType::_SIZE:
+            case ValueType::Invalid: {
+                throw FatalException("Unsupported property type");
+            }
+        }
     }
 };
 
