@@ -1441,6 +1441,30 @@ PipelineValuesOutputInterface& PipelineBuilder::addUnwind(ListView list) {
     return output;
 }
 
+template <SupportedType T>
+PipelineValuesOutputInterface& PipelineBuilder::addUnwind(ListView list) {
+    auto* proc = UnwindProcessor::create(_pipeline, list);
+
+    using InternalType = T::Primitive;
+
+    PipelineValuesOutputInterface& output = proc->output();
+
+    {
+        auto* valuesCol = _mem->alloc<ColumnVector<InternalType>>();
+        const ColumnTag newTag = _dfMan->allocTag();
+        NamedColumn* unwoundCol = NamedColumn::create(_dfMan, valuesCol, newTag);
+
+        Dataframe* outDf = output.getDataframe();
+        outDf->addColumn(unwoundCol);
+
+        output.setValues(unwoundCol);
+    }
+
+    _pendingOutput.setInterface(&output);
+    _lastProc = proc;
+    return output;
+}
+
 void PipelineBuilder::setOutputDataframe(const Dataframe* df) {
     _pipeline->setOutputDataframe(df);
 }
@@ -1507,3 +1531,10 @@ template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::D
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Bool::Primitive, EdgeID>(const Index*);
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::String::Primitive, EdgeID>(const Index*);
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Embedding::Primitive, EdgeID>(const Index*);
+
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Int64>(ListView list);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::UInt64>(ListView list);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Double>(ListView list);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Bool>(ListView list);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::String>(ListView list);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Embedding>(ListView list);
