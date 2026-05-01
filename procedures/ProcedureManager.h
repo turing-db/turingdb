@@ -16,6 +16,7 @@ class ProcedureManager {
 public:
     using Namespaces = std::vector<ProcedureNamespace*>;
 
+    ProcedureManager();
     ~ProcedureManager();
 
     void init();
@@ -28,14 +29,10 @@ public:
 
     ProcedureNamespace* createNamespace(std::string_view name);
 
-    static std::unique_ptr<ProcedureManager> create();
-
 private:
     mutable std::shared_mutex _mutex;
     Namespaces _namespaces;
     std::unordered_map<std::string_view, ProcedureNamespace*> _namespaceMap;
-
-    ProcedureManager();
 };
 
 }

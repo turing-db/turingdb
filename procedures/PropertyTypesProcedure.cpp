@@ -1,14 +1,12 @@
 #include "PropertyTypesProcedure.h"
 
-#include "ExecutionContext.h"
+#include "ProcedureContext.h"
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
 #include "iterators/ScanPropertyTypesIterator.h"
 #include "columns/ColumnVector.h"
 #include "views/GraphView.h"
-
-#include "PipelineException.h"
 
 using namespace db;
 
@@ -41,8 +39,8 @@ void PropertyTypesProcedure::registerProcedure(ProcedureNamespace* ns) {
 
 void PropertyTypesProcedure::execute(ProcedureState* proc) {
     Data& data = proc->data<Data>();
-    const ExecutionContext* ctxt = proc->getContext();
-    const GraphView& view = ctxt->getGraphView();
+    const ProcedureContext* ctxt = proc->getContext();
+    const GraphView& view = *ctxt->getGraphView();
 
     Column* rawIdsCol = data.getReturnColumn(0);
     Column* rawNamesCol = data.getReturnColumn(1);

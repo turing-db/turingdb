@@ -18,29 +18,27 @@ VectorDatabase::VectorDatabase()
 VectorDatabase::~VectorDatabase() {
 }
 
-VectorResult<std::unique_ptr<VectorDatabase>> VectorDatabase::create(const fs::Path& rootPath) {
+VectorResult<void> VectorDatabase::init(const fs::Path& rootPath) {
     static constexpr uint64_t RANDOM_SEED = 982451653;
 
     if (!RandomGenerator::initialized()) {
         RandomGenerator::initialize(RANDOM_SEED);
     }
 
-    std::unique_ptr<VectorDatabase> database(new VectorDatabase);
-
     auto storage = StorageManager::create(rootPath);
     if (!storage) {
         return nonstd::make_unexpected(storage.error());
     }
 
-    database->_storageManager = std::move(storage.value());
-    database->_shardCache = std::make_unique<ShardCache>(*database->_storageManager);
+    _storageManager = std::move(storage.value());
+    _shardCache = std::make_unique<ShardCache>(*_storageManager);
 
     // Build the libraries using the storage
-    if (auto res = database->load(); !res) {
+    if (auto res = load(); !res) {
         return nonstd::make_unexpected(res.error());
     }
 
-    return database;
+    return {};
 }
 
 VectorResult<VecLibID> VectorDatabase::createLibrary(std::string_view libName,

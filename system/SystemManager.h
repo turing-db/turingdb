@@ -4,6 +4,7 @@
 #include <vector>
 #include <optional>
 
+#include "ChangeManager.h"
 #include "versioning/ChangeID.h"
 #include "versioning/ChangeResult.h"
 
@@ -16,6 +17,14 @@
 #include "GraphLoadStatus.h"
 #include "dump/DumpResult.h"
 
+#include "VectorDatabase.h"
+
+#include "JobSystem.h"
+
+#include "ProcedureManager.h"
+#include "ExtensionManager.h"
+
+#include "LockFile.h"
 #include "Path.h"
 #include "RWSpinLock.h"
 
@@ -30,9 +39,12 @@ class Change;
 
 class SystemManager {
 public:
-    ~SystemManager();
+    explicit SystemManager(const TuringConfig* config);
 
-    static std::unique_ptr<SystemManager> create(const TuringConfig* config);
+    SystemManager(const SystemManager&) = delete;
+    SystemManager& operator=(const SystemManager&) = delete;
+
+    ~SystemManager();
 
     // Initialise system Manager
     void init();
@@ -66,8 +78,8 @@ public:
     DumpResult<void> dumpGraph(const std::string& graphName);
 
     // ChangeManager access and operations
-    ChangeManager& getChangeManager() { return *_changes; }
-    const ChangeManager& getChangeManager() const { return *_changes; }
+    ChangeManager& getChangeManager() { return _changes; }
+    const ChangeManager& getChangeManager() const { return _changes; }
     ChangeResult<Change*> newChange(const std::string& graphName,
                                     CommitHash baseHash = CommitHash::head());
 
@@ -86,8 +98,27 @@ public:
 
     S3::TuringS3Client<S3::MinioS3ClientWrapper>* getS3Client() { return _s3Client.get(); }
 
+    // Subsystems access
+    JobSystem* getJobSystem() { return &_jobSystem; }
+    const JobSystem* getJobSystem() const { return &_jobSystem; }
+
+    ProcedureManager* getProcedures() { return &_procedures; }
+    const ProcedureManager* getProcedures() const { return &_procedures; }
+
+    ExtensionManager* getExtensions() { return &_extensions; }
+    const ExtensionManager* getExtensions() const { return &_extensions; }
+
+    vec::VectorDatabase* getVectorDatabase() { return &_vectorDatabase; }
+    const vec::VectorDatabase* getVectorDatabase() const { return &_vectorDatabase; }
+
 private:
     const TuringConfig* _config {nullptr};
+
+    // Lock file
+    LockFile _lockFile;
+
+    // Job management
+    JobSystem _jobSystem;
 
     // Graphs management
     mutable RWSpinLock _graphsLock;
@@ -95,15 +126,28 @@ private:
     std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
 
     // Change management
-    std::unique_ptr<ChangeManager> _changes;
+    ChangeManager _changes;
 
     // Graph load status
     GraphLoadStatus _graphLoadStatus;
 
+    // Vector DB
+    vec::VectorDatabase _vectorDatabase;
+
+    // Procedures 
+    ProcedureManager _procedures;
+
+    // Extensions
+    ExtensionManager _extensions;
+
     // S3 Client
     std::unique_ptr<S3::TuringS3Client<S3::MinioS3ClientWrapper>> _s3Client {nullptr};
 
-    explicit SystemManager(const TuringConfig* config);
+    void initTuringDirectory();
+    void initLockFile();
+    void initVectorDatabase();
+    void initSystemEvents();
+    void loadOrCreateDefaultGraph();
 
     bool loadJsonlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadGmlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);

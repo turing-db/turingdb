@@ -21,7 +21,8 @@ using namespace db;
 class StringIndexTest : public TuringTest {
 protected:
     void initialize() override {
-        _jobSystem = JobSystem::create();
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->init();
     }
 
     void terminate() override {
@@ -32,7 +33,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createDB1() {
         auto graph = Graph::create();
-        GraphWriter writer(graph.get());
+        GraphWriter writer(graph.get(), _jobSystem.get());
 
         auto p1 = writer.addNode({"Person"});
         writer.addNodeProperty<types::String>(p1, "Name", "Cyrus");
@@ -52,7 +53,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createBioGraph() {
         auto graph = Graph::create();
-        GraphWriter writer(graph.get());
+        GraphWriter writer(graph.get(), _jobSystem.get());
 
         auto node1 = writer.addNode({"Chemical"});
         writer.addNodeProperty<types::String>(node1, "name", "APOE-4 [extracellular]");
@@ -70,7 +71,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createMultiDatapartGraph() {
         auto graph = Graph::create();
-        GraphWriter writer(graph.get());
+        GraphWriter writer(graph.get(), _jobSystem.get());
 
         auto poliwag = writer.addNode({"Pokemon"});
         writer.addNodeProperty<types::String>(poliwag, "name", "Poliwag");
@@ -103,7 +104,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createPrefixTestDB() {
         auto graph = Graph::create();
-        GraphWriter writer(graph.get());
+        GraphWriter writer(graph.get(), _jobSystem.get());
 
         auto node1 = writer.addNode({"Word"});
         writer.addNodeProperty<types::String>(node1, "name", "playful");
@@ -114,7 +115,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createEdgeCaseGraph() {
         auto graph = Graph::create();
-        GraphWriter writer(graph.get());
+        GraphWriter writer(graph.get(), _jobSystem.get());
 
         auto node1 = writer.addNode({"LastLetter"});
         writer.addNodeProperty<types::String>(node1, "name", "Zebraz");

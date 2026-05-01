@@ -15,6 +15,8 @@
 #include "writers/GraphWriter.h"
 #include "dataframe/Dataframe.h"
 
+#include "JobSystem.h"
+
 #include "LineContainer.h"
 #include "TuringException.h"
 #include "TuringTestEnv.h"
@@ -70,7 +72,10 @@ protected:
     }
 
     static void createPublicationGraph(Graph* graph) {
-        GraphWriter writer(graph);
+        JobSystem jobSystem;
+        jobSystem.init();
+
+        GraphWriter writer(graph, &jobSystem);
         writer.setName("publicationdb");
 
         // Publication 1: US publication with institution

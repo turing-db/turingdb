@@ -27,7 +27,7 @@
 #include "PipelineV2.h"
 #include "PipelineExecutor.h"
 #include "ExecutionContext.h"
-#include "procedures/ProcedureManager.h"
+#include "ProcedureManager.h"
 #include "nodes/PlanGraphNode.h"
 
 #include "LineContainer.h"
@@ -59,7 +59,7 @@ public:
 
 private:
     void executeImpl(std::string_view cypher, db::ChangeID change, auto callback) {
-        _procedures = db::ProcedureManager::create();
+        _procedures = std::make_unique<db::ProcedureManager>();
         _procedures->init();
 
         auto txRes = _sysMan->openTransaction(_graphName,
@@ -90,14 +90,13 @@ private:
         });
 
         db::PipelineV2 pipeline;
-        db::PipelineGenerator pipelineGen(&mem, _sysMan, _procedures.get(), &callbacks,
+        db::PipelineGenerator pipelineGen(&mem, _sysMan, &callbacks,
                                           &plan, view, &pipeline);
         pipelineGen.generate();
 
         db::ExecutionContext execCtxt(_sysMan, view);
         execCtxt.setTransaction(&*_tx);
         execCtxt.setGraphName(_graphName);
-        execCtxt.setProcedures(_procedures.get());
 
         db::PipelineExecutor executor(&pipeline, &execCtxt);
         executor.execute();

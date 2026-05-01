@@ -3,7 +3,6 @@
 #include <spdlog/spdlog.h>
 
 #include "Graph.h"
-#include "ChangeManager.h"
 
 #include "TuringConfig.h"
 
@@ -20,40 +19,146 @@
 #include "GMLImporter.h"
 #include "JsonlParser.h"
 
+#include "SystemEventHandler.h"
+
 #include "FileUtils.h"
+#include "Panic.h"
 #include "TuringException.h"
 
 using namespace db;
 
 SystemManager::SystemManager(const TuringConfig* config)
-    : _config(config),
-    _changes(std::make_unique<ChangeManager>())
+    : _config(config)
 {
 }
 
 SystemManager::~SystemManager() {
-}
-
-std::unique_ptr<SystemManager> SystemManager::create(const TuringConfig* config) {
-    return std::unique_ptr<SystemManager>(new SystemManager(config));
+    SystemEventHandler::terminate();
 }
 
 void SystemManager::init() {
-    const auto list = _config->getGraphsDir().listDir();
+    initTuringDirectory();
+    initLockFile();
+    initVectorDatabase();
+    initSystemEvents();
+    loadOrCreateDefaultGraph();
 
-    if (!list) {
-        throw TuringException(fmt::format("Can not list graphs in turing directory '{}'",
-                                          _config->getGraphsDir().get()));
+    _procedures.init();
+}
+
+void SystemManager::initTuringDirectory() {
+    // Create turing directory if it does not exist
+    const auto& turingDir = _config->getTuringDir();
+    const auto& graphsDir = _config->getGraphsDir();
+    const auto& dataDir = _config->getDataDir();
+    const auto& vectorDir = _config->getVectorDir();
+
+    spdlog::info("Starting TuringDB. Root directory: '{}'", turingDir.get());
+
+    if (turingDir.empty()) {
+        panic("Turing directory is not set");
     }
 
-    const fs::Path defaultPath = _config->getGraphsDir() / "default"; auto found = std::find(list.value().begin(), list.value().end(), defaultPath);
-
-    if (found != list->end()) {
-        _defaultGraph = loadGraph("default");
-    } else {
-        _defaultGraph = createGraph("default");
+    if (graphsDir.empty()) {
+        panic("Graphs directory is not set");
     }
 
+    if (dataDir.empty()) {
+        panic("Data directory is not set");
+    }
+
+    if (vectorDir.empty()) {
+        panic("Vector directory is not set");
+    }
+
+    if (!turingDir.exists()) {
+        spdlog::info("Creating turing directory {}", turingDir.get());
+
+        if (auto res = turingDir.mkdir(); !res) {
+            panic("Could not create turing directory '{}': {}",
+                  turingDir.get(), res.error().fmtMessage());
+        }
+    }
+
+    if (!graphsDir.exists()) {
+        spdlog::info("Creating graphs directory {}", graphsDir.get());
+
+        if (auto res = graphsDir.mkdir(); !res) {
+            panic("Could not create graphs directory '{}': {}",
+                  graphsDir.get(), res.error().fmtMessage());
+        }
+    }
+
+    if (!dataDir.exists()) {
+        spdlog::info("Creating data directory {}", dataDir.c_str());
+
+        if (auto res = dataDir.mkdir(); !res) {
+            panic("Could not create data directory '{}': {}",
+                  dataDir.get(), res.error().fmtMessage());
+        }
+    }
+
+    if (!vectorDir.exists()) {
+        spdlog::info("Creating vector directory {}", vectorDir.c_str());
+
+        if (auto res = vectorDir.mkdir(); !res) {
+            panic("Could not create vector directory '{}': {}",
+                  vectorDir.get(), res.error().fmtMessage());
+        }
+    }
+
+    const auto& extensionsDir = _config->getUserExtensionsDir();
+
+    if (!extensionsDir.exists()) {
+        spdlog::info("Creating extensions directory {}", extensionsDir.get());
+
+        if (auto res = extensionsDir.mkdir(); !res) {
+            panic("Could not create extensions directory '{}': {}",
+                  extensionsDir.get(), res.error().fmtMessage());
+        }
+    }
+}
+
+void SystemManager::initLockFile() {
+    // Acquire lock file
+    _lockFile.setPath(fs::Path(_config->getLockFilePath()));
+    const auto lockRes = _lockFile.tryLock();
+    if (!lockRes) {
+        panic("Could not acquire lock file: {}", lockRes.error().fmtMessage());
+    }
+}
+
+void SystemManager::initVectorDatabase() {
+    const auto& vectorDir = _config->getVectorDir();
+
+    if (auto res = _vectorDatabase.init(vectorDir); !res) {
+        panic("Could not create vector database: {}", res.error().fmtMessage());
+    }
+}
+
+void SystemManager::initSystemEvents() {
+    // Initialize socket/signal communication system
+    if (_config->usingSystemEvents()) {
+        if (!SystemEventHandler::initialize(_config->getSocketPath())) {
+            panic("Could not initialize system event handler");
+        }
+    }
+
+    // Set on stop callback
+    SystemEventHandler::setOnStop([this] {
+        _config->getOnStopRequest()();
+    });
+}
+
+void SystemManager::loadOrCreateDefaultGraph() {
+    // Try to load default graph from disk
+    _defaultGraph = loadGraph("default");
+    if (_defaultGraph) {
+        return;
+    }
+
+    // Create default graph if it does not exist
+    _defaultGraph = createGraph("default");
     if (!_defaultGraph) {
         throw TuringException("Could not initialise the default graph");
     }
@@ -66,7 +171,6 @@ Graph* SystemManager::loadGraph(const std::string& name) {
     Graph* graphPtr = graph.get();
 
     if (const auto res = graph->getSerializer().load(); !res) {
-        spdlog::error(res.error().fmtMessage());
         return nullptr;
     }
 
@@ -286,7 +390,7 @@ bool SystemManager::loadJsonlDB(const std::string& graphName,
         return false;
     }
 
-    Change* change = _changes->createChange(graph.get(), CommitHash::head());
+    Change* change = _changes.createChange(graph.get(), CommitHash::head());
     ChangeAccessor changeAccessor = change->access();
 
     const auto importRes = JsonlParser::parse(changeAccessor, file);
@@ -297,7 +401,7 @@ bool SystemManager::loadJsonlDB(const std::string& graphName,
         return false;
     }
 
-    const auto submitRes = _changes->submitChange(changeAccessor, jobsystem);
+    const auto submitRes = _changes.submitChange(changeAccessor, jobsystem);
 
     if (!submitRes) {
         _graphLoadStatus.removeLoadingGraph(graphName);
@@ -383,11 +487,11 @@ ChangeResult<Change*> SystemManager::newChange(const std::string& graphName, Com
     }
 
     Graph* graph = it->second.get();
-    return _changes->createChange(graph, baseHash);
+    return _changes.createChange(graph, baseHash);
 }
 
 DataPartMergeResult<void> SystemManager::mergeDataParts(Graph* graph, JobSystem& jobSystem) {
-    return _changes->mergeDataParts(graph, jobSystem);
+    return _changes.mergeDataParts(graph, jobSystem);
 }
 
 ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphName,

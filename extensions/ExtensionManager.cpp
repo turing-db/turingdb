@@ -6,19 +6,14 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "ExtensionDescriptor.h"
-#include "procedures/ProcedureManager.h"
-#include "procedures/ProcedureNamespace.h"
+#include "ProcedureManager.h"
+#include "ProcedureNamespace.h"
 
 #include "TuringException.h"
 
 using namespace db;
 
-ExtensionManager::ExtensionManager(const fs::Path& userExtensionsDir,
-                                   const fs::Path& installExtensionsDir,
-                                   ProcedureManager* procedures)
-    : _userExtensionsDir(userExtensionsDir),
-    _installExtensionsDir(installExtensionsDir),
-    _procedures(procedures)
+ExtensionManager::ExtensionManager()
 {
 }
 
@@ -32,10 +27,12 @@ ExtensionManager::~ExtensionManager() {
     }
 }
 
-std::unique_ptr<ExtensionManager> ExtensionManager::create(const fs::Path& userExtensionsDir,
-                                                           const fs::Path& installExtensionsDir,
-                                                           ProcedureManager* procedures) {
-    return std::unique_ptr<ExtensionManager>(new ExtensionManager(userExtensionsDir, installExtensionsDir, procedures));
+void ExtensionManager::init(ProcedureManager* procedures,
+                            const fs::Path& userExtensionsDir,
+                            const fs::Path& installExtensionsDir) {
+    _procedures = procedures;
+    _userExtensionsDir = userExtensionsDir;
+    _installExtensionsDir = installExtensionsDir;
 }
 
 void ExtensionManager::installExtension(std::string_view name) {

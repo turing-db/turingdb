@@ -19,7 +19,8 @@ namespace rv = ranges::views;
 class ComparatorTest : public TuringTest {
 protected:
     void initialize() override {
-        _jobSystem = JobSystem::create();
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->init();
     }
 
     void terminate() override {
@@ -28,7 +29,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createDB1() {
         auto graph = Graph::create();
-        GraphWriter writer(graph.get());
+        GraphWriter writer(graph.get(), _jobSystem.get());
 
         auto p1 = writer.addNode({"Person"});
         auto p2 = writer.addNode({ "Person", "Officer" });
@@ -57,7 +58,7 @@ protected:
 
     [[nodiscard]] std::unique_ptr<Graph> createDB2() {
         auto graph = Graph::create();
-        GraphWriter writer(graph.get());
+        GraphWriter writer(graph.get(), _jobSystem.get());
 
         auto p1 = writer.addNode({"Person"});
         auto p2 = writer.addNode({ "Person", "Officer" });

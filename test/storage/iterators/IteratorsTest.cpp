@@ -66,7 +66,8 @@ protected:
     * named as "TmpId<x> patch" to note those which were changed).
     */
     void initialize() override {
-        _jobSystem = JobSystem::create();
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->init();
         _graph = Graph::create();
 
         /* FIRST BUFFER */

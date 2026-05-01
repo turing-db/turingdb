@@ -21,6 +21,8 @@
 #include "Demonology.h"
 #include "LogSetup.h"
 #include "SystemEventHandler.h"
+#include "LockFile.h"
+#include "LockFile.h"
 #include "BannerDisplay.h"
 #include "BuildInfo.h"
 #include "DateTimeFmt.h"
@@ -34,7 +36,7 @@ using namespace db;
 
 namespace {
 
-void TuringDBCommitInfo() {
+void printTuringDBCommitInfo() {
     std::cout << "TuringDB - " << TOSTRING(HEAD_COMMIT_HASH)
               << " - " << formatUnixTime(BUILD_TIMESTAMP) << "\n\n";
 }
@@ -172,7 +174,7 @@ int StartCmd::execute() {
     const fs::Path& logsDir = config.getLogsDir();
 
     BannerDisplay::printBanner();
-    TuringDBCommitInfo();
+    printTuringDBCommitInfo();
 
     if (_demonize) {
         LockFile lockFile;

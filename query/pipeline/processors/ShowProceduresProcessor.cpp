@@ -6,10 +6,10 @@
 #include "dataframe/NamedColumn.h"
 #include "ExecutionContext.h"
 #include "metadata/PropertyType.h"
-#include "procedures/ProcedureManager.h"
-#include "procedures/ProcedureNamespace.h"
-#include "procedures/Procedure.h"
-#include "procedures/ProcedureTypeVector.h"
+#include "ProcedureManager.h"
+#include "ProcedureNamespace.h"
+#include "Procedure.h"
+#include "ProcedureTypeVector.h"
 
 using namespace db;
 

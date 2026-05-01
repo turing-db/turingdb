@@ -75,30 +75,15 @@ set(processors_sources
     processors/DataPartMergeProcessor.cpp
 )
 
-set(procedures_sources
-    procedures/ProcedureData.cpp
-    procedures/ProcedureTypeVector.cpp
-    procedures/Procedure.cpp
-    procedures/ProcedureNamespace.cpp
-    procedures/ProcedureManager.cpp
-    procedures/LabelsProcedure.cpp
-    procedures/EdgeTypesProcedure.cpp
-    procedures/PropertyTypesProcedure.cpp
-    procedures/HistoryProcedure.cpp
-    procedures/DescribeCommitProcedure.cpp
-    procedures/ProceduresProcedure.cpp
-    procedures/ShowIndexesProcedure.cpp
-)
-
 add_library(turing_db_pipeline_s
     STATIC ${pipeline_sources}
-           ${processors_sources}
-           ${procedures_sources})
+           ${processors_sources})
 
 target_include_directories(turing_db_pipeline_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(turing_db_pipeline_s PUBLIC
-    turing_db_memory_s)
+    turing_db_memory_s
+    turing_db_procedures_s)
 
 target_link_libraries(turing_db_pipeline_s PRIVATE
     turing_extensions_s

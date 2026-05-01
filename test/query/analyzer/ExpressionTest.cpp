@@ -9,7 +9,7 @@
 #include "StringBucket.h"
 #include "decl/DeclContext.h"
 #include "expr/All.h"
-#include "procedures/ProcedureManager.h"
+#include "ProcedureManager.h"
 #include "versioning/Transaction.h"
 
 using namespace db;
@@ -17,7 +17,7 @@ using namespace db;
 class ExpressionTest : public turing::test::TuringTest {
 public:
     ExpressionTest()
-        : _procedures(ProcedureManager::create()),
+        : _procedures(std::make_unique<ProcedureManager>()),
         _ast(_procedures.get(), "")
     {
     }

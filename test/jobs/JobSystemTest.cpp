@@ -20,7 +20,8 @@ protected:
 
 
 TEST_F(JobSystemTest, OneWorker) {
-    auto jobsystem = JobSystem::create(1);
+    auto jobsystem = std::make_unique<JobSystem>(1);
+    jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
         jobsystem->submit<void>([&](Promise*) {
@@ -38,7 +39,8 @@ TEST_F(JobSystemTest, OneWorker) {
 }
 
 TEST_F(JobSystemTest, TwoWorkers) {
-    auto jobsystem = JobSystem::create(2);
+    auto jobsystem = std::make_unique<JobSystem>(2);
+    jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
         jobsystem->submit<void>([&](Promise*) {
@@ -56,7 +58,8 @@ TEST_F(JobSystemTest, TwoWorkers) {
 }
 
 TEST_F(JobSystemTest, ManyWorkers) {
-    auto jobsystem = JobSystem::create(64);
+    auto jobsystem = std::make_unique<JobSystem>(64);
+    jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
         jobsystem->submit<void>([&](Promise*) {
@@ -74,7 +77,8 @@ TEST_F(JobSystemTest, ManyWorkers) {
 }
 
 TEST_F(JobSystemTest, OneWorkerShared) {
-    auto jobsystem = JobSystem::create(1);
+    auto jobsystem = std::make_unique<JobSystem>(1);
+    jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
         jobsystem->submitShared<void>([&](Promise*) {
@@ -92,7 +96,8 @@ TEST_F(JobSystemTest, OneWorkerShared) {
 }
 
 TEST_F(JobSystemTest, TwoWorkersShared) {
-    auto jobsystem = JobSystem::create(2);
+    auto jobsystem = std::make_unique<JobSystem>(2);
+    jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
         jobsystem->submitShared<void>([&](Promise*) {
@@ -110,7 +115,8 @@ TEST_F(JobSystemTest, TwoWorkersShared) {
 }
 
 TEST_F(JobSystemTest, ManyWorkersShared) {
-    auto jobsystem = JobSystem::create(64);
+    auto jobsystem = std::make_unique<JobSystem>(64);
+    jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
         jobsystem->submitShared<void>([&](Promise*) {
@@ -128,7 +134,8 @@ TEST_F(JobSystemTest, ManyWorkersShared) {
 }
 
 TEST_F(JobSystemTest, OneWorkerJobGroup) {
-    auto jobsystem = JobSystem::create(1);
+    auto jobsystem = std::make_unique<JobSystem>(1);
+    jobsystem->init();
 
     auto group = jobsystem->newGroup();
 
@@ -148,7 +155,8 @@ TEST_F(JobSystemTest, OneWorkerJobGroup) {
 }
 
 TEST_F(JobSystemTest, TwoWorkerJobGroup) {
-    auto jobsystem = JobSystem::create(2);
+    auto jobsystem = std::make_unique<JobSystem>(2);
+    jobsystem->init();
 
     auto group = jobsystem->newGroup();
 
@@ -168,7 +176,8 @@ TEST_F(JobSystemTest, TwoWorkerJobGroup) {
 }
 
 TEST_F(JobSystemTest, ManyWorkerJobGroup) {
-    auto jobsystem = JobSystem::create(64);
+    auto jobsystem = std::make_unique<JobSystem>(64);
+    jobsystem->init();
 
     auto group = jobsystem->newGroup();
 
@@ -188,7 +197,8 @@ TEST_F(JobSystemTest, ManyWorkerJobGroup) {
 }
 
 TEST_F(JobSystemTest, TooManyWorkerJobGroup) {
-    auto jobsystem = JobSystem::create(1024);
+    auto jobsystem = std::make_unique<JobSystem>(1024);
+    jobsystem->init();
 
     auto group = jobsystem->newGroup();
 
@@ -212,7 +222,8 @@ TEST_F(JobSystemTest, SubmitFromWorker) {
 
     for (size_t i = 0; i < 5; i++) {
 
-        auto jobsystem = JobSystem::create(1);
+        auto jobsystem = std::make_unique<JobSystem>(1);
+    jobsystem->init();
 
         for (size_t j = 0; j < 6; j++) {
             jobsystem->submit<void>([&](Promise*) {
@@ -236,7 +247,8 @@ TEST_F(JobSystemTest, SubmitFromWorker) {
 TEST_F(JobSystemTest, ManyJobSystems) {
     spdlog::info("Many systems test");
     for (size_t i = 0; i < 10; i++) {
-        auto jobsystem = JobSystem::create(1);
+        auto jobsystem = std::make_unique<JobSystem>(1);
+    jobsystem->init();
 
         for (size_t j = 0; j < 6; j++) {
             jobsystem->submit<void>([&](Promise*) {

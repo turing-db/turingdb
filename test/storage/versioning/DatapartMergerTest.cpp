@@ -123,7 +123,8 @@ using PropertyMap = std::variant<
 class DataPartMergerTest : public TuringTest {
 protected:
     void initialize() override {
-        _jobSystem = JobSystem::create();
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->init();
     }
 
     void terminate() override {
@@ -480,7 +481,7 @@ protected:
 
 TEST_F(DataPartMergerTest, MergeTest) {
     auto graph = Graph::create();
-    GraphWriter writer(graph.get());
+    GraphWriter writer(graph.get(), _jobSystem.get());
 
     createBasicGraph(writer);
 
@@ -621,7 +622,7 @@ TEST_F(DataPartMergerTest, MergeTest) {
 
 TEST_F(DataPartMergerTest, DeleteNodeAndMerge) {
     auto graph = Graph::create();
-    GraphWriter writer(graph.get());
+    GraphWriter writer(graph.get(), _jobSystem.get());
 
     createBasicGraph(writer);
 
@@ -728,7 +729,7 @@ TEST_F(DataPartMergerTest, DeleteNodeAndMerge) {
 
 TEST_F(DataPartMergerTest, DeleteEdgeAndMerge) {
     auto graph = Graph::create();
-    GraphWriter writer(graph.get());
+    GraphWriter writer(graph.get(), _jobSystem.get());
 
     createBasicGraph(writer);
 
@@ -815,7 +816,7 @@ TEST_F(DataPartMergerTest, DeleteEdgeAndMerge) {
 
 TEST_F(DataPartMergerTest, DeleteAllNodePropertiesAndMerge) {
     auto graph = Graph::create();
-    GraphWriter writer(graph.get());
+    GraphWriter writer(graph.get(), _jobSystem.get());
 
     createBasicGraph(writer);
 
@@ -846,7 +847,7 @@ TEST_F(DataPartMergerTest, DeleteAllNodePropertiesAndMerge) {
 
 TEST_F(DataPartMergerTest, DeleteAllEdgePropertiesAndMerge) {
     auto graph = Graph::create();
-    GraphWriter writer(graph.get());
+    GraphWriter writer(graph.get(), _jobSystem.get());
 
     createBasicGraph(writer);
 

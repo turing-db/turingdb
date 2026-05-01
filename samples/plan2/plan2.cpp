@@ -19,6 +19,7 @@
 #include "CypherAST.h"
 #include "FileReader.h"
 #include "TuringConfig.h"
+#include "ProcedureManager.h"
 
 using namespace db;
 
@@ -66,7 +67,8 @@ void runPlan2(std::string_view query) {
     const Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    CypherAST ast(db.getProcedures(), query);
+    const ProcedureManager* procedures = db.getSystemManager().getProcedures();
+    CypherAST ast(procedures, query);
     CypherParser parser(&ast);
 
     try {

@@ -11,6 +11,8 @@
 #include "dataframe/Dataframe.h"
 #include "writers/GraphWriter.h"
 
+#include "JobSystem.h"
+
 #include "TuringTestEnv.h"
 #include "TuringTest.h"
 #include "QueryStatus.h"
@@ -28,7 +30,10 @@ namespace {
 class StringFilterTestGraph {
 public:
     static void createGraph(Graph* graph) {
-        GraphWriter writer(graph);
+        JobSystem jobSystem;
+        jobSystem.init();
+
+        GraphWriter writer(graph, &jobSystem);
         writer.setName("stringfiltertest");
 
         // =====================================================================

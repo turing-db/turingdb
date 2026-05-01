@@ -7,7 +7,7 @@
 #include "Graph.h"
 #include "Literal.h"
 #include "SimpleGraph.h"
-#include "procedures/ProcedureManager.h"
+#include "ProcedureManager.h"
 #include "expr/All.h"
 #include "versioning/Transaction.h"
 
@@ -18,7 +18,7 @@ public:
     void initialize() override {
         _graph = Graph::create();
         SimpleGraph::createSimpleGraph(_graph.get());
-        _procedures = ProcedureManager::create();
+        _procedures = std::make_unique<ProcedureManager>();
         _procedures->init();
     }
 

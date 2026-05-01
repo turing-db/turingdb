@@ -16,14 +16,11 @@ int main(int argc, char** argv) {
     std::string_view libName = "test2";
 
     // Creating a database
-    auto dbRes = vec::VectorDatabase::create(rootPath);
-
-    if (!dbRes) {
-        fmt::println("Could not create database. {}", dbRes.error().fmtMessage());
+    vec::VectorDatabase db;
+    if (auto res = db.init(rootPath); !res) {
+        fmt::println("Could not create database. {}", res.error().fmtMessage());
         return 1;
     }
-
-    auto db = std::move(dbRes.value());
 
     fmt::println("Initialized database at {}", rootPath.c_str());
 
@@ -38,9 +35,9 @@ int main(int argc, char** argv) {
         queryData[i] = vec::RandomGenerator::generate<float>();
     }
 
-    if (!db->libraryExists(libName)) {
+    if (!db.libraryExists(libName)) {
         // Creating a library
-        const vec::VectorResult<vec::VecLibID> createRes = db->createLibrary(libName, dim, metric);
+        const vec::VectorResult<vec::VecLibID> createRes = db.createLibrary(libName, dim, metric);
 
         if (!createRes) {
             fmt::println("Could not create library. {}", createRes.error().fmtMessage());
@@ -49,7 +46,7 @@ int main(int argc, char** argv) {
 
         const vec::VecLibID libID = createRes.value();
 
-        vec::VecLibAccessor lib = db->getLibrary(libID);
+        vec::VecLibAccessor lib = db.getLibrary(libID);
         if (!lib.isValid()) {
             fmt::println("Library not found");
             return 1;
@@ -100,7 +97,7 @@ int main(int argc, char** argv) {
         fmt::println("- Generated vectors in {:.2f} s", totalDur);
     }
 
-    vec::VecLibAccessor lib = db->getLibrary(libName);
+    vec::VecLibAccessor lib = db.getLibrary(libName);
 
     if (!lib.isValid()) {
         fmt::println("Library not found");

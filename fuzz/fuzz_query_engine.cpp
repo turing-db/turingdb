@@ -34,7 +34,7 @@
 #include "versioning/VersionControlException.h"
 #include "versioning/Transaction.h"
 
-#include "procedures/ProcedureManager.h"
+#include "ProcedureManager.h"
 
 using namespace turing::test;
 
@@ -56,9 +56,8 @@ static int fuzzOne(const char* data, size_t size) {
 
     std::string_view query(data, size);
 
-    db::TuringDB& db = g_env->getDB();
     db::SystemManager& sysMan = g_env->getSystemManager();
-    const db::ProcedureManager* procedures = db.getProcedures();
+    const db::ProcedureManager* procedures = sysMan.getProcedures();
 
     const db::QueryConfig queryConfig;
 
@@ -117,7 +116,6 @@ static int fuzzOne(const char* data, size_t size) {
     db::QueryCallbacks callbacks;
     db::PipelineGenerator pipelineGen(&mem,
                                       &sysMan,
-                                      procedures,
                                       &callbacks,
                                       &planGraph,
                                       view,
@@ -132,10 +130,6 @@ static int fuzzOne(const char* data, size_t size) {
     db::ExecutionContext execCtxt(&sysMan, view);
     execCtxt.setTransaction(&txRes.value());
     execCtxt.setGraphName(g_graphName);
-    execCtxt.setJobSystem(&db.getJobSystem());
-    execCtxt.setProcedures(procedures);
-    execCtxt.setExtensions(db.getExtensions());
-    execCtxt.setVectorDatabase(nullptr);
 
     db::PipelineExecutor executor(&pipeline, &execCtxt);
     try {

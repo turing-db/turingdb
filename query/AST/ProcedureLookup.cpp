@@ -1,7 +1,7 @@
 #include "ProcedureLookup.h"
 
-#include "procedures/ProcedureManager.h"
-#include "procedures/Procedure.h"
+#include "ProcedureManager.h"
+#include "Procedure.h"
 #include "FunctionSignature.h"
 
 using namespace db;

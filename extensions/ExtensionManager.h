@@ -18,11 +18,12 @@ class ExtensionManager {
 public:
     using Extensions = std::vector<ExtensionDescriptor*>;
 
+    ExtensionManager();
     ~ExtensionManager();
 
-    static std::unique_ptr<ExtensionManager> create(const fs::Path& userExtensionsDir,
-                                                    const fs::Path& installExtensionsDir,
-                                                    ProcedureManager* procedures);
+    void init(ProcedureManager* procedures,
+              const fs::Path& userExtensionsDir,
+              const fs::Path& installExtensionsDir);
 
     void installExtension(std::string_view name);
     bool isInstalled(std::string_view name) const;
@@ -35,10 +36,6 @@ private:
     ProcedureManager* _procedures {nullptr};
     Extensions _installed;
     std::unordered_map<std::string_view, ExtensionDescriptor*> _installedMap;
-
-    ExtensionManager(const fs::Path& userExtensionsDir,
-                     const fs::Path& installExtensionsDir,
-                     ProcedureManager* procedures);
 
     void loadExtensionDef(const TuringExtensionDef* def,
                           ExtensionDescriptor::Handle handle);

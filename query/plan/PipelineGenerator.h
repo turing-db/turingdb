@@ -72,13 +72,11 @@ class PipelineGenerator {
 public:
     PipelineGenerator(LocalMemory* mem,
                       const SystemManager* sysMan,
-                      const ProcedureManager* procedures,
                       const QueryCallbacks* callbacks,
                       const PlanGraph* graph,
                       const GraphView& view,
                       PipelineV2* pipeline)
         : _graph(graph),
-        _procedures(procedures),
         _view(view),
         _pipeline(pipeline),
         _mem(mem),
@@ -110,7 +108,6 @@ private:
     friend class ExprProgramGenerator;
 
     const PlanGraph* _graph {nullptr};
-    const ProcedureManager* _procedures {nullptr};
     GraphView _view;
     PipelineV2* _pipeline {nullptr};
     LocalMemory* _mem {nullptr};

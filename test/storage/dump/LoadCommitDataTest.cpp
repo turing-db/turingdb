@@ -22,7 +22,8 @@ using namespace turing::test;
 class LoadCommitDataTest : public TuringTest {
 public:
     void initialize() override {
-        _jobSystem = JobSystem::create();
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->init();
         _originalPath = fs::Path {_outDir} / "testdb";
 
         // Build a graph with 2 commits in an in-memory environment

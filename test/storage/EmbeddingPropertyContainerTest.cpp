@@ -219,7 +219,8 @@ TEST(EmbeddingPropertyContainerTest, Sort) {
 class EmbeddingGraphTest : public TuringTest {
 protected:
     void initialize() override {
-        _jobSystem = JobSystem::create();
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->init();
     }
 
     void terminate() override {
@@ -237,7 +238,7 @@ TEST_F(EmbeddingGraphTest, GetPropertiesIterator) {
     const size_t count = bucketCapacity * 2 + 100;
 
     auto graph = Graph::create();
-    GraphWriter writer(graph.get());
+    GraphWriter writer(graph.get(), _jobSystem.get());
 
     // Create nodes with embedding and a unique index property to correlate after remapping
     std::vector<float> embedding(dimension);
@@ -296,7 +297,7 @@ TEST_F(EmbeddingGraphTest, GetPropertiesWithNullIterator) {
     const size_t count = 1000;
 
     auto graph = Graph::create();
-    GraphWriter writer(graph.get());
+    GraphWriter writer(graph.get(), _jobSystem.get());
 
     // Create nodes, only add embeddings to even-numbered loop iterations
     // Use idx property to correlate after remapping

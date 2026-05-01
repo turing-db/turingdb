@@ -7,7 +7,8 @@
 #include "Processor.h"
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
-#include "procedures/ProcedureState.h"
+#include "ProcedureContext.h"
+#include "ProcedureState.h"
 
 namespace db {
 
@@ -42,6 +43,7 @@ public:
 
 private:
     const Procedure* _procedure {nullptr};
+    ProcedureContext _procedureContext;
     ProcedureState _procedureState;
     std::optional<PipelineBlockInputInterface> _input;
     PipelineBlockOutputInterface _output;

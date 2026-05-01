@@ -11,7 +11,7 @@
 #include "PipelineV2.h"
 #include "PendingOutputView.h"
 #include "VecLibMetadata.h"
-#include "procedures/Procedure.h"
+#include "Procedure.h"
 
 #include "ProjectionItem.h"
 #include "dataframe/Dataframe.h"

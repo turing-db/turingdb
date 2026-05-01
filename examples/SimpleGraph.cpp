@@ -8,6 +8,8 @@
 #include "writers/GraphWriter.h"
 #include "versioning/Transaction.h"
 
+#include "JobSystem.h"
+
 using namespace db;
 
 NodeID SimpleGraph::findNodeID(Graph* graph, std::string_view nodeName) {
@@ -64,7 +66,10 @@ void SimpleGraph::findOutEdges(Graph* graph,
 }
 
 void SimpleGraph::createSimpleGraph(Graph* graph, bool changeName) {
-    GraphWriter writer(graph);
+    JobSystem jobSystem;
+    jobSystem.init();
+
+    GraphWriter writer(graph, &jobSystem);
     if (changeName) {
         writer.setName("simpledb");
     }

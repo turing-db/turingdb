@@ -18,7 +18,8 @@ static std::unique_ptr<db::JobSystem> g_jobSystem;
 
 static void initOnce() {
     if (!g_jobSystem) {
-        g_jobSystem = db::JobSystem::create();
+        g_jobSystem = std::make_unique<db::JobSystem>();
+        g_jobSystem->init();
     }
 }
 

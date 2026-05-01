@@ -1,20 +1,17 @@
 #include "DescribeCommitProcedure.h"
 
-#include "ExecutionContext.h"
+#include "ProcedureContext.h"
 #include "FatalException.h"
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
 #include "Graph.h"
-#include "SystemManager.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 #include "versioning/VersionController.h"
-
-#include "PipelineException.h"
 
 using namespace db;
 
@@ -126,7 +123,7 @@ void DescribeCommitProcedure::registerProcedure(ProcedureNamespace* ns) {
 
 void DescribeCommitProcedure::execute(ProcedureState* proc) {
     Data& data = proc->data<Data>();
-    ExecutionContext* ctxt = proc->getContext();
+    const ProcedureContext* ctxt = proc->getContext();
 
     const Column* rawCommitCol = data.getInputColumn(0);
     auto* nodeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(0));
@@ -137,8 +134,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
         case ProcedureState::Step::PREPARE: {
             bioassert(rawCommitCol, "db.describeCommit: must be provided a commit hash");
 
-            const SystemManager* sysMan = ctxt->getSystemManager();
-            const Graph* graph = sysMan->getGraph(ctxt->getGraphName().data());
+            const Graph* graph = ctxt->getGraph();
             const VersionController* controller = &graph->getVersionController();
 
             Transaction* tx = ctxt->getTransaction();
