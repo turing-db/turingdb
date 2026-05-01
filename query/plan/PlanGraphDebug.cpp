@@ -549,7 +549,6 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             }
             break;
 
-
             case PlanGraphOpcode::GET_OUT_EDGES:
             case PlanGraphOpcode::GET_IN_EDGES:
             case PlanGraphOpcode::GET_EDGES:
