@@ -1,5 +1,6 @@
 #include "ReadStmtGenerator.h"
 
+#include <algorithm>
 #include <string_view>
 
 #include <spdlog/fmt/bundled/format.h>
@@ -22,6 +23,7 @@
 #include "YieldClause.h"
 #include "YieldItems.h"
 #include "decl/DeclContext.h"
+#include "decl/EvaluatedType.h"
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
 #include "expr/BinaryExpr.h"
@@ -1118,7 +1120,38 @@ void ReadStmtGenerator::generateUnwindStmt(const UnwindStmt* stmt) {
     const VarDecl* var = _declContext->getDecl(symbolName);
     bioassert(var, "Null variable for UNWIND.");
 
-    _tree->create<UnwindNode>(arg, var);
+    const auto* litArg = dynamic_cast<const LiteralExpr*>(arg);
+    bioassert(litArg, "Non-literal argument.");
+    const Literal* lit = litArg->getLiteral();
+    bioassert(lit, "Null literal");
+    const auto* list = dynamic_cast<const ListLiteral*>(lit);
+
+    const ListLiteral::Items& items = list->items();
+
+    // Empty list -> no type restriction possible
+    if (items.empty()) {
+        _tree->create<UnwindNode>(arg, var);
+        return;
+    }
+
+    const auto differingType = [](const Expr* a, const Expr* b) {
+        return a->getType() != b->getType();
+    };
+
+    const auto typeIt = std::ranges::adjacent_find(items, differingType);
+    const bool homogeneous = typeIt == end(items);
+
+    // List is not homogeneous: no possibility for type restriction
+    if (!homogeneous) {
+        _tree->create<UnwindNode>(arg, var);
+        return;
+    }
+
+    // List is homogeneous and non empty: perform type restriction
+    const Expr* item = items.front();
+    const EvaluatedType homogeneity = item->getType();
+
+    _tree->create<UnwindNode>(arg, var, homogeneity);
 }
 
 void ReadStmtGenerator::throwError(std::string_view msg, const void* obj) const {
