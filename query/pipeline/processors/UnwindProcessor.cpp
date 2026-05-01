@@ -5,7 +5,9 @@
 
 #include "ExecutionContext.h"
 
+#include "ListBufferTypeTag.h"
 #include "ListElementView.h"
+#include "ListUtils.h"
 
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"
@@ -14,6 +16,8 @@
 #include "dataframe/NamedColumn.h"
 
 #include "PipelinePort.h"
+
+#include "metadata/PropertyType.h"
 
 #include "BioAssert.h"
 
@@ -27,11 +31,31 @@ UnwindProcessor::UnwindProcessor(ListView list)
 {
 }
 
+UnwindProcessor::UnwindProcessor(ListView list, ValueType homogeneity)
+    : _list(list),
+    _homogeneity(homogeneity)
+{
+}
+
 UnwindProcessor::~UnwindProcessor() {
 }
 
 UnwindProcessor* UnwindProcessor::create(PipelineV2* pipeline, ListView list) {
     auto* proc = new UnwindProcessor(list);
+
+    {
+        PipelineOutputPort* outPort = PipelineOutputPort::create(pipeline, proc);
+        proc->_output.setPort(outPort);
+        proc->addOutput(outPort);
+    }
+
+    proc->postCreate(pipeline);
+
+    return proc;
+}
+
+UnwindProcessor* UnwindProcessor::create(PipelineV2* pipeline, ListView list, ValueType homogeneity) {
+    auto* proc = new UnwindProcessor(list, homogeneity);
 
     {
         PipelineOutputPort* outPort = PipelineOutputPort::create(pipeline, proc);
@@ -54,13 +78,8 @@ void UnwindProcessor::reset() {
     markAsReset();
 }
 
-void UnwindProcessor::execute() {
-    bioassert(_list, "Invalid list in UNWIND.");
-
-    const NamedColumn* values = _output.getValues();
-    Column* valueCol = values->getColumn();
-
-    auto* typedCol = dynamic_cast<ColumnVector<ListElementView>*>(valueCol);
+void UnwindProcessor::fillHeterogeneous(Column* outCol) {
+    auto* typedCol = dynamic_cast<ColumnVector<ListElementView>*>(outCol);
     bioassert(typedCol, "Invalid column to UNWIND.");
 
     // Get at most a chunks worth of elements, starting from @ref _index
@@ -72,6 +91,53 @@ void UnwindProcessor::execute() {
     _output.getPort()->writeData();
 
     _index += count;
+}
+
+void UnwindProcessor::fillHomogeneous(Column* outCol) {
+    bioassert(isHomogeneous(), "Non-homogeneous UNWIND.");
+
+    const auto fill = [&]<SupportedType T>() {
+        using Primitive = T::Primitive;
+
+        auto* typedCol = dynamic_cast<ColumnVector<Primitive>*>(outCol);
+        bioassert(typedCol, "Invalid column.");
+
+        // Get at most a chunks worth of elements, starting from @ref _index
+        const auto toEmit = _list | rv::drop(_index) | rv::take(_ctxt->getChunkSize());
+        const size_t count = toEmit.size();
+
+        typedCol->resize(count);
+
+        for (size_t i = 0; const ListElementView item : toEmit) {
+            const ListBufferTypeTag tag = item.getTag();
+
+            constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<Primitive>::Tag;
+            bioassert(expectedTag == tag, "Invalid element.");
+
+            const Primitive v = item.getAs<Primitive>();
+            typedCol->operator[](i) = v;
+            i++;
+        }
+
+        _output.getPort()->writeData();
+        _index += count;
+    };
+
+    const ValueType type = homogeneity();
+    ValueTypeDispatcher {type}.execute(fill);
+}
+
+void UnwindProcessor::execute() {
+    bioassert(_list, "Invalid list in UNWIND.");
+
+    const NamedColumn* values = _output.getValues();
+    Column* valueCol = values->getColumn();
+
+    if (isHomogeneous()) {
+        fillHomogeneous(valueCol);
+    } else {
+        fillHeterogeneous(valueCol);
+    }
 
     const bool finished = _index == _list.size();
     if (finished) {

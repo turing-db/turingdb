@@ -1442,8 +1442,8 @@ PipelineValuesOutputInterface& PipelineBuilder::addUnwind(ListView list) {
 }
 
 template <SupportedType T>
-PipelineValuesOutputInterface& PipelineBuilder::addUnwind(ListView list) {
-    auto* proc = UnwindProcessor::create(_pipeline, list);
+PipelineValuesOutputInterface& PipelineBuilder::addUnwind(ListView list, ValueType homogeneity) {
+    auto* proc = UnwindProcessor::create(_pipeline, list, homogeneity);
 
     using InternalType = T::Primitive;
 
@@ -1532,9 +1532,9 @@ template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::B
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::String::Primitive, EdgeID>(const Index*);
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Embedding::Primitive, EdgeID>(const Index*);
 
-template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Int64>(ListView list);
-template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::UInt64>(ListView list);
-template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Double>(ListView list);
-template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Bool>(ListView list);
-template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::String>(ListView list);
-template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Embedding>(ListView list);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Int64>(ListView list, ValueType homogeneity);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::UInt64>(ListView list, ValueType homogeneity);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Double>(ListView list, ValueType homogeneity);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Bool>(ListView list, ValueType homogeneity);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::String>(ListView list, ValueType homogeneity);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Embedding>(ListView list, ValueType homogeneity);

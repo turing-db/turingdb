@@ -144,37 +144,6 @@ struct TranslateNodeToken {
 
 using TranslateTokenStack = std::stack<TranslateNodeToken>;
 
-struct ValueTypeDispatcher {
-    ValueType _valueType {ValueType::Invalid};
-
-    void execute(const auto& executor) const {
-        switch (_valueType) {
-            case ValueType::Int64:
-                executor.template operator()<types::Int64>();
-            break;
-            case ValueType::UInt64:
-                executor.template operator()<types::UInt64>();
-            break;
-            case ValueType::Double:
-                executor.template operator()<types::Double>();
-            break;
-            case ValueType::String:
-                executor.template operator()<types::String>();
-            break;
-            case ValueType::Bool:
-                executor.template operator()<types::Bool>();
-            break;
-            case ValueType::Embedding:
-                executor.template operator()<types::Embedding>();
-            break;
-            case ValueType::_SIZE:
-            case ValueType::Invalid: {
-                throw PlannerException("Unsupported property type");
-            }
-        }
-    }
-};
-
 struct AddLiteralToList {
     std::vector<ListBuffer<>::ListItemVariant>& _items;
 
@@ -1981,13 +1950,14 @@ PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node
         const PipelineValuesOutputInterface& out = _builder.addUnwind(listView);
         unwindOut = &out;
     } else {
+        const EvaluatedType homogeneity = node->homogeneity();
+        const ValueType valueHomogeneity = evaluatedToValueType(homogeneity);
+
         const auto addHomogeneousUnwind = [&]<SupportedType Type>() {
-            const PipelineValuesOutputInterface& out = _builder.addUnwind<Type>(listView);
+            const PipelineValuesOutputInterface& out = _builder.addUnwind<Type>(listView, valueHomogeneity);
             unwindOut = &out;
         };
 
-        const EvaluatedType homogeneity = node->homogeneity();
-        const ValueType valueHomogeneity = evaluatedToValueType(homogeneity);
         ValueTypeDispatcher {valueHomogeneity}.execute(addHomogeneousUnwind);
     }
 

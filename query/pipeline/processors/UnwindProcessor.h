@@ -4,12 +4,18 @@
 
 #include "ListView.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
+#include "metadata/PropertyType.h"
 
 namespace db {
+
+class Column;
 
 class UnwindProcessor final : public Processor {
 public:
     static UnwindProcessor* create(PipelineV2* pipeline, ListView list);
+    static UnwindProcessor* create(PipelineV2* pipeline,
+                                   ListView list,
+                                   ValueType homogeneity);
 
     void prepare(ExecutionContext* ctxt) final;
     void reset() final;
@@ -20,8 +26,12 @@ public:
 
     PipelineValuesOutputInterface& output() { return _output; }
 
+    bool isHomogeneous() const { return _homogeneity.has_value(); }
+    ValueType homogeneity() const { return _homogeneity.value(); }
+
 private:
     explicit UnwindProcessor(ListView list);
+    UnwindProcessor(ListView list, ValueType homogeneity);
     ~UnwindProcessor() final;
     
     PipelineValuesOutputInterface _output;
@@ -30,6 +40,10 @@ private:
 
     /// If @ref _list::size > @ref ChunkConfig::CHUNK_SIZE, chunk outputs
     size_t _index {0};
-};
 
+    std::optional<ValueType> _homogeneity;
+
+    void fillHeterogeneous(Column* outCol);
+    void fillHomogeneous(Column* outCol);
+};
 }
