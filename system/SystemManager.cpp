@@ -45,6 +45,9 @@ void SystemManager::init() {
     loadOrCreateDefaultGraph();
 
     _procedures.init();
+    _extensions.init(&_procedures,
+                     _config->getUserExtensionsDir(),
+                     _config->getInstallExtensionsDir());
 }
 
 void SystemManager::initTuringDirectory() {
