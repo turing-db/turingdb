@@ -582,6 +582,11 @@ void ReadStmtAnalyzer::analyze(const UnwindStmt* unwind) {
         throwError("Non-list arguments to UNWIND are not yet supported", litArg);
     }
 
+    const auto* list = static_cast<const ListLiteral*>(lit);
+    for (Expr* ele : list->items()) {
+        _exprAnalyzer->analyzeExpr(ele);
+    }
+
     const Symbol* symbol = unwind->symbol();
     bioassert(symbol, "Invalid symbol.");
 
