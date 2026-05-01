@@ -9,7 +9,6 @@
 using namespace db;
 
 TuringDB::TuringDB(const TuringConfig* config)
-    : _config(config)
 {
     _systemManager = std::make_unique<SystemManager>(config);
 }
