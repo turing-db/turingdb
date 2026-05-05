@@ -6,8 +6,8 @@ The objective is to store a TuringDB graph in one file if possible,
 so that turingdb graphs can be copied over easily just like SQLite database files,
 and for the esthetics of being self-contained and for decreasing the amount of system calls.
 
-Another object pertaining to this file format in itself is to have more compact
-disk storage for graphs than the first disk encoding format we have.
+Another aspect to this file format in itself is to have more compact
+disk storage for graphs than the current disk encoding format we have.
 
 We want to use the ".turing" file extension for the TuringDB files of this new format.
 
