@@ -39,8 +39,13 @@ public:
 
     bool isNodeIndex() const final;
 
+    /**
+     * @brief Inserts a value into the hash tree, without preserving immutable copies of
+     * the prior state of nodes.
+     * @detail Used in calls to @ref init, where there is no prior state to keep immutable
+     */
     void mutableInsert(const K& key, const V& value);
-    const V* find(const K& key);
+    const V* find(const K& key) const;
 
 private:
     WeakArc<HAMTIndexNode> _root;
@@ -57,17 +62,15 @@ private:
     /// Split each hash into chunks of 4 bits
     static constexpr size_t _hashChunkSize = 4;
     static constexpr size_t _chunksPerHash = (sizeof(size_t) * 8) / _hashChunkSize;
+    static_assert(_chunksPerHash == 16);
     /// Mask of 0b1111 for the initial chunk mask
     static constexpr size_t _chunkMask = (1UL << (_hashChunkSize)) - 1;
 
-    /// Helper to move the mask along to the next chunk
-    static constexpr size_t  nextMask(size_t mask) { return mask << _hashChunkSize; };
+    size_t getDepthHash(size_t hashcode, size_t depth) {
+        return (hashcode >> depth * _hashChunkSize) & _chunkMask;
+    }
 
-    /**
-     * @brief Inserts a value into the hash tree, without preserving immutable copies of
-     * the prior state of nodes.
-     * @detail Used in calls to @ref init, where there is no prior state to keep immutable
-     */
+    void mutInsFrom(HAMTIndexNode* from, size_t depth, const K& key, const V& value);
 
     static_assert((sizeof(size_t) * 8) % _hashChunkSize == 0, "Chunking assumption.");
     static_assert(sizeof(size_t) == 8, "Chunking assumption violated.");

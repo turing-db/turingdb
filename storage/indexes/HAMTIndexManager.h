@@ -21,6 +21,8 @@ public:
         return rc;
     }
 
+    void cleanUp() { _nodes.cleanUp(); }
+
 private:
     ArcManager<HAMTIndexNode> _nodes;
 };

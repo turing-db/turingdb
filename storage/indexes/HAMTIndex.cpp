@@ -4,6 +4,7 @@
 
 #include "ArcManager.h"
 
+#include "FatalException.h"
 #include "indexes/HAMTIndexNode.h"
 #include "metadata/PropertyType.h"
 
@@ -42,6 +43,33 @@ bool HAMTIndex<K, V, Hash>::isNodeIndex() const {
 }
 
 template <typename K, typename V, typename Hash>
+void HAMTIndex<K, V, Hash>::mutInsFrom(HAMTIndexNode* from, size_t depth, const K& key,
+                                       const V& value) {
+
+    const bool atMaxDepth = depth == _chunksPerHash;
+    if (atMaxDepth) {
+        auto* leaf = from->as<HAMTLeaf<K, V>>();
+        bioassert(leaf, "Reached max depth, but found not a leaf.");
+
+        leaf->emplace_back(key, value);
+        return;
+    }
+
+    const bool isLeaf = from->getKind() == HAMTIndexNode::Kind::LEAF;
+    bioassert(!isLeaf, "Tried to mut insert at non-max depth leaf.");
+
+    auto* inner = from->as<HAMTInnerNode>();
+
+    const HAMTInnerNode::ChildBitmask childMask = inner->mask();
+    const size_t hashcode = _hasher(key);
+    const size_t hashChunk = getDepthHash(hashcode, depth);
+    const size_t bitIndex = 1UL << hashChunk;
+    const size_t chldrnBelowMask = bitIndex - 1;
+    const size_t chldrnLesser = childMask & chldrnBelowMask;
+    const size_t chldrnLesserCount = std::popcount(chldrnLesser);
+}
+
+template <typename K, typename V, typename Hash>
 void HAMTIndex<K, V, Hash>::mutableInsert(const K& key, const V& value) {
     HAMTIndexNode* node = _root.get();
 
@@ -54,12 +82,24 @@ void HAMTIndex<K, V, Hash>::mutableInsert(const K& key, const V& value) {
         const bool isLeaf = node->getKind() == HAMTIndexNode::Kind::LEAF;
 
         if (isLeaf) {
+            const bool reachedMaxDepth = depth == _chunksPerHash;
+            auto* leaf = node->as<HAMTLeaf<K, V>>();
+
+            if (reachedMaxDepth) {
+                leaf->emplace_back(key, value);
+                return;
+            }
+
+            bioassert(leaf->_values.size() == 1, "Leaf conflict should be singleton.");
+            const auto& other = leaf->_values.front();
+
+            throw FatalException("Found leaf on path to insert");
             // TODO: Handle leaf replacement (if non terminal)/collision resultion (if
             // terminal)
             break;
         }
 
-        auto* inner = node->getAs<HAMTInnerNode>();
+        auto* inner = node->as<HAMTInnerNode>();
 
         const HAMTInnerNode::ChildBitmask childMask = inner->mask();
 
@@ -83,7 +123,7 @@ void HAMTIndex<K, V, Hash>::mutableInsert(const K& key, const V& value) {
         WeakArc<HAMTIndexNode> rc = _man->newLeaf<K, V>();
 
         { // Store the value for the inserted entry
-            auto* leaf = rc->getAs<HAMTLeaf<K, V>>();
+            auto* leaf = rc->as<HAMTLeaf<K, V>>();
             leaf->emplace_back(key, value);
         }
 
@@ -109,7 +149,7 @@ const V* HAMTIndex<K, V, Hash>::find(const K& key) {
         const bool isLeaf = node->getKind() == HAMTIndexNode::Kind::LEAF;
 
         if (isLeaf) {
-            auto* leaf = node->getAs<HAMTLeaf<K, V>>();
+            auto* leaf = node->as<HAMTLeaf<K, V>>();
             auto& pairs = leaf->_values;
             for (const auto& [k, v] : pairs) {
                 if (k == key) {
@@ -119,7 +159,7 @@ const V* HAMTIndex<K, V, Hash>::find(const K& key) {
             return nullptr;
         }
 
-        auto* inner = node->getAs<HAMTInnerNode>();
+        auto* inner = node->as<HAMTInnerNode>();
 
         const HAMTInnerNode::ChildBitmask childMask = inner->mask();
         const size_t bitIndex = 1UL << hashChunk;
