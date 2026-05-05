@@ -245,8 +245,8 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
         // For exprs with explicit AS aliases, update their decl to be named
         if (hasExplicitAlias) {
-            VarDecl* namedDecl =
-                _ctxt->getOrCreateNamedVariable(_ast, item->getType(), name);
+            const EvaluatedType type = item->getType();
+            const VarDecl* namedDecl = _ctxt->getOrCreateNamedVariable(_ast, type, name);
             item->setExprVarDecl(namedDecl);
         }
 

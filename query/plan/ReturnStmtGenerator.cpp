@@ -151,7 +151,7 @@ PlanGraphNode* ReturnStmtGenerator::generateReturnStmt() {
         // We may have populated both @ref _aggrEvalNode and @ref _exprEvalNode.
         // If we have no aggregates (blockers), do not add an ExprEvalNode becuase we
         // may have more expressions to evaluate in following return items. If we have
-        // aggregates, add the ExprEval and then the blocking AggregatEval.
+        // aggregates, add the ExprEval and then the blocking AggregateEval.
         const bool haveAggrs = _aggrEvalNode && !_aggrEvalNode->getFuncs().empty();
         const bool needEvaluateExpr = _exprEvalNode && !_exprEvalNode->getExprs().empty();
         if (haveAggrs) {
