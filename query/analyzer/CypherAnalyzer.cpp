@@ -261,6 +261,12 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         hasGroupingKeys |= !item->isAggregate();
     }
 
+    const bool multipleReturns = projection->items().size() != 1;
+    if (isAggregate && multipleReturns)  {
+        throwError("Aggregates may not yet be combined with multiple return items.",
+                   returnSt);
+    }
+
     if (projection->isReturningAll()) {
         // Return all variables defined in the current query
 

@@ -3,9 +3,9 @@
   "graph": "simpledb",
   "query": "MATCH (n), (m) RETURN COUNT(n), COUNT(m)",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __SCAN_NODES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: m\n    `\"]\n    5[\"`\n        __FILTER_NODE__\n    `\"]\n    6[\"`\n        __CARTESIAN_PRODUCT__\n    `\"]\n    7[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: count\n        __aggregate_func__: count\n    `\"]\n    8[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->6\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->7\n    7-->8",
-    "result": "COUNT(n),COUNT(m)\n324,324",
-    "resultJson": "{\"header\":{\"column_names\":[\"COUNT(n)\",\"COUNT(m)\"],\"column_types\":[\"UInt64\",\"UInt64\"]},\"data\":[[[324],[324]]]}"
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n), (m) RETURN COUNT(n), COUNT(m)\n       |                ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n), (m) RETURN COUNT(n), COUNT(m)\n       |                ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n), (m) RETURN COUNT(n), COUNT(m)\\n       |                ^^^^^^^^^^^^^^^^^^^^^^^^^\\n-------* Aggregates may not yet be combined with multiple return items.\"}"
   },
   "tags": [
     "count",

@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n), (m) RETURN n, count(m)",
+  "expect": {
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n), (m) RETURN n, count(m)\n       |                ^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n), (m) RETURN n, count(m)\n       |                ^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n), (m) RETURN n, count(m)\\n       |                ^^^^^^^^^^^^^^^^^^\\n-------* Aggregates may not yet be combined with multiple return items.\"}"
+  },
+  "tags": [
+    "count",
+    "return"
+  ],
+  "write-required": false
+}
