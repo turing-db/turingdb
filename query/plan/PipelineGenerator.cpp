@@ -32,6 +32,7 @@
 #include "interfaces/PipelineNodeOutputInterface.h"
 #include "interfaces/PipelineOutputInterface.h"
 #include "interfaces/PipelineValuesOutputInterface.h"
+#include "metadata/PropertyType.h"
 #include "metadata/SupportedType.h"
 #include "ProcedureManager.h"
 #include "processors/OrderByProcessor.h"
@@ -1946,21 +1947,22 @@ PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node
     bioassert(listView, "Failed to allocate ListView.");
 
     const PipelineValuesOutputInterface* unwindOut {nullptr};
-    if (!node->isHomogeneous()) {
-        const PipelineValuesOutputInterface& out = _builder.addUnwind(listView);
-        unwindOut = &out;
-    } else {
-        const EvaluatedType homogeneity = node->homogeneity();
-        const std::optional<ValueType> maybeValueType = toValueType(homogeneity);
-        bioassert(maybeValueType.has_value(), "False homogeneity.");
-        const ValueType valueHomogeneity = maybeValueType.value();
+
+    std::optional<ValueType> maybeHomogeneity = node->homogeneity().and_then(toValueType);
+
+    const bool canHomogenise = maybeHomogeneity.has_value();
+    if (canHomogenise) {
+        const ValueType homogeneity = maybeHomogeneity.value();
 
         const auto addHomogeneousUnwind = [&]<SupportedType Type>() {
-            const PipelineValuesOutputInterface& out = _builder.addUnwind<Type>(listView, valueHomogeneity);
+            const PipelineValuesOutputInterface& out = _builder.addUnwind<Type>(listView, homogeneity);
             unwindOut = &out;
         };
 
-        ValueTypeDispatcher {valueHomogeneity}.execute(addHomogeneousUnwind);
+        ValueTypeDispatcher {homogeneity}.execute(addHomogeneousUnwind);
+    } else {
+        const PipelineValuesOutputInterface& out = _builder.addUnwind(listView);
+        unwindOut = &out;
     }
 
     bioassert(unwindOut, "Failed to add UNWIND.");

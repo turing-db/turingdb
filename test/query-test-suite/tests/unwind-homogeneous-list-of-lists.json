@@ -1,10 +1,12 @@
 {
   "enabled": true,
+  "remote-enabled": false,
   "graph": "simpledb",
   "query": "unwind [[], [], []] as lists return lists",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __UNWIND__\n        [[], [], []] AS lists\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": ""
+    "result": "lists\n[]\n[]\n[]",
+    "resultJson": "{\"header\":{\"column_names\":[\"lists\"],\"column_types\":[\"ListElement\"]},\"data\":[[[[],[],[]]]]}"
   },
   "tags": [
     "list",
