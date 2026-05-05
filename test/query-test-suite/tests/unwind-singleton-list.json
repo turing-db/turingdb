@@ -1,5 +1,6 @@
 {
   "enabled": true,
+  "remote-enabled": false,
   "graph": "simpledb",
   "query": "UNWIND [\"all by myself\"] AS singletonlist MATCH (n)-[e]->(m) RETURN n.name, singletonlist, m.name, e.name",
   "expect": {

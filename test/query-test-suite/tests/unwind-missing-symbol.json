@@ -1,5 +1,6 @@
 {
   "enabled": true,
+  "remote-enabled": false,
   "graph": "simpledb",
   "query": "UNWIND [a] AS bad RETURN bad",
   "expect": {

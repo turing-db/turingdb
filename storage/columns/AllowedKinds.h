@@ -382,6 +382,8 @@ struct OutputtedTypes {
         std::optional<types::Embedding::Primitive>,
         PropertyNull,
 
+        std::optional<std::string>,
+
         NodeID,
         EdgeID,
         LabelID,

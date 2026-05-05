@@ -1,5 +1,6 @@
 {
   "enabled": true,
+  "remote-enabled": false,
   "graph": "simpledb",
   "query": "UNWIND [32, 1] AS age MATCH (n) WHERE n.age = age RETURN n",
   "expect": {
