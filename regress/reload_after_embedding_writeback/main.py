@@ -3,15 +3,18 @@
 Mirrors the failing CI flow in turingdb-dgl-example:
 
   1. LOAD JSONL reactome (~2.97M nodes, multi-label).
-  2. Spawn N worker processes; each opens its own change, writes a
-     stride-partitioned slice with ``SET nX.embedding = (...)``, then
-     ``COMMIT`` + ``CHANGE SUBMIT`` + ``checkout("main")``.
-  3. ``turingdb stop`` (server emits one ``Dumping graph reactome`` per change).
-  4. ``turingdb start`` again, ``LOAD GRAPH reactome`` — must not raise.
+  2. Repeat NUM_CYCLES times:
+     a. Spawn N worker processes; each opens its own change, writes a
+        stride-partitioned slice with ``SET nX.embedding = (...)``, then
+        ``COMMIT`` + ``CHANGE SUBMIT`` + ``checkout("main")``.
+     b. ``turingdb stop`` (server emits one ``Dumping graph reactome`` per change).
+     c. ``turingdb start`` again, ``LOAD GRAPH reactome`` — must not raise.
 
-Pre-bug-fix this trips ``TuringDBException: GRAPH_LOAD_ERROR`` on the second
-``LOAD GRAPH`` (only seen so far on the hetz-bench CI runner — see issue #618
-for the reproducibility status).
+Pre-bug-fix one of these cycles trips ``TuringDBException: GRAPH_LOAD_ERROR``
+on ``LOAD GRAPH``. The bug is a non-deterministic timing race in the
+dump-on-shutdown / load-after-shutdown path (see #618 for the
+reproducibility status), so we run several cycles to raise the hit rate
+above the per-cycle hit rate observed on hetz-bench.
 """
 import multiprocessing as mp
 import os
@@ -34,6 +37,11 @@ GRAPH = "reactome"
 EMBED_DIM = 128
 BATCH_SIZE = 500
 NUM_WORKERS = 4
+# Number of (writeback → stop → start → LOAD GRAPH) cycles. The bug is a
+# timing race in the dump-on-shutdown / load-after-shutdown path that did
+# not always fire on a single cycle on hetz-bench, so we run several to
+# raise the hit rate.
+NUM_CYCLES = 5
 
 REPO_ROOT = os.environ.get(
     "SOURCE_DIR", os.path.join(os.environ.get("TURING_HOME", ""), "..")
@@ -129,32 +137,42 @@ def main() -> None:
     print(f"num_nodes = {num_nodes:,}")
     del c
 
-    procs = []
-    for rank in range(NUM_WORKERS):
-        p = mp.Process(target=worker, args=(rank, NUM_WORKERS, num_nodes))
-        p.start()
-        procs.append(p)
-    for p in procs:
-        p.join()
-        if p.exitcode != 0:
-            raise RuntimeError(f"worker exited {p.exitcode}")
+    for cycle in range(1, NUM_CYCLES + 1):
+        print(f"--- cycle {cycle}/{NUM_CYCLES}: writeback ---")
+        procs = []
+        for rank in range(NUM_WORKERS):
+            p = mp.Process(target=worker, args=(rank, NUM_WORKERS, num_nodes))
+            p.start()
+            procs.append(p)
+        for p in procs:
+            p.join()
+            if p.exitcode != 0:
+                raise RuntimeError(
+                    f"cycle {cycle}: worker exited {p.exitcode}"
+                )
 
-    stop_db()
-    start_db()
+        print(f"--- cycle {cycle}/{NUM_CYCLES}: stop + start ---")
+        stop_db()
+        start_db()
 
-    c2 = turingdb.TuringDB(host=HOST)
-    print(f"loading {GRAPH} after restart...")
-    try:
-        c2.load_graph(GRAPH)
-    except Exception as e:
-        raise AssertionError(
-            f"reload after embedding writeback failed: {e!r} "
-            "(regression of issue #618)"
+        c2 = turingdb.TuringDB(host=HOST)
+        print(f"--- cycle {cycle}/{NUM_CYCLES}: loading {GRAPH} ---")
+        try:
+            c2.load_graph(GRAPH)
+        except Exception as e:
+            raise AssertionError(
+                f"cycle {cycle}: reload after embedding writeback failed: "
+                f"{e!r} (regression of issue #618)"
+            )
+        c2.set_graph(GRAPH)
+        n2 = int(c2.query(
+            "MATCH (n) RETURN count(n) AS num"
+        ).iloc[0, 0])
+        assert n2 == num_nodes, (
+            f"cycle {cycle}: node count after reload: {n2} != {num_nodes}"
         )
-    c2.set_graph(GRAPH)
-    n2 = int(c2.query("MATCH (n) RETURN count(n) AS num").iloc[0, 0])
-    assert n2 == num_nodes, f"node count after reload: {n2} != {num_nodes}"
-    print(f"reload OK ({n2:,} nodes)")
+        print(f"cycle {cycle}: reload OK ({n2:,} nodes)")
+        del c2
 
     stop_db()
 
