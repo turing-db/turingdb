@@ -31,7 +31,7 @@ public:
     const VarDecl* var() const { return _var; }
 
     bool isHomogeneous() const { return _homogeneity.has_value(); }
-    EvaluatedType homogeneity() const { return *_homogeneity; }
+    std::optional<EvaluatedType> homogeneity() const { return _homogeneity; }
 
 private:
     const Expr* _arg {nullptr};
