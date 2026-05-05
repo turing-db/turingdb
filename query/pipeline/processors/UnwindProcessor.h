@@ -26,7 +26,6 @@ public:
 
     PipelineValuesOutputInterface& output() { return _output; }
 
-    bool isHomogeneous() const { return _homogeneity.has_value(); }
     ValueType homogeneity() const { return _homogeneity.value(); }
 
 private:
@@ -42,6 +41,7 @@ private:
     size_t _index {0};
 
     std::optional<ValueType> _homogeneity;
+    bool _isHomogeneous {false};
 
     void fillHeterogeneous(Column* outCol);
     void fillHomogeneous(Column* outCol);
