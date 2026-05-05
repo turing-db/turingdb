@@ -37,7 +37,7 @@ public:
     template <typename K, typename V, typename Hash>
     friend class HAMTIndex;
 
-    using ChildBitmask = uint32_t;
+    using ChildBitmask = uint16_t;
     using Children = std::vector<WeakArc<HAMTIndexNode>>;
 
     ChildBitmask mask() const { return _mask; }
