@@ -11,7 +11,15 @@ namespace db {
 
 class Column;
 
-class HAMTInnerNode {
+class HAMTIndexNode {
+public:
+    enum class Kind : uint8_t {
+        INNER,
+        LEAF,
+    };
+};
+
+class HAMTInnerNode final : public HAMTIndexNode{
 public:
     using ChildBitmask = uint32_t;
     using Children = std::vector<WeakArc<HAMTInnerNode>>;
@@ -20,18 +28,21 @@ public:
     const Children& children() const { return _children; }
 
 private:
+    constexpr static HAMTIndexNode::Kind _kind {HAMTIndexNode::Kind::INNER};
+
     ChildBitmask _mask {0};
     Children _children;
 };
 
-class HAMTLeaf {
+template <typename K, typename V>
+class HAMTLeaf final : public HAMTIndexNode {
 public:
     const Column* values() const { return _values; }
 
 private:
+    constexpr static HAMTIndexNode::Kind _kind {HAMTIndexNode::Kind::LEAF};
+
     Column* _values {nullptr};
 };
-
-using HAMTIndexNode = std::variant<HAMTInnerNode, HAMTLeaf>;
 
 }

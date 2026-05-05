@@ -10,11 +10,17 @@ namespace db {
 
 class HAMTManager {
 public:
+    template <typename K, typename V>
     WeakArc<HAMTIndexNode> newLeaf() {
-        return _nodes.create(std::in_place_type<HAMTLeaf>);
+        HAMTLeaf<K, V>* leaf = new HAMTLeaf<K, V>();
+        WeakArc<HAMTIndexNode> rc = _nodes.takeOwnership(leaf);
+        return rc;
     }
+
     WeakArc<HAMTIndexNode> newInner() {
-        return _nodes.create(std::in_place_type<HAMTInnerNode>);
+        HAMTInnerNode* inner = new HAMTInnerNode();
+        WeakArc<HAMTIndexNode> rc = _nodes.takeOwnership(inner);
+        return rc;
     }
 
 private:
