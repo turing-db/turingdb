@@ -13,6 +13,7 @@ Pre-bug-fix this trips ``TuringDBException: GRAPH_LOAD_ERROR`` on the second
 ``LOAD GRAPH`` (only seen so far on the hetz-bench CI runner — see issue #618
 for the reproducibility status).
 """
+import fcntl
 import multiprocessing as mp
 import os
 import shutil
@@ -43,15 +44,41 @@ DATASET_CACHE = os.path.join(
 )
 
 
+LOCK_FILE = os.path.join(TURING_DIR, "turingdb.lock")
+STOP_TIMEOUT_MS = 120_000
+
+
 def listening_port(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
+def lock_held() -> bool:
+    # The TCP port closes early in shutdown; the lock file is only released
+    # once the server has finished dumping snapshots, so it is the authoritative
+    # signal that the previous process is gone.
+    if not os.path.isfile(LOCK_FILE):
+        return False
+    try:
+        fd = os.open(LOCK_FILE, os.O_RDWR)
+    except OSError:
+        return False
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(fd)
+
+
 def start_db():
     cmd = f"turingdb -demon -turing-dir {TURING_DIR}"
     print(f"$ {cmd}")
-    assert subprocess.call(cmd, shell=True) == 0
+    rc = subprocess.call(cmd, shell=True)
+    assert rc == 0, f"turingdb -demon returned {rc}"
     for _ in range(120):
         if listening_port(PORT):
             return
@@ -60,14 +87,15 @@ def start_db():
 
 
 def stop_db():
-    cmd = f"turingdb stop -turing-dir {TURING_DIR}"
+    cmd = f"turingdb stop -turing-dir {TURING_DIR} -timeout {STOP_TIMEOUT_MS}"
     print(f"$ {cmd}")
-    subprocess.call(cmd, shell=True)
-    for _ in range(50):
-        if not listening_port(PORT):
+    rc = subprocess.call(cmd, shell=True)
+    assert rc == 0, f"turingdb stop returned {rc}"
+    for _ in range(300):
+        if not lock_held():
             return
         time.sleep(0.2)
-    raise RuntimeError("turingdb did not shut down")
+    raise RuntimeError("turingdb did not release its lock file")
 
 
 def ensure_reactome(dest: str) -> None:
