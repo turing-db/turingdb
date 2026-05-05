@@ -1,5 +1,6 @@
 {
   "enabled": true,
+  "remote-enabled": false,
   "graph": "simpledb",
   "query": "UNWIND [\"string\", true, 10, 333.3] AS elements RETURN elements",
   "expect": {

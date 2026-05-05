@@ -1,5 +1,6 @@
 {
   "enabled": true,
+  "remote-enabled": false,
   "graph": "simpledb",
   "query": "UNWIND [1, 2, 3] AS row MATCH (n)-[e]->(m) RETURN n.name, e.name, m.name, row",
   "expect": {

@@ -1,5 +1,6 @@
 {
   "enabled": true,
+  "remote-enabled": false,
   "graph": "simpledb",
   "query": "UNWIND [1, [true, false, 33.3], \"stringy\"] AS nestedlist MATCH (n)-[e]->(m) RETURN n.name, e.name, m.name, nestedlist",
   "expect": {

@@ -1,5 +1,6 @@
 {
   "enabled": true,
+  "remote-enabled": false,
   "graph": "simpledb",
   "query": "UNWIND [] AS empty MATCH (n)-[e]->(m) RETURN e.name, empty",
   "expect": {
