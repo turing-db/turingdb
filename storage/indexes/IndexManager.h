@@ -2,8 +2,10 @@
 
 #include <memory>
 
-#include "ArcManager.h"
 #include "Index.h"
+
+#include "ArcManager.h"
+#include "HAMTIndexManager.h"
 
 #include "ID.h"
 
@@ -27,6 +29,8 @@ private:
     std::vector<WeakArc<Index>>_edgeIndexes;
 
     std::unique_ptr<ArcManager<Index>> _indexes;
+
+    HAMTManager _hamtManager;
 };
 
 }
