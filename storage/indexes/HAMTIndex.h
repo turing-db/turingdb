@@ -58,7 +58,7 @@ private:
     static constexpr size_t _hashChunkSize = 4;
     static constexpr size_t _chunksPerHash = (sizeof(size_t) * 8) / _hashChunkSize;
     /// Mask of 0b1111 for the initial chunk mask
-    static constexpr size_t _initialChunkMask = (1UL << (_hashChunkSize)) - 1;
+    static constexpr size_t _chunkMask = (1UL << (_hashChunkSize)) - 1;
 
     /// Helper to move the mask along to the next chunk
     static constexpr size_t  nextMask(size_t mask) { return mask << _hashChunkSize; };
