@@ -175,10 +175,14 @@ Graph* SystemManager::loadGraph(const std::string& name) {
     Graph* graphPtr = graph.get();
 
     if (const auto res = graph->getSerializer().load(); !res) {
+        spdlog::error("Failed to load graph '{}' from {}: {}",
+                      name, graphPath.get(), res.error().fmtMessage());
         return nullptr;
     }
 
     if (!addGraph(std::move(graph))) {
+        spdlog::error("Failed to register graph '{}': "
+                      "a graph with this name is already loaded", name);
         return nullptr;
     }
 
