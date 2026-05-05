@@ -604,7 +604,7 @@ void ReadStmtAnalyzer::analyze(const UnwindStmt* unwind) {
             const EvaluatedType homogeneity = item->getType();
             // Could be a list of lists: there is no ValueType::List -> do not treat as
             // homogeneous
-            const bool isValueType = evalTypeIsValueType(homogeneity);
+            const bool isValueType = convertibleToValueType(homogeneity);
 
             const bool canBeHomogeneous = isValueType;
 

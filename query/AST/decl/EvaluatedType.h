@@ -39,15 +39,6 @@ enum class EvaluatedType : uint8_t {
     _SIZE,
 };
 
-/// Determines if an evaluated type is convertible to a ValueType
-inline bool evalTypeIsValueType(EvaluatedType et) {
-    const bool isProperty = et == EvaluatedType::Integer || et == EvaluatedType::Bool
-                         || et == EvaluatedType::Char || et == EvaluatedType::String
-                         || et == EvaluatedType::Embedding;
-
-    return isProperty;
-}
-
 class TypePairBitset {
 public:
     constexpr TypePairBitset() = default;
