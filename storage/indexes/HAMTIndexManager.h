@@ -1,7 +1,5 @@
 #pragma once
 
-#include <utility>
-
 #include "ArcManager.h"
 
 #include "HAMTIndexNode.h"

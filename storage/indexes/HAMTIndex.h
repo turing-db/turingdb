@@ -54,7 +54,7 @@ private:
     static constexpr size_t  nextMask(size_t mask) { return mask << _hashChunkSize; };
 
     /**
-     * @brief Inserts a value into the hash tree, without preserving immutalbe copies of
+     * @brief Inserts a value into the hash tree, without preserving immutable copies of
      * the prior state of nodes.
      * @detail Used in calls to @ref init, where there is no prior state to keep immutable
      */
