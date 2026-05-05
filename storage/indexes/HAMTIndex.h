@@ -14,6 +14,13 @@ class Column;
 template <typename K, typename V, typename Hash = std::hash<K>>
 class HAMTIndex final : public Index {
 public:
+    HAMTIndex(std::string_view name, HAMTManager* man, PropertyTypeID pid)
+        : Index(name),
+        _man(man),
+        _propID(pid)
+    {
+    }
+
     void init(GraphView view) final;
 
     void insert(const Column* keys, const Column* values);
@@ -24,13 +31,16 @@ public:
                       Column* result,
                       ColumnIndices* indices,
                       QueryState& state,
-                      size_t limit) const final;
+                      size_t limit) const final {}
 
     size_t size() const final;
 
     PropertyTypeID property() const final;
 
     bool isNodeIndex() const final;
+
+    void mutableInsert(const K& key, const V& value);
+    const V* find(const K& key);
 
 private:
     WeakArc<HAMTIndexNode> _root;
@@ -48,7 +58,7 @@ private:
     static constexpr size_t _hashChunkSize = 4;
     static constexpr size_t _chunksPerHash = (sizeof(size_t) * 8) / _hashChunkSize;
     /// Mask of 0b1111 for the initial chunk mask
-    static constexpr size_t _initialChunkMask = (1UL << (_hashChunkSize + 1)) - 1;
+    static constexpr size_t _initialChunkMask = (1UL << (_hashChunkSize)) - 1;
 
     /// Helper to move the mask along to the next chunk
     static constexpr size_t  nextMask(size_t mask) { return mask << _hashChunkSize; };
@@ -58,7 +68,6 @@ private:
      * the prior state of nodes.
      * @detail Used in calls to @ref init, where there is no prior state to keep immutable
      */
-    void mutableInsert(const K& key, const V& value);
 
     static_assert((sizeof(size_t) * 8) % _hashChunkSize == 0, "Chunking assumption.");
     static_assert(sizeof(size_t) == 8, "Chunking assumption violated.");

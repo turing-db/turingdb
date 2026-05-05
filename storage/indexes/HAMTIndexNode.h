@@ -1,6 +1,5 @@
 #pragma once
 
-#include <variant>
 #include <vector>
 
 #include <stdint.h>
@@ -11,21 +10,40 @@ namespace db {
 
 class Column;
 
+template <typename K, typename V, typename Hash>
+class HAMTIndex;
+
 class HAMTIndexNode {
 public:
     enum class Kind : uint8_t {
         INNER,
         LEAF,
+
+        _SIZE,
     };
+
+    virtual ~HAMTIndexNode() = default;
+
+    virtual constexpr Kind getKind() const = 0;
+
+    template <typename T>
+    T* getAs() {
+        return dynamic_cast<T*>(this);
+    }
 };
 
-class HAMTInnerNode final : public HAMTIndexNode{
+class HAMTInnerNode final : public HAMTIndexNode {
 public:
+    template <typename K, typename V, typename Hash>
+    friend class HAMTIndex;
+
     using ChildBitmask = uint32_t;
-    using Children = std::vector<WeakArc<HAMTInnerNode>>;
+    using Children = std::vector<WeakArc<HAMTIndexNode>>;
 
     ChildBitmask mask() const { return _mask; }
     const Children& children() const { return _children; }
+
+    constexpr Kind getKind() const final { return _kind; }
 
 private:
     constexpr static HAMTIndexNode::Kind _kind {HAMTIndexNode::Kind::INNER};
@@ -37,12 +55,25 @@ private:
 template <typename K, typename V>
 class HAMTLeaf final : public HAMTIndexNode {
 public:
-    const Column* values() const { return _values; }
+    template <typename T, typename U, typename Hash>
+    friend class HAMTIndex;
+
+    using KVPair = std::pair<K, V>;
+    using Pairs = std::vector<KVPair>;
+
+    const Pairs& values() const { return _values; }
+
+    template <typename... Args>
+    void emplace_back(Args... args) {
+        _values.emplace_back(args...);
+    }
+
+    constexpr Kind getKind() const final { return _kind; }
 
 private:
     constexpr static HAMTIndexNode::Kind _kind {HAMTIndexNode::Kind::LEAF};
 
-    Column* _values {nullptr};
+    Pairs _values; 
 };
 
 }
