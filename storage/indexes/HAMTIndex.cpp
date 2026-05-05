@@ -46,8 +46,7 @@ void HAMTIndex<K, V, Hash>::mutableInsert(const K& key, const V& value) {
     HAMTIndexNode* node = _root.get();
 
     const size_t hashcode = _hasher(key);
-    size_t mask = _initialChunkMask;
-    size_t hashChunk = hashcode & mask;
+    size_t hashChunk = hashcode & _chunkMask;
 
     size_t depth = 0;
 
@@ -75,7 +74,7 @@ void HAMTIndex<K, V, Hash>::mutableInsert(const K& key, const V& value) {
             HAMTInnerNode::Children& chldrn = inner->_children;
             node = chldrn[chldrnLesserCount].get();
             depth++;
-            hashChunk = (hashcode >> depth * _hashChunkSize) & _initialChunkMask;
+            hashChunk = (hashcode >> depth * _hashChunkSize) & _chunkMask;
             continue;
         }
 
@@ -103,8 +102,7 @@ const V* HAMTIndex<K, V, Hash>::find(const K& key) {
     HAMTIndexNode* node = _root.get();
 
     const size_t hashcode = _hasher(key);
-    size_t mask = _initialChunkMask;
-    size_t hashChunk = hashcode & mask;
+    size_t hashChunk = hashcode & _chunkMask;
 
     size_t depth = 0;
     while (node) {
@@ -138,7 +136,7 @@ const V* HAMTIndex<K, V, Hash>::find(const K& key) {
         HAMTInnerNode::Children& chldrn = inner->_children;
         node = chldrn[chldrnLesserCount].get();
         depth++;
-        hashChunk = (hashcode >> depth * _hashChunkSize) & _initialChunkMask;
+        hashChunk = (hashcode >> depth * _hashChunkSize) & _chunkMask;
     }
 
     return nullptr;

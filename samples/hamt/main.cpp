@@ -16,12 +16,25 @@ int main() {
     HAMTIndex<std::string_view, NodeID> index("my index", &man, pid);
     index.init(view);
 
-    std::string_view key {"my string"};
-    NodeID val{101};
+    {
+        std::string_view key {"my string"};
+        NodeID val {101};
 
-    index.mutableInsert(key, val);
+        index.mutableInsert(key, val);
 
-    const NodeID* n = index.find("my string");
+        const NodeID* n = index.find(key);
 
-    spdlog::info("{}", n->getValue());
+        spdlog::info("{}", n->getValue());
+    }
+
+    {
+        std::string_view key {"my other string"};
+        NodeID val {333};
+
+        index.mutableInsert(key, val);
+
+        const NodeID* n = index.find(key);
+
+        spdlog::info("{}", n->getValue());
+    }
 }
