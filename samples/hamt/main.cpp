@@ -37,4 +37,15 @@ int main() {
 
         spdlog::info("{}", n->getValue());
     }
+
+    {
+        std::string_view key {"my third string"};
+        NodeID val {8333333333333333333};
+
+        index.mutableInsert(key, val);
+
+        const NodeID* n = index.find(key);
+
+        spdlog::info("{}", n->getValue());
+    }
 }
