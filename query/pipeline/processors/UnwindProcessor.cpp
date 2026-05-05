@@ -70,6 +70,8 @@ UnwindProcessor* UnwindProcessor::create(PipelineV2* pipeline, ListView list, Va
 
 void UnwindProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
+    _isHomogeneous = _homogeneity.has_value();
+
     markAsPrepared();
 }
 
@@ -94,7 +96,7 @@ void UnwindProcessor::fillHeterogeneous(Column* outCol) {
 }
 
 void UnwindProcessor::fillHomogeneous(Column* outCol) {
-    bioassert(isHomogeneous(), "Non-homogeneous UNWIND.");
+    bioassert(_isHomogeneous, "Non-homogeneous UNWIND.");
 
     const auto fill = [&]<SupportedType T>() {
         using Primitive = T::Primitive;
@@ -133,11 +135,7 @@ void UnwindProcessor::execute() {
     const NamedColumn* values = _output.getValues();
     Column* valueCol = values->getColumn();
 
-    if (isHomogeneous()) {
-        fillHomogeneous(valueCol);
-    } else {
-        fillHeterogeneous(valueCol);
-    }
+    _isHomogeneous ? fillHomogeneous(valueCol) : fillHeterogeneous(valueCol);
 
     const bool finished = _index == _list.size();
     if (finished) {
