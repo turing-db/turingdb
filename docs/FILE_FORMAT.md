@@ -3,7 +3,7 @@
 We describe in this specification a new format for turing graphs.
 
 The objective is to store a TuringDB graph in one file if possible,
-so that turingdb graphs just like SQLite database files can be copied other easily,
+so that turingdb graphs can be copied over easily just like SQLite database files,
 and for the esthetics of being self-contained and for decreasing the amount of system calls.
 
 Another object pertaining to this file format in itself is to have more compact
