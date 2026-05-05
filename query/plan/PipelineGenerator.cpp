@@ -1951,7 +1951,9 @@ PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node
         unwindOut = &out;
     } else {
         const EvaluatedType homogeneity = node->homogeneity();
-        const ValueType valueHomogeneity = evaluatedToValueType(homogeneity);
+        const std::optional<ValueType> maybeValueType = toValueType(homogeneity);
+        bioassert(maybeValueType.has_value(), "False homogeneity.");
+        const ValueType valueHomogeneity = maybeValueType.value();
 
         const auto addHomogeneousUnwind = [&]<SupportedType Type>() {
             const PipelineValuesOutputInterface& out = _builder.addUnwind<Type>(listView, valueHomogeneity);
