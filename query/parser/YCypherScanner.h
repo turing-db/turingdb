@@ -32,15 +32,12 @@ public:
         loc.columns(yyleng);
     }
 
-    void locationNewLine(SourceLocation& loc) {
-        loc.lines(1);
-    }
+    static void locationNewLine(SourceLocation& loc) { loc.lines(1); }
 
-    [[noreturn]] void syntaxError(const SourceLocation& loc,
-                                  const std::string& msg);
+    [[noreturn]] void syntaxError(const SourceLocation& loc, const std::string& msg);
 
-    void notImplemented(const SourceLocation& loc,
-                        std::string_view rawMsg);
+    void notImplemented(const SourceLocation& loc, std::string_view rawMsg);
+
 protected:
     int LexerInput(char* buf, int max_size) override {
         size_t remaining = _query.size() - _readPos;
