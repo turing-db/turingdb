@@ -202,10 +202,15 @@ DumpResult<void> BinaryDiskDecoder::decodeCommitData(const fs::Path& commitDir,
 // ─────────────────────────────────────────────────────────────────
 
 DumpResult<void> BinaryDiskDecoder::decodeGraphMetadata(const fs::Path& commitDir) {
-    if (auto res = decodeLabelMap(commitDir); !res) return res;
-    if (auto res = decodeEdgeTypeMap(commitDir); !res) return res;
-    if (auto res = decodePropertyTypeMap(commitDir); !res) return res;
-    if (auto res = decodeLabelSetMap(commitDir); !res) return res;
+    if (auto labels = decodeLabelMap(commitDir); !labels) {
+        return labels;
+    } else if (auto edgeTypes = decodeEdgeTypeMap(commitDir); !edgeTypes) {
+        return edgeTypes;
+    } else if (auto propTypes = decodePropertyTypeMap(commitDir); !propTypes) {
+        return propTypes;
+    } else if (auto labelsets = decodeLabelSetMap(commitDir); !labelsets) {
+        return labelsets;
+    }
     return {};
 }
 
@@ -838,8 +843,11 @@ DumpResult<void> BinaryDiskDecoder::decodeEdgeContainer(const fs::Path& partDir)
         return {};
     };
 
-    if (auto res = loadOneDirection(EdgeDirection::Out); !res) return res;
-    if (auto res = loadOneDirection(EdgeDirection::In); !res) return res;
+    if (auto outRes = loadOneDirection(EdgeDirection::Out); !outRes) {
+        return outRes;
+    } else if (auto inRes = loadOneDirection(EdgeDirection::In); !inRes) {
+        return inRes;
+    }
 
     _loader->endEdgeContainer();
     return {};
@@ -921,8 +929,11 @@ DumpResult<void> BinaryDiskDecoder::decodeEdgeIndexer(const fs::Path& partDir) {
         return {};
     };
 
-    if (auto res = loadSpans(EdgeDirection::Out, outSpansPageCount); !res) return res;
-    if (auto res = loadSpans(EdgeDirection::In, inSpansPageCount); !res) return res;
+    if (auto outRes = loadSpans(EdgeDirection::Out, outSpansPageCount); !outRes) {
+        return outRes;
+    } else if (auto inRes = loadSpans(EdgeDirection::In, inSpansPageCount); !inRes) {
+        return inRes;
+    }
 
     _loader->endEdgeIndexer();
     return {};

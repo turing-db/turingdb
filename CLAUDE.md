@@ -87,7 +87,8 @@ Key points:
 **Formatting:**
 - 4 spaces indentation, no tabs
 - Opening brace on same line (except constructors)
-- All control structures (`if`, `for`, `while`) must have braces, even for single-statement bodies
+- All control structures (`if`, `for`, `while`) must have braces, even for single-statement bodies. Never use the brace-less form, including not on the same line as the condition (no `if (cond) return x;` or `if (cond) doThing();`).
+- A sequence of conditionals must be written as an `if` / `else if` / `else if` chain, even when each branch returns. The presence of `return` does not dispense you from `else if`. Do not write multiple consecutive `if (...) { return ...; }` statements with no `else`.
 - `public`/`private` aligned with `class`
 - Do not overwrap: prefer keeping statements on one line when they fit. A slightly long line is better than an ugly split.
 - Return type must be on the same line as the function name, never on a separate line — even if the line is long
