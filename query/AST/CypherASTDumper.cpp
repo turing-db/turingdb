@@ -943,6 +943,11 @@ void CypherASTDumper::dump(std::ostream& out, const LiteralExpr* expr) {
             out << "        CharLiteral '" << charLiteral->getValue() << "'\n";
             break;
         }
+        case Literal::Kind::LIST: {
+            const ListLiteral* listLiteral = dynamic_cast<const ListLiteral*>(literal);
+            out << "        ListLiteral _" << listLiteral << "\n";
+            break;
+        }
         case Literal::Kind::MAP: {
             const MapLiteral* mapLiteral = dynamic_cast<const MapLiteral*>(literal);
             out << "        MapLiteral _" << mapLiteral << "\n";
