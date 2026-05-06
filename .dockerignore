@@ -1,3 +1,6 @@
 *
 !Dockerfile
 !docker/turing_install/**
+!run_visualizer.sh
+!wheel
+!wheel/**
