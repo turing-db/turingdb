@@ -144,3 +144,7 @@ Key points:
 ## Commit style
 
 Do not include Claude as a co-author in the commits.
+
+## PR style
+
+PR descriptions are one short sentence. Do not use the default `## Summary` / `## Test plan` template — no headers, no bullets, no checklists, no "Generated with Claude Code" footer. The title carries the detail; the body just states the intent in a sentence.
