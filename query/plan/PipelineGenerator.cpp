@@ -1948,7 +1948,9 @@ PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node
 
     const PipelineValuesOutputInterface* unwindOut {nullptr};
 
-    std::optional<ValueType> maybeHomogeneity = node->homogeneity().and_then(toValueType);
+    std::optional<EvaluatedType> maybeEvalHomogeneity = node->homogeneity();
+    std::optional<ValueType> maybeHomogeneity =
+        maybeEvalHomogeneity ? toValueType(*maybeEvalHomogeneity) : std::nullopt;
 
     const bool canHomogenise = maybeHomogeneity.has_value();
     if (canHomogenise) {
