@@ -22,8 +22,7 @@ public:
 
     using PathInfo = std::pair<PlanGraphTopology::PathToDependency, PlanGraphNode*>;
 
-    PathInfo getShortestPath(PlanGraphNode* origin,
-                             PlanGraphNode* target);
+    PathInfo getShortestPath(PlanGraphNode* origin, PlanGraphNode* target);
     PlanGraphNode* getBranchTip(PlanGraphNode* origin);
     bool detectLoopsFrom(PlanGraphNode* origin);
     PlanGraphNode* findCommonSuccessor(PlanGraphNode* a, PlanGraphNode* b);
