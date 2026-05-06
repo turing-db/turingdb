@@ -6,25 +6,49 @@ on:
   workflow_dispatch:
 
 jobs:
-  docker:
-    runs-on: ubuntu-latest
-    steps:
-      # Checkout repository
-      - name: Checkout repository
-        uses: actions/checkout@v3
+  build-wheel:
+    uses: ./.github/workflows/ci_build.yml
+    with:
+      os_list: '["ubuntu-24.04"]'
+      python_version_list: '["3.14"]'
+    secrets: inherit
 
-      # Log in to Docker Hub
+  docker:
+    needs: build-wheel
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
+      - name: Disk usage (initial)
+        run: df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: turingdb-wheel-ubuntu-24.04-py3.14
+          path: wheel/
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Set Docker image tag
       - name: Set Docker tag
         run: echo "IMAGE_TAG=nightly" >> $GITHUB_ENV
 
-      # Build and push Docker image
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -33,19 +57,16 @@ jobs:
           push: true
           tags: turingdbai/turingdb:${{ env.IMAGE_TAG }}
 
-      # Test container
       - name: Test Docker image
         run: |
           docker run --rm turingdbai/turingdb:${{ env.IMAGE_TAG }} turingdb --help
-      
-      # Save image archive
+
       - name: Save Docker image
         run: |
           docker save \
             turingdbai/turingdb:${IMAGE_TAG} \
             -o turingdb-image-${IMAGE_TAG}.tar
 
-      # Upload image as GitHub artifact
       - name: Upload image artifact
         uses: actions/upload-artifact@v4
         with:
