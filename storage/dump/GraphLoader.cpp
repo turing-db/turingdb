@@ -644,7 +644,7 @@ void GraphLoader::setStringPropIndexChild(EntityKind kind,
     auto& idx = currentStringIndex(kind, propTypeID);
     auto* parent = idx.getNode(parentLocalID);
     auto* child = idx.getNode(childLocalID);
-    parent->setChild(child, childSlot);
+    parent->setChild(child, static_cast<size_t>(childSlot));
 }
 
 void GraphLoader::appendStringPropIndexOwners(EntityKind kind,
