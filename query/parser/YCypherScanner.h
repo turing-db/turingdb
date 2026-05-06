@@ -18,7 +18,12 @@ class YCypherScanner : public yyFlexLexer {
 public:
     virtual YCypherParser::token_type lex(YCypherParser::semantic_type* yylval, SourceLocation* yylloc);
 
-    void setQuery(std::string_view query) { _query = query; }
+    void setQuery(std::string_view query) {
+        _query = query;
+        _nextOffset = 0;
+        _offset = 0;
+        _readPos = 0;
+    }
 
     void advanceLocation(SourceLocation& loc, uint64_t yyleng) {
         _offset = _nextOffset;
@@ -36,10 +41,22 @@ public:
 
     void notImplemented(const SourceLocation& loc,
                         std::string_view rawMsg);
+protected:
+    int LexerInput(char* buf, int max_size) override {
+        size_t remaining = _query.size() - _readPos;
+        size_t toRead = std::min<size_t>(max_size, remaining);
+        if (toRead == 0) {
+            return 0;
+        }
+        std::memcpy(buf, _query.data() + _readPos, toRead);
+        _readPos += toRead;
+        return static_cast<int>(toRead);
+    }
 
 private:
     size_t _nextOffset {0};
     size_t _offset {0};
+    size_t _readPos {0};
     std::string_view _query;
 
     std::string_view getStringView(size_t offset, size_t length) const {
