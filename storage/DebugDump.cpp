@@ -1,5 +1,7 @@
 #include "DebugDump.h"
 
+#include <sstream>
+
 #include <range/v3/view/drop.hpp>
 
 #include "ListElementView.h"
