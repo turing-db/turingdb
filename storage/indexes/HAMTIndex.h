@@ -37,7 +37,7 @@ public:
 
     PropertyTypeID property() const final;
 
-    bool isNodeIndex() const final;
+    consteval bool isNodeIndex() const final;
 
     /**
      * @brief Inserts a value into the hash tree, without preserving immutable copies of

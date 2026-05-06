@@ -29,23 +29,22 @@ void HAMTIndex<K, V, Hash>::query(const Column* query, Column* result) const {
 
 template <typename K, typename V, typename Hash>
 size_t HAMTIndex<K, V, Hash>::size() const {
-    return 0;
+    return -1;
 }
 
 template <typename K, typename V, typename Hash>
 PropertyTypeID HAMTIndex<K, V, Hash>::property() const {
-    return 0;
+    return -1;
 }
 
 template <typename K, typename V, typename Hash>
-bool HAMTIndex<K, V, Hash>::isNodeIndex() const {
-    return false;
+consteval bool HAMTIndex<K, V, Hash>::isNodeIndex() const {
+    return _isNode;
 }
 
 template <typename K, typename V, typename Hash>
 void HAMTIndex<K, V, Hash>::mutInsFrom(HAMTIndexNode* from, size_t depth, const K& key,
                                        const V& value) {
-
     const bool atMaxDepth = depth == _chunksPerHash;
     if (atMaxDepth) {
         auto* leaf = from->as<HAMTLeaf<K, V>>();
@@ -59,14 +58,28 @@ void HAMTIndex<K, V, Hash>::mutInsFrom(HAMTIndexNode* from, size_t depth, const 
     bioassert(!isLeaf, "Tried to mut insert at non-max depth leaf.");
 
     auto* inner = from->as<HAMTInnerNode>();
+    bioassert(inner, "Failed to get inner node.");
 
     const HAMTInnerNode::ChildBitmask childMask = inner->mask();
     const size_t hashcode = _hasher(key);
     const size_t hashChunk = getDepthHash(hashcode, depth);
+
     const size_t bitIndex = 1UL << hashChunk;
     const size_t chldrnBelowMask = bitIndex - 1;
     const size_t chldrnLesser = childMask & chldrnBelowMask;
     const size_t chldrnLesserCount = std::popcount(chldrnLesser);
+
+    const bool exists = (bitIndex & childMask) != 0;
+
+    if (!exists) {
+        WeakArc<HAMTIndexNode> rc = _man->newLeaf<K, V>();
+        auto* newLeaf = rc->as<HAMTLeaf<K, V>>();
+        newLeaf->emplace_back(key, value);
+
+        const auto after = inner->_children.begin() + chldrnLesserCount;
+        inner->_children.insert(after, rc);
+        inner->_mask |= bitIndex;
+    }
 }
 
 template <typename K, typename V, typename Hash>
