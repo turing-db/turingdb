@@ -10,9 +10,41 @@
 #include "versioning/Transaction.h"
 #include "versioning/VersionController.h"
 #include "FilePageReader.h"
-#include "GraphInfoLoader.h"
+#include "DumpConfig.h"
+#include "GraphDumpHelper.h"
 
 using namespace db;
+
+namespace {
+
+DumpResult<bool> isSameGraph(const fs::Path& infoFile, const Graph& graph) {
+    auto reader = fs::FilePageReader::open(infoFile, DumpConfig::PAGE_SIZE);
+    if (!reader) {
+        return DumpError::result(DumpErrorType::CANNOT_OPEN_GRAPH_INFO, reader.error());
+    }
+    auto& rd = reader.value();
+    rd.nextPage();
+    if (rd.errorOccured()) {
+        return DumpError::result(DumpErrorType::COULD_NOT_READ_GRAPH_INFO,
+                                 rd.error().value());
+    }
+    auto it = rd.begin();
+    if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
+        return DumpError::result(DumpErrorType::COULD_NOT_READ_GRAPH_INFO);
+    }
+    if (auto res = GraphDumpHelper::checkFileHeader(it); !res) {
+        return res.get_unexpected();
+    }
+    const GraphID graphID(it.get<GraphID::ValueType>());
+    if (graphID != graph.getID()) {
+        return false;
+    }
+    const uint64_t nameSize = it.get<uint64_t>();
+    const std::string_view name = it.get<char>(nameSize);
+    return name == graph.getName();
+}
+
+}
 
 DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& graphDir) {
     Profile profile("GraphDumper::dump");
@@ -32,18 +64,10 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& graphDir)
         const fs::Path infoFile = graphDir / "info";
 
         if (infoFile.exists()) {
-            auto reader = fs::FilePageReader::open(infoFile, DumpConfig::PAGE_SIZE);
-            if (!reader) {
-                return DumpError::result(DumpErrorType::CANNOT_OPEN_GRAPH_INFO, reader.error());
-            }
-
-            const GraphInfoLoader loader(reader.value());
-
-            auto res = loader.isSameGraph(graph);
+            auto res = isSameGraph(infoFile, graph);
             if (!res) {
                 return res.get_unexpected();
             }
-
             if (!res.value()) {
                 return DumpError::result(DumpErrorType::GRAPH_DIR_ALREADY_EXISTS);
             }

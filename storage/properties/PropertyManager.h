@@ -13,7 +13,7 @@ namespace db {
 
 class EntityPropertyView;
 class NodeContainer;
-class DataPartLoader;
+class GraphLoader;
 class DataPartRebaser;
 
 class PropertyManager {
@@ -187,7 +187,7 @@ public:
     const LabelSetPropertyIndexer* tryGetIndexer(PropertyTypeID ptID) const;
 
 private:
-    friend DataPartLoader;
+    friend GraphLoader;
     friend DataPartRebaser;
 
     PropertyContainerMap _map;

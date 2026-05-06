@@ -12,7 +12,6 @@
 
 namespace db {
 
-class GraphInfoLoader;
 class ConcurrentWriter;
 class DataPartBuilder;
 class PartIterator;
@@ -55,7 +54,6 @@ public:
     [[nodiscard]] static std::unique_ptr<Graph> create(const std::string& name, const fs::Path& path);
 
 private:
-    friend GraphInfoLoader;
     friend PartIterator;
     friend DataPartBuilder;
     friend GraphDumper;

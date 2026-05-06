@@ -11,8 +11,7 @@
 
 namespace db {
 
-class NodeContainerLoader;
-class DataPartLoader;
+class GraphLoader;
 class DataPartRebaser;
 
 class NodeContainer {
@@ -79,8 +78,7 @@ public:
                                                  const std::vector<LabelSetHandle>& nodeLabelSets);
 
 private:
-    friend NodeContainerLoader;
-    friend DataPartLoader;
+    friend GraphLoader;
     friend DataPartRebaser;
 
     NodeID _firstID {0};

@@ -39,7 +39,7 @@ private:
     friend class CommitHistoryBuilder;
     friend class CommitHistoryRebaser;
     friend class CommitBuilder;
-    friend class CommitLoader;
+    friend class GraphLoader;
 
     /// Stores all the data parts that are part of the commit history.
     std::vector<WeakArc<DataPart>> _allDataparts;

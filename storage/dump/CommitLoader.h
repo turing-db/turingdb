@@ -1,23 +1,24 @@
 #pragma once
 
-#include "dump/DumpResult.h"
-#include "versioning/CommitHash.h"
+#include "DumpResult.h"
+#include "Path.h"
 
 namespace db {
+
 class Commit;
 class Graph;
 
+/**
+ * @brief Public façade for lazy materialization of a previously-skeleton commit's data.
+ * Construction and orchestration are delegated to @ref GraphLoader (the builder) and
+ * @ref BinaryDiskDecoder (the byte-level decoder).
+ */
 class CommitLoader {
 public:
     [[nodiscard]] static DumpResult<void> loadData(const fs::Path& commitDir,
-                                                                  const fs::Path& partsDir,
-                                                                  Graph* graph,
-                                                                  Commit* commit);
-    //Just Load A Commit With No CommitData
-    [[nodiscard]] static DumpResult<std::unique_ptr<Commit>> load(Graph* graph,
-                                                                  CommitHash hash,
-                                                                  const fs::Path& commitDir,
-                                                                  const Commit* prevCommit);
+                                                   const fs::Path& partsDir,
+                                                   Graph* graph,
+                                                   Commit* commit);
 };
 
 }

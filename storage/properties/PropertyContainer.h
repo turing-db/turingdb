@@ -17,11 +17,7 @@ namespace db {
 template <SupportedType T>
 class TypedPropertyContainer;
 
-template <SupportedType T>
-class TrivialPropertyContainerLoader;
-
-class StringPropertyContainerLoader;
-class EmbeddingPropertyContainerLoader;
+class GraphLoader;
 
 class PropertyContainer {
 public:
@@ -58,6 +54,8 @@ public:
     const IDs& ids() const { return _ids; }
 
 protected:
+    friend GraphLoader;
+
     IDs _ids;
 
 private:
@@ -159,7 +157,7 @@ public:
     const Values& values() const { return _values; }
 
 private:
-    friend TrivialPropertyContainerLoader<T>;
+    friend GraphLoader;
 
     Values _values;
     std::unordered_map<EntityID, size_t> _entityIndexMap;
@@ -246,7 +244,7 @@ public:
     void sort() override;
 
 private:
-    friend StringPropertyContainerLoader;
+    friend GraphLoader;
     friend DataPartMerger;
 
     StringContainer _values;
@@ -318,7 +316,7 @@ public:
     void sort() override;
 
 private:
-    friend EmbeddingPropertyContainerLoader;
+    friend GraphLoader;
     friend DataPartMerger;
 
     EmbeddingContainer _values;

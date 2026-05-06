@@ -11,7 +11,6 @@
 
 namespace db {
 
-class DataPartInfoLoader;
 class EdgeContainer;
 class NodeContainer;
 class PropertyManager;
@@ -19,7 +18,7 @@ class DataPartBuilder;
 class GraphView;
 class GraphReader;
 class EdgeIndexer;
-class DataPartLoader;
+class GraphLoader;
 class DataPartRebaser;
 class JobSystem;
 class StringIndex;
@@ -76,9 +75,8 @@ public:
     const StringPropertyIndexer& getEdgeStrPropIndexer() const;
 
 private:
-    friend DataPartInfoLoader;
     friend GraphReader;
-    friend DataPartLoader;
+    friend GraphLoader;
     friend DataPartRebaser;
 
     bool _initialized {false};

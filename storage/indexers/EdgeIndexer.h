@@ -11,7 +11,7 @@
 namespace db {
 
 class EdgeIndexerDumper;
-class EdgeIndexerLoader;
+class GraphLoader;
 class EdgeContainer;
 class NodeContainer;
 class NodeEdgeView;
@@ -59,7 +59,7 @@ public:
 
 private:
     friend EdgeIndexerDumper;
-    friend EdgeIndexerLoader;
+    friend GraphLoader;
     friend DataPartRebaser;
 
     NodeID _firstNodeID;

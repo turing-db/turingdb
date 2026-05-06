@@ -12,7 +12,7 @@
 
 namespace db {
 
-class StringIndexerLoader;
+class GraphLoader;
     
 /*
  * @brief Approximate string indexing using prefix trees (tries)
@@ -25,7 +25,7 @@ class StringIndex {
 public:
     class PrefixTreeNode {
     public:
-        friend StringIndexerLoader;
+        friend GraphLoader;
 
         PrefixTreeNode(size_t id)
             : _children(ALPHABET_SIZE),

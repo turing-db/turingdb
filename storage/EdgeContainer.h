@@ -10,9 +10,8 @@ namespace db {
 
 class NodeEdgeView;
 class NodeContainer;
-class DataPartLoader;
+class GraphLoader;
 class EdgeIndexer;
-class EdgeContainerLoader;
 class DataPartRebaser;
 class DataPartMerger;
 
@@ -67,8 +66,7 @@ public:
 
 private:
     friend EdgeIndexer;
-    friend DataPartLoader;
-    friend EdgeContainerLoader;
+    friend GraphLoader;
     friend DataPartRebaser;
     friend DataPartMerger;
 

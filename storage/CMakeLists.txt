@@ -111,7 +111,7 @@ set(storage_sources
 
         dump/GraphLoader.cpp
         dump/GraphDumper.cpp
-        dump/DataPartLoader.cpp
+        dump/BinaryDiskDecoder.cpp
         dump/CommitDumper.cpp
         dump/CommitLoader.cpp
         dump/DataPartDumper.cpp
@@ -119,14 +119,10 @@ set(storage_sources
         dump/DumpUtils.cpp
         dump/LoadUtils.cpp
         dump/StringIndexerDumper.cpp
-        dump/StringIndexerLoader.cpp
         dump/EmbeddingPropertyContainerDumper.cpp
-        dump/EmbeddingPropertyContainerLoader.cpp
         dump/CommitJournalDumper.cpp
-        dump/CommitJournalLoader.cpp
         dump/CommitMetaDataDumper.cpp
         dump/TombstonesDumper.cpp
-        dump/TombstonesLoader.cpp
       )
 
 add_library(turing_db_storage_s STATIC ${storage_sources})

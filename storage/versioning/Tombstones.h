@@ -41,7 +41,7 @@ public:
 private:
     friend class CommitWriteBuffer;
     friend class ChangeRebaser;
-    friend class TombstonesLoader;
+    friend class GraphLoader;
 
     NodeTombstones _nodeTombstones;
     EdgeTombstones _edgeTombstones;

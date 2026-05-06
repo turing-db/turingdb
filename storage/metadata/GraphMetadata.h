@@ -9,7 +9,7 @@ namespace db {
 
 class MetadataBuilder;
 class MetadataRebaser;
-class GraphMetadataLoader;
+class GraphLoader;
 
 class GraphMetadata {
 public:
@@ -21,7 +21,7 @@ public:
 private:
     friend MetadataBuilder;
     friend MetadataRebaser;
-    friend GraphMetadataLoader;
+    friend GraphLoader;
 
     EdgeTypeMap _edgeTypeMap;
     LabelMap _labelMap;

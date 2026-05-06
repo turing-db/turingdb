@@ -55,7 +55,7 @@ public:
     void finalise();
 
 private:
-    friend class CommitJournalLoader;
+    friend class GraphLoader;
     friend class CommitHistoryRebaser;
 
     bool _initialised {false};
