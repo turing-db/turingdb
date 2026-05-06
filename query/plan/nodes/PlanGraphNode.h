@@ -1,6 +1,8 @@
 #pragma once
 
+#include <stdint.h>
 #include <vector>
+#include <numeric>
 
 #include "EnumToString.h"
 
@@ -125,10 +127,13 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
 class PlanGraphNode {
 public:
     using Nodes = std::vector<PlanGraphNode*>;
+    using PlanGraphNodeID = uint64_t;
 
     virtual ~PlanGraphNode() = default;
 
     PlanGraphOpcode getOpcode() const { return _opcode; }
+
+    PlanGraphNodeID id() const { return _id; }
 
     const Nodes& inputs() const { return _inputs; }
 
@@ -178,14 +183,18 @@ public:
     }
 
 protected:
-    explicit PlanGraphNode(PlanGraphOpcode opcode)
-        : _opcode(opcode)
+    explicit PlanGraphNode(PlanGraphNodeID id, PlanGraphOpcode opcode)
+        : _opcode(opcode),
+        _id(id)
     {
     }
 
 private:
-    PlanGraphOpcode _opcode {PlanGraphOpcode::UNKNOWN};
     Nodes _inputs;
     Nodes _outputs;
+
+    PlanGraphOpcode _opcode {PlanGraphOpcode::UNKNOWN};
+    PlanGraphNodeID _id {std::numeric_limits<PlanGraphNodeID>::max()};
 };
+
 }

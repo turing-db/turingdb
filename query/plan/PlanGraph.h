@@ -3,9 +3,12 @@
 #include <memory>
 #include <span>
 
+#include "PlanGraphNodeManager.h"
+
+#include "nodes/PlanGraphNode.h"
+
 #include "GetEntityTypeCache.h"
 #include "GetPropertyCache.h"
-#include "nodes/PlanGraphNode.h"
 
 namespace db {
 
@@ -21,11 +24,7 @@ public:
 
     template <typename T, typename... Args>
     T* create(Args&&... args) {
-        auto node = std::make_unique<T>(std::forward<Args>(args)...);
-        auto* nodePtr = node.get();
-        _nodes.emplace_back(std::move(node));
-
-        return nodePtr;
+        return _nodeMan.create<T>(std::forward<Args>(args)...);
     }
 
     template <typename T, typename... Args>
@@ -38,7 +37,7 @@ public:
 
     template <typename T, typename... Args>
     T* insertBefore(PlanGraphNode* after, Args&&... args) {
-        auto before = create<T>(std::forward<Args>(args)...);
+        T* before = create<T>(std::forward<Args>(args)...);
         for (PlanGraphNode* input : after->inputs()) {
             input->connectOut(before);
         }
@@ -52,7 +51,7 @@ public:
     void getRoots(std::vector<PlanGraphNode*>& roots) const;
 
     std::span<const std::unique_ptr<PlanGraphNode>> nodes() const {
-        return _nodes;
+        return _nodeMan.nodes();
     }
 
     Predicate* createPredicate(Expr* expr);
@@ -73,7 +72,7 @@ public:
 private:
     friend class PlanGraphDebug;
 
-    std::vector<std::unique_ptr<PlanGraphNode>> _nodes;
+    PlanGraphNodeManager _nodeMan;
     std::vector<std::unique_ptr<Predicate>> _predicates;
     GetPropertyCache _getPropertyCache;
     GetEntityTypeCache _getEntityTypeCache;
