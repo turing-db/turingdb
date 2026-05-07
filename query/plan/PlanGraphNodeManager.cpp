@@ -1,25 +1,25 @@
 #include "PlanGraphNodeManager.h"
 
+#include <memory>
+#include <vector>
+
 #include "nodes/PlanGraphNode.h"
 
 using namespace db;
 
+namespace {
+
+const auto isolated = [](const std::unique_ptr<PlanGraphNode>& node) {
+    const bool disconnected = node->inputs().empty() && node->outputs().empty();
+
+    const PlanGraphOpcode opc = node->getOpcode();
+    const bool canBeStandalone = opc == PlanGraphOpcode::WRITE;
+
+    return disconnected && !canBeStandalone;
+};
+
+}
+
 void PlanGraphNodeManager::removeIsolatedNodes() {
-    std::vector<std::unique_ptr<PlanGraphNode>> newNodes;
-
-    for (auto& node : _nodes) {
-        const PlanGraphOpcode opc = node->getOpcode();
-
-        const bool disconnected = node->inputs().empty() && node->outputs().empty();
-        // Write statements with no return clause; e.g. CREATE (n:Person)
-        const bool canBeStandalone = opc == PlanGraphOpcode::WRITE;
-
-        if (disconnected && !canBeStandalone) {
-            continue;
-        }
-
-        newNodes.emplace_back(std::move(node));
-    }
-
-    _nodes.swap(newNodes);
+    std::erase_if(_nodes, isolated);
 }
