@@ -60,7 +60,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set Docker tag
-        run: echo "IMAGE_TAG=nightly" >> $GITHUB_ENV
+        run: echo "IMAGE_TAG=latest" >> $GITHUB_ENV
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -99,7 +99,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set Docker tag
-        run: echo "IMAGE_TAG=nightly" >> $GITHUB_ENV
+        run: echo "IMAGE_TAG=latest" >> $GITHUB_ENV
 
       - name: Create and push multi-arch manifest
         run: |
