@@ -85,7 +85,7 @@ ReadStmtGenerator::ReadStmtGenerator(const CypherAST* ast,
     _graphMetadata(graphView.metadata()),
     _tree(tree),
     _variables(variables),
-    _topology(std::make_unique<PlanGraphTopology>()),
+    _topology(std::make_unique<PlanGraphTopology>(_tree)),
     _declContext(declCtxt)
 {
 }

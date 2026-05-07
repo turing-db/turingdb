@@ -1,16 +1,18 @@
 #pragma once
 
 #include <unordered_map>
-#include <unordered_set>
+
+#include "VisitedNodeSet.h"
 
 namespace db {
 
 class VarNode;
 class PlanGraphNode;
+class PlanGraph;
 
 class PlanGraphTopology {
 public:
-    PlanGraphTopology();
+    PlanGraphTopology(const PlanGraph* tree);
     ~PlanGraphTopology();
 
     enum class PathToDependency {
@@ -30,7 +32,8 @@ public:
 
 private:
     /// Visited set used by the algorithms. Clear at the beginning of each algorithm
-    std::unordered_set<PlanGraphNode*> _visited;
+    VisitedNodeSet _visited;
+    const PlanGraph* _tree {nullptr};
 
     /// Cache of the common successors
     struct NodePair {
