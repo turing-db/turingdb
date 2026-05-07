@@ -40,8 +40,8 @@ public:
 
 protected:
     int LexerInput(char* buf, int max_size) override {
-        size_t remaining = _query.size() - _readPos;
-        size_t toRead = std::min<size_t>(max_size, remaining);
+        const size_t remaining = _query.size() - _readPos;
+        const size_t toRead = std::min<size_t>(max_size, remaining);
         if (toRead == 0) {
             return 0;
         }
