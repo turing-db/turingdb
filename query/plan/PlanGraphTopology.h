@@ -31,9 +31,10 @@ public:
     VarNode* findNextVar(PlanGraphNode* node);
 
 private:
+    const PlanGraph* _tree {nullptr};
+
     /// Visited set used by the algorithms. Clear at the beginning of each algorithm
     VisitedNodeSet _visited;
-    const PlanGraph* _tree {nullptr};
 
     /// Cache of the common successors
     struct NodePair {
