@@ -8,8 +8,8 @@ namespace db {
 
 class LoadVectorNode : public PlanGraphNode {
 public:
-    LoadVectorNode(std::string_view filePath, std::string_view indexName)
-        : PlanGraphNode(PlanGraphOpcode::LOAD_VECTOR),
+    LoadVectorNode(PlanGraphNodeID id, std::string_view filePath, std::string_view indexName)
+        : PlanGraphNode(id, PlanGraphOpcode::LOAD_VECTOR),
         _filePath(filePath),
         _indexName(indexName)
     {

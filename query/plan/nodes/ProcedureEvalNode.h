@@ -9,9 +9,10 @@ class YieldClause;
 
 class ProcedureEvalNode : public PlanGraphNode {
 public:
-    explicit ProcedureEvalNode(const FunctionInvocationExpr* funcExpr,
-                               YieldClause* yield = nullptr)
-        : PlanGraphNode(PlanGraphOpcode::PROCEDURE_EVAL),
+    ProcedureEvalNode(PlanGraphNodeID id,
+                      const FunctionInvocationExpr* funcExpr,
+                      YieldClause* yield = nullptr)
+        : PlanGraphNode(id, PlanGraphOpcode::PROCEDURE_EVAL),
         _funcExpr(funcExpr),
         _yield(yield)
     {

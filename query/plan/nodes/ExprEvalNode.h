@@ -10,7 +10,7 @@ class ExprEvalNode final : public PlanGraphNode {
 public:
     using Expressions = std::vector<const Expr*>;
 
-    ExprEvalNode();
+    explicit ExprEvalNode(PlanGraphNodeID id);
     ~ExprEvalNode() final;
 
     void addExpr(const Expr* expr) { _exprs.push_back(expr); }

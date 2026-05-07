@@ -6,8 +6,8 @@ namespace db {
 
 class CreateGraphNode : public PlanGraphNode {
 public:
-    explicit CreateGraphNode(std::string_view graphName)
-        : PlanGraphNode(PlanGraphOpcode::CREATE_GRAPH),
+    CreateGraphNode(PlanGraphNodeID id, std::string_view graphName)
+        : PlanGraphNode(id, PlanGraphOpcode::CREATE_GRAPH),
         _graphName(graphName)
     {
     }

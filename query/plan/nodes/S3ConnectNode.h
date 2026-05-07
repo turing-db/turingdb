@@ -6,8 +6,8 @@ namespace db {
 
 class S3ConnectNode : public PlanGraphNode {
 public:
-    explicit S3ConnectNode(std::string_view accessId, std::string_view secretKey, std::string_view region)
-        : PlanGraphNode(PlanGraphOpcode::S3_CONNECT),
+    S3ConnectNode(PlanGraphNodeID id, std::string_view accessId, std::string_view secretKey, std::string_view region)
+        : PlanGraphNode(id, PlanGraphOpcode::S3_CONNECT),
         _accessId(accessId),
         _secretKey(secretKey),
         _region(region)

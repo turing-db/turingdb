@@ -12,7 +12,7 @@ PlanGraph::~PlanGraph() {
 }
 
 void PlanGraph::getRoots(std::vector<PlanGraphNode*>& roots) const {
-    for (const auto& node : _nodes) {
+    for (const auto& node : _nodeMan.nodes()) {
         if (node->isRoot()) {
             roots.emplace_back(node.get());
         }
@@ -29,21 +29,5 @@ Predicate* PlanGraph::createPredicate(Expr* expr) {
 }
 
 void PlanGraph::removeIsolatedNodes() {
-    std::vector<std::unique_ptr<PlanGraphNode>> newNodes;
-
-    for (auto& node : _nodes) {
-        const PlanGraphOpcode opc = node->getOpcode();
-
-        const bool disconnected = node->inputs().empty() && node->outputs().empty();
-        // Write statements with no return clause; e.g. CREATE (n:Person)
-        const bool canBeStandalone = opc == PlanGraphOpcode::WRITE;
-
-        if (disconnected && !canBeStandalone) {
-            continue;
-        }
-
-        newNodes.emplace_back(std::move(node));
-    }
-
-    _nodes = std::move(newNodes);
+    _nodeMan.removeIsolatedNodes();
 }

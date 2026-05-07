@@ -11,8 +11,8 @@ class OrderByNode : public PlanGraphNode {
 public:
     using ItemVector = std::vector<OrderByItem*>;
 
-    explicit OrderByNode()
-        : PlanGraphNode(PlanGraphOpcode::ORDER_BY)
+    explicit OrderByNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::ORDER_BY)
     {
     }
 

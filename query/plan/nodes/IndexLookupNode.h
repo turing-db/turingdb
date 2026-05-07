@@ -12,10 +12,11 @@ class LiteralExpr;
 
 class IndexLookupNode : public PlanGraphNode {
 public:
-    explicit IndexLookupNode(const Index* index,
-                             const PropertyExpr* prop,
-                             ValueType vt)
-        : PlanGraphNode(PlanGraphOpcode::INDEX_LOOKUP),
+    IndexLookupNode(PlanGraphNodeID id,
+                    const Index* index,
+                    const PropertyExpr* prop,
+                    ValueType vt)
+        : PlanGraphNode(id, PlanGraphOpcode::INDEX_LOOKUP),
           _index(index),
           _prop(prop),
           _valueType(vt)

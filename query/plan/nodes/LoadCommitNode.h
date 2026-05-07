@@ -8,8 +8,8 @@ namespace db {
 
 class LoadCommitNode : public PlanGraphNode {
 public:
-    LoadCommitNode(std::string_view hashStr)
-        : PlanGraphNode(PlanGraphOpcode::LOAD_COMMIT),
+    LoadCommitNode(PlanGraphNodeID id, std::string_view hashStr)
+        : PlanGraphNode(id, PlanGraphOpcode::LOAD_COMMIT),
         _hashStr(hashStr)
     {
     }

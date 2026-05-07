@@ -22,6 +22,10 @@ public:
 
     std::span<const std::unique_ptr<PlanGraphNode>> nodes() const { return _nodes; }
 
+    void removeIsolatedNodes();
+
+    size_t size() const { return _nodes.size(); }
+
 private:
     std::vector<std::unique_ptr<PlanGraphNode>> _nodes;
 

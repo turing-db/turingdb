@@ -14,21 +14,23 @@ enum class JoinType : uint8_t {
 
 class JoinNode : public PlanGraphNode {
 public:
-    JoinNode(const VarDecl* joinKeyVar1,
+    JoinNode(PlanGraphNodeID id,
+             const VarDecl* joinKeyVar1,
              const VarDecl* joinKeyVar2,
              JoinType type)
-        : PlanGraphNode(PlanGraphOpcode::JOIN),
+        : PlanGraphNode(id, PlanGraphOpcode::JOIN),
         _fstJoinKeyVar(joinKeyVar1),
         _sndJoinKeyVar(joinKeyVar2),
         _type(type)
     {
     }
 
-    JoinNode(const VarDecl* joinKeyVar1,
+    JoinNode(PlanGraphNodeID id,
+             const VarDecl* joinKeyVar1,
              const VarDecl* joinKeyVar2,
              const VarDecl* dependencyDecl,
              JoinType type)
-        : PlanGraphNode(PlanGraphOpcode::JOIN),
+        : PlanGraphNode(id, PlanGraphOpcode::JOIN),
         _fstJoinKeyVar(joinKeyVar1),
         _sndJoinKeyVar(joinKeyVar2),
         _dependencyVarDecl(dependencyDecl),

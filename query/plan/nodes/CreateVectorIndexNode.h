@@ -11,10 +11,11 @@ namespace db {
 
 class CreateVectorIndexNode : public PlanGraphNode {
 public:
-    CreateVectorIndexNode(std::string_view indexName,
+    CreateVectorIndexNode(PlanGraphNodeID id,
+                          std::string_view indexName,
                           vec::Dimension dimension,
                           vec::DistanceMetric metric)
-        : PlanGraphNode(PlanGraphOpcode::CREATE_VECTOR_INDEX),
+        : PlanGraphNode(id, PlanGraphOpcode::CREATE_VECTOR_INDEX),
         _indexName(indexName),
         _dimension(dimension),
         _metric(metric)

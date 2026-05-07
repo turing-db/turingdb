@@ -6,8 +6,8 @@ namespace db {
 
 class CommitNode : public PlanGraphNode {
 public:
-    CommitNode()
-        : PlanGraphNode(PlanGraphOpcode::COMMIT)
+    explicit CommitNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::COMMIT)
     {
     }
 };

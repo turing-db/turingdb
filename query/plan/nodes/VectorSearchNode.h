@@ -12,10 +12,11 @@ class VarDecl;
 
 class VectorSearchNode : public PlanGraphNode {
 public:
-    VectorSearchNode(std::string_view indexName,
+    VectorSearchNode(PlanGraphNodeID id,
+                     std::string_view indexName,
                      uint64_t k,
                      const std::vector<float>& queryVector)
-        : PlanGraphNode(PlanGraphOpcode::VECTOR_SEARCH),
+        : PlanGraphNode(id, PlanGraphOpcode::VECTOR_SEARCH),
         _indexName(indexName),
         _k(k),
         _queryVector(queryVector)

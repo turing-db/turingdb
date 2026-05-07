@@ -10,9 +10,10 @@ namespace db {
 
 class LoadGMLNode : public PlanGraphNode {
 public:
-    LoadGMLNode(std::string_view graphName,
+    LoadGMLNode(PlanGraphNodeID id,
+                std::string_view graphName,
                 const fs::Path& filePath)
-        : PlanGraphNode(PlanGraphOpcode::LOAD_GML),
+        : PlanGraphNode(id, PlanGraphOpcode::LOAD_GML),
         _graphName(graphName),
         _filePath(filePath)
     {

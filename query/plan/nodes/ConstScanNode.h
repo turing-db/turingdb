@@ -9,8 +9,8 @@ class VarDecl;
 
 class ConstScanNode : public PlanGraphNode {
 public:
-    explicit ConstScanNode(Column* values, const VarDecl* var)
-        : PlanGraphNode(PlanGraphOpcode::CONST_SCAN),
+    ConstScanNode(PlanGraphNodeID id, Column* values, const VarDecl* var)
+        : PlanGraphNode(id, PlanGraphOpcode::CONST_SCAN),
         _values(values),
         _var(var)
     {

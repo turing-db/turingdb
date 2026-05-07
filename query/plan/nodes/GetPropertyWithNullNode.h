@@ -9,8 +9,8 @@ class VarDecl;
 
 class GetPropertyWithNullNode : public PlanGraphNode {
 public:
-    GetPropertyWithNullNode(std::string_view propName)
-        : PlanGraphNode(PlanGraphOpcode::GET_PROPERTY_WITH_NULL),
+    GetPropertyWithNullNode(PlanGraphNodeID id, std::string_view propName)
+        : PlanGraphNode(id, PlanGraphOpcode::GET_PROPERTY_WITH_NULL),
         _propName(propName)
     {
     }

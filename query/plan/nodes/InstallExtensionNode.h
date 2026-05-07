@@ -6,8 +6,8 @@ namespace db {
 
 class InstallExtensionNode : public PlanGraphNode {
 public:
-    explicit InstallExtensionNode(std::string_view extensionName)
-        : PlanGraphNode(PlanGraphOpcode::INSTALL_EXTENSION),
+    InstallExtensionNode(PlanGraphNodeID id, std::string_view extensionName)
+        : PlanGraphNode(id, PlanGraphOpcode::INSTALL_EXTENSION),
         _extensionName(extensionName)
     {
     }

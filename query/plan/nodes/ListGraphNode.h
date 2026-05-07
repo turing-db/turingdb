@@ -6,8 +6,8 @@ namespace db {
 
 class ListGraphNode : public PlanGraphNode {
 public:
-    ListGraphNode()
-        : PlanGraphNode(PlanGraphOpcode::LIST_GRAPH)
+    explicit ListGraphNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::LIST_GRAPH)
     {
     }
 };

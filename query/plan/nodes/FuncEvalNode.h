@@ -11,8 +11,8 @@ class FuncEvalNode : public PlanGraphNode {
 public:
     using Funcs = std::vector<const FunctionInvocationExpr*>;
 
-    explicit FuncEvalNode()
-        : PlanGraphNode(PlanGraphOpcode::FUNC_EVAL)
+    explicit FuncEvalNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::FUNC_EVAL)
     {
     }
 

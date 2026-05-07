@@ -12,8 +12,8 @@ public:
     using GroupByKeys = std::vector<Expr*>;
     using Funcs = std::vector<const FunctionInvocationExpr*>;
 
-    explicit AggregateEvalNode()
-        : PlanGraphNode(PlanGraphOpcode::AGGREGATE_EVAL)
+    explicit AggregateEvalNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::AGGREGATE_EVAL)
     {
     }
 

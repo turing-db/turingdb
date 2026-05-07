@@ -5,8 +5,8 @@ namespace db {
 
 class CartesianProductNode : public PlanGraphNode {
 public:
-    CartesianProductNode()
-        : PlanGraphNode(PlanGraphOpcode::CARTESIAN_PRODUCT)
+    explicit CartesianProductNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::CARTESIAN_PRODUCT)
     {
     }
 };

@@ -6,8 +6,8 @@ namespace db {
 
 class GetEdgesNode : public PlanGraphNode {
 public:
-    explicit GetEdgesNode()
-        : PlanGraphNode(PlanGraphOpcode::GET_EDGES)
+    explicit GetEdgesNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::GET_EDGES)
     {
     }
 };

@@ -39,8 +39,8 @@ public:
     }
 
 protected:
-    explicit FilterNode(PlanGraphOpcode opcode)
-        : PlanGraphNode(opcode)
+    explicit FilterNode(PlanGraphNodeID id, PlanGraphOpcode opcode)
+        : PlanGraphNode(id, opcode)
     {
     }
 
@@ -53,16 +53,16 @@ private:
 
 class DataframeFilterNode : public FilterNode {
 public:
-    DataframeFilterNode()
-        : FilterNode(PlanGraphOpcode::FILTER_DATAFRAME)
+    explicit DataframeFilterNode(PlanGraphNodeID id)
+        : FilterNode(id, PlanGraphOpcode::FILTER_DATAFRAME)
     {
     }
 };
 
 class NodeFilterNode : public FilterNode {
 public:
-    NodeFilterNode()
-        : FilterNode(PlanGraphOpcode::FILTER_NODE)
+    explicit NodeFilterNode(PlanGraphNodeID id)
+        : FilterNode(id, PlanGraphOpcode::FILTER_NODE)
     {
     }
 
@@ -84,8 +84,8 @@ private:
 
 class EdgeFilterNode : public FilterNode {
 public:
-    EdgeFilterNode()
-        : FilterNode(PlanGraphOpcode::FILTER_EDGE)
+    explicit EdgeFilterNode(PlanGraphNodeID id)
+        : FilterNode(id, PlanGraphOpcode::FILTER_EDGE)
     {
     }
 

@@ -6,8 +6,8 @@ namespace db {
 
 class ShowVectorIndexesNode : public PlanGraphNode {
 public:
-    ShowVectorIndexesNode()
-        : PlanGraphNode(PlanGraphOpcode::SHOW_VECTOR_INDEXES)
+    explicit ShowVectorIndexesNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::SHOW_VECTOR_INDEXES)
     {
     }
 };

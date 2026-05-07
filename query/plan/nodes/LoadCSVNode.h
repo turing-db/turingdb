@@ -9,7 +9,8 @@ class VarDecl;
 
 class LoadCSVNode : public VarDeclProviderNode {
 public:
-    LoadCSVNode(const fs::Path& path,
+    LoadCSVNode(PlanGraphNodeID id,
+                const fs::Path& path,
                 bool hasHeaders,
                 bool skipOnError,
                 const VarDecl* aliasDecl);

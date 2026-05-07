@@ -8,8 +8,8 @@ namespace db {
 
 class LoadGraphNode : public PlanGraphNode {
 public:
-    LoadGraphNode(std::string_view graphName)
-        : PlanGraphNode(PlanGraphOpcode::LOAD_GRAPH),
+    LoadGraphNode(PlanGraphNodeID id, std::string_view graphName)
+        : PlanGraphNode(id, PlanGraphOpcode::LOAD_GRAPH),
         _graphName(graphName)
     {
     }

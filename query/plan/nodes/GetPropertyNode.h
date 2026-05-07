@@ -9,8 +9,8 @@ class VarDecl;
 
 class GetPropertyNode : public PlanGraphNode {
 public:
-    GetPropertyNode(std::string_view propName)
-        : PlanGraphNode(PlanGraphOpcode::GET_PROPERTY),
+    GetPropertyNode(PlanGraphNodeID id, std::string_view propName)
+        : PlanGraphNode(id, PlanGraphOpcode::GET_PROPERTY),
         _propName(propName)
     {
     }

@@ -13,10 +13,11 @@ enum class IndexEntityKind {
 
 class CreatePropertyIndexNode : public PlanGraphNode {
 public:
-    CreatePropertyIndexNode(std::string_view indexName,
+    CreatePropertyIndexNode(PlanGraphNodeID id,
+                            std::string_view indexName,
                             IndexEntityKind entityKind,
                             const PropertyExpr* propExpr)
-        : PlanGraphNode(PlanGraphOpcode::CREATE_PROPERTY_INDEX),
+        : PlanGraphNode(id, PlanGraphOpcode::CREATE_PROPERTY_INDEX),
         _indexName(indexName),
         _entityKind(entityKind),
         _propertyExpr(propExpr)

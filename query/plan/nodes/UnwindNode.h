@@ -12,15 +12,15 @@ class Symbol;
 
 class UnwindNode final : public PlanGraphNode {
 public:
-    UnwindNode(const Expr* arg, const VarDecl* var)
-        : PlanGraphNode(PlanGraphOpcode::UNWIND),
+    UnwindNode(PlanGraphNodeID id, const Expr* arg, const VarDecl* var)
+        : PlanGraphNode(id, PlanGraphOpcode::UNWIND),
         _arg(arg),
         _var(var)
     {
     }
 
-    UnwindNode(const Expr* arg, const VarDecl* var, EvaluatedType homogeneity)
-        : PlanGraphNode(PlanGraphOpcode::UNWIND),
+    UnwindNode(PlanGraphNodeID id, const Expr* arg, const VarDecl* var, EvaluatedType homogeneity)
+        : PlanGraphNode(id, PlanGraphOpcode::UNWIND),
         _arg(arg),
         _var(var),
         _homogeneity(homogeneity)

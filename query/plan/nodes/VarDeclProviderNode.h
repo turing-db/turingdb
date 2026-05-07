@@ -13,8 +13,8 @@ public:
 
 protected:
 
-    VarDeclProviderNode(PlanGraphOpcode opcode, const VarDecl* varDecl)
-    : PlanGraphNode(opcode),
+    VarDeclProviderNode(PlanGraphNodeID id, PlanGraphOpcode opcode, const VarDecl* varDecl)
+    : PlanGraphNode(id, opcode),
     _varDecl(varDecl)
     {
     }

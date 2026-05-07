@@ -6,8 +6,8 @@ namespace db {
 
 class ScanNodesNode : public PlanGraphNode {
 public:
-    explicit ScanNodesNode()
-        : PlanGraphNode(PlanGraphOpcode::SCAN_NODES)
+    explicit ScanNodesNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::SCAN_NODES)
     {
     }
 };
