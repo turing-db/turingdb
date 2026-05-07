@@ -11,11 +11,12 @@ class VarDecl;
 
 class PathExplorerNode : public PlanGraphNode {
 public:
-    explicit PathExplorerNode(const VarDecl* edgeDecl,
-                              const VarDecl* targetDecl,
-                              uint64_t minHops,
-                              uint64_t maxHops)
-        : PlanGraphNode(PlanGraphOpcode::PATH_EXPLORER),
+    PathExplorerNode(PlanGraphNodeID id,
+                     const VarDecl* edgeDecl,
+                     const VarDecl* targetDecl,
+                     uint64_t minHops,
+                     uint64_t maxHops)
+        : PlanGraphNode(id, PlanGraphOpcode::PATH_EXPLORER),
         _edgeDecl(edgeDecl),
         _targetDecl(targetDecl),
         _minHops(minHops),

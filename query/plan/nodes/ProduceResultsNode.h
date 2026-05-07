@@ -8,8 +8,8 @@ class Projection;
 
 class ProduceResultsNode : public PlanGraphNode {
 public:
-    ProduceResultsNode()
-        : PlanGraphNode(PlanGraphOpcode::PRODUCE_RESULTS)
+    explicit ProduceResultsNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::PRODUCE_RESULTS)
     {
     }
 

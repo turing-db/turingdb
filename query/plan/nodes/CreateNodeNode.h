@@ -9,8 +9,8 @@ class ExprConstraint;
 
 class CreateNodeNode : public PlanGraphNode {
 public:
-    explicit CreateNodeNode()
-        : PlanGraphNode(PlanGraphOpcode::CREATE_NODE)
+    explicit CreateNodeNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::CREATE_NODE)
     {
     }
 

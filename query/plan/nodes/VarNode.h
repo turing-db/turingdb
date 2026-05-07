@@ -8,8 +8,8 @@ class VarDecl;
 
 class VarNode : public VarDeclProviderNode{
 public:
-    VarNode(const VarDecl* varDecl)
-        : VarDeclProviderNode(PlanGraphOpcode::VAR, varDecl)
+    VarNode(PlanGraphNodeID id, const VarDecl* varDecl)
+        : VarDeclProviderNode(id, PlanGraphOpcode::VAR, varDecl)
     {
     }
 };

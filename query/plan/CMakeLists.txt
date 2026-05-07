@@ -3,6 +3,7 @@ set(plan_sources
     PlanGraphGenerator.cpp
     PlanGraphVariables.cpp
     PlanGraph.cpp
+    PlanGraphNodeManager.cpp
     PlanGraphDebug.cpp
     PlanGraphTopology.cpp
     ReadStmtGenerator.cpp

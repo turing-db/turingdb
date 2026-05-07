@@ -10,8 +10,8 @@ class FunctionInvocationExpr;
 
 class ChangeNode : public PlanGraphNode {
 public:
-    explicit ChangeNode(ChangeOp op)
-        : PlanGraphNode(PlanGraphOpcode::CHANGE),
+    ChangeNode(PlanGraphNodeID id, ChangeOp op)
+        : PlanGraphNode(id, PlanGraphOpcode::CHANGE),
         _op(op)
     {
     }

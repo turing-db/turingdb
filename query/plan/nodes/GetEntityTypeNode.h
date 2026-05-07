@@ -10,8 +10,8 @@ class SymbolChain;
 
 class GetEntityTypeNode : public PlanGraphNode {
 public:
-    explicit GetEntityTypeNode()
-        : PlanGraphNode(PlanGraphOpcode::GET_ENTITY_TYPE)
+    explicit GetEntityTypeNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::GET_ENTITY_TYPE)
     {
     }
 

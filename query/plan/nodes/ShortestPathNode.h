@@ -8,12 +8,13 @@ class VarDecl;
 
 class ShortestPathNode : public PlanGraphNode {
 public:
-    explicit ShortestPathNode(const VarDecl* source,
-                              const VarDecl* target,
-                              const VarDecl* distance,
-                              const VarDecl* path,
-                              const PropertyType edgeType)
-        : PlanGraphNode(PlanGraphOpcode::SHORTEST_PATH),
+    ShortestPathNode(PlanGraphNodeID id,
+                     const VarDecl* source,
+                     const VarDecl* target,
+                     const VarDecl* distance,
+                     const VarDecl* path,
+                     const PropertyType edgeType)
+        : PlanGraphNode(id, PlanGraphOpcode::SHORTEST_PATH),
         _source(source),
         _target(target),
         _distance(distance),

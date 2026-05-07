@@ -48,6 +48,8 @@ public:
         return before;
     }
 
+    size_t size() const { return _nodeMan.size(); }
+
     void getRoots(std::vector<PlanGraphNode*>& roots) const;
 
     std::span<const std::unique_ptr<PlanGraphNode>> nodes() const {

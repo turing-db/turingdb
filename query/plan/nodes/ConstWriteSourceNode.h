@@ -9,11 +9,12 @@ class VarDecl;
 
 class ConstWriteSourceNode : public PlanGraphNode {
 public:
-    ConstWriteSourceNode(Column* nodeIDs,
+    ConstWriteSourceNode(PlanGraphNodeID id,
+                         Column* nodeIDs,
                          Column* values,
                          const VarDecl* nodeIDDecl,
                          const VarDecl* valuesDecl)
-        : PlanGraphNode(PlanGraphOpcode::CONST_WRITE_SOURCE),
+        : PlanGraphNode(id, PlanGraphOpcode::CONST_WRITE_SOURCE),
         _nodeIDs(nodeIDs),
         _values(values),
         _nodeIDDecl(nodeIDDecl),

@@ -1,5 +1,7 @@
 #include "PlanGraphDebug.h"
 
+#include <range/v3/view/enumerate.hpp>
+
 #include "expr/Expr.h"
 #include "nodes/AggregateEvalNode.h"
 #include "nodes/ChangeNode.h"
@@ -50,6 +52,9 @@
 #include "metadata/LabelSet.h"
 
 using namespace db;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 namespace {
 
@@ -203,8 +208,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
     output << "flowchart TD\n";
 
-    for (size_t i = 0; i < planGraph._nodes.size(); i++) {
-        const auto& node = planGraph._nodes[i];
+    for (const auto& [i, node] : rv::enumerate(planGraph.nodes())) {
         nodeOrder[node.get()] = i;
 
         // Writing node definition
@@ -341,18 +345,18 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 const auto* n = dynamic_cast<WriteNode*>(node.get());
 
                 size_t j = 0;
-                for (const auto& node : n->pendingNodes()) {
+                for (const auto& pendingNode : n->pendingNodes()) {
                     output << "        __node__ (" << j;
 
-                    const std::span labels = node._data->labelConstraints();
+                    const std::span labels = pendingNode._data->labelConstraints();
                     for (const auto& label : labels) {
                         output << ":" << label << "";
                     }
 
-                    if (!node._data->exprConstraints().empty()) {
+                    if (!pendingNode._data->exprConstraints().empty()) {
                         output << " {";
                         size_t k = 0;
-                        for (const auto& [propName, vt, expr] : node._data->exprConstraints()) {
+                        for (const auto& [propName, vt, expr] : pendingNode._data->exprConstraints()) {
                             if (k++ > 0) {
                                 output << ", ";
                             }
@@ -408,21 +412,21 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
                 }
 
                 j = 0;
-                for (const auto& node : n->toDeleteNodes()) {
-                    output << "        __delete_node__ " << node->getName() << "\n";
+                for (const auto& delNode : n->toDeleteNodes()) {
+                    output << "        __delete_node__ " << delNode->getName() << "\n";
                     j++;
                 }
 
                 j = 0;
-                for (const auto& edge : n->toDeleteEdges()) {
-                    output << "        __delete_edge__ " << edge->getName() << "\n";
+                for (const auto& delEdge : n->toDeleteEdges()) {
+                    output << "        __delete_edge__ " << delEdge->getName() << "\n";
                     j++;
                 }
 
                 j = 0;
-                for (const auto& node : n->nodeUpdates()) {
-                    output << "        __node_update__ " << node._decl->getName()
-                           << "." << node._propTypeName << "\n";
+                for (const auto& nodeUpdate : n->nodeUpdates()) {
+                    output << "        __node_update__ " << nodeUpdate._decl->getName()
+                           << "." << nodeUpdate._propTypeName << "\n";
                     j++;
                 }
 
@@ -589,7 +593,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
         output << "    `\"]\n";
     }
 
-    for (const auto& node : planGraph._nodes) {
+    for (const auto& node : planGraph.nodes()) {
         // Writing connections
         const size_t a = nodeOrder.at(node.get());
 

@@ -6,8 +6,8 @@ namespace db {
 
 class ShowExtensionsNode : public PlanGraphNode {
 public:
-    ShowExtensionsNode()
-        : PlanGraphNode(PlanGraphOpcode::SHOW_EXTENSIONS)
+    explicit ShowExtensionsNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::SHOW_EXTENSIONS)
     {
     }
 };

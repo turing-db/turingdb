@@ -44,8 +44,8 @@ public:
         const EdgePatternData* _data {nullptr};
     };
 
-    WriteNode()
-        : PlanGraphNode(PlanGraphOpcode::WRITE)
+    explicit WriteNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::WRITE)
     {
     }
 

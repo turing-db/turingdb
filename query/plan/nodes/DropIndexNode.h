@@ -8,8 +8,8 @@ namespace db {
     
 class DropIndexNode final : public PlanGraphNode {
 public:
-    explicit DropIndexNode(std::string_view indexName)
-        : PlanGraphNode(PlanGraphOpcode::DROP_INDEX),
+    DropIndexNode(PlanGraphNodeID id, std::string_view indexName)
+        : PlanGraphNode(id, PlanGraphOpcode::DROP_INDEX),
         _indexName(indexName)
     {
     }

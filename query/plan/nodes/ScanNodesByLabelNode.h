@@ -8,8 +8,8 @@ namespace db {
 
 class ScanNodesByLabelNode : public PlanGraphNode {
 public:
-    explicit ScanNodesByLabelNode(const LabelSet& labelset)
-        : PlanGraphNode(PlanGraphOpcode::SCAN_NODES_BY_LABEL),
+    ScanNodesByLabelNode(PlanGraphNodeID id, const LabelSet& labelset)
+        : PlanGraphNode(id, PlanGraphOpcode::SCAN_NODES_BY_LABEL),
         _labelset(labelset)
     {
     }

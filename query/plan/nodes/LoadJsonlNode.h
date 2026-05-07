@@ -9,8 +9,8 @@ namespace db {
 
 class LoadJsonlNode : public PlanGraphNode {
 public:
-    LoadJsonlNode(const fs::Path& path, std::string_view graphName)
-        : PlanGraphNode(PlanGraphOpcode::LOAD_JSONL),
+    LoadJsonlNode(PlanGraphNodeID id, const fs::Path& path, std::string_view graphName)
+        : PlanGraphNode(id, PlanGraphOpcode::LOAD_JSONL),
         _path(path),
         _graphName(graphName)
     {

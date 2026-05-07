@@ -8,8 +8,8 @@ class Expr;
 
 class LimitNode : public PlanGraphNode {
 public:
-    explicit LimitNode()
-        : PlanGraphNode(PlanGraphOpcode::LIMIT)
+    explicit LimitNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::LIMIT)
     {
     }
 

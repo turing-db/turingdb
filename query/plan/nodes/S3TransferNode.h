@@ -11,12 +11,13 @@ public:
         PUSH
     };
 
-    explicit S3TransferNode(Direction direction,
-                            std::string_view s3Bucket,
-                            std::string_view s3Prefix,
-                            std::string_view s3File,
-                            std::string_view localPath)
-        : PlanGraphNode(PlanGraphOpcode::S3_TRANSFER),
+    S3TransferNode(PlanGraphNodeID id,
+                   Direction direction,
+                   std::string_view s3Bucket,
+                   std::string_view s3Prefix,
+                   std::string_view s3File,
+                   std::string_view localPath)
+        : PlanGraphNode(id, PlanGraphOpcode::S3_TRANSFER),
         _direction(direction),
         _s3Bucket(s3Bucket),
         _s3Prefix(s3Prefix),

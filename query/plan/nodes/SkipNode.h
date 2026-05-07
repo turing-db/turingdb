@@ -8,8 +8,8 @@ class Expr;
 
 class SkipNode : public PlanGraphNode {
 public:
-    explicit SkipNode()
-        : PlanGraphNode(PlanGraphOpcode::SKIP)
+    explicit SkipNode(PlanGraphNodeID id)
+        : PlanGraphNode(id, PlanGraphOpcode::SKIP)
     {
     }
 
