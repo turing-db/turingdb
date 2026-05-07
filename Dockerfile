@@ -48,4 +48,3 @@ COPY run_visualizer.sh /usr/local/bin/run_visualizer.sh
 RUN chmod +x /usr/local/bin/run_visualizer.sh
 
 ENTRYPOINT ["/usr/local/bin/run_visualizer.sh"]
-CMD ["turingdb", "--help"]
