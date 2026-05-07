@@ -183,7 +183,7 @@ public:
     }
 
 protected:
-    explicit PlanGraphNode(PlanGraphNodeID id, PlanGraphOpcode opcode)
+    PlanGraphNode(PlanGraphNodeID id, PlanGraphOpcode opcode)
         : _opcode(opcode),
         _id(id)
     {

@@ -39,7 +39,7 @@ public:
     }
 
 protected:
-    explicit FilterNode(PlanGraphNodeID id, PlanGraphOpcode opcode)
+    FilterNode(PlanGraphNodeID id, PlanGraphOpcode opcode)
         : PlanGraphNode(id, opcode)
     {
     }
