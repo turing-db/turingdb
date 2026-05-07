@@ -39,6 +39,7 @@ public:
     void notImplemented(const SourceLocation& loc, std::string_view rawMsg);
 
 protected:
+    /// Allows the scanner to batch copy query string bytes into the @ref _query buffer
     int LexerInput(char* buf, int max_size) override {
         const size_t remaining = _query.size() - _readPos;
         const size_t toRead = std::min<size_t>(max_size, remaining);
@@ -53,6 +54,7 @@ protected:
 private:
     size_t _nextOffset {0};
     size_t _offset {0};
+    /// Character position in @ref _query which has been consumed so far (inclusive)
     size_t _readPos {0};
     std::string_view _query;
 
