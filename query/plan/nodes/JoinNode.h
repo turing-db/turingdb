@@ -43,6 +43,8 @@ public:
     const VarDecl* getDependencyVarDecl() const { return _dependencyVarDecl; }
     JoinType getJoinType() const { return _type; };
 
+    static bool joinableTypes(EvaluatedType a, EvaluatedType b);
+
 private:
     const VarDecl* _fstJoinKeyVar {nullptr};
     const VarDecl* _sndJoinKeyVar {nullptr};

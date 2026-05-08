@@ -20,6 +20,7 @@ set(plan_sources
     nodes/ExprEvalNode.cpp
     nodes/ConstScanNode.cpp
     nodes/ConstWriteSourceNode.cpp
+    nodes/JoinNode.cpp
 )
 
 add_library(turing_db_plan_s STATIC ${plan_sources})

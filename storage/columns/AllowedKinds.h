@@ -533,6 +533,7 @@ struct ListableTypes {
     >;
 };
 
+// NOTE: This should be synced with @ref JoinNode::joinableTypes
 struct ValueHashJoinPairs {
     using Allowed = GenerateKindPairList<
         // Non-optionals on ID types
@@ -546,7 +547,7 @@ struct ValueHashJoinPairs {
             KindPair<ValueType, ValueType>
         >,
 
-        /// Property types, and adjacent: all optional variations
+        /// Property types: all optional variations
         OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
