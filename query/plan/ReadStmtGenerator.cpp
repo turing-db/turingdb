@@ -998,6 +998,16 @@ bool ReadStmtGenerator::tryPlaceValueHashJoin(FilterNode* filter, VarNode* node,
     const Expr* lhs = binExpr->getLHS();
     const Expr* rhs = binExpr->getRHS();
 
+    const EvaluatedType lhsType = lhs->getType();
+    const EvaluatedType rhsType = rhs->getType();
+
+    // @ref ExprAnalyzer is more liberal with types that can be compared with equality
+    // than the VHJ. Perform an additional check to ensure the types are actually
+    // joinable.
+    if (!JoinNode::joinableTypes(lhsType, rhsType)) {
+        return false;
+    }
+
     const bool isValidLhs = lhs->getKind() == Expr::Kind::SYMBOL || lhs->getKind() == Expr::Kind::PROPERTY;
     const bool isValidRhs = rhs->getKind() == Expr::Kind::SYMBOL || rhs->getKind() == Expr::Kind::PROPERTY;
     const bool isEqualityPred = binExpr->getOperator() == BinaryOperator::Equal;
