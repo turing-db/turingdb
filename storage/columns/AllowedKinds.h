@@ -533,4 +533,40 @@ struct ListableTypes {
     >;
 };
 
+struct ValueHashJoinPairs {
+    using Allowed = GenerateKindPairList<
+        // Non-optionals on ID types
+        std::tuple<
+            KindPair<NodeID, NodeID>,
+            KindPair<EdgeID, EdgeID>,
+
+            KindPair<LabelID, LabelID>,
+            KindPair<EdgeTypeID, EdgeTypeID>,
+
+            KindPair<ValueType, ValueType>
+        >,
+
+        /// Property types, and adjacent: all optional variations
+        OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
+        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
+        OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
+
+        // Occasionally need owning strings
+        OptionalKindPairs<std::string, std::string>::Pairs,
+        /// Enabled due to transparent string hashing in @ref HashJoinProcessor
+        OptionalKindPairs<std::string, std::string_view>::Pairs,
+        OptionalKindPairs<std::string_view, std::string_view>::Pairs
+    >;
+
+    using AllowedMixed = AllowedMixedList<>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnConst>(),
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
 }

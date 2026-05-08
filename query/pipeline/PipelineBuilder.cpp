@@ -69,8 +69,6 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnEdgeTypes.h"
-#include "columns/ColumnDispatcher.h"
-#include "TypeUtils.h"
 
 #include "dataframe/ColumnTag.h"
 #include "dataframe/NamedColumn.h"
@@ -165,22 +163,6 @@ void createHashJoinDataFrameShape(LocalMemory* mem,
     dest->addColumn(newNamedCol);
 }
 
-//The left and right key  need to be of the same type unless they are string/string_view
-template<typename LeftJoinKeyType,typename RightJoinKeyType>
-concept isValidHashJoinTypes =
-(std::is_same_v<LeftJoinKeyType, NodeID> ||
-std::is_same_v<LeftJoinKeyType, EdgeID> ||
-std::is_same_v<LeftJoinKeyType, LabelID> ||
-std::is_same_v<LeftJoinKeyType, EdgeTypeID> ||
-std::is_same_v<LeftJoinKeyType, PropertyTypeID> ||
-std::is_same_v<LeftJoinKeyType, ValueType> ||
-std::is_same_v<LeftJoinKeyType, int64_t> ||
-std::is_same_v<LeftJoinKeyType, uint64_t> ||
-std::is_same_v<LeftJoinKeyType, double> ||
-std::is_same_v<LeftJoinKeyType, CustomBool> ||
-std::is_same_v<LeftJoinKeyType, std::string> ||
-std::is_same_v<LeftJoinKeyType, std::string_view>) &&
-(std::is_same_v<LeftJoinKeyType,RightJoinKeyType> || Stringy<LeftJoinKeyType, RightJoinKeyType>);
 }
 
 PipelineNodeOutputInterface& PipelineBuilder::addScanNodes() {
@@ -574,60 +556,42 @@ PipelineBlockOutputInterface& PipelineBuilder::addHashJoin(PipelineOutputInterfa
     const Dataframe* rhsDf = rhs->getDataframe();
     Column* rightKeyCol = rhsDf->getColumn(rightJoinKey)->getColumn();
 
+    PipelineBlockOutputInterface* result = nullptr;
     {
+        const auto createValueHashJoin = [&]<typename T, typename U>
+            (const ColumnVector<T>*, const ColumnVector<U>*) -> void {
+            // T and U are guaranteed to be a valid VHJ combination due to the dispatcher
+            // taking @ref ValueHashJoinPairs as restrictions
 
-        if (leftKeyCol->getContainerKind() != ContainerKind::code<ColumnVector>()) {
-            throw PipelineException("Can only join on ColumnVectors");
-        }
+            auto* join = HashJoinProcessor<T, U>::create(_pipeline, leftJoinKey, rightJoinKey);
 
-        if (rightKeyCol->getContainerKind() != ContainerKind::code<ColumnVector>()) {
-            throw PipelineException("Can only join on ColumnVectors");
-        }
+            _pendingOutput.connectTo(join->leftInput());
+            rhs->connectTo(join->rightInput());
+
+            const Dataframe* leftDf = join->leftInput().getDataframe();
+            const Dataframe* rightDf = join->rightInput().getDataframe();
+
+            PipelineBlockOutputInterface& outInterface = join->output();
+            Dataframe* outDf = outInterface.getDataframe();
+
+            createHashJoinDataFrameShape(_mem, _dfMan, leftDf, rightDf, outDf,
+                                         leftJoinKey, rightJoinKey);
+
+            _pendingOutput.setInterface(&outInterface);
+
+            _lastProc = join;
+            result = &outInterface;
+        };
+
+        using Types = ValueHashJoinPairs;
+        using FunctorT = decltype(createValueHashJoin);
+        using Dispatcher = ColumnDoubleDispatcher<Types::Allowed, Types::AllowedMixed,
+                                                  FunctorT, Types::Excluded>;
+
+        Dispatcher::dispatch(leftKeyCol, rightKeyCol, createValueHashJoin);
     }
 
-    // Do the hash join connectivity and setup interfaces
-    auto setupJoin = [&](auto* join) -> PipelineBlockOutputInterface& {
-        _pendingOutput.connectTo(join->leftInput());
-        rhs->connectTo(join->rightInput());
-
-        const Dataframe* leftDf = join->leftInput().getDataframe();
-        const Dataframe* rightDf = join->rightInput().getDataframe();
-
-        PipelineBlockOutputInterface& outInterface = join->output();
-        Dataframe* outDf = outInterface.getDataframe();
-
-        createHashJoinDataFrameShape(_mem, _dfMan, leftDf, rightDf, outDf,
-                                     leftJoinKey, rightJoinKey);
-
-        _pendingOutput.setInterface(&outInterface);
-
-        _lastProc = join;
-        return outInterface;
-    };
-
-    // Create the join depending on the type combination of the keys
-    PipelineBlockOutputInterface* result = nullptr;
-
-    dispatchColumnVector(leftKeyCol, [&](auto* typedCol) {
-        using LeftJoinKeyType = typename std::decay_t<decltype(*typedCol)>::ValueType;
-        using UnwrappedLeftKey = TypeUtils::unwrap_optional_t<LeftJoinKeyType>;
-
-        dispatchColumnVector(rightKeyCol, [&](auto* rightTypedCol) {
-            using RightJoinKeyType = typename std::decay_t<decltype(*rightTypedCol)>::ValueType;
-            using UnwrappedRightKey = TypeUtils::unwrap_optional_t<RightJoinKeyType>;
-
-            if constexpr ((isValidHashJoinTypes<UnwrappedLeftKey, UnwrappedRightKey>)) {
-                auto* join = HashJoinProcessor<LeftJoinKeyType, RightJoinKeyType>::create(_pipeline,
-                                                                                          leftJoinKey,
-                                                                                          rightJoinKey);
-                result = &setupJoin(join);
-            } else {
-                throw PipelineException("Incompatible right key type for string hash join");
-            }
-        });
-    });
-
-    bioassert(result, "HashJoin Processor Result Is A Null Pointer");
+    bioassert(result, "Failed to add HashJoinProcessor.");
     return *result;
 }
 

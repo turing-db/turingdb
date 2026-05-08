@@ -709,12 +709,13 @@ bool ReadStmtGenerator::shouldPlaceValueHashJoin(VarNode* localVar, PlanGraphNod
             }
         }
         return !estimation.shouldPreferCartesian(leftLabels, rightLabels, _queryLimit);
-    } else {
-        // In the case where we have a Call procedure yield in the expression (for now
-        // this would only work if the yield item is on the rhs), we default the
-        // right side cardinality to 10
-        return !estimation.shouldPreferCartesian(leftLabels, 10, _queryLimit);
     }
+
+    // In the case where we have a Call procedure yield in the expression (for now
+    // this would only work if the yield item is on the rhs), we default the
+    // right side cardinality to 10
+    constexpr size_t naiveCardinalityEstimation = 10;
+    return !estimation.shouldPreferCartesian(leftLabels, naiveCardinalityEstimation, _queryLimit);
 }
 
 void ReadStmtGenerator::placeJoinsOnProcedures() {
