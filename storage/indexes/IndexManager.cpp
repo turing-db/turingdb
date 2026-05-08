@@ -15,6 +15,10 @@ IndexManager::IndexManager()
 }
 
 IndexManager::~IndexManager() {
+    // Delete WeakArcs to indexes before deleting the owning ArcManager
+    _nodeIndexes.clear();
+    _edgeIndexes.clear();
+
     _indexes.reset();
 }
 

@@ -36,6 +36,7 @@ VersionController::VersionController(Graph* graph)
 VersionController::~VersionController() {
     _commits.clear();
     _dataManager.reset();
+    _partMap.clear(); // Delete all WeakArc<DataPart> before deleting @ref _partManager
     _partManager.reset();
     // @ref ~IndexManager() calls reset() on its arc manager
 }
