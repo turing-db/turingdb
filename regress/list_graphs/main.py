@@ -1,6 +1,6 @@
 import turingdb
 
-t = turingdb.TuringDB(instance_id='', auth_token='', host='http://localhost:6666')
+t = turingdb.TuringDB(host='http://localhost:6666')
 
 # List an empty list of graphs
 res = t.query('LIST GRAPH')

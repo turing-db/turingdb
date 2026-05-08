@@ -69,9 +69,14 @@ if __name__ == "__main__":
     assert stop_turingdb()
 
     assert spawn_turingdb()
+    # The daemon is a fresh process; refresh the client's transport so the
+    # next query opens a new TCP connection. reconnect() resets session
+    # state (current graph etc.) — we re-establish it below.
+    client.reconnect()
 
     # Test after reload
     client.load_graph("mygraph")
+    client.set_graph("mygraph")
     res: pd.DataFrame = client.query("MATCH (n) RETURN n, n.name")
 
     if res.shape[0] != 3:

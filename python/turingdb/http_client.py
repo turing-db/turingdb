@@ -35,6 +35,14 @@ class HTTPClient:
 
         self._headers = HTTPClient.DEFAULT_HEADERS
 
+    def reconnect(self) -> None:
+        """No-op for HTTP: httpx opens a fresh TCP connection per request.
+
+        Exists for parity with BinaryClient so callers can write transport-
+        agnostic recovery code via the TuringDB facade.
+        """
+        pass
+
     def try_reach(self, timeout: int = 5):
         prev = self._client.timeout
         self._client.timeout = timeout
@@ -217,7 +225,16 @@ class HTTPClient:
 
         from .protocol import DTYPE_MAP
 
-        df = pd.DataFrame()
+        # Seed the dataframe with empty typed columns from the header so that
+        # zero-row results still carry their schema (matches the binary
+        # transport, which always emits the schema). Without this seed an
+        # empty `data` array would yield a bare pd.DataFrame() with no columns.
+        df = pd.DataFrame(
+            {
+                cname: pd.Series([], dtype=DTYPE_MAP.get(ctype, "object"))
+                for cname, ctype in zip(column_names, column_types)
+            }
+        )
 
         for chunk in json["data"]:
             df_chunk = pd.DataFrame(

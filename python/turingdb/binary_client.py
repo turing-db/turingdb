@@ -41,6 +41,26 @@ class BinaryClient:
         except RuntimeError as e:
             raise TuringDBException(str(e)) from e
 
+    def reconnect(self) -> None:
+        """Drop the current TCP socket and open a new one.
+
+        Session state (current graph, change, commit) is reset — the new
+        daemon has no memory of our previous context. Callers should re-call ``set_graph`` /
+        ``load_graph`` / ``set_change`` etc. to re-establish whatever they need.
+        """
+        if self._inner.is_connected():
+            try:
+                self._inner.disconnect()
+            except RuntimeError:
+                pass
+        self._call(self._inner.connect)
+        self._graph = "default"
+        self._change = None
+        self._commit = None
+        self._call(self._inner.set_graph_name, self._graph)
+        self._call(self._inner.clear_change_id)
+        self._call(self._inner.clear_commit_hash)
+
     # `timeout` is ignored: the binary protocol's TuringClient has no socket-timeout API yet.
     def try_reach(self, timeout: int = 5) -> None:
         self.query("LIST GRAPH")

@@ -9,6 +9,10 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/string_view.h>
+#include <nanobind/stl/optional.h>
+#include <nanobind/stl/vector.h>
 
 #include "ID.h"
 #include "metadata/PropertyType.h"
@@ -146,10 +150,17 @@ nb::object repeatValueAsList(const T& v, size_t n) {
 // Allocates a destination column for every column in incomingDf and registers
 // them with bufferedDf. ColumnConst sources have their value copied here once,
 // since constants don't get appended to row-by-row.
+//
+// The `nameStorage` parameter is owning storage for column names — the
+// ColumnTagManager (`ColumnTagManager.h:33`) only stores string_views, so we
+// need to keep the underlying bytes alive ourselves. The caller reserves
+// nameStorage to exactly the column count so subsequent push_backs can't
+// trigger reallocation and invalidate the views.
 void allocColumns(const db::Dataframe* incomingDf,
                   db::Dataframe* bufferedDf,
                   db::DataframeManager* dfMan,
-                  db::LocalMemory* localMem);
+                  db::LocalMemory* localMem,
+                  std::vector<std::string>* nameStorage);
 
 // Runtime dispatcher that appends a single column of unknown kind onto its
 // destination. Wraps copyColumnVector with a switch over the column-kind enum.
