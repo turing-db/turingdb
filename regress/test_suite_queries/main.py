@@ -24,7 +24,14 @@ def parse_result_json(json_str: str) -> pd.DataFrame:
     column_names = header["column_names"]
     column_types = header["column_types"]
 
-    df = pd.DataFrame()
+    # Seed with empty typed columns from the header so that zero-row results
+    # still carry their schema — matches the HTTP and binary client behavior.
+    df = pd.DataFrame(
+        {
+            cname: pd.Series([], dtype=DTYPE_MAP.get(ctype, "object"))
+            for cname, ctype in zip(column_names, column_types)
+        }
+    )
 
     for chunk in data["data"]:
         df_chunk = pd.DataFrame(
@@ -75,6 +82,8 @@ def main() -> None:
     tests = load_test_files(tests_dir)
     print(f"Loaded {len(tests)} tests")
 
+    transport = os.environ.get("TURINGDB_TRANSPORT", "http")
+
     passed = 0
     failed = 0
     skipped = 0
@@ -85,6 +94,10 @@ def main() -> None:
         name = test["_name"]
 
         if not test.get("enabled", True):
+            skipped += 1
+            continue
+
+        if transport == "binary" and not test.get("remote-enabled", True):
             skipped += 1
             continue
 

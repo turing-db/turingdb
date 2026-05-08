@@ -13,6 +13,7 @@ The crash occurs because:
 Expected: Once fixed, the server should return an error or skip invalid nodes.
 """
 
+import os
 import sys
 import httpx
 from turingdb import TuringDB
@@ -23,6 +24,12 @@ HOST = "http://localhost:6666"
 def main():
     print("=== get_nodes_invalid_id regression test ===")
     print()
+
+    # This test hits the server's /get_nodes HTTP endpoint directly, so it
+    # only applies to the HTTP transport.
+    if os.environ.get("TURINGDB_TRANSPORT") == "binary":
+        print("Skipping under binary transport (HTTP-specific test)")
+        sys.exit(0)
 
     # Setup: Create a graph with one node
     client = TuringDB(host=HOST)

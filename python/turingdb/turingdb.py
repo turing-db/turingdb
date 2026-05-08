@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import urllib.parse
 from typing import Literal, Optional, Union
 
@@ -17,7 +18,10 @@ class TuringDB:
     """Unified TuringDB client.
 
     Pass ``transport="http"`` (default) for the REST/HTTP client or
-    ``transport="binary"`` for the in-process binary protocol client.
+    ``transport="binary"`` for the in-process binary protocol client. If
+    ``transport`` is left unset the ``TURINGDB_TRANSPORT`` environment
+    variable picks the default (used by the regress runner to exercise both
+    transports without modifying every test).
 
     The facade exposes the methods that behave identically across both
     transports. For transport-specific functionality (e.g.
@@ -29,18 +33,19 @@ class TuringDB:
     def __init__(
         self,
         host: str = "http://localhost:6666",
-        transport: Transport = "http",
+        transport: Optional[Transport] = None,
         port: Optional[Union[int, str]] = None,
     ):
-        if transport == "http":
+        resolved = transport if transport is not None else _default_transport()
+        if resolved == "http":
             self._impl: Union[HTTPClient, BinaryClient] = HTTPClient(host=host)
-        elif transport == "binary":
+        elif resolved == "binary":
             binary_host, binary_port = _split_host_port(host, port)
             self._impl = BinaryClient(host=binary_host, port=binary_port)
         else:
-            raise TuringDBException(f"Unknown transport: {transport!r}")
+            raise TuringDBException(f"Unknown transport: {resolved!r}")
 
-        self._transport: Transport = transport
+        self._transport: Transport = resolved
 
     @property
     def transport(self) -> Transport:
@@ -87,6 +92,15 @@ class TuringDB:
     def load_graph(self, graph_name: str, raise_if_loaded: bool = True):
         return self._impl.load_graph(graph_name, raise_if_loaded=raise_if_loaded)
 
+    def reconnect(self) -> None:
+        """Refresh the underlying transport.
+
+        On the binary transport this drops the current TCP socket and opens
+        a new one, re-applying session state (graph, change, commit). Useful
+        after a daemon restart. No-op on HTTP since httpx connects per request.
+        """
+        self._impl.reconnect()
+
     def try_reach(self, timeout: int = 5) -> None:
         # The ``timeout`` argument is honored on HTTP; the binary transport ignores
         # it because the binary protocol's TuringClient has no socket-timeout API yet.
@@ -126,6 +140,17 @@ class TuringDB:
     @property
     def current_change(self) -> str:
         return self._impl.current_change
+
+
+def _default_transport() -> Transport:
+    env = os.environ.get("TURINGDB_TRANSPORT", "").strip().lower()
+    if env in ("http", "binary"):
+        return env  # type: ignore[return-value]
+    if env:
+        raise TuringDBException(
+            f"Invalid TURINGDB_TRANSPORT={env!r}; expected 'http' or 'binary'"
+        )
+    return "http"
 
 
 def _split_host_port(host: str, port: Optional[Union[int, str]]) -> tuple[str, str]:

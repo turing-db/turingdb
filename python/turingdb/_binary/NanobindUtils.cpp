@@ -29,12 +29,18 @@ namespace pybindings {
 void allocColumns(const db::Dataframe* incomingDf,
                   db::Dataframe* bufferedDf,
                   db::DataframeManager* dfMan,
-                  db::LocalMemory* localMem) {
-    for (const db::NamedColumn* namedCol : incomingDf->cols()) {
+                  db::LocalMemory* localMem,
+                  std::vector<std::string>* nameStorage) {
+    const auto& srcCols = incomingDf->cols();
+    nameStorage->reserve(srcCols.size());
+    for (const db::NamedColumn* namedCol : srcCols) {
         const db::Column* srcCol = namedCol->getColumn();
         db::Column* newCol = localMem->allocSame(srcCol);
         db::NamedColumn* newNamedCol = db::NamedColumn::create(dfMan, newCol, dfMan->allocTag());
-        newNamedCol->rename(namedCol->getName());
+        // Copy the name into our own storage; the source view points into the
+        // chunk buffer which is reused for subsequent chunks.
+        nameStorage->emplace_back(namedCol->getName());
+        newNamedCol->rename(nameStorage->back());
         bufferedDf->addColumn(newNamedCol);
 
         // We just need to copy the value over at alloc time for constants
@@ -135,9 +141,12 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 break;
             }
             case db::ColumnVector<db::PropertyTypeID>::staticKind(): {
+                // Widen to uint64 and report as "UInt64" so the HTTP path's
+                // numeric dtype matches; a bespoke "PropertyTypeID" name would
+                // fall through DTYPE_MAP to object dtype on the Python side.
                 const auto& src = static_cast<const db::ColumnVector<db::PropertyTypeID>*>(col)->getRaw();
-                value = transformVectorAsNdarray<uint16_t>(src, [](const db::PropertyTypeID& v) { return v.getValue(); });
-                dtypeName = "PropertyTypeID";
+                value = transformVectorAsNdarray<uint64_t>(src, [](const db::PropertyTypeID& v) { return v.getValue(); });
+                dtypeName = "UInt64";
                 break;
             }
             case db::ColumnVector<db::LabelID>::staticKind(): {
@@ -147,9 +156,12 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 break;
             }
             case db::ColumnVector<db::LabelSetID>::staticKind(): {
+                // Widen to uint64 and report as "UInt64" so the HTTP path's
+                // numeric dtype matches; a bespoke "LabelSetID" name would
+                // fall through DTYPE_MAP to object dtype on the Python side.
                 const auto& src = static_cast<const db::ColumnVector<db::LabelSetID>*>(col)->getRaw();
-                value = transformVectorAsNdarray<uint32_t>(src, [](const db::LabelSetID& v) { return v.getValue(); });
-                dtypeName = "LabelSetID";
+                value = transformVectorAsNdarray<uint64_t>(src, [](const db::LabelSetID& v) { return v.getValue(); });
+                dtypeName = "UInt64";
                 break;
             }
             case db::ColumnVector<db::ChangeID>::staticKind(): {
@@ -159,9 +171,15 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 break;
             }
             case db::ColumnVector<db::ValueType>::staticKind(): {
+                // Surface ValueType columns as their string names ("Int64", "String", …) so
+                // they match the HTTP path, which serializes them as strings server-side.
                 const auto& src = static_cast<const db::ColumnVector<db::ValueType>*>(col)->getRaw();
-                value = transformVectorAsNdarray<uint8_t>(src, [](db::ValueType v) -> uint8_t { return static_cast<uint8_t>(v); });
-                dtypeName = "ValueType";
+                nb::list lst;
+                for (db::ValueType v : src) {
+                    lst.append(nb::cast(std::string(db::ValueTypeName::value(v))));
+                }
+                value = lst;
+                dtypeName = "String";
                 break;
             }
             case db::ColumnVector<db::types::Embedding::Primitive>::staticKind(): {

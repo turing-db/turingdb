@@ -11,6 +11,7 @@ Valid JSON escapes are: \\" \\\\ \\/ \\b \\f \\n \\r \\t \\uXXXX
 """
 
 import json
+import os
 import subprocess
 import sys
 import httpx
@@ -23,6 +24,13 @@ GRAPH = "json_escape_test"
 def main():
     print("=== json_escape_properties regression test ===")
     print()
+
+    # This test inspects the server's raw HTTP JSON response, so it only
+    # applies to the HTTP transport. Under the binary transport the server
+    # speaks a different wire protocol on the same port.
+    if os.environ.get("TURINGDB_TRANSPORT") == "binary":
+        print("Skipping under binary transport (HTTP-specific test)")
+        sys.exit(0)
 
     client = TuringDB(host=HOST)
 

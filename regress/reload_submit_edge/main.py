@@ -13,6 +13,9 @@ def wait_until_reachable(client: turingdb.TuringDB, timeout_s: float = 10.0) -> 
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         try:
+            # Drop any stale socket left over from a previous daemon and
+            # open a fresh one. No-op on the HTTP transport.
+            client.reconnect()
             client.try_reach()
             return
         except Exception:
@@ -32,7 +35,7 @@ def load_graph(client: turingdb.TuringDB) -> None:
 
 
 def main() -> None:
-    client = turingdb.TuringDB(instance_id="", auth_token="", host=HOST)
+    client = turingdb.TuringDB(host=HOST)
     wait_until_reachable(client)
 
     print("1. Create graph")

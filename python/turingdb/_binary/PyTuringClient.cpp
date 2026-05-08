@@ -35,12 +35,14 @@ void PyTuringClient::setCommitHash(const std::string& s) {
 nb::dict PyTuringClient::query(const std::string& cypher) {
     db::DataframeManager dfMan;
     db::Dataframe bufferedDf;
+    // Owning storage for column names — see allocColumns docs.
+    std::vector<std::string> nameStorage;
     bool columnsAlloced = false;
     db::LocalMemory* localMem = _localMem.get();
 
-    const auto cb = [&bufferedDf, &columnsAlloced, &dfMan, localMem](const db::Dataframe* df) {
+    const auto cb = [&bufferedDf, &nameStorage, &columnsAlloced, &dfMan, localMem](const db::Dataframe* df) {
         if (!columnsAlloced) {
-            allocColumns(df, &bufferedDf, &dfMan, localMem);
+            allocColumns(df, &bufferedDf, &dfMan, localMem, &nameStorage);
             columnsAlloced = true;
         }
         appendDfs(df, &bufferedDf);
@@ -48,7 +50,9 @@ nb::dict PyTuringClient::query(const std::string& cypher) {
 
     const db::QueryStatus status = _client->sendQuery(cypher, cb);
     if (!status.isOk()) {
-        throw TuringException("Query error: " + status.getError());
+        // Format errors as "<STATUS>: <message>" (e.g. "EXEC_ERROR: ...") to match
+        // the HTTP transport, which prefixes server errors with the status enum name.
+        throw TuringException(std::string(db::QueryStatusDescription::value(status.getStatus())) + ": " + status.getError());
     }
 
     nb::dict envelope = dataframeToNumpy(&bufferedDf);

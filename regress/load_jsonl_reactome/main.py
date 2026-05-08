@@ -89,9 +89,7 @@ def main() -> None:
     ensure_reactome(dest_path)
 
     # Connect to the running turingdb instance
-    client = turingdb.TuringDB(
-        instance_id="", auth_token="", host="http://localhost:6666"
-    )
+    client = turingdb.TuringDB(host="http://localhost:6666")
     client.try_reach()
     print("Connected to TuringDB")
 
