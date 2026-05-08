@@ -47,7 +47,7 @@ ENV TURINGDB_VIS_URL=http://127.0.0.1:3000
 COPY run_visualizer.sh /usr/local/bin/run_visualizer.sh
 RUN chmod +x /usr/local/bin/run_visualizer.sh
 
-EXPOSE 6666 3000
+EXPOSE 6666 8080
 
 USER ubuntu
 WORKDIR /home/ubuntu
