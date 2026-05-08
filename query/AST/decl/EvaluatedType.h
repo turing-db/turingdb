@@ -87,6 +87,7 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
 
 // Evaluated Type to ValueType conversion
 static constexpr size_t VALUE_TYPE_COUNT = std::to_underlying(ValueType::_SIZE);
+static_assert(VALUE_TYPE_COUNT == 7, "ValueType added: please update below map.");
 
 static constexpr std::pair<ValueType, EvaluatedType> EVConversions[VALUE_TYPE_COUNT + 1] = {
     {ValueType::Int64,     EvaluatedType::Integer  },
