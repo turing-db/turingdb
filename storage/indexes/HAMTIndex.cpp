@@ -40,9 +40,11 @@ const V* HAMTIndex<K, V, Hash>::find(const K& key) const {
 
     const size_t hashcode = _hasher(key);
 
-    size_t depth = 0;
+    ssize_t depth = -1;
     while (node) {
+        depth++;
         const size_t hashChunk = getDepthHash(hashcode, depth);
+
         const bool isLeaf = node->getKind() == HAMTIndexNode::Kind::LEAF;
 
         if (isLeaf) {
@@ -72,7 +74,6 @@ const V* HAMTIndex<K, V, Hash>::find(const K& key) const {
 
         const HAMTInnerNode::Children& chldrn = inner->children();
         node = chldrn[chldrnLesserCount].get();
-        depth++;
     }
 
     return nullptr;
@@ -84,9 +85,11 @@ void HAMTIndex<K, V, Hash>::exhaustiveMutInsert(const K& key, const V& value) {
 
     const HashCode hashcode = _hasher(key);
 
-    size_t depth {0};
+    ssize_t depth = -1;
     while (node) {
+        depth++;
         const HashCode hashChunk = getDepthHash(hashcode, depth);
+
         const bool isLeaf = node->getKind() == HAMTIndexNode::Kind::LEAF;
         const bool atMaxDepth = depth == _chunksPerHash;
 
@@ -112,7 +115,6 @@ void HAMTIndex<K, V, Hash>::exhaustiveMutInsert(const K& key, const V& value) {
         if (exists) {
             HAMTInnerNode::Children& chldrn = inner->_children;
             node = chldrn[chldrnLesserCount].get();
-            depth++;
             continue;
         }
 
@@ -146,7 +148,6 @@ void HAMTIndex<K, V, Hash>::exhaustiveMutInsert(const K& key, const V& value) {
             inner->_mask |= bitIndex;
         }
 
-        depth++;
         node = rc.get();
     }
 }
