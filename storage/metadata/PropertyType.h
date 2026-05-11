@@ -35,7 +35,7 @@ using ValueTypeName = EnumToString<ValueType>::Create<
 
 struct CustomBool {
     CustomBool() = default;
-    CustomBool(bool v)
+    constexpr CustomBool(bool v)
         : _boolean(v)
     {
     }
