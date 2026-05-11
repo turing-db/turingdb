@@ -68,7 +68,7 @@ public:
 
     size_t size() const final;
 
-    bool isNodeIndex() const final { return _isNode; }
+    consteval bool isNodeIndex() const final { return _isNode; }
 
 private:
     PropertyTypeID _propID;

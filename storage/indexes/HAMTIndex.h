@@ -1,5 +1,7 @@
 #pragma once
 
+#include <type_traits>
+
 #include "Index.h"
 
 #include "HAMTIndexManager.h"
@@ -14,6 +16,8 @@ class Column;
 template <typename K, typename V, typename Hash = std::hash<K>>
 class HAMTIndex final : public Index {
 public:
+    using HashCode = std::invoke_result_t<Hash, K>;
+
     HAMTIndex(std::string_view name, HAMTManager* man, PropertyTypeID pid)
         : Index(name),
         _man(man),
@@ -35,9 +39,9 @@ public:
 
     size_t size() const final;
 
-    PropertyTypeID property() const final;
+    PropertyTypeID property() const final { return _propID; }
 
-    consteval bool isNodeIndex() const final;
+    consteval bool isNodeIndex() const final { return _isNode; }
 
     /**
      * @brief Inserts a value into the hash tree, without preserving immutable copies of
@@ -76,4 +80,5 @@ private:
     static_assert(sizeof(size_t) == 8, "Chunking assumption violated.");
     static_assert(_isNode or std::is_same_v<V, EdgeID>, "Non-entity ID index.");
 };
+
 }
