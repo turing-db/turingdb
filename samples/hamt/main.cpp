@@ -20,9 +20,10 @@ int main() {
         std::string_view key {"my string"};
         NodeID val {101};
 
-        index.mutableInsert(key, val);
+        index.exhaustiveMutInsert(key, val);
 
         const NodeID* n = index.find(key);
+        bioassert(n, "find {} failed", key);
 
         spdlog::info("{}", n->getValue());
     }
@@ -31,9 +32,10 @@ int main() {
         std::string_view key {"my other string"};
         NodeID val {333};
 
-        index.mutableInsert(key, val);
+        index.exhaustiveMutInsert(key, val);
 
         const NodeID* n = index.find(key);
+        bioassert(n, "find {} failed", key);
 
         spdlog::info("{}", n->getValue());
     }
@@ -42,9 +44,10 @@ int main() {
         std::string_view key {"my third string"};
         NodeID val {8333333333333333333};
 
-        index.mutableInsert(key, val);
+        index.exhaustiveMutInsert(key, val);
 
         const NodeID* n = index.find(key);
+        bioassert(n, "find {} failed", key);
 
         spdlog::info("{}", n->getValue());
     }

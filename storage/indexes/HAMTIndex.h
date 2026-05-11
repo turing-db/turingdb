@@ -51,6 +51,8 @@ public:
     void mutableInsert(const K& key, const V& value);
     const V* find(const K& key) const;
 
+    void exhaustiveMutInsert(const K& key, const V& value);
+
 private:
     WeakArc<HAMTIndexNode> _root;
 

@@ -113,7 +113,7 @@ void HAMTIndex<K, V, Hash>::mutInsFrom(HAMTIndexNode* from, size_t depth, const 
     const auto& [oldKey, oldValue] = oldLeaf->_values.front();
 
     WeakArc<HAMTIndexNode> rc = _man->newInner();
-    auto* replacementInner = rc->as<HAMTInnerNode>();
+    [[maybe_unused]] auto* replacementInner = rc->as<HAMTInnerNode>();
 
     // Replace the leaf with the new inner node
     inner->_children[chldrnLesserCount] = rc;
@@ -258,6 +258,79 @@ const V* HAMTIndex<K, V, Hash>::find(const K& key) const {
     }
 
     return nullptr;
+}
+
+template <typename K, typename V, typename Hash>
+void HAMTIndex<K, V, Hash>::exhaustiveMutInsert(const K& key, const V& value) {
+    HAMTIndexNode* node = _root.get();
+
+    const HashCode hashcode = _hasher(key);
+
+    size_t depth {0};
+    while (node) {
+        const HashCode hashChunk = getDepthHash(hashcode, depth);
+        const bool isLeaf = node->getKind() == HAMTIndexNode::Kind::LEAF;
+        const bool atMaxDepth = depth == _chunksPerHash;
+
+        if (isLeaf) {
+            bioassert(atMaxDepth, "Reached non-max-depth leaf.");
+
+            auto* leaf = node->as<HAMTLeaf<K, V>>();
+            leaf->emplace_back(key, value);
+            return;
+        }
+
+        // If this is not a leaf, we need to traverse the tree deeper
+        auto* inner = node->as<HAMTInnerNode>();
+
+        const HAMTInnerNode::ChildBitmask childMask = inner->mask();
+        const uint64_t bitIndex = 1UL << hashChunk;
+        const bool exists = (bitIndex & childMask) != 0;
+
+        const uint64_t chldrnBelowMask = bitIndex - 1;
+        const uint64_t chldrnLesser = childMask & chldrnBelowMask;
+        const uint8_t chldrnLesserCount = std::popcount(chldrnLesser);
+
+        if (exists) {
+            HAMTInnerNode::Children& chldrn = inner->_children;
+            node = chldrn[chldrnLesserCount].get();
+            depth++;
+            continue;
+        }
+
+        const bool penultimateDepth = depth == _chunksPerHash - 1;
+
+        // Create a leaf
+        if (penultimateDepth) {
+            // Doesn't exist: add this child as a leaf
+            WeakArc<HAMTIndexNode> rc = _man->newLeaf<K, V>();
+
+            { // Store the value for the inserted entry
+                auto* leaf = rc->as<HAMTLeaf<K, V>>();
+                leaf->emplace_back(key, value);
+            }
+
+            { // Update parent's child array and child bitmask
+                const auto after = inner->_children.begin() + chldrnLesserCount;
+                inner->_children.insert(after, rc);
+                inner->_mask |= bitIndex;
+            }
+
+            return;
+        }
+
+        // Otherwise create a new inner node and recurse
+        WeakArc<HAMTIndexNode> rc = _man->newInner();
+
+        { // Update parent's child array and child bitmask
+            const auto after = inner->_children.begin() + chldrnLesserCount;
+            inner->_children.insert(after, rc);
+            inner->_mask |= bitIndex;
+        }
+
+        depth++;
+        node = rc.get();
+    }
 }
 
 namespace db {
