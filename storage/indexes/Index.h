@@ -49,7 +49,7 @@ public:
 
     virtual size_t size() const = 0;
     virtual PropertyTypeID property() const = 0;
-    virtual bool isNodeIndex() const = 0;
+    virtual consteval bool isNodeIndex() const = 0;
 
     std::string_view name() const { return _name; }
 
