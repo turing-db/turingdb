@@ -14,6 +14,7 @@ using namespace db;
 template <typename K, typename V, typename Hash>
 void HAMTIndex<K, V, Hash>::init(GraphView view) {
     _root = _man->newInner();
+    // TODO: Use @param view to mutable insert all relevant kv-pairs
 }
 
 template <typename K, typename V, typename Hash>
@@ -94,7 +95,6 @@ void HAMTIndex<K, V, Hash>::mutInsFrom(HAMTIndexNode* from, size_t depth, const 
     const bool isLeaf = node->getKind() == HAMTIndexNode::Kind::LEAF;
 
     if (!isLeaf) {
-        // FIXME: return the inserted value to update @ref inner 's child array + bitmask
         mutInsFrom(node.get(), depth + 1, key, value);
         return;
     }
@@ -105,8 +105,36 @@ void HAMTIndex<K, V, Hash>::mutInsFrom(HAMTIndexNode* from, size_t depth, const 
     auto* oldLeaf = node->as<HAMTLeaf<K, V>>();
     bioassert(oldLeaf, "Failed to get old leaf.");
 
+    // If we have not reached the max depth, this should be the first time the
+    // prefix of the hash causes a collision, i.e. there should only be a
+    // single value in the leaf kv-pair storage.
+    bioassert(oldLeaf->_values.size() == 1, "Leaf conflict should be singleton.");
+    // Get the existing kv-pair, to reinsert into the new leaf
+    const auto& [oldKey, oldValue] = oldLeaf->_values.front();
+
     WeakArc<HAMTIndexNode> rc = _man->newInner();
-    [[maybe_unused]] auto* replacementNode = rc->as<HAMTInnerNode>();
+    auto* replacementInner = rc->as<HAMTInnerNode>();
+
+    // Replace the leaf with the new inner node
+    inner->_children[chldrnLesserCount] = rc;
+
+    bioassert(depth + 1 <= _chunksPerHash, "Invalid depth {}.", depth + 1);
+    // Get the hash chunk for the next level of the tree, so we know where to insert the
+    // previous leaf in the replacement inner node's child array.
+    const HashCode oldKeyHash = _hasher(oldKey);
+    const HashCode oldKeyNextDepthHashChunk = getDepthHash(oldKeyHash, depth + 1);
+
+    const HashCode newKeyNextDepthHashChunk = getDepthHash(hashcode, depth + 1);
+
+    const bool sameChunk = oldKeyNextDepthHashChunk == newKeyNextDepthHashChunk;
+    if (sameChunk) {
+        // FIXME: Implement some resolution
+        throw FatalException("Hash collision on 1-chunk lookahead");
+    }
+
+    // Leaf to store the kv-pair to insert
+    // FIXME: What if the leaf to store the new kv-pair is the same as @ref oldLeaf?
+    WeakArc<HAMTIndexNode> newLeaf = _man->newLeaf<K, V>();
 }
 
 template <typename K, typename V, typename Hash>
