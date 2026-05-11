@@ -21,6 +21,10 @@ namespace {
 struct TuringEqual;
 struct TuringNotEqual;
 
+// Static storage duration sentinals to avoid reconstructing each iteration
+static constexpr CustomBool sentinalFalse(false);
+static constexpr CustomBool sentinalTrue(true);
+
 template <typename T>
 concept BooleanOpt = std::same_as<TypeUtils::unwrap_optional_t<T>, types::Bool::Primitive>
                   || std::same_as<ColumnMask::Bool_t, T>;
@@ -34,10 +38,10 @@ concept TestsEquality =
 // short-circuiting) so are defined explicitly rather than generically
 template <BooleanOpt T, BooleanOpt U>
 inline std::optional<bool> optionalOr(const T& a, const U& b) {
-    if (a == CustomBool {true} || b == CustomBool {true}) {
+    if (a == sentinalTrue || b == sentinalTrue) {
         return true;
     }
-    if (a == CustomBool {false} && b == CustomBool {false}) {
+    if (a == sentinalFalse && b == sentinalFalse) {
         return false;
     }
     return std::nullopt;
@@ -45,10 +49,10 @@ inline std::optional<bool> optionalOr(const T& a, const U& b) {
 
 template <BooleanOpt T, BooleanOpt U>
 inline std::optional<bool> optionalAnd(const T& a, const U& b) {
-    if (a == CustomBool {true} && b == CustomBool {true}) {
+    if (a == sentinalTrue && b == sentinalTrue) {
         return true;
     }
-    if (a == CustomBool {false} || b == CustomBool {false}) {
+    if (a == sentinalFalse || b == sentinalFalse) {
         return false;
     }
     return std::nullopt;
