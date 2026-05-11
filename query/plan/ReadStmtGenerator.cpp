@@ -801,14 +801,18 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
         return ends[0];
     }
 
-    // Step 2: Generate all joins
+    // Step 2: Generate all common ancestor joins
     // Algorithm:
-    // - Pick the first endpoint (= rhs)
-    // - For each other endpoint (= lhs):
+    // - for each endpoint (= rhs)
+    // - loop through all the other endpoints (= lhs):
     //     - Find the shortest path between the lhs and rhs
     //     - If the path is undirected, JOIN the two endpoints
-    //     - If no path is found, CARTESIAN_PRODUCT the two endpoints
-    //     - rhs becomes the join node
+    //          - rhs becomes the join node
+    //          - mark the lhs node index as being part of common ancestor join so we can
+    //              skip the index in any future iterations.
+    //     - If no path is found, continue onto the next valid node
+    //     - At the end of a full iteration add the rhs node to a set of disconnected
+    //       leaf nodes. These will all be cartesian producted together in the end.
     /*       A              A              A
      *      / \            / \            / \
      *     B   C          B   C          B   C
@@ -821,50 +825,92 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
      *                                      \ /
      *                                      [u]   */
 
-    PlanGraphNode* rhsNode = ends[0];
+    std::vector<bool> hasBeenJoined(ends.size(), false);
+    std::vector<PlanGraphNode*> disconnectedLeaves;
 
-    for (size_t i = 1; i < ends.size(); i++) {
-        PlanGraphNode* lhsNode = ends[i];
-
-        const auto [path, ancestorNode] = _topology->getShortestPath(rhsNode, lhsNode);
-
-        switch (path) {
-            case PlanGraphTopology::PathToDependency::SameVar:
-            case PlanGraphTopology::PathToDependency::BackwardPath: {
-                // Should not happen
-                throwError("Unknown error. A branch cannot have two endpoints.");
-            } break;
-
-            case PlanGraphTopology::PathToDependency::UndirectedPath: {
-                // Join
-                if (lhsNode->getOpcode() == PlanGraphOpcode::SHORTEST_PATH ||
-                    rhsNode->getOpcode() == PlanGraphOpcode::SHORTEST_PATH) {
-                    throwError("Common Ancestor Joins With Shortest Path Unsupported");
-                }
-
-                const auto* varDecl = static_cast<VarNode*>(ancestorNode)->getVarDecl();
-                JoinNode* join = _tree->create<JoinNode>(varDecl,
-                                                         varDecl,
-                                                         JoinType::COMMON_ANCESTOR);
-                rhsNode->connectOut(join);
-                lhsNode->connectOut(join);
-
-                rhsNode = join;
-            } break;
-            case PlanGraphTopology::PathToDependency::NoPath: {
-                // Cartesian product
-                CartesianProductNode* join = _tree->create<CartesianProductNode>();
-                rhsNode->connectOut(join);
-                lhsNode->connectOut(join);
-
-                rhsNode = join;
-            } break;
+    for (size_t i = 0; i < ends.size(); i++) {
+        if (hasBeenJoined[i]) {
+            continue;
         }
+        PlanGraphNode* rhsNode = ends[i];
+        for (size_t j = i + 1; j < ends.size(); j++) {
+            if (hasBeenJoined[j]) {
+                continue;
+            }
+
+            PlanGraphNode* lhsNode = ends[j];
+
+            const auto [path, ancestorNode] = _topology->getShortestPath(rhsNode, lhsNode);
+
+            switch (path) {
+                case PlanGraphTopology::PathToDependency::SameVar:
+                case PlanGraphTopology::PathToDependency::BackwardPath: {
+                    // Should not happen
+                    throwError("Unknown error. A branch cannot have two endpoints.");
+                } break;
+
+                case PlanGraphTopology::PathToDependency::UndirectedPath: {
+                    // Join
+                    if (lhsNode->getOpcode() == PlanGraphOpcode::SHORTEST_PATH || rhsNode->getOpcode() == PlanGraphOpcode::SHORTEST_PATH) {
+                        throwError("Common Ancestor Joins With Shortest Path Unsupported");
+                    }
+
+                    const auto* varDecl = static_cast<VarNode*>(ancestorNode)->getVarDecl();
+                    JoinNode* join = _tree->create<JoinNode>(varDecl,
+                                                             varDecl,
+                                                             JoinType::COMMON_ANCESTOR);
+                    rhsNode->connectOut(join);
+                    lhsNode->connectOut(join);
+
+                    rhsNode = join;
+
+                    // Mark the indices as false so we don't use it again
+                    hasBeenJoined[i] = true;
+                    hasBeenJoined[j] = true;
+                } break;
+                case PlanGraphTopology::PathToDependency::NoPath: {
+                    // Do nothing as we should connect cartesian products after we connect
+                    // all the possible common ancestor joins.
+                    continue;
+                } break;
+            }
+        }
+        disconnectedLeaves.emplace_back(rhsNode);
+    }
+
+    /*
+     * Step 3 - Cartesian Product all the left over leaf nodes (with each node belonging
+     *          to a disjoint tree)
+
+                 A                  A
+                / \                / \
+               B   C              B   C
+              /     \            /     \
+             D       F          D       F
+              \     / \          \     / \
+               H   I   J ->       H   I   J
+                \   \ /            \   \ /
+                 \  [u]             \  [u]
+                  \ /                \ /
+          Z       [u]        Z       [u]
+                              \     /
+                               \   /
+                                \ /
+                                [x]
+    */
+
+    PlanGraphNode* finalNode = disconnectedLeaves[0];
+    for (size_t i = 1; i < disconnectedLeaves.size(); ++i) {
+        CartesianProductNode* cartesianNode = _tree->create<CartesianProductNode>();
+        finalNode->connectOut(cartesianNode);
+        disconnectedLeaves[i]->connectOut(cartesianNode);
+
+        finalNode = cartesianNode;
     }
 
     // From here, there is only one endpoint remaining which can be connected
     // to the next stage of the query pipeline
-    return rhsNode;
+    return finalNode;
 }
 
 void ReadStmtGenerator::insertShortestPathNode(VarNode* source,
