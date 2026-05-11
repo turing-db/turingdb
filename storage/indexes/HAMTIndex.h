@@ -72,7 +72,7 @@ private:
     /// Mask of 0b1111 for the initial chunk mask
     static constexpr size_t _chunkMask = (1UL << (_hashChunkSize)) - 1;
 
-    size_t getDepthHash(size_t hashcode, size_t depth) {
+    static size_t getDepthHash(size_t hashcode, size_t depth) {
         return (hashcode >> depth * _hashChunkSize) & _chunkMask;
     }
 

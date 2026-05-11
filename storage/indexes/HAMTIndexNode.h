@@ -27,6 +27,11 @@ public:
     virtual constexpr Kind getKind() const = 0;
 
     template <typename T>
+    const T* as() const {
+        return dynamic_cast<const T*>(this);
+    }
+
+    template <typename T>
     T* as() {
         return dynamic_cast<T*>(this);
     }

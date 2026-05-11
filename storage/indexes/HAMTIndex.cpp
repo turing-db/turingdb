@@ -216,18 +216,17 @@ void HAMTIndex<K, V, Hash>::mutableInsert(const K& key, const V& value) {
 
 template <typename K, typename V, typename Hash>
 const V* HAMTIndex<K, V, Hash>::find(const K& key) const {
-    const HAMTIndexNode* cnode = _root.get();
-    HAMTIndexNode* node = const_cast<HAMTIndexNode*>(cnode);
+    const HAMTIndexNode* node = _root.get();
 
     const size_t hashcode = _hasher(key);
-    size_t hashChunk = hashcode & _chunkMask;
 
     size_t depth = 0;
     while (node) {
+        const size_t hashChunk = getDepthHash(hashcode, depth);
         const bool isLeaf = node->getKind() == HAMTIndexNode::Kind::LEAF;
 
         if (isLeaf) {
-            auto* leaf = node->as<HAMTLeaf<K, V>>();
+            const auto* leaf = node->as<const HAMTLeaf<K, V>>();
             auto& pairs = leaf->_values;
             for (const auto& [k, v] : pairs) {
                 if (k == key) {
@@ -237,7 +236,7 @@ const V* HAMTIndex<K, V, Hash>::find(const K& key) const {
             return nullptr;
         }
 
-        auto* inner = node->as<HAMTInnerNode>();
+        const auto* inner = node->as<HAMTInnerNode>();
 
         const HAMTInnerNode::ChildBitmask childMask = inner->mask();
         const size_t bitIndex = 1UL << hashChunk;
@@ -251,10 +250,9 @@ const V* HAMTIndex<K, V, Hash>::find(const K& key) const {
         const size_t chldrnLesser = childMask & chldrnBelowMask;
         const size_t chldrnLesserCount = std::popcount(chldrnLesser);
 
-        HAMTInnerNode::Children& chldrn = inner->_children;
+        const HAMTInnerNode::Children& chldrn = inner->children();
         node = chldrn[chldrnLesserCount].get();
         depth++;
-        hashChunk = (hashcode >> depth * _hashChunkSize) & _chunkMask;
     }
 
     return nullptr;

@@ -1,9 +1,8 @@
-#include "indexes/HAMTIndex.h"
-
 #include <string_view>
 
 #include <spdlog/spdlog.h>
 
+#include "indexes/HAMTIndex.h"
 #include "indexes/HAMTIndexManager.h"
 
 using namespace db;
