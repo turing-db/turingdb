@@ -32,68 +32,80 @@ PlanGraphTopology::PathInfo PlanGraphTopology::getShortestPath(PlanGraphNode* or
     }
 
     // Step 1. Setup algorithm containers
-    std::queue<std::tuple<PlanGraphNode*, PathToDependency, PlanGraphNode*>> q;
+    std::queue<std::tuple<PlanGraphNode*, PathToDependency, PlanGraphNode*, SearchDirection>> q;
     _visited.reset(_tree->size());
 
     bool foundUndirected = false;
     PlanGraphNode* undirectedAncestor = nullptr;
 
-    // Step 2. Add the origin to the queue
-    q.emplace(origin, PathToDependency::BackwardPath, nullptr);
+    // Step 2: Add the origin node and traversal direction to the queue.
+    // Currently, the algorithm only performs backward path searches, so we begin by traversing input dependencies.
+    q.emplace(origin, PathToDependency::BackwardPath, nullptr, SearchDirection::Inputs);
     _visited.visit(origin);
 
-    // Step 3. BFS exploring both inputs (backward) and outputs (undirected)
+    // Step 3. BFS exploring search direction that has been popped from the queue
     while (!q.empty()) {
-        auto [node, path, commonAncestor] = q.front();
+        auto [node, path, commonAncestor, dir] = q.front();
         q.pop();
 
-        for (const auto& in : node->inputs()) {
-            if (in == target) {
-                if (path == PathToDependency::BackwardPath) {
-                    return {PathToDependency::BackwardPath, commonAncestor};
+        if (dir == SearchDirection::Inputs) {
+            for (const auto& in : node->inputs()) {
+                if (in == target) {
+                    // return backward path immediately
+                    if (path == PathToDependency::BackwardPath) {
+                        return {PathToDependency::BackwardPath, commonAncestor};
+                    }
+
+                    // If we have found an undirected path save it incase we find
+                    // a backward path to the target instead
+                    if (!foundUndirected) {
+                        foundUndirected = true;
+                        undirectedAncestor = commonAncestor;
+                    }
+                    continue;
                 }
 
-                if (!foundUndirected) {
-                    foundUndirected = true;
-                    undirectedAncestor = commonAncestor;
+                if (_visited.visited(in)) {
+                    continue;
                 }
-                continue;
-            }
 
-            if (_visited.visited(in)) {
-                continue;
-            }
+                q.emplace(in, path, commonAncestor, dir);
 
-            q.emplace(in, path, commonAncestor);
-            _visited.visit(in);
-        }
-
-        for (const auto& out : node->outputs()) {
-            if (out == target) {
-                if (!foundUndirected) {
-                    foundUndirected = true;
-                    undirectedAncestor = commonAncestor ? commonAncestor : node;
+                // Switch search directions if no common ancestor exists (i.e. the nodes are not connected by an undirected path).
+                // Shortest-path join resolution assumes the search direction changes at most once.
+                // The current node in the directed search path becomes the common ancestor of the undirected path.
+                if (!commonAncestor) {
+                    q.emplace(in, PathToDependency::UndirectedPath, in, SearchDirection::Outputs);
                 }
-                continue;
-            }
 
-            if (_visited.visited(out)) {
-                continue;
+                _visited.visit(in);
             }
+        } else if (dir == SearchDirection::Outputs) {
 
-            // If the commonAncestor is not null that means we are already exploring
-            // an undirected path and pass continue to pass the same
-            // common ancestor node
-            if (commonAncestor != nullptr) {
-                q.emplace(out, PathToDependency::UndirectedPath, commonAncestor);
-            } else {
-                q.emplace(out, PathToDependency::UndirectedPath, node);
+            for (const auto& out : node->outputs()) {
+                if (out == target) {
+                    if (!foundUndirected) {
+                        foundUndirected = true;
+                        undirectedAncestor = commonAncestor ? commonAncestor : node;
+                    }
+                    continue;
+                }
+
+                if (_visited.visited(out)) {
+                    continue;
+                }
+
+                q.emplace(out, path, commonAncestor, dir);
+                if (!commonAncestor) {
+                    q.emplace(out, PathToDependency::UndirectedPath, out, SearchDirection::Inputs);
+                }
+
+                _visited.visit(out);
             }
-
-            _visited.visit(out);
         }
     }
 
+    // Return the undirected path we saved earlier.
     if (foundUndirected) {
         return {PathToDependency::UndirectedPath, undirectedAncestor};
     }

@@ -15,6 +15,11 @@ public:
     PlanGraphTopology(const PlanGraph* tree);
     ~PlanGraphTopology();
 
+    enum class SearchDirection {
+        Inputs,
+        Outputs,
+    };
+
     enum class PathToDependency {
         SameVar,
         BackwardPath,
