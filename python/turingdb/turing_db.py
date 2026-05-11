@@ -7,32 +7,34 @@ from pandas import DataFrame
 
 from ._cypher_helpers import CypherHelpersMixin
 from .exceptions import TuringDBException
-from .s3 import S3Client
 
 
-class BinaryClient(CypherHelpersMixin):
-    """Pythonic wrapper over the nanobind TuringDB Binary Protocol client.
+class TuringDB(CypherHelpersMixin):
+    """In-process TuringDB engine.
 
-    Returns query results as pandas.DataFrame. The underlying protocol streams
-    one or more chunks per query; chunks are buffered into a single dataframe
-    on the C++ side and returned as a dict of numpy arrays / lists.
+    Runs the database in the caller's process — no daemon, no sockets.
+    State (graph, change, commit) accumulates on the client between
+    ``query()`` calls, mirroring the network client shape so code can move
+    between :class:`turingdb.TuringClient` and this class with the same
+    method calls.
+
+    If ``data_dir`` is omitted the engine uses the C++ default of
+    ``$HOME/.turing``.
     """
 
-    def __init__(self, host: str = "localhost", port: int | str = 6666):
-        # Deferred import: the compiled .so may be absent on systems that only
-        # use the HTTP transport, in which case the facade should still load.
-        from ._binary import TuringProtoClient as _Client
+    def __init__(self, data_dir: Optional[str] = None):
+        # Deferred import: the compiled .so may be absent on environments
+        # that ship only the network clients.
+        from ._local import PyTuringDB as _Engine
 
-        self._inner = _Client(host, str(port))
+        self._inner = _Engine() if data_dir is None else _Engine(data_dir)
         self._graph: str = "default"
         self._change: Optional[str] = None
         self._commit: Optional[str] = None
-        self._s3_client: Optional[S3Client] = None
         self._query_exec_time: Optional[float] = None
         self._total_exec_time: Optional[float] = None
         self._t0: float = 0
         self._t1: float = 0
-        self._call(self._inner.connect)
         self._call(self._inner.set_graph_name, self._graph)
 
     @staticmethod
@@ -42,34 +44,6 @@ class BinaryClient(CypherHelpersMixin):
         except RuntimeError as e:
             raise TuringDBException(str(e)) from e
 
-    def reconnect(self) -> None:
-        """Drop the current TCP socket and open a new one.
-
-        Session state (current graph, change, commit) is reset — the new
-        daemon has no memory of our previous context. Callers should re-call ``set_graph`` /
-        ``load_graph`` / ``set_change`` etc. to re-establish whatever they need.
-        """
-        if self._inner.is_connected():
-            try:
-                self._inner.disconnect()
-            except RuntimeError:
-                pass
-        self._call(self._inner.connect)
-        self._graph = "default"
-        self._change = None
-        self._commit = None
-        self._call(self._inner.set_graph_name, self._graph)
-        self._call(self._inner.clear_change_id)
-        self._call(self._inner.clear_commit_hash)
-
-    # `timeout` is ignored: the binary protocol's TuringClient has no socket-timeout API yet.
-    def try_reach(self, timeout: int = 5) -> None:
-        self.query("LIST GRAPH")
-
-    # Same caveat as try_reach: `timeout` is ignored.
-    def warmup(self, timeout: int = 5) -> None:
-        self.query("LIST GRAPH")
-
     def set_graph(self, name: str) -> None:
         self._call(self._inner.set_graph_name, name)
         self._graph = name
@@ -78,7 +52,7 @@ class BinaryClient(CypherHelpersMixin):
         return self._graph
 
     def set_change(self, change: int | str) -> None:
-        if isinstance(change, str) and change.lower() in ("main", "head"):
+        if change == "main" or change == "head":
             self._call(self._inner.clear_change_id)
             self._change = None
             return
@@ -92,7 +66,7 @@ class BinaryClient(CypherHelpersMixin):
         self._change = change_str
 
     def set_commit(self, commit: str) -> None:
-        if commit.lower() == "head":
+        if commit == "HEAD" or commit == "head":
             self._call(self._inner.clear_commit_hash)
             self._commit = None
             return
@@ -104,12 +78,6 @@ class BinaryClient(CypherHelpersMixin):
         if commit != "HEAD":
             self.query(f"LOAD COMMIT '{commit}'")
         self.set_commit(commit)
-
-    def list_available_graphs(self) -> list[str]:
-        raise TuringDBException(
-            "list_available_graphs is not supported by the binary protocol; "
-            "use the HTTP TuringDB client to enumerate on-disk graphs"
-        )
 
     def query(self, cypher: str) -> DataFrame:
         import pandas as pd
@@ -144,25 +112,6 @@ class BinaryClient(CypherHelpersMixin):
 
     def get_total_exec_time(self) -> Optional[float]:
         return self._total_exec_time
-
-    def s3_connect(
-        self,
-        bucket_name: str,
-        access_key: Optional[str] = None,
-        secret_key: Optional[str] = None,
-        region: Optional[str] = None,
-        use_scratch: bool = True,
-    ):
-        self._s3_client = S3Client(
-            bucket_name, access_key, secret_key, region, use_scratch
-        )
-        self._s3_client.connect(self)
-
-    def transfer(self, src: str, dst: str):
-        if self._s3_client is None:
-            raise TuringDBException("S3 client is not connected")
-
-        self._s3_client.transfer(src, dst)
 
     @property
     def current_graph(self) -> str:

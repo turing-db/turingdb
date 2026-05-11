@@ -1,6 +1,6 @@
 import turingdb
 
-t = turingdb.TuringDB()
+t = turingdb.TuringClient()
 t.try_reach()
 
 print("Running Wine Ontology Test")

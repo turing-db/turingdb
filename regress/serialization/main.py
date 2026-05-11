@@ -1,4 +1,4 @@
-from turingdb import TuringDB
+from turingdb import TuringClient
 
 import pandas as pd
 
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     assert spawn_turingdb()
 
     # Connect to turingdb
-    client = TuringDB(host="http://localhost:6666")
+    client = TuringClient(host="http://localhost:6666")
 
     print(f"- {BLUE}Creating graph{NC}")
     print(client.query("CREATE GRAPH mygraph"))

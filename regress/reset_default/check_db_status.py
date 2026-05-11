@@ -1,11 +1,11 @@
-from turingdb import TuringDB
+from turingdb import TuringClient
 
 def main() -> None:
-  client = TuringDB(host="http://localhost:6666")
+  client = TuringClient(host="http://localhost:6666")
   try:
     client.query("list graph") # Check the DB is running and listening
   except Exception:
-    raise Exception("TuringDB is not running") from None
+    raise Exception("TuringClient is not running") from None
 
 if __name__ == "__main__":
   main()

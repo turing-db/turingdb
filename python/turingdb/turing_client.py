@@ -14,20 +14,23 @@ from .binary_client import BinaryClient
 Transport = Literal["http", "binary"]
 
 
-class TuringDB:
-    """Unified TuringDB client.
+class TuringClient:
+    """Unified TuringDB network client.
 
     Pass ``transport="http"`` (default) for the REST/HTTP client or
-    ``transport="binary"`` for the in-process binary protocol client. If
-    ``transport`` is left unset the ``TURINGDB_TRANSPORT`` environment
-    variable picks the default (used by the regress runner to exercise both
-    transports without modifying every test).
+    ``transport="binary"`` for the binary-protocol client. If ``transport``
+    is left unset the ``TURINGDB_TRANSPORT`` environment variable picks the
+    default (used by the regress runner to exercise both transports without
+    modifying every test).
 
     The facade exposes the methods that behave identically across both
     transports. For transport-specific functionality (e.g.
     ``list_available_graphs`` on HTTP, or the raw column-dict response from
     the binary protocol) reach the underlying client via ``client.http`` or
     ``client.binary``.
+
+    For an embedded engine that runs the database in this process rather
+    than talking to a daemon, use :class:`turingdb.TuringDB` instead.
     """
 
     def __init__(

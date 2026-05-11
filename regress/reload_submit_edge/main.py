@@ -9,7 +9,7 @@ HOST = "http://localhost:6666"
 TURING_DIR = ".turing"
 
 
-def wait_until_reachable(client: turingdb.TuringDB, timeout_s: float = 10.0) -> None:
+def wait_until_reachable(client: turingdb.TuringClient, timeout_s: float = 10.0) -> None:
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         try:
@@ -29,13 +29,13 @@ def restart_db() -> None:
     assert subprocess.call(f"turingdb -demon -turing-dir {TURING_DIR}", shell=True) == 0
 
 
-def load_graph(client: turingdb.TuringDB) -> None:
+def load_graph(client: turingdb.TuringClient) -> None:
     client.load_graph(GRAPH_NAME)
     client.set_graph(GRAPH_NAME)
 
 
 def main() -> None:
-    client = turingdb.TuringDB(host=HOST)
+    client = turingdb.TuringClient(host=HOST)
     wait_until_reachable(client)
 
     print("1. Create graph")

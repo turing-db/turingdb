@@ -1,4 +1,4 @@
-from turingdb import TuringDB
+from turingdb import TuringClient
 
 import create_after_delete_test        as CaD_test
 import delete_after_create_test        as DaC_test
@@ -8,7 +8,7 @@ import set_after_set_test              as SAS_test
 
 
 def main():
-    client = TuringDB(host="http://localhost:6666")
+    client = TuringClient(host="http://localhost:6666")
     client.try_reach()
     print("Connected to DB")
 

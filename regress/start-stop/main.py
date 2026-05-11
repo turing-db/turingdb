@@ -1,4 +1,4 @@
-from turingdb import TuringDB
+from turingdb import TuringClient
 
 import subprocess
 import os
@@ -59,7 +59,7 @@ if __name__ == "__main__":
 
     #  Start and stop with signal
     proc = spawn_turingdb_process()
-    client = TuringDB()
+    client = TuringClient()
     stop_with_signal(proc)
 
     # Start and stop with cmd

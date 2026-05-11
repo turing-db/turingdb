@@ -1,4 +1,4 @@
-from turingdb import TuringDB
+from turingdb import TuringClient
 
 NUM_TOTAL_NODES = 10
 NUM_EDGES: int = 2  # CREATE (n)-[e]->(m)
@@ -6,7 +6,7 @@ NUM_NODES: int = NUM_TOTAL_NODES - (2 * NUM_EDGES)
 
 
 # Helper to create a change and return its ID
-def new_change(client: TuringDB) -> int:
+def new_change(client: TuringClient) -> int:
     client.checkout()
     change_id = client.new_change()
     client.checkout(change=change_id)
@@ -14,7 +14,7 @@ def new_change(client: TuringDB) -> int:
 
 
 # Helper to submit current change and switch back to main
-def submit_current_change(client: TuringDB) -> None:
+def submit_current_change(client: TuringClient) -> None:
     client.query("change submit")
     client.checkout()
 
@@ -24,7 +24,7 @@ Creates a graph for conflict checking to take place on.
 - 10 isolated nodes
 - 2 source nodes, 2 target nodes, 2 edges
 """
-def setup_graph(client: TuringDB, graph_name: str) -> None:
+def setup_graph(client: TuringClient, graph_name: str) -> None:
     client.query(f"CREATE GRAPH {graph_name}")
     print(f"Created {graph_name}")
 
@@ -50,7 +50,7 @@ def setup_graph(client: TuringDB, graph_name: str) -> None:
     submit_current_change(client)
 
 
-def validate_graph_setup(client: TuringDB) -> bool:
+def validate_graph_setup(client: TuringClient) -> bool:
     num_nodes: int = client.query("MATCH (n) RETURN COUNT(n) AS COUNT")["COUNT"][0]
     num_edges: int = client.query("MATCH (n)-[e]->(m) RETURN COUNT(e) AS COUNT")[
         "COUNT"

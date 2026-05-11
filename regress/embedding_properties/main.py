@@ -17,7 +17,7 @@ def euclidean_distance(x, r):
 
 
 def main():
-    client = turingdb.TuringDB(host="http://localhost:6666")
+    client = turingdb.TuringClient(host="http://localhost:6666")
     client.try_reach()
 
     print("Running Embedding Properties Test")

@@ -5,7 +5,7 @@ GRAPH_NAME = "csvtest"
 
 
 def main() -> None:
-    client = turingdb.TuringDB(host='http://localhost:6666')
+    client = turingdb.TuringClient(host='http://localhost:6666')
     print("Connected to DB")
 
     client.query(f"LOAD GRAPH {GRAPH_NAME}")
