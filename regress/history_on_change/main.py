@@ -1,6 +1,6 @@
-from turingdb import TuringDB
+from turingdb import TuringClient
 
-client = TuringDB(host="http://localhost:6666")
+client = TuringClient(host="http://localhost:6666")
 graph = "test_history_on_change"
 client.query(f"CREATE GRAPH {graph}")
 client.set_graph(graph)

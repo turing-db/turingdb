@@ -2,7 +2,7 @@
 Regression test for GitHub issue #592:
 JSON API responses contain invalid escape sequences in string property values.
 
-TuringDB returns \\' (backslash-apostrophe) in JSON strings, which is not a valid
+TuringClient returns \\' (backslash-apostrophe) in JSON strings, which is not a valid
 JSON escape sequence. It also returns unescaped double quotes inside string values.
 
 This causes JSON.parse() to fail in JavaScript clients (e.g. the visualizer).
@@ -15,7 +15,7 @@ import os
 import subprocess
 import sys
 import httpx
-from turingdb import TuringDB
+from turingdb import TuringClient
 
 HOST = "http://localhost:6666"
 GRAPH = "json_escape_test"
@@ -32,7 +32,7 @@ def main():
         print("Skipping under binary transport (HTTP-specific test)")
         sys.exit(0)
 
-    client = TuringDB(host=HOST)
+    client = TuringClient(host=HOST)
 
     # 1. Create a graph with nodes whose properties contain special characters
     print("1. Creating test graph with problematic string properties...")

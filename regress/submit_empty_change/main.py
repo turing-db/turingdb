@@ -1,6 +1,6 @@
 import turingdb
 
-t = turingdb.TuringDB()
+t = turingdb.TuringClient()
 t.try_reach()
 
 # Create a change

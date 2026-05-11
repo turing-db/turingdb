@@ -1,4 +1,4 @@
-from turingdb import TuringDB
+from turingdb import TuringClient
 import time
 import random
 
@@ -8,7 +8,7 @@ MAX_EDGES: int = MAX_NODES
 
 
 def make_local_changes(
-    client: TuringDB, num_nodes: int, num_edges: int
+    client: TuringClient, num_nodes: int, num_edges: int
 ) -> tuple[int, int]:
     ts = int(time.time())
 
@@ -28,14 +28,14 @@ def make_local_changes(
     return ts, change
 
 
-def submit_change(client: TuringDB, change_id: int):
+def submit_change(client: TuringClient, change_id: int):
     print(f"Submitting change {change_id}")
     client.checkout(change=change_id)
     client.query("change submit")
 
 
 def main():
-    client = TuringDB(host="http://localhost:6666")
+    client = TuringClient(host="http://localhost:6666")
     client.try_reach()
     print("Connected to DB")
 

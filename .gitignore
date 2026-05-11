@@ -12,6 +12,9 @@ python/turingdb/_version.py
 python/turingdb/_binary/*.so
 python/turingdb/_binary/*.pyd
 python/turingdb/_binary/*.dylib
+python/turingdb/_local/*.so
+python/turingdb/_local/*.pyd
+python/turingdb/_local/*.dylib
 *.whl
 wheel/
 dist

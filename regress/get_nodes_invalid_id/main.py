@@ -16,7 +16,7 @@ Expected: Once fixed, the server should return an error or skip invalid nodes.
 import os
 import sys
 import httpx
-from turingdb import TuringDB
+from turingdb import TuringClient
 
 HOST = "http://localhost:6666"
 
@@ -32,7 +32,7 @@ def main():
         sys.exit(0)
 
     # Setup: Create a graph with one node
-    client = TuringDB(host=HOST)
+    client = TuringClient(host=HOST)
 
     print("1. Creating test graph with one node...")
     client.query("CREATE GRAPH testgraph")
@@ -50,7 +50,7 @@ def main():
 
     headers = {
         "Content-Type": "application/json",
-        "X-TuringDB-Graph": "testgraph",
+        "X-TuringClient-Graph": "testgraph",
     }
     payload = {"nodeIDs": [999999]}
 

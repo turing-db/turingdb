@@ -1,8 +1,8 @@
-from turingdb import TuringDB
+from turingdb import TuringClient
 import rebased_tombstones_test as rebase_test
 
 def main() -> None:
-  client = TuringDB(host="http://localhost:6666")
+  client = TuringClient(host="http://localhost:6666")
   client.try_reach()
   print("Connected to DB")
 

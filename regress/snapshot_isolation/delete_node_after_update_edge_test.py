@@ -1,4 +1,4 @@
-from turingdb import TuringDB
+from turingdb import TuringClient
 from graph_utils import *
 
 # Review-flagged scenario for ChangeConflictChecker:
@@ -20,7 +20,7 @@ from graph_utils import *
 
 GRAPH_NAME : str = "ssi_dnaue_graph"
 
-def run(client : TuringDB) -> None:
+def run(client : TuringClient) -> None:
     setup_graph(client, GRAPH_NAME)
     assert validate_graph_setup(client)
 

@@ -1,4 +1,4 @@
-from turingdb import TuringDB
+from turingdb import TuringClient
 from graph_utils import *
 
 # CREATE after DELETE as specified in
@@ -6,7 +6,7 @@ from graph_utils import *
 
 GRAPH_NAME : str = "ssi_cad_graph"
 
-def run(client : TuringDB) -> None:
+def run(client : TuringClient) -> None:
   setup_graph(client, GRAPH_NAME)
   assert validate_graph_setup(client)
 

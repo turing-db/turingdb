@@ -3,7 +3,7 @@ import os
 import sys
 
 import pandas as pd
-from turingdb import TuringDB, TuringDBException
+from turingdb import TuringClient, TuringDBException
 
 GRAPH_NAME = "simpledb"
 
@@ -17,7 +17,7 @@ DTYPE_MAP = {
 
 
 def parse_result_json(json_str: str) -> pd.DataFrame:
-    """Parse a resultJson string into a DataFrame using the same logic as TuringDB._parse_chunks."""
+    """Parse a resultJson string into a DataFrame using the same logic as TuringClient._parse_chunks."""
     data = json.loads(json_str)
 
     header = data["header"]
@@ -71,7 +71,7 @@ def main() -> None:
         print(f"ERROR: Tests directory not found: {tests_dir}")
         sys.exit(1)
 
-    client = TuringDB(host="http://localhost:6666")
+    client = TuringClient(host="http://localhost:6666")
     client.try_reach()
     print("Connected to DB")
 
