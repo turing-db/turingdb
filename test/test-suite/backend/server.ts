@@ -35,8 +35,8 @@ const cliBinary =
 		? join(
 				turingSrc,
 				"build",
-				"build_package",
-				"dev-bin",
+				"test",
+				"query-test-suite",
 				"query_test_suite_cli",
 			)
 		: args[cliArgIndex + 1];

@@ -23,7 +23,7 @@ The script starts both the API server and the UI dev server. Stop with Ctrl+C.
 - If the `start.sh` script cannot find the query test CLI, specify its path with `--cli-binary`.
 
 ```bash
-./start.sh --cli-binary ../build/dev-bin/query_test_suite_cli
+./start.sh --cli-binary ../../build/test/query-test-suite/query_test_suite_cli
 ```
 
 ## Notes

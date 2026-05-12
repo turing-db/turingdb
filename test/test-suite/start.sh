@@ -11,7 +11,7 @@ Options:
   -h, --help               Show this help and exit.
   -b, --cli-binary <path>  Path to the test-suite CLI binary.
                            If not provided, defaults to
-                           $TURING_SRC/build/dev-bin/query_test_suite_cli
+                           $TURING_SRC/build/test/query-test-suite/query_test_suite_cli
 HELP
 }
 
@@ -20,7 +20,7 @@ if [ -z "${TURING_SRC-}" ]; then
   exit 1
 fi
 
-cli_binary="${TURING_SRC}/build/dev-bin/query_test_suite_cli"
+cli_binary="${TURING_SRC}/build/test/query-test-suite/query_test_suite_cli"
 current_dir="$(pwd)"
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 
