@@ -84,7 +84,7 @@ private:
 
     static size_t computeChildIndex(const HAMTInnerNode* parent, HashCode hashChunk);
 
-    void bulkInsert(std::span<const K> keys, std::span<const V> values);
+    void build(std::span<const K> keys, std::span<const V> values);
 
     static_assert((sizeof(size_t) * 8) % _hashChunkSize == 0, "Chunking assumption.");
     static_assert(sizeof(size_t) == 8, "Chunking assumption violated.");
