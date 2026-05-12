@@ -60,11 +60,3 @@ target_compile_definitions(test_remote_query_test_suite
 
 target_compile_definitions(query_test_suite_cli
     PRIVATE QUERY_TEST_SUITE_DIR="${QUERY_TEST_SUITE_DIR}")
-
-set_target_properties(query_test_suite_cli PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/dev-bin"
-  RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/dev-bin"
-  RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/dev-bin"
-  RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/dev-bin"
-  RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}/dev-bin"
-)
