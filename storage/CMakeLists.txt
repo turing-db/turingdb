@@ -71,6 +71,7 @@ set(storage_sources
 
         indexes/PropertyHashIndex.cpp
         indexes/HAMTIndex.cpp
+        indexes/HAMTIndexNode.cpp
 
         writers/DataPartBuilder.cpp
         writers/GraphWriter.cpp

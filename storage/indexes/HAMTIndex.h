@@ -9,6 +9,8 @@
 
 #include "ArcManager.h"
 
+#include "FatalException.h"
+
 namespace db {
 
 class Column;
@@ -31,11 +33,10 @@ public:
 
     void query(const Column* query, Column* result) const final;
 
-    void boundedQuery(const Column* query,
-                      Column* result,
-                      ColumnIndices* indices,
-                      QueryState& state,
-                      size_t limit) const final = delete;
+    void boundedQuery(const Column* query, Column* result, ColumnIndices* indices,
+                      QueryState& state, size_t limit) const final {
+        throw FatalException("Not implemented");
+    }
 
     size_t size() const final;
 
@@ -82,6 +83,8 @@ private:
     HAMTLeaf<K, V>* newLeafChild(HAMTInnerNode* parent, HashCode hashChunk);
 
     static size_t computeChildIndex(const HAMTInnerNode* parent, HashCode hashChunk);
+
+    void bulkInsert(std::span<const K> keys, std::span<const V> values);
 
     static_assert((sizeof(size_t) * 8) % _hashChunkSize == 0, "Chunking assumption.");
     static_assert(sizeof(size_t) == 8, "Chunking assumption violated.");

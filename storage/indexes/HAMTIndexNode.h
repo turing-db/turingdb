@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bit>
 #include <vector>
 
 #include <stdint.h>
@@ -47,6 +48,8 @@ public:
 
     ChildBitmask mask() const { return _mask; }
     const Children& children() const { return _children; }
+
+    void insertChild(size_t hashChunk, WeakArc<HAMTIndexNode>& child);
 
     constexpr Kind getKind() const final { return _kind; }
 
