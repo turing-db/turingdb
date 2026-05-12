@@ -152,6 +152,52 @@ void HAMTIndex<K, V, Hash>::exhaustiveMutInsert(const K& key, const V& value) {
     }
 }
 
+template <typename K, typename V, typename Hash>
+size_t HAMTIndex<K, V, Hash>::computeChildIndex(const HAMTInnerNode* parent, HashCode hashChunk) {
+    const HAMTInnerNode::ChildBitmask childMask = parent->mask();
+    const uint64_t bitIndex = 1UL << hashChunk;
+
+    const uint64_t chldrnBelowMask = bitIndex - 1;
+    const uint64_t chldrnLesser = childMask & chldrnBelowMask;
+    const uint8_t chldrnLesserCount = std::popcount(chldrnLesser);
+
+    return chldrnLesserCount;
+}
+
+template <typename K, typename V, typename Hash>
+HAMTInnerNode* HAMTIndex<K, V, Hash>::newInnerChild(HAMTInnerNode* parent, HashCode hashChunk) {
+    const size_t childIndex = computeChildIndex(parent, hashChunk);
+    // WARN: Does not check that the child does not exist already
+
+    WeakArc<HAMTIndexNode> rc = _man->newInner();
+    HAMTInnerNode* ptr = rc->as<HAMTInnerNode>();
+
+    { // Update parent's child array and child bitmask
+        const auto after = parent->_children.begin() + childIndex;
+        parent->_children.insert(after, rc);
+        parent->_mask |= bitIndex;
+    }
+
+    return ptr;
+}
+
+template <typename K, typename V, typename Hash>
+HAMTLeaf<K, V>* HAMTIndex<K, V, Hash>::newLeafChild(HAMTInnerNode* parent, HashCode hashChunk) {
+    const size_t childIndex = computeChildIndex(parent, hashChunk);
+    // WARN: Does not check that the child does not exist already
+
+    WeakArc<HAMTIndexNode> rc = _man->newLeaf<K, V>();
+    HAMTLeaf<K, V>* ptr = rc->as<HAMTLeaf<K,V>>();
+
+    { // Update parent's child array and child bitmask
+        const auto after = parent->_children.begin() + childIndex;
+        parent->_children.insert(after, rc);
+        parent->_mask |= bitIndex;
+    }
+
+    return ptr;
+}
+
 namespace db {
 template class HAMTIndex<types::String::Primitive, NodeID>;
 template class HAMTIndex<types::UInt64::Primitive, NodeID>;

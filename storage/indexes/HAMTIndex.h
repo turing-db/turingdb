@@ -35,7 +35,7 @@ public:
                       Column* result,
                       ColumnIndices* indices,
                       QueryState& state,
-                      size_t limit) const final {}
+                      size_t limit) const final = delete;
 
     size_t size() const final;
 
@@ -77,6 +77,11 @@ private:
     }
 
     void mutInsFrom(HAMTIndexNode* from, size_t depth, const K& key, const V& value);
+
+    HAMTInnerNode* newInnerChild(HAMTInnerNode* parent, HashCode hashChunk);
+    HAMTLeaf<K, V>* newLeafChild(HAMTInnerNode* parent, HashCode hashChunk);
+
+    static size_t computeChildIndex(const HAMTInnerNode* parent, HashCode hashChunk);
 
     static_assert((sizeof(size_t) * 8) % _hashChunkSize == 0, "Chunking assumption.");
     static_assert(sizeof(size_t) == 8, "Chunking assumption violated.");
