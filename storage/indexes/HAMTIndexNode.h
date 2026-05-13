@@ -23,6 +23,11 @@ public:
         _SIZE,
     };
 
+    explicit HAMTIndexNode(bool isLeaf)
+        : _isLeaf(isLeaf)
+    {
+    }
+
     virtual ~HAMTIndexNode() = default;
 
     virtual constexpr Kind getKind() const = 0;
@@ -36,12 +41,22 @@ public:
     T* as() {
         return dynamic_cast<T*>(this);
     }
+
+    bool isLeaf() const { return _isLeaf; }
+
+private:
+    bool _isLeaf {false};
 };
 
 class HAMTInnerNode final : public HAMTIndexNode {
 public:
     template <typename K, typename V, typename Hash>
     friend class HAMTIndex;
+
+    HAMTInnerNode()
+        : HAMTIndexNode(false)
+    {
+    }
 
     using ChildBitmask = uint16_t;
     using Children = std::vector<WeakArc<HAMTIndexNode>>;
@@ -65,6 +80,11 @@ class HAMTLeaf final : public HAMTIndexNode {
 public:
     template <typename T, typename U, typename Hash>
     friend class HAMTIndex;
+
+    HAMTLeaf()
+        : HAMTIndexNode(true)
+    {
+    }
 
     using KVPair = std::pair<K, V>;
     using Pairs = std::vector<KVPair>;

@@ -57,7 +57,7 @@ const V* HAMTIndex<K, V, Hash>::find(const K& key) const {
         depth++;
         const size_t hashChunk = getDepthHash(hashcode, depth);
 
-        const bool isLeaf = node->getKind() == HAMTIndexNode::Kind::LEAF;
+        const bool isLeaf = node->isLeaf();
 
         if (isLeaf) {
             const auto* leaf = node->as<const HAMTLeaf<K, V>>();
@@ -102,7 +102,7 @@ void HAMTIndex<K, V, Hash>::exhaustiveMutInsert(const K& key, const V& value) {
         depth++;
         const HashCode hashChunk = getDepthHash(hashcode, depth);
 
-        const bool isLeaf = node->getKind() == HAMTIndexNode::Kind::LEAF;
+        const bool isLeaf = node->isLeaf();
         const bool atMaxDepth = depth == _chunksPerHash;
 
         if (isLeaf) {
