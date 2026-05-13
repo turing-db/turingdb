@@ -7,6 +7,7 @@
 #include "metadata/PropertyType.h"
 #include "indexers/PropertyIndexer.h"
 #include "PropertyContainer.h"
+#include "PropertyTypeTrie.h"
 #include "FatalException.h"
 
 namespace db {
@@ -55,7 +56,7 @@ public:
     }
 
     void registerEmbeddingPropertyType(PropertyTypeID ptID, size_t dimension) {
-        if (_map.find(ptID) != _map.end()) {
+        if (_map.contains(ptID)) {
             throw FatalException("Trying to register a type that was already registered");
         }
 
@@ -63,6 +64,8 @@ public:
         _map.emplace(ptID, static_cast<PropertyContainer*>(ptr));
         _embeddings.emplace(ptID, static_cast<PropertyContainer*>(ptr));
     }
+
+    void buildTypeMapping(EntityID firstCoreEntityID, size_t coreEntityCount);
 
     template <SupportedType T, typename... Args>
     void add(PropertyTypeID ptID, EntityID entityID, Args&&... args) {
@@ -75,23 +78,22 @@ public:
     }
 
     bool has(PropertyTypeID ptID, EntityID entityID) const {
-        auto containerIt = _map.find(ptID);
+        const auto containerIt = _map.find(ptID);
         if (containerIt == _map.end()) {
             return false;
         }
-        return containerIt->second->has(entityID);
-    }
 
-    template <SupportedType T>
-    bool has(PropertyTypeID ptID, EntityID entityID) const {
-        const TypedPropertyContainer<T>& container = getContainer<T>(ptID);
-        return container.has(entityID);
+        return containerIt->second->has(entityID);
     }
 
     template <SupportedType T>
     const T::Pritimive& get(PropertyTypeID ptID, EntityID entityID) const {
         const TypedPropertyContainer<T>& container = getContainer<T>(ptID);
         return container.get(entityID);
+    }
+
+    const PropertyTypeSet* tryGetPropertyTypeSet(EntityID entityID) const {
+        return _typeMapping->tryGetPropertyTypeSet(entityID);
     }
 
     template <SupportedType T>
@@ -106,6 +108,7 @@ public:
         if (!container) {
             return nullptr;
         }
+
         return container->tryGet(entityID);
     }
 
@@ -200,6 +203,7 @@ private:
     PropertyContainerReferences _embeddings;
 
     PropertyIndexer _indexers;
+    std::unique_ptr<PropertyTypeTrie> _typeMapping;
 };
 
 }

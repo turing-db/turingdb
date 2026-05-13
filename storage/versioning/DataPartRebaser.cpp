@@ -187,6 +187,14 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
             nodeProperties->_indexers = std::move(newIndexers);
         }
 
+        bioassert(nodeProperties->_typeMapping, "PropertyTypeTrie was not initialised");
+        nodeProperties->_typeMapping->rebasePropertyTypes([&](PropertyTypeID id) {
+            return metadata.getPropertyTypeMapping(id)._id;
+        });
+        nodeProperties->_typeMapping->rebaseEntityIDs([&](EntityID id) {
+            return EntityID(_idRebaser->rebaseNodeID(NodeID(id.getValue())).getValue());
+        });
+
         for (auto& [ptID, container] : nodeProperties->_map) {
             for (auto& id : container->ids()) {
                 id = _idRebaser->rebaseNodeID(id.getValue()).getValue();
@@ -264,6 +272,14 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
 
             edgeProperties->_indexers = std::move(newIndexers);
         }
+
+        bioassert(edgeProperties->_typeMapping, "PropertyTypeTrie was not initialised");
+        edgeProperties->_typeMapping->rebasePropertyTypes([&](PropertyTypeID id) {
+            return metadata.getPropertyTypeMapping(id)._id;
+        });
+        edgeProperties->_typeMapping->rebaseEntityIDs([&](EntityID id) {
+            return EntityID(_idRebaser->rebaseEdgeID(EdgeID(id.getValue())).getValue());
+        });
 
         for (auto& [ptID, container] : edgeProperties->_map) {
             for (auto& id : container->ids()) {

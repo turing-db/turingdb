@@ -64,6 +64,8 @@ set(storage_sources
         indexes/IndexManager.cpp
 
         properties/PropertyContainer.cpp
+        properties/PropertyTypeSet.cpp
+        properties/PropertyTypeTrie.cpp
         properties/PropertyManager.cpp
 
         indexes/PropertyHashIndex.cpp

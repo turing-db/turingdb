@@ -45,7 +45,7 @@ DataPart::DataPart(NodeID firstNodeID,
 DataPart::~DataPart() = default;
 
 CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder& builder) {
-    Profile profile("DataPart::load");
+    const Profile profile("DataPart::load");
 
     JobGroup jobs = jobSystem.newGroup();
     const auto reader = view.read();
@@ -163,6 +163,9 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
 
     jobs.wait();
 
+    _nodeProperties->buildTypeMapping(_firstNodeID.getValue(),
+                                      coreNodeLabelSets.size());
+
     // EdgeContainer
     _edges = EdgeContainer::create(_firstNodeID,
                                    _firstEdgeID,
@@ -239,6 +242,9 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
                                        builder.getInPatchEdgeCount());
 
     jobs.wait();
+
+    _edgeProperties->buildTypeMapping(_firstEdgeID.getValue(),
+                                      _edges->getOuts().size());
 
     _initialized = true;
 

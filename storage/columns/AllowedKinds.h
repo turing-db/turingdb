@@ -337,6 +337,20 @@ struct TypeRestrictions<OP_FUNC_EDGE_TYPES> {
     >;
 };
 
+template <>
+struct TypeRestrictions<OP_FUNC_PROPERTY_TYPES> {
+    using Allowed = GenerateKindList<std::tuple<
+        NodeID,
+        EdgeID
+    >>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>(),
+        ContainerKind::code<ColumnConst>()
+    >;
+};
+
 template <ColumnOperator Func>
     requires ConversionFunction<Func>
 struct TypeRestrictions<Func> {

@@ -3,12 +3,18 @@
 #include <limits>
 #include <string>
 #include <system_error>
+#include <unordered_set>
+#include <range/v3/view/drop.hpp>
 
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
+
+#include "DataPart.h"
 #include "columns/ColumnVector.h"
 #include "TypeUtils.h"
 #include "metadata/PropertyType.h"
+#include "properties/PropertyManager.h"
+#include "reader/GraphReader.h"
 #include "views/GraphView.h"
 
 #include "ID.h"
@@ -181,6 +187,69 @@ public:
                           const types::Embedding::Primitive& b);
 };
 
+template <TypedInternalID ID>
+static void getPropertyTypesString(std::string& out,
+                                   const GraphView view,
+                                   std::unordered_set<PropertyTypeID>& seen,
+                                   ID id) {
+    out.clear();
+    seen.clear();
+    const PropertyTypeMap& ptMap = view.metadata().propTypes();
+    bool first = true;
+
+    for (const auto& part : view.dataparts()) {
+        const PropertyManager& props = std::same_as<ID, NodeID>
+                                         ? part->nodeProperties()
+                                         : part->edgeProperties();
+
+        const PropertyTypeSet* set = props.tryGetPropertyTypeSet(id.getValue());
+        if (!set) {
+            continue;
+        }
+
+        for (const PropertyTypeID ptId : set->get()) {
+            if (!seen.insert(ptId).second) {
+                continue;
+            }
+
+            const std::optional<std::string_view> name = ptMap.getName(ptId);
+            bioassert(name, "Could not get name of PropertyTypeID {}.", ptId.getValue());
+
+            if (!first) {
+                out += ", ";
+            }
+
+            out += *name;
+            first = false;
+        }
+    }
+}
+
+class PropertyTypesFunction {
+public:
+    using ResultType = std::string;
+
+    explicit PropertyTypesFunction(GraphView view)
+        : _view(view)
+    {
+    }
+
+    ResultType operator()(const NodeID n) {
+        getPropertyTypesString(_tmp, _view, _seen, n);
+        return _tmp;
+    }
+
+    ResultType operator()(const EdgeID e) {
+        getPropertyTypesString(_tmp, _view, _seen, e);
+        return _tmp;
+    }
+
+private:
+    GraphView _view;
+    std::string _tmp;
+    std::unordered_set<PropertyTypeID> _seen;
+};
+
 /// Generic function executor; default constructible operator
 template <typename Op, typename Res, typename Arg>
 struct FunctionExecutor {
@@ -324,5 +393,39 @@ struct BinaryFunc {
 
 using CosineSimilarity = BinaryFunc<CosineSimilarityFunction>;
 using EuclideanDistance = BinaryFunc<EuclideanDistanceFunction>;
+
+/// Specialisation for propertyTypes() on nodes
+template <typename Res, typename Arg>
+struct FunctionExecutor<PropertyTypesFunction, Res, Arg> {
+    static void apply(ColumnVector<std::string>* res,
+                      const ColumnNodeIDs* arg,
+                      GraphView view) {
+        const size_t size = arg->size();
+        res->resize(size);
+
+        const auto& argd = arg->getRaw();
+        auto& resd = res->getRaw();
+
+        PropertyTypesFunction propertyTypes(view);
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = propertyTypes(argd[i]);
+        }
+    }
+
+    static void apply(ColumnVector<std::string>* res,
+                      const ColumnEdgeIDs* arg,
+                      GraphView view) {
+        const size_t size = arg->size();
+        res->resize(size);
+
+        const auto& argd = arg->getRaw();
+        auto& resd = res->getRaw();
+
+        PropertyTypesFunction propertyTypes(view);
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = propertyTypes(argd[i]);
+        }
+    }
+};
 
 }

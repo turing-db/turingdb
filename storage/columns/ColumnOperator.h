@@ -44,6 +44,7 @@ enum ColumnOperator : uint8_t {
 
     OP_FUNC_LABELS,
     OP_FUNC_EDGE_TYPES,
+    OP_FUNC_PROPERTY_TYPES,
 
     OP_FUNC_COSINE_SIMILARITY,
     OP_FUNC_EUCLIDEAN_DISTANCE,
@@ -92,6 +93,7 @@ constexpr ColumnOperatorType getOperatorType(ColumnOperator op) {
         case OP_TO_BOOLEAN:
         case OP_FUNC_LABELS:
         case OP_FUNC_EDGE_TYPES:
+        case OP_FUNC_PROPERTY_TYPES:
         case OP_FUNC_COSINE_SIMILARITY:
         case OP_FUNC_EUCLIDEAN_DISTANCE:
             return ColumnOperatorType::OPTYPE_FUNC;
@@ -144,6 +146,7 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
 
     EnumStringPair<ColumnOperator::OP_FUNC_LABELS, "FUNCTION_LABELS">,
     EnumStringPair<ColumnOperator::OP_FUNC_EDGE_TYPES, "FUNCTION_EDGE_TYPES">,
+    EnumStringPair<ColumnOperator::OP_FUNC_PROPERTY_TYPES, "FUNCTION_PROPERTY_TYPES">,
 
     EnumStringPair<ColumnOperator::OP_FUNC_COSINE_SIMILARITY, "COSINE_SIMILARITY">,
     EnumStringPair<ColumnOperator::OP_FUNC_EUCLIDEAN_DISTANCE, "EUCLIDEAN_DISTANCE">>;

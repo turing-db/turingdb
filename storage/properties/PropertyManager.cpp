@@ -2,6 +2,7 @@
 
 #include <range/v3/view/enumerate.hpp>
 
+#include "properties/PropertyTypeTrie.h"
 #include "views/EntityPropertyView.h"
 
 #include "BioAssert.h"
@@ -13,6 +14,18 @@ PropertyManager::PropertyManager()
 }
 
 PropertyManager::~PropertyManager() {
+}
+
+void PropertyManager::buildTypeMapping(EntityID firstCoreEntityID,
+                                       size_t coreEntityCount) {
+    _typeMapping = std::make_unique<PropertyTypeTrie>();
+
+    std::unordered_map<PropertyTypeID, std::span<const EntityID>> map;
+    for (const auto& [ptID, container] : _map) {
+        map.emplace(ptID, container->ids());
+    }
+
+    _typeMapping->build(map, firstCoreEntityID, coreEntityCount);
 }
 
 void PropertyManager::fillEntityPropertyView(EntityID entityID,
@@ -70,6 +83,7 @@ const LabelSetPropertyIndexer* PropertyManager::tryGetIndexer(PropertyTypeID ptI
     if (it != _indexers.end()) {
         return &(it->second);
     }
+
     return nullptr;
 }
 
