@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <numeric>
+
 #include "LineContainer.h"
 #include "processors/ProcessorTester.h"
 

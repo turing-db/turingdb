@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <numeric>
+
 #include <range/v3/view/zip.hpp>
 
 #include "EdgeRecord.h"

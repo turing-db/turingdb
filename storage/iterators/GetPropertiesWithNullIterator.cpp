@@ -1,7 +1,10 @@
 #include "GetPropertiesWithNullIterator.h"
 
 #include "DataPart.h"
+#include "ID.h"
+#include "iterators/Iterator.h"
 #include "properties/PropertyManager.h"
+#include "views/EntityPropertyView.h"
 
 using namespace db;
 
@@ -25,6 +28,8 @@ void GetPropertiesIteratorWithNull<ID, T>::init() {
     }
 
     _entityIt = _inputIDs->cbegin();
+    EntityID id {_entityIt->getValue()};
+
     _partIt.skipToEnd();
     while (_partIt.isNotStart()) {
         _partIt.prev();
@@ -33,11 +38,20 @@ void GetPropertiesIteratorWithNull<ID, T>::init() {
                                               ? part->nodeProperties()
                                               : part->edgeProperties();
 
-        if (properties.hasPropertyType(_propTypeID)) {
-            _prop = properties.tryGet<T>(_propTypeID, _entityIt->getValue());
-            if (_prop) {
-                return;
-            }
+        if (!properties.hasPropertyType(_propTypeID)) {
+            continue;
+        }
+
+        const auto maybeProp = properties.tryGetWithNull<T>(_propTypeID, id);
+
+        const bool explicitNull = !maybeProp.has_value();
+        if (explicitNull) {
+            return;
+        }
+
+        _prop = maybeProp.value();
+        if (_prop) {
+            return;
         }
     }
 }
@@ -59,6 +73,8 @@ void GetPropertiesIteratorWithNull<ID, T>::next() {
         return;
     }
 
+    EntityID id = _entityIt->getValue();
+
     // Iterate over parts in reverse order: find the most recent property value first
     _partIt.skipToEnd();
     while (_partIt.isNotStart()) {
@@ -68,13 +84,24 @@ void GetPropertiesIteratorWithNull<ID, T>::next() {
                                               ? part->nodeProperties()
                                               : part->edgeProperties();
 
-        if (properties.hasPropertyType(_propTypeID)) {
-            _prop = properties.tryGet<T>(_propTypeID, _entityIt->getValue());
-
-            if (_prop) {
-                return;
-            }
+        if (!properties.hasPropertyType(_propTypeID)){
+            continue;
         }
+
+        const auto maybeProp = properties.tryGetWithNull<T>(_propTypeID, id);
+
+        const bool explicitNull = !maybeProp.has_value();
+
+        // nullopt => null valued => break; returning nullptr
+        if (explicitNull) {
+            return;
+        }
+
+        _prop = maybeProp.value();
+        if (_prop) { // not nullptr => return the value
+            return;
+        }
+        // nullptr => check next datapart
     }
 }
 

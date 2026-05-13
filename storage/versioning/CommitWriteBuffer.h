@@ -37,12 +37,12 @@ public:
     struct EdgeUpdate;
 
     using SupportedTypeVariant = std::variant<
-                     types::Int64::Primitive,
-                     types::UInt64::Primitive,
-                     types::Double::Primitive,
-                     std::string, /// Needs to be owning to outlive the query
-                     types::Bool::Primitive,
-                     types::Embedding::OwningPrimitive
+        std::optional<types::Int64::Primitive>,
+        std::optional<types::UInt64::Primitive>,
+        std::optional<types::Double::Primitive>,
+        std::optional<types::String::OwningPrimitive>, /// Needs to be owning to outlive the query
+        std::optional<types::Bool::Primitive>,
+        std::optional<types::Embedding::OwningPrimitive>
      >;
      using UntypedProperties = std::vector<UntypedProperty>;
      using PendingNodeOffset = size_t;
@@ -222,10 +222,10 @@ private:
     void buildPendingNodes(DataPartBuilder& builder);
     void buildPendingEdges(DataPartBuilder& builder);
 
-    void buildPendingNode(DataPartBuilder& builder, const PendingNode& node);
+    void buildPendingNode(DataPartBuilder& builder, PendingNode& node);
     void addPendingNodeProperties(DataPartBuilder& builder, const PendingNode& node);
 
-    void buildPendingEdge(DataPartBuilder& builder, const PendingEdge& edge);
+    void buildPendingEdge(DataPartBuilder& builder, PendingEdge& edge);
 
     void applyNodeUpdates(DataPartBuilder& builder);
     void applyEdgeUpdates(DataPartBuilder& builder);
@@ -233,12 +233,12 @@ private:
     /// Updates a property of an edge which is already committed
     void applyExistingEdgeUpdate(DataPartBuilder& builder,
                                  const EdgeRecord& record,
-                                 const CommitWriteBuffer::UntypedProperty& prop);
+                                 CommitWriteBuffer::UntypedProperty& prop);
 
     /// Updates a property of an edge which is not yet committed
     void applyPendingEdgeUpdate(DataPartBuilder& builder,
                                 EdgeID edgeID,
-                                const CommitWriteBuffer::UntypedProperty& prop);
+                                CommitWriteBuffer::UntypedProperty& prop);
 };
 
 class CommitWriteBufferRebaser {

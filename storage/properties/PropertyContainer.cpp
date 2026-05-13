@@ -32,9 +32,12 @@ void TypedPropertyContainer<types::String>::sort() {
     _values = std::move(newValues);
 
     _entityIndexMap.clear();
-    _entityIndexMap.reserve(_ids.size());
+    _entityIndexMap.reserve(_ids.size() + _nullIds.size());
     for (size_t i = 0; i < _ids.size(); i++) {
         _entityIndexMap[_ids[i]] = i;
+    }
+    for (const EntityID id : _nullIds) {
+        _entityIndexMap[id] = NULL_INDEX;
     }
 }
 
@@ -64,8 +67,11 @@ void TypedPropertyContainer<types::Embedding>::sort() {
     _values = std::move(newValues);
 
     _entityIndexMap.clear();
-    _entityIndexMap.reserve(_ids.size());
+    _entityIndexMap.reserve(_ids.size() + _nullIds.size());
     for (size_t i = 0; i < _ids.size(); i++) {
         _entityIndexMap[_ids[i]] = i;
+    }
+    for (const EntityID id : _nullIds) {
+        _entityIndexMap[id] = NULL_INDEX;
     }
 }
