@@ -1,6 +1,9 @@
 #include <chrono>
 #include <iostream>
+#include <random>
 #include <string_view>
+#include <unordered_map>
+#include <vector>
 
 #include <spdlog/spdlog.h>
 
@@ -74,7 +77,7 @@ void basictest() {
     }
 }
 
-void loadtest(size_t numPairs) {
+void loadtest(size_t numPairs, size_t numLookups) {
     GraphView view;
     HAMTManager man;
     PropertyTypeID pid {1};
@@ -82,20 +85,55 @@ void loadtest(size_t numPairs) {
     HAMTIndex<types::UInt64::Primitive, NodeID> index("my index", &man, pid);
     index.init(view);
 
+    std::mt19937_64 rng(std::random_device{}());
+    std::uniform_int_distribution<types::UInt64::Primitive> dist;
+
+    std::vector<types::UInt64::Primitive> keys(numPairs);
+    for (auto& k : keys) {
+        k = dist(rng);
+    }
+
+    std::unordered_map<types::UInt64::Primitive, NodeID> groundTruth;
+    groundTruth.reserve(numPairs);
+
     {
         const auto start = now();
         for (size_t i = 0; i < numPairs; i++) {
-            const types::UInt64::Primitive key = i;
-            const NodeID value = i;
-
-            index.exhaustiveMutInsert(key, value);
+            const NodeID value(keys[i]);
+            index.exhaustiveMutInsert(keys[i], value);
+            groundTruth.emplace(keys[i], value);
         }
         const auto taken = now() - start;
         printTime("build", taken);
+    }
+
+    std::uniform_int_distribution<size_t> indexDist(0, numPairs - 1);
+    std::vector<types::UInt64::Primitive> lookupKeys(numLookups);
+    for (auto& k : lookupKeys) {
+        k = keys[indexDist(rng)];
+    }
+
+    {
+        const auto start = now();
+        for (size_t i = 0; i < numLookups; i++) {
+            const types::UInt64::Primitive key = lookupKeys[i];
+            const NodeID* result = index.find(key);
+            bioassert(result, "lookup failed for key {}", key);
+
+            const NodeID& expected = groundTruth.at(key);
+            bioassert(result->getValue() == expected.getValue(),
+                      "value mismatch for key {}: got {}, expected {}",
+                      key, result->getValue(), expected.getValue());
+        }
+        const auto taken = now() - start;
+        printTime("lookup total", taken);
+
+        const auto perLookup = taken / numLookups;
+        printTime("lookup per query", perLookup);
     }
 }
 
 int main() {
     basictest();
-    loadtest(1'000'000);
+    loadtest(1'000'000, 1'000'000);
 }
