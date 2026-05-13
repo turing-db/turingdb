@@ -17,9 +17,47 @@
 using namespace db;
 
 namespace {
-    void lookup(const auto& map, auto key)  {
-        [[maybe_unused]] volatile auto x = map.find(key);
+
+void lookup(const auto& map, const auto& key) {
+    [[maybe_unused]] volatile auto&& x = map.find(key);
+}
+
+struct CorrectnessResult {
+    size_t hits {0};
+    size_t misses {0};
+};
+
+CorrectnessResult checkCorrectness(
+    const HAMTIndex<types::UInt64::Primitive, NodeID>& index,
+    const std::unordered_map<types::UInt64::Primitive, NodeID>& groundTruth,
+    const std::vector<types::UInt64::Primitive>& lookupKeys)
+{
+    CorrectnessResult result;
+
+    for (const types::UInt64::Primitive key : lookupKeys) {
+        const NodeID* found = index.find(key);
+        const auto it = groundTruth.find(key);
+        const bool expectedHit = it != groundTruth.end();
+
+        if (expectedHit) {
+            bioassert(found, "lookup failed for key {}", key);
+            bioassert(found->getValue() == it->second.getValue(),
+                      "value mismatch for key {}: got {}, expected {}",
+                      key, found->getValue(), it->second.getValue());
+            result.hits++;
+        } else {
+            bioassert(!found, "expected miss but got hit for key {}", key);
+            result.misses++;
+        }
     }
+
+    const size_t total = result.hits + result.misses;
+    spdlog::info("correctness: {} hits, {} misses ({:.1f}% hit rate)",
+                 result.hits, result.misses, 100.0 * result.hits / total);
+
+    return result;
+}
+
 }
 
 static const auto now = []() -> auto {
@@ -131,34 +169,9 @@ void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false, double
     }
 
     if (enableMap) {
-        size_t correctnessHits = 0;
-        size_t correctnessMisses = 0;
-
-        for (size_t i = 0; i < numLookups; i++) {
-            const types::UInt64::Primitive key = lookupKeys[i];
-            const NodeID* result = index.find(key);
-
-            bool expectedHit = false;
-            {
-                const auto it = groundTruth.find(key);
-                expectedHit = it != groundTruth.end();
-            }
-
-            if (expectedHit) {
-                bioassert(result, "lookup failed for key {}", key);
-                // bioassert(result->getValue() == it->second.getValue(),
-                          // "value mismatch for key {}: got {}, expected {}", key,
-                          // result->getValue(), it->second.getValue());
-                correctnessHits++;
-            } else {
-                bioassert(!result, "expected miss but got hit for key {}", key);
-                correctnessMisses++;
-            }
-        }
-
-        spdlog::info("correctness: {} hits, {} misses ({:.1f}% hit rate)",
-                     correctnessHits, correctnessMisses,
-                     100.0 * correctnessHits / numLookups);
+        const CorrectnessResult correctness = checkCorrectness(index, groundTruth, lookupKeys);
+        const size_t correctnessHits = correctness.hits;
+        const size_t correctnessMisses = correctness.misses;
 
         {
             const auto start = now();
