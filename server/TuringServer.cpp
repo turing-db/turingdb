@@ -57,10 +57,10 @@ void TuringServer::start() {
                 TuringProtoServerProcessor processor(_db, connection);
                 processor.process(threadContext);
             };
-        functions._createParser = [](net::NetBuffer* inputBuffer) {
+        functions._createParser = [](net::NetBuffer* inputBuffer, net::BaseConnectionState* /*state*/) {
             return std::unique_ptr<net::AbstractTCPParser>(new net::proto::TuringProtoParser(inputBuffer));
         };
-        functions._createWriter = [bufferCapacity = _config.getProtoBufferCapacity()] {
+        functions._createWriter = [bufferCapacity = _config.getProtoBufferCapacity()](net::BaseConnectionState* /*state*/) {
             return std::make_unique<net::proto::TuringProtoWriter>(bufferCapacity);
         };
     } else {
@@ -69,10 +69,10 @@ void TuringServer::start() {
             DBServerProcessor processor(_db, connection);
             processor.process(threadContext);
         };
-        functions._createParser = [](net::NetBuffer* inputBuffer) {
+        functions._createParser = [](net::NetBuffer* inputBuffer, net::BaseConnectionState* /*state*/) {
             return std::unique_ptr<net::AbstractTCPParser>(new net::HTTPParser<DBURIParser>(inputBuffer));
         };
-        functions._createWriter = [] {
+        functions._createWriter = [](net::BaseConnectionState* /*state*/) {
             return std::make_unique<net::HTTPWriter>();
         };
     }

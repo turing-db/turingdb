@@ -9,6 +9,7 @@
 namespace net {
 
 class NetBuffer;
+class BaseConnectionState;
 
 class AbstractTCPParser {
 public:
@@ -31,6 +32,8 @@ protected:
     AbstractTCPParser() = default;
 };
 
-using CreateAbstractTCPParserFunc = std::function<std::unique_ptr<AbstractTCPParser>(NetBuffer* inputBuffer)>;
+using CreateAbstractTCPParserFunc = std::function<
+    std::unique_ptr<AbstractTCPParser>(NetBuffer* inputBuffer,
+                                       BaseConnectionState* state)>;
 
 }

@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "AbstractTCPParser.h"
+#include "BaseConnectionState.h"
 #include "NetBuffer.h"
 #include "SocketUtils.h"
 
@@ -28,14 +29,18 @@ public:
     void close();
     void dealloc();
 
+    //Wat TODO here?
+    //Set socket is called multiple times through the event loop
+    //we can ensure that connection state is initialised?
     void setSocket(utils::DataSocket socket) {
-        bioassert(_writer, "Wrtier Needs To Be Set For The Connection"); 
+        bioassert(_connectionState, "Connection State Needs To Be Set For The Connection"); 
         _socket = socket;
-        _writer->setSocket(socket);
+        _connectionState->getWriter().setSocket(socket);
     }
 
-    void setParser(std::unique_ptr<AbstractTCPParser> parser) { _parser = std::move(parser); }
-    void setWriter(std::unique_ptr<AbstractTCPWriter> writer) { _writer = std::move(writer); }
+    //ugly to move never liked this yuk change?
+    void setConnectionState(std::unique_ptr<BaseConnectionState> state) { _connectionState= std::move(state); }
+
     void setStorage(TCPConnectionStorage* storage) { _storage = storage; }
     void setStorageIndex(size_t index) { _storageIndex = index; }
     void setCloseRequired(bool v) { _closeRequired = v; }
@@ -47,25 +52,24 @@ public:
     NetBuffer& getInputBuffer() { return _inputBuffer; }
 
     AbstractTCPWriter& getWriter() {
-        bioassert(_writer, "Writer not initialized");
-        return *_writer;
+        bioassert(_connectionState, "Connection State not initialized");
+        return _connectionState->getWriter();
     }
 
     AbstractTCPParser& getParser() {
-        bioassert(_parser, "Parser not initialized");
-        return *_parser;
+        bioassert(_connectionState, "Connection State not initialized");
+        return _connectionState->getParser();
     }
 
     template <std::derived_from<AbstractTCPParser> ParserT>
     ParserT& getParser() {
-        bioassert(_parser, "Parser not initialized");
-        return *static_cast<ParserT*>(_parser.get());
+        bioassert(_connectionState, "Connection State not initialized");
+        return _connectionState->getParser<ParserT>();
     }
 
     template <std::derived_from<AbstractTCPWriter> WriterT>
     WriterT& getWriter() {
-        bioassert(_writer, "Writer not initialized");
-        return *static_cast<WriterT*>(_writer.get());
+        return _connectionState->getWriter<WriterT>();
     }
 
 private:
@@ -73,8 +77,7 @@ private:
     TCPConnectionStorage* _storage {nullptr};
     size_t _storageIndex {0};
     NetBuffer _inputBuffer;
-    std::unique_ptr<AbstractTCPWriter> _writer;
-    std::unique_ptr<AbstractTCPParser> _parser;
+    std::unique_ptr<BaseConnectionState> _connectionState;
     bool _closeRequired {false};
 };
 }

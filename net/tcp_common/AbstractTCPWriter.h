@@ -5,6 +5,8 @@
 
 namespace net {
 
+class BaseConnectionState;
+
 class AbstractTCPWriter {
 public:
     virtual ~AbstractTCPWriter() = default;
@@ -17,6 +19,7 @@ public:
     [[nodiscard]] virtual bool errorOccured() const = 0;
 };
 
-using CreateAbstractTCPWriterFunc = std::function<std::unique_ptr<AbstractTCPWriter>()>;
+using CreateAbstractTCPWriterFunc = std::function<
+    std::unique_ptr<AbstractTCPWriter>(BaseConnectionState* state)>;
 
 }

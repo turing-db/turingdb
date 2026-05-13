@@ -26,8 +26,9 @@ public:
             _free[i] = i;
 
             auto& inputBuffer = _connections[i].getInputBuffer();
-            _connections[i].setParser(createParser(&inputBuffer));
-            _connections[i].setWriter(createWriter());
+            auto state = std::make_unique<BaseConnectionState>();
+            state->init(createWriter, createParser, &inputBuffer);
+            _connections[i].setConnectionState(std::move(state));
             _connections[i].setStorageIndex(i);
             _connections[i].setStorage(this);
         }

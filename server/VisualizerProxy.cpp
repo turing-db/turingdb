@@ -175,12 +175,12 @@ void VisualizerProxy::start() {
         };
 
     functions._createParser =
-        [](net::NetBuffer* inputBuffer) {
+        [](net::NetBuffer* inputBuffer, net::BaseConnectionState* /*state*/) {
             return std::unique_ptr<net::AbstractTCPParser>(
                 new net::HTTPParser<net::URIParser>(inputBuffer));
         };
     functions._createWriter =
-        [] {
+        [](net::BaseConnectionState* /*state*/) {
             return std::make_unique<net::HTTPWriter>();
         };
 
