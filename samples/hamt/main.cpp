@@ -19,8 +19,14 @@ using namespace db;
 namespace {
 
 void lookup(const auto& map, const auto& key) {
-    [[maybe_unused]] volatile auto&& x = map.find(key);
+    [[maybe_unused]] volatile const auto&& x = map.find(key);
 }
+
+struct TxValue {
+    NodeID value;
+    uint64_t txStart {0};
+    uint64_t txEnd {0};
+};
 
 struct CorrectnessResult {
     size_t hits {0};
@@ -29,7 +35,7 @@ struct CorrectnessResult {
 
 CorrectnessResult checkCorrectness(
     const HAMTIndex<types::UInt64::Primitive, NodeID>& index,
-    const std::unordered_map<types::UInt64::Primitive, NodeID>& groundTruth,
+    const std::unordered_map<types::UInt64::Primitive, TxValue>& groundTruth,
     const std::vector<types::UInt64::Primitive>& lookupKeys)
 {
     CorrectnessResult result;
@@ -41,9 +47,9 @@ CorrectnessResult checkCorrectness(
 
         if (expectedHit) {
             bioassert(found, "lookup failed for key {}", key);
-            bioassert(found->getValue() == it->second.getValue(),
+            bioassert(found->getValue() == it->second.value.getValue(),
                       "value mismatch for key {}: got {}, expected {}",
-                      key, found->getValue(), it->second.getValue());
+                      key, found->getValue(), it->second.value.getValue());
             result.hits++;
         } else {
             bioassert(!found, "expected miss but got hit for key {}", key);
@@ -116,8 +122,11 @@ void basictest() {
     separator();
 }
 
-void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false, double hitRate = 0.8) {
-    spdlog::info("loadtest: start ({} pairs, {} lookups, {:.0f}% hit rate)", numPairs, numLookups, hitRate * 100);
+void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
+              double hitRate = 0.8, double validFraction = 0.8) {
+    spdlog::info(
+        "loadtest: start ({} pairs, {} lookups, {:.0f}% hit rate, {:.0f}% tx valid)",
+        numPairs, numLookups, hitRate * 100, validFraction * 100);
 
     GraphView view;
     HAMTManager man;
@@ -134,20 +143,42 @@ void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false, double
         k = dist(rng);
     }
 
+    static constexpr uint64_t queryTid = 1000;
+    static constexpr uint64_t txRange = 1000;
+
     RWSpinLock lock;
-    std::unordered_map<types::UInt64::Primitive, NodeID> groundTruth;
+    std::unordered_map<types::UInt64::Primitive, TxValue> groundTruth;
+
+    std::bernoulli_distribution validDist(validFraction);
+    std::uniform_int_distribution<uint64_t> validStartDist(0, queryTid);
+    std::uniform_int_distribution<uint64_t> validEndDist(queryTid, queryTid + txRange);
+    std::uniform_int_distribution<uint64_t> invalidEndDist(0, queryTid - 1);
+
+    size_t validTxCount = 0;
 
     {
         const auto start = now();
         for (size_t i = 0; i < numPairs; i++) {
-            const NodeID value(keys[i]);
-            index.exhaustiveMutInsert(keys[i], value);
-            if (enableMap) {
-                groundTruth.emplace(keys[i], value);
-            }
+            index.exhaustiveMutInsert(keys[i], NodeID(keys[i]));
         }
         const auto taken = now() - start;
-        printTime("build", taken);
+        printTime("hamt build", taken);
+    }
+
+    if (enableMap) {
+        groundTruth.reserve(numPairs);
+        const auto start = now();
+        for (size_t i = 0; i < numPairs; i++) {
+            const bool valid = validDist(rng);
+            const uint64_t txStart = valid ? validStartDist(rng) : 0;
+            const uint64_t txEnd = valid ? validEndDist(rng) : invalidEndDist(rng);
+            groundTruth.emplace(keys[i], TxValue{NodeID(keys[i]), txStart, txEnd});
+            if (valid) { validTxCount++; }
+        }
+        const auto taken = now() - start;
+        printTime("map build", taken);
+        spdlog::info("build: {}/{} entries visible at queryTid={} ({:.1f}%)",
+                     validTxCount, numPairs, queryTid, 100.0 * validTxCount / numPairs);
     }
 
     // {
@@ -168,44 +199,61 @@ void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false, double
         k = hitDist(rng) ? keys[indexDist(rng)] : dist(rng);
     }
 
+    CorrectnessResult correctness;
     if (enableMap) {
-        const CorrectnessResult correctness = checkCorrectness(index, groundTruth, lookupKeys);
-        const size_t correctnessHits = correctness.hits;
-        const size_t correctnessMisses = correctness.misses;
+        correctness = checkCorrectness(index, groundTruth, lookupKeys);
+    }
+
+    // run with tx timestamping
+    if (enableMap) {
 
         {
             const auto start = now();
             for (size_t i = 0; i < numLookups; i++) {
-                index.find(lookupKeys[i]);
+                std::shared_lock<RWSpinLock> mut(lock);
+                const auto it = groundTruth.find(lookupKeys[i]);
+                [[maybe_unused]] volatile bool visible = it != groundTruth.end()
+                                                      && it->second.txStart <= queryTid
+                                                      && queryTid <= it->second.txEnd;
             }
             const auto taken = now() - start;
-            printTime("hamt lookup total", taken);
-            printTime("hamt lookup per query", taken / numLookups);
-            spdlog::info("hamt: {} hits, {} misses", correctnessHits, correctnessMisses);
+            printTime("map+tx lookup total", taken);
+            printTime("map+tx lookup per query", taken / numLookups);
+            spdlog::info("map+tx: {} hits, {} misses", correctness.hits, correctness.misses);
         }
 
         spdlog::info("");
+    }
 
+    // run HAMT
+    {
+        const auto start = now();
+        for (size_t i = 0; i < numLookups; i++) {
+            [[maybe_unused]] volatile const NodeID* x = index.find(lookupKeys[i]);
+        }
+        const auto taken = now() - start;
+        printTime("hamt lookup total", taken);
+        printTime("hamt lookup per query", taken / numLookups);
+        if (enableMap) {
+            spdlog::info("hamt: {} hits, {} misses", correctness.hits, correctness.misses);
+        }
+    }
+
+    spdlog::info("");
+
+    // run with out tx timestamping
+    if (enableMap) {
         {
             const auto start = now();
             for (size_t i = 0; i < numLookups; i++) {
-                // add a lock to simulate contention, required for "immutable" tid hashmap
                 std::shared_lock<RWSpinLock> mut(lock);
                 lookup(groundTruth, lookupKeys[i]);
             }
             const auto taken = now() - start;
             printTime("map lookup total", taken);
             printTime("map lookup per query", taken / numLookups);
-            spdlog::info("map: {} hits, {} misses", correctnessHits, correctnessMisses);
+            spdlog::info("map: {} hits, {} misses", correctness.hits, correctness.misses);
         }
-    } else {
-        const auto start = now();
-        for (size_t i = 0; i < numLookups; i++) {
-            index.find(lookupKeys[i]);
-        }
-        const auto taken = now() - start;
-        printTime("hamt lookup total", taken);
-        printTime("hamt lookup per query", taken / numLookups);
     }
 
     // {
