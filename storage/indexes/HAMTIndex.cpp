@@ -2,12 +2,15 @@
 
 #include <algorithm>
 #include <bit>
+#include <cstddef>
+#include <span>
 #include <stdint.h>
+#include <type_traits>
 
 #include <range/v3/numeric/iota.hpp>
 #include <range/v3/action/sort.hpp>
 #include <range/v3/view/transform.hpp>
-#include <range/v3/to_container.hpp>
+#include <range/v3/range/conversion.hpp>
 
 #include "ArcManager.h"
 
@@ -220,16 +223,23 @@ void HAMTIndex<K, V, Hash>::build(std::span<const K> keys, std::span<const V> va
     /*const auto sortedValues =
         indices | rv::transform([&values](size_t i) -> const V& { return values[i]; });*/
 
+    size_t depth = 0;
+    const auto different = [&depth](HashCode a, HashCode b) {
+        return getDepthHash(a, depth) != getDepthHash(b, depth);
+    };
 
-    const auto different = [](HashCode a, HashCode b) { return a != b; };
-    auto it = begin(sortedHashes);
-    const auto endSentinel = end(sortedHashes);
+    [[maybe_unused]]
+    const auto sharedPrefixRange = [&different](auto subrange) -> auto {
+        const auto start = begin(subrange);
+        const auto endSentinel = end(subrange);
+
+        const auto rgEnd = std::adjacent_find(start, endSentinel, different);
+
+        return std::ranges::subrange {start, rgEnd};
+    };
 
     do {
-        const auto rgEnd = std::adjacent_find(it, endSentinel, different);
-        // keys in this subrange share the same node
-        const auto same = std::ranges::subrange(it, rgEnd);
-    } while (it != endSentinel);
+    } while (true);
 }
 
 namespace db {

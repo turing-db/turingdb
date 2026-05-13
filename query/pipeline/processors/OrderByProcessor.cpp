@@ -196,7 +196,7 @@ public:
 
         // Get a view of the sorted column
         const auto reordered = _indices
-                               | rv::transform([&](std::size_t i) -> auto& { return data[i]; });
+                               | rv::transform([&](size_t i) -> auto& { return data[i]; });
 
         // Temporary vector which will contain the new tie-ranges
         OrderByProcessor::TieRanges temp;

@@ -86,6 +86,8 @@ private:
 
     void build(std::span<const K> keys, std::span<const V> values);
 
+    static std::span<HashCode> getSharedChunk(size_t depth, const std::vector<HashCode>& codes);
+
     static_assert((sizeof(size_t) * 8) % _hashChunkSize == 0, "Chunking assumption.");
     static_assert(sizeof(size_t) == 8, "Chunking assumption violated.");
     static_assert(_isNode or std::is_same_v<V, EdgeID>, "Non-entity ID index.");
