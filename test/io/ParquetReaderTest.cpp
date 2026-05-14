@@ -3,11 +3,8 @@
 #include "ParquetReader.h"
 
 #include <arrow/io/file.h>
-#include <parquet/column_reader.h>
 #include <parquet/column_writer.h>
-#include <parquet/file_reader.h>
 #include <parquet/file_writer.h>
-#include <parquet/metadata.h>
 #include <parquet/properties.h>
 #include <parquet/schema.h>
 #include <parquet/types.h>
@@ -22,14 +19,15 @@ struct RecordedEvent {
     enum Kind {
         FileStart,
         RowGroupStart,
-        ColumnChunk,
+        ColumnStart,
+        ColumnEnd,
         RowGroupEnd,
         FileEnd,
     };
 
     Kind _kind {FileStart};
-    int _rowGroup {-1};
-    int _column {-1};
+    size_t _rowGroup {0};
+    size_t _column {0};
     int64_t _numRows {0};
     std::string _columnName;
     parquet::Type::type _physicalType {parquet::Type::BOOLEAN};
@@ -41,64 +39,58 @@ public:
     std::vector<int64_t> _idValues;
     std::vector<std::string> _nameValues;
 
-    bool onFileStart(const parquet::FileMetaData& /*metadata*/) override {
-        _events.push_back({RecordedEvent::FileStart, -1, -1, 0, "", parquet::Type::BOOLEAN});
+    bool onFileStart(const parquet::FileMetaData& metadata) override {
+        _events.push_back({RecordedEvent::FileStart, 0, 0, 0, "", parquet::Type::BOOLEAN});
         return true;
     }
 
-    bool onRowGroupStart(int idx, const parquet::RowGroupMetaData& metadata) override {
-        _events.push_back({RecordedEvent::RowGroupStart, idx, -1,
+    bool onRowGroupStart(size_t rowGroupIndex,
+                         const parquet::RowGroupMetaData& metadata) override {
+        _events.push_back({RecordedEvent::RowGroupStart, rowGroupIndex, 0,
                            metadata.num_rows(), "", parquet::Type::BOOLEAN});
         return true;
     }
 
-    bool onColumnChunk(int rg,
-                       int col,
-                       const parquet::ColumnDescriptor& descriptor,
-                       parquet::ColumnReader& reader) override {
-        RecordedEvent e;
-        e._kind = RecordedEvent::ColumnChunk;
-        e._rowGroup = rg;
-        e._column = col;
-        e._columnName = descriptor.name();
-        e._physicalType = descriptor.physical_type();
-        _events.push_back(e);
-
-        if (descriptor.physical_type() == parquet::Type::INT64) {
-            auto* typed = static_cast<parquet::Int64Reader*>(&reader);
-            constexpr int64_t kBatch = 1024;
-            int64_t buf[kBatch];
-            int64_t valuesRead = 0;
-            while (typed->HasNext()) {
-                typed->ReadBatch(kBatch, nullptr, nullptr, buf, &valuesRead);
-                for (int64_t i = 0; i < valuesRead; ++i) {
-                    _idValues.push_back(buf[i]);
-                }
-            }
-        } else if (descriptor.physical_type() == parquet::Type::BYTE_ARRAY) {
-            auto* typed = static_cast<parquet::ByteArrayReader*>(&reader);
-            constexpr int64_t kBatch = 1024;
-            parquet::ByteArray buf[kBatch];
-            int64_t valuesRead = 0;
-            while (typed->HasNext()) {
-                typed->ReadBatch(kBatch, nullptr, nullptr, buf, &valuesRead);
-                for (int64_t i = 0; i < valuesRead; ++i) {
-                    _nameValues.emplace_back(reinterpret_cast<const char*>(buf[i].ptr),
-                                             buf[i].len);
-                }
-            }
-        }
-
+    bool onColumnStart(size_t rowGroupIndex,
+                       size_t columnIndex,
+                       const parquet::ColumnDescriptor& descriptor) override {
+        _events.push_back({RecordedEvent::ColumnStart, rowGroupIndex, columnIndex,
+                           0, descriptor.name(), descriptor.physical_type()});
         return true;
     }
 
-    bool onRowGroupEnd(int idx) override {
-        _events.push_back({RecordedEvent::RowGroupEnd, idx, -1, 0, "", parquet::Type::BOOLEAN});
+    bool onInt64Values(size_t rowGroupIndex,
+                       size_t columnIndex,
+                       std::span<const int64_t> values) override {
+        for (const int64_t v : values) {
+            _idValues.push_back(v);
+        }
+        return true;
+    }
+
+    bool onByteArrayValues(size_t rowGroupIndex,
+                           size_t columnIndex,
+                           std::span<const parquet::ByteArray> values) override {
+        for (const auto& ba : values) {
+            _nameValues.emplace_back(reinterpret_cast<const char*>(ba.ptr), ba.len);
+        }
+        return true;
+    }
+
+    bool onColumnEnd(size_t rowGroupIndex, size_t columnIndex) override {
+        _events.push_back({RecordedEvent::ColumnEnd, rowGroupIndex, columnIndex, 0, "",
+                           parquet::Type::BOOLEAN});
+        return true;
+    }
+
+    bool onRowGroupEnd(size_t rowGroupIndex) override {
+        _events.push_back({RecordedEvent::RowGroupEnd, rowGroupIndex, 0, 0, "",
+                           parquet::Type::BOOLEAN});
         return true;
     }
 
     bool onFileEnd() override {
-        _events.push_back({RecordedEvent::FileEnd, -1, -1, 0, "", parquet::Type::BOOLEAN});
+        _events.push_back({RecordedEvent::FileEnd, 0, 0, 0, "", parquet::Type::BOOLEAN});
         return true;
     }
 };
@@ -165,26 +157,36 @@ TEST_F(ParquetReaderTest, FiresFullEventSequence) {
     ParquetReader reader(fs::Path(_parquetPath), visitor);
     reader.read();
 
-    ASSERT_EQ(visitor._events.size(), 6u);
+    // Expected: FileStart, RowGroupStart,
+    //           ColumnStart(0,id), ColumnEnd(0),
+    //           ColumnStart(1,name), ColumnEnd(1),
+    //           RowGroupEnd, FileEnd
+    ASSERT_EQ(visitor._events.size(), 8u);
 
     EXPECT_EQ(visitor._events[0]._kind, RecordedEvent::FileStart);
 
     EXPECT_EQ(visitor._events[1]._kind, RecordedEvent::RowGroupStart);
-    EXPECT_EQ(visitor._events[1]._rowGroup, 0);
+    EXPECT_EQ(visitor._events[1]._rowGroup, 0u);
     EXPECT_EQ(visitor._events[1]._numRows, 3);
 
-    EXPECT_EQ(visitor._events[2]._kind, RecordedEvent::ColumnChunk);
-    EXPECT_EQ(visitor._events[2]._column, 0);
+    EXPECT_EQ(visitor._events[2]._kind, RecordedEvent::ColumnStart);
+    EXPECT_EQ(visitor._events[2]._column, 0u);
     EXPECT_EQ(visitor._events[2]._columnName, "id");
     EXPECT_EQ(visitor._events[2]._physicalType, parquet::Type::INT64);
 
-    EXPECT_EQ(visitor._events[3]._kind, RecordedEvent::ColumnChunk);
-    EXPECT_EQ(visitor._events[3]._column, 1);
-    EXPECT_EQ(visitor._events[3]._columnName, "name");
-    EXPECT_EQ(visitor._events[3]._physicalType, parquet::Type::BYTE_ARRAY);
+    EXPECT_EQ(visitor._events[3]._kind, RecordedEvent::ColumnEnd);
+    EXPECT_EQ(visitor._events[3]._column, 0u);
 
-    EXPECT_EQ(visitor._events[4]._kind, RecordedEvent::RowGroupEnd);
-    EXPECT_EQ(visitor._events[5]._kind, RecordedEvent::FileEnd);
+    EXPECT_EQ(visitor._events[4]._kind, RecordedEvent::ColumnStart);
+    EXPECT_EQ(visitor._events[4]._column, 1u);
+    EXPECT_EQ(visitor._events[4]._columnName, "name");
+    EXPECT_EQ(visitor._events[4]._physicalType, parquet::Type::BYTE_ARRAY);
+
+    EXPECT_EQ(visitor._events[5]._kind, RecordedEvent::ColumnEnd);
+    EXPECT_EQ(visitor._events[5]._column, 1u);
+
+    EXPECT_EQ(visitor._events[6]._kind, RecordedEvent::RowGroupEnd);
+    EXPECT_EQ(visitor._events[7]._kind, RecordedEvent::FileEnd);
 
     EXPECT_EQ(visitor._idValues, ids);
     EXPECT_EQ(visitor._nameValues, names);
@@ -200,27 +202,26 @@ TEST_F(ParquetReaderTest, ColumnProjectionSkipsUnselectedColumns) {
     reader.setColumnProjection({0});
     reader.read();
 
-    size_t columnChunkEvents = 0;
+    size_t columnStartEvents = 0;
     for (const auto& e : visitor._events) {
-        if (e._kind == RecordedEvent::ColumnChunk) {
-            ++columnChunkEvents;
+        if (e._kind == RecordedEvent::ColumnStart) {
+            ++columnStartEvents;
         }
     }
 
-    EXPECT_EQ(columnChunkEvents, 1u);
+    EXPECT_EQ(columnStartEvents, 1u);
     EXPECT_EQ(visitor._idValues, ids);
     EXPECT_TRUE(visitor._nameValues.empty());
 }
 
 class AbortingVisitor : public ParquetSaxVisitor {
 public:
-    int _columnChunksSeen {0};
+    int _columnStartsSeen {0};
 
-    bool onColumnChunk(int /*rg*/,
-                       int /*col*/,
-                       const parquet::ColumnDescriptor& /*descriptor*/,
-                       parquet::ColumnReader& /*reader*/) override {
-        ++_columnChunksSeen;
+    bool onColumnStart(size_t rowGroupIndex,
+                       size_t columnIndex,
+                       const parquet::ColumnDescriptor& descriptor) override {
+        ++_columnStartsSeen;
         return false;
     }
 };
@@ -232,7 +233,7 @@ TEST_F(ParquetReaderTest, ReturningFalseAbortsRead) {
     ParquetReader reader(fs::Path(_parquetPath), visitor);
     reader.read();
 
-    EXPECT_EQ(visitor._columnChunksSeen, 1);
+    EXPECT_EQ(visitor._columnStartsSeen, 1);
 }
 
 TEST_F(ParquetReaderTest, ThrowsOnMissingFile) {
