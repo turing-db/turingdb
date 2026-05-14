@@ -49,8 +49,8 @@ if (!(await Bun.file(cliBinary).exists())) {
 	);
 }
 
-const sourceTestsDir = join(turingSrc, "test", "query-test-suite", "tests");
-const testsRelDir = "test/query-test-suite/tests";
+const sourceTestsDir = join(turingSrc, "test-suite", "test", "query-test-suite", "tests");
+const testsRelDir = "test-suite/test/query-test-suite/tests";
 
 async function runCliJsonResponse(
     args: string[],
