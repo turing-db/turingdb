@@ -20,54 +20,72 @@ class RowGroupMetaData;
 
 namespace db {
 
-// SAX-style visitor invoked by ParquetReader.  Events fire at Parquet's
-// natural chunk granularities: file, row group, column chunk, and one
-// batch of typed values at a time within a column chunk.  Every method
-// has a no-op default; override only what your handler cares about.
-// Returning false from any callback aborts the read cleanly.
-//
-// The reader does the physical-type dispatch and the parquet::Typed
-// downcast internally, so handlers never touch parquet::ColumnReader.
+// SAX-style visitor invoked by ParquetReader.  
+// Events fire at Parquet's natural chunk granularities: file, 
+// row group, column chunk, and one batch of typed values at a time within a column chunk.  
+// Return false to stop the execution.
 class ParquetSaxVisitor {
 public:
     virtual ~ParquetSaxVisitor();
 
-    virtual bool onFileStart(const parquet::FileMetaData& metadata) { return true; }
+    virtual bool onFileStart(const parquet::FileMetaData& metadata) {
+        return true;
+    }
 
     virtual bool onRowGroupStart(size_t rowGroupIndex,
-                                 const parquet::RowGroupMetaData& metadata) { return true; }
+                                 const parquet::RowGroupMetaData& metadata) {
+        return true;
+    }
 
     virtual bool onColumnStart(size_t rowGroupIndex,
                                size_t columnIndex,
-                               const parquet::ColumnDescriptor& descriptor) { return true; }
+                               const parquet::ColumnDescriptor& descriptor) {
+        return true;
+    }
 
     virtual bool onInt32Values(size_t rowGroupIndex,
                                size_t columnIndex,
-                               std::span<const int32_t> values) { return true; }
+                               std::span<const int32_t> values) {
+        return true;
+    }
 
     virtual bool onInt64Values(size_t rowGroupIndex,
                                size_t columnIndex,
-                               std::span<const int64_t> values) { return true; }
+                               std::span<const int64_t> values) {
+        return true;
+    }
 
     virtual bool onFloatValues(size_t rowGroupIndex,
                                size_t columnIndex,
-                               std::span<const float> values) { return true; }
+                               std::span<const float> values) {
+        return true;
+    }
 
     virtual bool onDoubleValues(size_t rowGroupIndex,
                                 size_t columnIndex,
-                                std::span<const double> values) { return true; }
+                                std::span<const double> values) {
+        return true;
+    }
 
     virtual bool onBoolValues(size_t rowGroupIndex,
                               size_t columnIndex,
-                              std::span<const bool> values) { return true; }
+                              std::span<const bool> values) {
+        return true;
+    }
 
     virtual bool onByteArrayValues(size_t rowGroupIndex,
                                    size_t columnIndex,
-                                   std::span<const parquet::ByteArray> values) { return true; }
+                                   std::span<const parquet::ByteArray> values) {
+        return true;
+    }
 
-    virtual bool onColumnEnd(size_t rowGroupIndex, size_t columnIndex) { return true; }
+    virtual bool onColumnEnd(size_t rowGroupIndex, size_t columnIndex) {
+        return true;
+    }
 
-    virtual bool onRowGroupEnd(size_t rowGroupIndex) { return true; }
+    virtual bool onRowGroupEnd(size_t rowGroupIndex) {
+        return true;
+    }
 
     virtual bool onFileEnd() { return true; }
 };
@@ -85,13 +103,13 @@ public:
     ParquetReader& operator=(ParquetReader&&) = delete;
 
     // Restrict decoding to a subset of columns by their index in the
-    // file schema.  An empty projection (default) walks every column.
+    // file schema. An empty projection (default) walks every column.
     void setColumnProjection(const std::vector<size_t>& columnIndices) {
         _projection = columnIndices;
     }
 
-    // Walks the file and fires SAX callbacks.  Throws TuringException
-    // on I/O or decode failure.
+    // Walks the file and fires SAX callbacks.
+    // Throws TuringException on I/O or decode failure.
     void read();
 
 private:
