@@ -5,7 +5,7 @@
 #include "Graph.h"
 #include "JobSystem.h"
 #include "properties/PropertyContainer.h"
-#include "EmbeddingBucket.h"
+#include "embedding/EmbeddingBucket.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"

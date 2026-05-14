@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "EmbeddingContainer.h"
+#include "embedding/EmbeddingContainer.h"
 
 using namespace db;
 

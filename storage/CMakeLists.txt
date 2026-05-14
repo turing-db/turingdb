@@ -7,9 +7,10 @@ set(storage_sources
         NodeContainer.cpp
         EdgeContainer.cpp
         RowStore.cpp
-        EmbeddingBucket.cpp
-        EmbeddingContainer.cpp
         EntityList.cpp
+
+        embedding/EmbeddingBucket.cpp
+        embedding/EmbeddingContainer.cpp
 
         list/ListByteBuffer.cpp
         list/ListBuffer.cpp
