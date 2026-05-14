@@ -5,6 +5,7 @@
 #include <shared_mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -20,7 +21,8 @@ using namespace db;
 
 namespace {
 
-constexpr bool inputbrk= false;
+constexpr bool inputbrk = false;
+constexpr std::ptrdiff_t numThreads = 8;
 
 void lookup(const auto& map, const auto& key) {
     [[maybe_unused]] volatile const auto&& x = map.find(key);
@@ -214,14 +216,31 @@ static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
     if (enableMap) {
 
         {
+            spdlog::info("map+tx lookup: {} thread(s)", numThreads);
+
+            std::vector<std::thread> threads;
+            threads.reserve(numThreads);
+
+            const size_t chunkSize = numLookups / numThreads;
             const auto start = now();
-            for (size_t i = 0; i < numLookups; i++) {
-                std::shared_lock<RWSpinLock> mut(lock);
-                const auto it = groundTruth.find(lookupKeys[i]);
-                [[maybe_unused]] volatile bool visible = it != groundTruth.end()
-                                                      && it->second.txStart <= queryTid
-                                                      && queryTid <= it->second.txEnd;
+            for (size_t t = 0; t < numThreads; t++) {
+                const size_t begin = t * chunkSize;
+                const size_t end = (t + 1 == numThreads) ? numLookups : begin + chunkSize;
+
+                threads.emplace_back([&, begin, end]() {
+                    for (size_t i = begin; i < end; i++) {
+                        std::unique_lock<RWSpinLock> mut(lock);
+                        const auto it = groundTruth.find(lookupKeys[i]);
+                        [[maybe_unused]] volatile bool visible =
+                            it != groundTruth.end() && it->second.txStart <= queryTid
+                            && queryTid <= it->second.txEnd;
+                    }
+                });
             }
+            for (auto& th : threads) {
+                th.join();
+            }
+
             const auto taken = now() - start;
             printTime("map+tx lookup total", taken);
             printTime("map+tx lookup per query", taken / numLookups);
@@ -259,17 +278,35 @@ static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
 
     // run without tx timestamping
     if (enableMap) {
-        {
-            const auto start = now();
-            for (size_t i = 0; i < numLookups; i++) {
-                std::shared_lock<RWSpinLock> mut(lock);
-                lookup(groundTruth, lookupKeys[i]);
-            }
-            const auto taken = now() - start;
-            printTime("map lookup total", taken);
-            printTime("map lookup per query", taken / numLookups);
-            spdlog::info("map: {} hits, {} misses", correctness.hits, correctness.misses);
+        spdlog::info("map lookup: {} thread(s)", numThreads);
+
+        std::vector<std::thread> threads;
+        threads.reserve(numThreads);
+
+        const size_t chunkSize = numLookups / numThreads;
+        const auto start = now();
+
+        for (size_t t = 0; t < numThreads; t++) {
+            const size_t begin = t * chunkSize;
+            const size_t end = (t + 1 == numThreads) ? numLookups : begin + chunkSize;
+
+            threads.emplace_back([&, begin, end]() {
+                for (size_t i = begin; i < end; i++) {
+                    std::unique_lock<RWSpinLock> mut(lock);
+                    lookup(groundTruth, lookupKeys[i]);
+                }
+            });
         }
+
+        for (auto& th : threads) {
+            th.join();
+        }
+
+        const auto taken = now() - start;
+
+        printTime("map lookup total", taken);
+        printTime("map lookup per query", taken / numLookups);
+        spdlog::info("map: {} hits, {} misses", correctness.hits, correctness.misses);
     }
 
     spdlog::info("loadtest: ok");
@@ -279,9 +316,10 @@ static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
 int main() {
     basictest();
     constexpr bool map = true;
-    loadtest(1'000'000, 1'000'000, map);
-    loadtest(1'000, 1'000, map);
-    loadtest(1'000'000, 1'000, map);
-    loadtest(10'000'000, 100'000, map);
-    loadtest(1'000'000, 500, map);
+    // loadtest(1'000'000, 1'000'000, map);
+    // loadtest(1'000, 1'000, map);
+    // loadtest(1'000'000, 1'000, map);
+    // loadtest(10'000'000, 100'000, map);
+    // loadtest(1'000'000, 500, map);
+    loadtest(10'000'000, 500, map);
 }
