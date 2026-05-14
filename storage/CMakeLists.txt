@@ -10,9 +10,10 @@ set(storage_sources
         EmbeddingBucket.cpp
         EmbeddingContainer.cpp
         EntityList.cpp
-        ListByteBuffer.cpp
-        ListBuffer.cpp
-        ListElementViewBuffer.cpp
+
+        list/ListByteBuffer.cpp
+        list/ListBuffer.cpp
+        list/ListElementViewBuffer.cpp
 
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp

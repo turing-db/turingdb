@@ -6,8 +6,8 @@
 
 #include "QueryStatus.h"
 
-#include "ListElementView.h"
-#include "ListUtils.h"
+#include "list/ListElementView.h"
+#include "list/ListUtils.h"
 
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"

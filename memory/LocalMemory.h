@@ -14,8 +14,8 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnStringTable.h"
 
-#include "ListBuffer.h"
-#include "ListView.h"
+#include "list/ListBuffer.h"
+#include "list/ListView.h"
 
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"

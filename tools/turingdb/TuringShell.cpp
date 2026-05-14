@@ -35,9 +35,9 @@
 
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
-#include "ListBufferTypeTag.h"
-#include "ListElementView.h"
-#include "ListUtils.h"
+#include "list/ListBufferTypeTag.h"
+#include "list/ListElementView.h"
+#include "list/ListUtils.h"
 
 #include "versioning/ChangeResult.h"
 #include "versioning/CommitBuilder.h"
