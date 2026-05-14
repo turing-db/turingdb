@@ -80,7 +80,7 @@ private:
 // and don't forget to call delete yourself for each object so
 // that the destructor is called. 
 //
-// This must be done before the BumpPtrAllocator goes itself is deleted
+// This must be done before the BumpPtrAllocator itself is deleted
 // otherwise memory allocated possibly by members such as STL data structures
 // will be lost.
 //
