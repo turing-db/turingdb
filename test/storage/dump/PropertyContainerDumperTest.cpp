@@ -4,7 +4,7 @@
 #include "dump/PropertyContainerDumper.h"
 #include "dump/PropertyContainerLoader.h"
 #include "comparators/PropertyContainerComparator.h"
-#include "EmbeddingBucket.h"
+#include "embedding/EmbeddingBucket.h"
 #include "FilePageReader.h"
 #include "FilePageWriter.h"
 

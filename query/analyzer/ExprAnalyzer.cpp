@@ -17,7 +17,7 @@
 #include "decl/EvaluatedType.h"
 #include "decl/VarDecl.h"
 
-#include "EmbeddingBucket.h"
+#include "embedding/EmbeddingBucket.h"
 #include "StringBucket.h"
 
 #include "expr/All.h"

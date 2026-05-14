@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "EmbeddingBucket.h"
+#include "embedding/EmbeddingBucket.h"
 
 using namespace db;
 

@@ -6,7 +6,7 @@
 #include <range/v3/algorithm/sort.hpp>
 #include <range/v3/view/zip.hpp>
 
-#include "EmbeddingContainer.h"
+#include "embedding/EmbeddingContainer.h"
 #include "StringContainer.h"
 #include "metadata/PropertyType.h"
 
