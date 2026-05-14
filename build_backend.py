@@ -109,9 +109,14 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
 
     project_root = _get_project_root()
     binary_dir = project_root / "python" / "turingdb" / "_binary"
+    local_dir = project_root / "python" / "turingdb" / "_local"
     binary_pre_existing = {
         p.name
         for p in list(binary_dir.glob("_turingproto*.so")) + list(binary_dir.glob("_turingproto*.pyd"))
+    }
+    local_pre_existing = {
+        p.name
+        for p in list(local_dir.glob("_turinglocal*.so")) + list(local_dir.glob("_turinglocal*.pyd"))
     }
 
     # Ensure the executable exists
@@ -164,6 +169,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             for binary_file in list(binary_dir.glob("_turingproto*.so")) + list(binary_dir.glob("_turingproto*.pyd")):
                 if binary_file.name not in binary_pre_existing:
                     binary_file.unlink()
+        if local_dir.exists():
+            for local_file in list(local_dir.glob("_turinglocal*.so")) + list(local_dir.glob("_turinglocal*.pyd")):
+                if local_file.name not in local_pre_existing:
+                    local_file.unlink()
 
 
 def build_sdist(sdist_directory, config_settings=None):
