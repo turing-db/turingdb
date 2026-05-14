@@ -105,7 +105,7 @@ inline void* operator new(size_t size,
 
 inline void* operator new(size_t size,
                           BumpPtrAllocator& bumpPtrAlloc) {
-    return operator new(size, std::align_val_t(alignof(std::max_align_t)), bumpPtrAlloc);
+    return operator new(size, std::align_val_t(alignof(::max_align_t)), bumpPtrAlloc);
 }
 
 inline void operator delete(void* ptr, BumpPtrAllocator& bumpPtrAlloc) noexcept {
