@@ -9,8 +9,8 @@
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
 
-#include "ListElementView.h"
-#include "ListView.h"
+#include "list/ListElementView.h"
+#include "list/ListView.h"
 
 namespace db {
 

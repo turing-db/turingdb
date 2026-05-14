@@ -1,9 +1,9 @@
 #include <spdlog/spdlog.h>
 #include <type_traits>
 
-#include "ListBuffer.h"
-#include "ListElementView.h"
-#include "ListUtils.h"
+#include "list/ListBuffer.h"
+#include "list/ListElementView.h"
+#include "list/ListUtils.h"
 
 #include "metadata/PropertyType.h"
 

@@ -11,7 +11,7 @@
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
 #include "GraphPath.h"
-#include "ListView.h"
+#include "list/ListView.h"
 
 namespace db {
 

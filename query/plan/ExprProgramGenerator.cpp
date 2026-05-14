@@ -3,7 +3,7 @@
 #include <spdlog/fmt/fmt.h>
 #include <utility>
 
-#include "ListView.h"
+#include "list/ListView.h"
 #include "PipelineGenerator.h"
 #include "columns/AllowedKinds.h"
 #include "columns/BinaryOperators.h"
@@ -40,7 +40,7 @@
 #include "dataframe/NamedColumn.h"
 #include "columns/ColumnOperator.h"
 
-#include "ListBuffer.h"
+#include "list/ListBuffer.h"
 
 #include "LocalMemory.h"
 

@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-#include "ListBuffer.h"
+#include "list/ListBuffer.h"
 #include "SystemManager.h"
 
 #include "columns/ColumnVector.h"
@@ -10,7 +10,7 @@
 
 #include "processors/LambdaProcessor.h"
 
-#include "ListElementView.h"
+#include "list/ListElementView.h"
 
 using namespace db;
 using namespace turing::test;

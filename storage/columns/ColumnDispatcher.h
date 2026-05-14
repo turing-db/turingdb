@@ -6,7 +6,7 @@
 #include "ColumnOptVector.h"
 #include "ColumnKind.h"
 #include "EntityList.h"
-#include "ListElementView.h"
+#include "list/ListElementView.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
 
