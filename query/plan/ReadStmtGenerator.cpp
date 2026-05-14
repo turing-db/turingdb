@@ -970,9 +970,11 @@ bool ReadStmtGenerator::insertDataFlowNode(VarNode* node, PlanGraphNode* depende
             if (tryPlaceValueHashJoin(filter, node, dependency, pred)) {
                 return true;
             }
-            CartesianProductNode* join = _tree->insertBefore<CartesianProductNode>(filter);
+            CartesianProductNode* cartProd = _tree->insertBefore<CartesianProductNode>(filter);
             PlanGraphNode* depBranchTip = _topology->getBranchTip(dependency);
-            depBranchTip->connectOut(join);
+            if (!depBranchTip) return false;
+            bioassert(depBranchTip, "Failed to get branch tip.");
+            depBranchTip->connectOut(cartProd);
             return false;
         }
         default:
