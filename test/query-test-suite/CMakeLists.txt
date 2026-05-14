@@ -50,7 +50,7 @@ target_link_libraries(query_test_suite_cli
     PRIVATE turing_db_server_s
             turing_db_proto_client_s)
 
-set(QUERY_TEST_SUITE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+set(QUERY_TEST_SUITE_DIR ${CMAKE_SOURCE_DIR}/test-suite/test/query-test-suite/tests)
 
 target_compile_definitions(test_query_test_suite
     PRIVATE QUERY_TEST_SUITE_DIR="${QUERY_TEST_SUITE_DIR}")
