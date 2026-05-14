@@ -15,7 +15,9 @@
 
 using namespace db;
 
-ParquetSaxVisitor::~ParquetSaxVisitor() = default;
+ParquetSaxVisitor::~ParquetSaxVisitor()
+{
+}
 
 ParquetReader::ParquetReader(const fs::Path& path, ParquetSaxVisitor& visitor)
     : _path(path),
@@ -24,15 +26,16 @@ ParquetReader::ParquetReader(const fs::Path& path, ParquetSaxVisitor& visitor)
     _scratch.resize(DEFAULT_BATCH_SIZE * sizeof(parquet::ByteArray));
 }
 
-ParquetReader::~ParquetReader() = default;
+ParquetReader::~ParquetReader() {
+}
 
 template <typename ReaderT, typename ValueT, typename Callback>
 bool ParquetReader::decodeAndFire(size_t rowGroupIndex,
                                   size_t columnIndex,
                                   parquet::ColumnReader& reader,
                                   Callback callback) {
-    auto* typed = static_cast<ReaderT*>(&reader);
-    auto* buf = reinterpret_cast<ValueT*>(_scratch.data());
+    ReaderT* typed = static_cast<ReaderT*>(&reader);
+    ValueT* buf = reinterpret_cast<ValueT*>(_scratch.data());
     constexpr int64_t batchSize = static_cast<int64_t>(DEFAULT_BATCH_SIZE);
     int64_t valuesRead = 0;
 
@@ -57,10 +60,10 @@ void ParquetReader::read() {
         throw TuringException(fmt::format("Parquet: opening {}: {}", _path.get(), e.what()));
     }
 
-    // metadata() returns shared_ptr<FileMetaData>; bind locally and
-    // use a raw pointer for the rest of the function.
-    const auto fileMetadataSp = reader->metadata();
-    const parquet::FileMetaData* fileMetadata = fileMetadataSp.get();
+    // metadata() returns shared_ptr<FileMetaData>
+    // bind locally and use a raw pointer for the rest of the function.
+    const auto fileMetadataSharedPtr = reader->metadata();
+    const parquet::FileMetaData* fileMetadata = fileMetadataSharedPtr.get();
 
     if (!_visitor.onFileStart(*fileMetadata)) {
         return;
@@ -81,8 +84,8 @@ void ParquetReader::read() {
     }
 
     for (size_t rg = 0; rg < numRowGroups; ++rg) {
-        const auto rgReaderSp = reader->RowGroup(static_cast<int>(rg));
-        parquet::RowGroupReader* rgReader = rgReaderSp.get();
+        const auto rgReaderPtr = reader->RowGroup(static_cast<int>(rg));
+        parquet::RowGroupReader* rgReader = rgReaderPtr.get();
         const auto rgMetadata = fileMetadata->RowGroup(static_cast<int>(rg));
 
         if (!_visitor.onRowGroupStart(rg, *rgMetadata)) {
@@ -97,8 +100,8 @@ void ParquetReader::read() {
 
             const parquet::ColumnDescriptor* descriptor =
                 schema->Column(static_cast<int>(colIdx));
-            const auto colReaderSp = rgReader->Column(static_cast<int>(colIdx));
-            parquet::ColumnReader* colReader = colReaderSp.get();
+            const auto colReaderPtr = rgReader->Column(static_cast<int>(colIdx));
+            parquet::ColumnReader* colReader = colReaderPtr.get();
 
             if (!_visitor.onColumnStart(rg, colIdx, *descriptor)) {
                 return;
@@ -112,41 +115,48 @@ void ParquetReader::read() {
                                                                                  colIdx,
                                                                                  *colReader,
                                                                                  &ParquetSaxVisitor::onInt32Values);
-                    } break;
+                    }
+                    break;
                     case parquet::Type::INT64: {
                         keepGoing = decodeAndFire<parquet::Int64Reader, int64_t>(rg,
                                                                                  colIdx,
                                                                                  *colReader,
                                                                                  &ParquetSaxVisitor::onInt64Values);
-                    } break;
+                    }
+                    break;
                     case parquet::Type::FLOAT: {
                         keepGoing = decodeAndFire<parquet::FloatReader, float>(rg,
                                                                                colIdx,
                                                                                *colReader,
                                                                                &ParquetSaxVisitor::onFloatValues);
-                    } break;
+                    }
+                    break;
                     case parquet::Type::DOUBLE: {
                         keepGoing = decodeAndFire<parquet::DoubleReader, double>(rg,
                                                                                  colIdx,
                                                                                  *colReader,
                                                                                  &ParquetSaxVisitor::onDoubleValues);
-                    } break;
+                    }
+                    break;
                     case parquet::Type::BOOLEAN: {
                         keepGoing = decodeAndFire<parquet::BoolReader, bool>(rg,
                                                                              colIdx,
                                                                              *colReader,
                                                                              &ParquetSaxVisitor::onBoolValues);
-                    } break;
+                    }
+                    break;
                     case parquet::Type::BYTE_ARRAY: {
                         keepGoing = decodeAndFire<parquet::ByteArrayReader, parquet::ByteArray>(rg,
                                                                                                 colIdx,
                                                                                                 *colReader,
                                                                                                 &ParquetSaxVisitor::onByteArrayValues);
-                    } break;
+                    }
+                    break;
                     default: {
                         // INT96 and FIXED_LEN_BYTE_ARRAY not yet supported;
                         // onColumnStart still fired so users can detect.
-                    } break;
+                    }
+                    break;
                 }
             } catch (const parquet::ParquetException& e) {
                 throw TuringException(fmt::format(
