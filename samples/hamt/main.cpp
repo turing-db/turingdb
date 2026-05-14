@@ -20,6 +20,8 @@ using namespace db;
 
 namespace {
 
+constexpr bool inputbrk= false;
+
 void lookup(const auto& map, const auto& key) {
     [[maybe_unused]] volatile const auto&& x = map.find(key);
 }
@@ -185,7 +187,7 @@ static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
                      validTxCount, numPairs, queryTid, 100.0 * validTxCount / numPairs);
     }
 
-    {
+    if (inputbrk) {
         std::string input;
         spdlog::info("press y to continue with lookups...");
         std::getline(std::cin, input);
@@ -235,7 +237,8 @@ static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
             [[maybe_unused]] volatile const NodeID* x = index.find(lookupKeys[i]);
         }
         const auto taken = now() - start;
-        {
+
+        if (inputbrk) {
             std::string input;
             spdlog::info("press y to continue with teardown...");
             std::getline(std::cin, input);
@@ -254,7 +257,7 @@ static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
 
     spdlog::info("");
 
-    // run with out tx timestamping
+    // run without tx timestamping
     if (enableMap) {
         {
             const auto start = now();
@@ -275,10 +278,10 @@ static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
 
 int main() {
     basictest();
-    constexpr bool map = false;
-    // loadtest(1'000'000, 1'000'000, true);
-    // loadtest(1'000, 1'000, true);
-    // loadtest(1'000'000, 1'000, true);
-    // loadtest(10'000'000, 100'000, true);
+    constexpr bool map = true;
+    loadtest(1'000'000, 1'000'000, map);
+    loadtest(1'000, 1'000, map);
+    loadtest(1'000'000, 1'000, map);
+    loadtest(10'000'000, 100'000, map);
     loadtest(1'000'000, 500, map);
 }
