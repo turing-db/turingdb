@@ -34,9 +34,7 @@ public:
         return true;
     }
 
-    bool onInt64Values(size_t rowGroupIndex,
-                       size_t columnIndex,
-                       std::span<const int64_t> values) override {
+    bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) override {
         if (columnIndex == 0) {
             _totalRows += values.size();
         }
@@ -48,9 +46,7 @@ public:
         return true;
     }
 
-    bool onDoubleValues(size_t rowGroupIndex,
-                        size_t columnIndex,
-                        std::span<const double> values) override {
+    bool onDoubleValues(size_t columnIndex, std::span<const double> values) override {
         if (columnIndex == 0) {
             _totalRows += values.size();
         }
@@ -62,16 +58,15 @@ public:
         return true;
     }
 
-    bool onByteArrayValues(size_t rowGroupIndex,
-                           size_t columnIndex,
+    bool onByteArrayValues(size_t columnIndex,
                            std::span<const parquet::ByteArray> values) override {
         if (columnIndex == 0) {
             _totalRows += values.size();
         }
-        for (const auto& ba : values) {
+        for (const auto& byteArray : values) {
             if (_preview[columnIndex].size() < _previewRowsCount) {
                 _preview[columnIndex].emplace_back(
-                    reinterpret_cast<const char*>(ba.ptr), ba.len);
+                    reinterpret_cast<const char*>(byteArray.ptr), byteArray.len);
             }
         }
         return true;
@@ -108,7 +103,8 @@ static void processParquetFile(const fs::Path& path, size_t previewRowsCount) {
 
     CountingVisitor visitor(previewRowsCount);
     ParquetReader reader(path, visitor);
-    reader.read();
+    while (reader.nextChunk()) {
+    }
 
     fmt::println("");
 }

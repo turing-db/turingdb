@@ -16,14 +16,22 @@ class ColumnReader;
 class FileMetaData;
 class ParquetFileReader;
 class RowGroupMetaData;
+class RowGroupReader;
 }
 
 namespace db {
 
-// SAX-style visitor invoked by ParquetReader.  
-// Events fire at Parquet's natural chunk granularities: file, 
-// row group, column chunk, and one batch of typed values at a time within a column chunk.  
-// Return false to stop the execution.
+// Streaming SAX-style visitor driven by ParquetReader::nextChunk.
+//
+// Lifecycle: onFileStart fires once on the first nextChunk call.
+// For each row group, onRowGroupStart fires once, followed by one or more chunks.
+// A chunk fires onColumnStart (first time only, per column),
+// one callback per projected column in the chunk, then onChunkEnd. 
+// When a row group is exhausted, onColumnEnd fires for each projected column 
+// followed by onRowGroupEnd.
+// onFileEnd fires when nextChunk returns false.
+//
+// Returning false from any callback aborts further reading.
 class ParquetSaxVisitor {
 public:
     virtual ~ParquetSaxVisitor();
@@ -43,39 +51,37 @@ public:
         return true;
     }
 
-    virtual bool onInt32Values(size_t rowGroupIndex,
-                               size_t columnIndex,
-                               std::span<const int32_t> values) {
+    virtual bool onInt32Values(size_t columnIndex, std::span<const int32_t> values) {
         return true;
     }
 
-    virtual bool onInt64Values(size_t rowGroupIndex,
-                               size_t columnIndex,
-                               std::span<const int64_t> values) {
+    virtual bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) {
         return true;
     }
 
-    virtual bool onFloatValues(size_t rowGroupIndex,
-                               size_t columnIndex,
-                               std::span<const float> values) {
+    virtual bool onFloatValues(size_t columnIndex, std::span<const float> values) {
         return true;
     }
 
-    virtual bool onDoubleValues(size_t rowGroupIndex,
-                                size_t columnIndex,
-                                std::span<const double> values) {
+    virtual bool onDoubleValues(size_t columnIndex, std::span<const double> values) {
         return true;
     }
 
-    virtual bool onBoolValues(size_t rowGroupIndex,
-                              size_t columnIndex,
-                              std::span<const bool> values) {
+    virtual bool onBoolValues(size_t columnIndex, std::span<const bool> values) {
         return true;
     }
 
-    virtual bool onByteArrayValues(size_t rowGroupIndex,
-                                   size_t columnIndex,
+    virtual bool onByteArrayValues(size_t columnIndex,
                                    std::span<const parquet::ByteArray> values) {
+        return true;
+    }
+
+    // All projected columns for this chunk have fired their callback.
+    // firstRowInRowGroup is the row index within the current row group at
+    // which this chunk starts, rows is the chunk's row count.
+    virtual bool onChunkEnd(size_t rowGroupIndex,
+                            size_t firstRowInRowGroup,
+                            size_t rows) {
         return true;
     }
 
@@ -92,7 +98,7 @@ public:
 
 class ParquetReader {
 public:
-    static constexpr size_t DEFAULT_BATCH_SIZE = 1024;
+    static constexpr size_t DEFAULT_CHUNK_SIZE = 65536;
 
     ParquetReader(const fs::Path& path, ParquetSaxVisitor& visitor);
     ~ParquetReader();
@@ -108,23 +114,44 @@ public:
         _projection = columnIndices;
     }
 
-    // Walks the file and fires SAX callbacks.
+    // Produce one chunk and fire callbacks.
+    // Chunks are capped at the row-group boundary,
+    // so the actual row count is bounded by the rows
+    // remaining in the current row group.
+    // Returns false once the file is exhausted or a callback returned false.
     // Throws TuringException on I/O or decode failure.
-    void read();
+    bool nextChunk(size_t maxRows = DEFAULT_CHUNK_SIZE);
 
 private:
     fs::Path _path;
     ParquetSaxVisitor& _visitor;
     std::vector<size_t> _projection;
-    // Scratch buffer reused across all column chunks; sized once to hold
-    // DEFAULT_BATCH_SIZE of the widest typed value (parquet::ByteArray).
-    std::vector<uint8_t> _scratch;
 
-    template <typename ReaderT, typename ValueT, typename Callback>
-    bool decodeAndFire(size_t rowGroupIndex,
-                       size_t columnIndex,
-                       parquet::ColumnReader& reader,
-                       Callback callback);
+    // General ParquetFileReader state
+    std::unique_ptr<parquet::ParquetFileReader> _fileReader;
+    const parquet::FileMetaData* _fileMetadata {nullptr};
+    std::vector<size_t> _columns;
+    size_t _numRowGroups {0};
+    size_t _currentRowGroup {0};
+    bool _fileStarted {false};
+    bool _fileEnded {false};
+    bool _aborted {false};
+
+    // row-group state
+    bool _rowGroupOpen {false};
+    std::shared_ptr<parquet::RowGroupReader> _rowGroupReader;
+    std::vector<std::shared_ptr<parquet::ColumnReader>> _columnReaders;
+    size_t _rowsInRowGroup {0};
+    size_t _rowsConsumedInRowGroup {0};
+
+    // One scratch buffer per projected column, sized to hold
+    // DEFAULT_CHUNK_SIZE values of the widest type (parquet::ByteArray).
+    std::vector<std::vector<uint8_t>> _scratch;
+
+    bool ensureFileOpen();
+    bool openRowGroup();
+    void closeRowGroup();
+    bool readColumnSlice(size_t projectionIndex, size_t columnIndex, int64_t batchRows);
 };
 
 }
