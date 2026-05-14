@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cstddef>
 #include <iostream>
 #include <random>
 #include <shared_mutex>
@@ -12,6 +13,7 @@
 #include "RWSpinLock.h"
 #include "indexes/HAMTIndex.h"
 #include "indexes/HAMTIndexManager.h"
+#include "indexes/HAMTIndexNode.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -89,7 +91,7 @@ static constexpr auto printTime = [](std::string_view label, const auto& time) -
     }
 };
 
-void basictest() {
+static void basictest() {
     spdlog::info("basictest: start");
 
     GraphView view;
@@ -122,7 +124,7 @@ void basictest() {
     separator();
 }
 
-void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
+static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
               double hitRate = 0.8, double validFraction = 0.8) {
     spdlog::info(
         "loadtest: start ({} pairs, {} lookups, {:.0f}% hit rate, {:.0f}% tx valid)",
@@ -172,7 +174,9 @@ void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
             const bool valid = validDist(rng);
             const uint64_t txStart = valid ? validStartDist(rng) : 0;
             const uint64_t txEnd = valid ? validEndDist(rng) : invalidEndDist(rng);
-            groundTruth.emplace(keys[i], TxValue{NodeID(keys[i]), txStart, txEnd});
+            groundTruth.emplace(
+                keys[i],
+                TxValue {.value = NodeID {keys[i]}, .txStart = txStart, .txEnd = txEnd});
             if (valid) { validTxCount++; }
         }
         const auto taken = now() - start;
@@ -181,15 +185,15 @@ void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
                      validTxCount, numPairs, queryTid, 100.0 * validTxCount / numPairs);
     }
 
-    // {
-    //     std::string input;
-    //     spdlog::info("press y to continue with lookups...");
-    //     std::getline(std::cin, input);
-    //     if (input != "y") {
-    //         spdlog::info("aborted");
-    //         return;
-    //     }
-    // }
+    {
+        std::string input;
+        spdlog::info("press y to continue with lookups...");
+        std::getline(std::cin, input);
+        if (input != "y") {
+            spdlog::info("aborted");
+            return;
+        }
+    }
 
     std::uniform_int_distribution<size_t> indexDist(0, numPairs - 1);
     std::bernoulli_distribution hitDist(hitRate);
@@ -221,7 +225,6 @@ void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
             printTime("map+tx lookup per query", taken / numLookups);
             spdlog::info("map+tx: {} hits, {} misses", correctness.hits, correctness.misses);
         }
-
         spdlog::info("");
     }
 
@@ -232,8 +235,18 @@ void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
             [[maybe_unused]] volatile const NodeID* x = index.find(lookupKeys[i]);
         }
         const auto taken = now() - start;
+        {
+            std::string input;
+            spdlog::info("press y to continue with teardown...");
+            std::getline(std::cin, input);
+            if (input != "y") {
+                spdlog::info("aborted");
+                return;
+            }
+        }
         printTime("hamt lookup total", taken);
         printTime("hamt lookup per query", taken / numLookups);
+
         if (enableMap) {
             spdlog::info("hamt: {} hits, {} misses", correctness.hits, correctness.misses);
         }
@@ -256,25 +269,16 @@ void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
         }
     }
 
-    // {
-    //     std::string input;
-    //     spdlog::info("press y to continue with teardown...");
-    //     std::getline(std::cin, input);
-    //     if (input != "y") {
-    //         spdlog::info("aborted");
-    //         return;
-    //     }
-    // }
-
     spdlog::info("loadtest: ok");
     separator();
 }
 
 int main() {
     basictest();
+    constexpr bool map = false;
     // loadtest(1'000'000, 1'000'000, true);
     // loadtest(1'000, 1'000, true);
     // loadtest(1'000'000, 1'000, true);
     // loadtest(10'000'000, 100'000, true);
-    loadtest(1'000'000, 500, true);
+    loadtest(1'000'000, 500, map);
 }
