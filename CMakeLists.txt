@@ -218,6 +218,9 @@ find_package(FLEX REQUIRED)
 # Nlohmann json
 find_package(nlohmann_json REQUIRED)
 
+# Apache Parquet (pulls in Arrow transitively)
+find_package(Parquet REQUIRED)
+
 # Faiss
 find_package(Faiss REQUIRED)
 

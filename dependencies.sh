@@ -242,6 +242,73 @@ if [[ $USE_CLANG -eq 1 ]]; then
 fi
 
 # ============================================================
+# Build Apache Arrow (and Parquet) from source
+# ============================================================
+ARROW_VERSION="24.0.0"
+ARROW_TARBALL="apache-arrow-${ARROW_VERSION}.tar.gz"
+ARROW_SRC_DIR=$BUILD_DIR/apache-arrow-${ARROW_VERSION}
+
+if [[ ! -d "$ARROW_SRC_DIR" ]]; then
+    echo "Extracting Apache Arrow ${ARROW_VERSION}..."
+    cd $BUILD_DIR
+    tar xf "$SOURCE_DIR/external/$ARROW_TARBALL"
+fi
+
+echo "Building Apache Arrow + Parquet..."
+mkdir -p $BUILD_DIR/arrow
+cd $BUILD_DIR/arrow
+
+ARROW_CMAKE_ARGS=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    -DBUILD_SHARED_LIBS=OFF
+    -DARROW_BUILD_STATIC=ON
+    -DARROW_BUILD_SHARED=OFF
+    -DARROW_BUILD_TESTS=OFF
+    -DARROW_BUILD_BENCHMARKS=OFF
+    -DARROW_BUILD_EXAMPLES=OFF
+    -DARROW_BUILD_UTILITIES=OFF
+    -DARROW_BUILD_INTEGRATION=OFF
+    -DARROW_PARQUET=ON
+    -DARROW_IPC=ON
+    -DARROW_COMPUTE=OFF
+    -DARROW_CSV=OFF
+    -DARROW_JSON=OFF
+    -DARROW_DATASET=OFF
+    -DARROW_ACERO=OFF
+    -DARROW_FLIGHT=OFF
+    -DARROW_GANDIVA=OFF
+    -DARROW_FILESYSTEM=OFF
+    -DARROW_HDFS=OFF
+    -DARROW_S3=OFF
+    -DARROW_USE_OPENSSL=OFF
+    -DARROW_WITH_SNAPPY=ON
+    -DARROW_WITH_ZSTD=ON
+    -DARROW_WITH_LZ4=ON
+    -DARROW_WITH_GZIP=ON
+    -DARROW_WITH_BROTLI=OFF
+    -DARROW_WITH_BZ2=OFF
+    -DARROW_DEPENDENCY_SOURCE=BUNDLED
+    -DARROW_DEPENDENCY_USE_SHARED=OFF
+    -DPARQUET_BUILD_EXECUTABLES=OFF
+    -DPARQUET_BUILD_EXAMPLES=OFF
+    -DPARQUET_REQUIRE_ENCRYPTION=OFF
+)
+
+if [[ $USE_CLANG -eq 1 ]]; then
+    ARROW_CMAKE_ARGS+=("${CLANG_COMPILER_ARGS[@]}")
+fi
+
+if [[ "$(uname)" == "Linux" ]]; then
+    ARROW_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
+fi
+
+cmake "${ARROW_CMAKE_ARGS[@]}" $ARROW_SRC_DIR/cpp
+cmake --build $BUILD_DIR/arrow -j $NUM_JOBS
+cmake --install $BUILD_DIR/arrow
+
+# ============================================================
 # Build bison from source
 # ============================================================
 BISON_VERSION="3.8.2"
