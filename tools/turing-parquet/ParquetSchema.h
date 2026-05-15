@@ -26,6 +26,18 @@ enum class ParquetPrimitiveType {
     FIXED_LEN_BYTE_ARRAY,
 };
 
+// Outcome of content sampling on a BYTE_ARRAY column. KEY_VALUE means every
+// sampled value parsed as a JSON object at the top level (its values can be
+// arbitrarily nested); GENERAL means every sampled value was valid JSON but
+// at least one was not a top-level object (e.g., an array or a primitive);
+// NONE is the default (sampling did not run, or at least one sample failed
+// to parse as JSON).
+enum class ParquetJsonShape {
+    NONE,
+    GENERAL,
+    KEY_VALUE,
+};
+
 // A node in the Parquet schema tree, either a primitive leaf or a group with
 // children.
 class ParquetSchemaField {
@@ -44,12 +56,12 @@ public:
     bool isGroup() const { return _isGroup; }
 
     // Primitive-only accessors. getFixedLength is only meaningful when the
-    // primitive type is FIXED_LEN_BYTE_ARRAY. isLikelyJson is only meaningful
+    // primitive type is FIXED_LEN_BYTE_ARRAY. getJsonShape is only meaningful
     // when the primitive type is BYTE_ARRAY and is populated by a separate
     // content-sampling pass (see ParquetJsonDetector).
     ParquetPrimitiveType getPrimitiveType() const { return _primitiveType; }
     size_t getFixedLength() const { return _fixedLength; }
-    bool isLikelyJson() const { return _isLikelyJson; }
+    ParquetJsonShape getJsonShape() const { return _jsonShape; }
 
     // Group-only accessors.
     size_t getChildCount() const { return _children.size(); }
@@ -62,7 +74,7 @@ public:
     void setPrimitiveType(ParquetPrimitiveType primitiveType) { _primitiveType = primitiveType; }
     void setFixedLength(size_t fixedLength) { _fixedLength = fixedLength; }
     void markAsGroup() { _isGroup = true; }
-    void markAsLikelyJson() { _isLikelyJson = true; }
+    void setJsonShape(ParquetJsonShape jsonShape) { _jsonShape = jsonShape; }
 
     ParquetSchemaField& addChild();
 
@@ -73,7 +85,7 @@ private:
     bool _isGroup {false};
     ParquetPrimitiveType _primitiveType {ParquetPrimitiveType::BOOLEAN};
     size_t _fixedLength {0};
-    bool _isLikelyJson {false};
+    ParquetJsonShape _jsonShape {ParquetJsonShape::NONE};
     std::vector<std::unique_ptr<ParquetSchemaField>> _children;
 };
 

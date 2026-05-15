@@ -27,14 +27,22 @@ void collectLeaves(ParquetSchemaField& field,
     }
 }
 
-bool looksLikeJson(const parquet::ByteArray& value) {
+ParquetJsonShape classifyJson(const parquet::ByteArray& value) {
     if (value.len == 0) {
-        return false;
+        return ParquetJsonShape::NONE;
     }
 
     const std::string_view text(reinterpret_cast<const char*>(value.ptr),
                                 static_cast<size_t>(value.len));
-    return nlohmann::json::accept(text);
+    const auto json = nlohmann::json::parse(text, nullptr, /*allow_exceptions=*/false);
+    if (json.is_discarded()) {
+        return ParquetJsonShape::NONE;
+    }
+
+    if (json.is_object()) {
+        return ParquetJsonShape::KEY_VALUE;
+    }
+    return ParquetJsonShape::GENERAL;
 }
 
 }
@@ -90,7 +98,11 @@ bool ParquetJsonDetector::onByteArrayValues(size_t columnIndex,
         }
 
         ++state.samplesSeen;
-        if (looksLikeJson(value)) {
+        const ParquetJsonShape shape = classifyJson(value);
+        if (shape == ParquetJsonShape::KEY_VALUE) {
+            ++state.keyValueLooking;
+            ++state.jsonLooking;
+        } else if (shape == ParquetJsonShape::GENERAL) {
             ++state.jsonLooking;
         }
     }
@@ -130,8 +142,14 @@ void ParquetJsonDetector::markJsonFields() {
         if (state.samplesSeen == 0) {
             continue;
         }
-        if (state.jsonLooking == state.samplesSeen) {
-            state.field->markAsLikelyJson();
+        if (state.jsonLooking != state.samplesSeen) {
+            continue;
+        }
+
+        if (state.keyValueLooking == state.samplesSeen) {
+            state.field->setJsonShape(ParquetJsonShape::KEY_VALUE);
+        } else {
+            state.field->setJsonShape(ParquetJsonShape::GENERAL);
         }
     }
 }
