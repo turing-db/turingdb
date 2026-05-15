@@ -1,7 +1,7 @@
 #include "GraphReport.h"
 
 #include "reader/GraphReader.h"
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "metadata/GraphMetadata.h"
 #include "properties/PropertyManager.h"
 
