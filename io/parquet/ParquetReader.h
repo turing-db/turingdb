@@ -166,41 +166,17 @@ private:
     bool ensureFileOpen();
     bool openRowGroup();
     void closeRowGroup();
-    bool readColumnSlice(size_t projectionIndex, size_t columnIndex, int64_t batchRows);
+    bool readColumnSlice(size_t projectionIndex, size_t columnIndex, size_t batchRows);
 
-    bool readInt32Slice(parquet::ColumnReader* columnReader,
-                        std::vector<uint8_t>& scratch,
-                        size_t columnIndex,
-                        int64_t batchRows);
-    bool readInt64Slice(parquet::ColumnReader* columnReader,
-                        std::vector<uint8_t>& scratch,
-                        size_t columnIndex,
-                        int64_t batchRows);
-    bool readFloatSlice(parquet::ColumnReader* columnReader,
-                        std::vector<uint8_t>& scratch,
-                        size_t columnIndex,
-                        int64_t batchRows);
-    bool readDoubleSlice(parquet::ColumnReader* columnReader,
-                         std::vector<uint8_t>& scratch,
-                         size_t columnIndex,
-                         int64_t batchRows);
-    bool readBoolSlice(parquet::ColumnReader* columnReader,
-                       std::vector<uint8_t>& scratch,
-                       size_t columnIndex,
-                       int64_t batchRows);
-    bool readByteArraySlice(parquet::ColumnReader* columnReader,
-                            std::vector<uint8_t>& scratch,
-                            size_t columnIndex,
-                            int64_t batchRows);
-    bool readInt96Slice(parquet::ColumnReader* columnReader,
-                        std::vector<uint8_t>& scratch,
-                        size_t columnIndex,
-                        int64_t batchRows);
-    bool readFixedLenByteArraySlice(parquet::ColumnReader* columnReader,
-                                    std::vector<uint8_t>& scratch,
-                                    size_t columnIndex,
-                                    size_t byteWidth,
-                                    int64_t batchRows);
+    // Read a chunk for one column and dispatch to the matching visitor callback.
+    // DType is one of parquet::{Int32,Int64,Float,Double,Boolean,ByteArray,Int96,FLBA}Type.
+    // byteWidth is only consulted for FLBAType; it carries the fixed length of each value.
+    template <typename DType>
+    bool readSlice(parquet::ColumnReader* columnReader,
+                   std::vector<uint8_t>& scratch,
+                   size_t columnIndex,
+                   size_t batchRows,
+                   size_t byteWidth = 0);
 };
 
 }
