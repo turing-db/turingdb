@@ -5,6 +5,8 @@
 #include <exception>
 #include <iostream>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include <argparse.hpp>
 #include <spdlog/fmt/fmt.h>
@@ -295,28 +297,33 @@ void runGraphMapping(const fs::Path& path,
 
 void processFile(const std::string& filePath,
                  bool wantsSchema,
-                 const std::string& propsColumnName,
+                 const std::vector<std::string>& propsColumns,
                  const std::string& mappingColumnName) {
     const fs::Path path(filePath);
 
     ParquetSchema schema;
     buildSchema(path, schema);
 
+    bool firstSection = true;
+    const auto separate = [&]() {
+        if (!firstSection) {
+            std::cout << "\n";
+        }
+        firstSection = false;
+    };
+
     if (wantsSchema) {
+        separate();
         printSchema(schema);
     }
 
-    if (!propsColumnName.empty()) {
-        if (wantsSchema) {
-            std::cout << "\n";
-        }
-        runPropertyAnalysis(path, schema, propsColumnName);
+    for (const std::string& propsColumn : propsColumns) {
+        separate();
+        runPropertyAnalysis(path, schema, propsColumn);
     }
 
     if (!mappingColumnName.empty()) {
-        if (wantsSchema || !propsColumnName.empty()) {
-            std::cout << "\n";
-        }
+        separate();
         runGraphMapping(path, schema, mappingColumnName);
     }
 }
@@ -328,36 +335,65 @@ int main(int argc, const char** argv) {
     parser.add_description("TuringDB - Parquet inspection tool");
 
     std::string filePath;
+    std::vector<std::string> nodeFiles;
+    std::vector<std::string> edgeFiles;
+    std::unordered_map<std::string, std::vector<std::string>> propsByFile;
+    std::vector<std::string> pendingProps;
+    std::string currentFilePath;
+
+    const auto attachPendingProps = [&](const std::string& file) {
+        for (const std::string& column : pendingProps) {
+            propsByFile[file].push_back(column);
+        }
+        pendingProps.clear();
+    };
+
     parser.add_argument("file")
         .metavar("FILE")
         .help("Parquet file to inspect (optional if -nodes or -edges is given)")
         .nargs(argparse::nargs_pattern::optional)
-        .store_into(filePath);
+        .action([&](const std::string& value) {
+            filePath = value;
+            currentFilePath = value;
+            attachPendingProps(value);
+        });
 
-    std::vector<std::string> nodeFiles;
     parser.add_argument("-nodes")
         .metavar("FILE")
         .help("Parquet file to inspect as a node table (repeatable)")
         .append()
-        .store_into(nodeFiles);
+        .action([&](const std::string& value) {
+            nodeFiles.push_back(value);
+            currentFilePath = value;
+            attachPendingProps(value);
+        });
 
-    std::vector<std::string> edgeFiles;
     parser.add_argument("-edges")
         .metavar("FILE")
         .help("Parquet file to inspect as an edge table (repeatable)")
         .append()
-        .store_into(edgeFiles);
+        .action([&](const std::string& value) {
+            edgeFiles.push_back(value);
+            currentFilePath = value;
+            attachPendingProps(value);
+        });
 
     bool printSchemaFlag = false;
     parser.add_argument("-schema")
         .help("Pretty-print the schema of FILE")
         .store_into(printSchemaFlag);
 
-    std::string propsColumnName;
     parser.add_argument("-props")
         .metavar("COLUMN")
-        .help("Analyze the JSON property structure of COLUMN (must be key-value JSON)")
-        .store_into(propsColumnName);
+        .help("Analyze the JSON property structure of COLUMN on the most recent file (repeatable)")
+        .append()
+        .action([&](const std::string& value) {
+            if (currentFilePath.empty()) {
+                pendingProps.push_back(value);
+            } else {
+                propsByFile[currentFilePath].push_back(value);
+            }
+        });
 
     std::string mappingColumnName;
     parser.add_argument("-mapping")
@@ -373,8 +409,14 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
+    if (!pendingProps.empty()) {
+        std::cerr << "-props specified without a preceding file.\n";
+        std::cerr << parser;
+        return EXIT_FAILURE;
+    }
+
     const bool wantsSchema = printSchemaFlag;
-    const bool wantsProps = !propsColumnName.empty();
+    const bool wantsProps = !propsByFile.empty();
     const bool wantsMapping = !mappingColumnName.empty();
     if (!wantsSchema && !wantsProps && !wantsMapping) {
         std::cerr << "No action specified.\n";
@@ -402,7 +444,11 @@ int main(int argc, const char** argv) {
                 std::cout << "\n";
             }
             std::cout << "== " << allFiles[fileIndex] << " ==\n";
-            processFile(allFiles[fileIndex], wantsSchema, propsColumnName, mappingColumnName);
+
+            const auto propsIter = propsByFile.find(allFiles[fileIndex]);
+            const std::vector<std::string> emptyProps;
+            const std::vector<std::string>& fileProps = (propsIter != propsByFile.end()) ? propsIter->second : emptyProps;
+            processFile(allFiles[fileIndex], wantsSchema, fileProps, mappingColumnName);
         }
     } catch (const TuringException& e) {
         std::cerr << e.what() << "\n";
