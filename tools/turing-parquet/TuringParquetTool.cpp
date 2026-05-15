@@ -1,15 +1,20 @@
 #include <stdlib.h>
 
+#include <algorithm>
+#include <array>
 #include <exception>
 #include <iostream>
 #include <string>
 
 #include <argparse.hpp>
+#include <spdlog/fmt/fmt.h>
 
 #include "ParquetReader.h"
 #include "Path.h"
 
 #include "ParquetJsonDetector.h"
+#include "ParquetPropertyAnalysis.h"
+#include "ParquetPropertyAnalyzer.h"
 #include "ParquetSchema.h"
 #include "ParquetSchemaExtractor.h"
 
@@ -71,9 +76,57 @@ void printSchema(const ParquetSchema& schema) {
     }
 }
 
-void runSchemaCommand(const fs::Path& path) {
-    ParquetSchema schema;
+void printPropertyAnalysis(const ParquetPropertyAnalysis& analysis,
+                           const std::string& columnName) {
+    std::cout << "Property analysis for column '" << columnName << "':\n";
+    std::cout << "Total values: " << analysis.getTotalCount() << "\n\n";
 
+    std::array<ParquetJsonValueType, ParquetPropertyAnalysis::TYPE_COUNT> types {
+        ParquetJsonValueType::NIL,
+        ParquetJsonValueType::BOOLEAN,
+        ParquetJsonValueType::INTEGER,
+        ParquetJsonValueType::FLOAT,
+        ParquetJsonValueType::STRING,
+        ParquetJsonValueType::ARRAY,
+        ParquetJsonValueType::OBJECT,
+    };
+    std::sort(types.begin(), types.end(),
+              [&](ParquetJsonValueType a, ParquetJsonValueType b) {
+                  return analysis.getTypeCount(a) > analysis.getTypeCount(b);
+              });
+
+    std::cout << "Type breakdown:\n";
+    const size_t total = analysis.getTotalCount();
+    for (const ParquetJsonValueType type : types) {
+        const size_t count = analysis.getTypeCount(type);
+        if (count == 0) {
+            continue;
+        }
+        const double percent = (total == 0) ? 0.0 : 100.0 * static_cast<double>(count) / static_cast<double>(total);
+        std::cout << fmt::format("  {:<8} {:>8}  ({:5.1f}%)\n",
+                                 ParquetPropertyAnalysis::toString(type),
+                                 count,
+                                 percent);
+    }
+
+    const std::vector<std::string>& arrayPreviews = analysis.getArrayPreviews();
+    if (!arrayPreviews.empty()) {
+        std::cout << "\nArray previews:\n";
+        for (const std::string& preview : arrayPreviews) {
+            std::cout << "  " << preview << "\n";
+        }
+    }
+
+    const std::vector<std::string>& objectPreviews = analysis.getObjectPreviews();
+    if (!objectPreviews.empty()) {
+        std::cout << "\nObject previews:\n";
+        for (const std::string& preview : objectPreviews) {
+            std::cout << "  " << preview << "\n";
+        }
+    }
+}
+
+void buildSchema(const fs::Path& path, ParquetSchema& schema) {
     {
         ParquetSchemaExtractor extractor(schema);
         ParquetReader reader(path, extractor);
@@ -86,8 +139,19 @@ void runSchemaCommand(const fs::Path& path) {
         while (reader.nextChunk()) {
         }
     }
+}
 
-    printSchema(schema);
+void runPropertyAnalysis(const fs::Path& path,
+                         const ParquetSchema& schema,
+                         const std::string& columnName) {
+    ParquetPropertyAnalysis analysis;
+    ParquetPropertyAnalyzer analyzer(schema, columnName, analysis);
+
+    ParquetReader reader(path, analyzer);
+    while (reader.nextChunk()) {
+    }
+
+    printPropertyAnalysis(analysis, columnName);
 }
 
 }
@@ -107,6 +171,12 @@ int main(int argc, const char** argv) {
         .help("Pretty-print the schema of FILE")
         .store_into(printSchemaFlag);
 
+    std::string propsColumnName;
+    parser.add_argument("-props")
+        .metavar("COLUMN")
+        .help("Analyze the JSON property structure of COLUMN (must be key-value JSON)")
+        .store_into(propsColumnName);
+
     try {
         parser.parse_args(argc, argv);
     } catch (const std::exception& e) {
@@ -115,7 +185,9 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
-    if (!printSchemaFlag) {
+    const bool wantsSchema = printSchemaFlag;
+    const bool wantsProps = !propsColumnName.empty();
+    if (!wantsSchema && !wantsProps) {
         std::cerr << "No action specified.\n";
         std::cerr << parser;
         return EXIT_FAILURE;
@@ -124,8 +196,18 @@ int main(int argc, const char** argv) {
     try {
         const fs::Path path(filePath);
 
-        if (printSchemaFlag) {
-            runSchemaCommand(path);
+        ParquetSchema schema;
+        buildSchema(path, schema);
+
+        if (wantsSchema) {
+            printSchema(schema);
+        }
+
+        if (wantsProps) {
+            if (wantsSchema) {
+                std::cout << "\n";
+            }
+            runPropertyAnalysis(path, schema, propsColumnName);
         }
     } catch (const TuringException& e) {
         std::cerr << e.what() << "\n";
