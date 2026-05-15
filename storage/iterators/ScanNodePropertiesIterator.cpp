@@ -1,6 +1,6 @@
 #include "ScanNodePropertiesIterator.h"
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "IteratorUtils.h"
 #include "properties/PropertyManager.h"
 

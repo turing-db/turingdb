@@ -6,7 +6,7 @@
 
 #include "ID.h"
 #include "LabelSetIndexer.h"
-#include "NodeEdgeData.h"
+#include "datapart/NodeEdgeData.h"
 
 namespace db {
 

@@ -5,7 +5,7 @@
 #include "FilePageReader.h"
 #include "DumpConfig.h"
 #include "GraphDumpHelper.h"
-#include "EdgeContainer.h"
+#include "datapart/EdgeContainer.h"
 #include "EdgeContainerDumpConstants.h"
 #include "Profiler.h"
 

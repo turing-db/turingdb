@@ -2,7 +2,7 @@
 
 #include "FilePageReader.h"
 #include "GraphDumpHelper.h"
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 
 namespace db {
 

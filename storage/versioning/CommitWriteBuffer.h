@@ -7,7 +7,7 @@
 #include "ArcManager.h"
 
 #include "Commit.h"
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "writers/DataPartBuilder.h"
 
 #include "indexes/Index.h"

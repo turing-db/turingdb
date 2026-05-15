@@ -2,7 +2,7 @@
 
 #include <range/v3/view/reverse.hpp>
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "metadata/PropertyType.h"
 #include "properties/PropertyManager.h"
 

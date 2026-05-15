@@ -16,7 +16,7 @@
 #include "dump/DumpResult.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "ArcManager.h"
 
 namespace db {

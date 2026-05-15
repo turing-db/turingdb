@@ -1,7 +1,7 @@
 #include "MatchLabelSetIterator.h"
 
-#include "NodeContainer.h"
-#include "DataPart.h"
+#include "datapart/NodeContainer.h"
+#include "datapart/DataPart.h"
 
 using namespace db;
 

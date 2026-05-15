@@ -1,7 +1,7 @@
 #pragma once
 
 #include "GraphDumpHelper.h"
-#include "NodeContainer.h"
+#include "datapart/NodeContainer.h"
 #include "NodeContainerDumpConstants.h"
 #include "Profiler.h"
 

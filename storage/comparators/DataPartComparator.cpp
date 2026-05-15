@@ -1,6 +1,6 @@
 #include "DataPartComparator.h"
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "NodeContainerComparator.h"
 #include "EdgeContainerComparator.h"
 #include "EdgeIndexerComparator.h"

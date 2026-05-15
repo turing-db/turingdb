@@ -3,8 +3,8 @@
 #include <concepts>
 
 #include "StringIndex.h"
-#include "DataPart.h"
-#include "DataPartSpan.h"
+#include "datapart/DataPart.h"
+#include "datapart/DataPartSpan.h"
 #include "ID.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "iterators/ChunkConfig.h"

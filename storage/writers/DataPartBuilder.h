@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "EdgeRecord.h"
+#include "datapart/EdgeRecord.h"
 #include "ID.h"
 #include "MetadataBuilder.h"
 #include "metadata/LabelSetHandle.h"

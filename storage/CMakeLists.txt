@@ -2,12 +2,13 @@
 set(storage_sources
         Graph.cpp
         GraphSerializer.cpp
-        DataPart.cpp
         DebugDump.cpp
-        NodeContainer.cpp
-        EdgeContainer.cpp
         RowStore.cpp
         EntityList.cpp
+
+        datapart/DataPart.cpp
+        datapart/NodeContainer.cpp
+        datapart/EdgeContainer.cpp
 
         embedding/EmbeddingBucket.cpp
         embedding/EmbeddingContainer.cpp

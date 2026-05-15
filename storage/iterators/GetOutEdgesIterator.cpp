@@ -4,7 +4,7 @@
 
 #include "columns/ColumnIDs.h"
 #include "indexers/EdgeIndexer.h"
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "IteratorUtils.h"
 
 namespace db {

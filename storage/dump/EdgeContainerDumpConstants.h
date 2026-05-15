@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "EdgeRecord.h"
+#include "datapart/EdgeRecord.h"
 #include "DumpConfig.h"
 
 namespace db {

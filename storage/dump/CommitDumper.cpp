@@ -1,6 +1,6 @@
 #include "CommitDumper.h"
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "FilePageWriter.h"
 #include "DataPartDumper.h"
 #include "LabelMapDumper.h"

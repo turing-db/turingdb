@@ -2,11 +2,11 @@
 
 #include <range/v3/view/enumerate.hpp>
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "writers/DataPartBuilder.h"
 #include "versioning/CommitBuilder.h"
-#include "EdgeContainer.h"
-#include "NodeContainer.h"
+#include "datapart/EdgeContainer.h"
+#include "datapart/NodeContainer.h"
 #include "versioning/TombstoneRanges.h"
 #include "properties/PropertyManager.h"
 #include "reader/GraphReader.h"

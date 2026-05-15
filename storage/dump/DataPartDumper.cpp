@@ -1,6 +1,6 @@
 #include "DataPartDumper.h"
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "DumpConfig.h"
 #include "FilePageWriter.h"
 #include "Path.h"

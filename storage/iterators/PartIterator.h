@@ -1,7 +1,7 @@
 #pragma once
 
 #include "views/GraphView.h"
-#include "DataPartSpan.h"
+#include "datapart/DataPartSpan.h"
 
 namespace db {
 

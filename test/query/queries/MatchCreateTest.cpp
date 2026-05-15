@@ -2,7 +2,7 @@
 #include <optional>
 #include <cstdint>
 
-#include "EdgeRecord.h"
+#include "datapart/EdgeRecord.h"
 #include "TuringDB.h"
 #include "QueryConfig.h"
 #include "Graph.h"

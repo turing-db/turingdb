@@ -6,7 +6,7 @@
 #include "ChunkWriter.h"
 #include "PartIterator.h"
 #include "TombstoneFilter.h"
-#include "EdgeRecord.h"
+#include "datapart/EdgeRecord.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 

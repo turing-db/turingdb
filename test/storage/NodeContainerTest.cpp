@@ -2,7 +2,7 @@
 
 #include "GraphMetadata.h"
 #include "ID.h"
-#include "NodeContainer.h"
+#include "datapart/NodeContainer.h"
 
 using namespace db;
 

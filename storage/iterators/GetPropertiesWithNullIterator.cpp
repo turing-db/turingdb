@@ -1,6 +1,6 @@
 #include "GetPropertiesWithNullIterator.h"
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "properties/PropertyManager.h"
 
 using namespace db;

@@ -5,7 +5,7 @@
 #include <range/v3/view/enumerate.hpp>
 #include <string_view>
 
-#include "EdgeRecord.h"
+#include "datapart/EdgeRecord.h"
 #include "TuringDB.h"
 #include "QueryConfig.h"
 #include "Graph.h"

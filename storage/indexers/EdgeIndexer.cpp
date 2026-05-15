@@ -2,9 +2,9 @@
 
 #include <range/v3/view/enumerate.hpp>
 
-#include "EdgeContainer.h"
-#include "EdgeRecord.h"
-#include "NodeContainer.h"
+#include "datapart/EdgeContainer.h"
+#include "datapart/EdgeRecord.h"
+#include "datapart/NodeContainer.h"
 #include "views/NodeEdgeView.h"
 #include "Profiler.h"
 

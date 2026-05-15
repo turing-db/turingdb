@@ -5,7 +5,7 @@
 #include "FilePageReader.h"
 #include "DumpConfig.h"
 #include "GraphDumpHelper.h"
-#include "NodeContainer.h"
+#include "datapart/NodeContainer.h"
 #include "Profiler.h"
 #include "metadata/GraphMetadata.h"
 #include "NodeContainerDumpConstants.h"

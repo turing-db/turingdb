@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DataPartSpan.h"
+#include "datapart/DataPartSpan.h"
 #include "versioning/CommitData.h"
 
 namespace db {
