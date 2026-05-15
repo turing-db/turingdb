@@ -72,6 +72,26 @@ std::string buildPreview(const std::string& key, const nlohmann::json& value) {
     return preview;
 }
 
+void recordJsonRecursive(ParquetPropertyType& propertyType, const nlohmann::json& value) {
+    const ParquetJsonValueType type = jsonTypeOf(value);
+    propertyType.recordValue(type);
+
+    if (type == ParquetJsonValueType::OBJECT) {
+        for (const auto& entry : value.items()) {
+            recordJsonRecursive(propertyType.getOrCreateSubProperty(entry.key()),
+                                entry.value());
+        }
+    } else if (type == ParquetJsonValueType::ARRAY) {
+        if (value.empty()) {
+            return;
+        }
+        ParquetPropertyType& elementType = propertyType.getOrCreateElementType();
+        for (const auto& element : value) {
+            recordJsonRecursive(elementType, element);
+        }
+    }
+}
+
 }
 
 ParquetPropertyAnalyzer::ParquetPropertyAnalyzer(const ParquetSchema& schema,
@@ -137,7 +157,8 @@ bool ParquetPropertyAnalyzer::onByteArrayValues(size_t columnIndex,
         for (const auto& entry : json.items()) {
             const ParquetJsonValueType type = jsonTypeOf(entry.value());
             _analysis.recordValue(type);
-            _analysis.getOrCreatePropertyType(entry.key()).recordValue(type);
+            recordJsonRecursive(_analysis.getOrCreatePropertyType(entry.key()),
+                                entry.value());
 
             if (type == ParquetJsonValueType::ARRAY) {
                 _analysis.recordArrayPreview(buildPreview(entry.key(), entry.value()));

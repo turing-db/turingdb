@@ -8,10 +8,12 @@
 
 #include <argparse.hpp>
 #include <spdlog/fmt/fmt.h>
+#include <tabulate/table.hpp>
 
 #include "ParquetReader.h"
 #include "Path.h"
 
+#include "ParquetGraphMapping.h"
 #include "ParquetJsonDetector.h"
 #include "ParquetPropertyAnalysis.h"
 #include "ParquetPropertyAnalyzer.h"
@@ -189,6 +191,103 @@ void runPropertyAnalysis(const fs::Path& path,
     printPropertyAnalysis(analysis, columnName);
 }
 
+std::string propertyTypeString(const ParquetGraphProperty& property) {
+    std::string typeString = ParquetGraphMapping::toString(property.getType());
+    if (property.isNullable()) {
+        typeString += "?";
+    }
+    if (property.isRawJson()) {
+        typeString += " (raw JSON)";
+    }
+    return typeString;
+}
+
+void renderPropertiesTable(const ParquetGraphLabel& label) {
+    tabulate::Table table;
+    table.add_row({"name", "type"});
+    for (const auto& property : label.getProperties()) {
+        table.add_row({property->getName(), propertyTypeString(*property)});
+    }
+
+    const size_t rowCount = label.getProperties().size() + 1;
+    for (size_t rowIndex = 2; rowIndex < rowCount; ++rowIndex) {
+        table[rowIndex].format().hide_border_top();
+    }
+    table[0].format().font_style({tabulate::FontStyle::bold});
+    table.column(0).format().font_align(tabulate::FontAlign::left);
+    table.column(1).format().font_align(tabulate::FontAlign::left);
+
+    std::cout << table << "\n";
+}
+
+std::string labelHeader(const ParquetGraphLabel& label, const std::string& path) {
+    std::string header = path;
+    header += "  ";
+    header += ParquetGraphMapping::toString(label.getCardinality());
+    if (label.isNullable()) {
+        header += " (nullable)";
+    }
+    return header;
+}
+
+void renderLabelTables(const ParquetGraphLabel& label, const std::string& path) {
+    std::cout << "\n" << labelHeader(label, path) << "\n";
+    if (label.getProperties().empty()) {
+        std::cout << "(no properties)\n";
+    } else {
+        renderPropertiesTable(label);
+    }
+
+    const std::string separator = (label.getCardinality() == ParquetEdgeCardinality::MANY)
+                                  ? "[]."
+                                  : ".";
+    for (const auto& subLabel : label.getSubLabels()) {
+        const std::string subPath = path + separator + subLabel->getName();
+        renderLabelTables(*subLabel, subPath);
+    }
+}
+
+void printGraphMapping(const ParquetGraphMapping& mapping) {
+    std::cout << "Graph mapping for column '" << mapping.getColumnName() << "':\n";
+
+    const ParquetGraphLabel& root = mapping.getRoot();
+    if (!root.getProperties().empty()) {
+        std::cout << "\nProperties:\n";
+        renderPropertiesTable(root);
+    }
+
+    if (!root.getSubLabels().empty()) {
+        std::cout << "\nSub-records:\n";
+        for (const auto& subLabel : root.getSubLabels()) {
+            renderLabelTables(*subLabel, subLabel->getName());
+        }
+    }
+
+    const std::vector<std::string>& warnings = mapping.getWarnings();
+    if (!warnings.empty()) {
+        std::cout << "\nWarnings (" << warnings.size() << "):\n";
+        for (const std::string& warning : warnings) {
+            std::cout << "  - " << warning << "\n";
+        }
+    }
+}
+
+void runGraphMapping(const fs::Path& path,
+                     const ParquetSchema& schema,
+                     const std::string& columnName) {
+    ParquetPropertyAnalysis analysis;
+    ParquetPropertyAnalyzer analyzer(schema, columnName, analysis);
+
+    ParquetReader reader(path, analyzer);
+    while (reader.nextChunk()) {
+    }
+
+    ParquetGraphMapping mapping;
+    ParquetGraphMapping::buildFrom(analysis, columnName, mapping);
+
+    printGraphMapping(mapping);
+}
+
 }
 
 int main(int argc, const char** argv) {
@@ -212,6 +311,12 @@ int main(int argc, const char** argv) {
         .help("Analyze the JSON property structure of COLUMN (must be key-value JSON)")
         .store_into(propsColumnName);
 
+    std::string mappingColumnName;
+    parser.add_argument("-mapping")
+        .metavar("COLUMN")
+        .help("Derive a TuringDB graph mapping from the JSON property structure of COLUMN")
+        .store_into(mappingColumnName);
+
     try {
         parser.parse_args(argc, argv);
     } catch (const std::exception& e) {
@@ -222,7 +327,8 @@ int main(int argc, const char** argv) {
 
     const bool wantsSchema = printSchemaFlag;
     const bool wantsProps = !propsColumnName.empty();
-    if (!wantsSchema && !wantsProps) {
+    const bool wantsMapping = !mappingColumnName.empty();
+    if (!wantsSchema && !wantsProps && !wantsMapping) {
         std::cerr << "No action specified.\n";
         std::cerr << parser;
         return EXIT_FAILURE;
@@ -243,6 +349,13 @@ int main(int argc, const char** argv) {
                 std::cout << "\n";
             }
             runPropertyAnalysis(path, schema, propsColumnName);
+        }
+
+        if (wantsMapping) {
+            if (wantsSchema || wantsProps) {
+                std::cout << "\n";
+            }
+            runGraphMapping(path, schema, mappingColumnName);
         }
     } catch (const TuringException& e) {
         std::cerr << e.what() << "\n";

@@ -20,13 +20,21 @@ enum class ParquetJsonValueType {
     OBJECT,
 };
 
-// Per-key entry in the property analysis. _valueType is the first non-null
-// JSON value type observed for this key; _isNullable becomes true if at least
-// one NIL value was observed; _isMixed becomes true if at least two distinct
-// non-NIL types were observed. If only NIL values were ever seen, _valueType
+// Recursive node in the property analysis tree. _valueType is the first
+// non-null JSON value type observed at this position; _isNullable is true if
+// at least one NIL value was seen; _isMixed is true if at least two distinct
+// non-NIL types were seen. If only NIL values were ever seen, _valueType
 // remains NIL.
+//
+// For OBJECT values, _subProperties holds a child analysis per observed key.
+// For ARRAY values, _elementType holds the analysis of the array elements,
+// recursively. _elementType stays null until at least one element is recorded
+// (which lets the caller distinguish "arrays seen, all empty" from "arrays
+// with elements").
 class ParquetPropertyType {
 public:
+    using SubPropertyMap = std::map<std::string, std::unique_ptr<ParquetPropertyType>>;
+
     ParquetPropertyType();
     ~ParquetPropertyType();
 
@@ -41,8 +49,14 @@ public:
     bool isMixed() const { return _isMixed; }
     size_t getCount() const { return _count; }
 
+    const SubPropertyMap& getSubProperties() const { return _subProperties; }
+    const ParquetPropertyType* getElementType() const { return _elementType.get(); }
+
     void setName(const std::string& name) { _name = name; }
     void recordValue(ParquetJsonValueType type);
+
+    ParquetPropertyType& getOrCreateSubProperty(const std::string& name);
+    ParquetPropertyType& getOrCreateElementType();
 
 private:
     std::string _name;
@@ -51,6 +65,8 @@ private:
     bool _isNullable {false};
     bool _isMixed {false};
     size_t _count {0};
+    SubPropertyMap _subProperties;
+    std::unique_ptr<ParquetPropertyType> _elementType;
 };
 
 // Aggregated view of a key-value JSON column's value types and a small set of
