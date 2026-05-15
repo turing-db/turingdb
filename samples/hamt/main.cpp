@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <iostream>
@@ -95,6 +96,26 @@ static constexpr auto printTime = [](std::string_view label, const auto& time) -
     }
 };
 
+static void printStats(std::string_view label,
+                       const std::vector<std::chrono::nanoseconds>& times,
+                       size_t numLookups)
+{
+    std::chrono::nanoseconds sum {0};
+    for (const auto t : times) { sum += t; }
+    const auto avg = sum / static_cast<long long>(times.size());
+    const auto min = *std::min_element(times.begin(), times.end());
+    const auto max = *std::max_element(times.begin(), times.end());
+    const long long n = static_cast<long long>(numLookups);
+
+    const std::string base(label);
+    printTime(base + " avg",           avg);
+    printTime(base + " min",           min);
+    printTime(base + " max",           max);
+    printTime(base + " per query avg", avg / n);
+    printTime(base + " per query min", min / n);
+    printTime(base + " per query max", max / n);
+};
+
 static void basictest() {
     spdlog::info("basictest: start");
 
@@ -129,7 +150,7 @@ static void basictest() {
 }
 
 static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
-              double hitRate = 0.8, double validFraction = 0.8) {
+              double hitRate = 0.8, double validFraction = 0.8, size_t numRuns = 10) {
     spdlog::info(
         "loadtest: start ({} pairs, {} lookups, {:.0f}% hit rate, {:.0f}% tx valid)",
         numPairs, numLookups, hitRate * 100, validFraction * 100);
@@ -216,34 +237,35 @@ static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
     if (enableMap) {
 
         {
-            spdlog::info("map+tx lookup: {} thread(s)", numThreads);
+            spdlog::info("map+tx lookup: {} thread(s), {} run(s)", numThreads, numRuns);
 
-            std::vector<std::thread> threads;
-            threads.reserve(numThreads);
+            std::vector<std::chrono::nanoseconds> times;
+            times.reserve(numRuns);
 
-            const size_t chunkSize = numLookups / numThreads;
-            const auto start = now();
-            for (size_t t = 0; t < numThreads; t++) {
-                const size_t begin = t * chunkSize;
-                const size_t end = (t + 1 == numThreads) ? numLookups : begin + chunkSize;
+            for (size_t run = 0; run < numRuns; run++) {
+                std::vector<std::thread> threads;
+                threads.reserve(numThreads);
 
-                threads.emplace_back([&, begin, end]() {
-                    for (size_t i = begin; i < end; i++) {
-                        std::unique_lock<RWSpinLock> mut(lock);
-                        const auto it = groundTruth.find(lookupKeys[i]);
-                        [[maybe_unused]] volatile bool visible =
-                            it != groundTruth.end() && it->second.txStart <= queryTid
-                            && queryTid <= it->second.txEnd;
-                    }
-                });
+                const size_t chunkSize = numLookups / numThreads;
+                const auto start = now();
+                for (size_t t = 0; t < numThreads; t++) {
+                    const size_t begin = t * chunkSize;
+                    const size_t end = (t + 1 == numThreads) ? numLookups : begin + chunkSize;
+                    threads.emplace_back([&, begin, end]() {
+                        for (size_t i = begin; i < end; i++) {
+                            std::shared_lock<RWSpinLock> mut(lock);
+                            const auto it = groundTruth.find(lookupKeys[i]);
+                            [[maybe_unused]] volatile bool visible =
+                                it != groundTruth.end() && it->second.txStart <= queryTid
+                                && queryTid <= it->second.txEnd;
+                        }
+                    });
+                }
+                for (auto& th : threads) { th.join(); }
+                times.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(now() - start));
             }
-            for (auto& th : threads) {
-                th.join();
-            }
 
-            const auto taken = now() - start;
-            printTime("map+tx lookup total", taken);
-            printTime("map+tx lookup per query", taken / numLookups);
+            printStats("map+tx lookup", times, numLookups);
             spdlog::info("map+tx: {} hits, {} misses", correctness.hits, correctness.misses);
         }
         spdlog::info("");
@@ -251,11 +273,16 @@ static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
 
     // run HAMT
     {
-        const auto start = now();
-        for (size_t i = 0; i < numLookups; i++) {
-            [[maybe_unused]] volatile const NodeID* x = index.find(lookupKeys[i]);
+        std::vector<std::chrono::nanoseconds> times;
+        times.reserve(numRuns);
+
+        for (size_t run = 0; run < numRuns; run++) {
+            const auto start = now();
+            for (size_t i = 0; i < numLookups; i++) {
+                [[maybe_unused]] volatile const NodeID* x = index.find(lookupKeys[i]);
+            }
+            times.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(now() - start));
         }
-        const auto taken = now() - start;
 
         if (inputbrk) {
             std::string input;
@@ -266,9 +293,8 @@ static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
                 return;
             }
         }
-        printTime("hamt lookup total", taken);
-        printTime("hamt lookup per query", taken / numLookups);
 
+        printStats("hamt lookup", times, numLookups);
         if (enableMap) {
             spdlog::info("hamt: {} hits, {} misses", correctness.hits, correctness.misses);
         }
@@ -278,34 +304,32 @@ static void loadtest(size_t numPairs, size_t numLookups, bool enableMap = false,
 
     // run without tx timestamping
     if (enableMap) {
-        spdlog::info("map lookup: {} thread(s)", numThreads);
+        spdlog::info("map lookup: {} thread(s), {} run(s)", numThreads, numRuns);
 
-        std::vector<std::thread> threads;
-        threads.reserve(numThreads);
+        std::vector<std::chrono::nanoseconds> times;
+        times.reserve(numRuns);
 
-        const size_t chunkSize = numLookups / numThreads;
-        const auto start = now();
+        for (size_t run = 0; run < numRuns; run++) {
+            std::vector<std::thread> threads;
+            threads.reserve(numThreads);
 
-        for (size_t t = 0; t < numThreads; t++) {
-            const size_t begin = t * chunkSize;
-            const size_t end = (t + 1 == numThreads) ? numLookups : begin + chunkSize;
-
-            threads.emplace_back([&, begin, end]() {
-                for (size_t i = begin; i < end; i++) {
-                    std::unique_lock<RWSpinLock> mut(lock);
-                    lookup(groundTruth, lookupKeys[i]);
-                }
-            });
+            const size_t chunkSize = numLookups / numThreads;
+            const auto start = now();
+            for (size_t t = 0; t < numThreads; t++) {
+                const size_t begin = t * chunkSize;
+                const size_t end = (t + 1 == numThreads) ? numLookups : begin + chunkSize;
+                threads.emplace_back([&, begin, end]() {
+                    for (size_t i = begin; i < end; i++) {
+                        std::shared_lock<RWSpinLock> mut(lock);
+                        lookup(groundTruth, lookupKeys[i]);
+                    }
+                });
+            }
+            for (auto& th : threads) { th.join(); }
+            times.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(now() - start));
         }
 
-        for (auto& th : threads) {
-            th.join();
-        }
-
-        const auto taken = now() - start;
-
-        printTime("map lookup total", taken);
-        printTime("map lookup per query", taken / numLookups);
+        printStats("map lookup", times, numLookups);
         spdlog::info("map: {} hits, {} misses", correctness.hits, correctness.misses);
     }
 
@@ -321,5 +345,5 @@ int main() {
     // loadtest(1'000'000, 1'000, map);
     // loadtest(10'000'000, 100'000, map);
     // loadtest(1'000'000, 500, map);
-    loadtest(10'000'000, 500, map);
+    loadtest(1'000'000, 500, map);
 }
