@@ -293,6 +293,34 @@ void runGraphMapping(const fs::Path& path,
     printGraphMapping(mapping);
 }
 
+void processFile(const std::string& filePath,
+                 bool wantsSchema,
+                 const std::string& propsColumnName,
+                 const std::string& mappingColumnName) {
+    const fs::Path path(filePath);
+
+    ParquetSchema schema;
+    buildSchema(path, schema);
+
+    if (wantsSchema) {
+        printSchema(schema);
+    }
+
+    if (!propsColumnName.empty()) {
+        if (wantsSchema) {
+            std::cout << "\n";
+        }
+        runPropertyAnalysis(path, schema, propsColumnName);
+    }
+
+    if (!mappingColumnName.empty()) {
+        if (wantsSchema || !propsColumnName.empty()) {
+            std::cout << "\n";
+        }
+        runGraphMapping(path, schema, mappingColumnName);
+    }
+}
+
 }
 
 int main(int argc, const char** argv) {
@@ -302,8 +330,23 @@ int main(int argc, const char** argv) {
     std::string filePath;
     parser.add_argument("file")
         .metavar("FILE")
-        .help("Parquet file to inspect")
+        .help("Parquet file to inspect (optional if -nodes or -edges is given)")
+        .nargs(argparse::nargs_pattern::optional)
         .store_into(filePath);
+
+    std::vector<std::string> nodeFiles;
+    parser.add_argument("-nodes")
+        .metavar("FILE")
+        .help("Parquet file to inspect as a node table (repeatable)")
+        .append()
+        .store_into(nodeFiles);
+
+    std::vector<std::string> edgeFiles;
+    parser.add_argument("-edges")
+        .metavar("FILE")
+        .help("Parquet file to inspect as an edge table (repeatable)")
+        .append()
+        .store_into(edgeFiles);
 
     bool printSchemaFlag = false;
     parser.add_argument("-schema")
@@ -339,28 +382,27 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
+    std::vector<std::string> allFiles;
+    allFiles.reserve(nodeFiles.size() + edgeFiles.size() + 1);
+    allFiles.insert(allFiles.end(), nodeFiles.begin(), nodeFiles.end());
+    allFiles.insert(allFiles.end(), edgeFiles.begin(), edgeFiles.end());
+    if (!filePath.empty()) {
+        allFiles.push_back(filePath);
+    }
+
+    if (allFiles.empty()) {
+        std::cerr << "No input files specified.\n";
+        std::cerr << parser;
+        return EXIT_FAILURE;
+    }
+
     try {
-        const fs::Path path(filePath);
-
-        ParquetSchema schema;
-        buildSchema(path, schema);
-
-        if (wantsSchema) {
-            printSchema(schema);
-        }
-
-        if (wantsProps) {
-            if (wantsSchema) {
+        for (size_t fileIndex = 0; fileIndex < allFiles.size(); ++fileIndex) {
+            if (fileIndex > 0) {
                 std::cout << "\n";
             }
-            runPropertyAnalysis(path, schema, propsColumnName);
-        }
-
-        if (wantsMapping) {
-            if (wantsSchema || wantsProps) {
-                std::cout << "\n";
-            }
-            runGraphMapping(path, schema, mappingColumnName);
+            std::cout << "== " << allFiles[fileIndex] << " ==\n";
+            processFile(allFiles[fileIndex], wantsSchema, propsColumnName, mappingColumnName);
         }
     } catch (const TuringException& e) {
         std::cerr << e.what() << "\n";
