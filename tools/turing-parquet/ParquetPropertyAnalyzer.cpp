@@ -137,6 +137,7 @@ bool ParquetPropertyAnalyzer::onByteArrayValues(size_t columnIndex,
         for (const auto& entry : json.items()) {
             const ParquetJsonValueType type = jsonTypeOf(entry.value());
             _analysis.recordValue(type);
+            _analysis.getOrCreatePropertyType(entry.key()).recordValue(type);
 
             if (type == ParquetJsonValueType::ARRAY) {
                 _analysis.recordArrayPreview(buildPreview(entry.key(), entry.value()));
