@@ -44,13 +44,17 @@ public:
     bool isGroup() const { return _isGroup; }
 
     // Primitive-only accessors. getFixedLength is only meaningful when the
-    // primitive type is FIXED_LEN_BYTE_ARRAY.
+    // primitive type is FIXED_LEN_BYTE_ARRAY. isLikelyJson is only meaningful
+    // when the primitive type is BYTE_ARRAY and is populated by a separate
+    // content-sampling pass (see ParquetJsonDetector).
     ParquetPrimitiveType getPrimitiveType() const { return _primitiveType; }
     size_t getFixedLength() const { return _fixedLength; }
+    bool isLikelyJson() const { return _isLikelyJson; }
 
     // Group-only accessors.
     size_t getChildCount() const { return _children.size(); }
     const ParquetSchemaField& getChild(size_t index) const { return *_children[index]; }
+    ParquetSchemaField& getChild(size_t index) { return *_children[index]; }
 
     void setName(const std::string& name) { _name = name; }
     void setRepetition(ParquetFieldRepetition repetition) { _repetition = repetition; }
@@ -58,6 +62,7 @@ public:
     void setPrimitiveType(ParquetPrimitiveType primitiveType) { _primitiveType = primitiveType; }
     void setFixedLength(size_t fixedLength) { _fixedLength = fixedLength; }
     void markAsGroup() { _isGroup = true; }
+    void markAsLikelyJson() { _isLikelyJson = true; }
 
     ParquetSchemaField& addChild();
 
@@ -68,6 +73,7 @@ private:
     bool _isGroup {false};
     ParquetPrimitiveType _primitiveType {ParquetPrimitiveType::BOOLEAN};
     size_t _fixedLength {0};
+    bool _isLikelyJson {false};
     std::vector<std::unique_ptr<ParquetSchemaField>> _children;
 };
 
