@@ -15,8 +15,7 @@
 
 using namespace db;
 
-ParquetSaxVisitor::~ParquetSaxVisitor()
-{
+ParquetSaxVisitor::~ParquetSaxVisitor() {
 }
 
 ParquetReader::ParquetReader(const fs::Path& path, ParquetSaxVisitor& visitor)
