@@ -24,6 +24,26 @@ void ParquetPropertyType::recordValue(ParquetJsonValueType type) {
     }
 }
 
+ParquetPropertyType& ParquetPropertyType::getOrCreateSubProperty(const std::string& name) {
+    const auto it = _subProperties.find(name);
+    if (it != _subProperties.end()) {
+        return *it->second;
+    }
+
+    auto entry = std::make_unique<ParquetPropertyType>();
+    entry->setName(name);
+    ParquetPropertyType* raw = entry.get();
+    _subProperties.emplace(name, std::move(entry));
+    return *raw;
+}
+
+ParquetPropertyType& ParquetPropertyType::getOrCreateElementType() {
+    if (_elementType == nullptr) {
+        _elementType = std::make_unique<ParquetPropertyType>();
+    }
+    return *_elementType;
+}
+
 ParquetPropertyAnalysis::ParquetPropertyAnalysis() {
 }
 
