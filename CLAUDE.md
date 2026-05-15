@@ -102,6 +102,7 @@ Key points:
 - No abbreviations in identifiers — spell them out (`rowGroup`, not `rg`; `column`, not `col`; `index`, not `idx`). Applies to locals, parameters, members, and comments.
 - No Google-style `k`-prefix on constants. Use descriptive names: `previewRowsCount`, not `kPreviewRows`; `batchSize`, not `kBatch`.
 - Helpers that unconditionally throw use a `throw`-prefix: `throwError`, `throwIfError` — not `raise`, `bail`, or `fail`. C++ uses `throw` as the language keyword, so the name should match.
+- Area-local classes take a domain prefix matching their directory. Types under `io/parquet/`, `tools/turing-parquet/`, `dump/`, `import/`, etc. are written `ParquetReader`, `ParquetSchema`, `GraphLoader`, not unqualified `Reader`/`Schema`/`Loader`. Everything lives in `namespace db`, so unqualified names shadow generic ones and read ambiguously. Match file names to class names (`ParquetSchema.h` for `class ParquetSchema`).
 
 **Includes order:**
 1. Current class header (followed by blank line)
@@ -126,7 +127,11 @@ Key points:
 - Only trivial one-liner getters should be inline in headers
 - Destructors: declare `~ClassName();` in header, define in `.cpp` (not `= default` in header)
 - In `.cpp` files, open with `using namespace db;` after the includes — don't wrap the body in `namespace db { ... }`.
-- Don't use anonymous namespaces in `.cpp` files. Inline single-use helpers at the call site, or make them private static members.
+- Helper placement in `.cpp` files — pick by relationship to the class:
+  - Single-use, trivial → inline at the call site.
+  - Operates on the class's own enums/types (e.g., `toString(MyEnum)` where the enum lives with the class) → `static` member of that class. Callers write `Class::toString(value)`, which keeps the surface cohesive and avoids namespace pollution.
+  - Class-independent utility, only used in this `.cpp` (operates on third-party types or types from other classes) → anonymous namespace in the `.cpp`. Don't push it onto an unrelated class just to avoid the anonymous namespace — that pollutes the class's surface and falsely suggests a relationship to its state.
+  - Reused across translation units → free function in a shared header.
 
 **Error handling and return values:**
 - Don't return large/non-trivial objects by value from factory methods; use fill/output reference patterns instead
@@ -137,6 +142,7 @@ Key points:
 **Other rules:**
 - Never `using namespace` in headers
 - Never `using namespace std`
+- Never use `const_cast`. If you need a mutable reference, expose it through the type's API (e.g., add a non-const overload of the getter) rather than casting away const on an existing one. Reaching for `const_cast` is a sign that the type's API is wrong — fix the API instead.
 - Use `const` extensively — all local variables should be `const` unless they need mutation
 - When a conditional expression is long or compound, extract each part into a descriptively named `const bool` before the `if` statement
 - Use `bioassert` for assertions (from BioAssert.h)
@@ -150,6 +156,8 @@ Key points:
 ## Design Conventions
 
 - Embedding operations (cosine_similarity, euclidean_distance) are implemented as functions through the EvalFunction path, not as binary operators. New computation operations on embeddings should follow the function pattern (Functions.h, EvalFunction, ColumnFunctions).
+- **Extract-then-render for inspection tools.** When building tools that consume a streaming/SAX source (e.g. `ParquetSaxVisitor` driving `ParquetReader`), don't print or serialize directly inside the visitor callbacks. Define a high-level, source-independent data structure (e.g. `ParquetSchema` with `ParquetSchemaField`), have the visitor populate it, and render in a separate step. The high-level object stays decoupled from the source format and can be queried, transformed, or rendered multiple ways.
+- **Visitor shared state lives in the caller.** For SAX-style visitors that produce or mutate a shared output object — including pipelines where one visitor extracts and a later visitor enriches (e.g., `ParquetSchemaExtractor` then `ParquetJsonDetector`) — construct the output in the caller and pass it to each visitor's constructor by reference. The visitor stores `T&` and mutates the shared object in callbacks; it does NOT own the object and does NOT expose a `getX()` accessor. The caller's flow then reads as one object flowing through a series of visitors.
 
 ## Build/iteration workflow
 

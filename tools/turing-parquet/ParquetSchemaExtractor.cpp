@@ -4,9 +4,13 @@
 #include <parquet/schema.h>
 #include <parquet/types.h>
 
+#include "ParquetSchema.h"
+
 using namespace db;
 
-ParquetSchemaExtractor::ParquetSchemaExtractor() {
+ParquetSchemaExtractor::ParquetSchemaExtractor(ParquetSchema& schema)
+    : _schema(schema)
+{
 }
 
 ParquetSchemaExtractor::~ParquetSchemaExtractor() {

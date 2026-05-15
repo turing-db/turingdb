@@ -9,6 +9,7 @@
 #include "ParquetReader.h"
 #include "Path.h"
 
+#include "ParquetJsonDetector.h"
 #include "ParquetSchema.h"
 #include "ParquetSchemaExtractor.h"
 
@@ -42,8 +43,10 @@ void printField(const ParquetSchemaField& field, size_t depth) {
             typeString += "(" + std::to_string(field.getFixedLength()) + ")";
         }
 
+        const std::string jsonSuffix = field.isLikelyJson() ? " [likely JSON]" : "";
+
         std::cout << indent << repetition << " " << typeString << " "
-                  << field.getName() << logicalSuffix << "\n";
+                  << field.getName() << logicalSuffix << jsonSuffix << "\n";
     }
 }
 
@@ -61,6 +64,25 @@ void printSchema(const ParquetSchema& schema) {
     for (size_t childIndex = 0; childIndex < childCount; ++childIndex) {
         printField(root.getChild(childIndex), 0);
     }
+}
+
+void runSchemaCommand(const fs::Path& path) {
+    ParquetSchema schema;
+
+    {
+        ParquetSchemaExtractor extractor(schema);
+        ParquetReader reader(path, extractor);
+        reader.nextChunk();
+    }
+
+    {
+        ParquetJsonDetector detector(schema);
+        ParquetReader reader(path, detector);
+        while (reader.nextChunk()) {
+        }
+    }
+
+    printSchema(schema);
 }
 
 }
@@ -98,10 +120,7 @@ int main(int argc, const char** argv) {
         const fs::Path path(filePath);
 
         if (printSchemaFlag) {
-            ParquetSchemaExtractor extractor;
-            ParquetReader reader(path, extractor);
-            reader.nextChunk();
-            printSchema(extractor.getSchema());
+            runSchemaCommand(path);
         }
     } catch (const TuringException& e) {
         std::cerr << e.what() << "\n";
