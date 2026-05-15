@@ -92,12 +92,16 @@ Key points:
 - `public`/`private` aligned with `class`
 - Do not overwrap: prefer keeping statements on one line when they fit. A slightly long line is better than an ugly split.
 - Return type must be on the same line as the function name, never on a separate line — even if the line is long
-- Function calls: first argument must start on the same line as the function name, never on the next line. If arguments must wrap, align them under the first argument.
+- Function calls: first argument must start on the same line as the function name, never on the next line. If a call must wrap across lines, put **each argument on its own line**, all aligned under the first argument — never pack two-or-three-per-line.
 - Use blank lines between logical groups of statements in function bodies; don't write overly compact code
+- Switch cases: `return` directly inside each case body, and write `break;` after it aligned with `case` (one level out from the case body) for visual uniformity, even though unreachable. Don't capture per-case results into a local to return after the switch.
 
 **Naming:**
 - Private members prefixed with underscore: `_member`
 - Methods use lowerCamelCase: `myFunction`
+- No abbreviations in identifiers — spell them out (`rowGroup`, not `rg`; `column`, not `col`; `index`, not `idx`). Applies to locals, parameters, members, and comments.
+- No Google-style `k`-prefix on constants. Use descriptive names: `previewRowsCount`, not `kPreviewRows`; `batchSize`, not `kBatch`.
+- Helpers that unconditionally throw use a `throw`-prefix: `throwError`, `throwIfError` — not `raise`, `bail`, or `fail`. C++ uses `throw` as the language keyword, so the name should match.
 
 **Includes order:**
 1. Current class header (followed by blank line)
@@ -121,11 +125,14 @@ Key points:
 - Keep headers declaration-only; put non-trivial implementations in `.cpp` files
 - Only trivial one-liner getters should be inline in headers
 - Destructors: declare `~ClassName();` in header, define in `.cpp` (not `= default` in header)
-- Helper functions that don't need to be in the public API should be in an anonymous namespace in the `.cpp` (not `static`)
+- In `.cpp` files, open with `using namespace db;` after the includes — don't wrap the body in `namespace db { ... }`.
+- Don't use anonymous namespaces in `.cpp` files. Inline single-use helpers at the call site, or make them private static members.
 
 **Error handling and return values:**
 - Don't return large/non-trivial objects by value from factory methods; use fill/output reference patterns instead
 - Throw `TuringException` on failure rather than returning error codes or optionals
+- Use the layer-appropriate exception type: `FatalException` in `storage/` code (available via `common`), `PipelineException` in `query/pipeline/`. Storage cannot include pipeline headers (would create a circular dependency).
+- In `main()`, return `EXIT_SUCCESS` / `EXIT_FAILURE` (from `<stdlib.h>`), not literal `0` / `1`.
 
 **Other rules:**
 - Never `using namespace` in headers
@@ -136,10 +143,23 @@ Key points:
 - Exceptions must derive from `TuringException`
 - No move semantics/RVO; pass by pointer or reference
 - Prefer `enum class` with trailing comma
+- Prefer `size_t` for indices and counts in new code (row groups, columns, rows, batch sizes). Narrow with `static_cast<int>(...)` at third-party API boundaries inside the `.cpp`.
+- Don't wrap unused parameter names in `/*comments*/` — just name them normally. `-Wunused-parameter` isn't enabled in this codebase, so there's no warning to silence.
+- Don't add `(void)param;` lines in function bodies to mark a parameter as used. Same reason: no warning to silence; it's pure noise.
 
 ## Design Conventions
 
 - Embedding operations (cosine_similarity, euclidean_distance) are implemented as functions through the EvalFunction path, not as binary operators. New computation operations on embeddings should follow the function pattern (Functions.h, EvalFunction, ColumnFunctions).
+
+## Build/iteration workflow
+
+- During multi-turn iteration on a change (style feedback, API shape, refactors), **don't build after each edit**. Just write the edits and stop. Builds are slow and noisy; running them every micro-revision burns time. Only build when the user explicitly asks ("build" / "compile" / "run it") or signals the design is settled.
+- Don't preface `make` with `cmake ..`. `make` already re-runs cmake when any tracked `CMakeLists.txt` has changed. Only run `cmake ..` after editing `CMakeLists.txt` / `dependencies.sh`, or when resetting the build directory.
+
+## Project context
+
+- **Partitioning** is on the near-term roadmap (as of 2026-05-04). Some customers have specifically asked for **METIS-style structural partitioning** (edge-cut minimization), not hash partitioning. Treat partitioning as a near-term constraint when discussing scale-out, not a future-optional.
+- The **replication / distribution** initiative is motivated by *both* (a) scaling beyond single-node memory (which forces partitioning) and (b) write availability across network partitions / regions (which motivates CRDT-style merge). The realistic landing point is a layered hybrid; evaluate any proposal against both goals.
 
 ## Commit style
 
