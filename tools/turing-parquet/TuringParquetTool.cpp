@@ -222,6 +222,10 @@ void renderPropertiesTable(const ParquetGraphLabel& label) {
 
 std::string labelHeader(const ParquetGraphLabel& label, const std::string& path) {
     std::string header = path;
+    if (!label.getInferredLabel().empty()) {
+        header += "  :";
+        header += label.getInferredLabel();
+    }
     header += "  ";
     header += ParquetGraphMapping::toString(label.getCardinality());
     if (label.isNullable()) {
@@ -284,6 +288,7 @@ void runGraphMapping(const fs::Path& path,
 
     ParquetGraphMapping mapping;
     ParquetGraphMapping::buildFrom(analysis, columnName, mapping);
+    ParquetGraphMapping::inferLabelNames(mapping);
 
     printGraphMapping(mapping);
 }

@@ -70,12 +70,14 @@ public:
     const std::string& getName() const { return _name; }
     ParquetEdgeCardinality getCardinality() const { return _cardinality; }
     bool isNullable() const { return _isNullable; }
+    const std::string& getInferredLabel() const { return _inferredLabel; }
     const std::vector<std::unique_ptr<ParquetGraphProperty>>& getProperties() const { return _properties; }
     const std::vector<std::unique_ptr<ParquetGraphLabel>>& getSubLabels() const { return _subLabels; }
 
     void setName(const std::string& name) { _name = name; }
     void setCardinality(ParquetEdgeCardinality cardinality) { _cardinality = cardinality; }
     void setNullable(bool isNullable) { _isNullable = isNullable; }
+    void setInferredLabel(const std::string& inferredLabel) { _inferredLabel = inferredLabel; }
 
     ParquetGraphProperty& addProperty();
     ParquetGraphLabel& addSubLabel();
@@ -84,6 +86,7 @@ private:
     std::string _name;
     ParquetEdgeCardinality _cardinality {ParquetEdgeCardinality::ONE};
     bool _isNullable {false};
+    std::string _inferredLabel;
     std::vector<std::unique_ptr<ParquetGraphProperty>> _properties;
     std::vector<std::unique_ptr<ParquetGraphLabel>> _subLabels;
 };
@@ -117,6 +120,12 @@ public:
     static void buildFrom(const ParquetPropertyAnalysis& analysis,
                           const std::string& columnName,
                           ParquetGraphMapping& mapping);
+
+    // Walks every sub-label and sets its inferred TuringDB label name (e.g.
+    // `associated_proteins` -> `AssociatedProtein`): non-alpha characters are
+    // dropped as word separators, each word's first letter is capitalised, and
+    // a trailing plural `s` is stripped (unless preceded by another `s`).
+    static void inferLabelNames(ParquetGraphMapping& mapping);
 
 private:
     std::string _columnName;
