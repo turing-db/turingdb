@@ -125,6 +125,102 @@ void ParquetReader::closeRowGroup() {
     ++_currentRowGroup;
 }
 
+bool ParquetReader::readInt32Slice(parquet::ColumnReader* columnReader,
+                                   std::vector<uint8_t>& scratch,
+                                   size_t columnIndex,
+                                   int64_t batchRows) {
+    auto* typed = static_cast<parquet::Int32Reader*>(columnReader);
+    int32_t* buffer = reinterpret_cast<int32_t*>(scratch.data());
+    int64_t valuesRead = 0;
+    typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
+    const std::span<const int32_t> values(buffer, static_cast<size_t>(valuesRead));
+    if (!_visitor.onInt32Values(columnIndex, values)) {
+        _aborted = true;
+        return false;
+    }
+    return true;
+}
+
+bool ParquetReader::readInt64Slice(parquet::ColumnReader* columnReader,
+                                   std::vector<uint8_t>& scratch,
+                                   size_t columnIndex,
+                                   int64_t batchRows) {
+    auto* typed = static_cast<parquet::Int64Reader*>(columnReader);
+    int64_t* buffer = reinterpret_cast<int64_t*>(scratch.data());
+    int64_t valuesRead = 0;
+    typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
+    const std::span<const int64_t> values(buffer, static_cast<size_t>(valuesRead));
+    if (!_visitor.onInt64Values(columnIndex, values)) {
+        _aborted = true;
+        return false;
+    }
+    return true;
+}
+
+bool ParquetReader::readFloatSlice(parquet::ColumnReader* columnReader,
+                                   std::vector<uint8_t>& scratch,
+                                   size_t columnIndex,
+                                   int64_t batchRows) {
+    auto* typed = static_cast<parquet::FloatReader*>(columnReader);
+    float* buffer = reinterpret_cast<float*>(scratch.data());
+    int64_t valuesRead = 0;
+    typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
+    const std::span<const float> values(buffer, static_cast<size_t>(valuesRead));
+    if (!_visitor.onFloatValues(columnIndex, values)) {
+        _aborted = true;
+        return false;
+    }
+    return true;
+}
+
+bool ParquetReader::readDoubleSlice(parquet::ColumnReader* columnReader,
+                                    std::vector<uint8_t>& scratch,
+                                    size_t columnIndex,
+                                    int64_t batchRows) {
+    auto* typed = static_cast<parquet::DoubleReader*>(columnReader);
+    double* buffer = reinterpret_cast<double*>(scratch.data());
+    int64_t valuesRead = 0;
+    typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
+    const std::span<const double> values(buffer, static_cast<size_t>(valuesRead));
+    if (!_visitor.onDoubleValues(columnIndex, values)) {
+        _aborted = true;
+        return false;
+    }
+    return true;
+}
+
+bool ParquetReader::readBoolSlice(parquet::ColumnReader* columnReader,
+                                  std::vector<uint8_t>& scratch,
+                                  size_t columnIndex,
+                                  int64_t batchRows) {
+    auto* typed = static_cast<parquet::BoolReader*>(columnReader);
+    bool* buffer = reinterpret_cast<bool*>(scratch.data());
+    int64_t valuesRead = 0;
+    typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
+    const std::span<const bool> values(buffer, static_cast<size_t>(valuesRead));
+    if (!_visitor.onBoolValues(columnIndex, values)) {
+        _aborted = true;
+        return false;
+    }
+    return true;
+}
+
+bool ParquetReader::readByteArraySlice(parquet::ColumnReader* columnReader,
+                                       std::vector<uint8_t>& scratch,
+                                       size_t columnIndex,
+                                       int64_t batchRows) {
+    auto* typed = static_cast<parquet::ByteArrayReader*>(columnReader);
+    parquet::ByteArray* buffer = reinterpret_cast<parquet::ByteArray*>(scratch.data());
+    int64_t valuesRead = 0;
+    typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
+    const std::span<const parquet::ByteArray> values(buffer, static_cast<size_t>(valuesRead));
+    if (!_visitor.onByteArrayValues(columnIndex, values)) {
+        _aborted = true;
+        return false;
+    }
+    return true;
+}
+
 bool ParquetReader::readColumnSlice(size_t projectionIndex,
                                     size_t columnIndex,
                                     int64_t batchRows) {
@@ -133,87 +229,34 @@ bool ParquetReader::readColumnSlice(size_t projectionIndex,
     const parquet::ColumnDescriptor* descriptor = schema->Column(static_cast<int>(columnIndex));
 
     std::vector<uint8_t>& scratch = _scratch[projectionIndex];
-    const size_t neededBytes =
-        static_cast<size_t>(batchRows) * sizeof(parquet::ByteArray);
+    const size_t neededBytes = static_cast<size_t>(batchRows) * sizeof(parquet::ByteArray);
     if (scratch.size() < neededBytes) {
         scratch.resize(neededBytes);
     }
 
-    int64_t valuesRead = 0;
-
     try {
         switch (descriptor->physical_type()) {
-            case parquet::Type::INT32: {
-                auto* typed = static_cast<parquet::Int32Reader*>(columnReader);
-                int32_t* buffer = reinterpret_cast<int32_t*>(scratch.data());
-                typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
-                const std::span<const int32_t> values(buffer, static_cast<size_t>(valuesRead));
-                if (!_visitor.onInt32Values(columnIndex, values)) {
-                    _aborted = true;
-                    return false;
-                }
-            }
+            case parquet::Type::INT32:
+                return readInt32Slice(columnReader, scratch, columnIndex, batchRows);
             break;
-            case parquet::Type::INT64: {
-                auto* typed = static_cast<parquet::Int64Reader*>(columnReader);
-                int64_t* buffer = reinterpret_cast<int64_t*>(scratch.data());
-                typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
-                const std::span<const int64_t> values(buffer, static_cast<size_t>(valuesRead));
-                if (!_visitor.onInt64Values(columnIndex, values)) {
-                    _aborted = true;
-                    return false;
-                }
-            }
+            case parquet::Type::INT64:
+                return readInt64Slice(columnReader, scratch, columnIndex, batchRows);
             break;
-            case parquet::Type::FLOAT: {
-                auto* typed = static_cast<parquet::FloatReader*>(columnReader);
-                float* buffer = reinterpret_cast<float*>(scratch.data());
-                typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
-                const std::span<const float> values(buffer, static_cast<size_t>(valuesRead));
-                if (!_visitor.onFloatValues(columnIndex, values)) {
-                    _aborted = true;
-                    return false;
-                }
-            }
+            case parquet::Type::FLOAT:
+                return readFloatSlice(columnReader, scratch, columnIndex, batchRows);
             break;
-            case parquet::Type::DOUBLE: {
-                auto* typed = static_cast<parquet::DoubleReader*>(columnReader);
-                double* buffer = reinterpret_cast<double*>(scratch.data());
-                typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
-                const std::span<const double> values(buffer, static_cast<size_t>(valuesRead));
-                if (!_visitor.onDoubleValues(columnIndex, values)) {
-                    _aborted = true;
-                    return false;
-                }
-            }
+            case parquet::Type::DOUBLE:
+                return readDoubleSlice(columnReader, scratch, columnIndex, batchRows);
             break;
-            case parquet::Type::BOOLEAN: {
-                auto* typed = static_cast<parquet::BoolReader*>(columnReader);
-                bool* buffer = reinterpret_cast<bool*>(scratch.data());
-                typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
-                const std::span<const bool> values(buffer, static_cast<size_t>(valuesRead));
-                if (!_visitor.onBoolValues(columnIndex, values)) {
-                    _aborted = true;
-                    return false;
-                }
-            }
+            case parquet::Type::BOOLEAN:
+                return readBoolSlice(columnReader, scratch, columnIndex, batchRows);
             break;
-            case parquet::Type::BYTE_ARRAY: {
-                auto* typed = static_cast<parquet::ByteArrayReader*>(columnReader);
-                parquet::ByteArray* buffer =
-                    reinterpret_cast<parquet::ByteArray*>(scratch.data());
-                typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
-                const std::span<const parquet::ByteArray> values(
-                    buffer, static_cast<size_t>(valuesRead));
-                if (!_visitor.onByteArrayValues(columnIndex, values)) {
-                    _aborted = true;
-                    return false;
-                }
-            }
+            case parquet::Type::BYTE_ARRAY:
+                return readByteArraySlice(columnReader, scratch, columnIndex, batchRows);
             break;
-            default: {
+            default:
                 // INT96 and FIXED_LEN_BYTE_ARRAY not yet supported; skip silently.
-            }
+                return true;
             break;
         }
     } catch (const parquet::ParquetException& e) {
