@@ -43,7 +43,12 @@ void printField(const ParquetSchemaField& field, size_t depth) {
             typeString += "(" + std::to_string(field.getFixedLength()) + ")";
         }
 
-        const std::string jsonSuffix = field.isLikelyJson() ? " [likely JSON]" : "";
+        std::string jsonSuffix;
+        if (field.getJsonShape() == ParquetJsonShape::KEY_VALUE) {
+            jsonSuffix = " [likely key-value JSON]";
+        } else if (field.getJsonShape() == ParquetJsonShape::GENERAL) {
+            jsonSuffix = " [likely JSON]";
+        }
 
         std::cout << indent << repetition << " " << typeString << " "
                   << field.getName() << logicalSuffix << jsonSuffix << "\n";

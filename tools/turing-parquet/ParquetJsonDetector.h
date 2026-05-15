@@ -45,6 +45,7 @@ private:
         ParquetSchemaField* field {nullptr};
         size_t samplesSeen {0};
         size_t jsonLooking {0};
+        size_t keyValueLooking {0};
     };
 
     ParquetSchema& _schema;
