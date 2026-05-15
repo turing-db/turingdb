@@ -1,6 +1,7 @@
 #include "ParquetGraphMapping.h"
 
 #include <stddef.h>
+#include <ctype.h>
 
 #include <spdlog/fmt/fmt.h>
 
@@ -9,6 +10,43 @@
 using namespace db;
 
 namespace {
+
+std::string inferLabelFromName(const std::string& propertyName) {
+    std::vector<std::string> words;
+    std::string current;
+    for (const char ch : propertyName) {
+        if (isalpha(static_cast<unsigned char>(ch))) {
+            current.push_back(ch);
+        } else if (!current.empty()) {
+            words.push_back(std::move(current));
+            current.clear();
+        }
+    }
+    if (!current.empty()) {
+        words.push_back(std::move(current));
+    }
+
+    std::string label;
+    for (std::string& word : words) {
+        word[0] = static_cast<char>(toupper(static_cast<unsigned char>(word[0])));
+        label += word;
+    }
+
+    const bool stripPlural = label.size() >= 2
+                             && label.back() == 's'
+                             && label[label.size() - 2] != 's';
+    if (stripPlural) {
+        label.pop_back();
+    }
+    return label;
+}
+
+void applyLabelInference(ParquetGraphLabel& label) {
+    label.setInferredLabel(inferLabelFromName(label.getName()));
+    for (const auto& subLabel : label.getSubLabels()) {
+        applyLabelInference(*subLabel);
+    }
+}
 
 bool isPrimitive(ParquetJsonValueType type) {
     const bool boolType = type == ParquetJsonValueType::BOOLEAN;
@@ -101,9 +139,7 @@ void populateFromArrayElement(ParquetGraphLabel& label,
     const ParquetJsonValueType elementValueType = elementType->getValueType();
 
     if (elementValueType == ParquetJsonValueType::NIL) {
-        addRawJsonProperty(label, "value", true);
-        mapping.addWarning(fmt::format("'{}[]' elements were always null — type unknown, emitted as raw JSON string",
-                                       arrayPath));
+        addPrimitiveProperty(label, "value", ParquetJsonValueType::STRING, false);
         return;
     }
 
@@ -141,9 +177,7 @@ void addPropertyEntry(ParquetGraphLabel& parent,
     }
 
     if (valueType == ParquetJsonValueType::NIL) {
-        addRawJsonProperty(parent, name, true);
-        mapping.addWarning(fmt::format("'{}' was always null — type unknown, emitted as raw JSON string",
-                                       path));
+        addPrimitiveProperty(parent, name, ParquetJsonValueType::STRING, false);
         return;
     }
 
@@ -241,5 +275,11 @@ void ParquetGraphMapping::buildFrom(const ParquetPropertyAnalysis& analysis,
     mapping.setColumnName(columnName);
     for (const auto& entry : analysis.getPropertyTypes()) {
         addPropertyEntry(mapping.getRoot(), entry.first, *entry.second, "", mapping);
+    }
+}
+
+void ParquetGraphMapping::inferLabelNames(ParquetGraphMapping& mapping) {
+    for (const auto& subLabel : mapping.getRoot().getSubLabels()) {
+        applyLabelInference(*subLabel);
     }
 }
