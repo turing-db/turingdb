@@ -72,6 +72,14 @@ public:
         return _connectionState->getWriter<WriterT>();
     }
 
+    // Reach the connection-lifetime state object — used by per-protocol
+    // _processor lambdas (e.g. h2 needs H2ConnectionState::processPendingRequest).
+    template <std::derived_from<BaseConnectionState> StateT>
+    StateT& getConnectionState() {
+        bioassert(_connectionState, "Connection State not initialized");
+        return *static_cast<StateT*>(_connectionState.get());
+    }
+
 private:
     utils::DataSocket _socket {0};
     TCPConnectionStorage* _storage {nullptr};

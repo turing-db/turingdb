@@ -20,13 +20,16 @@ public:
     TCPConnectionStorage& operator=(TCPConnectionStorage&&) = delete;
 
     void initialize(CreateAbstractTCPParserFunc& createParser,
-                    CreateAbstractTCPWriterFunc& createWriter) {
+                    CreateAbstractTCPWriterFunc& createWriter,
+                    CreateConnectionStateFunc& createConnectionState) {
         _free.resize(_maxConnections);
         for (size_t i = 0; i < _maxConnections; i++) {
             _free[i] = i;
 
             auto& inputBuffer = _connections[i].getInputBuffer();
-            auto state = std::make_unique<BaseConnectionState>();
+            auto state = createConnectionState
+                ? createConnectionState()
+                : std::make_unique<BaseConnectionState>();
             state->init(createWriter, createParser, &inputBuffer);
             _connections[i].setConnectionState(std::move(state));
             _connections[i].setStorageIndex(i);

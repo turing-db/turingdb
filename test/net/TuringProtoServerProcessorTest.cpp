@@ -69,8 +69,15 @@ std::string framePacket(net::proto::MessageTypes type, std::string_view payload)
 }
 
 void attachProtocolObjects(net::TCPConnection* connection, int socketFd) {
-    connection->setParser(std::make_unique<net::proto::TuringProtoParser>(&connection->getInputBuffer()));
-    connection->setWriter(std::make_unique<net::proto::TuringProtoWriter>());
+    auto state = std::make_unique<net::BaseConnectionState>();
+    auto createWriter = [](net::BaseConnectionState*) {
+        return std::unique_ptr<net::AbstractTCPWriter>(new net::proto::TuringProtoWriter());
+    };
+    auto createParser = [](net::NetBuffer* buf, net::BaseConnectionState*) {
+        return std::unique_ptr<net::AbstractTCPParser>(new net::proto::TuringProtoParser(buf));
+    };
+    state->init(createWriter, createParser, &connection->getInputBuffer());
+    connection->setConnectionState(std::move(state));
     connection->setSocket(socketFd);
 }
 

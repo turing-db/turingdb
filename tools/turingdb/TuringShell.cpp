@@ -21,8 +21,10 @@
 #include "Graph.h"
 #include "SystemManager.h"
 #include "ChangeManager.h"
+#include "H2Client.h"
 #include "LineNoiseHandle.h"
 #include "LocalMemory.h"
+#include "TuringClient.h"
 
 #include "columns/Block.h"
 #include "columns/Column.h"
@@ -334,11 +336,25 @@ void shCommand(const TuringShell::Command::Words& args, TuringShell& shell, std:
 
 } // namespace
 
+namespace {
+
+std::unique_ptr<net::IClient> makeClient(LocalMemory* mem) {
+    // USE_TURING_H2_CLIENT=1 selects the HTTP/2 transport; otherwise we
+    // keep the raw binary-proto TuringClient as the default.
+    const char* val = ::getenv("USE_TURING_H2_CLIENT");
+    if (val != nullptr && std::string_view(val) == "1") {
+        return std::make_unique<net::H2::H2Client>("127.0.0.1", "6666", mem);
+    }
+    return std::make_unique<net::proto::TuringClient>("127.0.0.1", "6666", mem);
+}
+
+}
+
 TuringShell::TuringShell(TuringDB& turingDB,
                          LocalMemory* mem,
                          LineNoiseHandle* lineNoiseHandle)
     : _turingDB(turingDB),
-    _client("127.0.0.1", "6666", mem),
+    _client(makeClient(mem)),
     _mem(mem),
     _lineNoiseHandle(lineNoiseHandle)
 {
@@ -440,8 +456,8 @@ void TuringShell::startLoop() {
 
 std::string TuringShell::composePrompt() {
     if (_remoteConnected) {
-        const auto remoteCommit = _client.getCommitHash();
-        const auto remoteGraph = _client.getGraphName();
+        const auto remoteCommit = _client->getCommitHash();
+        const auto remoteGraph = _client->getGraphName();
         return remoteCommit == CommitHash::head()
                  ? fmt::format("{}:{}> ", _remoteAddress, remoteGraph)
                  : fmt::format("{}:{}(detached {:x})> ", _remoteAddress, remoteGraph, remoteCommit.get());
@@ -748,7 +764,7 @@ void TuringShell::processLine(std::string& line) {
         if (_remoteConnected) {
             try {
                 const TimePoint start = Clock::now();
-                res = _client.sendQuery(line, shellOutPutCallBack);
+                res = _client->sendQuery(line, shellOutPutCallBack);
                 const TimePoint end = Clock::now();
 
                 remoteQueryTime = end - start;
@@ -804,8 +820,8 @@ void TuringShell::processLine(std::string& line) {
 
 bool TuringShell::setGraphName(const std::string& graphName) {
     if (_remoteConnected) {
-        _client.setGraphName(graphName);
-        _client.setCommitHash(CommitHash::head());
+        _client->setGraphName(graphName);
+        _client->setCommitHash(CommitHash::head());
         return true;
     }
 
@@ -822,8 +838,8 @@ bool TuringShell::setChangeID(ChangeID changeID) {
     _hash = CommitHash::head();
 
     if (_remoteConnected) {
-        _client.setChangeID(changeID);
-        _client.setCommitHash(CommitHash::head());
+        _client->setChangeID(changeID);
+        _client->setCommitHash(CommitHash::head());
         return true;
     }
 
@@ -844,7 +860,7 @@ bool TuringShell::setChangeID(ChangeID changeID) {
 
 bool TuringShell::setCommitHash(CommitHash hash) {
     if (_remoteConnected) {
-        _client.setCommitHash(hash);
+        _client->setCommitHash(hash);
         return true;
     }
 
@@ -892,13 +908,13 @@ void TuringShell::stop() {
 }
 
 void TuringShell::connectRemote(const std::string& address, const std::string& port) {
-    _client.disconnect();
-    _client.setRemoteAddress(address);
-    _client.setRemotePort(port);
-    _client.setGraphName(_graphName);
-    _client.setCommitHash(_hash);
-    _client.setChangeID(_changeID);
-    _client.connect();
+    _client->disconnect();
+    _client->setRemoteAddress(address);
+    _client->setRemotePort(port);
+    _client->setGraphName(_graphName);
+    _client->setCommitHash(_hash);
+    _client->setChangeID(_changeID);
+    _client->connect();
 
     _remoteAddress = address;
     _remotePort = port;
@@ -906,7 +922,7 @@ void TuringShell::connectRemote(const std::string& address, const std::string& p
 }
 
 void TuringShell::disconnectRemote() {
-    _client.disconnect();
+    _client->disconnect();
     _remoteAddress.clear();
     _remotePort.clear();
     _remoteConnected = false;

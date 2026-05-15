@@ -11,7 +11,7 @@
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
 
-#include "TuringClient.h"
+#include "IClient.h"
 
 namespace db {
 
@@ -45,11 +45,13 @@ public:
 
     [[nodiscard]] CommitHash getCommitHash() const { return _hash; }
     [[nodiscard]] ChangeID getChangeID() const { return _changeID; }
-    net::proto::TuringClient& getTuringClient() { return _client; }
+    net::IClient& getTuringClient() { return *_client; }
 
 private:
     TuringDB& _turingDB;
-    net::proto::TuringClient _client;
+    // Concrete type chosen at construction based on the USE_TURING_H2_CLIENT
+    // env var: H2Client when set, TuringClient otherwise.
+    std::unique_ptr<net::IClient> _client;
     LocalMemory* _mem {nullptr};
     std::string _graphName {"default"};
     CommitHash _hash {CommitHash::head()};

@@ -1,4 +1,5 @@
 set(tcp_common_sources
+    BaseConnectionState.cpp
     NetBuffer.cpp
     NetException.cpp
     SocketUtils.cpp)

@@ -335,6 +335,36 @@ cmake --build $BUILD_DIR/curl -j $NUM_JOBS
 cmake --install $BUILD_DIR/curl
 
 # ============================================================
+# Build nghttp2 from source
+# ============================================================
+echo "Building nghttp2..."
+mkdir -p $BUILD_DIR/nghttp2
+cd $BUILD_DIR/nghttp2
+
+NGHTTP2_CMAKE_ARGS=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_PREFIX=$DEPENDENCIES_DIR
+    -DCMAKE_PREFIX_PATH=$DEPENDENCIES_DIR
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    -DBUILD_SHARED_LIBS=OFF
+    -DBUILD_STATIC_LIBS=ON
+    -DENABLE_LIB_ONLY=ON
+    -DBUILD_TESTING=OFF
+)
+
+if [[ $USE_CLANG -eq 1 ]]; then
+    NGHTTP2_CMAKE_ARGS+=("${CLANG_COMPILER_ARGS[@]}")
+fi
+
+if [[ "$(uname)" == "Linux" ]]; then
+    NGHTTP2_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
+fi
+
+cmake "${NGHTTP2_CMAKE_ARGS[@]}" $SOURCE_DIR/external/nghttp2
+cmake --build $BUILD_DIR/nghttp2 -j $NUM_JOBS
+cmake --install $BUILD_DIR/nghttp2
+
+# ============================================================
 # Build faiss
 # ============================================================
 echo "Building faiss..."

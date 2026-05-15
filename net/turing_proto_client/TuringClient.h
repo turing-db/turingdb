@@ -4,6 +4,7 @@
 #include <string>
 
 #include "EmbeddingBuffer.h"
+#include "IClient.h"
 #include "TuringProtoInBuf.h"
 #include "TuringProtoOutBuf.h"
 #include "TuringProtoHeaders.h"
@@ -21,37 +22,37 @@ class DataframeManager;
 
 namespace net::proto {
 
-class TuringClient {
+class TuringClient : public net::IClient {
 public:
     TuringClient(const std::string& remoteAddress,
                  const std::string& remotePort,
                  db::LocalMemory* localMem,
                  size_t bufferCapacity = DEFAULT_BUFFER_CAPACITY);
-    ~TuringClient();
+    ~TuringClient() override;
 
-    void connect();
-    void disconnect();
+    void connect() override;
+    void disconnect() override;
     ProtoHeader sendHello();
     bool setUpConnection();
     db::QueryStatus sendQuery(const std::string& query,
-                              const db::QueryCallbacks::OnOutputData& callback);
-    void setRemoteAddress(const std::string& remoteAddress) {
+                              const db::QueryCallbacks::OnOutputData& callback) override;
+    void setRemoteAddress(const std::string& remoteAddress) override {
         _remoteAddress = remoteAddress;
     }
-    void setRemotePort(const std::string& remotePort) { _remotePort = remotePort; }
-    void setGraphName(const std::string& graphName) { _graphName = graphName; }
-    void setCommitHash(db::CommitHash commitHash) { _commitHash = commitHash; }
-    void setChangeID(db::ChangeID changeID) { _changeID = changeID; }
+    void setRemotePort(const std::string& remotePort) override { _remotePort = remotePort; }
+    void setGraphName(const std::string& graphName) override { _graphName = graphName; }
+    void setCommitHash(db::CommitHash commitHash) override { _commitHash = commitHash; }
+    void setChangeID(db::ChangeID changeID) override { _changeID = changeID; }
 
-    bool isConnected() const { return _socket >= 0; }
+    bool isConnected() const override { return _socket >= 0; }
 
-    std::string_view getRemoteAddress() const { return _remoteAddress; }
-    std::string_view getRemotePort() const { return _remotePort; }
-    std::string_view getGraphName() const { return _graphName; }
+    std::string_view getRemoteAddress() const override { return _remoteAddress; }
+    std::string_view getRemotePort() const override { return _remotePort; }
+    std::string_view getGraphName() const override { return _graphName; }
 
-    EmbeddingBuffer& getEmbeddingBuffer() { return _embeddingBuffer; }
-    db::CommitHash getCommitHash() const { return _commitHash; }
-    db::ChangeID getChangeID() const { return _changeID; }
+    EmbeddingBuffer& getEmbeddingBuffer() override { return _embeddingBuffer; }
+    db::CommitHash getCommitHash() const override { return _commitHash; }
+    db::ChangeID getChangeID() const override { return _changeID; }
 
 private:
     std::string _remoteAddress;

@@ -15,7 +15,11 @@ void TCPConnection::close() {
     ::shutdown(_socket, SHUT_RDWR);
     ::close(_socket);
     _socket = 0;
-    _parser->reset();
+    //TODO also reset the writer?
+    _connectionState->getParser().reset();
+    // Transports that hold connection-lifetime state (e.g. nghttp2 session)
+    // recycle it here so the next caller of this slot starts clean.
+    _connectionState->reset();
     dealloc();
 }
 

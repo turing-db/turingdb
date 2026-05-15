@@ -259,6 +259,9 @@ find_package(ZLIB REQUIRED)
 # openssl
 find_package(OpenSSL REQUIRED)
 
+# nghttp2 (HTTP/2 framing library, built from source in dependencies.sh)
+find_package(nghttp2 REQUIRED)
+
 enable_testing()
 
 # ======== Git Info =================

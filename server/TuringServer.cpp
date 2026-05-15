@@ -10,6 +10,10 @@
 #include "DBThreadContext.h"
 #include "DBServerConfig.h"
 #include "ThreadName.h"
+#include "H2ConnectionState.h"
+#include "H2Parser.h"
+#include "H2ProtoServerProcessor.h"
+#include "H2Writer.h"
 #include "HTTPParser.h"
 #include "DBURIParser.h"
 #include "DBServerProcessor.h"
@@ -28,6 +32,11 @@ bool isProtoEnabled() {
     return val && strcmp(val, "1") == 0;
 }
 
+bool isH2Enabled() {
+    const char* val = getenv("USE_TURING_H2");
+    return val && strcmp(val, "1") == 0;
+}
+
 }
 
 TuringServer::TuringServer(const DBServerConfig& config, TuringDB& db)
@@ -43,7 +52,8 @@ TuringServer::~TuringServer() {
 }
 
 void TuringServer::start() {
-    const bool useProto = isProtoEnabled();
+    const bool useH2 = isH2Enabled();
+    const bool useProto = !useH2 && isProtoEnabled();
 
     net::TCPServer::Functions functions;
     functions._createThreadContext =
@@ -51,7 +61,22 @@ void TuringServer::start() {
             return std::unique_ptr<net::AbstractThreadContext>(new DBThreadContext());
         };
 
-    if (useProto) {
+    if (useH2) {
+        functions._processor =
+            [&](net::AbstractThreadContext* threadContext, net::TCPConnection& connection) {
+                H2ProtoServerProcessor processor(_db, connection);
+                processor.process(threadContext);
+            };
+        functions._createParser = [](net::NetBuffer* inputBuffer, net::BaseConnectionState* state) {
+            return std::unique_ptr<net::AbstractTCPParser>(new net::H2::H2Parser(inputBuffer, state));
+        };
+        functions._createWriter = [](net::BaseConnectionState* state) {
+            return std::make_unique<net::H2::H2Writer>(state);
+        };
+        functions._createConnectionState = [] {
+            return std::unique_ptr<net::BaseConnectionState>(new net::H2::H2ConnectionState());
+        };
+    } else if (useProto) {
         functions._processor =
             [&](net::AbstractThreadContext* threadContext, net::TCPConnection& connection) {
                 TuringProtoServerProcessor processor(_db, connection);
@@ -101,10 +126,11 @@ void TuringServer::start() {
 
     _serverThread = std::thread(serverFunc);
 
+    const char* transport = useH2 ? "h2" : (useProto ? "proto" : "http");
     spdlog::info("  - Server listening on address: {}:{} ({})",
                  _server->getAddress(),
                  _server->getPort(),
-                 useProto ? "proto" : "http");
+                 transport);
 }
 
 void TuringServer::wait() {

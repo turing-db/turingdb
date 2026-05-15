@@ -68,7 +68,9 @@ FlowStatus TCPServer::initialize() {
 
     _epollInstance = utils::createEventInstance();
     _connections = std::make_unique<TCPConnectionStorage>(_maxConnections);
-    _connections->initialize(_functions._createParser,_functions._createWriter);
+    _connections->initialize(_functions._createParser,
+                             _functions._createWriter,
+                             _functions._createConnectionState);
     _serverConnection = _connections->alloc(_serverSocket);
 
     // Registering server socket in epoll list

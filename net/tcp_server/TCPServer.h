@@ -5,6 +5,7 @@
 #include <thread>
 
 #include "AbstractTCPParser.h"
+#include "BaseConnectionState.h"
 #include "FlowStatus.h"
 #include "ServerContext.h"
 #include "SocketUtils.h"
@@ -21,6 +22,11 @@ public:
         CreateThreadContext _createThreadContext;
         CreateAbstractTCPParserFunc _createParser;
         CreateAbstractTCPWriterFunc _createWriter;
+        // Optional. When unset, TCPConnectionStorage falls back to a plain
+        // BaseConnectionState — what the HTTP and binary-proto transports
+        // need. Transports that require a derived state (e.g. h2's nghttp2
+        // session) supply this factory.
+        CreateConnectionStateFunc _createConnectionState;
     };
 
     explicit TCPServer(Functions&&);
