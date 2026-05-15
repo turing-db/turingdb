@@ -152,6 +152,31 @@ private:
     bool openRowGroup();
     void closeRowGroup();
     bool readColumnSlice(size_t projectionIndex, size_t columnIndex, int64_t batchRows);
+
+    bool readInt32Slice(parquet::ColumnReader* columnReader,
+                        std::vector<uint8_t>& scratch,
+                        size_t columnIndex,
+                        int64_t batchRows);
+    bool readInt64Slice(parquet::ColumnReader* columnReader,
+                        std::vector<uint8_t>& scratch,
+                        size_t columnIndex,
+                        int64_t batchRows);
+    bool readFloatSlice(parquet::ColumnReader* columnReader,
+                        std::vector<uint8_t>& scratch,
+                        size_t columnIndex,
+                        int64_t batchRows);
+    bool readDoubleSlice(parquet::ColumnReader* columnReader,
+                         std::vector<uint8_t>& scratch,
+                         size_t columnIndex,
+                         int64_t batchRows);
+    bool readBoolSlice(parquet::ColumnReader* columnReader,
+                       std::vector<uint8_t>& scratch,
+                       size_t columnIndex,
+                       int64_t batchRows);
+    bool readByteArraySlice(parquet::ColumnReader* columnReader,
+                            std::vector<uint8_t>& scratch,
+                            size_t columnIndex,
+                            int64_t batchRows);
 };
 
 }
