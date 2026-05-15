@@ -221,6 +221,41 @@ bool ParquetReader::readByteArraySlice(parquet::ColumnReader* columnReader,
     return true;
 }
 
+bool ParquetReader::readInt96Slice(parquet::ColumnReader* columnReader,
+                                   std::vector<uint8_t>& scratch,
+                                   size_t columnIndex,
+                                   int64_t batchRows) {
+    auto* typed = static_cast<parquet::Int96Reader*>(columnReader);
+    parquet::Int96* buffer = reinterpret_cast<parquet::Int96*>(scratch.data());
+    int64_t valuesRead = 0;
+    typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
+    const std::span<const parquet::Int96> values(buffer, static_cast<size_t>(valuesRead));
+    if (!_visitor.onInt96Values(columnIndex, values)) {
+        _aborted = true;
+        return false;
+    }
+    return true;
+}
+
+bool ParquetReader::readFixedLenByteArraySlice(parquet::ColumnReader* columnReader,
+                                               std::vector<uint8_t>& scratch,
+                                               size_t columnIndex,
+                                               size_t byteWidth,
+                                               int64_t batchRows) {
+    auto* typed = static_cast<parquet::FixedLenByteArrayReader*>(columnReader);
+    parquet::FixedLenByteArray* buffer =
+        reinterpret_cast<parquet::FixedLenByteArray*>(scratch.data());
+    int64_t valuesRead = 0;
+    typed->ReadBatch(batchRows, nullptr, nullptr, buffer, &valuesRead);
+    const std::span<const parquet::FixedLenByteArray> values(
+        buffer, static_cast<size_t>(valuesRead));
+    if (!_visitor.onFixedLenByteArrayValues(columnIndex, values, byteWidth)) {
+        _aborted = true;
+        return false;
+    }
+    return true;
+}
+
 bool ParquetReader::readColumnSlice(size_t projectionIndex,
                                     size_t columnIndex,
                                     int64_t batchRows) {
@@ -254,9 +289,22 @@ bool ParquetReader::readColumnSlice(size_t projectionIndex,
             case parquet::Type::BYTE_ARRAY:
                 return readByteArraySlice(columnReader, scratch, columnIndex, batchRows);
             break;
+            case parquet::Type::INT96:
+                return readInt96Slice(columnReader, scratch, columnIndex, batchRows);
+            break;
+            case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
+                const size_t byteWidth = static_cast<size_t>(descriptor->type_length());
+                return readFixedLenByteArraySlice(columnReader,
+                                                  scratch,
+                                                  columnIndex,
+                                                  byteWidth,
+                                                  batchRows);
+            }
+            break;
             default:
-                // INT96 and FIXED_LEN_BYTE_ARRAY not yet supported; skip silently.
-                return true;
+                throw TuringException(fmt::format(
+                    "Parquet: row group {}, column {}: unsupported physical type",
+                    _currentRowGroup, columnIndex));
             break;
         }
     } catch (const parquet::ParquetException& e) {

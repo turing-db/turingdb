@@ -14,6 +14,8 @@ class ByteArray;
 class ColumnDescriptor;
 class ColumnReader;
 class FileMetaData;
+class FixedLenByteArray;
+class Int96;
 class ParquetFileReader;
 class RowGroupMetaData;
 class RowGroupReader;
@@ -73,6 +75,19 @@ public:
 
     virtual bool onByteArrayValues(size_t columnIndex,
                                    std::span<const parquet::ByteArray> values) {
+        return true;
+    }
+
+    virtual bool onInt96Values(size_t columnIndex,
+                               std::span<const parquet::Int96> values) {
+        return true;
+    }
+
+    // byteWidth is the fixed length of each value, from the column descriptor.
+    // Each FixedLenByteArray entry points to byteWidth bytes owned by the reader.
+    virtual bool onFixedLenByteArrayValues(size_t columnIndex,
+                                           std::span<const parquet::FixedLenByteArray> values,
+                                           size_t byteWidth) {
         return true;
     }
 
@@ -177,6 +192,15 @@ private:
                             std::vector<uint8_t>& scratch,
                             size_t columnIndex,
                             int64_t batchRows);
+    bool readInt96Slice(parquet::ColumnReader* columnReader,
+                        std::vector<uint8_t>& scratch,
+                        size_t columnIndex,
+                        int64_t batchRows);
+    bool readFixedLenByteArraySlice(parquet::ColumnReader* columnReader,
+                                    std::vector<uint8_t>& scratch,
+                                    size_t columnIndex,
+                                    size_t byteWidth,
+                                    int64_t batchRows);
 };
 
 }
