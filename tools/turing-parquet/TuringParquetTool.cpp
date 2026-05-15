@@ -24,6 +24,19 @@ using namespace db;
 
 namespace {
 
+std::string propertyTypeLabel(const ParquetPropertyType& propertyType) {
+    if (propertyType.isMixed()) {
+        return "mixed";
+    }
+
+    const ParquetJsonValueType valueType = propertyType.getValueType();
+    const std::string typeName = ParquetPropertyAnalysis::toString(valueType);
+    if (propertyType.isNullable() && valueType != ParquetJsonValueType::NIL) {
+        return "nullable " + typeName;
+    }
+    return typeName;
+}
+
 void printField(const ParquetSchemaField& field, size_t depth) {
     const std::string indent(depth * 2, ' ');
     const char* repetition = ParquetSchema::toString(field.getRepetition());
@@ -107,6 +120,28 @@ void printPropertyAnalysis(const ParquetPropertyAnalysis& analysis,
                                  ParquetPropertyAnalysis::toString(type),
                                  count,
                                  percent);
+    }
+
+    const ParquetPropertyAnalysis::PropertyTypeMap& propertyTypes = analysis.getPropertyTypes();
+    if (!propertyTypes.empty()) {
+        std::cout << "\nProperty types (" << propertyTypes.size() << " unique):\n";
+
+        size_t maxNameWidth = 0;
+        size_t maxTypeWidth = 0;
+        for (const auto& entry : propertyTypes) {
+            maxNameWidth = std::max(maxNameWidth, entry.first.size());
+            maxTypeWidth = std::max(maxTypeWidth, propertyTypeLabel(*entry.second).size());
+        }
+
+        for (const auto& entry : propertyTypes) {
+            const ParquetPropertyType& propertyType = *entry.second;
+            std::cout << fmt::format("  {:<{}}  {:<{}}  ({})\n",
+                                     propertyType.getName(),
+                                     maxNameWidth,
+                                     propertyTypeLabel(propertyType),
+                                     maxTypeWidth,
+                                     propertyType.getCount());
+        }
     }
 
     const std::vector<std::string>& arrayPreviews = analysis.getArrayPreviews();

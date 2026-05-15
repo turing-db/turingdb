@@ -2,10 +2,45 @@
 
 using namespace db;
 
+ParquetPropertyType::ParquetPropertyType() {
+}
+
+ParquetPropertyType::~ParquetPropertyType() {
+}
+
+void ParquetPropertyType::recordValue(ParquetJsonValueType type) {
+    ++_count;
+
+    if (type == ParquetJsonValueType::NIL) {
+        _isNullable = true;
+        return;
+    }
+
+    if (!_hasNonNullValue) {
+        _valueType = type;
+        _hasNonNullValue = true;
+    } else if (_valueType != type) {
+        _isMixed = true;
+    }
+}
+
 ParquetPropertyAnalysis::ParquetPropertyAnalysis() {
 }
 
 ParquetPropertyAnalysis::~ParquetPropertyAnalysis() {
+}
+
+ParquetPropertyType& ParquetPropertyAnalysis::getOrCreatePropertyType(const std::string& name) {
+    const auto it = _propertyTypes.find(name);
+    if (it != _propertyTypes.end()) {
+        return *it->second;
+    }
+
+    auto entry = std::make_unique<ParquetPropertyType>();
+    entry->setName(name);
+    ParquetPropertyType* raw = entry.get();
+    _propertyTypes.emplace(name, std::move(entry));
+    return *raw;
 }
 
 void ParquetPropertyAnalysis::recordValue(ParquetJsonValueType type) {
