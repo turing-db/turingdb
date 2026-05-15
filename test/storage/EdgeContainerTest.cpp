@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <spdlog/spdlog.h>
 
-#include "EdgeContainer.h"
+#include "datapart/EdgeContainer.h"
 #include "ID.h"
 
 using namespace db;

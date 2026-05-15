@@ -8,7 +8,7 @@
 #include "DumpResult.h"
 #include "DumpConfig.h"
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "Graph.h"
 #include "Path.h"
 #include "dump/TombstonesLoader.h"

@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "NodeRecord.h"
+#include "datapart/NodeRecord.h"
 #include "DumpConfig.h"
 
 namespace db {

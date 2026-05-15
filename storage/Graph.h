@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "Path.h"
 #include "versioning/CommitHash.h"
 #include "versioning/GraphID.h"

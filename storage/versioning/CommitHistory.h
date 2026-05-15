@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "ArcManager.h"
-#include "DataPartSpan.h"
+#include "datapart/DataPartSpan.h"
 #include "versioning/CommitView.h"
 #include "versioning/CommitJournal.h"
 

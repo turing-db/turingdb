@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <numeric>
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "Iterator.h"
 #include "iterators/TombstoneFilter.h"
 

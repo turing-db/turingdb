@@ -2,7 +2,7 @@
 
 #include <range/v3/view/zip.hpp>
 
-#include "EdgeRecord.h"
+#include "datapart/EdgeRecord.h"
 #include "ID.h"
 #include "LineContainer.h"
 #include "dataframe/ColumnTag.h"

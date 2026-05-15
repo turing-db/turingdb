@@ -2,10 +2,10 @@
 #include <spdlog/spdlog.h>
 
 #include "GraphMetadata.h"
-#include "EdgeContainer.h"
+#include "datapart/EdgeContainer.h"
 #include "indexers/EdgeIndexer.h"
 #include "ID.h"
-#include "NodeContainer.h"
+#include "datapart/NodeContainer.h"
 
 using namespace db;
 

@@ -2,7 +2,7 @@
 
 #include <initializer_list>
 
-#include "EdgeRecord.h"
+#include "datapart/EdgeRecord.h"
 #include "ID.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"

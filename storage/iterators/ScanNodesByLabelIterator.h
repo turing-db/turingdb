@@ -4,7 +4,7 @@
 
 #include "ChunkWriter.h"
 #include "TombstoneFilter.h"
-#include "NodeRange.h"
+#include "datapart/NodeRange.h"
 #include "columns/ColumnIDs.h"
 #include "indexers/LabelSetIndexer.h"
 #include "metadata/LabelSetHandle.h"

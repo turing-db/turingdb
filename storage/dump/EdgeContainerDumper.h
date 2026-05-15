@@ -1,7 +1,7 @@
 #pragma once
 
 #include "GraphDumpHelper.h"
-#include "EdgeContainer.h"
+#include "datapart/EdgeContainer.h"
 #include "EdgeContainerDumpConstants.h"
 #include "Profiler.h"
 

@@ -1,10 +1,10 @@
 #include "ScanEdgesIterator.h"
 
 #include "TombstoneFilter.h"
-#include "EdgeContainer.h"
+#include "datapart/EdgeContainer.h"
 #include "IteratorUtils.h"
 #include "Bitmask.h"
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 
 #include "BioAssert.h"
 

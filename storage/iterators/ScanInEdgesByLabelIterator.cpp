@@ -1,7 +1,7 @@
 #include "ScanInEdgesByLabelIterator.h"
 
-#include "DataPart.h"
-#include "EdgeContainer.h"
+#include "datapart/DataPart.h"
+#include "datapart/EdgeContainer.h"
 #include "indexers/EdgeIndexer.h"
 #include "IteratorUtils.h"
 

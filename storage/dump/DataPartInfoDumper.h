@@ -1,7 +1,7 @@
 #pragma once
 
 #include "GraphDumpHelper.h"
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 
 namespace db {
 

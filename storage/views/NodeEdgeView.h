@@ -3,7 +3,7 @@
 #include <span>
 #include <range/v3/view/join.hpp>
 
-#include "EdgeRecord.h"
+#include "datapart/EdgeRecord.h"
 
 namespace db {
 

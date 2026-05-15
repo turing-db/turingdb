@@ -1,6 +1,6 @@
 #include "ScanEdgePropertiesIterator.h"
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "IteratorUtils.h"
 #include "metadata/SupportedType.h"
 #include "properties/PropertyManager.h"

@@ -2,9 +2,9 @@
 
 #include <numeric>
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "TombstoneFilter.h"
-#include "NodeContainer.h"
+#include "datapart/NodeContainer.h"
 
 #include "BioAssert.h"
 

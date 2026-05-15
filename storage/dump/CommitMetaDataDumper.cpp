@@ -2,11 +2,11 @@
 
 #include <range/v3/view/enumerate.hpp>
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 
 #include "dump/GraphDumpHelper.h"
 #include "versioning/Commit.h"
-#include "DataPartSpan.h"
+#include "datapart/DataPartSpan.h"
 
 using namespace db;
 

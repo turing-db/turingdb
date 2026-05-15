@@ -2,9 +2,9 @@
 
 #include "MetadataRebaser.h"
 #include "EntityIDRebaser.h"
-#include "DataPart.h"
-#include "EdgeContainer.h"
-#include "NodeContainer.h"
+#include "datapart/DataPart.h"
+#include "datapart/EdgeContainer.h"
+#include "datapart/NodeContainer.h"
 #include "indexers/EdgeIndexer.h"
 #include "properties/PropertyContainer.h"
 #include "properties/PropertyManager.h"

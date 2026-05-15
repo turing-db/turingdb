@@ -2,10 +2,10 @@
 
 #include <algorithm>
 
-#include "DataPart.h"
+#include "datapart/DataPart.h"
 #include "ID.h"
-#include "NodeContainer.h"
-#include "EdgeContainer.h"
+#include "datapart/NodeContainer.h"
+#include "datapart/EdgeContainer.h"
 #include "indexers/EdgeIndexer.h"
 #include "views/EdgeView.h"
 #include "properties/PropertyManager.h"

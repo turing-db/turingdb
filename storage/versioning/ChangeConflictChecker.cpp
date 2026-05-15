@@ -10,7 +10,7 @@
 #include "iterators/GetOutEdgesIterator.h"
 #include "columns/ColumnVector.h"
 #include "ID.h"
-#include "EdgeRecord.h"
+#include "datapart/EdgeRecord.h"
 
 #include "BioAssert.h"
 #include "VersionControlException.h"

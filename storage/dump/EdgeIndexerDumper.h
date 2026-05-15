@@ -1,6 +1,6 @@
 #pragma once
 
-#include "EdgeContainer.h"
+#include "datapart/EdgeContainer.h"
 #include "Profiler.h"
 #include "indexers/EdgeIndexer.h"
 #include "GraphDumpHelper.h"

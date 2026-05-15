@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "NodeEdgeData.h"
+#include "datapart/NodeEdgeData.h"
 #include "ID.h"
 #include "DumpConfig.h"
 

@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "DataPartSpan.h"
+#include "datapart/DataPartSpan.h"
 #include "views/GraphView.h"
 
 namespace db {

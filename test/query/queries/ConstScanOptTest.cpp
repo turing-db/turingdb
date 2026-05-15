@@ -15,7 +15,7 @@
 #include "versioning/Transaction.h"
 #include "reader/GraphReader.h"
 #include "dataframe/Dataframe.h"
-#include "EdgeRecord.h"
+#include "datapart/EdgeRecord.h"
 
 #include "CypherAST.h"
 #include "CypherParser.h"

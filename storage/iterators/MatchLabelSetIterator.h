@@ -2,7 +2,7 @@
 
 #include "Iterator.h"
 
-#include "NodeRange.h"
+#include "datapart/NodeRange.h"
 #include "indexers/LabelSetIndexer.h"
 
 namespace db {
