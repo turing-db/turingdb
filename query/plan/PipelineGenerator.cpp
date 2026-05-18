@@ -1238,8 +1238,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
             col = exprGen.generateExpr(argExpr);
         } else {
             auto it = _declToColumn.find(argDecl);
-            bioassert(it != _declToColumn.end(),
-                      "Argument does not have a variable declaration");
+            bioassert(it != _declToColumn.end(), "Argument does not have a variable declaration");
             const ColumnTag tag = it->second;
             const NamedColumn* namedCol = inDf->getColumn(tag);
 
