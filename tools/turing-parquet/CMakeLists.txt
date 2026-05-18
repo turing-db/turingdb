@@ -5,6 +5,7 @@ set(turing_parquet_sources
     ParquetSchemaExtractor.cpp
     ParquetJsonDetector.cpp
     ParquetPropertyAnalysis.cpp
+    ParquetPropertyMerge.cpp
     ParquetPropertyAnalyzer.cpp
     ParquetGraphMapping.cpp)
 

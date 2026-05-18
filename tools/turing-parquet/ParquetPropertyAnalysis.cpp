@@ -68,6 +68,11 @@ void ParquetPropertyAnalysis::recordValue(ParquetJsonValueType type) {
     ++_totalCount;
 }
 
+void ParquetPropertyAnalysis::addTypeCount(ParquetJsonValueType type, size_t count) {
+    _typeCounts[static_cast<size_t>(type)] += count;
+    _totalCount += count;
+}
+
 void ParquetPropertyAnalysis::recordArrayPreview(const std::string& preview) {
     if (_arrayPreviews.size() < MAX_PREVIEWS) {
         _arrayPreviews.push_back(preview);

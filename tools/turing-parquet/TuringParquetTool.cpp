@@ -4,6 +4,7 @@
 #include <array>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -19,6 +20,7 @@
 #include "ParquetJsonDetector.h"
 #include "ParquetPropertyAnalysis.h"
 #include "ParquetPropertyAnalyzer.h"
+#include "ParquetPropertyMerge.h"
 #include "ParquetSchema.h"
 #include "ParquetSchemaExtractor.h"
 
@@ -296,36 +298,87 @@ void runGraphMapping(const fs::Path& path,
 }
 
 void processFile(const std::string& filePath,
-                 bool wantsSchema,
+                 const ParquetSchema& schema,
                  const std::vector<std::string>& propsColumns,
                  const std::string& mappingColumnName) {
     const fs::Path path(filePath);
 
-    ParquetSchema schema;
-    buildSchema(path, schema);
-
-    bool firstSection = true;
-    const auto separate = [&]() {
-        if (!firstSection) {
-            std::cout << "\n";
-        }
-        firstSection = false;
-    };
-
-    if (wantsSchema) {
-        separate();
-        printSchema(schema);
-    }
+    printSchema(schema);
 
     for (const std::string& propsColumn : propsColumns) {
-        separate();
+        std::cout << "\n";
         runPropertyAnalysis(path, schema, propsColumn);
     }
 
     if (!mappingColumnName.empty()) {
-        separate();
+        std::cout << "\n";
         runGraphMapping(path, schema, mappingColumnName);
     }
+}
+
+bool fileHasTopLevelColumn(const ParquetSchema& schema, const std::string& name) {
+    const ParquetSchemaField& root = schema.getRoot();
+    const size_t childCount = root.getChildCount();
+    for (size_t childIndex = 0; childIndex < childCount; ++childIndex) {
+        if (root.getChild(childIndex).getName() == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string trimWhitespace(const std::string& value) {
+    const size_t start = value.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) {
+        return "";
+    }
+    const size_t end = value.find_last_not_of(" \t\r\n");
+    return value.substr(start, end - start + 1);
+}
+
+void runMergedPropertyPrompt(const std::vector<std::string>& files,
+                             const std::vector<std::unique_ptr<ParquetSchema>>& schemas) {
+    std::string defaultColumn = "properties";
+    for (const auto& schema : schemas) {
+        if (!fileHasTopLevelColumn(*schema, defaultColumn)) {
+            defaultColumn.clear();
+            break;
+        }
+    }
+
+    std::cout << "\n";
+    if (!defaultColumn.empty()) {
+        std::cout << "Column to merge property analysis on [" << defaultColumn << "] (empty to skip): ";
+    } else {
+        std::cout << "Column to merge property analysis on (empty to skip): ";
+    }
+    std::cout.flush();
+
+    std::string line;
+    if (!std::getline(std::cin, line)) {
+        return;
+    }
+
+    const std::string trimmed = trimWhitespace(line);
+    const std::string columnName = trimmed.empty() ? defaultColumn : trimmed;
+    if (columnName.empty()) {
+        return;
+    }
+
+    ParquetPropertyAnalysis merged;
+    ParquetPropertyMerge merger(merged);
+    for (size_t fileIndex = 0; fileIndex < files.size(); ++fileIndex) {
+        const fs::Path path(files[fileIndex]);
+        ParquetPropertyAnalysis analysis;
+        ParquetPropertyAnalyzer analyzer(*schemas[fileIndex], columnName, analysis);
+        ParquetReader reader(path, analyzer);
+        while (reader.nextChunk()) {
+        }
+        merger.merge(analysis);
+    }
+
+    std::cout << "\n== Merged property analysis ==\n";
+    printPropertyAnalysis(merged, columnName);
 }
 
 }
@@ -378,11 +431,6 @@ int main(int argc, const char** argv) {
             attachPendingProps(value);
         });
 
-    bool printSchemaFlag = false;
-    parser.add_argument("-schema")
-        .help("Pretty-print the schema of FILE")
-        .store_into(printSchemaFlag);
-
     parser.add_argument("-props")
         .metavar("COLUMN")
         .help("Analyze the JSON property structure of COLUMN on the most recent file (repeatable)")
@@ -415,15 +463,6 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
-    const bool wantsSchema = printSchemaFlag;
-    const bool wantsProps = !propsByFile.empty();
-    const bool wantsMapping = !mappingColumnName.empty();
-    if (!wantsSchema && !wantsProps && !wantsMapping) {
-        std::cerr << "No action specified.\n";
-        std::cerr << parser;
-        return EXIT_FAILURE;
-    }
-
     std::vector<std::string> allFiles;
     allFiles.reserve(nodeFiles.size() + edgeFiles.size() + 1);
     allFiles.insert(allFiles.end(), nodeFiles.begin(), nodeFiles.end());
@@ -439,6 +478,14 @@ int main(int argc, const char** argv) {
     }
 
     try {
+        std::vector<std::unique_ptr<ParquetSchema>> schemas;
+        schemas.reserve(allFiles.size());
+        for (const std::string& file : allFiles) {
+            schemas.push_back(std::make_unique<ParquetSchema>());
+            const fs::Path path(file);
+            buildSchema(path, *schemas.back());
+        }
+
         for (size_t fileIndex = 0; fileIndex < allFiles.size(); ++fileIndex) {
             if (fileIndex > 0) {
                 std::cout << "\n";
@@ -448,8 +495,10 @@ int main(int argc, const char** argv) {
             const auto propsIter = propsByFile.find(allFiles[fileIndex]);
             const std::vector<std::string> emptyProps;
             const std::vector<std::string>& fileProps = (propsIter != propsByFile.end()) ? propsIter->second : emptyProps;
-            processFile(allFiles[fileIndex], wantsSchema, fileProps, mappingColumnName);
+            processFile(allFiles[fileIndex], *schemas[fileIndex], fileProps, mappingColumnName);
         }
+
+        runMergedPropertyPrompt(allFiles, schemas);
     } catch (const TuringException& e) {
         std::cerr << e.what() << "\n";
         return EXIT_FAILURE;
