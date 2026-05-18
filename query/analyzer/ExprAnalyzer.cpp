@@ -630,7 +630,16 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
             continue;
         }
 
+        // Register variables for each argument
         for (Expr* arg : providedArgs) {
+            const VarDecl* var = arg->getExprVarDecl();
+            // Already registered: skip
+            if (var) {
+                continue;
+            }
+
+            // Not yet registered: create variable
+
             // Type is validated above
             const EvaluatedType type = arg->getType();
             const VarDecl* decl = _ctxt->createUnnamedVariable(_ast, type);
