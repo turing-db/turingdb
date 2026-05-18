@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "call db.describeCommit(\"not-a-commit\")",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.describeCommit\n    `\"]\n    1[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v0\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->0",
+    "result": ",nodeCount,edgeCount,partCount\nnot-a-commit,0,0,0",
+    "resultJson": "{\"header\":{\"column_names\":[\"$0\",\"nodeCount\",\"edgeCount\",\"partCount\"],\"column_types\":[\"String\",\"UInt64\",\"UInt64\",\"UInt64\"]},\"data\":[[[\"not-a-commit\"],[0],[0],[0]]]}"
+  },
+  "tags": [],
+  "write-required": false
+}
