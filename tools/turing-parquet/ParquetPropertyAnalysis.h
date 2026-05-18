@@ -45,6 +45,7 @@ public:
 
     const std::string& getName() const { return _name; }
     ParquetJsonValueType getValueType() const { return _valueType; }
+    bool hasNonNullValue() const { return _hasNonNullValue; }
     bool isNullable() const { return _isNullable; }
     bool isMixed() const { return _isMixed; }
     size_t getCount() const { return _count; }
@@ -54,6 +55,15 @@ public:
 
     void setName(const std::string& name) { _name = name; }
     void recordValue(ParquetJsonValueType type);
+
+    // Merge-time mutators. setValueType() also marks the entry as having seen
+    // at least one non-null observation; merge code combines two entries by
+    // calling setValueType once on the unset side or markMixed() when the
+    // two value types disagree.
+    void addCount(size_t count) { _count += count; }
+    void markNullable() { _isNullable = true; }
+    void markMixed() { _isMixed = true; }
+    void setValueType(ParquetJsonValueType type) { _valueType = type; _hasNonNullValue = true; }
 
     ParquetPropertyType& getOrCreateSubProperty(const std::string& name);
     ParquetPropertyType& getOrCreateElementType();
@@ -98,6 +108,10 @@ public:
     void recordValue(ParquetJsonValueType type);
     void recordArrayPreview(const std::string& preview);
     void recordObjectPreview(const std::string& preview);
+
+    // Merge-time accumulator: bumps both the per-type counter and the total
+    // by the given count.
+    void addTypeCount(ParquetJsonValueType type, size_t count);
 
     ParquetPropertyType& getOrCreatePropertyType(const std::string& name);
 
