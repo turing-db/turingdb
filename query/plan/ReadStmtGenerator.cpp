@@ -8,6 +8,7 @@
 
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
+#include "ExprProgramGenerator.h"
 #include "FunctionInvocation.h"
 #include "ID.h"
 #include "Literal.h"
@@ -36,6 +37,7 @@
 #include "expr/SymbolExpr.h"
 #include "metadata/LabelSet.h"
 #include "nodes/CartesianProductNode.h"
+#include "nodes/ExprEvalNode.h"
 #include "nodes/FilterNode.h"
 #include "nodes/GetEdgeTargetNode.h"
 #include "nodes/GetEdgesNode.h"
@@ -175,7 +177,25 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
     const FunctionInvocationExpr* funcExpr = callStmt->getFunc();
     YieldClause* yield = callStmt->getYield();
 
+    ExprEvalNode* exprEval = nullptr;
     ProcedureEvalNode* procNode = _tree->create<ProcedureEvalNode>(funcExpr, yield);
+
+    const FunctionInvocation* invok = funcExpr->getFunctionInvocation();
+    const ExprChain* args = invok->getArguments();
+
+    for (const Expr* arg : *args) {
+        // Arg does not need evaluation: perhaps supplied from an earlier proc
+        if (!ExprEvalNode::needsEvaluation(arg)) {
+            continue;
+        }
+
+        // Arg needs evaluation: ensure we have an ExprEvalNode
+        if (!exprEval) {
+            exprEval = _tree->insertBefore<ExprEvalNode>(procNode);
+        }
+
+        exprEval->addExpr(arg);
+    }
 
     if (yield && yield->getItems()) {
         YieldItems* yieldItems = yield->getItems();
