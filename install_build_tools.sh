@@ -81,11 +81,23 @@ else
     if command -v apt-get &> /dev/null; then
         if ! command -v "llvm-config-${LLVM_MAJOR_VERSION}" &> /dev/null; then
             echo "Installing LLVM ${LLVM_MAJOR_VERSION} via apt.llvm.org..."
-            wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+            # Scope the key to this repo via signed-by so a stale key elsewhere on the runner image cannot shadow it
+            LLVM_KEYRING=/etc/apt/keyrings/apt.llvm.org.asc
+            sudo install -d -m 0755 /etc/apt/keyrings
+            wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee "${LLVM_KEYRING}" >/dev/null
             CODENAME=$(lsb_release -cs)
-            echo "deb http://apt.llvm.org/${CODENAME}/ llvm-toolchain-${CODENAME}-${LLVM_MAJOR_VERSION} main" \
+            echo "deb [signed-by=${LLVM_KEYRING}] http://apt.llvm.org/${CODENAME}/ llvm-toolchain-${CODENAME}-${LLVM_MAJOR_VERSION} main" \
                 | sudo tee /etc/apt/sources.list.d/llvm-${LLVM_MAJOR_VERSION}.list >/dev/null
-            sudo apt-get update
+            # apt.llvm.org occasionally serves a snapshot key out of sync with InRelease; retry to ride out the drift
+            for attempt in 1 2 3; do
+                if sudo apt-get update; then
+                    break
+                fi
+                if [ "${attempt}" = 3 ]; then
+                    exit 1
+                fi
+                sleep 15
+            done
             sudo apt-get install -y clang-${LLVM_MAJOR_VERSION} llvm-${LLVM_MAJOR_VERSION}-dev lld-${LLVM_MAJOR_VERSION}
         else
             echo "LLVM ${LLVM_MAJOR_VERSION} is already installed"
