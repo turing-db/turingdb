@@ -588,12 +588,12 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
     }
 
     const ExprChain* argsChain = invoc->getArguments();
-    const auto& requestedArgs = argsChain->getExprs();
+    const ExprChain::ExprVector& providedArgs = argsChain->getExprs();
 
     bool isDynamic = false;
     bool isAggregate = false;
 
-    for (Expr* arg : requestedArgs) {
+    for (Expr* arg : providedArgs) {
         analyzeExpr(arg);
 
         isDynamic |= arg->isDynamic();
@@ -611,25 +611,28 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
     }
 
     // For each overload, check if the argument types match
-    for (auto it = signatures.begin(); it != signatures.end(); it++) {
-        FunctionSignature* signature = *it;
-
+    for (FunctionSignature* signature : signatures) {
         const auto& expectedArgs = signature->argumentTypes();
 
-        if (requestedArgs.size() != expectedArgs.size()) {
+        if (providedArgs.size() != expectedArgs.size()) {
             // Number of arguments does not match
             continue;
         }
 
-        const bool matchingArgs = std::equal(
-            expectedArgs.begin(), expectedArgs.end(), requestedArgs.begin(),
-            [](const EvaluatedType& expected, const Expr* arg) {
-                return arg->getType() == expected;
-            });
+        const bool matchingArgs = std::ranges::equal(expectedArgs, providedArgs,
+                               [](const EvaluatedType& expected, const Expr* arg) {
+                                   return arg->getType() == expected;
+                               });
 
         if (!matchingArgs) {
             // Argument types do not match
             continue;
+        }
+
+        for (Expr* arg : providedArgs) {
+            // Type is validated above
+            const VarDecl* decl = _ctxt->createUnnamedVariable(_ast, arg->getType());
+            arg->setExprVarDecl(decl);
         }
 
         // Found a valid signature
@@ -652,6 +655,7 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
         return;
     }
 
+    // Checked all overloaded signatures, none match: error
     throwError(fmt::format("Invalid arguments for function '{}'", name), expr);
 }
 
