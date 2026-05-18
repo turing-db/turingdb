@@ -21,6 +21,7 @@
 #include "StringBucket.h"
 
 #include "expr/All.h"
+#include "expr/Expr.h"
 
 using namespace db;
 
@@ -631,7 +632,8 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
 
         for (Expr* arg : providedArgs) {
             // Type is validated above
-            const VarDecl* decl = _ctxt->createUnnamedVariable(_ast, arg->getType());
+            const EvaluatedType type = arg->getType();
+            const VarDecl* decl = _ctxt->createUnnamedVariable(_ast, type);
             arg->setExprVarDecl(decl);
         }
 
