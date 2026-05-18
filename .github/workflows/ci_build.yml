@@ -100,17 +100,16 @@ jobs:
       id: version
       if: inputs.dev_version_suffix != ''
       run: |
-        DESC=$(git describe --tags --long --match 'v*' --first-parent)
-        TAG_VERSION=$(echo "$DESC" | sed 's/^v\(.*\)-[0-9]*-g[0-9a-f]*$/\1/')
-        DISTANCE=$(echo "$DESC" | sed 's/^v.*-\([0-9]*\)-g[0-9a-f]*$/\1/')
-        if [ "$DISTANCE" != "0" ]; then
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG_VERSION"
-          PATCH=${PATCH:-0}
-          PATCH=$((PATCH + 1))
-          VERSION="${MAJOR}.${MINOR}.${PATCH}.dev${{ inputs.dev_version_suffix }}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Computed version override: $VERSION"
-        fi
+        # Always bump patch and add a dev suffix so nightlies never collide with a published tag version on PyPI,
+        # including the edge case where HEAD sits exactly on the latest tag (distance == 0).
+        DESC=$(git describe --tags --match 'v*' --first-parent --abbrev=0)
+        TAG_VERSION=${DESC#v}
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG_VERSION"
+        PATCH=${PATCH:-0}
+        PATCH=$((PATCH + 1))
+        VERSION="${MAJOR}.${MINOR}.${PATCH}.dev${{ inputs.dev_version_suffix }}"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "Computed version override: $VERSION"
 
     - name: Build wheel
       run: |
