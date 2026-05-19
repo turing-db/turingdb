@@ -17,6 +17,7 @@
 
 #include "ParquetEdgeTypeAnalysis.h"
 #include "ParquetEdgeTypeAnalyzer.h"
+#include "ParquetGraphImporter.h"
 #include "ParquetGraphMapping.h"
 #include "ParquetJsonDetector.h"
 #include "ParquetPropertyAnalysis.h"
@@ -24,6 +25,12 @@
 #include "ParquetPropertyMerge.h"
 #include "ParquetSchema.h"
 #include "ParquetSchemaExtractor.h"
+
+#include "Graph.h"
+#include "JobSystem.h"
+#include "SystemManager.h"
+#include "TuringConfig.h"
+#include "TuringDB.h"
 
 #include "TuringException.h"
 
@@ -270,7 +277,8 @@ void printGraphMapping(const ParquetGraphMapping& mapping) {
 
 void runMergedPropertyAnalysis(const std::vector<std::string>& files,
                                const std::vector<std::unique_ptr<ParquetSchema>>& schemas,
-                               const std::string& columnName) {
+                               const std::string& columnName,
+                               ParquetGraphMapping& outMapping) {
     ParquetPropertyAnalysis merged;
     ParquetPropertyMerge merger(merged);
     for (size_t fileIndex = 0; fileIndex < files.size(); ++fileIndex) {
@@ -286,12 +294,11 @@ void runMergedPropertyAnalysis(const std::vector<std::string>& files,
     std::cout << "\n== Merged property analysis: " << columnName << " ==\n";
     printPropertyAnalysis(merged, columnName);
 
-    ParquetGraphMapping mapping;
-    ParquetGraphMapping::buildFrom(merged, columnName, mapping);
-    ParquetGraphMapping::inferLabelNames(mapping);
+    ParquetGraphMapping::buildFrom(merged, columnName, outMapping);
+    ParquetGraphMapping::inferLabelNames(outMapping);
 
     std::cout << "\n== Graph mapping: " << columnName << " ==\n";
-    printGraphMapping(mapping);
+    printGraphMapping(outMapping);
 }
 
 bool fileHasTopLevelColumn(const ParquetSchema& schema, const std::string& name) {
@@ -315,7 +322,9 @@ std::string trimWhitespace(const std::string& value) {
 }
 
 void runMergedPropertyPrompt(const std::vector<std::string>& files,
-                             const std::vector<std::unique_ptr<ParquetSchema>>& schemas) {
+                             const std::vector<std::unique_ptr<ParquetSchema>>& schemas,
+                             std::string& outColumnName,
+                             ParquetGraphMapping& outMapping) {
     std::string defaultColumn = "properties";
     for (const auto& schema : schemas) {
         if (!fileHasTopLevelColumn(*schema, defaultColumn)) {
@@ -333,17 +342,18 @@ void runMergedPropertyPrompt(const std::vector<std::string>& files,
     std::cout.flush();
 
     std::string line;
-    if (!std::getline(std::cin, line)) {
-        return;
-    }
-
-    const std::string trimmed = trimWhitespace(line);
+    const bool hasInput = static_cast<bool>(std::getline(std::cin, line));
+    const std::string trimmed = hasInput ? trimWhitespace(line) : "";
     const std::string columnName = trimmed.empty() ? defaultColumn : trimmed;
     if (columnName.empty()) {
         return;
     }
+    if (!hasInput) {
+        std::cout << defaultColumn << " (stdin closed; using default)\n";
+    }
 
-    runMergedPropertyAnalysis(files, schemas, columnName);
+    outColumnName = columnName;
+    runMergedPropertyAnalysis(files, schemas, columnName, outMapping);
 }
 
 void printEdgeTypeAnalysis(const ParquetEdgeTypeAnalysis& analysis,
@@ -419,14 +429,14 @@ void runEdgeTypePrompt(const std::vector<std::string>& edgeFiles,
     std::cout.flush();
 
     std::string line;
-    if (!std::getline(std::cin, line)) {
-        return;
-    }
-
-    const std::string trimmed = trimWhitespace(line);
+    const bool hasInput = static_cast<bool>(std::getline(std::cin, line));
+    const std::string trimmed = hasInput ? trimWhitespace(line) : "";
     const std::string columnName = trimmed.empty() ? defaultColumn : trimmed;
     if (columnName.empty()) {
         return;
+    }
+    if (!hasInput) {
+        std::cout << defaultColumn << " (stdin closed; using default)\n";
     }
 
     runEdgeTypeAnalysis(edgeFiles, edgeSchemas, columnName);
@@ -442,6 +452,8 @@ int main(int argc, const char** argv) {
     std::vector<std::string> edgeFiles;
     std::vector<std::string> propsColumns;
     std::string edgeTypeColumn;
+    std::string outputDir = "turingdb.out";
+    std::string graphName = "imported";
 
     parser.add_argument("-nodes")
         .metavar("FILE")
@@ -467,6 +479,21 @@ int main(int argc, const char** argv) {
         .help("Run edge-type analysis on COLUMN across all edge files. "
               "If omitted, you will be prompted for a column.")
         .store_into(edgeTypeColumn);
+
+    parser.add_argument("-out")
+        .metavar("DIR")
+        .help("TuringDB root directory (default: ./turingdb.out). Created if "
+              "absent; otherwise its existing contents (other graphs, system "
+              "files) are preserved. Only the named graph's subdirectory is "
+              "wiped before the import.")
+        .store_into(outputDir);
+
+    parser.add_argument("-graph")
+        .metavar("NAME")
+        .help("Graph name to create inside -out DIR (default: imported). If "
+              "a graph with this name already exists in the directory, its "
+              "subdirectory is removed before writing the new one.")
+        .store_into(graphName);
 
     try {
         parser.parse_args(argc, argv);
@@ -504,12 +531,20 @@ int main(int argc, const char** argv) {
             printSchema(*schemas[fileIndex]);
         }
 
+        std::unique_ptr<ParquetGraphMapping> propertyMapping;
+        std::string propertyColumn;
         if (!propsColumns.empty()) {
             for (const std::string& column : propsColumns) {
-                runMergedPropertyAnalysis(allFiles, schemas, column);
+                propertyMapping = std::make_unique<ParquetGraphMapping>();
+                runMergedPropertyAnalysis(allFiles, schemas, column, *propertyMapping);
+                propertyColumn = column;
             }
         } else {
-            runMergedPropertyPrompt(allFiles, schemas);
+            propertyMapping = std::make_unique<ParquetGraphMapping>();
+            runMergedPropertyPrompt(allFiles, schemas, propertyColumn, *propertyMapping);
+            if (propertyColumn.empty()) {
+                propertyMapping.reset();
+            }
         }
 
         std::vector<const ParquetSchema*> edgeSchemas;
@@ -518,13 +553,88 @@ int main(int argc, const char** argv) {
             edgeSchemas.push_back(schemas[nodeFiles.size() + edgeIndex].get());
         }
 
+        std::string resolvedEdgeTypeColumn = edgeTypeColumn;
         if (!edgeTypeColumn.empty()) {
             if (!edgeFiles.empty()) {
                 runEdgeTypeAnalysis(edgeFiles, edgeSchemas, edgeTypeColumn);
             }
         } else {
             runEdgeTypePrompt(edgeFiles, edgeSchemas);
+            if (resolvedEdgeTypeColumn.empty()) {
+                for (const ParquetSchema* schema : edgeSchemas) {
+                    if (fileHasTopLevelColumn(*schema, "relation")) {
+                        resolvedEdgeTypeColumn = "relation";
+                        break;
+                    }
+                }
+            }
         }
+
+        if (propertyMapping == nullptr) {
+            std::cerr << "Cannot import without a resolved property column "
+                         "(use -props COLUMN or accept the prompt default).\n";
+            return EXIT_FAILURE;
+        }
+        if (!edgeFiles.empty() && resolvedEdgeTypeColumn.empty()) {
+            std::cerr << "Cannot import edges without a resolved edge-type "
+                         "column (use -edgetype COLUMN).\n";
+            return EXIT_FAILURE;
+        }
+
+        fs::Path turingDir(outputDir);
+        if (!turingDir.toAbsolute()) {
+            std::cerr << "Failed to resolve -out path '" << outputDir << "'.\n";
+            return EXIT_FAILURE;
+        }
+
+        fs::Path graphSubDir = turingDir / "graphs" / graphName;
+        if (graphSubDir.exists()) {
+            std::cout << "Removing existing graph subdirectory " << graphSubDir.c_str() << "\n";
+            graphSubDir.rm();
+        }
+
+        TuringConfig config;
+        config.setTuringDirectory(turingDir);
+
+        std::cout << "\n== Import into " << turingDir.c_str()
+                  << " (graph '" << graphName << "') ==\n";
+
+        TuringDB db(&config);
+        db.init();
+        Graph* const graph = db.getSystemManager().createGraph(graphName);
+
+        JobSystem jobSystem;
+        jobSystem.init();
+
+        ParquetGraphImporter importer(graph, &jobSystem, *propertyMapping,
+                                      propertyColumn, resolvedEdgeTypeColumn);
+
+        for (size_t nodeIndex = 0; nodeIndex < nodeFiles.size(); ++nodeIndex) {
+            importer.importNodeFile(fs::Path(nodeFiles[nodeIndex]),
+                                    *schemas[nodeIndex]);
+        }
+        for (size_t edgeIndex = 0; edgeIndex < edgeFiles.size(); ++edgeIndex) {
+            importer.importEdgeFile(fs::Path(edgeFiles[edgeIndex]),
+                                    *schemas[nodeFiles.size() + edgeIndex]);
+        }
+        importer.finalize();
+
+        const auto dumpResult = db.getSystemManager().dumpGraph(graphName);
+        if (!dumpResult) {
+            std::cerr << "Failed to persist graph: "
+                      << dumpResult.error().fmtMessage() << "\n";
+            return EXIT_FAILURE;
+        }
+
+        std::cout << fmt::format(
+            "Imported {} nodes, {} sub-record nodes, {} stub nodes "
+            "(unresolved edge endpoints), {} edges ({} skipped).\n",
+            importer.getNodeCount(),
+            importer.getSubRecordCount(),
+            importer.getStubNodeCount(),
+            importer.getEdgeCount(),
+            importer.getSkippedEdgeCount());
+        std::cout << "Wrote graph '" << graphName << "' at " << turingDir.c_str() << "\n";
     } catch (const TuringException& e) {
         std::cerr << e.what() << "\n";
         return EXIT_FAILURE;
