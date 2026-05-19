@@ -1,6 +1,7 @@
 #include "CartesianProductProcessor.h"
 
 #include <algorithm>
+#include <type_traits>
 
 #include "PipelineV2.h"
 #include "PipelinePort.h"
@@ -63,8 +64,11 @@ public:
     {
     }
 
-    template <typename T>
-    void operator()(const ColumnVector<T>* lhsCol) {
+    template <template <typename> class Container, typename T>
+    void operator()(const Container<T>* lhsCol) {
+        static_assert(std::is_same_v<const ColumnConst<T>*, decltype(lhsCol)>
+                      || std::is_same_v<const ColumnVector<T>*, decltype(lhsCol)>);
+
         auto* outCol = dynamic_cast<ColumnVector<T>*>(_outCol);
 
         std::vector<T>& outRaw = outCol->getRaw();
@@ -166,24 +170,37 @@ public:
     {
     }
 
-    template <typename T>
-    void operator()(const ColumnVector<T>* rhsCol) {
+    template <template <typename> class Container, typename T>
+    void operator()(const Container<T>* rhsCol) {
+        static_assert(std::is_same_v<const ColumnConst<T>*, decltype(rhsCol)>
+                      || std::is_same_v<const ColumnVector<T>*, decltype(rhsCol)>);
+
         auto* outCol = dynamic_cast<ColumnVector<T>*>(_outCol);
 
         std::vector<T>& outRaw = outCol->getRaw();
-        const std::vector<T>& rhsRaw = rhsCol->getRaw();
+
+        // Abstraction to copy over a range of a vector, or copy n elements from a ColumnConst
+        const auto copySlice = [&](size_t rhsStart, size_t count, size_t outPos) {
+            if constexpr (std::is_same_v<Container<T>, ColumnConst<T>>) {
+                auto startIt = begin(outRaw) + outPos;
+                const T& val = rhsCol->getRaw();
+                std::fill_n(startIt, count, val);
+            } else {
+                const std::vector<T>& rhsRaw = rhsCol->getRaw();
+                const auto startIt = begin(rhsRaw) + rhsStart;
+                const auto endIt = startIt + count;
+                const auto fromIt = begin(outRaw) + outPos;
+
+                std::copy(startIt, endIt, fromIt);
+            }
+        };
 
         // If we were halfway through writing tuples for a left hand row, try and finish
         if (_rhsPtr != 0) {
             const size_t needToWrite = _m - _rhsPtr;
             const size_t canWrite = std::min(_remainingSpace, needToWrite);
 
-            // Copy as much of the column as we can
-            const auto rStart = begin(rhsRaw) + _rhsPtr;
-            const auto rEnd = rStart + canWrite;
-            const auto outStart = begin(outRaw) + _rowPtr;
-
-            std::copy(rStart, rEnd, outStart);
+            copySlice(_rhsPtr, canWrite, _rowPtr);
 
             _remainingSpace -= canWrite;
             _rowPtr += canWrite;
@@ -211,12 +228,12 @@ public:
 
         bioassert(_rhsPtr == 0, "ourRhsPtr must be zero");
         for (size_t i = 0; i < numCompleteLhsRowsCanWrite; i++) {
-            const auto rStart = begin(rhsRaw) + _rhsPtr;
-            const auto rEnd = rStart + _m; // We know we can fit m rows here
-            bioassert(rEnd == end(rhsRaw), "rEnd is not valid");
-            const auto outStart = begin(outRaw) + _rowPtr;
+            if constexpr (!std::is_same_v<Container<T>, ColumnConst<T>>) {
+                const std::vector<T>& rhsRaw = rhsCol->getRaw();
+                bioassert(begin(rhsRaw) + _m == end(rhsRaw), "rEnd is not valid");
+            }
 
-            std::copy(rStart, rEnd, outStart);
+            copySlice(_rhsPtr, _m, _rowPtr);
 
             _lhsPtr++;
             _rhsPtr = 0;
@@ -233,14 +250,15 @@ public:
         bioassert(_remainingSpace < _m, "not enough remaining space");
         bioassert(_rhsPtr == 0, "ourRhsPtr must be zero");
 
-        const auto rStart = begin(rhsRaw) + _rhsPtr;
-        const auto rEnd = rStart + _remainingSpace;
-        bioassert(rEnd != end(rhsRaw), "invalid rEnd");
+        if constexpr (!std::is_same_v<Container<T>, ColumnConst<T>>) {
+            const std::vector<T>& rhsRaw = rhsCol->getRaw();
+            bioassert(begin(rhsRaw) + _remainingSpace != end(rhsRaw), "invalid rEnd");
+        }
 
         const auto outStart = begin(outRaw) + _rowPtr;
         bioassert(outStart + _remainingSpace == end(outRaw), "invalid outStart");
 
-        std::copy(rStart, rEnd, outStart);
+        copySlice(_rhsPtr, _remainingSpace, _rowPtr);
 
         _rhsPtr += _remainingSpace;
         _rowPtr += _remainingSpace;
