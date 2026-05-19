@@ -6,17 +6,16 @@
 #include <iostream>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <argparse.hpp>
 #include <spdlog/fmt/fmt.h>
-#include <tabulate/table.hpp>
 
 #include "ParquetReader.h"
 #include "Path.h"
 
-#include "ParquetGraphMapping.h"
+#include "ParquetEdgeTypeAnalysis.h"
+#include "ParquetEdgeTypeAnalyzer.h"
 #include "ParquetJsonDetector.h"
 #include "ParquetPropertyAnalysis.h"
 #include "ParquetPropertyAnalyzer.h"
@@ -182,138 +181,23 @@ void buildSchema(const fs::Path& path, ParquetSchema& schema) {
     }
 }
 
-void runPropertyAnalysis(const fs::Path& path,
-                         const ParquetSchema& schema,
-                         const std::string& columnName) {
-    ParquetPropertyAnalysis analysis;
-    ParquetPropertyAnalyzer analyzer(schema, columnName, analysis);
-
-    ParquetReader reader(path, analyzer);
-    while (reader.nextChunk()) {
-    }
-
-    printPropertyAnalysis(analysis, columnName);
-}
-
-std::string propertyTypeString(const ParquetGraphProperty& property) {
-    std::string typeString = ParquetGraphMapping::toString(property.getType());
-    if (property.isNullable()) {
-        typeString += "?";
-    }
-    if (property.isRawJson()) {
-        typeString += " (raw JSON)";
-    }
-    return typeString;
-}
-
-void renderPropertiesTable(const ParquetGraphLabel& label) {
-    tabulate::Table table;
-    table.add_row({"name", "type"});
-    for (const auto& property : label.getProperties()) {
-        table.add_row({property->getName(), propertyTypeString(*property)});
-    }
-
-    const size_t rowCount = label.getProperties().size() + 1;
-    for (size_t rowIndex = 2; rowIndex < rowCount; ++rowIndex) {
-        table[rowIndex].format().hide_border_top();
-    }
-    table[0].format().font_style({tabulate::FontStyle::bold});
-    table.column(0).format().font_align(tabulate::FontAlign::left);
-    table.column(1).format().font_align(tabulate::FontAlign::left);
-
-    std::cout << table << "\n";
-}
-
-std::string labelHeader(const ParquetGraphLabel& label, const std::string& path) {
-    std::string header = path;
-    if (!label.getInferredLabel().empty()) {
-        header += "  :";
-        header += label.getInferredLabel();
-    }
-    header += "  ";
-    header += ParquetGraphMapping::toString(label.getCardinality());
-    if (label.isNullable()) {
-        header += " (nullable)";
-    }
-    return header;
-}
-
-void renderLabelTables(const ParquetGraphLabel& label, const std::string& path) {
-    std::cout << "\n" << labelHeader(label, path) << "\n";
-    if (label.getProperties().empty()) {
-        std::cout << "(no properties)\n";
-    } else {
-        renderPropertiesTable(label);
-    }
-
-    const std::string separator = (label.getCardinality() == ParquetEdgeCardinality::MANY)
-                                  ? "[]."
-                                  : ".";
-    for (const auto& subLabel : label.getSubLabels()) {
-        const std::string subPath = path + separator + subLabel->getName();
-        renderLabelTables(*subLabel, subPath);
-    }
-}
-
-void printGraphMapping(const ParquetGraphMapping& mapping) {
-    std::cout << "Graph mapping for column '" << mapping.getColumnName() << "':\n";
-
-    const ParquetGraphLabel& root = mapping.getRoot();
-    if (!root.getProperties().empty()) {
-        std::cout << "\nProperties:\n";
-        renderPropertiesTable(root);
-    }
-
-    if (!root.getSubLabels().empty()) {
-        std::cout << "\nSub-records:\n";
-        for (const auto& subLabel : root.getSubLabels()) {
-            renderLabelTables(*subLabel, subLabel->getName());
+void runMergedPropertyAnalysis(const std::vector<std::string>& files,
+                               const std::vector<std::unique_ptr<ParquetSchema>>& schemas,
+                               const std::string& columnName) {
+    ParquetPropertyAnalysis merged;
+    ParquetPropertyMerge merger(merged);
+    for (size_t fileIndex = 0; fileIndex < files.size(); ++fileIndex) {
+        const fs::Path path(files[fileIndex]);
+        ParquetPropertyAnalysis analysis;
+        ParquetPropertyAnalyzer analyzer(*schemas[fileIndex], columnName, analysis);
+        ParquetReader reader(path, analyzer);
+        while (reader.nextChunk()) {
         }
+        merger.merge(analysis);
     }
 
-    const std::vector<std::string>& warnings = mapping.getWarnings();
-    if (!warnings.empty()) {
-        std::cout << "\nWarnings (" << warnings.size() << "):\n";
-        for (const std::string& warning : warnings) {
-            std::cout << "  - " << warning << "\n";
-        }
-    }
-}
-
-void runGraphMapping(const fs::Path& path,
-                     const ParquetSchema& schema,
-                     const std::string& columnName) {
-    ParquetPropertyAnalysis analysis;
-    ParquetPropertyAnalyzer analyzer(schema, columnName, analysis);
-
-    ParquetReader reader(path, analyzer);
-    while (reader.nextChunk()) {
-    }
-
-    ParquetGraphMapping mapping;
-    ParquetGraphMapping::buildFrom(analysis, columnName, mapping);
-    ParquetGraphMapping::inferLabelNames(mapping);
-
-    printGraphMapping(mapping);
-}
-
-void processFile(const std::string& filePath,
-                 const ParquetSchema& schema,
-                 const std::vector<std::string>& propsColumns,
-                 const std::string& mappingColumnName) {
-    const fs::Path path(filePath);
-
-    printSchema(schema);
-
-    for (const std::string& propsColumn : propsColumns) {
-        std::cout << "\n";
-        runPropertyAnalysis(path, schema, propsColumn);
-    }
-
-    if (!mappingColumnName.empty()) {
-        std::cout << "\n";
-        runGraphMapping(path, schema, mappingColumnName);
-    }
+    std::cout << "\n== Merged property analysis: " << columnName << " ==\n";
+    printPropertyAnalysis(merged, columnName);
 }
 
 bool fileHasTopLevelColumn(const ParquetSchema& schema, const std::string& name) {
@@ -365,20 +249,87 @@ void runMergedPropertyPrompt(const std::vector<std::string>& files,
         return;
     }
 
-    ParquetPropertyAnalysis merged;
-    ParquetPropertyMerge merger(merged);
-    for (size_t fileIndex = 0; fileIndex < files.size(); ++fileIndex) {
-        const fs::Path path(files[fileIndex]);
-        ParquetPropertyAnalysis analysis;
-        ParquetPropertyAnalyzer analyzer(*schemas[fileIndex], columnName, analysis);
+    runMergedPropertyAnalysis(files, schemas, columnName);
+}
+
+void printEdgeTypeAnalysis(const ParquetEdgeTypeAnalysis& analysis,
+                           const std::string& columnName) {
+    std::cout << "Edge type analysis on column '" << columnName << "':\n";
+    std::cout << "Total values: " << analysis.getTotalCount() << "\n\n";
+
+    const ParquetEdgeTypeAnalysis::TypeCountMap& typeCounts = analysis.getTypeCounts();
+    if (typeCounts.empty()) {
+        std::cout << "(no values)\n";
+        return;
+    }
+
+    std::vector<std::pair<std::string, size_t>> sorted(typeCounts.begin(), typeCounts.end());
+    std::sort(sorted.begin(), sorted.end(),
+              [](const auto& a, const auto& b) {
+                  return a.second > b.second;
+              });
+
+    size_t maxNameWidth = 0;
+    for (const auto& entry : sorted) {
+        maxNameWidth = std::max(maxNameWidth, entry.first.size());
+    }
+
+    const size_t total = analysis.getTotalCount();
+    std::cout << "Type breakdown:\n";
+    for (const auto& entry : sorted) {
+        const double percent = (total == 0) ? 0.0 : 100.0 * static_cast<double>(entry.second) / static_cast<double>(total);
+        std::cout << fmt::format("  {:<{}}  {:>8}  ({:5.1f}%)\n",
+                                 entry.first,
+                                 maxNameWidth,
+                                 entry.second,
+                                 percent);
+    }
+}
+
+void runEdgeTypePrompt(const std::vector<std::string>& edgeFiles,
+                       const std::vector<const ParquetSchema*>& edgeSchemas) {
+    if (edgeFiles.empty()) {
+        return;
+    }
+
+    std::string defaultColumn;
+    for (const ParquetSchema* schema : edgeSchemas) {
+        if (fileHasTopLevelColumn(*schema, "relation")) {
+            defaultColumn = "relation";
+            break;
+        }
+    }
+
+    std::cout << "\n";
+    if (!defaultColumn.empty()) {
+        std::cout << "Column to analyze edge types on [" << defaultColumn << "] (empty to skip): ";
+    } else {
+        std::cout << "Column to analyze edge types on (empty to skip): ";
+    }
+    std::cout.flush();
+
+    std::string line;
+    if (!std::getline(std::cin, line)) {
+        return;
+    }
+
+    const std::string trimmed = trimWhitespace(line);
+    const std::string columnName = trimmed.empty() ? defaultColumn : trimmed;
+    if (columnName.empty()) {
+        return;
+    }
+
+    ParquetEdgeTypeAnalysis analysis;
+    for (size_t fileIndex = 0; fileIndex < edgeFiles.size(); ++fileIndex) {
+        const fs::Path path(edgeFiles[fileIndex]);
+        ParquetEdgeTypeAnalyzer analyzer(*edgeSchemas[fileIndex], columnName, analysis);
         ParquetReader reader(path, analyzer);
         while (reader.nextChunk()) {
         }
-        merger.merge(analysis);
     }
 
-    std::cout << "\n== Merged property analysis ==\n";
-    printPropertyAnalysis(merged, columnName);
+    std::cout << "\n== Edge type analysis ==\n";
+    printEdgeTypeAnalysis(analysis, columnName);
 }
 
 }
@@ -387,67 +338,28 @@ int main(int argc, const char** argv) {
     argparse::ArgumentParser parser("turing-parquet", "1.0", argparse::default_arguments::help);
     parser.add_description("TuringDB - Parquet inspection tool");
 
-    std::string filePath;
     std::vector<std::string> nodeFiles;
     std::vector<std::string> edgeFiles;
-    std::unordered_map<std::string, std::vector<std::string>> propsByFile;
-    std::vector<std::string> pendingProps;
-    std::string currentFilePath;
-
-    const auto attachPendingProps = [&](const std::string& file) {
-        for (const std::string& column : pendingProps) {
-            propsByFile[file].push_back(column);
-        }
-        pendingProps.clear();
-    };
-
-    parser.add_argument("file")
-        .metavar("FILE")
-        .help("Parquet file to inspect (optional if -nodes or -edges is given)")
-        .nargs(argparse::nargs_pattern::optional)
-        .action([&](const std::string& value) {
-            filePath = value;
-            currentFilePath = value;
-            attachPendingProps(value);
-        });
+    std::vector<std::string> propsColumns;
 
     parser.add_argument("-nodes")
         .metavar("FILE")
         .help("Parquet file to inspect as a node table (repeatable)")
         .append()
-        .action([&](const std::string& value) {
-            nodeFiles.push_back(value);
-            currentFilePath = value;
-            attachPendingProps(value);
-        });
+        .store_into(nodeFiles);
 
     parser.add_argument("-edges")
         .metavar("FILE")
         .help("Parquet file to inspect as an edge table (repeatable)")
         .append()
-        .action([&](const std::string& value) {
-            edgeFiles.push_back(value);
-            currentFilePath = value;
-            attachPendingProps(value);
-        });
+        .store_into(edgeFiles);
 
     parser.add_argument("-props")
         .metavar("COLUMN")
-        .help("Analyze the JSON property structure of COLUMN on the most recent file (repeatable)")
+        .help("Run merged JSON property analysis on COLUMN across all input files (repeatable). "
+              "If omitted, you will be prompted for a column.")
         .append()
-        .action([&](const std::string& value) {
-            if (currentFilePath.empty()) {
-                pendingProps.push_back(value);
-            } else {
-                propsByFile[currentFilePath].push_back(value);
-            }
-        });
-
-    std::string mappingColumnName;
-    parser.add_argument("-mapping")
-        .metavar("COLUMN")
-        .help("Derive a TuringDB graph mapping from the JSON property structure of COLUMN")
-        .store_into(mappingColumnName);
+        .store_into(propsColumns);
 
     try {
         parser.parse_args(argc, argv);
@@ -457,19 +369,10 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
-    if (!pendingProps.empty()) {
-        std::cerr << "-props specified without a preceding file.\n";
-        std::cerr << parser;
-        return EXIT_FAILURE;
-    }
-
     std::vector<std::string> allFiles;
-    allFiles.reserve(nodeFiles.size() + edgeFiles.size() + 1);
+    allFiles.reserve(nodeFiles.size() + edgeFiles.size());
     allFiles.insert(allFiles.end(), nodeFiles.begin(), nodeFiles.end());
     allFiles.insert(allFiles.end(), edgeFiles.begin(), edgeFiles.end());
-    if (!filePath.empty()) {
-        allFiles.push_back(filePath);
-    }
 
     if (allFiles.empty()) {
         std::cerr << "No input files specified.\n";
@@ -491,14 +394,23 @@ int main(int argc, const char** argv) {
                 std::cout << "\n";
             }
             std::cout << "== " << allFiles[fileIndex] << " ==\n";
-
-            const auto propsIter = propsByFile.find(allFiles[fileIndex]);
-            const std::vector<std::string> emptyProps;
-            const std::vector<std::string>& fileProps = (propsIter != propsByFile.end()) ? propsIter->second : emptyProps;
-            processFile(allFiles[fileIndex], *schemas[fileIndex], fileProps, mappingColumnName);
+            printSchema(*schemas[fileIndex]);
         }
 
-        runMergedPropertyPrompt(allFiles, schemas);
+        if (!propsColumns.empty()) {
+            for (const std::string& column : propsColumns) {
+                runMergedPropertyAnalysis(allFiles, schemas, column);
+            }
+        } else {
+            runMergedPropertyPrompt(allFiles, schemas);
+        }
+
+        std::vector<const ParquetSchema*> edgeSchemas;
+        edgeSchemas.reserve(edgeFiles.size());
+        for (size_t edgeIndex = 0; edgeIndex < edgeFiles.size(); ++edgeIndex) {
+            edgeSchemas.push_back(schemas[nodeFiles.size() + edgeIndex].get());
+        }
+        runEdgeTypePrompt(edgeFiles, edgeSchemas);
     } catch (const TuringException& e) {
         std::cerr << e.what() << "\n";
         return EXIT_FAILURE;
