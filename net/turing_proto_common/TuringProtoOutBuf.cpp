@@ -49,17 +49,6 @@ void TuringProtoOutBuf::copyHeader(const net::proto::ColumnWireHeader* header) {
     copy(&header->_encoding, sizeof(header->_encoding));
 }
 
-void TuringProtoOutBuf::copyHeader(const net::proto::QueryWireHeader* header) {
-    if (QueryWireHeader::wireSize() > remaining()) {
-        _onBufferFull();
-    }
-
-    copy(&header->_commitHash, sizeof(header->_commitHash));
-    copy(&header->_changeID, sizeof(header->_changeID));
-    copy(&header->_graphNameLen, sizeof(header->_graphNameLen));
-    copy(&header->_queryLen, sizeof(header->_queryLen));
-}
-
 void TuringProtoOutBuf::copyVarLenData(const void* data, size_t len) {
     size_t offset = 0;
     while (offset < len) {

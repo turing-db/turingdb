@@ -32,7 +32,7 @@ def ensure_reactome(dest_path: str) -> None:
         shutil.copy2(DATASET_CACHE, dest_path)
 
 
-def test_vector_search_match(client: turingdb.TuringClient, data_dir: str) -> None:
+def test_vector_search_match(client: turingdb.TuringDB, data_dir: str) -> None:
     """Test that VECTOR SEARCH + MATCH hash join works (issue #550)."""
 
     # Create a vector index
@@ -89,9 +89,9 @@ def main() -> None:
     ensure_reactome(dest_path)
 
     # Connect to the running turingdb instance
-    client = turingdb.TuringClient(host="http://localhost:6666")
+    client = turingdb.TuringDB(host="http://localhost:6666")
     client.try_reach()
-    print("Connected to TuringClient")
+    print("Connected to TuringDB")
 
     # Load the JSONL file as a graph
     result = client.query(f'LOAD JSONL "{LOCAL_FILENAME}" AS {GRAPH_NAME}')

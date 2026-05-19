@@ -1,33 +1,20 @@
 #include "TuringProtoServerProcessor.h"
 
-#include <string.h>
-
+#include "DBHTTPParams.h"
 #include "DBThreadContext.h"
+#include "DBURIParser.h"
+#include "Endpoints.h"
+#include "HTTPParser.h"
 #include "NetException.h"
 #include "ProtocolException.h"
 #include "QueryCallbacks.h"
-#include "TuringProtoHeaders.h"
 #include "QueryStatus.h"
 #include "TCPConnection.h"
 #include "TuringDB.h"
-#include "TuringProtoParser.h"
 #include "TuringProtoWriter.h"
 #include "dataframe/Dataframe.h"
 
 using namespace db;
-
-namespace {
-
-constexpr size_t HelloPayloadSize =
-    sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t);
-
-void ensureBytesAvailable(size_t offset, size_t required, size_t totalLen) {
-    if (offset + required > totalLen) {
-        throw ProtocolException("Incoming query payload is truncated");
-    }
-}
-
-}
 
 TuringProtoServerProcessor::TuringProtoServerProcessor(TuringDB& db,
                                                        net::TCPConnection& connection)
@@ -41,70 +28,49 @@ TuringProtoServerProcessor::~TuringProtoServerProcessor() = default;
 void TuringProtoServerProcessor::process(net::AbstractThreadContext* threadContext) {
     _threadContext = static_cast<DBThreadContext*>(threadContext);
 
-    auto& parser = _connection.getParser<net::proto::TuringProtoParser>();
+    auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
     auto& writer = _connection.getWriter<net::proto::TuringProtoWriter>();
 
     try {
-        switch (parser.getHeader()._type) {
-            case net::proto::MessageTypes::NABER:
-                handleHello();
-            break;
+        // Emit HTTP/1.1 200 OK + chunked headers up front so the catch block
+        // below can write a PROTOCOL_ERROR chunk for validation failures
+        // without first sending the response headers (Option A from the
+        // design note — every request, valid or not, opens with 200 OK).
+        writer.startResponse();
 
-            case net::proto::MessageTypes::QUERY:
+        const auto& httpInfo = parser.getHttpInfo();
+
+        if (httpInfo._method != net::HTTP::Method::POST) {
+            throw ProtocolException("Only POST is supported by the binary protocol");
+        }
+
+        switch (static_cast<Endpoint>(httpInfo._endpoint)) {
+            case Endpoint::QUERY:
                 handleQuery();
             break;
 
             default:
-                throw ProtocolException("Unsupported protocol message type");
+                throw ProtocolException("Unsupported endpoint for the binary protocol");
             break;
         }
 
         _threadContext->getLocalMemory().clear();
     } catch (const ProtocolException& e) {
-        //Protocol exceptions are errors that occur at the protocol level: e.g invalid 
-        //headers etc.
+        // Protocol exceptions are errors that occur at the protocol level: e.g invalid
+        // method, unknown endpoint.
         writer.writeProtocolError(e.what());
         _connection.setCloseRequired(true);
-    } catch (const NetException& e) {
-        //Net Exceptions have to do with errors that occur during networking syscalls
+    } catch (const NetException&) {
+        // Net Exceptions have to do with errors that occur during networking syscalls
         _connection.setCloseRequired(true);
     }
 }
 
-void TuringProtoServerProcessor::handleHello() {
-    auto& parser = _connection.getParser<net::proto::TuringProtoParser>();
-    auto& writer = _connection.getWriter<net::proto::TuringProtoWriter>();
-    const std::string_view payload = parser.getPayload();
-
-    if (payload.size() != HelloPayloadSize) {
-        throw ProtocolException("Invalid hello payload size");
-    }
-
-    uint8_t protocolVersion = 0;
-    bool keepAlive = false;
-    uint8_t timeout = 0;
-
-    size_t readOffset = 0;
-    memcpy(&protocolVersion, payload.data() + readOffset, sizeof(protocolVersion));
-    readOffset += sizeof(protocolVersion);
-    memcpy(&keepAlive, payload.data() + readOffset, sizeof(keepAlive));
-    readOffset += sizeof(keepAlive);
-    memcpy(&timeout, payload.data() + readOffset, sizeof(timeout));
-
-    //currently we don't do any thing with the data received in the handshake, but in 
-    //the future we will start checking things as a part of the handshake negotiation - 
-    //making sure protocol versions are valid etc.
-
-    constexpr bool ack = true;
-    writer.writeHelloAck(ack);
-}
-
-//Process the query in the request
+// Process the query in the request
 void TuringProtoServerProcessor::handleQuery() {
-    auto& parser = _connection.getParser<net::proto::TuringProtoParser>();
     auto& writer = _connection.getWriter<net::proto::TuringProtoWriter>();
     auto& mem = _threadContext->getLocalMemory();
-    const TransactionInfo transactionInfo = getTransactionInfo(parser.getPayload());
+    const TransactionInfo info = getTransactionInfo();
 
     QueryCallbacks callbacks;
 
@@ -133,35 +99,57 @@ void TuringProtoServerProcessor::handleQuery() {
         writer.writeError(&status);
     });
 
-    const QueryState state(transactionInfo.graphName, &mem, &_db.getDefaultQueryConfig(), &callbacks, transactionInfo.commit, transactionInfo.change);
-    _db.query(transactionInfo.query, state);
+    const QueryState state(info.graphName, &mem, &_db.getDefaultQueryConfig(), &callbacks, info.commit, info.change);
+    _db.query(info.query, state);
 }
 
-//Extract the transaction info from the request
-TuringProtoServerProcessor::TransactionInfo TuringProtoServerProcessor::getTransactionInfo(std::string_view payload) const {
-    size_t offset = 0;
-    ensureBytesAvailable(offset, net::proto::QueryWireHeader::wireSize(), payload.size());
+// Extract the transaction info from the URI params; the query string comes from the HTTP body.
+TuringProtoServerProcessor::TransactionInfo TuringProtoServerProcessor::getTransactionInfo() const {
+    auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
+    const auto& httpInfo = parser.getHttpInfo();
 
-    net::proto::QueryWireHeader queryHeader {};
-    queryHeader.copyFromBuffer(payload.data(), offset);
+    std::string_view graphNameView = httpInfo._params[static_cast<size_t>(DBHTTPParams::graph)];
+    std::string_view commitHashString = httpInfo._params[static_cast<size_t>(DBHTTPParams::commit)];
+    std::string_view changeHashString = httpInfo._params[static_cast<size_t>(DBHTTPParams::change)];
 
-    ensureBytesAvailable(offset,
-                         queryHeader._graphNameLen + queryHeader._queryLen,
-                         payload.size());
-
-    const std::string_view graphName(payload.data() + offset, queryHeader._graphNameLen);
-    offset += queryHeader._graphNameLen;
-
-    const std::string_view query(payload.data() + offset, queryHeader._queryLen);
-    offset += queryHeader._queryLen;
-
-    if (offset != payload.size()) {
-        throw ProtocolException("Incoming query payload size is inconsistent");
+    if (graphNameView.empty()) {
+        graphNameView = "default";
     }
 
-    return TransactionInfo {
-        .graphName = graphName,
-        .commit = CommitHash {queryHeader._commitHash},
-        .change = ChangeID {queryHeader._changeID},
-        .query = query};
+    if (commitHashString.empty()) {
+        commitHashString = "head";
+    }
+
+    if (changeHashString.empty()) {
+        changeHashString = "head";
+    }
+
+    const auto commitHashResult = CommitHash::fromString(commitHashString);
+
+    if (!commitHashResult) {
+        return {
+            .graphName = graphNameView,
+            .commit = CommitHash::head(),
+            .change = ChangeID::head(),
+            .query = httpInfo._payload,
+        };
+    }
+
+    const auto changeHashResult = ChangeID::fromString(changeHashString);
+
+    if (!changeHashResult) {
+        return {
+            .graphName = graphNameView,
+            .commit = commitHashResult.value(),
+            .change = ChangeID::head(),
+            .query = httpInfo._payload,
+        };
+    }
+
+    return {
+        .graphName = graphNameView,
+        .commit = commitHashResult.value(),
+        .change = changeHashResult.value(),
+        .query = httpInfo._payload,
+    };
 }

@@ -1,4 +1,4 @@
-from turingdb import TuringClient
+from turingdb import TuringDB
 
 import subprocess
 import os
@@ -93,7 +93,7 @@ if __name__ == "__main__":
         proc = spawn_turingdb()
 
         # Connect to turingdb
-        client = TuringClient(host="http://localhost:6666")
+        client = TuringDB(host="http://localhost:6666")
         wait_ready(client)
 
         # Create vector index

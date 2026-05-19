@@ -29,10 +29,10 @@ public:
     void setRemotePort(const std::string& port) { _client->setRemotePort(port); }
     void setGraphName(const std::string& name) { _client->setGraphName(name); }
 
-    void setChangeID(uint64_t v) { _client->setChangeID(db::ChangeID(v)); }
+    void setChangeID(uint64_t value) { _client->setChangeID(db::ChangeID(value)); }
     void clearChangeID() { _client->setChangeID(db::ChangeID::head()); }
 
-    void setCommitHash(const std::string& s);
+    void setCommitHash(const std::string& commitHash);
     void clearCommitHash() { _client->setCommitHash(db::CommitHash::head()); }
 
     nb::dict query(const std::string& cypher);

@@ -4,10 +4,18 @@
 #include <string.h>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <unistd.h>
+#include <algorithm>
 #include <array>
+#include <cctype>
+#include <charconv>
+#include <limits>
+#include <string>
+#include <string_view>
 #include <vector>
 
+#include "HTTPUtils.h"
 #include "TuringProtoDecoder.h"
 #include "TuringProtoHeaders.h"
 #include "TuringException.h"
@@ -18,14 +26,61 @@
 
 using namespace net::proto;
 
+namespace {
+
+// Length of the "\r\n\r\n" sentinel that terminates an HTTP/1.1 header block.
+constexpr size_t HEADERS_END_SIZE = 4;
+
+// Parses the integer status code from an HTTP/1.1 status line —
+// "HTTP/1.1 200 OK" -> 200. Throws TuringException on malformed input.
+int parseStatusCode(std::string_view statusLine) {
+    const size_t space1 = statusLine.find(' ');
+    if (space1 == std::string_view::npos) {
+        throw TuringException("Malformed HTTP response status line");
+    }
+    const std::string_view afterVersion = statusLine.substr(space1 + 1);
+    const size_t space2 = afterVersion.find(' ');
+    const std::string_view codeStr = (space2 == std::string_view::npos)
+                                       ? afterVersion
+                                       : afterVersion.substr(0, space2);
+    int statusCode = 0;
+    for (const char c : codeStr) {
+        if (c < '0' || c > '9') {
+            throw TuringException("Malformed HTTP status code");
+        }
+        statusCode = statusCode * 10 + (c - '0');
+    }
+    return statusCode;
+}
+
+// Inverse of net::http::writeHexU32. Lowercases each digit first so the a-f
+// and A-F cases collapse into one branch.
+size_t parseHexU32(std::string_view hexDigits) {
+    size_t value = 0;
+    for (const char c : hexDigits) {
+        const char lc = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        size_t digit = 0;
+        if (lc >= '0' && lc <= '9') {
+            digit = static_cast<size_t>(lc - '0');
+        } else if (lc >= 'a' && lc <= 'f') {
+            digit = static_cast<size_t>(lc - 'a') + 10;
+        } else {
+            throw TuringException("Invalid character in chunk size line");
+        }
+        value = (value << 4) | digit;
+    }
+    return value;
+}
+
+}
+
 TuringClient::TuringClient(const std::string& remoteAddress,
                            const std::string& remotePort,
-                           db::LocalMemory* localMem, size_t bufferCapacity)
+                           db::LocalMemory* localMem,
+                           size_t bufferCapacity)
     : _remoteAddress(remoteAddress),
     _remotePort(remotePort),
-    _socket(-1),
     _localMem(localMem),
-    _outBuf(bufferCapacity),
     _inBuf(bufferCapacity)
 {
 }
@@ -36,152 +91,10 @@ TuringClient::~TuringClient() {
     }
 }
 
-void TuringClient::disconnect() {
-    _inBuf.reset();
-    _outBuf.reset();
-    if (_socket >= 0) {
-        ::close(_socket);
-        _socket = -1;
-    }
-}
-
-void TuringClient::recvAll(size_t recvLen) {
-    _inBuf.reset();
-
-    uint64_t totalBytesRead = 0;
-    recvLen = std::min(recvLen, _inBuf.capacity());
-
-    while (totalBytesRead < recvLen) {
-        const ssize_t bytesRead = ::recv(_socket, _inBuf.end(), recvLen - totalBytesRead, 0);
-
-        if (bytesRead < 0) {
-            throw TuringException(std::string("Failed to read response: ") + strerror(errno));
-        }
-
-        if (bytesRead == 0) {
-            throw TuringException("Connection closed before a response was received");
-        }
-
-        totalBytesRead += bytesRead;
-        _inBuf.increaseWriteOffset(bytesRead);
-    }
-}
-
-ProtoHeader TuringClient::recvMsgHeader() {
-    std::array<char, ProtoHeader::wireSize()> recvHeaderBuf {};
-    size_t totalBytesRead = 0;
-
-    while (totalBytesRead < recvHeaderBuf.size()) {
-        const ssize_t bytesRead = ::recv(_socket,
-                                          recvHeaderBuf.data() + totalBytesRead,
-                                          recvHeaderBuf.size() - totalBytesRead,
-                                          0);
-
-        if (bytesRead < 0) {
-            throw TuringException(std::string("Failed to read response: ") + strerror(errno));
-        }
-
-        if (bytesRead == 0) {
-            throw TuringException("Connection closed before a response was received");
-        }
-
-        totalBytesRead += bytesRead;
-    }
-
-    const ProtoHeader header = ProtoHeader::decode(recvHeaderBuf.data(), recvHeaderBuf.size());
-    return header;
-}
-
-ProtoHeader TuringClient::send() {
-    const char* data = _outBuf.data();
-    size_t remainingBytes = _outBuf.size();
-
-    while (remainingBytes > 0) {
-        const ssize_t bytesSent = ::send(_socket, data, remainingBytes, MSG_NOSIGNAL);
-
-        if (bytesSent < 0) {
-            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
-                continue;
-            }
-
-            throw TuringException(std::string("Failed to send query: ") + strerror(errno));
-        }
-
-        if (bytesSent == 0) {
-            throw TuringException("Failed to send query: send returned 0");
-        }
-
-        data += bytesSent;
-        remainingBytes -= bytesSent;
-    }
-
-    _outBuf.reset();
-    return recvMsgHeader();
-}
-
-bool TuringClient::setUpConnection() {
-    _inBuf.reset();
-    _outBuf.reset();
-    const ProtoHeader resHeader = sendHello();
-
-    if (resHeader._dataLen != 0) {
-        recvAll(resHeader._dataLen);
-    }
-
-    if (resHeader._type == MessageTypes::PROTOCOL_ERROR) {
-        throw TuringException("Protocol error from server: "
-                              + std::string(_inBuf.data(), _inBuf.size()));
-    }
-
-    if (resHeader._type != MessageTypes::IYI) {
-        throw TuringException("Invalid hello response type received from server");
-    }
-
-    if (resHeader._dataLen != sizeof(uint8_t)) {
-        throw TuringException("Invalid hello response payload size");
-    }
-
-    uint8_t response = 0;
-    memcpy(&response, _inBuf.data(), sizeof(response));
-
-    if (response > 1) {
-        throw TuringException("Invalid hello response payload value");
-    }
-
-    return response != 0;
-}
-
-ProtoHeader TuringClient::sendHello() {
-    const uint8_t protocolVersion = 1;
-    const uint8_t keepAlive = static_cast<uint8_t>(true);
-    const uint8_t timeout = 0;
-
-    const size_t payloadSize =
-        sizeof(protocolVersion) + sizeof(keepAlive) + sizeof(timeout);
-
-    size_t offset = 0;
-    std::vector<char> payload(payloadSize);
-
-    const ProtoHeader header = {MessageTypes::NABER, sizeof(protocolVersion) + sizeof(keepAlive) + sizeof(timeout)};
-
-    auto write = [&](const void* data, size_t size) {
-        memcpy(payload.data() + offset, data, size);
-        offset += size;
-    };
-
-    write(&protocolVersion, sizeof(protocolVersion));
-    write(&keepAlive, sizeof(keepAlive));
-    write(&timeout, sizeof(timeout));
-
-    _outBuf.reset();
-    frameMessage(header._type, std::string_view(payload.data(), header._dataLen), &_outBuf);
-    return send();
-}
-
 void TuringClient::connect() {
     disconnect();
 
-    addrinfo hints {0};
+    addrinfo hints {};
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
@@ -207,14 +120,6 @@ void TuringClient::connect() {
         }
 
         _socket = sock;
-
-        if (!setUpConnection()) {
-            ::close(sock);
-            _socket = -1;
-            ::freeaddrinfo(result);
-            throw TuringException("Failed To Connect To Server");
-        }
-
         ::freeaddrinfo(result);
         return;
     }
@@ -225,79 +130,333 @@ void TuringClient::connect() {
                           + strerror(lastErrno));
 }
 
+void TuringClient::disconnect() {
+    _inBuf.reset();
+    _scratchHead = 0;
+    _scratchTail = 0;
+    if (_socket >= 0) {
+        ::close(_socket);
+        _socket = -1;
+    }
+}
+
+// Server-side ChangeID/CommitHash::fromString() parses with std::from_chars(..., 16),
+// so the wire encoding must be hex. std::to_string() would silently emit decimal,
+// which matches hex only for values 0-9 and then misroutes everything from 10 on.
+static std::string toHexString(uint64_t value) {
+    std::array<char, 17> buffer;
+    const auto res = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value, 16);
+    return std::string(buffer.data(), res.ptr);
+}
+
+void TuringClient::sendRequest(const std::string& query) {
+    std::string headers;
+    headers.reserve(256);
+
+    const std::string commitParam = (_commitHash.get() == db::CommitHash::head().get())
+                                      ? std::string("head")
+                                      : toHexString(_commitHash.get());
+    const std::string changeParam = (_changeID.get() == db::ChangeID::head().get())
+                                      ? std::string("head")
+                                      : toHexString(_changeID.get());
+
+    headers += "POST /query?graph=";
+    headers += _graphName;
+    headers += "&commit=";
+    headers += commitParam;
+    headers += "&change=";
+    headers += changeParam;
+    headers += " HTTP/1.1\r\n";
+
+    headers += "Host: ";
+    headers += _remoteAddress;
+    headers += ":";
+    headers += _remotePort;
+    headers += "\r\n";
+
+    headers += "Content-type: application/turing-proto\r\n";
+    headers += "Content-Length: ";
+    headers += std::to_string(query.size());
+    headers += "\r\n";
+    headers += "Connection: Keep-Alive\r\n";
+    headers += "\r\n";
+
+    // iovec.iov_base is void* (non-const) because the struct is shared with
+    // recvmsg, which writes through it. sendmsg only reads, so the const_cast
+    // on query.data() is a POSIX-ABI wrinkle , not a real mutation.
+    std::array<iovec, 2> iovecs = {{
+        {headers.data(), headers.size()},
+        {const_cast<char*>(query.data()), query.size()},
+    }};
+
+    size_t iovIndex = 0;
+    while (iovIndex < iovecs.size()) {
+        msghdr msg {};
+        msg.msg_iov = iovecs.data() + iovIndex;
+        msg.msg_iovlen = iovecs.size() - iovIndex;
+
+        const ssize_t bytesSent = ::sendmsg(_socket, &msg, MSG_NOSIGNAL);
+
+        if (bytesSent < 0) {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue;
+            }
+            throw TuringException(std::string("Failed to send HTTP request: ") + strerror(errno));
+        }
+
+        if (bytesSent == 0) {
+            throw TuringException("sendmsg returned 0");
+        }
+
+        size_t left = static_cast<size_t>(bytesSent);
+        while (iovIndex < iovecs.size() && left >= iovecs[iovIndex].iov_len) {
+            left -= iovecs[iovIndex].iov_len;
+            ++iovIndex;
+        }
+        if (iovIndex < iovecs.size() && left > 0) {
+            iovecs[iovIndex].iov_base = static_cast<char*>(iovecs[iovIndex].iov_base) + left;
+            iovecs[iovIndex].iov_len -= left;
+        }
+    }
+}
+
+void TuringClient::fillScratch() {
+    const size_t space = HTTP_SCRATCH_CAPACITY - _scratchTail;
+    if (space == 0) {
+        throw TuringException("HTTP scratch buffer full");
+    }
+
+    while (true) {
+        const ssize_t bytesRead = ::recv(_socket,
+                                         _httpScratch.data() + _scratchTail,
+                                         space,
+                                         0);
+        if (bytesRead < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            throw TuringException(std::string("Failed to read HTTP response: ") + strerror(errno));
+        }
+        if (bytesRead == 0) {
+            throw TuringException("Connection closed during HTTP read");
+        }
+        _scratchTail += static_cast<size_t>(bytesRead);
+        return;
+    }
+}
+
+void TuringClient::recvExactly(void* dst, size_t len) {
+    char* out = static_cast<char*>(dst);
+    size_t need = len;
+
+    //drain any extra data pulled into the scratch buffer into the iovec buffer
+    if (_scratchHead < _scratchTail) {
+        const size_t available = _scratchTail - _scratchHead;
+        const size_t sizeToCopy = std::min(available, need);
+        memcpy(out, _httpScratch.data() + _scratchHead, sizeToCopy);
+        _scratchHead += sizeToCopy;
+        out += sizeToCopy;
+        need -= sizeToCopy;
+    }
+
+    while (need > 0) {
+        const ssize_t bytesRead = ::recv(_socket, out, need, 0);
+        if (bytesRead < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            throw TuringException(std::string("Failed to read response body: ") + strerror(errno));
+        }
+        if (bytesRead == 0) {
+            throw TuringException("Connection closed mid-response");
+        }
+        out += bytesRead;
+        need -= static_cast<size_t>(bytesRead);
+    }
+}
+
+void TuringClient::recvHttpResponseHeaders() {
+    _scratchHead = 0;
+    _scratchTail = 0;
+
+    while (true) {
+        fillScratch();
+
+        // Search for end-of-headers sentinel (\r\n\r\n) in the buffered bytes.
+        if (_scratchTail < 4) {
+            continue;
+        }
+
+        for (size_t i = 0; i + 3 < _scratchTail; ++i) {
+            const bool match = _httpScratch[i] == '\r'
+                            && _httpScratch[i + 1] == '\n'
+                            && _httpScratch[i + 2] == '\r'
+                            && _httpScratch[i + 3] == '\n';
+            if (!match) {
+                continue;
+            }
+
+            const std::string_view headerBlock(_httpScratch.data(), i);
+            const size_t crlf = headerBlock.find("\r\n");
+            const std::string_view statusLine = (crlf == std::string_view::npos)
+                                                  ? headerBlock
+                                                  : headerBlock.substr(0, crlf);
+            const int statusCode = parseStatusCode(statusLine);
+            if (statusCode != 200) {
+                throw TuringException("Server returned HTTP " + std::to_string(statusCode));
+            }
+
+            _scratchHead = i + HEADERS_END_SIZE;
+            return;
+        }
+
+        if (_scratchTail == HTTP_SCRATCH_CAPACITY) {
+            throw TuringException("HTTP response headers exceed scratch capacity");
+        }
+    }
+}
+
+size_t TuringClient::recvChunkSizeLine() {
+    // Server emits a fixed-width chunk size line: 8 hex digits + CRLF.
+    // Both data chunks and the terminator chunk use this format.
+    std::array<char, net::http::CHUNK_HEADER_LINE_SIZE> line;
+    recvExactly(line.data(), line.size());
+
+    if (line[net::http::CHUNK_HEX_DIGITS] != '\r'
+        || line[net::http::CHUNK_HEX_DIGITS + 1] != '\n') {
+        throw TuringException("Malformed chunk size line: expected CRLF after hex digits");
+    }
+
+    return parseHexU32(std::string_view(line.data(), net::http::CHUNK_HEX_DIGITS));
+}
+
+void TuringClient::recvChunkBody(size_t chunkSize, ProtoHeader* outHeader) {
+    bioassert(chunkSize >= ProtoHeader::wireSize(), "Chunk smaller than ProtoHeader");
+    const size_t payloadSize = chunkSize - ProtoHeader::wireSize();
+
+    _inBuf.reset();
+    if (payloadSize > _inBuf.capacity()) {
+        throw TuringException("Server proto payload exceeds client inbuf capacity");
+    }
+
+    std::array<iovec, 2> iovecs = {{
+        {_protoHeaderBuf.data(), ProtoHeader::wireSize()},
+        {_inBuf.data(), payloadSize},
+    }};
+
+    size_t iovIndex = 0;
+
+    // Drain any leftover scratch bytes into the iovecs before issuing readv.
+    while (iovIndex < iovecs.size() && _scratchHead < _scratchTail) {
+        const size_t available = _scratchTail - _scratchHead;
+        const size_t need = iovecs[iovIndex].iov_len;
+        const size_t take = std::min(available, need);
+        memcpy(iovecs[iovIndex].iov_base, _httpScratch.data() + _scratchHead, take);
+        _scratchHead += take;
+        if (take == need) {
+            ++iovIndex;
+        } else {
+            iovecs[iovIndex].iov_base = static_cast<char*>(iovecs[iovIndex].iov_base) + take;
+            iovecs[iovIndex].iov_len -= take;
+        }
+    }
+
+    while (iovIndex < iovecs.size()) {
+        msghdr msg {};
+        msg.msg_iov = iovecs.data() + iovIndex;
+        msg.msg_iovlen = iovecs.size() - iovIndex;
+        const ssize_t bytesRead = ::recvmsg(_socket,
+                                            &msg,
+                                            0);
+        if (bytesRead < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            throw TuringException(std::string("readv failed: ") + strerror(errno));
+        }
+        if (bytesRead == 0) {
+            throw TuringException("Connection closed mid-chunk");
+        }
+
+        size_t left = static_cast<size_t>(bytesRead);
+        while (iovIndex < iovecs.size() && left >= iovecs[iovIndex].iov_len) {
+            left -= iovecs[iovIndex].iov_len;
+            ++iovIndex;
+        }
+        if (iovIndex < iovecs.size() && left > 0) {
+            iovecs[iovIndex].iov_base = static_cast<char*>(iovecs[iovIndex].iov_base) + left;
+            iovecs[iovIndex].iov_len -= left;
+        }
+    }
+
+    _inBuf.increaseWriteOffset(payloadSize);
+    *outHeader = ProtoHeader::decode(_protoHeaderBuf.data(), _protoHeaderBuf.size());
+}
+
+void TuringClient::recvCrlf() {
+    std::array<char, 2> buffer;
+    recvExactly(buffer.data(), buffer.size());
+    if (buffer[0] != '\r' || buffer[1] != '\n') {
+        throw TuringException("Expected CRLF between chunks");
+    }
+}
+
 db::QueryStatus TuringClient::sendQuery(const std::string& query,
                                         const db::QueryCallbacks::OnOutputData& callback) {
-    bioassert(query.length() <= std::numeric_limits<uint32_t>::max(), "String Size Is Too Large");
-    bioassert(_graphName.length() <= std::numeric_limits<uint32_t>::max(), "Graph name is too large");
+    bioassert(query.length() <= std::numeric_limits<uint32_t>::max(), "Query length exceeds uint32 maximum");
+    bioassert(_graphName.length() <= std::numeric_limits<uint32_t>::max(), "Graph name length exceeds uint32 maximum");
 
-    const net::proto::QueryWireHeader queryHeader {
-        ._commitHash = _commitHash.get(),
-        ._changeID = _changeID.get(),
-        ._graphNameLen = static_cast<uint32_t>(_graphName.length()),
-        ._queryLen = static_cast<uint32_t>(query.length()),
-    };
-
-    size_t offset = 0;
-    const size_t payloadSize = net::proto::QueryWireHeader::wireSize()
-                             + _graphName.length()
-                             + query.length();
-    std::vector<char> payload(payloadSize);
-
-    queryHeader.copyToBuffer(payload.data(), offset);
-    memcpy(payload.data() + offset, _graphName.data(), _graphName.length());
-    offset += _graphName.length();
-    memcpy(payload.data() + offset, query.data(), query.length());
-    offset += query.length();
-
-    // Testing hook: uncomment to append a stray byte to the QUERY payload and
-    // trip the server's "Incoming query payload size is inconsistent" protocol
-    // error. Verifies the PROTOCOL_ERROR round-trip end-to-end.
-    // payload.push_back('\x00');
-
-    _outBuf.reset();
-    bioassert(payload.size() <= std::numeric_limits<uint32_t>::max(), "Query payload size exceeds uint32 maximum");
-    frameMessage(MessageTypes::QUERY,
-                        std::string_view(payload.data(), static_cast<uint32_t>(payload.size())),
-                        &_outBuf);
+    sendRequest(query);
+    recvHttpResponseHeaders();
 
     _embeddingBuffer.clear();
     db::DataframeManager dfMan;
     db::QueryStatus res;
     std::vector<TuringProtoDecoder::DecodedColumnSchema> colSchemas;
     db::Dataframe df;
-    ProtoHeader responseHeader = send();
     TuringProtoDecoder decoder(_localMem, &dfMan, &_inBuf, &_embeddingBuffer);
+
     bool callbackFired = false;
+    bool sawTerminalPacket = false;
+
     while (true) {
+        const size_t chunkSize = recvChunkSizeLine();
+
+        if (chunkSize == 0) {
+            // End-of-response terminator chunk: consume trailing CRLF and stop.
+            recvCrlf();
+            break;
+        }
+
+        ProtoHeader responseHeader;
+        recvChunkBody(chunkSize, &responseHeader);
+        recvCrlf();
+
+        if (sawTerminalPacket) {
+            throw TuringException("Unexpected proto packet after END/ERROR");
+        }
+
+        if (responseHeader._dataLen != _inBuf.size()) {
+            throw TuringException("Proto header dataLen does not match chunk payload size");
+        }
+
         switch (responseHeader._type) {
-            case MessageTypes::CHUNK_HEADER: {
-                if (responseHeader._dataLen != 0) {
-                    recvAll(responseHeader._dataLen);
-                }
-
+            case MessageTypes::CHUNK_HEADER:
                 decoder.decodeIncomingChunkHeader(&df, colSchemas);
-            }
             break;
 
-            case MessageTypes::CHUNK: {
-                if (responseHeader._dataLen != 0) {
-                    recvAll(responseHeader._dataLen);
-                }
-
+            case MessageTypes::CHUNK:
                 decoder.decodeIncomingChunk(&df, colSchemas);
-            }
             break;
 
-            case MessageTypes::END_CHUNK: {
+            case MessageTypes::END_CHUNK:
                 callbackFired = true;
                 callback(&df);
-
                 df.clear();
                 for (auto& schema : colSchemas) {
                     schema._colState.reset();
                 }
                 decoder.reset();
-            }
             break;
 
             case MessageTypes::END: {
@@ -309,20 +468,14 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
                     throw TuringException("Invalid END packet payload size");
                 }
 
-                recvAll(sizeof(db::QueryCallbacks::ExecTimeMilliseconds));
-
                 db::QueryCallbacks::ExecTimeMilliseconds totalTimeMs = 0;
                 memcpy(&totalTimeMs, _inBuf.data(), sizeof(totalTimeMs));
                 res.setTotalTime(Milliseconds(totalTimeMs));
-                return res;
+                sawTerminalPacket = true;
             }
             break;
 
             case MessageTypes::ERROR: {
-                if (responseHeader._dataLen != 0) {
-                    recvAll(responseHeader._dataLen);
-                }
-
                 if (_inBuf.size() < sizeof(db::QueryStatus::Status)) {
                     throw TuringException("Invalid ERROR packet payload size");
                 }
@@ -331,24 +484,24 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
                 memcpy(&status, _inBuf.data(), sizeof(status));
                 res.setStatus(status);
                 res.setMessage(std::string_view(_inBuf.data() + sizeof(status),
-                                               _inBuf.size() - sizeof(status)));
+                                                _inBuf.size() - sizeof(status)));
+                // ERROR is not the response terminator — the server still
+                // emits an END packet afterwards (with the elapsed time)
+                // even when the query failed. Mirrors the binary protocol
+                // semantics: the END is what closes the response stream.
             }
             break;
 
-            case MessageTypes::PROTOCOL_ERROR: {
-                if (responseHeader._dataLen != 0) {
-                    recvAll(responseHeader._dataLen);
-                }
-
+            case MessageTypes::PROTOCOL_ERROR:
                 throw TuringException("Protocol error from server: "
                                       + std::string(_inBuf.data(), _inBuf.size()));
-            }
             break;
 
             default:
-                throw TuringException("Invalid Message Type Received");
+                throw TuringException("Invalid message type received");
             break;
         }
-        responseHeader = recvMsgHeader();
     }
+
+    return res;
 }

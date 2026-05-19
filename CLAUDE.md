@@ -67,12 +67,14 @@ Regression tests are Python-based and located in `regress/`. Each test has a `ru
 - Subdirectories: columns, iterators, indexers, versioning, mergers
 
 ### Server (`server/`, `net/`)
-- HTTP-based REST API using Crow framework
+- Single TCP listener with two response strategies selected at startup by `USE_TURING_PROTO`:
+  - **REST (default):** in-tree HTTP/1.1 stack — `net/http_parser/HTTPParser`, `net/http_common/HTTPWriter`, dispatched by `server/DBServerProcessor`. JSON over HTTP, endpoints routed in `server/DBURIParser.h` / `server/Endpoints.h`. No third-party web framework.
+  - **Native binary protocol (`USE_TURING_PROTO=1`):** TuringDB's binary proto framed as HTTP/1.1 chunked transfer — same `HTTPParser` reads the request, `net/turing_proto_server/TuringProtoWriter` emits one proto packet per HTTP chunk, `server/TuringProtoServerProcessor` handles dispatch. Client side: `net/turing_proto_client/TuringClient` (C++) / `python/turingdb/binary_client.py` (`BinaryClient`).
 - Default port: 6666
 
 ### Key Modules
 - `db/` - TuringDB main class
-- `common/` - Shared utilities and external libraries (spdlog, nlohmann_json, crow)
+- `common/` - Shared utilities and external libraries (spdlog, nlohmann_json)
 - `io/` - File I/O and S3 integration
 - `import/` - Data import (JSONL, GML formats)
 - `jobs/` - Job/task system

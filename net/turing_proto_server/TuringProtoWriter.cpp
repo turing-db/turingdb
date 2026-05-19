@@ -1,11 +1,12 @@
 #include "TuringProtoWriter.h"
 
 #include <errno.h>
+#include <string.h>
 #include <sys/socket.h>
 
+#include "HTTPUtils.h"
 #include "NetException.h"
 #include "QueryStatus.h"
-#include "TuringProtoHeaders.h"
 #include "TuringProtoEncoder.h"
 
 #include "BioAssert.h"
@@ -13,13 +14,11 @@
 using namespace net::proto;
 
 TuringProtoWriter::TuringProtoWriter(size_t bufferCapacity)
-    : _buffer(bufferCapacity),
-    _headerBuf(ProtoHeader::wireSize())
+    : _buffer(bufferCapacity)
 {
 }
 
-TuringProtoWriter::~TuringProtoWriter() {
-}
+TuringProtoWriter::~TuringProtoWriter() = default;
 
 void TuringProtoWriter::netErrorOccurred() {
     _errorOccured = true;
@@ -27,73 +26,44 @@ void TuringProtoWriter::netErrorOccurred() {
     _hasPendingPacket = false;
 }
 
-void TuringProtoWriter::flush() {
-    // Drain _iovecs in place: each sendmsg call points at the remaining tail
-    // (_iovecs[_iovIndex..]); after a partial send we advance _iovIndex for any
-    // fully-drained iovs and shrink the first partially-sent iov so it describes
-    // only the bytes still owed. Termination: _iovIndex == _iovecs.size().
-    size_t iovIndex = 0;
-
-    while (iovIndex < _iovecs.size()) {
-        msghdr msg {};
-        msg.msg_iov = _iovecs.data() + iovIndex;
-        msg.msg_iovlen = _iovecs.size() - iovIndex;
-
-        const ssize_t bytesSent = ::sendmsg(_socket, &msg, MSG_NOSIGNAL);
+void TuringProtoWriter::sendRaw(const char* data, size_t size) {
+    while (size > 0) {
+        const ssize_t bytesSent = ::send(_socket, data, size, MSG_NOSIGNAL);
 
         if (bytesSent < 0) {
-            if (errno == EINTR) {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
                 continue;
             }
-
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                continue;
-            }
-
             netErrorOccurred();
             throw NetException();
         }
 
         if (bytesSent == 0) {
-            // sendmsg on a stream socket shouldn't normally return 0; treat as failure
-            // rather than spinning (errno is not meaningful here).
             netErrorOccurred();
-            throw NetException("sendmsg returned 0");
+            throw NetException("send returned 0");
         }
 
-        size_t sent = bytesSent;
+        data += bytesSent;
+        size -= static_cast<size_t>(bytesSent);
+    }
+}
 
-        // Consume whole iovs until `sent` fits inside the next one.
-        while (iovIndex < _iovecs.size() && sent >= _iovecs[iovIndex].iov_len) {
-            sent -= _iovecs[iovIndex].iov_len;
-            ++iovIndex;
-        }
-
-        // Partial consumption of the next iov: shrink it in place.
-        if (iovIndex < _iovecs.size() && sent > 0) {
-            _iovecs[iovIndex].iov_base = static_cast<char*>(_iovecs[iovIndex].iov_base) + sent;
-            _iovecs[iovIndex].iov_len -= sent;
-        }
+void TuringProtoWriter::startResponse(net::ConnectionHeader connection) {
+    if (errorOccured()) {
+        return;
     }
 
-    reset();
+    std::array<char, net::http::RESPONSE_HEADER_BUFFER_SIZE> buffer;
+    size_t offset = 0;
+    offset += net::http::writeStatusLine(net::HTTP::Status::OK, buffer.data() + offset, buffer.size() - offset);
+    offset += net::http::writeRawHeader("Content-type: application/turing-proto", buffer.data() + offset, buffer.size() - offset);
+    offset += net::http::writeChunkedTransferEncoding(buffer.data() + offset, buffer.size() - offset);
+    offset += net::http::writeConnection(connection, buffer.data() + offset, buffer.size() - offset);
+    offset += net::http::writeHeadersEnd(buffer.data() + offset, buffer.size() - offset);
+
+    sendRaw(buffer.data(), offset);
 }
 
-void TuringProtoWriter::reset() {
-    _buffer.reset();
-    _headerBuf.reset();
-    _pendingBytes = 0;
-    _errorOccured = false;
-    _hasPendingPacket = false;
-}
-
-void TuringProtoWriter::writeHelloAck(bool ack) {
-    const uint8_t ackByte = ack ? 1 : 0;
-    _buffer.copyFixedLenData(&ackByte, sizeof(ackByte));
-    writePacket(MessageTypes::IYI);
-}
-
-// most simple version with quite a bit of copying
 void TuringProtoWriter::writeDataframeHeader(const db::Dataframe* frame) {
     net::proto::TuringProtoEncoder encoder(&_buffer);
 
@@ -168,8 +138,95 @@ void TuringProtoWriter::writeEndPacket(db::QueryCallbacks::ExecTimeMilliseconds 
 }
 
 void TuringProtoWriter::writePacket(MessageTypes type) {
-    frameMessage(type, &_headerBuf, &_buffer, _iovecs);
-    _pendingBytes = _headerBuf.size() + _buffer.size();
+    if (errorOccured()) {
+        return;
+    }
+
+    // Fills _protoHeaderBuffer (iovec[1]) and points iovec[2] at _buffer.
+    net::proto::frameMessage(type,
+                             std::span<char, ProtoHeader::wireSize()>(_protoHeaderBuffer),
+                             &_buffer,
+                             std::span<iovec, 2>(_iovecs.data() + 1, 2));
+
+    // HTTP chunk body size = ProtoHeader (5) + proto payload.
+    const uint32_t chunkSize = static_cast<uint32_t>(ProtoHeader::wireSize() + _buffer.size());
+    net::http::writeChunkHeaderLine(chunkSize, _chunkSizeLineBuffer.data(), _chunkSizeLineBuffer.size());
+
+    _iovecs[0] = {_chunkSizeLineBuffer.data(), _chunkSizeLineBuffer.size()};
+
+    // Trailer is pre-filled at construction via the member initializer; pin iovec[3] at it.
+    _iovecs[3] = {_trailerBuffer.data(), _trailerBuffer.size()};
+
+    _pendingBytes = _chunkSizeLineBuffer.size()
+                  + _protoHeaderBuffer.size()
+                  + _buffer.size()
+                  + _trailerBuffer.size();
     _hasPendingPacket = true;
     flush();
+}
+
+void TuringProtoWriter::flush() {
+    if (errorOccured()) {
+        return;
+    }
+
+    if (_hasPendingPacket) {
+        // PATH A: drain all 4 iovecs of the current chunk.
+        // Same drain pattern as the previous binary protocol — advance iovIndex
+        // past fully-sent iovecs after each partial sendmsg, shrink the next
+        // partially-sent iovec in place.
+        size_t iovIndex = 0;
+
+        while (iovIndex < _iovecs.size()) {
+            msghdr msg {};
+            msg.msg_iov = _iovecs.data() + iovIndex;
+            msg.msg_iovlen = _iovecs.size() - iovIndex;
+
+            const ssize_t bytesSent = ::sendmsg(_socket, &msg, MSG_NOSIGNAL);
+
+            if (bytesSent < 0) {
+                if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+                    continue;
+                }
+                netErrorOccurred();
+                throw NetException();
+            }
+
+            if (bytesSent == 0) {
+                netErrorOccurred();
+                throw NetException("sendmsg returned 0");
+            }
+
+            size_t sent = static_cast<size_t>(bytesSent);
+
+            while (iovIndex < _iovecs.size() && sent >= _iovecs[iovIndex].iov_len) {
+                sent -= _iovecs[iovIndex].iov_len;
+                ++iovIndex;
+            }
+
+            if (iovIndex < _iovecs.size() && sent > 0) {
+                _iovecs[iovIndex].iov_base =
+                    static_cast<char*>(_iovecs[iovIndex].iov_base) + sent;
+                _iovecs[iovIndex].iov_len -= sent;
+            }
+        }
+
+        _wroteNonEmptyChunk = true;
+        _hasPendingPacket = false;
+        _pendingBytes = 0;
+        _buffer.reset();
+    } else if (_wroteNonEmptyChunk) {
+        // PATH B: TCPConnectionManager calling flush() at end-of-request to
+        // emit the chunked-encoding terminator. Sticky _wroteNonEmptyChunk is
+        // cleared by the reset() that follows.
+        sendRaw(net::http::CHUNK_TERMINATOR, net::http::CHUNK_TERMINATOR_SIZE);
+    }
+}
+
+void TuringProtoWriter::reset() {
+    _buffer.reset();
+    _pendingBytes = 0;
+    _hasPendingPacket = false;
+    _wroteNonEmptyChunk = false;
+    _errorOccured = false;
 }

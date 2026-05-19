@@ -6,7 +6,7 @@ EXPECTED_NODE_COUNT = 18
 
 def main() -> None:
     data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".turing")
-    db = turingdb.TuringDB(data_dir=data_dir)
+    db = turingdb.TuringDB(type="embedded", data_dir=data_dir)
     print(f"In-process TuringDB opened at {data_dir}")
 
     db.query(f"LOAD GRAPH {GRAPH_NAME}")

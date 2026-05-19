@@ -9,7 +9,7 @@ EXPECTED_WORKS_AT_COUNT = 3
 EXPECTED_HAS_SKILL_COUNT = 4
 
 def main() -> None:
-    client = turingdb.TuringClient(host='http://localhost:6666')
+    client = turingdb.TuringDB(host='http://localhost:6666')
     client.try_reach()
     print("Connected to DB")
 

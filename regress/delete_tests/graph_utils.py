@@ -1,8 +1,8 @@
-from turingdb import TuringClient
+from turingdb import TuringDB
 
 
 # Helper to create a change and return its ID
-def new_change(client: TuringClient) -> int:
+def new_change(client: TuringDB) -> int:
     client.checkout()
     change_id = client.new_change()
     client.checkout(change=change_id)
@@ -10,6 +10,6 @@ def new_change(client: TuringClient) -> int:
 
 
 # Helper to submit current change and switch back to main
-def submit_current_change(client: TuringClient) -> None:
+def submit_current_change(client: TuringDB) -> None:
     client.query("change submit")
     client.checkout()

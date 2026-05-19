@@ -40,10 +40,9 @@ private:
     net::TCPConnection& _connection;
     DBThreadContext* _threadContext {nullptr};
 
-    void handleHello();
     void handleQuery();
     void writeQueryError(std::string_view message);
-    [[nodiscard]] TransactionInfo getTransactionInfo(std::string_view payload) const;
+    TransactionInfo getTransactionInfo() const;
 };
 
 }

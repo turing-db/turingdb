@@ -16,7 +16,7 @@ Expected: Once fixed, the server should return an error or skip invalid nodes.
 import os
 import sys
 import httpx
-from turingdb import TuringClient
+from turingdb import TuringDB
 
 HOST = "http://localhost:6666"
 
@@ -26,13 +26,13 @@ def main():
     print()
 
     # This test hits the server's /get_nodes HTTP endpoint directly, so it
-    # only applies to the HTTP transport.
-    if os.environ.get("TURINGDB_TRANSPORT") == "binary":
-        print("Skipping under binary transport (HTTP-specific test)")
+    # only applies to type='json'.
+    if os.environ.get("TURINGDB_TYPE") == "native":
+        print("Skipping under type='native' (json-specific test)")
         sys.exit(0)
 
     # Setup: Create a graph with one node
-    client = TuringClient(host=HOST)
+    client = TuringDB(host=HOST)
 
     print("1. Creating test graph with one node...")
     client.query("CREATE GRAPH testgraph")
@@ -50,7 +50,7 @@ def main():
 
     headers = {
         "Content-Type": "application/json",
-        "X-TuringClient-Graph": "testgraph",
+        "X-TuringDB-Graph": "testgraph",
     }
     payload = {"nodeIDs": [999999]}
 

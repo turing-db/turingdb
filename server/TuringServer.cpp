@@ -13,7 +13,6 @@
 #include "HTTPParser.h"
 #include "DBURIParser.h"
 #include "DBServerProcessor.h"
-#include "TuringProtoParser.h"
 #include "TuringProtoServerProcessor.h"
 #include "TuringProtoWriter.h"
 
@@ -58,7 +57,7 @@ void TuringServer::start() {
                 processor.process(threadContext);
             };
         functions._createParser = [](net::NetBuffer* inputBuffer) {
-            return std::unique_ptr<net::AbstractTCPParser>(new net::proto::TuringProtoParser(inputBuffer));
+            return std::unique_ptr<net::AbstractTCPParser>(new net::HTTPParser<DBURIParser>(inputBuffer));
         };
         functions._createWriter = [bufferCapacity = _config.getProtoBufferCapacity()] {
             return std::make_unique<net::proto::TuringProtoWriter>(bufferCapacity);

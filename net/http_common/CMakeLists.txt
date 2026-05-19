@@ -1,6 +1,7 @@
 
 set(http_common_sources
-    HTTP.cpp)
+    HTTP.cpp
+    HTTPUtils.cpp)
 
 add_library(turing_db_http_common_s STATIC ${http_common_sources})
 

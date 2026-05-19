@@ -3,7 +3,7 @@ import os
 import sys
 
 import pandas as pd
-from turingdb import TuringClient, TuringDBException
+from turingdb import TuringDB, TuringDBException
 
 GRAPH_NAME = "simpledb"
 
@@ -17,7 +17,7 @@ DTYPE_MAP = {
 
 
 def parse_result_json(json_str: str) -> pd.DataFrame:
-    """Parse a resultJson string into a DataFrame using the same logic as TuringClient._parse_chunks."""
+    """Parse a resultJson string into a DataFrame using the same logic as TuringDB._parse_chunks."""
     data = json.loads(json_str)
 
     header = data["header"]
@@ -71,7 +71,7 @@ def main() -> None:
         print(f"ERROR: Tests directory not found: {tests_dir}")
         sys.exit(1)
 
-    client = TuringClient(host="http://localhost:6666")
+    client = TuringDB(host="http://localhost:6666")
     client.try_reach()
     print("Connected to DB")
 
@@ -82,7 +82,7 @@ def main() -> None:
     tests = load_test_files(tests_dir)
     print(f"Loaded {len(tests)} tests")
 
-    transport = os.environ.get("TURINGDB_TRANSPORT", "http")
+    client_type = os.environ.get("TURINGDB_TYPE", "json")
 
     passed = 0
     failed = 0
@@ -97,7 +97,7 @@ def main() -> None:
             skipped += 1
             continue
 
-        if transport == "binary" and not test.get("remote-enabled", True):
+        if client_type == "native" and not test.get("remote-enabled", True):
             skipped += 1
             continue
 
