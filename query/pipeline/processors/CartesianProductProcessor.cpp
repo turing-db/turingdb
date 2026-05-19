@@ -5,6 +5,8 @@
 #include "PipelineV2.h"
 #include "PipelinePort.h"
 #include "ExecutionContext.h"
+#include "columns/AllowedKinds.h"
+#include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
 #include "columns/ColumnDispatcher.h"
@@ -47,6 +49,109 @@ void verifyRectangular(const Dataframe* df) {
                              "non-rectangular dataframe as input.");
     }
 }
+
+struct SetFromLeftCol {
+public:
+    SetFromLeftCol(Column* outCol, size_t rhsPtr, size_t lhsPtr, size_t rowPtr, size_t remainingSpace, size_t m, size_t n)
+        : _outCol(outCol),
+        _rhsPtr(rhsPtr),
+        _lhsPtr(lhsPtr),
+        _rowPtr(rowPtr),
+        _remainingSpace(remainingSpace),
+        _m(m),
+        _n(n)
+    {
+    }
+
+    template <typename T>
+    void operator()(const ColumnVector<T>* lhsCol) {
+        auto* outCol = dynamic_cast<ColumnVector<T>*>(_outCol);
+
+        std::vector<T>& outRaw = outCol->getRaw();
+
+        // If we were halfway through writing tuples for a left hand row, try and finish
+        if (_rhsPtr != 0) {
+            // Write as many as we need, or as many as we can
+            const size_t needToWrite = _m - _rhsPtr;
+            const size_t canWrite = std::min(_remainingSpace, needToWrite);
+
+            const auto startIt = begin(outRaw) + _rowPtr;
+            const auto endIt = startIt + canWrite;
+
+            const T& val = lhsCol->at(_lhsPtr);
+
+            std::fill(startIt, endIt, val);
+
+            // Reduce the space we have left to right
+            _remainingSpace -= canWrite;
+            _rhsPtr += canWrite;
+            _rowPtr += canWrite;
+            // If we wrote all `m` rows for this LHS row, then reset,
+            // otherwise increment
+            if (canWrite == needToWrite) { // If we wrote all we needed
+                _lhsPtr++;               // We now need to write the next LHS
+                _rhsPtr = 0;             // And start from the first RHS
+            }
+        }
+
+        if (_lhsPtr == _n + 1) { // We have written all rows from LHS
+            return;
+        }
+
+        if (_remainingSpace == 0) { // We have ran out of space
+            return;
+        }
+
+        // Work out how for how many rows in LHS can we write all tuples with RHS for
+        // Each row in LHS needs m rows to fit all tuples: one for for each row on RHS
+        const size_t rowsLeftToWrite = _n - _lhsPtr;
+        const size_t numCompleteLhsRowsCanWrite = std::min(rowsLeftToWrite, _remainingSpace / _m);
+        const bool canWriteAll = rowsLeftToWrite == numCompleteLhsRowsCanWrite;
+        const bool canWriteLeftovers = _remainingSpace % _m != 0;
+
+        for (size_t i = 0; i < numCompleteLhsRowsCanWrite; i++) {
+            const T& currentLhsElement = lhsCol->at(_lhsPtr);
+
+            const auto startIt = begin(outRaw) + _rowPtr;
+            const auto endIt = startIt + _m; // We know we can fit m rows here
+
+            std::fill(startIt, endIt, currentLhsElement);
+
+            _lhsPtr++;
+            _rhsPtr = 0;
+
+            _rowPtr += _m;
+
+            _remainingSpace -= _m;
+        }
+
+        if (canWriteAll || !canWriteLeftovers) {
+            return;
+        }
+
+        bioassert(_remainingSpace < _m, "Not enough remaining space");
+        bioassert(_rhsPtr == 0, "ourRhsPtr must be 0");
+
+        const T& lhsElement = lhsCol->at(_lhsPtr);
+        const auto startIt = begin(outRaw) + _rowPtr;
+        const auto endIt = startIt + _remainingSpace;
+        bioassert(endIt == end(outRaw), "Invalid endIt iterator");
+
+        std::fill(startIt, endIt, lhsElement);
+    }
+
+private:
+    Column* _outCol {nullptr};
+
+    size_t _rhsPtr {0};
+    size_t _lhsPtr {0};
+    size_t _rowPtr {0};
+    
+    size_t _remainingSpace {0};
+
+    size_t _m {0};
+    size_t _n {0};
+};
 
 }
 
@@ -125,94 +230,22 @@ void CartesianProductProcessor::setFromLeftColumn(Dataframe* left,
                                                   size_t fromRow,
                                                   size_t spaceAvailable) {
     size_t remainingSpace = spaceAvailable;
-    size_t ourRowPtr = fromRow;
 
     const size_t n = left->getLogicalRowCount();
     const size_t m = right->getLogicalRowCount();
 
-    // Keep local copies, because each column needs to reuse the global state
-    size_t ourLhsPtr = _lhsPtr;
-    size_t ourRhsPtr = _rhsPtr;
-
     Dataframe* oDF = _out.getDataframe();
-    Column* outColumnErased = oDF->cols().at(colIdx)->getColumn();
+    Column* outCol = oDF->cols().at(colIdx)->getColumn();
 
     Column* leftColumnErased = left->cols().at(colIdx)->getColumn();
 
-    dispatchColumnVector(leftColumnErased, [&](auto* lhsCol) {
-        auto* outCol = static_cast<decltype(lhsCol)>(outColumnErased);
-        auto& outRaw = outCol->getRaw();
+    // NOTE: Functor takes @ref _rhsPtr, _lhsPtr by value, and doesn't modify global state
+    SetFromLeftCol setter(outCol, _rhsPtr, _lhsPtr, fromRow, remainingSpace, m, n);
 
-        // If we were halfway through writing tuples for a left hand row, try and finish
-        if (ourRhsPtr != 0) {
-            // Write as many as we need, or as many as we can
-            const size_t needToWrite = m - ourRhsPtr;
-            const size_t canWrite = std::min(remainingSpace, needToWrite);
+    using Types = CartesianProductKinds;
+    using Dispatcher = ColumnSingleDispatcher<Types::Allowed, SetFromLeftCol, Types::Excluded>;
 
-            const auto startIt = begin(outRaw) + ourRowPtr;
-            const auto endIt = startIt + canWrite;
-
-            const auto& val = lhsCol->at(ourLhsPtr);
-
-            std::fill(startIt, endIt, val);
-
-            // Reduce the space we have left to right
-            remainingSpace -= canWrite;
-            ourRowPtr += canWrite;
-            ourRhsPtr += canWrite;
-            // If we wrote all `m` rows for this LHS row, then reset,
-            // otherwise increment
-            if (canWrite == needToWrite) { // If we wrote all we needed
-                ourLhsPtr++;               // We now need to write the next LHS
-                ourRhsPtr = 0;             // And start from the first RHS
-            }
-        }
-
-        if (ourLhsPtr == n + 1) { // We have written all rows from LHS
-            return;
-        }
-
-        if (remainingSpace == 0) { // We have ran out of space
-            return;
-        }
-
-        // Work out how for how many rows in LHS can we write all tuples with RHS for
-        // Each row in LHS needs m rows to fit all tuples: one for for each row on RHS
-        const size_t rowsLeftToWrite = n - ourLhsPtr;
-        const size_t numCompleteLhsRowsCanWrite = std::min(rowsLeftToWrite, remainingSpace / m);
-        const bool canWriteAll = rowsLeftToWrite == numCompleteLhsRowsCanWrite;
-        const bool canWriteLeftovers = remainingSpace % m != 0;
-
-        for (size_t i = 0; i < numCompleteLhsRowsCanWrite; i++) {
-            const auto& currentLhsElement = lhsCol->at(ourLhsPtr);
-
-            const auto startIt = begin(outRaw) + ourRowPtr;
-            const auto endIt = startIt + m; // We know we can fit m rows here
-
-            std::fill(startIt, endIt, currentLhsElement);
-
-            ourLhsPtr++;
-            ourRhsPtr = 0;
-
-            ourRowPtr += m;
-
-            remainingSpace -= m;
-        }
-
-        if (canWriteAll || !canWriteLeftovers) {
-            return;
-        }
-
-        bioassert(remainingSpace < m, "Not enough remaining space");
-        bioassert(ourRhsPtr == 0, "ourRhsPtr must be 0");
-
-        const auto& lhsElement = lhsCol->at(ourLhsPtr);
-        const auto startIt = begin(outRaw) + ourRowPtr;
-        const auto endIt = startIt + remainingSpace;
-        bioassert(endIt == end(outRaw), "Invalid endIt iterator");
-
-        std::fill(startIt, endIt, lhsElement);
-    });
+    Dispatcher::dispatch(leftColumnErased, setter);
 }
 
 void CartesianProductProcessor::copyFromRightColumn(Dataframe* left,

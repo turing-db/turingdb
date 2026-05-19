@@ -4,6 +4,7 @@
 #include <optional>
 #include <type_traits>
 
+#include "columns/ColumnConst.h"
 #include "list/ListBuffer.h"
 #include "ID.h"
 #include "versioning/ChangeID.h"
@@ -566,6 +567,45 @@ struct ValueHashJoinPairs {
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnConst>(),
         ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
+// Column types allowed as an input to @ref CartesianProductProcessor
+struct CartesianProductKinds {
+    using Allowed = GenerateKindList<std::tuple<
+        // All property types and their optional variants
+        types::Int64::Primitive,
+        types::UInt64::Primitive,
+        types::Double::Primitive,
+        types::String::Primitive,
+        types::Bool::Primitive,
+
+        std::optional<types::Int64::Primitive>,
+        std::optional<types::UInt64::Primitive>,
+        std::optional<types::Double::Primitive>,
+        std::optional<types::String::Primitive>,
+        std::optional<types::Bool::Primitive>,
+
+        // Entities
+        NodeID,
+        EdgeID,
+        EdgeTypeID,
+        PropertyTypeID,
+        LabelID,
+        LabelSetID,
+
+        // Lists
+        ListView,
+        ListElementView,
+
+        // Owning strings occasionally needed for procedures; tests
+        std::string
+    >>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnConst>(),
         ContainerKind::code<ColumnMask>()
     >;
 };
