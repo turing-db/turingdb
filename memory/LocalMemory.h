@@ -99,6 +99,7 @@ public:
         MakeMemoryPool<ColumnSet<EdgeID>>::type,
         MakeMemoryPool<ColumnStringTable>::type,
 
+        MakeMemoryPool<ColumnVector<ListView>>::type,
         MakeMemoryPool<ColumnConst<ListView>>::type,
         MakeMemoryPool<ColumnVector<ListElementView>>::type
     >;
