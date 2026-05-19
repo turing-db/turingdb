@@ -4,13 +4,15 @@
 #include <type_traits>
 
 #include "PipelineV2.h"
-#include "PipelinePort.h"
 #include "ExecutionContext.h"
+#include "PipelinePort.h"
+
 #include "columns/AllowedKinds.h"
+#include "columns/ColumnDispatcher.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
+
 #include "dataframe/Dataframe.h"
-#include "columns/ColumnDispatcher.h"
 #include "dataframe/NamedColumn.h"
 
 #include "FatalException.h"
@@ -19,37 +21,6 @@
 using namespace db;
 
 namespace {
-
-void verifyAllColumnVectors(const Dataframe* df) {
-    for (const NamedColumn* nCol : df->cols()) {
-        const Column* col = nCol->getColumn();
-
-        const ColumnKind::Code kind = col->getKind();
-        const ContainerKind::Code containerKind = ColumnKind::extractContainerKind(kind);
-        constexpr ContainerKind::Code ColumnVectorKind = ContainerKind::code<ColumnVector<size_t>>();
-
-        if (containerKind != ColumnVectorKind) {
-            std::string err =
-                fmt::format("Attempt to calulate the CartesianProduct of a "
-                            "Dataframe whose column is not a ColumnVector, but a {}.",
-                            col->getTypeName());
-            throw FatalException(std::move(err));
-        }
-    }
-}
-
-void verifyRectangular(const Dataframe* df) {
-    const size_t rowCount = df->getLogicalRowCount();
-
-    const bool rectangular = std::ranges::all_of(df->cols(), [rowCount](const NamedColumn* ncol) {
-        return ncol->getColumn()->size() == rowCount;
-    });
-
-    if (!rectangular) {
-        throw FatalException("CartesianProductProcessor was provided with "
-                             "non-rectangular dataframe as input.");
-    }
-}
 
 struct SetFromLeftCol {
 public:
@@ -605,12 +576,6 @@ void CartesianProductProcessor::emitFromLeftMemory() {
 }
 
 void CartesianProductProcessor::init() {
-    verifyAllColumnVectors(_lhs.getDataframe());
-    verifyAllColumnVectors(_rhs.getDataframe());
-    verifyAllColumnVectors(_out.getDataframe());
-    verifyRectangular(_lhs.getDataframe());
-    verifyRectangular(_rhs.getDataframe());
-
     const size_t n = _lhs.getPort()->hasData() ? _lhs.getDataframe()->getLogicalRowCount() : 0;
     const size_t m = _rhs.getPort()->hasData() ? _rhs.getDataframe()->getLogicalRowCount() : 0;
 
