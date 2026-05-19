@@ -85,6 +85,7 @@ public:
         const bool canWriteLeftovers = _remainingSpace % _m != 0;
 
         for (size_t i = 0; i < numCompleteLhsRowsCanWrite; i++) {
+            // If @ref lhsCol is a ColumnConst, this will always return the same value
             const T& currentLhsElement = lhsCol->at(_lhsPtr);
 
             const auto startIt = begin(outRaw) + _rowPtr;
@@ -107,6 +108,7 @@ public:
         bioassert(_remainingSpace < _m, "Not enough remaining space");
         bioassert(_rhsPtr == 0, "ourRhsPtr must be 0");
 
+        // If @ref lhsCol is a ColumnConst, this will always return the same value
         const T& lhsElement = lhsCol->at(_lhsPtr);
         const auto startIt = begin(outRaw) + _rowPtr;
         const auto endIt = startIt + _remainingSpace;
