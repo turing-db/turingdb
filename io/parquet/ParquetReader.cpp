@@ -135,34 +135,52 @@ bool ParquetReader::readSlice(parquet::ColumnReader* columnReader,
     using T = typename DType::c_type;
     auto* typed = static_cast<parquet::TypedColumnReader<DType>*>(columnReader);
     T* buffer = reinterpret_cast<T*>(scratch.data());
-    int64_t valuesRead = 0;
-    typed->ReadBatch(static_cast<int64_t>(batchRows), nullptr, nullptr, buffer, &valuesRead);
-    const std::span<const T> values(buffer, static_cast<size_t>(valuesRead));
 
-    bool visitorOk = true;
-    if constexpr (std::is_same_v<DType, parquet::Int32Type>) {
-        visitorOk = _visitor.onInt32Values(columnIndex, values);
-    } else if constexpr (std::is_same_v<DType, parquet::Int64Type>) {
-        visitorOk = _visitor.onInt64Values(columnIndex, values);
-    } else if constexpr (std::is_same_v<DType, parquet::FloatType>) {
-        visitorOk = _visitor.onFloatValues(columnIndex, values);
-    } else if constexpr (std::is_same_v<DType, parquet::DoubleType>) {
-        visitorOk = _visitor.onDoubleValues(columnIndex, values);
-    } else if constexpr (std::is_same_v<DType, parquet::BooleanType>) {
-        visitorOk = _visitor.onBoolValues(columnIndex, values);
-    } else if constexpr (std::is_same_v<DType, parquet::ByteArrayType>) {
-        visitorOk = _visitor.onByteArrayValues(columnIndex, values);
-    } else if constexpr (std::is_same_v<DType, parquet::Int96Type>) {
-        visitorOk = _visitor.onInt96Values(columnIndex, values);
-    } else if constexpr (std::is_same_v<DType, parquet::FLBAType>) {
-        visitorOk = _visitor.onFixedLenByteArrayValues(columnIndex, values, byteWidth);
-    } else {
-        static_assert(sizeof(DType) == 0, "Unsupported DType in readSlice");
-    }
+    // ReadBatch is allowed to stop at page boundaries and return fewer
+    // values than requested, especially on BYTE_ARRAY columns with large
+    // variable-length values. Loop until we've delivered batchRows values
+    // (or the underlying reader reports zero). Invoke the visitor on each
+    // sub-batch's values: parquet::ByteArray::ptr points into a page-owned
+    // buffer that is invalidated by the next ReadBatch call, so the visitor
+    // must consume each sub-batch before we read the next page.
+    size_t totalRead = 0;
+    while (totalRead < batchRows) {
+        int64_t valuesRead = 0;
+        typed->ReadBatch(static_cast<int64_t>(batchRows - totalRead),
+                         nullptr, nullptr,
+                         buffer, &valuesRead);
+        if (valuesRead <= 0) {
+            break;
+        }
+        const std::span<const T> values(buffer, static_cast<size_t>(valuesRead));
 
-    if (!visitorOk) {
-        _aborted = true;
-        return false;
+        bool visitorOk = true;
+        if constexpr (std::is_same_v<DType, parquet::Int32Type>) {
+            visitorOk = _visitor.onInt32Values(columnIndex, values);
+        } else if constexpr (std::is_same_v<DType, parquet::Int64Type>) {
+            visitorOk = _visitor.onInt64Values(columnIndex, values);
+        } else if constexpr (std::is_same_v<DType, parquet::FloatType>) {
+            visitorOk = _visitor.onFloatValues(columnIndex, values);
+        } else if constexpr (std::is_same_v<DType, parquet::DoubleType>) {
+            visitorOk = _visitor.onDoubleValues(columnIndex, values);
+        } else if constexpr (std::is_same_v<DType, parquet::BooleanType>) {
+            visitorOk = _visitor.onBoolValues(columnIndex, values);
+        } else if constexpr (std::is_same_v<DType, parquet::ByteArrayType>) {
+            visitorOk = _visitor.onByteArrayValues(columnIndex, values);
+        } else if constexpr (std::is_same_v<DType, parquet::Int96Type>) {
+            visitorOk = _visitor.onInt96Values(columnIndex, values);
+        } else if constexpr (std::is_same_v<DType, parquet::FLBAType>) {
+            visitorOk = _visitor.onFixedLenByteArrayValues(columnIndex, values, byteWidth);
+        } else {
+            static_assert(sizeof(DType) == 0, "Unsupported DType in readSlice");
+        }
+
+        if (!visitorOk) {
+            _aborted = true;
+            return false;
+        }
+
+        totalRead += static_cast<size_t>(valuesRead);
     }
     return true;
 }
