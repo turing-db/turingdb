@@ -260,39 +260,40 @@ void ParquetGraphImporter::writeSubRecord(NodeID parent,
                                    ? label.getName()
                                    : label.getInferredLabel();
 
-    // Dedup key: prefer the sub-record's `id` field (for object sub-records),
-    // fall back to the `value` field (for scalar arrays wrapped as
-    // {value: x}). When neither is present, we can't dedup so a fresh node
-    // is always created.
+    // Dedup key:
+    //  - If the sub-record has an explicit `id` field, use it (id is treated
+    //    as an authoritative natural key — two observations with the same id
+    //    collapse, even if other scalar fields disagree slightly).
+    //  - Otherwise if a wrapped scalar `value` is present, use it (same
+    //    rationale for arrays-of-scalars like canonical_exons).
+    //  - Otherwise fall back to a hash of the full canonical JSON content
+    //    under the sub-record's label. nlohmann::json keeps object keys in
+    //    std::map order so .dump() is canonical: byte-identical sub-records
+    //    share a key and a single node. This catches structurally-identical
+    //    sub-records that lack a natural id (e.g. SubcellularLocation, Url).
     std::string dedupKey;
     {
         const auto idIt = value.find("id");
         const auto valueIt = value.find("value");
-        const nlohmann::json* keyField = nullptr;
         if (idIt != value.end() && !idIt->is_null()) {
-            keyField = &(*idIt);
+            dedupKey = nodeLabel + ":id:" + idIt->dump();
         } else if (valueIt != value.end() && !valueIt->is_null()) {
-            keyField = &(*valueIt);
-        }
-        if (keyField != nullptr) {
-            dedupKey = nodeLabel + ":" + keyField->dump();
+            dedupKey = nodeLabel + ":value:" + valueIt->dump();
+        } else {
+            dedupKey = nodeLabel + ":content:" + value.dump();
         }
     }
 
-    if (!dedupKey.empty()) {
-        const auto it = _subRecordByKey.find(dedupKey);
-        if (it != _subRecordByKey.end()) {
-            _writer.addEdge(edgeType, parent, it->second);
-            ++_dedupedReferenceCount;
-            return;
-        }
+    const auto it = _subRecordByKey.find(dedupKey);
+    if (it != _subRecordByKey.end()) {
+        _writer.addEdge(edgeType, parent, it->second);
+        ++_dedupedReferenceCount;
+        return;
     }
 
     const NodeID sub = _writer.addNode({std::string_view(nodeLabel)});
     ++_subRecordCount;
-    if (!dedupKey.empty()) {
-        _subRecordByKey.emplace(dedupKey, sub);
-    }
+    _subRecordByKey.emplace(dedupKey, sub);
 
     _writer.addEdge(edgeType, parent, sub);
 
