@@ -17,13 +17,6 @@ using namespace db;
 
 namespace {
 
-void clearDataframe(Dataframe* df) {
-    for (NamedColumn* nCol : df->cols()) {
-        Column* col = nCol->getColumn();
-        dispatchColumnVector(col, [](auto* colVec) { colVec->clear(); });
-    }
-}
-
 void verifyAllColumnVectors(const Dataframe* df) {
     for (const NamedColumn* nCol : df->cols()) {
         const Column* col = nCol->getColumn();
@@ -554,6 +547,9 @@ void CartesianProductProcessor::init() {
 }
 
 void CartesianProductProcessor::execute() {
+    PipelineInputPort* leftPort = _lhs.getPort();
+    PipelineInputPort* rightPort = _rhs.getPort();
+
     // We start with our output port being empty, and not having written any rows
     _rowsWrittenThisCycle = 0;
 
@@ -578,14 +574,14 @@ void CartesianProductProcessor::execute() {
 
     if (_rowsWrittenSinceLastFinished == _rowsToWriteBeforeFinished) {
         // Memorise the new chunks
-        if (_lhs.getPort()->hasData()) {
+        if (leftPort->hasData()) {
             _leftMemory.append(_lhs.getDataframe());
-            _lhs.getPort()->consume();
+            leftPort->consume();
         }
 
-        if (_rhs.getPort()->hasData()) {
+        if (rightPort->hasData()) {
             _rightMemory.append(_rhs.getDataframe());
-            _rhs.getPort()->consume();
+            rightPort->consume();
         }
 
         // Edge case: if we didn't need to write any rows, @ref fillOutput would not have
@@ -593,11 +589,11 @@ void CartesianProductProcessor::execute() {
         // only in the case where we are not to recieve any more inputs (i.e. both ports
         // closed), so that the following processor evaluates @ref hasData() to true, and
         // can therefore execute.
-        if (_rowsToWriteBeforeFinished == 0) {
-            if (_lhs.getPort()->isClosed() && _rhs.getPort()->isClosed()) {
-                clearDataframe(_out.getDataframe());
-                _out.getPort()->writeData();
-            }
+        const bool inputsClosed = leftPort->isClosed() && rightPort->isClosed();
+        const bool nothingToWrite = _rowsToWriteBeforeFinished == 0;
+        if (nothingToWrite && inputsClosed) {
+            _out.getDataframe()->clear();
+            _out.getPort()->writeData();
         }
 
         finish();
