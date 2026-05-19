@@ -607,7 +607,6 @@ struct CartesianProductKinds {
 
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnConst>(),
         ContainerKind::code<ColumnMask>()
     >;
 };
