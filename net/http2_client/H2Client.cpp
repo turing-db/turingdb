@@ -45,12 +45,14 @@ H2Client::H2Client(const std::string& remoteAddress,
     : _remoteAddress(remoteAddress),
       _remotePort(remotePort),
       _localMem(localMem),
-      // Over-allocate _inBuf by 64 KiB so a single DATA frame at our
-      // negotiated MAX_FRAME_SIZE (1 MiB) plus interleaved control frames
-      // (HEADERS, WINDOW_UPDATE, SETTINGS-ACK) all fit before we have to
-      // recycle the buffer. _outBuf is just the request body, which is
-      // bounded by bufferCapacity directly.
-      _inBuf(bufferCapacity + 64 * 1024),
+      // _packetBuf accumulates DATA payload bytes across however many
+      // DATA frames the server splits a binary-protocol packet into. Size
+      // for one full max-sized packet (1 MiB body + 5-byte ProtoHeader)
+      // plus headroom for accumulating partial bytes of the next packet
+      // while the current one is in dispatch.
+      _packetBuf(bufferCapacity * 2),
+      // _inBuf holds one decoder-facing packet body at a time.
+      _inBuf(bufferCapacity),
       _outBuf(bufferCapacity)
 {
 }
@@ -219,14 +221,13 @@ void H2Client::connect() {
 void H2Client::disconnect() {
     teardownSession();
 
+    _packetBuf.reset();
     _inBuf.reset();
     _outBuf.reset();
     _outBufSent = 0;
     _outBufEof = false;
     _activeStreamId = 0;
-    _currentPayloadStart = 0;
-    _currentPayloadLen = 0;
-    _pendingFrames.clear();
+    _pendingPackets.clear();
     _streamEnded = false;
     _responseHeadersOk = false;
     _sessionFatal = false;
@@ -426,8 +427,8 @@ db::QueryStatus H2Client::sendQuery(const std::string& query,
         // pending queue drains, _streamEnded is true and _pendingFrames is
         // empty — pumpUntilFrameAvailable will throw "stream ended" so we
         // reach this point only when there's a real next packet.
-        pumpUntilFrameAvailable();
-        responseHeader = peelFrameHeader();
+        pumpUntilPacketAvailable();
+        responseHeader = peelPacketHeader();
     }
 }
 
@@ -438,13 +439,12 @@ db::QueryStatus H2Client::sendQuery(const std::string& query,
 net::proto::ProtoHeader H2Client::sendRequestPayload() {
     // Per-request state reset. The session itself stays alive across
     // requests; only the stream-scoped bookkeeping rolls over.
+    _packetBuf.reset();
     _inBuf.reset();
     _outBufSent = 0;
     _outBufEof = false;
     _activeStreamId = 0;
-    _currentPayloadStart = 0;
-    _currentPayloadLen = 0;
-    _pendingFrames.clear();
+    _pendingPackets.clear();
     _streamEnded = false;
     _responseHeadersOk = false;
 
@@ -483,9 +483,9 @@ net::proto::ProtoHeader H2Client::sendRequestPayload() {
     // nghttp2 has nothing left to push and our request body is fully sent.
     drainOutbound();
 
-    // Pump the response side until we have the first DATA frame.
-    pumpUntilFrameAvailable();
-    return peelFrameHeader();
+    // Pump the response side until we have the first complete packet.
+    pumpUntilPacketAvailable();
+    return peelPacketHeader();
 }
 
 void H2Client::drainOutbound() {
@@ -506,24 +506,22 @@ void H2Client::drainOutbound() {
 // Inbound pump + packet peeling
 // ============================================================
 
-void H2Client::pumpUntilFrameAvailable() {
-    while (_pendingFrames.empty()) {
+void H2Client::pumpUntilPacketAvailable() {
+    while (_pendingPackets.empty()) {
         if (_streamEnded) {
             throw TuringException("Server closed stream before producing the expected response packet");
         }
 
         // Drain any auto-queued outbound frames first (WINDOW_UPDATEs from
-        // consumed inbound DATA, PING-ACKs, SETTINGS-ACKs). This keeps the
-        // peer happy without needing a separate "is there work to send"
-        // check on the hot recv path.
+        // consumed inbound DATA, PING-ACKs, SETTINGS-ACKs).
         drainOutbound();
 
-        if (_inBuf.remaining() == 0) {
-            throw TuringException("H2Client inbound buffer full — DATA frame exceeded buffer capacity");
-        }
-
-        char* writePtr = _inBuf.end();
-        const ssize_t n = ::recv(_socket, writePtr, _inBuf.remaining(), 0);
+        // recv into a small scratch buffer — nghttp2 parses framing from
+        // here in place. on_data_chunk_recv (synchronous, fired inside
+        // mem_recv2) memcpys the DATA payload bytes into _packetBuf, so
+        // _recvScratch can be reused on the next iteration.
+        const ssize_t n = ::recv(_socket, _recvScratch.data(),
+                                 _recvScratch.size(), 0);
         if (n < 0) {
             if (errno == EINTR) continue;
             throw TuringException(std::string("recv failed: ") + ::strerror(errno));
@@ -532,84 +530,111 @@ void H2Client::pumpUntilFrameAvailable() {
             throw TuringException("Connection closed before response was complete");
         }
         spdlog::info("[h2c.client] recv {} bytes", n);
-        _inBuf.increaseWriteOffset(n);
 
-        // Callbacks fire synchronously inside mem_recv2; on_data_chunk_recv
-        // updates _currentPayloadStart / _currentPayloadLen and
-        // on_frame_recv(DATA) pushes a PendingFrame into the deque.
-        const nghttp2_ssize consumed = nghttp2_session_mem_recv2(_session,
-                                                                  reinterpret_cast<uint8_t*>(writePtr),
-                                                                  static_cast<size_t>(n));
+        const nghttp2_ssize consumed = nghttp2_session_mem_recv2(
+            _session,
+            reinterpret_cast<uint8_t*>(_recvScratch.data()),
+            static_cast<size_t>(n));
         spdlog::info("[h2c.client] mem_recv2 consumed={}", consumed);
         if (consumed < 0) {
             _sessionFatal = true;
             throw TuringException(std::string("nghttp2_session_mem_recv2 failed: ")
                                   + nghttp2_strerror(static_cast<int>(consumed)));
         }
+
+        // Walk the freshly-accumulated bytes in _packetBuf and queue any
+        // complete binary-protocol packets.
+        scanForPackets();
     }
 }
 
-net::proto::ProtoHeader H2Client::peelFrameHeader() {
-    bioassert(!_pendingFrames.empty(),
-              "peelFrameHeader called with no pending frames");
+void H2Client::scanForPackets() {
+    while (_packetBuf.readable() >= net::proto::ProtoHeader::wireSize()) {
+        // Peek at the ProtoHeader at the current read position without
+        // advancing past it — we want to do that ourselves once we know
+        // the full packet is present.
+        net::proto::ProtoHeader hdr {};
+        const char* hdrPtr = _packetBuf.readPtr();
+        memcpy(&hdr._type, hdrPtr, sizeof(hdr._type));
+        memcpy(&hdr._dataLen, hdrPtr + sizeof(hdr._type), sizeof(hdr._dataLen));
 
-    const PendingFrame& f = _pendingFrames.front();
-    bioassert(f._payloadLen >= net::proto::ProtoHeader::wireSize(),
-              "DATA frame payload too small to contain a ProtoHeader");
+        const size_t needed = net::proto::ProtoHeader::wireSize() + hdr._dataLen;
+        if (_packetBuf.readable() < needed) {
+            // Body still in flight; wait for more bytes.
+            break;
+        }
 
-    char tmp[net::proto::ProtoHeader::wireSize()];
-    memcpy(tmp, _inBuf.data() + f._payloadStart, net::proto::ProtoHeader::wireSize());
-    return net::proto::ProtoHeader::decode(tmp, net::proto::ProtoHeader::wireSize());
+        // Stage the packet. _bodyStart is an absolute offset into
+        // _packetBuf._data — stays valid until finishPacket compacts.
+        const size_t bodyStart =
+            _packetBuf.readOffset() + net::proto::ProtoHeader::wireSize();
+        _pendingPackets.push_back({bodyStart, hdr._dataLen, hdr._type});
+        _packetBuf.increaseReadOffset(needed);
+
+        spdlog::info("[h2c.client] scanForPackets staged type={} bodyLen={} bodyStart={}",
+                     static_cast<int>(hdr._type), hdr._dataLen, bodyStart);
+    }
+}
+
+net::proto::ProtoHeader H2Client::peelPacketHeader() {
+    bioassert(!_pendingPackets.empty(),
+              "peelPacketHeader called with no pending packets");
+
+    const PendingPacket& p = _pendingPackets.front();
+    return net::proto::ProtoHeader {
+        ._type = p._type,
+        ._dataLen = p._bodyLen,
+    };
 }
 
 void H2Client::stagePacketBody(uint32_t bodyLen) {
-    bioassert(!_pendingFrames.empty(),
-              "stagePacketBody called with no pending frames");
+    bioassert(!_pendingPackets.empty(),
+              "stagePacketBody called with no pending packets");
 
-    const PendingFrame& f = _pendingFrames.front();
-    const size_t bodyStart = f._payloadStart + net::proto::ProtoHeader::wireSize();
-    const size_t expectedTotal = net::proto::ProtoHeader::wireSize() + bodyLen;
+    const PendingPacket& p = _pendingPackets.front();
+    bioassert(p._bodyLen == bodyLen,
+              "Body length in ProtoHeader doesn't match pending packet entry");
+    bioassert(bodyLen <= _inBuf.capacity(),
+              "Packet body exceeds decoder buffer capacity");
 
-    bioassert(f._payloadLen == expectedTotal,
-              "Body length in ProtoHeader doesn't match DATA frame payload");
-
-    // The body bytes are sitting at _inBuf.data() + bodyStart — nghttp2
-    // parsed them in place. We just need the TuringProtoInBuf read window
-    // to bracket exactly those bodyLen bytes. No copy.
+    // Copy the body bytes from the accumulator into the decoder's buffer.
+    // This is the one copy on the receive path; the decoder then reads
+    // contiguous bytes via readPtr() exactly as on the binary-proto path.
     _inBuf.reset();
-    _inBuf.increaseWriteOffset(bodyStart + bodyLen);
-    _inBuf.increaseReadOffset(bodyStart);
+    if (bodyLen > 0) {
+        memcpy(_inBuf.data(), _packetBuf.data() + p._bodyStart, bodyLen);
+    }
+    _inBuf.increaseWriteOffset(bodyLen);
 }
 
 void H2Client::finishPacket() {
-    bioassert(!_pendingFrames.empty(),
-              "finishPacket called with no pending frames");
-    _pendingFrames.pop_front();
+    bioassert(!_pendingPackets.empty(),
+              "finishPacket called with no pending packets");
+    _pendingPackets.pop_front();
 
-    if (!_pendingFrames.empty()) {
-        // More queued frames — leave _inBuf alone. Their _payloadStart
-        // offsets still point at the original positions where nghttp2
-        // wrote them; the next stagePacketBody will reset offsets to
-        // bracket the next body, and the underlying bytes are unchanged.
+    if (!_pendingPackets.empty()) {
+        // More queued packets ahead. Their _bodyStart offsets reference
+        // bytes still in _packetBuf — DON'T compact yet.
         return;
     }
 
-    // Pending queue is empty.
-    if (_currentPayloadLen == 0) {
-        // No partial frame in flight either — recycle the buffer for the
-        // next recv batch.
-        _inBuf.reset();
-        return;
+    // No pending packets. Compact _packetBuf: shift any un-scanned tail
+    // (start of the next packet that hasn't fully arrived yet) to offset
+    // 0 so the next recv batch has full headroom. With pending empty,
+    // there are no PendingPacket entries referencing offsets that would
+    // be invalidated by the shift.
+    const size_t consumed = _packetBuf.readOffset();
+    const size_t remaining = _packetBuf.readable();
+    if (consumed == 0) {
+        return;  // nothing to shift
     }
-
-    // A partial frame is mid-assembly at _currentPayloadStart. Its bytes
-    // are still in _inBuf at that offset. We need _writeOffset positioned
-    // past the partial bytes so the next recv appends rather than
-    // overwriting. (stagePacketBody just left _writeOffset wherever the
-    // last completed packet ended — could be before OR after the partial
-    // bytes, depending on recv order.)
-    _inBuf.reset();
-    _inBuf.increaseWriteOffset(_currentPayloadStart + _currentPayloadLen);
+    if (remaining > 0) {
+        memmove(_packetBuf.data(), _packetBuf.data() + consumed, remaining);
+    }
+    _packetBuf.reset();
+    if (remaining > 0) {
+        _packetBuf.increaseWriteOffset(remaining);
+    }
 }
 
 // ============================================================
@@ -685,11 +710,16 @@ int H2Client::onDataChunkRecv(int32_t streamId,
         return 0;
     }
 
-    if (_currentPayloadLen == 0) {
-        _currentPayloadStart = static_cast<size_t>(
-            reinterpret_cast<const char*>(data) - _inBuf.data());
+    // Append DATA payload bytes to _packetBuf, regardless of the DATA frame
+    // boundary. scanForPackets (called after mem_recv2 returns) will walk
+    // the accumulated stream and parse out complete binary-protocol packets.
+    if (_packetBuf.remaining() < len) {
+        spdlog::error("[h2c.state] onDataChunkRecv: _packetBuf overflow (remaining={}, len={})",
+                      _packetBuf.remaining(), len);
+        return NGHTTP2_ERR_CALLBACK_FAILURE;
     }
-    _currentPayloadLen += len;
+    memcpy(_packetBuf.data() + _packetBuf.size(), data, len);
+    _packetBuf.increaseWriteOffset(len);
     return 0;
 }
 
@@ -706,14 +736,10 @@ int H2Client::onFrameRecv(const nghttp2_frame* frame) {
         return 0;
     }
 
-    if (frame->hd.type == NGHTTP2_DATA) {
-        // One complete DATA frame's payload has been delivered through
-        // onDataChunkRecv. Queue it for the caller.
-        _pendingFrames.push_back({_currentPayloadStart, _currentPayloadLen});
-        _currentPayloadStart = 0;
-        _currentPayloadLen = 0;
-    }
-
+    // DATA frame boundaries are invisible to us now — onDataChunkRecv has
+    // already appended its bytes to _packetBuf, and scanForPackets will
+    // parse packets out of the byte stream once mem_recv2 returns. The
+    // only frame-level concern here is END_STREAM.
     if (endStream) {
         _streamEnded = true;
     }

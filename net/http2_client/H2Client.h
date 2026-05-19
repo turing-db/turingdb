@@ -2,6 +2,7 @@
 
 #include <nghttp2/nghttp2.h>
 #include <stdint.h>
+#include <array>
 #include <deque>
 #include <string>
 #include <string_view>
@@ -96,7 +97,24 @@ private:
     db::ChangeID _changeID {db::ChangeID::head()};
     db::LocalMemory* _localMem {nullptr};
 
-    // ----- Inbound buffer + payload tracking -----
+    // ----- Inbound buffers -----
+    //
+    // _recvScratch: where ::recv writes raw socket bytes. nghttp2 parses
+    //   frames from here in place (no copy on the parse path). Sized
+    //   small because each recv batch is processed before the next.
+    //
+    // _packetBuf: accumulator for DATA payload bytes (post-h2-framing).
+    //   on_data_chunk_recv memcpys bytes here. scanForPackets walks it
+    //   parsing binary-protocol packets, regardless of how the bytes
+    //   were chunked across DATA frames. _readOffset advances as packets
+    //   are parsed out; _writeOffset advances as new bytes arrive.
+    //
+    // _inBuf: the decoder's view of ONE binary-protocol packet body at a
+    //   time. stagePacketBody memcpys the body from _packetBuf into
+    //   _inBuf, then TuringProtoDecoder reads via readPtr() exactly as
+    //   on the binary-proto path.
+    std::array<char, 64 * 1024> _recvScratch;
+    net::proto::TuringProtoInBuf _packetBuf;
     net::proto::TuringProtoInBuf _inBuf;
 
     // Outbound: bytes for the current request body get staged here, then
@@ -107,21 +125,17 @@ private:
 
     net::proto::EmbeddingBuffer _embeddingBuffer;
 
-    // Where the CURRENT (in-progress) DATA frame's payload lives in _inBuf.
-    // Reset between frames in onFrameRecv.
-    size_t _currentPayloadStart {0};
-    size_t _currentPayloadLen {0};
-
-    // Frames whose bytes are fully in _inBuf but whose payloads haven't
-    // been dispatched to the decoder yet. A single recv can deliver
-    // multiple back-to-back DATA frames, so we queue them and drain in
-    // arrival order. Each entry's _payloadStart is an absolute offset
-    // into _inBuf and stays valid as long as _inBuf isn't reset.
-    struct PendingFrame {
-        size_t _payloadStart {0};
-        size_t _payloadLen {0};
+    // Binary-protocol packets whose bytes have been fully accumulated in
+    // _packetBuf but haven't been dispatched to the decoder yet. Each
+    // entry's _bodyStart is the absolute offset into _packetBuf where
+    // the body bytes (post-5-byte-ProtoHeader) live. These offsets stay
+    // valid until _packetBuf is compacted in finishPacket.
+    struct PendingPacket {
+        size_t _bodyStart {0};
+        uint32_t _bodyLen {0};
+        net::proto::MessageTypes _type {};
     };
-    std::deque<PendingFrame> _pendingFrames;
+    std::deque<PendingPacket> _pendingPackets;
 
     bool _streamEnded {false};
     bool _responseHeadersOk {false};   // set true on :status 200
@@ -138,14 +152,19 @@ private:
     // Drive nghttp2 outbound until the queue is empty.
     void drainOutbound();
 
-    // Drive recv + mem_recv2 until at least one complete DATA frame is
-    // queued in _pendingFrames (or the stream ends).
-    void pumpUntilFrameAvailable();
+    // Drive recv + mem_recv2 until at least one complete binary-protocol
+    // packet has been assembled in _packetBuf (or the stream ends).
+    void pumpUntilPacketAvailable();
 
-    // Peel the front of _pendingFrames: decode its 5-byte ProtoHeader,
-    // and set _inBuf._readOffset / _writeOffset so the decoder sees just
-    // the body bytes.
-    net::proto::ProtoHeader peelFrameHeader();
+    // Walk _packetBuf from its current read offset, parsing ProtoHeaders
+    // and queueing PendingPacket entries for every complete packet.
+    // Called after every mem_recv2 to drain newly-arrived bytes.
+    void scanForPackets();
+
+    // Peel the front of _pendingPackets: return its ProtoHeader,
+    // memcpy its body bytes into _inBuf so the decoder reads them via
+    // TuringProtoInBuf::readPtr(), pop after dispatch.
+    net::proto::ProtoHeader peelPacketHeader();
     void stagePacketBody(uint32_t bodyLen);
     void finishPacket();
 
