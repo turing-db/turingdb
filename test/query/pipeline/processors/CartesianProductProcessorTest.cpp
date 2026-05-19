@@ -10,6 +10,7 @@
 #include "processors/ProcessorTester.h"
 
 #include "processors/CartesianProductProcessor.h"
+#include "columns/ColumnConst.h"
 #include "dataframe/Dataframe.h"
 #include "processors/LambdaProcessor.h"
 #include "processors/LambdaSourceProcessor.h"
@@ -1470,6 +1471,204 @@ TEST_F(CartesianProductProcessorTest, bothEmpty) {
     EXECUTE(view, ChunkConfig::CHUNK_SIZE);
     ASSERT_TRUE(executed);
     ASSERT_TRUE(actualRow.empty());
+}
+
+TEST_F(CartesianProductProcessorTest, constLhsColumn) {
+    using ConstNodeIDs = ColumnConst<NodeID>;
+
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t LHS_NUM_ROWS = 3;
+    constexpr size_t RHS_NUM_ROWS = 2;
+    const NodeID CONST_LHS_VAL = NodeID(42);
+
+    // LHS:
+    // [col 0: vector]  [col 1: const]
+    //        1               42
+    //        2               42
+    //        3               42
+    const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        auto* vecCol = dynamic_cast<ColumnNodeIDs*>(df->cols()[0]->getColumn());
+        vecCol->push_back(1);
+        vecCol->push_back(2);
+        vecCol->push_back(3);
+
+        auto* constCol = dynamic_cast<ConstNodeIDs*>(df->cols()[1]->getColumn());
+        constCol->set(CONST_LHS_VAL);
+
+        isFinished = true;
+    };
+
+    // RHS:
+    // [col 0: vector]
+    //        10
+    //        20
+    const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[0]->getColumn());
+        col->push_back(10);
+        col->push_back(20);
+        isFinished = true;
+    };
+
+    {
+        auto& rhsIF = _builder->addLambdaSource(genRDF);
+        _builder->addColumnToOutput<ColumnNodeIDs>(_pipeline.getDataframeManager()->allocTag());
+
+        [[maybe_unused]] auto& lhsIF = _builder->addLambdaSource(genLDF);
+        _builder->addColumnToOutput<ColumnNodeIDs>(_pipeline.getDataframeManager()->allocTag());
+        _builder->addColumnToOutput<ConstNodeIDs>(_pipeline.getDataframeManager()->allocTag());
+
+        const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), 3);
+    }
+
+    // Output:
+    // [col 0: lhs vector]  [col 1: lhs const]  [col 2: rhs vector]
+    //        1                    42                   10
+    //        1                    42                   20
+    //        2                    42                   10
+    //        2                    42                   20
+    //        3                    42                   10
+    //        3                    42                   20
+    bool executed = false;
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        executed = true;
+
+        ASSERT_EQ(df->size(), 3);
+        ASSERT_EQ(df->getLogicalRowCount(), LHS_NUM_ROWS * RHS_NUM_ROWS);
+
+        {
+            const ColumnNodeIDs expected = {1, 1, 2, 2, 3, 3};
+            const auto* col = df->cols().at(0)->as<ColumnNodeIDs>();
+            for (const auto& [exp, actual] : rv::zip(expected, *col)) {
+                EXPECT_EQ(exp, actual);
+            }
+        }
+        {
+            const auto* col = df->cols().at(1)->as<ConstNodeIDs>();
+            ASSERT_TRUE(col != nullptr);
+            EXPECT_EQ(col->getRaw(), CONST_LHS_VAL);
+        }
+        {
+            const ColumnNodeIDs expected = {10, 20, 10, 20, 10, 20};
+            const auto* col = df->cols().at(2)->as<ColumnNodeIDs>();
+            for (const auto& [exp, actual] : rv::zip(expected, *col)) {
+                EXPECT_EQ(exp, actual);
+            }
+        }
+    };
+
+    _builder->addLambda(VERIFY_CALLBACK);
+    EXECUTE(view, LHS_NUM_ROWS * RHS_NUM_ROWS);
+    ASSERT_TRUE(executed);
+}
+
+TEST_F(CartesianProductProcessorTest, constRhsColumn) {
+    using ConstNodeIDs = ColumnConst<NodeID>;
+
+    auto [transaction, view, reader] = readGraph();
+
+    constexpr size_t LHS_NUM_ROWS = 3;
+    constexpr size_t RHS_NUM_ROWS = 2;
+    const NodeID CONST_RHS_VAL = NodeID(99);
+
+    // LHS:
+    // [col 0: vector]
+    //        1
+    //        2
+    //        3
+    const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[0]->getColumn());
+        col->push_back(1);
+        col->push_back(2);
+        col->push_back(3);
+        isFinished = true;
+    };
+
+    // RHS:
+    // [col 0: vector]  [col 1: const]
+    //        10              99
+    //        20              99
+    const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        auto* vecCol = dynamic_cast<ColumnNodeIDs*>(df->cols()[0]->getColumn());
+        vecCol->push_back(10);
+        vecCol->push_back(20);
+
+        auto* constCol = dynamic_cast<ConstNodeIDs*>(df->cols()[1]->getColumn());
+        constCol->set(CONST_RHS_VAL);
+
+        isFinished = true;
+    };
+
+    {
+        auto& rhsIF = _builder->addLambdaSource(genRDF);
+        _builder->addColumnToOutput<ColumnNodeIDs>(_pipeline.getDataframeManager()->allocTag());
+        _builder->addColumnToOutput<ConstNodeIDs>(_pipeline.getDataframeManager()->allocTag());
+
+        [[maybe_unused]] auto& lhsIF = _builder->addLambdaSource(genLDF);
+        _builder->addColumnToOutput<ColumnNodeIDs>(_pipeline.getDataframeManager()->allocTag());
+
+        const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), 3);
+    }
+
+    // Output:
+    // [col 0: lhs vector]  [col 1: rhs vector]  [col 2: rhs const]
+    //        1                    10                   99
+    //        1                    20                   99
+    //        2                    10                   99
+    //        2                    20                   99
+    //        3                    10                   99
+    //        3                    20                   99
+    bool executed = false;
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        executed = true;
+
+        ASSERT_EQ(df->size(), 3);
+        ASSERT_EQ(df->getLogicalRowCount(), LHS_NUM_ROWS * RHS_NUM_ROWS);
+
+        {
+            const ColumnNodeIDs expected = {1, 1, 2, 2, 3, 3};
+            const auto* col = df->cols().at(0)->as<ColumnNodeIDs>();
+            for (const auto& [exp, actual] : rv::zip(expected, *col)) {
+                EXPECT_EQ(exp, actual);
+            }
+        }
+        {
+            const ColumnNodeIDs expected = {10, 20, 10, 20, 10, 20};
+            const auto* col = df->cols().at(1)->as<ColumnNodeIDs>();
+            for (const auto& [exp, actual] : rv::zip(expected, *col)) {
+                EXPECT_EQ(exp, actual);
+            }
+        }
+        {
+            const auto* col = df->cols().at(2)->as<ConstNodeIDs>();
+            ASSERT_TRUE(col != nullptr);
+            EXPECT_EQ(col->getRaw(), CONST_RHS_VAL);
+        }
+    };
+
+    _builder->addLambda(VERIFY_CALLBACK);
+    EXECUTE(view, LHS_NUM_ROWS * RHS_NUM_ROWS);
+    ASSERT_TRUE(executed);
 }
 
 int main(int argc, char** argv) {
