@@ -109,7 +109,7 @@ void duplicateDataframeShape(LocalMemory* mem,
 /*
 * @brief Column-wise concatenation of @param src onto @param dest
 */
-void concatDataframeShape(LocalMemory* mem,
+[[maybe_unused]] void concatDataframeShape(LocalMemory* mem,
                           DataframeManager* dfMan,
                           db::Dataframe* src,
                           db::Dataframe* dest) {
@@ -118,6 +118,57 @@ void concatDataframeShape(LocalMemory* mem,
         populateStringTableShape(mem, newCol, col->getColumn());
         auto* newNamedCol = NamedColumn::create(dfMan, newCol, col->getTag());
         dest->addColumn(newNamedCol);
+    }
+}
+
+// Functor for ColumnSingleDispatcher: allocates a ColumnVector<T> in the output
+// dataframe regardless of whether the source column is a ColumnVector or ColumnConst.
+struct AllocAsColumnVector {
+public:
+    AllocAsColumnVector(LocalMemory* mem, DataframeManager* dfMan, Dataframe* dest, ColumnTag tag)
+        : _mem(mem),
+        _dfMan(dfMan),
+        _dest(dest),
+        _tag(tag)
+    {
+    }
+
+    template <template <typename> class Container, typename T>
+    void operator()(const Container<T>*) {
+        ColumnVector<T>* newCol = _mem->alloc<ColumnVector<T>>();
+        _dest->addColumn(NamedColumn::create(_dfMan, newCol, _tag));
+    }
+
+private:
+    LocalMemory* _mem;
+    DataframeManager* _dfMan;
+    Dataframe* _dest;
+    ColumnTag _tag;
+};
+
+void duplicateDataframeShapeAsVectors(LocalMemory* mem,
+                                      DataframeManager* dfMan,
+                                      db::Dataframe* src,
+                                      db::Dataframe* dest) {
+    using Types = CartesianProductKinds;
+    using Dispatcher = ColumnSingleDispatcher<Types::Allowed, AllocAsColumnVector, Types::Excluded>;
+
+    for (const NamedColumn* col : src->cols()) {
+        AllocAsColumnVector alloc(mem, dfMan, dest, col->getTag());
+        Dispatcher::dispatch(col->getColumn(), alloc);
+    }
+}
+
+void concatDataframeShapeAsVectors(LocalMemory* mem,
+                                   DataframeManager* dfMan,
+                                   db::Dataframe* src,
+                                   db::Dataframe* dest) {
+    using Types = CartesianProductKinds;
+    using Dispatcher = ColumnSingleDispatcher<Types::Allowed, AllocAsColumnVector, Types::Excluded>;
+
+    for (const NamedColumn* col : src->cols()) {
+        AllocAsColumnVector alloc(mem, dfMan, dest, col->getTag());
+        Dispatcher::dispatch(col->getColumn(), alloc);
     }
 }
 
@@ -267,9 +318,10 @@ PipelineBlockOutputInterface& PipelineBuilder::addCartesianProduct(PipelineOutpu
     Dataframe* leftDf = cartProd->leftHandSide().getDataframe();
     Dataframe* rightDf = cartProd->rightHandSide().getDataframe();
 
-    // The output DF should be the same as the inputs, concatenated
-    duplicateDataframeShape(_mem, _dfMan, leftDf, outDf);
-    concatDataframeShape(_mem, _dfMan, rightDf, outDf);
+    // Output columns are always ColumnVector, even when an input column is ColumnConst,
+    // because the processor must write multiple values per output row.
+    duplicateDataframeShapeAsVectors(_mem, _dfMan, leftDf, outDf);
+    concatDataframeShapeAsVectors(_mem, _dfMan, rightDf, outDf);
 
     // Stream does not change when adding CartesianProduct
     output.setStream(_pendingOutput.getInterface()->getStream());
