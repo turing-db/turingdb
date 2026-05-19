@@ -153,6 +153,115 @@ private:
     size_t _n {0};
 };
 
+struct CopyFromRightCol {
+public:
+    CopyFromRightCol(Column* outCol, size_t rhsPtr, size_t lhsPtr, size_t rowPtr, size_t remainingSpace, size_t m, size_t n)
+        : _outCol(outCol),
+        _rhsPtr(rhsPtr),
+        _lhsPtr(lhsPtr),
+        _rowPtr(rowPtr),
+        _remainingSpace(remainingSpace),
+        _m(m),
+        _n(n)
+    {
+    }
+
+    template <typename T>
+    void operator()(const ColumnVector<T>* rhsCol) {
+        auto* outCol = dynamic_cast<ColumnVector<T>*>(_outCol);
+
+        std::vector<T>& outRaw = outCol->getRaw();
+        const std::vector<T>& rhsRaw = rhsCol->getRaw();
+
+        // If we were halfway through writing tuples for a left hand row, try and finish
+        if (_rhsPtr != 0) {
+            const size_t needToWrite = _m - _rhsPtr;
+            const size_t canWrite = std::min(_remainingSpace, needToWrite);
+
+            // Copy as much of the column as we can
+            const auto rStart = begin(rhsRaw) + _rhsPtr;
+            const auto rEnd = rStart + canWrite;
+            const auto outStart = begin(outRaw) + _rowPtr;
+
+            std::copy(rStart, rEnd, outStart);
+
+            _remainingSpace -= canWrite;
+            _rowPtr += canWrite;
+            _rhsPtr += canWrite;
+            // If we copied all the remainder of the column, we start again on RHS
+            if (canWrite == needToWrite) {
+                _lhsPtr++;
+                _rhsPtr = 0;
+            }
+        }
+
+        if (_lhsPtr == _n + 1) {
+            return;
+        }
+
+        if (_remainingSpace == 0) {
+            return;
+        }
+
+        const size_t rowsLeftToWrite = _n - _lhsPtr;
+        const size_t numCompleteLhsRowsCanWrite =
+            std::min(rowsLeftToWrite, _remainingSpace / _m);
+        const bool canWriteAll = rowsLeftToWrite == numCompleteLhsRowsCanWrite;
+        const bool canWriteLeftovers = _remainingSpace % _m != 0;
+
+        bioassert(_rhsPtr == 0, "ourRhsPtr must be zero");
+        for (size_t i = 0; i < numCompleteLhsRowsCanWrite; i++) {
+            const auto rStart = begin(rhsRaw) + _rhsPtr;
+            const auto rEnd = rStart + _m; // We know we can fit m rows here
+            bioassert(rEnd == end(rhsRaw), "rEnd is not valid");
+            const auto outStart = begin(outRaw) + _rowPtr;
+
+            std::copy(rStart, rEnd, outStart);
+
+            _lhsPtr++;
+            _rhsPtr = 0;
+
+            _rowPtr += _m;
+
+            _remainingSpace -= _m;
+        }
+
+        if (canWriteAll || !canWriteLeftovers) {
+            return;
+        }
+
+        bioassert(_remainingSpace < _m, "not enough remaining space");
+        bioassert(_rhsPtr == 0, "ourRhsPtr must be zero");
+
+        const auto rStart = begin(rhsRaw) + _rhsPtr;
+        const auto rEnd = rStart + _remainingSpace;
+        bioassert(rEnd != end(rhsRaw), "invalid rEnd");
+
+        const auto outStart = begin(outRaw) + _rowPtr;
+        bioassert(outStart + _remainingSpace == end(outRaw), "invalid outStart");
+
+        std::copy(rStart, rEnd, outStart);
+
+        _rhsPtr += _remainingSpace;
+        _rowPtr += _remainingSpace;
+        _remainingSpace -= _remainingSpace;
+
+        bioassert(_remainingSpace == 0, "we must not have remainingSpace here");
+    }
+
+private:
+    Column* _outCol {nullptr};
+
+    size_t _rhsPtr {0};
+    size_t _lhsPtr {0};
+    size_t _rowPtr {0};
+
+    size_t _remainingSpace {0};
+
+    size_t _m {0};
+    size_t _n {0};
+};
+
 }
 
 CartesianProductProcessor* CartesianProductProcessor::create(PipelineV2* pipeline) {
@@ -253,101 +362,22 @@ void CartesianProductProcessor::copyFromRightColumn(Dataframe* left,
                                                     size_t colIdx,
                                                     size_t fromRow,
                                                     size_t spaceAvailable) {
-    size_t remainingSpace = spaceAvailable;
-    size_t ourRowPtr = fromRow;
-
     const size_t n = left->getLogicalRowCount();
     const size_t m = right->getLogicalRowCount();
     const size_t p = left->size();
 
-    size_t ourLhsPtr = _lhsPtr;
-    size_t ourRhsPtr = _rhsPtr;
-
     Dataframe* oDF = _out.getDataframe();
-    Column* outColumnErased = oDF->cols().at(p + colIdx)->getColumn();
+    Column* outCol = oDF->cols().at(p + colIdx)->getColumn();
 
     Column* rightColumnErased = right->cols().at(colIdx)->getColumn();
 
-    dispatchColumnVector(rightColumnErased, [&](auto* rhsCol) {
-        auto* outCol = static_cast<decltype(rhsCol)>(outColumnErased);
-        auto& outRaw = outCol->getRaw();
+    // NOTE: Functor takes @ref _rhsPtr, _lhsPtr by value, and doesn't modify global state
+    CopyFromRightCol copier(outCol, _rhsPtr, _lhsPtr, fromRow, spaceAvailable, m, n);
 
-        const auto& rhsRaw = rhsCol->getRaw();
-        // If we were halfway through writing tuples for a left hand row, try and finish
-        if (ourRhsPtr != 0) {
-            const size_t needToWrite = m - ourRhsPtr;
-            const size_t canWrite = std::min(remainingSpace, needToWrite);
+    using Types = CartesianProductKinds;
+    using Dispatcher = ColumnSingleDispatcher<Types::Allowed, CopyFromRightCol, Types::Excluded>;
 
-            // Copy as much of the column as we can
-            const auto rStart = begin(rhsRaw) + ourRhsPtr;
-            const auto rEnd = rStart + canWrite;
-            const auto outStart = begin(outRaw) + ourRowPtr;
-
-            std::copy(rStart, rEnd, outStart);
-
-            remainingSpace -= canWrite;
-            ourRowPtr += canWrite;
-            ourRhsPtr += canWrite;
-            // If we copied all the remainder of the column, we start again on RHS
-            if (canWrite == needToWrite) {
-                ourLhsPtr++;
-                ourRhsPtr = 0;
-            }
-        }
-
-        if (ourLhsPtr == n + 1) {
-            return;
-        }
-
-        if (remainingSpace == 0) {
-            return;
-        }
-
-        const size_t rowsLeftToWrite = n - ourLhsPtr;
-        const size_t numCompleteLhsRowsCanWrite =
-            std::min(rowsLeftToWrite, remainingSpace / m);
-        const bool canWriteAll = rowsLeftToWrite == numCompleteLhsRowsCanWrite;
-        const bool canWriteLeftovers = remainingSpace % m != 0;
-
-        bioassert(ourRhsPtr == 0, "ourRhsPtr must be zero");
-        for (size_t i = 0; i < numCompleteLhsRowsCanWrite; i++) {
-            const auto rStart = begin(rhsRaw) + ourRhsPtr;
-            const auto rEnd = rStart + m; // We know we can fit m rows here
-            bioassert(rEnd == end(rhsRaw), "rEnd is not valid");
-            const auto outStart = begin(outRaw) + ourRowPtr;
-
-            std::copy(rStart, rEnd, outStart);
-
-            ourLhsPtr++;
-            ourRhsPtr = 0;
-
-            ourRowPtr += m;
-
-            remainingSpace -= m;
-        }
-
-        if (canWriteAll || !canWriteLeftovers) {
-            return;
-        }
-
-        bioassert(remainingSpace < m, "not enough remaining space");
-        bioassert(ourRhsPtr == 0, "ourRhsPtr must be zero");
-
-        const auto rStart = begin(rhsRaw) + ourRhsPtr;
-        const auto rEnd = rStart + remainingSpace;
-        bioassert(rEnd != end(rhsRaw), "invalid rEnd");
-
-        const auto outStart = begin(outRaw) + ourRowPtr;
-        bioassert(outStart + remainingSpace == end(outRaw), "invalid outStart");
-
-        std::copy(rStart, rEnd, outStart);
-
-        ourRhsPtr += remainingSpace;
-        ourRowPtr += remainingSpace;
-        remainingSpace -= remainingSpace;
-
-        bioassert(remainingSpace == 0, "we must not have remainingSpace here");
-    });
+    Dispatcher::dispatch(rightColumnErased, copier);
 }
 
 size_t CartesianProductProcessor::fillOutput(Dataframe* left, Dataframe* right) {

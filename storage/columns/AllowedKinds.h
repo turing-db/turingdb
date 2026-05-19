@@ -587,17 +587,19 @@ struct CartesianProductKinds {
         std::optional<types::String::Primitive>,
         std::optional<types::Bool::Primitive>,
 
-        // Entities
+        // Entities and metadata
         NodeID,
         EdgeID,
         EdgeTypeID,
         PropertyTypeID,
         LabelID,
         LabelSetID,
+        ValueType,
 
         // Lists
         ListView,
         ListElementView,
+        EntityList,
 
         // Owning strings occasionally needed for procedures; tests
         std::string
