@@ -259,8 +259,40 @@ void ParquetGraphImporter::writeSubRecord(NodeID parent,
     const std::string& nodeLabel = label.getInferredLabel().empty()
                                    ? label.getName()
                                    : label.getInferredLabel();
+
+    // Dedup key: prefer the sub-record's `id` field (for object sub-records),
+    // fall back to the `value` field (for scalar arrays wrapped as
+    // {value: x}). When neither is present, we can't dedup so a fresh node
+    // is always created.
+    std::string dedupKey;
+    {
+        const auto idIt = value.find("id");
+        const auto valueIt = value.find("value");
+        const nlohmann::json* keyField = nullptr;
+        if (idIt != value.end() && !idIt->is_null()) {
+            keyField = &(*idIt);
+        } else if (valueIt != value.end() && !valueIt->is_null()) {
+            keyField = &(*valueIt);
+        }
+        if (keyField != nullptr) {
+            dedupKey = nodeLabel + ":" + keyField->dump();
+        }
+    }
+
+    if (!dedupKey.empty()) {
+        const auto it = _subRecordByKey.find(dedupKey);
+        if (it != _subRecordByKey.end()) {
+            _writer.addEdge(edgeType, parent, it->second);
+            ++_dedupedReferenceCount;
+            return;
+        }
+    }
+
     const NodeID sub = _writer.addNode({std::string_view(nodeLabel)});
     ++_subRecordCount;
+    if (!dedupKey.empty()) {
+        _subRecordByKey.emplace(dedupKey, sub);
+    }
 
     _writer.addEdge(edgeType, parent, sub);
 

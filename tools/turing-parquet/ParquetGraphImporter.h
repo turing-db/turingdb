@@ -71,6 +71,7 @@ public:
     size_t getNodeCount() const { return _nodeCount; }
     size_t getEdgeCount() const { return _edgeCount; }
     size_t getSubRecordCount() const { return _subRecordCount; }
+    size_t getDedupedReferenceCount() const { return _dedupedReferenceCount; }
     size_t getStubNodeCount() const { return _stubNodeCount; }
     size_t getSkippedEdgeCount() const { return _skippedEdgeCount; }
 
@@ -103,9 +104,15 @@ private:
 
     std::unordered_map<std::string, NodeID> _externalIdToNodeId;
     std::unordered_map<std::string, ValueType> _propertyTypeByName;
+    // Sub-record dedup: maps "<inferredLabel>:<keyValue>" to the NodeID
+    // already created for that combination, so a second observation of the
+    // same sub-record (same label, same `id`/`value` field) reuses the node
+    // and only adds the HAS_… edge.
+    std::unordered_map<std::string, NodeID> _subRecordByKey;
     size_t _nodeCount {0};
     size_t _edgeCount {0};
     size_t _subRecordCount {0};
+    size_t _dedupedReferenceCount {0};
     size_t _stubNodeCount {0};
     size_t _skippedEdgeCount {0};
 };
