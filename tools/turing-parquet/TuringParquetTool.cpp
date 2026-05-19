@@ -10,12 +10,14 @@
 
 #include <argparse.hpp>
 #include <spdlog/fmt/fmt.h>
+#include <tabulate/table.hpp>
 
 #include "ParquetReader.h"
 #include "Path.h"
 
 #include "ParquetEdgeTypeAnalysis.h"
 #include "ParquetEdgeTypeAnalyzer.h"
+#include "ParquetGraphMapping.h"
 #include "ParquetJsonDetector.h"
 #include "ParquetPropertyAnalysis.h"
 #include "ParquetPropertyAnalyzer.h"
@@ -181,6 +183,91 @@ void buildSchema(const fs::Path& path, ParquetSchema& schema) {
     }
 }
 
+std::string propertyTypeString(const ParquetGraphProperty& property) {
+    std::string typeString = ParquetGraphMapping::toString(property.getType());
+    if (property.isNullable()) {
+        typeString += "?";
+    }
+    if (property.isRawJson()) {
+        typeString += " (raw JSON)";
+    }
+    return typeString;
+}
+
+void renderPropertiesTable(const ParquetGraphLabel& label) {
+    tabulate::Table table;
+    table.add_row({"name", "type"});
+    for (const auto& property : label.getProperties()) {
+        table.add_row({property->getName(), propertyTypeString(*property)});
+    }
+
+    const size_t rowCount = label.getProperties().size() + 1;
+    for (size_t rowIndex = 2; rowIndex < rowCount; ++rowIndex) {
+        table[rowIndex].format().hide_border_top();
+    }
+    table[0].format().font_style({tabulate::FontStyle::bold});
+    table.column(0).format().font_align(tabulate::FontAlign::left);
+    table.column(1).format().font_align(tabulate::FontAlign::left);
+
+    std::cout << table << "\n";
+}
+
+std::string labelHeader(const ParquetGraphLabel& label, const std::string& path) {
+    std::string header = path;
+    if (!label.getInferredLabel().empty()) {
+        header += "  :";
+        header += label.getInferredLabel();
+    }
+    header += "  ";
+    header += ParquetGraphMapping::toString(label.getCardinality());
+    if (label.isNullable()) {
+        header += " (nullable)";
+    }
+    return header;
+}
+
+void renderLabelTables(const ParquetGraphLabel& label, const std::string& path) {
+    std::cout << "\n" << labelHeader(label, path) << "\n";
+    if (label.getProperties().empty()) {
+        std::cout << "(no properties)\n";
+    } else {
+        renderPropertiesTable(label);
+    }
+
+    const std::string separator = (label.getCardinality() == ParquetEdgeCardinality::MANY)
+                                  ? "[]."
+                                  : ".";
+    for (const auto& subLabel : label.getSubLabels()) {
+        const std::string subPath = path + separator + subLabel->getName();
+        renderLabelTables(*subLabel, subPath);
+    }
+}
+
+void printGraphMapping(const ParquetGraphMapping& mapping) {
+    std::cout << "Graph mapping for column '" << mapping.getColumnName() << "':\n";
+
+    const ParquetGraphLabel& root = mapping.getRoot();
+    if (!root.getProperties().empty()) {
+        std::cout << "\nProperties:\n";
+        renderPropertiesTable(root);
+    }
+
+    if (!root.getSubLabels().empty()) {
+        std::cout << "\nSub-records:\n";
+        for (const auto& subLabel : root.getSubLabels()) {
+            renderLabelTables(*subLabel, subLabel->getName());
+        }
+    }
+
+    const std::vector<std::string>& warnings = mapping.getWarnings();
+    if (!warnings.empty()) {
+        std::cout << "\nWarnings (" << warnings.size() << "):\n";
+        for (const std::string& warning : warnings) {
+            std::cout << "  - " << warning << "\n";
+        }
+    }
+}
+
 void runMergedPropertyAnalysis(const std::vector<std::string>& files,
                                const std::vector<std::unique_ptr<ParquetSchema>>& schemas,
                                const std::string& columnName) {
@@ -198,6 +285,13 @@ void runMergedPropertyAnalysis(const std::vector<std::string>& files,
 
     std::cout << "\n== Merged property analysis: " << columnName << " ==\n";
     printPropertyAnalysis(merged, columnName);
+
+    ParquetGraphMapping mapping;
+    ParquetGraphMapping::buildFrom(merged, columnName, mapping);
+    ParquetGraphMapping::inferLabelNames(mapping);
+
+    std::cout << "\n== Graph mapping: " << columnName << " ==\n";
+    printGraphMapping(mapping);
 }
 
 bool fileHasTopLevelColumn(const ParquetSchema& schema, const std::string& name) {

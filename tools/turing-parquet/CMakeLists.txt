@@ -8,7 +8,8 @@ set(turing_parquet_sources
     ParquetPropertyMerge.cpp
     ParquetPropertyAnalyzer.cpp
     ParquetEdgeTypeAnalysis.cpp
-    ParquetEdgeTypeAnalyzer.cpp)
+    ParquetEdgeTypeAnalyzer.cpp
+    ParquetGraphMapping.cpp)
 
 add_executable(turing-parquet ${turing_parquet_sources})
 target_link_libraries(turing-parquet
