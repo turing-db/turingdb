@@ -627,10 +627,12 @@ int main(int argc, const char** argv) {
         }
 
         std::cout << fmt::format(
-            "Imported {} nodes, {} sub-record nodes, {} stub nodes "
-            "(unresolved edge endpoints), {} edges ({} skipped).\n",
+            "Imported {} nodes, {} sub-record nodes ({} duplicate references "
+            "reused), {} stub nodes (unresolved edge endpoints), {} edges "
+            "({} skipped).\n",
             importer.getNodeCount(),
             importer.getSubRecordCount(),
+            importer.getDedupedReferenceCount(),
             importer.getStubNodeCount(),
             importer.getEdgeCount(),
             importer.getSkippedEdgeCount());
