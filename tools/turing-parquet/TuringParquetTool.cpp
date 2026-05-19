@@ -286,6 +286,22 @@ void printEdgeTypeAnalysis(const ParquetEdgeTypeAnalysis& analysis,
     }
 }
 
+void runEdgeTypeAnalysis(const std::vector<std::string>& edgeFiles,
+                         const std::vector<const ParquetSchema*>& edgeSchemas,
+                         const std::string& columnName) {
+    ParquetEdgeTypeAnalysis analysis;
+    for (size_t fileIndex = 0; fileIndex < edgeFiles.size(); ++fileIndex) {
+        const fs::Path path(edgeFiles[fileIndex]);
+        ParquetEdgeTypeAnalyzer analyzer(*edgeSchemas[fileIndex], columnName, analysis);
+        ParquetReader reader(path, analyzer);
+        while (reader.nextChunk()) {
+        }
+    }
+
+    std::cout << "\n== Edge type analysis: " << columnName << " ==\n";
+    printEdgeTypeAnalysis(analysis, columnName);
+}
+
 void runEdgeTypePrompt(const std::vector<std::string>& edgeFiles,
                        const std::vector<const ParquetSchema*>& edgeSchemas) {
     if (edgeFiles.empty()) {
@@ -319,17 +335,7 @@ void runEdgeTypePrompt(const std::vector<std::string>& edgeFiles,
         return;
     }
 
-    ParquetEdgeTypeAnalysis analysis;
-    for (size_t fileIndex = 0; fileIndex < edgeFiles.size(); ++fileIndex) {
-        const fs::Path path(edgeFiles[fileIndex]);
-        ParquetEdgeTypeAnalyzer analyzer(*edgeSchemas[fileIndex], columnName, analysis);
-        ParquetReader reader(path, analyzer);
-        while (reader.nextChunk()) {
-        }
-    }
-
-    std::cout << "\n== Edge type analysis ==\n";
-    printEdgeTypeAnalysis(analysis, columnName);
+    runEdgeTypeAnalysis(edgeFiles, edgeSchemas, columnName);
 }
 
 }
@@ -341,6 +347,7 @@ int main(int argc, const char** argv) {
     std::vector<std::string> nodeFiles;
     std::vector<std::string> edgeFiles;
     std::vector<std::string> propsColumns;
+    std::string edgeTypeColumn;
 
     parser.add_argument("-nodes")
         .metavar("FILE")
@@ -360,6 +367,12 @@ int main(int argc, const char** argv) {
               "If omitted, you will be prompted for a column.")
         .append()
         .store_into(propsColumns);
+
+    parser.add_argument("-edgetype")
+        .metavar("COLUMN")
+        .help("Run edge-type analysis on COLUMN across all edge files. "
+              "If omitted, you will be prompted for a column.")
+        .store_into(edgeTypeColumn);
 
     try {
         parser.parse_args(argc, argv);
@@ -410,7 +423,14 @@ int main(int argc, const char** argv) {
         for (size_t edgeIndex = 0; edgeIndex < edgeFiles.size(); ++edgeIndex) {
             edgeSchemas.push_back(schemas[nodeFiles.size() + edgeIndex].get());
         }
-        runEdgeTypePrompt(edgeFiles, edgeSchemas);
+
+        if (!edgeTypeColumn.empty()) {
+            if (!edgeFiles.empty()) {
+                runEdgeTypeAnalysis(edgeFiles, edgeSchemas, edgeTypeColumn);
+            }
+        } else {
+            runEdgeTypePrompt(edgeFiles, edgeSchemas);
+        }
     } catch (const TuringException& e) {
         std::cerr << e.what() << "\n";
         return EXIT_FAILURE;
