@@ -7,16 +7,6 @@ add_turing_test(test_net_turing_proto_framing TuringProtoFramingTest.cpp)
 target_link_libraries(test_net_turing_proto_framing PRIVATE
     turing_db_proto_common_s)
 
-add_turing_test(test_net_turing_proto_parser TuringProtoParserTest.cpp)
-target_link_libraries(test_net_turing_proto_parser PRIVATE
-    turing_db_turing_proto_server_s)
-
-add_turing_test(test_net_turing_proto_processor TuringProtoServerProcessorTest.cpp)
-target_link_libraries(test_net_turing_proto_processor PRIVATE
-    turing_db_server_s
-    turing_db_turing_proto_server_s
-    turing_testenv_s)
-
 add_turing_test(test_net_turing_proto_roundtrip TuringProtoRoundTripTest.cpp)
 target_link_libraries(test_net_turing_proto_roundtrip PRIVATE
     turing_db_net_encoders

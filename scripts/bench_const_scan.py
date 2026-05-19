@@ -5,7 +5,7 @@ import time
 
 sys.path.insert(0, "/home/ubuntu/turingdb2/python")
 
-from turingdb import TuringClient
+from turingdb import TuringDB
 
 HOST = "http://localhost:6666"
 GRAPH = "reactome"
@@ -130,7 +130,7 @@ SEED_DBIDS = [
 def main():
     print(f"Seed dbIds: {len(SEED_DBIDS)}")
 
-    client = TuringClient(host=HOST)
+    client = TuringDB(host=HOST)
     client.set_graph(GRAPH)
 
     # Step 1: Map dbId -> NodeID

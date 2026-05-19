@@ -65,10 +65,10 @@ bool waitUntilListening(uint16_t port, std::chrono::milliseconds timeout) {
 }
 
 ProtoEnvScope::ProtoEnvScope() {
-    const char* prior = ::getenv("USE_TURING_PROTO");
-    _hadPrior = prior != nullptr;
+    const char* existing = ::getenv("USE_TURING_PROTO");
+    _hadPrior = existing != nullptr;
     if (_hadPrior) {
-        _prior = prior;
+        _prior = existing;
     }
     ::setenv("USE_TURING_PROTO", "1", 1);
 }

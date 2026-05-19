@@ -34,7 +34,6 @@ public:
 
     void copyHeader(const ProtoHeader* header);
     void copyHeader(const ColumnWireHeader* header);
-    void copyHeader(const QueryWireHeader* header);
 
     void copyVarLenData(const void* data, size_t len);
     void copyFixedLenData(const void* data, size_t len);

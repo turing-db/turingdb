@@ -29,12 +29,12 @@ TEST(TuringProtoFramingTest, FramesAndDecodesStringPayload) {
     net::proto::TuringProtoOutBuf outBuf(
         net::proto::ProtoHeader::wireSize() + payload.size());
     outBuf.setOnBufferFullCallBack([]() {});
-    net::proto::frameMessage(net::proto::MessageTypes::QUERY, payload, &outBuf);
+    net::proto::frameMessage(net::proto::MessageTypes::CHUNK, payload, &outBuf);
 
     const std::string_view packet(outBuf.data(), outBuf.size());
     const auto header = net::proto::ProtoHeader::decode(packet.data(), packet.size());
 
-    EXPECT_EQ(header._type, net::proto::MessageTypes::QUERY);
+    EXPECT_EQ(header._type, net::proto::MessageTypes::CHUNK);
     EXPECT_EQ(header._dataLen, payload.size());
     EXPECT_EQ(getPacketPayload(packet, header), payload);
 }
@@ -61,14 +61,14 @@ TEST(TuringProtoFramingTest, EncodesHeaderIntoSeparateBuffer) {
 // array for writev. The header it produces must advertise the data buffer's
 // size so the receiver knows how many bytes follow it on the wire.
 TEST(TuringProtoFramingTest, FrameMessageWithSplitBuffersProducesExpectedHeader) {
-    net::proto::TuringProtoOutBuf headerBuf(net::proto::ProtoHeader::wireSize());
+    std::array<char, net::proto::ProtoHeader::wireSize()> headerBuf{};
     net::proto::TuringProtoOutBuf dataBuf(64);
 
     constexpr std::string_view payload = "chunk-data";
     dataBuf.copyVarLenData(payload.data(), payload.size());
 
     std::array<iovec, 2> iovecs {};
-    net::proto::frameMessage(net::proto::MessageTypes::CHUNK, &headerBuf, &dataBuf, iovecs);
+    net::proto::frameMessage(net::proto::MessageTypes::CHUNK, std::span(headerBuf), &dataBuf, iovecs);
 
     ASSERT_EQ(iovecs[0].iov_len, net::proto::ProtoHeader::wireSize());
     ASSERT_EQ(iovecs[1].iov_len, dataBuf.size());
@@ -108,7 +108,7 @@ TEST(TuringProtoFramingTest, RejectsEncodingHeaderIntoTooSmallBuffer) {
 // representative middle value, and the _SIZE sentinel) are classified
 // correctly so out-of-range bytes can never reach a handler dispatch.
 TEST(TuringProtoFramingTest, ValidatesKnownMessageTypes) {
-    EXPECT_TRUE(net::proto::ProtoHeader::isValidMessageType(net::proto::MessageTypes::NABER));
+    EXPECT_TRUE(net::proto::ProtoHeader::isValidMessageType(net::proto::MessageTypes::CHUNK_HEADER));
     EXPECT_TRUE(net::proto::ProtoHeader::isValidMessageType(net::proto::MessageTypes::ERROR));
     EXPECT_FALSE(net::proto::ProtoHeader::isValidMessageType(
         static_cast<net::proto::MessageTypes>(static_cast<uint8_t>(net::proto::MessageTypes::_SIZE))));

@@ -1,10 +1,10 @@
-from turingdb import TuringClient
+from turingdb import TuringDB
 from graph_utils import new_change, submit_current_change
 import pandas as pd
 
 GRAPH_NAME : str = "simpledb"
 
-def run(client : TuringClient) -> None:
+def run(client : TuringDB) -> None:
   EXPECTED_NODE_IDS : list[int] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,16]
   def query(q : str):
     return client.query(q)

@@ -9,7 +9,7 @@
 namespace net::proto {
 
 bool ProtoHeader::isValidMessageType(MessageTypes type) {
-    return type >= MessageTypes::NABER && type < MessageTypes::_SIZE;
+    return type >= MessageTypes::CHUNK_HEADER && type < MessageTypes::_SIZE;
 }
 
 ProtoHeader ProtoHeader::decode(const char* data, size_t len) {
@@ -35,16 +35,20 @@ void frameMessage(MessageTypes type,
 }
 
 void frameMessage(MessageTypes type,
-                  TuringProtoOutBuf* headerBuf,
+                  std::span<char, ProtoHeader::wireSize()> headerSpan,
                   TuringProtoOutBuf* dataBuf,
-                  std::array<iovec, 2>& iovecs) {
+                  std::span<iovec, 2> iovecs) {
     bioassert(dataBuf->size() <= std::numeric_limits<uint32_t>::max(), "Message data buffer exceeds uint32 maximum");
     const ProtoHeader header {
         ._type = type,
         ._dataLen = static_cast<uint32_t>(dataBuf->size())};
-    headerBuf->copyHeader(&header);
 
-    iovecs[0] = {headerBuf->data(), headerBuf->size()};
+    const size_t sizeOfHeaderType = sizeof(header._type);
+
+    memcpy(headerSpan.data(), &header._type, sizeOfHeaderType);
+    memcpy(headerSpan.data() + sizeOfHeaderType, &header._dataLen, sizeof(header._dataLen));
+
+    iovecs[0] = {headerSpan.data(), headerSpan.size()};
     iovecs[1] = {dataBuf->data(), dataBuf->size()};
 }
 

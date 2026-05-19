@@ -23,39 +23,37 @@ PyTuringClient::PyTuringClient(const std::string& host, const std::string& port)
 
 PyTuringClient::~PyTuringClient() = default;
 
-void PyTuringClient::setCommitHash(const std::string& s) {
-    const auto res = db::CommitHash::fromString(s);
-    if (!res.has_value()) {
-        throw TuringException("Invalid commit hash: " + std::string(res.error()));
+void PyTuringClient::setCommitHash(const std::string& commitHash) {
+    const auto result = db::CommitHash::fromString(commitHash);
+    if (!result.has_value()) {
+        throw TuringException("Invalid commit hash: " + std::string(result.error()));
     }
 
-    _client->setCommitHash(res.value());
+    _client->setCommitHash(result.value());
 }
 
 nb::dict PyTuringClient::query(const std::string& cypher) {
-    db::DataframeManager dfMan;
-    db::Dataframe bufferedDf;
+    db::DataframeManager dataframeManager;
+    db::Dataframe bufferedDataframe;
     // Owning storage for column names — see allocColumns docs.
     std::vector<std::string> nameStorage;
-    bool columnsAlloced = false;
-    db::LocalMemory* localMem = _localMem.get();
+    bool columnsAllocated = false;
+    db::LocalMemory* localMemory = _localMem.get();
 
-    const auto cb = [&bufferedDf, &nameStorage, &columnsAlloced, &dfMan, localMem](const db::Dataframe* df) {
-        if (!columnsAlloced) {
-            allocColumns(df, &bufferedDf, &dfMan, localMem, &nameStorage);
-            columnsAlloced = true;
+    const auto onData = [&bufferedDataframe, &nameStorage, &columnsAllocated, &dataframeManager, localMemory](const db::Dataframe* dataframe) {
+        if (!columnsAllocated) {
+            allocColumns(dataframe, &bufferedDataframe, &dataframeManager, localMemory, &nameStorage);
+            columnsAllocated = true;
         }
-        appendDfs(df, &bufferedDf);
+        appendDfs(dataframe, &bufferedDataframe);
     };
 
-    const db::QueryStatus status = _client->sendQuery(cypher, cb);
+    const db::QueryStatus status = _client->sendQuery(cypher, onData);
     if (!status.isOk()) {
-        // Format errors as "<STATUS>: <message>" (e.g. "EXEC_ERROR: ...") to match
-        // the HTTP transport, which prefixes server errors with the status enum name.
         throw TuringException(std::string(db::QueryStatusDescription::value(status.getStatus())) + ": " + status.getError());
     }
 
-    nb::dict envelope = dataframeToNumpy(&bufferedDf);
+    nb::dict envelope = dataframeToNumpy(&bufferedDataframe);
     envelope["time"] = nb::cast(status.getTotalTime().count());
     return envelope;
 }

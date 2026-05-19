@@ -37,9 +37,9 @@ struct EndToEndResult {
 // One end-to-end run: spin up a server with the requested QueryConfig and
 // proto buffer capacity, seed the graph via the seeder callback, then send
 // the query through a client built with the same buffer capacity (the server
-// can emit a CHUNK as large as its buffer; TuringClient::recvAll truncates to
-// _inBuf.capacity(), so client buffer must be at least as big as server's —
-// equal is the simplest way to guarantee that).
+// can emit a proto payload as large as its buffer; TuringClient::recvChunkBody
+// copies that payload into _inBuf, so client buffer must be at least as big as
+// server's — equal is the simplest way to guarantee that).
 EndToEndResult runEndToEnd(const std::string& outDir,
                            size_t queryChunkRows,
                            size_t bufferCapacity,

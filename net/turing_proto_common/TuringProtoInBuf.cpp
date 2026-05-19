@@ -36,19 +36,6 @@ void TuringProtoInBuf::readHeader(ColumnWireHeader* header) {
     _readOffset += sizeof(header->_encoding);
 }
 
-void TuringProtoInBuf::readHeader(QueryWireHeader* header) {
-    ensureReadable(QueryWireHeader::wireSize());
-
-    memcpy(&header->_commitHash, readPtr(), sizeof(header->_commitHash));
-    _readOffset += sizeof(header->_commitHash);
-    memcpy(&header->_changeID, readPtr(), sizeof(header->_changeID));
-    _readOffset += sizeof(header->_changeID);
-    memcpy(&header->_graphNameLen, readPtr(), sizeof(header->_graphNameLen));
-    _readOffset += sizeof(header->_graphNameLen);
-    memcpy(&header->_queryLen, readPtr(), sizeof(header->_queryLen));
-    _readOffset += sizeof(header->_queryLen);
-}
-
 void TuringProtoInBuf::readData(void* dest, size_t len) {
     ensureReadable(len);
 

@@ -1,11 +1,11 @@
 #pragma once
 
 #include <stdint.h>
+#include <array>
 #include <string>
 
 #include "EmbeddingBuffer.h"
 #include "TuringProtoInBuf.h"
-#include "TuringProtoOutBuf.h"
 #include "TuringProtoHeaders.h"
 #include "QueryCallbacks.h"
 #include "QueryStatus.h"
@@ -26,18 +26,21 @@ public:
     TuringClient(const std::string& remoteAddress,
                  const std::string& remotePort,
                  db::LocalMemory* localMem,
-                 size_t bufferCapacity = DEFAULT_BUFFER_CAPACITY);
+                 size_t bufferCapacity = net::proto::DEFAULT_BUFFER_CAPACITY);
     ~TuringClient();
+
+    TuringClient(const TuringClient&) = delete;
+    TuringClient(TuringClient&&) = delete;
+    TuringClient& operator=(const TuringClient&) = delete;
+    TuringClient& operator=(TuringClient&&) = delete;
 
     void connect();
     void disconnect();
-    ProtoHeader sendHello();
-    bool setUpConnection();
+
     db::QueryStatus sendQuery(const std::string& query,
                               const db::QueryCallbacks::OnOutputData& callback);
-    void setRemoteAddress(const std::string& remoteAddress) {
-        _remoteAddress = remoteAddress;
-    }
+
+    void setRemoteAddress(const std::string& remoteAddress) { _remoteAddress = remoteAddress; }
     void setRemotePort(const std::string& remotePort) { _remotePort = remotePort; }
     void setGraphName(const std::string& graphName) { _graphName = graphName; }
     void setCommitHash(db::CommitHash commitHash) { _commitHash = commitHash; }
@@ -49,11 +52,13 @@ public:
     std::string_view getRemotePort() const { return _remotePort; }
     std::string_view getGraphName() const { return _graphName; }
 
-    EmbeddingBuffer& getEmbeddingBuffer() { return _embeddingBuffer; }
+    net::proto::EmbeddingBuffer& getEmbeddingBuffer() { return _embeddingBuffer; }
     db::CommitHash getCommitHash() const { return _commitHash; }
     db::ChangeID getChangeID() const { return _changeID; }
 
 private:
+    static constexpr size_t HTTP_SCRATCH_CAPACITY = 1024;
+
     std::string _remoteAddress;
     std::string _remotePort;
     std::string _graphName {"default"};
@@ -61,12 +66,34 @@ private:
     db::ChangeID _changeID {db::ChangeID::head()};
     int _socket {-1};
     db::LocalMemory* _localMem {nullptr};
-    TuringProtoOutBuf _outBuf;
-    TuringProtoInBuf _inBuf;
-    EmbeddingBuffer _embeddingBuffer;
 
-    ProtoHeader send();
-    void recvAll(size_t recvLen);
-    ProtoHeader recvMsgHeader();
+    // HTTP framing scratch buffer used to store the variable length http headers that
+    // will come in. Some of the request body might be recvd into this buffer but we
+    // will drain it out during the recv phase for the body
+    std::array<char, HTTP_SCRATCH_CAPACITY> _httpScratch {};
+    size_t _scratchHead {0};
+    size_t _scratchTail {0};
+
+    // ProtoHeader for the proto packet inside the current chunk (5 bytes).
+    std::array<char, net::proto::ProtoHeader::wireSize()> _protoHeaderBuf {};
+
+    // Proto packet payload for the current chunk; passed to TuringProtoDecoder unmodified.
+    net::proto::TuringProtoInBuf _inBuf;
+
+    net::proto::EmbeddingBuffer _embeddingBuffer;
+
+    void sendRequest(const std::string& query);
+    void recvHttpResponseHeaders();
+    size_t recvChunkSizeLine();
+    void recvChunkBody(size_t chunkSize, net::proto::ProtoHeader* outHeader);
+    void recvCrlf();
+
+    // Lower-level recv that drains _httpScratch first and then reads from the socket
+    // until exactly len bytes have been written to dst.
+    void recvExactly(void* dst, size_t len);
+
+    // Fills _httpScratch with one socket recv; throws on EOF.
+    void fillScratch();
 };
+
 }

@@ -10,7 +10,6 @@ namespace net::proto {
 
 struct ProtoHeader;
 struct ColumnWireHeader;
-struct QueryWireHeader;
 
 class TuringProtoInBuf {
 public:
@@ -42,7 +41,6 @@ public:
 
     void readHeader(ProtoHeader* header);
     void readHeader(ColumnWireHeader* header);
-    void readHeader(QueryWireHeader* header);
 
     void readData(void* dest, size_t len);
     void ensureReadable(size_t len) const;
