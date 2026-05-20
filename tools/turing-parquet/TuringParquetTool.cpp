@@ -38,6 +38,7 @@ using namespace db;
 
 namespace {
 
+// Format a JSON property value type for the analysis printout (e.g. "string", "nullable integer", "mixed").
 std::string propertyTypeLabel(const ParquetPropertyType& propertyType) {
     if (propertyType.isMixed()) {
         return "mixed";
@@ -51,6 +52,7 @@ std::string propertyTypeLabel(const ParquetPropertyType& propertyType) {
     return typeName;
 }
 
+// Recursively print one schema field in parquet-tools-like indented form.
 void printField(const ParquetSchemaField& field, size_t depth) {
     const std::string indent(depth * 2, ' ');
     const char* repetition = ParquetSchema::toString(field.getRepetition());
@@ -87,6 +89,7 @@ void printField(const ParquetSchemaField& field, size_t depth) {
     }
 }
 
+// Print the parquet file header (created-by, version, counts) followed by its schema fields.
 void printSchema(const ParquetSchema& schema) {
     std::cout << "Created by: " << schema.getCreatedBy() << "\n";
     std::cout << "Version:    " << schema.getVersion() << "\n";
@@ -103,6 +106,7 @@ void printSchema(const ParquetSchema& schema) {
     }
 }
 
+// Print the per-column property analysis: value-type breakdown, property type table, and array/object previews.
 void printPropertyAnalysis(const ParquetPropertyAnalysis& analysis,
                            const std::string& columnName) {
     std::cout << "Property analysis for column '" << columnName << "':\n";
@@ -175,6 +179,7 @@ void printPropertyAnalysis(const ParquetPropertyAnalysis& analysis,
     }
 }
 
+// Run the schema extractor and JSON-shape detector visitors over one parquet file, populating `schema`.
 void buildSchema(const fs::Path& path, ParquetSchema& schema) {
     {
         ParquetSchemaExtractor extractor(schema);
@@ -190,6 +195,7 @@ void buildSchema(const fs::Path& path, ParquetSchema& schema) {
     }
 }
 
+// Format a graph property's type with a `?` suffix for nullable and a "raw JSON" tag when applicable.
 std::string propertyTypeString(const ParquetGraphProperty& property) {
     std::string typeString = ParquetGraphMapping::toString(property.getType());
     if (property.isNullable()) {
@@ -201,6 +207,7 @@ std::string propertyTypeString(const ParquetGraphProperty& property) {
     return typeString;
 }
 
+// Render a label's property list as a `tabulate` ASCII table.
 void renderPropertiesTable(const ParquetGraphLabel& label) {
     tabulate::Table table;
     table.add_row({"name", "type"});
@@ -219,6 +226,7 @@ void renderPropertiesTable(const ParquetGraphLabel& label) {
     std::cout << table << "\n";
 }
 
+// Build a sub-label header line ("path :Label cardinality (nullable)") for the graph mapping printout.
 std::string labelHeader(const ParquetGraphLabel& label, const std::string& path) {
     std::string header = path;
     if (!label.getInferredLabel().empty()) {
@@ -233,6 +241,7 @@ std::string labelHeader(const ParquetGraphLabel& label, const std::string& path)
     return header;
 }
 
+// Recursively render a label's header and properties table, then descend into its sub-labels.
 void renderLabelTables(const ParquetGraphLabel& label, const std::string& path) {
     std::cout << "\n" << labelHeader(label, path) << "\n";
     if (label.getProperties().empty()) {
@@ -250,6 +259,7 @@ void renderLabelTables(const ParquetGraphLabel& label, const std::string& path) 
     }
 }
 
+// Print the full graph mapping derived from one column: root properties, sub-record labels, and warnings.
 void printGraphMapping(const ParquetGraphMapping& mapping) {
     std::cout << "Graph mapping for column '" << mapping.getColumnName() << "':\n";
 
@@ -275,6 +285,7 @@ void printGraphMapping(const ParquetGraphMapping& mapping) {
     }
 }
 
+// Merge the property analysis across all files for one column, print it, and derive the graph mapping.
 void runMergedPropertyAnalysis(const std::vector<std::string>& files,
                                const std::vector<std::unique_ptr<ParquetSchema>>& schemas,
                                const std::string& columnName,
@@ -301,6 +312,7 @@ void runMergedPropertyAnalysis(const std::vector<std::string>& files,
     printGraphMapping(outMapping);
 }
 
+// Return true if the schema's root has a top-level field with this name.
 bool fileHasTopLevelColumn(const ParquetSchema& schema, const std::string& name) {
     const ParquetSchemaField& root = schema.getRoot();
     const size_t childCount = root.getChildCount();
@@ -312,6 +324,7 @@ bool fileHasTopLevelColumn(const ParquetSchema& schema, const std::string& name)
     return false;
 }
 
+// Strip leading and trailing ASCII whitespace from a string.
 std::string trimWhitespace(const std::string& value) {
     const size_t start = value.find_first_not_of(" \t\r\n");
     if (start == std::string::npos) {
@@ -321,6 +334,7 @@ std::string trimWhitespace(const std::string& value) {
     return value.substr(start, end - start + 1);
 }
 
+// Prompt for the column to analyze (default "properties" when present across all files) and run the merged analysis.
 void runMergedPropertyPrompt(const std::vector<std::string>& files,
                              const std::vector<std::unique_ptr<ParquetSchema>>& schemas,
                              std::string& outColumnName,
@@ -356,6 +370,7 @@ void runMergedPropertyPrompt(const std::vector<std::string>& files,
     runMergedPropertyAnalysis(files, schemas, columnName, outMapping);
 }
 
+// Print the edge type breakdown for one column (counts and percentages, sorted by frequency).
 void printEdgeTypeAnalysis(const ParquetEdgeTypeAnalysis& analysis,
                            const std::string& columnName) {
     std::cout << "Edge type analysis on column '" << columnName << "':\n";
@@ -390,6 +405,7 @@ void printEdgeTypeAnalysis(const ParquetEdgeTypeAnalysis& analysis,
     }
 }
 
+// Run the edge type analyzer across all edge files for one column and print the result.
 void runEdgeTypeAnalysis(const std::vector<std::string>& edgeFiles,
                          const std::vector<const ParquetSchema*>& edgeSchemas,
                          const std::string& columnName) {
@@ -406,6 +422,7 @@ void runEdgeTypeAnalysis(const std::vector<std::string>& edgeFiles,
     printEdgeTypeAnalysis(analysis, columnName);
 }
 
+// Prompt for the edge-type column to analyze (default "relation" if present) and run the analysis.
 void runEdgeTypePrompt(const std::vector<std::string>& edgeFiles,
                        const std::vector<const ParquetSchema*>& edgeSchemas) {
     if (edgeFiles.empty()) {
