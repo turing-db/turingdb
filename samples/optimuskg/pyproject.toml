@@ -1,0 +1,8 @@
+[project]
+name = "optimuskg-sample"
+version = "0.1.0"
+description = "Sample: download the OptimusKG biomedical knowledge graph parquet files and import them into TuringDB."
+requires-python = ">=3.12"
+dependencies = [
+    "optimuskg",
+]
