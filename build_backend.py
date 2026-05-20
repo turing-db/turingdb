@@ -63,6 +63,14 @@ def _get_package_extensions_dir() -> Path:
     return _get_project_root() / "python" / "turingdb" / "lib" / "turingdb" / "extensions"
 
 
+def _strip_binary(path: Path) -> None:
+    """Strip debug symbols from a built binary or shared library."""
+    strip = shutil.which("strip")
+    if strip is None:
+        return
+    subprocess.check_call([strip, str(path)])
+
+
 def _run_cmake_build():
     """Run cmake configure, build, and install."""
     source_dir = _get_project_root()
@@ -164,13 +172,25 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             shutil.copy2(src, dest)
             os.chmod(dest, 0o755)
             copied_binaries.append(dest)
+            _strip_binary(dest)
 
         # Copy extension shared libraries (.so on Linux, .dylib on macOS)
         if ext_src_dir.exists() and not ext_dest_dir.exists():
             ext_dest_dir.mkdir(parents=True, exist_ok=True)
             copied_extensions = True
             for ext_file in list(ext_src_dir.glob("*.so")) + list(ext_src_dir.glob("*.dylib")):
-                shutil.copy2(ext_file, ext_dest_dir / ext_file.name)
+                dest = ext_dest_dir / ext_file.name
+                shutil.copy2(ext_file, dest)
+                _strip_binary(dest)
+
+        # Strip native pybind11 modules produced by the cmake build, but leave
+        # any pre-existing ones alone (a developer's editable install).
+        for native_file in list(binary_dir.glob("_turingproto*.so")) + list(binary_dir.glob("_turingproto*.pyd")):
+            if native_file.name not in binary_pre_existing:
+                _strip_binary(native_file)
+        for native_file in list(local_dir.glob("_turinglocal*.so")) + list(local_dir.glob("_turinglocal*.pyd")):
+            if native_file.name not in local_pre_existing:
+                _strip_binary(native_file)
 
         # Build the wheel using setuptools
         wheel_name = backend.build_wheel(
