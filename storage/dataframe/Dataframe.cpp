@@ -4,8 +4,10 @@
 #include <sstream>
 
 #include "NamedColumn.h"
+#include "columns/AllowedKinds.h"
 #include "columns/Column.h"
-#include "columns/ColumnDispatcher.h"
+#include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnVector.h"
 
 #include "FatalException.h"
 #include "columns/ContainerKind.h"
@@ -127,11 +129,9 @@ void Dataframe::copyFromLine(const Dataframe* other, size_t startRow, size_t row
 }
 
 void Dataframe::append(const Dataframe* other) {
-    if (this->size() != other->size()) {
-        throw FatalException(fmt::format(
-            "Attempted to append a Dataframe of size {} to a Dataframe of size {}.",
-            other->size(), this->size()));
-    }
+    bioassert(this->size() == other->size(),
+              "Attempted to append a Dataframe of size {} to a Dataframe of size {}.",
+              other->size(), this->size());
 
     const size_t oldRows = this->getLogicalRowCount();
     const size_t addRows = other->getLogicalRowCount();
@@ -140,27 +140,32 @@ void Dataframe::append(const Dataframe* other) {
     const NamedColumns& otherCols = other->cols();
 
     for (size_t i = 0; i < _cols.size(); i++) {
-        NamedColumn* dstNamed = _cols[i];
-        NamedColumn* srcNamed = otherCols[i];
+        Column* dst = _cols[i]->getColumn();
+        const Column* src = otherCols[i]->getColumn();
 
-        Column* dst = dstNamed->getColumn();
-        Column* src = srcNamed->getColumn();
+        const auto appendCol = [dst, oldRows, newRows]
+                         <template <typename> class Container, typename T>
+                         (const Container<T>* srcCol) {
+            auto* dstVec = dynamic_cast<ColumnVector<T>*>(dst);
+            bioassert(dstVec, "Invalid destination vector to append.");
 
-        dispatchColumnVector(dst, [&](auto* dstColumnVector) {
-            using T = typename std::remove_reference_t<decltype(dstColumnVector->getRaw())>::value_type;
+            dstVec->resize(newRows);
+            auto& dstRaw = dstVec->getRaw();
 
-            dstColumnVector->resize(newRows);
-            auto& dstRaw = dstColumnVector->getRaw();
-
-            if (const auto* srcConst = dynamic_cast<const ColumnConst<T>*>(src)) {
-                std::fill(begin(dstRaw) + oldRows, end(dstRaw), srcConst->getRaw());
-            } else if (const auto* srcVec = dynamic_cast<const ColumnVector<T>*>(src)) {
-                const auto& srcRaw = srcVec->getRaw();
-                std::copy(begin(srcRaw), end(srcRaw), begin(dstRaw) + oldRows);
+            if constexpr (std::is_same_v<Container<T>, ColumnConst<T>>) {
+                auto start = begin(dstRaw) + oldRows;
+                const T& value = srcCol->getRaw();
+                std::fill(start, end(dstRaw), value);
             } else {
-                throw FatalException("Unknown source column type.");
+                const std::vector<T>& srcRaw = srcCol->getRaw();
+                auto fromIt = begin(dstRaw) + oldRows;
+                std::ranges::copy(srcRaw, fromIt);
             }
-        });
+        };
+
+        using Types = CartesianProductKinds;
+        using Dispatcher = ColumnSingleDispatcher<Types::Allowed, decltype(appendCol), Types::Excluded>;
+        Dispatcher::dispatch(src, appendCol);
     }
 }
 
