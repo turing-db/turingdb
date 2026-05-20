@@ -20,6 +20,7 @@ namespace {
 
 constexpr size_t MAX_PREVIEW_LENGTH = 120;
 
+// Count the total number of leaf (non-group) fields under a schema field, recursively.
 size_t countLeaves(const ParquetSchemaField& field) {
     if (!field.isGroup()) {
         return 1;
@@ -33,6 +34,7 @@ size_t countLeaves(const ParquetSchemaField& field) {
     return total;
 }
 
+// Map a `nlohmann::json` value's runtime tag to a `ParquetJsonValueType`.
 ParquetJsonValueType jsonTypeOf(const nlohmann::json& value) {
     switch (value.type()) {
         case nlohmann::json::value_t::null:
@@ -63,6 +65,7 @@ ParquetJsonValueType jsonTypeOf(const nlohmann::json& value) {
     }
 }
 
+// Build a `"key": value` preview string, truncated with an ellipsis when longer than MAX_PREVIEW_LENGTH.
 std::string buildPreview(const std::string& key, const nlohmann::json& value) {
     std::string preview = "\"" + key + "\": " + value.dump();
     if (preview.size() > MAX_PREVIEW_LENGTH) {
@@ -72,6 +75,7 @@ std::string buildPreview(const std::string& key, const nlohmann::json& value) {
     return preview;
 }
 
+// Walk a JSON value and record types into `propertyType`, recursing into object sub-properties and array elements.
 void recordJsonRecursive(ParquetPropertyType& propertyType, const nlohmann::json& value) {
     const ParquetJsonValueType type = jsonTypeOf(value);
     propertyType.recordValue(type);

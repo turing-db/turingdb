@@ -25,6 +25,7 @@ using namespace db;
 
 namespace {
 
+// Return true if the schema has a top-level field with this name and it is a BYTE_ARRAY primitive.
 bool isTopLevelByteArray(const ParquetSchema& schema, const std::string& name) {
     const ParquetSchemaField& root = schema.getRoot();
     const size_t childCount = root.getChildCount();
@@ -41,6 +42,7 @@ bool isTopLevelByteArray(const ParquetSchema& schema, const std::string& name) {
     return false;
 }
 
+// Throw if the schema lacks a top-level BYTE_ARRAY column with this name; `role` describes it in the message.
 void requireByteArrayColumn(const ParquetSchema& schema,
                             const std::string& name,
                             const std::string& role) {
@@ -52,6 +54,7 @@ void requireByteArrayColumn(const ParquetSchema& schema,
     }
 }
 
+// Find a child sub-label by name on `parent`, returning nullptr when not present.
 const ParquetGraphLabel* findSubLabel(const ParquetGraphLabel& parent,
                                       const std::string& name) {
     for (const auto& subLabel : parent.getSubLabels()) {
@@ -62,6 +65,7 @@ const ParquetGraphLabel* findSubLabel(const ParquetGraphLabel& parent,
     return nullptr;
 }
 
+// Find a property by name on `label`, returning nullptr when not present.
 const ParquetGraphProperty* findProperty(const ParquetGraphLabel& label,
                                          const std::string& name) {
     for (const auto& property : label.getProperties()) {
@@ -72,6 +76,7 @@ const ParquetGraphProperty* findProperty(const ParquetGraphLabel& label,
     return nullptr;
 }
 
+// Convert an arbitrary string to UPPER_SNAKE_CASE for use as an edge relation type.
 std::string toUpperSnake(std::string_view value) {
     std::string result;
     result.reserve(value.size());
@@ -91,6 +96,7 @@ std::string toUpperSnake(std::string_view value) {
     return result;
 }
 
+// Map a `ParquetGraphProperty` to the corresponding TuringDB column `ValueType` (raw-JSON stores as String).
 ValueType propertyValueType(const ParquetGraphProperty& property) {
     if (property.isRawJson()) {
         return ValueType::String;

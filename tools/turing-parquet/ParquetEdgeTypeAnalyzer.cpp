@@ -17,6 +17,7 @@ using namespace db;
 
 namespace {
 
+// Count the total number of leaf (non-group) fields under a schema field, recursively.
 size_t countLeaves(const ParquetSchemaField& field) {
     if (!field.isGroup()) {
         return 1;
