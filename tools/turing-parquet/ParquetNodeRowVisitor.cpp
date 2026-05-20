@@ -15,6 +15,7 @@ using namespace db;
 
 namespace {
 
+// Count the total number of leaf (non-group) fields under a schema field, recursively.
 size_t countLeaves(const ParquetSchemaField& field) {
     if (!field.isGroup()) {
         return 1;
@@ -28,6 +29,7 @@ size_t countLeaves(const ParquetSchemaField& field) {
     return total;
 }
 
+// Return the zero-based leaf-column index of a named top-level field, throwing if it is absent.
 size_t resolveLeafIndex(const ParquetSchema& schema, const std::string& name) {
     const ParquetSchemaField& root = schema.getRoot();
     const size_t childCount = root.getChildCount();

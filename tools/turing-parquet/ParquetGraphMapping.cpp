@@ -11,6 +11,7 @@ using namespace db;
 
 namespace {
 
+// Derive a CapitalisedSingular label name from a snake_case property name (e.g. "canonical_exons" -> "CanonicalExon").
 std::string inferLabelFromName(const std::string& propertyName) {
     std::vector<std::string> words;
     std::string current;
@@ -41,6 +42,7 @@ std::string inferLabelFromName(const std::string& propertyName) {
     return label;
 }
 
+// Walk a label tree and set the inferred label name on each sub-label.
 void applyLabelInference(ParquetGraphLabel& label) {
     label.setInferredLabel(inferLabelFromName(label.getName()));
     for (const auto& subLabel : label.getSubLabels()) {
@@ -48,6 +50,7 @@ void applyLabelInference(ParquetGraphLabel& label) {
     }
 }
 
+// Return true if the JSON value type is a scalar (boolean, integer, float, or string).
 bool isPrimitive(ParquetJsonValueType type) {
     const bool boolType = type == ParquetJsonValueType::BOOLEAN;
     const bool integerType = type == ParquetJsonValueType::INTEGER;
@@ -56,6 +59,7 @@ bool isPrimitive(ParquetJsonValueType type) {
     return boolType || integerType || floatType || stringType;
 }
 
+// Map a primitive `ParquetJsonValueType` to its `ParquetTuringType` equivalent.
 ParquetTuringType toTuringType(ParquetJsonValueType type) {
     switch (type) {
         case ParquetJsonValueType::BOOLEAN:
@@ -76,6 +80,7 @@ ParquetTuringType toTuringType(ParquetJsonValueType type) {
     }
 }
 
+// Append a string-typed property to `parent` whose value is stored as the original JSON text.
 void addRawJsonProperty(ParquetGraphLabel& parent,
                         const std::string& name,
                         bool isNullable) {
@@ -86,6 +91,7 @@ void addRawJsonProperty(ParquetGraphLabel& parent,
     property.setRawJson(true);
 }
 
+// Append a primitive-typed property to `parent`, mapping the JSON value type to a Turing type.
 void addPrimitiveProperty(ParquetGraphLabel& parent,
                           const std::string& name,
                           ParquetJsonValueType valueType,
@@ -96,6 +102,7 @@ void addPrimitiveProperty(ParquetGraphLabel& parent,
     property.setNullable(isNullable);
 }
 
+// Join a parent path and a property name with a dot separator (returning `name` alone when parent is empty).
 std::string joinPath(const std::string& parentPath, const std::string& name) {
     if (parentPath.empty()) {
         return name;
@@ -109,6 +116,7 @@ void addPropertyEntry(ParquetGraphLabel& parent,
                       const std::string& parentPath,
                       ParquetGraphMapping& mapping);
 
+// Add each object key as a property entry under `label`.
 void populateFromObjectKeys(ParquetGraphLabel& label,
                             const ParquetPropertyType::SubPropertyMap& subProperties,
                             const std::string& objectPath,
@@ -118,6 +126,7 @@ void populateFromObjectKeys(ParquetGraphLabel& label,
     }
 }
 
+// Expand an array's element type under `label`: object elements become sub-properties; scalars become a single "value" property; mixed/nested-array elements fall back to raw JSON with a warning.
 void populateFromArrayElement(ParquetGraphLabel& label,
                               const ParquetPropertyType* elementType,
                               const std::string& arrayPath,
@@ -147,6 +156,7 @@ void populateFromArrayElement(ParquetGraphLabel& label,
     }
 }
 
+// Append one analysed property under `parent`: scalars inline, mixed/all-null as raw JSON, objects/arrays as sub-labels.
 void addPropertyEntry(ParquetGraphLabel& parent,
                       const std::string& name,
                       const ParquetPropertyType& propertyType,

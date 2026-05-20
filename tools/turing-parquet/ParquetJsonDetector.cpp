@@ -15,6 +15,7 @@ using namespace db;
 
 namespace {
 
+// Recursively collect pointers to every leaf field in a schema tree into `outLeaves`.
 void collectLeaves(ParquetSchemaField& field,
                    std::vector<ParquetSchemaField*>& outLeaves) {
     if (field.isGroup()) {
@@ -27,6 +28,7 @@ void collectLeaves(ParquetSchemaField& field,
     }
 }
 
+// Classify a BYTE_ARRAY value as KEY_VALUE (JSON object), GENERAL (other valid JSON), or NONE (empty or invalid).
 ParquetJsonShape classifyJson(const parquet::ByteArray& value) {
     if (value.len == 0) {
         return ParquetJsonShape::NONE;

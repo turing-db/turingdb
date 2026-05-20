@@ -4,6 +4,7 @@ using namespace db;
 
 namespace {
 
+// Merge `source` into `target`: accumulate counts, propagate nullable/mixed, reconcile value types, and recurse into sub-properties and the array element type.
 void mergePropertyType(const ParquetPropertyType& source, ParquetPropertyType& target) {
     target.addCount(source.getCount());
     if (source.isNullable()) {
