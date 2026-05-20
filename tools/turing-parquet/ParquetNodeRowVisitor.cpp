@@ -54,7 +54,8 @@ ParquetNodeRowVisitor::ParquetNodeRowVisitor(const ParquetSchema& schema,
 {
 }
 
-ParquetNodeRowVisitor::~ParquetNodeRowVisitor() = default;
+ParquetNodeRowVisitor::~ParquetNodeRowVisitor() {
+}
 
 bool ParquetNodeRowVisitor::onByteArrayValues(size_t columnIndex,
                                               std::span<const parquet::ByteArray> values) {
@@ -77,8 +78,8 @@ bool ParquetNodeRowVisitor::onByteArrayValues(size_t columnIndex,
     return true;
 }
 
-bool ParquetNodeRowVisitor::onChunkEnd(size_t /*rowGroupIndex*/,
-                                       size_t /*firstRowInRowGroup*/,
+bool ParquetNodeRowVisitor::onChunkEnd(size_t rowGroupIndex,
+                                       size_t firstRowInRowGroup,
                                        size_t rows) {
     for (size_t rowIndex = 0; rowIndex < rows; ++rowIndex) {
         const std::string_view id = (rowIndex < _ids.size()) ? std::string_view(_ids[rowIndex]) : std::string_view();

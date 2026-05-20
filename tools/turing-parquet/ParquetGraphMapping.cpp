@@ -18,12 +18,12 @@ std::string inferLabelFromName(const std::string& propertyName) {
         if (isalpha(static_cast<unsigned char>(ch))) {
             current.push_back(ch);
         } else if (!current.empty()) {
-            words.push_back(std::move(current));
+            words.push_back(current);
             current.clear();
         }
     }
     if (!current.empty()) {
-        words.push_back(std::move(current));
+        words.push_back(current);
     }
 
     std::string label;
@@ -126,39 +126,24 @@ void populateFromArrayElement(ParquetGraphLabel& label,
         addRawJsonProperty(label, "value", false);
         mapping.addWarning(fmt::format("'{}' arrays were always empty — element type unknown",
                                        arrayPath));
-        return;
-    }
-
-    if (elementType->isMixed()) {
+    } else if (elementType->isMixed()) {
         addRawJsonProperty(label, "value", elementType->isNullable());
         mapping.addWarning(fmt::format("'{}[]' has mixed element types — emitted as raw JSON string",
                                        arrayPath));
-        return;
-    }
-
-    const ParquetJsonValueType elementValueType = elementType->getValueType();
-
-    if (elementValueType == ParquetJsonValueType::NIL) {
-        addPrimitiveProperty(label, "value", ParquetJsonValueType::STRING, false);
-        return;
-    }
-
-    if (isPrimitive(elementValueType)) {
-        addPrimitiveProperty(label, "value", elementValueType, elementType->isNullable());
-        return;
-    }
-
-    if (elementValueType == ParquetJsonValueType::OBJECT) {
-        const std::string innerPath = arrayPath + "[]";
-        populateFromObjectKeys(label, elementType->getSubProperties(), innerPath, mapping);
-        return;
-    }
-
-    if (elementValueType == ParquetJsonValueType::ARRAY) {
-        addRawJsonProperty(label, "value", elementType->isNullable());
-        mapping.addWarning(fmt::format("'{}[]' contains nested arrays — emitted as raw JSON string",
-                                       arrayPath));
-        return;
+    } else {
+        const ParquetJsonValueType elementValueType = elementType->getValueType();
+        if (elementValueType == ParquetJsonValueType::NIL) {
+            addPrimitiveProperty(label, "value", ParquetJsonValueType::STRING, false);
+        } else if (isPrimitive(elementValueType)) {
+            addPrimitiveProperty(label, "value", elementValueType, elementType->isNullable());
+        } else if (elementValueType == ParquetJsonValueType::OBJECT) {
+            const std::string innerPath = arrayPath + "[]";
+            populateFromObjectKeys(label, elementType->getSubProperties(), innerPath, mapping);
+        } else if (elementValueType == ParquetJsonValueType::ARRAY) {
+            addRawJsonProperty(label, "value", elementType->isNullable());
+            mapping.addWarning(fmt::format("'{}[]' contains nested arrays — emitted as raw JSON string",
+                                           arrayPath));
+        }
     }
 }
 
@@ -173,35 +158,22 @@ void addPropertyEntry(ParquetGraphLabel& parent,
     if (propertyType.isMixed()) {
         addRawJsonProperty(parent, name, propertyType.isNullable());
         mapping.addWarning(fmt::format("'{}' has mixed types — emitted as raw JSON string", path));
-        return;
-    }
-
-    if (valueType == ParquetJsonValueType::NIL) {
+    } else if (valueType == ParquetJsonValueType::NIL) {
         addPrimitiveProperty(parent, name, ParquetJsonValueType::STRING, false);
-        return;
-    }
-
-    if (isPrimitive(valueType)) {
+    } else if (isPrimitive(valueType)) {
         addPrimitiveProperty(parent, name, valueType, propertyType.isNullable());
-        return;
-    }
-
-    if (valueType == ParquetJsonValueType::OBJECT) {
+    } else if (valueType == ParquetJsonValueType::OBJECT) {
         ParquetGraphLabel& subLabel = parent.addSubLabel();
         subLabel.setName(name);
         subLabel.setCardinality(ParquetEdgeCardinality::ONE);
         subLabel.setNullable(propertyType.isNullable());
         populateFromObjectKeys(subLabel, propertyType.getSubProperties(), path, mapping);
-        return;
-    }
-
-    if (valueType == ParquetJsonValueType::ARRAY) {
+    } else if (valueType == ParquetJsonValueType::ARRAY) {
         ParquetGraphLabel& subLabel = parent.addSubLabel();
         subLabel.setName(name);
         subLabel.setCardinality(ParquetEdgeCardinality::MANY);
         subLabel.setNullable(propertyType.isNullable());
         populateFromArrayElement(subLabel, propertyType.getElementType(), path, mapping);
-        return;
     }
 }
 

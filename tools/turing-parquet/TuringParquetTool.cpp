@@ -574,8 +574,7 @@ int main(int argc, const char** argv) {
             std::cerr << "Cannot import without a resolved property column "
                          "(use -props COLUMN or accept the prompt default).\n";
             return EXIT_FAILURE;
-        }
-        if (!edgeFiles.empty() && resolvedEdgeTypeColumn.empty()) {
+        } else if (!edgeFiles.empty() && resolvedEdgeTypeColumn.empty()) {
             std::cerr << "Cannot import edges without a resolved edge-type "
                          "column (use -edgetype COLUMN).\n";
             return EXIT_FAILURE;
