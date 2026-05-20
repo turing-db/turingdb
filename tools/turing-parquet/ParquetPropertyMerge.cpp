@@ -51,6 +51,7 @@ void ParquetPropertyMerge::merge(const ParquetPropertyAnalysis& source) {
     for (const std::string& preview : source.getArrayPreviews()) {
         _merged.recordArrayPreview(preview);
     }
+    
     for (const std::string& preview : source.getObjectPreviews()) {
         _merged.recordObjectPreview(preview);
     }
