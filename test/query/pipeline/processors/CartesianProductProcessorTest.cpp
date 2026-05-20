@@ -1554,9 +1554,11 @@ TEST_F(CartesianProductProcessorTest, constLhsColumn) {
             }
         }
         {
-            const auto* col = df->cols().at(1)->as<ConstNodeIDs>();
-            ASSERT_TRUE(col != nullptr);
-            EXPECT_EQ(col->getRaw(), CONST_LHS_VAL);
+            const ColumnNodeIDs expected = {42, 42, 42, 42, 42, 42};
+            const auto* col = df->cols().at(1)->as<ColumnNodeIDs>();
+            for (const auto& [exp, actual] : rv::zip(expected, *col)) {
+                EXPECT_EQ(exp, actual);
+            }
         }
         {
             const ColumnNodeIDs expected = {10, 20, 10, 20, 10, 20};
@@ -1660,15 +1662,121 @@ TEST_F(CartesianProductProcessorTest, constRhsColumn) {
             }
         }
         {
-            const auto* col = df->cols().at(2)->as<ConstNodeIDs>();
-            ASSERT_TRUE(col != nullptr);
-            EXPECT_EQ(col->getRaw(), CONST_RHS_VAL);
+            const ColumnNodeIDs expected = {99, 99, 99, 99, 99, 99};
+            const auto* col = df->cols().at(2)->as<ColumnNodeIDs>();
+            for (const auto& [exp, actual] : rv::zip(expected, *col)) {
+                EXPECT_EQ(exp, actual);
+            }
         }
     };
 
     _builder->addLambda(VERIFY_CALLBACK);
     EXECUTE(view, LHS_NUM_ROWS * RHS_NUM_ROWS);
     ASSERT_TRUE(executed);
+}
+
+TEST_F(CartesianProductProcessorTest, constValueChangesAcrossChunks) {
+    using ConstNodeIDs = ColumnConst<NodeID>;
+
+    auto [transaction, view, reader] = readGraph();
+
+    const NodeID CONST_VAL_1 = NodeID(42);
+    const NodeID CONST_VAL_2 = NodeID(99);
+
+    // LHS emits two separate chunks:
+    //   chunk 1: vecCol=[1], constCol=42  (isFinished=false)
+    //   chunk 2: vecCol=[2], constCol=99  (isFinished=true)
+    // The memory bank must store both const values as a ColumnVector [42, 99],
+    // not as a ColumnConst (which could only hold one value).
+    int lhsCallCount = 0;
+    const auto genLDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        lhsCallCount++;
+        auto* vecCol = dynamic_cast<ColumnNodeIDs*>(df->cols()[0]->getColumn());
+        auto* constCol = dynamic_cast<ConstNodeIDs*>(df->cols()[1]->getColumn());
+        if (lhsCallCount == 1) {
+            vecCol->push_back(1);
+            constCol->set(CONST_VAL_1);
+        } else {
+            vecCol->push_back(2);
+            constCol->set(CONST_VAL_2);
+            isFinished = true;
+        }
+    };
+
+    // RHS emits one chunk: [10, 20]
+    const auto genRDF = [&](Dataframe* df, bool& isFinished, auto operation) -> void {
+        if (operation != LambdaSourceProcessor::Operation::EXECUTE) {
+            return;
+        }
+        auto* col = dynamic_cast<ColumnNodeIDs*>(df->cols()[0]->getColumn());
+        col->push_back(10);
+        col->push_back(20);
+        isFinished = true;
+    };
+
+    {
+        auto& rhsIF = _builder->addLambdaSource(genRDF);
+        _builder->addColumnToOutput<ColumnNodeIDs>(_pipeline.getDataframeManager()->allocTag());
+
+        [[maybe_unused]] auto& lhsIF = _builder->addLambdaSource(genLDF);
+        _builder->addColumnToOutput<ColumnNodeIDs>(_pipeline.getDataframeManager()->allocTag());
+        _builder->addColumnToOutput<ConstNodeIDs>(_pipeline.getDataframeManager()->allocTag());
+
+        const auto& cartProd = _builder->addCartesianProduct(&rhsIF);
+        ASSERT_EQ(cartProd.getDataframe()->cols().size(), 3);
+    }
+
+    // With chunkSize=2 (1 LHS row × 2 RHS rows), each LHS chunk fills exactly one output chunk:
+    //   output chunk 1: lhs chunk1 × rhs   → (1,42,10), (1,42,20)
+    //   output chunk 2: lhs chunk2 × rhs   → (2,99,10), (2,99,20)
+    std::vector<NodeID> actualLhsVec;
+    std::vector<NodeID> actualLhsConst;
+    std::vector<NodeID> actualRhsVec;
+
+    bool executed = false;
+    const auto VERIFY_CALLBACK = [&](const Dataframe* df, LambdaProcessor::Operation operation) -> void {
+        if (operation == LambdaProcessor::Operation::RESET) {
+            return;
+        }
+        executed = true;
+
+        ASSERT_EQ(df->size(), 3);
+        const auto* lhsVecCol = df->cols().at(0)->as<ColumnNodeIDs>();
+        const auto* lhsConstCol = df->cols().at(1)->as<ColumnNodeIDs>();
+        const auto* rhsVecCol = df->cols().at(2)->as<ColumnNodeIDs>();
+
+        const size_t rowCount = df->getLogicalRowCount();
+        for (size_t row = 0; row < rowCount; row++) {
+            actualLhsVec.push_back(lhsVecCol->at(row));
+            actualLhsConst.push_back(lhsConstCol->at(row));
+            actualRhsVec.push_back(rhsVecCol->at(row));
+        }
+    };
+
+    _builder->addLambda(VERIFY_CALLBACK);
+    EXECUTE(view, 2);
+    ASSERT_TRUE(executed);
+
+    const ColumnNodeIDs expectedLhsVec   = {1, 1, 2, 2};
+    const ColumnNodeIDs expectedLhsConst = {42, 42, 99, 99};
+    const ColumnNodeIDs expectedRhsVec   = {10, 20, 10, 20};
+
+    ASSERT_EQ(actualLhsVec.size(), 4);
+    ASSERT_EQ(actualLhsConst.size(), 4);
+    ASSERT_EQ(actualRhsVec.size(), 4);
+
+    for (const auto& [exp, actual] : rv::zip(expectedLhsVec, actualLhsVec)) {
+        EXPECT_EQ(exp, actual);
+    }
+    for (const auto& [exp, actual] : rv::zip(expectedLhsConst, actualLhsConst)) {
+        EXPECT_EQ(exp, actual);
+    }
+    for (const auto& [exp, actual] : rv::zip(expectedRhsVec, actualRhsVec)) {
+        EXPECT_EQ(exp, actual);
+    }
 }
 
 int main(int argc, char** argv) {
