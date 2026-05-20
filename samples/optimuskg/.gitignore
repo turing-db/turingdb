@@ -1,0 +1,5 @@
+data/
+turingdb.out/
+.venv/
+uv.lock
+__pycache__/
