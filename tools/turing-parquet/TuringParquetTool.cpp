@@ -12,8 +12,13 @@
 #include <spdlog/fmt/fmt.h>
 #include <tabulate/table.hpp>
 
+#include "Graph.h"
+#include "JobSystem.h"
+#include "SystemManager.h"
+#include "TuringConfig.h"
+#include "TuringDB.h"
+
 #include "ParquetReader.h"
-#include "Path.h"
 
 #include "ParquetEdgeTypeAnalysis.h"
 #include "ParquetEdgeTypeAnalyzer.h"
@@ -26,12 +31,7 @@
 #include "ParquetSchema.h"
 #include "ParquetSchemaExtractor.h"
 
-#include "Graph.h"
-#include "JobSystem.h"
-#include "SystemManager.h"
-#include "TuringConfig.h"
-#include "TuringDB.h"
-
+#include "Path.h"
 #include "TuringException.h"
 
 using namespace db;
@@ -515,6 +515,7 @@ int main(int argc, const char** argv) {
     }
 
     try {
+        // Build schema for each file
         std::vector<std::unique_ptr<ParquetSchema>> schemas;
         schemas.reserve(allFiles.size());
         for (const std::string& file : allFiles) {
@@ -523,6 +524,7 @@ int main(int argc, const char** argv) {
             buildSchema(path, *schemas.back());
         }
 
+        // Print each schema
         for (size_t fileIndex = 0; fileIndex < allFiles.size(); ++fileIndex) {
             if (fileIndex > 0) {
                 std::cout << "\n";
@@ -531,6 +533,7 @@ int main(int argc, const char** argv) {
             printSchema(*schemas[fileIndex]);
         }
 
+        // Do property column analysis
         std::unique_ptr<ParquetGraphMapping> propertyMapping;
         std::string propertyColumn;
         if (!propsColumns.empty()) {
@@ -547,6 +550,7 @@ int main(int argc, const char** argv) {
             }
         }
 
+        // Infer edge types
         std::vector<const ParquetSchema*> edgeSchemas;
         edgeSchemas.reserve(edgeFiles.size());
         for (size_t edgeIndex = 0; edgeIndex < edgeFiles.size(); ++edgeIndex) {
@@ -570,6 +574,7 @@ int main(int argc, const char** argv) {
             }
         }
 
+        // Check that we have a property mapping and that edge types are resolved
         if (propertyMapping == nullptr) {
             std::cerr << "Cannot import without a resolved property column "
                          "(use -props COLUMN or accept the prompt default).\n";
@@ -580,6 +585,7 @@ int main(int argc, const char** argv) {
             return EXIT_FAILURE;
         }
 
+        // Init TuringDB in-process
         fs::Path turingDir(outputDir);
         if (!turingDir.toAbsolute()) {
             std::cerr << "Failed to resolve -out path '" << outputDir << "'.\n";
@@ -605,6 +611,7 @@ int main(int argc, const char** argv) {
         JobSystem jobSystem;
         jobSystem.init();
 
+        // Import the graph
         ParquetGraphImporter importer(graph, &jobSystem, *propertyMapping,
                                       propertyColumn, resolvedEdgeTypeColumn);
 
@@ -618,6 +625,7 @@ int main(int argc, const char** argv) {
         }
         importer.finalize();
 
+        // Dump the graph
         const auto dumpResult = db.getSystemManager().dumpGraph(graphName);
         if (!dumpResult) {
             std::cerr << "Failed to persist graph: "
