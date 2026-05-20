@@ -113,5 +113,8 @@ setup(
     },
     python_requires=">=3.10",
     # Dependencies are defined in pyproject.toml
-    entry_points={"console_scripts": ["turingdb=turingdb:main"]},
+    entry_points={"console_scripts": [
+        "turingdb=turingdb:main",
+        "turing-parquet=turingdb:main_parquet",
+    ]},
 )

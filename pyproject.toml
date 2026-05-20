@@ -27,6 +27,7 @@ Repository = "https://github.com/turing-db/turingdb"
 
 [project.scripts]
 turingdb = "turingdb:main"
+turing-parquet = "turingdb:main_parquet"
 
 [tool.setuptools]
 package-dir = {"" = "python"}
