@@ -146,21 +146,20 @@ void Dataframe::append(const Dataframe* other) {
         Column* dst = dstNamed->getColumn();
         Column* src = srcNamed->getColumn();
 
-        // Resize destination to fit new data
         dispatchColumnVector(dst, [&](auto* dstColumnVector) {
-            const auto* srcColumnVector = dynamic_cast<decltype(dstColumnVector)>(src);
-            if (!srcColumnVector) {
-                throw FatalException(
-                    fmt::format("Attempted to append to a Dataframe whose column at "
-                                "index {} is not a ColumnVector<T>.",
-                                i));
-            }
+            using T = typename std::remove_reference_t<decltype(dstColumnVector->getRaw())>::value_type;
 
             dstColumnVector->resize(newRows);
-            const auto& srcRaw = srcColumnVector->getRaw();
             auto& dstRaw = dstColumnVector->getRaw();
 
-            std::copy(begin(srcRaw),end(srcRaw),begin(dstRaw) + oldRows);
+            if (const auto* srcConst = dynamic_cast<const ColumnConst<T>*>(src)) {
+                std::fill(begin(dstRaw) + oldRows, end(dstRaw), srcConst->getRaw());
+            } else if (const auto* srcVec = dynamic_cast<const ColumnVector<T>*>(src)) {
+                const auto& srcRaw = srcVec->getRaw();
+                std::copy(begin(srcRaw), end(srcRaw), begin(dstRaw) + oldRows);
+            } else {
+                throw FatalException("Unknown source column type.");
+            }
         });
     }
 }
