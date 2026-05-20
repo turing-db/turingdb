@@ -612,16 +612,21 @@ int main(int argc, const char** argv) {
         jobSystem.init();
 
         // Import the graph
-        ParquetGraphImporter importer(graph, &jobSystem, *propertyMapping,
-                                      propertyColumn, resolvedEdgeTypeColumn);
+        ParquetGraphImporter importer(graph,
+                                      &jobSystem,
+                                      *propertyMapping,
+                                      propertyColumn,
+                                      resolvedEdgeTypeColumn);
 
         for (size_t nodeIndex = 0; nodeIndex < nodeFiles.size(); ++nodeIndex) {
-            importer.importNodeFile(fs::Path(nodeFiles[nodeIndex]),
-                                    *schemas[nodeIndex]);
+            const fs::Path path(nodeFiles[nodeIndex]);
+            const ParquetSchema* const schema = schemas[nodeIndex].get();
+            importer.importNodeFile(path, *schema);
         }
         for (size_t edgeIndex = 0; edgeIndex < edgeFiles.size(); ++edgeIndex) {
-            importer.importEdgeFile(fs::Path(edgeFiles[edgeIndex]),
-                                    *schemas[nodeFiles.size() + edgeIndex]);
+            const fs::Path path(edgeFiles[edgeIndex]);
+            const ParquetSchema* const schema = schemas[nodeFiles.size() + edgeIndex].get();
+            importer.importEdgeFile(path, *schema);
         }
         importer.finalize();
 
