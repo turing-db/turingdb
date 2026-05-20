@@ -130,10 +130,10 @@ void printPropertyAnalysis(const ParquetPropertyAnalysis& analysis,
             continue;
         }
         const double percent = (total == 0) ? 0.0 : 100.0 * static_cast<double>(count) / static_cast<double>(total);
-        std::cout << fmt::format("  {:<8} {:>8}  ({:5.1f}%)\n",
-                                 ParquetPropertyAnalysis::toString(type),
-                                 count,
-                                 percent);
+        fmt::println("  {:<8} {:>8}  ({:5.1f}%)",
+                     ParquetPropertyAnalysis::toString(type),
+                     count,
+                     percent);
     }
 
     const ParquetPropertyAnalysis::PropertyTypeMap& propertyTypes = analysis.getPropertyTypes();
@@ -149,12 +149,12 @@ void printPropertyAnalysis(const ParquetPropertyAnalysis& analysis,
 
         for (const auto& entry : propertyTypes) {
             const ParquetPropertyType& propertyType = *entry.second;
-            std::cout << fmt::format("  {:<{}}  {:<{}}  ({})\n",
-                                     propertyType.getName(),
-                                     maxNameWidth,
-                                     propertyTypeLabel(propertyType),
-                                     maxTypeWidth,
-                                     propertyType.getCount());
+            fmt::println("  {:<{}}  {:<{}}  ({})",
+                         propertyType.getName(),
+                         maxNameWidth,
+                         propertyTypeLabel(propertyType),
+                         maxTypeWidth,
+                         propertyType.getCount());
         }
     }
 
@@ -382,11 +382,11 @@ void printEdgeTypeAnalysis(const ParquetEdgeTypeAnalysis& analysis,
     std::cout << "Type breakdown:\n";
     for (const auto& entry : sorted) {
         const double percent = (total == 0) ? 0.0 : 100.0 * static_cast<double>(entry.second) / static_cast<double>(total);
-        std::cout << fmt::format("  {:<{}}  {:>8}  ({:5.1f}%)\n",
-                                 entry.first,
-                                 maxNameWidth,
-                                 entry.second,
-                                 percent);
+        fmt::println("  {:<{}}  {:>8}  ({:5.1f}%)",
+                     entry.first,
+                     maxNameWidth,
+                     entry.second,
+                     percent);
     }
 }
 
@@ -625,10 +625,10 @@ int main(int argc, const char** argv) {
             return EXIT_FAILURE;
         }
 
-        std::cout << fmt::format(
+        fmt::println(
             "Imported {} nodes, {} sub-record nodes ({} duplicate references "
             "reused), {} stub nodes (unresolved edge endpoints), {} edges "
-            "({} skipped).\n",
+            "({} skipped).",
             importer.getNodeCount(),
             importer.getSubRecordCount(),
             importer.getDedupedReferenceCount(),
