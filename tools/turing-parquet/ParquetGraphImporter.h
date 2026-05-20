@@ -55,10 +55,6 @@ public:
     void importEdgeFile(const fs::Path& path, const ParquetSchema& schema);
     void finalize();
 
-    // Per-row callbacks invoked by ParquetNodeRowVisitor / ParquetEdgeRowVisitor
-    // after each chunk is fully buffered. `undirected` is currently ignored on
-    // edges; the parameter is kept so the visitor's signature mirrors the
-    // parquet column set.
     void onNodeRow(std::string_view id,
                    std::string_view label,
                    std::string_view propertiesJson);

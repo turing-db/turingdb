@@ -38,7 +38,8 @@ ParquetPropertyMerge::ParquetPropertyMerge(ParquetPropertyAnalysis& merged)
 {
 }
 
-ParquetPropertyMerge::~ParquetPropertyMerge() = default;
+ParquetPropertyMerge::~ParquetPropertyMerge() {
+}
 
 void ParquetPropertyMerge::merge(const ParquetPropertyAnalysis& source) {
     for (size_t typeIndex = 0; typeIndex < ParquetPropertyAnalysis::TYPE_COUNT; ++typeIndex) {

@@ -118,16 +118,13 @@ ParquetPropertyAnalyzer::ParquetPropertyAnalyzer(const ParquetSchema& schema,
     if (target == nullptr) {
         throw TuringException(fmt::format("Column '{}' not found in the schema",
                                           columnName));
-    }
-    if (target->isGroup()) {
+    } else if (target->isGroup()) {
         throw TuringException(fmt::format("Column '{}' is a group, expected a BYTE_ARRAY primitive",
                                           columnName));
-    }
-    if (target->getPrimitiveType() != ParquetPrimitiveType::BYTE_ARRAY) {
+    } else if (target->getPrimitiveType() != ParquetPrimitiveType::BYTE_ARRAY) {
         throw TuringException(fmt::format("Column '{}' is not a BYTE_ARRAY column",
                                           columnName));
-    }
-    if (target->getJsonShape() != ParquetJsonShape::KEY_VALUE) {
+    } else if (target->getJsonShape() != ParquetJsonShape::KEY_VALUE) {
         throw TuringException(fmt::format("Column '{}' is not key-value JSON",
                                           columnName));
     }

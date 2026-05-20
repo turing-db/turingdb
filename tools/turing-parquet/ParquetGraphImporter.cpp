@@ -126,7 +126,8 @@ ParquetGraphImporter::ParquetGraphImporter(Graph* graph,
 {
 }
 
-ParquetGraphImporter::~ParquetGraphImporter() = default;
+ParquetGraphImporter::~ParquetGraphImporter() {
+}
 
 void ParquetGraphImporter::importNodeFile(const fs::Path& path,
                                           const ParquetSchema& schema) {
@@ -389,7 +390,7 @@ void ParquetGraphImporter::onEdgeRow(std::string_view fromId,
                                      std::string_view toId,
                                      std::string_view relation,
                                      std::string_view propertiesJson,
-                                     bool /*undirected*/) {
+                                     bool undirected) {
     if (fromId.empty() || toId.empty() || relation.empty()) {
         ++_skippedEdgeCount;
         return;
