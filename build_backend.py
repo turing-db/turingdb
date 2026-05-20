@@ -4,6 +4,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -65,6 +66,8 @@ def _get_package_extensions_dir() -> Path:
 
 def _strip_binary(path: Path) -> None:
     """Strip debug symbols from a built binary or shared library."""
+    if sys.platform == "darwin":
+        return
     strip = shutil.which("strip")
     if strip is None:
         return
