@@ -1696,11 +1696,15 @@ TEST_F(CartesianProductProcessorTest, constValueChangesAcrossChunks) {
         lhsCallCount++;
         auto* vecCol = dynamic_cast<ColumnNodeIDs*>(df->cols()[0]->getColumn());
         auto* constCol = dynamic_cast<ConstNodeIDs*>(df->cols()[1]->getColumn());
+        // Clear explicitly: the source may be called for the next chunk before the
+        // CartProd has consumed the previous one, so the df may have stale data.
         if (lhsCallCount == 1) {
-            vecCol->push_back(1);
+            vecCol->resize(1);
+            vecCol->at(0) = 1;
             constCol->set(CONST_VAL_1);
         } else {
-            vecCol->push_back(2);
+            vecCol->resize(1);
+            vecCol->at(0) = 2;
             constCol->set(CONST_VAL_2);
             isFinished = true;
         }
