@@ -545,6 +545,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<Projectio
     // Forward only the projected columns to the next processor
     for (const auto& item : items) {
         NamedColumn* col = inDf->getColumn(item._tag);
+        inDf->dump(std::cout);
 
         if (!col) {
             throw FatalException(fmt::format("projection variable {} not found in output column", item._name));
@@ -671,7 +672,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addCallProcedure(const Procedure*
     _pendingOutput.updateInterface(&output);
 
     proc->setInputValues(args);
-    proc->allocReturnValues(_mem, _dfMan, yield);
+    proc->allocReturnValues(_mem, _dfMan, yield, &_matProc->getMaterializeData());
 
     _lastProc = proc;
     return output;
@@ -1058,6 +1059,8 @@ PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull(ColumnT
     _pendingOutput.updateInterface(&output);
 
     _lastProc = getProps;
+    input.getDataframe()->dump(std::cout<<"[GetPropertiesWithNUll]");
+    outDf->dump(std::cout<<"[GetPropertiesWithNUll]");
     return output;
 }
 

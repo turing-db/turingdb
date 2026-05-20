@@ -14,6 +14,7 @@ namespace db {
 
 class LocalMemory;
 class DataframeManager;
+class MaterializeData;
 class PipelineV2;
 class Procedure;
 
@@ -34,7 +35,8 @@ public:
     void setInputValues(std::span<const Procedure::Argument> args);
     void allocReturnValues(LocalMemory* mem,
                            DataframeManager* dfMan,
-                           std::span<Procedure::YieldItem> yieldItems);
+                           std::span<Procedure::YieldItem> yieldItems,
+                           MaterializeData* matData);
 
     PipelineBlockInputInterface& input();
     PipelineBlockOutputInterface& output() { return _output; }

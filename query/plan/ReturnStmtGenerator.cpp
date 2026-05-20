@@ -389,11 +389,11 @@ void ReturnStmtGenerator::fetchOrGenerateProperty(PropertyExpr* prop) {
                        prop);
         }
 
-        const bool isFromVar = code == PlanGraphOpcode::VAR;
-        if (!isFromVar) {
-            throwError("Could not return properties from variable with ambiguous source.",
-                       prop);
-        }
+        // const bool isFromVar = code == PlanGraphOpcode::VAR;
+        // if (!isFromVar) {
+        //     throwError("Could not return properties from variable with ambiguous source.",
+        //                prop);
+        // }
     }
 
     const auto* cached = _propCache.cacheOrRetrieve(entityVar, propVar, propName);

@@ -122,6 +122,7 @@
 #include "PlannerException.h"
 #include "FatalException.h"
 #include "BioAssert.h"
+#include "spdlog/spdlog.h"
 #include "stmt/OrderByItem.h"
 
 #include "processors/CSVSourceProcessor.h"
@@ -284,6 +285,7 @@ void PipelineGenerator::generate() {
 }
 
 PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
+    spdlog::info(" Transalating {}", PlanGraphOpcodeDescription::value(node->getOpcode()));
     switch (node->getOpcode()) {
         case PlanGraphOpcode::VAR:
             return translateVarNode(static_cast<VarNode*>(node));
@@ -897,6 +899,8 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                     continue;
                 }
 
+                spdlog::info("found expr {} in projection node", *name);
+
                 if (!decl) {
                     throw PlannerException(
                         "Projection item does not have a variable declaration");
@@ -907,6 +911,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                     throw PlannerException(fmt::format("Unregistered variable {}.", decl->getName()));
                 }
                 const ColumnTag tag = findColIt->second;
+                spdlog::info("tag of projection node is {}", tag.getValue());
 
                 items.push_back({tag, *name});
             } else if (const auto* declPtr = std::get_if<VarDecl*>(&item)) {
@@ -916,6 +921,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                 if (!name) {
                     continue;
                 }
+                spdlog::info("found var decl {} in projection node", *name);
 
                 const auto findColIt = _declToColumn.find(decl);
                 if (findColIt == _declToColumn.end()) {
@@ -923,6 +929,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
                         fmt::format("Unregistered variable {}.", decl->getName()));
                 }
                 const ColumnTag tag = findColIt->second;
+                spdlog::info("tag of projection node is {}", tag.getValue());
 
                 items.push_back({tag, *name});
             }

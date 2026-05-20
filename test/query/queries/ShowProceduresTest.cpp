@@ -43,7 +43,7 @@ TEST_F(ShowProceduresTest, showProcedures) {
     const auto res = query("SHOW PROCEDURES", "default", [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 2);
-        ASSERT_EQ(df->getLogicalRowCount(), 8);
+        ASSERT_EQ(df->getLogicalRowCount(), 13);
 
         const auto& cols = df->cols();
         const auto* colName = cols.at(0)->as<ColumnVector<types::String::Primitive>>();
@@ -60,7 +60,12 @@ TEST_F(ShowProceduresTest, showProcedures) {
         ASSERT_EQ(colName->at(4), "db.describeCommit");
         ASSERT_EQ(colName->at(5), "db.procedures");
         ASSERT_EQ(colName->at(6), "db.showIndexes");
-        ASSERT_EQ(colName->at(7), "greeter.hello");
+        ASSERT_EQ(colName->at(7), "db.nodes");
+        ASSERT_EQ(colName->at(8), "db.edges");
+        ASSERT_EQ(colName->at(9), "db.neighbors");
+        ASSERT_EQ(colName->at(10), "db.nodeEdges");
+        ASSERT_EQ(colName->at(11), "db.exploreNodeEdges");
+        ASSERT_EQ(colName->at(12), "db.nodeProperties");
 
         // Check exact signatures
         ASSERT_EQ(colSignature->at(0), "db.labels() :: (id :: INTEGER, label :: STRING)");
@@ -74,7 +79,20 @@ TEST_F(ShowProceduresTest, showProcedures) {
                                        " :: (nodeCount :: INTEGER, edgeCount :: INTEGER, partCount :: INTEGER)");
         ASSERT_EQ(colSignature->at(5), "db.procedures() :: (name :: STRING, signature :: STRING)");
         ASSERT_EQ(colSignature->at(6), "db.showIndexes() :: (name :: STRING, size :: INTEGER)");
-        ASSERT_EQ(colSignature->at(7), "greeter.hello() :: (message :: STRING)");
+        ASSERT_EQ(colSignature->at(7), "db.nodes(nodeID :: NODE) :: (nodeID :: NODE)");
+        ASSERT_EQ(colSignature->at(8), "db.edges(edgeID :: EDGE) :: (edgeID :: EDGE)");
+        ASSERT_EQ(colSignature->at(9),
+                  "db.neighbors(nodeID :: NODE) :: (sourceNodeID :: NODE, edgeID :: EDGE, "
+                  "otherNodeID :: NODE, isOutgoing :: BOOLEAN)");
+        ASSERT_EQ(colSignature->at(10),
+                  "db.nodeEdges(nodeID :: NODE) :: (sourceNodeID :: NODE, edgeID :: EDGE, "
+                  "edgeTypeID :: INTEGER, otherNodeID :: NODE, isOutgoing :: BOOLEAN)");
+        ASSERT_EQ(colSignature->at(11),
+                  "db.exploreNodeEdges(nodeID :: NODE) :: (sourceNodeID :: NODE, edgeID :: EDGE, "
+                  "edgeTypeID :: INTEGER, otherNodeID :: NODE, isOutgoing :: BOOLEAN)");
+        ASSERT_EQ(colSignature->at(12),
+                  "db.nodeProperties(nodeID :: NODE) :: (nodeID :: NODE, propertyName :: STRING, "
+                  "value :: STRING)");
 
         executed = true;
     });

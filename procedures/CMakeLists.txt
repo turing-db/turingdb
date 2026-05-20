@@ -11,7 +11,13 @@ set(procedures_sources
     HistoryProcedure.cpp
     DescribeCommitProcedure.cpp
     ProceduresProcedure.cpp
-    ShowIndexesProcedure.cpp)
+    ShowIndexesProcedure.cpp
+    NodesProcedure.cpp
+    EdgesProcedure.cpp
+    NeighborsProcedure.cpp
+    NodeEdgesProcedure.cpp
+    ExploreNodeEdgesProcedure.cpp
+    NodePropertiesProcedure.cpp)
 
 add_library(turing_db_procedures_s STATIC ${procedures_sources})
 

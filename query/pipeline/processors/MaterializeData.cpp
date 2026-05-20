@@ -112,3 +112,6 @@ INSTANTIATE(ColumnOptVector<types::Double::Primitive>);
 INSTANTIATE(ColumnOptVector<types::String::Primitive>);
 INSTANTIATE(ColumnOptVector<types::Bool::Primitive>);
 INSTANTIATE(ColumnOptVector<types::Embedding::Primitive>);
+
+INSTANTIATE(ColumnVector<ValueType>);
+INSTANTIATE(ColumnVector<std::string>);

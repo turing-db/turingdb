@@ -9,6 +9,12 @@
 #include "DescribeCommitProcedure.h"
 #include "ProceduresProcedure.h"
 #include "ShowIndexesProcedure.h"
+#include "NodesProcedure.h"
+#include "EdgesProcedure.h"
+#include "NeighborsProcedure.h"
+#include "NodeEdgesProcedure.h"
+#include "ExploreNodeEdgesProcedure.h"
+#include "NodePropertiesProcedure.h"
 
 using namespace db;
 
@@ -33,6 +39,12 @@ void ProcedureManager::init() {
     DescribeCommitProcedure::registerProcedure(db);
     ProceduresProcedure::registerProcedure(db);
     ShowIndexesProcedure::registerProcedure(db);
+    NodesProcedure::registerProcedure(db);
+    EdgesProcedure::registerProcedure(db);
+    NeighborsProcedure::registerProcedure(db);
+    NodeEdgesProcedure::registerProcedure(db);
+    ExploreNodeEdgesProcedure::registerProcedure(db);
+    NodePropertiesProcedure::registerProcedure(db);
 }
 
 void ProcedureManager::getNamespaces(Namespaces& result) const {

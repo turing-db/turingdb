@@ -11,6 +11,8 @@
 #include "LocalMemory.h"
 
 #include "PipelineException.h"
+#include "processors/MaterializeProcessor.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -102,7 +104,8 @@ void CallProcedureProcessor::setInputValues(std::span<const Procedure::Argument>
 
 void CallProcedureProcessor::allocReturnValues(LocalMemory* mem,
                                                DataframeManager* dfMan,
-                                               std::span<Procedure::YieldItem> yieldItems) {
+                                               std::span<Procedure::YieldItem> yieldItems,
+                                               MaterializeData* matData) {
     ProcedureData& data = *_procedureState._data;
 
     PipelineBlockOutputInterface& output = _output;
@@ -114,78 +117,76 @@ void CallProcedureProcessor::allocReturnValues(LocalMemory* mem,
         const std::string_view& colName = item._baseName;
         const std::string_view& asName = item._asName;
 
+        spdlog::info("col name is {}, as name is {}", colName, asName);
+
         const size_t colIndex = _procedure->getReturnValueIndex(colName);
         const ProcedureType colType = _procedure->getReturnValueType(colIndex);
 
         Column* col = nullptr;
+
+        auto allocColumn = [&]<typename T>() {
+            col = mem->alloc<T>();
+            data.setReturnColumn(colIndex, col);
+
+            NamedColumn* namedCol = NamedColumn::create(dfMan, col, dfMan->allocTag());
+            spdlog::info("column tag is {}", namedCol->getTag().getValue());
+
+            if (asName.empty()) {
+                namedCol->rename(colName);
+            } else {
+                namedCol->rename(asName);
+            }
+
+            outDf->addColumn(namedCol);
+            matData->addToStep<T>(namedCol);
+
+            item._col = namedCol;
+        };
 
         switch (colType) {
             case ProcedureType::INVALID: {
                 throw PipelineException("Invalid procedure return type");
             } break;
             case ProcedureType::NODE: {
-                col = mem->alloc<ColumnVector<NodeID>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<NodeID>>();
             } break;
             case ProcedureType::EDGE: {
-                col = mem->alloc<ColumnVector<EdgeID>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<EdgeID>>();
             } break;
             case ProcedureType::LABEL_ID: {
-                col = mem->alloc<ColumnVector<LabelID>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<LabelID>>();
             } break;
             case ProcedureType::EDGE_TYPE_ID: {
-                col = mem->alloc<ColumnVector<EdgeTypeID>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<EdgeTypeID>>();
             } break;
             case ProcedureType::PROPERTY_TYPE_ID: {
-                col = mem->alloc<ColumnVector<PropertyTypeID>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<PropertyTypeID>>();
             } break;
             case ProcedureType::VALUE_TYPE: {
-                col = mem->alloc<ColumnVector<ValueType>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<ValueType>>();
             } break;
             case ProcedureType::UINT_64: {
-                col = mem->alloc<ColumnVector<types::UInt64::Primitive>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<types::UInt64::Primitive>>();
             } break;
             case ProcedureType::INT64: {
-                col = mem->alloc<ColumnVector<types::Int64::Primitive>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<types::Int64::Primitive>>();
             } break;
             case ProcedureType::DOUBLE: {
-                col = mem->alloc<ColumnVector<types::Double::Primitive>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<types::Double::Primitive>>();
             } break;
             case ProcedureType::BOOL: {
-                col = mem->alloc<ColumnVector<types::Bool::Primitive>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<types::Bool::Primitive>>();
             } break;
             case ProcedureType::STRING_VIEW: {
-                col = mem->alloc<ColumnVector<types::String::Primitive>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<types::String::Primitive>>();
             } break;
             case ProcedureType::STRING: {
-                col = mem->alloc<ColumnVector<std::string>>();
-                data.setReturnColumn(colIndex, col);
+                allocColumn.operator()<ColumnVector<std::string>>();
             } break;
             case ProcedureType::_SIZE: {
                 throw PipelineException("Invalid procedure return type: _SIZE");
             } break;
         }
-
-        NamedColumn* namedCol = NamedColumn::create(dfMan, col, dfMan->allocTag());
-
-        if (asName.empty()) {
-            namedCol->rename(colName);
-        } else {
-            namedCol->rename(asName);
-        }
-
-        outDf->addColumn(namedCol);
-        item._col = namedCol;
     }
 }
 
