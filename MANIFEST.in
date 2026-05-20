@@ -7,6 +7,6 @@ include build_backend.py
 include README.md
 include LICENSE
 
-# Python package with pre-built binary
+# Python package with pre-built binaries
 recursive-include python *.py
-include python/turingdb/bin/turingdb
+recursive-include python/turingdb/bin *

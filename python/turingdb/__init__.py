@@ -15,13 +15,10 @@ except ImportError:
 
 __all__ = ["TuringClient", "TuringDB", "HTTPClient", "BinaryClient", "TuringDBException", "__version__"]
 
-def get_executable_path():
-    """Get the path to the compiled C++ executable."""
+def get_executable_path(executable_name="turingdb"):
+    """Get the path to a compiled C++ executable shipped with the package."""
     import site
     import importlib.util
-
-    # Define possible executable names
-    executable_name = "turingdb"  # Adjust this to match your actual binary name
 
     # Search locations in order of preference
     search_locations = []
@@ -35,16 +32,15 @@ def get_executable_path():
     except:
         pass
 
-    # 2. Use turingdb in the local build directory
+    # 2. Local build directory (editable installs)
     try:
-        # Get the installed package location
-        spec = importlib.util.find_spec("turingdb")  # Your actual module name
+        spec = importlib.util.find_spec("turingdb")
         if spec and spec.origin:
             installed_module_dir = Path(spec.origin).parent
             project_dir = installed_module_dir.parent.parent
-            # Build directory locations
             search_locations.append(project_dir / "build/turing_install/bin/")
             search_locations.append(project_dir / "build/tools/turingdb/")
+            search_locations.append(project_dir / "build/tools/turing-parquet/")
     except:
         pass
 
@@ -64,7 +60,6 @@ def get_executable_path():
 
     # 5. Virtual environment site-packages (if we're in a venv)
     if hasattr(sys, 'prefix') and sys.prefix != sys.base_prefix:
-        # We're in a virtual environment
         venv_site = Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
         search_locations.append(venv_site / "turingdb" / "bin")
 
@@ -85,12 +80,10 @@ def get_executable_path():
     raise FileNotFoundError(f"Executable '{executable_name}' not found in any expected location")
 
 
-def main():
-    """Entry point for the console script."""
+def _run_executable(executable_name):
+    """Locate and exec a shipped C++ executable, replacing the current process."""
     try:
-        executable_path = get_executable_path()
-
-        # Execute the C++ binary directly, replacing the current process
+        executable_path = get_executable_path(executable_name)
         os.execv(executable_path, [executable_path] + sys.argv[1:])
 
     except FileNotFoundError as e:
@@ -98,10 +91,19 @@ def main():
         sys.exit(1)
     except Exception as e:
         print(f"Unexpected error: {e}", file=sys.stderr)
-        # Fallback to subprocess if execv fails
         try:
-            executable_path = get_executable_path()
+            executable_path = get_executable_path(executable_name)
             result = subprocess.run([executable_path] + sys.argv[1:])
             sys.exit(result.returncode)
         except:
             sys.exit(1)
+
+
+def main():
+    """Entry point for the turingdb console script."""
+    _run_executable("turingdb")
+
+
+def main_parquet():
+    """Entry point for the turing-parquet console script."""
+    _run_executable("turing-parquet")

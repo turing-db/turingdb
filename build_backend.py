@@ -18,22 +18,36 @@ from setuptools.build_meta import (
 )
 
 
+# Binaries shipped in the wheel under turingdb/bin/.
+_SHIPPED_EXECUTABLES = ("turingdb", "turing-parquet")
+
+
 def _get_project_root() -> Path:
     """Get the project root directory."""
     return Path(__file__).parent.resolve()
 
 
-def _get_build_executable() -> Path:
-    """Get the path to the executable in the build directory."""
+def _get_build_bin_dir() -> Path:
+    """Get the directory holding built executables."""
     turing_home = os.environ.get("TURING_HOME")
     if turing_home:
-        return Path(turing_home) / "bin" / "turingdb"
-    return _get_project_root() / "build" / "turing_install" / "bin" / "turingdb"
+        return Path(turing_home) / "bin"
+    return _get_project_root() / "build" / "turing_install" / "bin"
 
 
-def _get_package_executable() -> Path:
-    """Get the path to the executable in the package directory (used by sdist)."""
-    return _get_project_root() / "python" / "turingdb" / "bin" / "turingdb"
+def _get_package_bin_dir() -> Path:
+    """Get the bin directory inside the Python package (used by sdist)."""
+    return _get_project_root() / "python" / "turingdb" / "bin"
+
+
+def _get_build_executable(name: str = "turingdb") -> Path:
+    """Get the path to a built executable."""
+    return _get_build_bin_dir() / name
+
+
+def _get_package_executable(name: str = "turingdb") -> Path:
+    """Get the path to an executable in the package directory (used by sdist)."""
+    return _get_package_bin_dir() / name
 
 
 def _get_build_extensions_dir() -> Path:
@@ -74,33 +88,38 @@ def _run_cmake_build():
     subprocess.check_call(["make", "install"], cwd=str(build_dir))
 
 
-def _ensure_executable_built() -> Path:
-    """Ensure the executable is built, building if necessary. Returns path to executable."""
-    # Check package directory first (for sdist builds)
-    pkg_exe = _get_package_executable()
+def _resolve_executable(name: str) -> Path:
+    """Find a shipped executable, in package dir (sdist) or build dir."""
+    pkg_exe = _get_package_executable(name)
     if pkg_exe.exists():
         return pkg_exe
+    return _get_build_executable(name)
 
-    # Check build directory
-    exe_path = _get_build_executable()
-    if exe_path.exists():
-        return exe_path
+
+def _ensure_executables_built() -> dict[str, Path]:
+    """Ensure every shipped executable is built. Returns name -> source path."""
+    resolved = {name: _resolve_executable(name) for name in _SHIPPED_EXECUTABLES}
+    if all(path.exists() for path in resolved.values()):
+        return resolved
 
     cmake_file = _get_project_root() / "CMakeLists.txt"
     if not cmake_file.exists():
+        missing = ", ".join(name for name, path in resolved.items() if not path.exists())
         raise RuntimeError(
-            "Cannot build turingdb: CMakeLists.txt not found and no pre-built "
-            "executable exists. Please build from the source repository:\n"
+            f"Cannot build turingdb: CMakeLists.txt not found and pre-built "
+            f"executable(s) missing ({missing}). Please build from the source repository:\n"
             "  cd build && cmake .. && make -j8 && make install\n"
             "Then run the wheel build again."
         )
 
     _run_cmake_build()
 
-    if not exe_path.exists():
-        raise RuntimeError(f"Build completed but executable not found at {exe_path}")
+    resolved = {name: _resolve_executable(name) for name in _SHIPPED_EXECUTABLES}
+    for name, path in resolved.items():
+        if not path.exists():
+            raise RuntimeError(f"Build completed but executable not found at {path}")
 
-    return exe_path
+    return resolved
 
 
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
@@ -119,11 +138,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         for p in list(local_dir.glob("_turinglocal*.so")) + list(local_dir.glob("_turinglocal*.pyd"))
     }
 
-    # Ensure the executable exists
-    exe_path = _ensure_executable_built()
+    # Ensure all shipped executables exist
+    exe_paths = _ensure_executables_built()
 
-    bin_dir = project_root / "python" / "turingdb" / "bin"
-    dest_exe = bin_dir / "turingdb"
+    bin_dir = _get_package_bin_dir()
     build_lib_dir = project_root / "build" / "lib"
     ext_src_dir = _get_build_extensions_dir()
     ext_dest_dir = _get_package_extensions_dir()
@@ -133,16 +151,19 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         for f in build_lib_dir.glob("*.a"):
             f.unlink()
 
-    # Check if binary is already in package dir (sdist case)
-    binary_already_in_place = exe_path == dest_exe
+    # Track which binaries we copied so cleanup removes only those.
+    copied_binaries: list[Path] = []
     copied_extensions = False
 
     try:
-        if not binary_already_in_place:
-            # Copy binary to package directory temporarily
-            bin_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(exe_path, dest_exe)
-            os.chmod(dest_exe, 0o755)
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        for name, src in exe_paths.items():
+            dest = bin_dir / name
+            if src == dest:
+                continue
+            shutil.copy2(src, dest)
+            os.chmod(dest, 0o755)
+            copied_binaries.append(dest)
 
         # Copy extension shared libraries (.so on Linux, .dylib on macOS)
         if ext_src_dir.exists() and not ext_dest_dir.exists():
@@ -158,9 +179,12 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
 
         return wheel_name
     finally:
-        # Clean up - remove the temporary binary from source tree (only if we copied it)
-        if not binary_already_in_place and bin_dir.exists():
-            shutil.rmtree(bin_dir)
+        # Remove only the binaries we copied; leave pre-existing sdist binaries alone.
+        for path in copied_binaries:
+            if path.exists():
+                path.unlink()
+        if bin_dir.exists() and not any(bin_dir.iterdir()):
+            bin_dir.rmdir()
         if copied_extensions and ext_dest_dir.exists():
             shutil.rmtree(ext_dest_dir)
         # Remove native .so/.pyd files we just produced (don't touch any that pre-existed,
@@ -176,28 +200,28 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
 
 
 def build_sdist(sdist_directory, config_settings=None):
-    """Build an sdist with the C++ binary included."""
+    """Build an sdist with the C++ binaries included."""
     import setuptools.build_meta as backend
 
-    # Ensure the executable exists
-    exe_path = _ensure_executable_built()
+    # Ensure all shipped executables exist
+    exe_paths = _ensure_executables_built()
 
-    project_root = _get_project_root()
-    bin_dir = project_root / "python" / "turingdb" / "bin"
-    dest_exe = bin_dir / "turingdb"
+    bin_dir = _get_package_bin_dir()
     ext_src_dir = _get_build_extensions_dir()
     ext_dest_dir = _get_package_extensions_dir()
 
-    # Check if binary is already in package dir
-    binary_already_in_place = exe_path == dest_exe
+    copied_binaries: list[Path] = []
     copied_extensions = False
 
     try:
-        if not binary_already_in_place:
-            # Copy binary to package directory temporarily
-            bin_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(exe_path, dest_exe)
-            os.chmod(dest_exe, 0o755)
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        for name, src in exe_paths.items():
+            dest = bin_dir / name
+            if src == dest:
+                continue
+            shutil.copy2(src, dest)
+            os.chmod(dest, 0o755)
+            copied_binaries.append(dest)
 
         # Copy extension shared libraries (.so on Linux, .dylib on macOS)
         if ext_src_dir.exists() and not ext_dest_dir.exists():
@@ -211,8 +235,10 @@ def build_sdist(sdist_directory, config_settings=None):
 
         return sdist_name
     finally:
-        # Clean up - remove the temporary binary from source tree (only if we copied it)
-        if not binary_already_in_place and bin_dir.exists():
-            shutil.rmtree(bin_dir)
+        for path in copied_binaries:
+            if path.exists():
+                path.unlink()
+        if bin_dir.exists() and not any(bin_dir.iterdir()):
+            bin_dir.rmdir()
         if copied_extensions and ext_dest_dir.exists():
             shutil.rmtree(ext_dest_dir)
