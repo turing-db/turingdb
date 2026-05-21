@@ -1,7 +1,6 @@
 #pragma once
 
 #include <deque>
-#include <iosfwd>
 
 #include "SmallVector.h"
 
@@ -14,10 +13,9 @@ class VariableDependency;
 
 class VariableDependencyGraph {
 public:
-
     void registerPatternElement(const PatternElement* ptn);
 
-    void dumpMermaid(std::ostream& out) const;
+    const std::deque<VariableDependency>& vars() const { return _vars; }
 
 private:
     std::deque<VariableDependency> _vars;

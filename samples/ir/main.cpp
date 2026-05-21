@@ -18,6 +18,7 @@
 #include "versioning/Transaction.h"
 
 #include "ToolInit.h"
+#include "ir/IRDumper.h"
 #include "ir/VariableDependencyGraph.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/ReturnStmt.h"
@@ -25,7 +26,7 @@
 
 using namespace db;
 
-void inspectVarDepGraph(CypherAST* ast) {
+static void inspectVarDepGraph(CypherAST* ast) {
     bioassert(ast->queries().size() == 1, "Single queries only.");
 
     const QueryCommand* q = ast->queries().front();
@@ -48,7 +49,7 @@ void inspectVarDepGraph(CypherAST* ast) {
             vdg.registerPatternElement(ele);
         }
     }
-    vdg.dumpMermaid(std::cout);
+    IRDumper::dumpMermaid(vdg, std::cout);
 }
 
 int main(int argc, const char** argv) {
