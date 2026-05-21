@@ -4,6 +4,7 @@
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
 
+#include "SimpleGraph.h"
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
@@ -71,7 +72,9 @@ int main(int argc, const char** argv) {
     SystemManager sysman(&config);
     sysman.init();
 
-    Graph* graph = sysman.createGraph("ir");
+    Graph* graph = sysman.createGraph("simpledb");
+    SimpleGraph::createSimpleGraph(graph);
+
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
@@ -79,7 +82,9 @@ int main(int argc, const char** argv) {
 
     {
         CypherParser parser(&ast);
+        parser.parse(query);
         CypherAnalyzer analyzer(&ast, view);
+        analyzer.analyze();
     }
 
     inspectVarDepGraph(&ast);

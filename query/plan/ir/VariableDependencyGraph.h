@@ -7,8 +7,37 @@ namespace db {
 
 class EntityPattern;
 class PatternElement;
+class VarDecl;
 
-class VariableDependency;
+/**
+ * @brief A representation of a variable and its dependencies.
+ * @detail Used in @ref VariableDependencyGraph
+ */
+class VariableDependency {
+public:
+    using Deps = std::vector<const VariableDependency*>;
+
+    VariableDependency(VarDecl* decl)
+        : _decl(decl)
+    {
+    }
+
+    void dependsOn(VariableDependency* dep);
+    void requiredFor(VariableDependency* dep);
+
+    VarDecl* getDecl() const { return _decl; }
+    const Deps& getOutgoing() const { return _outgoing; }
+
+    bool isRoot() const { return _incoming.empty(); }
+    bool isSink() const { return _outgoing.empty(); }
+    bool isIsolated() const { return isRoot() && isSink(); }
+
+private:
+    VarDecl* _decl {nullptr};
+
+    Deps _incoming;
+    Deps _outgoing;
+};
 
 /**
  * @brief Graph representation of the dependencies among variables, generated from
@@ -31,36 +60,6 @@ private:
 
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const EntityPattern* entity);
-};
-
-/**
- * @brief A representation of a variable and its dependencies.
- * @detail Used in @ref VariableDependencyGraph
- */
-class VariableDependency {
-public:
-    using Deps = std::vector<const VariableDependency*>;
-
-    VariableDependency(const EntityPattern* entity)
-        : _entity(entity)
-    {
-    }
-
-    void dependsOn(VariableDependency* dep);
-    void requiredFor(VariableDependency* dep);
-
-    const EntityPattern* entity() const { return _entity; }
-    const Deps& getOutgoing() const { return _outgoing; }
-
-    bool isRoot() const { return _incoming.empty(); }
-    bool isSink() const { return _outgoing.empty(); }
-    bool isIsolated() const { return isRoot() && isSink(); }
-
-private:
-    const EntityPattern* _entity {nullptr};
-
-    Deps _incoming;
-    Deps _outgoing;
 };
 
 }

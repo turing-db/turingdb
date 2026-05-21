@@ -31,13 +31,13 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
 
 VariableDependency* VariableDependencyGraph::newVariable(const EntityPattern* entity) {
     bioassert(entity->getDecl(), "Variable without declaration.");
-    return &_vars.emplace_back(entity);
+    return &_vars.emplace_back(entity->getDecl());
 }
 
 VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPattern* entity) {
     bioassert(entity->getDecl(), "Variable with declaration.");
     const auto match = [entity](const VariableDependency& dep) {
-        return entity->getDecl() == dep.entity()->getDecl();
+        return entity->getDecl() == dep.getDecl();
     };
     const auto foundIt = std::ranges::find_if(_vars, match);
     const bool exists  = foundIt != _vars.end();
