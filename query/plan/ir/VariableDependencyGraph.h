@@ -17,7 +17,7 @@ public:
 
     void registerPatternElement(const PatternElement* ptn);
 
-    void dump(std::ostream& out) const;
+    void dumpMermaid(std::ostream& out) const;
 
 private:
     std::deque<VariableDependency> _vars;
@@ -42,6 +42,8 @@ public:
     const Deps& getOutgoing() const { return _outgoing; }
 
     bool isRoot() const { return _incoming.empty(); }
+    bool isSink() const { return _outgoing.empty(); }
+    bool isIsolated() const { return isRoot() && isSink(); }
 
 private:
     const EntityPattern* _entity {nullptr};
