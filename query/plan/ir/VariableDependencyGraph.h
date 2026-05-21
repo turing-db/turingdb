@@ -1,8 +1,7 @@
 #pragma once
 
 #include <deque>
-
-#include "SmallVector.h"
+#include <vector>
 
 namespace db {
 
@@ -11,22 +10,36 @@ class PatternElement;
 
 class VariableDependency;
 
+/**
+ * @brief Graph representation of the dependencies among variables, generated from
+ * an analyzed AST.
+ * @warn Ensure any AST elements passed to this class have been appropriately analysed, to
+ * populate @ref VarDecl s.
+ */
 class VariableDependencyGraph {
 public:
+    /// Given a pattern (e.g. (n)-[e]->(m)), inserts all vars into the dependency graph
     void registerPatternElement(const PatternElement* ptn);
 
-    const std::deque<VariableDependency>& vars() const { return _vars; }
+    /// Iteration order has no semantic meaning
+    auto begin() const { return std::cbegin(_vars); }
+    auto end() const { return std::cend(_vars); }
 
 private:
+    /// Variables whose dependencies are tracked this class
     std::deque<VariableDependency> _vars;
 
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const EntityPattern* entity);
 };
 
+/**
+ * @brief A representation of a variable and its dependencies.
+ * @detail Used in @ref VariableDependencyGraph
+ */
 class VariableDependency {
 public:
-    using Deps = SmallVector<const VariableDependency*, 4>;
+    using Deps = std::vector<const VariableDependency*>;
 
     VariableDependency(const EntityPattern* entity)
         : _entity(entity)
@@ -45,6 +58,7 @@ public:
 
 private:
     const EntityPattern* _entity {nullptr};
+
     Deps _incoming;
     Deps _outgoing;
 };

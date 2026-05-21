@@ -39,7 +39,7 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
         return entity->getDecl() == dep.entity()->getDecl();
     };
     const auto foundIt = std::ranges::find_if(_vars, match);
-    const bool exists  = foundIt != end(_vars);
+    const bool exists  = foundIt != _vars.end();
 
     return exists ? &*foundIt : newVariable(entity);
 }
