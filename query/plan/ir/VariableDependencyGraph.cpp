@@ -2,7 +2,6 @@
 
 #include <algorithm>
 
-#include "EdgePattern.h"
 #include "EntityPattern.h"
 #include "PatternElement.h"
 
@@ -19,28 +18,12 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
 
     VariableDependency* prev = originVar;
     for (const auto& [edge, tgt] : chain) {
-        const auto* eptn = dynamic_cast<const EdgePattern*>(edge);
-        bioassert(eptn, "Invalid edge pattern");
-
-        const auto direction = eptn->getDirection();
-        const bool bidirected = direction == EdgePattern::Direction::Undirected;
-        const bool outwards = direction == EdgePattern::Direction::Forward;
-        const bool inwards = direction == EdgePattern::Direction::Backward;
-
         VariableDependency* edgeVar = getOrCreateVariable(edge);
         VariableDependency* tgtVar = getOrCreateVariable(tgt);
 
-        // NOTE: Treating bidirectional edges as the leftmost node in pattern being the
-        // dependency provider. This may change/be wrong, but has implications on IR
-        // generated.
-        if (outwards || bidirected) {
-            prev->requiredFor(edgeVar);
-            edgeVar->requiredFor(tgtVar);
-        }
-        if (inwards) {
-            prev->dependsOn(edgeVar);
-            edgeVar->dependsOn(tgtVar);
-        }
+        // NOTE: Edge direction does not matter, as we can get out, in, or both edges
+        prev->requiredFor(edgeVar);
+        edgeVar->requiredFor(tgtVar);
 
         prev = tgtVar;
     }
