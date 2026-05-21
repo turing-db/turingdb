@@ -5,6 +5,10 @@ set(SOURCES
 
 turing_sample(${SAMPLE_NAME} ${SOURCES})
 
+configure_file(run.sh ${CMAKE_CURRENT_BINARY_DIR}/run.sh
+               FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE
+               COPYONLY)
+
 target_link_libraries(${SAMPLE_NAME} PRIVATE
 PRIVATE 
     turing_db_system_s
