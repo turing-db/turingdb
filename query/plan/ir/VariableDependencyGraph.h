@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <iosfwd>
 
 #include "EntityPattern.h"
 
@@ -13,6 +14,8 @@ class VariableDependency;
 class VariableDependencyGraph {
 public:
     const VariableDependency* getOrCreateVariable(const EntityPattern* entity);
+
+    void dump(std::ostream& out) const;
 
 private:
     std::deque<VariableDependency> _vars;
@@ -33,6 +36,7 @@ public:
     void addOutgoing(const VariableDependency* dep) { _outgoing.push_back(dep); }
 
     const EntityPattern* entity() const { return _entity; }
+    const Deps& getOutgoing() const { return _outgoing; }
 
     bool isRoot() const { return _incoming.empty(); }
 
