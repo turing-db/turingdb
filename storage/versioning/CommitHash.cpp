@@ -4,9 +4,9 @@
 
 using namespace db;
 
-static inline std::random_device _rd;
-static inline std::mt19937_64 _generator(_rd());
-static inline std::uniform_int_distribution<uint64_t> _distribution {
+thread_local std::random_device _rd;
+thread_local std::mt19937_64 _generator(_rd());
+thread_local std::uniform_int_distribution<uint64_t> _distribution {
     1,
     std::numeric_limits<uint64_t>::max() - 1,
 };
