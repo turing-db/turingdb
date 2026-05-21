@@ -4,7 +4,6 @@
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
 
-#include "CompilerException.h"
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
@@ -80,25 +79,8 @@ int main(int argc, const char** argv) {
 
     {
         CypherParser parser(&ast);
-        try {
-            parser.parse(query);
-        } catch (const CompilerException& e) {
-            spdlog::error("Parse error: {}", e.what());
-            return EXIT_FAILURE;
-        }
-    }
-
-    {
         CypherAnalyzer analyzer(&ast, view);
-        try {
-            analyzer.analyze();
-        } catch (const CompilerException& e) {
-            spdlog::error("Analysis error: {}", e.what());
-            return EXIT_FAILURE;
-        }
     }
 
     inspectVarDepGraph(&ast);
-
-    return EXIT_SUCCESS;
 }
