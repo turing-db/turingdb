@@ -45,10 +45,7 @@ void inspectVarDepGraph(CypherAST* ast) {
         const Pattern* ptn = rd->getPattern();
         const Pattern::PatternElements& eles = ptn->elements();
         for (const PatternElement* ele : eles) {
-            const PatternElement::EntityPatterns& entPtns = ele->getEntities();
-            for (const EntityPattern* entity : entPtns) {
-                vdg.getOrCreateVariable(entity);
-            }
+            vdg.registerPatternElement(ele);
         }
     }
     vdg.dump(std::cout);

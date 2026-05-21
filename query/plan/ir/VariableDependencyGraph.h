@@ -3,24 +3,27 @@
 #include <deque>
 #include <iosfwd>
 
-#include "EntityPattern.h"
-
 #include "SmallVector.h"
 
 namespace db {
+
+class EntityPattern;
+class PatternElement;
 
 class VariableDependency;
 
 class VariableDependencyGraph {
 public:
-    const VariableDependency* getOrCreateVariable(const EntityPattern* entity);
+
+    void registerPatternElement(const PatternElement* ptn);
 
     void dump(std::ostream& out) const;
 
 private:
     std::deque<VariableDependency> _vars;
 
-    const VariableDependency* newVariable(const EntityPattern* entity);
+    VariableDependency* getOrCreateVariable(const EntityPattern* entity);
+    VariableDependency* newVariable(const EntityPattern* entity);
 };
 
 class VariableDependency {

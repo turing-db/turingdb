@@ -4,13 +4,30 @@
 #include <ostream>
 
 #include "EntityPattern.h"
+#include "PatternElement.h"
 #include "decl/VarDecl.h"
 
 #include "BioAssert.h"
 
 using namespace db;
 
-const VariableDependency* VariableDependencyGraph::newVariable(const EntityPattern* entity) {
+void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) {
+    const EntityPattern* origin = ptn->getRootEntity();
+
+    VariableDependency* originVar = getOrCreateVariable(origin);
+
+    const auto& chain = ptn->getElementChain();
+
+    for (const auto& [edge, tgt] : chain) {
+        VariableDependency* edgeVar = getOrCreateVariable(edge);
+        VariableDependency* tgtVar = getOrCreateVariable(tgt);
+
+        originVar->addOutgoing(edgeVar);
+        originVar->addOutgoing(tgtVar);
+    }
+}
+
+VariableDependency* VariableDependencyGraph::newVariable(const EntityPattern* entity) {
     bioassert(entity->getDecl(), "Variable without declaration.");
     return &_vars.emplace_back(entity);
 }
@@ -28,11 +45,9 @@ void VariableDependencyGraph::dump(std::ostream& out) const {
             out << " [root]";
         }
 
-        out << " ->";
 
-        if (var.getOutgoing().empty()) {
-            out << " (none)";
-        } else {
+        if (!var.getOutgoing().empty()) {
+            out << " ->";
             for (const VariableDependency* dep : var.getOutgoing()) {
                 const std::string_view depName = dep->entity()->getDecl()->getName();
                 const bool depUnnamed = dep->entity()->getDecl()->isUnnamed();
@@ -44,7 +59,7 @@ void VariableDependencyGraph::dump(std::ostream& out) const {
     }
 }
 
-const VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPattern* entity) {
+VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPattern* entity) {
     bioassert(entity->getDecl(), "Variable with declaration.");
     const auto match = [entity](const VariableDependency& dep) {
         return entity->getDecl() == dep.entity()->getDecl();
