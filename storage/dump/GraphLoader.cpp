@@ -7,6 +7,8 @@
 #include "versioning/VersionController.h"
 #include "versioning/CommitView.h"
 
+#include <spdlog/spdlog.h>
+
 using namespace db;
 
 DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& graphDir) {
@@ -61,6 +63,16 @@ DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& graphDir) {
     }
 
     const size_t numEntries = it.get<uint64_t>();
+
+    //Expected size of the file = Size of File Header + uint64_t numEntries + uint64_t eachCommitHash * numEntries
+    const uint64_t expectedSize = DumpConfig::FILE_HEADER_STRIDE + sizeof(uint64_t) * (numEntries + 1);
+    const uint64_t actualSize = reader.file().getInfo()._size;
+    if (expectedSize != actualSize) {
+        spdlog::error("commitlog size mismatch: header claims {} entries "
+                      "(expected {} bytes) but file is {} bytes",
+                      numEntries, expectedSize, actualSize);
+        return DumpError::result(DumpErrorType::COULD_NOT_READ_COMMIT_LOG);
+    }
 
     const Commit* prevCommit = nullptr;
     for (size_t i = 0; i < numEntries; ++i) {

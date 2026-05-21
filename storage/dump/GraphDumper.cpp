@@ -163,33 +163,30 @@ DumpResult<void> GraphDumper::dumpMissingCommits(const Graph& graph, const fs::P
         return fileHeaderRes.get_unexpected();
     }
 
-    // update the total number of commits
-    writer.write(graph._versionController->getNumCommits());
-    writer.flush();
-
-    if (writer.errorOccured()) {
-        return DumpError::result(DumpErrorType::COULD_NOT_WRITE_COMMIT_LOG,
-                                 *writer.error());
-    }
-
-    // skip to the last entry (each Commit Log Entry is just the commit hash)
+    //Seek to the end of the file to get the last commit in order to check if all the commits
+    //have been dumped already. This can happen with concurrent writes - we treat dumps
+    //on the same version of a branch as idempotent.
     reader.file().seekEnd(-(off_t)sizeof(uint64_t));
     reader.read(sizeof(uint64_t));
 
     fs::ByteBufferIterator entryIt = reader.iterateBuffer();
 
-    // Use the dumped commitLog to get the last commit dumped - so
-    // we know to dump all commits from the new head until ( and exluding) the last dumped commit
     const uint64_t prevCommitHash = entryIt.get<uint64_t>();
+    const Commit* headCommit = graph._versionController->_head.load();
 
-    const Commit* commit = graph._versionController->_head.load();
+    //Check if the last dumped commit is the current head commit - this means 
+    //we have already dumped all the commits in the branch and can return safely.
+    if(prevCommitHash == headCommit->hash().get()) {
+        return {};
+    }
+
     std::vector<CommitHash> commitList;
-
+    // we know to dump all commits from the new head until (excluding) the last dumped commit.
     // collect all the new commits so we can iterate and append them to file later
-    while (commit && commit->hash().get() != prevCommitHash) {
-        commitList.emplace_back(commit->hash());
+    while (headCommit && headCommit->hash().get() != prevCommitHash) {
+        commitList.emplace_back(headCommit->hash());
 
-        const std::string fileName = fmt::format("{}", commit->hash().get());
+        const std::string fileName = fmt::format("{}", headCommit->hash().get());
         const fs::Path commitDir = graphDir / "commits" / fileName;
         const fs::Path partsDir = graphDir / "dataparts";
 
@@ -198,10 +195,21 @@ DumpResult<void> GraphDumper::dumpMissingCommits(const Graph& graph, const fs::P
             return DumpError::result(DumpErrorType::COMMIT_ALREADY_EXISTS);
         }
 
-        if (auto res = CommitDumper::dump(*commit, commitDir, partsDir); !res) {
+        if (auto res = CommitDumper::dump(*headCommit, commitDir, partsDir); !res) {
             return res;
         }
-        commit = commit->getPreviousCommit();
+        headCommit= headCommit->getPreviousCommit();
+    }
+
+    //seek back to the offset right after the headers
+    writer.file().seek(DumpConfig::FILE_HEADER_STRIDE);
+    // update the total number of commits
+    writer.write(graph._versionController->getNumCommits());
+    writer.flush();
+
+    if (writer.errorOccured()) {
+        return DumpError::result(DumpErrorType::COULD_NOT_WRITE_COMMIT_LOG,
+                                 *writer.error());
     }
 
     // Seek to EOF before appending new commit log entries
