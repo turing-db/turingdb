@@ -4,7 +4,6 @@
 #include <string>
 #include <unordered_map>
 
-#include "EntityPattern.h"
 #include "VariableDependencyGraph.h"
 #include "decl/VarDecl.h"
 
@@ -19,7 +18,7 @@ void IRDumper::dumpMermaid(const VariableDependencyGraph& graph, std::ostream& o
     }
 
     const auto nodeDef = [&](const VariableDependency* var) {
-        const std::string_view name = var->entity()->getDecl()->getName();
+        const std::string_view name = var->getDecl()->getName();
         const std::string_view label = name.empty() ? "<unnamed>" : name;
         return "v" + std::to_string(nodeIds.at(var)) + "[\"" + std::string(label) + "\"]";
     };
