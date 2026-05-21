@@ -46,8 +46,8 @@ public:
     {
     }
 
-    void addIncoming(const VariableDependency* dep) { _incoming.push_back(dep); }
-    void addOutgoing(const VariableDependency* dep) { _outgoing.push_back(dep); }
+    void dependsOn(VariableDependency* dep);
+    void requiredFor(VariableDependency* dep);
 
     const EntityPattern* entity() const { return _entity; }
     const Deps& getOutgoing() const { return _outgoing; }
