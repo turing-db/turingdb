@@ -1,12 +1,9 @@
 #include "VariableDependencyGraph.h"
 
 #include <algorithm>
-#include <ostream>
-#include <unordered_map>
 
 #include "EntityPattern.h"
 #include "PatternElement.h"
-#include "decl/VarDecl.h"
 
 #include "BioAssert.h"
 
@@ -34,33 +31,6 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
 VariableDependency* VariableDependencyGraph::newVariable(const EntityPattern* entity) {
     bioassert(entity->getDecl(), "Variable without declaration.");
     return &_vars.emplace_back(entity);
-}
-
-void VariableDependencyGraph::dumpMermaid(std::ostream& out) const {
-    out << "flowchart TD\n";
-
-    std::unordered_map<const VariableDependency*, size_t> nodeIds;
-    for (size_t i = 0; i < _vars.size(); i++) {
-        nodeIds[&_vars[i]] = i;
-    }
-
-    const auto nodeDef = [&](const VariableDependency* var) {
-        const std::string_view name = var->entity()->getDecl()->getName();
-        const std::string_view label = name.empty() ? "<unnamed>" : name;
-        return "v" + std::to_string(nodeIds.at(var)) + "[\"" + std::string(label) + "\"]";
-    };
-
-    for (const VariableDependency& var : _vars) {
-        const bool isolated = var.isIsolated();
-
-        if (isolated) {
-            out << "    " << nodeDef(&var) << "\n";
-        } else {
-            for (const VariableDependency* dep : var.getOutgoing()) {
-                out << "    " << nodeDef(&var) << " --> " << nodeDef(dep) << "\n";
-            }
-        }
-    }
 }
 
 VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPattern* entity) {

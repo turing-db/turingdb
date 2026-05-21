@@ -23,6 +23,7 @@ set(plan_sources
     nodes/JoinNode.cpp
 
     ir/VariableDependencyGraph.cpp
+    ir/IRDumper.cpp
 )
 
 add_library(turing_db_plan_s STATIC ${plan_sources})
