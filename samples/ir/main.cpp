@@ -48,7 +48,7 @@ void inspectVarDepGraph(CypherAST* ast) {
             vdg.registerPatternElement(ele);
         }
     }
-    vdg.dump(std::cout);
+    vdg.dumpMermaid(std::cout);
 }
 
 int main(int argc, const char** argv) {

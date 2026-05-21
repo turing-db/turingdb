@@ -36,7 +36,7 @@ VariableDependency* VariableDependencyGraph::newVariable(const EntityPattern* en
     return &_vars.emplace_back(entity);
 }
 
-void VariableDependencyGraph::dump(std::ostream& out) const {
+void VariableDependencyGraph::dumpMermaid(std::ostream& out) const {
     out << "flowchart TD\n";
 
     std::unordered_map<const VariableDependency*, size_t> nodeIds;
@@ -51,7 +51,7 @@ void VariableDependencyGraph::dump(std::ostream& out) const {
     };
 
     for (const VariableDependency& var : _vars) {
-        const bool isolated = var.isRoot() && var.getOutgoing().empty();
+        const bool isolated = var.isIsolated();
 
         if (isolated) {
             out << "    " << nodeDef(&var) << "\n";
