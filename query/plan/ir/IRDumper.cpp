@@ -14,8 +14,8 @@ void IRDumper::dumpMermaid(const VariableDependencyGraph& graph, std::ostream& o
     out << "flowchart TD\n";
 
     std::unordered_map<const VariableDependency*, size_t> nodeIds;
-    for (size_t i = 0; i < graph.vars().size(); i++) {
-        nodeIds[&graph.vars()[i]] = i;
+    for (size_t i {0}; const VariableDependency& var : graph) {
+        nodeIds[&var] = i++;
     }
 
     const auto nodeDef = [&](const VariableDependency* var) {
@@ -24,7 +24,7 @@ void IRDumper::dumpMermaid(const VariableDependencyGraph& graph, std::ostream& o
         return "v" + std::to_string(nodeIds.at(var)) + "[\"" + std::string(label) + "\"]";
     };
 
-    for (const VariableDependency& var : graph.vars()) {
+    for (const VariableDependency& var : graph) {
         if (var.isIsolated()) {
             out << "    " << nodeDef(&var) << "\n";
         } else {
