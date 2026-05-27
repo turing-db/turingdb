@@ -35,6 +35,7 @@ set(processors_sources
     processors/LambdaTransformProcessor.cpp
     processors/CartesianProductProcessor.cpp
     processors/ShortestPathProcessor.cpp
+    processors/MultiSourceShortestPathProcessor.cpp
     processors/PathExplorerProcessor.cpp
     processors/HashJoinProcessor.cpp
     processors/WriteProcessor.cpp

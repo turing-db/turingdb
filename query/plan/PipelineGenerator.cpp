@@ -77,6 +77,7 @@
 #include "nodes/S3TransferNode.h"
 #include "nodes/ShowProceduresNode.h"
 #include "nodes/ShortestPathNode.h"
+#include "nodes/MultiSourceShortestPathNode.h"
 #include "nodes/LoadCSVNode.h"
 #include "nodes/LoadCommitNode.h"
 #include "nodes/ExprEvalNode.h"
@@ -420,6 +421,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::SHORTEST_PATH:
             return translateShortestPathNode(static_cast<ShortestPathNode*>(node));
+        break;
+
+        case PlanGraphOpcode::MULTI_SOURCE_SHORTEST_PATH:
+            return translateMultiSourceShortestPathNode(static_cast<MultiSourceShortestPathNode*>(node));
         break;
 
         case PlanGraphOpcode::ORDER_BY:
@@ -1624,6 +1629,59 @@ PipelineOutputInterface* PipelineGenerator::translateShortestPathNode(ShortestPa
     };
     ValueTypeDispatcher {edgeType._valueType}.execute(process);
 
+    _declToColumn[node->getDistance()] = distCol->getTag();
+    _declToColumn[node->getPath()] = pathCol->getTag();
+
+    _builder.setMaterializeProc(MaterializeProcessor::createFromDf(_pipeline,
+                                                                   _mem,
+                                                                   output->getDataframe()));
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateMultiSourceShortestPathNode(MultiSourceShortestPathNode* node) {
+    if (!_binaryVisitedMap.contains(node)) {
+        throw PipelineException("Attempted to translate MultiSourceShortestPath Node which was "
+                                "not already encountered.");
+    }
+
+    PipelineOutputInterface* inputA = _builder.getPendingOutputInterface();
+    auto& [inputB, isBLhs] = _binaryVisitedMap.at(node);
+
+    PipelineOutputInterface* lhs = isBLhs ? inputB : inputA;
+    PipelineOutputInterface* rhs = isBLhs ? inputA : inputB;
+
+    _builder.getPendingOutput().updateInterface(lhs);
+
+    NamedColumn* sourceOutputCol = nullptr;
+    NamedColumn* targetOutputCol = nullptr;
+    NamedColumn* distCol = nullptr;
+    NamedColumn* pathCol = nullptr;
+
+    PipelineBlockOutputInterface* output = nullptr;
+
+    const PropertyType edgeType = node->getEdgeType();
+    const auto process = [&]<SupportedType Type>() {
+        if constexpr (std::is_arithmetic_v<typename Type::Primitive>) {
+            output = &_builder.addMultiSourceShortestPath<Type>(rhs,
+                                                                _declToColumn[node->getSource()],
+                                                                _declToColumn[node->getTarget()],
+                                                                node->getEdgeType(),
+                                                                sourceOutputCol,
+                                                                targetOutputCol,
+                                                                distCol,
+                                                                pathCol);
+            sourceOutputCol->rename(node->getSourceOutput()->getName());
+            targetOutputCol->rename(node->getTargetOutput()->getName());
+            distCol->rename(node->getDistance()->getName());
+            pathCol->rename(node->getPath()->getName());
+        } else {
+            throw PlannerException("Unsupported Edge Weight Type");
+        }
+    };
+    ValueTypeDispatcher {edgeType._valueType}.execute(process);
+
+    _declToColumn[node->getSourceOutput()] = sourceOutputCol->getTag();
+    _declToColumn[node->getTargetOutput()] = targetOutputCol->getTag();
     _declToColumn[node->getDistance()] = distCol->getTag();
     _declToColumn[node->getPath()] = pathCol->getTag();
 

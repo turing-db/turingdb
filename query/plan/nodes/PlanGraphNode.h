@@ -64,6 +64,7 @@ enum class PlanGraphOpcode {
     DROP_INDEX,
     MERGE_DATAPARTS,
     UNWIND,
+    MULTI_SOURCE_SHORTEST_PATH,
 
     _SIZE
 };
@@ -123,7 +124,8 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::INDEX_LOOKUP, "INDEX_LOOKUP">,
     EnumStringPair<PlanGraphOpcode::DROP_INDEX, "DROP_INDEX">,
     EnumStringPair<PlanGraphOpcode::MERGE_DATAPARTS, "MERGE_DATAPARTS">,
-    EnumStringPair<PlanGraphOpcode::UNWIND, "UNWIND">
+    EnumStringPair<PlanGraphOpcode::UNWIND, "UNWIND">,
+    EnumStringPair<PlanGraphOpcode::MULTI_SOURCE_SHORTEST_PATH, "MULTI_SOURCE_SHORTEST_PATH">
 >;
 
 class PlanGraphNode {

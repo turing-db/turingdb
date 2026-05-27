@@ -16,6 +16,7 @@
 #include "stmt/Skip.h"
 #include "stmt/CreateStmt.h"
 #include "stmt/ShortestPathStmt.h"
+#include "stmt/MultiSourceShortestPathStmt.h"
 #include "Projection.h"
 #include "Pattern.h"
 #include "PatternElement.h"
@@ -239,6 +240,13 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
                     const ShortestPathStmt* shortestPathStmt = static_cast<const ShortestPathStmt*>(stmt);
                     out << "    _" << std::hex << query << " ||--o{ _" << std::hex << shortestPathStmt << " : \"\"\n";
                     dump(out, shortestPathStmt);
+                }
+                break;
+
+                case Stmt::Kind::MULTISOURCESHORTESTPATH: {
+                    const MultiSourceShortestPathStmt* msspStmt = static_cast<const MultiSourceShortestPathStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << msspStmt << " : \"\"\n";
+                    dump(out, msspStmt);
                 }
                 break;
 
@@ -1094,6 +1102,15 @@ void CypherASTDumper::dump(std::ostream& out, const VarDecl* decl) {
 
 void CypherASTDumper::dump(std::ostream& out, const ShortestPathStmt* stmt) {
     out << "    SHORTEST PATH:" << " {\n";
+    out << "    SOURCE:" << stmt->getSource()->getName() << ",\n";
+    out << "    TARGET:" << stmt->getTarget()->getName() << ",\n";
+    out << "    WEIGHT:" << stmt->getEdgeProperty()->getName() << "\n";
+
+    out << "    }\n";
+}
+
+void CypherASTDumper::dump(std::ostream& out, const MultiSourceShortestPathStmt* stmt) {
+    out << "    MULTI SOURCE SHORTEST PATH:" << " {\n";
     out << "    SOURCE:" << stmt->getSource()->getName() << ",\n";
     out << "    TARGET:" << stmt->getTarget()->getName() << ",\n";
     out << "    WEIGHT:" << stmt->getEdgeProperty()->getName() << "\n";

@@ -23,6 +23,7 @@ class EdgePattern;
 class FunctionInvocation;
 class LoadCSVStmt;
 class ShortestPathStmt;
+class MultiSourceShortestPathStmt;
 class GraphMetadata;
 class UnwindStmt;
 
@@ -50,6 +51,7 @@ public:
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
     void analyze(const ShortestPathStmt* spSt);
+    void analyze(const MultiSourceShortestPathStmt* msspSt);
     void analyze(const UnwindStmt* unwind);
 
     // Pattern

@@ -35,6 +35,7 @@ class VarDecl;
 class PlanGenConfig;
 class Predicate;
 class ShortestPathStmt;
+class MultiSourceShortestPathStmt;
 class DeclContext;
 class UnwindStmt;
 
@@ -62,6 +63,7 @@ public:
     void generateWhereClause(const WhereClause* where);
     void generatePatternElement(const PatternElement* element);
     void generateShortestPathStmt(const ShortestPathStmt* stmt);
+    void generateMultiSourceShortestPathStmt(const MultiSourceShortestPathStmt* stmt);
     void generateUnwindStmt(const UnwindStmt* stmt);
 
     VarNode* generatePatternElementOrigin(const NodePattern* origin);
@@ -83,6 +85,14 @@ public:
                                 const PropertyType& edgeType,
                                 const VarDecl* distDecl,
                                 const VarDecl* pathDecl);
+
+    void insertMultiSourceShortestPathNode(VarNode* source,
+                                           VarNode* target,
+                                           const PropertyType& edgeType,
+                                           const VarDecl* sourceOutputDecl,
+                                           const VarDecl* targetOutputDecl,
+                                           const VarDecl* distDecl,
+                                           const VarDecl* pathDecl);
 
     void setIsStandaloneCall(bool hasReturn) { _isStandaloneCall = hasReturn; }
     void setQueryLimit(size_t limit) { _queryLimit = limit; }

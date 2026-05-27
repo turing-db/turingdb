@@ -568,6 +568,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             case PlanGraphOpcode::S3_TRANSFER:
             case PlanGraphOpcode::SHOW_PROCEDURES:
             case PlanGraphOpcode::SHORTEST_PATH:
+            case PlanGraphOpcode::MULTI_SOURCE_SHORTEST_PATH:
             case PlanGraphOpcode::LOAD_CSV:
             case PlanGraphOpcode::CREATE_VECTOR_INDEX:
             case PlanGraphOpcode::LOAD_VECTOR:

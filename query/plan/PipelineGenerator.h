@@ -50,6 +50,7 @@ class S3ConnectNode;
 class S3TransferNode;
 class ShowProceduresNode;
 class ShortestPathNode;
+class MultiSourceShortestPathNode;
 class CommitNode;
 class LoadCSVNode;
 class CreateVectorIndexNode;
@@ -161,6 +162,7 @@ private:
     PipelineOutputInterface* translateS3TransferNode(S3TransferNode* node);
     PipelineOutputInterface* translateShowProceduresNode(ShowProceduresNode* node);
     PipelineOutputInterface* translateShortestPathNode(ShortestPathNode* node);
+    PipelineOutputInterface* translateMultiSourceShortestPathNode(MultiSourceShortestPathNode* node);
     PipelineOutputInterface* translateLoadCSVNode(LoadCSVNode* node);
     PipelineOutputInterface* translateCreateVectorIndexNode(CreateVectorIndexNode* node);
     PipelineOutputInterface* translateLoadVectorNode(LoadVectorNode* node);

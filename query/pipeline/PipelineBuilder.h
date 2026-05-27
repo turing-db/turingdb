@@ -151,6 +151,16 @@ public:
                                                   NamedColumn*& distCol,
                                                   NamedColumn*& pathCol);
 
+    template <SupportedType T>
+    PipelineBlockOutputInterface& addMultiSourceShortestPath(PipelineOutputInterface* rhs,
+                                                             ColumnTag sourceKey,
+                                                             ColumnTag targetKey,
+                                                             const PropertyType& edgeType,
+                                                             NamedColumn*& sourceOutputCol,
+                                                             NamedColumn*& targetOutputCol,
+                                                             NamedColumn*& distCol,
+                                                             NamedColumn*& pathCol);
+
     // Aggregations
     PipelineBlockOutputInterface& addSkip(size_t count);
     PipelineBlockOutputInterface& addLimit(size_t count);

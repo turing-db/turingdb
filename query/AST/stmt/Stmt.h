@@ -16,6 +16,7 @@ public:
         DELETE,
         RETURN,
         SHORTESTPATH,
+        MULTISOURCESHORTESTPATH,
         LOAD_CSV,
         VECTOR_SEARCH,
         UNWIND,

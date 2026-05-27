@@ -53,6 +53,7 @@
 #include "nodes/UnwindNode.h"
 #include "nodes/VarNode.h"
 #include "nodes/ShortestPathNode.h"
+#include "nodes/MultiSourceShortestPathNode.h"
 #include "nodes/VectorSearchNode.h"
 #include "nodes/PathExplorerNode.h"
 
@@ -61,6 +62,7 @@
 #include "PlanGenConfig.h"
 
 #include "stmt/ShortestPathStmt.h"
+#include "stmt/MultiSourceShortestPathStmt.h"
 #include "stmt/Stmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/CallStmt.h"
@@ -119,6 +121,10 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
 
         case Stmt::Kind::SHORTESTPATH:
             generateShortestPathStmt(static_cast<const ShortestPathStmt*>(stmt));
+        break;
+
+        case Stmt::Kind::MULTISOURCESHORTESTPATH:
+            generateMultiSourceShortestPathStmt(static_cast<const MultiSourceShortestPathStmt*>(stmt));
         break;
 
         case Stmt::Kind::UNWIND:
@@ -872,7 +878,11 @@ PlanGraphNode* ReadStmtGenerator::generateEndpoint() {
 
                 case PlanGraphTopology::PathToDependency::UndirectedPath: {
                     // Join
-                    if (lhsNode->getOpcode() == PlanGraphOpcode::SHORTEST_PATH || rhsNode->getOpcode() == PlanGraphOpcode::SHORTEST_PATH) {
+                    const bool lhsIsShortestPath = lhsNode->getOpcode() == PlanGraphOpcode::SHORTEST_PATH
+                                                 || lhsNode->getOpcode() == PlanGraphOpcode::MULTI_SOURCE_SHORTEST_PATH;
+                    const bool rhsIsShortestPath = rhsNode->getOpcode() == PlanGraphOpcode::SHORTEST_PATH
+                                                 || rhsNode->getOpcode() == PlanGraphOpcode::MULTI_SOURCE_SHORTEST_PATH;
+                    if (lhsIsShortestPath || rhsIsShortestPath) {
                         throwError("Common Ancestor Joins With Shortest Path Unsupported");
                     }
 
@@ -1186,6 +1196,70 @@ void ReadStmtGenerator::generateShortestPathStmt(const ShortestPathStmt* stmt) {
     VarNode* targetNode = _variables->getVarNode(targetDecl);
 
     insertShortestPathNode(sourceNode, targetNode, propertyType, distDecl, pathDecl);
+}
+
+void ReadStmtGenerator::generateMultiSourceShortestPathStmt(const MultiSourceShortestPathStmt* stmt) {
+    const Symbol* source = stmt->getSource();
+    const Symbol* target = stmt->getTarget();
+    const Symbol* edgeProp = stmt->getEdgeProperty();
+    const Symbol* sourceVar = stmt->getSourceVar();
+    const Symbol* targetVar = stmt->getTargetVar();
+    const Symbol* distance = stmt->getDistVar();
+    const Symbol* path = stmt->getPathVar();
+
+    const std::string_view sourceName = source->getName();
+    const std::string_view targetName = target->getName();
+    const std::string_view edgePropName = edgeProp->getName();
+    const std::string_view sourceVarName = sourceVar->getName();
+    const std::string_view targetVarName = targetVar->getName();
+    const std::string_view distName = distance->getName();
+    const std::string_view pathName = path->getName();
+
+    const GraphMetadata& metadata = _graphView.metadata();
+    const PropertyTypeMap& propMan = metadata.propTypes();
+    const auto maybeProp = propMan.get(edgePropName);
+    bioassert(maybeProp.has_value(), "Invalid property.");
+
+    const PropertyType propertyType = maybeProp.value();
+
+    const VarDecl* sourceDecl = _declContext->getDecl(sourceName);
+    const VarDecl* targetDecl = _declContext->getDecl(targetName);
+    const VarDecl* sourceOutputDecl = _declContext->getDecl(sourceVarName);
+    const VarDecl* targetOutputDecl = _declContext->getDecl(targetVarName);
+    const VarDecl* distDecl = _declContext->getDecl(distName);
+    const VarDecl* pathDecl = _declContext->getDecl(pathName);
+
+    VarNode* sourceNode = _variables->getVarNode(sourceDecl);
+    VarNode* targetNode = _variables->getVarNode(targetDecl);
+
+    insertMultiSourceShortestPathNode(sourceNode, targetNode, propertyType,
+                                      sourceOutputDecl, targetOutputDecl,
+                                      distDecl, pathDecl);
+}
+
+void ReadStmtGenerator::insertMultiSourceShortestPathNode(VarNode* source,
+                                                          VarNode* target,
+                                                          const PropertyType& edgeType,
+                                                          const VarDecl* sourceOutputDecl,
+                                                          const VarDecl* targetOutputDecl,
+                                                          const VarDecl* distDecl,
+                                                          const VarDecl* pathDecl) {
+    auto* sourceTip = _topology->getBranchTip(source);
+    auto* targetTip = _topology->getBranchTip(target);
+
+    MultiSourceShortestPathNode* node = _tree->create<MultiSourceShortestPathNode>(source->getVarDecl(),
+                                                                                   target->getVarDecl(),
+                                                                                   sourceOutputDecl,
+                                                                                   targetOutputDecl,
+                                                                                   distDecl,
+                                                                                   pathDecl,
+                                                                                   edgeType);
+    sourceTip->connectOut(node);
+    targetTip->connectOut(node);
+    _variables->setProducer(sourceOutputDecl, node);
+    _variables->setProducer(targetOutputDecl, node);
+    _variables->setProducer(distDecl, node);
+    _variables->setProducer(pathDecl, node);
 }
 
 void ReadStmtGenerator::generateUnwindStmt(const UnwindStmt* stmt) {

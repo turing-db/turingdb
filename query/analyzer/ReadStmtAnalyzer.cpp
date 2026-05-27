@@ -19,6 +19,7 @@
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
 #include "stmt/ShortestPathStmt.h"
+#include "stmt/MultiSourceShortestPathStmt.h"
 #include "stmt/Skip.h"
 #include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
@@ -83,6 +84,10 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
 
         case Stmt::Kind::SHORTESTPATH:
             analyze(static_cast<const ShortestPathStmt*>(stmt));
+        break;
+
+        case Stmt::Kind::MULTISOURCESHORTESTPATH:
+            analyze(static_cast<const MultiSourceShortestPathStmt*>(stmt));
         break;
 
         case Stmt::Kind::UNWIND:
@@ -551,6 +556,32 @@ void ReadStmtAnalyzer::analyze(const ShortestPathStmt* spSt) {
     const std::string_view distName = distVar->getName();
     const std::string_view pathName = pathVar->getName();
 
+    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::Integer, distName);
+    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, pathName);
+}
+
+void ReadStmtAnalyzer::analyze(const MultiSourceShortestPathStmt* msspSt) {
+    const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
+    const std::string_view propName = msspSt->getEdgeProperty()->getName();
+
+    const std::optional<PropertyType> propType = propTypeMap.get(propName);
+    if (!propType) {
+        throwError(fmt::format("Unknown property: {}", propName));
+    }
+
+    const Symbol* sourceVar = msspSt->getSourceVar();
+    const Symbol* targetVar = msspSt->getTargetVar();
+    const Symbol* distVar = msspSt->getDistVar();
+    const Symbol* pathVar = msspSt->getPathVar();
+    bioassert(sourceVar && targetVar && distVar && pathVar, "Null variables.");
+
+    const std::string_view sourceVarName = sourceVar->getName();
+    const std::string_view targetVarName = targetVar->getName();
+    const std::string_view distName = distVar->getName();
+    const std::string_view pathName = pathVar->getName();
+
+    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, sourceVarName);
+    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, targetVarName);
     _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::Integer, distName);
     _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, pathName);
 }

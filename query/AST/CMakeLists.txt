@@ -34,6 +34,7 @@ set(ast_sources
     stmt/DeleteStmt.cpp
     stmt/ReturnStmt.cpp
     stmt/ShortestPathStmt.cpp
+    stmt/MultiSourceShortestPathStmt.cpp
     stmt/LoadCSVStmt.cpp
     stmt/OrderByItem.cpp
     stmt/OrderBy.cpp
