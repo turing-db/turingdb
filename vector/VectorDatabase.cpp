@@ -4,7 +4,7 @@
 
 #include "RandomGenerator.h"
 #include "ShardCache.h"
-#include "StorageManager.h"
+#include "VectorStorageManager.h"
 #include "VecLib.h"
 #include "VecLibAccessor.h"
 #include "VecLibWriteAccessor.h"
@@ -25,7 +25,7 @@ VectorResult<void> VectorDatabase::init(const fs::Path& rootPath) {
         RandomGenerator::initialize(RANDOM_SEED);
     }
 
-    auto storage = StorageManager::create(rootPath);
+    auto storage = VectorStorageManager::create(rootPath);
     if (!storage) {
         return nonstd::make_unexpected(storage.error());
     }

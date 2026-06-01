@@ -7,7 +7,7 @@
 
 #include "ShardCache.h"
 #include "VecLibShardAccessor.h"
-#include "StorageManager.h"
+#include "VectorStorageManager.h"
 #include "BatchVectorCreate.h"
 #include "VectorSearchQuery.h"
 #include "LSHShardRouter.h"
