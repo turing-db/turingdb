@@ -50,7 +50,7 @@ set(CPP_STANDARD "c++23")
 
 # C++ warning flags
 # Note: -Wno-deprecated-declarations is needed for external range-v3 library deprecation warnings
-set(CPP_WARNINGS "-Wall -Werror -Wunused-function -Wunused-variable -Wno-deprecated-declarations")
+set(CPP_WARNINGS "-Wall -Werror -Wunused-function -Wunused-variable -Wno-deprecated-declarations -Wno-maybe-uninitialized")
 
 # Detect debug build
 set(DEBUG_BUILD FALSE)
@@ -223,6 +223,18 @@ find_package(Parquet REQUIRED)
 
 # Faiss
 find_package(Faiss REQUIRED)
+
+find_package(LLVM REQUIRED)
+find_package(MLIR REQUIRED)
+message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+
+list(APPEND CMAKE_MODULE_PATH  "${MLIR_CMAKE_DIR}")
+list(APPEND CMAKE_MODULE_PATH  "${LLVM_CMAKE_DIR}")
+
+include(TableGen)
+include(AddLLVM)
+include(AddMLIR)
 
 # OpenMP (required by Faiss)
 # When libomp was built from source (clang builds: macOS always, Linux via
