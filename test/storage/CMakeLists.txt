@@ -38,4 +38,5 @@ add_storage_tests(test_storage_dump_loadcommit dump/LoadCommitDataTest.cpp)
 add_storage_tests(test_storage_dump_embedding_graph dump/EmbeddingGraphDumpLoadTest.cpp)
 
 add_storage_tests(test_storage_columns_dispatcher ColumnDispatcherTest.cpp)
+add_storage_tests(test_storage_objectmap ObjectMapTest.cpp)
 
