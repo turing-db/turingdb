@@ -10,8 +10,8 @@ template <class K, class V>
 struct StringHashMap : std::unordered_map<K, V, StringHasher, std::equal_to<>> {
     using Base = std::unordered_map<K, V, StringHasher, std::equal_to<>>;
 
-    using Base::unordered_map;
-    using Base::erase;
+    using typename Base::unordered_map;
+    using typename Base::erase;
 
     // The standard unordered_map::erase(key) is not heterogeneous, so erasing
     // by string_view requires a transparent lookup followed by an erase by
