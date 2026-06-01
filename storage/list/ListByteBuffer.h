@@ -28,6 +28,11 @@ public:
     /// Deallocates all owned chunks
     ~ListByteBuffer();
 
+    ListByteBuffer(const ListByteBuffer&) = delete;
+    ListByteBuffer(ListByteBuffer&&) = delete;
+    ListByteBuffer& operator=(const ListByteBuffer&) = delete;
+    ListByteBuffer& operator=(ListByteBuffer&&) = delete;
+
     static consteval size_t tagSize() { return _tagSize; }
 
     /**
@@ -88,9 +93,12 @@ public:
     {
     }
 
-    ~ByteChunk() {
-        delete[] _buf;
-    }
+    ~ByteChunk() { delete[] _buf; }
+
+    ByteChunk(const ByteChunk&) = delete;
+    ByteChunk(ByteChunk&&) = delete;
+    ByteChunk& operator=(const ByteChunk&) = delete;
+    ByteChunk& operator=(ByteChunk&&) = delete;
 
     /// Returns true if @ref _buf has at least @param numBytes remaining capacity
     [[nodiscard]] bool canFit(size_t numBytes) const;
