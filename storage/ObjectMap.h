@@ -2,6 +2,7 @@
 
 #include <string_view>
 #include <string>
+#include <vector>
 #include <memory>
 #include <shared_mutex>
 #include <mutex>
@@ -14,12 +15,22 @@ namespace db {
 template <typename ObjectT>
 class ObjectMap {
 public:
-    struct ObjectSlot {
-        std::unique_ptr<ObjectT> _obj;
+    class SlotReservation;
+
+    class ObjectSlot {
+    public:
+        friend SlotReservation;
 
         bool isFree() const {
             return _obj == nullptr;
         }
+
+        ObjectT* getObject() const {
+            return _obj.get();
+        }
+
+    private:
+        std::unique_ptr<ObjectT> _obj;
     };
 
     class SlotReservation {
@@ -54,6 +65,7 @@ public:
             {
                 std::unique_lock<RWSpinLock> lock(_map->_mapLock);
                 _slot->_obj = std::move(obj);
+                ++_map->_size;
             }
 
             _slot = nullptr;
@@ -113,9 +125,25 @@ public:
         return slot;
     }
 
+    size_t size() const {
+        std::shared_lock<RWSpinLock> lock(_mapLock);
+        return _size;
+    }
+
+    void listNames(std::vector<std::string_view>& names) const {
+        std::shared_lock<RWSpinLock> lock(_mapLock);
+
+        for (const auto& [name, slot] : _map) {
+            if (slot && !slot->isFree()) {
+                names.push_back(name);
+            }
+        }
+    }
+
 private:
     mutable RWSpinLock _mapLock;
     StringHashMap<std::string, std::unique_ptr<ObjectSlot>> _map;
+    size_t _size {0};
 
     void removeSlot(std::string_view name) {
         _map.erase(name);

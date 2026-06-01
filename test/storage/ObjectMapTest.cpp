@@ -86,7 +86,7 @@ TEST_F(ObjectMapTest, publishMakesObjectVisible) {
     const auto* slot = map.getObject("a");
     ASSERT_NE(slot, nullptr);
     ASSERT_FALSE(slot->isFree());
-    ASSERT_EQ(slot->_obj->_value, 42);
+    ASSERT_EQ(slot->getObject()->_value, 42);
 }
 
 TEST_F(ObjectMapTest, publishInvalidatesReservation) {
@@ -130,7 +130,7 @@ TEST_F(ObjectMapTest, publishedNameCannotBeReserved) {
 
     const auto* slot = map.getObject("a");
     ASSERT_NE(slot, nullptr);
-    ASSERT_EQ(slot->_obj->_value, 7);
+    ASSERT_EQ(slot->getObject()->_value, 7);
 }
 
 TEST_F(ObjectMapTest, multipleDistinctObjects) {
@@ -144,8 +144,8 @@ TEST_F(ObjectMapTest, multipleDistinctObjects) {
     first.publish(makeObject(1));
     second.publish(makeObject(2));
 
-    ASSERT_EQ(map.getObject("a")->_obj->_value, 1);
-    ASSERT_EQ(map.getObject("b")->_obj->_value, 2);
+    ASSERT_EQ(map.getObject("a")->getObject()->_value, 1);
+    ASSERT_EQ(map.getObject("b")->getObject()->_value, 2);
 }
 
 TEST_F(ObjectMapTest, destructionFreesPublishedObjects) {
@@ -203,7 +203,7 @@ TEST_F(ObjectMapTest, concurrentReserveDistinctNames) {
 
         const auto* slot = map.getObject(name);
         ASSERT_NE(slot, nullptr);
-        ASSERT_EQ(slot->_obj->_value, i);
+        ASSERT_EQ(slot->getObject()->_value, i);
     }
 
     ASSERT_EQ(TestObject::_liveCount, threadCount);
