@@ -1,8 +1,9 @@
 #pragma once
 
-#include <unordered_map>
 #include <vector>
 #include <optional>
+
+#include "StorageManager.h"
 
 #include "ChangeManager.h"
 #include "versioning/ChangeID.h"
@@ -26,7 +27,6 @@
 
 #include "LockFile.h"
 #include "Path.h"
-#include "RWSpinLock.h"
 
 namespace db {
 
@@ -55,7 +55,7 @@ public:
     // Graph access
     Graph* getDefaultGraph() const;
     Graph* getGraph(const std::string& graphName) const;
-    size_t getGraphCount() const { return _graphs.size(); }
+    size_t getGraphCount() const { return _storage.getGraphCount(); }
 
     // Graph operations
     Graph* createGraph(const std::string& graphName);
@@ -78,8 +78,8 @@ public:
     DumpResult<void> dumpGraph(const std::string& graphName);
 
     // ChangeManager access and operations
-    ChangeManager& getChangeManager() { return _changes; }
-    const ChangeManager& getChangeManager() const { return _changes; }
+    ChangeManager& getChangeManager() { return _storage.getChangeManager(); }
+    const ChangeManager& getChangeManager() const { return _storage.getChangeManager(); }
     ChangeResult<Change*> newChange(const std::string& graphName,
                                     CommitHash baseHash = CommitHash::head());
 
@@ -121,12 +121,7 @@ private:
     JobSystem _jobSystem;
 
     // Graphs management
-    mutable RWSpinLock _graphsLock;
-    Graph* _defaultGraph {nullptr};
-    std::unordered_map<std::string, std::unique_ptr<Graph>> _graphs;
-
-    // Change management
-    ChangeManager _changes;
+    StorageManager _storage;
 
     // Graph load status
     GraphLoadStatus _graphLoadStatus;
@@ -147,12 +142,10 @@ private:
     void initLockFile();
     void initVectorDatabase();
     void initSystemEvents();
-    void loadOrCreateDefaultGraph();
 
     bool loadJsonlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadGmlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
     bool loadBinaryDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
-    bool addGraph(std::unique_ptr<Graph> graph);
 };
 
 }

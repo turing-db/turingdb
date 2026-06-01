@@ -28,7 +28,8 @@
 using namespace db;
 
 SystemManager::SystemManager(const TuringConfig* config)
-    : _config(config)
+    : _config(config),
+    _storage(config->getGraphsDir(), config->isSyncedOnDisk())
 {
 }
 
@@ -42,7 +43,7 @@ void SystemManager::init() {
     initVectorDatabase();
     initSystemEvents();
     _jobSystem.init();
-    loadOrCreateDefaultGraph();
+    _storage.loadOrCreateDefaultGraph();
 
     _procedures.init();
     _extensions.init(&_procedures,
@@ -154,115 +155,28 @@ void SystemManager::initSystemEvents() {
     });
 }
 
-void SystemManager::loadOrCreateDefaultGraph() {
-    // Try to load default graph from disk
-    _defaultGraph = loadGraph("default");
-    if (_defaultGraph) {
-        return;
-    }
-
-    // Create default graph if it does not exist
-    _defaultGraph = createGraph("default");
-    if (!_defaultGraph) {
-        throw TuringException("Could not initialise the default graph");
-    }
-}
-
 Graph* SystemManager::loadGraph(const std::string& name) {
-    const fs::Path graphPath = _config->getGraphsDir() / name;
-
-    auto graph = Graph::create(name, graphPath);
-    Graph* graphPtr = graph.get();
-
-    if (const auto res = graph->getSerializer().load(); !res) {
-        spdlog::error("Failed to load graph '{}' from {}: {}",
-                      name, graphPath.get(), res.error().fmtMessage());
-        return nullptr;
-    }
-
-    if (!addGraph(std::move(graph))) {
-        spdlog::error("Failed to register graph '{}': "
-                      "a graph with this name is already loaded", name);
-        return nullptr;
-    }
-
-    return graphPtr;
+    return _storage.loadGraph(name);
 }
 
 Graph* SystemManager::createGraph(const std::string& name) {
-    const fs::Path path = _config->getGraphsDir() / name;
-
-    const bool syncedOnDisk = _config->isSyncedOnDisk();
-    if (syncedOnDisk) {
-        if (path.exists()) {
-            throw TuringException(fmt::format("Graph '{}' already exists", name));
-        }
-    }
-
-    auto graph = Graph::create(name, path);
-    Graph* graphPtr = graph.get();
-
-    if (_config->isSyncedOnDisk()) {
-        if (auto res = graph->getSerializer().dump(); !res) {
-            spdlog::error(res.error().fmtMessage());
-            return nullptr;
-        }
-    }
-
-    if (!addGraph(std::move(graph))) {
-        return nullptr;
-    }
-
-    return graphPtr;
-}
-
-bool SystemManager::addGraph(std::unique_ptr<Graph> graph) {
-    std::unique_lock guard(_graphsLock);
-
-    const auto& name = graph->getName();
-
-    // Search if a graph with the same name exists
-    const auto it = _graphs.find(name);
-    if (it != _graphs.end()) {
-        return false;
-    }
-
-    _graphs[name] = std::move(graph);
-
-    return true;
+    return _storage.createGraph(name);
 }
 
 Graph* SystemManager::getDefaultGraph() const {
-    std::shared_lock guard(_graphsLock);
-    return _defaultGraph;
+    return _storage.getDefaultGraph();
 }
 
 void SystemManager::setDefaultGraph(const std::string& name) {
-    std::unique_lock guard(_graphsLock);
-
-    const auto it = _graphs.find(name);
-    if (it != _graphs.end()) {
-        _defaultGraph = it->second.get();
-    }
+    _storage.setDefaultGraph(name);
 }
 
 Graph* SystemManager::getGraph(const std::string& graphName) const {
-    std::shared_lock guard(_graphsLock);
-
-    const auto it = _graphs.find(graphName);
-    if (it == _graphs.end()) {
-        return nullptr;
-    }
-
-    return it->second.get();
+    return _storage.getGraph(graphName);
 }
 
 void SystemManager::listGraphs(std::vector<std::string_view>& names) {
-    std::shared_lock guard(_graphsLock);
-
-    for (const auto& [name, graph] : _graphs) {
-        names.push_back(name);
-    }
+    _storage.listGraphs(names);
 }
 
 bool SystemManager::importGraph(const std::string& graphName, const fs::Path& filePath, JobSystem& jobSystem) {
@@ -310,19 +224,17 @@ bool SystemManager::importGraph(const std::string& graphName, const fs::Path& fi
 }
 
 DumpResult<void> SystemManager::dumpGraph(const std::string& graphName) {
-    std::shared_lock guard(_graphsLock);
-
     if (!_config->isSyncedOnDisk()) {
         spdlog::warn("Cannot dump graph, The system is running in full in-memory mode");
         return {};
     }
 
-    const auto graphIt = _graphs.find(graphName);
-    if (graphIt == _graphs.end()) {
+    Graph* graph = _storage.getGraph(graphName);
+    if (!graph) {
         return DumpError::result(DumpErrorType::GRAPH_DOES_NOT_EXIST);
     }
 
-    return graphIt->second->getSerializer().dump();
+    return graph->getSerializer().dump();
 }
 
 std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& graphPath) {
@@ -365,7 +277,7 @@ bool SystemManager::loadBinaryDB(const std::string& graphName,
         return false;
     }
 
-    if (!addGraph(std::move(graph))) {
+    if (!_storage.addGraph(std::move(graph))) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
@@ -398,7 +310,8 @@ bool SystemManager::loadJsonlDB(const std::string& graphName,
         return false;
     }
 
-    Change* change = _changes.createChange(graph.get(), CommitHash::head());
+    ChangeManager& changeManager = getChangeManager();
+    Change* change = changeManager.createChange(graph.get(), CommitHash::head());
     ChangeAccessor changeAccessor = change->access();
 
     const auto importRes = JsonlParser::parse(changeAccessor, file);
@@ -409,7 +322,7 @@ bool SystemManager::loadJsonlDB(const std::string& graphName,
         return false;
     }
 
-    const auto submitRes = _changes.submitChange(changeAccessor, jobsystem);
+    const auto submitRes = changeManager.submitChange(changeAccessor, jobsystem);
 
     if (!submitRes) {
         _graphLoadStatus.removeLoadingGraph(graphName);
@@ -427,7 +340,7 @@ bool SystemManager::loadJsonlDB(const std::string& graphName,
         }
     }
 
-    if (!addGraph(std::move(graph))) {
+    if (!_storage.addGraph(std::move(graph))) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
@@ -466,7 +379,7 @@ bool SystemManager::loadGmlDB(const std::string& graphName,
         }
     }
 
-    if (!addGraph(std::move(graph))) {
+    if (!_storage.addGraph(std::move(graph))) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
@@ -487,26 +400,23 @@ void SystemManager::listAvailableGraphs(std::vector<fs::Path>& names) {
 }
 
 ChangeResult<Change*> SystemManager::newChange(const std::string& graphName, CommitHash baseHash) {
-    std::shared_lock graphGuard(_graphsLock);
-
-    const auto it = _graphs.find(graphName);
-    if (it == _graphs.end()) {
+    Graph* graph = _storage.getGraph(graphName);
+    if (!graph) {
         return ChangeError::result(ChangeErrorType::GRAPH_NOT_FOUND);
     }
 
-    Graph* graph = it->second.get();
-    return _changes.createChange(graph, baseHash);
+    ChangeManager& changeManager = getChangeManager();
+    return changeManager.createChange(graph, baseHash);
 }
 
 DataPartMergeResult<void> SystemManager::mergeDataParts(Graph* graph, JobSystem& jobSystem) {
-    return _changes.mergeDataParts(graph, jobSystem);
+    ChangeManager& changeManager = getChangeManager();
+    return changeManager.mergeDataParts(graph, jobSystem);
 }
 
 ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphName,
                                                          CommitHash commitHash,
                                                          ChangeID changeID) {
-    std::shared_lock guard(_graphsLock);
-
     Graph* graph = graphName.empty() ? this->getDefaultGraph()
                                      : this->getGraph(std::string(graphName));
     if (!graph) {
@@ -527,7 +437,8 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
         return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
     }
 
-    const auto changeRes = this->getChangeManager().getChange(graph, changeID);
+    ChangeManager& changeManager = this->getChangeManager();
+    const auto changeRes = changeManager.getChange(graph, changeID);
     if (!changeRes) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }
@@ -564,7 +475,6 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
 }
 
 DumpResult<void> SystemManager::loadCommit(std::string_view graphName, CommitHash hash) {
-    std::shared_lock guard(_graphsLock);
     Graph* graph = graphName.empty() ? getDefaultGraph()
                                      : getGraph(std::string(graphName));
     if (!graph) {

@@ -2,6 +2,8 @@
 set(storage_sources
         Graph.cpp
         GraphSerializer.cpp
+        StorageManager.cpp
+        ChangeManager.cpp
         DebugDump.cpp
         RowStore.cpp
         EntityList.cpp
