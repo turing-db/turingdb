@@ -8,6 +8,7 @@ add_turing_test(test_io_s3 S3Test.cpp)
 add_turing_test(test_io_filecache FileCacheTest.cpp)
 add_turing_test(test_io_agingrincache AgingRingCacheTest.cpp)
 add_turing_test(test_io_parquet_reader ParquetReaderTest.cpp)
+add_turing_test(test_io_parquet_writer ParquetWriterTest.cpp)
 
 target_link_libraries(test_io_path
     PRIVATE turing_db_io_fs_s)
@@ -37,5 +38,9 @@ target_link_libraries(test_io_agingrincache
     PRIVATE turing_db_io_cache_s)
 
 target_link_libraries(test_io_parquet_reader
+    PRIVATE turing_db_io_fs_s
+            turing_db_io_parquet_s)
+
+target_link_libraries(test_io_parquet_writer
     PRIVATE turing_db_io_fs_s
             turing_db_io_parquet_s)
