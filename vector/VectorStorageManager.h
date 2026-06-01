@@ -16,19 +16,19 @@ class VecLib;
 class LSHShardRouter;
 struct VecLibMetadata;
 
-class StorageManager {
+class VectorStorageManager {
 public:
     using StorageMap = std::unordered_map<VecLibID, std::unique_ptr<VecLibStorage>>;
 
-    StorageManager();
-    ~StorageManager();
+    VectorStorageManager();
+    ~VectorStorageManager();
 
-    [[nodiscard]] static VectorResult<std::unique_ptr<StorageManager>> create(const fs::Path& rootPath);
+    VectorStorageManager(const VectorStorageManager&) = delete;
+    VectorStorageManager(VectorStorageManager&&) = delete;
+    VectorStorageManager& operator=(const VectorStorageManager&) = delete;
+    VectorStorageManager& operator=(VectorStorageManager&&) = delete;
 
-    StorageManager(const StorageManager&) = delete;
-    StorageManager(StorageManager&&) = delete;
-    StorageManager& operator=(const StorageManager&) = delete;
-    StorageManager& operator=(StorageManager&&) = delete;
+    [[nodiscard]] static VectorResult<std::unique_ptr<VectorStorageManager>> create(const fs::Path& rootPath);
 
     [[nodiscard]] VectorResult<void> createLibraryStorage(const VecLib& lib);
     [[nodiscard]] bool libraryExists(const VecLibID& libID) const;

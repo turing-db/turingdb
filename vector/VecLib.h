@@ -15,7 +15,7 @@ namespace vec {
 struct VecLibShard;
 struct VecLibStorage;
 class VectorDatabase;
-class StorageManager;
+class VectorStorageManager;
 class ShardCache;
 class BatchVectorCreate;
 class VectorSearchQuery;
@@ -37,7 +37,7 @@ public:
     public:
         Builder();
 
-        Builder& setStorage(StorageManager* storage) {
+        Builder& setStorage(VectorStorageManager* storage) {
             _vecLib->_storage = storage;
             return *this;
         }
@@ -77,7 +77,7 @@ public:
     public:
         Loader();
 
-        Loader& setStorageManager(StorageManager* storage) {
+        Loader& setStorageManager(VectorStorageManager* storage) {
             _vecLib->_storage = storage;
             return *this;
         }
@@ -123,7 +123,7 @@ private:
 
     mutable std::shared_mutex _mutex;
 
-    StorageManager* _storage {nullptr};
+    VectorStorageManager* _storage {nullptr};
     ShardCache* _shardCache {nullptr};
 
     VecLibMetadata _metadata;

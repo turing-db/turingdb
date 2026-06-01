@@ -5,7 +5,7 @@
 #include <faiss/IndexFlat.h>
 #include <spdlog/spdlog.h>
 
-#include "StorageManager.h"
+#include "VectorStorageManager.h"
 #include "VecLibShard.h"
 #include "VecLibShardAccessor.h"
 #include "AgingRingCache.h"
@@ -18,7 +18,7 @@ using namespace vec;
 namespace {
 
 struct LoadData {
-    const StorageManager& _storageManager;
+    const VectorStorageManager& _storageManager;
     const VecLibMetadata& _meta;
 };
 
@@ -60,7 +60,7 @@ size_t calculateMemoryUsage(const std::unique_ptr<VecLibShard>& shard) {
 
 }
 
-ShardCache::ShardCache(StorageManager& storageManager)
+ShardCache::ShardCache(VectorStorageManager& storageManager)
     : _storageManager(&storageManager),
     _cache(std::make_unique<Cache>())
 {

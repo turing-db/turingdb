@@ -1,7 +1,7 @@
 set(VECTOR_SOURCES
         RandomGenerator.cpp
         VectorException.cpp
-        StorageManager.cpp
+        VectorStorageManager.cpp
         LSHShardRouter.cpp
         VecLibShardAccessor.cpp
         VectorResult.cpp

@@ -13,7 +13,7 @@
 namespace vec {
 
 class VecLib;
-class StorageManager;
+class VectorStorageManager;
 class ShardCache;
 
 class VectorDatabase {
@@ -50,7 +50,7 @@ public:
 
 private:
     mutable std::shared_mutex _mutex;
-    std::unique_ptr<StorageManager> _storageManager;
+    std::unique_ptr<VectorStorageManager> _storageManager;
     std::unique_ptr<ShardCache> _shardCache;
     VecLibMap _vecLibs;
     VecLibIDs _vecLibIDs;

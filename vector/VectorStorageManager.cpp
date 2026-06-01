@@ -1,4 +1,4 @@
-#include "StorageManager.h"
+#include "VectorStorageManager.h"
 
 #include <charconv>
 #include <mutex>
@@ -12,15 +12,15 @@
 
 using namespace vec;
 
-StorageManager::StorageManager()
+VectorStorageManager::VectorStorageManager()
 {
 }
 
-StorageManager::~StorageManager() {
+VectorStorageManager::~VectorStorageManager() {
 }
 
-VectorResult<std::unique_ptr<StorageManager>> StorageManager::create(const fs::Path& rootPath) {
-    auto storage = std::make_unique<StorageManager>();
+VectorResult<std::unique_ptr<VectorStorageManager>> VectorStorageManager::create(const fs::Path& rootPath) {
+    auto storage = std::make_unique<VectorStorageManager>();
     storage->_rootPath = rootPath;
 
     const auto info = rootPath.getFileInfo();
@@ -44,7 +44,7 @@ VectorResult<std::unique_ptr<StorageManager>> StorageManager::create(const fs::P
     return storage;
 }
 
-VectorResult<void> StorageManager::createLibraryStorage(const VecLib& lib) {
+VectorResult<void> VectorStorageManager::createLibraryStorage(const VecLib& lib) {
     const auto* meta = lib.metadata();
 
     const fs::Path libRoot = getLibraryPath(meta->_id);
@@ -95,11 +95,11 @@ VectorResult<void> StorageManager::createLibraryStorage(const VecLib& lib) {
     return {};
 }
 
-bool StorageManager::libraryExists(const VecLibID& libID) const {
+bool VectorStorageManager::libraryExists(const VecLibID& libID) const {
     return getLibraryPath(libID).exists();
 }
 
-VectorResult<void> StorageManager::deleteLibraryStorage(const VecLibID& libID) {
+VectorResult<void> VectorStorageManager::deleteLibraryStorage(const VecLibID& libID) {
     const fs::Path libPath = getLibraryPath(libID);
 
     std::unique_lock lock(_mutex);
@@ -117,35 +117,35 @@ VectorResult<void> StorageManager::deleteLibraryStorage(const VecLibID& libID) {
     return {};
 }
 
-const VecLibStorage& StorageManager::getStorage(const VecLibID& libID) const {
+const VecLibStorage& VectorStorageManager::getStorage(const VecLibID& libID) const {
     std::shared_lock lock(_mutex);
 
     return *_storages.at(libID);
 }
 
-VecLibStorage& StorageManager::getStorage(const VecLibID& libID) {
+VecLibStorage& VectorStorageManager::getStorage(const VecLibID& libID) {
     std::shared_lock lock(_mutex);
 
     return *_storages.at(libID);
 }
 
-fs::Path StorageManager::getLibraryPath(const VecLibID& libID) const {
+fs::Path VectorStorageManager::getLibraryPath(const VecLibID& libID) const {
     return _rootPath / std::to_string(libID);
 }
 
-fs::Path StorageManager::getMetadataPath(const VecLibID& libID) const {
+fs::Path VectorStorageManager::getMetadataPath(const VecLibID& libID) const {
     return getLibraryPath(libID) / "metadata.json";
 }
 
-fs::Path StorageManager::getShardRouterPath(const VecLibID& libID) const {
+fs::Path VectorStorageManager::getShardRouterPath(const VecLibID& libID) const {
     return getLibraryPath(libID) / "shard_router.bin";
 }
 
-fs::Path StorageManager::getShardPath(const VecLibID& libID, LSHSignature sig) const {
+fs::Path VectorStorageManager::getShardPath(const VecLibID& libID, LSHSignature sig) const {
     return getLibraryPath(libID) / "embeddings-" + std::to_string(sig) + ".index";
 }
 
-VectorResult<void> StorageManager::initialize() {
+VectorResult<void> VectorStorageManager::initialize() {
     auto listRes = _rootPath.listDir();
     if (!listRes) {
         return VectorError::result(VectorErrorCode::CouldNotListLibraries);

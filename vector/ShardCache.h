@@ -15,7 +15,7 @@ class AgingRingCache;
 
 namespace vec {
 
-class StorageManager;
+class VectorStorageManager;
 
 class ShardCache {
 public:
@@ -24,7 +24,7 @@ public:
                                  ShardIdentifier::Hash,
                                  ShardIdentifier::Equal>;
 
-    explicit ShardCache(StorageManager& storageManager);
+    explicit ShardCache(VectorStorageManager& storageManager);
     ~ShardCache() noexcept;
 
     ShardCache(const ShardCache&) = delete;
@@ -38,7 +38,7 @@ public:
     void setMemLimit(ssize_t memLimit);
 
 private:
-    StorageManager* _storageManager {nullptr};
+    VectorStorageManager* _storageManager {nullptr};
     std::unique_ptr<Cache> _cache;
 };
 
