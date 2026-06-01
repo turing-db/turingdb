@@ -26,6 +26,11 @@ public:
     /// Deallocates all owned chunks
     ~ListElementViewBuffer();
 
+    ListElementViewBuffer(const ListElementViewBuffer&) = delete;
+    ListElementViewBuffer(ListElementViewBuffer&&) = delete;
+    ListElementViewBuffer& operator=(const ListElementViewBuffer&) = delete;
+    ListElementViewBuffer& operator=(ListElementViewBuffer&&) = delete;
+
     /**
      * @brief Ensures that after this call is complete, the current @ref Chunk
      * contains at least enough free space at the end of the its internal buffer to store
@@ -90,6 +95,11 @@ public:
     ~Chunk() {
         delete[] _buf;
     }
+
+    Chunk(const Chunk&) = delete;
+    Chunk(Chunk&&) = delete;
+    Chunk& operator=(const Chunk&) = delete;
+    Chunk& operator=(Chunk&&) = delete;
 
     /// Returns true if @ref _buf has at least @param numViews remaining capacity
     [[nodiscard]] bool canFit(size_t numViews) const;
