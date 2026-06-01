@@ -1,7 +1,6 @@
 set(system_sources
     TuringConfig.cpp
     GraphLoadStatus.cpp
-    ChangeManager.cpp
     LockFile.cpp
     LockFileResult.cpp
     SystemEventHandler.cpp
