@@ -231,6 +231,8 @@ find_package(LLVM REQUIRED)
 find_package(MLIR REQUIRED)
 message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+message(STATUS "MLIR_INCLUDE_DIRS: ${MLIR_INCLUDE_DIRS}")
+message(STATUS "MLIR_INCLUDE_DIRS: ${LLVM_INCLUDE_DIRS}")
 
 list(APPEND CMAKE_MODULE_PATH  "${MLIR_CMAKE_DIR}")
 list(APPEND CMAKE_MODULE_PATH  "${LLVM_CMAKE_DIR}")
