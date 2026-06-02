@@ -6,9 +6,44 @@ Parquet-backed format, reusing the engineering already in Apache Arrow/Parquet
 (page management, compression, row groups, column chunks) instead of maintaining
 our own.
 
-This document is the authoritative plan. Every claim about the current engine is
-grounded in the tree; references are cited as `path:line` and collected in the
-[Appendix](#appendix--verified-source-references).
+This document is the authoritative plan **and status record**. Every claim about the
+current engine is grounded in the tree; references are cited as `path:line` and
+collected in the [Appendix](#appendix--verified-source-references).
+
+---
+
+## 0. Status (as built)
+
+Phases 0 and 1 are **implemented and committed** on the `parquet-dumper` branch — the
+binary `DataPart` serializer now has a complete, faithful Parquet counterpart.
+
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | `ParquetWriter` / `ParquetWriteSchema` primitive (`io/parquet/`) | ✅ committed |
+| 1 | All six `DataPart` structure adapters + the `DataPart` orchestrator (`storage/dump/parquet/`), each round-trip-tested; gated by `DataPartComparator::same`; EdgeIndexer patch path covered | ✅ committed |
+| 2 | Commit-level metadata (`GraphMetadata` maps, journal, tombstones, commit metadata) + `GraphDumper`/`CommitDumper` wiring | in progress — see [§4.3](#43-commit--graph-metadata) |
+| 3 | `PARQUET` format-marker dispatch + back-compat with binary dumps | not started |
+| 4 | Retire the binary path; compression / row-group tuning | not started |
+
+Phase 1 shipped these in `storage/dump/parquet/` (sibling lib `turing_db_storage_dump_parquet_s`,
+which keeps Arrow out of `turing_db_storage_s`): `PropertyContainerParquet{Dumper,Loader}`,
+`NodeContainerParquet*`, `EdgeContainerParquet*`, `EdgeIndexerParquet*`,
+`PropertyIndexerParquet*`, `StringPropertyIndexerParquet*`, and the
+`DataPartParquet{Dumper,Loader}` + `DataPartParquetLayout.h` orchestrator. Each has a
+round-trip test in `test/storage/dump/parquet/`; the capstone builds a real graph
+(`SimpleGraph`) and asserts `DataPartComparator::same`, plus a deterministic two-commit
+test that forces (and verifies) an EdgeIndexer patch node.
+
+**Two deliberate deviations from the original draft** (corrected in the sections below):
+- **Exceptions, not `DumpResult`.** Adapters throw — `FatalException` for storage-level
+  errors; the `io/parquet` layer's `TuringException` propagates — rather than returning
+  `DumpResult`. (Per maintainer direction.)
+- **Loaders assemble via friend access.** A loader constructs the in-memory type through
+  its public ctor and fills private members directly (mirroring `DataPartLoader`/
+  `NodeContainerLoader`/etc.), because the in-memory types expose no public "install a
+  whole pre-built structure" API. `*ParquetLoader` is added as a `friend` alongside the
+  existing binary `*Loader`. (Public-only structures — `PropertyIndexer`,
+  `StringPropertyIndexer` — need no friend.)
 
 ---
 
@@ -144,7 +179,7 @@ Every file starts with a 12-byte header (`0x1BADCAFE` + version,
 | TuringDB `ValueType` (`storage/metadata/PropertyType.h:15-25`) | Parquet physical | Note |
 |---|---|---|
 | `Int64` | `INT64` | — |
-| `UInt64` / IDs (`EntityID`/`NodeID`/`EdgeID`/`LabelSetID`/`EdgeTypeID`/`PropertyTypeID`/`size_t`) | `INT64` | raw value; typed wrapper restored on load |
+| `UInt64` / IDs (`EntityID`/`NodeID`/`EdgeID`/`LabelSetID`/`EdgeTypeID`/`PropertyTypeID`/`size_t`) | `INT64`, logical `UINT_64` | bits round-trip via a two's-complement reinterpret at the `Int64Writer`/`Int64Reader` boundary; the `UINT_64` annotation keeps Parquet min/max stats unsigned-correct (verified by the `UInt64BoundaryRoundTrip` test seeding `2⁶³` and `uint64::max`) |
 | `Double` | `DOUBLE` | — |
 | `Bool` | `BOOLEAN` | — |
 | `String` | `BYTE_ARRAY` | `UTF8` |
@@ -160,7 +195,7 @@ key-value metadata.
 
 ```
 dataparts/<id>/
-  info.parquet                        # dataPartID, firstNodeID, firstEdgeID, counts, formatVersion (metadata only)
+  info.parquet                        # 1 row: data_part_id, first_node_id, first_edge_id
   node-records.parquet                # labelset_id                      (row i = node firstNodeID+i)
   node-ranges.parquet                 # labelset_id, first_node_id, count
   edges-out.parquet                   # edge_id, node_id, other_id, edge_type_id
@@ -183,11 +218,29 @@ dataparts/<id>/
 
 ### 4.3 Commit / graph metadata
 
-The commit-level structures (`labels`, `edge-types`, `property-types`,
-`labelsets`, `journal`, `tombstones`, `metadata`; `storage/dump/CommitDumper.cpp:23-178`)
-are small. Tabular ones (`labels`/`edge-types`/`property-types` → `(id, name)`;
-`tombstones` → id list) → small Parquet tables; structural ones (`journal`,
-`labelsets`, commit `metadata`) → Parquet or `nlohmann_json`. Decided in Phase 3.
+The commit-level structures (`labels`, `edge-types`, `property-types`, `labelsets`,
+`journal`, `tombstones`, `metadata`; `storage/dump/CommitDumper.cpp:23-178`) are small.
+
+**GraphMetadata schema maps** — `GraphMetadataParquet{Dumper,Loader}`, one file each.
+Each map's ids are assigned sequentially by `getOrCreate` (`LabelMap`/`EdgeTypeMap`/
+`PropertyTypeMap`/`LabelSetMap` have no explicit `add(id, ...)`), so entries are dumped in
+id order and reloaded via `getOrCreate`, reproducing the ids — the loader asserts the
+reassigned id matches the dumped one:
+
+- `labels.parquet` — `label_id`, `name`
+- `edge-types.parquet` — `edge_type_id`, `name`
+- `property-types.parquet` — `property_type_id`, `value_type`, `name`
+- `labelsets.parquet` — `labelset_id`, `integer_0..integer_3` (the four `uint64` of the
+  `LabelSet`, with `static_assert(LabelSet::IntegerCount == 4)`)
+
+`GraphMetadataParquetLoader` is a `friend` of `GraphMetadata` (to reach the private maps);
+the maps fill through their public `getOrCreate`. Gated by `GraphMetadataComparator::same`.
+
+**Still to design in Phase 2:** `journal` (CommitJournal — a sequence of operations → a
+row-per-entry table), `tombstones` (deleted-id sets → id-list table), and the small commit
+`metadata` (parents / author / message / timestamp → a 1-row table or JSON via the in-tree
+`nlohmann_json`). Then `CommitDumper`/`GraphDumper` are wired to emit a Parquet commit
+directory.
 
 ### 4.4 Row groups and compression
 
@@ -247,9 +300,13 @@ Members: `_firstNodeID`, `_firstEdgeID`, `std::vector<NodeEdgeData> _nodes`,
 `NodeEdgeData = {OutEdgeRange{first,count}, InEdgeRange{first,count}}`.
 
 - **`edge-indexer-nodedata.parquet`** — one row per `_nodes` entry, in order:
-  `out_first`, `out_count`, `in_first`, `in_count`. `_coreNodes`/`_patchNodes` are
-  spans over `_nodes`; their boundary is the scalar `coreNodeCount` (metadata), so
-  the spans are restored by slicing, not recomputed.
+  `out_first`, `out_count`, `in_first`, `in_count`. `_nodes` is laid out
+  **patch-prefix, core-suffix** (`EdgeIndexer.cpp:34-35`), so on load
+  `_patchNodes = [0, patchNodeCount)` and
+  `_coreNodes = [patchNodeCount, patchNodeCount + coreNodeCount)`. Both counts are
+  stored; the spans are sliced, not recomputed. (The original draft said the boundary
+  is `coreNodeCount` — wrong; the layout is patch-first, so the slice keys off
+  `patchNodeCount`. The review caught this; the implementation slices correctly.)
 - **`edge-indexer-out-spans.parquet`** / **`edge-indexer-in-spans.parquet`** — one
   row per span, grouped by labelset in map order: `labelset_id`, `offset`, `count`.
 - **`edge-indexer-patch.parquet`** — `node_id`, `offset`: the `_patchNodeOffsets`
@@ -265,7 +322,12 @@ Members: `_firstNodeID`, `_firstEdgeID`, `std::vector<NodeEdgeData> _nodes`,
 - **`node-prop-indexer.parquet`** / **`edge-prop-indexer.parquet`** — one row per
   `PropertyRange`, grouped by `(property_type_id, labelset_id)` in map order:
   `property_type_id`, `labelset_id`, `offset`, `count`. Range index is positional
-  (row order within a group). Group counts are read from the grouping, not stored.
+  (row order within a group); group counts are read from the grouping, not stored.
+  `PropertyIndexer` is a public map (`unordered_map<...>`), so this needs no friend.
+  A flat row-per-range layout cannot represent an empty group (a property type with no
+  label sets, or a label set with no ranges) — those do not occur for a built index, so
+  the dumper **throws** if it hits one rather than silently dropping it (closing the
+  reviewer's empty-group concern).
 
 ### 5.6 StringPropertyIndexer / StringIndex (`storage/indexes/StringIndex.h:26-145`)
 
@@ -278,23 +340,21 @@ The tree is already linearized to a node array on disk: `node._id` == its index 
 `_nodeManager`; children are written as `(alphabet_index, child_id)` pairs. Faithful
 columnization:
 
-- **`*-string-index-nodes.parquet`** — `property_type_id`, `node_id`: one row per
-  node, restoring `_nodeManager` size and node ids.
+- **`*-string-index-indexes.parquet`** — `property_type_id`, `node_count`: one row per
+  indexed property type. Node ids are dense (`0..node_count-1`) by construction, so the
+  per-node array is *not* stored separately.
 - **`*-string-index-children.parquet`** — `property_type_id`, `parent_node_id`,
-  `child_index` (0..ALPHABET_SIZE-1), `child_node_id`: one row per non-null child
-  link. Child pointers restored by id lookup into `_nodeManager`.
+  `child_index` (0..ALPHABET_SIZE-1), `child_node_id`: one row per non-null child link.
 - **`*-string-index-owners.parquet`** — `property_type_id`, `node_id`, `entity_id`:
   one row per owner (replaces the binary `-owners` aux file).
-- Scalars per property type: `node_count`, `root_node_id`, `next_free_id`,
-  `ALPHABET_SIZE` in metadata. (`root_node_id` and `next_free_id` are stored so the
-  `_root` pointer and `_nextFreeID` are restored, not inferred.)
 
-> This is the structurally hardest table. If a future refactor makes the flattened
-> schema fragile, the fallback (allowed by the "encode as one or more columns"
-> latitude) is a single `BYTE_ARRAY` column holding the existing linearized tree
-> bytes — keeping `StringIndexerDumper`'s serialization but inside a Parquet
-> container. Phase 1 implements the flattened tables; the blob fallback is the
-> escape hatch.
+On load, `StringIndex(node_count)` pre-allocates the dense node array (root = node 0,
+`_nextFreeID = node_count` — both set by the ctor, so neither is stored), then child
+links (`setChild`) and owners (`addOwner`) are applied through **public** APIs — no
+friend access, and the tree is *not* rebuilt by re-inserting strings. The
+`BYTE_ARRAY`-blob fallback the draft reserved was not needed; the flattened tables are
+clean and the round-trip is gated by `StringIndexerComparator::same` (node count, node
+ids, owners in order, child links).
 
 ---
 
@@ -336,20 +396,34 @@ public:
 
 ### 6.2 `storage/dump/parquet/` — per-structure encoders/decoders
 
-New subdirectory sibling to the binary dumpers; both coexist. Each keeps the
-existing convention `static DumpResult<void> dump(...)` / `static DumpResult<...>
-load(...)`, translating the io-layer `TuringException` into `DumpResult` at the
-boundary. One pair per structure in [§5](#5-faithful-column-schemas):
-`DataPartParquetDumper/Loader`, `NodeContainerParquetDumper/Loader`,
-`EdgeContainerParquetDumper/Loader`, `EdgeIndexerParquetDumper/Loader`,
-`PropertyIndexerParquetDumper/Loader`, `StringIndexParquetDumper/Loader`,
-`PropertyContainerParquetDumper<T>`/`Loader`. Naming follows CLAUDE.md's area-local
-rule (the `Dumper`/`Loader` family, `Parquet`-qualified, under `storage/dump/parquet/`).
+A sibling lib `turing_db_storage_dump_parquet_s` (links `turing_db_storage_s` +
+`turing_db_io_parquet_s`), so Arrow stays out of core `storage`. One pair per structure:
+`PropertyContainerParquet{Dumper,Loader}`, `NodeContainerParquet*`, `EdgeContainerParquet*`,
+`EdgeIndexerParquet*`, `PropertyIndexerParquet*`, `StringPropertyIndexerParquet*`, plus the
+`DataPartParquet{Dumper,Loader}` orchestrator and a shared `DataPartParquetLayout.h` that
+owns the per-part filenames.
 
-The loaders read columns straight into the in-memory members — no build algorithms
-re-run. `EntityID`/`NodeID`/etc. are reconstructed from raw `int64`; span members
-(`_coreNodes`, `_patchNodes`) are sliced from the loaded `_nodes` vector using the
-scalar counts; child pointers are resolved by id lookup.
+- **Exceptions, not `DumpResult`.** `dump` returns `void` and throws on failure; `load`
+  returns the built object (`std::unique_ptr<...>`) or fills an output reference, and
+  throws. `FatalException` for storage-level errors; the `io/parquet` layer's
+  `TuringException` propagates.
+- **Loaders read columns straight into the in-memory members — no build algorithms
+  re-run.** IDs are reconstructed from raw `int64`; span members (`_coreNodes`,
+  `_patchNodes`, the edge-indexer label-set spans) are sliced / rebound from the loaded
+  vectors and the supplied `EdgeContainer`; prefix-tree child pointers are resolved by id
+  lookup; label-set handles are bound through the supplied `LabelSetMap`.
+- **Friend access where needed.** `NodeContainer`, `EdgeContainer`, `EdgeIndexer`, and
+  `DataPart` + `PropertyManager` expose no public "install a whole structure" API, so each
+  `*ParquetLoader` is added as a `friend` beside the binary `*Loader` and fills private
+  members (or calls the private ctor) directly. `PropertyIndexer` and
+  `StringPropertyIndexer` are buildable through public APIs and need no friend.
+
+The `DataPart` orchestrator walks the part's public accessors and writes ~18 files into a
+part directory — including a 1-row `info.parquet` of `data_part_id` / `first_node_id` /
+`first_edge_id`. The loader constructs the `DataPart` via its public ctor, then assembles
+every piece via friend access, binding handles/spans to the supplied `LabelSetMap` and the
+loaded `EdgeContainer`. Per-property files are enumerated from the directory
+(`node-props-<ptID>.parquet`, parsed with `std::from_chars`).
 
 ### 6.3 Orchestration and format dispatch
 
@@ -363,27 +437,27 @@ scalar counts; child pointers are resolved by id lookup.
 
 ## 7. Phasing
 
-**Phase 0 — writer primitive.** `ParquetWriter` + `ParquetWriteSchema` + unit tests
-(round-trip every column type through `ParquetWriter` → `ParquetReader`, incl.
-`FIXED_LEN_BYTE_ARRAY`). No storage changes.
+**Phase 0 — writer primitive. ✅ Done.** `ParquetWriter` + `ParquetWriteSchema` +
+round-trip unit tests (every column type, incl. `FIXED_LEN_BYTE_ARRAY` and the `UINT_64`
+boundary).
 
-**Phase 1 — DataPart, fully faithful.** All encoders/decoders in
-[§6.2](#62-storagedumpparquet--per-structure-encodersdecoders), all structures in
-[§5](#5-faithful-column-schemas). DataPart round-trip test: build → dump → load →
-assert the loaded part is structurally identical, **including** indexers (compare
-`_nodes`, span boundaries, labelset spans, prefix-tree nodes/children/owners,
-patch offsets byte-for-byte against the original).
+**Phase 1 — DataPart, fully faithful. ✅ Done.** All six structure adapters
+([§5](#5-faithful-column-schemas)) + the `DataPart` orchestrator, each round-trip-tested;
+the capstone builds `SimpleGraph` and asserts `DataPartComparator::same`, plus a
+two-commit test that forces and verifies an EdgeIndexer patch node (the
+`_patchNodeOffsets` round-trip).
 
-**Phase 2 — full graph, payload + indexers in Parquet.** Wire into
-`GraphDumper`/`CommitDumper` behind `GraphFileType::PARQUET`; commit metadata stays
-binary for now (mixed dump is fine). Full dump→load regression.
+**Phase 2 — commit-level metadata.** *(in progress)* `GraphMetadata` schema maps, then
+journal / tombstones / commit metadata ([§4.3](#43-commit--graph-metadata)), then wire
+`CommitDumper`/`GraphDumper` to emit a Parquet commit directory. Full dump→load regression
+via `GraphComparator::same`.
 
-**Phase 3 — metadata + dispatch + back-compat.** Migrate commit/graph metadata
-([§4.3](#43-commit--graph-metadata)); `type`-marker dispatch; parametrize the
-regression suite over both formats; flip the default to `PARQUET`.
+**Phase 3 — format dispatch + back-compat.** `GraphFileType::PARQUET` marker; loaders
+([§6.3](#63-orchestration-and-format-dispatch)) dispatch on it; parametrize the regression
+suite over both formats; flip the default to `PARQUET`. Old binary dumps keep loading.
 
-**Phase 4 — cleanup & tuning.** Compression/row-group tuning; row-group alignment to
-node ranges; once existing dumps are migrated, sunset the binary dumpers and the
+**Phase 4 — cleanup & tuning.** Compression/row-group tuning; row-group alignment to node
+ranges; once existing dumps are migrated, sunset the binary dumpers and the
 `FilePageWriter` path.
 
 ---
