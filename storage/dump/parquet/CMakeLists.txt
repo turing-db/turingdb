@@ -8,7 +8,9 @@ add_library(turing_db_storage_dump_parquet_s STATIC
     EdgeIndexerParquetDumper.cpp
     EdgeIndexerParquetLoader.cpp
     PropertyIndexerParquetDumper.cpp
-    PropertyIndexerParquetLoader.cpp)
+    PropertyIndexerParquetLoader.cpp
+    StringPropertyIndexerParquetDumper.cpp
+    StringPropertyIndexerParquetLoader.cpp)
 
 target_link_libraries(turing_db_storage_dump_parquet_s
     PUBLIC  turing_db_storage_s
