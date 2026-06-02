@@ -1,8 +1,10 @@
 #include "ExprProgramGenerator.h"
 
 #include <spdlog/fmt/fmt.h>
+#include <string_view>
 #include <utility>
 
+#include "Symbol.h"
 #include "list/ListView.h"
 #include "PipelineGenerator.h"
 #include "columns/AllowedKinds.h"
@@ -21,6 +23,8 @@
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "interfaces/PipelineOutputInterface.h"
+#include "map/MapBuffer.h"
+#include "map/MapView.h"
 #include "processors/ExprProgram.h"
 #include "processors/PredicateProgram.h"
 #include "Predicate.h"
@@ -57,6 +61,16 @@ struct AddLiteralToList {
     template <typename T>
     void operator()(const ColumnConst<T>* litCol) {
         _items.emplace_back(litCol->getRaw());
+    }
+};
+
+struct AddLiteralKVToMap {
+    std::vector<MapBuffer<>::MapKeyValuePair>& _pairs;
+    std::string_view _keyName;
+
+    template <typename T>
+    void operator()(const ColumnConst<T>* litCol) {
+        _pairs.emplace_back(_keyName, litCol->getRaw());
     }
 };
 
@@ -325,6 +339,37 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
             outCol = value;
         }
         break;
+
+        case Literal::Kind::MAP: {
+            using Types = MappableTypes;
+            using AddPair = ColumnSingleDispatcher<Types::Allowed, AddLiteralKVToMap,
+                                                   Types::LiteralExcluded>;
+
+            const Literal* lit = literalExpr->getLiteral();
+            const MapLiteral* map = static_cast<const MapLiteral*>(lit);
+
+            std::vector<MapBuffer<>::MapKeyValuePair> pairs;
+            pairs.reserve(map->size());
+
+            AddLiteralKVToMap mapBuilder {._pairs = pairs, ._keyName = ""};
+
+            for (const auto& [sym, expr] : *map) {
+                const std::string_view keyName = sym->getName();
+                const Column* valueConst = generateExpr(expr);
+
+                mapBuilder._keyName = keyName;
+                AddPair::dispatch(valueConst, mapBuilder);
+            }
+
+            LocalMemory::DefaultMapBuffer& buf = _gen->memory().mapBuffer();
+
+            const MapView view = buf.insert(pairs);
+
+            auto* value = _gen->memory().alloc<ColumnConst<MapView>>();
+            value->set(view);
+
+            outCol = value;
+        } break;
 
         case Literal::Kind::NULL_LITERAL: {
             auto* value = _gen->memory().alloc<ColumnConst<PropertyNull>>();

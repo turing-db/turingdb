@@ -12,6 +12,7 @@
 #include "versioning/ChangeID.h"
 #include "GraphPath.h"
 #include "list/ListView.h"
+#include "map/MapView.h"
 
 namespace db {
 
@@ -95,7 +96,8 @@ public:
         const Change*,
         Column*,
         ListView,
-        ListElementView
+        ListElementView,
+        MapView
     >;
 
     using Code = uint8_t;

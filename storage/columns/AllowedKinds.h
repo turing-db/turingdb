@@ -534,6 +534,8 @@ struct ListableTypes {
     >;
 };
 
+using MappableTypes = ListableTypes;
+
 // NOTE: This should be synced with @ref JoinNode::joinableTypes
 struct ValueHashJoinPairs {
     using Allowed = GenerateKindPairList<
