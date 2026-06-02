@@ -56,6 +56,7 @@ public:
 
 private:
     friend class CommitJournalLoader;
+    friend class CommitJournalParquetLoader;
     friend class CommitHistoryRebaser;
 
     bool _initialised {false};

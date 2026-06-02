@@ -21,7 +21,7 @@ binary `DataPart` serializer now has a complete, faithful Parquet counterpart.
 |---|---|---|
 | 0 | `ParquetWriter` / `ParquetWriteSchema` primitive (`io/parquet/`) | ✅ committed |
 | 1 | All six `DataPart` structure adapters + the `DataPart` orchestrator (`storage/dump/parquet/`), each round-trip-tested; gated by `DataPartComparator::same`; EdgeIndexer patch path covered | ✅ committed |
-| 2 | Commit-level metadata (`GraphMetadata` maps, journal, tombstones, commit metadata) + `GraphDumper`/`CommitDumper` wiring | in progress — `GraphMetadata` schema maps ✅ committed; journal / tombstones / commit metadata + wiring remain — see [§4.3](#43-commit--graph-metadata) |
+| 2 | Commit-level metadata (`GraphMetadata` maps, journal, tombstones, commit metadata) + `GraphDumper`/`CommitDumper` wiring | in progress — `GraphMetadata` schema maps ✅ + commit journal ✅ committed; tombstones / commit metadata + wiring remain — see [§4.3](#43-commit--graph-metadata) |
 | 3 | `PARQUET` format-marker dispatch + back-compat with binary dumps | not started |
 | 4 | Retire the binary path; compression / row-group tuning | not started |
 
@@ -239,11 +239,24 @@ reproducing the ids — the loader asserts the reassigned id matches the dumped 
 the maps fill through their public `getOrCreate`. Round-trip-tested (incl. an empty-metadata
 case) and gated by `GraphMetadataComparator::same`.
 
-**Still to design in Phase 2:** `journal` (CommitJournal — a sequence of operations → a
-row-per-entry table), `tombstones` (deleted-id sets → id-list table), and the small commit
-`metadata` (parents / author / message / timestamp → a 1-row table or JSON via the in-tree
-`nlohmann_json`). Then `CommitDumper`/`GraphDumper` are wired to emit a Parquet commit
-directory.
+**Commit journal** — `CommitJournalParquet{Dumper,Loader}` (✅ committed). The persisted
+journal state is the node and edge write sets; the property write sets are transient
+change-application state (untouched by `clear`/`empty`/`finalise`, not persisted by the
+binary format, not checked by `CommitComparator`) and are not written. The two write sets
+have independent row counts, so they split into two single-column files:
+
+- `journal-nodes.parquet` — `node_id`, one row per written node in write-set order
+- `journal-edges.parquet` — `edge_id`, one row per written edge in write-set order
+
+`CommitJournalParquetLoader` is a `friend` of `CommitJournal` (to reach the raw write-set
+vectors); ids are read straight back in dumped (sorted/unique-from-`finalise`) order,
+nothing re-sorted. Round-trip-tested (incl. an empty-journal case) and gated by
+`WriteSetComparator`.
+
+**Still to design in Phase 2:** `tombstones` (deleted-id sets → id-list table) and the small
+commit `metadata` (parents / author / message / timestamp → a 1-row table or JSON via the
+in-tree `nlohmann_json`). Then `CommitDumper`/`GraphDumper` are wired to emit a Parquet
+commit directory.
 
 ### 4.4 Row groups and compression
 
@@ -450,10 +463,10 @@ the capstone builds `SimpleGraph` and asserts `DataPartComparator::same`, plus a
 two-commit test that forces and verifies an EdgeIndexer patch node (the
 `_patchNodeOffsets` round-trip).
 
-**Phase 2 — commit-level metadata.** *(in progress)* `GraphMetadata` schema maps ✅ done
-(`GraphMetadataParquet{Dumper,Loader}`, round-trip-tested); next: journal / tombstones /
-commit metadata ([§4.3](#43-commit--graph-metadata)), then wire `CommitDumper`/`GraphDumper`
-to emit a Parquet commit directory. Full dump→load regression via `GraphComparator::same`.
+**Phase 2 — commit-level metadata.** *(in progress)* `GraphMetadata` schema maps ✅ and
+commit journal ✅ done (both round-trip-tested); next: tombstones / commit metadata
+([§4.3](#43-commit--graph-metadata)), then wire `CommitDumper`/`GraphDumper` to emit a
+Parquet commit directory. Full dump→load regression via `GraphComparator::same`.
 
 **Phase 3 — format dispatch + back-compat.** `GraphFileType::PARQUET` marker; loaders
 ([§6.3](#63-orchestration-and-format-dispatch)) dispatch on it; parametrize the regression

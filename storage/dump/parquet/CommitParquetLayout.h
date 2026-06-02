@@ -13,6 +13,8 @@ inline fs::Path labels(const fs::Path& dir) { return dir / "labels.parquet"; }
 inline fs::Path edgeTypes(const fs::Path& dir) { return dir / "edge-types.parquet"; }
 inline fs::Path propertyTypes(const fs::Path& dir) { return dir / "property-types.parquet"; }
 inline fs::Path labelsets(const fs::Path& dir) { return dir / "labelsets.parquet"; }
+inline fs::Path journalNodes(const fs::Path& dir) { return dir / "journal-nodes.parquet"; }
+inline fs::Path journalEdges(const fs::Path& dir) { return dir / "journal-edges.parquet"; }
 
 }
 
