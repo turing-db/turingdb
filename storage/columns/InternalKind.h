@@ -12,6 +12,7 @@
 #include "versioning/ChangeID.h"
 #include "GraphPath.h"
 #include "list/ListView.h"
+#include "map/MapView.h"
 
 namespace db {
 
@@ -96,7 +97,8 @@ public:
         Column*,
         ListView,
         ListElementView,
-        std::optional<ListElementView>
+        std::optional<ListElementView>,
+        MapView
     >;
 
     using Code = uint8_t;
