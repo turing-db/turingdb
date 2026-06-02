@@ -69,6 +69,14 @@ target_link_libraries(test_storage_dump_edgeindexerparquet PRIVATE
         turing_db_jobs_s
         turing_db_storage_dump_parquet_s)
 
+add_turing_test(test_storage_dump_propertyindexerparquet dump/parquet/PropertyIndexerParquetTest.cpp)
+target_link_libraries(test_storage_dump_propertyindexerparquet PRIVATE
+        turing_common_s
+        turing_db_storage_s
+        turing_db_examples_s
+        turing_db_jobs_s
+        turing_db_storage_dump_parquet_s)
+
 add_storage_tests(test_storage_columns_dispatcher ColumnDispatcherTest.cpp)
 add_storage_tests(test_storage_objectmap ObjectMapTest.cpp)
 
