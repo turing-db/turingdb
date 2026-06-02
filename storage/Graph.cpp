@@ -10,6 +10,22 @@
 
 using namespace db;
 
+Graph::Graph()
+    : _graphName("default"),
+    _graphPath("/dev/null"),
+    _versionController(new VersionController {this}),
+    _serializer(new GraphSerializer {this})
+{
+}
+
+Graph::Graph(const std::string& name, const fs::Path& path)
+    : _graphName(name),
+    _graphPath(path),
+    _versionController(new VersionController {this}),
+    _serializer(new GraphSerializer {this})
+{
+}
+
 Graph::~Graph() {
 }
 
@@ -38,27 +54,11 @@ DumpResult<void> Graph::loadCommit(CommitHash hash) {
 std::unique_ptr<Graph> Graph::create() {
     auto* graph = new Graph();
     graph->_versionController->createFirstCommit();
-    return std::unique_ptr<Graph> {graph};
+    return std::unique_ptr<Graph>(graph);
 }
 
 std::unique_ptr<Graph> Graph::create(const std::string& name, const fs::Path& path) {
     auto* graph = new Graph(name, path);
     graph->_versionController->createFirstCommit();
     return std::unique_ptr<Graph>(graph);
-}
-
-Graph::Graph()
-    : _graphName("default"),
-    _graphPath("/dev/null"),
-    _versionController(new VersionController {this}),
-    _serializer(new GraphSerializer {this})
-{
-}
-
-Graph::Graph(const std::string& name, const fs::Path& path)
-    : _graphName(name),
-    _graphPath(path),
-    _versionController(new VersionController {this}),
-    _serializer(new GraphSerializer {this})
-{
 }

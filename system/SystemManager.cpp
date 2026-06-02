@@ -212,18 +212,27 @@ void SystemManager::listAvailableGraphs(std::vector<fs::Path>& names) {
 }
 
 ChangeResult<Change*> SystemManager::newChange(const std::string& graphName, CommitHash baseHash) {
-    Graph* graph = _graphManager.getGraph(graphName);
-    if (!graph) {
-        return ChangeError::result(ChangeErrorType::GRAPH_NOT_FOUND);
-    }
+    return _graphManager.newChange(graphName, baseHash);
+}
 
-    ChangeManager& changeManager = getChangeManager();
-    return changeManager.createChange(graph, baseHash);
+ChangeResult<Change*> SystemManager::getChange(const Graph* graph, ChangeID changeID) {
+    return _graphManager.getChange(graph, changeID);
+}
+
+ChangeResult<void> SystemManager::submitChange(ChangeAccessor& accessor, JobSystem& jobSystem) {
+    return _graphManager.submitChange(accessor, jobSystem);
+}
+
+ChangeResult<void> SystemManager::deleteChange(ChangeAccessor& accessor, ChangeID changeID) {
+    return _graphManager.deleteChange(accessor, changeID);
+}
+
+void SystemManager::listChanges(std::vector<const Change*>& changes, const Graph* graph) const {
+    _graphManager.listChanges(changes, graph);
 }
 
 DataPartMergeResult<void> SystemManager::mergeDataParts(Graph* graph, JobSystem& jobSystem) {
-    ChangeManager& changeManager = getChangeManager();
-    return changeManager.mergeDataParts(graph, jobSystem);
+    return _graphManager.mergeDataParts(graph, jobSystem);
 }
 
 ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphName,
@@ -249,8 +258,7 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
         return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
     }
 
-    ChangeManager& changeManager = this->getChangeManager();
-    const auto changeRes = changeManager.getChange(graph, changeID);
+    const auto changeRes = _graphManager.getChange(graph, changeID);
     if (!changeRes) {
         return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
     }
