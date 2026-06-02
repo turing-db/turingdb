@@ -53,6 +53,7 @@
 - [Const and span preferences](feedback_const_and_span.md) — const on locals, std::span for non-owning references
 - [No auto for casts](feedback_no_auto_for_casts.md) — Explicit types at static_cast sites, hoist getters into locals
 - [Friend placement](feedback_friend_placement.md) — `friend` declarations at top of `public:`, no `class` keyword
+- [ObjectMap reserve/publish](feedback_objectmap_reserve_publish.md) — reserve name before the load, publish after, work in between
 
 ## Workflow Preferences
 - [Test-first: write failing test before fix](feedback_test_first.md)

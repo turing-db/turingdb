@@ -91,19 +91,6 @@ Graph* GraphManager::loadGraph(std::string_view name) {
     return graphPtr;
 }
 
-bool GraphManager::addGraph(std::unique_ptr<Graph> graph) {
-    const std::string_view name = graph->getName();
-
-    auto reservation = _graphs.reserve(name);
-    if (!reservation.isValid()) {
-        return false;
-    }
-
-    reservation.publish(std::move(graph));
-
-    return true;
-}
-
 void GraphManager::setDefaultGraph(std::string_view name) {
     Graph* graph = getGraph(name);
     if (graph) {
@@ -206,6 +193,12 @@ bool GraphManager::loadBinaryDB(std::string_view graphName, const fs::Path& dbPa
         return false;
     }
 
+    auto reservation = _graphs.reserve(graphName);
+    if (!reservation.isValid()) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return false;
+    }
+
     // in the case of turingDB binaries the path is the same path we load from.
     auto graph = Graph::create(std::string(graphName), dbPath);
 
@@ -215,10 +208,7 @@ bool GraphManager::loadBinaryDB(std::string_view graphName, const fs::Path& dbPa
         return false;
     }
 
-    if (!addGraph(std::move(graph))) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
+    reservation.publish(std::move(graph));
 
     _graphLoadStatus.removeLoadingGraph(graphName);
 
@@ -232,6 +222,12 @@ bool GraphManager::loadJsonlDB(std::string_view graphName, const fs::Path& dbPat
 
     const fs::Path graphPath = _config->getGraphsDir() / graphName;
     if (graphPath == dbPath) {
+        return false;
+    }
+
+    auto reservation = _graphs.reserve(graphName);
+    if (!reservation.isValid()) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
 
@@ -272,10 +268,7 @@ bool GraphManager::loadJsonlDB(std::string_view graphName, const fs::Path& dbPat
         }
     }
 
-    if (!addGraph(std::move(graph))) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
+    reservation.publish(std::move(graph));
 
     _graphLoadStatus.removeLoadingGraph(graphName);
     return true;
@@ -288,6 +281,12 @@ bool GraphManager::loadGmlDB(std::string_view graphName, const fs::Path& dbPath,
 
     const fs::Path graphPath = _config->getGraphsDir() / graphName;
     if (graphPath == dbPath) {
+        return false;
+    }
+
+    auto reservation = _graphs.reserve(graphName);
+    if (!reservation.isValid()) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
     }
 
@@ -309,10 +308,7 @@ bool GraphManager::loadGmlDB(std::string_view graphName, const fs::Path& dbPath,
         }
     }
 
-    if (!addGraph(std::move(graph))) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
+    reservation.publish(std::move(graph));
 
     _graphLoadStatus.removeLoadingGraph(graphName);
     return true;
