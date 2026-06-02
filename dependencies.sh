@@ -503,3 +503,36 @@ fi
 cmake "${MINIO_CMAKE_ARGS[@]}" -DCMAKE_VERBOSE_MAKEFILE=ON $SOURCE_DIR/external/minio-cpp
 cmake --build $BUILD_DIR/minio-cpp -j $NUM_JOBS
 cmake --install $BUILD_DIR/minio-cpp
+
+# Build LLVM MLIR Subproject
+
+echo "Building LLVM MLIR"
+
+LLVM_BUILD_DIR=$BUILD_DIR/llvm-project
+LLVM_SRC_DIR=$SOURCE_DIR/external/llvm-project
+LLVM_CMAKE_DIR=$LLVM_SRC_DIR/llvm
+
+mkdir -p $LLVM_BUILD_DIR
+cd $LLVM_BUILD_DIR
+
+LLVM_CMAKE_ARGS=(
+   -DLLVM_ENABLE_PROJECTS=mlir
+   -DLLVM_BUILD_EXAMPLES=OFF
+   -DLLVM_TARGETS_TO_BUILD="Native"
+   -DCMAKE_BUILD_TYPE=Release
+   -DLLVM_ENABLE_ASSERTIONS=ON
+   -DLLVM_CCACHE_BUILD=OFF # required, otherwise error'd
+   -DCMAKE_INSTALL_PREFIX=$LLVM_BUILD_DIR
+)
+
+if [[ $USE_CLANG -eq 1 ]]; then
+    LLVM_CMAKE_ARGS+=("${CLANG_COMPILER_ARGS[@]}")
+fi
+
+if [[ "$(uname)" == "Linux" ]]; then
+    LLVM_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
+fi
+
+cmake "${LLVM_CMAKE_ARGS[@]}" $LLVM_CMAKE_DIR
+cmake --build $LLVM_BUILD_DIR -j $NUM_JOBS -t mlir-opt mlir-translate mlir-transform-opt mlir-runner
+cmake --build $LLVM_BUILD_DIR -j $NUM_JOBS -t install
