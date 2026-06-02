@@ -5,7 +5,6 @@
 
 #include "GraphManager.h"
 
-#include "ChangeManager.h"
 #include "versioning/ChangeID.h"
 #include "versioning/ChangeResult.h"
 
@@ -31,7 +30,7 @@ namespace db {
 
 class TuringConfig;
 class Graph;
-class ChangeManager;
+class ChangeAccessor;
 class JobSystem;
 class Transaction;
 class Change;
@@ -76,11 +75,13 @@ public:
     // Dump an entire graph
     DumpResult<void> dumpGraph(const std::string& graphName);
 
-    // ChangeManager access and operations
-    ChangeManager& getChangeManager() { return _graphManager.getChangeManager(); }
-    const ChangeManager& getChangeManager() const { return _graphManager.getChangeManager(); }
+    // Change management
     ChangeResult<Change*> newChange(const std::string& graphName,
                                     CommitHash baseHash = CommitHash::head());
+    ChangeResult<Change*> getChange(const Graph* graph, ChangeID changeID);
+    ChangeResult<void> submitChange(ChangeAccessor& accessor, JobSystem& jobSystem);
+    ChangeResult<void> deleteChange(ChangeAccessor& accessor, ChangeID changeID);
+    void listChanges(std::vector<const Change*>& changes, const Graph* graph) const;
 
     // DataPart merge
     DataPartMergeResult<void> mergeDataParts(Graph* graph, JobSystem& jobSystem);

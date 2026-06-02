@@ -1,20 +1,20 @@
 #include "GraphManager.h"
 
-#include <fstream>
 #include <string>
 #include <utility>
 
 #include <spdlog/spdlog.h>
 
-#include "TuringConfig.h"
-#include "JobSystem.h"
-
 #include "Graph.h"
+
 #include "GraphSerializer.h"
 #include "versioning/ChangeAccessor.h"
 
 #include "GMLImporter.h"
 #include "JsonlParser.h"
+
+#include "TuringConfig.h"
+#include "JobSystem.h"
 
 #include "Path.h"
 #include "FileUtils.h"
@@ -153,7 +153,7 @@ bool GraphManager::importGraph(std::string_view graphName, const fs::Path& fileP
             return loadJsonlDB(graphName, absolute, jobSystem);
         case GraphFileType::BINARY:
             return loadBinaryDB(graphName, absolute, jobSystem);
-        case GraphFileType::_SIZE:
+        default:
             throw TuringException("Unsupported graph type");
     }
 
@@ -188,7 +188,9 @@ bool GraphManager::isGraphLoading(std::string_view graphName) const {
     return _graphLoadStatus.isGraphLoading(graphName);
 }
 
-bool GraphManager::loadBinaryDB(std::string_view graphName, const fs::Path& dbPath, JobSystem& jobSystem) {
+bool GraphManager::loadBinaryDB(std::string_view graphName,
+                                const fs::Path& dbPath,
+                                JobSystem& jobSystem) {
     if (!_graphLoadStatus.addLoadingGraph(graphName)) {
         return false;
     }
@@ -208,14 +210,16 @@ bool GraphManager::loadBinaryDB(std::string_view graphName, const fs::Path& dbPa
         return false;
     }
 
-    reservation.publish(std::move(graph));
-
     _graphLoadStatus.removeLoadingGraph(graphName);
+
+    reservation.publish(std::move(graph));
 
     return true;
 }
 
-bool GraphManager::loadJsonlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem& jobSystem) {
+bool GraphManager::loadJsonlDB(std::string_view graphName,
+                               const fs::Path& dbPath,
+                               JobSystem& jobSystem) {
     if (!_graphLoadStatus.addLoadingGraph(graphName)) {
         return false;
     }
@@ -238,8 +242,7 @@ bool GraphManager::loadJsonlDB(std::string_view graphName, const fs::Path& dbPat
         return false;
     }
 
-    ChangeManager& changeManager = getChangeManager();
-    Change* change = changeManager.createChange(graph.get(), CommitHash::head());
+    Change* change = _changes.createChange(graph.get(), CommitHash::head());
     ChangeAccessor changeAccessor = change->access();
 
     const auto importRes = JsonlParser::parse(changeAccessor, file);
@@ -250,7 +253,7 @@ bool GraphManager::loadJsonlDB(std::string_view graphName, const fs::Path& dbPat
         return false;
     }
 
-    const auto submitRes = changeManager.submitChange(changeAccessor, jobSystem);
+    const auto submitRes = _changes.submitChange(changeAccessor, jobSystem);
 
     if (!submitRes) {
         _graphLoadStatus.removeLoadingGraph(graphName);
@@ -268,13 +271,16 @@ bool GraphManager::loadJsonlDB(std::string_view graphName, const fs::Path& dbPat
         }
     }
 
+    _graphLoadStatus.removeLoadingGraph(graphName);
+
     reservation.publish(std::move(graph));
 
-    _graphLoadStatus.removeLoadingGraph(graphName);
     return true;
 }
 
-bool GraphManager::loadGmlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem& jobSystem) {
+bool GraphManager::loadGmlDB(std::string_view graphName,
+                             const fs::Path& dbPath,
+                             JobSystem& jobSystem) {
     if (!_graphLoadStatus.addLoadingGraph(graphName)) {
         return false;
     }
@@ -308,8 +314,38 @@ bool GraphManager::loadGmlDB(std::string_view graphName, const fs::Path& dbPath,
         }
     }
 
+    _graphLoadStatus.removeLoadingGraph(graphName);
+
     reservation.publish(std::move(graph));
 
-    _graphLoadStatus.removeLoadingGraph(graphName);
     return true;
+}
+
+ChangeResult<Change*> GraphManager::newChange(std::string_view graphName, CommitHash baseHash) {
+    Graph* graph = getGraph(graphName);
+    if (!graph) {
+        return ChangeError::result(ChangeErrorType::GRAPH_NOT_FOUND);
+    }
+
+    return _changes.createChange(graph, baseHash);
+}
+
+ChangeResult<Change*> GraphManager::getChange(const Graph* graph, ChangeID changeID) {
+    return _changes.getChange(graph, changeID);
+}
+
+ChangeResult<void> GraphManager::submitChange(ChangeAccessor& accessor, JobSystem& jobSystem) {
+    return _changes.submitChange(accessor, jobSystem);
+}
+
+ChangeResult<void> GraphManager::deleteChange(ChangeAccessor& accessor, ChangeID changeID) {
+    return _changes.deleteChange(accessor, changeID);
+}
+
+void GraphManager::listChanges(std::vector<const Change*>& changes, const Graph* graph) const {
+    _changes.listChanges(changes, graph);
+}
+
+DataPartMergeResult<void> GraphManager::mergeDataParts(Graph* graph, JobSystem& jobSystem) {
+    return _changes.mergeDataParts(graph, jobSystem);
 }

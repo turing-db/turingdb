@@ -20,7 +20,6 @@
 #include "TuringDB.h"
 #include "Graph.h"
 #include "SystemManager.h"
-#include "ChangeManager.h"
 #include "LineNoiseHandle.h"
 #include "LocalMemory.h"
 
@@ -927,7 +926,7 @@ void TuringShell::checkShellContext() {
         }
     }
 
-    const auto res = _turingDB.getSystemManager().getChangeManager().getChange(graph, _changeID);
+    const auto res = _turingDB.getSystemManager().getChange(graph, _changeID);
     if (!res) {
         fmt::print("Change '{:x}' does not exist anymore, switching back to head\n", _changeID.get());
         setChangeID(ChangeID::head());

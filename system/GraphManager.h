@@ -50,8 +50,12 @@ public:
     bool isGraphLoading(std::string_view graphName) const;
 
     // Change management
-    ChangeManager& getChangeManager() { return _changes; }
-    const ChangeManager& getChangeManager() const { return _changes; }
+    ChangeResult<Change*> newChange(std::string_view graphName, CommitHash baseHash);
+    ChangeResult<Change*> getChange(const Graph* graph, ChangeID changeID);
+    ChangeResult<void> submitChange(ChangeAccessor& accessor, JobSystem& jobSystem);
+    ChangeResult<void> deleteChange(ChangeAccessor& accessor, ChangeID changeID);
+    void listChanges(std::vector<const Change*>& changes, const Graph* graph) const;
+    DataPartMergeResult<void> mergeDataParts(Graph* graph, JobSystem& jobSystem);
 
 private:
     const TuringConfig* _config {nullptr};

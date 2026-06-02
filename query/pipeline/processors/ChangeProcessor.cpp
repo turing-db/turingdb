@@ -2,7 +2,6 @@
 
 #include <spdlog/fmt/fmt.h>
 
-#include "ChangeManager.h"
 #include "ExecutionContext.h"
 #include "SystemManager.h"
 #include "versioning/Change.h"
@@ -105,12 +104,11 @@ void ChangeProcessor::submitChange() const {
 
     SystemManager* sysMan = _ctxt->getSystemManager();
     JobSystem* jobSystem = _ctxt->getJobSystem();
-    ChangeManager& changeMan = sysMan->getChangeManager();
 
     const ChangeID changeID = accessor.getID();
 
     // Step 1: Submit the change
-    if (const auto res = changeMan.submitChange(accessor, *jobSystem); !res) {
+    if (const auto res = sysMan->submitChange(accessor, *jobSystem); !res) {
         throw PipelineException(fmt::format("Failed to submit change: {}", res.error().fmtMessage()));
     }
 
@@ -141,11 +139,10 @@ void ChangeProcessor::deleteChange() const {
     bioassert(accessor.isValid(), "ChangeProcessor: Change accessor must be valid");
 
     SystemManager* sysMan = _ctxt->getSystemManager();
-    ChangeManager& changeMan = sysMan->getChangeManager();
 
     const ChangeID changeID = accessor.getID();
 
-    if (const auto res = changeMan.deleteChange(accessor, changeID); !res) {
+    if (const auto res = sysMan->deleteChange(accessor, changeID); !res) {
         throw PipelineException(fmt::format("Failed to delete change: {}", res.error().fmtMessage()));
     }
 
@@ -164,7 +161,7 @@ void ChangeProcessor::listChanges() const {
     const Graph* graph = sysMan->getGraph(graphName);
     bioassert(graph, "ChangeProcessor: Graph must exist");
 
-    sysMan->getChangeManager().listChanges(changes, graph);
+    sysMan->listChanges(changes, graph);
 
     _changeIDCol->clear();
     for (const auto* change : changes) {
