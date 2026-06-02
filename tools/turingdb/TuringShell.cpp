@@ -38,6 +38,9 @@
 #include "dataframe/NamedColumn.h"
 #include "GraphPath.h"
 
+#include "map/MapBufferTypeTag.h"
+#include "map/MapEntryView.h"
+#include "map/MapUtils.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "list/ListBufferTypeTag.h"
@@ -610,6 +613,43 @@ void asString(std::string& out, const ListView lv) {
     }
 
     out += ']';
+}
+
+void asString(std::string& out, MapView mv);
+
+void asString(std::string& out, MapEntryView v) {
+    const auto writeTyped = [&out]<typename T>(const MapEntryView ele) {
+        const T typed = ele.getValueAs<T>();
+        asString(out, typed);
+    };
+
+    const std::string_view key = v.getKey();
+
+    out += key;
+    out += " : ";
+
+    const MapBufferTypeTag tag = v.getValueTag();
+    MapTagDispatcher writer {._tag = tag};
+    writer.execute(writeTyped, v);
+}
+
+void asString(std::string& out, const MapView mv) {
+    if (mv.empty()) {
+        out += "{}";
+        return;
+    }
+
+    out += '{';
+
+    const MapEntryView fst = mv.front();
+    asString(out, fst);
+
+    for (const MapEntryView ele : mv.entries() | rv::drop(1)) {
+        out += ", ";
+        asString(out, ele);
+    }
+
+    out += '}';
 }
 
 template <typename T>
