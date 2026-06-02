@@ -1,9 +1,9 @@
 set(LLVM_TARGET_DEFINITIONS DBOps.td)
 
-mlir_tablegen(DBOps.h.inc   -gen-op-decls)
-mlir_tablegen(DBOps.cpp.inc -gen-op-defs)
-mlir_tablegen(DBDialect.h.inc      -gen-dialect-decls)
-mlir_tablegen(DBDialect.cpp.inc    -gen-dialect-defs)
+mlir_tablegen(DBOps.h.inc        -gen-op-decls      -dialect db   EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+mlir_tablegen(DBOps.cpp.inc      -gen-op-defs       -dialect db   EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+mlir_tablegen(DBDialect.h.inc    -gen-dialect-decls -dialect db   EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+mlir_tablegen(DBDialect.cpp.inc  -gen-dialect-defs  -dialect db   EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
 
 add_public_tablegen_target(DBDialectIncGen)
 
