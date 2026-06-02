@@ -1,7 +1,6 @@
 #pragma once
 
 #include <atomic>
-#include <memory>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -35,7 +34,6 @@ public:
     // Graph operations
     Graph* createGraph(std::string_view name);
     Graph* loadGraph(std::string_view name);
-    bool addGraph(std::unique_ptr<Graph> graph);
     void setDefaultGraph(std::string_view name);
     void listGraphs(std::vector<std::string_view>& names) const;
 
