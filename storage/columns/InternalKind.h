@@ -7,6 +7,7 @@
 
 #include "EntityList.h"
 #include "columns/KindTypes.h"
+#include "map/MapEntryView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
@@ -99,7 +100,8 @@ public:
         std::optional<ListView>,
         ListElementView,
         std::optional<ListElementView>,
-        MapView
+        MapView,
+        MapEntryView
     >;
 
     using Code = uint8_t;

@@ -14,6 +14,10 @@
 #include "list/ListElementView.h"
 #include "list/ListUtils.h"
 #include "list/ListView.h"
+
+#include "map/MapEntryView.h"
+#include "map/MapUtils.h"
+#include "map/MapView.h"
 #include "QueryStatus.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
@@ -117,6 +121,7 @@ template <typename T>
 
 [[maybe_unused]] std::string valueToString(const db::ListElementView element);
 [[maybe_unused]] std::string valueToString(db::ListView view);
+[[maybe_unused]] std::string valueToString(db::MapView view);
 
 template <typename T>
 [[maybe_unused]] std::string valueToString(const std::optional<T>& value) {
@@ -174,6 +179,39 @@ template <typename T>
     }
 
     out += "]";
+    return out;
+}
+
+[[maybe_unused]] std::string valueToString(const db::MapEntryView entry) {
+    const auto writeTyped = []<typename T>(const db::MapEntryView entry) -> std::string {
+        return valueToString(entry.getValueAs<T>());
+    };
+
+    const db::MapBufferTypeTag tag = entry.getValueTag();
+    db::MapTagDispatcher writer {._tag = tag};
+
+    std::string out {entry.getKey()};
+    out += ": ";
+    out += writer.execute(writeTyped, entry);
+    return out;
+}
+
+[[maybe_unused]] std::string valueToString(const db::MapView view) {
+    if (view.empty()) {
+        return "{}";
+    }
+
+    std::string out = "{";
+    size_t i = 0;
+
+    for (const db::MapEntryView entry : view.entries()) {
+        if (i++ > 0) {
+            out += ", ";
+        }
+        out += valueToString(entry);
+    }
+
+    out += "}";
     return out;
 }
 

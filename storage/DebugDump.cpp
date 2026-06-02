@@ -7,6 +7,10 @@
 #include "list/ListElementView.h"
 #include "list/ListUtils.h"
 
+#include "map/MapEntryView.h"
+#include "map/MapUtils.h"
+#include "map/MapView.h"
+
 using namespace db;
 
 namespace rg = ranges;
@@ -77,5 +81,52 @@ void DebugDump::dump(std::ostream& out, ListView list) {
     }
 
     out << "]\n";
+}
+
+void DebugDump::dump(std::ostream& out, MapEntryView view, bool isInMap) {
+    out << view.getKey() << ": ";
+
+    const auto dumpTyped = [&out, isInMap]<typename T>(const MapEntryView entry) {
+        const T typed = entry.getValueAs<T>();
+
+        if (!isInMap) {
+            dump(out, typed);
+            return;
+        }
+
+        // Dumping inside a MapView: strip the trailing \n after each value
+        std::ostringstream temp;
+        dump(temp, typed);
+        std::string dumped = temp.str();
+        if (!dumped.empty() && dumped.back() == '\n') {
+            dumped.pop_back();
+        }
+        out << dumped;
+    };
+
+    const MapBufferTypeTag tag = view.getValueTag();
+    MapTagDispatcher dumper {._tag = tag};
+    dumper.execute(dumpTyped, view);
+}
+
+void DebugDump::dump(std::ostream& out, MapView map) {
+    if (map.empty()) {
+        out << "{}\n";
+        return;
+    }
+
+    out << "{";
+
+    constexpr bool isInMap = true;
+
+    const MapEntryView fst = map.front();
+    dump(out, fst, isInMap);
+
+    for (const MapEntryView entry : map | rv::drop(1)) {
+        out << ", ";
+        dump(out, entry, isInMap);
+    }
+
+    out << "}\n";
 }
 
