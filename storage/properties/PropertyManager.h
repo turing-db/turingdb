@@ -14,6 +14,7 @@ namespace db {
 class EntityPropertyView;
 class NodeContainer;
 class DataPartLoader;
+class DataPartParquetLoader;
 class DataPartRebaser;
 
 class PropertyManager {
@@ -188,6 +189,7 @@ public:
 
 private:
     friend DataPartLoader;
+    friend DataPartParquetLoader;
     friend DataPartRebaser;
 
     PropertyContainerMap _map;

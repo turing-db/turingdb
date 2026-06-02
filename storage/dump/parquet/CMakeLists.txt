@@ -10,7 +10,9 @@ add_library(turing_db_storage_dump_parquet_s STATIC
     PropertyIndexerParquetDumper.cpp
     PropertyIndexerParquetLoader.cpp
     StringPropertyIndexerParquetDumper.cpp
-    StringPropertyIndexerParquetLoader.cpp)
+    StringPropertyIndexerParquetLoader.cpp
+    DataPartParquetDumper.cpp
+    DataPartParquetLoader.cpp)
 
 target_link_libraries(turing_db_storage_dump_parquet_s
     PUBLIC  turing_db_storage_s

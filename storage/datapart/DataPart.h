@@ -20,6 +20,7 @@ class GraphView;
 class GraphReader;
 class EdgeIndexer;
 class DataPartLoader;
+class DataPartParquetLoader;
 class DataPartRebaser;
 class JobSystem;
 class StringIndex;
@@ -79,6 +80,7 @@ private:
     friend DataPartInfoLoader;
     friend GraphReader;
     friend DataPartLoader;
+    friend DataPartParquetLoader;
     friend DataPartRebaser;
 
     bool _initialized {false};
