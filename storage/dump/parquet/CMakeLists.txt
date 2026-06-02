@@ -12,7 +12,9 @@ add_library(turing_db_storage_dump_parquet_s STATIC
     StringPropertyIndexerParquetDumper.cpp
     StringPropertyIndexerParquetLoader.cpp
     DataPartParquetDumper.cpp
-    DataPartParquetLoader.cpp)
+    DataPartParquetLoader.cpp
+    GraphMetadataParquetDumper.cpp
+    GraphMetadataParquetLoader.cpp)
 
 target_link_libraries(turing_db_storage_dump_parquet_s
     PUBLIC  turing_db_storage_s

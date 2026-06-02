@@ -21,7 +21,7 @@ binary `DataPart` serializer now has a complete, faithful Parquet counterpart.
 |---|---|---|
 | 0 | `ParquetWriter` / `ParquetWriteSchema` primitive (`io/parquet/`) | ✅ committed |
 | 1 | All six `DataPart` structure adapters + the `DataPart` orchestrator (`storage/dump/parquet/`), each round-trip-tested; gated by `DataPartComparator::same`; EdgeIndexer patch path covered | ✅ committed |
-| 2 | Commit-level metadata (`GraphMetadata` maps, journal, tombstones, commit metadata) + `GraphDumper`/`CommitDumper` wiring | in progress — see [§4.3](#43-commit--graph-metadata) |
+| 2 | Commit-level metadata (`GraphMetadata` maps, journal, tombstones, commit metadata) + `GraphDumper`/`CommitDumper` wiring | in progress — `GraphMetadata` schema maps ✅ committed; journal / tombstones / commit metadata + wiring remain — see [§4.3](#43-commit--graph-metadata) |
 | 3 | `PARQUET` format-marker dispatch + back-compat with binary dumps | not started |
 | 4 | Retire the binary path; compression / row-group tuning | not started |
 
@@ -221,20 +221,23 @@ dataparts/<id>/
 The commit-level structures (`labels`, `edge-types`, `property-types`, `labelsets`,
 `journal`, `tombstones`, `metadata`; `storage/dump/CommitDumper.cpp:23-178`) are small.
 
-**GraphMetadata schema maps** — `GraphMetadataParquet{Dumper,Loader}`, one file each.
-Each map's ids are assigned sequentially by `getOrCreate` (`LabelMap`/`EdgeTypeMap`/
-`PropertyTypeMap`/`LabelSetMap` have no explicit `add(id, ...)`), so entries are dumped in
-id order and reloaded via `getOrCreate`, reproducing the ids — the loader asserts the
-reassigned id matches the dumped one:
+**GraphMetadata schema maps** — `GraphMetadataParquet{Dumper,Loader}` (✅ committed), one
+file each in the commit directory (paths owned by `CommitParquetLayout.h`, the per-commit
+analogue of `DataPartParquetLayout.h`). Each map's ids are assigned sequentially by
+`getOrCreate` (`LabelMap`/`EdgeTypeMap`/`PropertyTypeMap`/`LabelSetMap` have no explicit
+`add(id, ...)`), so entries are dumped in id order and reloaded via `getOrCreate`,
+reproducing the ids — the loader asserts the reassigned id matches the dumped one:
 
 - `labels.parquet` — `label_id`, `name`
 - `edge-types.parquet` — `edge_type_id`, `name`
 - `property-types.parquet` — `property_type_id`, `value_type`, `name`
 - `labelsets.parquet` — `labelset_id`, `integer_0..integer_3` (the four `uint64` of the
-  `LabelSet`, with `static_assert(LabelSet::IntegerCount == 4)`)
+  `LabelSet`, with `static_assert(LabelSet::IntegerCount == 4)`; bitmasks with the high bit
+  set round-trip through the `INT64` columns, exercised by the test's label-id-63 set)
 
 `GraphMetadataParquetLoader` is a `friend` of `GraphMetadata` (to reach the private maps);
-the maps fill through their public `getOrCreate`. Gated by `GraphMetadataComparator::same`.
+the maps fill through their public `getOrCreate`. Round-trip-tested (incl. an empty-metadata
+case) and gated by `GraphMetadataComparator::same`.
 
 **Still to design in Phase 2:** `journal` (CommitJournal — a sequence of operations → a
 row-per-entry table), `tombstones` (deleted-id sets → id-list table), and the small commit
@@ -447,10 +450,10 @@ the capstone builds `SimpleGraph` and asserts `DataPartComparator::same`, plus a
 two-commit test that forces and verifies an EdgeIndexer patch node (the
 `_patchNodeOffsets` round-trip).
 
-**Phase 2 — commit-level metadata.** *(in progress)* `GraphMetadata` schema maps, then
-journal / tombstones / commit metadata ([§4.3](#43-commit--graph-metadata)), then wire
-`CommitDumper`/`GraphDumper` to emit a Parquet commit directory. Full dump→load regression
-via `GraphComparator::same`.
+**Phase 2 — commit-level metadata.** *(in progress)* `GraphMetadata` schema maps ✅ done
+(`GraphMetadataParquet{Dumper,Loader}`, round-trip-tested); next: journal / tombstones /
+commit metadata ([§4.3](#43-commit--graph-metadata)), then wire `CommitDumper`/`GraphDumper`
+to emit a Parquet commit directory. Full dump→load regression via `GraphComparator::same`.
 
 **Phase 3 — format dispatch + back-compat.** `GraphFileType::PARQUET` marker; loaders
 ([§6.3](#63-orchestration-and-format-dispatch)) dispatch on it; parametrize the regression
