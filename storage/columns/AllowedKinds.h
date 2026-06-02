@@ -7,6 +7,7 @@
 #include "columns/ColumnConst.h"
 #include "list/ListBuffer.h"
 #include "ID.h"
+#include "map/MapEntryView.h"
 #include "versioning/ChangeID.h"
 #include "ColumnOperator.h"
 #include "metadata/PropertyNull.h"
@@ -549,7 +550,10 @@ struct OutputtedTypes {
 
         ListView,
         ListElementView,
-        std::optional<ListElementView>
+        std::optional<ListElementView>,
+
+        MapView,
+        MapEntryView
     >>;
 
     using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>()>;
