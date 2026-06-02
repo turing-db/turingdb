@@ -11,7 +11,7 @@ def DB : Dialect {
 
 // -- Base class for all ops in this dialect --
 class My_Op<string mnemonic, list<Trait> traits = []>
-    : Op<MyDialect, mnemonic, traits>;
+    : Op<DB, mnemonic, traits>;
 
 // -- A simple add op --
 def AddOp : My_Op<"add", [Pure]> {
