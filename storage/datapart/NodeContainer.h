@@ -12,6 +12,7 @@
 namespace db {
 
 class NodeContainerLoader;
+class NodeContainerParquetLoader;
 class DataPartLoader;
 class DataPartRebaser;
 
@@ -80,6 +81,7 @@ public:
 
 private:
     friend NodeContainerLoader;
+    friend NodeContainerParquetLoader;
     friend DataPartLoader;
     friend DataPartRebaser;
 

@@ -37,6 +37,30 @@ add_storage_tests(test_storage_dump_stringindexloader dump/StringIndexLoaderTest
 add_storage_tests(test_storage_dump_loadcommit dump/LoadCommitDataTest.cpp)
 add_storage_tests(test_storage_dump_embedding_graph dump/EmbeddingGraphDumpLoadTest.cpp)
 
+add_turing_test(test_storage_dump_propertycontainerparquet dump/parquet/PropertyContainerParquetTest.cpp)
+target_link_libraries(test_storage_dump_propertycontainerparquet PRIVATE
+        turing_common_s
+        turing_db_storage_s
+        turing_db_examples_s
+        turing_db_jobs_s
+        turing_db_storage_dump_parquet_s)
+
+add_turing_test(test_storage_dump_nodecontainerparquet dump/parquet/NodeContainerParquetTest.cpp)
+target_link_libraries(test_storage_dump_nodecontainerparquet PRIVATE
+        turing_common_s
+        turing_db_storage_s
+        turing_db_examples_s
+        turing_db_jobs_s
+        turing_db_storage_dump_parquet_s)
+
+add_turing_test(test_storage_dump_edgecontainerparquet dump/parquet/EdgeContainerParquetTest.cpp)
+target_link_libraries(test_storage_dump_edgecontainerparquet PRIVATE
+        turing_common_s
+        turing_db_storage_s
+        turing_db_examples_s
+        turing_db_jobs_s
+        turing_db_storage_dump_parquet_s)
+
 add_storage_tests(test_storage_columns_dispatcher ColumnDispatcherTest.cpp)
 add_storage_tests(test_storage_objectmap ObjectMapTest.cpp)
 
