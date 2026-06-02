@@ -17,6 +17,9 @@
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
 
+#include "map/MapBuffer.h"
+#include "map/MapView.h"
+
 #include "buffers/StringBuffer.h"
 
 #include "metadata/PropertyType.h"
@@ -31,6 +34,8 @@ class Change;
 
 class LocalMemory {
 public:
+    using DefaultMapBuffer = MapBuffer<>;
+
     template <typename T>
     struct MakeMemoryPool {
         using type = TypeValueMapPair<T, MemoryPool<T>>;
@@ -113,7 +118,9 @@ public:
         MakeMemoryPool<ColumnConst<ListElementView>>::type,
         MakeMemoryPool<ColumnConst<std::optional<ListElementView>>>::type,
         MakeMemoryPool<ColumnOptVector<ListView>>::type,
-        MakeMemoryPool<ColumnConst<std::optional<ListView>>>::type
+        MakeMemoryPool<ColumnConst<std::optional<ListView>>>::type,
+
+        MakeMemoryPool<ColumnConst<MapView>>::type
     >;
 
     template <typename KeyT, typename ValueT>
@@ -148,12 +155,16 @@ public:
 
     QueryListBuffer& listBuffer() { return _listBuffer; }
 
+    DefaultMapBuffer& mapBuffer() { return _mapBuffer; }
+
     StringBuffer& stringBuffer() { return _stringBuf; }
 
 private:
     MemoryPools _pools;
     ColumnAllocatorMap _columnAllocators;
+
     QueryListBuffer _listBuffer;
+    DefaultMapBuffer _mapBuffer;
     StringBuffer _stringBuf;
 };
 
