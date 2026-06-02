@@ -16,7 +16,9 @@ add_library(turing_db_storage_dump_parquet_s STATIC
     GraphMetadataParquetDumper.cpp
     GraphMetadataParquetLoader.cpp
     CommitJournalParquetDumper.cpp
-    CommitJournalParquetLoader.cpp)
+    CommitJournalParquetLoader.cpp
+    TombstonesParquetDumper.cpp
+    TombstonesParquetLoader.cpp)
 
 target_link_libraries(turing_db_storage_dump_parquet_s
     PUBLIC  turing_db_storage_s
