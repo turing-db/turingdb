@@ -28,3 +28,6 @@
 [submodule "external/nanobind"]
 	path = external/nanobind
 	url = https://github.com/wjakob/nanobind.git
+[submodule "external/llvm-project"]
+	path = external/llvm-project
+	url = https://github.com/llvm/llvm-project.git
