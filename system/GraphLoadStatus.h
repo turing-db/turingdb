@@ -1,7 +1,9 @@
 #pragma once
 
+#include <functional>
 #include <set>
 #include <string>
+#include <string_view>
 
 #include "RWSpinLock.h"
 
@@ -9,13 +11,13 @@ namespace db {
 
 class GraphLoadStatus {
 public:
-    bool addLoadingGraph(const std::string& graphName);
-    void removeLoadingGraph(const std::string& graphName);
-    bool isGraphLoading(const std::string& graphName) const;
+    bool addLoadingGraph(std::string_view graphName);
+    void removeLoadingGraph(std::string_view graphName);
+    bool isGraphLoading(std::string_view graphName) const;
 
 private:
     mutable RWSpinLock _guard;
-    std::set<std::string> _loadingGraphs;
+    std::set<std::string, std::less<>> _loadingGraphs;
 };
 
-} 
+}

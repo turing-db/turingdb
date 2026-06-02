@@ -3,7 +3,7 @@
 #include <vector>
 #include <optional>
 
-#include "StorageManager.h"
+#include "GraphManager.h"
 
 #include "ChangeManager.h"
 #include "versioning/ChangeID.h"
@@ -15,7 +15,6 @@
 #include "MinioS3ClientWrapper.h"
 
 #include "GraphFileType.h"
-#include "GraphLoadStatus.h"
 #include "dump/DumpResult.h"
 
 #include "VectorDatabase.h"
@@ -55,7 +54,7 @@ public:
     // Graph access
     Graph* getDefaultGraph() const;
     Graph* getGraph(const std::string& graphName) const;
-    size_t getGraphCount() const { return _storage.getGraphCount(); }
+    size_t getGraphCount() const { return _graphManager.getGraphCount(); }
 
     // Graph operations
     Graph* createGraph(const std::string& graphName);
@@ -78,8 +77,8 @@ public:
     DumpResult<void> dumpGraph(const std::string& graphName);
 
     // ChangeManager access and operations
-    ChangeManager& getChangeManager() { return _storage.getChangeManager(); }
-    const ChangeManager& getChangeManager() const { return _storage.getChangeManager(); }
+    ChangeManager& getChangeManager() { return _graphManager.getChangeManager(); }
+    const ChangeManager& getChangeManager() const { return _graphManager.getChangeManager(); }
     ChangeResult<Change*> newChange(const std::string& graphName,
                                     CommitHash baseHash = CommitHash::head());
 
@@ -121,10 +120,7 @@ private:
     JobSystem _jobSystem;
 
     // Graphs management
-    StorageManager _storage;
-
-    // Graph load status
-    GraphLoadStatus _graphLoadStatus;
+    GraphManager _graphManager;
 
     // Vector DB
     vec::VectorDatabase _vectorDatabase;
@@ -142,10 +138,6 @@ private:
     void initLockFile();
     void initVectorDatabase();
     void initSystemEvents();
-
-    bool loadJsonlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
-    bool loadGmlDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
-    bool loadBinaryDB(const std::string& graphName, const fs::Path& dbPath, JobSystem&);
 };
 
 }

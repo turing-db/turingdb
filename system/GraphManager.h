@@ -2,25 +2,30 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
 #include "ChangeManager.h"
+#include "GraphFileType.h"
+#include "GraphLoadStatus.h"
 #include "ObjectMap.h"
 #include "Path.h"
 
 namespace db {
 
 class Graph;
+class TuringConfig;
+class JobSystem;
 
-class StorageManager {
+class GraphManager {
 public:
-    StorageManager(const fs::Path& graphsDir, bool syncedOnDisk);
+    explicit GraphManager(const TuringConfig* config);
 
-    StorageManager(const StorageManager&) = delete;
-    StorageManager& operator=(const StorageManager&) = delete;
+    GraphManager(const GraphManager&) = delete;
+    GraphManager& operator=(const GraphManager&) = delete;
 
-    ~StorageManager();
+    ~GraphManager();
 
     // Graph access
     Graph* getDefaultGraph() const { return _defaultGraph.load(); }
@@ -37,18 +42,31 @@ public:
     // Initialise the default graph, loading it from disk or creating it
     void loadOrCreateDefaultGraph();
 
+    // Import a graph from a file
+    bool importGraph(std::string_view graphName,
+                     const fs::Path& filePath,
+                     JobSystem& jobSystem);
+    std::optional<GraphFileType> getGraphFileType(const fs::Path& graphPath);
+
+    // Is a graph currently being loaded from a file
+    bool isGraphLoading(std::string_view graphName) const;
+
     // Change management
     ChangeManager& getChangeManager() { return _changes; }
     const ChangeManager& getChangeManager() const { return _changes; }
 
 private:
-    fs::Path _graphsDir;
-    bool _syncedOnDisk {false};
+    const TuringConfig* _config {nullptr};
 
     ObjectMap<Graph> _graphs;
     std::atomic<Graph*> _defaultGraph {nullptr};
 
     ChangeManager _changes;
+    GraphLoadStatus _graphLoadStatus;
+
+    bool loadJsonlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem& jobSystem);
+    bool loadGmlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem& jobSystem);
+    bool loadBinaryDB(std::string_view graphName, const fs::Path& dbPath, JobSystem& jobSystem);
 };
 
 }

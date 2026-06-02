@@ -4,6 +4,7 @@ set(system_sources
     LockFile.cpp
     LockFileResult.cpp
     SystemEventHandler.cpp
+    GraphManager.cpp
     SystemManager.cpp)
 
 add_library(turing_db_system_s STATIC ${system_sources})

@@ -14,14 +14,9 @@
 #include "versioning/VersionController.h"
 
 #include "GraphSerializer.h"
-#include "dump/GraphLoader.h"
-
-#include "GMLImporter.h"
-#include "JsonlParser.h"
 
 #include "SystemEventHandler.h"
 
-#include "FileUtils.h"
 #include "Panic.h"
 #include "TuringException.h"
 
@@ -29,7 +24,7 @@ using namespace db;
 
 SystemManager::SystemManager(const TuringConfig* config)
     : _config(config),
-    _storage(config->getGraphsDir(), config->isSyncedOnDisk())
+    _graphManager(config)
 {
 }
 
@@ -43,7 +38,7 @@ void SystemManager::init() {
     initVectorDatabase();
     initSystemEvents();
     _jobSystem.init();
-    _storage.loadOrCreateDefaultGraph();
+    _graphManager.loadOrCreateDefaultGraph();
 
     _procedures.init();
     _extensions.init(&_procedures,
@@ -156,71 +151,31 @@ void SystemManager::initSystemEvents() {
 }
 
 Graph* SystemManager::loadGraph(const std::string& name) {
-    return _storage.loadGraph(name);
+    return _graphManager.loadGraph(name);
 }
 
 Graph* SystemManager::createGraph(const std::string& name) {
-    return _storage.createGraph(name);
+    return _graphManager.createGraph(name);
 }
 
 Graph* SystemManager::getDefaultGraph() const {
-    return _storage.getDefaultGraph();
+    return _graphManager.getDefaultGraph();
 }
 
 void SystemManager::setDefaultGraph(const std::string& name) {
-    _storage.setDefaultGraph(name);
+    _graphManager.setDefaultGraph(name);
 }
 
 Graph* SystemManager::getGraph(const std::string& graphName) const {
-    return _storage.getGraph(graphName);
+    return _graphManager.getGraph(graphName);
 }
 
 void SystemManager::listGraphs(std::vector<std::string_view>& names) {
-    _storage.listGraphs(names);
+    _graphManager.listGraphs(names);
 }
 
 bool SystemManager::importGraph(const std::string& graphName, const fs::Path& filePath, JobSystem& jobSystem) {
-    const fs::Path graphPath = _config->getGraphsDir() / filePath;
-
-    // Step 1. Check if graph was already loaded || is already loading
-    if (getGraph(graphName) || isGraphLoading(graphName)) {
-        return false;
-    }
-
-    // Step 2. Validate the path. It should be within the data directory
-    const fs::Path absolute = _config->getDataDir() / filePath;
-    if (!absolute.isSubDirectory(_config->getDataDir())) {
-        spdlog::error("File is not within the data directory: {}", absolute.get());
-        return false;
-    }
-
-    if (!absolute.exists()) {
-        spdlog::error("File does not exist: {}", absolute.get());
-        return false;
-    }
-
-    // Step 3. Determine the file type
-    const auto fileType = getGraphFileType(absolute);
-
-    // Step 4. Load the graph
-    if (!fileType) {
-        // If we can not determine the file type, assume it is a JSONL graph
-        // to be changed in the future
-        return loadJsonlDB(graphName, absolute, jobSystem);
-    }
-
-    switch (*fileType) {
-        case GraphFileType::GML:
-            return loadGmlDB(graphName, absolute, jobSystem);
-        case GraphFileType::JSONL:
-            return loadJsonlDB(graphName, absolute, jobSystem);
-        case GraphFileType::BINARY:
-            return loadBinaryDB(graphName, absolute, jobSystem);
-        case GraphFileType::_SIZE:
-            throw TuringException("Unsupported graph type");
-    }
-
-    throw TuringException("Unsupported graph type");
+    return _graphManager.importGraph(graphName, filePath, jobSystem);
 }
 
 DumpResult<void> SystemManager::dumpGraph(const std::string& graphName) {
@@ -229,7 +184,7 @@ DumpResult<void> SystemManager::dumpGraph(const std::string& graphName) {
         return {};
     }
 
-    Graph* graph = _storage.getGraph(graphName);
+    Graph* graph = _graphManager.getGraph(graphName);
     if (!graph) {
         return DumpError::result(DumpErrorType::GRAPH_DOES_NOT_EXIST);
     }
@@ -238,154 +193,11 @@ DumpResult<void> SystemManager::dumpGraph(const std::string& graphName) {
 }
 
 std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& graphPath) {
-    if (graphPath.extension() == ".gml") {
-        return GraphFileType::GML;
-    }
-
-    if (graphPath.extension() == ".json" || graphPath.extension() == ".jsonl") {
-        return GraphFileType::JSONL;
-    }
-
-    const auto typeFilePath = graphPath / "type";
-    std::string typeName;
-    if (!FileUtils::readContent(typeFilePath.get(), typeName)) {
-        return {};
-    }
-
-    if (typeName == GraphFileTypeDescription::value(GraphFileType::BINARY)) {
-        return GraphFileType::BINARY;
-    } else if (typeName == GraphFileTypeDescription::value(GraphFileType::JSONL)) {
-        return GraphFileType::JSONL;
-    }
-
-    return {};
-}
-
-bool SystemManager::loadBinaryDB(const std::string& graphName,
-                                 const fs::Path& dbPath,
-                                 JobSystem& jobsystem) {
-    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return false;
-    }
-
-    // in the case of turingDB binaries the path is the same path we load from.
-    auto graph = Graph::create(graphName, dbPath);
-
-    if (auto res = graph->getSerializer().load(); !res) {
-        spdlog::error("Could not load graph {}: {}", graphName, res.error().fmtMessage());
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
-
-    if (!_storage.addGraph(std::move(graph))) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
-
-    _graphLoadStatus.removeLoadingGraph(graphName);
-
-    return true;
+    return _graphManager.getGraphFileType(graphPath);
 }
 
 bool SystemManager::isGraphLoading(const std::string& graphName) const {
-    return _graphLoadStatus.isGraphLoading(graphName);
-}
-
-bool SystemManager::loadJsonlDB(const std::string& graphName,
-                                const fs::Path& dbPath,
-                                JobSystem& jobsystem) {
-    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return false;
-    }
-
-    const auto& graphPath = _config->getGraphsDir() / graphName;
-    if (graphPath == dbPath) {
-        return false;
-    }
-
-    auto graph = Graph::create(graphName, graphPath);
-    std::ifstream file(dbPath.get());
-    if (!file) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
-
-    ChangeManager& changeManager = getChangeManager();
-    Change* change = changeManager.createChange(graph.get(), CommitHash::head());
-    ChangeAccessor changeAccessor = change->access();
-
-    const auto importRes = JsonlParser::parse(changeAccessor, file);
-
-    if (!importRes) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        spdlog::error(importRes.error().fmtMessage());
-        return false;
-    }
-
-    const auto submitRes = changeManager.submitChange(changeAccessor, jobsystem);
-
-    if (!submitRes) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        spdlog::error(submitRes.error().fmtMessage());
-        return false;
-    }
-
-    if (_config->isSyncedOnDisk()) {
-        const auto dumpRes = graph->getSerializer().dump();
-
-        if (!dumpRes) {
-            _graphLoadStatus.removeLoadingGraph(graphName);
-            spdlog::error(dumpRes.error().fmtMessage());
-            return false;
-        }
-    }
-
-    if (!_storage.addGraph(std::move(graph))) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
-
-    _graphLoadStatus.removeLoadingGraph(graphName);
-    return true;
-}
-
-bool SystemManager::loadGmlDB(const std::string& graphName,
-                              const fs::Path& dbPath,
-                              JobSystem& jobsystem) {
-    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return false;
-    }
-
-    const auto& graphPath = _config->getGraphsDir() / graphName;
-    if (graphPath == dbPath) {
-        return false;
-    }
-
-    // Load graph
-    auto graph = Graph::create(graphName, graphPath);
-
-    // load GMLs
-    GMLImporter importer;
-
-    if (!importer.importFile(jobsystem, graph.get(), FileUtils::Path {dbPath.c_str()})) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
-
-    if (_config->isSyncedOnDisk()) {
-        if (!graph->getSerializer().dump()) {
-            _graphLoadStatus.removeLoadingGraph(graphName);
-            return false;
-        }
-    }
-
-    if (!_storage.addGraph(std::move(graph))) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
-    }
-
-    _graphLoadStatus.removeLoadingGraph(graphName);
-    return true;
+    return _graphManager.isGraphLoading(graphName);
 }
 
 void SystemManager::listAvailableGraphs(std::vector<fs::Path>& names) {
@@ -400,7 +212,7 @@ void SystemManager::listAvailableGraphs(std::vector<fs::Path>& names) {
 }
 
 ChangeResult<Change*> SystemManager::newChange(const std::string& graphName, CommitHash baseHash) {
-    Graph* graph = _storage.getGraph(graphName);
+    Graph* graph = _graphManager.getGraph(graphName);
     if (!graph) {
         return ChangeError::result(ChangeErrorType::GRAPH_NOT_FOUND);
     }

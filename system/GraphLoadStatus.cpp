@@ -5,7 +5,7 @@
 
 using namespace db;
 
-bool GraphLoadStatus::addLoadingGraph(const std::string& graphName) {
+bool GraphLoadStatus::addLoadingGraph(std::string_view graphName) {
     std::unique_lock lock(_guard);
 
     if (_loadingGraphs.contains(graphName)) {
@@ -16,18 +16,17 @@ bool GraphLoadStatus::addLoadingGraph(const std::string& graphName) {
     return true;
 }
 
-void GraphLoadStatus::removeLoadingGraph(const std::string& graphName) {
+void GraphLoadStatus::removeLoadingGraph(std::string_view graphName) {
     std::unique_lock lock(_guard);
 
-    if (!_loadingGraphs.contains(graphName)) {
-        return;
+    const auto it = _loadingGraphs.find(graphName);
+    if (it != _loadingGraphs.end()) {
+        _loadingGraphs.erase(it);
     }
-
-    _loadingGraphs.erase(graphName);
 }
 
-bool GraphLoadStatus::isGraphLoading(const std::string& graphName) const {
+bool GraphLoadStatus::isGraphLoading(std::string_view graphName) const {
     std::shared_lock lock(_guard);
 
     return _loadingGraphs.contains(graphName);
-} 
+}
