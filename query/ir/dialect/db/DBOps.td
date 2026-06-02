@@ -2,21 +2,22 @@ include "mlir/IR/OpBase.td"
 include "mlir/IR/BuiltinTypes.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-// -- Dialect declaration --
-def DB : Dialect {
-  let name = "db";
+// Dialect declaration
+def TuringDB : Dialect {
+  let name = "turing";
   let summary = "TuringDB dialect";
-  let cppNamespace = "::mlir::db";
+  let cppNamespace = "::mlir::turing";
 }
 
-// -- Base class for all ops in this dialect --
-class My_Op<string mnemonic, list<Trait> traits = []>
-    : Op<DB, mnemonic, traits>;
+// Base, from which all TuringDB dialects are derived
+class TuringOp<string mnemonic, list<Trait> traits = []>
+    : Op<TuringDB, mnemonic, traits>;
 
-// -- A simple add op --
-def AddOp : My_Op<"add", [Pure]> {
-  let summary = "Integer addition";
-  let arguments = (ins I64:$lhs, I64:$rhs);
+/**
+* ScanNodes
+* Pure: this operation has no side effects
+*/
+def ScanNodes : TuringOp<"ScanNodes", [Pure]> {
+  let summary = "Produce all nodes in the graph";
   let results   = (outs I64:$result);
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
 }
