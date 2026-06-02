@@ -17,6 +17,7 @@ inline fs::Path journalNodes(const fs::Path& dir) { return dir / "journal-nodes.
 inline fs::Path journalEdges(const fs::Path& dir) { return dir / "journal-edges.parquet"; }
 inline fs::Path tombstoneNodes(const fs::Path& dir) { return dir / "tombstone-nodes.parquet"; }
 inline fs::Path tombstoneEdges(const fs::Path& dir) { return dir / "tombstone-edges.parquet"; }
+inline fs::Path commitMetaData(const fs::Path& dir) { return dir / "commit-metadata.parquet"; }
 
 }
 
