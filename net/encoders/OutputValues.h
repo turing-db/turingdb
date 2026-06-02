@@ -8,6 +8,8 @@
 #include "list/ListElementView.h"
 #include "OptionalLike.h"
 #include "TypeUtils.h"
+#include "map/MapEntryView.h"
+#include "map/MapView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitHash.h"
@@ -66,6 +68,12 @@ template <typename T>
 concept IsListElement = std::is_same_v<T, ListElementView>;
 
 template <typename T>
+concept IsMap = std::is_same_v<T, MapView>;
+
+template <typename T>
+concept IsMapEntry = std::is_same_v<T, MapEntryView>;
+
+template <typename T>
 concept IsNull = std::is_same_v<T, PropertyNull>;
 
 template <typename T>
@@ -98,6 +106,10 @@ struct ColumnTypeGenerator {
             _name = fmt::format("List");
         } else if constexpr (IsListElement<T>) {
             _name = fmt::format("ListElement");
+        } else if constexpr (IsMap<T>) {
+            _name = fmt::format("Map");
+        } else if constexpr (IsMapEntry<T>) {
+            _name = fmt::format("MapEntry");
         } else {
             COMPILE_ERROR("Unknown column type");
         }

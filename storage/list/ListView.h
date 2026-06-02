@@ -6,7 +6,6 @@
 
 namespace db {
 
-
 /**
  * @brief Non-owning view into a series of contiguously-stored @ref ListElementViews.
  */

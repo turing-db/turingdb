@@ -9,6 +9,10 @@
 #include "list/ListElementView.h"
 #include "list/ListUtils.h"
 
+#include "map/MapEntryView.h"
+#include "map/MapUtils.h"
+#include "map/MapView.h"
+
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "dataframe/Dataframe.h"
@@ -213,6 +217,39 @@ private:
         }
 
         _writer.write(']');
+    }
+
+    void encodeValue(const MapEntryView entry) {
+        encodeValue(entry.getKey());
+        _writer.write(": ");
+
+        const auto writeTyped = [this]<typename T>(const MapEntryView entry) {
+            const T typed = entry.getValueAs<T>();
+            this->encodeValue(typed);
+        };
+
+        const MapBufferTypeTag tag = entry.getValueTag();
+        MapTagDispatcher writer {._tag = tag};
+        writer.execute(writeTyped, entry);
+    }
+
+    void encodeValue(const MapView mv) {
+        if (mv.empty()) {
+            _writer.write("{}");
+            return;
+        }
+
+        _writer.write('{');
+
+        const MapEntryView fst = mv.front();
+        encodeValue(fst);
+
+        for (const MapEntryView entry : mv.entries() | rv::drop(1)) {
+            _writer.write(", ");
+            encodeValue(entry);
+        }
+
+        _writer.write('}');
     }
 };
 
