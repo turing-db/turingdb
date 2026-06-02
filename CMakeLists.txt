@@ -224,6 +224,9 @@ find_package(Parquet REQUIRED)
 # Faiss
 find_package(Faiss REQUIRED)
 
+set(LLVM_DIR "${CMAKE_SOURCE_DIR}/external/dependencies/build/llvm-project/lib/cmake/llvm")
+set(MLIR_DIR "${CMAKE_SOURCE_DIR}/external/dependencies/build/llvm-project/lib/cmake/mlir")
+
 find_package(LLVM REQUIRED)
 find_package(MLIR REQUIRED)
 message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
