@@ -7,6 +7,7 @@ def TuringDB : Dialect {
     let name = "turing";
     let summary = "TuringDB dialect";
     let cppNamespace = "::mlir::turing";
+    let useDefaultTypePrinterParser = 1;
 
     // Declare other functions: mlir::turing::TuringDB::f()
     let extraClassDeclaration = [{
