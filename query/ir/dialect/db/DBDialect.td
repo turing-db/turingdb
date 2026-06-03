@@ -3,15 +3,15 @@
 
 include "mlir/IR/OpBase.td"
 
-def TuringDB : Dialect {
-    let name = "turing";
+def DB : Dialect {
+    let name = "db";
     let summary = "TuringDB dialect";
-    let cppNamespace = "::mlir::turing";
+    let cppNamespace = "::mlir::db";
 
     // Removes the need to define custom printers for our custom types
     let useDefaultTypePrinterParser = 1;
 
-    // Declare other functions: mlir::turing::TuringDB::f()
+    // Declare other functions: mlir::turing::db::f()
     let extraClassDeclaration = [{
         void registerTypes(); // Makes MLIR aware of our custom types
     }];
@@ -20,6 +20,6 @@ def TuringDB : Dialect {
 
 // Base, from which all TuringDB dialects are derived
 class TuringOp<string mnemonic, list<Trait> traits = []>
-    : Op<TuringDB, mnemonic, traits>;
+    : Op<DB, mnemonic, traits>;
 
 #endif //TURINGDB_DIALECT

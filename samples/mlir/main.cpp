@@ -14,12 +14,11 @@ static void print(auto op) {
     llvm::outs() << '\n';
 }
 
-
 int main() {
     std::cout << "hello from mlir" << '\n';
 
     mlir::MLIRContext ctx;
-    ctx.loadDialect<mlir::turing::TuringDB>();
+    ctx.loadDialect<mlir::db::DB>();
     ctx.loadDialect<mlir::func::FuncDialect>();
 
     mlir::OpBuilder builder(&ctx);
@@ -33,14 +32,14 @@ int main() {
     builder.setInsertionPointToStart(&block);
     module.push_back(func);
 
-    mlir::Type col0 = mlir::turing::ColumnType::get(&ctx, "scan");
-    mlir::Type col1 = mlir::turing::ColumnType::get(&ctx, "srcs");
-    mlir::Type col2 = mlir::turing::ColumnType::get(&ctx, "eids");
-    mlir::Type col3 = mlir::turing::ColumnType::get(&ctx, "etypes");
-    mlir::Type col4 = mlir::turing::ColumnType::get(&ctx, "tgts");
+    mlir::Type col0 = mlir::db::ColumnType::get(&ctx, "scan");
+    mlir::Type col1 = mlir::db::ColumnType::get(&ctx, "srcs");
+    mlir::Type col2 = mlir::db::ColumnType::get(&ctx, "eids");
+    mlir::Type col3 = mlir::db::ColumnType::get(&ctx, "etypes");
+    mlir::Type col4 = mlir::db::ColumnType::get(&ctx, "tgts");
 
-    auto scan = builder.create<mlir::turing::ScanNodes>(loc, col0);
-    auto getout = builder.create<mlir::turing::GetOutEdges>(loc, col1, col2, col3, col4,
+    auto scan = builder.create<mlir::db::ScanNodes>(loc, col0);
+    auto getout = builder.create<mlir::db::GetOutEdges>(loc, col1, col2, col3, col4,
                                                             scan.getResult());
 
     print(scan);

@@ -6,12 +6,12 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-using namespace mlir::turing;
+using namespace mlir::db;
 
 #define GET_TYPEDEF_CLASSES
 #include "DBTypes.cpp.inc"
 
-void TuringDB::registerTypes() {
+void DB::registerTypes() {
     addTypes<
 #define GET_TYPEDEF_LIST
 #include "DBTypes.cpp.inc"
