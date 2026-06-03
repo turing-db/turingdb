@@ -50,7 +50,7 @@ std::string CallProcedureProcessor::describe() const {
 
 void CallProcedureProcessor::prepare(ExecutionContext* ctxt) {
     SystemManager* sysMan = ctxt->getSystemManager();
-    Graph* graph = sysMan->getGraph(std::string(ctxt->getGraphName()));
+    Graph* graph = sysMan->getGraph(ctxt->getGraphName());
 
     _procedureContext.setGraph(graph);
     _procedureContext.setGraphView(&ctxt->getGraphView());

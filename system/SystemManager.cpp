@@ -150,11 +150,11 @@ void SystemManager::initSystemEvents() {
     });
 }
 
-Graph* SystemManager::loadGraph(const std::string& name) {
+Graph* SystemManager::loadGraph(std::string_view name) {
     return _graphManager.loadGraph(name);
 }
 
-Graph* SystemManager::createGraph(const std::string& name) {
+Graph* SystemManager::createGraph(std::string_view name) {
     return _graphManager.createGraph(name);
 }
 
@@ -162,11 +162,11 @@ Graph* SystemManager::getDefaultGraph() const {
     return _graphManager.getDefaultGraph();
 }
 
-void SystemManager::setDefaultGraph(const std::string& name) {
+void SystemManager::setDefaultGraph(std::string_view name) {
     _graphManager.setDefaultGraph(name);
 }
 
-Graph* SystemManager::getGraph(const std::string& graphName) const {
+Graph* SystemManager::getGraph(std::string_view graphName) const {
     return _graphManager.getGraph(graphName);
 }
 
@@ -174,11 +174,11 @@ void SystemManager::listGraphs(std::vector<std::string_view>& names) {
     _graphManager.listGraphs(names);
 }
 
-bool SystemManager::importGraph(const std::string& graphName, const fs::Path& filePath, JobSystem& jobSystem) {
+bool SystemManager::importGraph(std::string_view graphName, const fs::Path& filePath, JobSystem& jobSystem) {
     return _graphManager.importGraph(graphName, filePath, jobSystem);
 }
 
-DumpResult<void> SystemManager::dumpGraph(const std::string& graphName) {
+DumpResult<void> SystemManager::dumpGraph(std::string_view graphName) {
     if (!_config->isSyncedOnDisk()) {
         spdlog::warn("Cannot dump graph, The system is running in full in-memory mode");
         return {};
@@ -196,7 +196,7 @@ std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& gra
     return _graphManager.getGraphFileType(graphPath);
 }
 
-bool SystemManager::isGraphLoading(const std::string& graphName) const {
+bool SystemManager::isGraphLoading(std::string_view graphName) const {
     return _graphManager.isGraphLoading(graphName);
 }
 
@@ -211,7 +211,7 @@ void SystemManager::listAvailableGraphs(std::vector<fs::Path>& names) {
     }
 }
 
-ChangeResult<Change*> SystemManager::newChange(const std::string& graphName, CommitHash baseHash) {
+ChangeResult<Change*> SystemManager::newChange(std::string_view graphName, CommitHash baseHash) {
     return _graphManager.newChange(graphName, baseHash);
 }
 
@@ -239,7 +239,7 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
                                                          CommitHash commitHash,
                                                          ChangeID changeID) {
     Graph* graph = graphName.empty() ? this->getDefaultGraph()
-                                     : this->getGraph(std::string(graphName));
+                                     : this->getGraph(graphName);
     if (!graph) {
         return ChangeError::result(ChangeErrorType::GRAPH_NOT_FOUND);
     }
@@ -296,7 +296,7 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
 
 DumpResult<void> SystemManager::loadCommit(std::string_view graphName, CommitHash hash) {
     Graph* graph = graphName.empty() ? getDefaultGraph()
-                                     : getGraph(std::string(graphName));
+                                     : getGraph(graphName);
     if (!graph) {
         return DumpError::result(DumpErrorType::GRAPH_DOES_NOT_EXIST);
     }
