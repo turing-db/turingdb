@@ -26,6 +26,7 @@
 #include <limits>
 #include <memory>
 #include <span>
+#include <string>
 #include <vector>
 
 using namespace db;
@@ -164,6 +165,34 @@ TEST_F(GraphParquetMultiCommitTest, DumpReplacesStaleTempDirectory) {
     auto loadedGraph = Graph::create();
     GraphParquetLoader::load(loadedGraph.get(), _dumpPath);
     EXPECT_TRUE(GraphComparator::same(*_graph, *loadedGraph));
+}
+
+TEST_F(GraphParquetMultiCommitTest, LoadIntoPopulatedGraphThrows) {
+    GraphParquetDumper::dump(*_graph, _dumpPath);
+
+    // _graph already carries real commits; loading over them must refuse rather than
+    // silently dropping them.
+    EXPECT_THROW(GraphParquetLoader::load(_graph.get(), _dumpPath), FatalException);
+}
+
+TEST_F(GraphParquetMultiCommitTest, LoadEmptyGraphInfoThrows) {
+    GraphParquetDumper::dump(*_graph, _dumpPath);
+
+    // Rewrite graph-info with a valid schema and version but zero rows; the loader must
+    // not default the graph id and name from an empty file.
+    {
+        ParquetWriteSchema schema;
+        schema.addColumn(graphParquetLayout::GRAPH_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(graphParquetLayout::NAME_COLUMN, ParquetColumnType::String);
+
+        ParquetWriter writer(graphParquetLayout::graphInfo(_dumpPath), schema);
+        writer.setMetadata(graphParquetLayout::FORMAT_VERSION_KEY,
+                           std::to_string(graphParquetLayout::FORMAT_VERSION));
+        writer.finish();
+    }
+
+    auto loadedGraph = Graph::create();
+    EXPECT_THROW(GraphParquetLoader::load(loadedGraph.get(), _dumpPath), FatalException);
 }
 
 TEST_F(GraphParquetMultiCommitTest, LoadMissingGraphInfoThrows) {

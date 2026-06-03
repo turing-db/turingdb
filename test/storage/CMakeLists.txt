@@ -7,6 +7,11 @@ function(add_storage_tests exe_name cpp_file)
             turing_db_jobs_s)
 endfunction()
 
+function(add_storage_parquet_tests exe_name cpp_file)
+    add_storage_tests(${exe_name} ${cpp_file})
+    target_link_libraries(${exe_name} PRIVATE turing_db_storage_dump_parquet_s)
+endfunction()
+
 add_storage_tests(test_storage_stringcontainer StringContainerTest.cpp)
 add_storage_tests(test_storage_embeddingbucket EmbeddingBucketTest.cpp)
 add_storage_tests(test_storage_embeddingcontainer EmbeddingContainerTest.cpp)
@@ -37,101 +42,18 @@ add_storage_tests(test_storage_dump_stringindexloader dump/StringIndexLoaderTest
 add_storage_tests(test_storage_dump_loadcommit dump/LoadCommitDataTest.cpp)
 add_storage_tests(test_storage_dump_embedding_graph dump/EmbeddingGraphDumpLoadTest.cpp)
 
-add_turing_test(test_storage_dump_propertycontainerparquet dump/parquet/PropertyContainerParquetTest.cpp)
-target_link_libraries(test_storage_dump_propertycontainerparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
-
-add_turing_test(test_storage_dump_nodecontainerparquet dump/parquet/NodeContainerParquetTest.cpp)
-target_link_libraries(test_storage_dump_nodecontainerparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
-
-add_turing_test(test_storage_dump_edgecontainerparquet dump/parquet/EdgeContainerParquetTest.cpp)
-target_link_libraries(test_storage_dump_edgecontainerparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
-
-add_turing_test(test_storage_dump_edgeindexerparquet dump/parquet/EdgeIndexerParquetTest.cpp)
-target_link_libraries(test_storage_dump_edgeindexerparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
-
-add_turing_test(test_storage_dump_propertyindexerparquet dump/parquet/PropertyIndexerParquetTest.cpp)
-target_link_libraries(test_storage_dump_propertyindexerparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
-
-add_turing_test(test_storage_dump_stringindexerparquet dump/parquet/StringPropertyIndexerParquetTest.cpp)
-target_link_libraries(test_storage_dump_stringindexerparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
-
-add_turing_test(test_storage_dump_datapartparquet dump/parquet/DataPartParquetTest.cpp)
-target_link_libraries(test_storage_dump_datapartparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
-
-add_turing_test(test_storage_dump_graphmetadataparquet dump/parquet/GraphMetadataParquetTest.cpp)
-target_link_libraries(test_storage_dump_graphmetadataparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
-
-add_turing_test(test_storage_dump_commitjournalparquet dump/parquet/CommitJournalParquetTest.cpp)
-target_link_libraries(test_storage_dump_commitjournalparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
-
-add_turing_test(test_storage_dump_tombstonesparquet dump/parquet/TombstonesParquetTest.cpp)
-target_link_libraries(test_storage_dump_tombstonesparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
-
-add_turing_test(test_storage_dump_commitmetadataparquet dump/parquet/CommitMetaDataParquetTest.cpp)
-target_link_libraries(test_storage_dump_commitmetadataparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
-
-add_turing_test(test_storage_dump_graphparquet dump/parquet/GraphParquetLoaderTest.cpp)
-target_link_libraries(test_storage_dump_graphparquet PRIVATE
-        turing_common_s
-        turing_db_storage_s
-        turing_db_examples_s
-        turing_db_jobs_s
-        turing_db_storage_dump_parquet_s)
+add_storage_parquet_tests(test_storage_dump_propertycontainerparquet dump/parquet/PropertyContainerParquetTest.cpp)
+add_storage_parquet_tests(test_storage_dump_nodecontainerparquet dump/parquet/NodeContainerParquetTest.cpp)
+add_storage_parquet_tests(test_storage_dump_edgecontainerparquet dump/parquet/EdgeContainerParquetTest.cpp)
+add_storage_parquet_tests(test_storage_dump_edgeindexerparquet dump/parquet/EdgeIndexerParquetTest.cpp)
+add_storage_parquet_tests(test_storage_dump_propertyindexerparquet dump/parquet/PropertyIndexerParquetTest.cpp)
+add_storage_parquet_tests(test_storage_dump_stringindexerparquet dump/parquet/StringPropertyIndexerParquetTest.cpp)
+add_storage_parquet_tests(test_storage_dump_datapartparquet dump/parquet/DataPartParquetTest.cpp)
+add_storage_parquet_tests(test_storage_dump_graphmetadataparquet dump/parquet/GraphMetadataParquetTest.cpp)
+add_storage_parquet_tests(test_storage_dump_commitjournalparquet dump/parquet/CommitJournalParquetTest.cpp)
+add_storage_parquet_tests(test_storage_dump_tombstonesparquet dump/parquet/TombstonesParquetTest.cpp)
+add_storage_parquet_tests(test_storage_dump_commitmetadataparquet dump/parquet/CommitMetaDataParquetTest.cpp)
+add_storage_parquet_tests(test_storage_dump_graphparquet dump/parquet/GraphParquetLoaderTest.cpp)
 
 add_storage_tests(test_storage_columns_dispatcher ColumnDispatcherTest.cpp)
 add_storage_tests(test_storage_objectmap ObjectMapTest.cpp)
