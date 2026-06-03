@@ -60,6 +60,14 @@ public:
     }
 };
 
+InfoVisitor readInfo(const fs::Path& infoPath) {
+    InfoVisitor infoVisitor;
+    ParquetReader reader(infoPath, infoVisitor);
+    while (reader.nextChunk()) {
+    }
+    return infoVisitor;
+}
+
 // Matches "<prefix><digits>.parquet" and returns the property type id.
 std::optional<uint64_t> parsePropertyTypeId(std::string_view filename, std::string_view prefix) {
     namespace layout = dataPartParquetLayout;
@@ -141,57 +149,77 @@ void DataPartParquetLoader::loadPropertyManager(const fs::Path& partDir,
     }
 }
 
-std::unique_ptr<DataPart> DataPartParquetLoader::load(const fs::Path& partDir,
-                                                      const LabelSetMap& labelsets) {
+void DataPartParquetLoader::fillContainers(DataPart& part,
+                                           const fs::Path& partDir,
+                                           const LabelSetMap& labelsets) {
     namespace layout = dataPartParquetLayout;
 
-    InfoVisitor infoVisitor;
-    {
-        ParquetReader reader(layout::info(partDir), infoVisitor);
-        while (reader.nextChunk()) {
-        }
-    }
+    part._nodes = NodeContainerParquetLoader::load(layout::nodeRanges(partDir),
+                                                   layout::nodeRecords(partDir),
+                                                   labelsets);
 
-    auto part = std::make_unique<DataPart>(NodeID {infoVisitor._firstNodeId},
-                                           EdgeID {infoVisitor._firstEdgeId},
-                                           DataPartID {infoVisitor._dataPartId});
+    part._edges = EdgeContainerParquetLoader::load(layout::edgesOut(partDir),
+                                                   layout::edgesIn(partDir));
 
-    part->_nodes = NodeContainerParquetLoader::load(layout::nodeRanges(partDir),
-                                                    layout::nodeRecords(partDir),
-                                                    labelsets);
+    part._edgeIndexer = EdgeIndexerParquetLoader::load(layout::edgeIndexerNodeData(partDir),
+                                                       layout::edgeIndexerPatch(partDir),
+                                                       layout::edgeIndexerOutSpans(partDir),
+                                                       layout::edgeIndexerInSpans(partDir),
+                                                       labelsets,
+                                                       *part._edges);
 
-    part->_edges = EdgeContainerParquetLoader::load(layout::edgesOut(partDir),
-                                                    layout::edgesIn(partDir));
-
-    part->_edgeIndexer = EdgeIndexerParquetLoader::load(layout::edgeIndexerNodeData(partDir),
-                                                        layout::edgeIndexerPatch(partDir),
-                                                        layout::edgeIndexerOutSpans(partDir),
-                                                        layout::edgeIndexerInSpans(partDir),
-                                                        labelsets,
-                                                        *part->_edges);
-
-    part->_nodeProperties = std::make_unique<PropertyManager>();
+    part._nodeProperties = std::make_unique<PropertyManager>();
     loadPropertyManager(partDir,
                         labelsets,
                         layout::nodePropIndexer(partDir),
                         layout::NODE_PROPS_PREFIX,
-                        *part->_nodeProperties);
+                        *part._nodeProperties);
 
-    part->_edgeProperties = std::make_unique<PropertyManager>();
+    part._edgeProperties = std::make_unique<PropertyManager>();
     loadPropertyManager(partDir,
                         labelsets,
                         layout::edgePropIndexer(partDir),
                         layout::EDGE_PROPS_PREFIX,
-                        *part->_edgeProperties);
+                        *part._edgeProperties);
 
-    part->_nodeStrPropIdx = StringPropertyIndexerParquetLoader::load(layout::nodeStringIndexes(partDir),
-                                                                     layout::nodeStringChildren(partDir),
-                                                                     layout::nodeStringOwners(partDir));
+    part._nodeStrPropIdx = StringPropertyIndexerParquetLoader::load(layout::nodeStringIndexes(partDir),
+                                                                    layout::nodeStringChildren(partDir),
+                                                                    layout::nodeStringOwners(partDir));
 
-    part->_edgeStrPropIdx = StringPropertyIndexerParquetLoader::load(layout::edgeStringIndexes(partDir),
-                                                                     layout::edgeStringChildren(partDir),
-                                                                     layout::edgeStringOwners(partDir));
+    part._edgeStrPropIdx = StringPropertyIndexerParquetLoader::load(layout::edgeStringIndexes(partDir),
+                                                                    layout::edgeStringChildren(partDir),
+                                                                    layout::edgeStringOwners(partDir));
 
-    part->_initialized = true;
+    part._initialized = true;
+}
+
+std::unique_ptr<DataPart> DataPartParquetLoader::load(const fs::Path& partDir,
+                                                      const LabelSetMap& labelsets) {
+    namespace layout = dataPartParquetLayout;
+
+    const InfoVisitor info = readInfo(layout::info(partDir));
+
+    auto part = std::make_unique<DataPart>(NodeID {info._firstNodeId},
+                                           EdgeID {info._firstEdgeId},
+                                           DataPartID {info._dataPartId});
+
+    fillContainers(*part, partDir, labelsets);
     return part;
+}
+
+void DataPartParquetLoader::load(DataPart& part,
+                                 const fs::Path& partDir,
+                                 const LabelSetMap& labelsets) {
+    namespace layout = dataPartParquetLayout;
+
+    const InfoVisitor info = readInfo(layout::info(partDir));
+
+    if (part.getID().get() != info._dataPartId) {
+        throw FatalException("DataPartParquetLoader: part id does not match info.parquet");
+    }
+
+    part._firstNodeID = NodeID {info._firstNodeId};
+    part._firstEdgeID = EdgeID {info._firstEdgeId};
+
+    fillContainers(part, partDir, labelsets);
 }

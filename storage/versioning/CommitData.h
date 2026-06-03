@@ -11,6 +11,7 @@ namespace db {
 class DataPart;
 class CommitBuilder;
 class CommitLoader;
+class CommitParquetLoader;
 class GraphLoader;
 class VersionController;
 class Change;
@@ -42,6 +43,7 @@ public:
 private:
     friend CommitBuilder;
     friend CommitLoader;
+    friend CommitParquetLoader;
     friend GraphLoader;
     friend VersionController;
     friend Change;

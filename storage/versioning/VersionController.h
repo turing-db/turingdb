@@ -23,6 +23,7 @@ namespace db {
 
 class Graph;
 class GraphLoader;
+class GraphParquetLoader;
 class GraphDumper;
 class JobSystem;
 class FrozenCommitTx;
@@ -84,6 +85,7 @@ public:
 
 private:
     friend GraphLoader;
+    friend GraphParquetLoader;
     friend CommitLoader;
     friend GraphDumper;
     friend Change;

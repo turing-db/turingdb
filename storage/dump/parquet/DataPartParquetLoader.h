@@ -20,9 +20,20 @@ class PropertyContainer;
 // Throws on failure.
 class DataPartParquetLoader {
 public:
+    // Builds a standalone DataPart from the directory: reads the id and first node/edge
+    // ids from info.parquet, constructs the part, and fills it.
     static std::unique_ptr<DataPart> load(const fs::Path& partDir, const LabelSetMap& labelsets);
 
+    // Fills an already-created part (e.g. one owned by the VersionController). The part's
+    // id must already match info.parquet's; this sets its first node/edge ids from the
+    // file and fills every structure.
+    static void load(DataPart& part, const fs::Path& partDir, const LabelSetMap& labelsets);
+
 private:
+    static void fillContainers(DataPart& part,
+                               const fs::Path& partDir,
+                               const LabelSetMap& labelsets);
+
     static void loadPropertyManager(const fs::Path& partDir,
                                     const LabelSetMap& labelsets,
                                     const fs::Path& indexerPath,

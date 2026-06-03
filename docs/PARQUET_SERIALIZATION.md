@@ -21,7 +21,7 @@ binary `DataPart` serializer now has a complete, faithful Parquet counterpart.
 |---|---|---|
 | 0 | `ParquetWriter` / `ParquetWriteSchema` primitive (`io/parquet/`) | ✅ committed |
 | 1 | All six `DataPart` structure adapters + the `DataPart` orchestrator (`storage/dump/parquet/`), each round-trip-tested; gated by `DataPartComparator::same`; EdgeIndexer patch path covered | ✅ committed |
-| 2 | Commit-level metadata (`GraphMetadata` maps, journal, tombstones, commit metadata) + `GraphDumper`/`CommitDumper` wiring | in progress — all four adapters (`GraphMetadata` maps ✅ + journal ✅ + tombstones ✅ + commit metadata ✅) committed; `CommitDumper`/`GraphDumper` wiring remains — see [§4.3](#43-commit--graph-metadata) |
+| 2 | Commit-level metadata (`GraphMetadata` maps, journal, tombstones, commit metadata) + `GraphDumper`/`CommitDumper` wiring | ✅ committed — all four adapters plus the `GraphParquet{Dumper,Loader}` / `CommitParquet{Dumper,Loader}` orchestrators; full graph dump→load round-trip gated by `GraphComparator::same` on the Reactome sample — see [§4.3](#43-commit--graph-metadata) |
 | 3 | `PARQUET` format-marker dispatch + back-compat with binary dumps | not started |
 | 4 | Retire the binary path; compression / row-group tuning | not started |
 
@@ -273,9 +273,36 @@ source-independent `CommitParquetMetaData` struct (num scalars + `std::vector<Da
 which the wiring step will map onto the `Commit` / `CommitHistoryBuilder`. Round-trip-tested
 over a real two-commit `GraphWriter` graph.
 
-**Remaining in Phase 2:** wire `CommitDumper`/`GraphDumper` (and `CommitLoader`/
-`GraphLoader`) to emit/read a Parquet commit directory using the six adapters above plus the
-Phase-1 `DataPart` adapters, gated end-to-end by `GraphComparator::same`.
+**Graph / commit orchestration** — `GraphParquet{Dumper,Loader}` + `CommitParquet{Dumper,Loader}`
+(✅ committed), the Parquet analogues of the binary `GraphDumper`/`CommitDumper` /
+`GraphLoader`/`CommitLoader`. They live in `storage/dump/parquet/` (so Arrow stays out of core
+`storage`), throw rather than return `DumpResult`, and own a `GraphParquetLayout.h` for the
+graph-directory paths:
+
+```
+graphDir/
+  graph-info.parquet   # 1 row: graph_id, name
+  commit-log.parquet   # commit_hash, one row per commit, oldest first
+  commits/<hash>/      # one Parquet commit directory per commit (CommitParquetDumper)
+  dataparts/<id>/      # shared per-DataPart Parquet directories (DataPartParquetDumper)
+```
+
+`GraphParquetDumper` walks the commit chain from head using only the graph's public
+accessors (no friend access); `CommitParquetDumper` takes a `const Commit&` and drives the
+four commit-level adapters plus the `DataPart` adapter for each of the commit's own
+dataparts. On load, `GraphParquetLoader` (friend of `Graph`/`VersionController`) recreates
+the `VersionController`, builds every commit shell via `CommitParquetLoader::load` (counts
+from `commit-metadata.parquet`), then materializes **only the head commit's** full data via
+`CommitParquetLoader::loadData` — matching the binary `GraphLoader`. `CommitParquetLoader`
+(friend of `Commit`/`CommitData`/`CommitHistory`) fills the metadata maps, journal,
+tombstones and each datapart (created through `VersionController::createDataPart`, so the
+parts are Arc-owned and registered in the part map). `DataPartParquetLoader` gained a
+`load(DataPart&, …)` overload that fills a controller-created part in place, sharing its
+body with the standalone `unique_ptr` loader.
+
+The full dump→load round-trip is gated end-to-end by `GraphComparator::same` on the
+miniature **Reactome** sample graph (`examples/ReactomeSampleGraph`, also now the shared
+fixture for `ReactomeTest`), in `test/storage/dump/parquet/GraphParquetLoaderTest.cpp`.
 
 ### 4.4 Row groups and compression
 
@@ -482,10 +509,11 @@ the capstone builds `SimpleGraph` and asserts `DataPartComparator::same`, plus a
 two-commit test that forces and verifies an EdgeIndexer patch node (the
 `_patchNodeOffsets` round-trip).
 
-**Phase 2 — commit-level metadata.** *(in progress)* `GraphMetadata` schema maps ✅, commit
-journal ✅, tombstones ✅, and commit metadata ✅ done (all round-trip-tested); next: wire
-`CommitDumper`/`GraphDumper` to emit a Parquet commit directory. Full dump→load regression
-via `GraphComparator::same`.
+**Phase 2 — commit-level metadata. ✅ Done.** `GraphMetadata` schema maps, commit journal,
+tombstones, and commit metadata adapters (all round-trip-tested), plus the
+`GraphParquet{Dumper,Loader}` / `CommitParquet{Dumper,Loader}` orchestrators that emit and
+read a full Parquet graph directory. Full dump→load regression via `GraphComparator::same`
+on the Reactome sample (`GraphParquetLoaderTest`).
 
 **Phase 3 — format dispatch + back-compat.** `GraphFileType::PARQUET` marker; loaders
 ([§6.3](#63-orchestration-and-format-dispatch)) dispatch on it; parametrize the regression
