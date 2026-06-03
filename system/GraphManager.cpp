@@ -32,7 +32,7 @@ GraphManager::~GraphManager() {
 }
 
 Graph* GraphManager::getGraph(std::string_view graphName) const {
-    const auto* slot = _graphs.getObject(graphName);
+    const ObjectMap<Graph>::ObjectSlot* slot = _graphs.getObject(graphName);
     if (!slot) {
         return nullptr;
     }
@@ -116,7 +116,9 @@ void GraphManager::loadOrCreateDefaultGraph() {
     _defaultGraph.store(graph);
 }
 
-bool GraphManager::importGraph(std::string_view graphName, const fs::Path& filePath, JobSystem& jobSystem) {
+bool GraphManager::importGraph(std::string_view graphName,
+                               const fs::Path& filePath,
+                               JobSystem& jobSystem) {
     const fs::Path graphPath = _config->getGraphsDir() / filePath;
 
     // Step 1. Check if graph was already loaded || is already loading
