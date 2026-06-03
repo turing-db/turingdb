@@ -7,7 +7,7 @@ include "DBDialect.td"
 
 // Base type. All turingdb dialect types derived from this.
 class TuringType<string name, string typeMnemonic, list<Trait> traits = []>
-    : TypeDef<TuringDB, name, traits> {
+    : TypeDef<DB, name, traits> {
   let mnemonic = typeMnemonic;
 }
 

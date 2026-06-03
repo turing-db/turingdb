@@ -2,11 +2,11 @@
 #include "DBOps.h"
 
 using namespace mlir;
-using namespace mlir::turing;
+using namespace mlir::db;
 
 #include "DBDialect.cpp.inc"
 
-void TuringDB::initialize() {
+void DB::initialize() {
     addOperations<
 #define GET_OP_LIST
 #include "DBOps.cpp.inc"
