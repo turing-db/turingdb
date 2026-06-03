@@ -11,8 +11,6 @@ set(LLVM_TARGET_DEFINITIONS DBOps.td)
 mlir_tablegen(DBOps.h.inc        -gen-op-decls      -dialect turing  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
 mlir_tablegen(DBOps.cpp.inc      -gen-op-defs       -dialect turing  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
 
-# mlir_tablegen(Types.cpp.inc  -gen-typedef-defs -dialect turing  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
-
 # Creates CMAKE target with all included .inc files, the lib depends on this
 add_public_tablegen_target(DBDialectIncGen)
 
