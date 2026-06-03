@@ -262,6 +262,23 @@ find_package(ZLIB REQUIRED)
 # openssl
 find_package(OpenSSL REQUIRED)
 
+# Resolve the Python used for the nanobind modules before any find_package(Python).
+# The first one runs inside add_subdirectory(external) via nanobind, so this must
+# come before it. Priority: explicit -DPython_EXECUTABLE, then the active
+# virtualenv, then the project .venv. Without this, FindPython picks the system
+# python3, whose ABI tag can differ from the Python running the wheel build and
+# the regression tests.
+if(NOT DEFINED Python_EXECUTABLE)
+    if(DEFINED ENV{VIRTUAL_ENV} AND EXISTS "$ENV{VIRTUAL_ENV}/bin/python")
+        set(Python_EXECUTABLE "$ENV{VIRTUAL_ENV}/bin/python")
+    elseif(EXISTS "${CMAKE_SOURCE_DIR}/.venv/bin/python")
+        set(Python_EXECUTABLE "${CMAKE_SOURCE_DIR}/.venv/bin/python")
+    endif()
+endif()
+if(DEFINED Python_EXECUTABLE)
+    message(STATUS "Python for native modules: ${Python_EXECUTABLE}")
+endif()
+
 enable_testing()
 
 # ======== Git Info =================

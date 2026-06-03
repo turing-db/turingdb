@@ -5,6 +5,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
 from pathlib import Path
 
@@ -85,6 +86,9 @@ def _run_cmake_build():
         "-G", "Unix Makefiles",
         "-DCMAKE_MAKE_PROGRAM=/usr/bin/make",
         "-DCMAKE_BUILD_TYPE=Release",
+        # Pin CMake's FindPython to the interpreter building the wheel, so the
+        # nanobind modules get the same ABI tag as the wheel itself.
+        f"-DPython_EXECUTABLE={sys.executable}",
     ]
 
     # Read CMAKE_ARGS from environment (used by CI for compiler paths)
@@ -97,6 +101,24 @@ def _run_cmake_build():
     subprocess.check_call(cmake_args, cwd=str(build_dir))
     subprocess.check_call(["make", f"-j{os.cpu_count() or 4}"], cwd=str(build_dir))
     subprocess.check_call(["make", "install"], cwd=str(build_dir))
+
+
+def _check_native_modules_abi(*module_dirs: Path) -> None:
+    """Fail if a bundled native module was built for a different Python ABI."""
+    expected_suffix = sysconfig.get_config_var("EXT_SUFFIX")
+    mismatched = []
+    for module_dir in module_dirs:
+        for module_file in list(module_dir.glob("*.so")) + list(module_dir.glob("*.pyd")):
+            if not module_file.name.endswith(expected_suffix):
+                mismatched.append(module_file)
+    if mismatched:
+        names = ", ".join(str(path) for path in mismatched)
+        raise RuntimeError(
+            f"Native module(s) built for a different Python ABI: {names}. "
+            f"This interpreter expects '*{expected_suffix}'. Rebuild against it:\n"
+            f"  cd build && cmake -DPython_EXECUTABLE={sys.executable} .. && make && make install\n"
+            "then delete the stale module file(s) and run the wheel build again."
+        )
 
 
 def _resolve_executable(name: str) -> Path:
@@ -152,6 +174,9 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     # Ensure all shipped executables exist
     exe_paths = _ensure_executables_built()
 
+    # Refuse to bundle native modules whose ABI tag doesn't match this interpreter
+    _check_native_modules_abi(binary_dir, local_dir)
+
     bin_dir = _get_package_bin_dir()
     build_lib_dir = project_root / "build" / "lib"
     ext_src_dir = _get_build_extensions_dir()
@@ -161,6 +186,14 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     if build_lib_dir.exists():
         for f in build_lib_dir.glob("*.a"):
             f.unlink()
+
+    # Purge native modules from setuptools' staging dirs (build/lib.*): setuptools
+    # never removes stale files there, so a module built for an older Python ABI
+    # would be bundled alongside the current one. They get re-copied fresh from
+    # python/turingdb/ during the build.
+    for staging_dir in (project_root / "build").glob("lib.*"):
+        for stale_module in list(staging_dir.glob("turingdb/_binary/_turingproto*")) + list(staging_dir.glob("turingdb/_local/_turinglocal*")):
+            stale_module.unlink()
 
     # Track which binaries we copied so cleanup removes only those.
     copied_binaries: list[Path] = []
