@@ -47,7 +47,7 @@ Graph* GraphManager::createGraph(std::string_view name) {
         throw TuringException(fmt::format("Graph '{}' already exists", name));
     }
 
-    auto reservation = _graphs.reserve(name);
+    ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(name);
     if (!reservation.isValid()) {
         return nullptr;
     }
@@ -70,7 +70,7 @@ Graph* GraphManager::createGraph(std::string_view name) {
 Graph* GraphManager::loadGraph(std::string_view name) {
     const fs::Path graphPath = _config->getGraphsDir() / name;
 
-    auto reservation = _graphs.reserve(name);
+    ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(name);
     if (!reservation.isValid()) {
         spdlog::error("Failed to register graph '{}': "
                       "a graph with this name is already loaded", name);
@@ -197,7 +197,7 @@ bool GraphManager::loadBinaryDB(std::string_view graphName,
         return false;
     }
 
-    auto reservation = _graphs.reserve(graphName);
+    ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(graphName);
     if (!reservation.isValid()) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
@@ -231,7 +231,7 @@ bool GraphManager::loadJsonlDB(std::string_view graphName,
         return false;
     }
 
-    auto reservation = _graphs.reserve(graphName);
+    ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(graphName);
     if (!reservation.isValid()) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
@@ -292,7 +292,7 @@ bool GraphManager::loadGmlDB(std::string_view graphName,
         return false;
     }
 
-    auto reservation = _graphs.reserve(graphName);
+    ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(graphName);
     if (!reservation.isValid()) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
