@@ -71,6 +71,8 @@ public:
 
 private:
     const ParquetWriteSchema& _schema;
+    // shared_ptr only because Arrow's FileOutputStream / ParquetFileWriter APIs demand
+    // one; the stream is never shared beyond this writer.
     std::shared_ptr<arrow::io::FileOutputStream> _outputStream;
     std::unique_ptr<parquet::ParquetFileWriter> _fileWriter;
     parquet::RowGroupWriter* _rowGroupWriter {nullptr};

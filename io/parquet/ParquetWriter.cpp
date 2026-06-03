@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -210,6 +211,13 @@ void ParquetWriter::writeStringColumn(size_t columnIndex,
     std::vector<parquet::ByteArray> byteArrays;
     byteArrays.reserve(values.size());
     for (const std::string_view value : values) {
+        // parquet::ByteArray carries a 32-bit length; refuse rather than truncate.
+        if (value.size() > std::numeric_limits<uint32_t>::max()) {
+            throw TuringException(fmt::format(
+                "Parquet: writing string column {}: a {}-byte value exceeds the ByteArray limit",
+                columnIndex, value.size()));
+        }
+
         byteArrays.emplace_back(static_cast<uint32_t>(value.size()),
                                 reinterpret_cast<const uint8_t*>(value.data()));
     }
