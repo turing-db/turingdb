@@ -7,11 +7,13 @@ def TuringDB : Dialect {
     let name = "turing";
     let summary = "TuringDB dialect";
     let cppNamespace = "::mlir::turing";
+
+    // Removes the need to define custom printers for our custom types
     let useDefaultTypePrinterParser = 1;
 
     // Declare other functions: mlir::turing::TuringDB::f()
     let extraClassDeclaration = [{
-        void registerTypes();
+        void registerTypes(); // Makes MLIR aware of our custom types
     }];
 
 }
