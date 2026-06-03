@@ -78,7 +78,7 @@ public:
         std::string_view _name;
     };
 
-    explicit ObjectMap()
+    ObjectMap()
     {
     }
 
@@ -96,7 +96,7 @@ public:
             return SlotReservation();
         }
 
-        // We allocate the slot in the critical section 
+        // We allocate the slot in the critical section
         // to not do an allocation for nothing if try_emplace fails
         auto slot = std::make_unique<ObjectSlot>();
         ObjectSlot* slotPtr = slot.get();
@@ -146,6 +146,7 @@ private:
     size_t _size {0};
 
     void removeSlot(std::string_view name) {
+        std::unique_lock<RWSpinLock> lock(_mapLock);
         _map.erase(name);
     }
 };
