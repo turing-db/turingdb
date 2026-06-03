@@ -37,6 +37,8 @@ add_mlir_library(DBDialect
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRSupport
+  MLIRFuncDialect
+  MLIRBuiltinToLLVMIRTranslation
 )
 
 # Ensure we have MLIR and LLVM includes, as well as the headers in current dir
