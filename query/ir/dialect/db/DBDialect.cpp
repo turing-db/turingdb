@@ -11,5 +11,4 @@ void TuringDB::initialize() {
 #define GET_OP_LIST
 #include "DBOps.cpp.inc"
     >();
-    // registerTypes();
 }
