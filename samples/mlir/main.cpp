@@ -1,4 +1,4 @@
-#include <print>
+#include <iostream>
 
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Builders.h"
@@ -7,7 +7,7 @@
 #include "DBOps.h"
 
 int main() {
-    std::println("hello from mlir");
+    std::cout << "hello from mlir" << '\n';
 
     mlir::MLIRContext ctx;
     ctx.loadDialect<mlir::turing::TuringDB>();
