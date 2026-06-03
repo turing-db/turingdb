@@ -47,7 +47,7 @@ void CreateGraphProcessor::reset() {
 void CreateGraphProcessor::execute() {
     SystemManager* sysMan = _ctxt->getSystemManager();
 
-    auto* res = sysMan->createGraph(std::string(_graphName));
+    auto* res = sysMan->createGraph(_graphName);
     if (!res) {
         throw PipelineException(fmt::format("Failed to create graph '{}'", _graphName));
     }

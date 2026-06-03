@@ -52,7 +52,7 @@ void LoadGMLProcessor::execute() {
     bioassert(sysMan, "SystemManager not initialised");
     bioassert(jobSys, "JobSystem not initialised");
 
-    const bool res = sysMan->importGraph(std::string(_graphName), _filePath, *jobSys);
+    const bool res = sysMan->importGraph(_graphName, _filePath, *jobSys);
     if (!res) {
         throw PipelineException(fmt::format("Failed to load graph '{}'", _graphName));
     }

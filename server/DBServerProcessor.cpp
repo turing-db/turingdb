@@ -130,7 +130,7 @@ const Graph* DBServerProcessor::getRequestedGraph() const {
     const std::string_view graphNameView = httpInfo._params[(size_t)DBHTTPParams::graph];
     return graphNameView.empty()
              ? sysMan.getDefaultGraph()
-             : sysMan.getGraph(std::string(graphNameView));
+             : sysMan.getGraph(graphNameView);
 }
 
 const net::HTTP::Info& DBServerProcessor::getHttpInfo() const {
@@ -213,7 +213,7 @@ void DBServerProcessor::is_graph_loaded() {
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
 
-    const Graph* graph = _db.getSystemManager().getGraph(std::string(graphNameView));
+    const Graph* graph = _db.getSystemManager().getGraph(graphNameView);
 
     payload.key("data");
     payload.value(graph != nullptr);
@@ -234,7 +234,7 @@ void DBServerProcessor::is_graph_loading() {
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
 
-    const bool isLoading = _db.getSystemManager().isGraphLoading(std::string(graphNameView));
+    const bool isLoading = _db.getSystemManager().isGraphLoading(graphNameView);
     payload.key("data");
     payload.value(isLoading);
 }

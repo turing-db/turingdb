@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <optional>
+#include <string_view>
 
 #include "GraphManager.h"
 
@@ -52,31 +53,31 @@ public:
 
     // Graph access
     Graph* getDefaultGraph() const;
-    Graph* getGraph(const std::string& graphName) const;
+    Graph* getGraph(std::string_view graphName) const;
     size_t getGraphCount() const { return _graphManager.getGraphCount(); }
 
     // Graph operations
-    Graph* createGraph(const std::string& graphName);
+    Graph* createGraph(std::string_view graphName);
     void listAvailableGraphs(std::vector<fs::Path>& names);
     void listGraphs(std::vector<std::string_view>& names);
-    void setDefaultGraph(const std::string& name);
+    void setDefaultGraph(std::string_view name);
 
     // Import graph from file
-    bool importGraph(const std::string& graphName,
+    bool importGraph(std::string_view graphName,
                      const fs::Path& filePath,
                      JobSystem& jobSystem);
     std::optional<GraphFileType> getGraphFileType(const fs::Path& graphPath);
 
     // Loading a graph
-    bool isGraphLoading(const std::string& graphName) const;
+    bool isGraphLoading(std::string_view graphName) const;
     DumpResult<void> loadCommit(std::string_view graphName, CommitHash hash);
-    Graph* loadGraph(const std::string& graphName);
+    Graph* loadGraph(std::string_view graphName);
 
     // Dump an entire graph
-    DumpResult<void> dumpGraph(const std::string& graphName);
+    DumpResult<void> dumpGraph(std::string_view graphName);
 
     // Change management
-    ChangeResult<Change*> newChange(const std::string& graphName,
+    ChangeResult<Change*> newChange(std::string_view graphName,
                                     CommitHash baseHash = CommitHash::head());
     ChangeResult<Change*> getChange(const Graph* graph, ChangeID changeID);
     ChangeResult<void> submitChange(ChangeAccessor& accessor, JobSystem& jobSystem);

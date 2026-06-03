@@ -47,7 +47,7 @@ void LoadGraphProcessor::reset() {
 void LoadGraphProcessor::execute() {
     SystemManager* sysMan = _ctxt->getSystemManager();
 
-    const bool res = sysMan->loadGraph(std::string(_graphName));
+    const bool res = sysMan->loadGraph(_graphName);
     if (!res) {
         throw PipelineException(fmt::format("Failed to load graph '{}'", _graphName));
     }
