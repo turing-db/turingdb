@@ -5,9 +5,17 @@ include "mlir/IR/AttrTypeBase.td"
 
 include "DBDialect.td"
 
+// Base type. All turingdb dialect types derived from this.
 class TuringType<string name, string typeMnemonic, list<Trait> traits = []>
     : TypeDef<TuringDB, name, traits> {
   let mnemonic = typeMnemonic;
 }
 
-#endif // TURINGBB_TYPES
+def Column : TuringType<"Column", "column"> {
+    let summary = "Generic column type";
+    let description = "Generic vector-like storage";
+    let parameters = (ins StringRefParameter<"the custom value">:$value);
+    let assemblyFormat = "`<` $value `>`";
+}
+
+#endif // TURINGDB_TYPES

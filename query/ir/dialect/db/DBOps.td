@@ -4,6 +4,7 @@
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 include "DBDialect.td"
+include "DBTypes.td"
 
 /**
 * ScanNodes
@@ -11,7 +12,7 @@ include "DBDialect.td"
 */
 def ScanNodes : TuringOp<"ScanNodes", [Pure]> {
   let summary = "Produce all nodes in the graph";
-  let results   = (outs I64:$result);
+  let results   = (outs Column:$result);
 }
 
 #endif //TURINGDB_OPS

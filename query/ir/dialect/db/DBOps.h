@@ -7,6 +7,7 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #include "DBDialect.h"
+#include "DBTypes.h"
 
 #define GET_OP_CLASSES
 #include "DBOps.h.inc"
