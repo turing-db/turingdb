@@ -1,6 +1,10 @@
 #ifndef TURINGDB_OPS
 #define TURINGDB_OPS
 
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
+include "DBDialect.td"
+
 /**
 * ScanNodes
 * Pure: this operation has no side effects
@@ -10,4 +14,4 @@ def ScanNodes : TuringOp<"ScanNodes", [Pure]> {
   let results   = (outs I64:$result);
 }
 
-#endif TURINGDB_OPS
+#endif //TURINGDB_OPS
