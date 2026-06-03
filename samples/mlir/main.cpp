@@ -20,6 +20,4 @@ int main() {
 
     op->print(llvm::outs());
     llvm::outs() << "\n";
-
-    return 0;
 }
