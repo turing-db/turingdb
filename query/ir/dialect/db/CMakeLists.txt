@@ -14,6 +14,12 @@ mlir_tablegen(DBOps.cpp.inc      -gen-op-defs       -dialect turing  EXTRA_INCLU
 # Creates CMAKE target with all included .inc files, the lib depends on this
 add_public_tablegen_target(DBDialectIncGen)
 
+set_source_files_properties(
+  DBDialect.cpp
+  DBOps.cpp
+  PROPERTIES COMPILE_FLAGS "-std=c++17"
+)
+
 # Compiles .cpp files; needs the codegen first, hence the DEPENDS clause
 add_mlir_library(DBDialect
   DBDialect.cpp
