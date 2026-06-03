@@ -85,6 +85,7 @@ public:
 
     Result<void> mkdir() const;
     Result<void> rm() const;
+    Result<void> rename(const Path& newPath) const;
 
 private:
     std::string _path;
