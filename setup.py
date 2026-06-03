@@ -34,6 +34,9 @@ def _run_cmake_build():
         "-G", "Unix Makefiles",
         "-DCMAKE_MAKE_PROGRAM=/usr/bin/make",
         "-DCMAKE_BUILD_TYPE=Release",
+        # Pin CMake's FindPython to the interpreter running the build, so the
+        # nanobind modules get the same ABI tag as the installing Python.
+        f"-DPython_EXECUTABLE={sys.executable}",
         str(source_dir),
     ]
     subprocess.check_call(cmake_args, cwd=str(build_dir))
