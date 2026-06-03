@@ -23,6 +23,8 @@ class RowGroupReader;
 
 namespace db {
 
+class ParquetWriteSchema;
+
 // Streaming SAX-style visitor driven by ParquetReader::nextChunk.
 //
 // Lifecycle: onFileStart fires once on the first nextChunk call.
@@ -129,6 +131,16 @@ public:
         _projection = columnIndices;
     }
 
+    // Declare the schema the file must have been written with. Checked when the
+    // file opens, before any visitor callback fires: column count, per-column
+    // name and physical type (and byte width for fixed-len columns) must all
+    // match or nextChunk throws TuringException. Protects loaders that route
+    // values by column index from silently misreading a reordered, retyped or
+    // truncated schema. The schema must outlive the reader.
+    void setExpectedSchema(const ParquetWriteSchema& schema) {
+        _expectedSchema = &schema;
+    }
+
     // Produce one chunk and fire callbacks.
     // Chunks are capped at the row-group boundary,
     // so the actual row count is bounded by the rows
@@ -141,6 +153,7 @@ private:
     fs::Path _path;
     ParquetSaxVisitor& _visitor;
     std::vector<size_t> _projection;
+    const ParquetWriteSchema* _expectedSchema {nullptr};
 
     // General ParquetFileReader state
     std::unique_ptr<parquet::ParquetFileReader> _fileReader;
@@ -164,6 +177,7 @@ private:
     std::vector<std::vector<uint8_t>> _scratch;
 
     bool ensureFileOpen();
+    void checkExpectedSchema() const;
     bool openRowGroup();
     void closeRowGroup();
     bool readColumnSlice(size_t projectionIndex, size_t columnIndex, size_t batchRows);

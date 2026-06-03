@@ -12,10 +12,39 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "ParquetWriteSchema.h"
+
 #include "BioAssert.h"
 #include "TuringException.h"
 
 using namespace db;
+
+namespace {
+
+parquet::Type::type physicalTypeFor(ParquetColumnType type) {
+    switch (type) {
+        case ParquetColumnType::Int64:
+        case ParquetColumnType::UInt64:
+            return parquet::Type::INT64;
+        break;
+        case ParquetColumnType::Double:
+            return parquet::Type::DOUBLE;
+        break;
+        case ParquetColumnType::Bool:
+            return parquet::Type::BOOLEAN;
+        break;
+        case ParquetColumnType::String:
+            return parquet::Type::BYTE_ARRAY;
+        break;
+        case ParquetColumnType::FixedLenBytes:
+            return parquet::Type::FIXED_LEN_BYTE_ARRAY;
+        break;
+    }
+
+    throw TuringException("Parquet: unhandled expected column type");
+}
+
+}
 
 ParquetSaxVisitor::~ParquetSaxVisitor() {
 }
@@ -46,6 +75,10 @@ bool ParquetReader::ensureFileOpen() {
     _numRowGroups = static_cast<size_t>(_fileMetadata->num_row_groups());
     const size_t numColumns = static_cast<size_t>(_fileMetadata->num_columns());
 
+    if (_expectedSchema != nullptr) {
+        checkExpectedSchema();
+    }
+
     if (_projection.empty()) {
         _columns.reserve(numColumns);
         for (size_t column = 0; column < numColumns; ++column) {
@@ -72,6 +105,53 @@ bool ParquetReader::ensureFileOpen() {
     }
 
     return true;
+}
+
+void ParquetReader::checkExpectedSchema() const {
+    const ParquetWriteSchema& expected = *_expectedSchema;
+    const size_t expectedColumnCount = expected.getColumnCount();
+    const size_t numColumns = static_cast<size_t>(_fileMetadata->num_columns());
+
+    if (numColumns != expectedColumnCount) {
+        throw TuringException(fmt::format(
+            "Parquet: {}: schema mismatch: expected {} columns, file has {}",
+            _path.get(), expectedColumnCount, numColumns));
+    }
+
+    const parquet::SchemaDescriptor* schema = _fileMetadata->schema();
+
+    for (size_t column = 0; column < expectedColumnCount; ++column) {
+        const parquet::ColumnDescriptor* descriptor = schema->Column(static_cast<int>(column));
+        const std::string& expectedName = expected.getColumnName(column);
+        const ParquetColumnType expectedType = expected.getColumnType(column);
+        const parquet::Type::type expectedPhysicalType = physicalTypeFor(expectedType);
+
+        if (descriptor->name() != expectedName) {
+            throw TuringException(fmt::format(
+                "Parquet: {}: schema mismatch: column {} is named '{}', expected '{}'",
+                _path.get(), column, descriptor->name(), expectedName));
+        }
+
+        if (descriptor->physical_type() != expectedPhysicalType) {
+            throw TuringException(fmt::format(
+                "Parquet: {}: schema mismatch: column '{}' has physical type {}, expected {}",
+                _path.get(),
+                expectedName,
+                parquet::TypeToString(descriptor->physical_type()),
+                parquet::TypeToString(expectedPhysicalType)));
+        }
+
+        const bool isFixedLen = expectedType == ParquetColumnType::FixedLenBytes;
+        if (isFixedLen) {
+            const size_t expectedByteWidth = expected.getColumnByteWidth(column);
+            const size_t fileByteWidth = static_cast<size_t>(descriptor->type_length());
+            if (fileByteWidth != expectedByteWidth) {
+                throw TuringException(fmt::format(
+                    "Parquet: {}: schema mismatch: column '{}' has byte width {}, expected {}",
+                    _path.get(), expectedName, fileByteWidth, expectedByteWidth));
+            }
+        }
+    }
 }
 
 bool ParquetReader::openRowGroup() {
