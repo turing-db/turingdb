@@ -7,6 +7,12 @@ def TuringDB : Dialect {
     let name = "turing";
     let summary = "TuringDB dialect";
     let cppNamespace = "::mlir::turing";
+
+    // Declare other functions: mlir::turing::TuringDB::f()
+    let extraClassDeclaration = [{
+        void registerTypes();
+    }];
+
 }
 
 // Base, from which all TuringDB dialects are derived
