@@ -14,9 +14,13 @@ int main() {
 
     mlir::OpBuilder builder(&ctx);
     mlir::Location loc = builder.getUnknownLoc();
-    mlir::Type resultType = mlir::IntegerType::get(&ctx, 64);
+    mlir::Type resultCol = mlir::turing::ColumnType::get(&ctx, "nodes");
 
-    auto op = builder.create<mlir::turing::ScanNodes>(loc, resultType);
+    auto op = builder.create<mlir::turing::ScanNodes>(loc, resultCol);
+
+    if (mlir::failed(op.verify())) {
+        llvm::errs() << "op verification failed\n";
+    }
 
     op->print(llvm::outs());
     llvm::outs() << "\n";
