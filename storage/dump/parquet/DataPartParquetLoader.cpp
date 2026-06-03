@@ -44,6 +44,7 @@ public:
     uint64_t _dataPartId {0};
     uint64_t _firstNodeId {0};
     uint64_t _firstEdgeId {0};
+    size_t _rows {0};
 
     bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) override {
         if (values.empty()) {
@@ -59,9 +60,14 @@ public:
         }
         return true;
     }
+
+    bool onChunkEnd(size_t rowGroupIndex, size_t firstRowInRowGroup, size_t rows) override {
+        _rows += rows;
+        return true;
+    }
 };
 
-InfoVisitor readInfo(const fs::Path& infoPath) {
+void readInfo(const fs::Path& infoPath, InfoVisitor& infoVisitor) {
     namespace layout = dataPartParquetLayout;
 
     ParquetWriteSchema expectedSchema;
@@ -69,12 +75,15 @@ InfoVisitor readInfo(const fs::Path& infoPath) {
     expectedSchema.addColumn(layout::FIRST_NODE_ID_COLUMN, ParquetColumnType::UInt64);
     expectedSchema.addColumn(layout::FIRST_EDGE_ID_COLUMN, ParquetColumnType::UInt64);
 
-    InfoVisitor infoVisitor;
     ParquetReader reader(infoPath, infoVisitor);
     reader.setExpectedSchema(expectedSchema);
     while (reader.nextChunk()) {
     }
-    return infoVisitor;
+
+    // An empty info file would otherwise silently default every id to 0.
+    if (infoVisitor._rows != 1) {
+        throw FatalException("DataPartParquetLoader: info must have exactly one row");
+    }
 }
 
 // Matches "<prefix><digits>.parquet" and returns the property type id.
@@ -104,27 +113,27 @@ std::optional<uint64_t> parsePropertyTypeId(std::string_view filename, std::stri
 void DataPartParquetLoader::insertContainer(PropertyManager& manager,
                                             PropertyTypeID propertyTypeID,
                                             std::unique_ptr<PropertyContainer> container) {
-    PropertyContainer* ptr = container.release();
-    manager._map.emplace(propertyTypeID, ptr);
+    PropertyContainer* raw = container.release();
+    manager._map.emplace(propertyTypeID, raw);
 
-    switch (ptr->getValueType()) {
+    switch (raw->getValueType()) {
         case ValueType::UInt64:
-            manager._uint64s.emplace(propertyTypeID, ptr);
+            manager._uint64s.emplace(propertyTypeID, raw);
         break;
         case ValueType::Int64:
-            manager._int64s.emplace(propertyTypeID, ptr);
+            manager._int64s.emplace(propertyTypeID, raw);
         break;
         case ValueType::Double:
-            manager._doubles.emplace(propertyTypeID, ptr);
+            manager._doubles.emplace(propertyTypeID, raw);
         break;
         case ValueType::String:
-            manager._strings.emplace(propertyTypeID, ptr);
+            manager._strings.emplace(propertyTypeID, raw);
         break;
         case ValueType::Bool:
-            manager._bools.emplace(propertyTypeID, ptr);
+            manager._bools.emplace(propertyTypeID, raw);
         break;
         case ValueType::Embedding:
-            manager._embeddings.emplace(propertyTypeID, ptr);
+            manager._embeddings.emplace(propertyTypeID, raw);
         break;
         case ValueType::Invalid:
         case ValueType::_SIZE:
@@ -205,7 +214,8 @@ std::unique_ptr<DataPart> DataPartParquetLoader::load(const fs::Path& partDir,
                                                       const LabelSetMap& labelsets) {
     namespace layout = dataPartParquetLayout;
 
-    const InfoVisitor info = readInfo(layout::info(partDir));
+    InfoVisitor info;
+    readInfo(layout::info(partDir), info);
 
     auto part = std::make_unique<DataPart>(NodeID {info._firstNodeId},
                                            EdgeID {info._firstEdgeId},
@@ -220,7 +230,8 @@ void DataPartParquetLoader::load(DataPart& part,
                                  const LabelSetMap& labelsets) {
     namespace layout = dataPartParquetLayout;
 
-    const InfoVisitor info = readInfo(layout::info(partDir));
+    InfoVisitor info;
+    readInfo(layout::info(partDir), info);
 
     if (part.getID().get() != info._dataPartId) {
         throw FatalException("DataPartParquetLoader: part id does not match info.parquet");

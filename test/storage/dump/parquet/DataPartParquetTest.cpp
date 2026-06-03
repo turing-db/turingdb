@@ -64,7 +64,7 @@ TEST_F(DataPartParquetTest, RoundTrip) {
 // Builds a two-commit graph where the second commit adds an edge into a node from
 // the first commit, so the second DataPart records that node as a patch node. This
 // exercises the EdgeIndexer patch path (the patch-prefix/core-suffix split and the
-// explicitly-dumped _patchNodeOffsets) with non-empty data.
+// _patchNodeOffsets rebuild on load) with non-empty data.
 class DataPartParquetPatchTest : public TuringTest {
 public:
     void initialize() override {

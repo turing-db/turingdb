@@ -120,6 +120,29 @@ void checkColumnsAgree(bool columnsAgree, std::string_view table) {
     }
 }
 
+// The children/owners rows reference indexes and tree nodes created from the indexes
+// table; a corrupt file can name either one that does not exist, so resolve with a
+// clean error instead of letting std::out_of_range escape.
+StringIndex* resolveIndex(const std::unordered_map<int64_t, StringIndex*>& indexByPropertyTypeId,
+                          int64_t propertyTypeId) {
+    const auto it = indexByPropertyTypeId.find(propertyTypeId);
+    if (it == indexByPropertyTypeId.end()) {
+        throw FatalException(fmt::format(
+            "StringPropertyIndexerParquetLoader: unknown property type id {}", propertyTypeId));
+    }
+    return it->second;
+}
+
+StringIndex::PrefixTreeNode* nodeAt(const StringIndex& index, int64_t rawNodeId) {
+    const size_t nodeId = static_cast<size_t>(rawNodeId);
+    if (nodeId >= index.getNodeCount()) {
+        throw FatalException(fmt::format(
+            "StringPropertyIndexerParquetLoader: node id {} out of range ({} nodes)",
+            nodeId, index.getNodeCount()));
+    }
+    return index.getNode(nodeId);
+}
+
 }
 
 std::unique_ptr<StringPropertyIndexer> StringPropertyIndexerParquetLoader::load(
@@ -172,6 +195,12 @@ std::unique_ptr<StringPropertyIndexer> StringPropertyIndexerParquetLoader::load(
         const int64_t rawPropertyTypeId = indexesVisitor._propertyTypeIds[i];
         const size_t nodeCount = static_cast<size_t>(indexesVisitor._nodeCounts[i]);
 
+        // A StringIndex always holds at least its root; zero can only come from a
+        // corrupt file (and would underflow the index's pre-allocation).
+        if (nodeCount == 0) {
+            throw FatalException("StringPropertyIndexerParquetLoader: index has zero nodes");
+        }
+
         auto index = std::make_unique<StringIndex>(nodeCount);
         StringIndex* raw = index.get();
         const PropertyTypeID propertyTypeID {static_cast<PropertyTypeID::Type>(rawPropertyTypeId)};
@@ -180,18 +209,24 @@ std::unique_ptr<StringPropertyIndexer> StringPropertyIndexerParquetLoader::load(
     }
 
     for (size_t i = 0; i < childrenVisitor._propertyTypeIds.size(); ++i) {
-        StringIndex* index = indexByPropertyTypeId.at(childrenVisitor._propertyTypeIds[i]);
-        StringIndex::PrefixTreeNode* parent =
-            index->getNode(static_cast<size_t>(childrenVisitor._parentIds[i]));
-        StringIndex::PrefixTreeNode* child =
-            index->getNode(static_cast<size_t>(childrenVisitor._childIds[i]));
-        parent->setChild(child, static_cast<size_t>(childrenVisitor._childIndices[i]));
+        const StringIndex* index = resolveIndex(indexByPropertyTypeId,
+                                                childrenVisitor._propertyTypeIds[i]);
+        StringIndex::PrefixTreeNode* parent = nodeAt(*index, childrenVisitor._parentIds[i]);
+        StringIndex::PrefixTreeNode* child = nodeAt(*index, childrenVisitor._childIds[i]);
+
+        const size_t childIndex = static_cast<size_t>(childrenVisitor._childIndices[i]);
+        if (childIndex >= StringIndex::PrefixTreeNode::ALPHABET_SIZE) {
+            throw FatalException(fmt::format(
+                "StringPropertyIndexerParquetLoader: child index {} out of range", childIndex));
+        }
+
+        parent->setChild(child, childIndex);
     }
 
     for (size_t i = 0; i < ownersVisitor._propertyTypeIds.size(); ++i) {
-        StringIndex* index = indexByPropertyTypeId.at(ownersVisitor._propertyTypeIds[i]);
-        StringIndex::PrefixTreeNode* node =
-            index->getNode(static_cast<size_t>(ownersVisitor._nodeIds[i]));
+        const StringIndex* index = resolveIndex(indexByPropertyTypeId,
+                                                ownersVisitor._propertyTypeIds[i]);
+        StringIndex::PrefixTreeNode* node = nodeAt(*index, ownersVisitor._nodeIds[i]);
         node->addOwner(EntityID {static_cast<uint64_t>(ownersVisitor._entityIds[i])});
     }
 

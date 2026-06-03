@@ -11,6 +11,12 @@ namespace db {
 class PropertyManagerComparator {
 public:
     [[nodiscard]] static bool same(const PropertyManager& a, const PropertyManager& b) {
+        // The loop below only proves every container of a exists in b; equal counts
+        // rule out extras in b.
+        if (a.propTypeCount() != b.propTypeCount()) {
+            return false;
+        }
+
         for (const auto& [ptA, containerA] : a) {
             auto itB = b.find(ptA);
 

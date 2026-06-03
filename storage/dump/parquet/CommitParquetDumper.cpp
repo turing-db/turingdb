@@ -5,7 +5,6 @@
 #include "TombstonesParquetDumper.h"
 #include "CommitMetaDataParquetDumper.h"
 #include "DataPartParquetDumper.h"
-#include "GraphParquetLayout.h"
 
 #include "datapart/DataPart.h"
 #include "datapart/DataPartSpan.h"

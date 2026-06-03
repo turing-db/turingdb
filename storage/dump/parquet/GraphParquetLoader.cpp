@@ -41,6 +41,7 @@ class GraphInfoVisitor : public ParquetSaxVisitor {
 public:
     uint64_t _graphId {0};
     std::string _name;
+    size_t _rows {0};
 
     bool onFileStart(const parquet::FileMetaData& metadata) override {
         const auto& keyValueMetadata = metadata.key_value_metadata();
@@ -84,6 +85,11 @@ public:
         }
         return true;
     }
+
+    bool onChunkEnd(size_t rowGroupIndex, size_t firstRowInRowGroup, size_t rows) override {
+        _rows += rows;
+        return true;
+    }
 };
 
 // commit-log.parquet: commit_hash (INT64), one row per commit, oldest first.
@@ -102,6 +108,14 @@ public:
 }
 
 void GraphParquetLoader::load(Graph* graph, const fs::Path& graphDir) {
+    // Loading replaces the graph's version controller wholesale; refuse a target that
+    // already carries commits beyond the initial empty one rather than dropping them.
+    const bool graphHasHistory = graph->_versionController != nullptr
+                                 && graph->_versionController->getNumCommits() > 1;
+    if (graphHasHistory) {
+        throw FatalException("GraphParquetLoader: target graph already has commits");
+    }
+
     GraphInfoVisitor info;
     {
         ParquetWriteSchema expectedSchema;
@@ -112,6 +126,11 @@ void GraphParquetLoader::load(Graph* graph, const fs::Path& graphDir) {
         reader.setExpectedSchema(expectedSchema);
         while (reader.nextChunk()) {
         }
+    }
+
+    if (info._rows != 1) {
+        throw FatalException(fmt::format(
+            "GraphParquetLoader: graph-info must have exactly one row, found {}", info._rows));
     }
 
     graph->_graphID = GraphID {info._graphId};

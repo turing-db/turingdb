@@ -34,9 +34,9 @@ std::unique_ptr<Commit> CommitParquetLoader::load(VersionController* controller,
     CommitParquetMetaData metadata;
     CommitMetaDataParquetLoader::load(commitDir, metadata);
 
-    commit->_numNodes = metadata._numNodes;
-    commit->_numEdges = metadata._numEdges;
-    commit->_numDataParts = metadata._numCommitDataParts;
+    commit->_numNodes = metadata.getNumNodes();
+    commit->_numEdges = metadata.getNumEdges();
+    commit->_numDataParts = metadata.getNumCommitDataParts();
 
     return commit;
 }
@@ -65,7 +65,7 @@ void CommitParquetLoader::loadData(const fs::Path& commitDir,
 
     const LabelSetMap& labelsets = metadata.labelsets();
 
-    for (const DataPartID dataPartID : commitMetaData._allDatapartIds) {
+    for (const DataPartID dataPartID : commitMetaData.getAllDatapartIds()) {
         const auto existing = partMap.find(dataPartID);
 
         // If the datapart has already been read, share the existing reference.
@@ -83,5 +83,5 @@ void CommitParquetLoader::loadData(const fs::Path& commitDir,
         partMap.emplace(dataPartID, part);
     }
 
-    historyBuilder.setCommitDatapartCount(commitMetaData._numCommitDataParts);
+    historyBuilder.setCommitDatapartCount(commitMetaData.getNumCommitDataParts());
 }

@@ -68,14 +68,14 @@ TEST_F(CommitMetaDataParquetTest, RoundTrip) {
             CommitParquetMetaData loaded;
             CommitMetaDataParquetLoader::load(commitDir, loaded);
 
-            EXPECT_EQ(loaded._numNodes, commit->getNumNodes());
-            EXPECT_EQ(loaded._numEdges, commit->getNumEdges());
-            EXPECT_EQ(loaded._numCommitDataParts, commit->data().commitDataparts().size());
+            EXPECT_EQ(loaded.getNumNodes(), commit->getNumNodes());
+            EXPECT_EQ(loaded.getNumEdges(), commit->getNumEdges());
+            EXPECT_EQ(loaded.getNumCommitDataParts(), commit->data().commitDataparts().size());
 
             const DataPartSpan allDataParts = commit->data().allDataparts();
-            ASSERT_EQ(loaded._allDatapartIds.size(), allDataParts.size());
+            ASSERT_EQ(loaded.getAllDatapartIds().size(), allDataParts.size());
             for (size_t i = 0; i < allDataParts.size(); ++i) {
-                EXPECT_EQ(loaded._allDatapartIds[i].get(), allDataParts[i]->getID().get());
+                EXPECT_EQ(loaded.getAllDatapartIds()[i].get(), allDataParts[i]->getID().get());
             }
 
             if (!allDataParts.empty()) {
