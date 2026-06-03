@@ -14,6 +14,9 @@
 #include <parquet/metadata.h>
 
 #include "ParquetReader.h"
+#include "ParquetWriteSchema.h"
+
+#include "NodeContainerParquetLayout.h"
 
 #include "datapart/NodeContainer.h"
 #include "datapart/NodeRange.h"
@@ -25,9 +28,9 @@
 
 using namespace db;
 
-namespace {
+namespace layout = nodeContainerParquetLayout;
 
-constexpr std::string_view FIRST_NODE_ID_KEY = "turing.first_node_id";
+namespace {
 
 // Ranges file: three INT64 columns (labelset_id, first_node_id, count), one row
 // per range, distinguished by column index.
@@ -42,8 +45,10 @@ public:
             append(_labelsetIds, values);
         } else if (columnIndex == 1) {
             append(_firstNodeIds, values);
-        } else {
+        } else if (columnIndex == 2) {
             append(_counts, values);
+        } else {
+            throw FatalException("NodeContainerParquetLoader: unexpected ranges column");
         }
         return true;
     }
@@ -67,7 +72,7 @@ public:
         bool hasFirstNodeID = false;
         if (keyValueMetadata) {
             for (int64_t i = 0; i < keyValueMetadata->size(); ++i) {
-                if (keyValueMetadata->key(i) == FIRST_NODE_ID_KEY) {
+                if (keyValueMetadata->key(i) == layout::FIRST_NODE_ID_KEY) {
                     _firstNodeID = static_cast<uint64_t>(std::stoull(keyValueMetadata->value(i)));
                     hasFirstNodeID = true;
                 }
@@ -104,16 +109,32 @@ std::unique_ptr<NodeContainer> NodeContainerParquetLoader::load(const fs::Path& 
                                                                const LabelSetMap& labelsets) {
     RangesVisitor rangesVisitor;
     {
+        ParquetWriteSchema expectedSchema;
+        expectedSchema.addColumn(layout::LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::FIRST_NODE_ID_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::COUNT_COLUMN, ParquetColumnType::UInt64);
+
         ParquetReader reader(rangesPath, rangesVisitor);
+        reader.setExpectedSchema(expectedSchema);
         while (reader.nextChunk()) {
         }
     }
 
     RecordsVisitor recordsVisitor;
     {
+        ParquetWriteSchema expectedSchema;
+        expectedSchema.addColumn(layout::LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
+
         ParquetReader reader(recordsPath, recordsVisitor);
+        reader.setExpectedSchema(expectedSchema);
         while (reader.nextChunk()) {
         }
+    }
+
+    const bool rangeColumnsAgree = rangesVisitor._firstNodeIds.size() == rangesVisitor._labelsetIds.size()
+                                   && rangesVisitor._counts.size() == rangesVisitor._labelsetIds.size();
+    if (!rangeColumnsAgree) {
+        throw FatalException("NodeContainerParquetLoader: ranges columns have mismatched lengths");
     }
 
     const uint64_t firstID = recordsVisitor._firstNodeID;

@@ -12,6 +12,8 @@
 #include "ParquetWriteSchema.h"
 #include "ParquetWriter.h"
 
+#include "EdgeIndexerParquetLayout.h"
+
 #include "indexers/EdgeIndexer.h"
 #include "indexers/LabelSetIndexer.h"
 #include "datapart/EdgeContainer.h"
@@ -21,20 +23,9 @@
 
 using namespace db;
 
+namespace layout = edgeIndexerParquetLayout;
+
 namespace {
-
-constexpr std::string_view OUT_FIRST_COLUMN = "out_first";
-constexpr std::string_view OUT_COUNT_COLUMN = "out_count";
-constexpr std::string_view IN_FIRST_COLUMN = "in_first";
-constexpr std::string_view IN_COUNT_COLUMN = "in_count";
-constexpr std::string_view LABELSET_ID_COLUMN = "labelset_id";
-constexpr std::string_view SPAN_OFFSET_COLUMN = "span_offset";
-constexpr std::string_view SPAN_COUNT_COLUMN = "span_count";
-
-constexpr std::string_view FIRST_NODE_ID_KEY = "turing.first_node_id";
-constexpr std::string_view FIRST_EDGE_ID_KEY = "turing.first_edge_id";
-constexpr std::string_view CORE_NODE_COUNT_KEY = "turing.core_node_count";
-constexpr std::string_view PATCH_NODE_COUNT_KEY = "turing.patch_node_count";
 
 void writeSpansFile(const LabelSetIndexer<EdgeIndexer::EdgeSpans>& spansByLabelSet,
                     std::span<const EdgeRecord> edges,
@@ -45,9 +36,9 @@ void writeSpansFile(const LabelSetIndexer<EdgeIndexer::EdgeSpans>& spansByLabelS
     }
 
     ParquetWriteSchema schema;
-    schema.addColumn(LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(SPAN_OFFSET_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(SPAN_COUNT_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::SPAN_OFFSET_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::SPAN_COUNT_COLUMN, ParquetColumnType::UInt64);
 
     ParquetWriter writer(path, schema);
 
@@ -88,16 +79,16 @@ void EdgeIndexerParquetDumper::dump(const EdgeIndexer& indexer,
     // Per-node out/in ranges.
     {
         ParquetWriteSchema schema;
-        schema.addColumn(OUT_FIRST_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(OUT_COUNT_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(IN_FIRST_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(IN_COUNT_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::OUT_FIRST_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::OUT_COUNT_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::IN_FIRST_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::IN_COUNT_COLUMN, ParquetColumnType::UInt64);
 
         ParquetWriter writer(nodeDataPath, schema);
-        writer.setMetadata(FIRST_NODE_ID_KEY, fmt::format("{}", indexer.getFirstNodeID().getValue()));
-        writer.setMetadata(FIRST_EDGE_ID_KEY, fmt::format("{}", indexer.getFirstEdgeID().getValue()));
-        writer.setMetadata(CORE_NODE_COUNT_KEY, fmt::format("{}", indexer.getCoreNodeCount()));
-        writer.setMetadata(PATCH_NODE_COUNT_KEY, fmt::format("{}", indexer.getPatchNodeCount()));
+        writer.setMetadata(layout::FIRST_NODE_ID_KEY, fmt::format("{}", indexer.getFirstNodeID().getValue()));
+        writer.setMetadata(layout::FIRST_EDGE_ID_KEY, fmt::format("{}", indexer.getFirstEdgeID().getValue()));
+        writer.setMetadata(layout::CORE_NODE_COUNT_KEY, fmt::format("{}", indexer.getCoreNodeCount()));
+        writer.setMetadata(layout::PATCH_NODE_COUNT_KEY, fmt::format("{}", indexer.getPatchNodeCount()));
 
         if (nodeCount > 0) {
             std::vector<int64_t> outFirsts;

@@ -11,9 +11,14 @@
 
 #include <arrow/util/key_value_metadata.h>
 #include <parquet/metadata.h>
+#include <parquet/schema.h>
 #include <parquet/types.h>
 
+#include <spdlog/fmt/fmt.h>
+
 #include "ParquetReader.h"
+
+#include "PropertyContainerParquetLayout.h"
 
 #include "properties/PropertyContainer.h"
 #include "metadata/PropertyType.h"
@@ -23,10 +28,9 @@
 
 using namespace db;
 
-namespace {
+namespace layout = propertyContainerParquetLayout;
 
-constexpr std::string_view VALUE_TYPE_KEY = "turing.value_type";
-constexpr std::string_view DIMENSION_KEY = "turing.embedding_dimension";
+namespace {
 
 // Collects the entity-id column and the typed value column across all chunks, then
 // rebuilds the matching TypedPropertyContainer<T> in build().
@@ -42,10 +46,10 @@ public:
         for (int64_t i = 0; i < keyValueMetadata->size(); ++i) {
             const std::string& key = keyValueMetadata->key(i);
             const std::string& value = keyValueMetadata->value(i);
-            if (key == VALUE_TYPE_KEY) {
+            if (key == layout::VALUE_TYPE_KEY) {
                 _valueType = static_cast<ValueType>(std::stoul(value));
                 hasValueType = true;
-            } else if (key == DIMENSION_KEY) {
+            } else if (key == layout::DIMENSION_KEY) {
                 _dimension = static_cast<size_t>(std::stoul(value));
             }
         }
@@ -53,6 +57,14 @@ public:
         if (!hasValueType) {
             throw FatalException("PropertyContainerParquetLoader: missing value-type metadata");
         }
+
+        const bool dimensionMissing = _valueType == ValueType::Embedding && _dimension == 0;
+        if (dimensionMissing) {
+            throw FatalException(
+                "PropertyContainerParquetLoader: missing or zero embedding dimension");
+        }
+
+        checkSchema(metadata);
 
         return true;
     }
@@ -139,11 +151,91 @@ private:
     std::vector<std::string> _stringValues;
     std::vector<float> _embeddingFloats;
 
+    parquet::Type::type valuePhysicalType() const {
+        switch (_valueType) {
+            case ValueType::Int64:
+            case ValueType::UInt64:
+                return parquet::Type::INT64;
+            break;
+            case ValueType::Double:
+                return parquet::Type::DOUBLE;
+            break;
+            case ValueType::Bool:
+                return parquet::Type::BOOLEAN;
+            break;
+            case ValueType::String:
+                return parquet::Type::BYTE_ARRAY;
+            break;
+            case ValueType::Embedding:
+                return parquet::Type::FIXED_LEN_BYTE_ARRAY;
+            break;
+            case ValueType::Invalid:
+            case ValueType::_SIZE:
+                throw FatalException("PropertyContainerParquetLoader: invalid value type");
+            break;
+        }
+
+        throw FatalException("PropertyContainerParquetLoader: unhandled value type");
+    }
+
+    // The value column's physical type depends on the value-type metadata, so the schema
+    // can only be checked here, after onFileStart has read it — not up front through
+    // ParquetReader::setExpectedSchema like the fixed-schema loaders.
+    void checkSchema(const parquet::FileMetaData& metadata) const {
+        if (metadata.num_columns() != 2) {
+            throw FatalException(fmt::format(
+                "PropertyContainerParquetLoader: expected 2 columns, file has {}",
+                metadata.num_columns()));
+        }
+
+        const parquet::SchemaDescriptor* schema = metadata.schema();
+
+        const parquet::ColumnDescriptor* entityColumn = schema->Column(0);
+        const bool entityColumnMatches = entityColumn->name() == layout::ENTITY_ID_COLUMN
+                                         && entityColumn->physical_type() == parquet::Type::INT64;
+        if (!entityColumnMatches) {
+            throw FatalException("PropertyContainerParquetLoader: unexpected entity-id column");
+        }
+
+        const parquet::ColumnDescriptor* valueColumn = schema->Column(1);
+        const bool valueColumnMatches = valueColumn->name() == layout::VALUE_COLUMN
+                                        && valueColumn->physical_type() == valuePhysicalType();
+        if (!valueColumnMatches) {
+            throw FatalException(fmt::format(
+                "PropertyContainerParquetLoader: value column does not match value type {}",
+                static_cast<unsigned>(_valueType)));
+        }
+
+        const bool isEmbedding = _valueType == ValueType::Embedding;
+        if (isEmbedding) {
+            const size_t expectedByteWidth = _dimension * sizeof(float);
+            const size_t fileByteWidth = static_cast<size_t>(valueColumn->type_length());
+            if (fileByteWidth != expectedByteWidth) {
+                throw FatalException(fmt::format(
+                    "PropertyContainerParquetLoader: embedding column byte width {} does not"
+                    " match dimension {}",
+                    fileByteWidth, _dimension));
+            }
+        }
+    }
+
+    // A corrupt or truncated file can deliver fewer values than entity ids (or the
+    // reverse); building from mismatched columns would read out of bounds.
+    void checkValueCount(size_t valueCount) const {
+        if (valueCount != _entityIds.size()) {
+            throw FatalException(fmt::format(
+                "PropertyContainerParquetLoader: {} values for {} entity ids",
+                valueCount, _entityIds.size()));
+        }
+    }
+
     EntityID entityIdAt(size_t index) const {
         return EntityID {static_cast<uint64_t>(_entityIds[index])};
     }
 
     std::unique_ptr<PropertyContainer> buildInt64() const {
+        checkValueCount(_int64Values.size());
+
         auto container = std::make_unique<TypedPropertyContainer<types::Int64>>();
         for (size_t i = 0; i < _entityIds.size(); ++i) {
             container->add(entityIdAt(i), _int64Values[i]);
@@ -152,6 +244,8 @@ private:
     }
 
     std::unique_ptr<PropertyContainer> buildUInt64() const {
+        checkValueCount(_int64Values.size());
+
         auto container = std::make_unique<TypedPropertyContainer<types::UInt64>>();
         for (size_t i = 0; i < _entityIds.size(); ++i) {
             container->add(entityIdAt(i), static_cast<uint64_t>(_int64Values[i]));
@@ -160,6 +254,8 @@ private:
     }
 
     std::unique_ptr<PropertyContainer> buildDouble() const {
+        checkValueCount(_doubleValues.size());
+
         auto container = std::make_unique<TypedPropertyContainer<types::Double>>();
         for (size_t i = 0; i < _entityIds.size(); ++i) {
             container->add(entityIdAt(i), _doubleValues[i]);
@@ -168,6 +264,8 @@ private:
     }
 
     std::unique_ptr<PropertyContainer> buildBool() const {
+        checkValueCount(_boolValues.size());
+
         auto container = std::make_unique<TypedPropertyContainer<types::Bool>>();
         for (size_t i = 0; i < _entityIds.size(); ++i) {
             container->add(entityIdAt(i), static_cast<bool>(_boolValues[i] != 0));
@@ -176,6 +274,8 @@ private:
     }
 
     std::unique_ptr<PropertyContainer> buildString() const {
+        checkValueCount(_stringValues.size());
+
         auto container = std::make_unique<TypedPropertyContainer<types::String>>();
         for (size_t i = 0; i < _entityIds.size(); ++i) {
             container->add(entityIdAt(i), std::string_view(_stringValues[i]));
@@ -184,6 +284,14 @@ private:
     }
 
     std::unique_ptr<PropertyContainer> buildEmbedding() const {
+        const bool floatsMatchEntities = _embeddingFloats.size() == _entityIds.size() * _dimension;
+        if (!floatsMatchEntities) {
+            throw FatalException(fmt::format(
+                "PropertyContainerParquetLoader: {} embedding floats for {} entity ids of"
+                " dimension {}",
+                _embeddingFloats.size(), _entityIds.size(), _dimension));
+        }
+
         auto container = std::make_unique<TypedPropertyContainer<types::Embedding>>(_dimension);
         for (size_t i = 0; i < _entityIds.size(); ++i) {
             const std::span<const float> view(_embeddingFloats.data() + i * _dimension, _dimension);

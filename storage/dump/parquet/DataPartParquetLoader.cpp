@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "ParquetReader.h"
+#include "ParquetWriteSchema.h"
 
 #include "DataPartParquetLayout.h"
 #include "NodeContainerParquetLoader.h"
@@ -61,8 +62,16 @@ public:
 };
 
 InfoVisitor readInfo(const fs::Path& infoPath) {
+    namespace layout = dataPartParquetLayout;
+
+    ParquetWriteSchema expectedSchema;
+    expectedSchema.addColumn(layout::DATA_PART_ID_COLUMN, ParquetColumnType::UInt64);
+    expectedSchema.addColumn(layout::FIRST_NODE_ID_COLUMN, ParquetColumnType::UInt64);
+    expectedSchema.addColumn(layout::FIRST_EDGE_ID_COLUMN, ParquetColumnType::UInt64);
+
     InfoVisitor infoVisitor;
     ParquetReader reader(infoPath, infoVisitor);
+    reader.setExpectedSchema(expectedSchema);
     while (reader.nextChunk()) {
     }
     return infoVisitor;

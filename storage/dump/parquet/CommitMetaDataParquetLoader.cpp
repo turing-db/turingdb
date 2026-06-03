@@ -12,6 +12,7 @@
 #include <parquet/metadata.h>
 
 #include "ParquetReader.h"
+#include "ParquetWriteSchema.h"
 
 #include "CommitParquetLayout.h"
 #include "versioning/DataPartID.h"
@@ -21,11 +22,9 @@
 
 using namespace db;
 
-namespace {
+namespace layout = commitParquetLayout;
 
-constexpr std::string_view NUM_NODES_KEY = "turing.num_nodes";
-constexpr std::string_view NUM_EDGES_KEY = "turing.num_edges";
-constexpr std::string_view NUM_COMMIT_DATAPARTS_KEY = "turing.num_commit_dataparts";
+namespace {
 
 // Reads the three scalars from the file's key/value metadata and the data_part_id column.
 class CommitMetaDataVisitor : public ParquetSaxVisitor {
@@ -47,13 +46,13 @@ public:
         for (int64_t i = 0; i < keyValueMetadata->size(); ++i) {
             const std::string& key = keyValueMetadata->key(i);
             const std::string& value = keyValueMetadata->value(i);
-            if (key == NUM_NODES_KEY) {
+            if (key == layout::NUM_NODES_KEY) {
                 _numNodes = static_cast<size_t>(std::stoull(value));
                 hasNumNodes = true;
-            } else if (key == NUM_EDGES_KEY) {
+            } else if (key == layout::NUM_EDGES_KEY) {
                 _numEdges = static_cast<size_t>(std::stoull(value));
                 hasNumEdges = true;
-            } else if (key == NUM_COMMIT_DATAPARTS_KEY) {
+            } else if (key == layout::NUM_COMMIT_DATAPARTS_KEY) {
                 _numCommitDataParts = static_cast<size_t>(std::stoull(value));
                 hasNumCommitDataParts = true;
             }
@@ -79,7 +78,11 @@ public:
 void CommitMetaDataParquetLoader::load(const fs::Path& commitDir, CommitParquetMetaData& out) {
     CommitMetaDataVisitor visitor;
     {
-        ParquetReader reader(commitParquetLayout::commitMetaData(commitDir), visitor);
+        ParquetWriteSchema expectedSchema;
+        expectedSchema.addColumn(layout::DATA_PART_ID_COLUMN, ParquetColumnType::UInt64);
+
+        ParquetReader reader(layout::commitMetaData(commitDir), visitor);
+        reader.setExpectedSchema(expectedSchema);
         while (reader.nextChunk()) {
         }
     }

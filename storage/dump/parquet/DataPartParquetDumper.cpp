@@ -27,15 +27,13 @@ using namespace db;
 
 namespace {
 
-constexpr std::string_view DATA_PART_ID_COLUMN = "data_part_id";
-constexpr std::string_view FIRST_NODE_ID_COLUMN = "first_node_id";
-constexpr std::string_view FIRST_EDGE_ID_COLUMN = "first_edge_id";
-
 void writeInfo(const DataPart& part, const fs::Path& path) {
+    namespace layout = dataPartParquetLayout;
+
     ParquetWriteSchema schema;
-    schema.addColumn(DATA_PART_ID_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(FIRST_NODE_ID_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(FIRST_EDGE_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::DATA_PART_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::FIRST_NODE_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::FIRST_EDGE_ID_COLUMN, ParquetColumnType::UInt64);
 
     ParquetWriter writer(path, schema);
 

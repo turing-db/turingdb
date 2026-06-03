@@ -5,18 +5,27 @@
 
 #include <memory>
 #include <span>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
+#include <spdlog/fmt/fmt.h>
+
 #include "ParquetReader.h"
+#include "ParquetWriteSchema.h"
+
+#include "StringPropertyIndexerParquetLayout.h"
 
 #include "indexers/StringPropertyIndexer.h"
 #include "indexes/StringIndex.h"
 #include "Path.h"
 
 #include "ID.h"
+#include "FatalException.h"
 
 using namespace db;
+
+namespace layout = stringPropertyIndexerParquetLayout;
 
 namespace {
 
@@ -59,8 +68,10 @@ private:
             return _parentIds;
         } else if (columnIndex == 2) {
             return _childIndices;
-        } else {
+        } else if (columnIndex == 3) {
             return _childIds;
+        } else {
+            throw FatalException("StringPropertyIndexerParquetLoader: unexpected children column");
         }
     }
 };
@@ -86,16 +97,26 @@ private:
             return _propertyTypeIds;
         } else if (columnIndex == 1) {
             return _nodeIds;
-        } else {
+        } else if (columnIndex == 2) {
             return _entityIds;
+        } else {
+            throw FatalException("StringPropertyIndexerParquetLoader: unexpected owners column");
         }
     }
 };
 
 template <typename Visitor>
-void readFile(const fs::Path& path, Visitor& visitor) {
+void readFile(const fs::Path& path, Visitor& visitor, const ParquetWriteSchema& expectedSchema) {
     ParquetReader reader(path, visitor);
+    reader.setExpectedSchema(expectedSchema);
     while (reader.nextChunk()) {
+    }
+}
+
+void checkColumnsAgree(bool columnsAgree, std::string_view table) {
+    if (!columnsAgree) {
+        throw FatalException(fmt::format(
+            "StringPropertyIndexerParquetLoader: {} columns have mismatched lengths", table));
     }
 }
 
@@ -106,13 +127,41 @@ std::unique_ptr<StringPropertyIndexer> StringPropertyIndexerParquetLoader::load(
     const fs::Path& childrenPath,
     const fs::Path& ownersPath) {
     IndexesVisitor indexesVisitor;
-    readFile(indexesPath, indexesVisitor);
+    {
+        ParquetWriteSchema expectedSchema;
+        expectedSchema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::NODE_COUNT_COLUMN, ParquetColumnType::UInt64);
+        readFile(indexesPath, indexesVisitor, expectedSchema);
+    }
 
     ChildrenVisitor childrenVisitor;
-    readFile(childrenPath, childrenVisitor);
+    {
+        ParquetWriteSchema expectedSchema;
+        expectedSchema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::PARENT_NODE_ID_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::CHILD_INDEX_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::CHILD_NODE_ID_COLUMN, ParquetColumnType::UInt64);
+        readFile(childrenPath, childrenVisitor, expectedSchema);
+    }
 
     OwnersVisitor ownersVisitor;
-    readFile(ownersPath, ownersVisitor);
+    {
+        ParquetWriteSchema expectedSchema;
+        expectedSchema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::NODE_ID_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::ENTITY_ID_COLUMN, ParquetColumnType::UInt64);
+        readFile(ownersPath, ownersVisitor, expectedSchema);
+    }
+
+    checkColumnsAgree(indexesVisitor._nodeCounts.size() == indexesVisitor._propertyTypeIds.size(),
+                      "indexes");
+    checkColumnsAgree(childrenVisitor._parentIds.size() == childrenVisitor._propertyTypeIds.size()
+                          && childrenVisitor._childIndices.size() == childrenVisitor._propertyTypeIds.size()
+                          && childrenVisitor._childIds.size() == childrenVisitor._propertyTypeIds.size(),
+                      "children");
+    checkColumnsAgree(ownersVisitor._nodeIds.size() == ownersVisitor._propertyTypeIds.size()
+                          && ownersVisitor._entityIds.size() == ownersVisitor._propertyTypeIds.size(),
+                      "owners");
 
     auto indexer = std::make_unique<StringPropertyIndexer>();
 

@@ -25,16 +25,14 @@ using namespace db;
 
 namespace {
 
-constexpr std::string_view GRAPH_ID_COLUMN = "graph_id";
-constexpr std::string_view NAME_COLUMN = "name";
-constexpr std::string_view COMMIT_HASH_COLUMN = "commit_hash";
-
 void writeGraphInfo(const Graph& graph, const fs::Path& path) {
     ParquetWriteSchema schema;
-    schema.addColumn(GRAPH_ID_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(NAME_COLUMN, ParquetColumnType::String);
+    schema.addColumn(graphParquetLayout::GRAPH_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(graphParquetLayout::NAME_COLUMN, ParquetColumnType::String);
 
     ParquetWriter writer(path, schema);
+    writer.setMetadata(graphParquetLayout::FORMAT_VERSION_KEY,
+                       std::to_string(graphParquetLayout::FORMAT_VERSION));
 
     const std::vector<int64_t> graphId {static_cast<int64_t>(graph.getID().get())};
     const std::vector<std::string_view> name {graph.getName()};
@@ -47,7 +45,7 @@ void writeGraphInfo(const Graph& graph, const fs::Path& path) {
 
 void writeCommitLog(const std::vector<uint64_t>& hashesAscending, const fs::Path& path) {
     ParquetWriteSchema schema;
-    schema.addColumn(COMMIT_HASH_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(graphParquetLayout::COMMIT_HASH_COLUMN, ParquetColumnType::UInt64);
 
     ParquetWriter writer(path, schema);
 
@@ -69,30 +67,50 @@ void writeCommitLog(const std::vector<uint64_t>& hashesAscending, const fs::Path
 }
 
 void GraphParquetDumper::dump(const Graph& graph, const fs::Path& graphDir) {
-    if (!graphDir.exists()) {
-        if (const auto res = graphDir.mkdir(); !res) {
-            throw FatalException("GraphParquetDumper: cannot create graph directory");
+    // Snapshot under the version-controller lock, as the binary GraphDumper does, so a
+    // concurrent commit cannot tear the head walk below.
+    const auto lock = graph._versionController->lock();
+
+    if (graphDir.exists()) {
+        throw FatalException("GraphParquetDumper: graph directory already exists");
+    }
+
+    // Dump into a sibling temp directory and rename it over the final path on success, so
+    // a partial dump (crash, disk full) is never mistaken for a complete one. A leftover
+    // temp directory is a previous crashed dump — partial by construction, remove it.
+    const fs::Path tempDir = graphParquetLayout::dumpTempDir(graphDir);
+    if (tempDir.exists()) {
+        if (const auto res = tempDir.rm(); !res) {
+            throw FatalException("GraphParquetDumper: cannot remove stale dump temp directory");
         }
     }
 
-    writeGraphInfo(graph, graphParquetLayout::graphInfo(graphDir));
+    if (const auto res = tempDir.mkdir(); !res) {
+        throw FatalException("GraphParquetDumper: cannot create dump temp directory");
+    }
 
-    const VersionController& controller = graph.getVersionController();
-    const fs::Path partsDir = graphParquetLayout::dataPartsDir(graphDir);
+    writeGraphInfo(graph, graphParquetLayout::graphInfo(tempDir));
+
+    const fs::Path partsDir = graphParquetLayout::dataPartsDir(tempDir);
 
     // Walk from head backwards, dumping each commit. Collected head-first; the commit log
-    // is written oldest-first below.
+    // is written oldest-first below. The head is read directly, as the binary GraphDumper
+    // does — getCommitSafe would re-take the version-controller mutex held above.
     std::vector<uint64_t> hashesHeadFirst;
-    for (const Commit* commit = controller.getCommitSafe(CommitHash::head());
+    for (const Commit* commit = graph._versionController->_head.load();
          commit != nullptr;
          commit = commit->getPreviousCommit()) {
         const uint64_t hash = commit->hash().get();
         hashesHeadFirst.push_back(hash);
 
-        const fs::Path commitDir = graphParquetLayout::commitDir(graphDir, hash);
+        const fs::Path commitDir = graphParquetLayout::commitDir(tempDir, hash);
         CommitParquetDumper::dump(*commit, commitDir, partsDir);
     }
 
     std::vector<uint64_t> hashesAscending(hashesHeadFirst.rbegin(), hashesHeadFirst.rend());
-    writeCommitLog(hashesAscending, graphParquetLayout::commitLog(graphDir));
+    writeCommitLog(hashesAscending, graphParquetLayout::commitLog(tempDir));
+
+    if (const auto res = tempDir.rename(graphDir); !res) {
+        throw FatalException("GraphParquetDumper: cannot rename dump temp directory into place");
+    }
 }

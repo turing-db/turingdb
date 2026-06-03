@@ -22,22 +22,14 @@
 
 using namespace db;
 
+namespace layout = commitParquetLayout;
+
 namespace {
-
-constexpr std::string_view LABEL_ID_COLUMN = "label_id";
-constexpr std::string_view EDGE_TYPE_ID_COLUMN = "edge_type_id";
-constexpr std::string_view PROPERTY_TYPE_ID_COLUMN = "property_type_id";
-constexpr std::string_view LABELSET_ID_COLUMN = "labelset_id";
-constexpr std::string_view NAME_COLUMN = "name";
-constexpr std::string_view VALUE_TYPE_COLUMN = "value_type";
-
-constexpr std::array<std::string_view, 4> LABELSET_INTEGER_COLUMNS = {
-    "integer_0", "integer_1", "integer_2", "integer_3"};
 
 void dumpLabels(const LabelMap& labels, const fs::Path& path) {
     ParquetWriteSchema schema;
-    schema.addColumn(LABEL_ID_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(NAME_COLUMN, ParquetColumnType::String);
+    schema.addColumn(layout::LABEL_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::NAME_COLUMN, ParquetColumnType::String);
 
     ParquetWriter writer(path, schema);
 
@@ -63,8 +55,8 @@ void dumpLabels(const LabelMap& labels, const fs::Path& path) {
 
 void dumpEdgeTypes(const EdgeTypeMap& edgeTypes, const fs::Path& path) {
     ParquetWriteSchema schema;
-    schema.addColumn(EDGE_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(NAME_COLUMN, ParquetColumnType::String);
+    schema.addColumn(layout::EDGE_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::NAME_COLUMN, ParquetColumnType::String);
 
     ParquetWriter writer(path, schema);
 
@@ -90,9 +82,9 @@ void dumpEdgeTypes(const EdgeTypeMap& edgeTypes, const fs::Path& path) {
 
 void dumpPropertyTypes(const PropertyTypeMap& propTypes, const fs::Path& path) {
     ParquetWriteSchema schema;
-    schema.addColumn(PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(VALUE_TYPE_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(NAME_COLUMN, ParquetColumnType::String);
+    schema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::VALUE_TYPE_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::NAME_COLUMN, ParquetColumnType::String);
 
     ParquetWriter writer(path, schema);
 
@@ -125,9 +117,9 @@ void dumpLabelsets(const LabelSetMap& labelsets, const fs::Path& path) {
                   "GraphMetadataParquetDumper assumes a 4-integer LabelSet");
 
     ParquetWriteSchema schema;
-    schema.addColumn(LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
     for (size_t column = 0; column < LabelSet::IntegerCount; ++column) {
-        schema.addColumn(LABELSET_INTEGER_COLUMNS[column], ParquetColumnType::UInt64);
+        schema.addColumn(layout::LABELSET_INTEGER_COLUMNS[column], ParquetColumnType::UInt64);
     }
 
     ParquetWriter writer(path, schema);
@@ -162,8 +154,8 @@ void dumpLabelsets(const LabelSetMap& labelsets, const fs::Path& path) {
 }
 
 void GraphMetadataParquetDumper::dump(const GraphMetadata& metadata, const fs::Path& commitDir) {
-    dumpLabels(metadata.labels(), commitParquetLayout::labels(commitDir));
-    dumpEdgeTypes(metadata.edgeTypes(), commitParquetLayout::edgeTypes(commitDir));
-    dumpPropertyTypes(metadata.propTypes(), commitParquetLayout::propertyTypes(commitDir));
-    dumpLabelsets(metadata.labelsets(), commitParquetLayout::labelsets(commitDir));
+    dumpLabels(metadata.labels(), layout::labels(commitDir));
+    dumpEdgeTypes(metadata.edgeTypes(), layout::edgeTypes(commitDir));
+    dumpPropertyTypes(metadata.propTypes(), layout::propertyTypes(commitDir));
+    dumpLabelsets(metadata.labelsets(), layout::labelsets(commitDir));
 }

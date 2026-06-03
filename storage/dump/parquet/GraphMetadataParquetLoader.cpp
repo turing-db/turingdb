@@ -6,11 +6,15 @@
 #include <array>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <parquet/types.h>
 
+#include <spdlog/fmt/fmt.h>
+
 #include "ParquetReader.h"
+#include "ParquetWriteSchema.h"
 
 #include "CommitParquetLayout.h"
 #include "metadata/EdgeTypeMap.h"
@@ -26,6 +30,8 @@
 #include "FatalException.h"
 
 using namespace db;
+
+namespace layout = commitParquetLayout;
 
 namespace {
 
@@ -91,13 +97,34 @@ public:
     }
 };
 
+// Every per-row loop below indexes the secondary columns by the id column's length, so
+// a truncated or corrupt file must fail here rather than read out of bounds.
+void checkColumnsAgree(bool columnsAgree, std::string_view table) {
+    if (!columnsAgree) {
+        throw FatalException(fmt::format(
+            "GraphMetadataParquetLoader: {} columns have mismatched lengths", table));
+    }
+}
+
+void readNameTable(const fs::Path& path,
+                   std::string_view idColumnName,
+                   std::string_view table,
+                   NameTableVisitor& visitor) {
+    ParquetWriteSchema expectedSchema;
+    expectedSchema.addColumn(idColumnName, ParquetColumnType::UInt64);
+    expectedSchema.addColumn(layout::NAME_COLUMN, ParquetColumnType::String);
+
+    ParquetReader reader(path, visitor);
+    reader.setExpectedSchema(expectedSchema);
+    while (reader.nextChunk()) {
+    }
+
+    checkColumnsAgree(visitor._names.size() == visitor._ids.size(), table);
+}
+
 void loadLabels(const fs::Path& path, LabelMap& labels) {
     NameTableVisitor visitor;
-    {
-        ParquetReader reader(path, visitor);
-        while (reader.nextChunk()) {
-        }
-    }
+    readNameTable(path, layout::LABEL_ID_COLUMN, "labels", visitor);
 
     for (size_t i = 0; i < visitor._ids.size(); ++i) {
         const LabelID id = labels.getOrCreate(visitor._names[i]);
@@ -109,11 +136,7 @@ void loadLabels(const fs::Path& path, LabelMap& labels) {
 
 void loadEdgeTypes(const fs::Path& path, EdgeTypeMap& edgeTypes) {
     NameTableVisitor visitor;
-    {
-        ParquetReader reader(path, visitor);
-        while (reader.nextChunk()) {
-        }
-    }
+    readNameTable(path, layout::EDGE_TYPE_ID_COLUMN, "edge-types", visitor);
 
     for (size_t i = 0; i < visitor._ids.size(); ++i) {
         const EdgeTypeID id = edgeTypes.getOrCreate(visitor._names[i]);
@@ -126,10 +149,20 @@ void loadEdgeTypes(const fs::Path& path, EdgeTypeMap& edgeTypes) {
 void loadPropertyTypes(const fs::Path& path, PropertyTypeMap& propTypes) {
     PropertyTypesVisitor visitor;
     {
+        ParquetWriteSchema expectedSchema;
+        expectedSchema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::VALUE_TYPE_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::NAME_COLUMN, ParquetColumnType::String);
+
         ParquetReader reader(path, visitor);
+        reader.setExpectedSchema(expectedSchema);
         while (reader.nextChunk()) {
         }
     }
+
+    checkColumnsAgree(visitor._valueTypes.size() == visitor._ids.size()
+                          && visitor._names.size() == visitor._ids.size(),
+                      "property-types");
 
     for (size_t i = 0; i < visitor._ids.size(); ++i) {
         const ValueType valueType =
@@ -147,10 +180,23 @@ void loadLabelsets(const fs::Path& path, LabelSetMap& labelsets) {
 
     LabelsetsVisitor visitor;
     {
+        ParquetWriteSchema expectedSchema;
+        expectedSchema.addColumn(layout::LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
+        for (size_t column = 0; column < LabelSet::IntegerCount; ++column) {
+            expectedSchema.addColumn(layout::LABELSET_INTEGER_COLUMNS[column], ParquetColumnType::UInt64);
+        }
+
         ParquetReader reader(path, visitor);
+        reader.setExpectedSchema(expectedSchema);
         while (reader.nextChunk()) {
         }
     }
+
+    bool integerColumnsAgree = true;
+    for (const std::vector<int64_t>& integerColumn : visitor._integers) {
+        integerColumnsAgree = integerColumnsAgree && integerColumn.size() == visitor._ids.size();
+    }
+    checkColumnsAgree(integerColumnsAgree, "labelsets");
 
     for (size_t i = 0; i < visitor._ids.size(); ++i) {
         std::array<LabelSet::IntegerType, LabelSet::IntegerCount> integers;
@@ -169,8 +215,8 @@ void loadLabelsets(const fs::Path& path, LabelSetMap& labelsets) {
 }
 
 void GraphMetadataParquetLoader::load(const fs::Path& commitDir, GraphMetadata& out) {
-    loadLabels(commitParquetLayout::labels(commitDir), out._labelMap);
-    loadEdgeTypes(commitParquetLayout::edgeTypes(commitDir), out._edgeTypeMap);
-    loadPropertyTypes(commitParquetLayout::propertyTypes(commitDir), out._propTypeMap);
-    loadLabelsets(commitParquetLayout::labelsets(commitDir), out._labelsetMap);
+    loadLabels(layout::labels(commitDir), out._labelMap);
+    loadEdgeTypes(layout::edgeTypes(commitDir), out._edgeTypeMap);
+    loadPropertyTypes(layout::propertyTypes(commitDir), out._propTypeMap);
+    loadLabelsets(layout::labelsets(commitDir), out._labelsetMap);
 }

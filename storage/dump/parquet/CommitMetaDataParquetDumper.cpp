@@ -19,14 +19,7 @@
 
 using namespace db;
 
-namespace {
-
-constexpr std::string_view DATA_PART_ID_COLUMN = "data_part_id";
-constexpr std::string_view NUM_NODES_KEY = "turing.num_nodes";
-constexpr std::string_view NUM_EDGES_KEY = "turing.num_edges";
-constexpr std::string_view NUM_COMMIT_DATAPARTS_KEY = "turing.num_commit_dataparts";
-
-}
+namespace layout = commitParquetLayout;
 
 void CommitMetaDataParquetDumper::dump(const Commit& commit, const fs::Path& commitDir) {
     const size_t numNodes = commit.getNumNodes();
@@ -41,12 +34,12 @@ void CommitMetaDataParquetDumper::dump(const Commit& commit, const fs::Path& com
                                               : commit.getNumDataParts();
 
     ParquetWriteSchema schema;
-    schema.addColumn(DATA_PART_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::DATA_PART_ID_COLUMN, ParquetColumnType::UInt64);
 
-    ParquetWriter writer(commitParquetLayout::commitMetaData(commitDir), schema);
-    writer.setMetadata(NUM_NODES_KEY, std::to_string(numNodes));
-    writer.setMetadata(NUM_EDGES_KEY, std::to_string(numEdges));
-    writer.setMetadata(NUM_COMMIT_DATAPARTS_KEY, std::to_string(numCommitDataParts));
+    ParquetWriter writer(layout::commitMetaData(commitDir), schema);
+    writer.setMetadata(layout::NUM_NODES_KEY, std::to_string(numNodes));
+    writer.setMetadata(layout::NUM_EDGES_KEY, std::to_string(numEdges));
+    writer.setMetadata(layout::NUM_COMMIT_DATAPARTS_KEY, std::to_string(numCommitDataParts));
 
     if (hasData) {
         const DataPartSpan allDataParts = commit.data().allDataparts();

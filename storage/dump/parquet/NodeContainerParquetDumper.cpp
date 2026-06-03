@@ -12,19 +12,14 @@
 #include "ParquetWriteSchema.h"
 #include "ParquetWriter.h"
 
+#include "NodeContainerParquetLayout.h"
+
 #include "datapart/NodeContainer.h"
 #include "Path.h"
 
 using namespace db;
 
-namespace {
-
-constexpr std::string_view LABELSET_ID_COLUMN = "labelset_id";
-constexpr std::string_view FIRST_NODE_ID_COLUMN = "first_node_id";
-constexpr std::string_view COUNT_COLUMN = "count";
-constexpr std::string_view FIRST_NODE_ID_KEY = "turing.first_node_id";
-
-}
+namespace layout = nodeContainerParquetLayout;
 
 void NodeContainerParquetDumper::dump(const NodeContainer& nodes,
                                       const fs::Path& rangesPath,
@@ -35,9 +30,9 @@ void NodeContainerParquetDumper::dump(const NodeContainer& nodes,
         const size_t rangeCount = indexer.size();
 
         ParquetWriteSchema schema;
-        schema.addColumn(LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(FIRST_NODE_ID_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(COUNT_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::FIRST_NODE_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::COUNT_COLUMN, ParquetColumnType::UInt64);
 
         ParquetWriter writer(rangesPath, schema);
 
@@ -70,10 +65,10 @@ void NodeContainerParquetDumper::dump(const NodeContainer& nodes,
         const size_t nodeCount = records.size();
 
         ParquetWriteSchema schema;
-        schema.addColumn(LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
 
         ParquetWriter writer(recordsPath, schema);
-        writer.setMetadata(FIRST_NODE_ID_KEY,
+        writer.setMetadata(layout::FIRST_NODE_ID_KEY,
                            fmt::format("{}", nodes.getFirstNodeID().getValue()));
 
         if (nodeCount > 0) {

@@ -13,6 +13,9 @@
 #include <parquet/metadata.h>
 
 #include "ParquetReader.h"
+#include "ParquetWriteSchema.h"
+
+#include "EdgeContainerParquetLayout.h"
 
 #include "datapart/EdgeContainer.h"
 #include "datapart/EdgeRecord.h"
@@ -22,10 +25,9 @@
 
 using namespace db;
 
-namespace {
+namespace layout = edgeContainerParquetLayout;
 
-constexpr std::string_view FIRST_EDGE_ID_KEY = "turing.first_edge_id";
-constexpr std::string_view FIRST_NODE_ID_KEY = "turing.first_node_id";
+namespace {
 
 // One edge file: four INT64 columns (edge_id, node_id, other_id, edge_type_id),
 // plus the first edge/node ids in metadata.
@@ -45,10 +47,10 @@ public:
         if (keyValueMetadata) {
             for (int64_t i = 0; i < keyValueMetadata->size(); ++i) {
                 const std::string& key = keyValueMetadata->key(i);
-                if (key == FIRST_EDGE_ID_KEY) {
+                if (key == layout::FIRST_EDGE_ID_KEY) {
                     _firstEdgeID = static_cast<uint64_t>(std::stoull(keyValueMetadata->value(i)));
                     _hasFirstEdgeID = true;
-                } else if (key == FIRST_NODE_ID_KEY) {
+                } else if (key == layout::FIRST_NODE_ID_KEY) {
                     _firstNodeID = static_cast<uint64_t>(std::stoull(keyValueMetadata->value(i)));
                     _hasFirstNodeID = true;
                 }
@@ -73,20 +75,37 @@ private:
             return _nodeIds;
         } else if (columnIndex == 2) {
             return _otherIds;
-        } else {
+        } else if (columnIndex == 3) {
             return _edgeTypeIds;
+        } else {
+            throw FatalException("EdgeContainerParquetLoader: unexpected edge column");
         }
     }
 };
 
 void readEdgeFile(const fs::Path& path, EdgeColumnsVisitor& visitor) {
+    ParquetWriteSchema expectedSchema;
+    expectedSchema.addColumn(layout::EDGE_ID_COLUMN, ParquetColumnType::UInt64);
+    expectedSchema.addColumn(layout::NODE_ID_COLUMN, ParquetColumnType::UInt64);
+    expectedSchema.addColumn(layout::OTHER_ID_COLUMN, ParquetColumnType::UInt64);
+    expectedSchema.addColumn(layout::EDGE_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+
     ParquetReader reader(path, visitor);
+    reader.setExpectedSchema(expectedSchema);
     while (reader.nextChunk()) {
     }
 }
 
 void buildRecords(const EdgeColumnsVisitor& visitor, std::vector<EdgeRecord>& out) {
     const size_t count = visitor._edgeIds.size();
+
+    const bool columnsAgree = visitor._nodeIds.size() == count
+                              && visitor._otherIds.size() == count
+                              && visitor._edgeTypeIds.size() == count;
+    if (!columnsAgree) {
+        throw FatalException("EdgeContainerParquetLoader: edge columns have mismatched lengths");
+    }
+
     out.resize(count);
     for (size_t i = 0; i < count; ++i) {
         out[i]._edgeID = EdgeID {static_cast<uint64_t>(visitor._edgeIds[i])};

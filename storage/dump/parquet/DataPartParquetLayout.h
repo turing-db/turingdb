@@ -17,6 +17,11 @@ constexpr std::string_view NODE_PROPS_PREFIX = "node-props-";
 constexpr std::string_view EDGE_PROPS_PREFIX = "edge-props-";
 constexpr std::string_view PARQUET_SUFFIX = ".parquet";
 
+// info.parquet column names, shared by DataPartParquetDumper and DataPartParquetLoader.
+constexpr std::string_view DATA_PART_ID_COLUMN = "data_part_id";
+constexpr std::string_view FIRST_NODE_ID_COLUMN = "first_node_id";
+constexpr std::string_view FIRST_EDGE_ID_COLUMN = "first_edge_id";
+
 inline fs::Path info(const fs::Path& dir) { return dir / "info.parquet"; }
 inline fs::Path nodeRanges(const fs::Path& dir) { return dir / "node-ranges.parquet"; }
 inline fs::Path nodeRecords(const fs::Path& dir) { return dir / "node-records.parquet"; }

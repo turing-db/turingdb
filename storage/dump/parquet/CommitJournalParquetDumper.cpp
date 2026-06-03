@@ -19,9 +19,6 @@ using namespace db;
 
 namespace {
 
-constexpr std::string_view NODE_ID_COLUMN = "node_id";
-constexpr std::string_view EDGE_ID_COLUMN = "edge_id";
-
 template <typename WriteSetType>
 void dumpWriteSet(const WriteSetType& writeSet, std::string_view columnName, const fs::Path& path) {
     ParquetWriteSchema schema;
@@ -48,6 +45,10 @@ void dumpWriteSet(const WriteSetType& writeSet, std::string_view columnName, con
 }
 
 void CommitJournalParquetDumper::dump(const CommitJournal& journal, const fs::Path& commitDir) {
-    dumpWriteSet(journal.nodeWriteSet(), NODE_ID_COLUMN, commitParquetLayout::journalNodes(commitDir));
-    dumpWriteSet(journal.edgeWriteSet(), EDGE_ID_COLUMN, commitParquetLayout::journalEdges(commitDir));
+    dumpWriteSet(journal.nodeWriteSet(),
+                 commitParquetLayout::NODE_ID_COLUMN,
+                 commitParquetLayout::journalNodes(commitDir));
+    dumpWriteSet(journal.edgeWriteSet(),
+                 commitParquetLayout::EDGE_ID_COLUMN,
+                 commitParquetLayout::journalEdges(commitDir));
 }

@@ -4,9 +4,11 @@
 #include <stdint.h>
 
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include "ParquetReader.h"
+#include "ParquetWriteSchema.h"
 
 #include "CommitParquetLayout.h"
 #include "versioning/TombstoneSet.h"
@@ -32,10 +34,14 @@ public:
 };
 
 template <typename IDT>
-void loadTombstoneSet(const fs::Path& path, TombstoneSet<IDT>& out) {
+void loadTombstoneSet(const fs::Path& path, std::string_view columnName, TombstoneSet<IDT>& out) {
     IdColumnVisitor visitor;
     {
+        ParquetWriteSchema expectedSchema;
+        expectedSchema.addColumn(columnName, ParquetColumnType::UInt64);
+
         ParquetReader reader(path, visitor);
+        reader.setExpectedSchema(expectedSchema);
         while (reader.nextChunk()) {
         }
     }
@@ -53,6 +59,10 @@ void loadTombstoneSet(const fs::Path& path, TombstoneSet<IDT>& out) {
 }
 
 void TombstonesParquetLoader::load(const fs::Path& commitDir, Tombstones& out) {
-    loadTombstoneSet<NodeID>(commitParquetLayout::tombstoneNodes(commitDir), out.nodeTombstones());
-    loadTombstoneSet<EdgeID>(commitParquetLayout::tombstoneEdges(commitDir), out.edgeTombstones());
+    loadTombstoneSet<NodeID>(commitParquetLayout::tombstoneNodes(commitDir),
+                             commitParquetLayout::NODE_ID_COLUMN,
+                             out.nodeTombstones());
+    loadTombstoneSet<EdgeID>(commitParquetLayout::tombstoneEdges(commitDir),
+                             commitParquetLayout::EDGE_ID_COLUMN,
+                             out.edgeTombstones());
 }

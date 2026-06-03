@@ -19,9 +19,6 @@ using namespace db;
 
 namespace {
 
-constexpr std::string_view NODE_ID_COLUMN = "node_id";
-constexpr std::string_view EDGE_ID_COLUMN = "edge_id";
-
 template <typename TombstoneSetType>
 void dumpTombstoneSet(const TombstoneSetType& set, std::string_view columnName, const fs::Path& path) {
     ParquetWriteSchema schema;
@@ -48,6 +45,10 @@ void dumpTombstoneSet(const TombstoneSetType& set, std::string_view columnName, 
 }
 
 void TombstonesParquetDumper::dump(const Tombstones& tombstones, const fs::Path& commitDir) {
-    dumpTombstoneSet(tombstones.nodeTombstones(), NODE_ID_COLUMN, commitParquetLayout::tombstoneNodes(commitDir));
-    dumpTombstoneSet(tombstones.edgeTombstones(), EDGE_ID_COLUMN, commitParquetLayout::tombstoneEdges(commitDir));
+    dumpTombstoneSet(tombstones.nodeTombstones(),
+                     commitParquetLayout::NODE_ID_COLUMN,
+                     commitParquetLayout::tombstoneNodes(commitDir));
+    dumpTombstoneSet(tombstones.edgeTombstones(),
+                     commitParquetLayout::EDGE_ID_COLUMN,
+                     commitParquetLayout::tombstoneEdges(commitDir));
 }

@@ -13,6 +13,8 @@
 #include "ParquetWriteSchema.h"
 #include "ParquetWriter.h"
 
+#include "PropertyContainerParquetLayout.h"
+
 #include "properties/PropertyContainer.h"
 #include "metadata/PropertyType.h"
 #include "Path.h"
@@ -21,12 +23,9 @@
 
 using namespace db;
 
-namespace {
+namespace layout = propertyContainerParquetLayout;
 
-constexpr std::string_view ENTITY_ID_COLUMN = "entity_id";
-constexpr std::string_view VALUE_COLUMN = "value";
-constexpr std::string_view VALUE_TYPE_KEY = "turing.value_type";
-constexpr std::string_view DIMENSION_KEY = "turing.embedding_dimension";
+namespace {
 
 void gatherEntityIds(const PropertyContainer& props, std::vector<int64_t>& idsOut) {
     const PropertyContainer::IDs& ids = props.ids();
@@ -46,27 +45,27 @@ void PropertyContainerParquetDumper::dump(const PropertyContainer& props, const 
     size_t embeddingDimension = 0;
 
     ParquetWriteSchema schema;
-    schema.addColumn(ENTITY_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::ENTITY_ID_COLUMN, ParquetColumnType::UInt64);
 
     switch (valueType) {
         case ValueType::Int64:
-            schema.addColumn(VALUE_COLUMN, ParquetColumnType::Int64);
+            schema.addColumn(layout::VALUE_COLUMN, ParquetColumnType::Int64);
         break;
         case ValueType::UInt64:
-            schema.addColumn(VALUE_COLUMN, ParquetColumnType::UInt64);
+            schema.addColumn(layout::VALUE_COLUMN, ParquetColumnType::UInt64);
         break;
         case ValueType::Double:
-            schema.addColumn(VALUE_COLUMN, ParquetColumnType::Double);
+            schema.addColumn(layout::VALUE_COLUMN, ParquetColumnType::Double);
         break;
         case ValueType::Bool:
-            schema.addColumn(VALUE_COLUMN, ParquetColumnType::Bool);
+            schema.addColumn(layout::VALUE_COLUMN, ParquetColumnType::Bool);
         break;
         case ValueType::String:
-            schema.addColumn(VALUE_COLUMN, ParquetColumnType::String);
+            schema.addColumn(layout::VALUE_COLUMN, ParquetColumnType::String);
         break;
         case ValueType::Embedding:
             embeddingDimension = props.cast<types::Embedding>().getRawContainer().getDimension();
-            schema.addFixedLenColumn(VALUE_COLUMN, embeddingDimension * sizeof(float));
+            schema.addFixedLenColumn(layout::VALUE_COLUMN, embeddingDimension * sizeof(float));
         break;
         case ValueType::Invalid:
         case ValueType::_SIZE:
@@ -75,9 +74,9 @@ void PropertyContainerParquetDumper::dump(const PropertyContainer& props, const 
     }
 
     ParquetWriter writer(path, schema);
-    writer.setMetadata(VALUE_TYPE_KEY, fmt::format("{}", static_cast<unsigned>(valueType)));
+    writer.setMetadata(layout::VALUE_TYPE_KEY, fmt::format("{}", static_cast<unsigned>(valueType)));
     if (valueType == ValueType::Embedding) {
-        writer.setMetadata(DIMENSION_KEY, fmt::format("{}", embeddingDimension));
+        writer.setMetadata(layout::DIMENSION_KEY, fmt::format("{}", embeddingDimension));
     }
 
     if (count > 0) {

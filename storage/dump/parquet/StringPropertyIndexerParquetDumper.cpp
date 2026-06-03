@@ -10,23 +10,15 @@
 #include "ParquetWriteSchema.h"
 #include "ParquetWriter.h"
 
+#include "StringPropertyIndexerParquetLayout.h"
+
 #include "indexers/StringPropertyIndexer.h"
 #include "indexes/StringIndex.h"
 #include "Path.h"
 
 using namespace db;
 
-namespace {
-
-constexpr std::string_view PROPERTY_TYPE_ID_COLUMN = "property_type_id";
-constexpr std::string_view NODE_COUNT_COLUMN = "node_count";
-constexpr std::string_view PARENT_NODE_ID_COLUMN = "parent_node_id";
-constexpr std::string_view CHILD_INDEX_COLUMN = "child_index";
-constexpr std::string_view CHILD_NODE_ID_COLUMN = "child_node_id";
-constexpr std::string_view NODE_ID_COLUMN = "node_id";
-constexpr std::string_view ENTITY_ID_COLUMN = "entity_id";
-
-}
+namespace layout = stringPropertyIndexerParquetLayout;
 
 void StringPropertyIndexerParquetDumper::dump(const StringPropertyIndexer& indexer,
                                               const fs::Path& indexesPath,
@@ -35,8 +27,8 @@ void StringPropertyIndexerParquetDumper::dump(const StringPropertyIndexer& index
     // Indexes table: one row per indexed property type.
     {
         ParquetWriteSchema schema;
-        schema.addColumn(PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(NODE_COUNT_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::NODE_COUNT_COLUMN, ParquetColumnType::UInt64);
 
         ParquetWriter writer(indexesPath, schema);
 
@@ -59,10 +51,10 @@ void StringPropertyIndexerParquetDumper::dump(const StringPropertyIndexer& index
     // Children table: one row per non-null child link.
     {
         ParquetWriteSchema schema;
-        schema.addColumn(PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(PARENT_NODE_ID_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(CHILD_INDEX_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(CHILD_NODE_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::PARENT_NODE_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::CHILD_INDEX_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::CHILD_NODE_ID_COLUMN, ParquetColumnType::UInt64);
 
         ParquetWriter writer(childrenPath, schema);
 
@@ -101,9 +93,9 @@ void StringPropertyIndexerParquetDumper::dump(const StringPropertyIndexer& index
     // Owners table: one row per (node, owner) pair.
     {
         ParquetWriteSchema schema;
-        schema.addColumn(PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(NODE_ID_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(ENTITY_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::NODE_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::ENTITY_ID_COLUMN, ParquetColumnType::UInt64);
 
         ParquetWriter writer(ownersPath, schema);
 

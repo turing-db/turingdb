@@ -9,6 +9,8 @@
 #include "ParquetWriteSchema.h"
 #include "ParquetWriter.h"
 
+#include "PropertyIndexerParquetLayout.h"
+
 #include "indexers/PropertyIndexer.h"
 #include "indexers/LabelSetIndexer.h"
 #include "metadata/LabelSetHandle.h"
@@ -18,14 +20,7 @@
 
 using namespace db;
 
-namespace {
-
-constexpr std::string_view PROPERTY_TYPE_ID_COLUMN = "property_type_id";
-constexpr std::string_view LABELSET_ID_COLUMN = "labelset_id";
-constexpr std::string_view OFFSET_COLUMN = "offset";
-constexpr std::string_view COUNT_COLUMN = "count";
-
-}
+namespace layout = propertyIndexerParquetLayout;
 
 void PropertyIndexerParquetDumper::dump(const PropertyIndexer& indexer, const fs::Path& path) {
     size_t totalRanges = 0;
@@ -42,10 +37,10 @@ void PropertyIndexerParquetDumper::dump(const PropertyIndexer& indexer, const fs
     }
 
     ParquetWriteSchema schema;
-    schema.addColumn(PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(OFFSET_COLUMN, ParquetColumnType::UInt64);
-    schema.addColumn(COUNT_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::OFFSET_COLUMN, ParquetColumnType::UInt64);
+    schema.addColumn(layout::COUNT_COLUMN, ParquetColumnType::UInt64);
 
     ParquetWriter writer(path, schema);
 

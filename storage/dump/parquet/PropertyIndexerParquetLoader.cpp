@@ -5,9 +5,13 @@
 
 #include <optional>
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include "ParquetReader.h"
+#include "ParquetWriteSchema.h"
+
+#include "PropertyIndexerParquetLayout.h"
 
 #include "indexers/PropertyIndexer.h"
 #include "indexers/LabelSetIndexer.h"
@@ -17,6 +21,8 @@
 #include "FatalException.h"
 
 using namespace db;
+
+namespace layout = propertyIndexerParquetLayout;
 
 namespace {
 
@@ -44,8 +50,10 @@ private:
             return _labelsetIds;
         } else if (columnIndex == 2) {
             return _offsets;
-        } else {
+        } else if (columnIndex == 3) {
             return _counts;
+        } else {
+            throw FatalException("PropertyIndexerParquetLoader: unexpected column");
         }
     }
 };
@@ -57,9 +65,23 @@ void PropertyIndexerParquetLoader::load(const fs::Path& path,
                                         PropertyIndexer& out) {
     PropertyIndexerVisitor visitor;
     {
+        ParquetWriteSchema expectedSchema;
+        expectedSchema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::LABELSET_ID_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::OFFSET_COLUMN, ParquetColumnType::UInt64);
+        expectedSchema.addColumn(layout::COUNT_COLUMN, ParquetColumnType::UInt64);
+
         ParquetReader reader(path, visitor);
+        reader.setExpectedSchema(expectedSchema);
         while (reader.nextChunk()) {
         }
+    }
+
+    const bool columnsAgree = visitor._labelsetIds.size() == visitor._propertyTypeIds.size()
+                              && visitor._offsets.size() == visitor._propertyTypeIds.size()
+                              && visitor._counts.size() == visitor._propertyTypeIds.size();
+    if (!columnsAgree) {
+        throw FatalException("PropertyIndexerParquetLoader: columns have mismatched lengths");
     }
 
     for (size_t i = 0; i < visitor._propertyTypeIds.size(); ++i) {

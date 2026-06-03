@@ -4,9 +4,11 @@
 #include <stdint.h>
 
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include "ParquetReader.h"
+#include "ParquetWriteSchema.h"
 
 #include "CommitParquetLayout.h"
 #include "versioning/CommitJournal.h"
@@ -32,10 +34,14 @@ public:
 };
 
 template <typename IDT>
-void loadWriteSet(const fs::Path& path, std::vector<IDT>& out) {
+void loadWriteSet(const fs::Path& path, std::string_view columnName, std::vector<IDT>& out) {
     IdColumnVisitor visitor;
     {
+        ParquetWriteSchema expectedSchema;
+        expectedSchema.addColumn(columnName, ParquetColumnType::UInt64);
+
         ParquetReader reader(path, visitor);
+        reader.setExpectedSchema(expectedSchema);
         while (reader.nextChunk()) {
         }
     }
@@ -49,6 +55,10 @@ void loadWriteSet(const fs::Path& path, std::vector<IDT>& out) {
 }
 
 void CommitJournalParquetLoader::load(const fs::Path& commitDir, CommitJournal& out) {
-    loadWriteSet<NodeID>(commitParquetLayout::journalNodes(commitDir), out.rawNodeWriteSet());
-    loadWriteSet<EdgeID>(commitParquetLayout::journalEdges(commitDir), out.rawEdgeWriteSet());
+    loadWriteSet<NodeID>(commitParquetLayout::journalNodes(commitDir),
+                         commitParquetLayout::NODE_ID_COLUMN,
+                         out.rawNodeWriteSet());
+    loadWriteSet<EdgeID>(commitParquetLayout::journalEdges(commitDir),
+                         commitParquetLayout::EDGE_ID_COLUMN,
+                         out.rawEdgeWriteSet());
 }
