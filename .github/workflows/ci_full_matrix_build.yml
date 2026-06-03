@@ -13,7 +13,7 @@ jobs:
   build:
     uses: ./.github/workflows/ci_build.yml
     with:
-      os_list: '["ubuntu-22.04", "ubuntu-24.04", "macos-14-large", "macos-15-large", "macos-26-large"]'
+      os_list: '["ubuntu-22.04", "ubuntu-24.04", "macos-14-xlarge", "macos-15-xlarge", "macos-26-xlarge"]'
       python_version_list: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
     secrets: inherit
 
