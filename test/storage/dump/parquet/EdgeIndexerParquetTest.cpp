@@ -71,14 +71,12 @@ TEST_F(EdgeIndexerParquetTest, CoreOnlyRoundTrip) {
 
     const fs::Path base = fs::Path(_outDir);
     const fs::Path nodeDataPath = base / "edge-indexer-nodedata.parquet";
-    const fs::Path patchPath = base / "edge-indexer-patch.parquet";
     const fs::Path outSpansPath = base / "edge-indexer-out-spans.parquet";
     const fs::Path inSpansPath = base / "edge-indexer-in-spans.parquet";
 
-    EdgeIndexerParquetDumper::dump(*indexer, nodeDataPath, patchPath, outSpansPath, inSpansPath);
+    EdgeIndexerParquetDumper::dump(*indexer, nodeDataPath, outSpansPath, inSpansPath);
 
     const std::unique_ptr<EdgeIndexer> loaded = EdgeIndexerParquetLoader::load(nodeDataPath,
-                                                                               patchPath,
                                                                                outSpansPath,
                                                                                inSpansPath,
                                                                                labelsets,

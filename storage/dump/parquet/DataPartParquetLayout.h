@@ -23,7 +23,6 @@ inline fs::Path nodeRecords(const fs::Path& dir) { return dir / "node-records.pa
 inline fs::Path edgesOut(const fs::Path& dir) { return dir / "edges-out.parquet"; }
 inline fs::Path edgesIn(const fs::Path& dir) { return dir / "edges-in.parquet"; }
 inline fs::Path edgeIndexerNodeData(const fs::Path& dir) { return dir / "edge-indexer-nodedata.parquet"; }
-inline fs::Path edgeIndexerPatch(const fs::Path& dir) { return dir / "edge-indexer-patch.parquet"; }
 inline fs::Path edgeIndexerOutSpans(const fs::Path& dir) { return dir / "edge-indexer-out-spans.parquet"; }
 inline fs::Path edgeIndexerInSpans(const fs::Path& dir) { return dir / "edge-indexer-in-spans.parquet"; }
 inline fs::Path nodePropIndexer(const fs::Path& dir) { return dir / "node-prop-indexer.parquet"; }

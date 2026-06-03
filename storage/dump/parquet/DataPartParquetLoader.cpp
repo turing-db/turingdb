@@ -162,7 +162,6 @@ void DataPartParquetLoader::fillContainers(DataPart& part,
                                                    layout::edgesIn(partDir));
 
     part._edgeIndexer = EdgeIndexerParquetLoader::load(layout::edgeIndexerNodeData(partDir),
-                                                       layout::edgeIndexerPatch(partDir),
                                                        layout::edgeIndexerOutSpans(partDir),
                                                        layout::edgeIndexerInSpans(partDir),
                                                        labelsets,

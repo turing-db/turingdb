@@ -73,7 +73,6 @@ void DataPartParquetDumper::dump(const DataPart& part, const fs::Path& partDir) 
 
     EdgeIndexerParquetDumper::dump(part.edgeIndexer(),
                                    layout::edgeIndexerNodeData(partDir),
-                                   layout::edgeIndexerPatch(partDir),
                                    layout::edgeIndexerOutSpans(partDir),
                                    layout::edgeIndexerInSpans(partDir));
 

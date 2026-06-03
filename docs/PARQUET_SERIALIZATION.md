@@ -94,11 +94,14 @@ readiness are secondary benefits, not the driver.
    we content-hash. Larger dumps are acceptable; Parquet compression mitigates, and
    load stays a straight column read.
 
-   > This includes the one structure the *current* binary format reconstructs:
-   > `EdgeIndexer::_patchNodeOffsets` is not written by `EdgeIndexerDumper` today and
-   > is rebuilt on load. To honor this principle we serialize it explicitly
-   > ([§5.4](#54-edgeindexer)), making the Parquet dump strictly more self-contained
-   > than the binary one.
+   > The one deliberate exception, matching the binary format, is
+   > `EdgeIndexer::_patchNodeOffsets`: it is not written and is rebuilt on load by
+   > recovering each patch node's id from its first edge ([§5.4](#54-edgeindexer)).
+   > It is a pure `NodeID → index` lookup over the already-loaded `_patchNodes` and
+   > the `EdgeContainer`, with no sort or tree build, so reconstructing it is O(patch
+   > nodes) and cannot diverge from the loaded state — the cost principle 1 guards
+   > against does not apply. Keeping the Parquet path identical to the binary
+   > `EdgeIndexerLoader` here is worth more than the marginal self-containment.
 
 2. **Parquet is a storage encoding, not an identity.** No random local ID and no
    format padding influences object identity; identity is computed over the
@@ -203,7 +206,6 @@ dataparts/<id>/
   edge-indexer-nodedata.parquet       # out_first, out_count, in_first, in_count   (row i = node i)
   edge-indexer-out-spans.parquet      # labelset_id, offset, count
   edge-indexer-in-spans.parquet       # labelset_id, offset, count
-  edge-indexer-patch.parquet          # node_id, offset                  (explicit; see 5.4)
   node-prop-indexer.parquet           # property_type_id, labelset_id, offset, count
   edge-prop-indexer.parquet           # property_type_id, labelset_id, offset, count
   node-props-<ptID>.parquet           # entity_id, value
@@ -371,9 +373,13 @@ Members: `_firstNodeID`, `_firstEdgeID`, `std::vector<NodeEdgeData> _nodes`,
   `patchNodeCount`. The review caught this; the implementation slices correctly.)
 - **`edge-indexer-out-spans.parquet`** / **`edge-indexer-in-spans.parquet`** — one
   row per span, grouped by labelset in map order: `labelset_id`, `offset`, `count`.
-- **`edge-indexer-patch.parquet`** — `node_id`, `offset`: the `_patchNodeOffsets`
-  map, **serialized explicitly** (the binary dumper rebuilds it; we do not — see
-  principle 1).
+- `_patchNodeOffsets` is **not written**. The loader rebuilds it exactly as the binary
+  `EdgeIndexerLoader` does: for each of the first `patchNodeCount` entries of `_nodes`
+  (the patch prefix), it recovers the node id from that node's first out-edge
+  (`outs[outRange.first]._nodeID`), or its first in-edge if it has no out-edges, and maps
+  that id to the patch index. This is the one place the Parquet path reconstructs rather
+  than reads back — a cheap O(patch nodes) lookup with no sort or tree build (see the
+  exception under principle 1).
 - Scalars `firstNodeID`, `firstEdgeID`, `coreNodeCount`, `patchNodeCount` in metadata.
 
 ### 5.5 PropertyIndexer (`storage/indexers/PropertyIndexer.h`)

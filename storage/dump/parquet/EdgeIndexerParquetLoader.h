@@ -10,15 +10,15 @@ class EdgeIndexer;
 class EdgeContainer;
 class LabelSetMap;
 
-// Rebuilds an EdgeIndexer from the four files written by EdgeIndexerParquetDumper,
-// loading the nodedata, patch offsets, and label-set spans directly. Span values
-// are bound to the supplied EdgeContainer's edge arrays and label-set keys to the
-// supplied LabelSetMap (neither pointer can be serialized). _patchNodeOffsets is
-// read from the dump, not rebuilt by scanning edges. Throws on failure.
+// Rebuilds an EdgeIndexer from the three files written by EdgeIndexerParquetDumper,
+// loading the nodedata and label-set spans directly. Span values are bound to the
+// supplied EdgeContainer's edge arrays and label-set keys to the supplied LabelSetMap
+// (neither pointer can be serialized). _patchNodeOffsets is rebuilt by scanning each
+// patch node's first edge for its node id, as the binary EdgeIndexerLoader does.
+// Throws on failure.
 class EdgeIndexerParquetLoader {
 public:
     static std::unique_ptr<EdgeIndexer> load(const fs::Path& nodeDataPath,
-                                             const fs::Path& patchPath,
                                              const fs::Path& outSpansPath,
                                              const fs::Path& inSpansPath,
                                              const LabelSetMap& labelsets,

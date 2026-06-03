@@ -5,7 +5,6 @@
 
 #include <span>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include <spdlog/fmt/fmt.h>
@@ -28,8 +27,6 @@ constexpr std::string_view OUT_FIRST_COLUMN = "out_first";
 constexpr std::string_view OUT_COUNT_COLUMN = "out_count";
 constexpr std::string_view IN_FIRST_COLUMN = "in_first";
 constexpr std::string_view IN_COUNT_COLUMN = "in_count";
-constexpr std::string_view NODE_ID_COLUMN = "node_id";
-constexpr std::string_view OFFSET_COLUMN = "offset";
 constexpr std::string_view LABELSET_ID_COLUMN = "labelset_id";
 constexpr std::string_view SPAN_OFFSET_COLUMN = "span_offset";
 constexpr std::string_view SPAN_COUNT_COLUMN = "span_count";
@@ -83,7 +80,6 @@ void writeSpansFile(const LabelSetIndexer<EdgeIndexer::EdgeSpans>& spansByLabelS
 
 void EdgeIndexerParquetDumper::dump(const EdgeIndexer& indexer,
                                     const fs::Path& nodeDataPath,
-                                    const fs::Path& patchPath,
                                     const fs::Path& outSpansPath,
                                     const fs::Path& inSpansPath) {
     const std::span<const NodeEdgeData> nodeData = indexer.getNodeData();
@@ -130,36 +126,10 @@ void EdgeIndexerParquetDumper::dump(const EdgeIndexer& indexer,
         writer.finish();
     }
 
-    // Patch-node offset map, dumped explicitly (not rebuilt on load).
-    {
-        ParquetWriteSchema schema;
-        schema.addColumn(NODE_ID_COLUMN, ParquetColumnType::UInt64);
-        schema.addColumn(OFFSET_COLUMN, ParquetColumnType::UInt64);
-
-        ParquetWriter writer(patchPath, schema);
-
-        const std::unordered_map<NodeID, size_t>& patchOffsets = indexer._patchNodeOffsets;
-        if (!patchOffsets.empty()) {
-            std::vector<int64_t> nodeIds;
-            std::vector<int64_t> offsets;
-            nodeIds.reserve(patchOffsets.size());
-            offsets.reserve(patchOffsets.size());
-
-            for (const auto& [nodeID, offset] : patchOffsets) {
-                nodeIds.push_back(static_cast<int64_t>(nodeID.getValue()));
-                offsets.push_back(static_cast<int64_t>(offset));
-            }
-
-            writer.beginRowGroup(patchOffsets.size());
-            writer.writeInt64Column(0, nodeIds);
-            writer.writeInt64Column(1, offsets);
-        }
-
-        writer.finish();
-    }
-
     // Out / in label-set span tables. _edges supplies the base of each direction's
-    // edge array so spans can be stored as (offset, count).
+    // edge array so spans can be stored as (offset, count). _patchNodeOffsets is not
+    // written; the loader rebuilds it from the per-node ranges and the edges, as the
+    // binary EdgeIndexerLoader does.
     writeSpansFile(indexer.getOutsByLabelSet(), indexer._edges->getOuts(), outSpansPath);
     writeSpansFile(indexer.getInsByLabelSet(), indexer._edges->getIns(), inSpansPath);
 }

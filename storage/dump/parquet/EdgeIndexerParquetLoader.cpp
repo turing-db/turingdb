@@ -7,7 +7,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include <arrow/util/key_value_metadata.h>
@@ -100,21 +99,6 @@ private:
     }
 };
 
-// Patch offsets: two INT64 columns (node_id, offset).
-class PatchVisitor : public ParquetSaxVisitor {
-public:
-    std::vector<int64_t> _nodeIds;
-    std::vector<int64_t> _offsets;
-
-    bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) override {
-        std::vector<int64_t>& target = (columnIndex == 0) ? _nodeIds : _offsets;
-        for (const int64_t value : values) {
-            target.push_back(value);
-        }
-        return true;
-    }
-};
-
 // Label-set spans: three INT64 columns (labelset_id, offset, count).
 class SpansVisitor : public ParquetSaxVisitor {
 public:
@@ -161,16 +145,12 @@ LabelSetHandle resolveHandle(const LabelSetMap& labelsets, int64_t labelsetId) {
 }
 
 std::unique_ptr<EdgeIndexer> EdgeIndexerParquetLoader::load(const fs::Path& nodeDataPath,
-                                                           const fs::Path& patchPath,
                                                            const fs::Path& outSpansPath,
                                                            const fs::Path& inSpansPath,
                                                            const LabelSetMap& labelsets,
                                                            const EdgeContainer& edges) {
     NodeDataVisitor nodeVisitor;
     readFile(nodeDataPath, nodeVisitor);
-
-    PatchVisitor patchVisitor;
-    readFile(patchPath, patchVisitor);
 
     SpansVisitor outSpansVisitor;
     readFile(outSpansPath, outSpansVisitor);
@@ -199,12 +179,27 @@ std::unique_ptr<EdgeIndexer> EdgeIndexerParquetLoader::load(const fs::Path& node
     indexer->_coreNodes = std::span<NodeEdgeData>(indexer->_nodes.data() + patchNodeCount,
                                                   coreNodeCount);
 
-    for (size_t i = 0; i < patchVisitor._nodeIds.size(); ++i) {
-        const NodeID nodeID {static_cast<uint64_t>(patchVisitor._nodeIds[i])};
-        indexer->_patchNodeOffsets[nodeID] = static_cast<size_t>(patchVisitor._offsets[i]);
+    const std::span<const EdgeRecord> outs = edges.getOuts();
+    const std::span<const EdgeRecord> ins = edges.getIns();
+
+    // Rebuild the patch-node offset map by recovering each patch node's id from its first
+    // edge, exactly as the binary EdgeIndexerLoader does — nothing is stored for it.
+    for (size_t i = 0; i < patchNodeCount; ++i) {
+        const NodeEdgeData& data = indexer->_patchNodes[i];
+
+        const bool hasOutEdge = data._outRange._count != 0;
+        const bool hasInEdge = data._inRange._count != 0;
+
+        if (!hasOutEdge && !hasInEdge) {
+            // A node recorded as a patch must have at least one edge.
+            throw FatalException("EdgeIndexerParquetLoader: patch node has no edges");
+        }
+
+        const NodeID nodeID = hasOutEdge ? outs[data._outRange._first]._nodeID
+                                         : ins[data._inRange._first]._nodeID;
+        indexer->_patchNodeOffsets[nodeID] = i;
     }
 
-    const std::span<const EdgeRecord> outs = edges.getOuts();
     for (size_t i = 0; i < outSpansVisitor._labelsetIds.size(); ++i) {
         const LabelSetHandle handle = resolveHandle(labelsets, outSpansVisitor._labelsetIds[i]);
         const size_t offset = static_cast<size_t>(outSpansVisitor._offsets[i]);
@@ -212,7 +207,6 @@ std::unique_ptr<EdgeIndexer> EdgeIndexerParquetLoader::load(const fs::Path& node
         indexer->_outLabelSetSpans[handle].emplace_back(outs.data() + offset, count);
     }
 
-    const std::span<const EdgeRecord> ins = edges.getIns();
     for (size_t i = 0; i < inSpansVisitor._labelsetIds.size(); ++i) {
         const LabelSetHandle handle = resolveHandle(labelsets, inSpansVisitor._labelsetIds[i]);
         const size_t offset = static_cast<size_t>(inSpansVisitor._offsets[i]);
