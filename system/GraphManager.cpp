@@ -44,7 +44,7 @@ Graph* GraphManager::createGraph(std::string_view name) {
     const fs::Path path = _config->getGraphsDir() / name;
 
     if (_config->isSyncedOnDisk() && path.exists()) {
-        throw FatalException(fmt::format("Graph '{}' already exists", name));
+        throw TuringException(fmt::format("Graph '{}' already exists", name));
     }
 
     auto reservation = _graphs.reserve(name);
@@ -155,7 +155,7 @@ bool GraphManager::importGraph(std::string_view graphName,
             return loadJsonlDB(graphName, absolute, jobSystem);
         case GraphFileType::BINARY:
             return loadBinaryDB(graphName, absolute, jobSystem);
-        default:
+        case GraphFileType::_SIZE:
             throw TuringException("Unsupported graph type");
     }
 
@@ -222,12 +222,12 @@ bool GraphManager::loadBinaryDB(std::string_view graphName,
 bool GraphManager::loadJsonlDB(std::string_view graphName,
                                const fs::Path& dbPath,
                                JobSystem& jobSystem) {
-    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
+    const fs::Path graphPath = _config->getGraphsDir() / graphName;
+    if (graphPath == dbPath) {
         return false;
     }
 
-    const fs::Path graphPath = _config->getGraphsDir() / graphName;
-    if (graphPath == dbPath) {
+    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
         return false;
     }
 
@@ -283,12 +283,12 @@ bool GraphManager::loadJsonlDB(std::string_view graphName,
 bool GraphManager::loadGmlDB(std::string_view graphName,
                              const fs::Path& dbPath,
                              JobSystem& jobSystem) {
-    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
+    const fs::Path graphPath = _config->getGraphsDir() / graphName;
+    if (graphPath == dbPath) {
         return false;
     }
 
-    const fs::Path graphPath = _config->getGraphsDir() / graphName;
-    if (graphPath == dbPath) {
+    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
         return false;
     }
 

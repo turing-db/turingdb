@@ -4,7 +4,9 @@
 #include <atomic>
 #include <vector>
 #include <string>
+#include <string_view>
 #include <memory>
+#include <algorithm>
 
 #include "ObjectMap.h"
 
@@ -240,4 +242,143 @@ TEST_F(ObjectMapTest, concurrentReserveSameNameSingleWinner) {
     }
 
     ASSERT_EQ(validCount.load(), 1);
+}
+
+TEST_F(ObjectMapTest, sizeCountsOnlyPublishedSlots) {
+    ObjectMap<TestObject> map;
+
+    ASSERT_EQ(map.size(), 0u);
+
+    auto first = map.reserve("a");
+
+    // A reserved-but-unpublished slot does not count towards the size.
+    ASSERT_EQ(map.size(), 0u);
+
+    first.publish(makeObject(1));
+    ASSERT_EQ(map.size(), 1u);
+
+    auto second = map.reserve("b");
+    second.publish(makeObject(2));
+    ASSERT_EQ(map.size(), 2u);
+}
+
+TEST_F(ObjectMapTest, cancelledReservationDoesNotChangeSize) {
+    ObjectMap<TestObject> map;
+
+    auto published = map.reserve("a");
+    published.publish(makeObject(1));
+    ASSERT_EQ(map.size(), 1u);
+
+    {
+        auto cancelled = map.reserve("b");
+        // Reserved but never published.
+        ASSERT_EQ(map.size(), 1u);
+    }
+
+    // Cancelling the reservation must not touch the published count.
+    ASSERT_EQ(map.size(), 1u);
+}
+
+TEST_F(ObjectMapTest, listNamesReturnsOnlyPublishedNames) {
+    ObjectMap<TestObject> map;
+
+    auto first = map.reserve("a");
+    first.publish(makeObject(1));
+
+    auto second = map.reserve("b");
+    second.publish(makeObject(2));
+
+    // Reserved but not published: must be excluded from the listing.
+    auto pending = map.reserve("c");
+
+    std::vector<std::string_view> names;
+    map.listNames(names);
+
+    std::sort(names.begin(), names.end());
+    ASSERT_EQ(names.size(), 2u);
+    ASSERT_EQ(names[0], "a");
+    ASSERT_EQ(names[1], "b");
+}
+
+TEST_F(ObjectMapTest, publishedPointersSurviveRehash) {
+    ObjectMap<TestObject> map;
+
+    // Publish one object and capture the pointers handed out before the
+    // map grows.
+    auto first = map.reserve("first");
+    first.publish(makeObject(123));
+
+    const auto* slotBefore = map.getObject("first");
+    ASSERT_NE(slotBefore, nullptr);
+    const TestObject* objectBefore = slotBefore->getObject();
+
+    // Insert many more entries to force the underlying map to rehash.
+    constexpr int extraCount = 1024;
+    for (int i = 0; i < extraCount; ++i) {
+        auto reservation = map.reserve("extra_" + std::to_string(i));
+        reservation.publish(makeObject(i));
+    }
+
+    // Slots live behind unique_ptr and are never moved, so the slot and the
+    // object it owns must still be reachable at the same addresses.
+    const auto* slotAfter = map.getObject("first");
+    ASSERT_EQ(slotAfter, slotBefore);
+    ASSERT_EQ(slotAfter->getObject(), objectBefore);
+    ASSERT_EQ(slotAfter->getObject()->_value, 123);
+}
+
+TEST_F(ObjectMapTest, concurrentCancelDoesNotRaceReaders) {
+    ObjectMap<TestObject> map;
+
+    // A stable published entry that readers can always look up.
+    auto stable = map.reserve("stable");
+    stable.publish(makeObject(99));
+
+    constexpr int threadCount = 8;
+    constexpr int iterations = 200;
+    std::vector<std::thread> threads;
+    threads.reserve(threadCount * 2);
+
+    // Half the threads repeatedly reserve and cancel distinct names,
+    // exercising the unpublished-reservation cleanup path (removeSlot),
+    // which erases from the map under the write lock.
+    for (int t = 0; t < threadCount; ++t) {
+        threads.emplace_back([&map, t]() {
+            for (int i = 0; i < iterations; ++i) {
+                const std::string name = "tmp_" + std::to_string(t) + "_" + std::to_string(i);
+
+                auto reservation = map.reserve(name);
+                ASSERT_TRUE(reservation.isValid());
+
+                // The reservation is destroyed here without publishing,
+                // racing the reader threads below.
+            }
+        });
+    }
+
+    // The other half hammer the read paths concurrently.
+    for (int t = 0; t < threadCount; ++t) {
+        threads.emplace_back([&map]() {
+            for (int i = 0; i < iterations; ++i) {
+                const auto* slot = map.getObject("stable");
+                ASSERT_NE(slot, nullptr);
+                ASSERT_EQ(slot->getObject()->_value, 99);
+
+                std::vector<std::string_view> names;
+                map.listNames(names);
+            }
+        });
+    }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    // Only the pre-published entry survives; every temporary was cancelled.
+    ASSERT_EQ(map.size(), 1u);
+
+    std::vector<std::string_view> names;
+    map.listNames(names);
+    ASSERT_EQ(names.size(), 1u);
+    ASSERT_EQ(names[0], "stable");
 }
