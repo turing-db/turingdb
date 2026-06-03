@@ -1,7 +1,11 @@
 #include "TuringTest.h"
 
+#include "ParquetWriteSchema.h"
+#include "ParquetWriter.h"
+
 #include "dump/parquet/PropertyContainerParquetDumper.h"
 #include "dump/parquet/PropertyContainerParquetLoader.h"
+#include "dump/parquet/PropertyContainerParquetLayout.h"
 #include "comparators/PropertyContainerComparator.h"
 #include "properties/PropertyContainer.h"
 #include "metadata/PropertyType.h"
@@ -16,6 +20,7 @@
 #include <vector>
 
 #include "Path.h"
+#include "FatalException.h"
 
 using namespace db;
 using namespace turing::test;
@@ -93,4 +98,43 @@ TEST_F(PropertyContainerParquetTest, EmbeddingRoundTrip) {
         original.add(EntityID {i}, std::span<const float>(embedding.data(), dimension));
     }
     roundTrip(original, "embedding.parquet");
+}
+
+TEST_F(PropertyContainerParquetTest, MissingEmbeddingDimensionThrows) {
+    namespace layout = propertyContainerParquetLayout;
+
+    // An embedding-typed file without the dimension metadata cannot be interpreted.
+    const fs::Path path = fs::Path(_outDir) / "bad-embedding.parquet";
+    {
+        ParquetWriteSchema schema;
+        schema.addColumn(layout::ENTITY_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addFixedLenColumn(layout::VALUE_COLUMN, 4 * sizeof(float));
+
+        ParquetWriter writer(path, schema);
+        writer.setMetadata(layout::VALUE_TYPE_KEY,
+                           std::to_string(static_cast<unsigned>(ValueType::Embedding)));
+        writer.finish();
+    }
+
+    EXPECT_THROW(PropertyContainerParquetLoader::load(path), FatalException);
+}
+
+TEST_F(PropertyContainerParquetTest, ValueColumnTypeMismatchThrows) {
+    namespace layout = propertyContainerParquetLayout;
+
+    // The metadata claims Double but the value column holds INT64; the loader must
+    // reject the file rather than silently dropping the column.
+    const fs::Path path = fs::Path(_outDir) / "bad-double.parquet";
+    {
+        ParquetWriteSchema schema;
+        schema.addColumn(layout::ENTITY_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::VALUE_COLUMN, ParquetColumnType::Int64);
+
+        ParquetWriter writer(path, schema);
+        writer.setMetadata(layout::VALUE_TYPE_KEY,
+                           std::to_string(static_cast<unsigned>(ValueType::Double)));
+        writer.finish();
+    }
+
+    EXPECT_THROW(PropertyContainerParquetLoader::load(path), FatalException);
 }
