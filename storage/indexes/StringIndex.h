@@ -56,7 +56,7 @@ public:
         static inline size_t charToIndex(char c);
 
         static inline char indexToChar(size_t idx) {
-            if (idx > ALPHABET_SIZE) [[unlikely]] {
+            if (idx >= ALPHABET_SIZE) [[unlikely]] {
                 throw TuringException("Invalid index: " + std::to_string(idx));
             }
             const char c = idx < NUM_ALPHABETICAL_CHARS
