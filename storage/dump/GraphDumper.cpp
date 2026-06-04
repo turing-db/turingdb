@@ -1,5 +1,7 @@
 #include "GraphDumper.h"
 
+#include <spdlog/spdlog.h>
+
 #include "FileReader.h"
 #include "FileWriter.h"
 #include "Graph.h"
@@ -16,6 +18,8 @@ using namespace db;
 
 DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& graphDir) {
     Profile profile("GraphDumper::dump");
+
+    spdlog::info("Dumping graph {}", graph.getName());
 
     auto lock = graph._versionController->lock();
 

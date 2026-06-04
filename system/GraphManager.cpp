@@ -7,7 +7,8 @@
 
 #include "Graph.h"
 
-#include "GraphSerializer.h"
+#include "dump/GraphDumper.h"
+#include "dump/GraphLoader.h"
 #include "versioning/ChangeAccessor.h"
 
 #include "GMLImporter.h"
@@ -56,7 +57,7 @@ Graph* GraphManager::createGraph(std::string_view name) {
     Graph* graphPtr = graph.get();
 
     if (_config->isSyncedOnDisk()) {
-        if (const auto res = graph->getSerializer().dump(); !res) {
+        if (const auto res = GraphDumper::dump(*graph, path); !res) {
             spdlog::error(res.error().fmtMessage());
             return nullptr;
         }
@@ -80,7 +81,7 @@ Graph* GraphManager::loadGraph(std::string_view name) {
     auto graph = Graph::create(std::string(name), graphPath);
     Graph* graphPtr = graph.get();
 
-    if (const auto res = graph->getSerializer().load(); !res) {
+    if (const auto res = GraphLoader::load(graph.get(), graphPath); !res) {
         spdlog::error("Failed to load graph '{}' from {}: {}",
                       name, graphPath.get(), res.error().fmtMessage());
         return nullptr;
@@ -206,7 +207,7 @@ bool GraphManager::loadBinaryDB(std::string_view graphName,
     // in the case of turingDB binaries the path is the same path we load from.
     auto graph = Graph::create(std::string(graphName), dbPath);
 
-    if (auto res = graph->getSerializer().load(); !res) {
+    if (auto res = GraphLoader::load(graph.get(), dbPath); !res) {
         spdlog::error("Could not load graph {}: {}", graphName, res.error().fmtMessage());
         _graphLoadStatus.removeLoadingGraph(graphName);
         return false;
@@ -264,7 +265,7 @@ bool GraphManager::loadJsonlDB(std::string_view graphName,
     }
 
     if (_config->isSyncedOnDisk()) {
-        const auto dumpRes = graph->getSerializer().dump();
+        const auto dumpRes = GraphDumper::dump(*graph, graphPath);
 
         if (!dumpRes) {
             _graphLoadStatus.removeLoadingGraph(graphName);
@@ -310,7 +311,7 @@ bool GraphManager::loadGmlDB(std::string_view graphName,
     }
 
     if (_config->isSyncedOnDisk()) {
-        if (!graph->getSerializer().dump()) {
+        if (!GraphDumper::dump(*graph, graphPath)) {
             _graphLoadStatus.removeLoadingGraph(graphName);
             return false;
         }

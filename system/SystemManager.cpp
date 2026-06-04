@@ -13,7 +13,7 @@
 #include "versioning/Transaction.h"
 #include "versioning/VersionController.h"
 
-#include "GraphSerializer.h"
+#include "dump/GraphDumper.h"
 
 #include "SystemEventHandler.h"
 
@@ -189,7 +189,7 @@ DumpResult<void> SystemManager::dumpGraph(std::string_view graphName) {
         return DumpError::result(DumpErrorType::GRAPH_DOES_NOT_EXIST);
     }
 
-    return graph->getSerializer().dump();
+    return GraphDumper::dump(*graph, graph->getPath());
 }
 
 std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& graphPath) {

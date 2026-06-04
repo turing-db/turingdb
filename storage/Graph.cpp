@@ -1,6 +1,5 @@
 #include "Graph.h"
 
-#include "GraphSerializer.h"
 #include "views/GraphView.h"
 #include "writers/DataPartBuilder.h"
 #include "versioning/Change.h"
@@ -13,16 +12,14 @@ using namespace db;
 Graph::Graph()
     : _graphName("default"),
     _graphPath("/dev/null"),
-    _versionController(new VersionController {this}),
-    _serializer(new GraphSerializer {this})
+    _versionController(new VersionController {this})
 {
 }
 
 Graph::Graph(const std::string& name, const fs::Path& path)
     : _graphName(name),
     _graphPath(path),
-    _versionController(new VersionController {this}),
-    _serializer(new GraphSerializer {this})
+    _versionController(new VersionController {this})
 {
 }
 

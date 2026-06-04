@@ -1,7 +1,6 @@
 
 set(storage_sources
         Graph.cpp
-        GraphSerializer.cpp
         ChangeManager.cpp
         DebugDump.cpp
         RowStore.cpp

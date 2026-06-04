@@ -14,6 +14,8 @@ using namespace db;
 DumpResult<void> GraphLoader::load(Graph* graph, const fs::Path& graphDir) {
     Profile profile("GraphLoader::load");
 
+    spdlog::info("Loading graph {}", graph->getName());
+
     const auto dirInfo = graphDir.getFileInfo();
     if (!dirInfo) {
         return DumpError::result(DumpErrorType::GRAPH_DOES_NOT_EXIST);
