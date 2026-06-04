@@ -35,44 +35,38 @@ parquet::schema::NodePtr buildSchemaNode(const ParquetWriteSchema& schema, size_
 
     switch (schema.getColumnType(index)) {
         case ParquetColumnType::Int64:
-            return parquet::schema::PrimitiveNode::Make(
-                name,
-                parquet::Repetition::REQUIRED,
-                parquet::Type::INT64);
+            return parquet::schema::PrimitiveNode::Make(name,
+                                                        parquet::Repetition::REQUIRED,
+                                                        parquet::Type::INT64);
         break;
         case ParquetColumnType::UInt64:
-            return parquet::schema::PrimitiveNode::Make(
-                name,
-                parquet::Repetition::REQUIRED,
-                parquet::Type::INT64,
-                parquet::ConvertedType::UINT_64);
+            return parquet::schema::PrimitiveNode::Make(name,
+                                                        parquet::Repetition::REQUIRED,
+                                                        parquet::Type::INT64,
+                                                        parquet::ConvertedType::UINT_64);
         break;
         case ParquetColumnType::Double:
-            return parquet::schema::PrimitiveNode::Make(
-                name,
-                parquet::Repetition::REQUIRED,
-                parquet::Type::DOUBLE);
+            return parquet::schema::PrimitiveNode::Make(name,
+                                                        parquet::Repetition::REQUIRED,
+                                                        parquet::Type::DOUBLE);
         break;
         case ParquetColumnType::Bool:
-            return parquet::schema::PrimitiveNode::Make(
-                name,
-                parquet::Repetition::REQUIRED,
-                parquet::Type::BOOLEAN);
+            return parquet::schema::PrimitiveNode::Make(name,
+                                                        parquet::Repetition::REQUIRED,
+                                                        parquet::Type::BOOLEAN);
         break;
         case ParquetColumnType::String:
-            return parquet::schema::PrimitiveNode::Make(
-                name,
-                parquet::Repetition::REQUIRED,
-                parquet::Type::BYTE_ARRAY,
-                parquet::ConvertedType::UTF8);
+            return parquet::schema::PrimitiveNode::Make(name,
+                                                        parquet::Repetition::REQUIRED,
+                                                        parquet::Type::BYTE_ARRAY,
+                                                        parquet::ConvertedType::UTF8);
         break;
         case ParquetColumnType::FixedLenBytes:
-            return parquet::schema::PrimitiveNode::Make(
-                name,
-                parquet::Repetition::REQUIRED,
-                parquet::Type::FIXED_LEN_BYTE_ARRAY,
-                parquet::ConvertedType::NONE,
-                static_cast<int>(schema.getColumnByteWidth(index)));
+            return parquet::schema::PrimitiveNode::Make(name,
+                                                        parquet::Repetition::REQUIRED,
+                                                        parquet::Type::FIXED_LEN_BYTE_ARRAY,
+                                                        parquet::ConvertedType::NONE,
+                                                        static_cast<int>(schema.getColumnByteWidth(index)));
         break;
     }
 

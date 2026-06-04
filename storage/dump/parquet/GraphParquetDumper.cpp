@@ -107,7 +107,7 @@ void GraphParquetDumper::dump(const Graph& graph, const fs::Path& graphDir) {
         CommitParquetDumper::dump(*commit, commitDir, partsDir);
     }
 
-    std::vector<uint64_t> hashesAscending(hashesHeadFirst.rbegin(), hashesHeadFirst.rend());
+    const std::vector<uint64_t> hashesAscending(hashesHeadFirst.rbegin(), hashesHeadFirst.rend());
     writeCommitLog(hashesAscending, graphParquetLayout::commitLog(tempDir));
 
     if (const auto res = tempDir.rename(graphDir); !res) {

@@ -59,9 +59,9 @@ int main(int argc, const char** argv) {
 
     const fs::Path binaryDir {graphDirArg};
 
-    fs::Path parquetDir = outDirArg.empty()
-                              ? fs::Path {toolInit.getOutputsDir()} / "parquet-roundtrip" / "dump"
-                              : fs::Path {outDirArg};
+    const fs::Path parquetDir = outDirArg.empty()
+                                    ? fs::Path {toolInit.getOutputsDir()} / "parquet-roundtrip" / "dump"
+                                    : fs::Path {outDirArg};
 
     if (parquetDir.exists()) {
         parquetDir.rm();

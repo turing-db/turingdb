@@ -64,20 +64,17 @@ void ReactomeSampleGraph::create(Graph* graph) {
     // TopLevelPathways
     // =================================================================
     auto tlpSignal = writer.addNode({"TopLevelPathway", "Pathway"});
-    writer.addNodeProperty<types::String>(
-        tlpSignal, "displayName", "Signal Transduction");
+    writer.addNodeProperty<types::String>(tlpSignal, "displayName", "Signal Transduction");
     writer.addNodeProperty<types::String>(tlpSignal, "stId", "R-HSA-162582");
     writer.addNodeProperty<types::Int64>(tlpSignal, "dbId", 162582);
 
     auto tlpMetabolism = writer.addNode({"TopLevelPathway", "Pathway"});
-    writer.addNodeProperty<types::String>(
-        tlpMetabolism, "displayName", "Metabolism of lipids");
+    writer.addNodeProperty<types::String>(tlpMetabolism, "displayName", "Metabolism of lipids");
     writer.addNodeProperty<types::String>(tlpMetabolism, "stId", "R-HSA-556833");
     writer.addNodeProperty<types::Int64>(tlpMetabolism, "dbId", 556833);
 
     auto tlpAutophagy = writer.addNode({"TopLevelPathway", "Pathway"});
-    writer.addNodeProperty<types::String>(
-        tlpAutophagy, "displayName", "Autophagy");
+    writer.addNodeProperty<types::String>(tlpAutophagy, "displayName", "Autophagy");
     writer.addNodeProperty<types::String>(tlpAutophagy, "stId", "R-HSA-9612973");
     writer.addNodeProperty<types::Int64>(tlpAutophagy, "dbId", 9612973);
 
@@ -85,33 +82,28 @@ void ReactomeSampleGraph::create(Graph* graph) {
     // Sub-pathways
     // =================================================================
     auto pwEGFR = writer.addNode({"Pathway"});
-    writer.addNodeProperty<types::String>(
-        pwEGFR, "displayName", "Signaling by EGFR");
+    writer.addNodeProperty<types::String>(pwEGFR, "displayName", "Signaling by EGFR");
     writer.addNodeProperty<types::String>(pwEGFR, "stId", "R-HSA-177929");
     writer.addNodeProperty<types::Int64>(pwEGFR, "dbId", 177929);
 
     auto pwAPOE = writer.addNode({"Pathway"});
-    writer.addNodeProperty<types::String>(
-        pwAPOE, "displayName", "APOE4-mediated lipid transport");
+    writer.addNodeProperty<types::String>(pwAPOE, "displayName", "APOE4-mediated lipid transport");
     writer.addNodeProperty<types::String>(pwAPOE, "stId", "R-HSA-8866910");
     writer.addNodeProperty<types::Int64>(pwAPOE, "dbId", 8866910);
 
     auto pwMacroAutophagy = writer.addNode({"Pathway"});
-    writer.addNodeProperty<types::String>(
-        pwMacroAutophagy, "displayName", "Macro-autophagy initiation");
+    writer.addNodeProperty<types::String>(pwMacroAutophagy, "displayName", "Macro-autophagy initiation");
     writer.addNodeProperty<types::String>(pwMacroAutophagy, "stId", "R-HSA-1632852");
     writer.addNodeProperty<types::Int64>(pwMacroAutophagy, "dbId", 1632852);
 
     auto pwEGFRDownreg = writer.addNode({"Pathway"});
-    writer.addNodeProperty<types::String>(
-        pwEGFRDownreg, "displayName", "EGFR downregulation");
+    writer.addNodeProperty<types::String>(pwEGFRDownreg, "displayName", "EGFR downregulation");
     writer.addNodeProperty<types::String>(pwEGFRDownreg, "stId", "R-HSA-182971");
     writer.addNodeProperty<types::Int64>(pwEGFRDownreg, "dbId", 182971);
 
     // Shared pathway: lipid transport appears under both metabolism and signal
     auto pwLipidTransport = writer.addNode({"Pathway"});
-    writer.addNodeProperty<types::String>(
-        pwLipidTransport, "displayName", "Lipid particle transport");
+    writer.addNodeProperty<types::String>(pwLipidTransport, "displayName", "Lipid particle transport");
     writer.addNodeProperty<types::String>(pwLipidTransport, "stId", "R-HSA-8866423");
     writer.addNodeProperty<types::Int64>(pwLipidTransport, "dbId", 8866423);
 
@@ -119,44 +111,37 @@ void ReactomeSampleGraph::create(Graph* graph) {
     // ReactionLikeEvents
     // =================================================================
     auto rxnEGFRBinding = writer.addNode({"ReactionLikeEvent"});
-    writer.addNodeProperty<types::String>(
-        rxnEGFRBinding, "displayName", "EGF binds EGFR");
+    writer.addNodeProperty<types::String>(rxnEGFRBinding, "displayName", "EGF binds EGFR");
     writer.addNodeProperty<types::String>(rxnEGFRBinding, "stId", "R-HSA-177934");
     writer.addNodeProperty<types::Int64>(rxnEGFRBinding, "dbId", 177934);
 
     auto rxnEGFRDimer = writer.addNode({"ReactionLikeEvent"});
-    writer.addNodeProperty<types::String>(
-        rxnEGFRDimer, "displayName", "EGFR dimerization");
+    writer.addNodeProperty<types::String>(rxnEGFRDimer, "displayName", "EGFR dimerization");
     writer.addNodeProperty<types::String>(rxnEGFRDimer, "stId", "R-HSA-177940");
     writer.addNodeProperty<types::Int64>(rxnEGFRDimer, "dbId", 177940);
 
     auto rxnEGFREndocytosis = writer.addNode({"ReactionLikeEvent"});
-    writer.addNodeProperty<types::String>(
-        rxnEGFREndocytosis, "displayName", "EGFR internalization");
+    writer.addNodeProperty<types::String>(rxnEGFREndocytosis, "displayName", "EGFR internalization");
     writer.addNodeProperty<types::String>(rxnEGFREndocytosis, "stId", "R-HSA-182969");
     writer.addNodeProperty<types::Int64>(rxnEGFREndocytosis, "dbId", 182969);
 
     auto rxnAPOELipid = writer.addNode({"ReactionLikeEvent"});
-    writer.addNodeProperty<types::String>(
-        rxnAPOELipid, "displayName", "APOE4 binds lipid particle");
+    writer.addNodeProperty<types::String>(rxnAPOELipid, "displayName", "APOE4 binds lipid particle");
     writer.addNodeProperty<types::String>(rxnAPOELipid, "stId", "R-HSA-8866913");
     writer.addNodeProperty<types::Int64>(rxnAPOELipid, "dbId", 8866913);
 
     auto rxnLipidClearance = writer.addNode({"ReactionLikeEvent"});
-    writer.addNodeProperty<types::String>(
-        rxnLipidClearance, "displayName", "Lipid particle clearance");
+    writer.addNodeProperty<types::String>(rxnLipidClearance, "displayName", "Lipid particle clearance");
     writer.addNodeProperty<types::String>(rxnLipidClearance, "stId", "R-HSA-8866430");
     writer.addNodeProperty<types::Int64>(rxnLipidClearance, "dbId", 8866430);
 
     auto rxnULKActivation = writer.addNode({"ReactionLikeEvent"});
-    writer.addNodeProperty<types::String>(
-        rxnULKActivation, "displayName", "ULK1 complex activation");
+    writer.addNodeProperty<types::String>(rxnULKActivation, "displayName", "ULK1 complex activation");
     writer.addNodeProperty<types::String>(rxnULKActivation, "stId", "R-HSA-5679091");
     writer.addNodeProperty<types::Int64>(rxnULKActivation, "dbId", 5679091);
 
     auto rxnPhagophore = writer.addNode({"ReactionLikeEvent"});
-    writer.addNodeProperty<types::String>(
-        rxnPhagophore, "displayName", "Phagophore nucleation");
+    writer.addNodeProperty<types::String>(rxnPhagophore, "displayName", "Phagophore nucleation");
     writer.addNodeProperty<types::String>(rxnPhagophore, "stId", "R-HSA-5679095");
     writer.addNodeProperty<types::Int64>(rxnPhagophore, "dbId", 5679095);
 
@@ -204,76 +189,62 @@ void ReactomeSampleGraph::create(Graph* graph) {
     // PhysicalEntities (proteins in cellular context)
     // =================================================================
     auto peEGFR = writer.addNode({"PhysicalEntity"});
-    writer.addNodeProperty<types::String>(
-        peEGFR, "displayName", "EGFR [plasma membrane]");
+    writer.addNodeProperty<types::String>(peEGFR, "displayName", "EGFR [plasma membrane]");
     writer.addNodeProperty<types::Int64>(peEGFR, "dbId", 80001);
 
     auto peEGF = writer.addNode({"PhysicalEntity"});
-    writer.addNodeProperty<types::String>(
-        peEGF, "displayName", "EGF [extracellular region]");
+    writer.addNodeProperty<types::String>(peEGF, "displayName", "EGF [extracellular region]");
     writer.addNodeProperty<types::Int64>(peEGF, "dbId", 80002);
 
     auto peAPOE4 = writer.addNode({"PhysicalEntity"});
-    writer.addNodeProperty<types::String>(
-        peAPOE4, "displayName", "APOE-4 [extracellular region]");
+    writer.addNodeProperty<types::String>(peAPOE4, "displayName", "APOE-4 [extracellular region]");
     writer.addNodeProperty<types::Int64>(peAPOE4, "dbId", 80003);
 
     auto peLipidParticle = writer.addNode({"PhysicalEntity"});
-    writer.addNodeProperty<types::String>(
-        peLipidParticle, "displayName", "Lipid particle [extracellular region]");
+    writer.addNodeProperty<types::String>(peLipidParticle, "displayName", "Lipid particle [extracellular region]");
     writer.addNodeProperty<types::Int64>(peLipidParticle, "dbId", 80004);
 
     auto peULK1 = writer.addNode({"PhysicalEntity"});
-    writer.addNodeProperty<types::String>(
-        peULK1, "displayName", "ULK1 [cytosol]");
+    writer.addNodeProperty<types::String>(peULK1, "displayName", "ULK1 [cytosol]");
     writer.addNodeProperty<types::Int64>(peULK1, "dbId", 80005);
 
     auto peBECN1 = writer.addNode({"PhysicalEntity"});
-    writer.addNodeProperty<types::String>(
-        peBECN1, "displayName", "BECN1 [cytosol]");
+    writer.addNodeProperty<types::String>(peBECN1, "displayName", "BECN1 [cytosol]");
     writer.addNodeProperty<types::Int64>(peBECN1, "dbId", 80006);
 
     auto peEGFRDimer = writer.addNode({"PhysicalEntity"});
-    writer.addNodeProperty<types::String>(
-        peEGFRDimer, "displayName", "EGFR dimer [plasma membrane]");
+    writer.addNodeProperty<types::String>(peEGFRDimer, "displayName", "EGFR dimer [plasma membrane]");
     writer.addNodeProperty<types::Int64>(peEGFRDimer, "dbId", 80007);
 
     auto peEGFREndosome = writer.addNode({"PhysicalEntity"});
-    writer.addNodeProperty<types::String>(
-        peEGFREndosome, "displayName", "EGFR [endosome membrane]");
+    writer.addNodeProperty<types::String>(peEGFREndosome, "displayName", "EGFR [endosome membrane]");
     writer.addNodeProperty<types::Int64>(peEGFREndosome, "dbId", 80008);
 
     auto peAPOE4Lipid = writer.addNode({"PhysicalEntity"});
-    writer.addNodeProperty<types::String>(
-        peAPOE4Lipid, "displayName", "APOE4:lipid particle [extracellular region]");
+    writer.addNodeProperty<types::String>(peAPOE4Lipid, "displayName", "APOE4:lipid particle [extracellular region]");
     writer.addNodeProperty<types::Int64>(peAPOE4Lipid, "dbId", 80009);
 
     auto pePhagophore = writer.addNode({"PhysicalEntity"});
-    writer.addNodeProperty<types::String>(
-        pePhagophore, "displayName", "Phagophore [cytosol]");
+    writer.addNodeProperty<types::String>(pePhagophore, "displayName", "Phagophore [cytosol]");
     writer.addNodeProperty<types::Int64>(pePhagophore, "dbId", 80010);
 
     // =================================================================
     // Complexes
     // =================================================================
     auto cxEGFR_EGF = writer.addNode({"Complex"});
-    writer.addNodeProperty<types::String>(
-        cxEGFR_EGF, "displayName", "EGF:EGFR complex");
+    writer.addNodeProperty<types::String>(cxEGFR_EGF, "displayName", "EGF:EGFR complex");
     writer.addNodeProperty<types::Int64>(cxEGFR_EGF, "dbId", 90001);
 
     auto cxULK = writer.addNode({"Complex"});
-    writer.addNodeProperty<types::String>(
-        cxULK, "displayName", "ULK1:ATG13:FIP200 complex");
+    writer.addNodeProperty<types::String>(cxULK, "displayName", "ULK1:ATG13:FIP200 complex");
     writer.addNodeProperty<types::Int64>(cxULK, "dbId", 90002);
 
     auto cxBECN1_PI3K = writer.addNode({"Complex"});
-    writer.addNodeProperty<types::String>(
-        cxBECN1_PI3K, "displayName", "BECN1:PIK3C3 complex");
+    writer.addNodeProperty<types::String>(cxBECN1_PI3K, "displayName", "BECN1:PIK3C3 complex");
     writer.addNodeProperty<types::Int64>(cxBECN1_PI3K, "dbId", 90003);
 
     auto cxAPOE4Lipid = writer.addNode({"Complex"});
-    writer.addNodeProperty<types::String>(
-        cxAPOE4Lipid, "displayName", "APOE4:Lipid complex");
+    writer.addNodeProperty<types::String>(cxAPOE4Lipid, "displayName", "APOE4:Lipid complex");
     writer.addNodeProperty<types::Int64>(cxAPOE4Lipid, "dbId", 90004);
 
     // =================================================================

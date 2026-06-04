@@ -18,6 +18,7 @@
 #include "ParquetWriteSchema.h"
 
 #include "EdgeIndexerParquetLayout.h"
+#include "ParquetFileReading.h"
 #include "ParquetMetadataParsing.h"
 
 #include "indexers/EdgeIndexer.h"
@@ -146,14 +147,6 @@ void spansSchema(ParquetWriteSchema& schema) {
     schema.addColumn(layout::SPAN_COUNT_COLUMN, ParquetColumnType::UInt64);
 }
 
-template <typename Visitor>
-void readFile(const fs::Path& path, Visitor& visitor, const ParquetWriteSchema& expectedSchema) {
-    ParquetReader reader(path, visitor);
-    reader.setExpectedSchema(expectedSchema);
-    while (reader.nextChunk()) {
-    }
-}
-
 // A (first, count) pair read from the file must address edges inside the direction's
 // edge array; anything else would read out of bounds when the indexer is used, or form
 // an out-of-range span pointer. The int64-to-size_t casts make negative file values
@@ -201,13 +194,13 @@ std::unique_ptr<EdgeIndexer> EdgeIndexerParquetLoader::load(const fs::Path& node
     spansSchema(expectedSpansSchema);
 
     NodeDataVisitor nodeVisitor;
-    readFile(nodeDataPath, nodeVisitor, expectedNodeDataSchema);
+    readParquetFile(nodeDataPath, nodeVisitor, expectedNodeDataSchema);
 
     SpansVisitor outSpansVisitor;
-    readFile(outSpansPath, outSpansVisitor, expectedSpansSchema);
+    readParquetFile(outSpansPath, outSpansVisitor, expectedSpansSchema);
 
     SpansVisitor inSpansVisitor;
-    readFile(inSpansPath, inSpansVisitor, expectedSpansSchema);
+    readParquetFile(inSpansPath, inSpansVisitor, expectedSpansSchema);
 
     const size_t nodeCount = nodeVisitor._outFirsts.size();
 

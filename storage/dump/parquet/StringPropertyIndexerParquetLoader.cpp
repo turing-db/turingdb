@@ -14,6 +14,7 @@
 #include "ParquetReader.h"
 #include "ParquetWriteSchema.h"
 
+#include "ParquetFileReading.h"
 #include "StringPropertyIndexerParquetLayout.h"
 
 #include "indexers/StringPropertyIndexer.h"
@@ -105,14 +106,6 @@ private:
     }
 };
 
-template <typename Visitor>
-void readFile(const fs::Path& path, Visitor& visitor, const ParquetWriteSchema& expectedSchema) {
-    ParquetReader reader(path, visitor);
-    reader.setExpectedSchema(expectedSchema);
-    while (reader.nextChunk()) {
-    }
-}
-
 void checkColumnsAgree(bool columnsAgree, std::string_view table) {
     if (!columnsAgree) {
         throw FatalException(fmt::format(
@@ -154,7 +147,7 @@ std::unique_ptr<StringPropertyIndexer> StringPropertyIndexerParquetLoader::load(
         ParquetWriteSchema expectedSchema;
         expectedSchema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
         expectedSchema.addColumn(layout::NODE_COUNT_COLUMN, ParquetColumnType::UInt64);
-        readFile(indexesPath, indexesVisitor, expectedSchema);
+        readParquetFile(indexesPath, indexesVisitor, expectedSchema);
     }
 
     ChildrenVisitor childrenVisitor;
@@ -164,7 +157,7 @@ std::unique_ptr<StringPropertyIndexer> StringPropertyIndexerParquetLoader::load(
         expectedSchema.addColumn(layout::PARENT_NODE_ID_COLUMN, ParquetColumnType::UInt64);
         expectedSchema.addColumn(layout::CHILD_INDEX_COLUMN, ParquetColumnType::UInt64);
         expectedSchema.addColumn(layout::CHILD_NODE_ID_COLUMN, ParquetColumnType::UInt64);
-        readFile(childrenPath, childrenVisitor, expectedSchema);
+        readParquetFile(childrenPath, childrenVisitor, expectedSchema);
     }
 
     OwnersVisitor ownersVisitor;
@@ -173,7 +166,7 @@ std::unique_ptr<StringPropertyIndexer> StringPropertyIndexerParquetLoader::load(
         expectedSchema.addColumn(layout::PROPERTY_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
         expectedSchema.addColumn(layout::NODE_ID_COLUMN, ParquetColumnType::UInt64);
         expectedSchema.addColumn(layout::ENTITY_ID_COLUMN, ParquetColumnType::UInt64);
-        readFile(ownersPath, ownersVisitor, expectedSchema);
+        readParquetFile(ownersPath, ownersVisitor, expectedSchema);
     }
 
     checkColumnsAgree(indexesVisitor._nodeCounts.size() == indexesVisitor._propertyTypeIds.size(),
