@@ -46,11 +46,11 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
 }
 
 void VariableDependency::dependsOn(VariableDependency* dep) {
-    this->_incoming.push_back(dep);
-    dep->_outgoing.push_back(this);
+    this->_incoming.emplace_back(dep);
+    dep->_outgoing.emplace_back(this);
 }
 
 void VariableDependency::requiredFor(VariableDependency* dep) {
-    this->_outgoing.push_back(dep);
-    dep->_incoming.push_back(this);
+    this->_outgoing.emplace_back(dep);
+    dep->_incoming.emplace_back(this);
 }

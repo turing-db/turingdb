@@ -27,8 +27,8 @@ void IRDumper::dumpMermaid(const VariableDependencyGraph& graph, std::ostream& o
         if (var.isIsolated()) {
             out << "    " << nodeDef(&var) << "\n";
         } else {
-            for (const VariableDependency* dep : var.getOutgoing()) {
-                out << "    " << nodeDef(&var) << " --> " << nodeDef(dep) << "\n";
+            for (const DependencyEdge& edge : var.getOutgoing()) {
+                out << "    " << nodeDef(&var) << " --> " << nodeDef(edge.tgt()) << "\n";
             }
         }
     }
