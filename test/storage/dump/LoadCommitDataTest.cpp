@@ -40,7 +40,7 @@ public:
 
             _newHeadHash = _dumpedGraph->getHeadHash(); // HEAD commit (will remain loaded)
 
-            auto dumpRes = GraphDumper::dump(*_dumpedGraph, _dumpedGraph->getPath());
+            auto dumpRes = GraphDumper::dump(_dumpedGraph.get(), _dumpedGraph->getPath());
             bioassert(dumpRes, "dump failed");
         }
 

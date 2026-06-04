@@ -70,7 +70,7 @@ int main(int argc, const char** argv) {
         }
 
         spdlog::info("Dump graph into {}", outDir.c_str());
-        const auto dumpRes = GraphDumper::dump(*graph, outDir);
+        const auto dumpRes = GraphDumper::dump(graph, outDir);
         if (!dumpRes) {
             spdlog::error("{}", dumpRes.error().fmtMessage());
             return EXIT_FAILURE;

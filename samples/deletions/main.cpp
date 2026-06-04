@@ -13,7 +13,7 @@ void getSimpleDB() {
     auto graph = Graph::create();
     SimpleGraph::createSimpleGraph(graph.get());
     if (auto res =
-            GraphDumper::dump(*graph, DeleteTest::WORKING_PATH / "graphs" / "simpledb");
+            GraphDumper::dump(graph.get(), DeleteTest::WORKING_PATH / "graphs" / "simpledb");
         !res) {
         spdlog::error("{}\n", res.error().fmtMessage());
         std::abort();

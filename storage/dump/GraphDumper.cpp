@@ -16,12 +16,12 @@
 
 using namespace db;
 
-DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& graphDir) {
+DumpResult<void> GraphDumper::dump(const Graph* graph, const fs::Path& graphDir) {
     Profile profile("GraphDumper::dump");
 
-    spdlog::info("Dumping graph {}", graph.getName());
+    spdlog::info("Dumping graph {}", graph->getName());
 
-    auto lock = graph._versionController->lock();
+    auto lock = graph->_versionController->lock();
 
     if (!graphDir.exists()) {
         // Create directory
@@ -43,7 +43,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& graphDir)
 
             const GraphInfoLoader loader(reader.value());
 
-            auto res = loader.isSameGraph(graph);
+            auto res = loader.isSameGraph(*graph);
             if (!res) {
                 return res.get_unexpected();
             }
@@ -63,7 +63,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& graphDir)
 
         GraphInfoDumper dumper(writer.value());
 
-        if (auto res = dumper.dump(graph); !res) {
+        if (auto res = dumper.dump(*graph); !res) {
             return res;
         }
     }
@@ -87,7 +87,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& graphDir)
         Profile profile {"GraphDumper::dump <Commit Log>"};
         const fs::Path logFile = graphDir / "commitlog";
 
-        const Commit* commit = graph._versionController->_head.load();
+        const Commit* commit = graph->_versionController->_head.load();
         std::vector<CommitHash> commitList;
 
         // collect all the commits so we can iterate and write them to file later
@@ -121,7 +121,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& graphDir)
         GraphDumpHelper::writeFileHeader(&writer);
 
         // Dump the number of commits.
-        writer.write(graph._versionController->getNumCommits());
+        writer.write(graph->_versionController->getNumCommits());
 
         // Iterate through the list backwards to dump commits in ascending (by time of commit)
         // order
@@ -139,7 +139,7 @@ DumpResult<void> GraphDumper::dump(const Graph& graph, const fs::Path& graphDir)
     return {};
 }
 
-DumpResult<void> GraphDumper::dumpMissingCommits(const Graph& graph, const fs::Path& graphDir) {
+DumpResult<void> GraphDumper::dumpMissingCommits(const Graph* graph, const fs::Path& graphDir) {
     const fs::Path logFile = graphDir / "commitlog";
     auto fileRes = fs::File::open(logFile);
     if (!fileRes) {
@@ -176,7 +176,7 @@ DumpResult<void> GraphDumper::dumpMissingCommits(const Graph& graph, const fs::P
     fs::ByteBufferIterator entryIt = reader.iterateBuffer();
 
     const uint64_t prevCommitHash = entryIt.get<uint64_t>();
-    const Commit* headCommit = graph._versionController->_head.load();
+    const Commit* headCommit = graph->_versionController->_head.load();
 
     //Check if the last dumped commit is the current head commit - this means 
     //we have already dumped all the commits in the branch and can return safely.
@@ -208,7 +208,7 @@ DumpResult<void> GraphDumper::dumpMissingCommits(const Graph& graph, const fs::P
     //seek back to the offset right after the headers
     writer.file().seek(DumpConfig::FILE_HEADER_STRIDE);
     // update the total number of commits
-    writer.write(graph._versionController->getNumCommits());
+    writer.write(graph->_versionController->getNumCommits());
     writer.flush();
 
     if (writer.errorOccured()) {
