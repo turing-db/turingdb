@@ -6,6 +6,8 @@
 #include <type_traits>
 #include <vector>
 
+#include "EnumToString.h"
+
 namespace db {
 
 class EntityPattern;
@@ -13,16 +15,24 @@ class PatternElement;
 class VarDecl;
 class VariableDependency;
 
-enum class EdgeType : uint8_t {
-    OUTGOING,
-    INCOMING,
-    JOIN,
-
-    _SIZE
-};
-
 class EdgeMetadata {
 public:
+    enum class EdgeType : uint8_t;
+
+    explicit EdgeMetadata(EdgeType type)
+        : _type(type)
+    {
+    }
+
+    enum class EdgeType : uint8_t {
+        OUTGOING,
+        INCOMING,
+        BIDIRECTIONAL,
+        JOIN,
+
+        _SIZE
+    };
+
     EdgeType type() const { return _type; }
 
 private:
@@ -31,10 +41,19 @@ private:
 
 static_assert(std::is_trivially_copyable_v<EdgeMetadata>);
 
+
+using EdgeTypeName = EnumToString<EdgeMetadata::EdgeType>::Create<
+    EnumStringPair<EdgeMetadata::EdgeType::OUTGOING, "getout">,
+    EnumStringPair<EdgeMetadata::EdgeType::INCOMING, "getin">,
+    EnumStringPair<EdgeMetadata::EdgeType::BIDIRECTIONAL, "bidir">,
+    EnumStringPair<EdgeMetadata::EdgeType::JOIN, "join">
+>;
+
 class DependencyEdge {
 public:
-    DependencyEdge(VariableDependency* tgt)
-        : _tgt{tgt}
+    DependencyEdge(VariableDependency* tgt, EdgeMetadata data)
+        : _tgt(tgt),
+        _data(data)
     {
     }
 
@@ -59,8 +78,8 @@ public:
     {
     }
 
-    void dependsOn(VariableDependency* dep);
-    void requiredFor(VariableDependency* dep);
+    void dependsOn(VariableDependency* dep, EdgeMetadata::EdgeType type);
+    void requiredFor(VariableDependency* dep, EdgeMetadata::EdgeType type);
 
     VarDecl* getDecl() const { return _decl; }
     const Edges& getOutgoing() const { return _outgoing; }

@@ -2,6 +2,7 @@
 
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include "VariableDependencyGraph.h"
@@ -28,7 +29,10 @@ void IRDumper::dumpMermaid(const VariableDependencyGraph& graph, std::ostream& o
             out << "    " << nodeDef(&var) << "\n";
         } else {
             for (const DependencyEdge& edge : var.getOutgoing()) {
-                out << "    " << nodeDef(&var) << " --> " << nodeDef(edge.tgt()) << "\n";
+                const EdgeMetadata::EdgeType etype = edge.data().type();
+                const std::string_view typeName = EdgeTypeName::value(etype);
+                out << "    " << nodeDef(&var) << " -->|" << typeName << "| "
+                    << nodeDef(edge.tgt()) << "\n";
             }
         }
     }
