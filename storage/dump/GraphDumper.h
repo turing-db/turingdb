@@ -9,10 +9,10 @@ class Graph;
 
 class GraphDumper {
 public:
-    [[nodiscard]] static DumpResult<void> dump(const Graph& graph, const fs::Path& graphDir);
+    [[nodiscard]] static DumpResult<void> dump(const Graph* graph, const fs::Path& graphDir);
 
 private:
-    [[nodiscard]] static DumpResult<void> dumpMissingCommits(const Graph& graph, const fs::Path& graphDir);
+    [[nodiscard]] static DumpResult<void> dumpMissingCommits(const Graph* graph, const fs::Path& graphDir);
 };
 
 }

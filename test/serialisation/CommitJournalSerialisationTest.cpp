@@ -44,7 +44,7 @@ protected:
     QueryConfig _queryConfig;
 
     void dumpLoadSimpleDB() {
-        auto res = GraphDumper::dump(*_builtGraph, _workingPath);
+        auto res = GraphDumper::dump(_builtGraph, _workingPath);
         if (!res) {
             throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
         }

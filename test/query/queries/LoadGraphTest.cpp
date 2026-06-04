@@ -25,7 +25,7 @@ public:
         auto graph = Graph::create();
         SimpleGraph::createSimpleGraph(graph.get());
         const auto graphDir = testTuringDir / "graphs" / "simpledb";
-        const auto dumpRes = GraphDumper::dump(*graph, graphDir);
+        const auto dumpRes = GraphDumper::dump(graph.get(), graphDir);
         bioassert(dumpRes, "failed to dump simpledb graph");
     }
 

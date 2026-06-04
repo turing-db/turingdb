@@ -57,7 +57,7 @@ Graph* GraphManager::createGraph(std::string_view name) {
     Graph* graphPtr = graph.get();
 
     if (_config->isSyncedOnDisk()) {
-        if (const auto res = GraphDumper::dump(*graph, path); !res) {
+        if (const auto res = GraphDumper::dump(graphPtr, path); !res) {
             spdlog::error(res.error().fmtMessage());
             return nullptr;
         }
@@ -265,7 +265,7 @@ bool GraphManager::loadJsonlDB(std::string_view graphName,
     }
 
     if (_config->isSyncedOnDisk()) {
-        const auto dumpRes = GraphDumper::dump(*graph, graphPath);
+        const auto dumpRes = GraphDumper::dump(graph.get(), graphPath);
 
         if (!dumpRes) {
             _graphLoadStatus.removeLoadingGraph(graphName);
@@ -311,7 +311,7 @@ bool GraphManager::loadGmlDB(std::string_view graphName,
     }
 
     if (_config->isSyncedOnDisk()) {
-        if (!GraphDumper::dump(*graph, graphPath)) {
+        if (!GraphDumper::dump(graph.get(), graphPath)) {
             _graphLoadStatus.removeLoadingGraph(graphName);
             return false;
         }

@@ -53,7 +53,7 @@ public:
 
             // Step 3: Dump to the graphs directory where LOAD GRAPH expects it.
             const auto graphDir = turingDir / "graphs" / "testdb";
-            auto dumpRes = GraphDumper::dump(*graph, graphDir);
+            auto dumpRes = GraphDumper::dump(graph, graphDir);
             bioassert(dumpRes, "dump failed");
         }
 

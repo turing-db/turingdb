@@ -189,7 +189,7 @@ DumpResult<void> SystemManager::dumpGraph(std::string_view graphName) {
         return DumpError::result(DumpErrorType::GRAPH_DOES_NOT_EXIST);
     }
 
-    return GraphDumper::dump(*graph, graph->getPath());
+    return GraphDumper::dump(graph, graph->getPath());
 }
 
 std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& graphPath) {
