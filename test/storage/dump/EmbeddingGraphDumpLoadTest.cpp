@@ -47,8 +47,7 @@ TEST_F(EmbeddingGraphDumpLoadTest, NodeEmbeddings) {
         writer.submit();
     }
 
-    GraphDumper dumper;
-    auto res = dumper.dump(*graph, dumpPath);
+    auto res = GraphDumper::dump(graph.get(), dumpPath);
     if (!res) {
         throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
     }
@@ -99,8 +98,7 @@ TEST_F(EmbeddingGraphDumpLoadTest, NodeAndEdgeEmbeddings) {
         writer.submit();
     }
 
-    GraphDumper dumper;
-    auto res = dumper.dump(*graph, dumpPath);
+    auto res = GraphDumper::dump(graph.get(), dumpPath);
     if (!res) {
         throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
     }
@@ -141,8 +139,7 @@ TEST_F(EmbeddingGraphDumpLoadTest, SparseEmbeddings) {
         writer.submit();
     }
 
-    GraphDumper dumper;
-    auto res = dumper.dump(*graph, dumpPath);
+    auto res = GraphDumper::dump(graph.get(), dumpPath);
     if (!res) {
         throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
     }
@@ -191,8 +188,7 @@ TEST_F(EmbeddingGraphDumpLoadTest, MultiCommitEmbeddings) {
         writer.submit();
     }
 
-    GraphDumper dumper;
-    auto res = dumper.dump(*graph, dumpPath);
+    auto res = GraphDumper::dump(graph.get(), dumpPath);
     if (!res) {
         throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
     }
