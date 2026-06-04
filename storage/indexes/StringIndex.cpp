@@ -49,7 +49,7 @@ PrefixTreeNode* PrefixTreeNode::getChild(char c) const {
 }
 
 PrefixTreeNode* PrefixTreeNode::getChild(size_t idx) const {
-    if (idx > ALPHABET_SIZE) [[unlikely]] {
+    if (idx >= ALPHABET_SIZE) [[unlikely]] {
         throw TuringException("Queried child at index" + std::to_string(idx)
                               + " which is out of range (max: "
                               + std::to_string(ALPHABET_SIZE) + ")");

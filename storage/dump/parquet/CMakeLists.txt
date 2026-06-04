@@ -1,4 +1,5 @@
 add_library(turing_db_storage_dump_parquet_s STATIC
+    ParquetMetadataParsing.cpp
     PropertyContainerParquetDumper.cpp
     PropertyContainerParquetLoader.cpp
     NodeContainerParquetDumper.cpp

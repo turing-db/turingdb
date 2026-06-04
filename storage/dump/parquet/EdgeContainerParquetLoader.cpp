@@ -16,6 +16,7 @@
 #include "ParquetWriteSchema.h"
 
 #include "EdgeContainerParquetLayout.h"
+#include "ParquetMetadataParsing.h"
 
 #include "datapart/EdgeContainer.h"
 #include "datapart/EdgeRecord.h"
@@ -48,10 +49,10 @@ public:
             for (int64_t i = 0; i < keyValueMetadata->size(); ++i) {
                 const std::string& key = keyValueMetadata->key(i);
                 if (key == layout::FIRST_EDGE_ID_KEY) {
-                    _firstEdgeID = static_cast<uint64_t>(std::stoull(keyValueMetadata->value(i)));
+                    _firstEdgeID = parseMetadataUint64(key, keyValueMetadata->value(i));
                     _hasFirstEdgeID = true;
                 } else if (key == layout::FIRST_NODE_ID_KEY) {
-                    _firstNodeID = static_cast<uint64_t>(std::stoull(keyValueMetadata->value(i)));
+                    _firstNodeID = parseMetadataUint64(key, keyValueMetadata->value(i));
                     _hasFirstNodeID = true;
                 }
             }

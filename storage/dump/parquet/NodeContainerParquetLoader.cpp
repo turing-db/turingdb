@@ -17,6 +17,7 @@
 #include "ParquetWriteSchema.h"
 
 #include "NodeContainerParquetLayout.h"
+#include "ParquetMetadataParsing.h"
 
 #include "datapart/NodeContainer.h"
 #include "datapart/NodeRange.h"
@@ -73,7 +74,8 @@ public:
         if (keyValueMetadata) {
             for (int64_t i = 0; i < keyValueMetadata->size(); ++i) {
                 if (keyValueMetadata->key(i) == layout::FIRST_NODE_ID_KEY) {
-                    _firstNodeID = static_cast<uint64_t>(std::stoull(keyValueMetadata->value(i)));
+                    _firstNodeID = parseMetadataUint64(keyValueMetadata->key(i),
+                                                       keyValueMetadata->value(i));
                     hasFirstNodeID = true;
                 }
             }

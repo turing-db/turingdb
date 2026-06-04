@@ -6,6 +6,7 @@
 #include "dump/parquet/GraphParquetDumper.h"
 #include "dump/parquet/GraphParquetLoader.h"
 #include "dump/parquet/GraphParquetLayout.h"
+#include "dump/parquet/CommitParquetLayout.h"
 #include "comparators/GraphComparator.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
@@ -243,6 +244,53 @@ TEST_F(GraphParquetMultiCommitTest, LoadUnsupportedFormatVersionThrows) {
         writer.beginRowGroup(1);
         writer.writeInt64Column(0, graphId);
         writer.writeStringColumn(1, name);
+        writer.finish();
+    }
+
+    auto loadedGraph = Graph::create();
+    EXPECT_THROW(GraphParquetLoader::load(loadedGraph.get(), _dumpPath), FatalException);
+}
+
+TEST_F(GraphParquetMultiCommitTest, LoadNonNumericFormatVersionThrows) {
+    GraphParquetDumper::dump(*_graph, _dumpPath);
+
+    // Rewrite graph-info with a non-numeric format version; the loader must surface a
+    // TuringDB exception, not leak std::invalid_argument out of the metadata parse.
+    {
+        ParquetWriteSchema schema;
+        schema.addColumn(graphParquetLayout::GRAPH_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(graphParquetLayout::NAME_COLUMN, ParquetColumnType::String);
+
+        ParquetWriter writer(graphParquetLayout::graphInfo(_dumpPath), schema);
+        writer.setMetadata(graphParquetLayout::FORMAT_VERSION_KEY, "not-a-number");
+
+        const std::vector<int64_t> graphId {1};
+        const std::vector<std::string_view> name {"multi"};
+        writer.beginRowGroup(1);
+        writer.writeInt64Column(0, graphId);
+        writer.writeStringColumn(1, name);
+        writer.finish();
+    }
+
+    auto loadedGraph = Graph::create();
+    EXPECT_THROW(GraphParquetLoader::load(loadedGraph.get(), _dumpPath), FatalException);
+}
+
+TEST_F(GraphParquetMultiCommitTest, LoadOversizedCommitDatapartCountThrows) {
+    GraphParquetDumper::dump(*_graph, _dumpPath);
+
+    // Rewrite the head commit's metadata so it claims one commit datapart while listing
+    // none; the loader must refuse instead of underflowing the commit-datapart span.
+    const uint64_t headHash = _graph->getHeadHash().get();
+    const fs::Path headCommitDir = graphParquetLayout::commitDir(_dumpPath, headHash);
+    {
+        ParquetWriteSchema schema;
+        schema.addColumn(commitParquetLayout::DATA_PART_ID_COLUMN, ParquetColumnType::UInt64);
+
+        ParquetWriter writer(commitParquetLayout::commitMetaData(headCommitDir), schema);
+        writer.setMetadata(commitParquetLayout::NUM_NODES_KEY, "0");
+        writer.setMetadata(commitParquetLayout::NUM_EDGES_KEY, "0");
+        writer.setMetadata(commitParquetLayout::NUM_COMMIT_DATAPARTS_KEY, "1");
         writer.finish();
     }
 

@@ -15,6 +15,7 @@
 #include "ParquetWriteSchema.h"
 
 #include "CommitParquetLayout.h"
+#include "ParquetMetadataParsing.h"
 #include "versioning/DataPartID.h"
 #include "Path.h"
 
@@ -47,13 +48,13 @@ public:
             const std::string& key = keyValueMetadata->key(i);
             const std::string& value = keyValueMetadata->value(i);
             if (key == layout::NUM_NODES_KEY) {
-                _numNodes = static_cast<size_t>(std::stoull(value));
+                _numNodes = static_cast<size_t>(parseMetadataUint64(key, value));
                 hasNumNodes = true;
             } else if (key == layout::NUM_EDGES_KEY) {
-                _numEdges = static_cast<size_t>(std::stoull(value));
+                _numEdges = static_cast<size_t>(parseMetadataUint64(key, value));
                 hasNumEdges = true;
             } else if (key == layout::NUM_COMMIT_DATAPARTS_KEY) {
-                _numCommitDataParts = static_cast<size_t>(std::stoull(value));
+                _numCommitDataParts = static_cast<size_t>(parseMetadataUint64(key, value));
                 hasNumCommitDataParts = true;
             }
         }

@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 
+#include <spdlog/fmt/fmt.h>
+
 #include "GraphMetadataParquetLoader.h"
 #include "CommitJournalParquetLoader.h"
 #include "TombstonesParquetLoader.h"
@@ -22,6 +24,7 @@
 #include "Path.h"
 
 #include "BioAssert.h"
+#include "FatalException.h"
 
 using namespace db;
 
@@ -83,5 +86,15 @@ void CommitParquetLoader::loadData(const fs::Path& commitDir,
         partMap.emplace(dataPartID, part);
     }
 
-    historyBuilder.setCommitDatapartCount(commitMetaData.getNumCommitDataParts());
+    // CommitHistoryBuilder slices the commit dataparts as a suffix of all dataparts;
+    // a corrupt count larger than the dump carries would underflow the span offset.
+    const size_t numCommitDataParts = commitMetaData.getNumCommitDataParts();
+    const size_t numDumpedDataParts = commitMetaData.getAllDatapartIds().size();
+    if (numCommitDataParts > numDumpedDataParts) {
+        throw FatalException(fmt::format(
+            "CommitParquetLoader: commit datapart count {} exceeds dumped datapart count {}",
+            numCommitDataParts, numDumpedDataParts));
+    }
+
+    historyBuilder.setCommitDatapartCount(numCommitDataParts);
 }

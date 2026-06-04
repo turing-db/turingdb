@@ -20,6 +20,7 @@
 
 #include "CommitParquetLoader.h"
 #include "GraphParquetLayout.h"
+#include "ParquetMetadataParsing.h"
 
 #include "Graph.h"
 #include "versioning/Commit.h"
@@ -51,7 +52,8 @@ public:
         if (keyValueMetadata) {
             for (int64_t i = 0; i < keyValueMetadata->size(); ++i) {
                 if (keyValueMetadata->key(i) == graphParquetLayout::FORMAT_VERSION_KEY) {
-                    version = static_cast<uint64_t>(std::stoull(keyValueMetadata->value(i)));
+                    version = parseMetadataUint64(keyValueMetadata->key(i),
+                                                  keyValueMetadata->value(i));
                     hasVersion = true;
                 }
             }

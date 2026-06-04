@@ -19,6 +19,7 @@
 #include "ParquetReader.h"
 
 #include "PropertyContainerParquetLayout.h"
+#include "ParquetMetadataParsing.h"
 
 #include "properties/PropertyContainer.h"
 #include "metadata/PropertyType.h"
@@ -47,10 +48,10 @@ public:
             const std::string& key = keyValueMetadata->key(i);
             const std::string& value = keyValueMetadata->value(i);
             if (key == layout::VALUE_TYPE_KEY) {
-                _valueType = static_cast<ValueType>(std::stoul(value));
+                _valueType = static_cast<ValueType>(parseMetadataUint64(key, value));
                 hasValueType = true;
             } else if (key == layout::DIMENSION_KEY) {
-                _dimension = static_cast<size_t>(std::stoul(value));
+                _dimension = static_cast<size_t>(parseMetadataUint64(key, value));
             }
         }
 

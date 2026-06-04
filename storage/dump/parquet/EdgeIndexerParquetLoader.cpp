@@ -18,6 +18,7 @@
 #include "ParquetWriteSchema.h"
 
 #include "EdgeIndexerParquetLayout.h"
+#include "ParquetMetadataParsing.h"
 
 #include "indexers/EdgeIndexer.h"
 #include "indexers/LabelSetIndexer.h"
@@ -58,16 +59,16 @@ public:
                 const std::string& key = keyValueMetadata->key(i);
                 const std::string& value = keyValueMetadata->value(i);
                 if (key == layout::FIRST_NODE_ID_KEY) {
-                    _firstNodeID = static_cast<uint64_t>(std::stoull(value));
+                    _firstNodeID = parseMetadataUint64(key, value);
                     hasNode = true;
                 } else if (key == layout::FIRST_EDGE_ID_KEY) {
-                    _firstEdgeID = static_cast<uint64_t>(std::stoull(value));
+                    _firstEdgeID = parseMetadataUint64(key, value);
                     hasEdge = true;
                 } else if (key == layout::CORE_NODE_COUNT_KEY) {
-                    _coreNodeCount = static_cast<uint64_t>(std::stoull(value));
+                    _coreNodeCount = parseMetadataUint64(key, value);
                     hasCore = true;
                 } else if (key == layout::PATCH_NODE_COUNT_KEY) {
-                    _patchNodeCount = static_cast<uint64_t>(std::stoull(value));
+                    _patchNodeCount = parseMetadataUint64(key, value);
                     hasPatch = true;
                 }
             }
