@@ -8,7 +8,6 @@ include "DBTypes.td"
 
 /**
 * ScanNodes
-* Pure: this operation has no side effects
 */
 def ScanNodes : TuringOp<"scan_nodes", [Pure]> {
   let summary = "Produce all nodes in the graph";
