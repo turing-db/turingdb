@@ -15,7 +15,7 @@ namespace {
 struct TestObject {
     int _value {0};
 
-    static inline int _liveCount {0};
+    static inline std::atomic<size_t> _liveCount {0};
 
     explicit TestObject(int value)
         : _value(value)
