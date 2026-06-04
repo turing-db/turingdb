@@ -4,7 +4,7 @@
 #include <algorithm>
 
 #include "Bitmask.h"
-#include "EmbeddingBuffer.h"
+#include "ChunkedBuffer.h"
 #include "TuringProtoHeaders.h"
 #include "Decoders.h"
 #include "TuringProtoInBuf.h"
@@ -47,6 +47,10 @@ decltype(auto) dispatchColumnType(net::proto::ColumnInternalKind typeCode, net::
             return fn.template operator()<db::ValueType>(encoding);
         case net::proto::ColumnInternalKind::ENTITY_LIST:
             return fn.template operator()<db::EntityList>(encoding);
+        case net::proto::ColumnInternalKind::LIST_VIEW:
+            return fn.template operator()<db::ListView>(encoding);
+        case net::proto::ColumnInternalKind::LIST_ELEMENT_VIEW:
+            return fn.template operator()<db::ListElementView>(encoding);
         case net::proto::ColumnInternalKind::NODE_ID:
             return fn.template operator()<db::NodeID>(encoding);
         case net::proto::ColumnInternalKind::EDGE_ID:
@@ -218,12 +222,16 @@ bool TuringProtoDecoder::decodeColumn(db::ColumnConst<std::optional<T>>* col) {
 TuringProtoDecoder::TuringProtoDecoder(db::LocalMemory* localMem,
                                        db::DataframeManager* dfMan,
                                        TuringProtoInBuf* inBuf,
-                                       EmbeddingBuffer* embeddingBuffer)
+                                       ChunkedBuffer<float>* embeddingBuffer,
+                                       ChunkedBuffer<char>* stringBuffer,
+                                       db::ListBuffer<>* listBuffer)
     : _localMem(localMem),
     _dfMan(dfMan)
 {
     _ctxt._inBuf = inBuf;
     _ctxt._embeddingBuffer = embeddingBuffer;
+    _ctxt._stringBuffer = stringBuffer;
+    _ctxt._listBuffer = listBuffer;
 }
 
 void TuringProtoDecoder::reset() {

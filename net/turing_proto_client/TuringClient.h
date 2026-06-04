@@ -4,9 +4,10 @@
 #include <array>
 #include <string>
 
-#include "EmbeddingBuffer.h"
+#include "ChunkedBuffer.h"
 #include "TuringProtoInBuf.h"
 #include "TuringProtoHeaders.h"
+#include "list/ListBuffer.h"
 #include "QueryCallbacks.h"
 #include "QueryStatus.h"
 #include "versioning/ChangeID.h"
@@ -52,7 +53,9 @@ public:
     std::string_view getRemotePort() const { return _remotePort; }
     std::string_view getGraphName() const { return _graphName; }
 
-    net::proto::EmbeddingBuffer& getEmbeddingBuffer() { return _embeddingBuffer; }
+    net::proto::ChunkedBuffer<float>& getEmbeddingBuffer() { return _embeddingBuffer; }
+    net::proto::ChunkedBuffer<char>& getStringBuffer() { return _stringBuffer; }
+    db::ListBuffer<>& getListBuffer() { return _listBuffer; }
     db::CommitHash getCommitHash() const { return _commitHash; }
     db::ChangeID getChangeID() const { return _changeID; }
 
@@ -80,7 +83,10 @@ private:
     // Proto packet payload for the current chunk; passed to TuringProtoDecoder unmodified.
     net::proto::TuringProtoInBuf _inBuf;
 
-    net::proto::EmbeddingBuffer _embeddingBuffer;
+    // Owning buffers that provide stable references to outputted dataframes
+    net::proto::ChunkedBuffer<float> _embeddingBuffer;
+    net::proto::ChunkedBuffer<char> _stringBuffer;
+    db::ListBuffer<> _listBuffer;
 
     void sendRequest(const std::string& query);
     void recvHttpResponseHeaders();

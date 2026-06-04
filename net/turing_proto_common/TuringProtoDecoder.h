@@ -6,6 +6,7 @@
 
 #include "Bitmask.h"
 #include "TuringProtoHeaders.h"
+#include "list/ListBuffer.h"
 
 namespace db {
 class Dataframe;
@@ -20,7 +21,8 @@ class ColumnConst;
 
 namespace net::proto {
 
-class EmbeddingBuffer;
+template <typename T>
+class ChunkedBuffer;
 class TuringProtoInBuf;
 
 class TuringProtoDecoder {
@@ -58,19 +60,31 @@ public:
         size_t _rowIndex {0};
         TuringProtoInBuf* _inBuf {nullptr};
         InterruptedBufferState _bufferState;
-        EmbeddingBuffer* _embeddingBuffer {nullptr};
+        ChunkedBuffer<float>* _embeddingBuffer {nullptr};
+        ChunkedBuffer<char>* _stringBuffer {nullptr};
+        db::ListBuffer<>* _listBuffer {nullptr};
+
+        // Cursor for the list row currently being decoded: how many elements it has in
+        // total and how many we have written so far. Lets a list resume across buffer
+        // boundaries; the elements themselves live in the (already emplaced) ListView.
+        uint32_t _listCount {0};
+        uint32_t _listWritten {0};
 
         void reset() {
             _colIndex = 0;
             _rowIndex = 0;
             _bufferState.reset();
+            _listCount = 0;
+            _listWritten = 0;
         }
     };
 
     TuringProtoDecoder(db::LocalMemory* localMem,
                        db::DataframeManager* dfMan,
                        TuringProtoInBuf* inBuf,
-                       EmbeddingBuffer* embeddingBuffer);
+                       ChunkedBuffer<float>* embeddingBuffer,
+                       ChunkedBuffer<char>* stringBuffer,
+                       db::ListBuffer<>* listBuffer);
 
     void decodeIncomingChunkHeader(db::Dataframe* df,
                                    std::vector<DecodedColumnSchema>& colSchemas);

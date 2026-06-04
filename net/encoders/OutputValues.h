@@ -60,7 +60,10 @@ template <typename T>
 concept IsPath = std::is_same_v<T, Path>;
 
 template <typename T>
-concept IsList = std::is_same_v<T, EntityList> || std::is_same_v<T, ListView>;
+concept IsEntityList = std::is_same_v<T, EntityList>;
+
+template <typename T>
+concept IsListView = std::is_same_v<T, ListView>;
 
 template <typename T>
 concept IsListElement = std::is_same_v<T, ListElementView>;
@@ -94,7 +97,9 @@ struct ColumnTypeGenerator {
             _name = fmt::format("Path");
         } else if constexpr (IsNull<T>) {
             _name = fmt::format("NULL");
-        } else if constexpr (IsList<T>) {
+        } else if constexpr (IsEntityList<T>) {
+            _name = fmt::format("EntityList");
+        } else if constexpr (IsListView<T>) {
             _name = fmt::format("List");
         } else if constexpr (IsListElement<T>) {
             _name = fmt::format("ListElement");

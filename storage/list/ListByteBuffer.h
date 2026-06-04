@@ -52,6 +52,15 @@ public:
     template <typename T>
     ListElementView write(ListBufferTypeTag tag, const T& val);
 
+    /**
+     * @brief Copies a pre-formed [tag][value] element of @param numBytes bytes directly
+     * into the @ref _last byte buffer. For decoders whose wire layout already matches the
+     * stored layout, this avoids materialising an intermediate value.
+     * @warn MUST ONLY be called after an appropriate call to @ref reserveContiguous.
+     * @warn Does not perform bounds checking.
+     */
+    ListElementView writeRaw(const void* data, size_t numBytes);
+
     void clear();
 
 private:

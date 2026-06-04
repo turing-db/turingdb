@@ -410,11 +410,13 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
     recvHttpResponseHeaders();
 
     _embeddingBuffer.clear();
+    _stringBuffer.clear();
+    _listBuffer.clear();
     db::DataframeManager dfMan;
     db::QueryStatus res;
     std::vector<TuringProtoDecoder::DecodedColumnSchema> colSchemas;
     db::Dataframe df;
-    TuringProtoDecoder decoder(_localMem, &dfMan, &_inBuf, &_embeddingBuffer);
+    TuringProtoDecoder decoder(_localMem, &dfMan, &_inBuf, &_embeddingBuffer, &_stringBuffer, &_listBuffer);
 
     bool callbackFired = false;
     bool sawTerminalPacket = false;

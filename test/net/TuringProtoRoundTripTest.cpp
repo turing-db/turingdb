@@ -10,9 +10,10 @@
 #include <string_view>
 #include <vector>
 
-#include "EmbeddingBuffer.h"
+#include "ChunkedBuffer.h"
 #include "TuringException.h"
 #include "TuringProtoDecoder.h"
+#include "list/ListBuffer.h"
 #include "TuringProtoEncoder.h"
 #include "TuringProtoHeaders.h"
 #include "TuringProtoInBuf.h"
@@ -118,14 +119,16 @@ size_t countPacketsOfType(const std::vector<FramedPacket>& packets,
 // schema state across chunks, so preserving packet order matters here.
 void decodeChunkPackets(const std::vector<FramedPacket>& packets,
                         db::LocalMemory* localMem,
-                        net::proto::EmbeddingBuffer* embeddingBuffer,
+                        net::proto::ChunkedBuffer<float>* embeddingBuffer,
+                        net::proto::ChunkedBuffer<char>* stringBuffer,
+                        db::ListBuffer<>* listBuffer,
                         db::DataframeManager* dfMan,
                         db::Dataframe* decoded,
                         std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema>* schemas) {
     const size_t maxPayloadSize =
         std::transform_reduce(packets.begin(), packets.end(), size_t {0}, [](size_t lhs, size_t rhs) { return std::max(lhs, rhs); }, [](const FramedPacket& packet) { return packet._bytes.size() - net::proto::ProtoHeader::wireSize(); });
     net::proto::TuringProtoInBuf inBuf(maxPayloadSize);
-    net::proto::TuringProtoDecoder decoder(localMem, dfMan, &inBuf, embeddingBuffer);
+    net::proto::TuringProtoDecoder decoder(localMem, dfMan, &inBuf, embeddingBuffer, stringBuffer, listBuffer);
     schemas->clear();
 
     for (const auto& packet : packets) {
@@ -205,10 +208,12 @@ TEST(TuringProtoRoundTripTest, RoundTripsNumericColumnsAcrossChunkSizes) {
         const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
         expectPacketSequence(packets, true);
 
-        net::proto::EmbeddingBuffer embeddingBuffer;
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         EXPECT_EQ(decoded.getLogicalRowCount(), 6u);
@@ -262,10 +267,12 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalStringColumnsAcrossChunkSizes) 
         const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
         expectPacketSequence(packets, true);
 
-        net::proto::EmbeddingBuffer embeddingBuffer;
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
@@ -312,10 +319,12 @@ TEST(TuringProtoRoundTripTest, RoundTripsHugeStringsAcrossMultipleBuffers) {
         expectPacketSequence(packets, true);
         EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 5u);
 
-        net::proto::EmbeddingBuffer embeddingBuffer;
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         const auto* decodedIds = decoded.cols().at(0)->as<db::ColumnVector<UInt64>>();
@@ -355,10 +364,12 @@ TEST(TuringProtoRoundTripTest, RoundTripsHugeEmbeddingsAcrossMultipleBuffers) {
         expectPacketSequence(packets, true);
         EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 5u);
 
-        net::proto::EmbeddingBuffer embeddingBuffer;
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         const auto* decodedIds = decoded.cols().at(0)->as<db::ColumnVector<UInt64>>();
@@ -402,10 +413,12 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantColumns) {
     expectPacketSequence(packets, true);
     EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
 
-    net::proto::EmbeddingBuffer embeddingBuffer;
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 3u);
     const auto* decodedIds = decoded.cols().at(0)->as<db::ColumnConst<std::optional<UInt64>>>();
@@ -418,6 +431,112 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantColumns) {
     EXPECT_EQ(decodedIds->at(0), std::optional<UInt64> {42});
     EXPECT_EQ(decodedLabel->at(0), OptionalDecodedString {hugeLabel});
     EXPECT_EQ(decodedEmptyLabel->at(0), std::nullopt);
+}
+
+// Encode a constant list column whose single list mixes a fixed element, a string, and an
+// embedding, then decode it back. The chunk size is small enough to split the string
+// payload across packets, exercising the list header grouping, the fixed raw-copy path,
+// and the String/Embedding side-buffer + _bufferState resume.
+TEST(TuringProtoRoundTripTest, RoundTripsConstantListColumns) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    // Longer than the chunk size below, so its payload spans packets.
+    const std::string text(64, 'z');
+    const std::vector<float> embedding {1.0f, 2.5f, -3.0f, 4.25f};
+
+    std::vector<db::ListBuffer<>::ListItemVariant> items;
+    items.emplace_back(Int64 {-7});
+    items.emplace_back(StringView {text});
+    items.emplace_back(Embedding {embedding});
+    items.emplace_back(UInt64 {99});
+
+    auto* listCol = localMem.alloc<db::ColumnConst<db::ListView>>();
+    listCol->set(localMem.listBuffer().insert(items));
+    addColumn(&dfMan, &source, "my_list", listCol);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 48);
+    expectPacketSequence(packets, true);
+    EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    const auto* decodedList = decoded.cols().at(0)->as<db::ColumnConst<db::ListView>>();
+    ASSERT_NE(decodedList, nullptr);
+
+    const db::ListView view = decodedList->at(0);
+    ASSERT_EQ(view.size(), 4u);
+
+    auto element = view.begin();
+    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(element->getAs<Int64>(), -7);
+    ++element;
+    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(element->getAs<StringView>(), std::string_view(text));
+    ++element;
+    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::Embedding);
+    expectEmbedding(element->getAs<Embedding>(), std::span<const float>(embedding));
+    ++element;
+    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::UInt);
+    EXPECT_EQ(element->getAs<UInt64>(), 99u);
+}
+
+// Encode a ColumnVector<ListElementView> — one tagged element per row — and decode it
+// back. Same wire shape as a list of N elements; the small chunk size splits the string
+// element's payload across packets.
+TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumns) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    const std::string text(64, 'q');
+    const std::vector<float> embedding {0.5f, 1.5f, 2.5f};
+
+    std::vector<db::ListBuffer<>::ListItemVariant> items;
+    items.emplace_back(Int64 {-3});
+    items.emplace_back(StringView {text});
+    items.emplace_back(Embedding {embedding});
+    items.emplace_back(UInt64 {123});
+
+    const db::ListView list = localMem.listBuffer().insert(items);
+
+    auto* col = localMem.alloc<db::ColumnVector<db::ListElementView>>();
+    for (const auto& element : list) {
+        col->push_back(element);
+    }
+    addColumn(&dfMan, &source, "elements", col);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 48);
+    expectPacketSequence(packets, true);
+    EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::ListElementView>>();
+    ASSERT_NE(decodedCol, nullptr);
+    ASSERT_EQ(decodedCol->size(), 4u);
+
+    EXPECT_EQ(decodedCol->at(0).getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(decodedCol->at(0).getAs<Int64>(), -3);
+    EXPECT_EQ(decodedCol->at(1).getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(decodedCol->at(1).getAs<StringView>(), std::string_view(text));
+    EXPECT_EQ(decodedCol->at(2).getTag(), db::ListBufferTypeTag::Embedding);
+    expectEmbedding(decodedCol->at(2).getAs<Embedding>(), std::span<const float>(embedding));
+    EXPECT_EQ(decodedCol->at(3).getTag(), db::ListBufferTypeTag::UInt);
+    EXPECT_EQ(decodedCol->at(3).getAs<UInt64>(), 123u);
 }
 
 // The schema (column names and types) must fit in a single CHUNK_HEADER

@@ -5,6 +5,7 @@
 
 #include "EntityList.h"
 #include "GraphPath.h"
+#include "list/ListView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
@@ -41,7 +42,9 @@ concept SupportedColumnVectorTypes = std::is_same_v<T, db::types::UInt64::Primit
 || std::is_same_v<T, db::ChangeID>
 || std::is_same_v<T, db::Path>
 || std::is_same_v<T, db::EntityList>
+|| std::is_same_v<T, db::ListElementView>
 || std::is_same_v<T, std::string>;
+//|| std::is_same_v<T, db::ListView> - no way to test this for now
 
 template <typename T>
 concept SupportedColumnOptVectorTypes = std::is_same_v<T, db::types::UInt64::Primitive>
@@ -58,7 +61,9 @@ concept SupportedColumnConstTypes = std::is_same_v<T, db::types::UInt64::Primiti
 || std::is_same_v<T, db::types::Bool::Primitive>
 || std::is_same_v<T, db::types::Embedding::Primitive>
 || std::is_same_v<T, db::PropertyNull>
+|| std::is_same_v<T, db::ListView>
 || std::is_same_v<T, std::string>;
+//|| std::is_same_v<T, db::ListElementView> - disabled: no ColumnConst<ListElementView> memory pool
 
 template <typename T>
 concept SupportedColumnOptConstTypes = std::is_same_v<T, db::types::UInt64::Primitive>
