@@ -33,9 +33,7 @@ protected:
     std::unique_ptr<Graph> _graph;
 
     void dumpGraph() {
-        GraphDumper dumper;
-
-        auto res = dumper.dump(*_graph, _dumpPath);
+        auto res = GraphDumper::dump(_graph.get(), _dumpPath);
         if (!res) {
             throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
         }

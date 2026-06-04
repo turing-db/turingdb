@@ -34,9 +34,7 @@ protected:
 };
 
 TEST_F(StringIndexLoaderTest, SimpleDumpLoad) {
-    GraphDumper dumper;
-
-    auto res = dumper.dump(*_graph, _dumpPath);
+    auto res = GraphDumper::dump(_graph.get(), _dumpPath);
     if (!res) {
         throw TuringException("Failed to dump graph:\n" + res.error().fmtMessage());
     }
