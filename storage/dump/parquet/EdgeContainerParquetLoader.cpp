@@ -126,8 +126,18 @@ std::unique_ptr<EdgeContainer> EdgeContainerParquetLoader::load(const fs::Path& 
     EdgeColumnsVisitor inVisitor;
     readEdgeFile(inPath, inVisitor);
 
-    if (!outVisitor._hasFirstEdgeID || !outVisitor._hasFirstNodeID) {
+    const bool outHasFirstIds = outVisitor._hasFirstEdgeID && outVisitor._hasFirstNodeID;
+    const bool inHasFirstIds = inVisitor._hasFirstEdgeID && inVisitor._hasFirstNodeID;
+    if (!outHasFirstIds || !inHasFirstIds) {
         throw FatalException("EdgeContainerParquetLoader: missing first-id metadata");
+    }
+
+    // The dumper writes the same first ids to both files; a disagreement means one of
+    // them belongs to a different container.
+    const bool firstIdsAgree = inVisitor._firstEdgeID == outVisitor._firstEdgeID
+                               && inVisitor._firstNodeID == outVisitor._firstNodeID;
+    if (!firstIdsAgree) {
+        throw FatalException("EdgeContainerParquetLoader: out- and in-edge first ids disagree");
     }
 
     std::vector<EdgeRecord> outEdges;

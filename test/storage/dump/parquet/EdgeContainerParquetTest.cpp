@@ -1,7 +1,11 @@
 #include "TuringTest.h"
 
+#include "ParquetWriteSchema.h"
+#include "ParquetWriter.h"
+
 #include "dump/parquet/EdgeContainerParquetDumper.h"
 #include "dump/parquet/EdgeContainerParquetLoader.h"
+#include "dump/parquet/EdgeContainerParquetLayout.h"
 #include "comparators/EdgeContainerComparator.h"
 #include "datapart/EdgeContainer.h"
 #include "datapart/EdgeRecord.h"
@@ -15,6 +19,7 @@
 
 #include "ID.h"
 #include "Path.h"
+#include "FatalException.h"
 
 using namespace db;
 using namespace turing::test;
@@ -68,4 +73,42 @@ TEST_F(EdgeContainerParquetTest, RoundTrip) {
         EXPECT_EQ(originalIns[i]._otherID.getValue(), loadedIns[i]._otherID.getValue());
         EXPECT_EQ(originalIns[i]._edgeTypeID.getValue(), loadedIns[i]._edgeTypeID.getValue());
     }
+}
+
+// The dumper writes the same first ids to both edge files; a forged in-file whose
+// first ids disagree with the out-file must be refused instead of silently building
+// a container from mismatched halves.
+TEST_F(EdgeContainerParquetTest, MismatchedInFileFirstIdsThrow) {
+    std::vector<EdgeRecord> outEdges = {
+        {0, 1, 2, 0},
+    };
+
+    std::unordered_map<EdgeID, EdgeID> tmpToFinalEdgeIDs;
+    const std::unique_ptr<EdgeContainer> original = EdgeContainer::create(NodeID {0},
+                                                                          EdgeID {0},
+                                                                          std::move(outEdges),
+                                                                          tmpToFinalEdgeIDs);
+    ASSERT_NE(original, nullptr);
+
+    const fs::Path outPath = fs::Path(_outDir) / "edges-out.parquet";
+    const fs::Path inPath = fs::Path(_outDir) / "edges-in.parquet";
+    EdgeContainerParquetDumper::dump(*original, outPath, inPath);
+
+    // Rewrite the in-edge file with a valid schema but different first ids.
+    {
+        namespace layout = edgeContainerParquetLayout;
+
+        ParquetWriteSchema schema;
+        schema.addColumn(layout::EDGE_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::NODE_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::OTHER_ID_COLUMN, ParquetColumnType::UInt64);
+        schema.addColumn(layout::EDGE_TYPE_ID_COLUMN, ParquetColumnType::UInt64);
+
+        ParquetWriter writer(inPath, schema);
+        writer.setMetadata(layout::FIRST_EDGE_ID_KEY, "7");
+        writer.setMetadata(layout::FIRST_NODE_ID_KEY, "7");
+        writer.finish();
+    }
+
+    EXPECT_THROW(EdgeContainerParquetLoader::load(outPath, inPath), FatalException);
 }

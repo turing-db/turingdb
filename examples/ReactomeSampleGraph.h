@@ -4,7 +4,7 @@ namespace db {
 
 class Graph;
 
-// Miniature Reactome graph (~50 nodes, ~70 edges) modelled after the real Reactome
+// Miniature Reactome graph (41 nodes, 60 edges) modelled after the real Reactome
 // Knowledgebase schema: TopLevelPathway / Pathway / ReactionLikeEvent hierarchy,
 // Complex / PhysicalEntity / ReferenceGeneProduct, Species and Compartment, with
 // hasEvent / hasComponent / species / input / output / compartment edge types. Used as a

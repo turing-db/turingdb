@@ -25,6 +25,7 @@
 #include "datapart/NodeContainer.h"
 #include "datapart/EdgeContainer.h"
 #include "indexers/EdgeIndexer.h"
+#include "indexers/PropertyIndexer.h"
 #include "indexers/StringPropertyIndexer.h"
 #include "properties/PropertyManager.h"
 #include "properties/PropertyContainer.h"
@@ -164,6 +165,28 @@ void DataPartParquetLoader::loadPropertyManager(const fs::Path& partDir,
         insertContainer(manager,
                         PropertyTypeID {static_cast<PropertyTypeID::Type>(propertyTypeId.value())},
                         std::move(container));
+    }
+
+    // The indexer is loaded before the containers, so only now can its ranges be
+    // checked. An out-of-bounds range would read past the container's values once
+    // the index is used.
+    for (const auto& [propertyTypeID, labelSetIndexer] : manager._indexers) {
+        const auto containerIt = manager._map.find(propertyTypeID);
+        if (containerIt == manager._map.end()) {
+            throw FatalException(
+                "DataPartParquetLoader: property indexer references a missing container");
+        }
+
+        const size_t valueCount = containerIt->second->size();
+        for (const auto& [labelset, ranges] : labelSetIndexer) {
+            for (const PropertyRange& range : ranges) {
+                const bool rangeInBounds = range._count <= valueCount
+                                           && range._offset <= valueCount - range._count;
+                if (!rangeInBounds) {
+                    throw FatalException("DataPartParquetLoader: property range out of bounds");
+                }
+            }
+        }
     }
 }
 
