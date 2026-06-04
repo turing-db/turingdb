@@ -1,16 +1,18 @@
 #pragma once
 
+#include <span>
 #include <type_traits>
 #include <utility>
 
-#include "Bitmask.h"
 #include "OutputValues.h"
 #include "TuringProtoOutBuf.h"
+#include "TuringProtoHeaders.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
-#include "TuringProtoHeaders.h"
+#include "list/ListUtils.h"
 #include "QueryCallbacks.h"
+#include "Bitmask.h"
 
 namespace db {
 class QueryStatus;
@@ -44,6 +46,8 @@ using ProtoEncoderSupportedTypes = std::tuple<
     std::string,
     db::Path,
     db::EntityList,
+    db::ListView,
+    db::ListElementView,
     db::PropertyNull,
     db::ValueType>;
 
@@ -81,8 +85,12 @@ struct ColInternalKindToProtoEnum {
             return Enum::PATH;
         } else if constexpr (db::IsEmbedding<T>) {
             return Enum::EMBEDDING;
-        } else if constexpr (db::IsList<T>) {
+        } else if constexpr (db::IsEntityList<T>) {
             return Enum::ENTITY_LIST;
+        } else if constexpr (db::IsListView<T>) {
+            return Enum::LIST_VIEW;
+        } else if constexpr (db::IsListElement<T>) {
+            return Enum::LIST_ELEMENT_VIEW;
         } else if constexpr (db::IsValueType<T>) {
             return Enum::VALUE_TYPE;
         } else if constexpr (db::IsNull<T>) {
@@ -133,6 +141,60 @@ struct ColumnHeaderWriter {
     }
 };
 
+/// Dispatched on a list element's runtime tag to return the size of the object
+/// the tag maps to, so the client knows how much to allocate. For String and
+/// Embedding this is the size of the view object (std::string_view / std::span),
+/// not the length of the data it points to.
+struct ListElementByteSizeVisitor {
+    template <typename T>
+    size_t operator()(const db::ListElementView elem) const {
+        return sizeof(T);
+    }
+};
+
+/// Dispatched on a list element's runtime tag to write [tag][value] for fixed types, or
+/// [tag][numBytes][data] for variable-length types (String, Embedding). The tag and the
+/// fixed framing are kept within a single chunk (checkRemainingAndFlush) so the decoder,
+/// which reads each unit atomically, never sees them split across a packet boundary; the
+/// variable payload that follows still streams across chunks via copyVarLenData.
+struct ListElementWriteVisitor {
+    net::proto::TuringProtoOutBuf* _outBuf {nullptr};
+
+    template <typename T>
+    void operator()(const db::ListElementView elem) const {
+        constexpr size_t tagSize = sizeof(db::ListBufferTypeTag);
+        const db::ListBufferTypeTag tag = db::TypeToListBufferTag<T>::Tag;
+
+        if constexpr (db::StringLike<T>) {
+            const T value = elem.getAs<T>();
+            bioassert(value.size() * sizeof(char) <= std::numeric_limits<uint32_t>::max(), "List string element exceeds maximum wire size");
+            const uint32_t numBytes = static_cast<uint32_t>(value.size() * sizeof(char));
+
+            _outBuf->checkRemainingAndFlush(tagSize + sizeof(numBytes));
+            _outBuf->copyFixedLenData(&tag, tagSize);
+            _outBuf->copyFixedLenData(&numBytes, sizeof(numBytes));
+            _outBuf->copyVarLenData(value.data(), numBytes);
+        } else if constexpr (db::IsEmbedding<T>) {
+            const T value = elem.getAs<T>();
+            bioassert(value.size() * sizeof(float) <= std::numeric_limits<uint32_t>::max(), "List embedding element exceeds maximum wire size");
+            const uint32_t numBytes = static_cast<uint32_t>(value.size() * sizeof(float));
+
+            _outBuf->checkRemainingAndFlush(tagSize + sizeof(numBytes));
+            _outBuf->copyFixedLenData(&tag, tagSize);
+            _outBuf->copyFixedLenData(&numBytes, sizeof(numBytes));
+            _outBuf->copyVarLenData(value.data(), numBytes);
+        } else if constexpr (db::IsListView<T>) {
+            throw FatalException("Nested lists are not supported over the binary protocol.");
+        } else {
+            const T value = elem.getAs<T>();
+
+            _outBuf->checkRemainingAndFlush(tagSize + sizeof(T));
+            _outBuf->copyFixedLenData(&tag, tagSize);
+            _outBuf->copyFixedLenData(&value, sizeof(T));
+        }
+    }
+};
+
 class DataWriter {
 public:
     explicit DataWriter(net::proto::TuringProtoOutBuf* outBuf)
@@ -173,7 +235,7 @@ public:
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val.data(), columnByteSize);
             }
-        } else if constexpr (db::IsList<T>) {
+        } else if constexpr (db::IsEntityList<T>) {
             constexpr size_t sizeOfEntry = sizeof(db::EntityList::Entry::_id) + sizeof(db::EntityList::Entry::_type);
 
             for (const auto& entityList : *col) {
@@ -188,6 +250,14 @@ public:
                     _outBuf->copyFixedLenData(&entry._id, sizeof(entry._id));
                 }
             }
+        } else if constexpr (db::IsListView<T>) {
+            for (const auto& listView : *col) {
+                writeListView(listView);
+            }
+        } else if constexpr (db::IsListElement<T>) {
+            // One element per row: the row count (already written above) is the element
+            // count, so only [listByteSize] + the elements follow.
+            writeListElements(std::span<const db::ListElementView>(col->data(), col->size()));
         } else {
             static_assert(std::is_trivially_copyable_v<T>,
                           "TuringProtoEncoder only supports trivially copyable types and string");
@@ -243,7 +313,7 @@ public:
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val->data(), columnByteSize);
             }
-        } else if constexpr (db::IsList<T>) {
+        } else if constexpr (db::IsEntityList<T>) {
             // EntityList is only used as ColumnVector<EntityList>, never optional
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
@@ -282,8 +352,15 @@ public:
             const uint32_t columnByteSize = static_cast<uint32_t>(val.size() * sizeof(float));
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
-        } else if constexpr (db::IsList<T>) {
-            // EntityList is only used as ColumnVector<EntityList>, never const
+        } else if constexpr (db::IsEntityList<T>) {
+            // It is not used/returned anywhere in the codebase so we disable support for
+            // it now. We can renable it if ever needed.
+            throw FatalException("ColumnConst<EntityList> is not supported");
+        } else if constexpr (db::IsListView<T>) {
+            writeListView(col->at(0));
+        } else if constexpr (db::IsListElement<T>) {
+            const db::ListElementView element = col->at(0);
+            writeListElements(std::span<const db::ListElementView>(&element, 1));
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
@@ -321,8 +398,8 @@ public:
             const uint32_t columnByteSize = static_cast<uint32_t>(val.size() * sizeof(float));
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
-        } else if constexpr (db::IsList<T>) {
-            // EntityList is only used as ColumnVector<EntityList>, never optional const
+        } else if constexpr (db::IsEntityList<T>) {
+            throw FatalException("ColumnOptConst<EntityList> is not supported");
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
@@ -333,6 +410,56 @@ public:
     }
 
 private:
+    // Writes one list as [count][listByteSize] followed by its [tag][value] /
+    // [tag][numBytes][data] elements. Shared by the vector and constant paths.
+    // Σ sizeof(value) over the elements — the deserialized footprint the decoder reserves.
+    uint32_t computeListByteSize(std::span<const db::ListElementView> elements) {
+        const ListElementByteSizeVisitor sizeVisitor;
+
+        size_t totalSize = 0;
+        for (const auto& elem : elements) {
+            totalSize += db::ListTagDispatcher {elem.getTag()}.execute(sizeVisitor, elem);
+        }
+
+        bioassert(totalSize <= std::numeric_limits<uint32_t>::max(), "List length exceeds maximum wire size");
+        return static_cast<uint32_t>(totalSize);
+    }
+
+    // Writes each element's [tag][value] / [tag][numBytes][data].
+    void writeListElementValues(std::span<const db::ListElementView> elements) {
+        const ListElementWriteVisitor writeVisitor {_outBuf};
+
+        for (const auto& elem : elements) {
+            db::ListTagDispatcher {elem.getTag()}.execute(writeVisitor, elem);
+        }
+    }
+
+    // A whole list value: [count][listByteSize] followed by the elements.
+    void writeListView(const db::ListView& listView) {
+        const std::span<const db::ListElementView> elements = listView.elements();
+
+        bioassert(elements.size() <= std::numeric_limits<uint32_t>::max(), "List element count exceeds maximum wire size");
+        const uint32_t elementCount = static_cast<uint32_t>(elements.size());
+        const uint32_t listByteSize = computeListByteSize(elements);
+
+        // Keep the [count][listByteSize] header together in one chunk.
+        _outBuf->checkRemainingAndFlush(sizeof(elementCount) + sizeof(listByteSize));
+        _outBuf->copyFixedLenData(&elementCount, sizeof(elementCount));
+        _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
+
+        writeListElementValues(elements);
+    }
+
+    // Helper function to write ColumnVectors or Column Const List Element Views.
+    void writeListElements(std::span<const db::ListElementView> elements) {
+        const uint32_t listByteSize = computeListByteSize(elements);
+
+        _outBuf->checkRemainingAndFlush(sizeof(listByteSize));
+        _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
+
+        writeListElementValues(elements);
+    }
+
     net::proto::TuringProtoOutBuf* _outBuf {nullptr};
 };
 

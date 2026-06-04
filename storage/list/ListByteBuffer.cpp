@@ -83,6 +83,16 @@ ListElementView ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
 }
 
 template <size_t N>
+ListElementView ListByteBuffer<N>::writeRaw(const void* data, size_t numBytes) {
+    std::byte* startPtr = &_last->_buf[_last->_size];
+
+    std::memcpy(startPtr, data, numBytes);
+    _last->_size += numBytes;
+
+    return ListElementView {startPtr};
+}
+
+template <size_t N>
 void ListByteBuffer<N>::clear() {
     // Delete all chunks
     auto* cur = _first;

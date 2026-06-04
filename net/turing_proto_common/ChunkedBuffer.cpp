@@ -1,14 +1,19 @@
-#include "EmbeddingBuffer.h"
+#include "ChunkedBuffer.h"
+
+#include <algorithm>
 
 using namespace net::proto;
 
-EmbeddingBuffer::EmbeddingBuffer() {
+template<typename T>
+ChunkedBuffer<T>::ChunkedBuffer() {
 }
 
-EmbeddingBuffer::~EmbeddingBuffer() {
+template<typename T>
+ChunkedBuffer<T>::~ChunkedBuffer() {
 }
 
-std::vector<float>& EmbeddingBuffer::ensureCapacity(size_t count) {
+template<typename T>
+std::vector<T>& ChunkedBuffer<T>::ensureCapacity(size_t count) {
     const bool chunksHaveBeenAllocated = !_chunks.empty();
     const bool hasCapacity = chunksHaveBeenAllocated
                           && _chunks.back().size() + count <= _chunks.back().capacity();
@@ -20,24 +25,33 @@ std::vector<float>& EmbeddingBuffer::ensureCapacity(size_t count) {
     return _chunks.back();
 }
 
-std::span<const float> EmbeddingBuffer::alloc(const float* data, size_t count) {
+template<typename T>
+ChunkedBuffer<T>::refType ChunkedBuffer<T>::alloc(const T* data, size_t count) {
     auto& chunk = ensureCapacity(count);
     const size_t offset = chunk.size();
     chunk.insert(chunk.end(), data, data + count);
     return {chunk.data() + offset, count};
 }
 
-float* EmbeddingBuffer::alloc(size_t count) {
+template<typename T>
+T* ChunkedBuffer<T>::alloc(size_t count) {
     auto& chunk = ensureCapacity(count);
     const size_t offset = chunk.size();
-    chunk.resize(offset + count, 0.0f);
+    chunk.resize(offset + count, T {});
     return chunk.data() + offset;
 }
 
-std::span<const float> EmbeddingBuffer::getSpan(float* data, size_t count) {
+template<typename T>
+ChunkedBuffer<T>::refType ChunkedBuffer<T>::getView(T* data, size_t count) {
     return {data, count};
 }
 
-void EmbeddingBuffer::clear() {
+template<typename T>
+void ChunkedBuffer<T>::clear() {
     _chunks.clear();
+}
+
+namespace net::proto {
+template class ChunkedBuffer<float>;
+template class ChunkedBuffer<char>;
 }
