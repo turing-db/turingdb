@@ -1,13 +1,33 @@
 #include "VariableDependencyGraph.h"
 
 #include <algorithm>
+#include <utility>
 
+#include "EdgePattern.h"
 #include "EntityPattern.h"
 #include "PatternElement.h"
 
 #include "BioAssert.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
+
+
+static EdgeMetadata::EdgeType directionToType(EdgePattern::Direction dir) {
+    switch (dir) {
+        case EdgePattern::Direction::Undirected:
+            return EdgeMetadata::EdgeType::BIDIRECTIONAL;
+        break;
+        case EdgePattern::Direction::Backward:
+            return EdgeMetadata::EdgeType::INCOMING;
+        break;
+        case EdgePattern::Direction::Forward:
+            return EdgeMetadata::EdgeType::OUTGOING;
+        break;
+    }
+    std::unreachable();
+    return EdgeMetadata::EdgeType::_SIZE;
+}
 
 void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) {
     const EntityPattern* origin = ptn->getRootEntity();
@@ -21,9 +41,13 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         VariableDependency* edgeVar = getOrCreateVariable(edge);
         VariableDependency* tgtVar = getOrCreateVariable(tgt);
 
+        const EdgePattern::Direction direction = edge->getDirection();
+        const EdgeMetadata::EdgeType type = directionToType(direction);
+        spdlog::info("dir = {}, type = {}", std::to_underlying(direction), std::to_underlying(type));
+
         // NOTE: Edge direction does not matter, as we can get out, in, or both edges
-        prev->requiredFor(edgeVar);
-        edgeVar->requiredFor(tgtVar);
+        prev->requiredFor(edgeVar, type);
+        edgeVar->requiredFor(tgtVar, type);
 
         prev = tgtVar;
     }
@@ -45,12 +69,14 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
     return exists ? &*foundIt : newVariable(entity);
 }
 
-void VariableDependency::dependsOn(VariableDependency* dep) {
-    this->_incoming.emplace_back(dep);
-    dep->_outgoing.emplace_back(this);
+void VariableDependency::dependsOn(VariableDependency* dep, EdgeMetadata::EdgeType type) {
+    const EdgeMetadata data(type);
+    this->_incoming.emplace_back(dep, data);
+    dep->_outgoing.emplace_back(this, data);
 }
 
-void VariableDependency::requiredFor(VariableDependency* dep) {
-    this->_outgoing.emplace_back(dep);
-    dep->_incoming.emplace_back(this);
+void VariableDependency::requiredFor(VariableDependency* dep, EdgeMetadata::EdgeType type) {
+    const EdgeMetadata data(type);
+    this->_outgoing.emplace_back(dep, data);
+    dep->_incoming.emplace_back(this, data);
 }
