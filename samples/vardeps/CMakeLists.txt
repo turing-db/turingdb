@@ -1,4 +1,4 @@
-set(SAMPLE_NAME ir)
+set(SAMPLE_NAME vardeps)
 set(SOURCES
     main.cpp
 )
