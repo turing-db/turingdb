@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <utility>
 
+#include <range/v3/view/chunk.hpp>
+
 #include "EdgePattern.h"
 #include "EntityPattern.h"
 #include "PatternElement.h"
@@ -13,6 +15,8 @@
 
 using namespace db;
 
+namespace rg = ranges;
+namespace rv = rg::views;
 
 static EdgeMetadata::EdgeType directionToType(EdgePattern::Direction dir) {
     switch (dir) {
@@ -72,30 +76,12 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
 
 void VariableDependency::dependsOn(VariableDependency* dep, EdgeMetadata::EdgeType type) {
     const EdgeMetadata data(type);
-    this->_incoming.emplace_back(dep, data);
-    dep->_outgoing.emplace_back(this, data);
+    this->_incoming.emplace_back(dep, this, data);
+    dep->_outgoing.emplace_back(this, dep, data);
 }
 
 void VariableDependency::requiredFor(VariableDependency* dep, EdgeMetadata::EdgeType type) {
     const EdgeMetadata data(type);
-    this->_outgoing.emplace_back(dep, data);
-    dep->_incoming.emplace_back(this, data);
-}
-
-void VariableDependencyGraph::forestify() {
-    for (VariableDependency& var : _vars) {
-        const VariableDependency::Edges& incoming = var.getIncoming();
-
-        const bool singlePath = incoming.size() == 1;
-        if (singlePath) {
-            continue;
-        }
-
-        [[maybe_unused]] const auto nonMetaEdge = [](const DependencyEdge& e) {
-            return EdgeMetadata::isMetaEdge(e.data().type());
-        };
-
-        // for (const DependencyEdge& incEdge : incoming) {
-        // }
-    }
+    this->_outgoing.emplace_back(this, dep, data);
+    dep->_incoming.emplace_back(dep, this, data);
 }
