@@ -4,6 +4,7 @@
 
 #include <deque>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -43,7 +44,6 @@ private:
 
 static_assert(std::is_trivially_copyable_v<EdgeMetadata>);
 
-
 using EdgeTypeName = EnumToString<EdgeMetadata::EdgeType>::Create<
     EnumStringPair<EdgeMetadata::EdgeType::OUTGOING, "getout">,
     EnumStringPair<EdgeMetadata::EdgeType::INCOMING, "getin">,
@@ -53,16 +53,21 @@ using EdgeTypeName = EnumToString<EdgeMetadata::EdgeType>::Create<
 
 class DependencyEdge {
 public:
-    DependencyEdge(VariableDependency* tgt, EdgeMetadata data)
-        : _tgt(tgt),
+    DependencyEdge(VariableDependency* src, VariableDependency* tgt, EdgeMetadata data)
+        : _src(src),
+         _tgt(tgt),
         _data(data)
     {
     }
 
+    const VariableDependency* src() const { return _src; }
     const VariableDependency* tgt() const { return _tgt; }
     EdgeMetadata data() const { return _data; }
 
 private:
+    friend class VariableDependencyGraph;
+
+    VariableDependency* _src;
     VariableDependency* _tgt;
     EdgeMetadata _data;
 };
@@ -91,7 +96,11 @@ public:
     bool isSink() const { return _outgoing.empty(); }
     bool isIsolated() const { return isRoot() && isSink(); }
 
+    void setName(std::string_view name) { _name = name; }
+
 private:
+    friend class VariableDependencyGraph;
+
     std::string _name;
 
     Edges _incoming;
@@ -112,8 +121,6 @@ public:
     /// Iteration order has no semantic meaning
     auto begin() const { return std::cbegin(_vars); }
     auto end() const { return std::cend(_vars); }
-
-    void forestify();
 
 private:
     /// Variables whose dependencies are tracked this class
