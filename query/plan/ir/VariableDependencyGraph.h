@@ -53,22 +53,22 @@ using EdgeTypeName = EnumToString<EdgeMetadata::EdgeType>::Create<
 
 class DependencyEdge {
 public:
-    DependencyEdge(VariableDependency* src, VariableDependency* tgt, EdgeMetadata data)
-        : _src(src),
-         _tgt(tgt),
+    DependencyEdge(VariableDependency* u, VariableDependency* v, EdgeMetadata data)
+        : _u(u),
+         _v(v),
         _data(data)
     {
     }
 
-    const VariableDependency* src() const { return _src; }
-    const VariableDependency* tgt() const { return _tgt; }
+    const VariableDependency* u() const { return _u; }
+    const VariableDependency* v() const { return _v; }
     EdgeMetadata data() const { return _data; }
 
 private:
     friend class VariableDependencyGraph;
 
-    VariableDependency* _src;
-    VariableDependency* _tgt;
+    VariableDependency* _u;
+    VariableDependency* _v;
     EdgeMetadata _data;
 };
 
@@ -78,33 +78,29 @@ private:
  */
 class VariableDependency {
 public:
-    using Edges = std::vector<DependencyEdge>;
+    using Edges = std::vector<DependencyEdge*>;
 
     explicit VariableDependency(std::string_view name)
         : _name(name)
     {
     }
 
-    void dependsOn(VariableDependency* dep, EdgeMetadata::EdgeType type);
-    void requiredFor(VariableDependency* dep, EdgeMetadata::EdgeType type);
+    const Edges& edges() const { return _edges; }
 
     std::string_view getName() const { return _name; }
-    const Edges& getOutgoing() const { return _outgoing; }
-    const Edges& getIncoming() const { return _incoming; }
 
-    bool isRoot() const { return _incoming.empty(); }
-    bool isSink() const { return _outgoing.empty(); }
-    bool isIsolated() const { return isRoot() && isSink(); }
+    bool isIsolated() const { return _edges.empty(); }
 
     void setName(std::string_view name) { _name = name; }
+
+    void addEdge(DependencyEdge* newEdge);
 
 private:
     friend class VariableDependencyGraph;
 
     std::string _name;
 
-    Edges _incoming;
-    Edges _outgoing;
+    Edges _edges;
 };
 
 /**
@@ -119,12 +115,15 @@ public:
     void registerPatternElement(const PatternElement* ptn);
 
     /// Iteration order has no semantic meaning
-    auto begin() const { return std::cbegin(_vars); }
-    auto end() const { return std::cend(_vars); }
+    const auto& vars() const { return _vars; }
+    const auto& edges() const { return _edges; }
+
+    const DependencyEdge* connect(VariableDependency* u, VariableDependency* v, const EdgeMetadata& data);
 
 private:
-    /// Variables whose dependencies are tracked this class
+    /// Variables whose dependencies are tracked by this class
     std::deque<VariableDependency> _vars;
+    std::deque<DependencyEdge> _edges;
 
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const EntityPattern* entity);

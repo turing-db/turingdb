@@ -5,9 +5,13 @@ set(SOURCES
 
 turing_sample(${SAMPLE_NAME} ${SOURCES})
 
-configure_file(run.sh ${CMAKE_CURRENT_BINARY_DIR}/run.sh
-               FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE
-               COPYONLY)
+foreach(f run.sh shell.nix asciimermaid.py package.json)
+    configure_file(${f} ${CMAKE_CURRENT_BINARY_DIR}/${f} COPYONLY)
+endforeach()
+
+# run.sh needs to be executable
+file(CHMOD ${CMAKE_CURRENT_BINARY_DIR}/run.sh
+     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 
 target_link_libraries(${SAMPLE_NAME} PRIVATE
     turing_db_system_s

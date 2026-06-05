@@ -11,27 +11,33 @@ using namespace db;
 void IRDumper::dumpMermaid(const VariableDependencyGraph& graph, std::ostream& out) {
     out << "flowchart TD\n";
 
-    std::unordered_map<const VariableDependency*, size_t> nodeIds;
-    for (size_t i {0}; const VariableDependency& var : graph) {
-        nodeIds[&var] = i++;
+    // Unnamed nodes (synthetic merge points) need a generated ID; named nodes use
+    // their variable name directly as the Mermaid ID so the script shows it as-is.
+    std::unordered_map<const VariableDependency*, size_t> anonIds;
+    for (size_t i {0}; const VariableDependency& var : graph.vars()) {
+        if (var.getName().empty()) {
+            anonIds[&var] = i++;
+        }
     }
 
-    const auto nodeDef = [&](const VariableDependency* var) {
-        std::string_view name = var->getName();
-        std::string_view label = name.empty() ? "<unnamed>" : name;
-        return "v" + std::to_string(nodeIds.at(var)) + "[\"" + std::string(label) + "\"]";
+    const auto nodeDef = [&](const VariableDependency* var) -> std::string {
+        const std::string_view name = var->getName();
+        if (!name.empty()) {
+            return std::string(name);
+        }
+        return "anon" + std::to_string(anonIds.at(var)) + "[\"<unnamed>\"]";
     };
 
-    for (const VariableDependency& var : graph) {
+    for (const VariableDependency& var : graph.vars()) {
         if (var.isIsolated()) {
             out << "    " << nodeDef(&var) << "\n";
-        } else {
-            for (const DependencyEdge& edge : var.getOutgoing()) {
-                const EdgeMetadata::EdgeType etype = edge.data().type();
-                const std::string_view typeName = EdgeTypeName::value(etype);
-                out << "    " << nodeDef(&var) << " -->|" << typeName << "| "
-                    << nodeDef(edge.tgt()) << "\n";
-            }
         }
+    }
+
+    for (const DependencyEdge& edge : graph.edges()) {
+        const EdgeMetadata::EdgeType etype = edge.data().type();
+        const std::string_view typeName = EdgeTypeName::value(etype);
+        out << "    " << nodeDef(edge.u()) << " ---|" << typeName << "| "
+            << nodeDef(edge.v()) << "\n";
     }
 }
