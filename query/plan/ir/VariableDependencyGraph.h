@@ -28,12 +28,14 @@ public:
         OUTGOING,
         INCOMING,
         BIDIRECTIONAL,
-        JOIN,
+        MERGE,
 
         _SIZE
     };
 
     EdgeType type() const { return _type; }
+
+    static bool isMetaEdge(EdgeType et) { return et == EdgeType::MERGE; }
 
 private:
     EdgeType _type {EdgeType::_SIZE};
@@ -46,7 +48,7 @@ using EdgeTypeName = EnumToString<EdgeMetadata::EdgeType>::Create<
     EnumStringPair<EdgeMetadata::EdgeType::OUTGOING, "getout">,
     EnumStringPair<EdgeMetadata::EdgeType::INCOMING, "getin">,
     EnumStringPair<EdgeMetadata::EdgeType::BIDIRECTIONAL, "bidir">,
-    EnumStringPair<EdgeMetadata::EdgeType::JOIN, "join">
+    EnumStringPair<EdgeMetadata::EdgeType::MERGE, "merge">
 >;
 
 class DependencyEdge {
@@ -110,6 +112,8 @@ public:
     /// Iteration order has no semantic meaning
     auto begin() const { return std::cbegin(_vars); }
     auto end() const { return std::cend(_vars); }
+
+    void forestify();
 
 private:
     /// Variables whose dependencies are tracked this class

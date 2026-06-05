@@ -80,3 +80,21 @@ void VariableDependency::requiredFor(VariableDependency* dep, EdgeMetadata::Edge
     this->_outgoing.emplace_back(dep, data);
     dep->_incoming.emplace_back(this, data);
 }
+
+void VariableDependencyGraph::forestify() {
+    for (VariableDependency& var : _vars) {
+        const VariableDependency::Edges& incoming = var.getIncoming();
+
+        const bool singlePath = incoming.size() == 1;
+        if (singlePath) {
+            continue;
+        }
+
+        const auto nonMetaEdge = [](const DependencyEdge& e) {
+            return EdgeMetadata::isMetaEdge(e.data().type());
+        };
+
+        for (const DependencyEdge& incEdge : incoming) {
+        }
+    }
+}
