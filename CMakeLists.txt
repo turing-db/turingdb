@@ -50,7 +50,7 @@ set(CPP_STANDARD "c++23")
 
 # C++ warning flags
 # Note: -Wno-deprecated-declarations is needed for external range-v3 library deprecation warnings
-set(CPP_WARNINGS "-Wall -Werror -Wunused-function -Wunused-variable -Wno-deprecated-declarations -Wno-maybe-uninitialized")
+set(CPP_WARNINGS "-Wall -Werror -Wunused-function -Wunused-variable -Wno-deprecated-declarations")
 
 # Detect debug build
 set(DEBUG_BUILD FALSE)
