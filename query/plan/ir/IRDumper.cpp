@@ -2,11 +2,9 @@
 
 #include <ostream>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 
 #include "VariableDependencyGraph.h"
-#include "decl/VarDecl.h"
 
 using namespace db;
 
@@ -19,8 +17,8 @@ void IRDumper::dumpMermaid(const VariableDependencyGraph& graph, std::ostream& o
     }
 
     const auto nodeDef = [&](const VariableDependency* var) {
-        const std::string_view name = var->getDecl()->getName();
-        const std::string_view label = name.empty() ? "<unnamed>" : name;
+        std::string_view name = var->getName();
+        std::string_view label = name.empty() ? "<unnamed>" : name;
         return "v" + std::to_string(nodeIds.at(var)) + "[\"" + std::string(label) + "\"]";
     };
 
