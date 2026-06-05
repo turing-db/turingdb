@@ -34,6 +34,21 @@ static EdgeMetadata::EdgeType directionToType(EdgePattern::Direction dir) {
     return EdgeMetadata::EdgeType::_SIZE;
 }
 
+void VariableDependency::addEdge(DependencyEdge* newEdge) {
+    _edges.push_back(newEdge);
+}
+
+const DependencyEdge* VariableDependencyGraph::connect(VariableDependency* u,
+                                                       VariableDependency* v,
+                                                       const EdgeMetadata& data) {
+    DependencyEdge& newEdge = _edges.emplace_back(u, v, data);
+
+    u->addEdge(&newEdge);
+    v->addEdge(&newEdge);
+
+    return &newEdge;
+}
+
 void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) {
     const EntityPattern* origin = ptn->getRootEntity();
 
@@ -50,9 +65,8 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         const EdgeMetadata::EdgeType type = directionToType(direction);
         spdlog::info("dir = {}, type = {}", std::to_underlying(direction), std::to_underlying(type));
 
-        // NOTE: Edge direction does not matter, as we can get out, in, or both edges
-        prev->requiredFor(edgeVar, type);
-        edgeVar->requiredFor(tgtVar, type);
+        connect(prev, edgeVar, EdgeMetadata {type});
+        connect(edgeVar, tgtVar, EdgeMetadata{type});
 
         prev = tgtVar;
     }
@@ -74,14 +88,3 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
     return exists ? &*foundIt : newVariable(entity);
 }
 
-void VariableDependency::dependsOn(VariableDependency* dep, EdgeMetadata::EdgeType type) {
-    const EdgeMetadata data(type);
-    this->_incoming.emplace_back(dep, this, data);
-    dep->_outgoing.emplace_back(this, dep, data);
-}
-
-void VariableDependency::requiredFor(VariableDependency* dep, EdgeMetadata::EdgeType type) {
-    const EdgeMetadata data(type);
-    this->_outgoing.emplace_back(this, dep, data);
-    dep->_incoming.emplace_back(dep, this, data);
-}
