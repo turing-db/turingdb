@@ -22,7 +22,7 @@ set_source_files_properties(
   DBDialect.cpp
   DBOps.cpp
   DBTypes.cpp
-  PROPERTIES COMPILE_FLAGS "-std=c++17"
+  PROPERTIES COMPILE_FLAGS "-Wno-uninitialized"
 )
 
 # Compiles .cpp files; needs the codegen first, hence the DEPENDS clause
