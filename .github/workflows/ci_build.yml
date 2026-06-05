@@ -47,6 +47,27 @@ jobs:
         docker-images: true
         swap-storage: false
 
+    # jlumbroso/free-disk-space only supports Ubuntu. The macOS image ships
+    # nine Xcode versions plus iOS/tvOS/watchOS/visionOS simulator runtimes,
+    # leaving only ~44GB free out of 320GB, which is not enough for a
+    # from-source LLVM/MLIR build + regress. Keep the selected Xcode and
+    # delete the rest.
+    - name: Free disk space (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        ACTIVE_XCODE=$(dirname "$(dirname "$(xcode-select -p)")")
+        echo "Keeping $ACTIVE_XCODE"
+        sudo xcrun simctl runtime delete all || true
+        for xcode in /Applications/Xcode*.app; do
+            if [ "$xcode" != "$ACTIVE_XCODE" ]; then
+                sudo rm -rf "$xcode" &
+            fi
+        done
+        sudo rm -rf "$HOME/Library/Android" &
+        sudo rm -rf "$HOME/.dotnet" &
+        sudo rm -rf "$HOME/hostedtoolcache/CodeQL" &
+        wait
+
     - name: Disk usage (initial)
       run: df -h
 
