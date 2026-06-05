@@ -8,6 +8,7 @@
 #include "PatternElement.h"
 
 #include "BioAssert.h"
+#include "decl/VarDecl.h"
 #include "spdlog/spdlog.h"
 
 using namespace db;
@@ -55,13 +56,13 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
 
 VariableDependency* VariableDependencyGraph::newVariable(const EntityPattern* entity) {
     bioassert(entity->getDecl(), "Variable without declaration.");
-    return &_vars.emplace_back(entity->getDecl());
+    return &_vars.emplace_back(std::string(entity->getDecl()->getName()));
 }
 
 VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPattern* entity) {
-    bioassert(entity->getDecl(), "Variable with declaration.");
+    bioassert(entity->getDecl(), "Variable with null declaration.");
     const auto match = [entity](const VariableDependency& dep) {
-        return entity->getDecl() == dep.getDecl();
+        return entity->getDecl()->getName() == dep.getName();
     };
     const auto foundIt = std::ranges::find_if(_vars, match);
     const bool exists  = foundIt != _vars.end();
@@ -90,11 +91,11 @@ void VariableDependencyGraph::forestify() {
             continue;
         }
 
-        const auto nonMetaEdge = [](const DependencyEdge& e) {
+        [[maybe_unused]] const auto nonMetaEdge = [](const DependencyEdge& e) {
             return EdgeMetadata::isMetaEdge(e.data().type());
         };
 
-        for (const DependencyEdge& incEdge : incoming) {
-        }
+        // for (const DependencyEdge& incEdge : incoming) {
+        // }
     }
 }

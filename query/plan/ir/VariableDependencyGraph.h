@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include <deque>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -12,7 +13,6 @@ namespace db {
 
 class EntityPattern;
 class PatternElement;
-class VarDecl;
 class VariableDependency;
 
 class EdgeMetadata {
@@ -75,15 +75,15 @@ class VariableDependency {
 public:
     using Edges = std::vector<DependencyEdge>;
 
-    VariableDependency(VarDecl* decl)
-        : _decl(decl)
+    explicit VariableDependency(std::string_view name)
+        : _name(name)
     {
     }
 
     void dependsOn(VariableDependency* dep, EdgeMetadata::EdgeType type);
     void requiredFor(VariableDependency* dep, EdgeMetadata::EdgeType type);
 
-    VarDecl* getDecl() const { return _decl; }
+    std::string_view getName() const { return _name; }
     const Edges& getOutgoing() const { return _outgoing; }
     const Edges& getIncoming() const { return _incoming; }
 
@@ -92,7 +92,7 @@ public:
     bool isIsolated() const { return isRoot() && isSink(); }
 
 private:
-    VarDecl* _decl {nullptr};
+    std::string _name;
 
     Edges _incoming;
     Edges _outgoing;
