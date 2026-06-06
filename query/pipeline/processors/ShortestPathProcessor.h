@@ -1,10 +1,10 @@
 #pragma once
 
-#include <queue>
 #include <unordered_set>
 
 #include "ID.h"
 #include "Processor.h"
+#include "ShortestPathUtils.h"
 
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
@@ -21,40 +21,12 @@ namespace db {
 class GraphView;
 class GetOutEdgesChunkWriter;
 class LocalMemory;
-
-template <typename T>
-struct DjistrakaNode {
-    NodeID id;
-    NodeID prevNode;
-    EdgeID edge;
-    T distance {0};
-};
-
-template <typename T>
-struct HeapMapValues {
-    NodeID prevNode;
-    EdgeID edge;
-    T distance {0};
-};
-
-template <typename T>
-struct DjistrakaNodeCompartor {
-    bool operator()(const DjistrakaNode<T> l, const DjistrakaNode<T> r) const {
-        return l.distance > r.distance;
-    }
-};
-
 class PipelineV2;
 
 template <SupportedType T>
 class ShortestPathProcessor final : public Processor {
 public:
     using EdgePropType = T::Primitive;
-    using DjistrakaHeap = std::priority_queue<DjistrakaNode<EdgePropType>,
-                                              std::vector<DjistrakaNode<EdgePropType>>,
-                                              DjistrakaNodeCompartor<EdgePropType>>;
-
-    using DjistrakaValueMap = std::unordered_map<NodeID, HeapMapValues<EdgePropType>>;
 
     static ShortestPathProcessor<T>* create(PipelineV2* pipeline,
                                             LocalMemory* mem,
@@ -74,8 +46,8 @@ public:
     PipelineBlockInputInterface& rightHandSide() { return _target; }
     PipelineBlockOutputInterface& output() { return _out; }
 
-    void addDistVarTag(ColumnTag distTag) { _distTag = distTag; };
-    void addPathVarTag(ColumnTag pathTag) { _pathTag = pathTag; };
+    void addDistVarTag(ColumnTag distTag) { _distTag = distTag; }
+    void addPathVarTag(ColumnTag pathTag) { _pathTag = pathTag; }
 
 private:
     LocalMemory* _mem {nullptr};
@@ -84,8 +56,7 @@ private:
                           ColumnTag sourceTag,
                           ColumnTag targetTag,
                           const PropertyType& edgeType);
-    ;
-    ~ShortestPathProcessor() final = default;
+    ~ShortestPathProcessor();
 
     PipelineBlockInputInterface _source;
     PipelineBlockInputInterface _target;
@@ -108,8 +79,8 @@ private:
     std::unique_ptr<GetPropertiesChunkWriter<EdgeID, T>> _getPropertiesWriter;
 
     std::unordered_set<NodeID> _targetNodes;
-    DjistrakaHeap _heap;
-    DjistrakaValueMap _heapValueMap;
+    DijkstraHeap<EdgePropType> _heap;
+    DijkstraValueMap<EdgePropType> _heapValueMap;
 };
 
 }

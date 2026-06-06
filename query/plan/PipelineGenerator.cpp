@@ -1678,7 +1678,7 @@ PipelineOutputInterface* PipelineGenerator::translateMultiSourceShortestPathNode
             throw PlannerException("Unsupported Edge Weight Type");
         }
     };
-    ValueTypeDispatcher {edgeType._valueType}.execute(process);
+    ValueTypeDispatcher(edgeType._valueType).execute(process);
 
     _declToColumn[node->getSourceOutput()] = sourceOutputCol->getTag();
     _declToColumn[node->getTargetOutput()] = targetOutputCol->getTag();

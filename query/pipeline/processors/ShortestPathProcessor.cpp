@@ -25,6 +25,9 @@ ShortestPathProcessor<T>::ShortestPathProcessor(LocalMemory* mem,
 }
 
 template <SupportedType T>
+ShortestPathProcessor<T>::~ShortestPathProcessor() = default;
+
+template <SupportedType T>
 ShortestPathProcessor<T>* ShortestPathProcessor<T>::create(PipelineV2* pipeline,
                                                            LocalMemory* mem,
                                                            ColumnTag sourceTag,
@@ -133,7 +136,7 @@ void ShortestPathProcessor<T>::execute() {
         return;
     }
     while (!_heap.empty()) {
-        const DjistrakaNode<EdgePropType> val = _heap.top();
+        const DijkstraNode<EdgePropType> val = _heap.top();
 
         if (_targetNodes.contains(val.id)) {
             // target found

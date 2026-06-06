@@ -1,11 +1,10 @@
 #pragma once
 
-#include <queue>
 #include <unordered_set>
-#include <unordered_map>
 
 #include "ID.h"
 #include "Processor.h"
+#include "ShortestPathUtils.h"
 
 #include "interfaces/PipelineBlockInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
@@ -24,37 +23,10 @@ class GetOutEdgesChunkWriter;
 class LocalMemory;
 class PipelineV2;
 
-template <typename T>
-struct MultiSourceDijkstraNode {
-    NodeID id;
-    NodeID prevNode;
-    EdgeID edge;
-    T distance {0};
-};
-
-template <typename T>
-struct MultiSourceDijkstraNodeComparator {
-    bool operator()(const MultiSourceDijkstraNode<T> l, const MultiSourceDijkstraNode<T> r) const {
-        return l.distance > r.distance;
-    }
-};
-
-template <typename T>
-struct MultiSourceHeapMapValues {
-    NodeID prevNode;
-    EdgeID edge;
-    T distance {0};
-};
-
 template <SupportedType T>
 class MultiSourceShortestPathProcessor final : public Processor {
 public:
     using EdgePropType = T::Primitive;
-    using DijkstraHeap = std::priority_queue<MultiSourceDijkstraNode<EdgePropType>,
-                                             std::vector<MultiSourceDijkstraNode<EdgePropType>>,
-                                             MultiSourceDijkstraNodeComparator<EdgePropType>>;
-
-    using DijkstraValueMap = std::unordered_map<NodeID, MultiSourceHeapMapValues<EdgePropType>>;
 
     static MultiSourceShortestPathProcessor<T>* create(PipelineV2* pipeline,
                                                        LocalMemory* mem,
@@ -86,7 +58,7 @@ private:
                                      ColumnTag sourceTag,
                                      ColumnTag targetTag,
                                      const PropertyType& edgeType);
-    ~MultiSourceShortestPathProcessor() final = default;
+    ~MultiSourceShortestPathProcessor();
 
     PipelineBlockInputInterface _source;
     PipelineBlockInputInterface _target;
@@ -112,6 +84,10 @@ private:
 
     std::vector<NodeID> _sourceNodes;
     std::unordered_set<NodeID> _targetNodes;
+
+    DijkstraHeap<EdgePropType> _heap;
+    DijkstraValueMap<EdgePropType> _heapValueMap;
+    std::unordered_set<NodeID> _settledTargets;
 
     void runDijkstra(NodeID sourceNode,
                      ColumnVector<NodeID>* sourceOutputCol,

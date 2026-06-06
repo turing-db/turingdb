@@ -25,6 +25,9 @@ MultiSourceShortestPathProcessor<T>::MultiSourceShortestPathProcessor(LocalMemor
 }
 
 template <SupportedType T>
+MultiSourceShortestPathProcessor<T>::~MultiSourceShortestPathProcessor() = default;
+
+template <SupportedType T>
 MultiSourceShortestPathProcessor<T>* MultiSourceShortestPathProcessor<T>::create(PipelineV2* pipeline,
                                                                                  LocalMemory* mem,
                                                                                  ColumnTag sourceTag,
@@ -149,6 +152,7 @@ void MultiSourceShortestPathProcessor<T>::execute() {
         throw TuringException("Could not find path column");
     }
 
+    // Run an independent Dijkstra from each source node to find shortest paths to all targets.
     for (const NodeID sourceNode : _sourceNodes) {
         runDijkstra(sourceNode, sourceOutputCol, targetOutputCol, distCol, pathCol);
     }
@@ -157,30 +161,39 @@ void MultiSourceShortestPathProcessor<T>::execute() {
     finish();
 }
 
+// Runs Dijkstra's algorithm from a single source node. For each reachable target,
+// emits one row with the source identity, target identity, shortest distance, and
+// the reconstructed path. The heap and value map are class members to avoid
+// repeated allocation; they are cleared at the start of each invocation.
 template <SupportedType T>
 void MultiSourceShortestPathProcessor<T>::runDijkstra(NodeID sourceNode,
                                                       ColumnVector<NodeID>* sourceOutputCol,
                                                       ColumnVector<NodeID>* targetOutputCol,
                                                       ColumnVector<EdgePropType>* distCol,
                                                       ColumnVector<Path>* pathCol) {
-    DijkstraHeap heap;
-    DijkstraValueMap heapValueMap;
-    std::unordered_set<NodeID> settledTargets;
+    // Reset state from any previous source invocation.
+    _heap = DijkstraHeap<EdgePropType>();
+    _heapValueMap.clear();
+    _settledTargets.clear();
 
-    heap.push({sourceNode, NodeID(), EdgeID(), 0});
-    heapValueMap.insert({sourceNode, {NodeID(), EdgeID(), 0}});
+    _heap.push({sourceNode, NodeID(), EdgeID(), 0});
+    _heapValueMap.insert({sourceNode, {NodeID(), EdgeID(), 0}});
 
-    while (!heap.empty()) {
-        const MultiSourceDijkstraNode<EdgePropType> val = heap.top();
-        heap.pop();
+    while (!_heap.empty()) {
+        const DijkstraNode<EdgePropType> val = _heap.top();
+        _heap.pop();
 
-        const auto it = heapValueMap.find(val.id);
-        if (it != heapValueMap.end() && it->second.distance != val.distance) {
+        // Skip stale entries — a node can appear multiple times in the heap
+        // when a shorter path is discovered after the initial insertion.
+        const auto it = _heapValueMap.find(val.id);
+        if (it != _heapValueMap.end() && it->second.distance != val.distance) {
             continue;
         }
 
-        if (_targetNodes.contains(val.id) && !settledTargets.contains(val.id)) {
-            settledTargets.insert(val.id);
+        // When a target node is settled, record the result row and reconstruct
+        // the path by walking backwards through the predecessor chain.
+        if (_targetNodes.contains(val.id) && !_settledTargets.contains(val.id)) {
+            _settledTargets.insert(val.id);
 
             sourceOutputCol->push_back(sourceNode);
             targetOutputCol->push_back(val.id);
@@ -195,16 +208,18 @@ void MultiSourceShortestPathProcessor<T>::runDijkstra(NodeID sourceNode,
                 pathVec.push_back(edge.getValue());
                 pathVec.push_back(lastNode.getValue());
 
-                const auto& pathInfo = heapValueMap[lastNode];
+                const auto& pathInfo = _heapValueMap[lastNode];
                 lastNode = pathInfo.prevNode;
                 edge = pathInfo.edge;
             }
 
-            if (settledTargets.size() == _targetNodes.size()) {
+            // Early exit once all targets have been reached.
+            if (_settledTargets.size() == _targetNodes.size()) {
                 break;
             }
         }
 
+        // Expand the current node: fetch all outgoing edges and their weights.
         _input->clear();
         _input->push_back(val.id);
         _getOutEdgesWriter->reset();
@@ -225,13 +240,14 @@ void MultiSourceShortestPathProcessor<T>::runDijkstra(NodeID sourceNode,
             const auto outputEdgeId = (*_outputEdges)[(*_propertyIndices)[i]];
             const auto dist = val.distance + (*_properties)[i];
 
-            const auto neighborIt = heapValueMap.find(outputNodeId);
-            if (neighborIt == heapValueMap.end()) {
-                heap.push({outputNodeId, val.id, outputEdgeId, dist});
-                heapValueMap[outputNodeId] = {val.id, outputEdgeId, dist};
+            // Relax the edge: update the shortest known distance if this path is better.
+            const auto neighborIt = _heapValueMap.find(outputNodeId);
+            if (neighborIt == _heapValueMap.end()) {
+                _heap.push({outputNodeId, val.id, outputEdgeId, dist});
+                _heapValueMap[outputNodeId] = {val.id, outputEdgeId, dist};
             } else if (dist < neighborIt->second.distance) {
-                heap.push({outputNodeId, val.id, outputEdgeId, dist});
-                heapValueMap[outputNodeId] = {val.id, outputEdgeId, dist};
+                _heap.push({outputNodeId, val.id, outputEdgeId, dist});
+                _heapValueMap[outputNodeId] = {val.id, outputEdgeId, dist};
             }
         }
     }
