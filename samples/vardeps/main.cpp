@@ -49,6 +49,9 @@ static void inspectVarDepGraph(CypherAST* ast) {
             vdg.registerPatternElement(ele);
         }
     }
+
+    vdg.rewriteCycle();
+
     IRDumper::dumpMermaid(vdg, std::cout);
 }
 

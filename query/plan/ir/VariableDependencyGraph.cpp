@@ -1,6 +1,8 @@
 #include "VariableDependencyGraph.h"
 
 #include <algorithm>
+#include <string_view>
+#include <unordered_set>
 #include <utility>
 
 #include <range/v3/view/chunk.hpp>
@@ -77,6 +79,10 @@ VariableDependency* VariableDependencyGraph::newVariable(const EntityPattern* en
     return &_vars.emplace_back(std::string(entity->getDecl()->getName()));
 }
 
+VariableDependency* VariableDependencyGraph::newVariable(std::string_view name) {
+    return &_vars.emplace_back(name);
+}
+
 VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPattern* entity) {
     bioassert(entity->getDecl(), "Variable with null declaration.");
     const auto match = [entity](const VariableDependency& dep) {
@@ -88,3 +94,114 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
     return exists ? &*foundIt : newVariable(entity);
 }
 
+std::vector<VariableDependency*> VariableDependencyGraph::getCycle() {
+    std::unordered_set<const VariableDependency*> visited;
+    std::vector<VariableDependency*> path;
+    std::unordered_set<const VariableDependency*> pathSet;
+
+    for (VariableDependency& node : _vars) {
+        if (!visited.contains(&node)) {
+            if (auto result = findCycle(&node, nullptr, visited, path, pathSet);
+                !result.empty()) {
+                return result;
+            }
+        }
+    }
+
+    return {};
+}
+
+std::vector<VariableDependency*> VariableDependencyGraph::findCycle(
+    VariableDependency* curr, VariableDependency* prev,
+    std::unordered_set<const VariableDependency*>& visited,
+    std::vector<VariableDependency*>& path,
+    std::unordered_set<const VariableDependency*>& pathSet) {
+    visited.insert(curr);
+    path.push_back(curr);
+    pathSet.insert(curr);
+
+    for (DependencyEdge* edge : curr->edges()) {
+        if (EdgeMetadata::isMetaEdge(edge->data().type())) {
+            continue;
+        }
+
+        // handle self-loop
+        if (edge->u() == edge->v()) {
+            path.pop_back();
+            pathSet.erase(curr);
+            return {curr};
+        }
+
+        VariableDependency* adj = edge->_u == curr ? edge->_v : edge->_u;
+
+        if (adj == prev) {
+            continue;
+        }
+
+        if (pathSet.contains(adj)) {
+            path.push_back(adj);
+            const auto cycleStart = std::ranges::find(path, adj);
+            std::vector result(cycleStart, end(path));
+            path.pop_back();
+            path.pop_back();
+            pathSet.erase(curr);
+            return result;
+        }
+
+        if (!visited.contains(adj)) {
+            if (auto result = findCycle(adj, curr, visited, path, pathSet);
+                !result.empty()) {
+                path.pop_back();
+                pathSet.erase(curr);
+                return result;
+            }
+        }
+    }
+
+    path.pop_back();
+    pathSet.erase(curr);
+    return {};
+}
+
+void VariableDependencyGraph::rewriteCycle() {
+    auto cyc = getCycle();
+
+    fmt::print("Cycle of length {}:\n", cyc.size());
+    for (const VariableDependency* v : cyc) {
+        fmt::print("{} ", v->getName());
+    }
+    fmt::println("");
+
+    bioassert(cyc.front() == cyc.back(), "Invalid cycle.");
+    bioassert(cyc.size() >= 3, "Invalid cycle.");
+
+    VariableDependency* head = cyc[0];
+    const std::string_view headName = head->getName();
+
+    const std::string fstName = std::string(headName) + std::string {"o"};
+    const std::string sndName = std::string(headName) + std::string {"oo"};
+
+    VariableDependency* newHead = newVariable(fstName);
+    VariableDependency* newTail = newVariable(sndName);
+
+    VariableDependency::Edges& edges = head->_edges;
+
+    const VariableDependency* nxt = *next(begin(cyc));
+    const VariableDependency* prv = *prev(prev(end(cyc)));
+
+    // replace head and tail of loop with new vars
+    for (DependencyEdge* e : edges) {
+        if (e->u() == nxt && e->v() == head) {
+            e->_v = newHead;
+        } else if (e->v() == nxt && e->u() == head) {
+            e->_u = newHead;
+        } else if (e->u() == prv && e->v() == head) {
+            e->_v = newTail;
+        } else if (e->v() == prv && e->u() == head) {
+            e->_u = newTail;
+        }
+    }
+
+    connect(newHead, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
+    connect(newTail, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
+}

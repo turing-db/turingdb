@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_set>
 #include <vector>
 
 #include "EnumToString.h"
@@ -120,6 +121,10 @@ public:
 
     const DependencyEdge* connect(VariableDependency* u, VariableDependency* v, const EdgeMetadata& data);
 
+    std::vector<VariableDependency*> getCycle();
+
+    void rewriteCycle();
+
 private:
     /// Variables whose dependencies are tracked by this class
     std::deque<VariableDependency> _vars;
@@ -127,6 +132,13 @@ private:
 
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const EntityPattern* entity);
+    VariableDependency* newVariable(std::string_view name);
+
+    std::vector<VariableDependency*> findCycle(VariableDependency* curr,
+                                                     VariableDependency* prev,
+                                                     std::unordered_set<const VariableDependency*>& visited,
+                                                     std::vector<VariableDependency*>& path,
+                                                     std::unordered_set<const VariableDependency*>& pathSet);
 };
 
 }
