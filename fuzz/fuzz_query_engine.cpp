@@ -45,7 +45,8 @@ static void initOnce() {
     if (g_env) return;
 
     g_env = TuringTestEnv::create(fs::Path("/tmp/fuzz_query_engine"));
-    auto* graph = g_env->getSystemManager().createGraph(g_graphName);
+    db::SystemAccessor system = g_env->getSystemManager().accessUnique();
+    auto* graph = system.createGraph(g_graphName);
     db::SimpleGraph::createSimpleGraph(graph);
 }
 
@@ -62,7 +63,8 @@ static int fuzzOne(const char* data, size_t size) {
     const db::QueryConfig queryConfig;
 
     // Open transaction
-    auto txRes = sysMan.openTransaction(g_graphName,
+    db::SystemAccessor system = sysMan.accessShared();
+    auto txRes = system.openTransaction(g_graphName,
                                         db::CommitHash::head(),
                                         db::ChangeID::head());
     if (!txRes) {
@@ -128,6 +130,7 @@ static int fuzzOne(const char* data, size_t size) {
 
     // Execute pipeline
     db::ExecutionContext execCtxt(&sysMan, view);
+    execCtxt.setSystemAccessor(&system);
     execCtxt.setTransaction(&txRes.value());
     execCtxt.setGraphName(g_graphName);
 

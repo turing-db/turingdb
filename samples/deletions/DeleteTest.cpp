@@ -32,7 +32,8 @@ void DeleteTest::addQuery(const std::string& query) {
 void DeleteTest::addIncidentEdges(const std::vector<NodeID>& nodes) {
     TuringDB& db = _env->getDB();
     SystemManager& sysMan = db.getSystemManager();
-    auto txRes = sysMan.openTransaction(_graphName, CommitHash::head(), ChangeID::head());
+    SystemAccessor system = sysMan.accessShared();
+    auto txRes = system.openTransaction(_graphName, CommitHash::head(), ChangeID::head());
     if (!txRes) {
         spdlog::error("Failed to open transaction to get incident edges.");
         std::abort();
@@ -83,12 +84,16 @@ bool DeleteTest::runDeleteQueries(bool nodes) {
     deleteQuery.pop_back(); // Remove extra space
     deleteQuery.pop_back(); // Remove extra comma
 
-    auto res = db.getSystemManager().newChange(_graphName);
-    if (!res) {
-        spdlog::error("Failed to make change to delete {}", type);
-        return false;
+    Change* ch = nullptr;
+    {
+        SystemAccessor system = db.getSystemManager().accessUnique();
+        auto res = system.newChange(_graphName);
+        if (!res) {
+            spdlog::error("Failed to make change to delete {}", type);
+            return false;
+        }
+        ch = res.value();
     }
-    Change* ch = res.value();
     if (auto qres = db.query(deleteQuery, _graphName, &_env->getMem(), &queryConfig,
                              CommitHash::head(), ch->id());
         !res) {
@@ -137,9 +142,13 @@ bool DeleteTest::run() {
     TuringDB& db = _env->getDB();
     QueryConfig queryConfig;
 
-    bool loaded = sysMan.loadGraph(_graphName);
-    if (!loaded) {
-        loaded = sysMan.importGraph(fs::Path {_graphName}, _graphName);
+    bool loaded = false;
+    {
+        SystemAccessor system = sysMan.accessUnique();
+        loaded = system.loadGraph(_graphName);
+        if (!loaded) {
+            loaded = system.importGraph(fs::Path {_graphName}, _graphName);
+        }
     }
     if (!loaded) {
         spdlog::error("Failed to load/import graph {}", _graphName);

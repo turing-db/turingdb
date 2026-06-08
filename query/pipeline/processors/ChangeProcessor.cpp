@@ -48,7 +48,7 @@ void ChangeProcessor::reset() {
 void ChangeProcessor::execute() {
     bioassert(_changeIDCol, "ChangeProcessor: ChangeID column must be set");
     bioassert(!_ctxt->getGraphName().empty(), "ChangeProcessor: Graph name must be set");
-    bioassert(_ctxt->getSystemManager(), "ChangeProcessor: System manager must be set");
+    bioassert(_ctxt->getSystemAccessor(), "ChangeProcessor: System accessor must be set");
     bioassert(_ctxt->getJobSystem(), "ChangeProcessor: Job system must be set");
 
     switch (_op) {
@@ -76,9 +76,9 @@ void ChangeProcessor::createChange() const {
     Profile profile("ChangeProcessor::createChange");
 
     std::string graphName(_ctxt->getGraphName());
-    SystemManager* sysMan = _ctxt->getSystemManager();
+    SystemAccessor* system = _ctxt->getSystemAccessor();
 
-    auto res = sysMan->newChange(graphName);
+    auto res = system->newChange(graphName);
     if (!res) {
         throw PipelineException(fmt::format("Failed to create change: {}", res.error().fmtMessage()));
     }
@@ -102,20 +102,20 @@ void ChangeProcessor::submitChange() const {
     ChangeAccessor& accessor = tx.changeAccessor();
     bioassert(accessor.isValid(), "ChangeProcessor: Change accessor must be valid");
 
-    SystemManager* sysMan = _ctxt->getSystemManager();
+    SystemAccessor* system = _ctxt->getSystemAccessor();
     JobSystem* jobSystem = _ctxt->getJobSystem();
 
     const ChangeID changeID = accessor.getID();
 
     // Step 1: Submit the change
-    if (const auto res = sysMan->submitChange(accessor, *jobSystem); !res) {
+    if (const auto res = system->submitChange(accessor, *jobSystem); !res) {
         throw PipelineException(fmt::format("Failed to submit change: {}", res.error().fmtMessage()));
     }
 
     const std::string graphName(_ctxt->getGraphName());
 
     // Step 2: Dump newly created commits
-    if (const auto res = sysMan->dumpGraph(graphName); !res) {
+    if (const auto res = system->dumpGraph(graphName); !res) {
         throw PipelineException(fmt::format("Failed to dump new commits: {}", res.error().fmtMessage()));
     }
 
@@ -138,11 +138,11 @@ void ChangeProcessor::deleteChange() const {
     ChangeAccessor& accessor = tx.changeAccessor();
     bioassert(accessor.isValid(), "ChangeProcessor: Change accessor must be valid");
 
-    SystemManager* sysMan = _ctxt->getSystemManager();
+    SystemAccessor* system = _ctxt->getSystemAccessor();
 
     const ChangeID changeID = accessor.getID();
 
-    if (const auto res = sysMan->deleteChange(accessor, changeID); !res) {
+    if (const auto res = system->deleteChange(accessor, changeID); !res) {
         throw PipelineException(fmt::format("Failed to delete change: {}", res.error().fmtMessage()));
     }
 
@@ -153,15 +153,15 @@ void ChangeProcessor::deleteChange() const {
 void ChangeProcessor::listChanges() const {
     Profile profile("ChangeProcessor::listChanges");
 
-    SystemManager* sysMan = _ctxt->getSystemManager();
+    SystemAccessor* system = _ctxt->getSystemAccessor();
 
     std::vector<const Change*> changes;
     const std::string graphName(_ctxt->getGraphName());
 
-    const Graph* graph = sysMan->getGraph(graphName);
+    const Graph* graph = system->getGraph(graphName);
     bioassert(graph, "ChangeProcessor: Graph must exist");
 
-    sysMan->listChanges(changes, graph);
+    system->listChanges(changes, graph);
 
     _changeIDCol->clear();
     for (const auto* change : changes) {

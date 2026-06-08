@@ -9,6 +9,7 @@
 #include "versioning/Transaction.h"
 #include "views/EdgeView.h"
 #include "SystemManager.h"
+#include "SystemAccessor.h"
 #include "Path.h"
 
 #include "ListNodesExecutor.h"
@@ -125,12 +126,12 @@ void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
 
 const Graph* DBServerProcessor::getRequestedGraph() const {
     auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
-    const auto& sysMan = _db.getSystemManager();
+    SystemAccessor system = _db.getSystemManager().accessShared();
     const auto& httpInfo = parser.getHttpInfo();
     const std::string_view graphNameView = httpInfo._params[(size_t)DBHTTPParams::graph];
     return graphNameView.empty()
-             ? sysMan.getDefaultGraph()
-             : sysMan.getGraph(graphNameView);
+             ? system.getDefaultGraph()
+             : system.getGraph(graphNameView);
 }
 
 const net::HTTP::Info& DBServerProcessor::getHttpInfo() const {
@@ -149,7 +150,7 @@ void DBServerProcessor::query() {
 }
 
 void DBServerProcessor::load_graph() {
-    auto& sys = _db.getSystemManager();
+    SystemAccessor system = _db.getSystemManager().accessUnique();
 
     const TransactionInfo transactionInfo = getTransactionInfo();
 
@@ -159,7 +160,7 @@ void DBServerProcessor::load_graph() {
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
 
-    if (!sys.loadGraph(transactionInfo.graphName)) {
+    if (!system.loadGraph(transactionInfo.graphName)) {
         payload.key("error");
         payload.value(EndpointStatusDescription::value(EndpointStatus::GRAPH_LOAD_ERROR));
         return;
@@ -167,8 +168,6 @@ void DBServerProcessor::load_graph() {
 }
 
 void DBServerProcessor::get_graph_status() {
-    const auto& sysMan = _db.getSystemManager();
-
     const auto transactionInfo = getTransactionInfo();
 
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
@@ -186,7 +185,10 @@ void DBServerProcessor::get_graph_status() {
     payload.value(graph != nullptr);
 
     payload.key("isLoading");
-    payload.value(sysMan.isGraphLoading(transactionInfo.graphName));
+    {
+        SystemAccessor system = _db.getSystemManager().accessShared();
+        payload.value(system.isGraphLoading(transactionInfo.graphName));
+    }
 
     if (graph != nullptr) {
         const auto transaction = graph->openTransaction();
@@ -213,7 +215,8 @@ void DBServerProcessor::is_graph_loaded() {
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
 
-    const Graph* graph = _db.getSystemManager().getGraph(graphNameView);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const Graph* graph = system.getGraph(graphNameView);
 
     payload.key("data");
     payload.value(graph != nullptr);
@@ -234,7 +237,8 @@ void DBServerProcessor::is_graph_loading() {
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
 
-    const bool isLoading = _db.getSystemManager().isGraphLoading(graphNameView);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const bool isLoading = system.isGraphLoading(graphNameView);
     payload.key("data");
     payload.value(isLoading);
 }
@@ -245,7 +249,8 @@ void DBServerProcessor::list_loaded_graphs() {
 
 void DBServerProcessor::list_avail_graphs() {
     std::vector<std::string> list;
-    _db.getSystemManager().listAvailableGraphs(list);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    system.listAvailableGraphs(list);
 
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
                                             !_connection.isCloseRequired());
@@ -270,9 +275,10 @@ void DBServerProcessor::list_labels() {
     payload.obj();
 
     const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const auto transaction = system.openTransaction(info.graphName,
+                                                    info.commit,
+                                                    info.change);
 
     if (!transaction) {
         const auto txError = transaction.error().fmtMessage();
@@ -352,9 +358,10 @@ void DBServerProcessor::list_property_types() {
     payload.obj();
 
     const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const auto transaction = system.openTransaction(info.graphName,
+                                                    info.commit,
+                                                    info.change);
 
     if (!transaction) {
         const auto txError = transaction.error().fmtMessage();
@@ -417,9 +424,10 @@ void DBServerProcessor::list_edge_types() {
     payload.obj();
 
     const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const auto transaction = system.openTransaction(info.graphName,
+                                                    info.commit,
+                                                    info.change);
 
     if (!transaction) {
         const auto txError = transaction.error().fmtMessage();
@@ -482,9 +490,10 @@ void DBServerProcessor::list_nodes() {
     payload.obj();
 
     const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const auto transaction = system.openTransaction(info.graphName,
+                                                    info.commit,
+                                                    info.change);
 
     if (!transaction) {
         const auto txError = transaction.error().fmtMessage();
@@ -582,9 +591,10 @@ void DBServerProcessor::get_node_properties() {
     payload.obj();
 
     const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const auto transaction = system.openTransaction(info.graphName,
+                                                    info.commit,
+                                                    info.change);
 
     if (!transaction) {
         const auto txError = transaction.error().fmtMessage();
@@ -701,9 +711,10 @@ void DBServerProcessor::get_neighbors() {
     payload.obj();
 
     const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const auto transaction = system.openTransaction(info.graphName,
+                                                    info.commit,
+                                                    info.change);
 
     if (!transaction) {
         const auto txError = transaction.error().fmtMessage();
@@ -821,9 +832,10 @@ void DBServerProcessor::get_nodes() {
     payload.obj();
 
     const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const auto transaction = system.openTransaction(info.graphName,
+                                                    info.commit,
+                                                    info.change);
 
     if (!transaction) {
         const auto txError = transaction.error().fmtMessage();
@@ -894,9 +906,10 @@ void DBServerProcessor::get_node_edges() {
     payload.obj();
 
     const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const auto transaction = system.openTransaction(info.graphName,
+                                                    info.commit,
+                                                    info.change);
 
     if (!transaction) {
         const auto txError = transaction.error().fmtMessage();
@@ -1098,9 +1111,10 @@ void DBServerProcessor::explore_node_edges() {
     payload.obj();
 
     const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const auto transaction = system.openTransaction(info.graphName,
+                                                    info.commit,
+                                                    info.change);
 
     if (!transaction) {
         const auto txError = transaction.error().fmtMessage();
@@ -1252,9 +1266,10 @@ void DBServerProcessor::get_edges() {
     payload.obj();
 
     const auto info = getTransactionInfo();
-    const auto transaction = _db.getSystemManager().openTransaction(info.graphName,
-                                                                    info.commit,
-                                                                    info.change);
+    SystemAccessor system = _db.getSystemManager().accessShared();
+    const auto transaction = system.openTransaction(info.graphName,
+                                                    info.commit,
+                                                    info.change);
 
     if (!transaction) {
         const auto txError = transaction.error().fmtMessage();

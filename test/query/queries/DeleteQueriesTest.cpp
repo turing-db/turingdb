@@ -23,7 +23,8 @@ class DeleteQueriesTest : public TuringTest {
 public:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        _graph = _env->getSystemManager().createGraph(_graphName);
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        _graph = system.createGraph(_graphName);
         SimpleGraph::createSimpleGraph(_graph);
         _db = &_env->getDB();
     }
@@ -39,7 +40,8 @@ protected:
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     void newChange() {
-        auto res = _env->getSystemManager().newChange(_graphName);
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        auto res = system.newChange(_graphName);
         ASSERT_TRUE(res);
 
         Change* change = res.value();

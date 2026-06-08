@@ -66,7 +66,10 @@ int main(int argc, const char** argv) {
     db.init();
 
     const std::string graphName = "tfl";
-    db.getSystemManager().createGraph(graphName);
+    {
+        SystemAccessor system = db.getSystemManager().accessUnique();
+        system.createGraph(graphName);
+    }
 
     // ---------------------------------------------------------------
     // Step 1: Load connections.csv using LOAD CSV
@@ -267,21 +270,25 @@ int main(int argc, const char** argv) {
     // ---------------------------------------------------------------
     // Step 3: Create change, execute CREATE, submit
     // ---------------------------------------------------------------
-    auto changeRes =
-        db.getSystemManager().newChange(graphName);
-    if (!changeRes) {
-        spdlog::error("Failed to create change");
-        return EXIT_FAILURE;
+    ChangeID changeID = ChangeID::head();
+    {
+        SystemAccessor system = db.getSystemManager().accessUnique();
+        auto changeRes = system.newChange(graphName);
+        if (!changeRes) {
+            spdlog::error("Failed to create change");
+            return EXIT_FAILURE;
+        }
+        Change* change = changeRes.value();
+        changeID = change->id();
     }
-    Change* change = changeRes.value();
 
-    const auto createStatus = runQuery(createQuery, [](const Dataframe*) {}, change->id());
+    const auto createStatus = runQuery(createQuery, [](const Dataframe*) {}, changeID);
     if (!createStatus.isOk()) {
         spdlog::error("CREATE failed: {}", createStatus.getError());
         return EXIT_FAILURE;
     }
 
-    const auto submitStatus = runQuery("CHANGE SUBMIT", [](const Dataframe*) {}, change->id());
+    const auto submitStatus = runQuery("CHANGE SUBMIT", [](const Dataframe*) {}, changeID);
     if (!submitStatus.isOk()) {
         spdlog::error("CHANGE SUBMIT failed: {}",
                       submitStatus.getError());
@@ -326,7 +333,8 @@ int main(int argc, const char** argv) {
     }
 
     // Resolve node IDs in the path to station names
-    auto txRes = db.getSystemManager().openTransaction(
+    SystemAccessor system = db.getSystemManager().accessShared();
+    auto txRes = system.openTransaction(
         graphName, CommitHash::head(), ChangeID::head());
     if (!txRes) {
         spdlog::error("Failed to open transaction");

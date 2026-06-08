@@ -808,7 +808,8 @@ bool TuringShell::setGraphName(const std::string& graphName) {
         return true;
     }
 
-    if (_turingDB.getSystemManager().getGraph(graphName) == nullptr) {
+    SystemAccessor system = _turingDB.getSystemManager().accessShared();
+    if (system.getGraph(graphName) == nullptr) {
         return false;
     }
 
@@ -826,7 +827,8 @@ bool TuringShell::setChangeID(ChangeID changeID) {
         return true;
     }
 
-    auto tx = _turingDB.getSystemManager().openTransaction(_graphName, _hash, changeID);
+    SystemAccessor system = _turingDB.getSystemManager().accessShared();
+    auto tx = system.openTransaction(_graphName, _hash, changeID);
     if (!tx) {
         spdlog::error("Can not checkout change: {}", tx.error().fmtMessage());
         return false;
@@ -847,19 +849,20 @@ bool TuringShell::setCommitHash(CommitHash hash) {
         return true;
     }
 
-    auto tx = _turingDB.getSystemManager().openTransaction(_graphName, hash, _changeID);
+    SystemAccessor system = _turingDB.getSystemManager().accessUnique();
+    auto tx = system.openTransaction(_graphName, hash, _changeID);
 
     if (!tx) {
         if (tx.error().getType() == ChangeErrorType::COMMIT_NOT_LOADED) {
             // Commit exists but isn't hydrated — load it now
             spdlog::info("Loading commit {:x}...", hash.get());
-            auto loadRes = _turingDB.getSystemManager().loadCommit(_graphName, hash);
+            auto loadRes = system.loadCommit(_graphName, hash);
             if (!loadRes) {
                 spdlog::error("Failed to load commit: {}", loadRes.error().fmtMessage());
                 return false;
             }
             // Re-open transaction after loading
-            tx = _turingDB.getSystemManager().openTransaction(_graphName, hash, _changeID);
+            tx = system.openTransaction(_graphName, hash, _changeID);
         }
 
         if (!tx) {
@@ -912,7 +915,12 @@ void TuringShell::disconnectRemote() {
 }
 
 void TuringShell::checkShellContext() {
-    const auto* graph = _turingDB.getSystemManager().getGraph(_graphName);
+    const Graph* graph = nullptr;
+    {
+        SystemAccessor system = _turingDB.getSystemManager().accessShared();
+        graph = system.getGraph(_graphName);
+    }
+
     if (graph == nullptr) {
         fmt::print("Graph '{}' does not exist anymore, switching back to default graph\n", _graphName);
         setGraphName("default");
@@ -926,14 +934,21 @@ void TuringShell::checkShellContext() {
         }
     }
 
-    const auto res = _turingDB.getSystemManager().getChange(graph, _changeID);
-    if (!res) {
+    Change* change = nullptr;
+    {
+        SystemAccessor system = _turingDB.getSystemManager().accessShared();
+        const auto res = system.getChange(graph, _changeID);
+        if (res) {
+            change = res.value();
+        }
+    }
+
+    if (change == nullptr) {
         fmt::print("Change '{:x}' does not exist anymore, switching back to head\n", _changeID.get());
         setChangeID(ChangeID::head());
         return;
     }
 
-    auto* change = res.value();
     if (auto tx = change->openWriteTransaction(); tx.isValid()) {
         return;
     }

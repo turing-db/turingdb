@@ -567,12 +567,16 @@ public:
 
         // Create road network graph
         {
-            _graph = _env->getSystemManager().createGraph(_graphName);
+            ChangeID changeId = ChangeID::head();
+            {
+                SystemAccessor system = _env->getSystemManager().accessUnique();
+                _graph = system.createGraph(_graphName);
 
-            auto changeResult = _env->getSystemManager().newChange(_graphName);
-            ASSERT_TRUE(changeResult.has_value());
-            Change* change = changeResult.value();
-            auto changeId = change->id();
+                auto changeResult = system.newChange(_graphName);
+                ASSERT_TRUE(changeResult.has_value());
+                Change* change = changeResult.value();
+                changeId = change->id();
+            }
 
             auto status = runQuery(ROAD_NETWORK_CYPHER, _graphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create road network: " << status.getError();
@@ -584,12 +588,16 @@ public:
 
         // Create negative weight graph
         {
-            _negGraph = _env->getSystemManager().createGraph(_negGraphName);
+            ChangeID changeId = ChangeID::head();
+            {
+                SystemAccessor system = _env->getSystemManager().accessUnique();
+                _negGraph = system.createGraph(_negGraphName);
 
-            auto changeResult = _env->getSystemManager().newChange(_negGraphName);
-            ASSERT_TRUE(changeResult.has_value());
-            Change* change = changeResult.value();
-            auto changeId = change->id();
+                auto changeResult = system.newChange(_negGraphName);
+                ASSERT_TRUE(changeResult.has_value());
+                Change* change = changeResult.value();
+                changeId = change->id();
+            }
 
             auto status = runQuery(NEGATIVE_WEIGHT_GRAPH_CYPHER, _negGraphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create negative weight graph: "
@@ -602,12 +610,16 @@ public:
 
         // Create disjoint graph
         {
-            _disjGraph = _env->getSystemManager().createGraph(_disjGraphName);
+            ChangeID changeId = ChangeID::head();
+            {
+                SystemAccessor system = _env->getSystemManager().accessUnique();
+                _disjGraph = system.createGraph(_disjGraphName);
 
-            auto changeResult = _env->getSystemManager().newChange(_disjGraphName);
-            ASSERT_TRUE(changeResult.has_value());
-            Change* change = changeResult.value();
-            auto changeId = change->id();
+                auto changeResult = system.newChange(_disjGraphName);
+                ASSERT_TRUE(changeResult.has_value());
+                Change* change = changeResult.value();
+                changeId = change->id();
+            }
 
             auto status = runQuery(DISJOINT_GRAPH_CYPHER, _disjGraphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create disjoint graph: " << status.getError();

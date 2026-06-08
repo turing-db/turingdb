@@ -34,15 +34,21 @@ public:
         // Step 2: Build graph with 2 commits in a separate in-memory environment.
         {
             auto buildEnv = TuringTestEnv::create(fs::Path {_outDir} / "build");
-            Graph* graph = buildEnv->getSystemManager().createGraph("testdb");
-            // Pass false so the graph keeps the "testdb" name — LOAD GRAPH testdb
-            // relies on it. Most callers use the default (rename to "simpledb").
-            SimpleGraph::createSimpleGraph(graph, false);
-            _initialHeadHash = graph->getHeadHash(); // last commit of simple graph (skeleton after load)
 
-            auto changeRes = buildEnv->getSystemManager().newChange("testdb");
-            bioassert(changeRes, "create change failed");
-            const ChangeID chid = changeRes.value()->id();
+            Graph* graph = nullptr;
+            ChangeID chid;
+            {
+                SystemAccessor system = buildEnv->getSystemManager().accessUnique();
+                graph = system.createGraph("testdb");
+                // Pass false so the graph keeps the "testdb" name — LOAD GRAPH testdb
+                // relies on it. Most callers use the default (rename to "simpledb").
+                SimpleGraph::createSimpleGraph(graph, false);
+                _initialHeadHash = graph->getHeadHash(); // last commit of simple graph (skeleton after load)
+
+                auto changeRes = system.newChange("testdb");
+                bioassert(changeRes, "create change failed");
+                chid = changeRes.value()->id();
+            }
 
             QueryConfig buildQueryConfig;
             QueryCallbacks submitCallbacks;

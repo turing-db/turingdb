@@ -62,9 +62,10 @@ private:
         _procedures = std::make_unique<db::ProcedureManager>();
         _procedures->init();
 
-        auto txRes = _sysMan->openTransaction(_graphName,
-                                              db::CommitHash::head(),
-                                              change);
+        db::SystemAccessor system = _sysMan->accessShared();
+        auto txRes = system.openTransaction(_graphName,
+                                            db::CommitHash::head(),
+                                            change);
         _tx.emplace(std::move(txRes.value()));
         const db::GraphView view = _tx->viewGraph();
 
@@ -144,8 +145,11 @@ class ConstScanOptTest : public TuringTest {
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
         _env->getConfig().setSyncedOnDisk(false);
-        _env->getSystemManager().createGraph("default");
-        _graph = _env->getSystemManager().createGraph(_graphName);
+        {
+            db::SystemAccessor system = _env->getSystemManager().accessUnique();
+            system.createGraph("default");
+            _graph = system.createGraph(_graphName);
+        }
         _db = &_env->getDB();
 
         buildGraph();
@@ -161,7 +165,8 @@ protected:
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     void newChange() {
-        auto res = _env->getSystemManager().newChange(_graphName);
+        db::SystemAccessor system = _env->getSystemManager().accessUnique();
+        auto res = system.newChange(_graphName);
         ASSERT_TRUE(res);
         _currentChange = res.value()->id();
     }

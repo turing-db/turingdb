@@ -313,7 +313,11 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     result._name = spec._name;
 
     auto env = turing::test::TuringTestEnv::create(outDir);
-    db::Graph* graph = env->getSystemManager().createGraph(spec._graphName);
+    db::Graph* graph = nullptr;
+    {
+        db::SystemAccessor system = env->getSystemManager().accessUnique();
+        graph = system.createGraph(spec._graphName);
+    }
     db::SimpleGraph::createSimpleGraph(graph);
     db::TuringDB* db = &env->getDB();
 

@@ -35,7 +35,8 @@ class QueriesTest : public TuringTest {
 public:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        _graph = _env->getSystemManager().createGraph(_graphName);
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        _graph = system.createGraph(_graphName);
         SimpleGraph::createSimpleGraph(_graph);
         _db = &_env->getDB();
     }
@@ -1789,7 +1790,10 @@ TEST_F(QueriesTest, change) {
 TEST_F(QueriesTest, db_listGraph) {
     ColumnVector<std::string_view> expectedGraphNames;
     ColumnVector<std::string_view> actualGraphNames;
-    _env->getSystemManager().listGraphs(expectedGraphNames.getRaw());
+    {
+        SystemAccessor system = _env->getSystemManager().accessShared();
+        system.listGraphs(expectedGraphNames.getRaw());
+    }
 
     bool callBackExecuted = false;
     runQuery("list graph", [&](const Dataframe* df) -> void {
@@ -1832,9 +1836,10 @@ TEST_F(QueriesTest, db_commit) {
 
             changeID = changeIDs->at(0);
         });
-        auto transaction = _env->getSystemManager().openTransaction(_graphName,
-                                                                    CommitHash::head(),
-                                                                    changeID);
+        SystemAccessor system = _env->getSystemManager().accessShared();
+        auto transaction = system.openTransaction(_graphName,
+                                                  CommitHash::head(),
+                                                  changeID);
 
         newCommitHash = transaction->getCommitHash();
         EXPECT_NE(originalCommitHash, newCommitHash);
@@ -1847,9 +1852,10 @@ TEST_F(QueriesTest, db_commit) {
             ASSERT_EQ(df->size(), 0);
             ASSERT_EQ(df->cols().size(), 0); }, CommitHash::head(), changeID);
 
-        auto transaction = _env->getSystemManager().openTransaction(_graphName,
-                                                                    CommitHash::head(),
-                                                                    changeID);
+        SystemAccessor system = _env->getSystemManager().accessShared();
+        auto transaction = system.openTransaction(_graphName,
+                                                  CommitHash::head(),
+                                                  changeID);
         const auto finalCommitHash = transaction->getCommitHash();
 
         EXPECT_FALSE(res.hasErrorMessage());

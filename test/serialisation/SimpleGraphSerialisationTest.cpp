@@ -24,7 +24,8 @@ public:
     void initialize() override {
         _env = TuringTestEnv::createSyncedOnDisk(fs::Path {_outDir} / "turing");
 
-        _builtGraph = _env->getSystemManager().createGraph("simple");
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        _builtGraph = system.createGraph("simple");
         SimpleGraph::createSimpleGraph(_builtGraph);
         _workingPath = fs::Path {_outDir + "/testfile"};
 

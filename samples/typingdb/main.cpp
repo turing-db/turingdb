@@ -36,10 +36,11 @@ int main(int argc, const char** argv) {
 
     {
         spdlog::info("Create company graph");
-        auto* graph = db.getSystemManager().getDefaultGraph();
+        SystemAccessor system = db.getSystemManager().accessShared();
+        auto* graph = system.getDefaultGraph();
         TypingGraph::createTypingGraph(graph);
 
-        const Graph* defaultGraph = db.getSystemManager().getDefaultGraph();
+        const Graph* defaultGraph = system.getDefaultGraph();
 
         spdlog::info("Graph created");
         const FrozenCommitTx tx = defaultGraph->openTransaction();

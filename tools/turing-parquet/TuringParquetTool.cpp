@@ -623,7 +623,8 @@ int main(int argc, const char** argv) {
 
         TuringDB db(&config);
         db.init();
-        Graph* const graph = db.getSystemManager().createGraph(graphName);
+        SystemAccessor system = db.getSystemManager().accessUnique();
+        Graph* const graph = system.createGraph(graphName);
 
         JobSystem jobSystem;
         jobSystem.init();
@@ -648,7 +649,7 @@ int main(int argc, const char** argv) {
         importer.finalize();
 
         // Dump the graph
-        const auto dumpResult = db.getSystemManager().dumpGraph(graphName);
+        const auto dumpResult = system.dumpGraph(graphName);
         if (!dumpResult) {
             std::cerr << "Failed to persist graph: "
                       << dumpResult.error().fmtMessage() << "\n";

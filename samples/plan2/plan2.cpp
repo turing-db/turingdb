@@ -61,7 +61,8 @@ void runPlan2(std::string_view query) {
     TuringDB db(&config);
     db.init();
 
-    Graph* graph = db.getSystemManager().createGraph("simpledb");
+    SystemAccessor system = db.getSystemManager().accessUnique();
+    Graph* graph = system.createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
 
     const Transaction transaction = graph->openTransaction();
