@@ -7,14 +7,14 @@
 #include "HTTPUtils.h"
 #include "NetException.h"
 #include "QueryStatus.h"
-#include "TuringProtoEncoder.h"
 
 #include "BioAssert.h"
 
 using namespace net::proto;
 
 TuringProtoWriter::TuringProtoWriter(size_t bufferCapacity)
-    : _buffer(bufferCapacity)
+    : _buffer(bufferCapacity),
+    _encoder(&_buffer)
 {
 }
 
@@ -65,29 +65,25 @@ void TuringProtoWriter::startResponse(net::ConnectionHeader connection) {
 }
 
 void TuringProtoWriter::writeDataframeHeader(const db::Dataframe* frame) {
-    net::proto::TuringProtoEncoder encoder(&_buffer);
-
     // Schema must fit in a single CHUNK_HEADER packet. The encoder's capacity
     // check enforces that, so a buffer-full trigger here would be a bug.
     _buffer.setOnBufferFullCallBack([]() {
         bioassert(false, "Dataframe schema exceeded buffer capacity");
     });
 
-    encoder.writeDataframeHeader(frame);
+    _encoder.writeDataframeHeader(frame);
 
     writePacket(MessageTypes::CHUNK_HEADER);
 }
 
 void TuringProtoWriter::writeDataframe(const db::Dataframe* frame) {
-    net::proto::TuringProtoEncoder encoder(&_buffer);
-
     auto onBufferFull = [&]() {
         writePacket(MessageTypes::CHUNK);
     };
 
     _buffer.setOnBufferFullCallBack(onBufferFull);
 
-    encoder.writeDataframe(frame);
+    _encoder.writeDataframe(frame);
 
     if (_buffer.size() > 0) {
         writePacket(MessageTypes::CHUNK);
@@ -96,43 +92,37 @@ void TuringProtoWriter::writeDataframe(const db::Dataframe* frame) {
 }
 
 void TuringProtoWriter::writeError(const db::QueryStatus* status) {
-    net::proto::TuringProtoEncoder encoder(&_buffer);
-
     auto onBufferFull = [&]() {
         writePacket(MessageTypes::ERROR);
     };
 
     _buffer.setOnBufferFullCallBack(onBufferFull);
 
-    encoder.writeError(status);
+    _encoder.writeError(status);
 
     writePacket(MessageTypes::ERROR);
 }
 
 void TuringProtoWriter::writeProtocolError(std::string_view message) {
-    net::proto::TuringProtoEncoder encoder(&_buffer);
-
     auto onBufferFull = [&]() {
         writePacket(MessageTypes::PROTOCOL_ERROR);
     };
 
     _buffer.setOnBufferFullCallBack(onBufferFull);
 
-    encoder.writeProtocolError(message);
+    _encoder.writeProtocolError(message);
 
     writePacket(MessageTypes::PROTOCOL_ERROR);
 }
 
 void TuringProtoWriter::writeEndPacket(db::QueryCallbacks::ExecTimeMilliseconds milliseconds) {
-    net::proto::TuringProtoEncoder encoder(&_buffer);
-
     auto onBufferFull = [&]() {
         writePacket(MessageTypes::END);
     };
 
     _buffer.setOnBufferFullCallBack(onBufferFull);
 
-    encoder.writeEnd(milliseconds);
+    _encoder.writeEnd(milliseconds);
 
     writePacket(MessageTypes::END);
 }

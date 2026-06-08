@@ -44,6 +44,17 @@ public:
     void reserveContiguous(size_t numBytes);
 
     /**
+     * @brief Reserves @param numBytes of contiguous space and commits it (advancing the
+     * write position past the whole region), returning a writable pointer to its start.
+     *
+     * Unlike @ref write, which writes at the internal append position, the caller fills the
+     * reserved region itself through the returned pointer. Committing up
+     * front means a subsequent reservation lands after this region rather than inside it.
+     * @warn Can allocate unbounded amounts of memory; no size check is performed.
+     */
+    std::byte* reserveAndCommit(size_t numBytes);
+
+    /**
      * @brief Writes the provided @param tag, followed by the bytes of @param val, in the
      * @ref _last byte buffer.
      * @warn Must only be called after an appropriate call to @ref reserveContiguous.
@@ -51,15 +62,6 @@ public:
      */
     template <typename T>
     ListElementView write(ListBufferTypeTag tag, const T& val);
-
-    /**
-     * @brief Copies a pre-formed [tag][value] element of @param numBytes bytes directly
-     * into the @ref _last byte buffer. For decoders whose wire layout already matches the
-     * stored layout, this avoids materialising an intermediate value.
-     * @warn MUST ONLY be called after an appropriate call to @ref reserveContiguous.
-     * @warn Does not perform bounds checking.
-     */
-    ListElementView writeRaw(const void* data, size_t numBytes);
 
     void clear();
 

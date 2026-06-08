@@ -264,12 +264,12 @@ void TuringProtoDecoder::decodeIncomingChunkHeader(db::Dataframe* df,
                                                    std::vector<DecodedColumnSchema>& colSchemas) {
     bioassert(df, "decodeIncomingChunkHeader called with null dataframe");
 
-    uint32_t columnCount = 0;
+    WireSize columnCount = 0;
     _ctxt._inBuf->readData(&columnCount, sizeof(columnCount));
 
     colSchemas.resize(columnCount);
 
-    for (uint32_t i = 0; i < columnCount; ++i) {
+    for (WireSize i = 0; i < columnCount; ++i) {
         auto& schema = colSchemas[i];
         _ctxt._inBuf->readHeader(&(schema._header));
 

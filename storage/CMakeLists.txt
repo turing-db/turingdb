@@ -16,6 +16,7 @@ set(storage_sources
         list/ListByteBuffer.cpp
         list/ListBuffer.cpp
         list/ListElementViewBuffer.cpp
+        list/ListWriteCursor.cpp
 
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp

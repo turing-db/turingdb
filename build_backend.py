@@ -161,21 +161,21 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
 
     project_root = _get_project_root()
     binary_dir = project_root / "python" / "turingdb" / "_binary"
-    local_dir = project_root / "python" / "turingdb" / "_local"
+    embedded_dir = project_root / "python" / "turingdb" / "_embedded"
     binary_pre_existing = {
         p.name
         for p in list(binary_dir.glob("_turingproto*.so")) + list(binary_dir.glob("_turingproto*.pyd"))
     }
-    local_pre_existing = {
+    embedded_pre_existing = {
         p.name
-        for p in list(local_dir.glob("_turinglocal*.so")) + list(local_dir.glob("_turinglocal*.pyd"))
+        for p in list(embedded_dir.glob("_turingembedded*.so")) + list(embedded_dir.glob("_turingembedded*.pyd"))
     }
 
     # Ensure all shipped executables exist
     exe_paths = _ensure_executables_built()
 
     # Refuse to bundle native modules whose ABI tag doesn't match this interpreter
-    _check_native_modules_abi(binary_dir, local_dir)
+    _check_native_modules_abi(binary_dir, embedded_dir)
 
     bin_dir = _get_package_bin_dir()
     build_lib_dir = project_root / "build" / "lib"
@@ -192,7 +192,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     # would be bundled alongside the current one. They get re-copied fresh from
     # python/turingdb/ during the build.
     for staging_dir in (project_root / "build").glob("lib.*"):
-        for stale_module in list(staging_dir.glob("turingdb/_binary/_turingproto*")) + list(staging_dir.glob("turingdb/_local/_turinglocal*")):
+        for stale_module in list(staging_dir.glob("turingdb/_binary/_turingproto*")) + list(staging_dir.glob("turingdb/_embedded/_turingembedded*")):
             stale_module.unlink()
 
     # Track which binaries we copied so cleanup removes only those.
@@ -224,8 +224,8 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         for native_file in list(binary_dir.glob("_turingproto*.so")) + list(binary_dir.glob("_turingproto*.pyd")):
             if native_file.name not in binary_pre_existing:
                 _strip_binary(native_file)
-        for native_file in list(local_dir.glob("_turinglocal*.so")) + list(local_dir.glob("_turinglocal*.pyd")):
-            if native_file.name not in local_pre_existing:
+        for native_file in list(embedded_dir.glob("_turingembedded*.so")) + list(embedded_dir.glob("_turingembedded*.pyd")):
+            if native_file.name not in embedded_pre_existing:
                 _strip_binary(native_file)
 
         # Build the wheel using setuptools
@@ -249,10 +249,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             for binary_file in list(binary_dir.glob("_turingproto*.so")) + list(binary_dir.glob("_turingproto*.pyd")):
                 if binary_file.name not in binary_pre_existing:
                     binary_file.unlink()
-        if local_dir.exists():
-            for local_file in list(local_dir.glob("_turinglocal*.so")) + list(local_dir.glob("_turinglocal*.pyd")):
-                if local_file.name not in local_pre_existing:
-                    local_file.unlink()
+        if embedded_dir.exists():
+            for embedded_file in list(embedded_dir.glob("_turingembedded*.so")) + list(embedded_dir.glob("_turingembedded*.pyd")):
+                if embedded_file.name not in embedded_pre_existing:
+                    embedded_file.unlink()
 
 
 def build_sdist(sdist_directory, config_settings=None):

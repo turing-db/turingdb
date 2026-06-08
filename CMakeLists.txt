@@ -342,7 +342,7 @@ add_subdirectory(test)
 
 add_subdirectory(python/turingdb/_common)
 add_subdirectory(python/turingdb/_binary)
-add_subdirectory(python/turingdb/_local)
+add_subdirectory(python/turingdb/_embedded)
 add_subdirectory(samples)
 add_subdirectory(regress)
 add_subdirectory(fuzz)

@@ -47,6 +47,16 @@ public:
      */
     void write(ListElementView view);
 
+    /**
+     * @brief Reserves space for @param numViews views and commits it (advancing the write
+     * position past the whole region), returning a writable pointer to the first slot.
+     *
+     * Unlike @ref write, which writes at the internal append position, the caller fills the
+     * reserved slots itself through the returned pointer.
+     * @warn Can allocate unbounded amounts of memory; no size check is performed.
+     */
+    ListElementView* reserveAndCommit(size_t numViews);
+
     /// Returns a pointer to the next free available slot in the last buffer
     const ListElementView* nextPtr() const { return &_last->_buf[_last->_size]; }
 

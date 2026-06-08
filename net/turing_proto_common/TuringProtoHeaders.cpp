@@ -26,10 +26,10 @@ ProtoHeader ProtoHeader::decode(const char* data, size_t len) {
 void frameMessage(MessageTypes type,
                   std::string_view payload,
                   TuringProtoOutBuf* outBuf) {
-    bioassert(payload.size() <= std::numeric_limits<uint32_t>::max(), "Message payload exceeds uint32 maximum");
+    bioassert(payload.size() <= MAX_WIRE_SIZE, "Message payload exceeds maximum wire size");
     const ProtoHeader header {
         ._type = type,
-        ._dataLen = static_cast<uint32_t>(payload.size())};
+        ._dataLen = static_cast<WireSize>(payload.size())};
     outBuf->copyHeader(&header);
     outBuf->copyVarLenData(payload.data(), payload.size());
 }
@@ -38,10 +38,10 @@ void frameMessage(MessageTypes type,
                   std::span<char, ProtoHeader::wireSize()> headerSpan,
                   TuringProtoOutBuf* dataBuf,
                   std::span<iovec, 2> iovecs) {
-    bioassert(dataBuf->size() <= std::numeric_limits<uint32_t>::max(), "Message data buffer exceeds uint32 maximum");
+    bioassert(dataBuf->size() <= MAX_WIRE_SIZE, "Message data buffer exceeds maximum wire size");
     const ProtoHeader header {
         ._type = type,
-        ._dataLen = static_cast<uint32_t>(dataBuf->size())};
+        ._dataLen = static_cast<WireSize>(dataBuf->size())};
 
     const size_t sizeOfHeaderType = sizeof(header._type);
 

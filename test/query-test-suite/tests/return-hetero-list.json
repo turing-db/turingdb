@@ -1,7 +1,5 @@
 {
   "enabled": true,
-  "remote-enabled": false,
-  "remote-disabled-reason": "Remote protocol does not support nested lists yet.",
   "graph": "simpledb",
   "query": "return [true, \"i love turingdb\", 20.3, (1,2,3,4)] as list",
   "expect": {

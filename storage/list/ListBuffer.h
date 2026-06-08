@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <cstddef>
 #include <utility>
 
 #include "ListByteBuffer.h"
@@ -9,6 +10,7 @@
 #include "ListBufferTypeTag.h"
 
 #include "ListView.h"
+#include "ListWriteCursor.h"
 
 #include "metadata/PropertyType.h"
 
@@ -48,26 +50,15 @@ public:
 
     /**
      * @brief Reserves contiguous storage for a list of @param numElements elements whose
-     * values occupy @param valueBytes bytes in total, and returns the (as-yet unfilled)
-     * @ref ListView spanning them.
+     * values occupy @param valueBytes bytes in total, commits it, and returns a
+     * @ref ListWriteCursor over it.
      *
-     * For streaming decoders: reserve once up front, then call @ref appendElement for each
-     * element as it arrives. Reserving guarantees the element bytes and the views stay put,
-     * so the returned ListView is valid immediately and the appends only fill it in.
+     * For streaming decoders: reserve once up front, then fill the region by copying each
+     * element through the cursor's write pointers as it arrives. Reserving guarantees the
+     * element bytes and the views stay put, so the cursor's @ref ListView is valid
+     * immediately and the raw writes only fill it in.
      */
-    ListView reserveList(size_t numElements, size_t valueBytes);
-
-    /// Appends one element into the space reserved by the preceding @ref reserveList,
-    /// returning the view of the element just written.
-    ListElementView appendElement(const ListItemVariant& element);
-
-    /// Appends a pre-formed [tag][value] element of @param numBytes bytes, copied
-    /// directly without materialising an intermediate value, returning the view of the
-    /// element just written. Only valid for elements whose stored layout matches the
-    /// source bytes (i.e. the fixed-width types).
-    /// @warn As mentioned ListByteBuffer.h this MUST ONLY be called after appropriate
-    /// buffer resizing as there are no bound checks
-    ListElementView appendRawElement(const void* data, size_t numBytes);
+    ListWriteCursor reserveList(size_t numElements, size_t valueBytes);
 
     void clear();
 

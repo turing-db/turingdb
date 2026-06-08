@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stack>
 #include <stddef.h>
 #include <string>
 #include <vector>
@@ -29,7 +30,7 @@ class TuringProtoDecoder {
 public:
     struct DfColumnState {
         DynamicLargeBitMask<uint64_t> _bitMask {0};
-        uint32_t _numRows {0};
+        WireSize _numRows {0};
 
         void reset() {
             _bitMask.resize(0);
@@ -64,18 +65,18 @@ public:
         ChunkedBuffer<char>* _stringBuffer {nullptr};
         db::ListBuffer<>* _listBuffer {nullptr};
 
-        // Cursor for the list row currently being decoded: how many elements it has in
-        // total and how many we have written so far. Lets a list resume across buffer
-        // boundaries; the elements themselves live in the (already emplaced) ListView.
-        uint32_t _listCount {0};
-        uint32_t _listWritten {0};
+        // Stack of write cursors into the preallocated list buffers. We always write the
+        // latest element received on the wire through the cursor at the top of the stack.
+        // If we find a nested list we push a child cursor; once a cursor's elements are all
+        // written we pop it and resume writing through the one beneath. Lives here (rather
+        // than as a local) so a list resumes across buffer boundaries.
+        std::stack<db::ListWriteCursor> _listStack;
 
         void reset() {
             _colIndex = 0;
             _rowIndex = 0;
             _bufferState.reset();
-            _listCount = 0;
-            _listWritten = 0;
+            _listStack = {};
         }
     };
 

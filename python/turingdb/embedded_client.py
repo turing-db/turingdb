@@ -22,7 +22,7 @@ class EmbeddedClient(CypherHelpersMixin):
     """
 
     def __init__(self, data_dir: Optional[str] = None):
-        from ._local import PyTuringDB as _Engine
+        from ._embedded import PyTuringEmbedded as _Engine
 
         self._inner = _Engine() if data_dir is None else _Engine(data_dir)
         self._graph: str = "default"

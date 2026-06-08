@@ -1,6 +1,9 @@
 #pragma once
 
+#include <stack>
 #include <stddef.h>
+#include <cstddef>
+#include <cstring>
 #include <span>
 #include <string>
 
@@ -36,36 +39,55 @@ struct ListElementReadVisitor {
     template <typename T>
     bool operator()(const db::ListElementView unusedView) const {
         constexpr size_t tagSize = sizeof(db::ListBufferTypeTag);
+        auto& currCursor = _ctx->_listStack.top();
 
         if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
-            if (_ctx->_inBuf->readable() < tagSize + sizeof(uint32_t)) {
+            if (_ctx->_inBuf->readable() < tagSize + sizeof(WireSize)) {
                 return false;
             }
             _ctx->_inBuf->increaseReadOffset(tagSize);
 
-            uint32_t numBytes = 0;
+            WireSize numBytes = 0;
             _ctx->_inBuf->readData(&numBytes, sizeof(numBytes));
 
             char* dest = _ctx->_stringBuffer->alloc(numBytes);
-            appended(_ctx->_listBuffer->appendElement(_ctx->_stringBuffer->getView(dest, numBytes)));
+            const T view = _ctx->_stringBuffer->getView(dest, numBytes);
+            captureOutView(currCursor.writeValue<T>(db::TypeToListBufferTag<T>::Tag, view));
 
             return readVarLenPayload(dest, numBytes);
         } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
-            if (_ctx->_inBuf->readable() < tagSize + sizeof(uint32_t)) {
+            if (_ctx->_inBuf->readable() < tagSize + sizeof(WireSize)) {
                 return false;
             }
             _ctx->_inBuf->increaseReadOffset(tagSize);
 
-            uint32_t numBytes = 0;
+            WireSize numBytes = 0;
             _ctx->_inBuf->readData(&numBytes, sizeof(numBytes));
 
             const size_t numFloats = numBytes / sizeof(float);
             float* dest = _ctx->_embeddingBuffer->alloc(numFloats);
-            appended(_ctx->_listBuffer->appendElement(_ctx->_embeddingBuffer->getView(dest, numFloats)));
+            const T view = _ctx->_embeddingBuffer->getView(dest, numFloats);
+            captureOutView(currCursor.writeValue<T>(db::TypeToListBufferTag<T>::Tag, view));
 
             return readVarLenPayload(reinterpret_cast<char*>(dest), numBytes);
         } else if constexpr (std::is_same_v<T, db::ListView>) {
-            throw TuringException("Nested lists are not supported over the binary protocol");
+            if (_ctx->_inBuf->readable() < tagSize + sizeof(WireSize) + sizeof(WireSize)) {
+                return false;
+            }
+            _ctx->_inBuf->increaseReadOffset(tagSize);
+
+            WireSize numElements = 0;
+            WireSize numBytes = 0;
+            _ctx->_inBuf->readData(&numElements, sizeof(numElements));
+            _ctx->_inBuf->readData(&numBytes, sizeof(numBytes));
+
+            // The parent's nested slot stores the child's ListView; the child's elements
+            // then stream into the cursor we push.
+            const db::ListWriteCursor childCursor = _ctx->_listBuffer->reserveList(numElements, numBytes);
+            captureOutView(currCursor.writeValue<T>(db::TypeToListBufferTag<T>::Tag, childCursor.getView()));
+            _ctx->_listStack.emplace(childCursor);
+
+            return true;
         } else {
             // Fixed-width element: the wire layout [tag][value] is identical to the stored
             // layout, so copy it straight into the reserved slot — no intermediate value.
@@ -74,7 +96,7 @@ struct ListElementReadVisitor {
                 return false;
             }
 
-            appended(_ctx->_listBuffer->appendRawElement(_ctx->_inBuf->readPtr(), elementBytes));
+            captureOutView(currCursor.writeRaw(_ctx->_inBuf->readPtr(), elementBytes));
             _ctx->_inBuf->increaseReadOffset(elementBytes);
 
             return true;
@@ -82,18 +104,17 @@ struct ListElementReadVisitor {
     }
 
 private:
-    // Records that an element was appended: advances the cursor and, if a caller asked
-    // for it, hands back the element's view.
-    void appended(const db::ListElementView view) const {
-        ++_ctx->_listWritten;
-        if (_outView != nullptr) {
+    // If a caller asked for it (the ListElementView columns, which store one view per row),
+    // hands back the view of the element just written.
+    void captureOutView(const db::ListElementView view) const {
+        if (_outView) {
             *_outView = view;
         }
     }
 
     // Copies @param numBytes into the (stable) @param dest, queueing a @ref _bufferState
     // resume if the payload is split across the buffer boundary.
-    bool readVarLenPayload(char* dest, uint32_t numBytes) const {
+    bool readVarLenPayload(char* dest, WireSize numBytes) const {
         if (numBytes <= _ctx->_inBuf->readable()) {
             _ctx->_inBuf->readData(dest, numBytes);
             return true;
@@ -108,6 +129,60 @@ private:
         return false;
     }
 };
+
+/**
+ * @brief Drains the list cursor stack in @ref _listStack, reading elements off the wire into
+ * the reserved buffers until the stack empties (the whole top-level list is decoded) or the
+ * read buffer runs dry (returns false; the stack and @ref _bufferState carry the resume point).
+ *
+ * For each top-level element completed (one written through the column's own cursor, i.e. stack
+ * depth 1 — nested elements live deeper and are not column rows), @param onTopLevelElement is
+ * invoked with its 0-based index and view. ListElementView columns store the view; ListView
+ * columns pass a no-op.
+ *
+ * return false if we have an incomplete element in the input buffer.
+ */
+template <typename OnTopLevelElement>
+inline bool drainListStack(TuringProtoDecoder::DecodeContext* ctx,
+                           const OnTopLevelElement& onTopLevelElement) {
+    db::ListElementView view;
+    const ListElementReadVisitor readVisitor {ctx, &view};
+    auto& stack = ctx->_listStack;
+
+    while (!stack.empty()) {
+        if (stack.top().isComplete()) {
+            stack.pop();
+            continue;
+        }
+
+        if (ctx->_inBuf->readable() < sizeof(db::ListBufferTypeTag)) {
+            return false;
+        }
+
+        db::ListBufferTypeTag tag {};
+        // Peek the tag (don't consume): keeping it in the buffer lets the fixed-width path
+        // memcpy [tag][value] in one go.
+        memcpy(&tag, ctx->_inBuf->readPtr(), sizeof(tag));
+
+        // A top-level element is one written through the column's own cursor (stack depth 1);
+        // nested elements live deeper and are not column rows. The reference stays valid across
+        // a push (std::stack is deque-backed, which doesn't relocate existing elements).
+        const bool topLevel = (stack.size() == 1);
+        db::ListWriteCursor& cursor = stack.top();
+        const size_t elementIndex = cursor.getWritten();
+
+        const bool elementComplete = db::ListTagDispatcher {tag}.execute(readVisitor, db::ListElementView {});
+
+        if (topLevel && cursor.getWritten() > elementIndex) {
+            onTopLevelElement(elementIndex, view);
+        }
+        if (!elementComplete) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 template <typename T>
 inline bool decodeVector(TuringProtoDecoder::DecodeContext* ctx,
@@ -141,12 +216,12 @@ inline bool decodeVector<std::string>(TuringProtoDecoder::DecodeContext* ctx,
     }
 
     for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
-        if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+        if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             ctx->_rowIndex += i;
             return false;
         }
 
-        uint32_t stringSize = 0;
+        WireSize stringSize = 0;
         ctx->_inBuf->readData(&stringSize, sizeof(stringSize));
 
         if (stringSize <= ctx->_inBuf->readable()) {
@@ -176,7 +251,7 @@ inline bool decodeVector<db::ListView>(TuringProtoDecoder::DecodeContext* ctx,
         typedCol->reserve(columnState->_numRows);
     }
 
-    const ListElementReadVisitor readVisitor {ctx};
+    auto& stack = ctx->_listStack;
 
     while (ctx->_rowIndex < columnState->_numRows) {
         // A list is "started" once we have read its header and emplaced its (initially
@@ -184,35 +259,23 @@ inline bool decodeVector<db::ListView>(TuringProtoDecoder::DecodeContext* ctx,
         // current row's header is still to come.
         const bool listStarted = (typedCol->size() == ctx->_rowIndex + 1);
         if (!listStarted) {
-            if (ctx->_inBuf->readable() < 2 * sizeof(uint32_t)) {
+            if (ctx->_inBuf->readable() < 2 * sizeof(WireSize)) {
                 return false;
             }
 
-            uint32_t elementCount = 0;
-            uint32_t listByteSize = 0;
+            WireSize elementCount = 0;
+            WireSize listByteSize = 0;
             ctx->_inBuf->readData(&elementCount, sizeof(elementCount));
             ctx->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
-            typedCol->emplace_back(ctx->_listBuffer->reserveList(elementCount, listByteSize));
-            ctx->_listCount = elementCount;
-            ctx->_listWritten = 0;
+            stack.emplace(ctx->_listBuffer->reserveList(elementCount, listByteSize));
+            typedCol->emplace_back(stack.top().getView());
         }
 
-        // Stream the remaining elements straight into the reserved space.
-        while (ctx->_listWritten < ctx->_listCount) {
-            if (ctx->_inBuf->readable() < sizeof(db::ListBufferTypeTag)) {
-                return false;
-            }
-
-            db::ListBufferTypeTag tag {};
-            // This 'peek' of the ListBufferTypeTag preserves the tag bytes in the buffer that
-            // later lets us memcpy the inline tag + fixed-size data in one go
-            memcpy(&tag, ctx->_inBuf->readPtr(), sizeof(tag));
-
-            const bool elementComplete = db::ListTagDispatcher {tag}.execute(readVisitor, db::ListElementView {});
-            if (!elementComplete) {
-                return false;
-            }
+        // Stream this row's list (and any nested children) straight into the reserved space.
+        auto onTopLevelElement = [](size_t, const db::ListElementView&) {};
+        if (!drainListStack(ctx, onTopLevelElement)) {
+            return false;
         }
 
         ++ctx->_rowIndex;
@@ -228,49 +291,28 @@ template <>
 inline bool decodeVector<db::ListElementView>(TuringProtoDecoder::DecodeContext* ctx,
                                               db::ColumnVector<db::ListElementView>* typedCol,
                                               TuringProtoDecoder::DfColumnState* columnState) {
-    // We pass this view object to the read visitor as a way of returning the ListElementView of
-    // the object we just inserted.
-    db::ListElementView view;
-    const ListElementReadVisitor readVisitor {ctx, &view};
+    auto& stack = ctx->_listStack;
 
     // If the row index is 0 this indicates that we haven't read any values from
     // our encoded ListView and need to allocate the list buffer itself
     if (ctx->_rowIndex == 0) {
-        if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+        if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             return false;
         }
 
-        uint32_t listByteSize = 0;
+        WireSize listByteSize = 0;
         ctx->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
-        ctx->_listBuffer->reserveList(columnState->_numRows, listByteSize);
+        stack.emplace(ctx->_listBuffer->reserveList(columnState->_numRows, listByteSize));
         typedCol->resize(columnState->_numRows);
-        ctx->_listCount = columnState->_numRows;
-        ctx->_listWritten = 0;
         ctx->_rowIndex = 1;
     }
 
-    while (ctx->_listWritten < ctx->_listCount) {
-        if (ctx->_inBuf->readable() < sizeof(db::ListBufferTypeTag)) {
-            return false;
-        }
-
-        db::ListBufferTypeTag tag {};
-        memcpy(&tag, ctx->_inBuf->readPtr(), sizeof(tag));
-
-        const size_t elementIndex = ctx->_listWritten;
-        const bool elementComplete = db::ListTagDispatcher {tag}.execute(readVisitor, db::ListElementView {});
-
-        // Append the view of the list element we just inserted into the list buffer
-        if (ctx->_listWritten > elementIndex) {
-            typedCol->data()[elementIndex] = view;
-        }
-        if (!elementComplete) {
-            return false;
-        }
-    }
-
-    return true;
+    // One column row per top-level element; its view is stored in the matching row.
+    auto onTopLevelElement = [typedCol](size_t index, const db::ListElementView& view) {
+        typedCol->data()[index] = view;
+    };
+    return drainListStack(ctx, onTopLevelElement);
 }
 
 template <>
@@ -282,12 +324,12 @@ inline bool decodeVector<db::Path>(TuringProtoDecoder::DecodeContext* ctx,
     }
 
     for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
-        if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+        if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             ctx->_rowIndex += i;
             return false;
         }
 
-        uint32_t pathByteSize = 0;
+        WireSize pathByteSize = 0;
         ctx->_inBuf->readData(&pathByteSize, sizeof(pathByteSize));
         const size_t numEntities = pathByteSize / sizeof(db::EntityID);
 
@@ -319,12 +361,12 @@ inline bool decodeVector<db::types::Embedding::Primitive>(TuringProtoDecoder::De
     }
 
     for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
-        if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+        if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             ctx->_rowIndex += i;
             return false;
         }
 
-        uint32_t embeddingSize = 0;
+        WireSize embeddingSize = 0;
         ctx->_inBuf->readData(&embeddingSize, sizeof(embeddingSize));
         const size_t numFloats = embeddingSize / sizeof(float);
 
@@ -363,12 +405,12 @@ inline bool decodeVector<db::EntityList>(TuringProtoDecoder::DecodeContext* ctx,
         auto& entityList = (*typedCol)[ctx->_rowIndex + i];
 
         if (entityList.size() == 0) {
-            if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+            if (ctx->_inBuf->readable() < sizeof(WireSize)) {
                 ctx->_rowIndex += i;
                 return false;
             }
 
-            uint32_t numberOfEntries = 0;
+            WireSize numberOfEntries = 0;
             ctx->_inBuf->readData(&numberOfEntries, sizeof(numberOfEntries));
             entityList.reserve(numberOfEntries);
         }
@@ -426,7 +468,7 @@ inline bool decodeOptVector<std::string>(TuringProtoDecoder::DecodeContext* ctx,
                                          db::ColumnOptVector<std::string>* typedCol,
                                          TuringProtoDecoder::DfColumnState* columnState) {
     for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
-        if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+        if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             ctx->_rowIndex += i;
             return false;
         }
@@ -435,11 +477,11 @@ inline bool decodeOptVector<std::string>(TuringProtoDecoder::DecodeContext* ctx,
 
         const bool hasValue = columnState->_bitMask.test(ctx->_rowIndex + i);
         if (!hasValue) {
-            ctx->_inBuf->increaseReadOffset(sizeof(uint32_t));
+            ctx->_inBuf->increaseReadOffset(sizeof(WireSize));
             continue;
         }
 
-        uint32_t stringSize = 0;
+        WireSize stringSize = 0;
         ctx->_inBuf->readData(&stringSize, sizeof(stringSize));
 
         if (stringSize <= ctx->_inBuf->readable()) {
@@ -466,7 +508,7 @@ inline bool decodeOptVector<db::types::Embedding::Primitive>(TuringProtoDecoder:
                                                               db::ColumnOptVector<db::types::Embedding::Primitive>* typedCol,
                                                               TuringProtoDecoder::DfColumnState* columnState) {
     for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
-        if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+        if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             ctx->_rowIndex += i;
             return false;
         }
@@ -475,11 +517,11 @@ inline bool decodeOptVector<db::types::Embedding::Primitive>(TuringProtoDecoder:
 
         const bool hasValue = columnState->_bitMask.test(ctx->_rowIndex + i);
         if (!hasValue) {
-            ctx->_inBuf->increaseReadOffset(sizeof(uint32_t));
+            ctx->_inBuf->increaseReadOffset(sizeof(WireSize));
             continue;
         }
 
-        uint32_t embeddingSize = 0;
+        WireSize embeddingSize = 0;
         ctx->_inBuf->readData(&embeddingSize, sizeof(embeddingSize));
         const size_t numFloats = embeddingSize / sizeof(float);
 
@@ -524,11 +566,11 @@ inline bool decodeConst(TuringProtoDecoder::DecodeContext* ctx,
 template <>
 inline bool decodeConst<std::string>(TuringProtoDecoder::DecodeContext* ctx,
                                      db::ColumnConst<std::string>* typedCol) {
-    if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+    if (ctx->_inBuf->readable() < sizeof(WireSize)) {
         return false;
     }
 
-    uint32_t stringSize = 0;
+    WireSize stringSize = 0;
     ctx->_inBuf->readData(&stringSize, sizeof(stringSize));
 
     if (stringSize <= ctx->_inBuf->readable()) {
@@ -564,11 +606,11 @@ inline bool decodeConst<std::string>(TuringProtoDecoder::DecodeContext* ctx,
 template <>
 inline bool decodeConst<db::Path>(TuringProtoDecoder::DecodeContext* ctx,
                                   db::ColumnConst<db::Path>* typedCol) {
-    if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+    if (ctx->_inBuf->readable() < sizeof(WireSize)) {
         return false;
     }
 
-    uint32_t pathByteSize = 0;
+    WireSize pathByteSize = 0;
     ctx->_inBuf->readData(&pathByteSize, sizeof(pathByteSize));
     const size_t numEntities = pathByteSize / sizeof(db::EntityID);
 
@@ -600,11 +642,11 @@ inline bool decodeConst<db::Path>(TuringProtoDecoder::DecodeContext* ctx,
 template <>
 inline bool decodeConst<db::types::Embedding::Primitive>(TuringProtoDecoder::DecodeContext* ctx,
                                                          db::ColumnConst<db::types::Embedding::Primitive>* typedCol) {
-    if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+    if (ctx->_inBuf->readable() < sizeof(WireSize)) {
         return false;
     }
 
-    uint32_t embeddingSize = 0;
+    WireSize embeddingSize = 0;
     ctx->_inBuf->readData(&embeddingSize, sizeof(embeddingSize));
     const size_t numFloats = embeddingSize / sizeof(float);
 
@@ -639,42 +681,27 @@ inline bool decodeConst<db::types::Embedding::Primitive>(TuringProtoDecoder::Dec
 template <>
 inline bool decodeConst<db::ListView>(TuringProtoDecoder::DecodeContext* ctx,
                                       db::ColumnConst<db::ListView>* typedCol) {
-    const ListElementReadVisitor readVisitor {ctx};
+    auto& stack = ctx->_listStack;
 
     // Const columns have no row dimension, so reuse _rowIndex as a 0/1 "list started"
     // marker (the driver resets it to 0 before this column). 1 means we have read the
     // header, reserved the space, and set the (initially unfilled) ListView on the column.
     if (ctx->_rowIndex == 0) {
-        if (ctx->_inBuf->readable() < 2 * sizeof(uint32_t)) {
+        if (ctx->_inBuf->readable() < 2 * sizeof(WireSize)) {
             return false;
         }
 
-        uint32_t elementCount = 0;
-        uint32_t listByteSize = 0;
+        WireSize elementCount = 0;
+        WireSize listByteSize = 0;
         ctx->_inBuf->readData(&elementCount, sizeof(elementCount));
         ctx->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
-        typedCol->set(ctx->_listBuffer->reserveList(elementCount, listByteSize));
-        ctx->_listCount = elementCount;
-        ctx->_listWritten = 0;
+        stack.emplace(ctx->_listBuffer->reserveList(elementCount, listByteSize));
+        typedCol->set(stack.top().getView());
         ctx->_rowIndex = 1;
     }
-
-    while (ctx->_listWritten < ctx->_listCount) {
-        if (ctx->_inBuf->readable() < sizeof(db::ListBufferTypeTag)) {
-            return false;
-        }
-
-        db::ListBufferTypeTag tag {};
-        memcpy(&tag, ctx->_inBuf->readPtr(), sizeof(tag));
-
-        const bool elementComplete = db::ListTagDispatcher {tag}.execute(readVisitor, db::ListElementView {});
-        if (!elementComplete) {
-            return false;
-        }
-    }
-
-    return true;
+    auto onTopLevelElement = [](size_t, const db::ListElementView&) {};
+    return drainListStack(ctx, onTopLevelElement);
 }
 
 // A constant ListElementView is a single element, wire-encoded as [listByteSize] + one
@@ -682,43 +709,26 @@ inline bool decodeConst<db::ListView>(TuringProtoDecoder::DecodeContext* ctx,
 template <>
 inline bool decodeConst<db::ListElementView>(TuringProtoDecoder::DecodeContext* ctx,
                                              db::ColumnConst<db::ListElementView>* typedCol) {
-    db::ListElementView view;
-    const ListElementReadVisitor readVisitor {ctx, &view};
+    auto& stack = ctx->_listStack;
 
     if (ctx->_rowIndex == 0) {
-        if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+        if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             return false;
         }
 
-        uint32_t listByteSize = 0;
+        WireSize listByteSize = 0;
         ctx->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
-        ctx->_listBuffer->reserveList(1, listByteSize);
-        ctx->_listCount = 1;
-        ctx->_listWritten = 0;
+        stack.emplace(ctx->_listBuffer->reserveList(1, listByteSize));
         ctx->_rowIndex = 1;
     }
 
-    while (ctx->_listWritten < ctx->_listCount) {
-        if (ctx->_inBuf->readable() < sizeof(db::ListBufferTypeTag)) {
-            return false;
-        }
+    // The constant is the single top-level element; store its view on the column.
+    auto onTopLevelElement = [typedCol](size_t, const db::ListElementView& view) {
+        typedCol->set(view);
+    };
 
-        db::ListBufferTypeTag tag {};
-        memcpy(&tag, ctx->_inBuf->readPtr(), sizeof(tag));
-
-        const size_t elementIndex = ctx->_listWritten;
-        const bool elementComplete = db::ListTagDispatcher {tag}.execute(readVisitor, db::ListElementView {});
-
-        if (ctx->_listWritten > elementIndex) {
-            typedCol->set(view);
-        }
-        if (!elementComplete) {
-            return false;
-        }
-    }
-
-    return true;
+    return drainListStack(ctx, onTopLevelElement); 
 }
 
 template <>
@@ -769,11 +779,11 @@ inline bool decodeOptConst<std::string>(TuringProtoDecoder::DecodeContext* ctx,
         return true;
     }
 
-    if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+    if (ctx->_inBuf->readable() < sizeof(WireSize)) {
         return false;
     }
 
-    uint32_t stringSize = 0;
+    WireSize stringSize = 0;
     ctx->_inBuf->readData(&stringSize, sizeof(stringSize));
 
     if (stringSize <= ctx->_inBuf->readable()) {
@@ -816,11 +826,11 @@ inline bool decodeOptConst<db::types::Embedding::Primitive>(TuringProtoDecoder::
         return true;
     }
 
-    if (ctx->_inBuf->readable() < sizeof(uint32_t)) {
+    if (ctx->_inBuf->readable() < sizeof(WireSize)) {
         return false;
     }
 
-    uint32_t embeddingSize = 0;
+    WireSize embeddingSize = 0;
     ctx->_inBuf->readData(&embeddingSize, sizeof(embeddingSize));
     const size_t numFloats = embeddingSize / sizeof(float);
 
