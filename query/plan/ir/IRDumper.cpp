@@ -54,7 +54,7 @@ void IRDumper::dumpMermaid(const VariableDependencyGraph& graph, std::ostream& o
         const EdgeMetadata::EdgeType etype = edge.data().type();
         const std::string_view typeName = EdgeTypeName::value(etype);
         const bool directed = (etype != EdgeMetadata::EdgeType::BIDIRECTIONAL);
-        const std::string_view arrow = directed ? "-->" : "---";
+        const std::string_view arrow = directed ? "--->" : "----";
         out << "    " << nodeDef(edge.src()) << " " << arrow << "|" << typeName << "| "
             << nodeDef(edge.tgt()) << "\n";
     }
