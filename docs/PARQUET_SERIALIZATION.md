@@ -14,8 +14,11 @@ collected in the [Appendix](#appendix--verified-source-references).
 
 ## 0. Status (as built)
 
-Phases 0 and 1 are **implemented and committed** on the `parquet-dumper` branch — the
-binary `DataPart` serializer now has a complete, faithful Parquet counterpart.
+Phases 0–2 are **implemented and committed** on the `parquet-dumper` branch — the binary
+serializer has a complete, faithful Parquet counterpart from the `DataPart` up through the
+commit and graph level. A body of hardening, memory-bounding and compression work has landed on
+top of Phase 2 (see [§0.1](#01-since-phase-2--hardening-memory-bounding-compression-committed)),
+short of the Phase 3 format-dispatch wiring.
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -23,7 +26,7 @@ binary `DataPart` serializer now has a complete, faithful Parquet counterpart.
 | 1 | All six `DataPart` structure adapters + the `DataPart` orchestrator (`storage/dump/parquet/`), each round-trip-tested; gated by `DataPartComparator::same`; EdgeIndexer patch path covered | ✅ committed |
 | 2 | Commit-level metadata (`GraphMetadata` maps, journal, tombstones, commit metadata) + `GraphDumper`/`CommitDumper` wiring | ✅ committed — all four adapters plus the `GraphParquet{Dumper,Loader}` / `CommitParquet{Dumper,Loader}` orchestrators; full graph dump→load round-trip gated by `GraphComparator::same` on the Reactome sample — see [§4.3](#43-commit--graph-metadata) |
 | 3 | `PARQUET` format-marker dispatch + back-compat with binary dumps | not started |
-| 4 | Retire the binary path; compression / row-group tuning | not started |
+| 4 | Retire the binary path; compression / row-group tuning | 🔶 partial — ZSTD compression and memory-bounded row-group streaming committed ([§4.4](#44-row-groups-and-compression)); binary retirement and range-aligned row groups not started |
 
 Phase 1 shipped these in `storage/dump/parquet/` (sibling lib `turing_db_storage_dump_parquet_s`,
 which keeps Arrow out of `turing_db_storage_s`): `PropertyContainerParquet{Dumper,Loader}`,
@@ -44,6 +47,67 @@ test that forces (and verifies) an EdgeIndexer patch node.
   whole pre-built structure" API. `*ParquetLoader` is added as a `friend` alongside the
   existing binary `*Loader`. (Public-only structures — `PropertyIndexer`,
   `StringPropertyIndexer` — need no friend.)
+
+### 0.1 Since Phase 2 — hardening, memory bounding, compression (committed)
+
+A body of robustness and performance work has landed on the branch on top of Phase 2, short of
+the Phase 3 format-dispatch wiring. The Parquet path is still driven directly (the
+`parquet-roundtrip` sample and the tests), not yet through `GraphSerializer`.
+
+- **Corrupt-dump hardening.** Every loader declares the schema it expects to
+  `ParquetReader::setExpectedSchema` — column count, per-column name and physical type (and byte
+  width for fixed-len), checked when the file opens before any callback fires
+  (`ParquetReader.h:137-142`). Loaders validate cross-column lengths, edge-range bounds and
+  embedding dimensions and throw `FatalException` rather than reading out of bounds: edge-indexer
+  ranges and label-set spans are bounds-checked against the edge arrays
+  (`EdgeIndexerParquetLoader.cpp:151-292`); property-indexer ranges are checked against the
+  loaded container's value count (`DataPartParquetLoader.cpp:170-187`); the `EdgeContainer`
+  loader refuses an out/in file whose first-id metadata is missing or disagrees between the two
+  files (`EdgeContainerParquetLoader.cpp:148-156`); `info` / `graph-info` files must have exactly
+  one row; a commit datapart count larger than the dump carries is refused
+  (`CommitParquetLoader.cpp`); `GraphParquetLoader` refuses a target graph that already has
+  history (`GraphParquetLoader.cpp:113-119`). Metadata scalars parse through a shared
+  `parseMetadataUint64` (`std::from_chars`, full-string) that turns a malformed value into a
+  `FatalException` instead of a leaked `std::invalid_argument`/`out_of_range`
+  (`ParquetMetadataParsing.{h,cpp}`). The writer refuses a string longer than the
+  `parquet::ByteArray` 32-bit length rather than truncating (`ParquetWriter.cpp:208-213`); the
+  prefix-tree `setChild`/`getChild`/`indexToChar` carry `>= ALPHABET_SIZE` bounds
+  (`StringIndex.cpp:32-55`).
+
+- **Safe-publish dump.** `GraphParquetDumper::dump` takes the version-controller lock like the
+  binary `GraphDumper`, writes into a sibling `<dir>.dumping` temp directory, and renames it over
+  the final path on success, so a partial dump (crash, disk full) is never mistaken for a
+  complete one; a leftover temp directory is a crashed dump and is removed
+  (`GraphParquetDumper.cpp:72-133`). A dump-wide format version is stamped into
+  `graph-info.parquet`'s key/value metadata and checked first on load — an absent or mismatched
+  version is rejected before anything else is interpreted (`GraphParquetLayout.h:20-21`,
+  `GraphParquetLoader.cpp:47-74`).
+
+- **Shell commits and orphaned ancestor dataparts.** A full dump walks every commit. A shell
+  ancestor (a lazily-loaded commit whose `CommitData` has expired) has no in-memory data and
+  dumps only its metadata file with empty datapart lists; once a loaded graph is committed to,
+  the previous head becomes a shell whose dataparts are still referenced through the new head's
+  `allDataparts`, so both dumpers now dump any datapart the per-commit walk did not already write,
+  keeping the dump loadable (`GraphParquetDumper.cpp:113-125`; binary `CommitDumper.cpp` /
+  `GraphDumper.cpp`).
+
+- **Memory-bounded row groups.** The edge and embedding dumpers no longer materialise a whole
+  column before touching the writer; they flatten one bounded row group at a time against a
+  512 MiB scratch budget (`EdgeContainerParquetDumper.cpp:32-86`,
+  `PropertyContainerParquetDumper.cpp:40-126`). On load, every value type now streams straight
+  into its container as the reader delivers each row-group batch — embeddings, edges, and (since
+  the per-column accumulation vectors were removed) the scalar and string property columns — so
+  load no longer transiently doubles the largest column (`PropertyContainerParquetLoader.cpp`,
+  `EdgeContainerParquetLoader.cpp`). The embedding container's `sort()` skips the reorder when the
+  ids are already ascending (the bulk-add case), which otherwise copied every embedding into a
+  fresh container at commit time (`PropertyContainer.cpp:42-58`).
+
+- **ZSTD compression.** All columns are written with `ZSTD`, set once on the writer's
+  `WriterProperties` (`ParquetWriter.cpp:91-93`).
+
+- **Shared layout and read helpers.** Column names and metadata keys live in per-area
+  `*ParquetLayout.h` headers so the dumper and loader sides cannot drift; `ParquetFileReading`
+  wraps the open-validate-drain sequence every loader runs (`ParquetFileReading.{h,cpp}`).
 
 ---
 
@@ -308,11 +372,19 @@ fixture for `ReactomeTest`), in `test/storage/dump/parquet/GraphParquetLoaderTes
 
 ### 4.4 Row groups and compression
 
-Phase 1: fixed rows-per-row-group (start 1 M) and `ZSTD` for value columns;
-dictionary for low-cardinality id columns. Forward: align row-group boundaries to
-node-ID / partition ranges for partial on-disk scans. `BYTE_STREAM_SPLIT` is not
-applicable to `FIXED_LEN_BYTE_ARRAY` embeddings (revisit with the embedding
-effort).
+All columns are compressed with `ZSTD`, set once on the writer's `WriterProperties`
+(`ParquetWriter.cpp:91-93`); no per-column dictionary/encoding tuning yet. Row groups are sized
+by a **memory budget, not a fixed row count**: the edge and embedding dumpers flatten one row
+group at a time against a 512 MiB scratch buffer so the dumper's transient footprint stays flat
+regardless of edge/embedding count (`EdgeContainerParquetDumper.cpp:32-86`,
+`PropertyContainerParquetDumper.cpp:40-126`); the smaller structures write a single row group.
+Each loader streams every row-group batch straight into the target container as it arrives, so
+neither dump nor load transiently doubles the largest column.
+
+Measured on `ogbn_papers100m` + 256-dim embeddings, the row-group streaming dropped the ZSTD
+dump's peak memory from 273.7 GiB to 228.9 GiB, fitting in RAM without swap. Forward: align
+row-group boundaries to node-ID / partition ranges for partial on-disk scans. `BYTE_STREAM_SPLIT`
+is not applicable to `FIXED_LEN_BYTE_ARRAY` embeddings (revisit with the embedding effort).
 
 ---
 
@@ -341,8 +413,11 @@ serialized (no rebuild of `getIns()` from `getOuts()`).
 - **`edges-out.parquet`** / **`edges-in.parquet`** — 4 columns each:
   `edge_id`, `node_id`, `other_id`, `edge_type_id`. `EdgeRecord` is
   array-of-structs in memory, so each column is gathered into a contiguous scratch
-  buffer before `WriteBatch` (O(n) transpose per column).
-- Scalars `firstEdgeID`, `firstNodeID` in metadata.
+  buffer before `WriteBatch`; the transpose runs one bounded row group at a time (512 MiB),
+  not over the whole column ([§4.4](#44-row-groups-and-compression)).
+- Scalars `firstEdgeID`, `firstNodeID` in metadata. The loader cross-checks that the out- and
+  in-edge files carry the same first ids and refuses a file missing them
+  (`EdgeContainerParquetLoader.cpp:148-156`).
 
 ### 5.3 PropertyManager containers (`storage/properties/PropertyContainer.h:117,221,300`)
 
@@ -353,7 +428,9 @@ Per property type, the container exposes contiguous `ids()` and `all()`:
   (`Int64`/`UInt64`/`Double`/`Bool`) write `all()` near-zero-copy. Strings build
   `ByteArray` descriptors over the existing `string_view` bytes. Embeddings write
   each view's flat floats as `FIXED_LEN_BYTE_ARRAY(byteWidth = dim×4)`; dimension in
-  metadata.
+  metadata. On load every type streams straight into its `TypedPropertyContainer<T>` as each
+  row-group batch arrives (the entity-id column is read ahead of the value column within each
+  chunk), so no per-column accumulation vector is held ([§4.4](#44-row-groups-and-compression)).
 
 ### 5.4 EdgeIndexer (`storage/indexers/EdgeIndexer.h:60-84`)
 
@@ -461,6 +538,13 @@ public:
   `parquet::schema::{PrimitiveNode,GroupNode}` in the `.cpp`.
 - Catches `parquet::ParquetException`, rethrows `TuringException` (as
   `ParquetReader.cpp:37-41`).
+- All columns are written with `ZSTD` (`WriterProperties`, `ParquetWriter.cpp:91-93`); a string
+  value longer than the `parquet::ByteArray` 32-bit length is refused, not truncated
+  (`.cpp:208-213`).
+- The reader gained `setExpectedSchema`: a loader declares the schema the file must carry
+  (column count, names, physical types, fixed-len widths), checked when the file opens before any
+  callback (`ParquetReader.h:137-142`). Every `storage/dump/parquet` loader uses it, via the
+  `ParquetFileReading` open-validate-drain helper.
 
 ### 6.2 `storage/dump/parquet/` — per-structure encoders/decoders
 
@@ -501,6 +585,12 @@ loaded `EdgeContainer`. Per-property files are enumerated from the directory
 - Loaders (`GraphSerializer`/`CommitLoader`/`DataPartLoader`) read the `type` marker
   and dispatch. Old dumps keep loading via the unchanged binary path.
 
+None of this is built yet — `GraphFileType` still carries only `GML` and `BINARY`, and the
+Parquet path is invoked directly. Independent of this marker, a Parquet dump already self-versions
+through `graphParquetLayout::FORMAT_VERSION` in `graph-info.parquet`'s metadata, so a
+forward-incompatible layout change is rejected on load regardless of how dispatch lands
+([§0.1](#01-since-phase-2--hardening-memory-bounding-compression-committed)).
+
 ---
 
 ## 7. Phasing
@@ -525,8 +615,11 @@ on the Reactome sample (`GraphParquetLoaderTest`).
 ([§6.3](#63-orchestration-and-format-dispatch)) dispatch on it; parametrize the regression
 suite over both formats; flip the default to `PARQUET`. Old binary dumps keep loading.
 
-**Phase 4 — cleanup & tuning.** Compression/row-group tuning; row-group alignment to node
-ranges; once existing dumps are migrated, sunset the binary dumpers and the
+**Phase 4 — cleanup & tuning. 🔶 In progress.** ZSTD compression and memory-bounded row-group
+streaming are committed ([§4.4](#44-row-groups-and-compression)); the `parquet-roundtrip` sample
+([§9](#9-testing)) benchmarks dump size, dump/load time and peak memory against the binary
+serializer. Remaining: row-group alignment to node ranges for partial on-disk scans, per-column
+encoding tuning, and — once existing dumps are migrated — sunsetting the binary dumpers and the
 `FilePageWriter` path.
 
 ---
@@ -554,6 +647,14 @@ The hub design (`docs/GRAPHHUB.md` §4) content-addresses dataparts over the
 - **DataPart round-trip (Phase 1):** structural-equality after dump→load, asserting
   every indexer matches the original (the dump-everything guarantee is the property
   under test).
+- **Negative-path loader tests:** corrupt/short/retyped dumps, out-of-bounds ranges,
+  mismatched first-id metadata, oversized commit datapart counts and a non-empty target graph
+  each raise `FatalException` rather than reading out of bounds (`test/storage/dump/parquet/`).
+- **Benchmark sample:** `samples/parquet-roundtrip` loads a binary dump, round-trips it through
+  the Parquet path and asserts `GraphComparator::same`; `-dump-only` / `-load-parquet` /
+  `-dump-binary` / `-load-only` / `-add-random-embeddings` isolate dump or load timing, exercise
+  the binary path, and attach deterministic random embeddings for size/time/peak-memory
+  comparison.
 - **Regression (Phase 2–3):** `regress/` dump/load suites parametrized over `BINARY`
   and `PARQUET`.
 - **Back-compat:** a checked-in binary dump that must keep loading after the default flips.
@@ -563,17 +664,22 @@ The hub design (`docs/GRAPHHUB.md` §4) content-addresses dataparts over the
 ## 10. Risks and open questions
 
 - **String prefix-tree columnization** ([§5.6](#56-stringpropertyindexer--stringindex-storageindexesstringindexh26-145))
-  — the hardest schema; opaque-`BYTE_ARRAY`-blob fallback retained.
-- **Load-time CPU** — Parquet decode is more work than a near-memory-image binary
-  load (though we avoid index *rebuild*, which is the bigger cost). Quantify on a
-  100 M-node graph in Phase 1; parallelize decode via `JobSystem` if needed.
+  — *resolved.* The flattened node/children/owners tables round-trip cleanly under
+  `StringIndexerComparator::same`; the opaque-`BYTE_ARRAY`-blob fallback the draft reserved was
+  not needed.
+- **`UInt64`/`size_t` round-trip** — *resolved.* Full-range lossless round-trip through the
+  `INT64`/`UINT_64` encoding is covered by the `UInt64BoundaryRoundTrip` test
+  ([§4.1](#41-type-mapping)).
+- **`coreNodes`/`patchNodes` span restoration** — *resolved.* The slice keys off
+  `patchNodeCount` (the layout is patch-first, not `coreNodeCount`); verified by the two-commit
+  patch-node equality test ([§5.4](#54-edgeindexer)).
+- **Load-time CPU** — Parquet decode is more work than a near-memory-image binary load (though we
+  avoid index *rebuild*, the bigger cost). The `parquet-roundtrip` sample now times dump and load
+  in isolation ([§9](#9-testing)); parallelize decode via `JobSystem` if a 100 M-node graph
+  proves it necessary.
 - **Small-file overhead** — a part with many property/index tables yields many small
   Parquet files (footer overhead each). Phase 4 may consolidate; faithful
   decomposition first.
-- **`UInt64`/`size_t` round-trip** — confirm full-range lossless round-trip through
-  the `INT64` encoding.
-- **`coreNodes`/`patchNodes` span restoration** — confirm slicing `_nodes` by
-  `coreNodeCount` reproduces the exact spans (validate in the Phase 1 equality test).
 
 ---
 
@@ -596,5 +702,14 @@ The hub design (`docs/GRAPHHUB.md` §4) content-addresses dataparts over the
 | LabelSetIndexer backing map; LabelSetHandle; LabelSetID | `storage/indexers/LabelSetIndexer.h:19`; `storage/metadata/LabelSetHandle.h:273-277`; `storage/ID.h` |
 | ValueType enum | `storage/metadata/PropertyType.h:15-25` |
 | ParquetReader API + exception wrapping | `io/parquet/ParquetReader.h`; `.cpp:37-41,203-245` |
+| Reader expected-schema validation | `io/parquet/ParquetReader.h:137-142` |
 | Low-level Parquet write APIs in use | `test/io/ParquetReaderTest.cpp:124-161` |
+| ParquetWriter ZSTD; oversized-string refusal | `io/parquet/ParquetWriter.cpp:91-93,208-213` |
+| Dump format version; temp-dir + rename publish | `storage/dump/parquet/GraphParquetLayout.h:20-21`; `GraphParquetDumper.cpp:72-133` |
+| Strict metadata scalar parsing | `storage/dump/parquet/ParquetMetadataParsing.cpp:11-23` |
+| Open-validate-drain read helper | `storage/dump/parquet/ParquetFileReading.h` |
+| Loader bounds checks (edge ranges, property ranges, first-id cross-check) | `storage/dump/parquet/EdgeIndexerParquetLoader.cpp:151-292`; `DataPartParquetLoader.cpp:170-187`; `EdgeContainerParquetLoader.cpp:148-156` |
+| Memory-bounded row-group streaming; ascending-id sort skip | `storage/dump/parquet/EdgeContainerParquetDumper.cpp:32-86`; `PropertyContainerParquetDumper.cpp:40-126`; `storage/properties/PropertyContainer.cpp:42-58` |
+| Shell-commit / orphaned-datapart dump | `storage/dump/parquet/GraphParquetDumper.cpp:113-125`; `storage/dump/CommitDumper.cpp`; `GraphDumper.cpp` |
+| Benchmark / round-trip sample | `samples/parquet-roundtrip/main.cpp` |
 | Parquet CMake wiring | `CMakeLists.txt:222`; `io/parquet/CMakeLists.txt` |
