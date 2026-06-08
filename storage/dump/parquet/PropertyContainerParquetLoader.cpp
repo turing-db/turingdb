@@ -33,8 +33,11 @@ namespace layout = propertyContainerParquetLayout;
 
 namespace {
 
-// Collects the entity-id column and the typed value column across all chunks, then
-// rebuilds the matching TypedPropertyContainer<T> in build().
+// Streams each value-column batch straight into the matching TypedPropertyContainer<T> as
+// it is read. The reader delivers row-aligned chunks with the entity-id column ahead of the
+// value column, so every value batch lands after the ids it belongs to. Accumulating the
+// whole value column first would transiently double the container's footprint, which on
+// large property columns is tens of gigabytes on top of the resident graph.
 class PropertyContainerLoadVisitor : public ParquetSaxVisitor {
 public:
     bool onFileStart(const parquet::FileMetaData& metadata) override {
@@ -67,89 +70,24 @@ public:
 
         checkSchema(metadata);
 
-        if (_valueType == ValueType::Embedding) {
-            _embeddingContainer = std::make_unique<TypedPropertyContainer<types::Embedding>>(_dimension);
-        }
-
-        return true;
-    }
-
-    bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) override {
-        std::vector<int64_t>& target = (columnIndex == 0) ? _entityIds : _int64Values;
-        for (const int64_t value : values) {
-            target.push_back(value);
-        }
-        return true;
-    }
-
-    bool onDoubleValues(size_t columnIndex, std::span<const double> values) override {
-        for (const double value : values) {
-            _doubleValues.push_back(value);
-        }
-        return true;
-    }
-
-    bool onBoolValues(size_t columnIndex, std::span<const bool> values) override {
-        for (const bool value : values) {
-            _boolValues.push_back(value ? 1 : 0);
-        }
-        return true;
-    }
-
-    bool onByteArrayValues(size_t columnIndex,
-                           std::span<const parquet::ByteArray> values) override {
-        for (const parquet::ByteArray& byteArray : values) {
-            _stringValues.emplace_back(reinterpret_cast<const char*>(byteArray.ptr), byteArray.len);
-        }
-        return true;
-    }
-
-    // The reader delivers row-aligned chunks with the entity-id column ahead of the value
-    // column, so every value batch lands after the ids it belongs to. Stream each embedding
-    // into the container right away: accumulating the raw floats first would transiently
-    // double the container's memory footprint.
-    bool onFixedLenByteArrayValues(size_t columnIndex,
-                                   std::span<const parquet::FixedLenByteArray> values,
-                                   size_t byteWidth) override {
-        const size_t floatsPerValue = byteWidth / sizeof(float);
-
-        if (_embeddingRowsLoaded + values.size() > _entityIds.size()) {
-            throw FatalException(fmt::format(
-                "PropertyContainerParquetLoader: embedding values ahead of entity ids"
-                " ({} loaded + {} new for {} ids)",
-                _embeddingRowsLoaded, values.size(), _entityIds.size()));
-        }
-
-        for (const parquet::FixedLenByteArray& value : values) {
-            const float* floats = reinterpret_cast<const float*>(value.ptr);
-
-            _embeddingContainer->add(entityIdAt(_embeddingRowsLoaded),
-                                     std::span<const float>(floats, floatsPerValue));
-            ++_embeddingRowsLoaded;
-        }
-
-        return true;
-    }
-
-    std::unique_ptr<PropertyContainer> build() {
         switch (_valueType) {
             case ValueType::Int64:
-                return buildInt64();
+                _container = std::make_unique<TypedPropertyContainer<types::Int64>>();
             break;
             case ValueType::UInt64:
-                return buildUInt64();
+                _container = std::make_unique<TypedPropertyContainer<types::UInt64>>();
             break;
             case ValueType::Double:
-                return buildDouble();
+                _container = std::make_unique<TypedPropertyContainer<types::Double>>();
             break;
             case ValueType::Bool:
-                return buildBool();
+                _container = std::make_unique<TypedPropertyContainer<types::Bool>>();
             break;
             case ValueType::String:
-                return buildString();
+                _container = std::make_unique<TypedPropertyContainer<types::String>>();
             break;
             case ValueType::Embedding:
-                return buildEmbedding();
+                _container = std::make_unique<TypedPropertyContainer<types::Embedding>>(_dimension);
             break;
             case ValueType::Invalid:
             case ValueType::_SIZE:
@@ -157,19 +95,95 @@ public:
             break;
         }
 
-        throw FatalException("PropertyContainerParquetLoader: unhandled value type");
+        return true;
+    }
+
+    bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) override {
+        if (columnIndex == 0) {
+            for (const int64_t value : values) {
+                _entityIds.push_back(value);
+            }
+            return true;
+        }
+
+        if (_valueType == ValueType::Int64) {
+            addValueBatch<TypedPropertyContainer<types::Int64>>(
+                values, [](int64_t value) { return value; });
+        } else {
+            addValueBatch<TypedPropertyContainer<types::UInt64>>(
+                values, [](int64_t value) { return static_cast<uint64_t>(value); });
+        }
+        return true;
+    }
+
+    bool onDoubleValues(size_t columnIndex, std::span<const double> values) override {
+        addValueBatch<TypedPropertyContainer<types::Double>>(
+            values, [](double value) { return value; });
+        return true;
+    }
+
+    bool onBoolValues(size_t columnIndex, std::span<const bool> values) override {
+        addValueBatch<TypedPropertyContainer<types::Bool>>(
+            values, [](bool value) { return value; });
+        return true;
+    }
+
+    bool onByteArrayValues(size_t columnIndex,
+                           std::span<const parquet::ByteArray> values) override {
+        addValueBatch<TypedPropertyContainer<types::String>>(
+            values, [](const parquet::ByteArray& byteArray) {
+                return std::string_view(reinterpret_cast<const char*>(byteArray.ptr), byteArray.len);
+            });
+        return true;
+    }
+
+    bool onFixedLenByteArrayValues(size_t columnIndex,
+                                   std::span<const parquet::FixedLenByteArray> values,
+                                   size_t byteWidth) override {
+        const size_t floatsPerValue = byteWidth / sizeof(float);
+
+        addValueBatch<TypedPropertyContainer<types::Embedding>>(
+            values, [floatsPerValue](const parquet::FixedLenByteArray& value) {
+                return std::span<const float>(reinterpret_cast<const float*>(value.ptr), floatsPerValue);
+            });
+        return true;
+    }
+
+    std::unique_ptr<PropertyContainer> build() {
+        if (_valueRowsLoaded != _entityIds.size()) {
+            throw FatalException(fmt::format(
+                "PropertyContainerParquetLoader: {} values for {} entity ids",
+                _valueRowsLoaded, _entityIds.size()));
+        }
+
+        return std::move(_container);
     }
 
 private:
     ValueType _valueType {ValueType::Invalid};
     size_t _dimension {0};
     std::vector<int64_t> _entityIds;
-    std::vector<int64_t> _int64Values;
-    std::vector<double> _doubleValues;
-    std::vector<uint8_t> _boolValues;
-    std::vector<std::string> _stringValues;
-    std::unique_ptr<TypedPropertyContainer<types::Embedding>> _embeddingContainer;
-    size_t _embeddingRowsLoaded {0};
+    std::unique_ptr<PropertyContainer> _container;
+    size_t _valueRowsLoaded {0};
+
+    // Streams one value-column batch into the typed container. ParquetValue is the element
+    // type the reader delivers; convert maps it to the container's value (identity for the
+    // scalars, a view for strings, a float span for embeddings — the container copies in).
+    template <typename ContainerType, typename ParquetValue, typename Convert>
+    void addValueBatch(std::span<const ParquetValue> values, Convert convert) {
+        if (_valueRowsLoaded + values.size() > _entityIds.size()) {
+            throw FatalException(fmt::format(
+                "PropertyContainerParquetLoader: value column runs ahead of entity ids"
+                " ({} loaded + {} new for {} ids)",
+                _valueRowsLoaded, values.size(), _entityIds.size()));
+        }
+
+        auto* container = static_cast<ContainerType*>(_container.get());
+        for (const ParquetValue& value : values) {
+            container->add(entityIdAt(_valueRowsLoaded), convert(value));
+            ++_valueRowsLoaded;
+        }
+    }
 
     parquet::Type::type valuePhysicalType() const {
         switch (_valueType) {
@@ -239,74 +253,8 @@ private:
         }
     }
 
-    // A corrupt or truncated file can deliver fewer values than entity ids (or the
-    // reverse); building from mismatched columns would read out of bounds.
-    void checkValueCount(size_t valueCount) const {
-        if (valueCount != _entityIds.size()) {
-            throw FatalException(fmt::format(
-                "PropertyContainerParquetLoader: {} values for {} entity ids",
-                valueCount, _entityIds.size()));
-        }
-    }
-
     EntityID entityIdAt(size_t index) const {
         return EntityID {static_cast<uint64_t>(_entityIds[index])};
-    }
-
-    std::unique_ptr<PropertyContainer> buildInt64() const {
-        checkValueCount(_int64Values.size());
-
-        auto container = std::make_unique<TypedPropertyContainer<types::Int64>>();
-        for (size_t i = 0; i < _entityIds.size(); ++i) {
-            container->add(entityIdAt(i), _int64Values[i]);
-        }
-        return container;
-    }
-
-    std::unique_ptr<PropertyContainer> buildUInt64() const {
-        checkValueCount(_int64Values.size());
-
-        auto container = std::make_unique<TypedPropertyContainer<types::UInt64>>();
-        for (size_t i = 0; i < _entityIds.size(); ++i) {
-            container->add(entityIdAt(i), static_cast<uint64_t>(_int64Values[i]));
-        }
-        return container;
-    }
-
-    std::unique_ptr<PropertyContainer> buildDouble() const {
-        checkValueCount(_doubleValues.size());
-
-        auto container = std::make_unique<TypedPropertyContainer<types::Double>>();
-        for (size_t i = 0; i < _entityIds.size(); ++i) {
-            container->add(entityIdAt(i), _doubleValues[i]);
-        }
-        return container;
-    }
-
-    std::unique_ptr<PropertyContainer> buildBool() const {
-        checkValueCount(_boolValues.size());
-
-        auto container = std::make_unique<TypedPropertyContainer<types::Bool>>();
-        for (size_t i = 0; i < _entityIds.size(); ++i) {
-            container->add(entityIdAt(i), static_cast<bool>(_boolValues[i] != 0));
-        }
-        return container;
-    }
-
-    std::unique_ptr<PropertyContainer> buildString() const {
-        checkValueCount(_stringValues.size());
-
-        auto container = std::make_unique<TypedPropertyContainer<types::String>>();
-        for (size_t i = 0; i < _entityIds.size(); ++i) {
-            container->add(entityIdAt(i), std::string_view(_stringValues[i]));
-        }
-        return container;
-    }
-
-    std::unique_ptr<PropertyContainer> buildEmbedding() {
-        checkValueCount(_embeddingRowsLoaded);
-
-        return std::move(_embeddingContainer);
     }
 };
 
