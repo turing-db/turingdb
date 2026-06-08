@@ -54,22 +54,22 @@ using EdgeTypeName = EnumToString<EdgeMetadata::EdgeType>::Create<
 
 class DependencyEdge {
 public:
-    DependencyEdge(VariableDependency* u, VariableDependency* v, EdgeMetadata data)
-        : _u(u),
-         _v(v),
+    DependencyEdge(VariableDependency* src, VariableDependency* tgt, EdgeMetadata data)
+        : _src(src),
+         _tgt(tgt),
         _data(data)
     {
     }
 
-    const VariableDependency* u() const { return _u; }
-    const VariableDependency* v() const { return _v; }
+    const VariableDependency* src() const { return _src; }
+    const VariableDependency* tgt() const { return _tgt; }
     EdgeMetadata data() const { return _data; }
 
 private:
     friend class VariableDependencyGraph;
 
-    VariableDependency* _u;
-    VariableDependency* _v;
+    VariableDependency* _src;
+    VariableDependency* _tgt;
     EdgeMetadata _data;
 };
 
@@ -86,22 +86,24 @@ public:
     {
     }
 
-    const Edges& edges() const { return _edges; }
+    auto edges() const;
 
     std::string_view getName() const { return _name; }
 
-    bool isIsolated() const { return _edges.empty(); }
+    bool isIsolated() const;
 
     void setName(std::string_view name) { _name = name; }
 
-    void addEdge(DependencyEdge* newEdge);
+    void addIncoming(DependencyEdge* newEdge);
+    void addOutgoing(DependencyEdge* newEdge);
 
 private:
     friend class VariableDependencyGraph;
 
     std::string _name;
 
-    Edges _edges;
+    Edges _incoming;
+    Edges _outgoing;
 };
 
 /**
@@ -119,7 +121,7 @@ public:
     const auto& vars() const { return _vars; }
     const auto& edges() const { return _edges; }
 
-    const DependencyEdge* connect(VariableDependency* u, VariableDependency* v, const EdgeMetadata& data);
+    const DependencyEdge* addDirected(VariableDependency* src, VariableDependency* tgt, const EdgeMetadata& data);
 
     std::vector<VariableDependency*> getCycle();
 

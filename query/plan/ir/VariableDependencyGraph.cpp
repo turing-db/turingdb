@@ -6,6 +6,7 @@
 #include <utility>
 
 #include <range/v3/view/chunk.hpp>
+#include <range/v3/view/concat.hpp>
 
 #include "EdgePattern.h"
 #include "EntityPattern.h"
@@ -36,17 +37,29 @@ static EdgeMetadata::EdgeType directionToType(EdgePattern::Direction dir) {
     return EdgeMetadata::EdgeType::_SIZE;
 }
 
-void VariableDependency::addEdge(DependencyEdge* newEdge) {
-    _edges.push_back(newEdge);
+auto VariableDependency::edges() const {
+    return rv::concat(_incoming, _outgoing);
 }
 
-const DependencyEdge* VariableDependencyGraph::connect(VariableDependency* u,
-                                                       VariableDependency* v,
-                                                       const EdgeMetadata& data) {
-    DependencyEdge& newEdge = _edges.emplace_back(u, v, data);
+bool VariableDependency::isIsolated() const {
+    return edges().empty();
+}
 
-    u->addEdge(&newEdge);
-    v->addEdge(&newEdge);
+void VariableDependency::addIncoming(DependencyEdge* newEdge) {
+    _incoming.push_back(newEdge);
+}
+
+void VariableDependency::addOutgoing(DependencyEdge* newEdge) {
+    _outgoing.push_back(newEdge);
+}
+
+const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* src,
+                                                           VariableDependency* tgt,
+                                                           const EdgeMetadata& data) {
+    DependencyEdge& newEdge = _edges.emplace_back(src, tgt, data);
+
+    src->addOutgoing(&newEdge);
+    tgt->addIncoming(&newEdge);
 
     return &newEdge;
 }
@@ -59,18 +72,28 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
     const auto& chain = ptn->getElementChain();
 
     VariableDependency* prev = originVar;
-    for (const auto& [edge, tgt] : chain) {
+    for (const auto& [edge, tgtPtn] : chain) {
         VariableDependency* edgeVar = getOrCreateVariable(edge);
-        VariableDependency* tgtVar = getOrCreateVariable(tgt);
+        VariableDependency* tgtVar = getOrCreateVariable(tgtPtn);
 
         const EdgePattern::Direction direction = edge->getDirection();
         const EdgeMetadata::EdgeType type = directionToType(direction);
-        spdlog::info("dir = {}, type = {}", std::to_underlying(direction), std::to_underlying(type));
 
-        connect(prev, edgeVar, EdgeMetadata {type});
-        connect(edgeVar, tgtVar, EdgeMetadata{type});
+        VariableDependency* src {nullptr};
+        VariableDependency* tgt {nullptr};
 
-        prev = tgtVar;
+        if (direction == EdgePattern::Direction::Forward) {
+            src = prev;
+            tgt = tgtVar;
+        } else {
+            src = tgtVar;
+            tgt = prev;
+        }
+
+        addDirected(src, edgeVar, EdgeMetadata {type});
+        addDirected(edgeVar, tgt, EdgeMetadata{type});
+
+        prev = tgt;
     }
 }
 
@@ -126,13 +149,13 @@ std::vector<VariableDependency*> VariableDependencyGraph::findCycle(
         }
 
         // handle self-loop
-        if (edge->u() == edge->v()) {
+        if (edge->src() == edge->tgt()) {
             path.pop_back();
             pathSet.erase(curr);
             return {curr};
         }
 
-        VariableDependency* adj = edge->_u == curr ? edge->_v : edge->_u;
+        VariableDependency* adj = edge->_src == curr ? edge->_tgt : edge->_src;
 
         if (adj == prev) {
             continue;
@@ -175,33 +198,33 @@ void VariableDependencyGraph::rewriteCycle() {
     bioassert(cyc.front() == cyc.back(), "Invalid cycle.");
     bioassert(cyc.size() >= 3, "Invalid cycle.");
 
-    VariableDependency* head = cyc[0];
+    VariableDependency* head = cyc.front();
     const std::string_view headName = head->getName();
 
-    const std::string fstName = std::string(headName) + std::string {"o"};
-    const std::string sndName = std::string(headName) + std::string {"oo"};
+    const std::string fstName = std::string(headName) + "'";
+    const std::string sndName = std::string(headName) + "''";
 
     VariableDependency* newHead = newVariable(fstName);
     VariableDependency* newTail = newVariable(sndName);
 
-    VariableDependency::Edges& edges = head->_edges;
+    auto edges = head->edges();
 
     const VariableDependency* nxt = *next(begin(cyc));
     const VariableDependency* prv = *prev(prev(end(cyc)));
 
     // replace head and tail of loop with new vars
     for (DependencyEdge* e : edges) {
-        if (e->u() == nxt && e->v() == head) {
-            e->_v = newHead;
-        } else if (e->v() == nxt && e->u() == head) {
-            e->_u = newHead;
-        } else if (e->u() == prv && e->v() == head) {
-            e->_v = newTail;
-        } else if (e->v() == prv && e->u() == head) {
-            e->_u = newTail;
+        if (e->src() == nxt && e->tgt() == head) {
+            e->_tgt = newHead;
+        } else if (e->tgt() == nxt && e->src() == head) {
+            e->_src = newHead;
+        } else if (e->src() == prv && e->tgt() == head) {
+            e->_tgt = newTail;
+        } else if (e->tgt() == prv && e->src() == head) {
+            e->_src = newTail;
         }
     }
 
-    connect(newHead, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
-    connect(newTail, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
+    addDirected(newHead, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
+    addDirected(newTail, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
 }
