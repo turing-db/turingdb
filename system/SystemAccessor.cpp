@@ -2,8 +2,6 @@
 
 #include "SystemManager.h"
 
-#include "BioAssert.h"
-
 using namespace db;
 
 SystemAccessor::SystemAccessor(SystemManager* sysMan, SharedAccess)
