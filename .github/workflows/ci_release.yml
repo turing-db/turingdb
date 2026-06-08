@@ -13,7 +13,7 @@ jobs:
       group: turing-runners
       labels: ubuntu-24.04
     outputs:
-      os_list: '["ubuntu-22.04", "ubuntu-24.04", "ubuntu-22.04-arm", "ubuntu-24.04-arm", "macos-14-xlarge", "macos-15-xlarge", "macos-26-xlarge"]'
+      os_list: '["ubuntu-22.04", "ubuntu-24.04", "ubuntu-22.04-arm", "ubuntu-24.04-arm", "macos14-turing", "macos15-turing", "macos26-turing"]'
       python_version_list: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
       dev_version_suffix: ${{ steps.suffix.outputs.value }}
     steps:

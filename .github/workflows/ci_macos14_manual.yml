@@ -8,6 +8,6 @@ jobs:
   build:
     uses: ./.github/workflows/ci_build.yml
     with:
-      os_list: '["macos-14-xlarge"]'
+      os_list: '["macos14-turing"]'
       python_version_list: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
 
