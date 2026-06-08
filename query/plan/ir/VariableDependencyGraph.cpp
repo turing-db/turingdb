@@ -335,31 +335,37 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     VariableDependency* newHead = newVariable(fstName);
     VariableDependency* newTail = newVariable(sndName);
 
-    auto edges = head->edges();
-
     const VariableDependency* nxt = *next(begin(cyc));
     const VariableDependency* prv = *prev(prev(end(cyc)));
 
-    // replace head and tail of loop with new vars
-    for (DependencyEdge* e : edges) {
-        if (e->src() == nxt && e->tgt() == head) {
-            e->_tgt = newHead;
-            std::erase_if(head->_incoming,
-                          [e](const DependencyEdge* f) { return e == f; });
-        } else if (e->tgt() == nxt && e->src() == head) {
-            e->_src = newHead;
-            std::erase_if(head->_outgoing,
-                          [e](const DependencyEdge* f) { return e == f; });
-        } else if (e->src() == prv && e->tgt() == head) {
-            e->_tgt = newTail;
-            std::erase_if(head->_incoming,
-                          [e](const DependencyEdge* f) { return e == f; });
-        } else if (e->tgt() == prv && e->src() == head) {
-            e->_src = newTail;
-            std::erase_if(head->_outgoing,
-                          [e](const DependencyEdge* f) { return e == f; });
+    const auto updateAndDeleteOutgoing = [&](DependencyEdge* e) -> bool {
+        const bool first = e->tgt() == nxt;
+        const bool last = e->tgt() == prv;
+        if (!first && !last) {
+            return false;
         }
-    }
+
+        if (first) {e->_src = newHead; newHead->addOutgoing(e);}
+        if (last) {e->_src = newTail; newTail->addOutgoing(e);}
+
+        return true;
+    };
+
+    const auto updateAndDeleteIncoming = [&](DependencyEdge* e) -> bool {
+        const bool first = e->src() == nxt;
+        const bool last = e->src() == prv;
+        if (!first && !last) {
+            return false;
+        }
+
+        if (first) {e->_tgt = newHead; newHead->addIncoming(e);}
+        if (last) {e->_tgt = newTail; newTail->addIncoming(e);}
+
+        return true;
+    };
+
+    std::erase_if(head->_outgoing, updateAndDeleteOutgoing);
+    std::erase_if(head->_incoming, updateAndDeleteIncoming);
 
     _pendingMerges[head].push_back(newHead);
     _pendingMerges[head].push_back(newTail);
