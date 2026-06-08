@@ -184,18 +184,13 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: eu-west-2
 
+    # The reactome regress test runs on Linux only (load_jsonl_reactome/run.sh
+    # skips on macOS), so reactome.jsonl is only ever downloaded on the Linux
+    # runners. Cache it there; there is nothing to cache on macOS.
     - name: Cache reactome dataset (Linux)
       if: runner.os == 'Linux'
       uses: actions/cache@v4
       with:
-        path: external/datasets/reactome.jsonl
-        key: dataset-reactome-v1
-
-    - name: Cache reactome dataset (macOS)
-      if: runner.os == 'macOS'
-      uses: corca-ai/local-cache@v2
-      with:
-        base: /Users/m1/actions-local-cache
         path: external/datasets/reactome.jsonl
         key: dataset-reactome-v1
 
