@@ -67,6 +67,10 @@ public:
 
         checkSchema(metadata);
 
+        if (_valueType == ValueType::Embedding) {
+            _embeddingContainer = std::make_unique<TypedPropertyContainer<types::Embedding>>(_dimension);
+        }
+
         return true;
     }
 
@@ -100,20 +104,34 @@ public:
         return true;
     }
 
+    // The reader delivers row-aligned chunks with the entity-id column ahead of the value
+    // column, so every value batch lands after the ids it belongs to. Stream each embedding
+    // into the container right away: accumulating the raw floats first would transiently
+    // double the container's memory footprint.
     bool onFixedLenByteArrayValues(size_t columnIndex,
                                    std::span<const parquet::FixedLenByteArray> values,
                                    size_t byteWidth) override {
         const size_t floatsPerValue = byteWidth / sizeof(float);
+
+        if (_embeddingRowsLoaded + values.size() > _entityIds.size()) {
+            throw FatalException(fmt::format(
+                "PropertyContainerParquetLoader: embedding values ahead of entity ids"
+                " ({} loaded + {} new for {} ids)",
+                _embeddingRowsLoaded, values.size(), _entityIds.size()));
+        }
+
         for (const parquet::FixedLenByteArray& value : values) {
             const float* floats = reinterpret_cast<const float*>(value.ptr);
-            for (size_t i = 0; i < floatsPerValue; ++i) {
-                _embeddingFloats.push_back(floats[i]);
-            }
+
+            _embeddingContainer->add(entityIdAt(_embeddingRowsLoaded),
+                                     std::span<const float>(floats, floatsPerValue));
+            ++_embeddingRowsLoaded;
         }
+
         return true;
     }
 
-    std::unique_ptr<PropertyContainer> build() const {
+    std::unique_ptr<PropertyContainer> build() {
         switch (_valueType) {
             case ValueType::Int64:
                 return buildInt64();
@@ -150,7 +168,8 @@ private:
     std::vector<double> _doubleValues;
     std::vector<uint8_t> _boolValues;
     std::vector<std::string> _stringValues;
-    std::vector<float> _embeddingFloats;
+    std::unique_ptr<TypedPropertyContainer<types::Embedding>> _embeddingContainer;
+    size_t _embeddingRowsLoaded {0};
 
     parquet::Type::type valuePhysicalType() const {
         switch (_valueType) {
@@ -284,21 +303,10 @@ private:
         return container;
     }
 
-    std::unique_ptr<PropertyContainer> buildEmbedding() const {
-        const bool floatsMatchEntities = _embeddingFloats.size() == _entityIds.size() * _dimension;
-        if (!floatsMatchEntities) {
-            throw FatalException(fmt::format(
-                "PropertyContainerParquetLoader: {} embedding floats for {} entity ids of"
-                " dimension {}",
-                _embeddingFloats.size(), _entityIds.size(), _dimension));
-        }
+    std::unique_ptr<PropertyContainer> buildEmbedding() {
+        checkValueCount(_embeddingRowsLoaded);
 
-        auto container = std::make_unique<TypedPropertyContainer<types::Embedding>>(_dimension);
-        for (size_t i = 0; i < _entityIds.size(); ++i) {
-            const std::span<const float> view(_embeddingFloats.data() + i * _dimension, _dimension);
-            container->add(entityIdAt(i), view);
-        }
-        return container;
+        return std::move(_embeddingContainer);
     }
 };
 

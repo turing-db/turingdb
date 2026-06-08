@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <memory>
 #include <span>
 #include <string_view>
@@ -33,6 +34,39 @@ void gatherEntityIds(const PropertyContainer& props, std::vector<int64_t>& idsOu
     idsOut.reserve(ids.size());
     for (const EntityID id : ids) {
         idsOut.push_back(static_cast<int64_t>(id.getValue()));
+    }
+}
+
+// Embeddings are flattened through a bounded scratch buffer and written as multiple row
+// groups: flattening the whole container at once would transiently double its memory
+// footprint, which for large graphs is tens of gigabytes.
+constexpr size_t embeddingScratchBudgetBytes = 512ull * 1024 * 1024;
+
+void writeEmbeddingRowGroups(ParquetWriter& writer,
+                             const TypedPropertyContainer<types::Embedding>& container,
+                             std::span<const int64_t> entityIds,
+                             size_t embeddingDimension) {
+    const size_t count = entityIds.size();
+    const size_t bytesPerRow = embeddingDimension * sizeof(float);
+    const size_t rowsPerGroup = std::max<size_t>(1, embeddingScratchBudgetBytes / bytesPerRow);
+
+    std::vector<float> flat;
+    flat.reserve(std::min(count, rowsPerGroup) * embeddingDimension);
+
+    for (size_t firstRow = 0; firstRow < count; firstRow += rowsPerGroup) {
+        const size_t groupRows = std::min(rowsPerGroup, count - firstRow);
+
+        writer.beginRowGroup(groupRows);
+        writer.writeInt64Column(0, entityIds.subspan(firstRow, groupRows));
+
+        flat.clear();
+        for (const types::Embedding::Primitive view : container.getSpan(firstRow, groupRows)) {
+            flat.insert(flat.end(), view.begin(), view.end());
+        }
+
+        writer.writeFixedLenColumn(1,
+                                   std::span<const float>(flat.data(), flat.size()),
+                                   bytesPerRow);
     }
 }
 
@@ -80,55 +114,50 @@ void PropertyContainerParquetDumper::dump(const PropertyContainer& props, const 
     }
 
     if (count > 0) {
-        writer.beginRowGroup(count);
-
         std::vector<int64_t> entityIds;
         gatherEntityIds(props, entityIds);
-        writer.writeInt64Column(0, entityIds);
 
-        switch (valueType) {
-            case ValueType::Int64:
-                writer.writeInt64Column(1, props.cast<types::Int64>().all());
-            break;
-            case ValueType::UInt64: {
-                const std::span<const uint64_t> values = props.cast<types::UInt64>().all();
-                const std::span<const int64_t> asInt64(
-                    reinterpret_cast<const int64_t*>(values.data()), values.size());
-                writer.writeInt64Column(1, asInt64);
-            }
-            break;
-            case ValueType::Double:
-                writer.writeDoubleColumn(1, props.cast<types::Double>().all());
-            break;
-            case ValueType::Bool: {
-                const std::span<const CustomBool> values = props.cast<types::Bool>().all();
-                const std::unique_ptr<bool[]> boolBuffer(new bool[count]);
-                for (size_t i = 0; i < count; ++i) {
-                    boolBuffer[i] = static_cast<bool>(values[i]);
+        if (valueType == ValueType::Embedding) {
+            writeEmbeddingRowGroups(writer,
+                                    props.cast<types::Embedding>(),
+                                    entityIds,
+                                    embeddingDimension);
+        } else {
+            writer.beginRowGroup(count);
+            writer.writeInt64Column(0, entityIds);
+
+            switch (valueType) {
+                case ValueType::Int64:
+                    writer.writeInt64Column(1, props.cast<types::Int64>().all());
+                break;
+                case ValueType::UInt64: {
+                    const std::span<const uint64_t> values = props.cast<types::UInt64>().all();
+                    const std::span<const int64_t> asInt64(
+                        reinterpret_cast<const int64_t*>(values.data()), values.size());
+                    writer.writeInt64Column(1, asInt64);
                 }
-                writer.writeBoolColumn(1, std::span<const bool>(boolBuffer.get(), count));
-            }
-            break;
-            case ValueType::String:
-                writer.writeStringColumn(1, props.cast<types::String>().all());
-            break;
-            case ValueType::Embedding: {
-                const std::span<const types::Embedding::Primitive> views =
-                    props.cast<types::Embedding>().all();
-                std::vector<float> flat;
-                flat.reserve(count * embeddingDimension);
-                for (const types::Embedding::Primitive view : views) {
-                    flat.insert(flat.end(), view.begin(), view.end());
+                break;
+                case ValueType::Double:
+                    writer.writeDoubleColumn(1, props.cast<types::Double>().all());
+                break;
+                case ValueType::Bool: {
+                    const std::span<const CustomBool> values = props.cast<types::Bool>().all();
+                    const std::unique_ptr<bool[]> boolBuffer(new bool[count]);
+                    for (size_t i = 0; i < count; ++i) {
+                        boolBuffer[i] = static_cast<bool>(values[i]);
+                    }
+                    writer.writeBoolColumn(1, std::span<const bool>(boolBuffer.get(), count));
                 }
-                writer.writeFixedLenColumn(1,
-                                           std::span<const float>(flat.data(), flat.size()),
-                                           embeddingDimension * sizeof(float));
+                break;
+                case ValueType::String:
+                    writer.writeStringColumn(1, props.cast<types::String>().all());
+                break;
+                case ValueType::Embedding:
+                case ValueType::Invalid:
+                case ValueType::_SIZE:
+                    throw FatalException("PropertyContainerParquetDumper: invalid property value type");
+                break;
             }
-            break;
-            case ValueType::Invalid:
-            case ValueType::_SIZE:
-                throw FatalException("PropertyContainerParquetDumper: invalid property value type");
-            break;
         }
     }
 

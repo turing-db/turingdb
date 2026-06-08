@@ -12,6 +12,8 @@
 #include <arrow/util/key_value_metadata.h>
 #include <parquet/metadata.h>
 
+#include <spdlog/fmt/fmt.h>
+
 #include "ParquetReader.h"
 #include "ParquetWriteSchema.h"
 
@@ -30,14 +32,15 @@ namespace layout = edgeContainerParquetLayout;
 
 namespace {
 
-// One edge file: four INT64 columns (edge_id, node_id, other_id, edge_type_id),
-// plus the first edge/node ids in metadata.
-class EdgeColumnsVisitor : public ParquetSaxVisitor {
+// One edge file: four INT64 columns (edge_id, node_id, other_id, edge_type_id), plus the
+// first edge/node ids in metadata. The reader delivers the columns in schema order, each in
+// row order across all row groups, so each column's batches are written straight into the
+// final EdgeRecord vector through its own cursor. Accumulating the four columns separately
+// first would cost an extra 32 bytes per edge (tens of gigabytes on large graphs), all
+// transient on top of the records being built.
+class EdgeRecordsVisitor : public ParquetSaxVisitor {
 public:
-    std::vector<int64_t> _edgeIds;
-    std::vector<int64_t> _nodeIds;
-    std::vector<int64_t> _otherIds;
-    std::vector<int64_t> _edgeTypeIds;
+    std::vector<EdgeRecord> _edges;
     uint64_t _firstEdgeID {0};
     uint64_t _firstNodeID {0};
     bool _hasFirstEdgeID {false};
@@ -57,34 +60,64 @@ public:
                 }
             }
         }
+
+        const int64_t numRows = metadata.num_rows();
+        if (numRows < 0) {
+            throw FatalException("EdgeContainerParquetLoader: negative row count");
+        }
+        _edges.resize(static_cast<size_t>(numRows));
+
         return true;
     }
 
     bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) override {
-        std::vector<int64_t>& target = columnFor(columnIndex);
-        for (const int64_t value : values) {
-            target.push_back(value);
+        if (columnIndex > 3) {
+            throw FatalException("EdgeContainerParquetLoader: unexpected edge column");
         }
+
+        size_t& cursor = _cursors[columnIndex];
+        if (cursor + values.size() > _edges.size()) {
+            throw FatalException("EdgeContainerParquetLoader: edge column longer than row count");
+        }
+
+        if (columnIndex == 0) {
+            for (const int64_t value : values) {
+                _edges[cursor++]._edgeID = EdgeID {static_cast<uint64_t>(value)};
+            }
+        } else if (columnIndex == 1) {
+            for (const int64_t value : values) {
+                _edges[cursor++]._nodeID = NodeID {static_cast<uint64_t>(value)};
+            }
+        } else if (columnIndex == 2) {
+            for (const int64_t value : values) {
+                _edges[cursor++]._otherID = NodeID {static_cast<uint64_t>(value)};
+            }
+        } else {
+            for (const int64_t value : values) {
+                _edges[cursor++]._edgeTypeID = EdgeTypeID {static_cast<uint64_t>(value)};
+            }
+        }
+
         return true;
     }
 
-private:
-    std::vector<int64_t>& columnFor(size_t columnIndex) {
-        if (columnIndex == 0) {
-            return _edgeIds;
-        } else if (columnIndex == 1) {
-            return _nodeIds;
-        } else if (columnIndex == 2) {
-            return _otherIds;
-        } else if (columnIndex == 3) {
-            return _edgeTypeIds;
-        } else {
-            throw FatalException("EdgeContainerParquetLoader: unexpected edge column");
+    // Each column must have filled exactly every record; a short column means a truncated
+    // file delivered fewer values than the row count promised.
+    void checkComplete() const {
+        for (size_t columnIndex = 0; columnIndex < 4; ++columnIndex) {
+            if (_cursors[columnIndex] != _edges.size()) {
+                throw FatalException(fmt::format(
+                    "EdgeContainerParquetLoader: column {} delivered {} of {} edges",
+                    columnIndex, _cursors[columnIndex], _edges.size()));
+            }
         }
     }
+
+private:
+    size_t _cursors[4] {0, 0, 0, 0};
 };
 
-void readEdgeFile(const fs::Path& path, EdgeColumnsVisitor& visitor) {
+void readEdgeFile(const fs::Path& path, EdgeRecordsVisitor& visitor) {
     ParquetWriteSchema expectedSchema;
     expectedSchema.addColumn(layout::EDGE_ID_COLUMN, ParquetColumnType::UInt64);
     expectedSchema.addColumn(layout::NODE_ID_COLUMN, ParquetColumnType::UInt64);
@@ -97,34 +130,17 @@ void readEdgeFile(const fs::Path& path, EdgeColumnsVisitor& visitor) {
     }
 }
 
-void buildRecords(const EdgeColumnsVisitor& visitor, std::vector<EdgeRecord>& out) {
-    const size_t count = visitor._edgeIds.size();
-
-    const bool columnsAgree = visitor._nodeIds.size() == count
-                              && visitor._otherIds.size() == count
-                              && visitor._edgeTypeIds.size() == count;
-    if (!columnsAgree) {
-        throw FatalException("EdgeContainerParquetLoader: edge columns have mismatched lengths");
-    }
-
-    out.resize(count);
-    for (size_t i = 0; i < count; ++i) {
-        out[i]._edgeID = EdgeID {static_cast<uint64_t>(visitor._edgeIds[i])};
-        out[i]._nodeID = NodeID {static_cast<uint64_t>(visitor._nodeIds[i])};
-        out[i]._otherID = NodeID {static_cast<uint64_t>(visitor._otherIds[i])};
-        out[i]._edgeTypeID = EdgeTypeID {static_cast<uint64_t>(visitor._edgeTypeIds[i])};
-    }
-}
-
 }
 
 std::unique_ptr<EdgeContainer> EdgeContainerParquetLoader::load(const fs::Path& outPath,
                                                                const fs::Path& inPath) {
-    EdgeColumnsVisitor outVisitor;
+    EdgeRecordsVisitor outVisitor;
     readEdgeFile(outPath, outVisitor);
+    outVisitor.checkComplete();
 
-    EdgeColumnsVisitor inVisitor;
+    EdgeRecordsVisitor inVisitor;
     readEdgeFile(inPath, inVisitor);
+    inVisitor.checkComplete();
 
     const bool outHasFirstIds = outVisitor._hasFirstEdgeID && outVisitor._hasFirstNodeID;
     const bool inHasFirstIds = inVisitor._hasFirstEdgeID && inVisitor._hasFirstNodeID;
@@ -140,16 +156,11 @@ std::unique_ptr<EdgeContainer> EdgeContainerParquetLoader::load(const fs::Path& 
         throw FatalException("EdgeContainerParquetLoader: out- and in-edge first ids disagree");
     }
 
-    std::vector<EdgeRecord> outEdges;
-    std::vector<EdgeRecord> inEdges;
-    buildRecords(outVisitor, outEdges);
-    buildRecords(inVisitor, inEdges);
-
     EdgeContainer* container = new EdgeContainer {
         outVisitor._firstNodeID,
         outVisitor._firstEdgeID,
-        std::move(outEdges),
-        std::move(inEdges),
+        std::move(outVisitor._edges),
+        std::move(inVisitor._edges),
     };
 
     return std::unique_ptr<EdgeContainer>(container);

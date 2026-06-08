@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -24,6 +25,12 @@ namespace layout = edgeContainerParquetLayout;
 
 namespace {
 
+// Edges are written in bounded row groups: materialising all four id columns for the whole
+// container at once costs 32 bytes per edge (tens of gigabytes on large graphs), all of it
+// transient on top of the already-resident graph. One row group's worth at a time keeps the
+// dumper's own footprint flat regardless of edge count.
+constexpr size_t edgeScratchBudgetBytes = 512ull * 1024 * 1024;
+
 void writeEdgeFile(std::span<const EdgeRecord> records,
                    const fs::Path& path,
                    uint64_t firstEdgeID,
@@ -39,24 +46,37 @@ void writeEdgeFile(std::span<const EdgeRecord> records,
     writer.setMetadata(layout::FIRST_NODE_ID_KEY, fmt::format("{}", firstNodeID));
 
     const size_t count = records.size();
-    if (count > 0) {
-        std::vector<int64_t> edgeIds;
-        std::vector<int64_t> nodeIds;
-        std::vector<int64_t> otherIds;
-        std::vector<int64_t> edgeTypeIds;
-        edgeIds.reserve(count);
-        nodeIds.reserve(count);
-        otherIds.reserve(count);
-        edgeTypeIds.reserve(count);
 
-        for (const EdgeRecord& record : records) {
+    // Four int64 columns, so 32 bytes per edge across the scratch buffers.
+    const size_t rowsPerGroup = std::max<size_t>(1, edgeScratchBudgetBytes / (4 * sizeof(int64_t)));
+    const size_t reserveRows = std::min(count, rowsPerGroup);
+
+    std::vector<int64_t> edgeIds;
+    std::vector<int64_t> nodeIds;
+    std::vector<int64_t> otherIds;
+    std::vector<int64_t> edgeTypeIds;
+    edgeIds.reserve(reserveRows);
+    nodeIds.reserve(reserveRows);
+    otherIds.reserve(reserveRows);
+    edgeTypeIds.reserve(reserveRows);
+
+    for (size_t firstRow = 0; firstRow < count; firstRow += rowsPerGroup) {
+        const size_t groupRows = std::min(rowsPerGroup, count - firstRow);
+
+        edgeIds.clear();
+        nodeIds.clear();
+        otherIds.clear();
+        edgeTypeIds.clear();
+
+        for (size_t i = 0; i < groupRows; ++i) {
+            const EdgeRecord& record = records[firstRow + i];
             edgeIds.push_back(static_cast<int64_t>(record._edgeID.getValue()));
             nodeIds.push_back(static_cast<int64_t>(record._nodeID.getValue()));
             otherIds.push_back(static_cast<int64_t>(record._otherID.getValue()));
             edgeTypeIds.push_back(static_cast<int64_t>(record._edgeTypeID.getValue()));
         }
 
-        writer.beginRowGroup(count);
+        writer.beginRowGroup(groupRows);
         writer.writeInt64Column(0, edgeIds);
         writer.writeInt64Column(1, nodeIds);
         writer.writeInt64Column(2, otherIds);
