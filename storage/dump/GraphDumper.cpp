@@ -16,10 +16,29 @@
 
 using namespace db;
 
-DumpResult<void> GraphDumper::dump(const Graph* graph, const fs::Path& graphDir) {
+DumpResult<void> GraphDumper::dump(Graph* graph, const fs::Path& graphDir) {
     Profile profile("GraphDumper::dump");
 
     spdlog::info("Dumping graph {}", graph->getName());
+
+    // We dump from scratch and write every commit. After a load only the HEAD
+    // commit is hydrated — ancestors are skeletons with no CommitData. Each
+    // commit owns the dataparts created in it, which later commits still
+    // reference, and CommitDumper reads CommitData, so the skeletons must be
+    // materialised first or the dump is incomplete and dereferences a null
+    // WeakArc. loadCommit() takes the version controller's shared lock, so this
+    // runs before the exclusive dump lock below to avoid deadlocking on it.
+    // Hydrating a commit leaves the chain pointers intact, so we can walk and
+    // load in a single pass.
+    const Commit* commit = graph->_versionController->_head.load();
+    while (commit) {
+        if (!commit->hasData()) {
+            if (auto res = graph->loadCommit(commit->hash()); !res) {
+                return res;
+            }
+        }
+        commit = commit->getPreviousCommit();
+    }
 
     auto lock = graph->_versionController->lock();
 
@@ -139,7 +158,7 @@ DumpResult<void> GraphDumper::dump(const Graph* graph, const fs::Path& graphDir)
     return {};
 }
 
-DumpResult<void> GraphDumper::dumpMissingCommits(const Graph* graph, const fs::Path& graphDir) {
+DumpResult<void> GraphDumper::dumpMissingCommits(Graph* graph, const fs::Path& graphDir) {
     const fs::Path logFile = graphDir / "commitlog";
     auto fileRes = fs::File::open(logFile);
     if (!fileRes) {

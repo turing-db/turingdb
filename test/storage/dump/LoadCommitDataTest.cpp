@@ -128,6 +128,38 @@ TEST_F(LoadCommitDataTest, openTransactionAfterLoadCommit) {
     EXPECT_TRUE(tx.isValid());
 }
 
+TEST_F(LoadCommitDataTest, fullDumpOfLoadedGraphHydratesSkeletonCommits) {
+    // Regression: re-dumping a loaded graph to a fresh location used to
+    // segfault — GraphDumper read CommitData on the skeleton (non-HEAD) commits
+    // the load had left un-hydrated. The dump must now materialise those
+    // skeletons so every delta datapart is written; otherwise the HEAD's
+    // metadata references dataparts that were never dumped and the re-dump
+    // fails to reload ("Datapart does not exist").
+    const fs::Path redumpPath = fs::Path {_outDir} / "redump";
+
+    const auto dumpRes = GraphDumper::dump(_loadedGraph.get(), redumpPath);
+    ASSERT_TRUE(dumpRes) << dumpRes.error().fmtMessage();
+
+    auto reloaded = Graph::create("reloaded", redumpPath);
+    const auto loadRes = GraphLoader::load(reloaded.get(), redumpPath);
+    ASSERT_TRUE(loadRes) << loadRes.error().fmtMessage();
+
+    // Full history survived the round trip: every commit was written (none
+    // dropped), and the HEAD's accumulated counts are intact — which they would
+    // not be if an ancestor's dataparts had gone missing.
+    auto& reloadedCtl = reloaded->getVersionController();
+    auto& loadedCtl = _loadedGraph->getVersionController();
+    EXPECT_EQ(reloadedCtl.getNumCommits(), loadedCtl.getNumCommits());
+
+    const Commit* head = reloadedCtl.getCommitSafe(_newHeadHash);
+    ASSERT_NE(head, nullptr);
+    const Commit* origHead = loadedCtl.getCommitSafe(_newHeadHash);
+    ASSERT_NE(origHead, nullptr);
+    EXPECT_EQ(head->getNumNodes(), origHead->getNumNodes());
+    EXPECT_EQ(head->getNumEdges(), origHead->getNumEdges());
+    EXPECT_EQ(head->getNumDataParts(), origHead->getNumDataParts());
+}
+
 int main(int argc, char** argv) {
     return turingTestMain(argc, argv, [] { testing::GTEST_FLAG(repeat) = 1; });
 }
