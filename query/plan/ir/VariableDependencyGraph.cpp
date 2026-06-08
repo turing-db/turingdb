@@ -117,6 +117,75 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
     return exists ? &*foundIt : newVariable(entity);
 }
 
+std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis() {
+    using NodeSet = std::unordered_set<VariableDependency*>;
+    using PredMap = std::unordered_map<VariableDependency*, VariableDependency*>;
+    using UsedMap = std::unordered_map<VariableDependency*, NodeSet>;
+
+    NodeSet gnodes;
+    for (VariableDependency& v : _vars) {
+        gnodes.insert(&v);
+    }
+
+    std::vector<Cycle> cycles;
+    VariableDependency* root = nullptr;
+
+    while (!gnodes.empty()) {
+        if (root == nullptr) {
+            root = *gnodes.begin();
+        }
+
+        PredMap pred;
+        pred[root] = root;
+
+        UsedMap used;
+        used[root] = {};
+
+        std::vector<VariableDependency*> stack = {root};
+
+        Cycle cycle;
+
+        while (!stack.empty()) {
+            VariableDependency* z = stack.back();
+            stack.pop_back();
+
+            NodeSet& zused = used[z];
+
+            for (DependencyEdge* edge : z->edges()) {
+                VariableDependency* neighbor = edge->_src == z ? edge->_tgt : edge->_src;
+
+                if (!used.contains(neighbor)) {
+                    pred[neighbor] = z;
+                    stack.push_back(neighbor);
+                    used[neighbor] = {z};
+                } else if (neighbor == z) {
+                    cycles.push_back({z});
+                } else if (!zused.contains(neighbor)) {
+                    const NodeSet& pn = used[neighbor];
+                    cycle.clear();
+                    cycle.push_back(neighbor);
+                    cycle.push_back(z);
+                    VariableDependency* p = pred[z];
+                    while (!pn.contains(p)) {
+                        cycle.push_back(p);
+                        p = pred[p];
+                    }
+                    cycle.push_back(p);
+                    cycles.push_back(cycle);
+                    used[neighbor].insert(z);
+                }
+            }
+        }
+
+        for (const auto& entry : pred) {
+            gnodes.erase(entry.first);
+        }
+        root = nullptr;
+    }
+
+    return cycles;
+}
+
 std::vector<VariableDependency*> VariableDependencyGraph::getCycle() {
     std::unordered_set<const VariableDependency*> visited;
     std::vector<VariableDependency*> path;

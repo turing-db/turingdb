@@ -50,20 +50,15 @@ static void inspectVarDepGraph(CypherAST* ast) {
         }
     }
 
-    auto cyc = vdg._getCycle();
-    vdg.detachCycle(cyc);
-    IRDumper::dumpMermaid(vdg, std::cout);
+    auto cycs = vdg.cycleBasis();
 
-    cyc = vdg._getCycle();
-    if (cyc.empty()) {
-        spdlog::warn("no cycle");
-    } else {
-        for (auto* v : cyc) {
-            fmt::println("{}, ", v->getName());
+    for (auto& c : cycs) {
+        for (auto* v : c) {
+            fmt::print("{} ", v->getName());
         }
+        fmt::print("\n");
     }
 
-    vdg.detachCycle(cyc);
     IRDumper::dumpMermaid(vdg, std::cout);
 }
 
