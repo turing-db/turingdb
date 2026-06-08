@@ -42,11 +42,11 @@ void ListGraphProcessor::reset() {
 }
 
 void ListGraphProcessor::execute() {
-    SystemManager* sysMan = _ctxt->getSystemManager();
+    SystemAccessor* system = _ctxt->getSystemAccessor();
 
     using ColumnString = ColumnVector<types::String::Primitive>;
     ColumnString* colName = _output.getValue()->as<ColumnString>();
-    sysMan->listGraphs(colName->getRaw());
+    system->listGraphs(colName->getRaw());
 
     _output.getPort()->writeData();
     finish();

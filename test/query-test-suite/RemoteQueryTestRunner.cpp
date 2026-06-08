@@ -36,7 +36,11 @@ QueryTestResult RemoteQueryTestRunner::runTest(const QueryTestSpec& spec,
     }
 
     auto env = turing::test::TuringTestEnv::create(outDir, queryConfig);
-    db::Graph* graph = env->getSystemManager().createGraph(spec._graphName);
+    db::Graph* graph = nullptr;
+    {
+        db::SystemAccessor system = env->getSystemManager().accessUnique();
+        graph = system.createGraph(spec._graphName);
+    }
     db::SimpleGraph::createSimpleGraph(graph);
     db::TuringDB* db = &env->getDB();
 

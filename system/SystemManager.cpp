@@ -32,6 +32,14 @@ SystemManager::~SystemManager() {
     SystemEventHandler::terminate();
 }
 
+SystemAccessor SystemManager::accessShared() {
+    return SystemAccessor(this, Accessor::SharedAccess{});
+}
+
+SystemAccessor SystemManager::accessUnique() {
+    return SystemAccessor(this, Accessor::UniqueAccess{});
+}
+
 void SystemManager::init() {
     initTuringDirectory();
     initLockFile();

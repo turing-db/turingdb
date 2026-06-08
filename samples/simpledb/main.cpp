@@ -58,7 +58,8 @@ int main(int argc, const char** argv) {
 
     {
         spdlog::info("Create company graph");
-        auto* graph = db.getSystemManager().createGraph("simpledb");
+        SystemAccessor system = db.getSystemManager().accessUnique();
+        auto* graph = system.createGraph("simpledb");
         SimpleGraph::createSimpleGraph(graph);
 
         spdlog::info("Graph created");

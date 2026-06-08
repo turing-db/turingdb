@@ -61,9 +61,11 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     const QueryCallbacks* callbacks = ctxt.getQueryCallbacks();
     callbacks->onBegin();
 
-    auto txRes = _sysMan->openTransaction(graphName,
-                                          ctxt.getCommitHash(),
-                                          ctxt.getChangeID());
+    SystemAccessor system = _sysMan->accessShared();
+
+    auto txRes = system.openTransaction(graphName,
+                                        ctxt.getCommitHash(),
+                                        ctxt.getChangeID());
     if (!txRes) {
         switch (txRes.error().getType()) {
             case ChangeErrorType::GRAPH_NOT_FOUND: {
@@ -195,6 +197,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
 
     // Execute pipeline
     ExecutionContext execCtxt(_sysMan, view);
+    execCtxt.setSystemAccessor(&system);
     execCtxt.setChunkSize(queryConfig->getChunkSize());
     execCtxt.setTransaction(&txRes.value());
     execCtxt.setGraphName(graphName);

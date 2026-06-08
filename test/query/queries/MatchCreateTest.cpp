@@ -24,8 +24,9 @@ using namespace turing::test;
 class MatchCreateTest : public TuringTest {
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        _env->getSystemManager().createGraph("default");
-        _graph = _env->getSystemManager().createGraph(_graphName);
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        system.createGraph("default");
+        _graph = system.createGraph(_graphName);
         SimpleGraph::createSimpleGraph(_graph);
         _db = &_env->getDB();
     }
@@ -41,7 +42,8 @@ protected:
     GraphReader read() { return _graph->openTransaction().readGraph(); }
 
     void newChange() {
-        auto res = _env->getSystemManager().newChange(_graphName);
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        auto res = system.newChange(_graphName);
         ASSERT_TRUE(res);
 
         Change* change = res.value();
@@ -63,7 +65,8 @@ protected:
 
     void setWorkingGraph(std::string_view name) {
         _graphName = name;
-        _graph = _env->getSystemManager().getGraph(std::string {name});
+        SystemAccessor system = _env->getSystemManager().accessShared();
+        _graph = system.getGraph(std::string {name});
         ASSERT_TRUE(_graph);
     }
 

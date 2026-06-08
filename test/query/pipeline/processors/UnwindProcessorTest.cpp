@@ -19,7 +19,8 @@ class UnwindProcessorTest : public ProcessorTester {
 public:
     void initialize() override {
         ProcessorTester::initialize();
-        _graph = _env->getSystemManager().createGraph("testdb");
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        _graph = system.createGraph("testdb");
     }
 };
 

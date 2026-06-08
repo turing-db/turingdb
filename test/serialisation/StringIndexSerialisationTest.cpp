@@ -30,7 +30,8 @@ public:
         _db->init();
 
         SystemManager& sysMan = _db->getSystemManager();
-        _builtGraph = sysMan.createGraph("simple");
+        SystemAccessor system = sysMan.accessUnique();
+        _builtGraph = system.createGraph("simple");
         SimpleGraph::createSimpleGraph(_builtGraph);
 
         loadDumpLoadSimpleDb();

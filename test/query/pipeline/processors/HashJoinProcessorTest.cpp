@@ -18,7 +18,8 @@ class HashJoinProcessorTest : public ProcessorTester {
 public:
     void initialize() override {
         ProcessorTester::initialize();
-        _graph = _env->getSystemManager().createGraph("simpledb");
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        _graph = system.createGraph("simpledb");
         SimpleGraph::createSimpleGraph(_graph);
     }
 };

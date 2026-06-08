@@ -40,7 +40,8 @@ int main(int argc, char** argv) {
     auto sysMan = std::make_unique<SystemManager>(&config);
     sysMan->init();
 
-    Graph* graph = sysMan->createGraph("simpledb");
+    SystemAccessor system = sysMan->accessUnique();
+    Graph* graph = system.createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
 
     auto procedures = std::make_unique<ProcedureManager>();
@@ -176,6 +177,7 @@ int main(int argc, char** argv) {
             fmt::print("\n=== Execution ===\n\n");
 
             ExecutionContext execCtxt(sysMan.get(), view);
+            execCtxt.setSystemAccessor(&system);
             execCtxt.setTransaction(&transaction);
 
             PipelineExecutor executor(&pipeline, &execCtxt);

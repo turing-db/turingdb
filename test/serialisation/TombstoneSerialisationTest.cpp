@@ -26,20 +26,25 @@ public:
     void initialize() override {
         _env = TuringTestEnv::createSyncedOnDisk(fs::Path {_outDir} / "turing");
 
-        _builtGraph = _env->getSystemManager().createGraph(_workingGraphName);
+        {
+            SystemAccessor system = _env->getSystemManager().accessUnique();
+            _builtGraph = system.createGraph(_workingGraphName);
+        }
 
         populateAndDump();
         applyDeletesAndDump();
     }
 
     void populateAndDump() {
-        auto& sysMan = _env->getSystemManager();
-
-        auto res = sysMan.newChange(_workingGraphName);
-        if (!res) {
-            panic("Failed to make change in populate().");
+        Change* change {nullptr};
+        {
+            SystemAccessor system = _env->getSystemManager().accessUnique();
+            auto res = system.newChange(_workingGraphName);
+            if (!res) {
+                panic("Failed to make change in populate().");
+            }
+            change = res.value();
         }
-        Change* change = res.value();
 
         // populate the graph
         for (size_t i = 0; i < NUM_EDGES; i++) {
@@ -73,13 +78,15 @@ public:
     }
 
     void applyDeletesAndDump() {
-        auto& sysMan = _env->getSystemManager();
-
-        auto delRes = sysMan.newChange(_workingGraphName);
-        if (!delRes) {
-            panic("Failed to make change in populate().");
+        Change* delChange {nullptr};
+        {
+            SystemAccessor system = _env->getSystemManager().accessUnique();
+            auto delRes = system.newChange(_workingGraphName);
+            if (!delRes) {
+                panic("Failed to make change in populate().");
+            }
+            delChange = delRes.value();
         }
-        Change* delChange = delRes.value();
 
         for (size_t node : DELETED_NODES) {
             const std::string queryStr = "match (n{id: " + std::to_string(node) + "}) delete n";
@@ -125,9 +132,12 @@ protected:
 
 TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
     _loadedGraph = Graph::create();
-    const auto res = GraphLoader::load(_loadedGraph.get(),
-        _env->getSystemManager().getGraph(_workingGraphName)->getPath());
-    ASSERT_TRUE(res);
+    {
+        SystemAccessor system = _env->getSystemManager().accessShared();
+        const auto res = GraphLoader::load(_loadedGraph.get(),
+            system.getGraph(_workingGraphName)->getPath());
+        ASSERT_TRUE(res);
+    }
 
     const Tombstones& tombstones =
         _loadedGraph->openTransaction().viewGraph().tombstones();

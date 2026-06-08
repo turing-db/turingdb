@@ -160,7 +160,11 @@ int main(int argc, const char** argv) {
     db.init();
 
     const std::string graphName = "simpledb";
-    Graph* graph = db.getSystemManager().createGraph(graphName);
+    Graph* graph = nullptr;
+    {
+        SystemAccessor system = db.getSystemManager().accessUnique();
+        graph = system.createGraph(graphName);
+    }
     SimpleGraph::createSimpleGraph(graph);
 
     spdlog::info("simpledb graph created");
@@ -282,9 +286,13 @@ int main(int argc, const char** argv) {
     }
 
     {
-        const auto changeRes = db.getSystemManager().newChange(graphName);
-        Change* change = changeRes.value();
-        ChangeID chg = change->id();
+        ChangeID chg = ChangeID::head();
+        {
+            SystemAccessor system = db.getSystemManager().accessUnique();
+            const auto changeRes = system.newChange(graphName);
+            Change* change = changeRes.value();
+            chg = change->id();
+        }
 
         for (size_t i = 0; i < N; i++) {
             buildSetQuery(q, nodeIDs[i].getValue(), embeddings, i);
@@ -459,9 +467,13 @@ int main(int argc, const char** argv) {
     };
 
     // Open a single change for all epochs; COMMIT after each, SUBMIT at the end
-    const auto trainChangeRes = db.getSystemManager().newChange(graphName);
-    Change* trainChange = trainChangeRes.value();
-    ChangeID trainChg = trainChange->id();
+    ChangeID trainChg = ChangeID::head();
+    {
+        SystemAccessor system = db.getSystemManager().accessUnique();
+        const auto trainChangeRes = system.newChange(graphName);
+        Change* trainChange = trainChangeRes.value();
+        trainChg = trainChange->id();
+    }
 
     for (size_t epoch = 0; epoch < epochs; epoch++) {
 

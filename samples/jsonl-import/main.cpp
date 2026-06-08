@@ -63,7 +63,8 @@ int main(int argc, const char** argv) {
     TuringDB db(&config);
 
     SystemManager& sysMan = db.getSystemManager();
-    Graph* graph = sysMan.createGraph("test");
+    SystemAccessor system = sysMan.accessUnique();
+    Graph* graph = system.createGraph("test");
 
     std::unique_ptr<Change> change = graph->newChange();
     ChangeAccessor accessor(change->access());
@@ -89,7 +90,7 @@ int main(int argc, const char** argv) {
     const GraphReader reader = tx.readGraph();
     fmt::println("Graph has {} nodes and {} edges", reader.getNodeCount(), reader.getEdgeCount());
 
-    sysMan.dumpGraph("test");
+    system.dumpGraph("test");
 
     return 0;
 }

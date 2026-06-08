@@ -11,6 +11,7 @@ namespace db {
 class GraphView;
 class Transaction;
 class Graph;
+class SystemAccessor;
 
 class ExecutionContext {
 public:
@@ -26,17 +27,20 @@ public:
     Transaction* getTransaction() { return _tx; }
     std::string_view getGraphName() const { return _graphName; }
     SystemManager* getSystemManager() const { return _sysMan; }
+    SystemAccessor* getSystemAccessor() const { return _sysAccessor; }
     JobSystem* getJobSystem() const { return _sysMan->getJobSystem(); }
     const ProcedureManager* getProcedures() const { return _sysMan->getProcedures(); }
     ExtensionManager* getExtensions() const { return _sysMan->getExtensions(); }
     vec::VectorDatabase* getVectorDatabase() const { return _sysMan->getVectorDatabase(); }
 
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
+    void setSystemAccessor(SystemAccessor* accessor) { _sysAccessor = accessor; }
     void setTransaction(Transaction* tx) { _tx = tx; }
     void setGraphName(std::string_view graphName) { _graphName = graphName; }
 
 private:
     SystemManager* _sysMan {nullptr};
+    SystemAccessor* _sysAccessor {nullptr};
     const GraphView& _graphView;
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
     Transaction* _tx {nullptr};

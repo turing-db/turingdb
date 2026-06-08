@@ -20,7 +20,8 @@ public:
     void initialize() override {
         const auto testTuringDir = fs::Path {_outDir} / "turing";
         _env = TuringTestEnv::create(testTuringDir);
-        Graph* graph = _env->getSystemManager().createGraph("simpledb");
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        Graph* graph = system.createGraph("simpledb");
         SimpleGraph::createSimpleGraph(graph);
         _db = &_env->getDB();
     }

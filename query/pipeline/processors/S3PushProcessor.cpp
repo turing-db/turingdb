@@ -46,7 +46,8 @@ std::string S3PushProcessor::describe() const {
 void S3PushProcessor::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
 
-    _s3Client = _ctxt->getSystemManager()->getS3Client();
+    SystemAccessor* system = _ctxt->getSystemAccessor();
+    _s3Client = system->getS3Client();
     if (_s3Client == nullptr) {
         throw PipelineException("TuringS3Client has not been created");
     }

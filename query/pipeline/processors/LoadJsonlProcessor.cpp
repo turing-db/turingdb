@@ -49,11 +49,11 @@ void LoadJsonlProcessor::reset() {
 }
 
 void LoadJsonlProcessor::execute() {
-    SystemManager* sysMan = _ctxt->getSystemManager();
+    SystemAccessor* system = _ctxt->getSystemAccessor();
 
-    bioassert(sysMan, "SystemManager not initialized");
+    bioassert(system, "SystemAccessor not initialized");
 
-    Graph* graph = sysMan->importGraph(_path, _graphName);
+    Graph* graph = system->importGraph(_path, _graphName);
     if (!graph) {
         throw PipelineException(fmt::format("Failed to load JSONL graph {}", _path.get()));
     }

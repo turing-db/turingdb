@@ -48,8 +48,8 @@ void LoadCommitProcessor::execute() {
             fmt::format("Invalid commit hash: '{}'", _hashStr));
     }
 
-    SystemManager* sysMan = _ctxt->getSystemManager();
-    auto res = sysMan->loadCommit(_ctxt->getGraphName(), hashRes.value());
+    SystemAccessor* system = _ctxt->getSystemAccessor();
+    auto res = system->loadCommit(_ctxt->getGraphName(), hashRes.value());
 
     if (!res) {
         throw PipelineException(

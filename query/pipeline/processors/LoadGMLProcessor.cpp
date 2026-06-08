@@ -47,10 +47,10 @@ void LoadGMLProcessor::reset() {
 }
 
 void LoadGMLProcessor::execute() {
-    SystemManager* sysMan = _ctxt->getSystemManager();
-    bioassert(sysMan, "SystemManager not initialised");
+    SystemAccessor* system = _ctxt->getSystemAccessor();
+    bioassert(system, "SystemAccessor not initialised");
 
-    Graph* graph = sysMan->importGraph(_filePath, _graphName);
+    Graph* graph = system->importGraph(_filePath, _graphName);
     if (!graph) {
         throw PipelineException(fmt::format("Failed to load graph '{}'", _graphName));
     }

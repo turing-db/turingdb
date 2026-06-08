@@ -6,6 +6,8 @@
 
 #include "GraphManager.h"
 
+#include "SystemAccessor.h"
+
 #include "versioning/ChangeID.h"
 #include "versioning/ChangeResult.h"
 
@@ -52,6 +54,51 @@ public:
 
     void init();
 
+    SystemAccessor accessShared();
+    SystemAccessor accessUnique();
+
+    // Subsystems access
+    JobSystem* getJobSystem() { return &_jobSystem; }
+    const JobSystem* getJobSystem() const { return &_jobSystem; }
+
+    ProcedureManager* getProcedures() { return &_procedures; }
+    const ProcedureManager* getProcedures() const { return &_procedures; }
+
+    ExtensionManager* getExtensions() { return &_extensions; }
+    const ExtensionManager* getExtensions() const { return &_extensions; }
+
+    vec::VectorDatabase* getVectorDatabase() { return &_vectorDatabase; }
+    const vec::VectorDatabase* getVectorDatabase() const { return &_vectorDatabase; }
+
+private:
+    const TuringConfig* _config {nullptr};
+
+    // Global system lock
+    std::shared_mutex _sysLock;
+
+    // Lock file
+    LockFile _lockFile;
+
+    // Job management
+    JobSystem _jobSystem;
+
+    // Graphs management
+    GraphManager _graphManager;
+
+    // Vector DB
+    vec::VectorDatabase _vectorDatabase;
+
+    // Procedures
+    ProcedureManager _procedures;
+
+    // Extensions
+    ExtensionManager _extensions;
+
+    // S3 Client
+    std::unique_ptr<S3::TuringS3Client<S3::MinioS3ClientWrapper>> _s3Client {nullptr};
+
+    // System API - accessed through the friend SystemAccessor
+
     // Graph access
     Graph* getDefaultGraph() const;
     Graph* getGraph(std::string_view graphName) const;
@@ -97,46 +144,6 @@ public:
                         const std::string& region);
 
     S3::TuringS3Client<S3::MinioS3ClientWrapper>* getS3Client() { return _s3Client.get(); }
-
-    // Subsystems access
-    JobSystem* getJobSystem() { return &_jobSystem; }
-    const JobSystem* getJobSystem() const { return &_jobSystem; }
-
-    ProcedureManager* getProcedures() { return &_procedures; }
-    const ProcedureManager* getProcedures() const { return &_procedures; }
-
-    ExtensionManager* getExtensions() { return &_extensions; }
-    const ExtensionManager* getExtensions() const { return &_extensions; }
-
-    vec::VectorDatabase* getVectorDatabase() { return &_vectorDatabase; }
-    const vec::VectorDatabase* getVectorDatabase() const { return &_vectorDatabase; }
-
-private:
-    const TuringConfig* _config {nullptr};
-
-    // Global system lock
-    std::shared_mutex _sysLock;
-
-    // Lock file
-    LockFile _lockFile;
-
-    // Job management
-    JobSystem _jobSystem;
-
-    // Graphs management
-    GraphManager _graphManager;
-
-    // Vector DB
-    vec::VectorDatabase _vectorDatabase;
-
-    // Procedures 
-    ProcedureManager _procedures;
-
-    // Extensions
-    ExtensionManager _extensions;
-
-    // S3 Client
-    std::unique_ptr<S3::TuringS3Client<S3::MinioS3ClientWrapper>> _s3Client {nullptr};
 
     void initTuringDirectory();
     void initLockFile();

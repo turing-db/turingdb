@@ -9,10 +9,26 @@
 #include "GraphFileType.h"
 #include "Path.h"
 
+#include "versioning/ChangeID.h"
+#include "versioning/CommitHash.h"
+#include "versioning/ChangeResult.h"
+#include "dump/DumpResult.h"
+#include "mergers/DataPartMergeResult.h"
+
+namespace S3 {
+template <typename ClientType>
+class TuringS3Client;
+class MinioS3ClientWrapper;
+}
+
 namespace db {
 
 class SystemManager;
 class Graph;
+class Change;
+class ChangeAccessor;
+class JobSystem;
+class Transaction;
 
 class SystemAccessor : public Accessor {
 public:
@@ -35,14 +51,41 @@ public:
     void listGraphs(std::vector<std::string_view>& names) const;
     void listAvailableGraphs(std::vector<std::string>& names) const;
 
+    // Default graph
+    void setDefaultGraph(std::string_view name);
+
     // Load graph
     Graph* loadGraph(std::string_view name);
     bool isGraphLoading(std::string_view name) const;
+    DumpResult<void> loadCommit(std::string_view name, CommitHash hash);
 
     // Import graph
     Graph* importGraph(const fs::Path& path, std::string_view name);
-
     GraphFileType getGraphFileType(const fs::Path& path) const;
+
+    // Dump graph
+    DumpResult<void> dumpGraph(std::string_view name);
+
+    // Change management
+    ChangeResult<Change*> newChange(std::string_view name, CommitHash baseHash = CommitHash::head());
+    ChangeResult<Change*> getChange(const Graph* graph, ChangeID changeID);
+    ChangeResult<void> submitChange(ChangeAccessor& accessor, JobSystem& jobSystem);
+    ChangeResult<void> deleteChange(ChangeAccessor& accessor, ChangeID changeID);
+    void listChanges(std::vector<const Change*>& changes, const Graph* graph) const;
+
+    // DataPart merge
+    DataPartMergeResult<void> mergeDataParts(Graph* graph, JobSystem& jobSystem);
+
+    // Transaction open
+    ChangeResult<Transaction> openTransaction(std::string_view graphName,
+                                              CommitHash commitHash,
+                                              ChangeID changeID);
+
+    // S3 client
+    void createS3Client(const std::string& accessId,
+                        const std::string& secretKey,
+                        const std::string& region);
+    S3::TuringS3Client<S3::MinioS3ClientWrapper>* getS3Client();
 
 private:
     SystemManager* _sysMan {nullptr};

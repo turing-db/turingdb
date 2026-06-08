@@ -527,9 +527,13 @@ TEST_F(VectorQueriesTest, vectorSearchWithMatch) {
     // Step 1: Create nodes with id and title properties
     // We need to use change management for write operations
     {
-        auto changeRes = _env->getSystemManager().newChange("default");
-        ASSERT_TRUE(changeRes) << "Failed to create change";
-        const ChangeID changeId = changeRes.value()->id();
+        ChangeID changeId;
+        {
+            SystemAccessor system = _env->getSystemManager().accessUnique();
+            auto changeRes = system.newChange("default");
+            ASSERT_TRUE(changeRes) << "Failed to create change";
+            changeId = changeRes.value()->id();
+        }
 
         const auto createRes = query(R"(CREATE (n1:Document {id: 1, title: "Doc One"}),
                       (n2:Document {id: 2, title: "Doc Two"}),

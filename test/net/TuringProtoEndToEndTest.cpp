@@ -49,8 +49,12 @@ EndToEndResult runEndToEnd(const std::string& outDir,
     queryConfig.setChunkSize(queryChunkRows);
 
     auto env = TuringTestEnv::create(fs::Path {outDir} / "turing", queryConfig);
-    env->getSystemManager().createGraph("default");
-    db::Graph* graph = env->getSystemManager().createGraph(GRAPH_NAME);
+    db::Graph* graph = nullptr;
+    {
+        db::SystemAccessor system = env->getSystemManager().accessUnique();
+        system.createGraph("default");
+        graph = system.createGraph(GRAPH_NAME);
+    }
     seeder(graph, env->getSystemManager().getJobSystem());
 
     const uint16_t port = reserveFreePort();

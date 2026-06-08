@@ -31,7 +31,8 @@ public:
         _config.setTuringDirectory(_workingPath);
 
         SystemManager& sysMan = _env->getDB().getSystemManager();
-        _builtGraph = sysMan.createGraph("simpledb");
+        SystemAccessor system = sysMan.accessUnique();
+        _builtGraph = system.createGraph("simpledb");
         SimpleGraph::createSimpleGraph(_builtGraph);
     }
 
@@ -56,7 +57,8 @@ protected:
     }
 
     ChangeID newChange() {
-        auto changeRes = _env->getDB().getSystemManager().newChange(_builtGraph->getName());
+        SystemAccessor system = _env->getDB().getSystemManager().accessUnique();
+        auto changeRes = system.newChange(_builtGraph->getName());
         bioassert(changeRes, "invalid change");
         Change* change = changeRes.value();
         ChangeID changeID = change->id();

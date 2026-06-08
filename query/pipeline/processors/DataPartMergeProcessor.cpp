@@ -48,18 +48,18 @@ void DataPartMergeProcessor::reset() {
 void DataPartMergeProcessor::execute() {
     Profile profile("DataPartMergeProcessor::execute");
 
-    SystemManager* sysMan = _ctxt->getSystemManager();
-    bioassert(sysMan, "DataPartMergeProcessor: SystemManager must be set");
+    SystemAccessor* system = _ctxt->getSystemAccessor();
+    bioassert(system, "DataPartMergeProcessor: System accessor must be set");
     bioassert(!_ctxt->getGraphName().empty(), "DataPartMergeProcessor: Graph name must be set");
 
     const std::string graphName(_ctxt->getGraphName());
-    Graph* graph = sysMan->getGraph(graphName);
+    Graph* graph = system->getGraph(graphName);
     bioassert(graph, "DataPartMergeProcessor: Graph must exist");
 
     JobSystem* jobSystem = _ctxt->getJobSystem();
     bioassert(jobSystem, "DataPartMergeProcessor: Job system must be set");
 
-    if (auto res = sysMan->mergeDataParts(graph, *jobSystem); !res) {
+    if (auto res = system->mergeDataParts(graph, *jobSystem); !res) {
         throw PipelineException(fmt::format("DataPartMergeProcessor: Failed to merge data parts: {}",
                                             res.error().fmtMessage()));
     }
