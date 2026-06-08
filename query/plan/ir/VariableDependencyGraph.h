@@ -114,6 +114,8 @@ private:
  */
 class VariableDependencyGraph {
 public:
+    using Cycle = std::vector<VariableDependency*>;
+    
     /// Given a pattern (e.g. (n)-[e]->(m)), inserts all vars into the dependency graph
     void registerPatternElement(const PatternElement* ptn);
 
@@ -123,9 +125,9 @@ public:
 
     const DependencyEdge* addDirected(VariableDependency* src, VariableDependency* tgt, const EdgeMetadata& data);
 
-    std::vector<VariableDependency*> getCycle();
+    Cycle getCycle();
 
-    void rewriteCycle();
+    void rewriteCycle(const Cycle& cyc);
 
 private:
     /// Variables whose dependencies are tracked by this class
@@ -136,11 +138,10 @@ private:
     VariableDependency* newVariable(const EntityPattern* entity);
     VariableDependency* newVariable(std::string_view name);
 
-    std::vector<VariableDependency*> findCycle(VariableDependency* curr,
-                                                     VariableDependency* prev,
-                                                     std::unordered_set<const VariableDependency*>& visited,
-                                                     std::vector<VariableDependency*>& path,
-                                                     std::unordered_set<const VariableDependency*>& pathSet);
+    Cycle findCycle(VariableDependency* curr, VariableDependency* prev,
+                    std::unordered_set<const VariableDependency*>& visited,
+                    std::vector<VariableDependency*>& path,
+                    std::unordered_set<const VariableDependency*>& pathSet);
 };
 
 }

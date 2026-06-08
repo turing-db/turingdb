@@ -50,7 +50,14 @@ static void inspectVarDepGraph(CypherAST* ast) {
         }
     }
 
-    vdg.rewriteCycle();
+    auto cyc = vdg.getCycle();
+
+    while (!cyc.empty()) {
+        spdlog::info("Rewriting cycle of length {}, head = {}", cyc.size(), cyc.front()->getName());
+        vdg.rewriteCycle(cyc);
+
+        cyc = vdg.getCycle();
+    }
 
     IRDumper::dumpMermaid(vdg, std::cout);
 }

@@ -122,13 +122,35 @@ std::vector<VariableDependency*> VariableDependencyGraph::getCycle() {
     std::vector<VariableDependency*> path;
     std::unordered_set<const VariableDependency*> pathSet;
 
+    const auto meta = [](const DependencyEdge* e) {
+        return EdgeMetadata::isMetaEdge(e->data().type());
+    };
+
+    spdlog::info("\n\nfind cycles...");
     for (VariableDependency& node : _vars) {
+        spdlog::info("Considering {}", node.getName());
+
+        // Cannot be the head of a cycle degree less than 2
+        if (node.edges().size() < 2) {
+            spdlog::info("\t degree too low");
+            continue;
+        }
+
+        // If all meta, cycle has been resolved
+        const bool allMeta = std::ranges::all_of(node.edges(), meta);
+        if (allMeta) {
+            spdlog::info("\t all meta");
+            continue;
+        }
+        
         if (!visited.contains(&node)) {
-            if (auto result = findCycle(&node, nullptr, visited, path, pathSet);
-                !result.empty()) {
+            auto result = findCycle(&node, nullptr, visited, path, pathSet);
+            if (!result.empty()) {
+                spdlog::info("\t FOUND");
                 return result;
             }
         }
+        spdlog::info("\t no cycle found");
     }
 
     return {};
@@ -144,20 +166,17 @@ std::vector<VariableDependency*> VariableDependencyGraph::findCycle(
     pathSet.insert(curr);
 
     for (DependencyEdge* edge : curr->edges()) {
-        if (EdgeMetadata::isMetaEdge(edge->data().type())) {
-            continue;
-        }
+        // if (EdgeMetadata::isMetaEdge(edge->data().type())) {
+            // continue;
+        // }
+        spdlog::info("\t\tConsidering {}->{}", edge->src()->getName(), edge->tgt()->getName());
 
-        // handle self-loop
-        if (edge->src() == edge->tgt()) {
-            path.pop_back();
-            pathSet.erase(curr);
-            return {curr};
-        }
+        bioassert(edge->src() != edge->tgt(), "Invalid edge.");
 
         VariableDependency* adj = edge->_src == curr ? edge->_tgt : edge->_src;
 
         if (adj == prev) {
+            spdlog::warn("\t\t skipping");
             continue;
         }
 
@@ -186,9 +205,7 @@ std::vector<VariableDependency*> VariableDependencyGraph::findCycle(
     return {};
 }
 
-void VariableDependencyGraph::rewriteCycle() {
-    auto cyc = getCycle();
-
+void VariableDependencyGraph::rewriteCycle(const Cycle& cyc) {
     if (cyc.empty()) {
         return;
     }
@@ -212,6 +229,7 @@ void VariableDependencyGraph::rewriteCycle() {
 
     // replace head and tail of loop with new vars
     for (DependencyEdge* e : edges) {
+        // TODO: remove all these cases, should be explicit which is src/tgt
         if (e->src() == nxt && e->tgt() == head) {
             e->_tgt = newHead;
         } else if (e->tgt() == nxt && e->src() == head) {
