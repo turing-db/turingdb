@@ -1,6 +1,7 @@
 #include "VariableDependencyGraph.h"
 
 #include <algorithm>
+#include <stack>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
@@ -128,52 +129,77 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
     }
 
     std::vector<Cycle> cycles;
-    VariableDependency* root = nullptr;
 
+    if (gnodes.empty()) {
+        return cycles;
+    }
+
+    VariableDependency* root = *begin(gnodes);
+
+    PredMap pred;
+    UsedMap used;
+    std::vector<VariableDependency*> stack;
+
+    Cycle cycle;
+
+    // Outer loop ensures all connected components are traversed
     while (!gnodes.empty()) {
-        if (root == nullptr) {
-            root = *gnodes.begin();
-        }
+        pred.clear();
+        used.clear();
+        stack.clear();
 
-        PredMap pred;
         pred[root] = root;
-
-        UsedMap used;
         used[root] = {};
 
-        std::vector<VariableDependency*> stack = {root};
+        stack.push_back(root);
 
-        Cycle cycle;
-
+        // DFS from the root of this connected component
         while (!stack.empty()) {
-            VariableDependency* z = stack.back();
+            VariableDependency* u = stack.back();
             stack.pop_back();
 
-            NodeSet& zused = used[z];
+            NodeSet& usedThisTraversal = used[u];
 
-            for (DependencyEdge* edge : z->edges()) {
-                VariableDependency* neighbor = edge->_src == z ? edge->_tgt : edge->_src;
+            for (DependencyEdge* edge : u->edges()) {
+                VariableDependency* neighbor = edge->_src == u ? edge->_tgt : edge->_src;
+                bioassert(neighbor != u, "Invalid self loop.");
 
-                if (!used.contains(neighbor)) {
-                    pred[neighbor] = z;
+                // Recurse in DFS
+                const bool encountered = used.contains(neighbor);
+                if (!encountered) {
                     stack.push_back(neighbor);
-                    used[neighbor] = {z};
-                } else if (neighbor == z) {
-                    cycles.push_back({z});
-                } else if (!zused.contains(neighbor)) {
-                    const NodeSet& pn = used[neighbor];
-                    cycle.clear();
-                    cycle.push_back(neighbor);
-                    cycle.push_back(z);
-                    VariableDependency* p = pred[z];
-                    while (!pn.contains(p)) {
-                        cycle.push_back(p);
-                        p = pred[p];
-                    }
-                    cycle.push_back(p);
-                    cycles.push_back(cycle);
-                    used[neighbor].insert(z);
+                    pred[neighbor] = u;
+                    used[neighbor] = {u};
+                    continue;
                 }
+
+                // Otherwise, already encountered: found a cycle.
+
+                const bool cycleAlreadyLogged = usedThisTraversal.contains(neighbor);
+                if (cycleAlreadyLogged) {
+                    continue;
+                }
+
+                // Form the cycle
+                cycle.clear();
+                cycle.push_back(neighbor);
+                cycle.push_back(u);
+
+                // Get the nodes used on the path of this cycle
+                const NodeSet& pn = used[neighbor];
+
+                VariableDependency* p = pred[u];
+                while (!pn.contains(p)) {
+                    cycle.push_back(p);
+                    p = pred[p];
+                }
+
+                cycle.push_back(p);
+                cycle.push_back(u); // Ensure cycle is of the form (u, v, ..., x, u)
+
+                cycles.push_back(cycle);
+
+                used[neighbor].insert(u);
             }
         }
 
