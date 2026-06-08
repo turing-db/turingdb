@@ -11,9 +11,12 @@
 #include "ParquetWriter.h"
 
 #include "CommitParquetDumper.h"
+#include "DataPartParquetDumper.h"
 #include "GraphParquetLayout.h"
 
 #include "Graph.h"
+#include "datapart/DataPart.h"
+#include "datapart/DataPartSpan.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "versioning/VersionController.h"
@@ -96,15 +99,29 @@ void GraphParquetDumper::dump(const Graph& graph, const fs::Path& graphDir) {
     // Walk from head backwards, dumping each commit. Collected head-first; the commit log
     // is written oldest-first below. The head is read directly, as the binary GraphDumper
     // does — getCommitSafe would re-take the version-controller mutex held above.
+    const Commit* head = graph._versionController->_head.load();
+
     std::vector<uint64_t> hashesHeadFirst;
-    for (const Commit* commit = graph._versionController->_head.load();
-         commit != nullptr;
-         commit = commit->getPreviousCommit()) {
+    for (const Commit* commit = head; commit != nullptr; commit = commit->getPreviousCommit()) {
         const uint64_t hash = commit->hash().get();
         hashesHeadFirst.push_back(hash);
 
         const fs::Path commitDir = graphParquetLayout::commitDir(tempDir, hash);
         CommitParquetDumper::dump(*commit, commitDir, partsDir);
+    }
+
+    // The walk dumps each commit's own dataparts, but a shell ancestor (a lazily-loaded
+    // commit whose CommitData has expired) dumps only its metadata. Its dataparts are
+    // still alive and referenced through the head's allDataparts: dump whatever the walk
+    // did not write, so the dump stays loadable.
+    if (head != nullptr && head->hasData()) {
+        for (const auto& part : head->data().allDataparts()) {
+            const fs::Path partDir = partsDir / std::to_string(part->getID().get());
+
+            if (!partDir.exists()) {
+                DataPartParquetDumper::dump(*part, partDir);
+            }
+        }
     }
 
     const std::vector<uint64_t> hashesAscending(hashesHeadFirst.rbegin(), hashesHeadFirst.rend());

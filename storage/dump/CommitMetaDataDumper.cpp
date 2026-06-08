@@ -17,6 +17,14 @@ DumpResult<void> CommitMetaDataDumper::dump(const Commit& commit,
     writer.write(commit.getNumNodes());
     writer.write(commit.getNumEdges());
 
+    // A shell commit (a lazily-loaded ancestor) has no CommitData in memory — only its
+    // counters. Write empty datapart lists, mirroring CommitMetaDataParquetDumper.
+    if (!commit.hasData()) {
+        writer.write(size_t {0});
+        writer.write(size_t {0});
+        return {};
+    }
+
     const DataPartSpan commitDataParts = commit.data().commitDataparts();
     const size_t commitDataSize = commitDataParts.size();
     writer.write(commitDataSize);

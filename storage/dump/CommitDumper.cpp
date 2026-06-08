@@ -33,6 +33,13 @@ DumpResult<void> CommitDumper::dump(const Commit& commit,
         return DumpError::result(DumpErrorType::CANNOT_MKDIR_COMMIT, res.get_unexpected().error());
     }
 
+    // A shell commit (a lazily-loaded ancestor) has no CommitData in memory — only its
+    // counters. There is nothing to dump but the commit metadata, mirroring
+    // CommitParquetDumper's handling of shell commits.
+    if (!commit.hasData()) {
+        return dumpMetaDataFile(commit, commitDir);
+    }
+
     const auto& metadata = commit.data().metadata();
 
     // Dumping labels
@@ -151,27 +158,34 @@ DumpResult<void> CommitDumper::dump(const Commit& commit,
         }
     }
 
-    {
-        Profile profile("CommitMetaDataDumper::dump <commit metadata>");
-        const fs::Path metaDataFile = commitDir / "metadata";
+    if (auto res = dumpMetaDataFile(commit, commitDir); !res) {
+        return res;
+    }
 
-        auto fileRes = fs::File::createAndOpen(metaDataFile);
-        if (!fileRes) {
-            return DumpError::result(DumpErrorType::CANNOT_OPEN_COMMIT_METADATA, fileRes.error());
-        }
-        fs::FileWriter writer;
-        writer.setFile(&fileRes.value());
+    return {};
+}
 
-        if (auto res = CommitMetaDataDumper::dump(commit, writer); !res) {
-            return res;
-        }
+DumpResult<void> CommitDumper::dumpMetaDataFile(const Commit& commit,
+                                                const fs::Path& commitDir) {
+    Profile profile("CommitMetaDataDumper::dump <commit metadata>");
+    const fs::Path metaDataFile = commitDir / "metadata";
 
-        writer.flush();
-        writer.file().close();
-        if (writer.errorOccured()) {
-            return DumpError::result(DumpErrorType::COULD_NOT_WRITE_COMMIT_METADATA,
-                                     *writer.error());
-        }
+    auto fileRes = fs::File::createAndOpen(metaDataFile);
+    if (!fileRes) {
+        return DumpError::result(DumpErrorType::CANNOT_OPEN_COMMIT_METADATA, fileRes.error());
+    }
+    fs::FileWriter writer;
+    writer.setFile(&fileRes.value());
+
+    if (auto res = CommitMetaDataDumper::dump(commit, writer); !res) {
+        return res;
+    }
+
+    writer.flush();
+    writer.file().close();
+    if (writer.errorOccured()) {
+        return DumpError::result(DumpErrorType::COULD_NOT_WRITE_COMMIT_METADATA,
+                                 *writer.error());
     }
 
     return {};
