@@ -56,10 +56,12 @@ public:
                 // Header
                 _writer.writeToCurrentPage(countInPage);
 
-                // Data
-                for (const auto& id : idSpan) {
-                    _writer.writeToCurrentPage(id.getValue());
-                }
+                // Data — IDs are contiguous and EntityID is a standard-layout
+                // uint64_t wrapper, so the whole page goes out in one write,
+                // byte-identical to writing each getValue().
+                _writer.writeToCurrentPage(std::span<const uint8_t>{
+                    reinterpret_cast<const uint8_t*>(idSpan.data()),
+                    idSpan.size_bytes()});
             }
         }
 
@@ -147,10 +149,10 @@ public:
                 // Header
                 _writer.writeToCurrentPage(countInPage);
 
-                // Data
-                for (const auto& id : pageIDs) {
-                    _writer.writeToCurrentPage(id.getValue());
-                }
+                // Data — see TrivialPropertyContainerDumper: one bulk write.
+                _writer.writeToCurrentPage(std::span<const uint8_t>{
+                    reinterpret_cast<const uint8_t*>(pageIDs.data()),
+                    pageIDs.size_bytes()});
             }
         }
 
@@ -222,10 +224,13 @@ public:
                     _writer.writeToCurrentPage(i);
                     _writer.writeToCurrentPage(blockStrCount);
 
-                    for (const auto& lim : blockLimits) {
-                        _writer.writeToCurrentPage(lim._offset);
-                        _writer.writeToCurrentPage(lim._count);
-                    }
+                    // StringLimits is a packed {uint32 _offset; uint32 _count}
+                    // with no padding (cf. StringBucket::create's memcpy), and
+                    // a block is contiguous, so the limits go out in one write,
+                    // byte-identical to the per-field writes.
+                    _writer.writeToCurrentPage(std::span<const uint8_t>{
+                        reinterpret_cast<const uint8_t*>(blockLimits.data()),
+                        blockLimits.size_bytes()});
 
                     offset += blockStrCount;
                     blockCountInPage++;

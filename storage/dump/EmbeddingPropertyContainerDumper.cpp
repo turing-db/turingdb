@@ -1,5 +1,9 @@
 #include "PropertyContainerDumper.h"
 
+#include <algorithm>
+#include <cstdint>
+#include <span>
+
 #include "GraphDumpHelper.h"
 #include "PropertyContainerDumpConstants.h"
 
@@ -58,9 +62,12 @@ DumpResult<void> EmbeddingPropertyContainerDumper::dump(const TypedPropertyConta
             offset += countInPage;
 
             _writer.writeToCurrentPage(countInPage);
-            for (const auto& id : idSpan) {
-                _writer.writeToCurrentPage(id.getValue());
-            }
+            // The IDs of a page are contiguous in `ids()`, and EntityID is a
+            // standard-layout uint64_t wrapper, so the whole page's IDs go out
+            // in a single write — byte-identical to writing each getValue().
+            _writer.writeToCurrentPage(std::span<const uint8_t>{
+                reinterpret_cast<const uint8_t*>(idSpan.data()),
+                idSpan.size_bytes()});
         }
     }
 
@@ -79,12 +86,39 @@ DumpResult<void> EmbeddingPropertyContainerDumper::dump(const TypedPropertyConta
 
             _writer.writeToCurrentPage(countInPage);
 
-            for (size_t j = 0; j < countInPage; j++) {
+            // Write the largest physically-contiguous run per call instead of
+            // one float at a time. A run is capped by the floats remaining in
+            // this page (to preserve the page layout) and breaks at bucket
+            // boundaries, where the backing storage is no longer contiguous.
+            // Float order — and therefore the byte output — is unchanged.
+            size_t toWrite = countInPage;
+            while (toWrite > 0) {
                 const size_t embIdx = floatOffset / dimension;
                 const size_t floatIdx = floatOffset % dimension;
                 const std::span<const float> view = container.getView(embIdx);
-                _writer.writeToCurrentPage(view[floatIdx]);
-                floatOffset++;
+
+                const float* runStart = view.data() + floatIdx;
+                const float* runEnd = view.data() + view.size();
+                size_t runLen = view.size() - floatIdx;
+
+                // Extend the run across following embeddings that sit
+                // immediately after this one in memory (same bucket).
+                for (size_t nextEmb = embIdx + 1;
+                     runLen < toWrite && nextEmb < propCount; nextEmb++) {
+                    const std::span<const float> next = container.getView(nextEmb);
+                    if (next.data() != runEnd) {
+                        break;
+                    }
+                    runLen += next.size();
+                    runEnd += next.size();
+                }
+
+                const size_t n = std::min(runLen, toWrite);
+                _writer.writeToCurrentPage(std::span<const uint8_t>{
+                    reinterpret_cast<const uint8_t*>(runStart), n * sizeof(float)});
+
+                floatOffset += n;
+                toWrite -= n;
             }
         }
     }
