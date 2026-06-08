@@ -116,7 +116,7 @@ endif()
 
 if (${DEBUG_BUILD})
     message(STATUS "Debug build")
-    set(OPTIMIZE_FLAGS "-O0 -g ${CFP_FLAG}")
+    set(OPTIMIZE_FLAGS "-O0 -g ${CFP_FLAG} -Wno-maybe-uninitialized" )
 else()
     message(STATUS "Optimized build")
     add_definitions(-DNDEBUG)

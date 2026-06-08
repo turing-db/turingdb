@@ -253,7 +253,6 @@ void VariableDependencyGraph::resetCycleState() {
 
 VariableDependency* VariableDependencyGraph::_dfs(VariableDependency* u, VariableDependency* par) {
     _cyclicVisited[u] = true;
-    // spdlog::info("dfs from {}", u->getName());
 
     for (const DependencyEdge* e : u->edges()) {
         VariableDependency* adj = e->src() == u ? e->_tgt : e->_src;
@@ -279,17 +278,35 @@ VariableDependency* VariableDependencyGraph::_dfs(VariableDependency* u, Variabl
 VariableDependencyGraph::Cycle VariableDependencyGraph::_getCycle() {
     resetCycleState();
 
+    const auto meta = [](const DependencyEdge* e) {
+        return EdgeMetadata::isMetaEdge(e->data().type());
+    };
+
     for (VariableDependency& node : _vars) {
+        // Cannot be the head of a cycle, degree less than 2
+        if (node.edges().size() < 2) {
+            continue;
+        }
+
+        // If all meta, cycle has been resolved
+        const bool allMeta = std::ranges::all_of(node.edges(), meta);
+        if (allMeta) {
+            continue;
+        }
+
+        // already visited, cannot have cycle
         if (_cyclicVisited.contains(&node)){
             continue;
         }
 
         VariableDependency* start = _dfs(&node, nullptr);
+        fmt::println("");
+        int max = 100;
         if (start) {
             Cycle out;
             out.push_back(start);
             VariableDependency* cur = _cyclicParents[start];
-            while(cur != start) {
+            while (cur != start && max-- && _cyclicParents.contains(cur)) {
                 out.push_back(cur);
                 cur = _cyclicParents[cur];
             }
@@ -299,4 +316,54 @@ VariableDependencyGraph::Cycle VariableDependencyGraph::_getCycle() {
     }
 
     return {};
+}
+
+void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
+    if (cyc.empty()) {
+        return;
+    }
+
+    bioassert(cyc.front() == cyc.back(), "Invalid cycle.");
+    bioassert(cyc.size() >= 3, "Invalid cycle.");
+
+    VariableDependency* head = cyc.front();
+    const std::string_view headName = head->getName();
+
+    const std::string fstName = std::string(headName) + "'";
+    const std::string sndName = std::string(headName) + "''";
+
+    VariableDependency* newHead = newVariable(fstName);
+    VariableDependency* newTail = newVariable(sndName);
+
+    auto edges = head->edges();
+
+    const VariableDependency* nxt = *next(begin(cyc));
+    const VariableDependency* prv = *prev(prev(end(cyc)));
+
+    // replace head and tail of loop with new vars
+    for (DependencyEdge* e : edges) {
+        if (e->src() == nxt && e->tgt() == head) {
+            e->_tgt = newHead;
+            std::erase_if(head->_incoming,
+                          [e](const DependencyEdge* f) { return e == f; });
+        } else if (e->tgt() == nxt && e->src() == head) {
+            e->_src = newHead;
+            std::erase_if(head->_outgoing,
+                          [e](const DependencyEdge* f) { return e == f; });
+        } else if (e->src() == prv && e->tgt() == head) {
+            e->_tgt = newTail;
+            std::erase_if(head->_incoming,
+                          [e](const DependencyEdge* f) { return e == f; });
+        } else if (e->tgt() == prv && e->src() == head) {
+            e->_src = newTail;
+            std::erase_if(head->_outgoing,
+                          [e](const DependencyEdge* f) { return e == f; });
+        }
+    }
+
+    _pendingMerges[head].push_back(newHead);
+    _pendingMerges[head].push_back(newTail);
+}
+
+void VariableDependencyGraph::applyMerges() {
 }
