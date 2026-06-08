@@ -189,11 +189,9 @@ std::vector<VariableDependency*> VariableDependencyGraph::findCycle(
 void VariableDependencyGraph::rewriteCycle() {
     auto cyc = getCycle();
 
-    fmt::print("Cycle of length {}:\n", cyc.size());
-    for (const VariableDependency* v : cyc) {
-        fmt::print("{} ", v->getName());
+    if (cyc.empty()) {
+        return;
     }
-    fmt::println("");
 
     bioassert(cyc.front() == cyc.back(), "Invalid cycle.");
     bioassert(cyc.size() >= 3, "Invalid cycle.");
