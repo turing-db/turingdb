@@ -23,10 +23,6 @@ public:
 
     ~SystemAccessor();
 
-    // Initialise system Manager
-    // @ requires unique access
-    void init();
-
     // Graph access
     Graph* getDefaultGraph() const;
     Graph* getGraph(std::string_view name) const;
