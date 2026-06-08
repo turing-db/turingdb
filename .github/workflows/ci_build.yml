@@ -102,10 +102,23 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v3
 
-    - name: Cache dependencies
-      id: cache-dependencies
+    # Linux (turing-runners) keeps the GitHub-hosted cache. The self-hosted
+    # macOS minis use a local on-disk cache instead (no GitHub cache egress);
+    # /Users/m1/actions-local-cache is pre-provisioned on each mini.
+    - name: Cache dependencies (Linux)
+      id: cache-dependencies-linux
+      if: runner.os == 'Linux'
       uses: actions/cache@v4
       with:
+        path: external/dependencies
+        key: ${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}
+
+    - name: Cache dependencies (macOS)
+      id: cache-dependencies-macos
+      if: runner.os == 'macOS'
+      uses: corca-ai/local-cache@v2
+      with:
+        base: /Users/m1/actions-local-cache
         path: external/dependencies
         key: ${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}
 
@@ -115,7 +128,7 @@ jobs:
     - name: Build dependencies
       run: ./dependencies.sh
       env:
-        SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies.outputs.cache-hit }}
+        SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies-linux.outputs.cache-hit || steps.cache-dependencies-macos.outputs.cache-hit }}
 
     - name: Setup Python
       run: uv python install ${{ matrix.python_version }}
@@ -171,9 +184,18 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: eu-west-2
 
-    - name: Cache reactome dataset
+    - name: Cache reactome dataset (Linux)
+      if: runner.os == 'Linux'
       uses: actions/cache@v4
       with:
+        path: external/datasets/reactome.jsonl
+        key: dataset-reactome-v1
+
+    - name: Cache reactome dataset (macOS)
+      if: runner.os == 'macOS'
+      uses: corca-ai/local-cache@v2
+      with:
+        base: /Users/m1/actions-local-cache
         path: external/datasets/reactome.jsonl
         key: dataset-reactome-v1
 
