@@ -52,6 +52,16 @@ void ListElementViewBuffer<N>::write(ListElementView view) {
 }
 
 template <size_t N>
+ListElementView* ListElementViewBuffer<N>::reserveAndCommit(size_t numViews) {
+    reserveContiguous(numViews);
+
+    ListElementView* startPtr = &_last->_buf[_last->_size];
+    _last->_size += numViews;
+
+    return startPtr;
+}
+
+template <size_t N>
 void ListElementViewBuffer<N>::clear() {
     // Delete all chunks
     auto* cur = _first;

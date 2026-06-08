@@ -36,7 +36,7 @@ package-dir = {"" = "python"}
 where = ["python"]
 
 [tool.setuptools.package-data]
-turingdb = ["bin/*", "lib/turingdb/extensions/*.so", "_binary/_turingproto*.so", "_binary/_turingproto*.pyd", "_local/_turinglocal*.so", "_local/_turinglocal*.pyd"]
+turingdb = ["bin/*", "lib/turingdb/extensions/*.so", "_binary/_turingproto*.so", "_binary/_turingproto*.pyd", "_embedded/_turingembedded*.so", "_embedded/_turingembedded*.pyd"]
 
 [tool.setuptools.exclude-package-data]
 turingdb = ["**/*.cpp", "**/*.cc", "**/*.cxx", "**/CMakeLists.txt", "**/*.cmake"]

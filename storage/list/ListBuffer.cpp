@@ -47,39 +47,20 @@ ListView ListBuffer<N>::insert(std::span<const ListItemVariant> elements) {
 }
 
 template <size_t N>
-ListView ListBuffer<N>::reserveList(size_t numElements, size_t valueBytes) {
+ListWriteCursor ListBuffer<N>::reserveList(size_t numElements, size_t valueBytes) {
     const size_t numBytes = numElements * ListByteBuffer<N>::tagSize() + valueBytes;
 
-    // Reserve both stores up front so the appends that follow never relocate the bytes
-    // or the views: the returned ListView stays valid as it is filled in.
-    _elements.reserveContiguous(numBytes);
-    _views.reserveContiguous(numElements);
+    // Reserve and commit both stores up front so the raw writes that follow never relocate
+    // the bytes or the views: the cursor's pointers and ListView stay valid as it is filled
+    // in, and any later reservation lands after this region rather than inside it.
+    std::byte* elementWritePtr = _elements.reserveAndCommit(numBytes);
+    ListElementView* viewWritePtr = _views.reserveAndCommit(numElements);
 
-    return ListView {_views.nextPtr(), numElements};
-}
-
-template <size_t N>
-ListElementView ListBuffer<N>::appendElement(const ListItemVariant& element) {
-    ListElementView appended;
-
-    const auto write = [this, &appended](auto&& typed) -> void {
-        using T = std::decay_t<decltype(typed)>;
-
-        const ListBufferTypeTag tag = TypeToListBufferTag<T>::Tag;
-        appended = _elements.write(tag, typed);
-        _views.write(appended);
+    return ListWriteCursor {
+        ListView {viewWritePtr, numElements},
+        elementWritePtr,
+        viewWritePtr,
     };
-
-    std::visit(write, element);
-
-    return appended;
-}
-
-template <size_t N>
-ListElementView ListBuffer<N>::appendRawElement(const void* data, size_t numBytes) {
-    const ListElementView view = _elements.writeRaw(data, numBytes);
-    _views.write(view);
-    return view;
 }
 
 template <size_t N>

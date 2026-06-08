@@ -12,12 +12,16 @@
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
+#include "columns/AllowedKinds.h"
 #include "columns/Column.h"
 #include "columns/ColumnConst.h"
-#include "columns/ColumnDispatcher.h"
+#include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "columns/ContainerKind.h"
+#include "list/ListElementView.h"
+#include "list/ListUtils.h"
+#include "list/ListView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
@@ -52,13 +56,24 @@ void allocColumns(const db::Dataframe* incomingDf,
 
 void addToColumn(const db::Column* col, db::Column* newCol) {
     // ColumnConst columns are handled once in allocColumns via assign() and
-    // skipped in appendDfs, so only ColumnVector kinds reach here. The
-    // dispatcher throws a FatalException for any kind it doesn't enumerate,
-    // so an unsupported column type still produces a clear failure.
-    db::dispatchColumnVector(col, [newCol](const auto* typedCol) {
+    // skipped in appendDfs, so only ColumnVector kinds reach here. Const/Set/Mask
+    // containers are excluded from the dispatcher below, so any non-vector column
+    // hits the dispatcher's unsupported() path and throws a FatalException — an
+    // unsupported column type still produces a clear failure.
+    const auto appendCol = [newCol](const auto* typedCol) {
         using T = typename std::decay_t<decltype(*typedCol)>::ValueType;
         copyColumnVector<T>(typedCol, newCol);
-    });
+    };
+
+    using ExcludedNonVector = db::ExcludedContainers<
+        db::ContainerKind::code<db::ColumnConst>(),
+        db::ContainerKind::code<db::ColumnSet>(),
+        db::ContainerKind::code<db::ColumnMask>()>;
+    using Dispatcher = db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed,
+                                                  decltype(appendCol),
+                                                  ExcludedNonVector>;
+
+    Dispatcher::dispatch(col, appendCol);
 }
 
 void appendDfs(const db::Dataframe* src, db::Dataframe* dst) {
@@ -82,9 +97,53 @@ nb::object embeddingToNdarray(std::span<const float> s) {
     return wrapVectorAsNdarray(std::move(buf));
 }
 
+namespace {
+
+// Converts a list value (or a single list element) to plain Python objects — scalars, a list
+// of floats for an embedding, or nested lists. Deliberately plain objects, not ndarrays, so
+// the result compares equal to the JSON-parsed expectation. A nested list recurses through
+// view() -> element() -> operator(); keeping both as members of one struct lets them call each
+// other without a forward declaration.
+struct ListToPyObject {
+    nb::object view(const db::ListView& listView) const {
+        nb::list out;
+        for (const db::ListElementView element : listView.elements()) {
+            out.append(this->element(element));
+        }
+        return out;
+    }
+
+    nb::object element(const db::ListElementView element) const {
+        return db::ListTagDispatcher {element.getTag()}.execute(*this, element);
+    }
+
+    template <typename T>
+    nb::object operator()(const db::ListElementView element) const {
+        if constexpr (std::is_same_v<T, db::types::Bool::Primitive>) {
+            return nb::cast(element.getAs<T>()._boolean);
+        } else if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
+            return nb::cast(std::string(element.getAs<T>()));
+        } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
+            nb::list floats;
+            for (const float value : element.getAs<T>()) {
+                floats.append(nb::cast(value));
+            }
+            return floats;
+        } else if constexpr (std::is_same_v<T, db::ListView>) {
+            return view(element.getAs<T>());
+        } else {
+            return nb::cast(element.getAs<T>());
+        }
+    }
+};
+
+}
+
 nb::dict dataframeToNumpy(db::Dataframe* df) {
     nb::dict data;
     nb::dict dtypes;
+    ListToPyObject listVisitor;
+
     const size_t rowCount = df->getLogicalRowCount();
 
     for (const db::NamedColumn* namedCol : df->cols()) {
@@ -221,6 +280,26 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 dtypeName = "EntityList";
                 break;
             }
+            case db::ColumnVector<db::ListView>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnVector<db::ListView>*>(col)->getRaw();
+                nb::list lst;
+                for (const db::ListView& listView : src) {
+                    lst.append(listVisitor.view(listView));
+                }
+                value = lst;
+                dtypeName = "List";
+                break;
+            }
+            case db::ColumnVector<db::ListElementView>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnVector<db::ListElementView>*>(col)->getRaw();
+                nb::list lst;
+                for (const db::ListElementView element : src) {
+                    lst.append(listVisitor.element(element));
+                }
+                value = lst;
+                dtypeName = "ListElement";
+                break;
+            }
 
             case db::ColumnOptVector<db::types::UInt64::Primitive>::staticKind(): {
                 const auto& src = static_cast<const db::ColumnOptVector<db::types::UInt64::Primitive>*>(col)->getRaw();
@@ -352,6 +431,28 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 }
                 value = lst;
                 dtypeName = "Null";
+                break;
+            }
+            case db::ColumnConst<db::ListView>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<db::ListView>*>(col)->getRaw();
+                const nb::object listObj = listVisitor.view(v);
+                nb::list lst;
+                for (size_t i = 0; i < rowCount; ++i) {
+                    lst.append(listObj);
+                }
+                value = lst;
+                dtypeName = "List";
+                break;
+            }
+            case db::ColumnConst<db::ListElementView>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<db::ListElementView>*>(col)->getRaw();
+                const nb::object elementObj = listVisitor.element(v);
+                nb::list lst;
+                for (size_t i = 0; i < rowCount; ++i) {
+                    lst.append(elementObj);
+                }
+                value = lst;
+                dtypeName = "ListElement";
                 break;
             }
             default:

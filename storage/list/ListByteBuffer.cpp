@@ -51,6 +51,16 @@ void ListByteBuffer<N>::reserveContiguous(size_t numBytes) {
 }
 
 template <size_t N>
+std::byte* ListByteBuffer<N>::reserveAndCommit(size_t numBytes) {
+    reserveContiguous(numBytes);
+
+    std::byte* startPtr = &_last->_buf[_last->_size];
+    _last->_size += numBytes;
+
+    return startPtr;
+}
+
+template <size_t N>
 template <typename T>
 ListElementView ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
     static_assert(std::is_trivially_copyable_v<T>);
@@ -78,16 +88,6 @@ ListElementView ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
 
         _last->_size += valSize;
     }
-
-    return ListElementView {startPtr};
-}
-
-template <size_t N>
-ListElementView ListByteBuffer<N>::writeRaw(const void* data, size_t numBytes) {
-    std::byte* startPtr = &_last->_buf[_last->_size];
-
-    std::memcpy(startPtr, data, numBytes);
-    _last->_size += numBytes;
 
     return ListElementView {startPtr};
 }

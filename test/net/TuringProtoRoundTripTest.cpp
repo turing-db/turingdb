@@ -539,6 +539,160 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumns) {
     EXPECT_EQ(decodedCol->at(3).getAs<UInt64>(), 123u);
 }
 
+// Encode a ColumnConst<ListView> whose elements include a nested list, which itself
+// contains a doubly-nested list, and decode it back. Exercises the inline depth-first
+// encoding and the decoder's cursor stack to three levels. The small chunk size splits
+// the deep string's payload across packets, so the nested element resumes mid-decode.
+TEST(TuringProtoRoundTripTest, RoundTripsNestedListColumns) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    // Longer than the chunk size below, so its payload spans packets.
+    const std::string deepText(64, 'd');
+
+    // deep = [2, "ddd...d"]
+    std::vector<db::ListBuffer<>::ListItemVariant> deepItems;
+    deepItems.emplace_back(UInt64 {2});
+    deepItems.emplace_back(StringView {deepText});
+    const db::ListView deep = localMem.listBuffer().insert(deepItems);
+
+    // inner = [1, deep, 3]
+    std::vector<db::ListBuffer<>::ListItemVariant> innerItems;
+    innerItems.emplace_back(Int64 {1});
+    innerItems.emplace_back(deep);
+    innerItems.emplace_back(Int64 {3});
+    const db::ListView inner = localMem.listBuffer().insert(innerItems);
+
+    // outer = [7, inner, "end"]
+    std::vector<db::ListBuffer<>::ListItemVariant> outerItems;
+    outerItems.emplace_back(Int64 {7});
+    outerItems.emplace_back(inner);
+    outerItems.emplace_back(StringView {"end"});
+    const db::ListView outer = localMem.listBuffer().insert(outerItems);
+
+    auto* listCol = localMem.alloc<db::ColumnConst<db::ListView>>();
+    listCol->set(outer);
+    addColumn(&dfMan, &source, "nested", listCol);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 48);
+    expectPacketSequence(packets, true);
+    EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    const auto* decodedList = decoded.cols().at(0)->as<db::ColumnConst<db::ListView>>();
+    ASSERT_NE(decodedList, nullptr);
+
+    const db::ListView outerView = decodedList->at(0);
+    ASSERT_EQ(outerView.size(), 3u);
+
+    auto outerIt = outerView.begin();
+    EXPECT_EQ(outerIt->getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(outerIt->getAs<Int64>(), 7);
+
+    ++outerIt;
+    EXPECT_EQ(outerIt->getTag(), db::ListBufferTypeTag::ListView);
+    const db::ListView innerView = outerIt->getAs<db::ListView>();
+    ASSERT_EQ(innerView.size(), 3u);
+
+    auto innerIt = innerView.begin();
+    EXPECT_EQ(innerIt->getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(innerIt->getAs<Int64>(), 1);
+
+    ++innerIt;
+    EXPECT_EQ(innerIt->getTag(), db::ListBufferTypeTag::ListView);
+    const db::ListView deepView = innerIt->getAs<db::ListView>();
+    ASSERT_EQ(deepView.size(), 2u);
+
+    auto deepIt = deepView.begin();
+    EXPECT_EQ(deepIt->getTag(), db::ListBufferTypeTag::UInt);
+    EXPECT_EQ(deepIt->getAs<UInt64>(), 2u);
+    ++deepIt;
+    EXPECT_EQ(deepIt->getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(deepIt->getAs<StringView>(), std::string_view(deepText));
+
+    ++innerIt;
+    EXPECT_EQ(innerIt->getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(innerIt->getAs<Int64>(), 3);
+
+    ++outerIt;
+    EXPECT_EQ(outerIt->getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(outerIt->getAs<StringView>(), std::string_view("end"));
+}
+
+// Encode a ColumnVector<ListElementView> whose every row is itself a list (nested), one
+// of them empty, and decode it back. Each row is a top-level element that pushes a child
+// cursor; the empty row's child completes with zero elements. Guards the row-capture path
+// that stores the top-level element's view (and not a nested child's) into each row.
+TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumnOfNestedLists) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    // row 0 = [1, 2]
+    std::vector<db::ListBuffer<>::ListItemVariant> firstItems;
+    firstItems.emplace_back(Int64 {1});
+    firstItems.emplace_back(Int64 {2});
+    const db::ListView first = localMem.listBuffer().insert(firstItems);
+
+    // row 1 = []
+    std::vector<db::ListBuffer<>::ListItemVariant> emptyItems;
+    const db::ListView empty = localMem.listBuffer().insert(emptyItems);
+
+    // row 2 = ["only"]
+    std::vector<db::ListBuffer<>::ListItemVariant> thirdItems;
+    thirdItems.emplace_back(StringView {"only"});
+    const db::ListView third = localMem.listBuffer().insert(thirdItems);
+
+    // The column's rows are the three nested lists.
+    std::vector<db::ListBuffer<>::ListItemVariant> rowItems;
+    rowItems.emplace_back(first);
+    rowItems.emplace_back(empty);
+    rowItems.emplace_back(third);
+    const db::ListView rows = localMem.listBuffer().insert(rowItems);
+
+    auto* col = localMem.alloc<db::ColumnVector<db::ListElementView>>();
+    for (const auto& element : rows) {
+        col->push_back(element);
+    }
+    addColumn(&dfMan, &source, "rows", col);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 64);
+    expectPacketSequence(packets, true);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::ListElementView>>();
+    ASSERT_NE(decodedCol, nullptr);
+    ASSERT_EQ(decodedCol->size(), 3u);
+
+    EXPECT_EQ(decodedCol->at(0).getTag(), db::ListBufferTypeTag::ListView);
+    const db::ListView firstView = decodedCol->at(0).getAs<db::ListView>();
+    ASSERT_EQ(firstView.size(), 2u);
+    EXPECT_EQ(firstView.begin()->getAs<Int64>(), 1);
+
+    EXPECT_EQ(decodedCol->at(1).getTag(), db::ListBufferTypeTag::ListView);
+    EXPECT_EQ(decodedCol->at(1).getAs<db::ListView>().size(), 0u);
+
+    EXPECT_EQ(decodedCol->at(2).getTag(), db::ListBufferTypeTag::ListView);
+    const db::ListView thirdView = decodedCol->at(2).getAs<db::ListView>();
+    ASSERT_EQ(thirdView.size(), 1u);
+    EXPECT_EQ(thirdView.begin()->getAs<StringView>(), std::string_view("only"));
+}
+
 // The schema (column names and types) must fit in a single CHUNK_HEADER
 // packet; we never split a schema across packets. If the configured chunk
 // size is too small to hold the schema, the encoder must throw at encode

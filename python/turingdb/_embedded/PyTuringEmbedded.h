@@ -20,11 +20,11 @@ namespace pybindings {
 
 namespace nb = nanobind;
 
-class PyTuringDB {
+class PyTuringEmbedded {
 public:
-    explicit PyTuringDB();
-    explicit PyTuringDB(const std::string& dataDir);
-    ~PyTuringDB();
+    explicit PyTuringEmbedded();
+    explicit PyTuringEmbedded(const std::string& dataDir);
+    ~PyTuringEmbedded();
 
     void setGraphName(const std::string& name) { _graphName = name; }
     const std::string& getGraphName() const { return _graphName; }

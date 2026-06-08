@@ -1,6 +1,7 @@
 #pragma once
 
 #include <span>
+#include <stack>
 #include <type_traits>
 #include <utility>
 
@@ -13,12 +14,45 @@
 #include "list/ListUtils.h"
 #include "QueryCallbacks.h"
 #include "Bitmask.h"
+#include "spdlog/spdlog.h"
 
 namespace db {
 class QueryStatus;
 }
 
 namespace net::proto {
+
+struct NestedListStackElement {
+    std::span<const db::ListElementView>::iterator currIt;
+    std::span<const db::ListElementView>::iterator endIt;
+};
+
+/// Dispatched on a list element's runtime tag to return the size of the object
+/// the tag maps to, so the client knows how much to allocate. For String and
+/// Embedding this is the size of the view object (std::string_view / std::span),
+/// not the length of the data it points to.
+struct ListElementByteSizeVisitor {
+    template <typename T>
+    size_t operator()(const db::ListElementView elem) const {
+        return sizeof(T);
+    }
+};
+
+// Writes one list as [count][listByteSize] followed by its [tag][value] /
+// [tag][numBytes][data] elements. Shared by the vector and constant paths.
+// Σ sizeof(value) over the elements — the deserialized footprint the decoder reserves.
+inline WireSize computeListByteSize(std::span<const db::ListElementView> elements) {
+    const ListElementByteSizeVisitor sizeVisitor;
+
+    size_t totalSize = 0;
+    for (const auto& elem : elements) {
+        db::ListTagDispatcher dispatcher {elem.getTag()};
+        totalSize += dispatcher.execute(sizeVisitor, elem);
+    }
+
+    bioassert(totalSize <= MAX_WIRE_SIZE, "List length exceeds maximum wire size");
+    return static_cast<WireSize>(totalSize);
+}
 
 using ProtoEncoderSupportedTypes = std::tuple<
     db::types::Int64::Primitive,
@@ -141,16 +175,6 @@ struct ColumnHeaderWriter {
     }
 };
 
-/// Dispatched on a list element's runtime tag to return the size of the object
-/// the tag maps to, so the client knows how much to allocate. For String and
-/// Embedding this is the size of the view object (std::string_view / std::span),
-/// not the length of the data it points to.
-struct ListElementByteSizeVisitor {
-    template <typename T>
-    size_t operator()(const db::ListElementView elem) const {
-        return sizeof(T);
-    }
-};
 
 /// Dispatched on a list element's runtime tag to write [tag][value] for fixed types, or
 /// [tag][numBytes][data] for variable-length types (String, Embedding). The tag and the
@@ -159,6 +183,7 @@ struct ListElementByteSizeVisitor {
 /// variable payload that follows still streams across chunks via copyVarLenData.
 struct ListElementWriteVisitor {
     net::proto::TuringProtoOutBuf* _outBuf {nullptr};
+    std::stack<NestedListStackElement>* _stack {nullptr};
 
     template <typename T>
     void operator()(const db::ListElementView elem) const {
@@ -167,8 +192,8 @@ struct ListElementWriteVisitor {
 
         if constexpr (db::StringLike<T>) {
             const T value = elem.getAs<T>();
-            bioassert(value.size() * sizeof(char) <= std::numeric_limits<uint32_t>::max(), "List string element exceeds maximum wire size");
-            const uint32_t numBytes = static_cast<uint32_t>(value.size() * sizeof(char));
+            bioassert(value.size() * sizeof(char) <= MAX_WIRE_SIZE, "List string element exceeds maximum wire size");
+            const WireSize numBytes = static_cast<WireSize>(value.size() * sizeof(char));
 
             _outBuf->checkRemainingAndFlush(tagSize + sizeof(numBytes));
             _outBuf->copyFixedLenData(&tag, tagSize);
@@ -176,16 +201,30 @@ struct ListElementWriteVisitor {
             _outBuf->copyVarLenData(value.data(), numBytes);
         } else if constexpr (db::IsEmbedding<T>) {
             const T value = elem.getAs<T>();
-            bioassert(value.size() * sizeof(float) <= std::numeric_limits<uint32_t>::max(), "List embedding element exceeds maximum wire size");
-            const uint32_t numBytes = static_cast<uint32_t>(value.size() * sizeof(float));
+            bioassert(value.size() * sizeof(float) <= MAX_WIRE_SIZE, "List embedding element exceeds maximum wire size");
+            const WireSize numBytes = static_cast<WireSize>(value.size() * sizeof(float));
 
             _outBuf->checkRemainingAndFlush(tagSize + sizeof(numBytes));
             _outBuf->copyFixedLenData(&tag, tagSize);
             _outBuf->copyFixedLenData(&numBytes, sizeof(numBytes));
             _outBuf->copyVarLenData(value.data(), numBytes);
         } else if constexpr (db::IsListView<T>) {
-            throw FatalException("Nested lists are not supported over the binary protocol.");
+            const T value = elem.getAs<T>();
+            const auto tag = elem.getTag();
+
+            bioassert(value.size() <= MAX_WIRE_SIZE, "List element count exceeds maximum wire size");
+            const WireSize elementCount = static_cast<WireSize>(value.size());
+            const WireSize listByteSize = computeListByteSize(value);
+
+            _outBuf->checkRemainingAndFlush(tagSize + sizeof(elementCount) + sizeof(listByteSize));
+            _outBuf->copyFixedLenData(&tag, tagSize);
+            _outBuf->copyFixedLenData(&elementCount, sizeof(elementCount));
+            _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
+
+            _stack->emplace(value.begin(), value.end());
         } else {
+            static_assert(std::is_trivially_copyable_v<T>,
+                          "ListViewEncoder can't encode a non trivial element in a trivial manner");
             const T value = elem.getAs<T>();
 
             _outBuf->checkRemainingAndFlush(tagSize + sizeof(T));
@@ -197,16 +236,17 @@ struct ListElementWriteVisitor {
 
 class DataWriter {
 public:
-    explicit DataWriter(net::proto::TuringProtoOutBuf* outBuf)
-        : _outBuf(outBuf)
+    explicit DataWriter(net::proto::TuringProtoOutBuf* outBuf, std::stack<NestedListStackElement>& stack)
+        : _outBuf(outBuf),
+        _stack(stack)
     {
     }
 
     ~DataWriter() = default;
 
     void writeRowCount(size_t size) {
-        bioassert(size <= std::numeric_limits<uint32_t>::max(), "Number of data frame rows is too high");
-        const uint32_t rowCount = static_cast<uint32_t>(size);
+        bioassert(size <= MAX_WIRE_SIZE, "Number of data frame rows is too high");
+        const WireSize rowCount = static_cast<WireSize>(size);
         _outBuf->copyFixedLenData(&rowCount, sizeof(rowCount));
     }
 
@@ -216,22 +256,22 @@ public:
 
         if constexpr (db::StringLike<T>) {
             for (const auto& val : *col) {
-                bioassert(val.size() * sizeof(char) <= std::numeric_limits<uint32_t>::max(), "String length exceeds maximum wire size");
-                const uint32_t columnByteSize = static_cast<uint32_t>(val.size() * sizeof(char));
+                bioassert(val.size() * sizeof(char) <= MAX_WIRE_SIZE, "String length exceeds maximum wire size");
+                const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(char));
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val.data(), columnByteSize);
             }
         } else if constexpr (db::IsPath<T>) {
             for (const auto& val : *col) {
-                bioassert(val.size() * sizeof(db::EntityID) <= std::numeric_limits<uint32_t>::max(), "Path length exceeds maximum wire size");
-                const uint32_t columnByteSize = static_cast<uint32_t>(val.size() * sizeof(db::EntityID));
+                bioassert(val.size() * sizeof(db::EntityID) <= MAX_WIRE_SIZE, "Path length exceeds maximum wire size");
+                const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(db::EntityID));
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val.data(), columnByteSize);
             }
         } else if constexpr (db::IsEmbedding<T>) {
             for (const auto& val : *col) {
-                bioassert(val.size() * sizeof(float) <= std::numeric_limits<uint32_t>::max(), "Embedding length exceeds maximum wire size");
-                const uint32_t columnByteSize = static_cast<uint32_t>(val.size() * sizeof(float));
+                bioassert(val.size() * sizeof(float) <= MAX_WIRE_SIZE, "Embedding length exceeds maximum wire size");
+                const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(float));
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val.data(), columnByteSize);
             }
@@ -239,8 +279,8 @@ public:
             constexpr size_t sizeOfEntry = sizeof(db::EntityList::Entry::_id) + sizeof(db::EntityList::Entry::_type);
 
             for (const auto& entityList : *col) {
-                bioassert(entityList.size() <= std::numeric_limits<uint32_t>::max(), "Entity list length exceeds maximum wire size");
-                const uint32_t columnByteSize = static_cast<uint32_t>(entityList.size());
+                bioassert(entityList.size() <= MAX_WIRE_SIZE, "Entity list length exceeds maximum wire size");
+                const WireSize columnByteSize = static_cast<WireSize>(entityList.size());
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 for (const auto& entry : entityList) {
                     // Ensure that we can copy a full entry into the packet
@@ -257,10 +297,10 @@ public:
         } else if constexpr (db::IsListElement<T>) {
             // One element per row: the row count (already written above) is the element
             // count, so only [listByteSize] + the elements follow.
-            writeListElements(std::span<const db::ListElementView>(col->data(), col->size()));
+            writeListElements(col->getRaw());
         } else {
             static_assert(std::is_trivially_copyable_v<T>,
-                          "TuringProtoEncoder only supports trivially copyable types and string");
+                          "TuringProtoEncoder can't encode a non trivial element in a trivial manner");
             const size_t columnByteSize = sizeof(T) * col->size();
             _outBuf->copyVector<T>(col->data(), columnByteSize);
         }
@@ -277,44 +317,45 @@ public:
         if constexpr (db::StringLike<T>) {
             for (const auto& val : *col) {
                 if (!val.has_value()) {
-                    const uint32_t columnByteSize = 0;
+                    const WireSize columnByteSize = 0;
                     _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                     continue;
                 }
 
-                bioassert(val->size() * sizeof(char) <= std::numeric_limits<uint32_t>::max(), "Optional string length exceeds maximum wire size");
-                const uint32_t columnByteSize = static_cast<uint32_t>(val->size() * sizeof(char));
+                bioassert(val->size() * sizeof(char) <= MAX_WIRE_SIZE, "Optional string length exceeds maximum wire size");
+                const WireSize columnByteSize = static_cast<WireSize>(val->size() * sizeof(char));
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val->data(), columnByteSize);
             }
         } else if constexpr (db::IsPath<T>) {
             for (const auto& val : *col) {
                 if (!val.has_value()) {
-                    const uint32_t columnByteSize = 0;
+                    const WireSize columnByteSize = 0;
                     _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                     continue;
                 }
 
-                bioassert(val->size() * sizeof(db::EntityID) <= std::numeric_limits<uint32_t>::max(), "Optional path length exceeds maximum wire size");
-                const uint32_t columnByteSize = static_cast<uint32_t>(val->size() * sizeof(db::EntityID));
+                bioassert(val->size() * sizeof(db::EntityID) <= MAX_WIRE_SIZE, "Optional path length exceeds maximum wire size");
+                const WireSize columnByteSize = static_cast<WireSize>(val->size() * sizeof(db::EntityID));
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val->data(), columnByteSize);
             }
         } else if constexpr (db::IsEmbedding<T>) {
             for (const auto& val : *col) {
                 if (!val.has_value()) {
-                    const uint32_t columnByteSize = 0;
+                    const WireSize columnByteSize = 0;
                     _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                     continue;
                 }
 
-                bioassert(val->size() * sizeof(float) <= std::numeric_limits<uint32_t>::max(), "Optional embedding length exceeds maximum wire size");
-                const uint32_t columnByteSize = static_cast<uint32_t>(val->size() * sizeof(float));
+                bioassert(val->size() * sizeof(float) <= MAX_WIRE_SIZE, "Optional embedding length exceeds maximum wire size");
+                const WireSize columnByteSize = static_cast<WireSize>(val->size() * sizeof(float));
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val->data(), columnByteSize);
             }
         } else if constexpr (db::IsEntityList<T>) {
             // EntityList is only used as ColumnVector<EntityList>, never optional
+            static_assert(false, "Sending ColumnOptVector<EntityList> not supported");
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
@@ -336,20 +377,20 @@ public:
     void operator()(const db::ColumnConst<T>* col) {
         if constexpr (db::StringLike<T>) {
             const auto& val = col->at(0);
-            bioassert(val.size() * sizeof(char) <= std::numeric_limits<uint32_t>::max(), "Const string length exceeds maximum wire size");
-            const uint32_t columnByteSize = static_cast<uint32_t>(val.size() * sizeof(char));
+            bioassert(val.size() * sizeof(char) <= MAX_WIRE_SIZE, "Const string length exceeds maximum wire size");
+            const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(char));
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
         } else if constexpr (db::IsPath<T>) {
             const auto& val = col->at(0);
-            bioassert(val.size() * sizeof(db::EntityID) <= std::numeric_limits<uint32_t>::max(), "Const path length exceeds maximum wire size");
-            const uint32_t columnByteSize = static_cast<uint32_t>(val.size() * sizeof(db::EntityID));
+            bioassert(val.size() * sizeof(db::EntityID) <= MAX_WIRE_SIZE, "Const path length exceeds maximum wire size");
+            const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(db::EntityID));
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
         } else if constexpr (db::IsEmbedding<T>) {
             const auto& val = col->at(0);
-            bioassert(val.size() * sizeof(float) <= std::numeric_limits<uint32_t>::max(), "Const embedding length exceeds maximum wire size");
-            const uint32_t columnByteSize = static_cast<uint32_t>(val.size() * sizeof(float));
+            bioassert(val.size() * sizeof(float) <= MAX_WIRE_SIZE, "Const embedding length exceeds maximum wire size");
+            const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(float));
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
         } else if constexpr (db::IsEntityList<T>) {
@@ -382,24 +423,25 @@ public:
 
         if constexpr (db::StringLike<T>) {
             const auto& val = *opt;
-            bioassert(val.size() * sizeof(char) <= std::numeric_limits<uint32_t>::max(), "Optional const string length exceeds maximum wire size");
-            const uint32_t columnByteSize = static_cast<uint32_t>(val.size() * sizeof(char));
+            bioassert(val.size() * sizeof(char) <= MAX_WIRE_SIZE, "Optional const string length exceeds maximum wire size");
+            const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(char));
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
         } else if constexpr (db::IsPath<T>) {
             const auto& val = *opt;
-            bioassert(val.size() * sizeof(db::EntityID) <= std::numeric_limits<uint32_t>::max(), "Optional const path length exceeds maximum wire size");
-            const uint32_t columnByteSize = static_cast<uint32_t>(val.size() * sizeof(db::EntityID));
+            bioassert(val.size() * sizeof(db::EntityID) <= MAX_WIRE_SIZE, "Optional const path length exceeds maximum wire size");
+            const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(db::EntityID));
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
         } else if constexpr (db::IsEmbedding<T>) {
             const auto& val = *opt;
-            bioassert(val.size() * sizeof(float) <= std::numeric_limits<uint32_t>::max(), "Optional const embedding length exceeds maximum wire size");
-            const uint32_t columnByteSize = static_cast<uint32_t>(val.size() * sizeof(float));
+            bioassert(val.size() * sizeof(float) <= MAX_WIRE_SIZE, "Optional const embedding length exceeds maximum wire size");
+            const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(float));
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
         } else if constexpr (db::IsEntityList<T>) {
             throw FatalException("ColumnOptConst<EntityList> is not supported");
+            static_assert(false, "ColumnOptConst<EntityList> is not supported");
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
@@ -410,27 +452,24 @@ public:
     }
 
 private:
-    // Writes one list as [count][listByteSize] followed by its [tag][value] /
-    // [tag][numBytes][data] elements. Shared by the vector and constant paths.
-    // Σ sizeof(value) over the elements — the deserialized footprint the decoder reserves.
-    uint32_t computeListByteSize(std::span<const db::ListElementView> elements) {
-        const ListElementByteSizeVisitor sizeVisitor;
-
-        size_t totalSize = 0;
-        for (const auto& elem : elements) {
-            totalSize += db::ListTagDispatcher {elem.getTag()}.execute(sizeVisitor, elem);
-        }
-
-        bioassert(totalSize <= std::numeric_limits<uint32_t>::max(), "List length exceeds maximum wire size");
-        return static_cast<uint32_t>(totalSize);
-    }
-
     // Writes each element's [tag][value] / [tag][numBytes][data].
     void writeListElementValues(std::span<const db::ListElementView> elements) {
-        const ListElementWriteVisitor writeVisitor {_outBuf};
+        const ListElementWriteVisitor writeVisitor {_outBuf, &_stack};
 
-        for (const auto& elem : elements) {
-            db::ListTagDispatcher {elem.getTag()}.execute(writeVisitor, elem);
+        _stack.emplace(elements.begin(), elements.end());
+
+        // Depth-first walk over the (possibly nested) list via an explicit stack: each frame
+        // resumes from its saved iterator, and a nested list pushes a child frame that is
+        // fully drained before the parent continues.
+        while (!_stack.empty()) {
+            auto& [currIt, endIt] = _stack.top();
+            if (currIt == endIt) {
+                _stack.pop();
+                continue;
+            }
+
+            db::ListTagDispatcher {currIt->getTag()}.execute(writeVisitor, *currIt);
+            ++currIt;
         }
     }
 
@@ -438,9 +477,9 @@ private:
     void writeListView(const db::ListView& listView) {
         const std::span<const db::ListElementView> elements = listView.elements();
 
-        bioassert(elements.size() <= std::numeric_limits<uint32_t>::max(), "List element count exceeds maximum wire size");
-        const uint32_t elementCount = static_cast<uint32_t>(elements.size());
-        const uint32_t listByteSize = computeListByteSize(elements);
+        bioassert(elements.size() <= MAX_WIRE_SIZE, "List element count exceeds maximum wire size");
+        const WireSize elementCount = static_cast<WireSize>(elements.size());
+        const WireSize listByteSize = computeListByteSize(elements);
 
         // Keep the [count][listByteSize] header together in one chunk.
         _outBuf->checkRemainingAndFlush(sizeof(elementCount) + sizeof(listByteSize));
@@ -452,7 +491,7 @@ private:
 
     // Helper function to write ColumnVectors or Column Const List Element Views.
     void writeListElements(std::span<const db::ListElementView> elements) {
-        const uint32_t listByteSize = computeListByteSize(elements);
+        const WireSize listByteSize = computeListByteSize(elements);
 
         _outBuf->checkRemainingAndFlush(sizeof(listByteSize));
         _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
@@ -461,6 +500,7 @@ private:
     }
 
     net::proto::TuringProtoOutBuf* _outBuf {nullptr};
+    std::stack<NestedListStackElement>& _stack;
 };
 
 class TuringProtoEncoder {
@@ -475,6 +515,7 @@ public:
 
 private:
     net::proto::TuringProtoOutBuf* _outBuf {nullptr};
+    std::stack<NestedListStackElement> _stack;
 };
 
 }

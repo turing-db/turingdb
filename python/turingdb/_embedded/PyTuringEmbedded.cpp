@@ -1,4 +1,4 @@
-#include "PyTuringDB.h"
+#include "PyTuringEmbedded.h"
 
 #include <stdint.h>
 #include <memory>
@@ -20,27 +20,27 @@
 
 namespace pybindings {
 
-PyTuringDB::PyTuringDB()
+PyTuringEmbedded::PyTuringEmbedded()
     : _localMem(std::make_unique<db::LocalMemory>())
 {
     init();
 }
 
-PyTuringDB::PyTuringDB(const std::string& dataDir)
+PyTuringEmbedded::PyTuringEmbedded(const std::string& dataDir)
     : _localMem(std::make_unique<db::LocalMemory>())
 {
     _config.setTuringDirectory(fs::Path(dataDir));
     init();
 }
 
-PyTuringDB::~PyTuringDB() = default;
+PyTuringEmbedded::~PyTuringEmbedded() = default;
 
-void PyTuringDB::init() {
+void PyTuringEmbedded::init() {
     _db = std::make_unique<db::TuringDB>(&_config);
     _db->init();
 }
 
-void PyTuringDB::setCommitHash(const std::string& s) {
+void PyTuringEmbedded::setCommitHash(const std::string& s) {
     const auto res = db::CommitHash::fromString(s);
     if (!res.has_value()) {
         throw TuringException("Invalid commit hash: " + std::string(res.error()));
@@ -48,7 +48,7 @@ void PyTuringDB::setCommitHash(const std::string& s) {
     _commitHash = res.value();
 }
 
-nb::dict PyTuringDB::query(const std::string& cypher) {
+nb::dict PyTuringEmbedded::query(const std::string& cypher) {
     db::DataframeManager dfMan;
     db::Dataframe bufferedDf;
     // Owning storage for column names — see allocColumns docs.

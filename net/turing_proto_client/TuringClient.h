@@ -5,6 +5,7 @@
 #include <string>
 
 #include "ChunkedBuffer.h"
+#include "LocalMemory.h"
 #include "TuringProtoInBuf.h"
 #include "TuringProtoHeaders.h"
 #include "list/ListBuffer.h"
@@ -55,7 +56,7 @@ public:
 
     net::proto::ChunkedBuffer<float>& getEmbeddingBuffer() { return _embeddingBuffer; }
     net::proto::ChunkedBuffer<char>& getStringBuffer() { return _stringBuffer; }
-    db::ListBuffer<>& getListBuffer() { return _listBuffer; }
+    db::LocalMemory::DefaultListBuffer& getListBuffer() { return _listBuffer; }
     db::CommitHash getCommitHash() const { return _commitHash; }
     db::ChangeID getChangeID() const { return _changeID; }
 

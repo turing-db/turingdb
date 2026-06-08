@@ -4,7 +4,7 @@ find_package(Python 3.9 REQUIRED COMPONENTS Interpreter Development.Module)
 # python/turingdb/. INTERFACE rather than STATIC because nanobind_add_module
 # wants to compile each module's sources with its own per-module flags
 # (visibility, RTTI, etc.); propagating the source via INTERFACE lets it be
-# baked into _turingproto and _turinglocal individually without duplicating
+# baked into _turingproto and _turingembedded individually without duplicating
 # the code on disk.
 add_library(turing_py_nanobind_utils INTERFACE)
 

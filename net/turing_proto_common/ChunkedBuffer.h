@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stddef.h>
-
 #include <span>
 #include <string_view>
 #include <vector>

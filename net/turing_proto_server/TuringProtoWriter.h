@@ -11,6 +11,7 @@
 #include "HTTPUtils.h"
 #include "TuringProtoOutBuf.h"
 #include "TuringProtoHeaders.h"
+#include "TuringProtoEncoder.h"
 #include "QueryCallbacks.h"
 
 namespace db {
@@ -69,6 +70,9 @@ private:
     std::array<char, net::proto::ProtoHeader::wireSize()> _protoHeaderBuffer {};
     // Proto payload (encoder writes into it). Reset after each successful flush.
     net::proto::TuringProtoOutBuf _buffer;
+
+    //Encoder to convert dataframes to encoded bytes
+    net::proto::TuringProtoEncoder _encoder;
     // HTTP chunk trailer: "\r\n", pre-filled once in the constructor.
     std::array<char, net::http::CHUNK_TRAILER_SIZE> _trailerBuffer {'\r','\n'};
 

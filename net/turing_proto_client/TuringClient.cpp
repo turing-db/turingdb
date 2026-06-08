@@ -10,7 +10,6 @@
 #include <array>
 #include <cctype>
 #include <charconv>
-#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -403,8 +402,8 @@ void TuringClient::recvCrlf() {
 
 db::QueryStatus TuringClient::sendQuery(const std::string& query,
                                         const db::QueryCallbacks::OnOutputData& callback) {
-    bioassert(query.length() <= std::numeric_limits<uint32_t>::max(), "Query length exceeds uint32 maximum");
-    bioassert(_graphName.length() <= std::numeric_limits<uint32_t>::max(), "Graph name length exceeds uint32 maximum");
+    bioassert(query.length() <= MAX_WIRE_SIZE, "Query length exceeds maximum wire size");
+    bioassert(_graphName.length() <= MAX_WIRE_SIZE, "Graph name length exceeds maximum wire size");
 
     sendRequest(query);
     recvHttpResponseHeaders();
