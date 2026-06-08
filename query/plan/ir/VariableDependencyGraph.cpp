@@ -244,3 +244,59 @@ void VariableDependencyGraph::rewriteCycle(const Cycle& cyc) {
     addDirected(newHead, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
     addDirected(newTail, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
 }
+
+void VariableDependencyGraph::resetCycleState() {
+    _cyclicParents.clear();
+    _cyclicVisited.clear();
+}
+
+
+VariableDependency* VariableDependencyGraph::_dfs(VariableDependency* u, VariableDependency* par) {
+    _cyclicVisited[u] = true;
+    // spdlog::info("dfs from {}", u->getName());
+
+    for (const DependencyEdge* e : u->edges()) {
+        VariableDependency* adj = e->src() == u ? e->_tgt : e->_src;
+        if (adj == par) {
+            continue;
+        }
+
+        if (_cyclicVisited[adj]) {
+            _cyclicParents[adj] = u;
+            return adj;
+        }
+
+        _cyclicParents[adj] = u;
+        VariableDependency* res = _dfs(adj, u);
+        if (res) {
+            return res;
+        }
+    }
+
+    return nullptr;
+}
+
+VariableDependencyGraph::Cycle VariableDependencyGraph::_getCycle() {
+    resetCycleState();
+
+    for (VariableDependency& node : _vars) {
+        if (_cyclicVisited.contains(&node)){
+            continue;
+        }
+
+        VariableDependency* start = _dfs(&node, nullptr);
+        if (start) {
+            Cycle out;
+            out.push_back(start);
+            VariableDependency* cur = _cyclicParents[start];
+            while(cur != start) {
+                out.push_back(cur);
+                cur = _cyclicParents[cur];
+            }
+            out.push_back(start);
+            return out;
+        }
+    }
+
+    return {};
+}
