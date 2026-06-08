@@ -131,12 +131,18 @@ public:
 
     void rewriteCycle(const Cycle& cyc);
 
+    void detachCycle(const Cycle& cyc);
+
     Cycle _getCycle();
+
+    void applyMerges();
 
 private:
     /// Variables whose dependencies are tracked by this class
     std::deque<VariableDependency> _vars;
     std::deque<DependencyEdge> _edges;
+
+    std::unordered_map<VariableDependency*, std::vector<VariableDependency*>> _pendingMerges;
 
     using Visited = std::unordered_map<VariableDependency*, uint8_t>;
     using Parents = std::unordered_map<VariableDependency*, VariableDependency*>;
