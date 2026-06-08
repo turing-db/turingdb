@@ -89,7 +89,7 @@ ParquetWriter::ParquetWriter(const fs::Path& path, const ParquetWriteSchema& sch
         parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, fields));
 
     parquet::WriterProperties::Builder builder;
-    builder.compression(parquet::Compression::UNCOMPRESSED);
+    builder.compression(parquet::Compression::ZSTD);
     const auto properties = builder.build();
 
     auto streamResult = arrow::io::FileOutputStream::Open(path.get());
