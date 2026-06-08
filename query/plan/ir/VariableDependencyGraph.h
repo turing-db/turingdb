@@ -1,11 +1,13 @@
 #pragma once
 
+#include <cstdint>
 #include <stdint.h>
 
 #include <deque>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -129,10 +131,17 @@ public:
 
     void rewriteCycle(const Cycle& cyc);
 
+    Cycle _getCycle();
+
 private:
     /// Variables whose dependencies are tracked by this class
     std::deque<VariableDependency> _vars;
     std::deque<DependencyEdge> _edges;
+
+    using Visited = std::unordered_map<VariableDependency*, uint8_t>;
+    using Parents = std::unordered_map<VariableDependency*, VariableDependency*>;
+    Visited _cyclicVisited;
+    Parents _cyclicParents;
 
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const EntityPattern* entity);
@@ -142,6 +151,10 @@ private:
                     std::unordered_set<const VariableDependency*>& visited,
                     std::vector<VariableDependency*>& path,
                     std::unordered_set<const VariableDependency*>& pathSet);
+
+    VariableDependency* _dfs(VariableDependency* u, VariableDependency* par);
+
+    void resetCycleState();
 };
 
 }
