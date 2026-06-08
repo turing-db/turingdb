@@ -35,14 +35,21 @@ using namespace db;
 
 namespace {
 
-// graph-info.parquet: one row, graph_id (INT64) + name (BYTE_ARRAY). Also carries the
-// dump-wide format version in its key/value metadata; it is the first file the loader
-// reads, so an incompatible dump is rejected before anything else is interpreted.
-class GraphInfoVisitor : public ParquetSaxVisitor {
-public:
+// graph-info.parquet's single row: the graph id and name.
+struct GraphInfoData {
     uint64_t _graphId {0};
     std::string _name;
-    size_t _rows {0};
+};
+
+// graph-info.parquet: one row, graph_id (INT64) + name (BYTE_ARRAY). Also carries the
+// dump-wide format version in its key/value metadata; it is the first file the loader
+// reads, so an incompatible dump is rejected before anything else is interpreted. Fills
+// the caller-owned GraphInfoData and tracks the row count for the caller to validate.
+class GraphInfoVisitor : public ParquetSaxVisitor {
+public:
+    explicit GraphInfoVisitor(GraphInfoData& data)
+        : _data(data) {
+    }
 
     bool onFileStart(const parquet::FileMetaData& metadata) override {
         const auto& keyValueMetadata = metadata.key_value_metadata();
@@ -75,7 +82,7 @@ public:
 
     bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) override {
         if (columnIndex == 0 && !values.empty()) {
-            _graphId = static_cast<uint64_t>(values[0]);
+            _data._graphId = static_cast<uint64_t>(values[0]);
         }
         return true;
     }
@@ -83,7 +90,7 @@ public:
     bool onByteArrayValues(size_t columnIndex, std::span<const parquet::ByteArray> values) override {
         if (columnIndex == 1 && !values.empty()) {
             const parquet::ByteArray& byteArray = values[0];
-            _name.assign(reinterpret_cast<const char*>(byteArray.ptr), byteArray.len);
+            _data._name.assign(reinterpret_cast<const char*>(byteArray.ptr), byteArray.len);
         }
         return true;
     }
@@ -92,12 +99,21 @@ public:
         _rows += rows;
         return true;
     }
+
+    size_t getRowCount() const { return _rows; }
+
+private:
+    GraphInfoData& _data;
+    size_t _rows {0};
 };
 
-// commit-log.parquet: commit_hash (INT64), one row per commit, oldest first.
+// commit-log.parquet: commit_hash (INT64), one row per commit, oldest first. Collected
+// into the caller-owned vector.
 class CommitLogVisitor : public ParquetSaxVisitor {
 public:
-    std::vector<uint64_t> _hashes;
+    explicit CommitLogVisitor(std::vector<uint64_t>& hashes)
+        : _hashes(hashes) {
+    }
 
     bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) override {
         for (const int64_t value : values) {
@@ -105,6 +121,9 @@ public:
         }
         return true;
     }
+
+private:
+    std::vector<uint64_t>& _hashes;
 };
 
 }
@@ -118,21 +137,24 @@ void GraphParquetLoader::load(Graph* graph, const fs::Path& graphDir) {
         throw FatalException("GraphParquetLoader: target graph already has commits");
     }
 
-    GraphInfoVisitor info;
+    GraphInfoData info;
     {
+        GraphInfoVisitor visitor(info);
+
         ParquetWriteSchema expectedSchema;
         expectedSchema.addColumn(graphParquetLayout::GRAPH_ID_COLUMN, ParquetColumnType::UInt64);
         expectedSchema.addColumn(graphParquetLayout::NAME_COLUMN, ParquetColumnType::String);
 
-        ParquetReader reader(graphParquetLayout::graphInfo(graphDir), info);
+        ParquetReader reader(graphParquetLayout::graphInfo(graphDir), visitor);
         reader.setExpectedSchema(expectedSchema);
         while (reader.nextChunk()) {
         }
-    }
 
-    if (info._rows != 1) {
-        throw FatalException(fmt::format(
-            "GraphParquetLoader: graph-info must have exactly one row, found {}", info._rows));
+        if (visitor.getRowCount() != 1) {
+            throw FatalException(fmt::format(
+                "GraphParquetLoader: graph-info must have exactly one row, found {}",
+                visitor.getRowCount()));
+        }
     }
 
     graph->_graphID = GraphID {info._graphId};
@@ -141,19 +163,21 @@ void GraphParquetLoader::load(Graph* graph, const fs::Path& graphDir) {
     graph->_versionController = std::make_unique<VersionController>(graph);
     VersionController* controller = graph->_versionController.get();
 
-    CommitLogVisitor commitLog;
+    std::vector<uint64_t> commitHashes;
     {
+        CommitLogVisitor visitor(commitHashes);
+
         ParquetWriteSchema expectedSchema;
         expectedSchema.addColumn(graphParquetLayout::COMMIT_HASH_COLUMN, ParquetColumnType::UInt64);
 
-        ParquetReader reader(graphParquetLayout::commitLog(graphDir), commitLog);
+        ParquetReader reader(graphParquetLayout::commitLog(graphDir), visitor);
         reader.setExpectedSchema(expectedSchema);
         while (reader.nextChunk()) {
         }
     }
 
     const Commit* prevCommit = nullptr;
-    for (const uint64_t hash : commitLog._hashes) {
+    for (const uint64_t hash : commitHashes) {
         const fs::Path commitDir = graphParquetLayout::commitDir(graphDir, hash);
 
         std::unique_ptr<Commit> commit =

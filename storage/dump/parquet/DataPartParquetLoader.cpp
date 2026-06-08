@@ -39,13 +39,21 @@ using namespace db;
 
 namespace {
 
-// Info file: three INT64 columns (data_part_id, first_node_id, first_edge_id), one row.
-class InfoVisitor : public ParquetSaxVisitor {
-public:
+// The three ids carried by a data part's single-row info file.
+struct DataPartInfo {
     uint64_t _dataPartId {0};
     uint64_t _firstNodeId {0};
     uint64_t _firstEdgeId {0};
-    size_t _rows {0};
+};
+
+// Info file: three INT64 columns (data_part_id, first_node_id, first_edge_id), one row.
+// Fills the caller-owned DataPartInfo and tracks the row count so the caller can
+// reject a file that does not hold exactly one row.
+class InfoVisitor : public ParquetSaxVisitor {
+public:
+    explicit InfoVisitor(DataPartInfo& info)
+        : _info(info) {
+    }
 
     bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) override {
         if (values.empty()) {
@@ -53,11 +61,11 @@ public:
         }
         const uint64_t value = static_cast<uint64_t>(values[0]);
         if (columnIndex == 0) {
-            _dataPartId = value;
+            _info._dataPartId = value;
         } else if (columnIndex == 1) {
-            _firstNodeId = value;
+            _info._firstNodeId = value;
         } else {
-            _firstEdgeId = value;
+            _info._firstEdgeId = value;
         }
         return true;
     }
@@ -66,9 +74,15 @@ public:
         _rows += rows;
         return true;
     }
+
+    size_t getRowCount() const { return _rows; }
+
+private:
+    DataPartInfo& _info;
+    size_t _rows {0};
 };
 
-void readInfo(const fs::Path& infoPath, InfoVisitor& infoVisitor) {
+void readInfo(const fs::Path& infoPath, DataPartInfo& info) {
     namespace layout = dataPartParquetLayout;
 
     ParquetWriteSchema expectedSchema;
@@ -76,13 +90,14 @@ void readInfo(const fs::Path& infoPath, InfoVisitor& infoVisitor) {
     expectedSchema.addColumn(layout::FIRST_NODE_ID_COLUMN, ParquetColumnType::UInt64);
     expectedSchema.addColumn(layout::FIRST_EDGE_ID_COLUMN, ParquetColumnType::UInt64);
 
+    InfoVisitor infoVisitor(info);
     ParquetReader reader(infoPath, infoVisitor);
     reader.setExpectedSchema(expectedSchema);
     while (reader.nextChunk()) {
     }
 
     // An empty info file would otherwise silently default every id to 0.
-    if (infoVisitor._rows != 1) {
+    if (infoVisitor.getRowCount() != 1) {
         throw FatalException("DataPartParquetLoader: info must have exactly one row");
     }
 }
@@ -237,7 +252,7 @@ std::unique_ptr<DataPart> DataPartParquetLoader::load(const fs::Path& partDir,
                                                       const LabelSetMap& labelsets) {
     namespace layout = dataPartParquetLayout;
 
-    InfoVisitor info;
+    DataPartInfo info;
     readInfo(layout::info(partDir), info);
 
     auto part = std::make_unique<DataPart>(NodeID {info._firstNodeId},
@@ -253,7 +268,7 @@ void DataPartParquetLoader::load(DataPart& part,
                                  const LabelSetMap& labelsets) {
     namespace layout = dataPartParquetLayout;
 
-    InfoVisitor info;
+    DataPartInfo info;
     readInfo(layout::info(partDir), info);
 
     if (part.getID().get() != info._dataPartId) {

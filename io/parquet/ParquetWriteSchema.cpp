@@ -4,7 +4,8 @@
 
 using namespace db;
 
-ParquetWriteSchema::ParquetWriteSchema() {
+ParquetWriteSchema::ParquetWriteSchema()
+{
 }
 
 ParquetWriteSchema::~ParquetWriteSchema() {

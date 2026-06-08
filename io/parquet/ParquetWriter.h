@@ -18,6 +18,8 @@ class FileOutputStream;
 }
 
 namespace parquet {
+class ByteArray;
+class FixedLenByteArray;
 class ParquetFileWriter;
 class RowGroupWriter;
 }
@@ -70,6 +72,7 @@ public:
     void finish();
 
 private:
+    fs::Path _path;
     const ParquetWriteSchema& _schema;
     // shared_ptr only because Arrow's FileOutputStream / ParquetFileWriter APIs demand
     // one; the stream is never shared beyond this writer.
@@ -81,7 +84,14 @@ private:
     bool _finished {false};
     std::vector<std::string> _metadataKeys;
     std::vector<std::string> _metadataValues;
+    // Scratch buffers for the variable-length column writers; reused across calls
+    // so each write reuses the prior allocation instead of allocating afresh.
+    std::vector<parquet::ByteArray> _byteArrayScratch;
+    std::vector<parquet::FixedLenByteArray> _fixedLenByteArrayScratch;
 
+    // Build the Parquet schema and open the output file on first use; a no-op
+    // afterwards. Kept out of the constructor so construction performs no I/O.
+    void ensureOpen();
     void beginColumn(size_t columnIndex, size_t valueCount) const;
 };
 

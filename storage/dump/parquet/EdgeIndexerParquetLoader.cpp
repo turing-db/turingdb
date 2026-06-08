@@ -38,8 +38,7 @@ namespace layout = edgeIndexerParquetLayout;
 namespace {
 
 // Per-node out/in ranges: four INT64 columns, plus the scalars in metadata.
-class NodeDataVisitor : public ParquetSaxVisitor {
-public:
+struct NodeDataValues {
     uint64_t _firstNodeID {0};
     uint64_t _firstEdgeID {0};
     uint64_t _coreNodeCount {0};
@@ -48,6 +47,14 @@ public:
     std::vector<int64_t> _outCounts;
     std::vector<int64_t> _inFirsts;
     std::vector<int64_t> _inCounts;
+};
+
+// Fills the caller-owned NodeDataValues from the four columns and the file metadata.
+class NodeDataVisitor : public ParquetSaxVisitor {
+public:
+    explicit NodeDataVisitor(NodeDataValues& values)
+        : _values(values) {
+    }
 
     bool onFileStart(const parquet::FileMetaData& metadata) override {
         const auto& keyValueMetadata = metadata.key_value_metadata();
@@ -60,16 +67,16 @@ public:
                 const std::string& key = keyValueMetadata->key(i);
                 const std::string& value = keyValueMetadata->value(i);
                 if (key == layout::FIRST_NODE_ID_KEY) {
-                    _firstNodeID = parseMetadataUint64(key, value);
+                    _values._firstNodeID = parseMetadataUint64(key, value);
                     hasNode = true;
                 } else if (key == layout::FIRST_EDGE_ID_KEY) {
-                    _firstEdgeID = parseMetadataUint64(key, value);
+                    _values._firstEdgeID = parseMetadataUint64(key, value);
                     hasEdge = true;
                 } else if (key == layout::CORE_NODE_COUNT_KEY) {
-                    _coreNodeCount = parseMetadataUint64(key, value);
+                    _values._coreNodeCount = parseMetadataUint64(key, value);
                     hasCore = true;
                 } else if (key == layout::PATCH_NODE_COUNT_KEY) {
-                    _patchNodeCount = parseMetadataUint64(key, value);
+                    _values._patchNodeCount = parseMetadataUint64(key, value);
                     hasPatch = true;
                 }
             }
@@ -90,15 +97,17 @@ public:
     }
 
 private:
+    NodeDataValues& _values;
+
     std::vector<int64_t>& columnFor(size_t columnIndex) {
         if (columnIndex == 0) {
-            return _outFirsts;
+            return _values._outFirsts;
         } else if (columnIndex == 1) {
-            return _outCounts;
+            return _values._outCounts;
         } else if (columnIndex == 2) {
-            return _inFirsts;
+            return _values._inFirsts;
         } else if (columnIndex == 3) {
-            return _inCounts;
+            return _values._inCounts;
         } else {
             throw FatalException("EdgeIndexerParquetLoader: unexpected nodedata column");
         }
@@ -106,11 +115,18 @@ private:
 };
 
 // Label-set spans: three INT64 columns (labelset_id, offset, count).
-class SpansVisitor : public ParquetSaxVisitor {
-public:
+struct SpansValues {
     std::vector<int64_t> _labelsetIds;
     std::vector<int64_t> _offsets;
     std::vector<int64_t> _counts;
+};
+
+// Fills the caller-owned SpansValues from the three span columns.
+class SpansVisitor : public ParquetSaxVisitor {
+public:
+    explicit SpansVisitor(SpansValues& values)
+        : _values(values) {
+    }
 
     bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) override {
         std::vector<int64_t>& target = columnFor(columnIndex);
@@ -121,13 +137,15 @@ public:
     }
 
 private:
+    SpansValues& _values;
+
     std::vector<int64_t>& columnFor(size_t columnIndex) {
         if (columnIndex == 0) {
-            return _labelsetIds;
+            return _values._labelsetIds;
         } else if (columnIndex == 1) {
-            return _offsets;
+            return _values._offsets;
         } else if (columnIndex == 2) {
-            return _counts;
+            return _values._counts;
         } else {
             throw FatalException("EdgeIndexerParquetLoader: unexpected spans column");
         }
@@ -161,10 +179,10 @@ void checkEdgeRange(size_t first, size_t count, size_t edgeCount, std::string_vi
     }
 }
 
-void checkSpanColumns(const SpansVisitor& visitor, std::string_view which) {
-    const size_t spanCount = visitor._labelsetIds.size();
-    const bool columnsAgree = visitor._offsets.size() == spanCount
-                              && visitor._counts.size() == spanCount;
+void checkSpanColumns(const SpansValues& spans, std::string_view which) {
+    const size_t spanCount = spans._labelsetIds.size();
+    const bool columnsAgree = spans._offsets.size() == spanCount
+                              && spans._counts.size() == spanCount;
     if (!columnsAgree) {
         throw FatalException(fmt::format(
             "EdgeIndexerParquetLoader: {} spans columns have mismatched lengths", which));
@@ -193,31 +211,34 @@ std::unique_ptr<EdgeIndexer> EdgeIndexerParquetLoader::load(const fs::Path& node
     ParquetWriteSchema expectedSpansSchema;
     spansSchema(expectedSpansSchema);
 
-    NodeDataVisitor nodeVisitor;
+    NodeDataValues nodeData;
+    NodeDataVisitor nodeVisitor(nodeData);
     readParquetFile(nodeDataPath, nodeVisitor, expectedNodeDataSchema);
 
-    SpansVisitor outSpansVisitor;
+    SpansValues outSpans;
+    SpansVisitor outSpansVisitor(outSpans);
     readParquetFile(outSpansPath, outSpansVisitor, expectedSpansSchema);
 
-    SpansVisitor inSpansVisitor;
+    SpansValues inSpans;
+    SpansVisitor inSpansVisitor(inSpans);
     readParquetFile(inSpansPath, inSpansVisitor, expectedSpansSchema);
 
-    const size_t nodeCount = nodeVisitor._outFirsts.size();
+    const size_t nodeCount = nodeData._outFirsts.size();
 
-    const bool nodeColumnsAgree = nodeVisitor._outCounts.size() == nodeCount
-                                  && nodeVisitor._inFirsts.size() == nodeCount
-                                  && nodeVisitor._inCounts.size() == nodeCount;
+    const bool nodeColumnsAgree = nodeData._outCounts.size() == nodeCount
+                                  && nodeData._inFirsts.size() == nodeCount
+                                  && nodeData._inCounts.size() == nodeCount;
     if (!nodeColumnsAgree) {
         throw FatalException("EdgeIndexerParquetLoader: nodedata columns have mismatched lengths");
     }
 
-    checkSpanColumns(outSpansVisitor, "out");
-    checkSpanColumns(inSpansVisitor, "in");
+    checkSpanColumns(outSpans, "out");
+    checkSpanColumns(inSpans, "in");
 
     // Patch nodes are the prefix of _nodes, core nodes the suffix; the two metadata
     // counts must partition the rows exactly or the spans built below would overrun.
-    const size_t patchNodeCount = static_cast<size_t>(nodeVisitor._patchNodeCount);
-    const size_t coreNodeCount = static_cast<size_t>(nodeVisitor._coreNodeCount);
+    const size_t patchNodeCount = static_cast<size_t>(nodeData._patchNodeCount);
+    const size_t coreNodeCount = static_cast<size_t>(nodeData._coreNodeCount);
     const bool countsPartitionRows = patchNodeCount <= nodeCount
                                      && coreNodeCount == nodeCount - patchNodeCount;
     if (!countsPartitionRows) {
@@ -227,8 +248,8 @@ std::unique_ptr<EdgeIndexer> EdgeIndexerParquetLoader::load(const fs::Path& node
     }
 
     std::unique_ptr<EdgeIndexer> indexer {new EdgeIndexer {edges}};
-    indexer->_firstNodeID = NodeID {nodeVisitor._firstNodeID};
-    indexer->_firstEdgeID = EdgeID {nodeVisitor._firstEdgeID};
+    indexer->_firstNodeID = NodeID {nodeData._firstNodeID};
+    indexer->_firstEdgeID = EdgeID {nodeData._firstEdgeID};
 
     const std::span<const EdgeRecord> outs = edges.getOuts();
     const std::span<const EdgeRecord> ins = edges.getIns();
@@ -236,10 +257,10 @@ std::unique_ptr<EdgeIndexer> EdgeIndexerParquetLoader::load(const fs::Path& node
     indexer->_nodes.resize(nodeCount);
     for (size_t i = 0; i < nodeCount; ++i) {
         NodeEdgeData& data = indexer->_nodes[i];
-        data._outRange._first = static_cast<size_t>(nodeVisitor._outFirsts[i]);
-        data._outRange._count = static_cast<size_t>(nodeVisitor._outCounts[i]);
-        data._inRange._first = static_cast<size_t>(nodeVisitor._inFirsts[i]);
-        data._inRange._count = static_cast<size_t>(nodeVisitor._inCounts[i]);
+        data._outRange._first = static_cast<size_t>(nodeData._outFirsts[i]);
+        data._outRange._count = static_cast<size_t>(nodeData._outCounts[i]);
+        data._inRange._first = static_cast<size_t>(nodeData._inFirsts[i]);
+        data._inRange._count = static_cast<size_t>(nodeData._inCounts[i]);
 
         // An empty range is never dereferenced, so only non-empty ranges must lie
         // within their direction's edge array.
@@ -273,10 +294,10 @@ std::unique_ptr<EdgeIndexer> EdgeIndexerParquetLoader::load(const fs::Path& node
         indexer->_patchNodeOffsets[nodeID] = i;
     }
 
-    for (size_t i = 0; i < outSpansVisitor._labelsetIds.size(); ++i) {
-        const LabelSetHandle handle = resolveHandle(labelsets, outSpansVisitor._labelsetIds[i]);
-        const size_t offset = static_cast<size_t>(outSpansVisitor._offsets[i]);
-        const size_t count = static_cast<size_t>(outSpansVisitor._counts[i]);
+    for (size_t i = 0; i < outSpans._labelsetIds.size(); ++i) {
+        const LabelSetHandle handle = resolveHandle(labelsets, outSpans._labelsetIds[i]);
+        const size_t offset = static_cast<size_t>(outSpans._offsets[i]);
+        const size_t count = static_cast<size_t>(outSpans._counts[i]);
 
         // Span pointers are formed from the offset even for empty spans, so the
         // whole range must lie within the edge array.
@@ -284,10 +305,10 @@ std::unique_ptr<EdgeIndexer> EdgeIndexerParquetLoader::load(const fs::Path& node
         indexer->_outLabelSetSpans[handle].emplace_back(outs.data() + offset, count);
     }
 
-    for (size_t i = 0; i < inSpansVisitor._labelsetIds.size(); ++i) {
-        const LabelSetHandle handle = resolveHandle(labelsets, inSpansVisitor._labelsetIds[i]);
-        const size_t offset = static_cast<size_t>(inSpansVisitor._offsets[i]);
-        const size_t count = static_cast<size_t>(inSpansVisitor._counts[i]);
+    for (size_t i = 0; i < inSpans._labelsetIds.size(); ++i) {
+        const LabelSetHandle handle = resolveHandle(labelsets, inSpans._labelsetIds[i]);
+        const size_t offset = static_cast<size_t>(inSpans._offsets[i]);
+        const size_t count = static_cast<size_t>(inSpans._counts[i]);
 
         checkEdgeRange(offset, count, ins.size(), "in span");
         indexer->_inLabelSetSpans[handle].emplace_back(ins.data() + offset, count);

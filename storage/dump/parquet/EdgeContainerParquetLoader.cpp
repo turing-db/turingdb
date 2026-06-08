@@ -32,19 +32,27 @@ namespace layout = edgeContainerParquetLayout;
 
 namespace {
 
-// One edge file: four INT64 columns (edge_id, node_id, other_id, edge_type_id), plus the
-// first edge/node ids in metadata. The reader delivers the columns in schema order, each in
-// row order across all row groups, so each column's batches are written straight into the
-// final EdgeRecord vector through its own cursor. Accumulating the four columns separately
-// first would cost an extra 32 bytes per edge (tens of gigabytes on large graphs), all
-// transient on top of the records being built.
-class EdgeRecordsVisitor : public ParquetSaxVisitor {
-public:
+// One edge file's contents: the EdgeRecord vector plus the first edge/node ids from
+// the file metadata, with flags marking whether those ids were present.
+struct EdgeRecordsData {
     std::vector<EdgeRecord> _edges;
     uint64_t _firstEdgeID {0};
     uint64_t _firstNodeID {0};
     bool _hasFirstEdgeID {false};
     bool _hasFirstNodeID {false};
+};
+
+// One edge file: four INT64 columns (edge_id, node_id, other_id, edge_type_id), plus the
+// first edge/node ids in metadata. The reader delivers the columns in schema order, each in
+// row order across all row groups, so each column's batches are written straight into the
+// caller's EdgeRecord vector through its own cursor. Accumulating the four columns separately
+// first would cost an extra 32 bytes per edge (tens of gigabytes on large graphs), all
+// transient on top of the records being built.
+class EdgeRecordsVisitor : public ParquetSaxVisitor {
+public:
+    explicit EdgeRecordsVisitor(EdgeRecordsData& data)
+        : _data(data) {
+    }
 
     bool onFileStart(const parquet::FileMetaData& metadata) override {
         const auto& keyValueMetadata = metadata.key_value_metadata();
@@ -52,11 +60,11 @@ public:
             for (int64_t i = 0; i < keyValueMetadata->size(); ++i) {
                 const std::string& key = keyValueMetadata->key(i);
                 if (key == layout::FIRST_EDGE_ID_KEY) {
-                    _firstEdgeID = parseMetadataUint64(key, keyValueMetadata->value(i));
-                    _hasFirstEdgeID = true;
+                    _data._firstEdgeID = parseMetadataUint64(key, keyValueMetadata->value(i));
+                    _data._hasFirstEdgeID = true;
                 } else if (key == layout::FIRST_NODE_ID_KEY) {
-                    _firstNodeID = parseMetadataUint64(key, keyValueMetadata->value(i));
-                    _hasFirstNodeID = true;
+                    _data._firstNodeID = parseMetadataUint64(key, keyValueMetadata->value(i));
+                    _data._hasFirstNodeID = true;
                 }
             }
         }
@@ -65,7 +73,7 @@ public:
         if (numRows < 0) {
             throw FatalException("EdgeContainerParquetLoader: negative row count");
         }
-        _edges.resize(static_cast<size_t>(numRows));
+        _data._edges.resize(static_cast<size_t>(numRows));
 
         return true;
     }
@@ -76,25 +84,25 @@ public:
         }
 
         size_t& cursor = _cursors[columnIndex];
-        if (cursor + values.size() > _edges.size()) {
+        if (cursor + values.size() > _data._edges.size()) {
             throw FatalException("EdgeContainerParquetLoader: edge column longer than row count");
         }
 
         if (columnIndex == 0) {
             for (const int64_t value : values) {
-                _edges[cursor++]._edgeID = EdgeID {static_cast<uint64_t>(value)};
+                _data._edges[cursor++]._edgeID = EdgeID {static_cast<uint64_t>(value)};
             }
         } else if (columnIndex == 1) {
             for (const int64_t value : values) {
-                _edges[cursor++]._nodeID = NodeID {static_cast<uint64_t>(value)};
+                _data._edges[cursor++]._nodeID = NodeID {static_cast<uint64_t>(value)};
             }
         } else if (columnIndex == 2) {
             for (const int64_t value : values) {
-                _edges[cursor++]._otherID = NodeID {static_cast<uint64_t>(value)};
+                _data._edges[cursor++]._otherID = NodeID {static_cast<uint64_t>(value)};
             }
         } else {
             for (const int64_t value : values) {
-                _edges[cursor++]._edgeTypeID = EdgeTypeID {static_cast<uint64_t>(value)};
+                _data._edges[cursor++]._edgeTypeID = EdgeTypeID {static_cast<uint64_t>(value)};
             }
         }
 
@@ -105,19 +113,22 @@ public:
     // file delivered fewer values than the row count promised.
     void checkComplete() const {
         for (size_t columnIndex = 0; columnIndex < 4; ++columnIndex) {
-            if (_cursors[columnIndex] != _edges.size()) {
+            if (_cursors[columnIndex] != _data._edges.size()) {
                 throw FatalException(fmt::format(
                     "EdgeContainerParquetLoader: column {} delivered {} of {} edges",
-                    columnIndex, _cursors[columnIndex], _edges.size()));
+                    columnIndex, _cursors[columnIndex], _data._edges.size()));
             }
         }
     }
 
 private:
+    EdgeRecordsData& _data;
     size_t _cursors[4] {0, 0, 0, 0};
 };
 
-void readEdgeFile(const fs::Path& path, EdgeRecordsVisitor& visitor) {
+void readEdgeFile(const fs::Path& path, EdgeRecordsData& data) {
+    EdgeRecordsVisitor visitor(data);
+
     ParquetWriteSchema expectedSchema;
     expectedSchema.addColumn(layout::EDGE_ID_COLUMN, ParquetColumnType::UInt64);
     expectedSchema.addColumn(layout::NODE_ID_COLUMN, ParquetColumnType::UInt64);
@@ -128,39 +139,39 @@ void readEdgeFile(const fs::Path& path, EdgeRecordsVisitor& visitor) {
     reader.setExpectedSchema(expectedSchema);
     while (reader.nextChunk()) {
     }
+
+    visitor.checkComplete();
 }
 
 }
 
 std::unique_ptr<EdgeContainer> EdgeContainerParquetLoader::load(const fs::Path& outPath,
                                                                const fs::Path& inPath) {
-    EdgeRecordsVisitor outVisitor;
-    readEdgeFile(outPath, outVisitor);
-    outVisitor.checkComplete();
+    EdgeRecordsData out;
+    readEdgeFile(outPath, out);
 
-    EdgeRecordsVisitor inVisitor;
-    readEdgeFile(inPath, inVisitor);
-    inVisitor.checkComplete();
+    EdgeRecordsData in;
+    readEdgeFile(inPath, in);
 
-    const bool outHasFirstIds = outVisitor._hasFirstEdgeID && outVisitor._hasFirstNodeID;
-    const bool inHasFirstIds = inVisitor._hasFirstEdgeID && inVisitor._hasFirstNodeID;
+    const bool outHasFirstIds = out._hasFirstEdgeID && out._hasFirstNodeID;
+    const bool inHasFirstIds = in._hasFirstEdgeID && in._hasFirstNodeID;
     if (!outHasFirstIds || !inHasFirstIds) {
         throw FatalException("EdgeContainerParquetLoader: missing first-id metadata");
     }
 
     // The dumper writes the same first ids to both files; a disagreement means one of
     // them belongs to a different container.
-    const bool firstIdsAgree = inVisitor._firstEdgeID == outVisitor._firstEdgeID
-                               && inVisitor._firstNodeID == outVisitor._firstNodeID;
+    const bool firstIdsAgree = in._firstEdgeID == out._firstEdgeID
+                               && in._firstNodeID == out._firstNodeID;
     if (!firstIdsAgree) {
         throw FatalException("EdgeContainerParquetLoader: out- and in-edge first ids disagree");
     }
 
     EdgeContainer* container = new EdgeContainer {
-        outVisitor._firstNodeID,
-        outVisitor._firstEdgeID,
-        std::move(outVisitor._edges),
-        std::move(inVisitor._edges),
+        out._firstNodeID,
+        out._firstEdgeID,
+        std::move(out._edges),
+        std::move(in._edges),
     };
 
     return std::unique_ptr<EdgeContainer>(container);

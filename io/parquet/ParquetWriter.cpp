@@ -30,6 +30,9 @@ using namespace db;
 
 namespace {
 
+// Translate one ParquetWriteSchema column into the matching parquet schema node:
+// a REQUIRED primitive node carrying the column name, physical type, and (for
+// the annotated / fixed-length kinds) its converted type and byte width.
 parquet::schema::NodePtr buildSchemaNode(const ParquetWriteSchema& schema, size_t index) {
     const std::string& name = schema.getColumnName(index);
 
@@ -77,12 +80,20 @@ parquet::schema::NodePtr buildSchemaNode(const ParquetWriteSchema& schema, size_
 }
 
 ParquetWriter::ParquetWriter(const fs::Path& path, const ParquetWriteSchema& schema)
-    : _schema(schema)
+    : _path(path),
+    _schema(schema)
 {
+}
+
+void ParquetWriter::ensureOpen() {
+    if (_fileWriter) {
+        return;
+    }
+
     parquet::schema::NodeVector fields;
-    fields.reserve(schema.getColumnCount());
-    for (size_t index = 0; index < schema.getColumnCount(); ++index) {
-        fields.push_back(buildSchemaNode(schema, index));
+    fields.reserve(_schema.getColumnCount());
+    for (size_t index = 0; index < _schema.getColumnCount(); ++index) {
+        fields.push_back(buildSchemaNode(_schema, index));
     }
 
     const auto groupNode = std::static_pointer_cast<parquet::schema::GroupNode>(
@@ -92,11 +103,11 @@ ParquetWriter::ParquetWriter(const fs::Path& path, const ParquetWriteSchema& sch
     builder.compression(parquet::Compression::ZSTD);
     const auto properties = builder.build();
 
-    auto streamResult = arrow::io::FileOutputStream::Open(path.get());
+    auto streamResult = arrow::io::FileOutputStream::Open(_path.get());
     if (!streamResult.ok()) {
         throw TuringException(fmt::format(
             "Parquet: opening {} for writing: {}",
-            path.get(), streamResult.status().ToString()));
+            _path.get(), streamResult.status().ToString()));
     }
     _outputStream = *streamResult;
 
@@ -104,7 +115,7 @@ ParquetWriter::ParquetWriter(const fs::Path& path, const ParquetWriteSchema& sch
         _fileWriter = parquet::ParquetFileWriter::Open(_outputStream, groupNode, properties);
     } catch (const parquet::ParquetException& e) {
         throw TuringException(fmt::format(
-            "Parquet: opening {} for writing: {}", path.get(), e.what()));
+            "Parquet: opening {} for writing: {}", _path.get(), e.what()));
     }
 }
 
@@ -134,6 +145,8 @@ void ParquetWriter::beginRowGroup(size_t rowCount) {
     bioassert(!_finished, "ParquetWriter: beginRowGroup after finish");
     bioassert(_nextColumnIndex == 0 || _nextColumnIndex == _schema.getColumnCount(),
               "ParquetWriter: previous row group is missing columns");
+
+    ensureOpen();
 
     try {
         _rowGroupWriter = _fileWriter->AppendRowGroup();
@@ -202,8 +215,8 @@ void ParquetWriter::writeStringColumn(size_t columnIndex,
     bioassert(_schema.getColumnType(columnIndex) == ParquetColumnType::String,
               "ParquetWriter: writeStringColumn on a non-string column");
 
-    std::vector<parquet::ByteArray> byteArrays;
-    byteArrays.reserve(values.size());
+    _byteArrayScratch.clear();
+    _byteArrayScratch.reserve(values.size());
     for (const std::string_view value : values) {
         // parquet::ByteArray carries a 32-bit length; refuse rather than truncate.
         if (value.size() > std::numeric_limits<uint32_t>::max()) {
@@ -212,16 +225,16 @@ void ParquetWriter::writeStringColumn(size_t columnIndex,
                 columnIndex, value.size()));
         }
 
-        byteArrays.emplace_back(static_cast<uint32_t>(value.size()),
-                                reinterpret_cast<const uint8_t*>(value.data()));
+        _byteArrayScratch.emplace_back(static_cast<uint32_t>(value.size()),
+                                       reinterpret_cast<const uint8_t*>(value.data()));
     }
 
     try {
         auto* writer = static_cast<parquet::ByteArrayWriter*>(_rowGroupWriter->NextColumn());
-        writer->WriteBatch(static_cast<int64_t>(byteArrays.size()),
+        writer->WriteBatch(static_cast<int64_t>(_byteArrayScratch.size()),
                            nullptr,
                            nullptr,
-                           byteArrays.data());
+                           _byteArrayScratch.data());
     } catch (const parquet::ParquetException& e) {
         throw TuringException(fmt::format(
             "Parquet: writing string column {}: {}", columnIndex, e.what()));
@@ -248,19 +261,19 @@ void ParquetWriter::writeFixedLenColumn(size_t columnIndex,
               "ParquetWriter: byteWidth does not match the schema column");
 
     const auto* base = reinterpret_cast<const uint8_t*>(flat.data());
-    std::vector<parquet::FixedLenByteArray> values;
-    values.reserve(valueCount);
+    _fixedLenByteArrayScratch.clear();
+    _fixedLenByteArrayScratch.reserve(valueCount);
     for (size_t value = 0; value < valueCount; ++value) {
-        values.emplace_back(base + value * byteWidth);
+        _fixedLenByteArrayScratch.emplace_back(base + value * byteWidth);
     }
 
     try {
         auto* writer = static_cast<parquet::FixedLenByteArrayWriter*>(
             _rowGroupWriter->NextColumn());
-        writer->WriteBatch(static_cast<int64_t>(values.size()),
+        writer->WriteBatch(static_cast<int64_t>(_fixedLenByteArrayScratch.size()),
                            nullptr,
                            nullptr,
-                           values.data());
+                           _fixedLenByteArrayScratch.data());
     } catch (const parquet::ParquetException& e) {
         throw TuringException(fmt::format(
             "Parquet: writing fixed-length column {}: {}", columnIndex, e.what()));
@@ -279,6 +292,9 @@ void ParquetWriter::finish() {
     bioassert(!_finished, "ParquetWriter: finish called twice");
     bioassert(_nextColumnIndex == 0 || _nextColumnIndex == _schema.getColumnCount(),
               "ParquetWriter: final row group is missing columns");
+
+    // A writer that never opened a row group still produces a valid empty file.
+    ensureOpen();
 
     try {
         if (!_metadataKeys.empty()) {

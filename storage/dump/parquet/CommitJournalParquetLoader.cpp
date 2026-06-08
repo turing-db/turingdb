@@ -20,10 +20,13 @@ using namespace db;
 
 namespace {
 
-// A single INT64 id column (node_id or edge_id), collected across all chunks.
+// A single INT64 id column (node_id or edge_id), collected across all chunks into
+// the caller-owned vector.
 class IdColumnVisitor : public ParquetSaxVisitor {
 public:
-    std::vector<int64_t> _ids;
+    explicit IdColumnVisitor(std::vector<int64_t>& ids)
+        : _ids(ids) {
+    }
 
     bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) override {
         for (const int64_t value : values) {
@@ -31,12 +34,17 @@ public:
         }
         return true;
     }
+
+private:
+    std::vector<int64_t>& _ids;
 };
 
 template <typename IDT>
 void loadWriteSet(const fs::Path& path, std::string_view columnName, std::vector<IDT>& out) {
-    IdColumnVisitor visitor;
+    std::vector<int64_t> ids;
     {
+        IdColumnVisitor visitor(ids);
+
         ParquetWriteSchema expectedSchema;
         expectedSchema.addColumn(columnName, ParquetColumnType::UInt64);
 
@@ -46,8 +54,8 @@ void loadWriteSet(const fs::Path& path, std::string_view columnName, std::vector
         }
     }
 
-    out.reserve(visitor._ids.size());
-    for (const int64_t value : visitor._ids) {
+    out.reserve(ids.size());
+    for (const int64_t value : ids) {
         out.push_back(IDT {static_cast<typename IDT::Type>(value)});
     }
 }
