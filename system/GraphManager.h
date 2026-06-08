@@ -1,7 +1,6 @@
 #pragma once
 
 #include <atomic>
-#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -41,10 +40,10 @@ public:
     void loadOrCreateDefaultGraph();
 
     // Import a graph from a file
-    bool importGraph(std::string_view graphName,
-                     const fs::Path& filePath,
-                     JobSystem& jobSystem);
-    std::optional<GraphFileType> getGraphFileType(const fs::Path& graphPath);
+    Graph* importGraph(std::string_view graphName,
+                       const fs::Path& filePath,
+                       JobSystem* jobSystem);
+    GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 
     // Is a graph currently being loaded from a file
     bool isGraphLoading(std::string_view graphName) const;
@@ -66,9 +65,9 @@ private:
     ChangeManager _changes;
     GraphLoadStatus _graphLoadStatus;
 
-    bool loadJsonlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem& jobSystem);
-    bool loadGmlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem& jobSystem);
-    bool loadBinaryDB(std::string_view graphName, const fs::Path& dbPath, JobSystem& jobSystem);
+    Graph* loadJsonlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);
+    Graph* loadGmlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);
+    Graph* loadBinaryDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);
 };
 
 }

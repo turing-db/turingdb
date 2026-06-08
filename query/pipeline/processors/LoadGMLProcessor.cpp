@@ -48,12 +48,10 @@ void LoadGMLProcessor::reset() {
 
 void LoadGMLProcessor::execute() {
     SystemManager* sysMan = _ctxt->getSystemManager();
-    JobSystem* jobSys = _ctxt->getJobSystem();
     bioassert(sysMan, "SystemManager not initialised");
-    bioassert(jobSys, "JobSystem not initialised");
 
-    const bool res = sysMan->importGraph(_graphName, _filePath, *jobSys);
-    if (!res) {
+    Graph* graph = sysMan->importGraph(_filePath, _graphName);
+    if (!graph) {
         throw PipelineException(fmt::format("Failed to load graph '{}'", _graphName));
     }
 

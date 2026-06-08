@@ -5,7 +5,8 @@ set(system_sources
     LockFileResult.cpp
     SystemEventHandler.cpp
     GraphManager.cpp
-    SystemManager.cpp)
+    SystemManager.cpp
+    SystemAccessor.cpp)
 
 add_library(turing_db_system_s STATIC ${system_sources})
 target_include_directories(turing_db_system_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
