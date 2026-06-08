@@ -50,13 +50,11 @@ void LoadJsonlProcessor::reset() {
 
 void LoadJsonlProcessor::execute() {
     SystemManager* sysMan = _ctxt->getSystemManager();
-    JobSystem* jobSystem = _ctxt->getJobSystem();
 
     bioassert(sysMan, "SystemManager not initialized");
-    bioassert(jobSystem, "JobSystem not initialized");
 
-    const bool res = sysMan->importGraph(_graphName, _path, *jobSystem);
-    if (!res) {
+    Graph* graph = sysMan->importGraph(_path, _graphName);
+    if (!graph) {
         throw PipelineException(fmt::format("Failed to load JSONL graph {}", _path.get()));
     }
 

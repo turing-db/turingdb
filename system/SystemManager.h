@@ -1,8 +1,8 @@
 #pragma once
 
-#include <vector>
-#include <optional>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "GraphManager.h"
 
@@ -30,6 +30,7 @@
 namespace db {
 
 class TuringConfig;
+class SystemAccessor;
 class Graph;
 class ChangeAccessor;
 class JobSystem;
@@ -38,6 +39,8 @@ class Change;
 
 class SystemManager {
 public:
+    friend SystemAccessor;
+
     explicit SystemManager(const TuringConfig* config);
 
     SystemManager(const SystemManager&) = delete;
@@ -45,11 +48,9 @@ public:
 
     ~SystemManager();
 
-    // Initialise system Manager
-    void init();
-
-    // Get TuringConfig
     const TuringConfig* getConfig() const { return _config; }
+
+    void init();
 
     // Graph access
     Graph* getDefaultGraph() const;
@@ -58,15 +59,13 @@ public:
 
     // Graph operations
     Graph* createGraph(std::string_view graphName);
-    void listAvailableGraphs(std::vector<fs::Path>& names);
-    void listGraphs(std::vector<std::string_view>& names);
+    void listAvailableGraphs(std::vector<std::string>& names) const;
+    void listGraphs(std::vector<std::string_view>& names) const;
     void setDefaultGraph(std::string_view name);
 
     // Import graph from file
-    bool importGraph(std::string_view graphName,
-                     const fs::Path& filePath,
-                     JobSystem& jobSystem);
-    std::optional<GraphFileType> getGraphFileType(const fs::Path& graphPath);
+    Graph* importGraph(const fs::Path& path, std::string_view graphName);
+    GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 
     // Loading a graph
     bool isGraphLoading(std::string_view graphName) const;
@@ -114,6 +113,9 @@ public:
 
 private:
     const TuringConfig* _config {nullptr};
+
+    // Global system lock
+    std::shared_mutex _sysLock;
 
     // Lock file
     LockFile _lockFile;

@@ -5,6 +5,7 @@
 namespace db {
 
 enum class GraphFileType {
+    UNKNOWN,
     GML,
     JSONL,
     BINARY,
@@ -12,6 +13,7 @@ enum class GraphFileType {
 };
 
 using GraphFileTypeDescription = EnumToString<GraphFileType>::Create<
+    EnumStringPair<GraphFileType::UNKNOWN, "UNKNOWN">,
     EnumStringPair<GraphFileType::GML, "GML">,
     EnumStringPair<GraphFileType::JSONL, "JSONL">,
     EnumStringPair<GraphFileType::BINARY, "BINARY">>;

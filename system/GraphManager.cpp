@@ -117,65 +117,66 @@ void GraphManager::loadOrCreateDefaultGraph() {
     _defaultGraph.store(graph);
 }
 
-bool GraphManager::importGraph(std::string_view graphName,
-                               const fs::Path& filePath,
-                               JobSystem& jobSystem) {
+Graph* GraphManager::importGraph(std::string_view graphName,
+                                 const fs::Path& filePath,
+                                 JobSystem* jobSystem) {
     const fs::Path graphPath = _config->getGraphsDir() / filePath;
 
     // Step 1. Check if graph was already loaded || is already loading
     if (getGraph(graphName) || isGraphLoading(graphName)) {
-        return false;
+        return nullptr;
     }
 
     // Step 2. Validate the path. It should be within the data directory
     const fs::Path absolute = _config->getDataDir() / filePath;
     if (!absolute.isSubDirectory(_config->getDataDir())) {
         spdlog::error("File is not within the data directory: {}", absolute.get());
-        return false;
+        return nullptr;
     }
 
     if (!absolute.exists()) {
         spdlog::error("File does not exist: {}", absolute.get());
-        return false;
+        return nullptr;
     }
 
     // Step 3. Determine the file type
-    const auto fileType = getGraphFileType(absolute);
+    const GraphFileType fileType = getGraphFileType(absolute);
 
     // Step 4. Load the graph
-    if (!fileType) {
-        // If we can not determine the file type, assume it is a JSONL graph
-        // to be changed in the future
-        return loadJsonlDB(graphName, absolute, jobSystem);
-    }
-
-    switch (*fileType) {
+    switch (fileType) {
         case GraphFileType::GML:
             return loadGmlDB(graphName, absolute, jobSystem);
+        break;
         case GraphFileType::JSONL:
             return loadJsonlDB(graphName, absolute, jobSystem);
+        break;
         case GraphFileType::BINARY:
             return loadBinaryDB(graphName, absolute, jobSystem);
+        break;
+        case GraphFileType::UNKNOWN:
+            // If we can not determine the file type, assume it is a JSONL graph
+            // to be changed in the future
+            return loadJsonlDB(graphName, absolute, jobSystem);
+        break;
         case GraphFileType::_SIZE:
             throw TuringException("Unsupported graph type");
+        break;
     }
 
     throw TuringException("Unsupported graph type");
 }
 
-std::optional<GraphFileType> GraphManager::getGraphFileType(const fs::Path& graphPath) {
+GraphFileType GraphManager::getGraphFileType(const fs::Path& graphPath) const {
     if (graphPath.extension() == ".gml") {
         return GraphFileType::GML;
-    }
-
-    if (graphPath.extension() == ".json" || graphPath.extension() == ".jsonl") {
+    } else if (graphPath.extension() == ".json" || graphPath.extension() == ".jsonl") {
         return GraphFileType::JSONL;
     }
 
     const auto typeFilePath = graphPath / "type";
     std::string typeName;
     if (!FileUtils::readContent(typeFilePath.get(), typeName)) {
-        return {};
+        return GraphFileType::UNKNOWN;
     }
 
     if (typeName == GraphFileTypeDescription::value(GraphFileType::BINARY)) {
@@ -184,65 +185,68 @@ std::optional<GraphFileType> GraphManager::getGraphFileType(const fs::Path& grap
         return GraphFileType::JSONL;
     }
 
-    return {};
+    return GraphFileType::UNKNOWN;
 }
 
 bool GraphManager::isGraphLoading(std::string_view graphName) const {
     return _graphLoadStatus.isGraphLoading(graphName);
 }
 
-bool GraphManager::loadBinaryDB(std::string_view graphName,
-                                const fs::Path& dbPath,
-                                JobSystem& jobSystem) {
+Graph* GraphManager::loadBinaryDB(std::string_view graphName,
+                                  const fs::Path& dbPath,
+                                  JobSystem* jobSystem) {
     if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return false;
+        return nullptr;
     }
 
     ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(graphName);
     if (!reservation.isValid()) {
         _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
+        return nullptr;
     }
 
     // in the case of turingDB binaries the path is the same path we load from.
     auto graph = Graph::create(std::string(graphName), dbPath);
+    Graph* graphPtr = graph.get();
 
     if (auto res = GraphLoader::load(graph.get(), dbPath); !res) {
         spdlog::error("Could not load graph {}: {}", graphName, res.error().fmtMessage());
         _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
+        return nullptr;
     }
 
     _graphLoadStatus.removeLoadingGraph(graphName);
 
     reservation.publish(std::move(graph));
 
-    return true;
+    return graphPtr;
 }
 
-bool GraphManager::loadJsonlDB(std::string_view graphName,
-                               const fs::Path& dbPath,
-                               JobSystem& jobSystem) {
+Graph* GraphManager::loadJsonlDB(std::string_view graphName,
+                                 const fs::Path& dbPath,
+                                 JobSystem* jobSystem) {
     const fs::Path graphPath = _config->getGraphsDir() / graphName;
     if (graphPath == dbPath) {
-        return false;
+        return nullptr;
     }
 
     if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return false;
+        return nullptr;
     }
 
     ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(graphName);
     if (!reservation.isValid()) {
         _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
+        return nullptr;
     }
 
     auto graph = Graph::create(std::string(graphName), graphPath);
+    Graph* graphPtr = graph.get();
+
     std::ifstream file(dbPath.get());
     if (!file) {
         _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
+        return nullptr;
     }
 
     Change* change = _changes.createChange(graph.get(), CommitHash::head());
@@ -253,15 +257,15 @@ bool GraphManager::loadJsonlDB(std::string_view graphName,
     if (!importRes) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         spdlog::error(importRes.error().fmtMessage());
-        return false;
+        return nullptr;
     }
 
-    const auto submitRes = _changes.submitChange(changeAccessor, jobSystem);
+    const auto submitRes = _changes.submitChange(changeAccessor, *jobSystem);
 
     if (!submitRes) {
         _graphLoadStatus.removeLoadingGraph(graphName);
         spdlog::error(submitRes.error().fmtMessage());
-        return false;
+        return nullptr;
     }
 
     if (_config->isSyncedOnDisk()) {
@@ -270,7 +274,7 @@ bool GraphManager::loadJsonlDB(std::string_view graphName,
         if (!dumpRes) {
             _graphLoadStatus.removeLoadingGraph(graphName);
             spdlog::error(dumpRes.error().fmtMessage());
-            return false;
+            return nullptr;
         }
     }
 
@@ -278,42 +282,43 @@ bool GraphManager::loadJsonlDB(std::string_view graphName,
 
     reservation.publish(std::move(graph));
 
-    return true;
+    return graphPtr;
 }
 
-bool GraphManager::loadGmlDB(std::string_view graphName,
-                             const fs::Path& dbPath,
-                             JobSystem& jobSystem) {
+Graph* GraphManager::loadGmlDB(std::string_view graphName,
+                               const fs::Path& dbPath,
+                               JobSystem* jobSystem) {
     const fs::Path graphPath = _config->getGraphsDir() / graphName;
     if (graphPath == dbPath) {
-        return false;
+        return nullptr;
     }
 
     if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return false;
+        return nullptr;
     }
 
     ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(graphName);
     if (!reservation.isValid()) {
         _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
+        return nullptr;
     }
 
     // Load graph
     auto graph = Graph::create(std::string(graphName), graphPath);
+    Graph* graphPtr = graph.get();
 
     // load GMLs
     GMLImporter importer;
 
-    if (!importer.importFile(jobSystem, graph.get(), FileUtils::Path {dbPath.c_str()})) {
+    if (!importer.importFile(*jobSystem, graph.get(), FileUtils::Path {dbPath.c_str()})) {
         _graphLoadStatus.removeLoadingGraph(graphName);
-        return false;
+        return nullptr;
     }
 
     if (_config->isSyncedOnDisk()) {
         if (!GraphDumper::dump(graph.get(), graphPath)) {
             _graphLoadStatus.removeLoadingGraph(graphName);
-            return false;
+            return nullptr;
         }
     }
 
@@ -321,7 +326,7 @@ bool GraphManager::loadGmlDB(std::string_view graphName,
 
     reservation.publish(std::move(graph));
 
-    return true;
+    return graphPtr;
 }
 
 ChangeResult<Change*> GraphManager::newChange(std::string_view graphName, CommitHash baseHash) {

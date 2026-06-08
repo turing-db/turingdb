@@ -170,12 +170,12 @@ Graph* SystemManager::getGraph(std::string_view graphName) const {
     return _graphManager.getGraph(graphName);
 }
 
-void SystemManager::listGraphs(std::vector<std::string_view>& names) {
+void SystemManager::listGraphs(std::vector<std::string_view>& names) const {
     _graphManager.listGraphs(names);
 }
 
-bool SystemManager::importGraph(std::string_view graphName, const fs::Path& filePath, JobSystem& jobSystem) {
-    return _graphManager.importGraph(graphName, filePath, jobSystem);
+Graph* SystemManager::importGraph(const fs::Path& path, std::string_view graphName) {
+    return _graphManager.importGraph(graphName, path, &_jobSystem);
 }
 
 DumpResult<void> SystemManager::dumpGraph(std::string_view graphName) {
@@ -192,7 +192,7 @@ DumpResult<void> SystemManager::dumpGraph(std::string_view graphName) {
     return GraphDumper::dump(graph, graph->getPath());
 }
 
-std::optional<GraphFileType> SystemManager::getGraphFileType(const fs::Path& graphPath) {
+GraphFileType SystemManager::getGraphFileType(const fs::Path& graphPath) const {
     return _graphManager.getGraphFileType(graphPath);
 }
 
@@ -200,14 +200,14 @@ bool SystemManager::isGraphLoading(std::string_view graphName) const {
     return _graphManager.isGraphLoading(graphName);
 }
 
-void SystemManager::listAvailableGraphs(std::vector<fs::Path>& names) {
+void SystemManager::listAvailableGraphs(std::vector<std::string>& names) const {
     const auto list = _config->getGraphsDir().listDir();
     if (!list) {
         throw TuringException("Can not list graphs in turing directory");
     }
 
     for (const auto& path : list.value()) {
-        names.push_back(path);
+        names.emplace_back(path.filename());
     }
 }
 

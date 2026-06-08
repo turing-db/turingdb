@@ -244,7 +244,7 @@ void DBServerProcessor::list_loaded_graphs() {
 }
 
 void DBServerProcessor::list_avail_graphs() {
-    std::vector<fs::Path> list;
+    std::vector<std::string> list;
     _db.getSystemManager().listAvailableGraphs(list);
 
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
@@ -256,8 +256,8 @@ void DBServerProcessor::list_avail_graphs() {
     payload.key("data");
     payload.arr();
 
-    for (const auto& path : list) {
-        payload.value(path.filename());
+    for (const auto& name : list) {
+        payload.value(name);
     }
 }
 

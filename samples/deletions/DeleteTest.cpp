@@ -139,8 +139,7 @@ bool DeleteTest::run() {
 
     bool loaded = sysMan.loadGraph(_graphName);
     if (!loaded) {
-        loaded =
-            sysMan.importGraph(_graphName, fs::Path {_graphName}, _env->getJobSystem());
+        loaded = sysMan.importGraph(fs::Path {_graphName}, _graphName);
     }
     if (!loaded) {
         spdlog::error("Failed to load/import graph {}", _graphName);
