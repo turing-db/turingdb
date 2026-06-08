@@ -53,13 +53,9 @@ static void inspectVarDepGraph(CypherAST* ast) {
     auto cyc = vdg._getCycle();
     vdg.detachCycle(cyc);
 
-    for (auto e : vdg.edges()) {
-        spdlog::info("{} -> {}", e.src()->getName(), e.tgt()->getName());
-    }
-
     cyc = vdg._getCycle();
     if (cyc.empty()) {
-        spdlog::error("no cycle");
+        spdlog::warn("no cycle");
     } else {
         for (auto* v : cyc) {
             fmt::println("{}, ", v->getName());
