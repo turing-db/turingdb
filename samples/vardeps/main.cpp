@@ -52,6 +52,7 @@ static void inspectVarDepGraph(CypherAST* ast) {
 
     auto cyc = vdg._getCycle();
     vdg.detachCycle(cyc);
+    IRDumper::dumpMermaid(vdg, std::cout);
 
     cyc = vdg._getCycle();
     if (cyc.empty()) {
@@ -62,6 +63,7 @@ static void inspectVarDepGraph(CypherAST* ast) {
         }
     }
 
+    vdg.detachCycle(cyc);
     IRDumper::dumpMermaid(vdg, std::cout);
 }
 

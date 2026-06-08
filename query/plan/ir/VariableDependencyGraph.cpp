@@ -327,10 +327,9 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     bioassert(cyc.size() >= 3, "Invalid cycle.");
 
     VariableDependency* head = cyc.front();
-    const std::string_view headName = head->getName();
 
-    const std::string fstName = std::string(headName) + "'";
-    const std::string sndName = std::string(headName) + "''";
+    const std::string fstName = getNextAnonymisation(head);
+    const std::string sndName = getNextAnonymisation(head);
 
     VariableDependency* newHead = newVariable(fstName);
     VariableDependency* newTail = newVariable(sndName);
@@ -367,9 +366,20 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     std::erase_if(head->_outgoing, updateAndDeleteOutgoing);
     std::erase_if(head->_incoming, updateAndDeleteIncoming);
 
-    _pendingMerges[head].push_back(newHead);
-    _pendingMerges[head].push_back(newTail);
+    addDirected(head, newHead, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
+    addDirected(head, newTail, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
 }
 
-void VariableDependencyGraph::applyMerges() {
+std::string VariableDependencyGraph::getNextAnonymisation(VariableDependency* v) {
+    const std::string_view name = v->getName();
+    const int count = _anonymised[v];
+
+    _anonymised[v]++;
+
+    std::string out;
+    out += name;
+    out += '\'';
+    out += std::to_string(count);
+
+    return out;
 }

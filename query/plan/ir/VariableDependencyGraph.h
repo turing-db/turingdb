@@ -129,6 +129,8 @@ public:
 
     Cycle getCycle();
 
+    std::vector<Cycle> cycleBasis();
+
     void rewriteCycle(const Cycle& cyc);
 
     void detachCycle(const Cycle& cyc);
@@ -142,7 +144,7 @@ private:
     std::deque<VariableDependency> _vars;
     std::deque<DependencyEdge> _edges;
 
-    std::unordered_map<VariableDependency*, std::vector<VariableDependency*>> _pendingMerges;
+    std::unordered_map<VariableDependency*, int> _anonymised;
 
     using Visited = std::unordered_map<VariableDependency*, uint8_t>;
     using Parents = std::unordered_map<VariableDependency*, VariableDependency*>;
@@ -159,6 +161,8 @@ private:
                     std::unordered_set<const VariableDependency*>& pathSet);
 
     VariableDependency* _dfs(VariableDependency* u, VariableDependency* par);
+
+    std::string getNextAnonymisation(VariableDependency* v);
 
     void resetCycleState();
 };
