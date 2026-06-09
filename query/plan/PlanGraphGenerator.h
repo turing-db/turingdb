@@ -30,6 +30,7 @@ class S3TransferQuery;
 class ShowProceduresQuery;
 class CreateVectorIndexQuery;
 class LoadVectorQuery;
+class LoadEmbeddingQuery;
 class DeleteVectorIndexQuery;
 class ShowVectorIndexesQuery;
 class InstallExtensionQuery;
@@ -73,6 +74,7 @@ private:
     void generateShowProceduresQuery(const ShowProceduresQuery* query);
     void generateCreateVectorIndexQuery(const CreateVectorIndexQuery* query);
     void generateLoadVectorQuery(const LoadVectorQuery* query);
+    void generateLoadEmbeddingQuery(const LoadEmbeddingQuery* query);
     void generateDeleteVectorIndexQuery(const DeleteVectorIndexQuery* query);
     void generateShowVectorIndexesQuery(const ShowVectorIndexesQuery* query);
     void generateLoadCommitQuery(const LoadCommitQuery* query);

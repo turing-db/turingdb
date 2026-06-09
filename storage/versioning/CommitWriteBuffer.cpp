@@ -226,8 +226,9 @@ void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
 }
 
 void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
-    // Iterate through updates in reverse: most recent take precedence
-    for (const auto& [nodeID, property] : rv::reverse(_updatedNodes)) {
+    // Iterate through updates in reverse: most recent update take precedence
+    while(!_updatedNodes.empty()) {
+        const auto& [nodeID, property] = _updatedNodes.back();
         const auto& [propID, value] = property;
         std::visit(
             [&](const auto& val) {
@@ -243,6 +244,7 @@ void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
 
         _journal.addWrittenNode(nodeID);
         _journal.addWrittenNodeProperty(propID);
+        _updatedNodes.pop_back();
     }
 }
 

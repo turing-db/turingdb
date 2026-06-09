@@ -53,6 +53,7 @@
 #include "processors/ShortestPathProcessor.h"
 #include "processors/CreateVectorIndexProcessor.h"
 #include "processors/LoadVectorProcessor.h"
+#include "processors/LoadEmbeddingProcessor.h"
 #include "processors/VectorSearchProcessor.h"
 #include "processors/DeleteVectorIndexProcessor.h"
 #include "processors/ShowVectorIndexesProcessor.h"
@@ -1314,6 +1315,21 @@ PipelineValueOutputInterface& PipelineBuilder::addCreateVectorIndex(std::string_
 PipelineValueOutputInterface& PipelineBuilder::addLoadVector(std::string_view filePath,
                                                               std::string_view indexName) {
     LoadVectorProcessor* proc = LoadVectorProcessor::create(_pipeline, filePath, indexName);
+
+    PipelineValueOutputInterface& output = proc->output();
+    Dataframe* df = output.getDataframe();
+
+    NamedColumn* countCol = allocColumn<ColumnConst<types::UInt64::Primitive>>(df);
+    countCol->rename("count");
+    output.setValue(countCol);
+
+    _pendingOutput.setInterface(&output);
+    return output;
+}
+
+PipelineValueOutputInterface& PipelineBuilder::addLoadEmbedding(std::string_view filePath,
+                                                                std::string_view propertyName) {
+    LoadEmbeddingProcessor* proc = LoadEmbeddingProcessor::create(_pipeline, filePath, propertyName);
 
     PipelineValueOutputInterface& output = proc->output();
     Dataframe* df = output.getDataframe();

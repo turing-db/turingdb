@@ -571,6 +571,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             case PlanGraphOpcode::LOAD_CSV:
             case PlanGraphOpcode::CREATE_VECTOR_INDEX:
             case PlanGraphOpcode::LOAD_VECTOR:
+            case PlanGraphOpcode::LOAD_EMBEDDING:
             case PlanGraphOpcode::VECTOR_SEARCH:
             case PlanGraphOpcode::DELETE_VECTOR_INDEX:
             case PlanGraphOpcode::SHOW_VECTOR_INDEXES:

@@ -142,6 +142,10 @@ void CypherASTDumper::dump(std::ostream& out) {
                 out << "    script ||--o{ LOAD_VECTOR : \"\"\n";
             break;
 
+            case QueryCommand::Kind::LOAD_EMBEDDING_QUERY:
+                out << "    script ||--o{ LOAD_EMBEDDING : \"\"\n";
+            break;
+
             case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
                 out << "    script ||--o{ DELETE_VECTOR_INDEX : \"\"\n";
             break;

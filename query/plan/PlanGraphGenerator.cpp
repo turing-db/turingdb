@@ -54,6 +54,7 @@
 #include "nodes/ExprEvalNode.h"
 #include "nodes/CreateVectorIndexNode.h"
 #include "nodes/LoadVectorNode.h"
+#include "nodes/LoadEmbeddingNode.h"
 #include "nodes/DeleteVectorIndexNode.h"
 #include "nodes/ShowVectorIndexesNode.h"
 #include "nodes/InstallExtensionNode.h"
@@ -76,6 +77,7 @@
 #include "LoadJsonlQuery.h"
 #include "CreateVectorIndexQuery.h"
 #include "LoadVectorQuery.h"
+#include "LoadEmbeddingQuery.h"
 #include "DeleteVectorIndexQuery.h"
 #include "ShowVectorIndexesQuery.h"
 #include "LoadCommitQuery.h"
@@ -180,6 +182,10 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::LOAD_VECTOR_QUERY:
             generateLoadVectorQuery(static_cast<const LoadVectorQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::LOAD_EMBEDDING_QUERY:
+            generateLoadEmbeddingQuery(static_cast<const LoadEmbeddingQuery*>(query));
         break;
 
         case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
@@ -360,6 +366,13 @@ void PlanGraphGenerator::generateLoadVectorQuery(const LoadVectorQuery* query) {
     LoadVectorNode* node = _tree.create<LoadVectorNode>(
         query->getFilePath(),
         query->getIndexName());
+    _tree.newOut<ProduceResultsNode>(node);
+}
+
+void PlanGraphGenerator::generateLoadEmbeddingQuery(const LoadEmbeddingQuery* query) {
+    LoadEmbeddingNode* node = _tree.create<LoadEmbeddingNode>(
+        query->getFilePath(),
+        query->getPropertyName());
     _tree.newOut<ProduceResultsNode>(node);
 }
 
