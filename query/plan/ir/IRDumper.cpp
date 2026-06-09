@@ -50,12 +50,14 @@ void IRDumper::dumpMermaid(const VariableDependencyGraph& graph, std::ostream& o
         }
     }
 
-    for (const DependencyEdge& edge : graph.edges()) {
-        const EdgeMetadata::EdgeType etype = edge.data().type();
-        const std::string_view typeName = EdgeTypeName::value(etype);
-        const bool directed = (etype != EdgeMetadata::EdgeType::BIDIRECTIONAL);
-        const std::string_view arrow = directed ? "--->" : "----";
-        out << "    " << nodeDef(edge.src()) << " " << arrow << "|" << typeName << "| "
-            << nodeDef(edge.tgt()) << "\n";
+    for (const VariableDependency& var : graph.vars()) {
+        for (const DependencyEdge* edge : var.outgoing()) {
+            const EdgeMetadata::EdgeType etype = edge->data().type();
+            const std::string_view typeName = EdgeTypeName::value(etype);
+            const bool directed = (etype != EdgeMetadata::EdgeType::BIDIRECTIONAL);
+            const std::string_view arrow = directed ? "--->" : "----";
+            out << "    " << nodeDef(edge->src()) << " " << arrow << "|" << typeName << "| "
+                << nodeDef(edge->tgt()) << "\n";
+        }
     }
 }
