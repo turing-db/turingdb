@@ -56,10 +56,7 @@ void DataPartMergeProcessor::execute() {
     Graph* graph = system->getGraph(graphName);
     bioassert(graph, "DataPartMergeProcessor: Graph must exist");
 
-    JobSystem* jobSystem = _ctxt->getJobSystem();
-    bioassert(jobSystem, "DataPartMergeProcessor: Job system must be set");
-
-    if (auto res = system->mergeDataParts(graph, *jobSystem); !res) {
+    if (auto res = system->mergeDataParts(graph); !res) {
         throw PipelineException(fmt::format("DataPartMergeProcessor: Failed to merge data parts: {}",
                                             res.error().fmtMessage()));
     }

@@ -28,10 +28,8 @@ public:
     std::string_view getGraphName() const { return _graphName; }
     SystemManager* getSystemManager() const { return _sysMan; }
     SystemAccessor* getSystemAccessor() const { return _sysAccessor; }
-    JobSystem* getJobSystem() const { return _sysMan->getJobSystem(); }
-    const ProcedureManager* getProcedures() const { return _sysMan->getProcedures(); }
-    ExtensionManager* getExtensions() const { return _sysMan->getExtensions(); }
-    vec::VectorDatabase* getVectorDatabase() const { return _sysMan->getVectorDatabase(); }
+    const ProcedureManager* getProcedures() const { return _sysAccessor->getProcedures(); }
+    vec::VectorDatabase* getVectorDatabase() const { return _sysAccessor->getVectorDatabase(); }
 
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
     void setSystemAccessor(SystemAccessor* accessor) { _sysAccessor = accessor; }

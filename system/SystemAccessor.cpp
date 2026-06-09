@@ -81,8 +81,12 @@ ChangeResult<Change*> SystemAccessor::getChange(const Graph* graph, ChangeID cha
     return _sysMan->getChange(graph, changeID);
 }
 
-ChangeResult<void> SystemAccessor::submitChange(ChangeAccessor& accessor, JobSystem& jobSystem) {
-    return _sysMan->submitChange(accessor, jobSystem);
+ChangeResult<void> SystemAccessor::submitChange(ChangeAccessor& accessor) {
+    return _sysMan->submitChange(accessor);
+}
+
+CommitResult<void> SystemAccessor::commitChange(ChangeAccessor& accessor) {
+    return _sysMan->commitChange(accessor);
 }
 
 ChangeResult<void> SystemAccessor::deleteChange(ChangeAccessor& accessor, ChangeID changeID) {
@@ -93,8 +97,8 @@ void SystemAccessor::listChanges(std::vector<const Change*>& changes, const Grap
     _sysMan->listChanges(changes, graph);
 }
 
-DataPartMergeResult<void> SystemAccessor::mergeDataParts(Graph* graph, JobSystem& jobSystem) {
-    return _sysMan->mergeDataParts(graph, jobSystem);
+DataPartMergeResult<void> SystemAccessor::mergeDataParts(Graph* graph) {
+    return _sysMan->mergeDataParts(graph);
 }
 
 ChangeResult<Transaction> SystemAccessor::openTransaction(std::string_view graphName,
@@ -111,4 +115,20 @@ void SystemAccessor::createS3Client(const std::string& accessId,
 
 S3::TuringS3Client<S3::MinioS3ClientWrapper>* SystemAccessor::getS3Client() {
     return _sysMan->getS3Client();
+}
+
+const ProcedureManager* SystemAccessor::getProcedures() const {
+    return _sysMan->getProcedures();
+}
+
+vec::VectorDatabase* SystemAccessor::getVectorDatabase() {
+    return _sysMan->getVectorDatabase();
+}
+
+void SystemAccessor::installExtension(std::string_view name) {
+    _sysMan->getExtensions()->installExtension(name);
+}
+
+void SystemAccessor::getInstalledExtensions(std::vector<ExtensionDescriptor*>& result) const {
+    _sysMan->getExtensions()->getInstalled(result);
 }

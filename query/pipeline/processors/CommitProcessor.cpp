@@ -56,11 +56,10 @@ void CommitProcessor::execute() {
     auto& writeTx = tx->get<PendingCommitWriteTx>();
     auto& access = writeTx.changeAccessor();
 
-    JobSystem* jobSystem = _ctxt->getJobSystem();
-    bioassert(jobSystem, "CommitProcessor: Job system must be set");
+    SystemAccessor* system = _ctxt->getSystemAccessor();
 
     // Perform the commit (core logic from old CommitStep)
-    if (auto res = access.commit(*jobSystem); !res) {
+    if (auto res = system->commitChange(access); !res) {
         throw PipelineException(fmt::format("CommitProcessor: Failed to commit: {}",
                                            res.error().fmtMessage()));
     }

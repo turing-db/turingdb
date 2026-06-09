@@ -57,19 +57,6 @@ public:
     SystemAccessor accessShared();
     SystemAccessor accessUnique();
 
-    // Subsystems access
-    JobSystem* getJobSystem() { return &_jobSystem; }
-    const JobSystem* getJobSystem() const { return &_jobSystem; }
-
-    ProcedureManager* getProcedures() { return &_procedures; }
-    const ProcedureManager* getProcedures() const { return &_procedures; }
-
-    ExtensionManager* getExtensions() { return &_extensions; }
-    const ExtensionManager* getExtensions() const { return &_extensions; }
-
-    vec::VectorDatabase* getVectorDatabase() { return &_vectorDatabase; }
-    const vec::VectorDatabase* getVectorDatabase() const { return &_vectorDatabase; }
-
 private:
     const TuringConfig* _config {nullptr};
 
@@ -126,12 +113,13 @@ private:
     ChangeResult<Change*> newChange(std::string_view graphName,
                                     CommitHash baseHash = CommitHash::head());
     ChangeResult<Change*> getChange(const Graph* graph, ChangeID changeID);
-    ChangeResult<void> submitChange(ChangeAccessor& accessor, JobSystem& jobSystem);
+    ChangeResult<void> submitChange(ChangeAccessor& accessor);
+    CommitResult<void> commitChange(ChangeAccessor& accessor);
     ChangeResult<void> deleteChange(ChangeAccessor& accessor, ChangeID changeID);
     void listChanges(std::vector<const Change*>& changes, const Graph* graph) const;
 
     // DataPart merge
-    DataPartMergeResult<void> mergeDataParts(Graph* graph, JobSystem& jobSystem);
+    DataPartMergeResult<void> mergeDataParts(Graph* graph);
 
     // Transaction open
     ChangeResult<Transaction> openTransaction(std::string_view graphName,
@@ -142,8 +130,13 @@ private:
     void createS3Client(const std::string& accessId,
                         const std::string& secretKey,
                         const std::string& region);
-
     S3::TuringS3Client<S3::MinioS3ClientWrapper>* getS3Client() { return _s3Client.get(); }
+
+    // Subsystems
+    ProcedureManager* getProcedures() { return &_procedures; }
+    const ProcedureManager* getProcedures() const { return &_procedures; }
+    ExtensionManager* getExtensions() { return &_extensions; }
+    vec::VectorDatabase* getVectorDatabase() { return &_vectorDatabase; }
 
     void initTuringDirectory();
     void initLockFile();

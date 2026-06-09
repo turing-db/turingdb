@@ -68,7 +68,7 @@ void runPlan2(std::string_view query) {
     const Transaction transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    const ProcedureManager* procedures = db.getSystemManager().getProcedures();
+    const ProcedureManager* procedures = system.getProcedures();
     CypherAST ast(procedures, query);
     CypherParser parser(&ast);
 

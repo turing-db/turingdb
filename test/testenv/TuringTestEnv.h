@@ -36,10 +36,6 @@ public:
 
     [[nodiscard]] LocalMemory& getMem() { return _mem; }
 
-    [[nodiscard]] JobSystem* getJobSystem() {
-        return _db.getSystemManager().getJobSystem();
-    }
-
     [[nodiscard]] SystemManager& getSystemManager() {
         return _db.getSystemManager();
     }
