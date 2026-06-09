@@ -21,12 +21,17 @@ int main(int argc, char** argv) {
     parser.add_description("TuringDB MLIR dialects assembler");
 
     std::vector<std::string> files;
+    bool dumpCode = false;
 
     parser.add_argument("files")
         .metavar("mlir.txt")
         .nargs(argparse::nargs_pattern::any)
         .store_into(files)
         .help("Textual MLIR input files");
+
+    parser.add_argument("-d", "--dump")
+        .store_into(dumpCode)
+        .help("Dump the full MLIR code of every function in the module");
 
     try {
         parser.parse_args(argc, argv);
@@ -61,7 +66,11 @@ int main(int argc, char** argv) {
         assembler.assemble();
 
         IRModuleInspector inspector(&mainMod);
-        inspector.dump(std::cout);
+        if (dumpCode) {
+            inspector.dumpFunctions(std::cout);
+        } else {
+            inspector.dumpFunctionTypes(std::cout);
+        }
     } catch (const std::exception& e) {
         std::cerr << e.what() << "\n";
         return EXIT_FAILURE;
