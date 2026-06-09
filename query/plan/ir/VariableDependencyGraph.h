@@ -41,6 +41,10 @@ public:
 
     static bool isMetaEdge(EdgeType et) { return et == EdgeType::MERGE; }
 
+    bool operator==(const EdgeMetadata& other) const {
+        return _type == other._type;
+    }
+
 private:
     EdgeType _type {EdgeType::_SIZE};
 };
@@ -66,6 +70,10 @@ public:
     const VariableDependency* src() const { return _src; }
     const VariableDependency* tgt() const { return _tgt; }
     EdgeMetadata data() const { return _data; }
+
+    bool operator==(const DependencyEdge& other) const {
+        return _src == other.src() && _tgt == other.tgt() && _data == other.data();
+    }
 
 private:
     friend class VariableDependencyGraph;
@@ -130,6 +138,7 @@ public:
     Cycle getCycle();
 
     std::vector<Cycle> cycleBasis();
+    std::vector<Cycle> paton();
 
     void rewriteCycle(const Cycle& cyc);
 

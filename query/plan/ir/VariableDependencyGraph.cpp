@@ -1,8 +1,9 @@
 #include "VariableDependencyGraph.h"
 
 #include <algorithm>
-#include <stack>
+#include <set>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -59,6 +60,17 @@ const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* s
                                                            const EdgeMetadata& data) {
     DependencyEdge& newEdge = _edges.emplace_back(src, tgt, data);
 
+    // Exercises invariant that src outgoing and tgt incoming are synced
+    const auto same = [&newEdge](DependencyEdge* other) {
+        return newEdge == *other;
+    };
+    const auto findIt = std::ranges::find_if(src->_outgoing, same);
+    const bool exists = findIt != end(src->_outgoing);
+    if (exists) {
+        _edges.pop_back(); // Iterators is still valid
+        return *findIt;
+    }
+
     src->addOutgoing(&newEdge);
     tgt->addIncoming(&newEdge);
 
@@ -91,6 +103,7 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
             tgt = prev;
         }
 
+        // Below checks for duplication
         addDirected(src, edgeVar, EdgeMetadata {type});
         addDirected(edgeVar, tgt, EdgeMetadata{type});
 
@@ -118,8 +131,29 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
     return exists ? &*foundIt : newVariable(entity);
 }
 
+// std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::paton() {
+//     std::vector<Cycle> cycles;
+//     const size_t n = _vars.size();
+//     if (n == 0) {
+//         return cycles;
+//     }
+
+//     // Exists in map => visited
+//     using VisitedEdges = std::unordered_set<DependencyEdge*>;
+//     // [x, true] => visited, [y, false] => not visited
+//     using VisitedNodes = std::unordered_map<VariableDependency*, bool>;
+
+//     VisitedNodes X;
+//     X.reserve(n);
+//     for (VariableDependency& v : _vars) {
+//         X.emplace(&v, false);
+//     }
+
+//     return cycles;
+// }
+
 std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis() {
-    using NodeSet = std::unordered_set<VariableDependency*>;
+    using NodeSet = std::set<VariableDependency*>;
     using PredMap = std::unordered_map<VariableDependency*, VariableDependency*>;
     using UsedMap = std::unordered_map<VariableDependency*, NodeSet>;
 
@@ -136,6 +170,7 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
 
     VariableDependency* root = *begin(gnodes);
 
+    // Records spanning tree from its key
     PredMap pred;
     UsedMap used;
     std::vector<VariableDependency*> stack;
@@ -144,6 +179,10 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
 
     // Outer loop ensures all connected components are traversed
     while (!gnodes.empty()) {
+        if (root == nullptr) {
+            root = *begin(gnodes);
+        }
+
         pred.clear();
         used.clear();
         stack.clear();
@@ -180,13 +219,20 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
                     continue;
                 }
 
-                // Form the cycle
+                // Parallel edge: u is neighbour's direct tree-parent, so pred walk would
+                // start above u and never descend to neighbour. Emit 2-cycle directly.
+                const bool isParallelEdge = pred.contains(neighbour) && pred[neighbour] == u;
+                if (isParallelEdge) {
+                    cycles.push_back({u, neighbour, u});
+                    usedThisTraversal.insert(neighbour);
+                    continue;
+                }
+
+                // Back-edge to ancestor: walk pred from u until hitting neighbour's parent.
+                const NodeSet& pn = used[neighbour];
                 cycle.clear();
                 cycle.push_back(neighbour);
                 cycle.push_back(u);
-
-                // Get the nodes used on the path of this cycle
-                const NodeSet& pn = used[neighbour];
 
                 VariableDependency* p = pred[u];
                 while (!pn.contains(p)) {
@@ -195,10 +241,9 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
                 }
 
                 cycle.push_back(p);
-                cycle.push_back(neighbour); // Ensure cycle is of the form (u, v, ..., x, u)
+                cycle.push_back(neighbour);
 
                 cycles.push_back(cycle);
-
                 used[neighbour].insert(u);
             }
         }
