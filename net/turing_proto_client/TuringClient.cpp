@@ -72,6 +72,22 @@ size_t parseHexU32(std::string_view hexDigits) {
     return value;
 }
 
+// Rejects control characters (anything below 0x20, plus DEL 0x7f) in a value
+// that will be concatenated into the HTTP request line or a header. CR and LF
+// are the dangerous case — an embedded "\r\n" terminates the header block early
+// and lets a caller splice in arbitrary headers or a request body — but no
+// control character is legal in a request target or header value, so the whole
+// class is rejected. fieldName names the offending field in the thrown message.
+void throwIfControlChars(const char* fieldName, std::string_view value) {
+    for (const char c : value) {
+        const unsigned char byte = static_cast<unsigned char>(c);
+        if (byte < 0x20 || byte == 0x7f) {
+            throw TuringException(std::string("Invalid ") + fieldName
+                                  + ": control characters (including CR/LF) are not allowed");
+        }
+    }
+}
+
 }
 
 TuringClient::TuringClient(const std::string& remoteAddress,
@@ -85,10 +101,12 @@ TuringClient::TuringClient(const std::string& remoteAddress,
 {
     // Default the auth token from the environment so C++ consumers (shell,
     // tools) authenticate automatically against an -auth-on server. An explicit
-    // setAuthToken() overrides this.
+    // setAuthToken() overrides this. Route it through the setter so a malformed
+    // env value (e.g. a stray trailing newline) fails loudly instead of
+    // corrupting every request.
     const char* envToken = getenv("TURINGDB_AUTH_TOKEN");
     if (envToken != nullptr && *envToken != '\0') {
-        _authToken = envToken;
+        setAuthToken(envToken);
     }
 }
 
@@ -96,6 +114,16 @@ TuringClient::~TuringClient() {
     if (_socket >= 0) {
         ::close(_socket);
     }
+}
+
+void TuringClient::setGraphName(const std::string& graphName) {
+    throwIfControlChars("graph name", graphName);
+    _graphName = graphName;
+}
+
+void TuringClient::setAuthToken(const std::string& authToken) {
+    throwIfControlChars("auth token", authToken);
+    _authToken = authToken;
 }
 
 void TuringClient::connect() {

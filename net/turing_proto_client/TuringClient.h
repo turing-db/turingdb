@@ -44,8 +44,8 @@ public:
 
     void setRemoteAddress(const std::string& remoteAddress) { _remoteAddress = remoteAddress; }
     void setRemotePort(const std::string& remotePort) { _remotePort = remotePort; }
-    void setGraphName(const std::string& graphName) { _graphName = graphName; }
-    void setAuthToken(const std::string& authToken) { _authToken = authToken; }
+    void setGraphName(const std::string& graphName);
+    void setAuthToken(const std::string& authToken);
     void setCommitHash(db::CommitHash commitHash) { _commitHash = commitHash; }
     void setChangeID(db::ChangeID changeID) { _changeID = changeID; }
 

@@ -20,17 +20,17 @@ public:
             }
         }
 
-        info._path = std::string_view(pathBegin, pathPtr - pathBegin);
+        info.setPath(std::string_view(pathBegin, pathPtr - pathBegin));
 
-        const auto res = getEndpointIndex(info._path);
+        const auto res = getEndpointIndex(info.getPath());
         if (!res) {
             if (res.error() == net::HTTP::Error::UNKNOWN_ENDPOINT) {
-                info._endpoint = -1;
+                info.setEndpoint(-1);
             } else {
                 return res.get_unexpected();
             }
         } else {
-            info._endpoint = res.value();
+            info.setEndpoint(res.value());
         }
 
         // We can stop here if we are already at the end of the URI
@@ -40,7 +40,7 @@ public:
 
         // URI variables
         pathPtr++;
-        auto& parameters = info._params;
+        auto& parameters = info.getParams();
         std::string_view key;
         std::string_view value;
 

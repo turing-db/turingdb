@@ -3,7 +3,7 @@
 #include <string_view>
 
 namespace net::HTTP {
-struct Info;
+class Info;
 }
 
 namespace db {

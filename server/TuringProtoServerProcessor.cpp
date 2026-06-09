@@ -41,7 +41,7 @@ void TuringProtoServerProcessor::process(net::AbstractThreadContext* threadConte
 
         const auto& httpInfo = parser.getHttpInfo();
 
-        if (httpInfo._method != net::HTTP::Method::POST) {
+        if (httpInfo.getMethod() != net::HTTP::Method::POST) {
             throw ProtocolException("Only POST is supported by the binary protocol");
         }
 
@@ -49,7 +49,7 @@ void TuringProtoServerProcessor::process(net::AbstractThreadContext* threadConte
             throw ProtocolException("Unauthorized: missing or invalid authentication token");
         }
 
-        switch (static_cast<Endpoint>(httpInfo._endpoint)) {
+        switch (static_cast<Endpoint>(httpInfo.getEndpoint())) {
             case Endpoint::QUERY:
                 handleQuery();
             break;
@@ -113,9 +113,9 @@ TuringProtoServerProcessor::TransactionInfo TuringProtoServerProcessor::getTrans
     auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
     const auto& httpInfo = parser.getHttpInfo();
 
-    std::string_view graphNameView = httpInfo._params[static_cast<size_t>(DBHTTPParams::graph)];
-    std::string_view commitHashString = httpInfo._params[static_cast<size_t>(DBHTTPParams::commit)];
-    std::string_view changeHashString = httpInfo._params[static_cast<size_t>(DBHTTPParams::change)];
+    std::string_view graphNameView = httpInfo.getParams()[static_cast<size_t>(DBHTTPParams::graph)];
+    std::string_view commitHashString = httpInfo.getParams()[static_cast<size_t>(DBHTTPParams::commit)];
+    std::string_view changeHashString = httpInfo.getParams()[static_cast<size_t>(DBHTTPParams::change)];
 
     if (graphNameView.empty()) {
         graphNameView = "default";
@@ -136,7 +136,7 @@ TuringProtoServerProcessor::TransactionInfo TuringProtoServerProcessor::getTrans
             .graphName = graphNameView,
             .commit = CommitHash::head(),
             .change = ChangeID::head(),
-            .query = httpInfo._payload,
+            .query = httpInfo.getPayload(),
         };
     }
 
@@ -147,7 +147,7 @@ TuringProtoServerProcessor::TransactionInfo TuringProtoServerProcessor::getTrans
             .graphName = graphNameView,
             .commit = commitHashResult.value(),
             .change = ChangeID::head(),
-            .query = httpInfo._payload,
+            .query = httpInfo.getPayload(),
         };
     }
 
@@ -155,6 +155,6 @@ TuringProtoServerProcessor::TransactionInfo TuringProtoServerProcessor::getTrans
         .graphName = graphNameView,
         .commit = commitHashResult.value(),
         .change = changeHashResult.value(),
-        .query = httpInfo._payload,
+        .query = httpInfo.getPayload(),
     };
 }

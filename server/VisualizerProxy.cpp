@@ -88,10 +88,10 @@ void VisualizerProxy::start() {
             auto& parser = connection.getParser<net::HTTPParser<net::URIParser>>();
             const auto& httpInfo = parser.getHttpInfo();
 
-            const std::string_view path = httpInfo._path;
-            const std::string_view uri = httpInfo._uri;
-            const std::string_view payload = httpInfo._payload;
-            const bool isPost = (httpInfo._method == net::HTTP::Method::POST);
+            const std::string_view path = httpInfo.getPath();
+            const std::string_view uri = httpInfo.getUri();
+            const std::string_view payload = httpInfo.getPayload();
+            const bool isPost = (httpInfo.getMethod() == net::HTTP::Method::POST);
 
             // Build target URL (use uri to preserve query parameters)
             std::string targetUrl;

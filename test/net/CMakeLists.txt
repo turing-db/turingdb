@@ -12,6 +12,10 @@ target_link_libraries(test_net_turing_proto_roundtrip PRIVATE
     turing_db_net_encoders
     turing_db_proto_client_s)
 
+add_turing_test(test_net_turing_client TuringClientTest.cpp)
+target_link_libraries(test_net_turing_client PRIVATE
+    turing_db_proto_client_s)
+
 add_turing_test(test_net_turing_proto_endtoend TuringProtoEndToEndTest.cpp)
 target_sources(test_net_turing_proto_endtoend PRIVATE
     ${CMAKE_SOURCE_DIR}/test/query-test-suite/QueryResultFormatter.cpp)
