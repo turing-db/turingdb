@@ -15,9 +15,7 @@ concurrency:
 jobs:
   # First job: Claude Code AI review (analysis phase)
   claude-review:
-    runs-on:
-      group: turing-runners
-      labels: ubuntu-24.04
+    runs-on: ubuntu-24.04-turing
 
     permissions:
       contents: read
@@ -55,9 +53,7 @@ jobs:
 
   # Second job: Post Claude review comment (has write access, only runs trusted code)
   claude-comment:
-    runs-on:
-      group: turing-runners
-      labels: ubuntu-24.04
+    runs-on: ubuntu-24.04-turing
     needs: claude-review
     if: always() && needs.claude-review.result == 'success'
 

@@ -9,9 +9,7 @@ on:
 
 jobs:
   setup:
-    runs-on:
-      group: turing-runners
-      labels: ubuntu-24.04
+    runs-on: ubuntu-24.04-turing
     outputs:
       os_list: '["ubuntu-22.04", "ubuntu-24.04", "ubuntu-22.04-arm", "ubuntu-24.04-arm", "macos14-turing", "macos15-turing", "macos26-turing"]'
       python_version_list: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
@@ -35,9 +33,7 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build-release
-    runs-on:
-      group: turing-runners
-      labels: ubuntu-24.04
+    runs-on: ubuntu-24.04-turing
     outputs:
       version: ${{ steps.get-version.outputs.version }}
     environment:
@@ -85,7 +81,7 @@ jobs:
       matrix:
         os: ${{ fromJson(needs.setup.outputs.os_list) }}
         python_version: ${{ fromJson(needs.setup.outputs.python_version_list) }}
-    runs-on: ${{ startsWith(matrix.os, 'ubuntu') && fromJSON(format('{{"group":"turing-runners","labels":["{0}"]}}', matrix.os)) || matrix.os }}
+    runs-on: ${{ (matrix.os == 'ubuntu-22.04' || matrix.os == 'ubuntu-24.04') && format('{0}-turing', matrix.os) || startsWith(matrix.os, 'ubuntu') && fromJSON(format('{{"group":"turing-runners","labels":["{0}"]}}', matrix.os)) || matrix.os }}
     steps:
       - name: Install uv
         uses: astral-sh/setup-uv@v3

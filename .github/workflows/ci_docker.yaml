@@ -25,9 +25,7 @@ jobs:
           - os: ubuntu-24.04-arm
             arch: arm64
             platform: linux/arm64
-    runs-on:
-      group: turing-runners
-      labels: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-24.04' && format('{0}-turing', matrix.os) || startsWith(matrix.os, 'ubuntu') && fromJSON(format('{{"group":"turing-runners","labels":["{0}"]}}', matrix.os)) || matrix.os }}
     steps:
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
@@ -92,9 +90,7 @@ jobs:
 
   manifest:
     needs: docker
-    runs-on:
-      group: turing-runners
-      labels: ubuntu-24.04
+    runs-on: ubuntu-24.04-turing
     steps:
       - name: Log in to Docker Hub
         uses: docker/login-action@v2

@@ -29,10 +29,11 @@ jobs:
         os: ${{ fromJson(inputs.os_list || '["ubuntu-24.04", "macos15-turing"]') }}
         python_version: ${{ fromJson(inputs.python_version_list || '["3.14"]') }}
 
-    # Linux jobs must run on the turing-runners group only. The bare ubuntu labels
-    # also match standard GitHub-hosted runners, whose disks are too small for
-    # build + regress, so spillover to them is not acceptable.
-    runs-on: ${{ startsWith(matrix.os, 'ubuntu') && fromJSON(format('{{"group":"turing-runners","labels":["{0}"]}}', matrix.os)) || matrix.os }}
+    # Non-arm ubuntu jobs run on the dedicated ubuntu-22.04-turing / ubuntu-24.04-turing
+    # labels. The arm ubuntu variants still resolve through the turing-runners group, since
+    # their bare labels would otherwise match GitHub-hosted runners whose disks are too small
+    # for build + regress, so spillover to them is not acceptable.
+    runs-on: ${{ (matrix.os == 'ubuntu-22.04' || matrix.os == 'ubuntu-24.04') && format('{0}-turing', matrix.os) || startsWith(matrix.os, 'ubuntu') && fromJSON(format('{{"group":"turing-runners","labels":["{0}"]}}', matrix.os)) || matrix.os }}
 
     steps:
     - name: Free disk space
