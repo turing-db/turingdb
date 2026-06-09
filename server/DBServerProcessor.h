@@ -9,7 +9,9 @@ namespace net {
 class TCPConnection;
 class AbstractThreadContext;
 
-namespace HTTP { struct Info; }
+namespace HTTP {
+class Info;
+}
 
 }
 

@@ -42,6 +42,7 @@ public:
                 httpWriter.setFirstLine(net::HTTP::Status::CONTENT_TOO_LARGE);
             break;
 
+            case net::HTTP::Error::INVALID_CONTENT_LENGTH:
             case net::HTTP::Error::HEADER_INCOMPLETE:
                 httpWriter.setFirstLine(net::HTTP::Status::BAD_REQUEST);
             break;
@@ -119,8 +120,8 @@ private:
             _payloadBegin = _currentPtr;
         }
 
-        _info._payload = std::string_view {_payloadBegin, getSize()};
-        const bool finished = _info._payload.size() == _payloadSize;
+        _info.setPayload(std::string_view {_payloadBegin, getSize()});
+        const bool finished = _info.getPayload().size() == _payloadSize;
 
         if (!finished && _reader.getSize() == NetBuffer::BUFFER_SIZE) {
             return BadResult(HTTP::Error::REQUEST_TOO_BIG);
@@ -158,7 +159,7 @@ private:
             return BadResult(HTTP::Error::INVALID_METHOD);
         }
 
-        _info._method = HTTP::Method::POST;
+        _info.setMethod(HTTP::Method::POST);
         _currentPtr += 4;
 
         return {};
@@ -172,14 +173,14 @@ private:
             return BadResult(HTTP::Error::INVALID_METHOD);
         }
 
-        _info._method = HTTP::Method::GET;
+        _info.setMethod(HTTP::Method::GET);
         _currentPtr += 3;
 
         return {};
     }
 
     [[nodiscard]] HTTP::Result<void> parseURI() {
-        auto& uri = _info._uri;
+        HTTP::Uri uri;
 
         bool foundBegin = false;
         const char* endPtr = getEndPtr();
@@ -218,6 +219,8 @@ private:
         if (uri.empty()) {
             return BadResult(HTTP::Error::INVALID_URI);
         }
+
+        _info.setUri(uri);
 
         return URIParserT::parseURI(_info, uri);
     }
@@ -306,6 +309,15 @@ private:
 
             _contentLengthSeen = true;
 
+            // A Content-Length must be a non-empty run of digits (RFC 7230
+            // §3.3.2). An empty or whitespace-only value (leading whitespace is
+            // already stripped by parseHeaders, so it arrives here as "") is
+            // malformed: reject it rather than silently treating it as zero,
+            // which would mis-frame a request that actually carries a body.
+            if (value.empty()) {
+                return BadResult(HTTP::Error::INVALID_CONTENT_LENGTH);
+            }
+
             // Parse digits with bounds checking (no strtoull — buffer is not
             // null-terminated). Horner's rule; the overflow guard keeps
             // _payloadSize * 10 well below the size_t bound because BUFFER_SIZE
@@ -313,7 +325,7 @@ private:
             _payloadSize = 0;
             for (const char c : value) {
                 if (!isdigit(static_cast<unsigned char>(c))) {
-                    break;
+                    return BadResult(HTTP::Error::INVALID_CONTENT_LENGTH);
                 }
 
                 if (_payloadSize > NetBuffer::BUFFER_SIZE / 10) {
@@ -325,7 +337,7 @@ private:
 
             return {};
         } else if (net::http::equalsIgnoreCaseAscii(name, "authorization")) {
-            _info._authorization = value;
+            _info.setAuthorization(value);
         }
 
         return {};

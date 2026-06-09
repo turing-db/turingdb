@@ -42,7 +42,7 @@ void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
     auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
 
     const auto& httpInfo = parser.getHttpInfo();
-    if (httpInfo._method != net::HTTP::Method::POST) {
+    if (httpInfo.getMethod() != net::HTTP::Method::POST) {
         _writer.writeHttpError(net::HTTP::Status::METHOD_NOT_ALLOWED);
         return;
     }
@@ -52,9 +52,9 @@ void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
         return;
     }
 
-    switch ((Endpoint)httpInfo._endpoint) {
+    switch ((Endpoint)httpInfo.getEndpoint()) {
         case Endpoint::QUERY: {
-             query();
+            query();
         }
         break;
         case Endpoint::LOAD_GRAPH: {
@@ -134,7 +134,7 @@ const Graph* DBServerProcessor::getRequestedGraph() const {
     auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
     SystemAccessor system = _db.getSystemManager().accessShared();
     const auto& httpInfo = parser.getHttpInfo();
-    const std::string_view graphNameView = httpInfo._params[(size_t)DBHTTPParams::graph];
+    const std::string_view graphNameView = httpInfo.getParams()[(size_t)DBHTTPParams::graph];
     return graphNameView.empty()
              ? system.getDefaultGraph()
              : system.getGraph(graphNameView);
@@ -149,7 +149,7 @@ void DBServerProcessor::query() {
     const net::HTTP::Info& httpInfo = getHttpInfo();
     const TransactionInfo transactionInfo = getTransactionInfo();
 
-    queryImpl(httpInfo._payload,
+    queryImpl(httpInfo.getPayload(),
               transactionInfo.graphName,
               transactionInfo.commit,
               transactionInfo.change);
@@ -209,7 +209,7 @@ void DBServerProcessor::get_graph_status() {
 void DBServerProcessor::is_graph_loaded() {
     const auto& httpInfo = getHttpInfo();
 
-    const auto graphNameView = httpInfo._params[(size_t)DBHTTPParams::graph];
+    const auto graphNameView = httpInfo.getParams()[(size_t)DBHTTPParams::graph];
     if (graphNameView.empty()) {
         _writer.writeHttpError(net::HTTP::Status::BAD_REQUEST);
         return;
@@ -231,7 +231,7 @@ void DBServerProcessor::is_graph_loaded() {
 void DBServerProcessor::is_graph_loading() {
     const auto& httpInfo = getHttpInfo();
 
-    const auto graphNameView = httpInfo._params[(size_t)DBHTTPParams::graph];
+    const auto graphNameView = httpInfo.getParams()[(size_t)DBHTTPParams::graph];
     if (graphNameView.empty()) {
         _writer.writeHttpError(net::HTTP::Status::BAD_REQUEST);
         return;
@@ -276,7 +276,7 @@ void DBServerProcessor::list_labels() {
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
                                             !_connection.isCloseRequired());
 
-    const auto& reqBody = getHttpInfo()._payload;
+    const auto& reqBody = getHttpInfo().getPayload();
     PayloadWriter payload(_writer.getWriter());
     payload.obj();
 
@@ -378,9 +378,9 @@ void DBServerProcessor::list_property_types() {
 
     const auto reader = transaction.value().readGraph();
 
-    if (!httpInfo._payload.empty()) {
+    if (const std::string_view requestBody = httpInfo.getPayload(); !requestBody.empty()) {
         try {
-            const auto json = nlohmann::json::parse(httpInfo._payload);
+            const auto json = nlohmann::json::parse(requestBody);
 
             // NodeIDs
             const auto nodeIDsIt = json.find("nodeIDs");
@@ -444,9 +444,9 @@ void DBServerProcessor::list_edge_types() {
 
     const auto reader = transaction.value().readGraph();
 
-    if (!httpInfo._payload.empty()) {
+    if (const std::string_view requestBody = httpInfo.getPayload(); !requestBody.empty()) {
         try {
-            const auto json = nlohmann::json::parse(httpInfo._payload);
+            const auto json = nlohmann::json::parse(requestBody);
 
             // EdgeIDs
             const auto edgeIDsIt = json.find("edgeIDs");
@@ -519,7 +519,7 @@ void DBServerProcessor::list_nodes() {
     ListNodesExecutor executor(reader, payload);
 
     try {
-        const auto json = nlohmann::json::parse(httpInfo._payload);
+        const auto json = nlohmann::json::parse(httpInfo.getPayload());
 
         // Labels
         const auto labelsIt = json.find("labels");
@@ -588,7 +588,7 @@ void DBServerProcessor::get_node_properties() {
     auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
     LocalMemory& mem = _threadContext->getLocalMemory();
     const auto& httpInfo = parser.getHttpInfo();
-    const std::string_view reqBody = httpInfo._payload;
+    const std::string_view reqBody = httpInfo.getPayload();
 
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
                                             !_connection.isCloseRequired());
@@ -736,7 +736,7 @@ void DBServerProcessor::get_neighbors() {
     size_t limitPerNode = std::numeric_limits<size_t>::max();
 
     try {
-        const auto json = nlohmann::json::parse(httpInfo._payload);
+        const auto json = nlohmann::json::parse(httpInfo.getPayload());
 
         // NodeIDs
         const auto nodeIDsIt = json.find("nodeIDs");
@@ -829,7 +829,7 @@ void DBServerProcessor::get_neighbors() {
 void DBServerProcessor::get_nodes() {
     auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
     LocalMemory& mem = _threadContext->getLocalMemory();
-    const std::string_view reqBody = parser.getHttpInfo()._payload;
+    const std::string_view reqBody = parser.getHttpInfo().getPayload();
 
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
                                             !_connection.isCloseRequired());
@@ -903,7 +903,7 @@ void DBServerProcessor::get_nodes() {
 
 void DBServerProcessor::get_node_edges() {
     LocalMemory& mem = _threadContext->getLocalMemory();
-    const std::string_view reqBody = getHttpInfo()._payload;
+    const std::string_view reqBody = getHttpInfo().getPayload();
 
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
                                             !_connection.isCloseRequired());
@@ -1140,7 +1140,7 @@ void DBServerProcessor::explore_node_edges() {
     ExploreNodeEdgesExecutor executor(reader, payload);
 
     try {
-        const auto json = nlohmann::json::parse(httpInfo._payload);
+        const auto json = nlohmann::json::parse(httpInfo.getPayload());
         // NodeID
         auto it = json.find("nodeID");
         if (it == json.end()) {
@@ -1263,7 +1263,7 @@ void DBServerProcessor::explore_node_edges() {
 void DBServerProcessor::get_edges() {
     auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
     LocalMemory& mem = _threadContext->getLocalMemory();
-    const std::string_view reqBody = parser.getHttpInfo()._payload;
+    const std::string_view reqBody = parser.getHttpInfo().getPayload();
 
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
                                             !_connection.isCloseRequired());
@@ -1335,9 +1335,9 @@ void DBServerProcessor::get_edges() {
 DBServerProcessor::TransactionInfo DBServerProcessor::getTransactionInfo() const {
     auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
     const auto& httpInfo = parser.getHttpInfo();
-    std::string_view graphNameView = httpInfo._params[(size_t)DBHTTPParams::graph];
-    std::string_view commitHashStr = httpInfo._params[(size_t)DBHTTPParams::commit];
-    std::string_view changeHashStr = httpInfo._params[(size_t)DBHTTPParams::change];
+    std::string_view graphNameView = httpInfo.getParams()[(size_t)DBHTTPParams::graph];
+    std::string_view commitHashStr = httpInfo.getParams()[(size_t)DBHTTPParams::commit];
+    std::string_view changeHashStr = httpInfo.getParams()[(size_t)DBHTTPParams::change];
 
     if (graphNameView.empty()) {
         graphNameView = "default";

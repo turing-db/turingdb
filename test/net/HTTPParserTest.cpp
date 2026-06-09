@@ -313,6 +313,66 @@ TEST_F(HTTPParserCrashTest, ContentLengthGarbage) {
 }
 
 // -------------------------------------------------------------------
+// Content-Length validation: malformed values must be rejected as
+// INVALID_CONTENT_LENGTH (-> 400), not silently coerced to 0.
+// -------------------------------------------------------------------
+TEST_F(HTTPParserCrashTest, ContentLengthNonNumericRejected) {
+    std::string req =
+        "GET / HTTP/1.1\r\n"
+        "Content-Length: abc\r\n\r\n";
+    auto result = feedAndAnalyze(req);
+    EXPECT_TRUE(!result);
+    EXPECT_EQ(result.error(), net::HTTP::Error::INVALID_CONTENT_LENGTH);
+}
+
+TEST_F(HTTPParserCrashTest, ContentLengthTrailingGarbageRejected) {
+    // Leading digits followed by garbage must not be accepted as the number.
+    std::string req =
+        "GET / HTTP/1.1\r\n"
+        "Content-Length: 12x\r\n\r\n";
+    auto result = feedAndAnalyze(req);
+    EXPECT_TRUE(!result);
+    EXPECT_EQ(result.error(), net::HTTP::Error::INVALID_CONTENT_LENGTH);
+}
+
+TEST_F(HTTPParserCrashTest, ContentLengthEmptyRejected) {
+    std::string req =
+        "GET / HTTP/1.1\r\n"
+        "Content-Length:\r\n\r\n";
+    auto result = feedAndAnalyze(req);
+    EXPECT_TRUE(!result);
+    EXPECT_EQ(result.error(), net::HTTP::Error::INVALID_CONTENT_LENGTH);
+}
+
+TEST_F(HTTPParserCrashTest, ContentLengthWhitespaceOnlyRejected) {
+    std::string req =
+        "GET / HTTP/1.1\r\n"
+        "Content-Length:    \r\n\r\n";
+    auto result = feedAndAnalyze(req);
+    EXPECT_TRUE(!result);
+    EXPECT_EQ(result.error(), net::HTTP::Error::INVALID_CONTENT_LENGTH);
+}
+
+TEST_F(HTTPParserCrashTest, ContentLengthOverflowReportsTooBig) {
+    // A genuinely oversized (but all-digit) value is "too big" -> 413, not 400.
+    std::string req =
+        "GET / HTTP/1.1\r\n"
+        "Content-Length: 99999999999999999999\r\n\r\n";
+    auto result = feedAndAnalyze(req);
+    EXPECT_TRUE(!result);
+    EXPECT_EQ(result.error(), net::HTTP::Error::REQUEST_TOO_BIG);
+}
+
+TEST_F(HTTPParserCrashTest, ContentLengthValidZeroAccepted) {
+    std::string req =
+        "GET / HTTP/1.1\r\n"
+        "Content-Length: 0\r\n\r\n";
+    auto result = feedAndAnalyze(req);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_TRUE(result.value());
+}
+
+// -------------------------------------------------------------------
 // Missing \r\n\r\n terminator – header never ends.
 // -------------------------------------------------------------------
 TEST_F(HTTPParserCrashTest, IncompleteHeader) {

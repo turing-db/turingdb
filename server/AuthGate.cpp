@@ -36,7 +36,7 @@ bool db::isRequestAuthorized(Authenticator* authenticator, const net::HTTP::Info
         return true;
     }
 
-    const std::string_view token = extractBearerToken(info._authorization);
+    const std::string_view token = extractBearerToken(info.getAuthorization());
     if (token.empty()) {
         return false;
     }

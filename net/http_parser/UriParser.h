@@ -24,8 +24,8 @@ public:
             }
         }
 
-        info._path = std::string_view(pathBegin, pathPtr - pathBegin);
-        info._endpoint = 0;
+        info.setPath(std::string_view(pathBegin, pathPtr - pathBegin));
+        info.setEndpoint(0);
 
         // We can stop here if we are already at the end of the URI
         if (pathPtr >= uriEnd) {
@@ -34,7 +34,7 @@ public:
 
         // URI variables
         pathPtr++;
-        auto& parameters = info._params;
+        auto& parameters = info.getParams();
         std::string_view key;
         std::string_view value;
 
