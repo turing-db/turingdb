@@ -46,7 +46,9 @@ if (${NOEOLATEOF} EQUAL 1)
 endif ()
 
 # C++ standard
-set(CPP_STANDARD "c++23")
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # C++ warning flags
 # Note: -Wno-deprecated-declarations is needed for external range-v3 library deprecation warnings
@@ -143,7 +145,7 @@ endif()
 # C++ flags
 # AFL_CXX_FLAGS is prepended to allow AFL builds to suppress warnings (e.g. -Wno-error=maybe-uninitialized)
 set(AFL_CXX_FLAGS "" CACHE STRING "Extra C++ flags prepended for AFL/fuzzing builds")
-set(CMAKE_CXX_FLAGS "${AFL_CXX_FLAGS} -std=${CPP_STANDARD} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
+set(CMAKE_CXX_FLAGS "${AFL_CXX_FLAGS} ${CPP_WARNINGS} ${OPTIMIZE_FLAGS}")
 
 if(APPLE AND NOT NIX_BUILD)
 

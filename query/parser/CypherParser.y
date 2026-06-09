@@ -68,6 +68,7 @@
     #include "stmt/LoadCSVStmt.h"
     #include "CreateVectorIndexQuery.h"
     #include "LoadVectorQuery.h"
+    #include "LoadEmbeddingQuery.h"
     #include "DeleteVectorIndexQuery.h"
     #include "ShowVectorIndexesQuery.h"
     #include "InstallExtensionQuery.h"
@@ -228,6 +229,7 @@
 
 // Vector query tokens
 %token<std::string_view> VECTOR
+%token<std::string_view> EMBEDDING
 %token<std::string_view> INDEX
 %token<std::string_view> DIMENSION
 %token<std::string_view> METRIC
@@ -326,6 +328,7 @@
 %type<db::ShowExtensionsQuery*> showExtensionsQuery
 %type<db::CreateVectorIndexQuery*> createVectorIndexQuery
 %type<db::LoadVectorQuery*> loadVectorQuery
+%type<db::LoadEmbeddingQuery*> loadEmbedding
 %type<db::DeleteVectorIndexQuery*> deleteVectorIndexQuery
 %type<db::ShowVectorIndexesQuery*> showVectorIndexesQuery
 %type<db::VectorSearchStmt*> vectorSearchSt
@@ -416,6 +419,7 @@ singleQuery
     | createEdgePropertyIndexQuery { $$ = $1; }
     | dropIndexQuery { $$ = $1; }
     | loadVectorQuery { $$ = $1; }
+    | loadEmbedding { $$ = $1; }
     | deleteVectorIndexQuery { $$ = $1; }
     | showVectorIndexesQuery { $$ = $1; }
     | installExtensionQuery { $$ = $1; }
@@ -486,6 +490,14 @@ distanceMetric
 loadVectorQuery
     : LOAD VECTOR FROM STRING_LITERAL IN ID {
         $$ = LoadVectorQuery::create(ast, $4, $6);
+        LOC($$, @$);
+      }
+    ;
+
+// LOAD EMBEDDING FROM "filepath" AS embeddingProperty
+loadEmbedding
+    : LOAD EMBEDDING FROM STRING_LITERAL AS ID {
+        $$ = LoadEmbeddingQuery::create(ast, $4, $6);
         LOC($$, @$);
       }
     ;
@@ -1433,6 +1445,7 @@ symbol
     | ID { $$ = Symbol::create(ast, $1); }
     | FILTER { $$ = Symbol::create(ast, $1); }
     | EXTRACT { $$ = Symbol::create(ast, $1); }
+    | EMBEDDING { $$ = Symbol::create(ast, $1); }
     //| ANY { $$ = Symbol::create(ast, $1); } // Causes conflicts
     //| NONE { $$ = Symbol::create(ast, $1); } // Causes conflicts
     //| SINGLE { $$ = Symbol::create(ast, $1); } // Causes conflicts

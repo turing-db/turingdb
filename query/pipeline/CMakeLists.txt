@@ -61,6 +61,7 @@ set(processors_sources
     processors/CSVSourceProcessor.cpp
     processors/CreateVectorIndexProcessor.cpp
     processors/LoadVectorProcessor.cpp
+    processors/LoadEmbeddingProcessor.cpp
     processors/VectorSearchProcessor.cpp
     processors/DeleteVectorIndexProcessor.cpp
     processors/ShowVectorIndexesProcessor.cpp
@@ -91,4 +92,5 @@ target_link_libraries(turing_db_pipeline_s PRIVATE
     turing_db_storage_s
     turing_db_system_s
     turing_db_io_csv_s
+    turing_db_io_parquet_s
     turing_vector_s)

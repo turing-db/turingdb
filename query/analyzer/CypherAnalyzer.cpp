@@ -26,6 +26,7 @@
 #include "S3TransferQuery.h"
 #include "CreateVectorIndexQuery.h"
 #include "LoadVectorQuery.h"
+#include "LoadEmbeddingQuery.h"
 #include "DeleteVectorIndexQuery.h"
 #include "ShowVectorIndexesQuery.h"
 #include "InstallExtensionQuery.h"
@@ -116,6 +117,10 @@ void CypherAnalyzer::analyze() {
 
             case QueryCommand::Kind::LOAD_VECTOR_QUERY:
                 analyze(static_cast<const LoadVectorQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::LOAD_EMBEDDING_QUERY:
+                analyze(static_cast<const LoadEmbeddingQuery*>(query));
             break;
 
             case QueryCommand::Kind::INSTALL_EXTENSION_QUERY:
@@ -475,6 +480,18 @@ void CypherAnalyzer::analyze(const LoadVectorQuery* query) {
     const std::string_view indexName = query->getIndexName();
     if (indexName.empty()) {
         throwError("LOAD VECTOR index name cannot be empty", query);
+    }
+}
+
+void CypherAnalyzer::analyze(const LoadEmbeddingQuery* query) {
+    const std::string_view filePath = query->getFilePath();
+    if (filePath.empty()) {
+        throwError("LOAD EMBEDDING file path cannot be empty", query);
+    }
+
+    const std::string_view propertyName = query->getPropertyName();
+    if (propertyName.empty()) {
+        throwError("LOAD EMBEDDING property name cannot be empty", query);
     }
 }
 

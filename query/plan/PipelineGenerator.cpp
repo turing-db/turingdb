@@ -82,6 +82,7 @@
 #include "nodes/ExprEvalNode.h"
 #include "nodes/CreateVectorIndexNode.h"
 #include "nodes/LoadVectorNode.h"
+#include "nodes/LoadEmbeddingNode.h"
 #include "nodes/VectorSearchNode.h"
 #include "nodes/DeleteVectorIndexNode.h"
 #include "nodes/ShowVectorIndexesNode.h"
@@ -435,6 +436,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::LOAD_VECTOR:
             return translateLoadVectorNode(static_cast<LoadVectorNode*>(node));
+        break;
+
+        case PlanGraphOpcode::LOAD_EMBEDDING:
+            return translateLoadEmbeddingNode(static_cast<LoadEmbeddingNode*>(node));
         break;
 
         case PlanGraphOpcode::VECTOR_SEARCH:
@@ -1682,6 +1687,11 @@ PipelineOutputInterface* PipelineGenerator::translateCreateVectorIndexNode(Creat
 
 PipelineOutputInterface* PipelineGenerator::translateLoadVectorNode(LoadVectorNode* node) {
     _builder.addLoadVector(node->getFilePath(), node->getIndexName());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateLoadEmbeddingNode(LoadEmbeddingNode* node) {
+    _builder.addLoadEmbedding(node->getFilePath(), node->getPropertyName());
     return _builder.getPendingOutputInterface();
 }
 

@@ -54,6 +54,7 @@ class CommitNode;
 class LoadCSVNode;
 class CreateVectorIndexNode;
 class LoadVectorNode;
+class LoadEmbeddingNode;
 class VectorSearchNode;
 class DeleteVectorIndexNode;
 class ShowVectorIndexesNode;
@@ -163,6 +164,7 @@ private:
     PipelineOutputInterface* translateLoadCSVNode(LoadCSVNode* node);
     PipelineOutputInterface* translateCreateVectorIndexNode(CreateVectorIndexNode* node);
     PipelineOutputInterface* translateLoadVectorNode(LoadVectorNode* node);
+    PipelineOutputInterface* translateLoadEmbeddingNode(LoadEmbeddingNode* node);
     PipelineOutputInterface* translateVectorSearchNode(VectorSearchNode* node);
     PipelineOutputInterface* translateDeleteVectorIndexNode(DeleteVectorIndexNode* node);
     PipelineOutputInterface* translateShowVectorIndexesNode(ShowVectorIndexesNode* node);

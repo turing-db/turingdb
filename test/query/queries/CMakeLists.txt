@@ -28,6 +28,10 @@ add_queries_gtest(test_incorrect_query IncorrectQueryTest.cpp)
 add_queries_gtest(test_load_csv LoadCSVTest.cpp)
 add_queries_gtest(test_vector_queries VectorQueriesTest.cpp)
 add_queries_gtest(test_embedding_queries EmbeddingQueriesTest.cpp)
+add_queries_gtest(test_load_embedding LoadEmbeddingTest.cpp)
+# Needs the Parquet writer to produce test inputs; the pipeline links
+# turing_db_io_parquet_s privately, so depend on it explicitly here.
+target_link_libraries(test_load_embedding PRIVATE turing_db_io_parquet_s)
 add_queries_gtest(test_load_commit LoadCommitTest.cpp)
 add_queries_gtest(test_greeter_extension GreeterExtensionTest.cpp)
 add_queries_gtest(test_show_extensions ShowExtensionsTest.cpp)

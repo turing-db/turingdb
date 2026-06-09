@@ -61,6 +61,7 @@ set(ast_sources
     ShowExtensionsQuery.cpp
     CreateVectorIndexQuery.cpp
     LoadVectorQuery.cpp
+    LoadEmbeddingQuery.cpp
     DeleteVectorIndexQuery.cpp
     ShowVectorIndexesQuery.cpp
     InstallExtensionQuery.cpp

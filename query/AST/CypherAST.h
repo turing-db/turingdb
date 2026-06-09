@@ -88,6 +88,7 @@ class ShowProceduresQuery;
 class LoadCSVStmt;
 class CreateVectorIndexQuery;
 class LoadVectorQuery;
+class LoadEmbeddingQuery;
 class DeleteVectorIndexQuery;
 class ShowVectorIndexesQuery;
 class InstallExtensionQuery;
@@ -170,6 +171,7 @@ public:
     friend LoadCSVStmt;
     friend CreateVectorIndexQuery;
     friend LoadVectorQuery;
+    friend LoadEmbeddingQuery;
     friend DeleteVectorIndexQuery;
     friend ShowVectorIndexesQuery;
     friend InstallExtensionQuery;

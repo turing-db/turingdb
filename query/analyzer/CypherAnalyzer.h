@@ -21,6 +21,7 @@ class S3ConnectQuery;
 class S3TransferQuery;
 class CreateVectorIndexQuery;
 class LoadVectorQuery;
+class LoadEmbeddingQuery;
 class InstallExtensionQuery;
 class OrderBy;
 class Skip;
@@ -55,6 +56,7 @@ public:
     void analyze(S3TransferQuery* s3Transfer);
     void analyze(const CreateVectorIndexQuery* query);
     void analyze(const LoadVectorQuery* query);
+    void analyze(const LoadEmbeddingQuery* query);
     void analyze(const InstallExtensionQuery* query);
     void analyze(const CreateNodePropertyIndexQuery* query);
     void analyze(const CreateEdgePropertyIndexQuery* query);

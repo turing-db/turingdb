@@ -222,6 +222,8 @@ public:
                                                        vec::DistanceMetric metric);
     PipelineValueOutputInterface& addLoadVector(std::string_view filePath,
                                                 std::string_view indexName);
+    PipelineValueOutputInterface& addLoadEmbedding(std::string_view filePath,
+                                                   std::string_view propertyName);
     PipelineValuesOutputInterface& addVectorSearch(std::string_view indexName,
                                                    uint64_t k,
                                                    const std::vector<float>& queryVector);
