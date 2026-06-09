@@ -241,7 +241,6 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
                 }
 
                 cycle.push_back(p);
-                cycle.push_back(neighbour);
 
                 cycles.push_back(cycle);
                 used[neighbour].insert(u);
@@ -463,7 +462,6 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
         return;
     }
 
-    bioassert(cyc.front() == cyc.back(), "Invalid cycle.");
     bioassert(cyc.size() >= 3, "Invalid cycle.");
 
     VariableDependency* head = cyc.front();
@@ -475,7 +473,7 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     VariableDependency* newTail = newVariable(sndName);
 
     const VariableDependency* nxt = *next(begin(cyc));
-    const VariableDependency* prv = *prev(prev(end(cyc)));
+    const VariableDependency* prv = *prev(end(cyc));
 
     const auto updateAndDeleteOutgoing = [&](DependencyEdge* e) -> bool {
         const bool first = e->tgt() == nxt;
@@ -506,8 +504,8 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     std::erase_if(head->_outgoing, updateAndDeleteOutgoing);
     std::erase_if(head->_incoming, updateAndDeleteIncoming);
 
-    addDirected(head, newHead, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
-    addDirected(head, newTail, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
+    addDirected(newHead, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
+    addDirected(newTail, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
 }
 
 std::string VariableDependencyGraph::getNextAnonymisation(VariableDependency* v) {

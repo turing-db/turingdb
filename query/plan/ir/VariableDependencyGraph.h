@@ -104,6 +104,9 @@ public:
 
     void setName(std::string_view name) { _name = name; }
 
+    bool isSink() const { return _outgoing.empty(); }
+    bool isSource() const { return _incoming.empty(); }
+
     void addIncoming(DependencyEdge* newEdge);
     void addOutgoing(DependencyEdge* newEdge);
 
