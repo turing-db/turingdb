@@ -55,7 +55,9 @@ EndToEndResult runEndToEnd(const std::string& outDir,
         system.createGraph("default");
         graph = system.createGraph(GRAPH_NAME);
     }
-    seeder(graph, env->getSystemManager().getJobSystem());
+    db::JobSystem seedJobSystem;
+    seedJobSystem.init();
+    seeder(graph, &seedJobSystem);
 
     const uint16_t port = reserveFreePort();
     db::DBServerConfig serverConfig;

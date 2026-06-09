@@ -44,10 +44,10 @@ void ShowExtensionsProcessor::reset() {
 void ShowExtensionsProcessor::execute() {
     auto* colName = _nameCol->as<ColumnVector<types::String::Primitive>>();
 
-    const ExtensionManager* manager = _ctxt->getExtensions();
+    SystemAccessor* system = _ctxt->getSystemAccessor();
 
-    ExtensionManager::Extensions extensions;
-    manager->getInstalled(extensions);
+    std::vector<ExtensionDescriptor*> extensions;
+    system->getInstalledExtensions(extensions);
 
     for (const ExtensionDescriptor* ext : extensions) {
         colName->push_back(ext->getName());

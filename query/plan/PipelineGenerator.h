@@ -12,6 +12,7 @@ namespace db {
 
 class LocalMemory;
 class SystemManager;
+class ProcedureManager;
 class SourceManager;
 class ProcedureBlueprintMap;
 class PlanGraph;
@@ -73,6 +74,7 @@ class PipelineGenerator {
 public:
     PipelineGenerator(LocalMemory* mem,
                       const SystemManager* sysMan,
+                      const ProcedureManager* procedures,
                       const QueryCallbacks* callbacks,
                       const PlanGraph* graph,
                       const GraphView& view,
@@ -82,6 +84,7 @@ public:
         _pipeline(pipeline),
         _mem(mem),
         _sysMan(sysMan),
+        _procedures(procedures),
         _callbacks(callbacks),
         _builder(mem, pipeline)
     {
@@ -113,6 +116,7 @@ private:
     PipelineV2* _pipeline {nullptr};
     LocalMemory* _mem {nullptr};
     const SystemManager* _sysMan {nullptr};
+    const ProcedureManager* _procedures {nullptr};
     const QueryCallbacks* _callbacks {nullptr};
     PipelineBuilder _builder;
 

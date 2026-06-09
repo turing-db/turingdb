@@ -49,7 +49,6 @@ void ChangeProcessor::execute() {
     bioassert(_changeIDCol, "ChangeProcessor: ChangeID column must be set");
     bioassert(!_ctxt->getGraphName().empty(), "ChangeProcessor: Graph name must be set");
     bioassert(_ctxt->getSystemAccessor(), "ChangeProcessor: System accessor must be set");
-    bioassert(_ctxt->getJobSystem(), "ChangeProcessor: Job system must be set");
 
     switch (_op) {
         case ChangeOp::NEW: {
@@ -103,12 +102,11 @@ void ChangeProcessor::submitChange() const {
     bioassert(accessor.isValid(), "ChangeProcessor: Change accessor must be valid");
 
     SystemAccessor* system = _ctxt->getSystemAccessor();
-    JobSystem* jobSystem = _ctxt->getJobSystem();
 
     const ChangeID changeID = accessor.getID();
 
     // Step 1: Submit the change
-    if (const auto res = system->submitChange(accessor, *jobSystem); !res) {
+    if (const auto res = system->submitChange(accessor); !res) {
         throw PipelineException(fmt::format("Failed to submit change: {}", res.error().fmtMessage()));
     }
 

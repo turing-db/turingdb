@@ -1198,8 +1198,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
     std::vector<Procedure::Argument> inputItems;
     std::vector<Procedure::YieldItem> yieldItems;
 
-    const ProcedureManager* procedures = _sysMan->getProcedures();
-    const Procedure* procedure = procedures->getProcedure(signature->getFullName());
+    const Procedure* procedure = _procedures->getProcedure(signature->getFullName());
     if (!procedure) {
         throw PlannerException(fmt::format("Procedure '{}' does not exist", signature->getFullName()));
     }

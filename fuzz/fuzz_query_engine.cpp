@@ -58,12 +58,12 @@ static int fuzzOne(const char* data, size_t size) {
     std::string_view query(data, size);
 
     db::SystemManager& sysMan = g_env->getSystemManager();
-    const db::ProcedureManager* procedures = sysMan.getProcedures();
+    db::SystemAccessor system = sysMan.accessShared();
+    const db::ProcedureManager* procedures = system.getProcedures();
 
     const db::QueryConfig queryConfig;
 
     // Open transaction
-    db::SystemAccessor system = sysMan.accessShared();
     auto txRes = system.openTransaction(g_graphName,
                                         db::CommitHash::head(),
                                         db::ChangeID::head());
@@ -118,6 +118,7 @@ static int fuzzOne(const char* data, size_t size) {
     db::QueryCallbacks callbacks;
     db::PipelineGenerator pipelineGen(&mem,
                                       &sysMan,
+                                      procedures,
                                       &callbacks,
                                       &planGraph,
                                       view,

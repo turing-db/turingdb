@@ -95,7 +95,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     const GraphView view = txRes->viewGraph();
 
     // Parsing query
-    CypherAST ast(_sysMan->getProcedures(), query);
+    CypherAST ast(system.getProcedures(), query);
     CypherParser parser(&ast);
     try {
         parser.parse(query);
@@ -175,6 +175,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     PipelineV2 pipeline;
     PipelineGenerator pipelineGen(mem,
                                   _sysMan,
+                                  system.getProcedures(),
                                   ctxt.getQueryCallbacks(),
                                   &planGraph,
                                   view,

@@ -47,12 +47,8 @@ void InstallExtensionProcessor::reset() {
 }
 
 void InstallExtensionProcessor::execute() {
-    ExtensionManager* ext = _ctxt->getExtensions();
-    if (!ext) {
-        throw PipelineException("Extension manager is not available");
-    }
-
-    ext->installExtension(_extensionName);
+    SystemAccessor* system = _ctxt->getSystemAccessor();
+    system->installExtension(_extensionName);
 
     using ColumnString = ColumnConst<types::String::Primitive>;
     ColumnString* colName = _outName.getValue()->as<ColumnString>();

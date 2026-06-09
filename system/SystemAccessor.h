@@ -15,6 +15,10 @@
 #include "dump/DumpResult.h"
 #include "mergers/DataPartMergeResult.h"
 
+namespace vec {
+class VectorDatabase;
+}
+
 namespace S3 {
 template <typename ClientType>
 class TuringS3Client;
@@ -27,8 +31,9 @@ class SystemManager;
 class Graph;
 class Change;
 class ChangeAccessor;
-class JobSystem;
 class Transaction;
+class ProcedureManager;
+class ExtensionDescriptor;
 
 class SystemAccessor : public Accessor {
 public:
@@ -69,12 +74,13 @@ public:
     // Change management
     ChangeResult<Change*> newChange(std::string_view name, CommitHash baseHash = CommitHash::head());
     ChangeResult<Change*> getChange(const Graph* graph, ChangeID changeID);
-    ChangeResult<void> submitChange(ChangeAccessor& accessor, JobSystem& jobSystem);
+    ChangeResult<void> submitChange(ChangeAccessor& accessor);
+    CommitResult<void> commitChange(ChangeAccessor& accessor);
     ChangeResult<void> deleteChange(ChangeAccessor& accessor, ChangeID changeID);
     void listChanges(std::vector<const Change*>& changes, const Graph* graph) const;
 
     // DataPart merge
-    DataPartMergeResult<void> mergeDataParts(Graph* graph, JobSystem& jobSystem);
+    DataPartMergeResult<void> mergeDataParts(Graph* graph);
 
     // Transaction open
     ChangeResult<Transaction> openTransaction(std::string_view graphName,
@@ -86,6 +92,16 @@ public:
                         const std::string& secretKey,
                         const std::string& region);
     S3::TuringS3Client<S3::MinioS3ClientWrapper>* getS3Client();
+
+    // Procedures
+    const ProcedureManager* getProcedures() const;
+
+    // Vector DB
+    vec::VectorDatabase* getVectorDatabase();
+
+    // Extensions
+    void installExtension(std::string_view name);
+    void getInstalledExtensions(std::vector<ExtensionDescriptor*>& result) const;
 
 private:
     SystemManager* _sysMan {nullptr};

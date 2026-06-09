@@ -158,6 +158,7 @@ int main(int argc, char** argv) {
             const QueryCallbacks callbacks;
             PipelineGenerator pipelineGen(&mem,
                                           sysMan.get(),
+                                          procedures.get(),
                                           &callbacks,
                                           &planGraph,
                                           view,

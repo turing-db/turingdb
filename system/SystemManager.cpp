@@ -12,6 +12,7 @@
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 #include "versioning/VersionController.h"
+#include "versioning/ChangeAccessor.h"
 
 #include "dump/GraphDumper.h"
 
@@ -227,8 +228,12 @@ ChangeResult<Change*> SystemManager::getChange(const Graph* graph, ChangeID chan
     return _graphManager.getChange(graph, changeID);
 }
 
-ChangeResult<void> SystemManager::submitChange(ChangeAccessor& accessor, JobSystem& jobSystem) {
-    return _graphManager.submitChange(accessor, jobSystem);
+ChangeResult<void> SystemManager::submitChange(ChangeAccessor& accessor) {
+    return _graphManager.submitChange(accessor, _jobSystem);
+}
+
+CommitResult<void> SystemManager::commitChange(ChangeAccessor& accessor) {
+    return accessor.commit(_jobSystem);
 }
 
 ChangeResult<void> SystemManager::deleteChange(ChangeAccessor& accessor, ChangeID changeID) {
@@ -239,8 +244,8 @@ void SystemManager::listChanges(std::vector<const Change*>& changes, const Graph
     _graphManager.listChanges(changes, graph);
 }
 
-DataPartMergeResult<void> SystemManager::mergeDataParts(Graph* graph, JobSystem& jobSystem) {
-    return _graphManager.mergeDataParts(graph, jobSystem);
+DataPartMergeResult<void> SystemManager::mergeDataParts(Graph* graph) {
+    return _graphManager.mergeDataParts(graph, _jobSystem);
 }
 
 ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphName,

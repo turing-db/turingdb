@@ -91,11 +91,12 @@ private:
         });
 
         db::PipelineV2 pipeline;
-        db::PipelineGenerator pipelineGen(&mem, _sysMan, &callbacks,
+        db::PipelineGenerator pipelineGen(&mem, _sysMan, _procedures.get(), &callbacks,
                                           &plan, view, &pipeline);
         pipelineGen.generate();
 
         db::ExecutionContext execCtxt(_sysMan, view);
+        execCtxt.setSystemAccessor(&system);
         execCtxt.setTransaction(&*_tx);
         execCtxt.setGraphName(_graphName);
 
