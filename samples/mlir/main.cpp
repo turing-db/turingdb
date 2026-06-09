@@ -9,7 +9,7 @@
 
 #include "DBOps.h"
 
-static void print(auto op) {
+void print(auto op) {
     op->print(llvm::outs());
     llvm::outs() << '\n';
 }
