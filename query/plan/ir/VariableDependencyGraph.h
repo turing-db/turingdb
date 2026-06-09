@@ -107,6 +107,9 @@ public:
     bool isSink() const { return _outgoing.empty(); }
     bool isSource() const { return _incoming.empty(); }
 
+    const Edges& outgoing() const { return _outgoing; }
+    const Edges& incoming() const { return _incoming; }
+
     void addIncoming(DependencyEdge* newEdge);
     void addOutgoing(DependencyEdge* newEdge);
 
@@ -158,6 +161,10 @@ private:
 
     std::unordered_map<VariableDependency*, int> _anonymised;
 
+    std::unordered_map<VariableDependency*,
+                       std::pair<VariableDependency*, VariableDependency*>>
+        _anonMap;
+
     using Visited = std::unordered_map<VariableDependency*, uint8_t>;
     using Parents = std::unordered_map<VariableDependency*, VariableDependency*>;
     Visited _cyclicVisited;
@@ -176,7 +183,23 @@ private:
 
     std::string getNextAnonymisation(VariableDependency* v);
 
+    void addMerge(VariableDependency* from1, VariableDependency* from2,
+                  VariableDependency* into, VariableDependency* via1,
+                  VariableDependency* via2);
+
     void resetCycleState();
+
+    static bool patchEdgeSrc(DependencyEdge* e,
+                             VariableDependency* oldSrc,
+                             VariableDependency* newSrc);
+    static bool patchEdgeTgt(DependencyEdge* e,
+                             VariableDependency* oldtgt,
+                             VariableDependency* newTgt);
+
+    void addBetween(VariableDependency* s, VariableDependency* mid, VariableDependency* t);
+
+    void addBetweenOutImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
+    void addBetweenIncImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
 };
 
 }

@@ -1,6 +1,7 @@
 #include "VariableDependencyGraph.h"
 
 #include <algorithm>
+#include <iostream>
 #include <set>
 #include <string_view>
 #include <unordered_map>
@@ -16,6 +17,7 @@
 
 #include "BioAssert.h"
 #include "decl/VarDecl.h"
+#include "ir/IRDumper.h"
 #include "spdlog/spdlog.h"
 
 using namespace db;
@@ -457,6 +459,41 @@ VariableDependencyGraph::Cycle VariableDependencyGraph::_getCycle() {
     return {};
 }
 
+bool VariableDependencyGraph::patchEdgeSrc(DependencyEdge* e,
+                                           VariableDependency* oldSrc,
+                                           VariableDependency* newSrc) {
+    VariableDependency* src = e->_src;
+    if (src != oldSrc) {
+        return false;
+    }
+
+    e->_src = newSrc;
+    return true;
+}
+
+bool VariableDependencyGraph::patchEdgeTgt(DependencyEdge* e,
+                                           VariableDependency* oldtgt,
+                                           VariableDependency* newTgt) {
+    VariableDependency* tgt = e->_tgt;
+    if (tgt != oldtgt) {
+        return false;
+    }
+
+    e->_tgt = newTgt;
+    return true;
+}
+
+void VariableDependencyGraph::addMerge(VariableDependency* from1,
+                                       VariableDependency* from2,
+                                       VariableDependency* into,
+                                       VariableDependency* via1,
+                                       VariableDependency* via2) {
+    addBetween(from1, via1, into);
+    IRDumper::dumpMermaid(*this, std::cout);
+    addBetween(from2, via2, into);
+    IRDumper::dumpMermaid(*this, std::cout);
+}
+
 void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     if (cyc.empty()) {
         return;
@@ -466,46 +503,91 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
 
     VariableDependency* head = cyc.front();
 
-    const std::string fstName = getNextAnonymisation(head);
-    const std::string sndName = getNextAnonymisation(head);
+    VariableDependency* newHead = nullptr;
+    VariableDependency* newTail = nullptr;
 
-    VariableDependency* newHead = newVariable(fstName);
-    VariableDependency* newTail = newVariable(sndName);
+    VariableDependency* merged1 = nullptr;
+    VariableDependency* merged2 = nullptr;
 
-    const VariableDependency* nxt = *next(begin(cyc));
-    const VariableDependency* prv = *prev(end(cyc));
-
-    const auto updateAndDeleteOutgoing = [&](DependencyEdge* e) -> bool {
-        const bool first = e->tgt() == nxt;
-        const bool last = e->tgt() == prv;
-        if (!first && !last) {
+    std::erase_if(head->_incoming, [&](DependencyEdge* e) {
+        const bool meta = EdgeMetadata::isMetaEdge(e->data().type());
+        if (!meta) {
             return false;
         }
 
-        if (first) {e->_src = newHead; newHead->addOutgoing(e);}
-        if (last) {e->_src = newTail; newTail->addOutgoing(e);}
-
-        return true;
-    };
-
-    const auto updateAndDeleteIncoming = [&](DependencyEdge* e) -> bool {
-        const bool first = e->src() == nxt;
-        const bool last = e->src() == prv;
-        if (!first && !last) {
-            return false;
+        if (!merged1) {
+            merged1 = e->_src;
+            return true;
+        }
+        if (!merged2) {
+            merged2 = e->_src;
+            return true;
         }
 
-        if (first) {e->_tgt = newHead; newHead->addIncoming(e);}
-        if (last) {e->_tgt = newTail; newTail->addIncoming(e);}
+        return false;
+    });
 
-        return true;
-    };
+    bioassert(!((bool)merged1 ^ (bool)merged2), "Invalid merge state");
 
-    std::erase_if(head->_outgoing, updateAndDeleteOutgoing);
-    std::erase_if(head->_incoming, updateAndDeleteIncoming);
+    if (merged1 && merged2) {
+        newHead = newVariable(getNextAnonymisation(head));
+        addDirected(merged1, newHead, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
+        addDirected(merged2, newHead, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
+    }
 
-    addDirected(newHead, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
-    addDirected(newTail, head, EdgeMetadata{EdgeMetadata::EdgeType::MERGE});
+    newHead = newHead ? newHead : newVariable(getNextAnonymisation(head));
+    newTail = newVariable(getNextAnonymisation(head));
+    spdlog::info("nh = {}, nt = {}", newHead->getName(), newTail->getName());
+
+    VariableDependency* nxt = *next(begin(cyc));
+    VariableDependency* prv = *prev(end(cyc));
+
+    addMerge(nxt, prv, head, newHead, newTail);
+}
+
+void VariableDependencyGraph::addBetweenOutImpl(VariableDependency* s,
+                                                VariableDependency* mid,
+                                                VariableDependency* t,
+                                                DependencyEdge* e) {
+    std::erase_if(s->_outgoing, [e](DependencyEdge* f) { return f == e; });
+    std::erase_if(t->_incoming, [e](DependencyEdge* f) { return f == e; });
+
+    const EdgeMetadata& data = e->data();
+    addDirected(s, mid, data);
+    addDirected(mid, t, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
+}
+
+void VariableDependencyGraph::addBetweenIncImpl(VariableDependency* s,
+                                                VariableDependency* mid,
+                                                VariableDependency* t,
+                                                DependencyEdge* e) {
+    std::erase_if(s->_incoming, [e](DependencyEdge* f) { return f == e; });
+    std::erase_if(t->_outgoing, [e](DependencyEdge* f) { return f == e; });
+
+    const EdgeMetadata& data = e->data();
+    addDirected(mid, s, data);
+    addDirected(t, mid, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
+}
+
+void VariableDependencyGraph::addBetween(VariableDependency* s,
+                                         VariableDependency* mid,
+                                         VariableDependency* t) {
+    spdlog::info("Attempting to add {} between {} and {}", mid->getName(), s->getName(), t->getName());
+    const auto findOut = std::ranges::find_if(
+        s->_outgoing, [t](DependencyEdge* e) { return e->_tgt == t; });
+    if (findOut != end(s->_outgoing)) {
+        addBetweenOutImpl(s, mid, t, *findOut);
+        return;
+    }
+
+    const auto findIn = std::ranges::find_if(
+        s->_incoming, [t](DependencyEdge* e) { return e->_src == t; });
+    if (findIn != end(s->_incoming)) {
+        addBetweenIncImpl(s, mid, t, *findOut);
+        return;
+    }
+
+    bioassert(false, "Attempted to addBetween on two nodes that were not connected.");
 }
 
 std::string VariableDependencyGraph::getNextAnonymisation(VariableDependency* v) {
