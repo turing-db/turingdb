@@ -103,14 +103,16 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v3
 
-    # Linux (turing-runners) keeps the GitHub-hosted cache. The self-hosted
-    # macOS minis use a local on-disk cache instead (no GitHub cache egress);
-    # /Users/m1/actions-local-cache is pre-provisioned on each mini.
+    # Both the self-hosted Linux runner containers and the macOS minis use a
+    # local on-disk cache instead of the GitHub-hosted cache (no cache egress).
+    # The cache dir is pre-provisioned per runner: /opt/actions-local-cache in
+    # the Linux runner containers, /Users/m1/actions-local-cache on the minis.
     - name: Cache dependencies (Linux)
       id: cache-dependencies-linux
       if: runner.os == 'Linux'
-      uses: actions/cache@v4
+      uses: corca-ai/local-cache@v2
       with:
+        base: /opt/actions-local-cache
         path: external/dependencies
         key: ${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}
 
@@ -187,7 +189,10 @@ jobs:
 
     # The reactome regress test runs on Linux only (load_jsonl_reactome/run.sh
     # skips on macOS), so reactome.jsonl is only ever downloaded on the Linux
-    # runners. Cache it there; there is nothing to cache on macOS.
+    # runners. Cache it there; there is nothing to cache on macOS. This stays on
+    # the GitHub-hosted cache (not the local on-disk cache used for deps above)
+    # because corca-ai/local-cache is directory-only and hard-fails on a
+    # single-file path like this one.
     - name: Cache reactome dataset (Linux)
       if: runner.os == 'Linux'
       uses: actions/cache@v4
