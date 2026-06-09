@@ -26,7 +26,7 @@ set_source_files_properties(
 )
 
 # Compiles .cpp files; needs the codegen first, hence the DEPENDS clause
-add_mlir_library(DBDialect
+add_mlir_library(turing_db_ir_dbdialect_s
   DBDialect.cpp
   DBOps.cpp
   DBTypes.cpp
@@ -42,9 +42,9 @@ add_mlir_library(DBDialect
 )
 
 # Ensure we have MLIR and LLVM includes, as well as the headers in current dir
-target_include_directories(DBDialect PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-  $<BUILD_INTERFACE:${MLIR_INCLUDE_DIRS}>
-  $<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>
+target_include_directories(turing_db_ir_dbdialect_s PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}
+  ${MLIR_INCLUDE_DIRS}
+  ${LLVM_INCLUDE_DIRS}
 )
