@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <string>
 
@@ -24,6 +25,17 @@
 #include "stmt/ReturnStmt.h"
 #include "stmt/StmtContainer.h"
 
+/**
+
+problematic queries
+
+1. (x)-[e]->(a), (x)<-[e]-(a)
+Will always return nothing (e cannot be both an in edge and an out
+edge of x), however it causes the dep graph to be non-simple (multigraph),
+and causes the cycle basis algorithm to report 2 cycles.
+
+*/
+
 using namespace db;
 
 static void inspectVarDepGraph(CypherAST* ast) {
@@ -49,18 +61,34 @@ static void inspectVarDepGraph(CypherAST* ast) {
             vdg.registerPatternElement(ele);
         }
     }
+    IRDumper::dumpMermaid(vdg, std::cout);
 
-    auto cycs = vdg.cycleBasis();
-
-    for (auto& c : cycs) {
+    const auto printCycle = [](auto& c) {
         for (auto* v : c) {
             fmt::print("{} ", v->getName());
         }
         fmt::print("\n");
-        vdg.detachCycle(c);
+    };
+
+    auto cycs = vdg.cycleBasis();
+
+    for (auto& c : cycs) {
+        printCycle(c);
+        auto cr = c;
+        const auto sink = std::ranges::find_if(
+            cr, [](const VariableDependency* v) { return v->isSink(); });
+
+        if (sink != end(cr)) {
+            std::ranges::rotate(cr, sink);
+            spdlog::warn("ROTATED:");
+            printCycle(cr);
+            fmt::println("");
+        }
+
+        vdg.detachCycle(cr);
+        IRDumper::dumpMermaid(vdg, std::cout);
     }
 
-    IRDumper::dumpMermaid(vdg, std::cout);
 }
 
 int main(int argc, const char** argv) {
