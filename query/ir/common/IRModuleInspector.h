@@ -15,7 +15,8 @@ public:
     {
     }
 
-    void dump(std::ostream& out) const;
+    void dumpFunctionTypes(std::ostream& out) const;
+    void dumpFunctions(std::ostream& out) const;
 
 private:
     mlir::ModuleOp* _mod {nullptr};
