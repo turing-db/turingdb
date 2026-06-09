@@ -161,32 +161,32 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
             NodeSet& usedThisTraversal = used[u];
 
             for (DependencyEdge* edge : u->edges()) {
-                VariableDependency* neighbor = edge->_src == u ? edge->_tgt : edge->_src;
-                bioassert(neighbor != u, "Invalid self loop.");
+                VariableDependency* neighbour = edge->_src == u ? edge->_tgt : edge->_src;
+                bioassert(neighbour != u, "Invalid self loop.");
 
                 // Recurse in DFS
-                const bool encountered = used.contains(neighbor);
+                const bool encountered = used.contains(neighbour);
                 if (!encountered) {
-                    stack.push_back(neighbor);
-                    pred[neighbor] = u;
-                    used[neighbor] = {u};
+                    stack.push_back(neighbour);
+                    pred[neighbour] = u;
+                    used[neighbour] = {u};
                     continue;
                 }
 
                 // Otherwise, already encountered: found a cycle.
 
-                const bool cycleAlreadyLogged = usedThisTraversal.contains(neighbor);
+                const bool cycleAlreadyLogged = usedThisTraversal.contains(neighbour);
                 if (cycleAlreadyLogged) {
                     continue;
                 }
 
                 // Form the cycle
                 cycle.clear();
-                cycle.push_back(neighbor);
+                cycle.push_back(neighbour);
                 cycle.push_back(u);
 
                 // Get the nodes used on the path of this cycle
-                const NodeSet& pn = used[neighbor];
+                const NodeSet& pn = used[neighbour];
 
                 VariableDependency* p = pred[u];
                 while (!pn.contains(p)) {
@@ -195,11 +195,11 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
                 }
 
                 cycle.push_back(p);
-                cycle.push_back(u); // Ensure cycle is of the form (u, v, ..., x, u)
+                cycle.push_back(neighbour); // Ensure cycle is of the form (u, v, ..., x, u)
 
                 cycles.push_back(cycle);
 
-                used[neighbor].insert(u);
+                used[neighbour].insert(u);
             }
         }
 
