@@ -31,14 +31,32 @@ void helloModule(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     builder.setInsertionPointToStart(&block);
     module.push_back(func);
 
-    const mlir::Type col0 = mlir::db::ColumnType::get(ctxt, "scan");
-    const mlir::Type col1 = mlir::db::ColumnType::get(ctxt, "srcs");
-    const mlir::Type col2 = mlir::db::ColumnType::get(ctxt, "eids");
-    const mlir::Type col3 = mlir::db::ColumnType::get(ctxt, "etypes");
-    const mlir::Type col4 = mlir::db::ColumnType::get(ctxt, "tgts");
+    // MATCH (a)->(b)->(c): scan `a`, then two get_out_edges hops. The second hop
+    // carries the filtered `a` column so it ends up filtered to the `a` that reach a `c`.
+    const mlir::Type colA   = mlir::db::ColumnType::get(ctxt, "a");
+    const mlir::Type colA1  = mlir::db::ColumnType::get(ctxt, "a1");
+    const mlir::Type colE0  = mlir::db::ColumnType::get(ctxt, "e0");
+    const mlir::Type colEt0 = mlir::db::ColumnType::get(ctxt, "et0");
+    const mlir::Type colB   = mlir::db::ColumnType::get(ctxt, "b");
+    const mlir::Type colB2  = mlir::db::ColumnType::get(ctxt, "b2");
+    const mlir::Type colE1  = mlir::db::ColumnType::get(ctxt, "e1");
+    const mlir::Type colEt1 = mlir::db::ColumnType::get(ctxt, "et1");
+    const mlir::Type colC   = mlir::db::ColumnType::get(ctxt, "c");
+    const mlir::Type colA2  = mlir::db::ColumnType::get(ctxt, "a2");
 
-    auto scan = builder.create<mlir::db::ScanNodes>(loc, col0);
-    builder.create<mlir::db::GetOutEdges>(loc, col1, col2, col3, col4, scan.getResult());
+    auto scan = builder.create<mlir::db::ScanNodes>(loc, colA);
+
+    // First hop a->b with an empty carry set: four fixed result columns, no filtered
+    // columns, and just the input_nodes operand.
+    auto hop1 = builder.create<mlir::db::GetOutEdges>(loc,
+                                                      mlir::TypeRange {colA1, colE0, colEt0, colB},
+                                                      mlir::ValueRange {scan.getResult()});
+
+    // Second hop b->c carrying the filtered `a` (hop1 srcids): one extra carry operand
+    // and one extra result type for its filtered counterpart.
+    builder.create<mlir::db::GetOutEdges>(loc,
+                                          mlir::TypeRange {colB2, colE1, colEt1, colC, colA2},
+                                          mlir::ValueRange {hop1.getTgtids(), hop1.getSrcids()});
 }
 
 void assembleFiles(mlir::MLIRContext& ctxt, mlir::ModuleOp& module, const std::vector<std::string>& files) {
