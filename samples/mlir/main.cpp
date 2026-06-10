@@ -85,10 +85,26 @@ void addNestedLoopFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     auto nodeLoop = builder.create<mlir::nl::For>(loc, nodes.getResult());
     builder.create<mlir::func::ReturnOp>(loc);
 
-    // Fill the node loop body: iterate the out-edges of each chunk of nodes
+    // Fill the node loop body: walk each chunk of nodes both forwards
+    // (out-edges) and backwards (in-edges)
     builder.setInsertionPointToStart(nodeLoop.getBody());
-    auto edges = builder.create<mlir::nl::GetOutEdges>(loc, nodeLoop.getBody()->getArgument(0));
-    builder.create<mlir::nl::For>(loc, edges.getResult());
+    const mlir::Value nodeChunk = nodeLoop.getBody()->getArgument(0);
+
+    // Out-edges: send each step's target (successor) node IDs to the result.
+    // The edge loop binds the chunks in order: sources, edge IDs, edge type
+    // IDs, targets - so argument 3 is the targets column.
+    auto outEdges = builder.create<mlir::nl::GetOutEdges>(loc, nodeChunk);
+    auto outLoop = builder.create<mlir::nl::For>(loc, outEdges.getResult());
+    builder.setInsertionPointToStart(outLoop.getBody());
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {outLoop.getBody()->getArgument(3)});
+
+    // In-edges of the same node chunk: send the source (predecessor) node IDs.
+    // Same chunk order, so argument 0 is the sources column.
+    builder.setInsertionPointAfter(outLoop);
+    auto inEdges = builder.create<mlir::nl::GetInEdges>(loc, nodeChunk);
+    auto inLoop = builder.create<mlir::nl::For>(loc, inEdges.getResult());
+    builder.setInsertionPointToStart(inLoop.getBody());
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {inLoop.getBody()->getArgument(0)});
 }
 
 void helloModule(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
