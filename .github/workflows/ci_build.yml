@@ -116,14 +116,20 @@ jobs:
         path: external/dependencies
         key: ${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}
 
-    - name: Cache dependencies (macOS)
+    # The macOS minis share one cache base across several runner instances, and
+    # corca-ai/local-cache symlinks external/dependencies straight into that
+    # shared base while populating it with a non-atomic mv. A job could thus link
+    # against a half-published tree and fail (e.g. a missing libopenblas.a).
+    # Serialize restore and publish under the same per-host flock the regress
+    # step uses, so a job never symlinks into an in-progress publish.
+    - name: Restore dependency cache (macOS)
       id: cache-dependencies-macos
       if: runner.os == 'macOS'
-      uses: corca-ai/local-cache@v2
-      with:
-        base: /Users/m1/actions-local-cache
-        path: external/dependencies
-        key: ${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}
+      run: |
+        python3 scripts/with_host_lock.py /tmp/turingdb-depcache.lock \
+          bash scripts/dep_cache.sh restore \
+          /Users/m1/actions-local-cache \
+          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}"
 
     - name: Install build tools
       run: ./install_build_tools.sh
@@ -132,6 +138,14 @@ jobs:
       run: ./dependencies.sh
       env:
         SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies-linux.outputs.cache-hit || steps.cache-dependencies-macos.outputs.cache-hit }}
+
+    - name: Publish dependency cache (macOS)
+      if: runner.os == 'macOS' && steps.cache-dependencies-macos.outputs.cache-hit != 'true'
+      run: |
+        python3 scripts/with_host_lock.py /tmp/turingdb-depcache.lock \
+          bash scripts/dep_cache.sh publish \
+          /Users/m1/actions-local-cache \
+          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}"
 
     - name: Setup Python
       run: uv python install ${{ matrix.python_version }}
