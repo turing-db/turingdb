@@ -191,13 +191,6 @@ private:
 
     void resetCycleState();
 
-    static bool patchEdgeSrc(DependencyEdge* e,
-                             VariableDependency* oldSrc,
-                             VariableDependency* newSrc);
-    static bool patchEdgeTgt(DependencyEdge* e,
-                             VariableDependency* oldtgt,
-                             VariableDependency* newTgt);
-
     void addBetween(VariableDependency* s, VariableDependency* mid, VariableDependency* t);
 
     void addBetweenOutImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);

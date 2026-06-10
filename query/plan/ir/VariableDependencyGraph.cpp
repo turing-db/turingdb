@@ -88,7 +88,8 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
 
     VariableDependency* prev = originVar;
     for (const auto& [edge, tgtPtn] : chain) {
-        VariableDependency* edgeVar = getOrCreateVariable(edge);
+        const VarDecl* edgeDecl = edge->getDecl();
+
         VariableDependency* tgtVar = getOrCreateVariable(tgtPtn);
 
         const EdgePattern::Direction direction = edge->getDirection();
@@ -105,9 +106,14 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
             tgt = prev;
         }
 
-        // Below checks for duplication
-        addDirected(src, edgeVar, EdgeMetadata {type});
-        addDirected(edgeVar, tgt, EdgeMetadata{type});
+        if (edgeDecl->isUnnamed()) {
+            addDirected(src, tgt, EdgeMetadata {type});
+        } else {
+            VariableDependency* edgeVar = getOrCreateVariable(edge);
+            // Below checks for duplication
+            addDirected(src, edgeVar, EdgeMetadata {type});
+            addDirected(edgeVar, tgt, EdgeMetadata {type});
+        }
 
         prev = tgt;
     }
@@ -457,30 +463,6 @@ VariableDependencyGraph::Cycle VariableDependencyGraph::_getCycle() {
     }
 
     return {};
-}
-
-bool VariableDependencyGraph::patchEdgeSrc(DependencyEdge* e,
-                                           VariableDependency* oldSrc,
-                                           VariableDependency* newSrc) {
-    VariableDependency* src = e->_src;
-    if (src != oldSrc) {
-        return false;
-    }
-
-    e->_src = newSrc;
-    return true;
-}
-
-bool VariableDependencyGraph::patchEdgeTgt(DependencyEdge* e,
-                                           VariableDependency* oldtgt,
-                                           VariableDependency* newTgt) {
-    VariableDependency* tgt = e->_tgt;
-    if (tgt != oldtgt) {
-        return false;
-    }
-
-    e->_tgt = newTgt;
-    return true;
 }
 
 // TODO: remove

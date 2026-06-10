@@ -75,8 +75,10 @@ static void inspectVarDepGraph(CypherAST* ast) {
     for (auto& c : cycs) {
         printCycle(c);
         auto cr = c;
-        const auto sink = std::ranges::find_if(
-            cr, [](const VariableDependency* v) { return v->isSink(); });
+        const auto sink = std::ranges::max_element(
+            cr, [](const VariableDependency* v, const VariableDependency* u) {
+                return v->incoming().size() < u->incoming().size();
+            });
 
         if (sink != end(cr)) {
             std::ranges::rotate(cr, sink);
