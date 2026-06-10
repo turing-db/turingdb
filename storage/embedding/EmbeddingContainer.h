@@ -41,6 +41,9 @@ public:
     size_t getDimension() const { return _dimension; }
     size_t size() const { return _views.size(); }
 
+    size_t bucketCount() const { return _buckets.size(); }
+    const EmbeddingBucket& bucket(size_t index) const { return *_buckets[index]; }
+
     const ViewVector& get() const { return _views; }
 
     void clear();
