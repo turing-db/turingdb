@@ -13,6 +13,7 @@ class NodeContainer;
 class DataPartLoader;
 class EdgeIndexer;
 class EdgeContainerLoader;
+class EdgeContainerParquetLoader;
 class DataPartRebaser;
 class DataPartMerger;
 
@@ -69,6 +70,7 @@ private:
     friend EdgeIndexer;
     friend DataPartLoader;
     friend EdgeContainerLoader;
+    friend EdgeContainerParquetLoader;
     friend DataPartRebaser;
     friend DataPartMerger;
 

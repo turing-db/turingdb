@@ -1,4 +1,7 @@
-add_library(turing_db_io_parquet_s STATIC ParquetReader.cpp)
+add_library(turing_db_io_parquet_s STATIC
+    ParquetReader.cpp
+    ParquetWriter.cpp
+    ParquetWriteSchema.cpp)
 
 target_include_directories(turing_db_io_parquet_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 

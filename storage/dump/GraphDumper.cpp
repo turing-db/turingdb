@@ -7,8 +7,12 @@
 #include "Graph.h"
 #include "GraphInfoDumper.h"
 #include "CommitDumper.h"
+#include "DataPartDumper.h"
 #include "GraphFileType.h"
 #include "FileUtils.h"
+#include "datapart/DataPart.h"
+#include "datapart/DataPartSpan.h"
+#include "versioning/Commit.h"
 #include "versioning/Transaction.h"
 #include "versioning/VersionController.h"
 #include "FilePageReader.h"
@@ -87,16 +91,17 @@ DumpResult<void> GraphDumper::dump(const Graph* graph, const fs::Path& graphDir)
         Profile profile {"GraphDumper::dump <Commit Log>"};
         const fs::Path logFile = graphDir / "commitlog";
 
-        const Commit* commit = graph->_versionController->_head.load();
+        const Commit* head = graph->_versionController->_head.load();
+        const fs::Path partsDir = graphDir / "dataparts";
+
         std::vector<CommitHash> commitList;
 
         // collect all the commits so we can iterate and write them to file later
-        while (commit) {
+        for (const Commit* commit = head; commit != nullptr; commit = commit->getPreviousCommit()) {
             commitList.emplace_back(commit->hash());
 
             const std::string fileName = fmt::format("{}", commit->hash().get());
             const fs::Path commitDir = graphDir / "commits" / fileName;
-            const fs::Path partsDir = graphDir / "dataparts";
 
             if (commitDir.exists()) {
                 // commit shouldn't exist
@@ -106,8 +111,23 @@ DumpResult<void> GraphDumper::dump(const Graph* graph, const fs::Path& graphDir)
             if (auto res = CommitDumper::dump(*commit, commitDir, partsDir); !res) {
                 return res;
             }
+        }
 
-            commit = commit->getPreviousCommit();
+        // The walk dumps each commit's own dataparts, but a shell ancestor (a lazily-loaded
+        // commit whose CommitData has expired) dumps only its metadata. Its dataparts are
+        // still alive and referenced through the head's allDataparts: dump whatever the walk
+        // did not write, so the dump stays loadable.
+        if (head != nullptr && head->hasData()) {
+            for (const auto& part : head->data().allDataparts()) {
+                const std::string partDirName = fmt::format("{}", part->getID().get());
+                const fs::Path partDir = partsDir / partDirName;
+
+                if (!partDir.exists()) {
+                    if (auto res = DataPartDumper::dump(*part, partDir); !res) {
+                        return res;
+                    }
+                }
+            }
         }
 
         auto fileRes = fs::File::createAndOpen(logFile);

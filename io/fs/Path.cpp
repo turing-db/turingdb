@@ -221,6 +221,16 @@ Result<void> Path::rm() const {
     return {};
 }
 
+Result<void> Path::rename(const Path& newPath) const {
+    std::error_code err;
+    std::filesystem::rename(_path, newPath.get(), err);
+    if (err) {
+        return Error::result(ErrorType::CANNOT_RENAME, err.value());
+    }
+
+    return {};
+}
+
 Result<Path> Path::getCurrentDir() {
     try {
         return Path(std::filesystem::current_path().string());

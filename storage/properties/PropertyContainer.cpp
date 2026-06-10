@@ -2,6 +2,7 @@
 
 #include <numeric>
 
+#include <range/v3/algorithm/is_sorted.hpp>
 #include <range/v3/algorithm/sort.hpp>
 #include <range/v3/view/zip.hpp>
 
@@ -40,6 +41,19 @@ void TypedPropertyContainer<types::String>::sort() {
 
 void TypedPropertyContainer<types::Embedding>::sort() {
     if (_ids.empty()) {
+        return;
+    }
+
+    // Already sorted (e.g. bulk-added in ascending entity order): skip the reorder, which
+    // would copy every embedding into a fresh container. The IDs may still have been
+    // rewritten in place (temporary to final) before this call, so the index map must be
+    // rebuilt regardless.
+    if (ranges::is_sorted(_ids)) {
+        _entityIndexMap.clear();
+        _entityIndexMap.reserve(_ids.size());
+        for (size_t i = 0; i < _ids.size(); i++) {
+            _entityIndexMap[_ids[i]] = i;
+        }
         return;
     }
 

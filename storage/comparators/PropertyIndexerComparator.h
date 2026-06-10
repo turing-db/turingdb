@@ -25,6 +25,10 @@ public:
 
             const auto& indexerB = itB->second;
 
+            if (indexerA.size() != indexerB.size()) {
+                return false;
+            }
+
             for (const auto& [lsetID, infoA] : indexerA) {
                 const auto infoItB = indexerB.find(lsetID);
 
@@ -33,6 +37,10 @@ public:
                 }
 
                 const auto& infoB = infoItB->second;
+
+                if (infoA.size() != infoB.size()) {
+                    return false;
+                }
 
                 for (const auto& [rA, rB] : rv::zip(infoA, infoB)) {
                     if (rA._offset != rB._offset) {

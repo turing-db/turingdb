@@ -2,6 +2,7 @@
 set(examples_sources
     SimpleGraph.cpp
     TypingGraph.cpp
+    ReactomeSampleGraph.cpp
 )
 
 add_library(turing_db_examples_s STATIC ${examples_sources})

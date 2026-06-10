@@ -20,6 +20,8 @@ class Change;
 class CommitLoader;
 class VersionController;
 class GraphLoader;
+class GraphParquetLoader;
+class GraphParquetDumper;
 class Commit;
 class GraphDumper;
 class CommitBuilder;
@@ -61,6 +63,8 @@ private:
     friend CommitLoader;
     friend CommitBuilder;
     friend GraphLoader;
+    friend GraphParquetLoader;
+    friend GraphParquetDumper;
     friend GraphWriter;
 
     GraphID _graphID;
