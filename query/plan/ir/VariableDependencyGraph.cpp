@@ -489,9 +489,7 @@ void VariableDependencyGraph::addMerge(VariableDependency* from1,
                                        VariableDependency* via1,
                                        VariableDependency* via2) {
     addBetween(from1, via1, into);
-    IRDumper::dumpMermaid(*this, std::cout);
     addBetween(from2, via2, into);
-    IRDumper::dumpMermaid(*this, std::cout);
 }
 
 void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
@@ -501,14 +499,22 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
 
     bioassert(cyc.size() >= 3, "Invalid cycle.");
 
+    // For a cycle (head, u, ..., v) with [v,head] in E :
     VariableDependency* head = cyc.front();
+    VariableDependency* u = *next(begin(cyc));
+    VariableDependency* v = *prev(end(cyc));
 
     VariableDependency* newHead = nullptr;
     VariableDependency* newTail = nullptr;
 
     VariableDependency* merged1 = nullptr;
     VariableDependency* merged2 = nullptr;
+    DependencyEdge* mergeToDelete1 = nullptr;
+    DependencyEdge* mergeToDelete2 = nullptr;
 
+    // If the current head has any incoming merge edges, it must have 2.
+    // Find those two merge edges.
+    // Delete them.
     std::erase_if(head->_incoming, [&](DependencyEdge* e) {
         const bool meta = EdgeMetadata::isMetaEdge(e->data().type());
         if (!meta) {
@@ -517,32 +523,48 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
 
         if (!merged1) {
             merged1 = e->_src;
+            mergeToDelete1 = e;
             return true;
         }
         if (!merged2) {
             merged2 = e->_src;
+            mergeToDelete2 = e;
             return true;
         }
 
         return false;
     });
 
+    // Ensure we exactly 0 or 2 merges
     bioassert(!((bool)merged1 ^ (bool)merged2), "Invalid merge state");
 
-    if (merged1 && merged2) {
+    // If not cascading a merge, just merge the two nodes as normal
+    if (!merged1 || !merged2) {
         newHead = newVariable(getNextAnonymisation(head));
-        addDirected(merged1, newHead, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
-        addDirected(merged2, newHead, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
+        newTail = newVariable(getNextAnonymisation(head));
+        addMerge(u, v, head, newHead, newTail);
+        return;
     }
 
-    newHead = newHead ? newHead : newVariable(getNextAnonymisation(head));
+    { // Erase the merge edges from the merge sources as well
+        std::erase_if(merged1->_outgoing, [mergeToDelete1](DependencyEdge* e) {
+            return e == mergeToDelete1;
+        });
+        std::erase_if(merged2->_outgoing, [mergeToDelete2](DependencyEdge* e) {
+            return e == mergeToDelete2;
+        });
+    }
+
+    // Create a parent of those two merge edges to cascade
+    {
+        VariableDependency* mergeParent = newVariable(getNextAnonymisation(head));
+        EdgeMetadata data(EdgeMetadata::EdgeType::MERGE);
+        addDirected(merged1, mergeParent, data);
+        addDirected(merged2, mergeParent, data);
+        newHead = mergeParent;
+    }
+
     newTail = newVariable(getNextAnonymisation(head));
-    spdlog::info("nh = {}, nt = {}", newHead->getName(), newTail->getName());
-
-    VariableDependency* nxt = *next(begin(cyc));
-    VariableDependency* prv = *prev(end(cyc));
-
-    addMerge(nxt, prv, head, newHead, newTail);
 }
 
 void VariableDependencyGraph::addBetweenOutImpl(VariableDependency* s,
