@@ -251,11 +251,11 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                 const EdgeRecord& edge = builder.addEdge(edgeTypeID, srcNodeID, tgtNodeID);
 
                 if (properties != obj.end()) {
-                    // Reusable storage for loading embedding properties
-
                     for (const auto& [key, value] : properties->items()) {
                         ptName = key;
                         ValueType vt = ValueType::Invalid;
+
+                        const bool valueIsEmbedding = value.is_array() && isEmbedding(value);
 
                         if (value.is_number_float()) {
                             vt = ValueType::Double;
@@ -263,7 +263,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                             vt = ValueType::Bool;
                         } else if (value.is_number()) {
                             vt = ValueType::Int64;
-                        } else if (value.is_array()) {
+                        } else if (valueIsEmbedding) {
                             vt = ValueType::Embedding;
                         } else {
                             vt = ValueType::String;
@@ -283,7 +283,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                             builder.addEdgeProperty<types::Int64>(edge, pt._id, value.get<int64_t>());
                         } else if (value.is_string()) {
                             builder.addEdgeProperty<types::String>(edge, pt._id, value.get<std::string_view>());
-                        } else if (value.is_array()) {
+                        } else if (valueIsEmbedding) {
                             const JsonlImportResult<void> res =
                                 tryFillEmbedding(value, embBacking, edgeEmbPropSizes, pt._id, lineNumber);
                             if (!res) {
