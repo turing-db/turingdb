@@ -6,14 +6,14 @@
 
 #include "Accessor.h"
 
-#include "GraphFileType.h"
-#include "Path.h"
-
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeResult.h"
 #include "dump/DumpResult.h"
 #include "mergers/DataPartMergeResult.h"
+
+#include "GraphFileType.h"
+#include "Path.h"
 
 namespace vec {
 class VectorDatabase;
