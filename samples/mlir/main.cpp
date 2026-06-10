@@ -12,7 +12,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 
 #include "DBOps.h"
-#include "NLDialect.h"
+#include "NLOps.h"
 #include "IRAssembler.h"
 #include "IRModuleInspector.h"
 
@@ -20,17 +20,27 @@ using namespace db;
 
 namespace {
 
-void helloModule(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
-    std::cout << "hello from mlir" << '\n';
-
+// Appends an empty function to the module and moves the builder insertion
+// point inside its entry block
+void startFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module, const char* name) {
     mlir::MLIRContext* ctxt = builder.getContext();
     const mlir::Location loc = builder.getUnknownLoc();
 
+    builder.setInsertionPointToEnd(module.getBody());
+
     auto funcType = mlir::FunctionType::get(ctxt, {}, {});
-    auto func = builder.create<mlir::func::FuncOp>(loc, "main", funcType);
+    auto func = builder.create<mlir::func::FuncOp>(loc, name, funcType);
     auto& block = *func.addEntryBlock();
+
     builder.setInsertionPointToStart(&block);
-    module.push_back(func);
+}
+
+// The set-at-a-time form of the query: db dialect ops on whole columns
+void addDBFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
+    startFunction(builder, module, "db_ops");
+
+    mlir::MLIRContext* ctxt = builder.getContext();
+    const mlir::Location loc = builder.getUnknownLoc();
 
     // MATCH (a)->(b)->(c): scan `a`, then two get_out_edges hops. The second hop
     // carries the filtered `a` column so it ends up filtered to the `a` that reach a `c`.
@@ -58,6 +68,34 @@ void helloModule(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     builder.create<mlir::db::GetOutEdges>(loc,
                                           mlir::TypeRange {colB2, colE1, colEt1, colC, colA2},
                                           mlir::ValueRange {hop1.getTgtids(), hop1.getSrcids()});
+
+    builder.create<mlir::func::ReturnOp>(loc);
+}
+
+// The imperative nested-loop form of the same query: nl dialect iterators
+// driven by chunked for loops. No type is ever spelled: the source ops infer
+// their iterator types and the nl.for builder looks up the loop variable
+// types on the iterator value
+void addNestedLoopFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
+    startFunction(builder, module, "nested_loop");
+
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    auto nodes = builder.create<mlir::nl::ScanNodes>(loc);
+    auto nodeLoop = builder.create<mlir::nl::For>(loc, nodes.getResult());
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    // Fill the node loop body: iterate the out-edges of each chunk of nodes
+    builder.setInsertionPointToStart(nodeLoop.getBody());
+    auto edges = builder.create<mlir::nl::GetOutEdges>(loc, nodeLoop.getBody()->getArgument(0));
+    builder.create<mlir::nl::For>(loc, edges.getResult());
+}
+
+void helloModule(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
+    std::cout << "hello from mlir" << '\n';
+
+    addDBFunction(builder, module);
+    addNestedLoopFunction(builder, module);
 }
 
 void assembleFiles(mlir::MLIRContext& ctxt, mlir::ModuleOp& module, const std::vector<std::string>& files) {

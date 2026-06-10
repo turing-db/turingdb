@@ -38,6 +38,7 @@ add_mlir_library(turing_db_ir_nldialect_s
   MLIRIR
   MLIRSupport
   MLIRFuncDialect
+  MLIRInferTypeOpInterface
   MLIRBuiltinToLLVMIRTranslation
 )
 

@@ -12,56 +12,60 @@ using namespace mlir::nl;
 
 namespace {
 
-bool isChunkOf(Type type, auto isElement) {
-    const auto chunkType = dyn_cast<ChunkType>(type);
-    return chunkType && isElement(chunkType.getElementType());
+Type getNodeIDChunkType(MLIRContext* context) {
+    return ChunkType::get(context, NodeIDType::get(context));
 }
 
-bool isNodeIDChunk(Type type) {
-    return isChunkOf(type, [](Type element) { return isa<NodeIDType>(element); });
+Type getEdgeIDChunkType(MLIRContext* context) {
+    return ChunkType::get(context, EdgeIDType::get(context));
 }
 
-bool isEdgeIDChunk(Type type) {
-    return isChunkOf(type, [](Type element) { return isa<EdgeIDType>(element); });
-}
-
-bool isEdgeTypeIDChunk(Type type) {
-    return isChunkOf(type, [](Type element) { return isa<EdgeTypeIDType>(element); });
+Type getEdgeTypeIDChunkType(MLIRContext* context) {
+    return ChunkType::get(context, EdgeTypeIDType::get(context));
 }
 
 }
 
-LogicalResult ScanNodes::verify() {
-    const auto iteratorType = cast<IteratorType>(getResult().getType());
-    const ArrayRef<Type> chunkTypes = iteratorType.getChunkTypes();
-
-    const bool yieldsNodeIDChunk = chunkTypes.size() == 1 && isNodeIDChunk(chunkTypes[0]);
-    if (!yieldsNodeIDChunk) {
-        return emitOpError("must return an iterator yielding one chunk of node IDs");
-    }
-
+// A node scan always produces one chunk of node IDs per step
+LogicalResult ScanNodes::inferReturnTypes(MLIRContext* context,
+                                          std::optional<Location> location,
+                                          ScanNodes::Adaptor adaptor,
+                                          SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(IteratorType::get(context, {getNodeIDChunkType(context)}));
     return success();
 }
 
-LogicalResult GetOutEdges::verify() {
-    const auto inputType = cast<ChunkType>(getInputNodes().getType());
-    const auto iteratorType = cast<IteratorType>(getResult().getType());
-    const ArrayRef<Type> chunkTypes = iteratorType.getChunkTypes();
+// An out-edges fetch always produces one chunk of source node IDs, edge IDs,
+// edge type IDs and target node IDs per step, mirroring db.get_out_edges
+LogicalResult GetOutEdges::inferReturnTypes(MLIRContext* context,
+                                            std::optional<Location> location,
+                                            GetOutEdges::Adaptor adaptor,
+                                            SmallVectorImpl<Type>& inferredReturnTypes) {
+    const Type sources = getNodeIDChunkType(context);
+    const Type edgeIDs = getEdgeIDChunkType(context);
+    const Type edgeTypeIDs = getEdgeTypeIDChunkType(context);
+    const Type targets = getNodeIDChunkType(context);
 
-    const bool yieldsEdgeChunks = chunkTypes.size() == 4
-                                  && isNodeIDChunk(chunkTypes[0])
-                                  && isEdgeIDChunk(chunkTypes[1])
-                                  && isEdgeTypeIDChunk(chunkTypes[2])
-                                  && isNodeIDChunk(chunkTypes[3]);
-
-    if (!isa<NodeIDType>(inputType.getElementType())) {
-        return emitOpError("expects a chunk of node IDs as input");
-    } else if (!yieldsEdgeChunks) {
-        return emitOpError("must return an iterator yielding chunks of source node IDs, "
-                           "edge IDs, edge type IDs and target node IDs");
-    }
-
+    inferredReturnTypes.push_back(IteratorType::get(context, {sources, edgeIDs, edgeTypeIDs, targets}));
     return success();
+}
+
+// Build a loop from just the iterator value: its iterator type carries the
+// chunk types, which become the loop variables (the body block arguments).
+// The body is created with its implicit nl.yield terminator, ready for the
+// caller to set the insertion point into it.
+void For::build(OpBuilder& builder, OperationState& state, Value iterator) {
+    const OpBuilder::InsertionGuard guard(builder);
+
+    state.addOperands(iterator);
+
+    const auto iteratorType = cast<IteratorType>(iterator.getType());
+    const ArrayRef<Type> chunkTypes = iteratorType.getChunkTypes();
+    const llvm::SmallVector<Location> chunkLocations(chunkTypes.size(), state.location);
+
+    Region* bodyRegion = state.addRegion();
+    builder.createBlock(bodyRegion, bodyRegion->end(), chunkTypes, chunkLocations);
+    For::ensureTerminator(*bodyRegion, builder, state.location);
 }
 
 // Custom syntax, in the style of scf.for / LingoDB's dsa.for:
