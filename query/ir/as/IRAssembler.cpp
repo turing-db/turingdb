@@ -36,7 +36,7 @@ void IRAssembler::assemble() const {
 
         auto fileMod = mlir::parseSourceFile<mlir::ModuleOp>(filename, parserConfig);
         if (!fileMod) {
-            throw CompilerException(fmt::format("MLIR file {} can not be parsed", file.get()));
+            throw IRException(fmt::format("MLIR file {} can not be parsed", file.get()));
         }
 
         // A parsed module is already verified to have unique symbol names, so a single
@@ -46,9 +46,9 @@ void IRAssembler::assemble() const {
             const llvm::StringRef name = func.getSymName();
             const bool alreadyDefined = moduleSymbols.lookup(name) != nullptr;
             if (alreadyDefined) {
-                throw CompilerException(fmt::format("Function '{}' from MLIR file {} is already defined in the module",
-                                                    name.str(),
-                                                    file.get()));
+                throw IRException(fmt::format("Function '{}' from MLIR file {} is already defined in the module",
+                                              name.str(),
+                                              file.get()));
             }
         }
 
