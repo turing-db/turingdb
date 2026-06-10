@@ -14,6 +14,7 @@
 #include "writers/MetadataBuilder.h"
 
 using json = nlohmann::json;
+using namespace db;
 
 namespace {
 
@@ -49,9 +50,44 @@ namespace {
     }
 }
 
+JsonlImportResult<void> tryFillEmbedding(const json& arr,
+                      std::vector<float>& storage,
+                      std::unordered_map<db::PropertyTypeID, size_t>& sizeMap,
+                      PropertyTypeID ptId,
+                      size_t lineNo) {
+    // Check the embedding is a valid size
+    const size_t dim = arr.size();
+    if (dim == 0) {
+        return JsonlImportError::result(JsonlImportErrorType::NON_EMB_ARRAY, lineNo);
+    }
+    // All embeddings of the same property need be the same dimension
+    const auto findIt = sizeMap.find(ptId);
+    const bool alreadyRegistered = findIt != (end(sizeMap));
+    if (alreadyRegistered && dim != findIt->second) {
+        return JsonlImportError::result(JsonlImportErrorType::MISMATCH_EMB_DIM, lineNo);
+    }
+    if (!alreadyRegistered) {
+        sizeMap.emplace(ptId, dim);
+    }
+
+    storage.clear();
+    storage.reserve(dim);
+
+    for (const json& e: arr) {
+        if (!e.is_number()) {
+            return JsonlImportError::result(JsonlImportErrorType::NON_EMB_ARRAY, lineNo);
+        }
+
+        const float v = e.get<float>(); // Will work for any numeric type
+        storage.push_back(v);
+    }
+
+    // fills the vector, then caller needs to add the property at the callsite
+
+    return {};
 }
 
-namespace db {
+}
 
 JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream& stream) {
     Profile profile("JsonlParser::parse");
@@ -65,8 +101,10 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
     MetadataBuilder& metadataBuilder = tip->metadata();
     std::string ptName;
     LabelSet labelset;
+
     std::unordered_map<PropertyTypeID, size_t> nodeEmbPropSizes;
     std::unordered_map<PropertyTypeID, size_t> edgeEmbPropSizes;
+    std::vector<float> embBacking;
 
     while (std::getline(stream, line)) {
         ++lineNumber;
@@ -117,9 +155,6 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                 nodeIDs.emplace(parseEntityID(*id), nodeID);
 
                 if (properties != obj.end()) {
-                    // Reusable storage for loading embedding properties
-                    std::vector<float> embBacking;
-
                     for (const auto& [key, value] : properties->items()) {
                         ptName = key;
                         ValueType vt = ValueType::Invalid;
@@ -151,38 +186,10 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                         } else if (value.is_string()) {
                             builder.addNodeProperty<types::String>(nodeID, pt._id, value.get<std::string_view>());
                         } else if (value.is_array()) {
-                            const size_t sz = value.size();
-
-                            // Embeddings must be at least dimension 1
-                            if (sz == 0) {
-                                return JsonlImportError::result(
-                                    JsonlImportErrorType::NON_EMB_ARRAY, lineNumber);
-                            }
-
-                            { // All embeddings need be the same size
-                                const auto findIt = nodeEmbPropSizes.find(pt._id);
-                                const bool alreadyRegistered = findIt != (end(nodeEmbPropSizes));
-                                if (alreadyRegistered) {
-                                    if (sz != findIt->second) {
-                                        return JsonlImportError::result(
-                                            JsonlImportErrorType::MISMATCH_EMB_DIM,
-                                            lineNumber);
-                                    }
-                                } else {
-                                    nodeEmbPropSizes.emplace(pt._id, sz);
-                                }
-                            }
-
-                            embBacking.clear();
-                            embBacking.reserve(sz);
-
-                            for (const json& e : value) {
-                                if (!e.is_number()) {
-                                    return JsonlImportError::result(
-                                        JsonlImportErrorType::NON_EMB_ARRAY, lineNumber);
-                                }
-                                const float v = e.get<float>(); // Will work for any numeric type
-                                embBacking.push_back(v);
+                            const JsonlImportResult<void> res =
+                                tryFillEmbedding(value, embBacking, nodeEmbPropSizes, pt._id, lineNumber);
+                            if (!res) {
+                                return res;
                             }
 
                             builder.addNodeProperty<types::Embedding>(nodeID, pt._id, embBacking);
@@ -243,7 +250,6 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
 
                 if (properties != obj.end()) {
                     // Reusable storage for loading embedding properties
-                    std::vector<float> embBacking;
 
                     for (const auto& [key, value] : properties->items()) {
                         ptName = key;
@@ -276,38 +282,10 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                         } else if (value.is_string()) {
                             builder.addEdgeProperty<types::String>(edge, pt._id, value.get<std::string_view>());
                         } else if (value.is_array()) {
-                            const size_t sz = value.size();
-
-                            // Embeddings must be at least dimension 1
-                            if (sz == 0) {
-                                return JsonlImportError::result(
-                                    JsonlImportErrorType::NON_EMB_ARRAY, lineNumber);
-                            }
-
-                            { // All embeddings need be the same size
-                                const auto findIt = edgeEmbPropSizes.find(pt._id);
-                                const bool alreadyRegistered = findIt != (end(edgeEmbPropSizes));
-                                if (alreadyRegistered) {
-                                    if (sz != findIt->second) {
-                                        return JsonlImportError::result(
-                                            JsonlImportErrorType::MISMATCH_EMB_DIM,
-                                            lineNumber);
-                                    }
-                                } else {
-                                    edgeEmbPropSizes.emplace(pt._id, sz);
-                                }
-                            }
-
-                            embBacking.clear();
-                            embBacking.reserve(sz);
-
-                            for (const json& e : value) {
-                                if (!e.is_number()) {
-                                    return JsonlImportError::result(
-                                        JsonlImportErrorType::NON_EMB_ARRAY, lineNumber);
-                                }
-                                const float v = e.get<float>();
-                                embBacking.push_back(v);
+                            const JsonlImportResult<void> res =
+                                tryFillEmbedding(value, embBacking, edgeEmbPropSizes, pt._id, lineNumber);
+                            if (!res) {
+                                return res;
                             }
 
                             builder.addEdgeProperty<types::Embedding>(edge, pt._id, embBacking);
@@ -324,6 +302,4 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
     }
 
     return {};
-}
-
 }
