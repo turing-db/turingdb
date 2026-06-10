@@ -67,7 +67,7 @@ JsonlImportResult<void> tryFillEmbedding(const json& arr,
 
     // All embeddings of the same property need be the same dimension
     const auto findIt = sizeMap.find(ptId);
-    const bool alreadyRegistered = findIt != (end(sizeMap));
+    const bool alreadyRegistered = findIt != end(sizeMap);
     if (alreadyRegistered && dim != findIt->second) {
         return JsonlImportError::result(JsonlImportErrorType::MISMATCH_EMB_DIM, lineNo);
     }
@@ -78,7 +78,7 @@ JsonlImportResult<void> tryFillEmbedding(const json& arr,
     storage.clear();
     storage.reserve(dim);
 
-    for (const json& e: arr) {
+    for (const json& e : arr) {
         // Elements are guaranteed to be numeric via call to @ref isEmbedding
         const float v = e.get<float>(); // Casts from any numeric type
         storage.push_back(v);
@@ -159,13 +159,15 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                         ptName = key;
                         ValueType vt = ValueType::Invalid;
 
+                        const bool valueIsEmbedding = value.is_array() && isEmbedding(value);
+
                         if (value.is_number_float()) {
                             vt = ValueType::Double;
                         } else if (value.is_boolean()) {
                             vt = ValueType::Bool;
                         } else if (value.is_number()) {
                             vt = ValueType::Int64;
-                        } else if (value.is_array()) {
+                        } else if (valueIsEmbedding) {
                             vt = ValueType::Embedding;
                         } else {
                             vt = ValueType::String;
@@ -185,7 +187,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                             builder.addNodeProperty<types::Int64>(nodeID, pt._id, value.get<int64_t>());
                         } else if (value.is_string()) {
                             builder.addNodeProperty<types::String>(nodeID, pt._id, value.get<std::string_view>());
-                        } else if (value.is_array() && isEmbedding(value)) {
+                        } else if (valueIsEmbedding) {
                             const JsonlImportResult<void> res =
                                 tryFillEmbedding(value, embBacking, nodeEmbPropSizes, pt._id, lineNumber);
                             if (!res) {
