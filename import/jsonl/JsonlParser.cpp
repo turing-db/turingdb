@@ -1,6 +1,7 @@
 #include "JsonlParser.h"
 
 #include <nlohmann/json.hpp>
+#include <unordered_map>
 
 #include "ID.h"
 #include "JsonlImportResult.h"
@@ -64,6 +65,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
     MetadataBuilder& metadataBuilder = tip->metadata();
     std::string ptName;
     LabelSet labelset;
+    std::unordered_map<PropertyTypeID, size_t> embPropSizes;
 
     while (std::getline(stream, line)) {
         ++lineNumber;
@@ -114,6 +116,9 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                 nodeIDs.emplace(parseEntityID(*id), nodeID);
 
                 if (properties != obj.end()) {
+                    // Reusable storage for loading embedding properties
+                    std::vector<float> embBacking;
+
                     for (const auto& [key, value] : properties->items()) {
                         ptName = key;
                         ValueType vt = ValueType::Invalid;
@@ -145,13 +150,33 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                         } else if (value.is_string()) {
                             builder.addNodeProperty<types::String>(nodeID, pt._id, value.get<std::string_view>());
                         } else if (value.is_array()) {
-                            const auto arr = value.get<std::vector<json>>();
-                            std::vector<float> embBacking;
-                            embBacking.reserve(arr.size());
+                            const size_t sz = value.size();
 
-                            for (const json& e : arr) {
-                                const bool isNumeric = e.is_number();
-                                if (isNumeric) {
+                            // Embeddings must be at least dimension 1
+                            if (sz == 0) {
+                                return JsonlImportError::result(
+                                    JsonlImportErrorType::NON_EMB_ARRAY, lineNumber);
+                            }
+
+                            { // All embeddings need be the same size
+                                const auto findIt = embPropSizes.find(pt._id);
+                                const bool alreadyRegistered = findIt != (end(embPropSizes));
+                                if (alreadyRegistered) {
+                                    if (sz != findIt->second) {
+                                        return JsonlImportError::result(
+                                            JsonlImportErrorType::MISMATCH_EMB_DIM,
+                                            lineNumber);
+                                    }
+                                } else {
+                                    embPropSizes.emplace(pt._id, sz);
+                                }
+                            }
+
+                            embBacking.clear();
+                            embBacking.reserve(sz);
+
+                            for (const json& e : value) {
+                                if (!e.is_number()) {
                                     return JsonlImportError::result(
                                         JsonlImportErrorType::NON_EMB_ARRAY, lineNumber);
                                 }
