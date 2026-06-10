@@ -29,12 +29,39 @@ def GetOutEdges : NLOp<"get_out_edges", [Pure, InferTypeOpAdaptor]> {
   let description = [{
     Imperative counterpart of db.get_out_edges. Each step of an enclosing
     nl.for fills one chunk of source node IDs, edge IDs, edge type IDs and
-    target node IDs. Both the input chunk type and the result iterator type
-    are fixed and inferred, not spelled out.
+    target node IDs.
+
+    `columns_to_filter` is the carry set, mirroring db.get_out_edges: chunks
+    bound by an outer nl.for that this hop must filter down to the rows that
+    survive the traversal. Each carried chunk comes back - same type, filtered -
+    as a trailing chunk of the result iterator, so an enclosing nl.for binds it
+    as an extra loop variable after the four fixed edge chunks:
+
+      %edges = nl.get_out_edges(%a, {})
+      nl.for %srcs, %eids, %etypes, %b in %edges {
+        // second hop b->c, carrying the `a` of this step (here %srcs)
+        %hop = nl.get_out_edges(%b, {%srcs}) : !nl.chunk<!nl.node_id>
+        nl.for %srcs2, %eids2, %etypes2, %c, %aFiltered in %hop { ... }
+      }
+
+    The input chunk type and the four fixed result chunks are inferred; only
+    the carried chunk types are spelled out, after the colon.
   }];
-  let arguments = (ins NLNodeIDChunk:$input_nodes);
+
+  // `columns_to_filter`: the variadic carry set, after the fixed input_nodes.
+  // NLChunk, not NLNodeIDChunk, so chunks of any element type can be carried.
+  let arguments = (ins NLNodeIDChunk:$input_nodes, Variadic<NLChunk>:$columns_to_filter);
   let results   = (outs NLIterator:$result);
-  let assemblyFormat = "`(` $input_nodes `)` attr-dict";
+
+  // The carried chunk element types vary from call to call and - unlike
+  // input_nodes and the inferred result - cannot be built from a recipe, so
+  // they are spelled after the colon, the same as nl.output. The optional
+  // group (anchored on the carried types) drops the colon when the carry set
+  // is empty, keeping the first-hop syntax `(%nodes, {})`.
+  let assemblyFormat = [{
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` attr-dict
+    ( `:` qualified(type($columns_to_filter))^ )?
+  }];
 }
 
 /**
@@ -47,12 +74,21 @@ def GetInEdges : NLOp<"get_in_edges", [Pure, InferTypeOpAdaptor]> {
     node's successors, this walks its predecessors. Each step of an enclosing
     nl.for fills one chunk of source node IDs, edge IDs, edge type IDs and
     target node IDs - the same chunk shape as out-edges, so the two are
-    interchangeable in a loop. Both the input chunk type and the result
-    iterator type are fixed and inferred, not spelled out.
+    interchangeable in a loop.
+
+    Like nl.get_out_edges it takes a `columns_to_filter` carry set: chunks from
+    an outer nl.for that this hop filters and hands back as trailing chunks of
+    the result iterator. The input chunk type and the four fixed result chunks
+    are inferred; only the carried chunk types are spelled out, after the colon.
   }];
-  let arguments = (ins NLNodeIDChunk:$input_nodes);
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes, Variadic<NLChunk>:$columns_to_filter);
   let results   = (outs NLIterator:$result);
-  let assemblyFormat = "`(` $input_nodes `)` attr-dict";
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` attr-dict
+    ( `:` qualified(type($columns_to_filter))^ )?
+  }];
 }
 
 /**
