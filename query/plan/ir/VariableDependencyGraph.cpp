@@ -602,7 +602,7 @@ void VariableDependencyGraph::addBetweenIncImpl(VariableDependency* s,
 
     const EdgeMetadata& data = e->data();
     addDirected(mid, s, data);
-    addDirected(t, mid, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
+    addDirected(mid, t, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
 }
 
 void VariableDependencyGraph::addBetween(VariableDependency* s,
