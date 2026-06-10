@@ -139,27 +139,6 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
     return exists ? &*foundIt : newVariable(entity);
 }
 
-// std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::paton() {
-//     std::vector<Cycle> cycles;
-//     const size_t n = _vars.size();
-//     if (n == 0) {
-//         return cycles;
-//     }
-
-//     // Exists in map => visited
-//     using VisitedEdges = std::unordered_set<DependencyEdge*>;
-//     // [x, true] => visited, [y, false] => not visited
-//     using VisitedNodes = std::unordered_map<VariableDependency*, bool>;
-
-//     VisitedNodes X;
-//     X.reserve(n);
-//     for (VariableDependency& v : _vars) {
-//         X.emplace(&v, false);
-//     }
-
-//     return cycles;
-// }
-
 std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis() {
     using NodeSet = std::set<VariableDependency*>;
     using PredMap = std::unordered_map<VariableDependency*, VariableDependency*>;
@@ -540,10 +519,6 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
         });
     }
 
-    // Only one of the ends of the cycle should be merged (property of cycle basis)
-    // Employ a convention: make whatever side is already merged the "newHead"
-    const bool startIsMerged = _seenInCycle.contains(u);
-
     // Create a parent of those two merge edges to cascade
     VariableDependency* mergeParent = newVariable(getNextAnonymisation(head));
     {
@@ -553,11 +528,14 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     }
     VariableDependency* otherInput = newVariable(getNextAnonymisation(head));
 
+    // Only one of the ends of the cycle should be merged (property of cycle basis)
+    // Employ a convention: make whatever side is already merged the "newHead"
+    const bool startIsMerged = _seenInCycle.contains(u);
     newHead = startIsMerged? mergeParent : otherInput;
     newTail = startIsMerged? otherInput : mergeParent;
 
-    addDirected(newTail, head, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
-    addBetween(u, otherInput, head);
+    addDirected(newHead, head, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
+    addBetween(v, newTail, head);
 
     // Register that we have seen these nodes in a cycle
     _seenInCycle.insert(begin(cyc), end(cyc));
@@ -608,7 +586,9 @@ void VariableDependencyGraph::addBetween(VariableDependency* s,
         }
     }
 
-    bioassert(false, "Attempted to addBetween on two nodes that were not connected.");
+    bioassert(false,
+              "Attempted to addBetween on two nodes that were not connected: {} and {}.",
+              s->getName(), t->getName());
 }
 
 std::string VariableDependencyGraph::getNextAnonymisation(VariableDependency* v) {
