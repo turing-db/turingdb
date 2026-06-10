@@ -24,6 +24,18 @@ Type getEdgeTypeIDChunkType(MLIRContext* context) {
     return ChunkType::get(context, EdgeTypeIDType::get(context));
 }
 
+// Out- and in-edge fetches expose the same row of chunks - source node IDs,
+// edge IDs, edge type IDs and target node IDs - so a loop body written for one
+// direction works unchanged for the other.
+Type getEdgeIteratorType(MLIRContext* context) {
+    const Type sources = getNodeIDChunkType(context);
+    const Type edgeIDs = getEdgeIDChunkType(context);
+    const Type edgeTypeIDs = getEdgeTypeIDChunkType(context);
+    const Type targets = getNodeIDChunkType(context);
+
+    return IteratorType::get(context, {sources, edgeIDs, edgeTypeIDs, targets});
+}
+
 }
 
 // A node scan always produces one chunk of node IDs per step
@@ -35,18 +47,23 @@ LogicalResult ScanNodes::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
-// An out-edges fetch always produces one chunk of source node IDs, edge IDs,
-// edge type IDs and target node IDs per step, mirroring db.get_out_edges
+// An out-edges fetch produces one row of edge chunks per step, mirroring
+// db.get_out_edges
 LogicalResult GetOutEdges::inferReturnTypes(MLIRContext* context,
                                             std::optional<Location> location,
                                             GetOutEdges::Adaptor adaptor,
                                             SmallVectorImpl<Type>& inferredReturnTypes) {
-    const Type sources = getNodeIDChunkType(context);
-    const Type edgeIDs = getEdgeIDChunkType(context);
-    const Type edgeTypeIDs = getEdgeTypeIDChunkType(context);
-    const Type targets = getNodeIDChunkType(context);
+    inferredReturnTypes.push_back(getEdgeIteratorType(context));
+    return success();
+}
 
-    inferredReturnTypes.push_back(IteratorType::get(context, {sources, edgeIDs, edgeTypeIDs, targets}));
+// An in-edges fetch produces the same row of edge chunks as out-edges; the
+// input chunk names the nodes whose in-edges are gathered
+LogicalResult GetInEdges::inferReturnTypes(MLIRContext* context,
+                                           std::optional<Location> location,
+                                           GetInEdges::Adaptor adaptor,
+                                           SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context));
     return success();
 }
 
