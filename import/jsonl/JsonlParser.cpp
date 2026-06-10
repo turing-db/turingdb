@@ -65,7 +65,8 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
     MetadataBuilder& metadataBuilder = tip->metadata();
     std::string ptName;
     LabelSet labelset;
-    std::unordered_map<PropertyTypeID, size_t> embPropSizes;
+    std::unordered_map<PropertyTypeID, size_t> nodeEmbPropSizes;
+    std::unordered_map<PropertyTypeID, size_t> edgeEmbPropSizes;
 
     while (std::getline(stream, line)) {
         ++lineNumber;
@@ -159,8 +160,8 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                             }
 
                             { // All embeddings need be the same size
-                                const auto findIt = embPropSizes.find(pt._id);
-                                const bool alreadyRegistered = findIt != (end(embPropSizes));
+                                const auto findIt = nodeEmbPropSizes.find(pt._id);
+                                const bool alreadyRegistered = findIt != (end(nodeEmbPropSizes));
                                 if (alreadyRegistered) {
                                     if (sz != findIt->second) {
                                         return JsonlImportError::result(
@@ -168,7 +169,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                                             lineNumber);
                                     }
                                 } else {
-                                    embPropSizes.emplace(pt._id, sz);
+                                    nodeEmbPropSizes.emplace(pt._id, sz);
                                 }
                             }
 
@@ -241,6 +242,9 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                 const EdgeRecord& edge = builder.addEdge(edgeTypeID, srcNodeID, tgtNodeID);
 
                 if (properties != obj.end()) {
+                    // Reusable storage for loading embedding properties
+                    std::vector<float> embBacking;
+
                     for (const auto& [key, value] : properties->items()) {
                         ptName = key;
                         ValueType vt = ValueType::Invalid;
@@ -251,6 +255,8 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                             vt = ValueType::Bool;
                         } else if (value.is_number()) {
                             vt = ValueType::Int64;
+                        } else if (value.is_array()) {
+                            vt = ValueType::Embedding;
                         } else {
                             vt = ValueType::String;
                         }
@@ -269,6 +275,42 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                             builder.addEdgeProperty<types::Int64>(edge, pt._id, value.get<int64_t>());
                         } else if (value.is_string()) {
                             builder.addEdgeProperty<types::String>(edge, pt._id, value.get<std::string_view>());
+                        } else if (value.is_array()) {
+                            const size_t sz = value.size();
+
+                            // Embeddings must be at least dimension 1
+                            if (sz == 0) {
+                                return JsonlImportError::result(
+                                    JsonlImportErrorType::NON_EMB_ARRAY, lineNumber);
+                            }
+
+                            { // All embeddings need be the same size
+                                const auto findIt = edgeEmbPropSizes.find(pt._id);
+                                const bool alreadyRegistered = findIt != (end(edgeEmbPropSizes));
+                                if (alreadyRegistered) {
+                                    if (sz != findIt->second) {
+                                        return JsonlImportError::result(
+                                            JsonlImportErrorType::MISMATCH_EMB_DIM,
+                                            lineNumber);
+                                    }
+                                } else {
+                                    edgeEmbPropSizes.emplace(pt._id, sz);
+                                }
+                            }
+
+                            embBacking.clear();
+                            embBacking.reserve(sz);
+
+                            for (const json& e : value) {
+                                if (!e.is_number()) {
+                                    return JsonlImportError::result(
+                                        JsonlImportErrorType::NON_EMB_ARRAY, lineNumber);
+                                }
+                                const float v = e.get<float>();
+                                embBacking.push_back(v);
+                            }
+
+                            builder.addEdgeProperty<types::Embedding>(edge, pt._id, embBacking);
                         } else {
                             builder.addEdgeProperty<types::String>(edge, pt._id, value.dump());
                         }
