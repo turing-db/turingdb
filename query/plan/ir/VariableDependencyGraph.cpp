@@ -88,8 +88,6 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
 
     VariableDependency* prev = originVar;
     for (const auto& [edge, tgtPtn] : chain) {
-        const VarDecl* edgeDecl = edge->getDecl();
-
         VariableDependency* tgtVar = getOrCreateVariable(tgtPtn);
 
         const EdgePattern::Direction direction = edge->getDirection();
@@ -106,14 +104,10 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
             tgt = prev;
         }
 
-        if (edgeDecl->isUnnamed()) {
-            addDirected(src, tgt, EdgeMetadata {type});
-        } else {
-            VariableDependency* edgeVar = getOrCreateVariable(edge);
-            // Below checks for duplication
-            addDirected(src, edgeVar, EdgeMetadata {type});
-            addDirected(edgeVar, tgt, EdgeMetadata {type});
-        }
+        VariableDependency* edgeVar = getOrCreateVariable(edge);
+        // Below checks for duplication
+        addDirected(src, edgeVar, EdgeMetadata {type});
+        addDirected(edgeVar, tgt, EdgeMetadata {type});
 
         prev = tgt;
     }
