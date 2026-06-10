@@ -41,6 +41,12 @@ public:
             const size_t remainder = propCount % Constants::ID_COUNT_PER_PAGE;
             const auto& ids = props.ids();
 
+            // EntityID is a standard-layout uint64_t wrapper (pinned in
+            // PropertyContainerDumpConstants.h), so pages of IDs are written
+            // straight from the ID array, byte-identical to per-getValue()
+            // writes.
+            const uint8_t* idBytes = reinterpret_cast<const uint8_t*>(ids.data());
+
             size_t offset = 0;
             for (size_t i = 0; i < idPageCount; i++) {
                 // New page
@@ -50,18 +56,14 @@ public:
                 const size_t countInPage = isLastPage
                                              ? (remainder == 0 ? Constants::ID_COUNT_PER_PAGE : remainder)
                                              : Constants::ID_COUNT_PER_PAGE;
-                const std::span idSpan = std::span {ids}.subspan(offset, countInPage);
-                offset += countInPage;
 
                 // Header
                 _writer.writeToCurrentPage(countInPage);
 
-                // Data — IDs are contiguous and EntityID is a standard-layout
-                // uint64_t wrapper, so the whole page goes out in one write,
-                // byte-identical to writing each getValue().
-                _writer.writeToCurrentPage(std::span<const uint8_t>{
-                    reinterpret_cast<const uint8_t*>(idSpan.data()),
-                    idSpan.size_bytes()});
+                // Data
+                _writer.writeToCurrentPage(std::span {idBytes + offset * Constants::ID_STRIDE, countInPage * Constants::ID_STRIDE});
+
+                offset += countInPage;
             }
         }
 
@@ -132,7 +134,11 @@ public:
         {
             // IDs
             const size_t remainder = propCount % Constants::ID_COUNT_PER_PAGE;
-            std::span ids(props.ids());
+            const auto& ids = props.ids();
+
+            // See the TrivialPropertyContainerDumper IDs section: pages of
+            // IDs are written straight from the ID array.
+            const uint8_t* idBytes = reinterpret_cast<const uint8_t*>(ids.data());
 
             size_t offset = 0;
             for (size_t i = 0; i < idPageCount; i++) {
@@ -143,16 +149,14 @@ public:
                 const size_t countInPage = isLastPage
                                              ? (remainder == 0 ? Constants::ID_COUNT_PER_PAGE : remainder)
                                              : Constants::ID_COUNT_PER_PAGE;
-                const std::span pageIDs = ids.subspan(offset, countInPage);
-                offset += countInPage;
 
                 // Header
                 _writer.writeToCurrentPage(countInPage);
 
-                // Data — see TrivialPropertyContainerDumper: one bulk write.
-                _writer.writeToCurrentPage(std::span<const uint8_t>{
-                    reinterpret_cast<const uint8_t*>(pageIDs.data()),
-                    pageIDs.size_bytes()});
+                // Data
+                _writer.writeToCurrentPage(std::span {idBytes + offset * Constants::ID_STRIDE, countInPage * Constants::ID_STRIDE});
+
+                offset += countInPage;
             }
         }
 
@@ -197,6 +201,12 @@ public:
                 const std::span limits = bucket.limits();
                 uint32_t remainingStrCount = bucket.strCount();
 
+                // StringLimits is a packed {uint32 _offset; uint32 _count}
+                // (layout pinned in PropertyContainerDumpConstants.h), so
+                // blocks of limits are written straight from the limits
+                // array, byte-identical to the loader's field-wise reads.
+                const uint8_t* limitBytes = reinterpret_cast<const uint8_t*>(limits.data());
+
                 size_t offset = 0;
 
                 while (remainingStrCount != 0) {
@@ -218,19 +228,11 @@ public:
                     const size_t limitsStride = std::min(availSpace, maxStride);
 
                     const uint32_t blockStrCount = limitsStride / Constants::LIMIT_STRIDE;
-                    const std::span blockLimits = limits.subspan(offset, blockStrCount);
                     remainingStrCount -= blockStrCount;
 
                     _writer.writeToCurrentPage(i);
                     _writer.writeToCurrentPage(blockStrCount);
-
-                    // StringLimits is a packed {uint32 _offset; uint32 _count}
-                    // with no padding (cf. StringBucket::create's memcpy), and
-                    // a block is contiguous, so the limits go out in one write,
-                    // byte-identical to the per-field writes.
-                    _writer.writeToCurrentPage(std::span<const uint8_t>{
-                        reinterpret_cast<const uint8_t*>(blockLimits.data()),
-                        blockLimits.size_bytes()});
+                    _writer.writeToCurrentPage(std::span {limitBytes + offset * Constants::LIMIT_STRIDE, blockStrCount * Constants::LIMIT_STRIDE});
 
                     offset += blockStrCount;
                     blockCountInPage++;

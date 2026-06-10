@@ -1,11 +1,13 @@
 #include "PropertyContainerDumper.h"
 
+#include <stdint.h>
 #include <algorithm>
-#include <cstdint>
 #include <span>
 
 #include "GraphDumpHelper.h"
 #include "PropertyContainerDumpConstants.h"
+
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -50,6 +52,11 @@ DumpResult<void> EmbeddingPropertyContainerDumper::dump(const TypedPropertyConta
         const size_t remainder = propCount % idCountPerPage;
         const auto& ids = props.ids();
 
+        // See the TrivialPropertyContainerDumper IDs section: pages of IDs
+        // are written straight from the ID array, layout pinned in
+        // PropertyContainerDumpConstants.h.
+        const uint8_t* idBytes = reinterpret_cast<const uint8_t*>(ids.data());
+
         size_t offset = 0;
         for (size_t i = 0; i < idPageCount; i++) {
             _writer.nextPage();
@@ -58,16 +65,11 @@ DumpResult<void> EmbeddingPropertyContainerDumper::dump(const TypedPropertyConta
             const size_t countInPage = isLastPage
                                          ? (remainder == 0 ? idCountPerPage : remainder)
                                          : idCountPerPage;
-            const std::span idSpan = std::span{ids}.subspan(offset, countInPage);
-            offset += countInPage;
 
             _writer.writeToCurrentPage(countInPage);
-            // The IDs of a page are contiguous in `ids()`, and EntityID is a
-            // standard-layout uint64_t wrapper, so the whole page's IDs go out
-            // in a single write — byte-identical to writing each getValue().
-            _writer.writeToCurrentPage(std::span<const uint8_t>{
-                reinterpret_cast<const uint8_t*>(idSpan.data()),
-                idSpan.size_bytes()});
+            _writer.writeToCurrentPage(std::span {idBytes + offset * idStride, countInPage * idStride});
+
+            offset += countInPage;
         }
     }
 
@@ -75,6 +77,17 @@ DumpResult<void> EmbeddingPropertyContainerDumper::dump(const TypedPropertyConta
         // Float data — written as a flat stream across pages
         const size_t remainder = totalFloats % floatsPerPage;
         size_t floatOffset = 0;
+
+        // The stream is sliced straight out of the container's buckets: views
+        // are stored in allocation order at dump time (alloc, the loader and
+        // sort() all fill buckets sequentially), so a bucket's used span is
+        // exactly the floats of its views in index order. A run is capped by
+        // the floats remaining in the page (to preserve the page layout) and
+        // by the bucket end, so a write never touches more than one
+        // allocation. Float order — and therefore the byte output — is
+        // unchanged from per-float writes.
+        size_t bucketIndex = 0;
+        size_t bucketFirstView = 0;
 
         for (size_t i = 0; i < floatPageCount; i++) {
             _writer.nextPage();
@@ -86,36 +99,27 @@ DumpResult<void> EmbeddingPropertyContainerDumper::dump(const TypedPropertyConta
 
             _writer.writeToCurrentPage(countInPage);
 
-            // Write the largest physically-contiguous run per call instead of
-            // one float at a time. A run is capped by the floats remaining in
-            // this page (to preserve the page layout) and breaks at bucket
-            // boundaries, where the backing storage is no longer contiguous.
-            // Float order — and therefore the byte output — is unchanged.
             size_t toWrite = countInPage;
             while (toWrite > 0) {
                 const size_t embIdx = floatOffset / dimension;
                 const size_t floatIdx = floatOffset % dimension;
-                const std::span<const float> view = container.getView(embIdx);
 
-                const float* runStart = view.data() + floatIdx;
-                const float* runEnd = view.data() + view.size();
-                size_t runLen = view.size() - floatIdx;
-
-                // Extend the run across following embeddings that sit
-                // immediately after this one in memory (same bucket).
-                for (size_t nextEmb = embIdx + 1;
-                     runLen < toWrite && nextEmb < propCount; nextEmb++) {
-                    const std::span<const float> next = container.getView(nextEmb);
-                    if (next.data() != runEnd) {
-                        break;
-                    }
-                    runLen += next.size();
-                    runEnd += next.size();
+                while (embIdx >= bucketFirstView + container.bucket(bucketIndex).getEmbeddingCount()) {
+                    bucketFirstView += container.bucket(bucketIndex).getEmbeddingCount();
+                    bucketIndex++;
+                    bioassert(bucketIndex < container.bucketCount(), "Embedding bucket walk ran past the last bucket");
                 }
 
-                const size_t n = std::min(runLen, toWrite);
-                _writer.writeToCurrentPage(std::span<const uint8_t>{
-                    reinterpret_cast<const uint8_t*>(runStart), n * sizeof(float)});
+                const std::span<const float> bucketSpan = container.bucket(bucketIndex).span();
+                const size_t bucketFloatIndex = (embIdx - bucketFirstView) * dimension + floatIdx;
+
+                // Verify the allocation-order invariant the slicing relies on.
+                const std::span<const float> view = container.getView(embIdx);
+                bioassert(view.size() == dimension, "Embedding view size must match the container dimension");
+                bioassert(view.data() == bucketSpan.data() + (embIdx - bucketFirstView) * dimension, "Embedding views must be stored in allocation order");
+
+                const size_t n = std::min(bucketSpan.size() - bucketFloatIndex, toWrite);
+                _writer.writeToCurrentPage(std::span {bucketSpan.data() + bucketFloatIndex, n});
 
                 floatOffset += n;
                 toWrite -= n;
