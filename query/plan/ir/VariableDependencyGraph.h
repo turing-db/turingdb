@@ -141,18 +141,9 @@ public:
 
     const DependencyEdge* addDirected(VariableDependency* src, VariableDependency* tgt, const EdgeMetadata& data);
 
-    Cycle getCycle();
-
     std::vector<Cycle> cycleBasis();
-    std::vector<Cycle> paton();
-
-    void rewriteCycle(const Cycle& cyc);
 
     void detachCycle(const Cycle& cyc);
-
-    Cycle _getCycle();
-
-    void applyMerges();
 
 private:
     /// Variables whose dependencies are tracked by this class
@@ -167,29 +158,15 @@ private:
                        std::pair<VariableDependency*, VariableDependency*>>
         _anonMap;
 
-    using Visited = std::unordered_map<VariableDependency*, uint8_t>;
-    using Parents = std::unordered_map<VariableDependency*, VariableDependency*>;
-    Visited _cyclicVisited;
-    Parents _cyclicParents;
-
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const EntityPattern* entity);
     VariableDependency* newVariable(std::string_view name);
-
-    Cycle findCycle(VariableDependency* curr, VariableDependency* prev,
-                    std::unordered_set<const VariableDependency*>& visited,
-                    std::vector<VariableDependency*>& path,
-                    std::unordered_set<const VariableDependency*>& pathSet);
-
-    VariableDependency* _dfs(VariableDependency* u, VariableDependency* par);
 
     std::string getNextAnonymisation(VariableDependency* v);
 
     void addMerge(VariableDependency* from1, VariableDependency* from2,
                   VariableDependency* into, VariableDependency* via1,
                   VariableDependency* via2);
-
-    void resetCycleState();
 
     void addBetween(VariableDependency* s, VariableDependency* mid, VariableDependency* t);
 
