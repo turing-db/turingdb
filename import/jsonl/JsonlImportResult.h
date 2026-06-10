@@ -34,7 +34,6 @@ using JsonlImportErrorTypeDescription = EnumToString<JsonlImportErrorType>::Crea
     EnumStringPair<JsonlImportErrorType::MISSING_EDGE_TGT_ID, "Missing edge target node id">,
     EnumStringPair<JsonlImportErrorType::NON_EMB_ARRAY, "Non-numeric arrays are not supported">,
     EnumStringPair<JsonlImportErrorType::MISMATCH_EMB_DIM, "Found embedding property of differing dimensions">
-
 >;
 
 class JsonlImportError {
