@@ -19,4 +19,5 @@ target_link_libraries(${SAMPLE_NAME} PRIVATE
     turing_db_report_s
     turing_db_import_jsonl_s
     turing_db_s
+    argparse
 )
