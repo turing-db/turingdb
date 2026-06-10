@@ -62,11 +62,9 @@ JsonlImportResult<void> tryFillEmbedding(const json& arr,
                       std::unordered_map<db::PropertyTypeID, size_t>& sizeMap,
                       PropertyTypeID ptId,
                       size_t lineNo) {
-    // Check the embedding is a valid size
+    // Dimension is checked for validity by call to @ref isEmbedding
     const size_t dim = arr.size();
-    if (dim == 0) {
-        return JsonlImportError::result(JsonlImportErrorType::NON_EMB_ARRAY, lineNo);
-    }
+
     // All embeddings of the same property need be the same dimension
     const auto findIt = sizeMap.find(ptId);
     const bool alreadyRegistered = findIt != (end(sizeMap));
