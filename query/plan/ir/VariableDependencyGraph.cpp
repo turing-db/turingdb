@@ -483,6 +483,7 @@ bool VariableDependencyGraph::patchEdgeTgt(DependencyEdge* e,
     return true;
 }
 
+// TODO: remove
 void VariableDependencyGraph::addMerge(VariableDependency* from1,
                                        VariableDependency* from2,
                                        VariableDependency* into,
@@ -498,6 +499,7 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     }
 
     bioassert(cyc.size() >= 3, "Invalid cycle.");
+
 
     // For a cycle (head, u, ..., v) with [v,head] in E :
     VariableDependency* head = cyc.front();
@@ -543,6 +545,8 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
         newHead = newVariable(getNextAnonymisation(head));
         newTail = newVariable(getNextAnonymisation(head));
         addMerge(u, v, head, newHead, newTail);
+        // Register that we have seen these nodes in a cycle
+        _seenInCycle.insert(begin(cyc), end(cyc));
         return;
     }
 
@@ -555,16 +559,27 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
         });
     }
 
+    // Only one of the ends of the cycle should be merged (property of cycle basis)
+    // Employ a convention: make whatever side is already merged the "newHead"
+    const bool startIsMerged = _seenInCycle.contains(u);
+
     // Create a parent of those two merge edges to cascade
+    VariableDependency* mergeParent = newVariable(getNextAnonymisation(head));
     {
-        VariableDependency* mergeParent = newVariable(getNextAnonymisation(head));
         EdgeMetadata data(EdgeMetadata::EdgeType::MERGE);
         addDirected(merged1, mergeParent, data);
         addDirected(merged2, mergeParent, data);
-        newHead = mergeParent;
     }
+    VariableDependency* otherInput = newVariable(getNextAnonymisation(head));
 
-    newTail = newVariable(getNextAnonymisation(head));
+    newHead = startIsMerged? mergeParent : otherInput;
+    newTail = startIsMerged? otherInput : mergeParent;
+
+    addDirected(newTail, head, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
+    addBetween(u, otherInput, head);
+
+    // Register that we have seen these nodes in a cycle
+    _seenInCycle.insert(begin(cyc), end(cyc));
 }
 
 void VariableDependencyGraph::addBetweenOutImpl(VariableDependency* s,
