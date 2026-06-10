@@ -53,7 +53,7 @@ namespace {
 
 bool isEmbedding(const std::vector<json>& arr) {
     // Embeddings must be at least size 2 (enforced in grammar)
-    return arr.size() < 2
+    return arr.size() > 1
         && std::ranges::all_of(arr, [](const json& v) { return v.is_number(); });
 }
 
