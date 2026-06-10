@@ -25,15 +25,21 @@ Type getEdgeTypeIDChunkType(MLIRContext* context) {
 }
 
 // Out- and in-edge fetches expose the same row of chunks - source node IDs,
-// edge IDs, edge type IDs and target node IDs - so a loop body written for one
-// direction works unchanged for the other.
-Type getEdgeIteratorType(MLIRContext* context) {
+// edge IDs, edge type IDs and target node IDs - followed by one filtered chunk
+// per carried column, so a loop body written for one direction works unchanged
+// for the other.
+Type getEdgeIteratorType(MLIRContext* context, TypeRange carriedChunkTypes) {
     const Type sources = getNodeIDChunkType(context);
     const Type edgeIDs = getEdgeIDChunkType(context);
     const Type edgeTypeIDs = getEdgeTypeIDChunkType(context);
     const Type targets = getNodeIDChunkType(context);
 
-    return IteratorType::get(context, {sources, edgeIDs, edgeTypeIDs, targets});
+    // The four fixed edge chunks, then the carry set comes back with the same
+    // chunk types, mirroring db.get_out_edges' filtered_columns.
+    llvm::SmallVector<Type> chunkTypes {sources, edgeIDs, edgeTypeIDs, targets};
+    chunkTypes.append(carriedChunkTypes.begin(), carriedChunkTypes.end());
+
+    return IteratorType::get(context, chunkTypes);
 }
 
 }
@@ -47,23 +53,23 @@ LogicalResult ScanNodes::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
-// An out-edges fetch produces one row of edge chunks per step, mirroring
-// db.get_out_edges
+// An out-edges fetch produces one row of edge chunks per step, then one
+// filtered chunk per carried column, mirroring db.get_out_edges
 LogicalResult GetOutEdges::inferReturnTypes(MLIRContext* context,
                                             std::optional<Location> location,
                                             GetOutEdges::Adaptor adaptor,
                                             SmallVectorImpl<Type>& inferredReturnTypes) {
-    inferredReturnTypes.push_back(getEdgeIteratorType(context));
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, adaptor.getColumnsToFilter()));
     return success();
 }
 
-// An in-edges fetch produces the same row of edge chunks as out-edges; the
-// input chunk names the nodes whose in-edges are gathered
+// An in-edges fetch produces the same row of edge chunks as out-edges, plus the
+// same carried chunks; the input chunk names the nodes whose in-edges are gathered
 LogicalResult GetInEdges::inferReturnTypes(MLIRContext* context,
                                            std::optional<Location> location,
                                            GetInEdges::Adaptor adaptor,
                                            SmallVectorImpl<Type>& inferredReturnTypes) {
-    inferredReturnTypes.push_back(getEdgeIteratorType(context));
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, adaptor.getColumnsToFilter()));
     return success();
 }
 
