@@ -16,6 +16,8 @@ enum class JsonlImportErrorType : uint8_t {
     MISSING_EDGE_SRC_ID,
     MISSING_EDGE_TGT_ID,
 
+    NON_EMB_ARRAY,
+
     _SIZE
 };
 
@@ -28,7 +30,10 @@ using JsonlImportErrorTypeDescription = EnumToString<JsonlImportErrorType>::Crea
     EnumStringPair<JsonlImportErrorType::MISSING_EDGE_SRC, "Missing edge source node data">,
     EnumStringPair<JsonlImportErrorType::MISSING_EDGE_TGT, "Missing edge target node data">,
     EnumStringPair<JsonlImportErrorType::MISSING_EDGE_SRC_ID, "Missing edge source node id">,
-    EnumStringPair<JsonlImportErrorType::MISSING_EDGE_TGT_ID, "Missing edge target node id">>;
+    EnumStringPair<JsonlImportErrorType::MISSING_EDGE_TGT_ID, "Missing edge target node id">,
+    EnumStringPair<JsonlImportErrorType::NON_EMB_ARRAY, "Non-numeric arrays are not supported">
+
+>;
 
 class JsonlImportError {
 public:

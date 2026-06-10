@@ -4,6 +4,7 @@
 
 #include "ID.h"
 #include "JsonlImportResult.h"
+#include "metadata/PropertyType.h"
 #include "versioning/ChangeAccessor.h"
 #include "versioning/CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
@@ -123,6 +124,8 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                             vt = ValueType::Bool;
                         } else if (value.is_number()) {
                             vt = ValueType::Int64;
+                        } else if (value.is_array()) {
+                            vt = ValueType::Embedding;
                         } else {
                             vt = ValueType::String;
                         }
@@ -141,6 +144,22 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                             builder.addNodeProperty<types::Int64>(nodeID, pt._id, value.get<int64_t>());
                         } else if (value.is_string()) {
                             builder.addNodeProperty<types::String>(nodeID, pt._id, value.get<std::string_view>());
+                        } else if (value.is_array()) {
+                            const auto arr = value.get<std::vector<json>>();
+                            std::vector<float> embBacking;
+                            embBacking.reserve(arr.size());
+
+                            for (const json& e : arr) {
+                                const bool isNumeric = e.is_number();
+                                if (isNumeric) {
+                                    return JsonlImportError::result(
+                                        JsonlImportErrorType::NON_EMB_ARRAY, lineNumber);
+                                }
+                                const float v = e.get<float>(); // Will work for any numeric type
+                                embBacking.push_back(v);
+                            }
+
+                            builder.addNodeProperty<types::Embedding>(nodeID, pt._id, embBacking);
                         } else {
                             builder.addNodeProperty<types::String>(nodeID, pt._id, value.dump());
                         }
