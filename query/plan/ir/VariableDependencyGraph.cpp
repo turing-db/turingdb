@@ -500,7 +500,6 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
 
     bioassert(cyc.size() >= 3, "Invalid cycle.");
 
-
     // For a cycle (head, u, ..., v) with [v,head] in E :
     VariableDependency* head = cyc.front();
     VariableDependency* u = *next(begin(cyc));
@@ -609,19 +608,22 @@ void VariableDependencyGraph::addBetweenIncImpl(VariableDependency* s,
 void VariableDependencyGraph::addBetween(VariableDependency* s,
                                          VariableDependency* mid,
                                          VariableDependency* t) {
-    spdlog::info("Attempting to add {} between {} and {}", mid->getName(), s->getName(), t->getName());
-    const auto findOut = std::ranges::find_if(
-        s->_outgoing, [t](DependencyEdge* e) { return e->_tgt == t; });
-    if (findOut != end(s->_outgoing)) {
-        addBetweenOutImpl(s, mid, t, *findOut);
-        return;
+    {
+        const auto findOut = std::ranges::find_if(
+            s->_outgoing, [t](DependencyEdge* e) { return e->_tgt == t; });
+        if (findOut != end(s->_outgoing)) {
+            addBetweenOutImpl(s, mid, t, *findOut);
+            return;
+        }
     }
 
-    const auto findIn = std::ranges::find_if(
-        s->_incoming, [t](DependencyEdge* e) { return e->_src == t; });
-    if (findIn != end(s->_incoming)) {
-        addBetweenIncImpl(s, mid, t, *findOut);
-        return;
+    {
+        const auto findIn = std::ranges::find_if(
+            s->_incoming, [t](DependencyEdge* e) { return e->_src == t; });
+        if (findIn != end(s->_incoming)) {
+            addBetweenIncImpl(s, mid, t, *findIn);
+            return;
+        }
     }
 
     bioassert(false, "Attempted to addBetween on two nodes that were not connected.");
