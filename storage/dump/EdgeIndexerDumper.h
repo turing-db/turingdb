@@ -39,6 +39,12 @@ public:
         const size_t remainder = nodeCount % Constants::NODE_DATA_COUNT_PER_PAGE;
         const NodeEdgeData* nodeData = indexer.getNodeData().data();
 
+        // NodeEdgeData is four packed size_t fields in field write order
+        // (pinned in EdgeIndexerDumpConstants.h), so pages of node data are
+        // written straight from the array, byte-identical to the per-field
+        // writes.
+        const uint8_t* nodeDataBytes = reinterpret_cast<const uint8_t*>(nodeData);
+
         size_t offset = 0;
         for (size_t i = 0; i < nodePageCount; i++) {
             // New page
@@ -48,19 +54,13 @@ public:
                                          ? (remainder == 0 ? Constants::NODE_DATA_COUNT_PER_PAGE : remainder)
                                          : Constants::NODE_DATA_COUNT_PER_PAGE;
 
-            const std::span dataSpan = {nodeData + offset, countInPage};
-            offset += countInPage;
-
             // Header
             _writer.writeToCurrentPage(countInPage);
 
             // Data
-            for (const auto& data : dataSpan) {
-                _writer.writeToCurrentPage(data._outRange._first);
-                _writer.writeToCurrentPage(data._outRange._count);
-                _writer.writeToCurrentPage(data._inRange._first);
-                _writer.writeToCurrentPage(data._inRange._count);
-            }
+            _writer.writeToCurrentPage(std::span {nodeDataBytes + offset * Constants::NODE_DATA_STRIDE, countInPage * Constants::NODE_DATA_STRIDE});
+
+            offset += countInPage;
         }
 
         auto* buffer = &_writer.buffer();
