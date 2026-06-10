@@ -12,6 +12,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 
 #include "DBOps.h"
+#include "NLDialect.h"
 #include "IRAssembler.h"
 #include "IRModuleInspector.h"
 
@@ -99,6 +100,7 @@ int main(int argc, char** argv) {
     try {
         mlir::MLIRContext ctxt;
         ctxt.loadDialect<mlir::db::DB>();
+        ctxt.loadDialect<mlir::nl::NL>();
         ctxt.loadDialect<mlir::func::FuncDialect>();
 
         mlir::OpBuilder builder(&ctxt);
