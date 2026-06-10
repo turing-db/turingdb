@@ -1,5 +1,6 @@
 #include "JsonlParser.h"
 
+#include <algorithm>
 #include <nlohmann/json.hpp>
 #include <unordered_map>
 
@@ -50,6 +51,12 @@ namespace {
     }
 }
 
+bool isEmbedding(const std::vector<json>& arr) {
+    // Embeddings must be at least size 2 (enforced in grammar)
+    return arr.size() < 2
+        && std::ranges::all_of(arr, [](const json& v) { return v.is_number(); });
+}
+
 JsonlImportResult<void> tryFillEmbedding(const json& arr,
                       std::vector<float>& storage,
                       std::unordered_map<db::PropertyTypeID, size_t>& sizeMap,
@@ -74,15 +81,10 @@ JsonlImportResult<void> tryFillEmbedding(const json& arr,
     storage.reserve(dim);
 
     for (const json& e: arr) {
-        if (!e.is_number()) {
-            return JsonlImportError::result(JsonlImportErrorType::NON_EMB_ARRAY, lineNo);
-        }
-
-        const float v = e.get<float>(); // Will work for any numeric type
+        // Elements are guaranteed to be numeric via call to @ref isEmbedding
+        const float v = e.get<float>(); // Casts from any numeric type
         storage.push_back(v);
     }
-
-    // fills the vector, then caller needs to add the property at the callsite
 
     return {};
 }
@@ -185,7 +187,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                             builder.addNodeProperty<types::Int64>(nodeID, pt._id, value.get<int64_t>());
                         } else if (value.is_string()) {
                             builder.addNodeProperty<types::String>(nodeID, pt._id, value.get<std::string_view>());
-                        } else if (value.is_array()) {
+                        } else if (value.is_array() && isEmbedding(value)) {
                             const JsonlImportResult<void> res =
                                 tryFillEmbedding(value, embBacking, nodeEmbPropSizes, pt._id, lineNumber);
                             if (!res) {
