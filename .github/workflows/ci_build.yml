@@ -203,9 +203,12 @@ jobs:
     - name: Disk usage (before regress)
       run: df -h
 
+    # The regress suite assumes exclusive use of the host (fixed port 6666 and a
+    # host-wide `pkill -9 turingdb`), but several self-hosted runner instances share
+    # one physical machine. Serialize regress per host with a kernel flock that the OS
+    # releases automatically when the job ends, however it ends.
     - name: Run regress
-      run: |
-        ./run_regress.sh
+      run: python3 scripts/with_host_lock.py /tmp/turingdb-regress.lock ./run_regress.sh
 
     - name: Disk usage (after regress)
       if: always()
