@@ -35,6 +35,12 @@ public:
         const auto dumpEdges = [&](std::span<const EdgeRecord> records) {
             const size_t remainder = edgeCount % Constants::COUNT_PER_PAGE;
 
+            // EdgeRecord is four packed uint64 ID wrappers in field write
+            // order (pinned in EdgeContainerDumpConstants.h), so pages of
+            // records are written straight from the record array,
+            // byte-identical to the per-field writes.
+            const uint8_t* recordBytes = reinterpret_cast<const uint8_t*>(records.data());
+
             size_t offset = 0;
             for (size_t i = 0; i < pageCountPerDir; i++) {
                 // New page
@@ -45,19 +51,13 @@ public:
                                              ? (remainder == 0 ? Constants::COUNT_PER_PAGE : remainder)
                                              : Constants::COUNT_PER_PAGE;
 
-                const std::span edgeSpan = std::span {records}.subspan(offset, countInPage);
-                offset += countInPage;
-
                 // Header
                 _writer.writeToCurrentPage(countInPage);
 
                 // Data
-                for (const auto& edge : edgeSpan) {
-                    _writer.writeToCurrentPage(edge._edgeID.getValue());
-                    _writer.writeToCurrentPage(edge._nodeID.getValue());
-                    _writer.writeToCurrentPage(edge._otherID.getValue());
-                    _writer.writeToCurrentPage(edge._edgeTypeID.getValue());
-                }
+                _writer.writeToCurrentPage(std::span {recordBytes + offset * Constants::RECORD_STRIDE, countInPage * Constants::RECORD_STRIDE});
+
+                offset += countInPage;
             }
         };
 

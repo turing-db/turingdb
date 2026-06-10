@@ -5,8 +5,7 @@
 #include "dump/PropertyContainerLoader.h"
 #include "comparators/PropertyContainerComparator.h"
 #include "embedding/EmbeddingBucket.h"
-#include "File.h"
-#include "FileReader.h"
+#include "FileHash.h"
 #include "FilePageReader.h"
 #include "FilePageWriter.h"
 
@@ -24,26 +23,6 @@ using namespace turing::test;
 // hash and the round trip prove that dumps written by older builds stay
 // loadable by the current loader.
 class PropertyDumpFormatTest : public TuringTest {
-public:
-    static constexpr uint64_t FNV_OFFSET_BASIS = 1469598103934665603ull;
-    static constexpr uint64_t FNV_PRIME = 1099511628211ull;
-
-    void hashFile(const fs::Path& path, uint64_t& hash) {
-        auto file = fs::File::open(path);
-        ASSERT_TRUE(file);
-
-        fs::FileReader reader;
-        reader.setFile(&file.value());
-        reader.read();
-        ASSERT_FALSE(reader.errorOccured());
-
-        uint64_t value = FNV_OFFSET_BASIS;
-        for (const uint8_t byte : reader.getBuffer()) {
-            value = (value ^ byte) * FNV_PRIME;
-        }
-
-        hash = value;
-    }
 };
 
 TEST_F(PropertyDumpFormatTest, int64DumpBytes) {
@@ -64,8 +43,8 @@ TEST_F(PropertyDumpFormatTest, int64DumpBytes) {
     }
 
     uint64_t hash = 0;
-    hashFile(path, hash);
-    EXPECT_EQ(hash, 13083236007965161758ull);
+    hashDumpFileContent(path, hash);
+    EXPECT_EQ(hash, 15496022882663149246ull);
 
     {
         auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
@@ -105,8 +84,8 @@ TEST_F(PropertyDumpFormatTest, stringDumpBytes) {
     }
 
     uint64_t hash = 0;
-    hashFile(path, hash);
-    EXPECT_EQ(hash, 13294265124095545638ull);
+    hashDumpFileContent(path, hash);
+    EXPECT_EQ(hash, 3120130461636103366ull);
 
     {
         auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
@@ -150,8 +129,8 @@ TEST_F(PropertyDumpFormatTest, embeddingDumpBytes) {
     }
 
     uint64_t hash = 0;
-    hashFile(path, hash);
-    EXPECT_EQ(hash, 14912157516766626100ull);
+    hashDumpFileContent(path, hash);
+    EXPECT_EQ(hash, 762524712164351316ull);
 
     {
         auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);

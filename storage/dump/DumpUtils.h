@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <ranges>
 
 #include "ID.h"
@@ -90,45 +91,71 @@ DumpResult<void> DumpUtils::dumpRange(const Range& rg, fs::FilePageWriter& wr) {
         throw TuringException("Illegal write: " + errMsg);
     }
 
-    // Write as many as we can on this page
-    const size_t remainingSpace = wr.buffer().avail();
-    const size_t countThisPage = remainingSpace / TSize;
+    if constexpr (std::ranges::contiguous_range<Range> && std::ranges::sized_range<Range>) {
+        // Contiguous storage goes out in page-sized bulk writes. ID wrappers
+        // add no bytes on top of their value (single member, pinned below),
+        // so object bytes equal the per-element getValue() writes.
+        static_assert(sizeof(T) == sizeof(WorkingT), "Bulk range dump requires element object bytes to equal value bytes");
 
-    auto it = rg.begin();
-    for (size_t j = 0; j < countThisPage && it != rg.end(); j++) {
-        wr.writeToCurrentPage(*it);
-        it++;
-    }
+        const uint8_t* bytes = reinterpret_cast<const uint8_t*>(std::ranges::data(rg));
+        const size_t total = std::ranges::size(rg);
+        const size_t countPerPage = DumpConfig::PAGE_SIZE / TSize;
 
-    if (it == rg.end()) {
+        // Write as many as we can on this page, then page-sized chunks
+        size_t written = std::min(wr.buffer().avail() / TSize, total);
+        if (written != 0) {
+            wr.writeToCurrentPage(std::span {bytes, written * TSize});
+        }
+
+        while (written < total) {
+            wr.nextPage();
+            const size_t countInPage = std::min(countPerPage, total - written);
+            wr.writeToCurrentPage(std::span {bytes + written * TSize, countInPage * TSize});
+            written += countInPage;
+        }
+
+        return {};
+    } else {
+        // Write as many as we can on this page
+        const size_t remainingSpace = wr.buffer().avail();
+        const size_t countThisPage = remainingSpace / TSize;
+
+        auto it = rg.begin();
+        for (size_t j = 0; j < countThisPage && it != rg.end(); j++) {
+            wr.writeToCurrentPage(*it);
+            it++;
+        }
+
+        if (it == rg.end()) {
+            return {};
+        }
+
+        const size_t read = countThisPage;
+        const size_t remaining = rg.size() - read;
+
+        const size_t countPerPage = DumpConfig::PAGE_SIZE / TSize;
+
+        const size_t fullPagesNeeded = remaining / countPerPage;
+        const size_t leftOver = remaining % countPerPage;
+
+        for (size_t p = 0; p < fullPagesNeeded; p++) {
+            wr.nextPage();
+            for (size_t j = 0; j < countPerPage; j++) {
+                wr.writeToCurrentPage(*it);
+                it++;
+            }
+        }
+
+        if (leftOver != 0) {
+            wr.nextPage();
+            for (size_t j = 0; j < leftOver; j++) {
+                wr.writeToCurrentPage(*it);
+                it++;
+            }
+        }
+
         return {};
     }
-
-    const size_t read = countThisPage;
-    const size_t remaining = rg.size() - read;
-
-    const size_t countPerPage = DumpConfig::PAGE_SIZE / TSize;
-
-    const size_t fullPagesNeeded = remaining / countPerPage;
-    const size_t leftOver = remaining % countPerPage;
-
-    for (size_t p = 0; p < fullPagesNeeded; p++) {
-        wr.nextPage();
-        for (size_t j = 0; j < countPerPage; j++) {
-            wr.writeToCurrentPage(*it);
-            it++;
-        }
-    }
-
-    if (leftOver != 0) {
-        wr.nextPage();
-        for (size_t j = 0; j < leftOver; j++) {
-            wr.writeToCurrentPage(*it);
-            it++;
-        }
-    }
-
-    return {};
 }
 
 }

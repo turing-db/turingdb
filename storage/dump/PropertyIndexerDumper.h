@@ -50,9 +50,12 @@ public:
                 _writer.writeToCurrentPage(lset.getID().getValue());
                 _writer.writeToCurrentPage((uint64_t)info.size());
 
-                for (const auto& range : info) {
-                    _writer.writeToCurrentPage((uint64_t)range._offset);
-                    _writer.writeToCurrentPage((uint64_t)range._count);
+                // PropertyRange is a packed {size_t _offset; size_t _count}
+                // (pinned in PropertyIndexerDumpConstants.h), so a labelset's
+                // ranges go out in one write, byte-identical to the per-field
+                // writes.
+                if (!info.empty()) {
+                    _writer.writeToCurrentPage(std::span {reinterpret_cast<const uint8_t*>(info.data()), info.size() * Constants::LABELSET_INFO_STRIDE});
                 }
             }
 
