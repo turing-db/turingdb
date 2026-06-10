@@ -233,7 +233,7 @@ int main(int argc, const char** argv) {
 
         const auto start = std::chrono::steady_clock::now();
 
-        const auto res = GraphDumper::dump(*binaryGraph, binaryOutDir);
+        const auto res = GraphDumper::dump(binaryGraph.get(), binaryOutDir);
         if (!res) {
             spdlog::error("Binary dump failed: {}", res.error().fmtMessage());
             return EXIT_FAILURE;
