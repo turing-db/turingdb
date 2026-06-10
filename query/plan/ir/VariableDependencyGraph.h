@@ -159,6 +159,8 @@ private:
     std::deque<VariableDependency> _vars;
     std::deque<DependencyEdge> _edges;
 
+    std::unordered_set<VariableDependency*> _seenInCycle;
+
     std::unordered_map<VariableDependency*, int> _anonymised;
 
     std::unordered_map<VariableDependency*,
