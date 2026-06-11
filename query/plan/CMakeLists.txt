@@ -22,6 +22,7 @@ set(plan_sources
     nodes/ConstWriteSourceNode.cpp
     nodes/JoinNode.cpp
 
+    ir/VariableDependency.cpp
     ir/VariableDependencyGraph.cpp
     ir/IRDumper.cpp
 )
