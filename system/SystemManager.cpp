@@ -185,7 +185,9 @@ void SystemManager::listGraphs(std::vector<std::string_view>& names) const {
     _graphManager.listGraphs(names);
 }
 
-Graph* SystemManager::importGraph(const fs::Path& path, std::string_view graphName, const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+Graph* SystemManager::importGraph(const fs::Path& path,
+                                  std::string_view graphName,
+                                  const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
     return _graphManager.importGraph(graphName, path, &_jobSystem, embeddingSpecs);
 }
 
