@@ -88,7 +88,7 @@ protected:
 
 TEST_F(VectorQueriesTest, createVectorIndex) {
     bool executed = false;
-    const auto res = query("CREATE VECTOR INDEX embeddings WITH DIMENSION 128 METRIC EUCLID", "default", [&](const Dataframe* df) -> void {
+    const auto res = query("CREATE VECTOR INDEX embs WITH DIMENSION 128 METRIC EUCLID", "default", [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df != nullptr);
             ASSERT_EQ(df->cols().size(), 1);
             ASSERT_EQ(df->getLogicalRowCount(), 1);
@@ -101,7 +101,7 @@ TEST_F(VectorQueriesTest, createVectorIndex) {
             // Check the column value is the index name we created
             const auto* colName = cols.at(0)->as<ColumnConst<types::String::Primitive>>();
             ASSERT_TRUE(colName != nullptr);
-            ASSERT_EQ(colName->getRaw(), "embeddings");
+            ASSERT_EQ(colName->getRaw(), "embs");
 
             executed = true;
         });
@@ -125,12 +125,12 @@ TEST_F(VectorQueriesTest, createVectorIndex) {
 
             bool found = false;
             for (size_t i = 0; i < df->getLogicalRowCount(); ++i) {
-                if (nameCol->at(i) == "embeddings") {
+                if (nameCol->at(i) == "embs") {
                     found = true;
                     break;
                 }
             }
-            ASSERT_TRUE(found) << "Index 'embeddings' not found in SHOW VECTOR INDEXES";
+            ASSERT_TRUE(found) << "Index 'embs' not found in SHOW VECTOR INDEXES";
 
             showExecuted = true;
         });
