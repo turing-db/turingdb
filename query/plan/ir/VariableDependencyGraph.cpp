@@ -1,7 +1,6 @@
 #include "VariableDependencyGraph.h"
 
 #include <algorithm>
-#include <iostream>
 #include <set>
 #include <string_view>
 #include <unordered_map>
@@ -18,7 +17,6 @@
 #include "BioAssert.h"
 #include "decl/VarDecl.h"
 #include "ir/IRDumper.h"
-#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -245,8 +243,8 @@ void VariableDependencyGraph::addMerge(VariableDependency* from1,
                                        VariableDependency* into,
                                        VariableDependency* via1,
                                        VariableDependency* via2) {
-    addBetween(from1, via1, into);
-    addBetween(from2, via2, into);
+    subdivideWithMerge(from1, via1, into);
+    subdivideWithMerge(from2, via2, into);
 }
 
 void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
@@ -270,8 +268,7 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     DependencyEdge* mergeToDelete2 = nullptr;
 
     // If the current head has any incoming merge edges, it must have 2.
-    // Find those two merge edges.
-    // Delete them.
+    // Find those two merge edges, delete them, but track the source nodes
     std::erase_if(head->_incoming, [&](DependencyEdge* e) {
         const bool meta = EdgeMetadata::isMetaEdge(e->data().type());
         if (!meta) {
@@ -292,7 +289,7 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
         return false;
     });
 
-    // Ensure we exactly 0 or 2 merges
+    // Ensure we exactly 0 or 2 merge sources
     bioassert(!((bool)merged1 ^ (bool)merged2), "Invalid merge state");
 
     // If not cascading a merge, just merge the two nodes as normal
@@ -304,6 +301,11 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
         _seenInCycle.insert(begin(cyc), end(cyc));
         return;
     }
+
+    // Otherwise, @ref head has already been a merge target, and we need to cascade the
+    // merge by combining the existing two merge sources into a third, which is then
+    // merged with the tail of the current cycle, into @ref head. This is to ensure that
+    // any given merge has arity of at most 2 (to ensure it can be executed by a join).
 
     { // Erase the merge edges from the merge sources as well
         std::erase_if(merged1->_outgoing, [mergeToDelete1](DependencyEdge* e) {
@@ -326,20 +328,21 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     // Only one of the ends of the cycle should be merged (property of cycle basis)
     // Employ a convention: make whatever side is already merged the "newHead"
     const bool startIsMerged = _seenInCycle.contains(u);
-    newHead = startIsMerged? mergeParent : otherInput;
-    newTail = startIsMerged? otherInput : mergeParent;
+    newHead = startIsMerged ? mergeParent : otherInput;
+    newTail = startIsMerged ? otherInput : mergeParent;
 
+    // Parent of the previous two merges that were just cascaded, merged into current head
     addDirected(newHead, head, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
-    addBetween(v, newTail, head);
+    // Add a temporary between the tail (unmerged end of cycle) and current head
+    subdivideWithMerge(v, newTail, head);
 
-    // Register that we have seen these nodes in a cycle
     _seenInCycle.insert(begin(cyc), end(cyc));
 }
 
-void VariableDependencyGraph::addBetweenOutImpl(VariableDependency* s,
-                                                VariableDependency* mid,
-                                                VariableDependency* t,
-                                                DependencyEdge* e) {
+void VariableDependencyGraph::subdivideWithMergeOutImpl(VariableDependency* s,
+                                                        VariableDependency* mid,
+                                                        VariableDependency* t,
+                                                        DependencyEdge* e) {
     std::erase_if(s->_outgoing, [e](DependencyEdge* f) { return f == e; });
     std::erase_if(t->_incoming, [e](DependencyEdge* f) { return f == e; });
 
@@ -348,10 +351,10 @@ void VariableDependencyGraph::addBetweenOutImpl(VariableDependency* s,
     addDirected(mid, t, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
 }
 
-void VariableDependencyGraph::addBetweenIncImpl(VariableDependency* s,
-                                                VariableDependency* mid,
-                                                VariableDependency* t,
-                                                DependencyEdge* e) {
+void VariableDependencyGraph::subdivideWithMergeIncImpl(VariableDependency* s,
+                                                        VariableDependency* mid,
+                                                        VariableDependency* t,
+                                                        DependencyEdge* e) {
     std::erase_if(s->_incoming, [e](DependencyEdge* f) { return f == e; });
     std::erase_if(t->_outgoing, [e](DependencyEdge* f) { return f == e; });
 
@@ -360,14 +363,15 @@ void VariableDependencyGraph::addBetweenIncImpl(VariableDependency* s,
     addDirected(mid, t, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
 }
 
-void VariableDependencyGraph::addBetween(VariableDependency* s,
+void VariableDependencyGraph::subdivideWithMerge(VariableDependency* s,
                                          VariableDependency* mid,
                                          VariableDependency* t) {
     {
         const auto findOut = std::ranges::find_if(
             s->_outgoing, [t](DependencyEdge* e) { return e->_tgt == t; });
+        // Case where the existing edge between s and t is outgoing s->t
         if (findOut != end(s->_outgoing)) {
-            addBetweenOutImpl(s, mid, t, *findOut);
+            subdivideWithMergeOutImpl(s, mid, t, *findOut);
             return;
         }
     }
@@ -375,8 +379,9 @@ void VariableDependencyGraph::addBetween(VariableDependency* s,
     {
         const auto findIn = std::ranges::find_if(
             s->_incoming, [t](DependencyEdge* e) { return e->_src == t; });
+        // Case where the existing edge between s and t is incoming s<-t
         if (findIn != end(s->_incoming)) {
-            addBetweenIncImpl(s, mid, t, *findIn);
+            subdivideWithMergeIncImpl(s, mid, t, *findIn);
             return;
         }
     }

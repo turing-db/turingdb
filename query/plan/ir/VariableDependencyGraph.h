@@ -164,10 +164,10 @@ private:
                   VariableDependency* into, VariableDependency* via1,
                   VariableDependency* via2);
 
-    void addBetween(VariableDependency* s, VariableDependency* mid, VariableDependency* t);
+    void subdivideWithMerge(VariableDependency* s, VariableDependency* mid, VariableDependency* t);
 
-    void addBetweenOutImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
-    void addBetweenIncImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
+    void subdivideWithMergeOutImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
+    void subdivideWithMergeIncImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
 };
 
 }
