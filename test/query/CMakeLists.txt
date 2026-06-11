@@ -1,3 +1,4 @@
 add_subdirectory(analyzer)
+add_subdirectory(ir)
 add_subdirectory(pipeline)
 add_subdirectory(queries)
