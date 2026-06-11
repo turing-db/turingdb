@@ -254,6 +254,8 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
         return;
     }
 
+    bioassert(cyc.size() >= 2, "Invalid cycle.");
+
     // For a cycle (head, u, ..., v) with [v,head] in E :
     VariableDependency* head = cyc.front();
     VariableDependency* u = *next(begin(cyc));
