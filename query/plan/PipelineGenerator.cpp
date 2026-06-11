@@ -1528,7 +1528,7 @@ PipelineOutputInterface* PipelineGenerator::translateLoadGraph(LoadGraphNode* no
 }
 
 PipelineOutputInterface* PipelineGenerator::translateLoadJsonl(LoadJsonlNode* node) {
-    _builder.addLoadJsonl(node->getGraphName(), node->getFilePath());
+    _builder.addLoadJsonl(node->getGraphName(), node->getFilePath(), node->getEmbeddingSpecs());
     return _builder.getPendingOutputInterface();
 }
 

@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "ChangeManager.h"
@@ -42,7 +43,9 @@ public:
     // Import a graph from a file
     Graph* importGraph(std::string_view graphName,
                        const fs::Path& filePath,
-                       JobSystem* jobSystem);
+                       JobSystem* jobSystem,
+                       const std::unordered_map<std::string_view, size_t>& embeddingSpecs = {});
+
     GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 
     // Is a graph currently being loaded from a file
@@ -65,7 +68,8 @@ private:
     ChangeManager _changes;
     GraphLoadStatus _graphLoadStatus;
 
-    Graph* loadJsonlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);
+    Graph* loadJsonlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem,
+                       std::unordered_map<std::string_view, size_t>& embeddingSpecs);
     Graph* loadGmlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);
     Graph* loadBinaryDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);
 };

@@ -1,6 +1,8 @@
 #include "SystemManager.h"
 
 #include <spdlog/spdlog.h>
+#include <string_view>
+#include <unordered_map>
 
 #include "Graph.h"
 
@@ -183,8 +185,8 @@ void SystemManager::listGraphs(std::vector<std::string_view>& names) const {
     _graphManager.listGraphs(names);
 }
 
-Graph* SystemManager::importGraph(const fs::Path& path, std::string_view graphName) {
-    return _graphManager.importGraph(graphName, path, &_jobSystem);
+Graph* SystemManager::importGraph(const fs::Path& path, std::string_view graphName, const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+    return _graphManager.importGraph(graphName, path, &_jobSystem, embeddingSpecs);
 }
 
 DumpResult<void> SystemManager::dumpGraph(std::string_view graphName) {

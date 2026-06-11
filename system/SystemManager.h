@@ -2,6 +2,8 @@
 
 #include <string>
 #include <string_view>
+#include <optional>
+#include <unordered_map>
 #include <vector>
 
 #include "GraphManager.h"

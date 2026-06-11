@@ -2,6 +2,7 @@
 
 #include <span>
 #include <string_view>
+#include <unordered_map>
 
 #include "ChangeOp.h"
 #include "EntityType.h"
@@ -186,7 +187,9 @@ public:
     // Load graph
     PipelineValueOutputInterface& addLoadGraph(std::string_view graphName);
     PipelineValueOutputInterface& addLoadGML(std::string_view graphName, const fs::Path& filePath);
-    PipelineValueOutputInterface& addLoadJsonl(std::string_view graphName, const fs::Path& filePath);
+    PipelineValueOutputInterface& addLoadJsonl(std::string_view graphName,
+                                               const fs::Path& filePath,
+                                               const std::unordered_map<std::string_view, size_t>& embeddingSpecs);
 
     // List Graph
     PipelineValueOutputInterface& addListGraph();
