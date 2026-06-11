@@ -237,16 +237,6 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
     return cycles;
 }
 
-// TODO: remove
-void VariableDependencyGraph::addMerge(VariableDependency* from1,
-                                       VariableDependency* from2,
-                                       VariableDependency* into,
-                                       VariableDependency* via1,
-                                       VariableDependency* via2) {
-    subdivideWithMerge(from1, via1, into);
-    subdivideWithMerge(from2, via2, into);
-}
-
 void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     if (cyc.empty()) {
         return;
@@ -296,7 +286,10 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     if (!merged1 || !merged2) {
         newHead = newVariable(getNextAnonymisation(head));
         newTail = newVariable(getNextAnonymisation(head));
-        addMerge(u, v, head, newHead, newTail);
+
+        subdivideWithMerge(u, newHead, head);
+        subdivideWithMerge(v, newTail, head);
+
         // Register that we have seen these nodes in a cycle
         _seenInCycle.insert(begin(cyc), end(cyc));
         return;
