@@ -27,12 +27,9 @@ def ensure_reactome(dest_path: str) -> None:
         print(f"Copying cached {DATASET_CACHE} -> {dest_path}")
         shutil.copy2(DATASET_CACHE, dest_path)
     else:
-        # assert false
-        shutil.copy2("/home/cyrus/.turing/data/reactome.jsonl", dest_path)
-    # else:
-        # download_from_s3(DATASET_CACHE)
-        # print(f"Copying {DATASET_CACHE} -> {dest_path}")
-        # shutil.copy2(DATASET_CACHE, dest_path)
+        download_from_s3(DATASET_CACHE)
+        print(f"Copying {DATASET_CACHE} -> {dest_path}")
+        shutil.copy2(DATASET_CACHE, dest_path)
 
 
 def test_vector_search_match(client: turingdb.TuringDB, data_dir: str) -> None:
