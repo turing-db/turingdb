@@ -160,10 +160,6 @@ private:
 
     std::string getNextAnonymisation(VariableDependency* v);
 
-    void addMerge(VariableDependency* from1, VariableDependency* from2,
-                  VariableDependency* into, VariableDependency* via1,
-                  VariableDependency* via2);
-
     void subdivideWithMerge(VariableDependency* s, VariableDependency* mid, VariableDependency* t);
 
     void subdivideWithMergeOutImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
