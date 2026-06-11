@@ -2,6 +2,7 @@
 
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "Accessor.h"
@@ -65,7 +66,10 @@ public:
     DumpResult<void> loadCommit(std::string_view name, CommitHash hash);
 
     // Import graph
-    Graph* importGraph(const fs::Path& path, std::string_view name);
+    Graph* importGraph(const fs::Path& path,
+                       std::string_view name,
+                       const std::unordered_map<std::string_view, size_t>& embeddingSpecs = {});
+
     GraphFileType getGraphFileType(const fs::Path& path) const;
 
     // Dump graph

@@ -157,7 +157,7 @@ Graph* GraphManager::importGraph(std::string_view graphName,
         case GraphFileType::UNKNOWN:
             // If we can not determine the file type, assume it is a JSONL graph
             // to be changed in the future
-            return loadJsonlDB(graphName, absolute, jobSystem);
+            return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs);
         break;
         case GraphFileType::_SIZE:
             throw TuringException("Unsupported graph type");

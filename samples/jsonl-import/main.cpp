@@ -100,7 +100,6 @@ int main(int argc, char** argv) {
     const GraphReader reader = tx.readGraph();
     fmt::println("Graph has {} nodes and {} edges", reader.getNodeCount(), reader.getEdgeCount());
 
-    system.dumpGraph("test");
     if (!query.empty()) {
         LocalMemory mem;
         QueryCallbacks cbs;
@@ -114,7 +113,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    sysMan.dumpGraph("test");
+    system.dumpGraph("test");
 
     return EXIT_SUCCESS;
 }

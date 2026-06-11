@@ -3,6 +3,8 @@
 #include "SystemManager.h"
 
 #include "versioning/Transaction.h"
+#include <string_view>
+#include <unordered_map>
 
 using namespace db;
 
@@ -61,8 +63,10 @@ DumpResult<void> SystemAccessor::loadCommit(std::string_view name, CommitHash ha
     return _sysMan->loadCommit(name, hash);
 }
 
-Graph* SystemAccessor::importGraph(const fs::Path& path, std::string_view name) {
-    return _sysMan->importGraph(path, name);
+Graph* SystemAccessor::importGraph(const fs::Path& path,
+                                   std::string_view name,
+                                   const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+    return _sysMan->importGraph(path, name, embeddingSpecs);
 }
 
 GraphFileType SystemAccessor::getGraphFileType(const fs::Path& path) const {
