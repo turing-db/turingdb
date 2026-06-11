@@ -18,12 +18,16 @@
 #include "TuringConfig.h"
 #include "versioning/Transaction.h"
 
-#include "ToolInit.h"
-#include "ir/IRDumper.h"
-#include "ir/VariableDependencyGraph.h"
+#include "VariableDependencyGraph.h"
+
+#include "IRDumper.h"
+
+
 #include "stmt/MatchStmt.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/StmtContainer.h"
+
+#include "ToolInit.h"
 
 /**
 

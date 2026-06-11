@@ -22,5 +22,6 @@ target_link_libraries(${SAMPLE_NAME} PRIVATE
     turing_db_ast_s
     turing_db_plan_s
     turing_db_query_common_s
+    turing_db_frontend_cypher_s
     turing_db_s
 )

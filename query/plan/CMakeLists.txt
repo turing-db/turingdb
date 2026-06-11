@@ -21,10 +21,6 @@ set(plan_sources
     nodes/ConstScanNode.cpp
     nodes/ConstWriteSourceNode.cpp
     nodes/JoinNode.cpp
-
-    ir/VariableDependency.cpp
-    ir/VariableDependencyGraph.cpp
-    ir/IRDumper.cpp
 )
 
 add_library(turing_db_plan_s STATIC ${plan_sources})

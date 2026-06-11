@@ -108,7 +108,7 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
 }
 
 std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis() {
-    using NodeSet = std::unordered_set<VariableDependency*>;
+    using NodeSet = std::set<VariableDependency*>;
     using PredMap = std::unordered_map<VariableDependency*, VariableDependency*>;
     using UsedMap = std::unordered_map<VariableDependency*, NodeSet>;
 
