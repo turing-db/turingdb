@@ -146,6 +146,7 @@ Key points:
 - Never `using namespace std`
 - Never use `const_cast`. If you need a mutable reference, expose it through the type's API (e.g., add a non-const overload of the getter) rather than casting away const on an existing one. Reaching for `const_cast` is a sign that the type's API is wrong — fix the API instead.
 - Use `const` extensively — all local variables should be `const` unless they need mutation
+- **Never call the same getter repeatedly when the result can be reused.** Capture it once in a named local and use that everywhere. Writing `loop.getBody()` on several consecutive lines (`setInsertionPointToStart(loop.getBody())` then `loop.getBody()->getArgument(0)` then `loop.getBody()->getArgument(3)`) is bad style: it is noisy, hides that all the calls operate on the same object, and re-evaluates the call for nothing. Write `mlir::Block* loopBody = loop.getBody();` once and use `loopBody`. This applies to any getter or accessor chain, not just MLIR.
 - When a conditional expression is long or compound, extract each part into a descriptively named `const bool` before the `if` statement
 - Use `bioassert` for assertions (from BioAssert.h)
 - Exceptions must derive from `TuringException`
