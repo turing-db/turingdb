@@ -58,10 +58,10 @@ bool isEmbedding(const std::vector<json>& arr) {
 }
 
 JsonlImportResult<void> tryFillEmbedding(const json& arr,
-                      std::vector<float>& storage,
-                      std::unordered_map<db::PropertyTypeID, size_t>& sizeMap,
-                      PropertyTypeID ptId,
-                      size_t lineNo) {
+                                         std::vector<float>& storage,
+                                         std::unordered_map<db::PropertyTypeID, size_t>& sizeMap,
+                                         PropertyTypeID ptId,
+                                         size_t lineNo) {
     // Dimension is checked for validity by call to @ref isEmbedding
     const size_t dim = arr.size();
 
