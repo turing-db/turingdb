@@ -67,7 +67,7 @@ const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* s
     const auto findIt = std::ranges::find_if(src->_outgoing, same);
     const bool exists = findIt != end(src->_outgoing);
     if (exists) {
-        _edges.pop_back(); // Iterators is still valid
+        _edges.pop_back();
         return *findIt;
     }
 
@@ -103,7 +103,6 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         }
 
         VariableDependency* edgeVar = getOrCreateVariable(edge);
-        // Below checks for duplication
         addDirected(src, edgeVar, EdgeMetadata {type});
         addDirected(edgeVar, tgt, EdgeMetadata {type});
 
