@@ -7,21 +7,14 @@
 #include <unordered_set>
 #include <utility>
 
-#include <range/v3/view/chunk.hpp>
-#include <range/v3/view/concat.hpp>
-
 #include "EdgePattern.h"
 #include "EntityPattern.h"
 #include "PatternElement.h"
 
 #include "BioAssert.h"
 #include "decl/VarDecl.h"
-#include "ir/IRDumper.h"
 
 using namespace db;
-
-namespace rg = ranges;
-namespace rv = rg::views;
 
 static EdgeMetadata::EdgeType directionToType(EdgePattern::Direction dir) {
     switch (dir) {
@@ -37,22 +30,6 @@ static EdgeMetadata::EdgeType directionToType(EdgePattern::Direction dir) {
     }
     std::unreachable();
     return EdgeMetadata::EdgeType::_SIZE;
-}
-
-auto VariableDependency::edges() const {
-    return rv::concat(_incoming, _outgoing);
-}
-
-bool VariableDependency::isIsolated() const {
-    return edges().empty();
-}
-
-void VariableDependency::addIncoming(DependencyEdge* newEdge) {
-    _incoming.push_back(newEdge);
-}
-
-void VariableDependency::addOutgoing(DependencyEdge* newEdge) {
-    _outgoing.push_back(newEdge);
 }
 
 const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* src,
@@ -131,7 +108,7 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
 }
 
 std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis() {
-    using NodeSet = std::set<VariableDependency*>;
+    using NodeSet = std::unordered_set<VariableDependency*>;
     using PredMap = std::unordered_map<VariableDependency*, VariableDependency*>;
     using UsedMap = std::unordered_map<VariableDependency*, NodeSet>;
 
@@ -181,7 +158,6 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
                 VariableDependency* neighbour = edge->_src == u ? edge->_tgt : edge->_src;
                 bioassert(neighbour != u, "Invalid self loop.");
 
-                // Recurse in DFS
                 const bool encountered = used.contains(neighbour);
                 if (!encountered) {
                     stack.push_back(neighbour);
@@ -356,8 +332,8 @@ void VariableDependencyGraph::subdivideWithMergeIncImpl(VariableDependency* s,
 }
 
 void VariableDependencyGraph::subdivideWithMerge(VariableDependency* s,
-                                         VariableDependency* mid,
-                                         VariableDependency* t) {
+                                                 VariableDependency* mid,
+                                                 VariableDependency* t) {
     {
         const auto findOut = std::ranges::find_if(
             s->_outgoing, [t](DependencyEdge* e) { return e->_tgt == t; });
@@ -379,7 +355,7 @@ void VariableDependencyGraph::subdivideWithMerge(VariableDependency* s,
     }
 
     bioassert(false,
-              "Attempted to addBetween on two nodes that were not connected: {} and {}.",
+              "Attempted to subdivideWithMerge on two nodes that were not connected: {} and {}.",
               s->getName(), t->getName());
 }
 
