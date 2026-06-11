@@ -16,6 +16,7 @@ enum class JsonlImportErrorType : uint8_t {
     MISSING_EDGE_SRC_ID,
     MISSING_EDGE_TGT_ID,
     MISMATCH_EMB_DIM,
+    NON_NUMERIC_EMB,
 
     _SIZE
 };
@@ -30,7 +31,8 @@ using JsonlImportErrorTypeDescription = EnumToString<JsonlImportErrorType>::Crea
     EnumStringPair<JsonlImportErrorType::MISSING_EDGE_TGT, "Missing edge target node data">,
     EnumStringPair<JsonlImportErrorType::MISSING_EDGE_SRC_ID, "Missing edge source node id">,
     EnumStringPair<JsonlImportErrorType::MISSING_EDGE_TGT_ID, "Missing edge target node id">,
-    EnumStringPair<JsonlImportErrorType::MISMATCH_EMB_DIM, "Found embedding property of differing dimensions">
+    EnumStringPair<JsonlImportErrorType::MISMATCH_EMB_DIM, "Found embedding property of differing dimensions">,
+    EnumStringPair<JsonlImportErrorType::NON_NUMERIC_EMB, "Found non-numeric value in embedding">
 >;
 
 class JsonlImportError {

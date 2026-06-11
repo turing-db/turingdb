@@ -325,7 +325,8 @@ void PlanGraphGenerator::generateLoadGMLQuery(const LoadGMLQuery* loadGML) {
 }
 
 void PlanGraphGenerator::generateLoadJsonlQuery(const LoadJsonlQuery* query) {
-    LoadJsonlNode* n = _tree.create<LoadJsonlNode>(query->getFilePath(), query->getGraphName());
+    std::unordered_map<std::string_view, size_t> specs(query->getEmbeddingSpecs());
+    LoadJsonlNode* n = _tree.create<LoadJsonlNode>(query->getFilePath(), query->getGraphName(), std::move(specs));
     _tree.newOut<ProduceResultsNode>(n);
 }
 

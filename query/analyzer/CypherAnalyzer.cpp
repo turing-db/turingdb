@@ -391,6 +391,13 @@ void CypherAnalyzer::analyze(LoadJsonlQuery* loadJsonl) {
                        loadJsonl);
         }
     }
+
+    const auto& embDims = loadJsonl->getEmbeddingSpecs();
+    const bool validDims =
+        std::ranges::all_of(embDims, [](const auto& kv) { return kv.second > 1; });
+    if (!validDims) {
+        throwError("All embedding properties must have dimension greater than 1.");
+    }
 }
 
 void CypherAnalyzer::analyze(LoadGMLQuery* loadGML) {

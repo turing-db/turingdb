@@ -963,8 +963,10 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadGML(std::string_view graph
     return output;
 }
 
-PipelineValueOutputInterface& PipelineBuilder::addLoadJsonl(std::string_view graphName, const fs::Path& path) {
-    LoadJsonlProcessor* proc = LoadJsonlProcessor::create(_pipeline, path, graphName);
+PipelineValueOutputInterface& PipelineBuilder::addLoadJsonl(std::string_view graphName,
+                                                            const fs::Path& path,
+                                                            const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+    LoadJsonlProcessor* proc = LoadJsonlProcessor::create(_pipeline, path, graphName, embeddingSpecs);
 
     PipelineValueOutputInterface& output = proc->output();
 

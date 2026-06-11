@@ -17,6 +17,8 @@
 %code requires {
 
     #include <optional>
+    #include <unordered_map>
+    #include <utility>
 
     // Inspired by https://github.com/antlr/grammars-v4/blob/master/cypher/CypherParser.g4
 
@@ -179,6 +181,7 @@
 %token<std::string_view> COUNT
 %token<std::string_view> GRAPH
 %token<std::string_view> HEADERS
+%token<std::string_view> EMBEDDINGS
 %token<std::string_view> JSONL
 %token<std::string_view> LIST
 %token<std::string_view> DESC
@@ -371,6 +374,8 @@
 %type<db::CreateEdgePropertyIndexQuery*> createEdgePropertyIndexQuery
 %type<db::DropIndexQuery*> dropIndexQuery
 %type<db::UnwindStmt*> unwindSt
+%type<std::unordered_map<std::string_view, size_t>> embeddingSpecs
+%type<std::pair<std::string_view, size_t>> embeddingSpec
 
 %expect 0
 
@@ -437,6 +442,36 @@ loadJsonl
         $$ = LoadJsonlQuery::create(ast, fs::Path(std::string($3)));
         $$->setGraphName($5);
         LOC($$, @$);
+      }
+    | LOAD JSONL STRING_LITERAL WITH EMBEDDINGS OBRACK embeddingSpecs CBRACK {
+        $$ = LoadJsonlQuery::create(ast, fs::Path(std::string($3)));
+        $$->setEmbeddingSpecs(std::move($7));
+        LOC($$, @$);
+      }
+    | LOAD JSONL STRING_LITERAL AS ID WITH EMBEDDINGS OBRACK embeddingSpecs CBRACK {
+        $$ = LoadJsonlQuery::create(ast, fs::Path(std::string($3)));
+        $$->setGraphName($5);
+        $$->setEmbeddingSpecs(std::move($9));
+        LOC($$, @$);
+      }
+    ;
+
+embeddingSpecs
+    : embeddingSpec {
+        $$.emplace($1.first, $1.second);
+      }
+    | embeddingSpecs COMMA embeddingSpec {
+        $$ = std::move($1);
+        $$.emplace($3.first, $3.second);
+      }
+    ;
+
+embeddingSpec
+    : OBRACE STRING_LITERAL COMMA DIGIT CBRACE {
+        $$ = {$2, static_cast<size_t>($4)};
+      }
+    | OBRACE ID COMMA DIGIT CBRACE {
+        $$ = {$2, static_cast<size_t>($4)};
       }
     ;
 

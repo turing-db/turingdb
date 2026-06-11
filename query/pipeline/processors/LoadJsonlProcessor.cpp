@@ -12,9 +12,11 @@
 using namespace db;
 
 LoadJsonlProcessor::LoadJsonlProcessor(const fs::Path& path,
-                                       std::string_view graphName)
+                                       std::string_view graphName,
+                                       const std::unordered_map<std::string_view, size_t>& embeddingSpecs)
     : _path(path),
-    _graphName(graphName)
+    _graphName(graphName),
+    _embeddingSpecs(embeddingSpecs)
 {
 }
 
@@ -23,8 +25,9 @@ LoadJsonlProcessor::~LoadJsonlProcessor() {
 
 LoadJsonlProcessor* LoadJsonlProcessor::create(PipelineV2* pipeline,
                                                const fs::Path& path,
-                                               std::string_view graphName) {
-    LoadJsonlProcessor* proc = new LoadJsonlProcessor(path, graphName);
+                                               std::string_view graphName,
+                                               const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+    LoadJsonlProcessor* proc = new LoadJsonlProcessor(path, graphName, embeddingSpecs);
 
     PipelineOutputPort* outName = PipelineOutputPort::create(pipeline, proc);
     proc->_outName.setPort(outName);

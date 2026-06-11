@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 #include <istream>
+#include <string_view>
+#include <unordered_map>
 
 #include "JsonlImportResult.h"
 
@@ -19,7 +21,9 @@ public:
     JsonlParser& operator=(const JsonlParser&) = delete;
     JsonlParser& operator=(JsonlParser&&) = delete;
 
-    [[nodiscard]] static JsonlImportResult<void> parse(ChangeAccessor& change, std::istream& stream);
+    [[nodiscard]] static JsonlImportResult<void> parse(ChangeAccessor& change,
+                                                       std::istream& stream,
+                                                       const std::unordered_map<std::string_view, size_t>& embeddingSpecs = {});
 };
 
 }

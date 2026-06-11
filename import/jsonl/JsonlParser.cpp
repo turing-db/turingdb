@@ -1,7 +1,7 @@
 #include "JsonlParser.h"
 
-#include <algorithm>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <unordered_map>
 
 #include "ID.h"
@@ -51,35 +51,23 @@ namespace {
     }
 }
 
-bool isEmbedding(const std::vector<json>& arr) {
-    // Embeddings must be at least size 2 (enforced in grammar)
-    return arr.size() > 1
-        && std::ranges::all_of(arr, [](const json& v) { return v.is_number(); });
-}
-
 JsonlImportResult<void> tryFillEmbedding(const json& arr,
                                          std::vector<float>& storage,
-                                         std::unordered_map<db::PropertyTypeID, size_t>& sizeMap,
-                                         PropertyTypeID ptId,
+                                         size_t expectedDim,
                                          size_t lineNo) {
-    // Dimension is checked for validity by call to @ref isEmbedding
     const size_t dim = arr.size();
 
-    // All embeddings of the same property need be the same dimension
-    const auto findIt = sizeMap.find(ptId);
-    const bool alreadyRegistered = findIt != end(sizeMap);
-    if (alreadyRegistered && dim != findIt->second) {
+    if (dim != expectedDim) {
         return JsonlImportError::result(JsonlImportErrorType::MISMATCH_EMB_DIM, lineNo);
-    }
-    if (!alreadyRegistered) {
-        sizeMap.emplace(ptId, dim);
     }
 
     storage.clear();
     storage.reserve(dim);
 
     for (const json& e : arr) {
-        // Elements are guaranteed to be numeric via call to @ref isEmbedding
+        if (!e.is_number()) {
+            return JsonlImportError::result(JsonlImportErrorType::NON_NUMERIC_EMB, lineNo);
+        }
         const float v = e.get<float>(); // Casts from any numeric type
         storage.push_back(v);
     }
@@ -87,9 +75,25 @@ JsonlImportResult<void> tryFillEmbedding(const json& arr,
     return {};
 }
 
+std::optional<size_t> tryGetEmbDim(std::string_view name,
+                                   const json& value,
+                                   const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+    if (!value.is_array()) {
+        return {};
+    }
+
+    const auto it = embeddingSpecs.find(name);
+    if (it != embeddingSpecs.end()) {
+        return it->second;
+    }
+
+    return {};
+}
 }
 
-JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream& stream) {
+JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
+                                           std::istream& stream,
+                                           const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
     Profile profile("JsonlParser::parse");
 
     std::string line;
@@ -102,8 +106,6 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
     std::string ptName;
     LabelSet labelset;
 
-    std::unordered_map<PropertyTypeID, size_t> nodeEmbPropSizes;
-    std::unordered_map<PropertyTypeID, size_t> edgeEmbPropSizes;
     std::vector<float> embBacking;
 
     while (std::getline(stream, line)) {
@@ -157,9 +159,14 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                 if (properties != obj.end()) {
                     for (const auto& [key, value] : properties->items()) {
                         ptName = key;
-                        ValueType vt = ValueType::Invalid;
 
-                        const bool valueIsEmbedding = value.is_array() && isEmbedding(value);
+                        ValueType vt = ValueType::Invalid;
+                        std::optional<size_t> embDim = std::nullopt;
+
+                        if (value.is_array()) {
+                            embDim = tryGetEmbDim(ptName, value, embeddingSpecs);
+                        }
+                        const bool valueIsEmbedding = embDim.has_value();
 
                         if (value.is_number_float()) {
                             vt = ValueType::Double;
@@ -189,7 +196,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                             builder.addNodeProperty<types::String>(nodeID, pt._id, value.get<std::string_view>());
                         } else if (valueIsEmbedding) {
                             const JsonlImportResult<void> res =
-                                tryFillEmbedding(value, embBacking, nodeEmbPropSizes, pt._id, lineNumber);
+                                tryFillEmbedding(value, embBacking, *embDim, lineNumber);
                             if (!res) {
                                 return res;
                             }
@@ -253,9 +260,14 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                 if (properties != obj.end()) {
                     for (const auto& [key, value] : properties->items()) {
                         ptName = key;
-                        ValueType vt = ValueType::Invalid;
 
-                        const bool valueIsEmbedding = value.is_array() && isEmbedding(value);
+                        ValueType vt = ValueType::Invalid;
+                        std::optional<size_t> embDim = std::nullopt;
+
+                        if (value.is_array()) {
+                            embDim = tryGetEmbDim(ptName, value, embeddingSpecs);
+                        }
+                        const bool valueIsEmbedding = embDim.has_value();
 
                         if (value.is_number_float()) {
                             vt = ValueType::Double;
@@ -285,7 +297,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change, std::istream&
                             builder.addEdgeProperty<types::String>(edge, pt._id, value.get<std::string_view>());
                         } else if (valueIsEmbedding) {
                             const JsonlImportResult<void> res =
-                                tryFillEmbedding(value, embBacking, edgeEmbPropSizes, pt._id, lineNumber);
+                                tryFillEmbedding(value, embBacking, *embDim, lineNumber);
                             if (!res) {
                                 return res;
                             }
