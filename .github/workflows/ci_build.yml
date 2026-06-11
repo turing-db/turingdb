@@ -129,7 +129,7 @@ jobs:
         python3 scripts/with_host_lock.py /tmp/turingdb-depcache.lock \
           bash scripts/dep_cache.sh restore \
           /Users/m1/actions-local-cache \
-          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}"
+          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh', 'scripts/dep_cache.sh') }}"
 
     - name: Install build tools
       run: ./install_build_tools.sh
@@ -145,7 +145,7 @@ jobs:
         python3 scripts/with_host_lock.py /tmp/turingdb-depcache.lock \
           bash scripts/dep_cache.sh publish \
           /Users/m1/actions-local-cache \
-          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}"
+          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh', 'scripts/dep_cache.sh') }}"
 
     - name: Setup Python
       run: uv python install ${{ matrix.python_version }}
