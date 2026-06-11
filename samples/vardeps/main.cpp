@@ -34,6 +34,9 @@ Will always return nothing (e cannot be both an in edge and an out
 edge of x), however it causes the dep graph to be non-simple (multigraph),
 and causes the cycle basis algorithm to report 2 cycles.
 
+2. (x)-->(x), (x)<--(x)
+Verify the generated graph is correct
+
 */
 
 using namespace db;

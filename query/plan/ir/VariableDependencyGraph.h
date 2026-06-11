@@ -154,10 +154,6 @@ private:
 
     std::unordered_map<VariableDependency*, int> _anonymised;
 
-    std::unordered_map<VariableDependency*,
-                       std::pair<VariableDependency*, VariableDependency*>>
-        _anonMap;
-
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const EntityPattern* entity);
     VariableDependency* newVariable(std::string_view name);

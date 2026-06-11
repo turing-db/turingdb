@@ -201,11 +201,12 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
                 }
 
                 // TODO: Remove, we should have a simple graph?
+                // XXX: Consider (x)-->(x)
                 // Parallel edge: u is neighbour's direct tree-parent, so pred walk would
                 // start above u and never descend to neighbour. Emit 2-cycle directly.
                 const bool isParallelEdge = pred.contains(neighbour) && pred[neighbour] == u;
                 if (isParallelEdge) {
-                    cycles.push_back({u, neighbour, u});
+                    cycles.push_back({u, neighbour});
                     usedThisTraversal.insert(neighbour);
                     continue;
                 }
@@ -252,8 +253,6 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     if (cyc.empty()) {
         return;
     }
-
-    bioassert(cyc.size() >= 3, "Invalid cycle.");
 
     // For a cycle (head, u, ..., v) with [v,head] in E :
     VariableDependency* head = cyc.front();
