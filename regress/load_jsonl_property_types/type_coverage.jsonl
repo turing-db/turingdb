@@ -1,3 +1,3 @@
-{"type":"node","id":"0","labels":["TypeTest"],"properties":{"strProp":"hello","intProp":42,"floatProp":3.14,"boolProp":true,"embProp":[1.0,2.0,3.0],"arrProp":["foo","bar"]}}
-{"type":"node","id":"1","labels":["TypeTest"],"properties":{"strProp":"world","intProp":7,"floatProp":2.71,"boolProp":false,"embProp":[4.0,5.0,6.0],"arrProp":["foo","bar"]}}
-{"type":"relationship","id":"0","label":"CONNECTED","properties":{"strProp":"edge","intProp":100,"floatProp":9.9,"boolProp":true,"embProp":[7.0,8.0,9.0],"arrProp":["foo","bar"]},"start":0,"end":1}
+{"type":"node","id":"0","labels":["TypeTest"],"properties":{"strProp":"hello","intProp":42,"floatProp":3.14,"boolProp":true,"embProp":[1.0,2.0,3.0],"arrProp":["foo","bar"],"mixedArrProp":[1,"foo"],"intArrProp":[10,20,30],"mixedNumEmbProp":[1.0,2,3.0]}}
+{"type":"node","id":"1","labels":["TypeTest"],"properties":{"strProp":"world","intProp":7,"floatProp":2.71,"boolProp":false,"embProp":[4.0,5.0,6.0],"arrProp":["foo","bar"],"mixedArrProp":[2,"baz"],"intArrProp":[40,50,60],"mixedNumEmbProp":[4.0,5,6.0]}}
+{"type":"relationship","id":"0","label":"CONNECTED","properties":{"strProp":"edge","intProp":100,"floatProp":9.9,"boolProp":true,"embProp":[7.0,8.0,9.0],"arrProp":["foo","bar"],"mixedArrProp":[3,"qux"],"intArrProp":[70,80,90],"mixedNumEmbProp":[7.0,8,9.0]},"start":0,"end":1}
