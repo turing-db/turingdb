@@ -100,7 +100,7 @@ private:
     void setDefaultGraph(std::string_view name);
 
     // Import graph from file
-    Graph* importGraph(const fs::Path& path, std::string_view graphName);
+    Graph* importGraph(const fs::Path& path, std::string_view graphName, const std::unordered_map<std::string_view, size_t>& embeddingSpecs);
     GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 
     // Loading a graph

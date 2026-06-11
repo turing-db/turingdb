@@ -69,7 +69,7 @@ private:
     GraphLoadStatus _graphLoadStatus;
 
     Graph* loadJsonlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem,
-                       std::unordered_map<std::string_view, size_t>& embeddingSpecs);
+                       const std::unordered_map<std::string_view, size_t>& embeddingSpecs);
     Graph* loadGmlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);
     Graph* loadBinaryDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);
 };

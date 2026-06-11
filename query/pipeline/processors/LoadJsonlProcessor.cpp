@@ -56,7 +56,7 @@ void LoadJsonlProcessor::execute() {
 
     bioassert(system, "SystemAccessor not initialized");
 
-    Graph* graph = system->importGraph(_path, _graphName);
+    Graph* graph = system->importGraph(_path, _graphName, _embeddingSpecs);
     if (!graph) {
         throw PipelineException(fmt::format("Failed to load JSONL graph {}", _path.get()));
     }
