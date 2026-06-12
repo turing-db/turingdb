@@ -6,6 +6,7 @@ target_link_libraries(turing_db_import_jsonl_s
     PUBLIC  turing_common_s
             turing_db_jobs_s
             turing_db_storage_s
+            turing_db_import_common_s
     PRIVATE nlohmann_json
             range-v3)
 

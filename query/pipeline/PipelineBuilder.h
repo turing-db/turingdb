@@ -2,7 +2,6 @@
 
 #include <span>
 #include <string_view>
-#include <unordered_map>
 
 #include "ChangeOp.h"
 #include "EntityType.h"
@@ -31,6 +30,8 @@
 
 #include "metadata/SupportedType.h"
 #include "metadata/LabelSet.h"
+
+#include "EmbeddingsSpec.h"
 
 #include "LocalMemory.h"
 
@@ -189,7 +190,7 @@ public:
     PipelineValueOutputInterface& addLoadGML(std::string_view graphName, const fs::Path& filePath);
     PipelineValueOutputInterface& addLoadJsonl(std::string_view graphName,
                                                const fs::Path& filePath,
-                                               const std::unordered_map<std::string_view, size_t>& embeddingSpecs);
+                                               const EmbeddingsSpec& embeddingSpecs);
 
     // List Graph
     PipelineValueOutputInterface& addListGraph();

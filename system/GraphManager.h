@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "ChangeManager.h"
+#include "EmbeddingsSpec.h"
 #include "GraphFileType.h"
 #include "GraphLoadStatus.h"
 #include "ObjectMap.h"
@@ -44,7 +45,7 @@ public:
     Graph* importGraph(std::string_view graphName,
                        const fs::Path& filePath,
                        JobSystem* jobSystem,
-                       const std::unordered_map<std::string_view, size_t>& embeddingSpecs = {});
+                       const EmbeddingsSpec& embeddingSpecs = {});
 
     GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 
@@ -71,7 +72,7 @@ private:
     Graph* loadJsonlDB(std::string_view graphName,
                        const fs::Path& dbPath,
                        JobSystem* jobSystem,
-                       const std::unordered_map<std::string_view, size_t>& embeddingSpecs);
+                       const EmbeddingsSpec& embeddingSpecs);
 
     Graph* loadGmlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);
     Graph* loadBinaryDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);

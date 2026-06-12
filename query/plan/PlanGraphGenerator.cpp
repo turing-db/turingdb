@@ -1,6 +1,7 @@
 #include "PlanGraphGenerator.h"
 
 #include "BioAssert.h"
+#include "EmbeddingsSpec.h"
 #include "FunctionInvocation.h"
 #include "GetPropertyCache.h"
 #include "NodePattern.h"
@@ -325,7 +326,7 @@ void PlanGraphGenerator::generateLoadGMLQuery(const LoadGMLQuery* loadGML) {
 }
 
 void PlanGraphGenerator::generateLoadJsonlQuery(const LoadJsonlQuery* query) {
-    std::unordered_map<std::string_view, size_t> specs(query->getEmbeddingSpecs());
+    EmbeddingsSpec specs(query->getEmbeddingSpecs());
     LoadJsonlNode* n = _tree.create<LoadJsonlNode>(query->getFilePath(), query->getGraphName(), std::move(specs));
     _tree.newOut<ProduceResultsNode>(n);
 }

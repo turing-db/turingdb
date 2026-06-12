@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "EmbeddingsSpec.h"
 #include "GraphManager.h"
 
 #include "SystemAccessor.h"
@@ -102,7 +103,7 @@ private:
     // Import graph from file
     Graph* importGraph(const fs::Path& path,
                        std::string_view graphName,
-                       const std::unordered_map<std::string_view, size_t>& embeddingSpecs);
+                       const EmbeddingsSpec& embeddingSpecs);
 
     GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 

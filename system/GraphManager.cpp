@@ -5,6 +5,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "EmbeddingsSpec.h"
 #include "Graph.h"
 
 #include "dump/GraphDumper.h"
@@ -120,7 +121,7 @@ void GraphManager::loadOrCreateDefaultGraph() {
 Graph* GraphManager::importGraph(std::string_view graphName,
                                  const fs::Path& filePath,
                                  JobSystem* jobSystem,
-                                const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+                                const EmbeddingsSpec& embeddingSpecs) {
     const fs::Path graphPath = _config->getGraphsDir() / filePath;
 
     // Step 1. Check if graph was already loaded || is already loading
@@ -226,7 +227,7 @@ Graph* GraphManager::loadBinaryDB(std::string_view graphName,
 Graph* GraphManager::loadJsonlDB(std::string_view graphName,
                                  const fs::Path& dbPath,
                                  JobSystem* jobSystem,
-                                 const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+                                 const EmbeddingsSpec& embeddingSpecs) {
     const fs::Path graphPath = _config->getGraphsDir() / graphName;
     if (graphPath == dbPath) {
         return nullptr;

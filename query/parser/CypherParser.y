@@ -17,7 +17,6 @@
 %code requires {
 
     #include <optional>
-    #include <unordered_map>
     #include <utility>
 
     // Inspired by https://github.com/antlr/grammars-v4/blob/master/cypher/CypherParser.g4
@@ -82,6 +81,7 @@
     #include "DropIndexQuery.h"
     #include "MergeDataPartsQuery.h"
     #include "stmt/UnwindStmt.h"
+    #include "EmbeddingsSpec.h"
 
     namespace db {
         class YCypherScanner;
@@ -374,7 +374,7 @@
 %type<db::CreateEdgePropertyIndexQuery*> createEdgePropertyIndexQuery
 %type<db::DropIndexQuery*> dropIndexQuery
 %type<db::UnwindStmt*> unwindSt
-%type<std::unordered_map<std::string_view, size_t>> embeddingSpecs
+%type<EmbeddingsSpec> embeddingSpecs
 %type<std::pair<std::string_view, size_t>> embeddingSpec
 
 %expect 0

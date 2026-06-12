@@ -31,6 +31,7 @@ target_include_directories(turing_db_parser_s
 target_link_libraries(turing_db_parser_s
     PRIVATE turing_common_s
             turing_db_query_common_s
+            turing_db_import_common_s
             turing_db_ast_s
             turing_vector_s
             range-v3)

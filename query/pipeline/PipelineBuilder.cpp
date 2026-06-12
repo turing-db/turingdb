@@ -1,5 +1,6 @@
 #include "PipelineBuilder.h"
 
+#include "EmbeddingsSpec.h"
 #include "PipelinePort.h"
 #include "columns/AllowedKinds.h"
 #include "columns/Column.h"
@@ -965,7 +966,7 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadGML(std::string_view graph
 
 PipelineValueOutputInterface& PipelineBuilder::addLoadJsonl(std::string_view graphName,
                                                             const fs::Path& path,
-                                                            const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+                                                            const EmbeddingsSpec& embeddingSpecs) {
     LoadJsonlProcessor* proc = LoadJsonlProcessor::create(_pipeline, path, graphName, embeddingSpecs);
 
     PipelineValueOutputInterface& output = proc->output();

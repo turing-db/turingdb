@@ -1,5 +1,6 @@
 #include "SystemAccessor.h"
 
+#include "EmbeddingsSpec.h"
 #include "SystemManager.h"
 
 #include "versioning/Transaction.h"
@@ -65,7 +66,7 @@ DumpResult<void> SystemAccessor::loadCommit(std::string_view name, CommitHash ha
 
 Graph* SystemAccessor::importGraph(const fs::Path& path,
                                    std::string_view name,
-                                   const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+                                   const EmbeddingsSpec& embeddingSpecs) {
     return _sysMan->importGraph(path, name, embeddingSpecs);
 }
 
