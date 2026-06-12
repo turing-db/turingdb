@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <iostream>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -13,8 +14,17 @@
 
 #include "DBOps.h"
 #include "NLOps.h"
+#include "NLInterpreter.h"
+#include "NLOutputSink.h"
 #include "IRAssembler.h"
 #include "IRModuleInspector.h"
+
+#include "Graph.h"
+#include "dump/GraphLoader.h"
+#include "reader/GraphReader.h"
+#include "versioning/Transaction.h"
+#include "columns/ColumnIDs.h"
+#include "columns/ColumnEdgeTypes.h"
 
 using namespace db;
 
@@ -153,6 +163,73 @@ void assembleFiles(mlir::MLIRContext& ctxt, mlir::ModuleOp& module, const std::v
     assembler.assemble();
 }
 
+// Prints each nl.output chunk set as one row per index, zipping the columns.
+// The interpreter pushes one chunk per output column, all of the same length.
+class PrintingSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks) override {
+        if (chunks.empty()) {
+            return;
+        }
+
+        const size_t rowCount = chunks.front()->size();
+        for (size_t row = 0; row < rowCount; row++) {
+            std::cout << "(";
+            for (size_t column = 0; column < chunks.size(); column++) {
+                if (column > 0) {
+                    std::cout << ", ";
+                }
+
+                printCell(chunks[column], row);
+            }
+
+            std::cout << ")\n";
+            _rowCount++;
+        }
+    }
+
+    size_t getRowCount() const { return _rowCount; }
+
+private:
+    // The translator only ever emits node ID, edge ID and edge type ID chunks
+    static void printCell(const Column* column, size_t row) {
+        if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
+            std::cout << (*nodeIDs)[row].getValue();
+        } else if (const auto* edgeIDs = dynamic_cast<const ColumnEdgeIDs*>(column)) {
+            std::cout << (*edgeIDs)[row].getValue();
+        } else if (const auto* edgeTypes = dynamic_cast<const ColumnEdgeTypes*>(column)) {
+            std::cout << (*edgeTypes)[row].getValue();
+        } else {
+            std::cout << "?";
+        }
+    }
+
+    size_t _rowCount {0};
+};
+
+// Loads the graph at graphDir and runs the module's main function against it
+void executeModule(mlir::ModuleOp& module, const std::string& graphDir) {
+    if (graphDir.empty()) {
+        throw std::runtime_error("-exec requires a graph directory given with -graph");
+    }
+
+    auto graph = Graph::create();
+    const auto loadResult = GraphLoader::load(graph.get(), fs::Path(graphDir));
+    if (!loadResult) {
+        throw std::runtime_error(loadResult.error().fmtMessage());
+    }
+
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    PrintingSink sink;
+    NLInterpreter interpreter(module, &view, &sink);
+    interpreter.run();
+
+    std::cout << sink.getRowCount() << " rows\n";
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -161,6 +238,8 @@ int main(int argc, char** argv) {
 
     std::vector<std::string> files;
     bool dumpCode = false;
+    bool execute = false;
+    std::string graphDir;
 
     parser.add_argument("files")
         .metavar("mlir.txt")
@@ -171,6 +250,15 @@ int main(int argc, char** argv) {
     parser.add_argument("-d", "--dump")
         .store_into(dumpCode)
         .help("Dump the full MLIR code of every function in the module");
+
+    parser.add_argument("-exec")
+        .store_into(execute)
+        .help("Execute the module's main function with the NLInterpreter");
+
+    parser.add_argument("-graph")
+        .metavar("path")
+        .store_into(graphDir)
+        .help("Graph directory to load and execute against (requires -exec)");
 
     try {
         parser.parse_args(argc, argv);
@@ -200,6 +288,10 @@ int main(int argc, char** argv) {
             inspector.dumpFunctions(std::cout);
         } else {
             inspector.dumpFunctionTypes(std::cout);
+        }
+
+        if (execute) {
+            executeModule(mainMod, graphDir);
         }
     } catch (const std::exception& e) {
         std::cerr << e.what() << "\n";

@@ -3,7 +3,7 @@
 // nl.output sends a chunk on as a column of the query result. The last block
 // shows a two-hop MATCH (a)->(b)->(c) using a get_out_edges carry set.
 module {
-    func.func @nested_loop() {
+    func.func @main() {
         %nodes = nl.scan_nodes()
 
         nl.for %chunk in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
