@@ -3,14 +3,11 @@
 #include <string_view>
 #include <unordered_map>
 
-namespace {
-using MapType = std::unordered_map<std::string_view, size_t>;
-}
-
 namespace db {
 
 class EmbeddingsSpec {
 public:
+    using MapType = std::unordered_map<std::string_view, size_t>;
     using Iterator = MapType::iterator;
     using ConstIterator = MapType::const_iterator;
 
@@ -25,6 +22,5 @@ public:
 private:
     MapType _specMap;
 };
-
 
 }
