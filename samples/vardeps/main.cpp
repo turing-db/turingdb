@@ -77,23 +77,23 @@ static void inspectVarDepGraph(CypherAST* ast) {
         fmt::print("\n");
     };
 
-    // VariableDependencyGraph::Cycle cyc;
-    // for (;;) {
-    //     cyc = vdg.getCycle();
-    //     if (cyc.empty()) {
-    //         break;
-    //     }
-    //     printCycle(cyc);
-    //     vdg.detachCycle(cyc);
-    //     IRDumper::dumpMermaid(vdg, std::cout);
-    // }
+    VariableDependencyGraph::Cycle cyc;
+    for (;;) {
+        cyc = vdg.getCycle();
+        if (cyc.empty()) {
+            break;
+        }
+        printCycle(cyc);
+        vdg.detachCycle(cyc);
+        IRDumper::dumpMermaid(vdg, std::cout);
+    }
 
-    auto cyc = vdg.getCycle();
-    printCycle(cyc);
-    vdg.detachCycle(cyc);
-    IRDumper::dumpMermaid(vdg, std::cout);
-    cyc = vdg.getCycle();
-    printCycle(cyc);
+    // auto cyc = vdg.getCycle();
+    // printCycle(cyc);
+    // vdg.detachCycle(cyc);
+    // IRDumper::dumpMermaid(vdg, std::cout);
+    // cyc = vdg.getCycle();
+    // printCycle(cyc);
     IRDumper::dumpMermaid(vdg, std::cout);
 }
 
