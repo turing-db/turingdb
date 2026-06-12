@@ -1,5 +1,7 @@
 #include "NLInterpreter.h"
 
+#include <iostream>
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/SymbolTable.h"
 
@@ -8,6 +10,7 @@
 #include "NLExecutor.h"
 
 #include "IRException.h"
+#include "TuringTime.h"
 
 using namespace db;
 
@@ -38,9 +41,25 @@ void NLInterpreter::run() {
     NLProgram program;
     program.setChunkSize(_chunkSize);
 
-    NLTranslator translator(&program, _memory);
-    translator.translate(function);
+    float translateMilliseconds {0.0f};
+    float executeMilliseconds {0.0f};
 
-    NLExecutor executor(_view, &program, _sink);
-    executor.run();
+    {
+        const TimePoint start = Clock::now();
+        NLTranslator translator(&program, _memory);
+        translator.translate(function);
+        const TimePoint end = Clock::now();
+        translateMilliseconds = duration<Milliseconds>(start, end);
+    }
+
+    {
+        const TimePoint start = Clock::now();
+        NLExecutor executor(_view, &program, _sink);
+        executor.run();
+        const TimePoint end = Clock::now();
+        executeMilliseconds = duration<Milliseconds>(start, end);
+    }
+
+    std::cout << "[NLInterpreter] translation: " << translateMilliseconds << " ms, "
+              << "execution: " << executeMilliseconds << " ms\n";
 }
