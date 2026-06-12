@@ -9,4 +9,4 @@ function(add_ir_tests exe_name cpp_file)
             MLIRParser)
 endfunction()
 
-add_ir_tests(test_query_ir_nlinterpreter NLInterpreterTest.cpp)
+add_ir_tests(test_query_ir_nlexecutor NLExecutorTest.cpp)

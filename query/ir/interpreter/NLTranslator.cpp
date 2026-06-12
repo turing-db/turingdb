@@ -5,7 +5,7 @@
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Verifier.h"
 
-#include "NLInterpreter.h"
+#include "NLExecutor.h"
 
 #include "IRException.h"
 
@@ -92,7 +92,7 @@ void NLTranslator::translateScanLoop(mlir::Block& loopBody, NLStmtContainer* bod
 
     NLScanLoopData* loopData = _program->allocFunctionData<NLScanLoopData>(nodeIDs);
 
-    body->addStmt(NLFunctionDescriptor {&NLInterpreter::runScanNodesLoop, loopData});
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanNodesLoop, loopData});
 
     translateBlock(loopBody, loopData->getStmts());
 }
@@ -144,13 +144,13 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
 
         const NLCarriedColumn carriedColumn(getColumn(carriedValue),
                                             carriedOutput,
-                                            NLInterpreter::selectGatherFunction(kind));
+                                            NLExecutor::selectGatherFunction(kind));
         loopData->addCarriedColumn(carriedColumn);
     }
 
     const bool isOutEdges = config._kind == IteratorKind::GetOutEdges;
-    const NLHandlerFunction handler = isOutEdges ? &NLInterpreter::runGetOutEdgesLoop
-                                                 : &NLInterpreter::runGetInEdgesLoop;
+    const NLHandlerFunction handler = isOutEdges ? &NLExecutor::runGetOutEdgesLoop
+                                                 : &NLExecutor::runGetInEdgesLoop;
     body->addStmt(NLFunctionDescriptor {handler, loopData});
 
     translateBlock(loopBody, loopData->getStmts());
@@ -187,7 +187,7 @@ void NLTranslator::translateOutput(const nl::Output& output, NLStmtContainer* bo
         outputData->addOutputColumn(getColumn(column));
     }
 
-    body->addStmt(NLFunctionDescriptor {&NLInterpreter::runOutput, outputData});
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runOutput, outputData});
 }
 
 Column* NLTranslator::allocColumn(mlir::Value chunkValue) {

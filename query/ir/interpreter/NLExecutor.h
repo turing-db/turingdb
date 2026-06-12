@@ -31,12 +31,12 @@ private:
 };
 
 // Executes a translated NLProgram against a graph view
-class NLInterpreter {
+class NLExecutor {
 public:
-    NLInterpreter(const GraphView* view,
+    NLExecutor(const GraphView* view,
                   const NLProgram* prog,
                   NLOutputSink* sink);
-    ~NLInterpreter();
+    ~NLExecutor();
 
     void run();
 

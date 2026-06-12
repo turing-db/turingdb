@@ -1,4 +1,4 @@
-#include "NLInterpreter.h"
+#include "NLExecutor.h"
 
 #include <type_traits>
 
@@ -73,7 +73,7 @@ void runEdgeLoopSteps(NLExecutionContext* context,
 
 }
 
-NLInterpreter::NLInterpreter(const GraphView* view,
+NLExecutor::NLExecutor(const GraphView* view,
                              const NLProgram* prog,
                              NLOutputSink* sink)
     : _ctxt(view, sink, prog->getChunkSize()),
@@ -81,14 +81,14 @@ NLInterpreter::NLInterpreter(const GraphView* view,
 {
 }
 
-NLInterpreter::~NLInterpreter() {
+NLExecutor::~NLExecutor() {
 }
 
-void NLInterpreter::run() {
+void NLExecutor::run() {
     runBody(&_ctxt, _prog->getStmts());
 }
 
-void NLInterpreter::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* data) {
+void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLScanLoopData* loopData = static_cast<NLScanLoopData*>(data);
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
@@ -108,7 +108,7 @@ void NLInterpreter::runScanNodesLoop(NLExecutionContext* context, NLFunctionData
     }
 }
 
-void NLInterpreter::runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
+void NLExecutor::runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLEdgeLoopData* loopData = static_cast<NLEdgeLoopData*>(data);
     const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
 
@@ -125,7 +125,7 @@ void NLInterpreter::runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionDa
     runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getSources());
 }
 
-void NLInterpreter::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
+void NLExecutor::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLEdgeLoopData* loopData = static_cast<NLEdgeLoopData*>(data);
     const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
 
@@ -142,7 +142,7 @@ void NLInterpreter::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionDat
     runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getTargets());
 }
 
-void NLInterpreter::runOutput(NLExecutionContext* context, NLFunctionData* data) {
+void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     const NLOutputData* output = static_cast<NLOutputData*>(data);
     const auto& cols = output->outputs();
     bioassert(!cols.empty(), "nl.output requires at least one column");
@@ -151,7 +151,7 @@ void NLInterpreter::runOutput(NLExecutionContext* context, NLFunctionData* data)
     sink->appendChunks(cols);
 }
 
-NLGatherFunction NLInterpreter::selectGatherFunction(NLChunkKind kind) {
+NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:
             return &gatherColumn<NodeID>;
