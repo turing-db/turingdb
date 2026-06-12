@@ -40,7 +40,7 @@ public:
     void detachCycle(const Cycle& cyc);
 
     Cycle getCycle();
-    CyclicPair dfs(VariableDependency* cur, VariableDependency* prev, bool fromMeta = false);
+    Cycle dfs(VariableDependency* cur, VariableDependency* prev, bool fromMeta = false);
 
 private:
     /// Variables whose dependencies are tracked by this class
@@ -48,7 +48,8 @@ private:
     std::deque<DependencyEdge> _edges;
 
     std::unordered_set<const VariableDependency*> _dfsVisited;
-    std::unordered_map<VariableDependency*, VariableDependency*> _dfsParents;
+    std::vector<VariableDependency*> _dfsPath;
+    std::unordered_set<VariableDependency*> _dfsPathSet;
 
     std::unordered_set<VariableDependency*> _seenInCycle;
 

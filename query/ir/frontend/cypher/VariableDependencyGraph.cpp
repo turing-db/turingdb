@@ -1,6 +1,7 @@
 #include "VariableDependencyGraph.h"
 
 #include <algorithm>
+#include <iostream>
 #include <set>
 #include <string_view>
 #include <unordered_map>
@@ -11,6 +12,7 @@
 #include "EdgeMetadata.h"
 #include "EdgePattern.h"
 #include "EntityPattern.h"
+#include "IRDumper.h"
 #include "PatternElement.h"
 
 #include "BioAssert.h"
@@ -266,7 +268,9 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
         newHead = newVariable(getNextAnonymisation(head));
         newTail = newVariable(getNextAnonymisation(head));
 
+        // spdlog::info("subdividing {}-{}->{}", u->getName(), newHead->getName(), head->getName());
         subdivideWithMerge(u, newHead, head);
+        // spdlog::info("subdividing {}-{}->{}", v->getName(), newTail->getName(), head->getName());
         subdivideWithMerge(v, newTail, head);
 
         // Register that we have seen these nodes in a cycle
@@ -292,7 +296,9 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     VariableDependency* mergeParent = newVariable(getNextAnonymisation(head));
     {
         EdgeMetadata data(EdgeMetadata::EdgeType::MERGE);
+        // spdlog::info("adding {}->{}", merged1->getName(), mergeParent->getName());
         addDirected(merged1, mergeParent, data);
+        // spdlog::info("adding {}->{}", merged2->getName(), mergeParent->getName());
         addDirected(merged2, mergeParent, data);
     }
     VariableDependency* otherInput = newVariable(getNextAnonymisation(head));
@@ -304,9 +310,11 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     newTail = startIsMerged ? otherInput : mergeParent;
 
     // Parent of the previous two merges that were just cascaded, merged into current head
-    addDirected(newHead, head, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
+    // spdlog::info("adding merge {}->{}", newHead->getName(), head->getName());
+    addDirected(newTail, head, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
     // Add a temporary between the tail (unmerged end of cycle) and current head
-    subdivideWithMerge(v, newTail, head);
+    // spdlog::info("subdividing {}-{}->{}", v->getName(), newTail->getName(), head->getName());
+    subdivideWithMerge(u, newHead, head);
 
     _seenInCycle.insert(begin(cyc), end(cyc));
 }
@@ -358,6 +366,7 @@ void VariableDependencyGraph::subdivideWithMerge(VariableDependency* s,
         }
     }
 
+    IRDumper::dumpMermaid(*this, std::cout);
     bioassert(false,
               "Attempted to subdivideWithMerge on two nodes that were not connected: {} and {}.",
               s->getName(), t->getName());
@@ -377,14 +386,13 @@ std::string VariableDependencyGraph::getNextAnonymisation(VariableDependency* v)
     return out;
 }
 
-VariableDependencyGraph::CyclicPair VariableDependencyGraph::dfs(VariableDependency* cur,
-                                                                 VariableDependency* prev,
-                                                                 bool fromMeta) {
+VariableDependencyGraph::Cycle VariableDependencyGraph::dfs(VariableDependency* cur,
+                                                            VariableDependency* prev,
+                                                            bool fromMeta) {
     const auto edges = cur->edges();
-    _dfsParents[cur] = prev;
     _dfsVisited.emplace(cur);
-    spdlog::info("dfs cur={}, prev={}, fromMeta={}", cur ? cur->getName() : "null",
-                 prev ? prev->getName() : "null", fromMeta);
+    _dfsPath.push_back(cur);
+    _dfsPathSet.emplace(cur);
 
     for (const DependencyEdge* e : edges) {
         VariableDependency* other = e->_src == cur ? e->_tgt : e->_src;
@@ -399,48 +407,32 @@ VariableDependencyGraph::CyclicPair VariableDependencyGraph::dfs(VariableDepende
             continue;
         }
 
-        const bool seen = _dfsVisited.contains(other);
+        const bool seen = _dfsPathSet.contains(other);
         if (seen) {
-            return {cur, other};
+            return _dfsPath;
         }
 
-        auto [head, tail] = dfs(other, cur, metaEdge);
-        if (head && tail) {
-            return {head, tail};
+        Cycle cyc = dfs(other, cur, metaEdge);
+        if (!cyc.empty()) {
+            return cyc;
         }
 
     }
-    return {nullptr, nullptr};
+
+    _dfsPath.pop_back();
+    _dfsPathSet.erase(cur);
+    return {};
 }
 
 VariableDependencyGraph::Cycle VariableDependencyGraph::getCycle() {
     Cycle cyc;
 
-    auto const rebuildCycle = [this, &cyc](VariableDependency* head,
-                                           VariableDependency* tail) {
-        cyc.clear();
-        VariableDependency* current = head;
-        while (current != tail) {
-            cyc.push_back(current);
-            current = _dfsParents[current];
-        }
-        cyc.push_back(tail);
-
-        // Rotate the cycle so the most sink-like is first
-        const auto sink = std::ranges::max_element(
-            cyc, [](const VariableDependency* v, const VariableDependency* u) {
-                return v->incoming().size() < u->incoming().size();
-            });
-
-        std::ranges::rotate(cyc, sink);
-    };
-
-
     if (_vars.empty()) {
         return cyc;
     }
 
-    _dfsParents.clear();
+    _dfsPath.clear();
+    _dfsPathSet.clear();
     _dfsVisited.clear();
 
     for (VariableDependency& v : _vars) {
@@ -448,9 +440,16 @@ VariableDependencyGraph::Cycle VariableDependencyGraph::getCycle() {
             continue;
         }
 
-        auto [head, tail] = dfs(&v, nullptr, false);
-        if (head && tail) {
-            rebuildCycle(head, tail);
+        cyc = dfs(&v, nullptr, false);
+        if (!cyc.empty()) {
+            const auto inDegree = [](const VariableDependency* v) {
+                return v->incoming().size();
+            };
+            const auto sinkLike =
+                std::ranges::max_element(cyc, [inDegree](auto&& a, auto&& b) {
+                    return inDegree(a) < inDegree(b);
+                });
+            std::ranges::rotate(cyc, sinkLike);
             return cyc;
         }
     }
