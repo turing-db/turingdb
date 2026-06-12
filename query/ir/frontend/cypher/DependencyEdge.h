@@ -20,6 +20,8 @@ public:
     const VariableDependency* tgt() const { return _tgt; }
     EdgeMetadata data() const { return _data; }
 
+    bool isMetaEdge() const { return EdgeMetadata::isMetaEdge(_data.type()); }
+
     bool operator==(const DependencyEdge& other) const {
         return _src == other.src() && _tgt == other.tgt() && _data == other.data();
     }
