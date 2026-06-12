@@ -1,7 +1,7 @@
 set(ir_interpreter_sources
     NLProgram.cpp
     NLOutputSink.cpp
-    NLInterpreter.cpp
+    NLExecutor.cpp
     NLTranslator.cpp)
 
 add_library(turing_db_ir_interpreter_s STATIC ${ir_interpreter_sources})

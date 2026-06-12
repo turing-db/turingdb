@@ -24,7 +24,7 @@
 
 #include "IRException.h"
 #include "NLDialect.h"
-#include "NLInterpreter.h"
+#include "NLExecutor.h"
 #include "NLOutputSink.h"
 #include "NLProgram.h"
 #include "NLTranslator.h"
@@ -173,7 +173,7 @@ func.func @cross_loop_carry() {
 
 }
 
-class NLInterpreterTest : public TuringTest {
+class NLExecutorTest : public TuringTest {
 protected:
     void initialize() override {
         _jobSystem = std::make_unique<JobSystem>();
@@ -251,8 +251,8 @@ protected:
         NLTranslator translator(&program);
         translator.translate(*functions.begin());
 
-        NLInterpreter interpreter(&view, &program, &sink);
-        interpreter.run();
+        NLExecutor executor(&view, &program, &sink);
+        executor.run();
     }
 
     // Parses a program that MLIR accepts but the translator must reject
@@ -276,7 +276,7 @@ protected:
     std::unique_ptr<JobSystem> _jobSystem;
 };
 
-TEST_F(NLInterpreterTest, emptyGraphProducesNoOutput) {
+TEST_F(NLExecutorTest, emptyGraphProducesNoOutput) {
     auto graph = Graph::create();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -287,7 +287,7 @@ TEST_F(NLInterpreterTest, emptyGraphProducesNoOutput) {
     EXPECT_TRUE(sink.getColumns().empty());
 }
 
-TEST_F(NLInterpreterTest, scanNodesOutput) {
+TEST_F(NLExecutorTest, scanNodesOutput) {
     auto graph = buildDiamondGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -301,7 +301,7 @@ TEST_F(NLInterpreterTest, scanNodesOutput) {
     EXPECT_EQ(rows, expected);
 }
 
-TEST_F(NLInterpreterTest, oneHopOutEdges) {
+TEST_F(NLExecutorTest, oneHopOutEdges) {
     auto graph = buildDiamondGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -315,7 +315,7 @@ TEST_F(NLInterpreterTest, oneHopOutEdges) {
     EXPECT_EQ(rows, expected);
 }
 
-TEST_F(NLInterpreterTest, oneHopInEdges) {
+TEST_F(NLExecutorTest, oneHopInEdges) {
     auto graph = buildDiamondGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -329,7 +329,7 @@ TEST_F(NLInterpreterTest, oneHopInEdges) {
     EXPECT_EQ(rows, expected);
 }
 
-TEST_F(NLInterpreterTest, twoHopWithCarriedColumn) {
+TEST_F(NLExecutorTest, twoHopWithCarriedColumn) {
     auto graph = buildDiamondGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -344,7 +344,7 @@ TEST_F(NLInterpreterTest, twoHopWithCarriedColumn) {
     EXPECT_EQ(rows, expected);
 }
 
-TEST_F(NLInterpreterTest, oneHopSmallChunksTwoParts) {
+TEST_F(NLExecutorTest, oneHopSmallChunksTwoParts) {
     auto graph = buildDiamondGraph();
     addSecondPart(*graph);
 
@@ -362,11 +362,11 @@ TEST_F(NLInterpreterTest, oneHopSmallChunksTwoParts) {
     EXPECT_EQ(rows, expected);
 }
 
-TEST_F(NLInterpreterTest, rejectsCrossLoopOutputColumns) {
+TEST_F(NLExecutorTest, rejectsCrossLoopOutputColumns) {
     expectTranslationFailure(crossLoopOutputProgram);
 }
 
-TEST_F(NLInterpreterTest, rejectsCrossLoopCarriedColumns) {
+TEST_F(NLExecutorTest, rejectsCrossLoopCarriedColumns) {
     expectTranslationFailure(crossLoopCarryProgram);
 }
 

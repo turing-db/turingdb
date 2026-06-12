@@ -142,7 +142,7 @@ New library `query/ir/interpreter/`, static target `turing_db_ir_interpreter_s`,
 linking the storage library, the nl dialect library and `turing_db_ir_common_s`.
 
 The hard boundary: **only `NLTranslator` includes MLIR headers.** `NLProgram`
-and `NLInterpreter` are pure runtime. After translation the MLIR module can be
+and `NLExecutor` are pure runtime. After translation the MLIR module can be
 destroyed; the descriptor program is self-contained, which also makes it the
 natural unit for a future plan cache.
 
@@ -153,7 +153,7 @@ natural unit for a future plan cache.
               v
           NLProgram          descriptors + preallocated chunk slots
               |
-              |  NLInterpreter::run(view, program, sink)   [no MLIR, per execution]
+              |  NLExecutor::run(view, program, sink)   [no MLIR, per execution]
               v
          NLOutputSink        receives output chunks, push-based
 ```
@@ -203,17 +203,17 @@ Known simplification for this milestone: the program owns its slot state, so
 one `NLProgram` instance supports one execution at a time. Splitting the
 immutable program from per-run state belongs with the plan cache work.
 
-## NLInterpreter — handlers and entry point
+## NLExecutor — handlers and entry point
 
 ```cpp
-class NLInterpreter {
+class NLExecutor {
 public:
     static void run(const GraphView& view, NLProgram& program, NLOutputSink& sink);
 };
 ```
 
 `NLExecutionContext` carries the `GraphView`, the sink pointer and the chunk
-size. Handlers are static member functions of `NLInterpreter`, one per
+size. Handlers are static member functions of `NLExecutor`, one per
 descriptor shape, exposed so the translator can bind them into descriptors.
 
 **Scan loop.** Constructs a `ScanNodesChunkWriter(view)` on the handler's own
@@ -326,7 +326,7 @@ name.
 
 # Testing
 
-`test/query/ir/NLInterpreterTest.cpp`, following the `ScanNodesIteratorTest`
+`test/query/ir/NLExecutorTest.cpp`, following the `ScanNodesIteratorTest`
 fixture pattern (`TuringTest` + `JobSystem`; `Graph::create()` →
 `newChange()` → datapart builder → `submit`). Programs are parsed from string
 with `mlir::parseSourceString<ModuleOp>` (the file-based `IRAssembler` stays
@@ -347,7 +347,7 @@ interpreter, dialect and storage libraries.
 # Implementation order
 
 1. `NLProgram.h/.cpp` — runtime structures, no MLIR.
-2. `NLInterpreter.h/.cpp` — handlers and entry point.
+2. `NLExecutor.h/.cpp` — handlers and entry point.
 3. `NLTranslator.h/.cpp` — the MLIR walk.
 4. CMake wiring for the library and tests.
 5. Tests, then one build and test run to verify the milestone.
