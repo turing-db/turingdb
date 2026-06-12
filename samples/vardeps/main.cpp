@@ -77,27 +77,24 @@ static void inspectVarDepGraph(CypherAST* ast) {
         fmt::print("\n");
     };
 
-    auto cycs = vdg.cycleBasis();
+    // VariableDependencyGraph::Cycle cyc;
+    // for (;;) {
+    //     cyc = vdg.getCycle();
+    //     if (cyc.empty()) {
+    //         break;
+    //     }
+    //     printCycle(cyc);
+    //     vdg.detachCycle(cyc);
+    //     IRDumper::dumpMermaid(vdg, std::cout);
+    // }
 
-    for (auto& c : cycs) {
-        printCycle(c);
-        auto cr = c;
-        const auto sink = std::ranges::max_element(
-            cr, [](const VariableDependency* v, const VariableDependency* u) {
-                return v->incoming().size() < u->incoming().size();
-            });
-
-        if (sink != end(cr)) {
-            std::ranges::rotate(cr, sink);
-            spdlog::warn("ROTATED:");
-            printCycle(cr);
-            fmt::println("");
-        }
-
-        vdg.detachCycle(cr);
-        IRDumper::dumpMermaid(vdg, std::cout);
-    }
-
+    auto cyc = vdg.getCycle();
+    printCycle(cyc);
+    vdg.detachCycle(cyc);
+    IRDumper::dumpMermaid(vdg, std::cout);
+    cyc = vdg.getCycle();
+    printCycle(cyc);
+    IRDumper::dumpMermaid(vdg, std::cout);
 }
 
 int main(int argc, const char** argv) {
@@ -120,13 +117,15 @@ int main(int argc, const char** argv) {
     SystemManager sysman(&config);
     sysman.init();
 
-    Graph* graph = sysman.createGraph("simpledb");
+    SystemAccessor acc = sysman.accessUnique();
+
+    Graph* graph = acc.createGraph("simpledb");
     SimpleGraph::createSimpleGraph(graph);
 
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
-    CypherAST ast(sysman.getProcedures(), query);
+    CypherAST ast(acc.getProcedures(), query);
 
     {
         CypherParser parser(&ast);

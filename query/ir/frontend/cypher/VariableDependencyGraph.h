@@ -24,6 +24,7 @@ class PatternElement;
 class VariableDependencyGraph {
 public:
     using Cycle = std::vector<VariableDependency*>;
+    using CyclicPair = std::pair<VariableDependency*, VariableDependency*>;
 
     /// Given a pattern (e.g. (n)-[e]->(m)), inserts all vars into the dependency graph
     void registerPatternElement(const PatternElement* ptn);
@@ -38,10 +39,16 @@ public:
 
     void detachCycle(const Cycle& cyc);
 
+    Cycle getCycle();
+    CyclicPair dfs(VariableDependency* cur, VariableDependency* prev, bool fromMeta = false);
+
 private:
     /// Variables whose dependencies are tracked by this class
     std::deque<VariableDependency> _vars;
     std::deque<DependencyEdge> _edges;
+
+    std::unordered_set<const VariableDependency*> _dfsVisited;
+    std::unordered_map<VariableDependency*, VariableDependency*> _dfsParents;
 
     std::unordered_set<VariableDependency*> _seenInCycle;
 

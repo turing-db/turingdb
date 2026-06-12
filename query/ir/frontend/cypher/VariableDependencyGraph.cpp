@@ -7,12 +7,16 @@
 #include <unordered_set>
 #include <utility>
 
+#include "DependencyEdge.h"
+#include "EdgeMetadata.h"
 #include "EdgePattern.h"
 #include "EntityPattern.h"
 #include "PatternElement.h"
 
 #include "BioAssert.h"
+#include "VariableDependency.h"
 #include "decl/VarDecl.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -371,4 +375,85 @@ std::string VariableDependencyGraph::getNextAnonymisation(VariableDependency* v)
     out += std::to_string(count);
 
     return out;
+}
+
+VariableDependencyGraph::CyclicPair VariableDependencyGraph::dfs(VariableDependency* cur,
+                                                                 VariableDependency* prev,
+                                                                 bool fromMeta) {
+    const auto edges = cur->edges();
+    _dfsParents[cur] = prev;
+    _dfsVisited.emplace(cur);
+    spdlog::info("dfs cur={}, prev={}, fromMeta={}", cur ? cur->getName() : "null",
+                 prev ? prev->getName() : "null", fromMeta);
+
+    for (const DependencyEdge* e : edges) {
+        VariableDependency* other = e->_src == cur ? e->_tgt : e->_src;
+
+        const bool justVisited = other == prev;
+        if (justVisited) {
+            continue;
+        }
+
+        const bool metaEdge = e->isMetaEdge();
+        if (fromMeta && metaEdge) {
+            continue;
+        }
+
+        const bool seen = _dfsVisited.contains(other);
+        if (seen) {
+            return {cur, other};
+        }
+
+        auto [head, tail] = dfs(other, cur, metaEdge);
+        if (head && tail) {
+            return {head, tail};
+        }
+
+    }
+    return {nullptr, nullptr};
+}
+
+VariableDependencyGraph::Cycle VariableDependencyGraph::getCycle() {
+    Cycle cyc;
+
+    auto const rebuildCycle = [this, &cyc](VariableDependency* head,
+                                           VariableDependency* tail) {
+        cyc.clear();
+        VariableDependency* current = head;
+        while (current != tail) {
+            cyc.push_back(current);
+            current = _dfsParents[current];
+        }
+        cyc.push_back(tail);
+
+        // Rotate the cycle so the most sink-like is first
+        const auto sink = std::ranges::max_element(
+            cyc, [](const VariableDependency* v, const VariableDependency* u) {
+                return v->incoming().size() < u->incoming().size();
+            });
+
+        std::ranges::rotate(cyc, sink);
+    };
+
+
+    if (_vars.empty()) {
+        return cyc;
+    }
+
+    _dfsParents.clear();
+    _dfsVisited.clear();
+
+    for (VariableDependency& v : _vars) {
+        if (_dfsVisited.contains(&v)) {
+            continue;
+        }
+
+        auto [head, tail] = dfs(&v, nullptr, false);
+        if (head && tail) {
+            rebuildCycle(head, tail);
+            return cyc;
+        }
+    }
+
+    return cyc;
 }
