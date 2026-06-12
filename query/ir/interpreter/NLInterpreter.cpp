@@ -1,9 +1,12 @@
 #include "NLInterpreter.h"
 
+#include <type_traits>
+
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/ScanNodesIterator.h"
 
+#include "NLProgram.h"
 #include "NLOutputSink.h"
 
 #include "BioAssert.h"
@@ -12,144 +15,140 @@ using namespace db;
 
 namespace {
 
-void runBody(NLExecutionContext& context, const std::vector<NLFunctionDescriptor>& body) {
-    for (const NLFunctionDescriptor& descriptor : body) {
-        descriptor._function(context, descriptor._data);
+// Execute a body of statements
+void runBody(NLExecutionContext* context, const NLStmtContainer* body) {
+    for (const NLFunctionDescriptor& descriptor : body->stmts()) {
+        const auto func = descriptor.getFunction();
+        NLFunctionData* funcData = descriptor.getData();
+        func(context, funcData);
     }
 }
 
-// The kernel behind NLCarriedColumn::_gather, instantiated per chunk element
-// type and selected at translation time. The casts are safe because slots are
-// allocated from the same NLChunkKind the gather is selected from.
+// Gather rows of a carried column by applying indices
 template <typename ElementType>
-void gatherColumn(const Column& input, const ColumnVector<size_t>& indices, Column& output) {
-    const auto& typedInput = static_cast<const ColumnVector<ElementType>&>(input);
-    auto& typedOutput = static_cast<ColumnVector<ElementType>&>(output);
+void gatherColumn(const Column* input,
+                  const ColumnVector<size_t>* indices,
+                  Column* output) {
+    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
+    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
-    typedOutput.clear();
-    for (const size_t index : indices.getRaw()) {
-        typedOutput.push_back(typedInput[index]);
+    typedOutput->clear();
+    typedOutput->reserve(indices->size());
+    const auto& indicesRaw = indices->getRaw();
+    auto& typedInputRaw = typedInput->getRaw();
+
+    for (const size_t index : indicesRaw) {
+        typedOutput->push_back(typedInputRaw[index]);
     }
 }
 
-void checkCarriedColumnSizes(const NLEdgeLoopData& loop) {
-    const size_t inputSize = loop._inputNodeIDs->size();
-    for (const NLCarriedColumn& carriedColumn : loop._carriedColumns) {
-        bioassert(carriedColumn._input->size() == inputSize,
-                  "Carried chunk must have one row per input node");
-    }
-}
+// Execute a get_out_edges/get_in_edges loop
+template <typename ChunkWriterType>
+void runEdgeLoopSteps(NLExecutionContext* context,
+                      NLEdgeLoopData* loopData,
+                      ChunkWriterType* chunkWriter,
+                      ColumnNodeIDs* gatheredNodeIDs) {
+    const NLStmtContainer* loopBody = loopData->getStmts();
 
-// The native chunk-stepping loop shared by the two edge-loop handlers. The
-// writer fills its bound chunks plus the indices column, where indices[i] is
-// the input-chunk row that produced output row i; that one map drives both
-// the reconstruction of the gathered side (sources for out-edges, targets for
-// in-edges) and the carry-set filtering.
-template <typename WriterType>
-void runEdgeLoopSteps(NLExecutionContext& context,
-                      NLEdgeLoopData& loop,
-                      WriterType& writer,
-                      ColumnNodeIDs& gatheredNodeIDs) {
-    while (writer.isValid()) {
-        // fill clears the bound columns before writing the next chunk
-        writer.fill(context._chunkSize);
+    while (chunkWriter->isValid()) {
+        chunkWriter->fill(context->getChunkSize());
 
-        // Every row of this step may have been tombstone-filtered away
-        if (loop._indices.empty()) {
+        const ColumnVector<size_t>* indices = loopData->getIndices();
+        if (indices->empty()) {
             continue;
         }
 
-        gatherColumn<NodeID>(*loop._inputNodeIDs, loop._indices, gatheredNodeIDs);
+        // Gather either source or target if we are get_out or get_in (the source side)
+        gatherColumn<NodeID>(loopData->getInput(), indices, gatheredNodeIDs);
 
-        for (const NLCarriedColumn& carriedColumn : loop._carriedColumns) {
-            carriedColumn._gather(*carriedColumn._input, loop._indices, *carriedColumn._output);
+        // Transform all the columns in the carried set according to indices
+        for (const NLCarriedColumn& carriedColumn : loopData->carriedColumns()) {
+            const auto gatherFunc = carriedColumn.getGatherFunc();
+            gatherFunc(carriedColumn.getInput(), indices, carriedColumn.getOutput());
         }
 
-        runBody(context, loop._body);
+        runBody(context, loopBody);
     }
 }
 
 }
 
-void NLInterpreter::run(const GraphView& view, NLProgram& program, NLOutputSink& sink) {
-    NLExecutionContext context {view, &sink, program.getChunkSize()};
-    runBody(context, program.getTopLevel());
+NLInterpreter::NLInterpreter(const GraphView* view,
+                             const NLProgram* prog,
+                             NLOutputSink* sink)
+    : _ctxt(view, sink, prog->getChunkSize()),
+    _prog(prog)
+{
 }
 
-void NLInterpreter::runScanNodesLoop(NLExecutionContext& context, NLFunctionData* data) {
-    auto* loop = static_cast<NLScanLoopData*>(data);
-    ColumnNodeIDs* nodeIDs = loop->_nodeIDs;
+NLInterpreter::~NLInterpreter() {
+}
 
-    // The writer lives on the handler's own stack: loop state on the native C
-    // stack is the point of the subroutine-threaded design
-    ScanNodesChunkWriter writer(context._view);
-    writer.setNodeIDs(nodeIDs);
+void NLInterpreter::run() {
+    runBody(&_ctxt, _prog->getStmts());
+}
 
-    while (writer.isValid()) {
-        writer.fill(context._chunkSize);
+void NLInterpreter::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLScanLoopData* loopData = static_cast<NLScanLoopData*>(data);
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
+    const size_t chunkSize = context->getChunkSize();
+
+    ScanNodesChunkWriter chunkWriter(*context->getView());
+    chunkWriter.setNodeIDs(nodeIDs);
+
+    while (chunkWriter.isValid()) {
+        chunkWriter.fill(chunkSize);
 
         if (nodeIDs->empty()) {
             continue;
         }
 
-        runBody(context, loop->_body);
+        runBody(context, loopBody);
     }
 }
 
-void NLInterpreter::runGetOutEdgesLoop(NLExecutionContext& context, NLFunctionData* data) {
-    auto* loop = static_cast<NLEdgeLoopData*>(data);
-    const ColumnNodeIDs* inputNodeIDs = loop->_inputNodeIDs;
+void NLInterpreter::runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLEdgeLoopData* loopData = static_cast<NLEdgeLoopData*>(data);
+    const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
 
     if (inputNodeIDs->empty()) {
         return;
     }
 
-    checkCarriedColumnSizes(*loop);
+    GetOutEdgesChunkWriter chunkWriter(*context->getView(), inputNodeIDs);
+    chunkWriter.setIndices(loopData->getIndices());
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setTgtIDs(loopData->getTargets());
 
-    // Constructed at handler entry, after the enclosing loop filled the input
-    // slot: the writer captures the input column's iterators on construction
-    GetOutEdgesChunkWriter writer(context._view, inputNodeIDs);
-    writer.setIndices(&loop->_indices);
-    writer.setEdgeIDs(loop->_edgeIDs);
-    writer.setEdgeTypes(loop->_edgeTypes);
-    writer.setTgtIDs(loop->_targets);
-
-    // Out-edges walk the successors of the input nodes: the writer fills the
-    // target side and the source side is gathered from the input
-    runEdgeLoopSteps(context, *loop, writer, *loop->_sources);
+    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getSources());
 }
 
-void NLInterpreter::runGetInEdgesLoop(NLExecutionContext& context, NLFunctionData* data) {
-    auto* loop = static_cast<NLEdgeLoopData*>(data);
-    const ColumnNodeIDs* inputNodeIDs = loop->_inputNodeIDs;
+void NLInterpreter::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLEdgeLoopData* loopData = static_cast<NLEdgeLoopData*>(data);
+    const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
 
     if (inputNodeIDs->empty()) {
         return;
     }
 
-    checkCarriedColumnSizes(*loop);
+    GetInEdgesChunkWriter chunkWriter(*context->getView(), inputNodeIDs);
+    chunkWriter.setIndices(loopData->getIndices());
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setSrcIDs(loopData->getSources());
 
-    GetInEdgesChunkWriter writer(context._view, inputNodeIDs);
-    writer.setIndices(&loop->_indices);
-    writer.setEdgeIDs(loop->_edgeIDs);
-    writer.setEdgeTypes(loop->_edgeTypes);
-    writer.setSrcIDs(loop->_sources);
-
-    // In-edges walk the predecessors of the input nodes: the writer fills the
-    // source side and the target side is gathered from the input
-    runEdgeLoopSteps(context, *loop, writer, *loop->_targets);
+    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getTargets());
 }
 
-void NLInterpreter::runOutput(NLExecutionContext& context, NLFunctionData* data) {
-    const auto* output = static_cast<NLOutputData*>(data);
-    bioassert(!output->_columns.empty(), "nl.output requires at least one column");
+void NLInterpreter::runOutput(NLExecutionContext* context, NLFunctionData* data) {
+    const NLOutputData* output = static_cast<NLOutputData*>(data);
+    const auto& cols = output->outputs();
+    bioassert(!cols.empty(), "nl.output requires at least one column");
 
-    const size_t rowCount = output->_columns.front()->size();
-    for (const Column* column : output->_columns) {
-        bioassert(column->size() == rowCount, "nl.output columns must have the same length");
-    }
-
-    context._sink->appendChunks(output->_columns);
+    NLOutputSink* sink = context->getSink();
+    sink->appendChunks(cols);
 }
 
 NLGatherFunction NLInterpreter::selectGatherFunction(NLChunkKind kind) {

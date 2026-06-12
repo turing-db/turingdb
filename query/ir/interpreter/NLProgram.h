@@ -11,61 +11,149 @@
 
 namespace db {
 
-struct NLExecutionContext;
-struct NLFunctionData;
+class NLExecutionContext;
+class NLFunctionData;
 
-// The element type of a chunk slot, mirroring the !nl.chunk element types of
-// the nl dialect. Translation resolves every chunk SSA value to a concrete
-// ColumnVector through this kind; the interpreter never consults a type again.
+// Translation resolves every chunk SSA value 
+// to a concrete ColumnVector type through this kind
 enum class NLChunkKind {
     NodeID,
     EdgeID,
     EdgeTypeID,
 };
 
-// A handler is an ordinary function composed by plain indirect calls: the
-// interpreter is subroutine-threaded, so loop control stays a native C++ loop
-// inside the handler and nesting maps onto the C call stack
-// (see docs/subroutine_interpreter.md).
-using NLHandlerFunction = void (*)(NLExecutionContext& context, NLFunctionData* data);
+// Type of function pointers implementing operations
+using NLHandlerFunction = void (*)(NLExecutionContext* context, NLFunctionData* data);
 
-// One translated statement: the handler to call and the payload it runs on.
-struct NLFunctionDescriptor {
+// Function descriptor representing translated statements
+// It consists of a function pointer and function-specific data
+class NLFunctionDescriptor {
+public:
+    NLFunctionDescriptor(NLHandlerFunction function,
+                         NLFunctionData* data)
+        : _function(function),
+        _data(data)
+    {
+    }
+
+    NLHandlerFunction getFunction() const { return _function; }
+    NLFunctionData* getData() const { return _data; }
+
+private:
     NLHandlerFunction _function {nullptr};
     NLFunctionData* _data {nullptr};
 };
 
-// Base of the per-descriptor payloads, owned by the NLProgram. Handlers know
-// the concrete payload type of their descriptor and static_cast to it.
-struct NLFunctionData {
-    virtual ~NLFunctionData();
+// Base class of function-specific data
+class NLFunctionData {
+public:
+    virtual ~NLFunctionData() = default;
 };
 
-// Copies the input rows selected by the writer's indices column into the
-// output chunk. Selected per NLChunkKind at translation time.
-using NLGatherFunction = void (*)(const Column& input,
-                                  const ColumnVector<size_t>& indices,
-                                  Column& output);
+// Holds the translated statements of a program or loop body
+class NLStmtContainer {
+public:
+    using Stmts = std::vector<NLFunctionDescriptor>;
 
-// One columns_to_filter entry of an edge fetch: the chunk of the enclosing
-// loop to filter down to the rows surviving the traversal, and the loop
-// variable slot the filtered chunk lands in.
-struct NLCarriedColumn {
+    const Stmts& stmts() const { return _stmts; }
+
+    void addStmt(const NLFunctionDescriptor& stmt) {
+        _stmts.push_back(stmt);
+    }
+
+private:
+    Stmts _stmts;
+};
+
+// Type of handles per column type that writes the input rows selected 
+// by the indices column into output
+using NLGatherFunction = void (*)(const Column* input,
+                                  const ColumnVector<size_t>* indices,
+                                  Column* output);
+
+// Wraps a "carried" column from previous operations
+class NLCarriedColumn {
+public:
+    NLCarriedColumn(const Column* input,
+                    Column* output,
+                    NLGatherFunction gather)
+        : _input(input),
+        _output(output),
+        _gather(gather)
+    {
+    }
+
+    const Column* getInput() const { return _input; }
+    Column* getOutput() const { return _output; }
+    NLGatherFunction getGatherFunc() const { return _gather; }
+
+private:
+    // Carried column pre-filtering
     const Column* _input {nullptr};
+
+    // Output column after filtering
     Column* _output {nullptr};
+
+    // Gather function to be used to process indices
     NLGatherFunction _gather {nullptr};
 };
 
-// nl.for over an nl.scan_nodes iterator.
-struct NLScanLoopData : public NLFunctionData {
+// nl.scan_nodes loop data
+class NLScanLoopData : public NLFunctionData {
+public:
+    NLScanLoopData(ColumnNodeIDs* nodeIDs)
+        : _nodeIDs(nodeIDs)
+    {
+    }
+
+    ColumnNodeIDs* getNodeIDs() const { return _nodeIDs; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
     ColumnNodeIDs* _nodeIDs {nullptr};
-    std::vector<NLFunctionDescriptor> _body;
+    NLStmtContainer _stmts;
 };
 
-// nl.for over an nl.get_out_edges or nl.get_in_edges iterator. The source op
-// emits no descriptor of its own: its configuration is folded in here, so the
-// handler drives the storage chunk writer directly.
-struct NLEdgeLoopData : public NLFunctionData {
+// nl.get_out_edges and nl.get_in_edges loop data
+// The state is the same for get_out_edges/get_in_edges
+class NLEdgeLoopData : public NLFunctionData {
+public:
+    using CarriedColumns = std::vector<NLCarriedColumn>;
+
+    NLEdgeLoopData(const ColumnNodeIDs* input,
+                   ColumnNodeIDs* sources,
+                   ColumnEdgeIDs* edgeIDs,
+                   ColumnEdgeTypes* edgeTypes,
+                   ColumnNodeIDs* targets)
+        : _inputNodeIDs(input),
+        _sources(sources),
+        _edgeIDs(edgeIDs),
+        _edgeTypes(edgeTypes),
+        _targets(targets)
+    {
+    }
+
+    const ColumnNodeIDs* getInput() const { return _inputNodeIDs; }
+
+    ColumnNodeIDs* getSources() const { return _sources; }
+    ColumnEdgeIDs* getEdgeIDs() const { return _edgeIDs; }
+    ColumnEdgeTypes* getEdgeTypes() const { return _edgeTypes; }
+    ColumnNodeIDs* getTargets() const { return _targets; }
+
+    ColumnVector<size_t>* getIndices() { return &_indices; }
+
+    const CarriedColumns& carriedColumns() const { return _carriedColumns; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+    void addCarriedColumn(const NLCarriedColumn& carried) {
+        _carriedColumns.push_back(carried);
+    }
+
+private:
     const ColumnNodeIDs* _inputNodeIDs {nullptr};
 
     // The four fixed chunks of an edge iterator step, in loop-variable order
@@ -74,22 +162,28 @@ struct NLEdgeLoopData : public NLFunctionData {
     ColumnEdgeTypes* _edgeTypes {nullptr};
     ColumnNodeIDs* _targets {nullptr};
 
-    std::vector<NLCarriedColumn> _carriedColumns;
-    std::vector<NLFunctionDescriptor> _body;
+    CarriedColumns _carriedColumns;
+    NLStmtContainer _stmts;
 
     // Scratch for the writer's row-to-input-row map, which drives the gathers
     ColumnVector<size_t> _indices;
 };
 
-// nl.output: hand the current chunks to the sink, one output column per chunk.
-struct NLOutputData : public NLFunctionData {
+// nl.output data
+class NLOutputData : public NLFunctionData {
+public:
+    using OutputColumns = std::vector<const Column*>;
+
+    const OutputColumns& outputs() const { return _columns; }
+
+    void addOutputColumn(const Column* col) {
+        _columns.push_back(col);
+    }
+
+private:
     std::vector<const Column*> _columns;
 };
 
-// A translated nl program: the descriptor tree plus all the state it points
-// into. Slots are preallocated at translation time, so execution performs no
-// allocation. The program owns its slot state, which means one NLProgram
-// instance supports one execution at a time.
 class NLProgram {
 public:
     NLProgram();
@@ -98,29 +192,28 @@ public:
     NLProgram(const NLProgram&) = delete;
     NLProgram& operator=(const NLProgram&) = delete;
 
-    // Allocates the backing column of one chunk SSA value, reserved to the
-    // chunk size. Set the chunk size before translating.
-    Column* addChunkSlot(NLChunkKind kind);
+    // Allocate a concrete column given an NLChunkKind
+    Column* allocColumn(NLChunkKind kind);
 
-    template <typename DataType>
-    DataType* addFunctionData() {
-        auto data = std::make_unique<DataType>();
-        DataType* dataPointer = data.get();
+    template <typename DataType, typename... Args>
+    DataType* allocFunctionData(Args... args) {
+        auto data = std::make_unique<DataType>(args...);
+        DataType* dataPtr = data.get();
         _functionData.push_back(std::move(data));
-        return dataPointer;
+        return dataPtr;
     }
 
-    std::vector<NLFunctionDescriptor>& getTopLevel() { return _topLevel; }
-    const std::vector<NLFunctionDescriptor>& getTopLevel() const { return _topLevel; }
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
 
     size_t getChunkSize() const { return _chunkSize; }
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
 
 private:
-    std::vector<std::unique_ptr<Column>> _chunkSlots;
-    std::vector<std::unique_ptr<NLFunctionData>> _functionData;
-    std::vector<NLFunctionDescriptor> _topLevel;
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
+    std::vector<std::unique_ptr<Column>> _columns;
+    std::vector<std::unique_ptr<NLFunctionData>> _functionData;
+    NLStmtContainer _stmts;
 };
 
 }
