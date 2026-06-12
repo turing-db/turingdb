@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <iostream>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "DBOps.h"
 #include "NLOps.h"
 #include "NLInterpreter.h"
+#include "DBDialectInterpreter.h"
 #include "NLOutputSink.h"
 #include "IRAssembler.h"
 #include "IRModuleInspector.h"
@@ -77,9 +79,14 @@ void addDBFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
 
     // Second hop b->c carrying the filtered `a` (hop1 srcids): one extra carry operand
     // and one extra result type for its filtered counterpart.
-    builder.create<mlir::db::GetOutEdges>(loc,
-                                          mlir::TypeRange {colB2, colE1, colEt1, colC, colA2},
-                                          mlir::ValueRange {hop1.getTgtids(), hop1.getSrcids()});
+    auto hop2 = builder.create<mlir::db::GetOutEdges>(loc,
+                                                      mlir::TypeRange {colB2, colE1, colEt1, colC, colA2},
+                                                      mlir::ValueRange {hop1.getTgtids(), hop1.getSrcids()});
+
+    // Project the (a, b, c) triple the query returns: the filtered `a` (hop2's
+    // only carried column), the `b` (hop2 srcids) and the `c` (hop2 tgtids).
+    builder.create<mlir::db::Output>(loc,
+                                     mlir::ValueRange {hop2.getFilteredColumns()[0], hop2.getSrcids(), hop2.getTgtids()});
 
     builder.create<mlir::func::ReturnOp>(loc);
 }
@@ -209,6 +216,42 @@ private:
     size_t _rowCount {0};
 };
 
+// Whether a query function is in the set-at-a-time db dialect or the
+// nested-loop nl dialect
+enum class QueryDialect {
+    DB,
+    NL,
+};
+
+// Classifies a function by the dialect of the query ops in its body: the first
+// db or nl op decides. The func.* structural ops carry no query semantics, so
+// they are skipped. Throws if the function holds neither, since there is then
+// nothing to run.
+QueryDialect classifyDialect(mlir::func::FuncOp function) {
+    const llvm::StringRef dbNamespace = mlir::db::DB::getDialectNamespace();
+    const llvm::StringRef nlNamespace = mlir::nl::NL::getDialectNamespace();
+
+    std::optional<QueryDialect> dialect;
+    function->walk([&](mlir::Operation* operation) {
+        const llvm::StringRef opNamespace = operation->getName().getDialectNamespace();
+        if (opNamespace == dbNamespace) {
+            dialect = QueryDialect::DB;
+            return mlir::WalkResult::interrupt();
+        } else if (opNamespace == nlNamespace) {
+            dialect = QueryDialect::NL;
+            return mlir::WalkResult::interrupt();
+        }
+
+        return mlir::WalkResult::advance();
+    });
+
+    if (!dialect) {
+        throw std::runtime_error("function contains no db or nl operation to classify");
+    }
+
+    return *dialect;
+}
+
 // Loads the graph at graphDir and runs the module's main function against it
 void executeModule(mlir::ModuleOp& module, const std::string& graphDir) {
     if (graphDir.empty()) {
@@ -227,8 +270,22 @@ void executeModule(mlir::ModuleOp& module, const std::string& graphDir) {
 
     LocalMemory memory;
     PrintingSink sink;
-    NLInterpreter interpreter(module, &view, &sink, &memory);
-    interpreter.run();
+
+    // A db-dialect "main" runs through DBDialectInterpreter, which lowers it to
+    // the nl dialect first; an nl-dialect "main" runs straight through
+    // NLInterpreter.
+    const mlir::func::FuncOp mainFunction = module.lookupSymbol<mlir::func::FuncOp>("main");
+    if (!mainFunction) {
+        throw std::runtime_error("-exec requires a 'main' function in the module");
+    }
+
+    if (classifyDialect(mainFunction) == QueryDialect::DB) {
+        DBDialectInterpreter interpreter(module, &view, &sink, &memory);
+        interpreter.run();
+    } else {
+        NLInterpreter interpreter(module, &view, &sink, &memory);
+        interpreter.run();
+    }
 
     std::cout << sink.getRowCount() << " rows\n";
 }
