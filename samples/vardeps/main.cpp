@@ -107,6 +107,7 @@ static void inspectVarDepGraph(CypherAST* ast) {
                 fmt::println("");
             };
             vdg.detachCycle(cr);
+            IRDumper::dumpMermaid(vdg, std::cout);
         }
     };
 
