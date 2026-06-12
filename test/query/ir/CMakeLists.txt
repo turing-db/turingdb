@@ -5,8 +5,11 @@ function(add_ir_tests exe_name cpp_file)
             turing_db_storage_s
             turing_db_jobs_s
             turing_db_ir_interpreter_s
+            turing_db_ir_lowering_s
+            turing_db_ir_dbdialect_s
             turing_db_ir_common_s
             MLIRParser)
 endfunction()
 
 add_ir_tests(test_query_ir_nlexecutor NLExecutorTest.cpp)
+add_ir_tests(test_query_ir_dblowering DBLoweringTest.cpp)

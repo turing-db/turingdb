@@ -3,13 +3,15 @@ set(ir_interpreter_sources
     NLOutputSink.cpp
     NLExecutor.cpp
     NLTranslator.cpp
-    NLInterpreter.cpp)
+    NLInterpreter.cpp
+    DBDialectInterpreter.cpp)
 
 add_library(turing_db_ir_interpreter_s STATIC ${ir_interpreter_sources})
 
 target_link_libraries(turing_db_ir_interpreter_s
     PUBLIC
         turing_db_ir_nldialect_s
+        turing_db_ir_lowering_s
         turing_db_storage_s
         turing_db_memory_s
         turing_common_s

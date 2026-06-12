@@ -51,4 +51,29 @@ def GetOutEdges : TuringOp<"get_out_edges", [Pure]> {
   }];
 }
 
+/**
+* Output
+*/
+def Output : TuringOp<"output"> {
+  let summary = "Project a set of columns as the query result";
+  let description = [{
+    The result projection of the set-at-a-time form and the db counterpart of
+    nl.output: it names the columns the query returns, in order, and is the one
+    op the lowering turns into nl.output - placed inside the innermost loop that
+    binds those columns.
+
+      db.output(%a, %b, %c) : !db.column<a>, !db.column<b>, !db.column<c>
+
+    Variadic<Column> accepts any number of columns of any value. The op has no
+    results and is deliberately not Pure: emitting the result is its whole
+    purpose, so it must survive dead-code elimination.
+  }];
+  let arguments = (ins Variadic<Column>:$columns);
+
+  // The column types vary from query to query and cannot be built from a
+  // recipe, so they are spelled after the colon, the same as nl.output.
+  // qualified(...) forces the leading !db. on every printed type.
+  let assemblyFormat = "`(` $columns `)` attr-dict `:` qualified(type($columns))";
+}
+
 #endif //TURINGDB_OPS
