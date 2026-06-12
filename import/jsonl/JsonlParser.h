@@ -2,10 +2,10 @@
 
 #include <stddef.h>
 #include <istream>
-#include <string_view>
-#include <unordered_map>
 
 #include "JsonlImportResult.h"
+
+#include "EmbeddingsSpec.h"
 
 namespace db {
 
@@ -23,7 +23,7 @@ public:
 
     [[nodiscard]] static JsonlImportResult<void> parse(ChangeAccessor& change,
                                                        std::istream& stream,
-                                                       const std::unordered_map<std::string_view, size_t>& embeddingSpecs = {});
+                                                       const EmbeddingsSpec& embeddingSpecs = {});
 };
 
 }

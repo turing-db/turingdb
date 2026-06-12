@@ -2,7 +2,6 @@
 
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include "Accessor.h"
@@ -12,6 +11,8 @@
 #include "versioning/ChangeResult.h"
 #include "dump/DumpResult.h"
 #include "mergers/DataPartMergeResult.h"
+
+#include "EmbeddingsSpec.h"
 
 #include "GraphFileType.h"
 #include "Path.h"
@@ -68,7 +69,7 @@ public:
     // Import graph
     Graph* importGraph(const fs::Path& path,
                        std::string_view name,
-                       const std::unordered_map<std::string_view, size_t>& embeddingSpecs = {});
+                       const EmbeddingsSpec& embeddingSpecs = {});
 
     GraphFileType getGraphFileType(const fs::Path& path) const;
 

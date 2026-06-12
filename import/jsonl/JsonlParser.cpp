@@ -11,6 +11,8 @@
 #include "versioning/CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
 
+#include "EmbeddingsSpec.h"
+
 #include "Profiler.h"
 #include "writers/MetadataBuilder.h"
 
@@ -77,7 +79,7 @@ JsonlImportResult<void> tryFillEmbedding(const json& arr,
 
 std::optional<size_t> tryGetEmbDim(std::string_view name,
                                    const json& value,
-                                   const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+                                   const EmbeddingsSpec& embeddingSpecs) {
     if (!value.is_array()) {
         return {};
     }
@@ -93,7 +95,7 @@ std::optional<size_t> tryGetEmbDim(std::string_view name,
 
 JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                                            std::istream& stream,
-                                           const std::unordered_map<std::string_view, size_t>& embeddingSpecs) {
+                                           const EmbeddingsSpec& embeddingSpecs) {
     Profile profile("JsonlParser::parse");
 
     std::string line;
