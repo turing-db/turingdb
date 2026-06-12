@@ -118,15 +118,14 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
     using PredMap = std::unordered_map<VariableDependency*, VariableDependency*>;
     using UsedMap = std::unordered_map<VariableDependency*, NodeSet>;
 
+    std::vector<Cycle> cycles;
+    if (_vars.empty()) {
+        return cycles;
+    }
+
     NodeSet gnodes;
     for (VariableDependency& v : _vars) {
         gnodes.insert(&v);
-    }
-
-    std::vector<Cycle> cycles;
-
-    if (gnodes.empty()) {
-        return cycles;
     }
 
     VariableDependency* root = *begin(gnodes);
@@ -311,10 +310,10 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
 
     // Parent of the previous two merges that were just cascaded, merged into current head
     spdlog::info("adding merge {}->{}", newHead->getName(), head->getName());
-    addDirected(newTail, head, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
+    addDirected(newHead, head, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
     // Add a temporary between the tail (unmerged end of cycle) and current head
     spdlog::info("subdividing {}-{}->{}", v->getName(), newTail->getName(), head->getName());
-    subdivideWithMerge(u, newHead, head);
+    subdivideWithMerge(v, newTail, head);
 
     _seenInCycle.insert(begin(cyc), end(cyc));
 }
@@ -339,7 +338,7 @@ void VariableDependencyGraph::subdivideWithMergeIncImpl(VariableDependency* s,
     std::erase_if(t->_outgoing, [e](DependencyEdge* f) { return f == e; });
 
     const EdgeMetadata& data = e->data();
-    addDirected(mid, s, data);
+    addDirected(s, mid, data);
     addDirected(mid, t, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
 }
 
