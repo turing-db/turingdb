@@ -1,6 +1,7 @@
 #include "VariableDependencyGraph.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <iostream>
 #include <set>
 #include <string_view>
@@ -460,4 +461,14 @@ VariableDependencyGraph::Cycle VariableDependencyGraph::getCycle() {
     }
 
     return cyc;
+}
+
+void VariableDependencyGraph::canonicaliseCycle(Cycle& cyc) const {
+    const auto inDegree = [](const VariableDependency* v) {
+        return v->incoming().size();
+    };
+    const auto pivot = std::ranges::max_element(
+        cyc, [inDegree](auto&& a, auto&& b) { return inDegree(a) < inDegree(b); });
+
+    std::ranges::rotate(cyc, pivot);
 }

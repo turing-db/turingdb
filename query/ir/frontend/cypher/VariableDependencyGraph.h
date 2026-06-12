@@ -41,6 +41,7 @@ public:
 
     Cycle getCycle();
     Cycle dfs(VariableDependency* cur, VariableDependency* prev, bool fromMeta = false);
+    void canonicaliseCycle(Cycle& cyc) const;
 
 private:
     /// Variables whose dependencies are tracked by this class

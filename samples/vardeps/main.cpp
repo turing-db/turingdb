@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <iostream>
 #include <string>
 
@@ -94,19 +93,11 @@ static void inspectVarDepGraph(CypherAST* ast) {
         auto cycs = vdg.cycleBasis();
         for (auto& c : cycs) {
             printCycle(c);
-            auto cr = c;
-            const auto sink = std::ranges::max_element(
-                cr, [](const VariableDependency* v, const VariableDependency* u) {
-                    return v->incoming().size() < u->incoming().size();
-                });
-
-            if (sink != end(cr)) {
-                std::ranges::rotate(cr, sink);
-                spdlog::warn("ROTATED:");
-                printCycle(cr);
-                fmt::println("");
-            };
-            vdg.detachCycle(cr);
+            vdg.canonicaliseCycle(c);
+            spdlog::warn("CANONICALISED:");
+            printCycle(c);
+            fmt::println("");
+            vdg.detachCycle(c);
             IRDumper::dumpMermaid(vdg, std::cout);
         }
     };
