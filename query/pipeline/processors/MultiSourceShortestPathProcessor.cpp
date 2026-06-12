@@ -1,7 +1,5 @@
 #include "MultiSourceShortestPathProcessor.h"
 
-#include <algorithm>
-
 #include "LocalMemory.h"
 #include "PipelineV2.h"
 #include "PipelinePort.h"
@@ -85,6 +83,10 @@ void MultiSourceShortestPathProcessor<T>::prepare(ExecutionContext* ctxt) {
     _getPropertiesWriter->setOutput(_properties);
     _getPropertiesWriter->setIndices(_propertyIndices);
 
+    _runner.initialize(_input, _outputEdges, _outputNodes, _outputIndices,
+                       _getOutEdgesWriter.get(),
+                       _propertyIndices, _properties, _getPropertiesWriter.get());
+
     markAsPrepared();
 }
 
@@ -152,105 +154,92 @@ void MultiSourceShortestPathProcessor<T>::execute() {
         throw TuringException("Could not find path column");
     }
 
-    // Run an independent Dijkstra from each source node to find shortest paths to all targets.
+    SubpathCache<EdgePropType> cache;
+
     for (const NodeID sourceNode : _sourceNodes) {
-        runDijkstra(sourceNode, sourceOutputCol, targetOutputCol, distCol, pathCol);
+        std::unordered_set<NodeID> remainingTargets = _targetNodes;
+
+        // Use cached subpaths: if this source appeared as an intermediate
+        // node in a previous run's shortest path, we already know its
+        // optimal paths to those targets.
+        const auto cacheIt = cache.find(sourceNode);
+        if (cacheIt != cache.end()) {
+            for (const SubpathCacheEntry<EdgePropType>& entry : cacheIt->second) {
+                if (!remainingTargets.contains(entry.targetNode)) {
+                    continue;
+                }
+
+                sourceOutputCol->push_back(sourceNode);
+                targetOutputCol->push_back(entry.targetNode);
+                distCol->push_back(entry.distance);
+                auto& pathVec = pathCol->emplace_back();
+                pathVec = entry.pathSuffix;
+                remainingTargets.erase(entry.targetNode);
+            }
+        }
+
+        if (!remainingTargets.empty()) {
+            DijkstraHeap<EdgePropType> heap;
+            DijkstraValueMap<EdgePropType> valueMap;
+            heap.push({sourceNode, NodeID(), EdgeID(), 0});
+            valueMap.insert({sourceNode, {NodeID(), EdgeID(), 0}});
+
+            _runner.run(heap, valueMap, remainingTargets, false, &cache);
+
+            for (const DijkstraResult<EdgePropType>& result : _runner.results()) {
+                sourceOutputCol->push_back(sourceNode);
+                targetOutputCol->push_back(result.targetNode);
+                distCol->push_back(result.distance);
+                auto& pathVec = pathCol->emplace_back();
+                pathVec = result.path;
+            }
+        }
+
+        // Populate cache from the run's results: for each settled target,
+        // walk the path and cache subpaths from every intermediate node.
+        for (const DijkstraResult<EdgePropType>& result : _runner.results()) {
+            const auto& path = result.path;
+            const auto& valueMap = _runner.getValueMap();
+
+            // path = [target, edge, node, edge, node, ..., source]
+            // Nodes are at even indices; skip index 0 (target) and the last
+            // node (source, which is the current sourceNode).
+            for (size_t i = 2; i < path.size(); i += 2) {
+                const NodeID intermediateNode(path[i].getValue());
+                if (intermediateNode == sourceNode) {
+                    continue;
+                }
+
+                const auto valueIt = valueMap.find(intermediateNode);
+                if (valueIt == valueMap.end()) {
+                    continue;
+                }
+
+                const EdgePropType distanceToTarget = result.distance - valueIt->second.distance;
+                const Path pathSuffix(path.begin(), path.begin() + i + 1);
+
+                bool alreadyCached = false;
+                const auto existingIt = cache.find(intermediateNode);
+                if (existingIt != cache.end()) {
+                    for (const SubpathCacheEntry<EdgePropType>& existing : existingIt->second) {
+                        if (existing.targetNode == result.targetNode) {
+                            alreadyCached = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!alreadyCached) {
+                    cache[intermediateNode].push_back({result.targetNode,
+                                                       distanceToTarget,
+                                                       pathSuffix});
+                }
+            }
+        }
     }
 
     _out.getPort()->writeData();
     finish();
-}
-
-// Runs Dijkstra's algorithm from a single source node. For each reachable target,
-// emits one row with the source identity, target identity, shortest distance, and
-// the reconstructed path. The heap and value map are class members to avoid
-// repeated allocation; they are cleared at the start of each invocation.
-template <SupportedType T>
-void MultiSourceShortestPathProcessor<T>::runDijkstra(NodeID sourceNode,
-                                                      ColumnVector<NodeID>* sourceOutputCol,
-                                                      ColumnVector<NodeID>* targetOutputCol,
-                                                      ColumnVector<EdgePropType>* distCol,
-                                                      ColumnVector<Path>* pathCol) {
-    // Reset state from any previous source invocation.
-    _heap = DijkstraHeap<EdgePropType>();
-    _heapValueMap.clear();
-    _settledTargets.clear();
-
-    _heap.push({sourceNode, NodeID(), EdgeID(), 0});
-    _heapValueMap.insert({sourceNode, {NodeID(), EdgeID(), 0}});
-
-    while (!_heap.empty()) {
-        const DijkstraNode<EdgePropType> val = _heap.top();
-        _heap.pop();
-
-        // Skip stale entries — a node can appear multiple times in the heap
-        // when a shorter path is discovered after the initial insertion.
-        const auto it = _heapValueMap.find(val.id);
-        if (it != _heapValueMap.end() && it->second.distance != val.distance) {
-            continue;
-        }
-
-        // When a target node is settled, record the result row and reconstruct
-        // the path by walking backwards through the predecessor chain.
-        if (_targetNodes.contains(val.id) && !_settledTargets.contains(val.id)) {
-            _settledTargets.insert(val.id);
-
-            sourceOutputCol->push_back(sourceNode);
-            targetOutputCol->push_back(val.id);
-            distCol->push_back(val.distance);
-
-            auto& pathVec = pathCol->emplace_back();
-            auto lastNode = val.prevNode;
-            auto edge = val.edge;
-            pathVec.push_back(val.id.getValue());
-
-            while (lastNode.isValid()) {
-                pathVec.push_back(edge.getValue());
-                pathVec.push_back(lastNode.getValue());
-
-                const auto& pathInfo = _heapValueMap[lastNode];
-                lastNode = pathInfo.prevNode;
-                edge = pathInfo.edge;
-            }
-
-            // Early exit once all targets have been reached.
-            if (_settledTargets.size() == _targetNodes.size()) {
-                break;
-            }
-        }
-
-        // Expand the current node: fetch all outgoing edges and their weights.
-        _input->clear();
-        _input->push_back(val.id);
-        _getOutEdgesWriter->reset();
-        _getOutEdgesWriter->fill(SIZE_MAX);
-
-        _getPropertiesWriter->reset();
-        _getPropertiesWriter->fill(SIZE_MAX);
-
-        for (size_t i = 0; i < _properties->size(); ++i) {
-
-            if constexpr (std::is_signed_v<EdgePropType>) {
-                if ((*_properties)[i] < 0) {
-                    throw PipelineException("Cannot Do Shortest Path With Negative Weights");
-                }
-            }
-
-            const auto outputNodeId = (*_outputNodes)[(*_propertyIndices)[i]];
-            const auto outputEdgeId = (*_outputEdges)[(*_propertyIndices)[i]];
-            const auto dist = val.distance + (*_properties)[i];
-
-            // Relax the edge: update the shortest known distance if this path is better.
-            const auto neighborIt = _heapValueMap.find(outputNodeId);
-            if (neighborIt == _heapValueMap.end()) {
-                _heap.push({outputNodeId, val.id, outputEdgeId, dist});
-                _heapValueMap[outputNodeId] = {val.id, outputEdgeId, dist};
-            } else if (dist < neighborIt->second.distance) {
-                _heap.push({outputNodeId, val.id, outputEdgeId, dist});
-                _heapValueMap[outputNodeId] = {val.id, outputEdgeId, dist};
-            }
-        }
-    }
 }
 
 namespace db {

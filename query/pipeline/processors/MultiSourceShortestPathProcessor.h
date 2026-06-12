@@ -85,15 +85,7 @@ private:
     std::vector<NodeID> _sourceNodes;
     std::unordered_set<NodeID> _targetNodes;
 
-    DijkstraHeap<EdgePropType> _heap;
-    DijkstraValueMap<EdgePropType> _heapValueMap;
-    std::unordered_set<NodeID> _settledTargets;
-
-    void runDijkstra(NodeID sourceNode,
-                     ColumnVector<NodeID>* sourceOutputCol,
-                     ColumnVector<NodeID>* targetOutputCol,
-                     ColumnVector<EdgePropType>* distCol,
-                     ColumnVector<Path>* pathCol);
+    DijkstraRunner<T> _runner;
 };
 
 }

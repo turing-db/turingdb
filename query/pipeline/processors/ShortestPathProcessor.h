@@ -81,6 +81,8 @@ private:
     std::unordered_set<NodeID> _targetNodes;
     DijkstraHeap<EdgePropType> _heap;
     DijkstraValueMap<EdgePropType> _heapValueMap;
+
+    DijkstraRunner<T> _runner;
 };
 
 }
