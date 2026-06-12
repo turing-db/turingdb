@@ -268,9 +268,9 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
         newHead = newVariable(getNextAnonymisation(head));
         newTail = newVariable(getNextAnonymisation(head));
 
-        // spdlog::info("subdividing {}-{}->{}", u->getName(), newHead->getName(), head->getName());
+        spdlog::info("subdividing {}-{}->{}", u->getName(), newHead->getName(), head->getName());
         subdivideWithMerge(u, newHead, head);
-        // spdlog::info("subdividing {}-{}->{}", v->getName(), newTail->getName(), head->getName());
+        spdlog::info("subdividing {}-{}->{}", v->getName(), newTail->getName(), head->getName());
         subdivideWithMerge(v, newTail, head);
 
         // Register that we have seen these nodes in a cycle
@@ -296,9 +296,9 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     VariableDependency* mergeParent = newVariable(getNextAnonymisation(head));
     {
         EdgeMetadata data(EdgeMetadata::EdgeType::MERGE);
-        // spdlog::info("adding {}->{}", merged1->getName(), mergeParent->getName());
+        spdlog::info("adding {}->{}", merged1->getName(), mergeParent->getName());
         addDirected(merged1, mergeParent, data);
-        // spdlog::info("adding {}->{}", merged2->getName(), mergeParent->getName());
+        spdlog::info("adding {}->{}", merged2->getName(), mergeParent->getName());
         addDirected(merged2, mergeParent, data);
     }
     VariableDependency* otherInput = newVariable(getNextAnonymisation(head));
@@ -310,10 +310,10 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     newTail = startIsMerged ? otherInput : mergeParent;
 
     // Parent of the previous two merges that were just cascaded, merged into current head
-    // spdlog::info("adding merge {}->{}", newHead->getName(), head->getName());
+    spdlog::info("adding merge {}->{}", newHead->getName(), head->getName());
     addDirected(newTail, head, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
     // Add a temporary between the tail (unmerged end of cycle) and current head
-    // spdlog::info("subdividing {}-{}->{}", v->getName(), newTail->getName(), head->getName());
+    spdlog::info("subdividing {}-{}->{}", v->getName(), newTail->getName(), head->getName());
     subdivideWithMerge(u, newHead, head);
 
     _seenInCycle.insert(begin(cyc), end(cyc));
@@ -402,14 +402,20 @@ VariableDependencyGraph::Cycle VariableDependencyGraph::dfs(VariableDependency* 
             continue;
         }
 
+        const bool seenOnPath = _dfsPathSet.contains(other);
+        if (seenOnPath) {
+            const auto start = std::ranges::find(_dfsPath, other);
+            return {start, end(_dfsPath)};
+        }
+
         const bool metaEdge = e->isMetaEdge();
         if (fromMeta && metaEdge) {
             continue;
         }
 
-        const bool seen = _dfsPathSet.contains(other);
-        if (seen) {
-            return _dfsPath;
+        const bool visited = _dfsVisited.contains(other);
+        if (visited) {
+            continue;
         }
 
         Cycle cyc = dfs(other, cur, metaEdge);
