@@ -10,10 +10,12 @@
 
 namespace db {
 
+class LocalMemory;
+
 // Translates an MLIR func.func in the nl dialect into an NLProgram
 class NLTranslator {
 public:
-    explicit NLTranslator(NLProgram* program);
+    NLTranslator(NLProgram* program, LocalMemory* memory);
     ~NLTranslator();
 
     void translate(const mlir::func::FuncOp& function);
@@ -32,6 +34,7 @@ private:
     };
 
     NLProgram* _program {nullptr};
+    LocalMemory* _memory {nullptr};
     llvm::DenseMap<mlir::Value, Column*> _valueSlots;
     llvm::DenseMap<mlir::Value, IteratorConfig> _iteratorConfigs;
 
@@ -44,6 +47,7 @@ private:
     void translateOutput(const mlir::nl::Output& output, NLStmtContainer* body);
 
     Column* allocColumn(mlir::Value chunkValue);
+    Column* allocColumnForKind(NLChunkKind kind);
     Column* getColumn(mlir::Value chunkValue) const;
     static NLChunkKind getChunkKind(mlir::Type chunkType);
 };

@@ -192,9 +192,6 @@ public:
     NLProgram(const NLProgram&) = delete;
     NLProgram& operator=(const NLProgram&) = delete;
 
-    // Allocate a concrete column given an NLChunkKind
-    Column* allocColumn(NLChunkKind kind);
-
     template <typename DataType, typename... Args>
     DataType* allocFunctionData(Args... args) {
         auto data = std::make_unique<DataType>(args...);
@@ -211,7 +208,6 @@ public:
 
 private:
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
-    std::vector<std::unique_ptr<Column>> _columns;
     std::vector<std::unique_ptr<NLFunctionData>> _functionData;
     NLStmtContainer _stmts;
 };

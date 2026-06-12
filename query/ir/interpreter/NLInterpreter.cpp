@@ -14,10 +14,12 @@ using namespace db;
 NLInterpreter::NLInterpreter(const mlir::ModuleOp& module,
                              const GraphView* view,
                              NLOutputSink* sink,
+                             LocalMemory* memory,
                              size_t chunkSize)
     : _module(module),
     _view(view),
     _sink(sink),
+    _memory(memory),
     _chunkSize(chunkSize)
 {
 }
@@ -36,7 +38,7 @@ void NLInterpreter::run() {
     NLProgram program;
     program.setChunkSize(_chunkSize);
 
-    NLTranslator translator(&program);
+    NLTranslator translator(&program, _memory);
     translator.translate(function);
 
     NLExecutor executor(_view, &program, _sink);

@@ -26,6 +26,8 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnEdgeTypes.h"
 
+#include "LocalMemory.h"
+
 using namespace db;
 
 namespace {
@@ -223,8 +225,9 @@ void executeModule(mlir::ModuleOp& module, const std::string& graphDir) {
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
 
+    LocalMemory memory;
     PrintingSink sink;
-    NLInterpreter interpreter(module, &view, &sink);
+    NLInterpreter interpreter(module, &view, &sink, &memory);
     interpreter.run();
 
     std::cout << sink.getRowCount() << " rows\n";

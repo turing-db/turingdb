@@ -11,6 +11,7 @@ target_link_libraries(turing_db_ir_interpreter_s
     PUBLIC
         turing_db_ir_nldialect_s
         turing_db_storage_s
+        turing_db_memory_s
         turing_common_s
 
     PRIVATE

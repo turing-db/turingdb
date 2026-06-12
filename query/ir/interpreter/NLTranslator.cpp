@@ -7,14 +7,17 @@
 
 #include "NLExecutor.h"
 
+#include "LocalMemory.h"
 #include "IRException.h"
+#include "BioAssert.h"
 
 using namespace db;
 
 namespace nl = mlir::nl;
 
-NLTranslator::NLTranslator(NLProgram* program)
-    : _program(program)
+NLTranslator::NLTranslator(NLProgram* program, LocalMemory* memory)
+    : _program(program),
+    _memory(memory)
 {
 }
 
@@ -193,9 +196,41 @@ void NLTranslator::translateOutput(const nl::Output& output, NLStmtContainer* bo
 Column* NLTranslator::allocColumn(mlir::Value chunkValue) {
     const NLChunkKind kind = getChunkKind(chunkValue.getType());
 
-    Column* column = _program->allocColumn(kind);
+    Column* column = allocColumnForKind(kind);
     _valueSlots[chunkValue] = column;
     return column;
+}
+
+// Pool-allocate a chunk column of the right concrete type from the external
+// arena, reserving a full chunk so execution stays allocation-free
+Column* NLTranslator::allocColumnForKind(NLChunkKind kind) {
+    const size_t chunkSize = _program->getChunkSize();
+
+    switch (kind) {
+        case NLChunkKind::NodeID: {
+            ColumnNodeIDs* column = _memory->alloc<ColumnNodeIDs>();
+            column->reserve(chunkSize);
+            return column;
+        }
+        break;
+
+        case NLChunkKind::EdgeID: {
+            ColumnEdgeIDs* column = _memory->alloc<ColumnEdgeIDs>();
+            column->reserve(chunkSize);
+            return column;
+        }
+        break;
+
+        case NLChunkKind::EdgeTypeID: {
+            ColumnEdgeTypes* column = _memory->alloc<ColumnEdgeTypes>();
+            column->reserve(chunkSize);
+            return column;
+        }
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
 }
 
 Column* NLTranslator::getColumn(mlir::Value chunkValue) const {
