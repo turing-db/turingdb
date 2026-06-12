@@ -248,10 +248,11 @@ protected:
         NLProgram program;
         program.setChunkSize(chunkSize);
 
-        NLTranslator translator(program);
+        NLTranslator translator(&program);
         translator.translate(*functions.begin());
 
-        NLInterpreter::run(view, program, sink);
+        NLInterpreter interpreter(&view, &program, &sink);
+        interpreter.run();
     }
 
     // Parses a program that MLIR accepts but the translator must reject
@@ -268,7 +269,7 @@ protected:
         ASSERT_TRUE(functions.begin() != functions.end());
 
         NLProgram program;
-        NLTranslator translator(program);
+        NLTranslator translator(&program);
         EXPECT_THROW(translator.translate(*functions.begin()), IRException);
     }
 

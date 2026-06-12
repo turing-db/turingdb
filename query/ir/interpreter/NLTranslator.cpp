@@ -13,7 +13,7 @@ using namespace db;
 
 namespace nl = mlir::nl;
 
-NLTranslator::NLTranslator(NLProgram& program)
+NLTranslator::NLTranslator(NLProgram* program)
     : _program(program)
 {
 }
@@ -21,21 +21,26 @@ NLTranslator::NLTranslator(NLProgram& program)
 NLTranslator::~NLTranslator() {
 }
 
-void NLTranslator::translate(mlir::func::FuncOp function) {
-    // The op verifiers carry the type guarantees the slot casts below rely on
-    if (mlir::failed(mlir::verify(function.getOperation()))) {
+void NLTranslator::translate(const mlir::func::FuncOp& function) {
+    // The op verifiers carry the type guarantees the column casts below rely
+    // on. The const handle converts to Operation* through its const
+    // conversion operator.
+    if (mlir::failed(mlir::verify(function))) {
         throw IRException("nl function failed MLIR verification");
     }
 
-    mlir::Region& bodyRegion = function.getBody();
+    // The generated accessors are non-const, so the const handle is read
+    // through its const operator-> into the generic Operation API: region 0
+    // of a func.func is its body
+    mlir::Region& bodyRegion = function->getRegion(0);
     if (!bodyRegion.hasOneBlock()) {
         throw IRException("NLTranslator expects a function with a single block");
     }
 
-    translateBlock(bodyRegion.front(), _program.getTopLevel());
+    translateBlock(bodyRegion.front(), _program->getStmts());
 }
 
-void NLTranslator::translateBlock(mlir::Block& block, std::vector<NLFunctionDescriptor>& body) {
+void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
     for (mlir::Operation& operation : block) {
         if (auto scanNodes = mlir::dyn_cast<nl::ScanNodes>(operation)) {
             _iteratorConfigs[scanNodes.getResult()] = IteratorConfig {IteratorKind::ScanNodes, {}, {}};
@@ -62,14 +67,16 @@ void NLTranslator::translateBlock(mlir::Block& block, std::vector<NLFunctionDesc
     }
 }
 
-void NLTranslator::translateFor(nl::For forLoop, std::vector<NLFunctionDescriptor>& body) {
-    const auto configIt = _iteratorConfigs.find(forLoop.getIterator());
+void NLTranslator::translateFor(const nl::For& forLoop, NLStmtContainer* body) {
+    // The iterator is the only operand of nl.for and the loop body is the
+    // single block of its only region, both read through the const operator->
+    const auto configIt = _iteratorConfigs.find(forLoop->getOperand(0));
     if (configIt == _iteratorConfigs.end()) {
         throw IRException("nl.for iterator must be produced by an nl source operation");
     }
 
     const IteratorConfig& config = configIt->second;
-    mlir::Block* loopBody = forLoop.getBody();
+    mlir::Block& loopBody = forLoop->getRegion(0).front();
 
     if (config._kind == IteratorKind::ScanNodes) {
         translateScanLoop(loopBody, body);
@@ -78,47 +85,40 @@ void NLTranslator::translateFor(nl::For forLoop, std::vector<NLFunctionDescripto
     }
 }
 
-void NLTranslator::translateScanLoop(mlir::Block* loopBody, std::vector<NLFunctionDescriptor>& body) {
+void NLTranslator::translateScanLoop(mlir::Block& loopBody, NLStmtContainer* body) {
     // For::verify guarantees one block argument per iterator chunk, and a
     // node scan iterator has exactly one chunk of node IDs
-    Column* nodeIDsSlot = _program.addChunkSlot(NLChunkKind::NodeID);
-    _valueSlots[loopBody->getArgument(0)] = nodeIDsSlot;
+    ColumnNodeIDs* nodeIDs = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(0)));
 
-    NLScanLoopData* loopData = _program.addFunctionData<NLScanLoopData>();
-    loopData->_nodeIDs = static_cast<ColumnNodeIDs*>(nodeIDsSlot);
+    NLScanLoopData* loopData = _program->allocFunctionData<NLScanLoopData>(nodeIDs);
 
-    body.push_back(NLFunctionDescriptor {&NLInterpreter::runScanNodesLoop, loopData});
+    body->addStmt(NLFunctionDescriptor {&NLInterpreter::runScanNodesLoop, loopData});
 
-    translateBlock(*loopBody, loopData->_body);
+    translateBlock(loopBody, loopData->getStmts());
 }
 
 void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
-                                     mlir::Block* loopBody,
-                                     std::vector<NLFunctionDescriptor>& body) {
-    NLEdgeLoopData* loopData = _program.addFunctionData<NLEdgeLoopData>();
-    loopData->_inputNodeIDs = static_cast<const ColumnNodeIDs*>(resolveChunkSlot(config._inputNodes));
-
-    // The scratch indices column gets the same up-front reservation as the
-    // slots, keeping execution allocation-free
-    loopData->_indices.reserve(_program.getChunkSize());
-
+                                     mlir::Block& loopBody,
+                                     NLStmtContainer* body) {
     // The four fixed chunks of an edge iterator step, in the block-argument
     // order established by getEdgeIteratorType: sources, edge IDs, edge type
     // IDs, targets
-    Column* sourcesSlot = _program.addChunkSlot(NLChunkKind::NodeID);
-    Column* edgeIDsSlot = _program.addChunkSlot(NLChunkKind::EdgeID);
-    Column* edgeTypesSlot = _program.addChunkSlot(NLChunkKind::EdgeTypeID);
-    Column* targetsSlot = _program.addChunkSlot(NLChunkKind::NodeID);
+    ColumnNodeIDs* sources = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(0)));
+    ColumnEdgeIDs* edgeIDs = static_cast<ColumnEdgeIDs*>(allocColumn(loopBody.getArgument(1)));
+    ColumnEdgeTypes* edgeTypes = static_cast<ColumnEdgeTypes*>(allocColumn(loopBody.getArgument(2)));
+    ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(3)));
 
-    loopData->_sources = static_cast<ColumnNodeIDs*>(sourcesSlot);
-    loopData->_edgeIDs = static_cast<ColumnEdgeIDs*>(edgeIDsSlot);
-    loopData->_edgeTypes = static_cast<ColumnEdgeTypes*>(edgeTypesSlot);
-    loopData->_targets = static_cast<ColumnNodeIDs*>(targetsSlot);
+    const ColumnNodeIDs* inputNodeIDs = static_cast<const ColumnNodeIDs*>(getColumn(config._inputNodes));
 
-    _valueSlots[loopBody->getArgument(0)] = sourcesSlot;
-    _valueSlots[loopBody->getArgument(1)] = edgeIDsSlot;
-    _valueSlots[loopBody->getArgument(2)] = edgeTypesSlot;
-    _valueSlots[loopBody->getArgument(3)] = targetsSlot;
+    NLEdgeLoopData* loopData = _program->allocFunctionData<NLEdgeLoopData>(inputNodeIDs,
+                                                                           sources,
+                                                                           edgeIDs,
+                                                                           edgeTypes,
+                                                                           targets);
+
+    // The scratch indices column gets the same up-front reservation as the
+    // other columns, keeping execution allocation-free
+    loopData->getIndices()->reserve(_program->getChunkSize());
 
     // One carried chunk per columns_to_filter entry, bound as trailing loop
     // variables after the four fixed chunks
@@ -139,28 +139,27 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
             throw IRException("Carried columns must be loop variables of the same nl.for as the input chunk");
         }
 
-        const NLChunkKind kind = chunkKindOf(carriedValue.getType());
+        const NLChunkKind kind = getChunkKind(carriedValue.getType());
+        Column* carriedOutput = allocColumn(loopBody.getArgument(static_cast<unsigned>(4 + carriedIndex)));
 
-        Column* carriedOutSlot = _program.addChunkSlot(kind);
-        _valueSlots[loopBody->getArgument(static_cast<unsigned>(4 + carriedIndex))] = carriedOutSlot;
-
-        NLCarriedColumn carriedColumn;
-        carriedColumn._input = resolveChunkSlot(carriedValue);
-        carriedColumn._output = carriedOutSlot;
-        carriedColumn._gather = NLInterpreter::selectGatherFunction(kind);
-        loopData->_carriedColumns.push_back(carriedColumn);
+        const NLCarriedColumn carriedColumn(getColumn(carriedValue),
+                                            carriedOutput,
+                                            NLInterpreter::selectGatherFunction(kind));
+        loopData->addCarriedColumn(carriedColumn);
     }
 
     const bool isOutEdges = config._kind == IteratorKind::GetOutEdges;
     const NLHandlerFunction handler = isOutEdges ? &NLInterpreter::runGetOutEdgesLoop
                                                  : &NLInterpreter::runGetInEdgesLoop;
-    body.push_back(NLFunctionDescriptor {handler, loopData});
+    body->addStmt(NLFunctionDescriptor {handler, loopData});
 
-    translateBlock(*loopBody, loopData->_body);
+    translateBlock(loopBody, loopData->getStmts());
 }
 
-void NLTranslator::translateOutput(nl::Output output, std::vector<NLFunctionDescriptor>& body) {
-    const mlir::OperandRange columns = output.getColumns();
+void NLTranslator::translateOutput(const nl::Output& output, NLStmtContainer* body) {
+    // The columns are the only operands of nl.output, read through the const
+    // operator-> since the generated accessors are non-const
+    const mlir::OperandRange columns = output->getOperands();
     if (columns.empty()) {
         throw IRException("nl.output requires at least one column");
     }
@@ -177,7 +176,7 @@ void NLTranslator::translateOutput(nl::Output output, std::vector<NLFunctionDesc
     // verification and has to be rejected here.
     mlir::Block* outputBlock = output->getBlock();
 
-    NLOutputData* outputData = _program.addFunctionData<NLOutputData>();
+    NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
     for (const mlir::Value column : columns) {
         const auto columnArgument = mlir::dyn_cast<mlir::BlockArgument>(column);
         const bool isInnermostLoopVariable = columnArgument && columnArgument.getOwner() == outputBlock;
@@ -185,13 +184,21 @@ void NLTranslator::translateOutput(nl::Output output, std::vector<NLFunctionDesc
             throw IRException("nl.output columns must be loop variables of the innermost enclosing nl.for");
         }
 
-        outputData->_columns.push_back(resolveChunkSlot(column));
+        outputData->addOutputColumn(getColumn(column));
     }
 
-    body.push_back(NLFunctionDescriptor {&NLInterpreter::runOutput, outputData});
+    body->addStmt(NLFunctionDescriptor {&NLInterpreter::runOutput, outputData});
 }
 
-Column* NLTranslator::resolveChunkSlot(mlir::Value chunkValue) {
+Column* NLTranslator::allocColumn(mlir::Value chunkValue) {
+    const NLChunkKind kind = getChunkKind(chunkValue.getType());
+
+    Column* column = _program->allocColumn(kind);
+    _valueSlots[chunkValue] = column;
+    return column;
+}
+
+Column* NLTranslator::getColumn(mlir::Value chunkValue) const {
     // Chunk SSA values only exist as nl.for block arguments, each of which
     // was registered when its loop was translated
     const auto slotIt = _valueSlots.find(chunkValue);
@@ -202,7 +209,7 @@ Column* NLTranslator::resolveChunkSlot(mlir::Value chunkValue) {
     return slotIt->second;
 }
 
-NLChunkKind NLTranslator::chunkKindOf(mlir::Type chunkType) {
+NLChunkKind NLTranslator::getChunkKind(mlir::Type chunkType) {
     const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
     if (!chunk) {
         throw IRException("Expected an !nl.chunk type");

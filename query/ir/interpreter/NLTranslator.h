@@ -10,22 +10,15 @@
 
 namespace db {
 
-// Translates one func.func of nl ops into an NLProgram, once. This is the
-// only MLIR-facing file of the interpreter: translation is where SSA chunk
-// values become preallocated slots and handlers are selected, so the runtime
-// never touches MLIR and the module can be destroyed after translating.
+// Translates an MLIR func.func in the nl dialect into an NLProgram
 class NLTranslator {
 public:
-    explicit NLTranslator(NLProgram& program);
+    explicit NLTranslator(NLProgram* program);
     ~NLTranslator();
 
-    void translate(mlir::func::FuncOp function);
+    void translate(const mlir::func::FuncOp& function);
 
 private:
-    // The source ops (nl.scan_nodes, nl.get_out_edges, nl.get_in_edges) emit
-    // no descriptor: they only configure the iterator that a consuming nl.for
-    // drives, so translation records one config per iterator value and folds
-    // it into the loop that uses it.
     enum class IteratorKind {
         ScanNodes,
         GetOutEdges,
@@ -38,20 +31,21 @@ private:
         llvm::SmallVector<mlir::Value, 4> _carriedColumns;
     };
 
-    NLProgram& _program;
+    NLProgram* _program {nullptr};
     llvm::DenseMap<mlir::Value, Column*> _valueSlots;
     llvm::DenseMap<mlir::Value, IteratorConfig> _iteratorConfigs;
 
-    void translateBlock(mlir::Block& block, std::vector<NLFunctionDescriptor>& body);
-    void translateFor(mlir::nl::For forLoop, std::vector<NLFunctionDescriptor>& body);
-    void translateScanLoop(mlir::Block* loopBody, std::vector<NLFunctionDescriptor>& body);
+    void translateBlock(mlir::Block& block, NLStmtContainer* body);
+    void translateFor(const mlir::nl::For& forLoop, NLStmtContainer* body);
+    void translateScanLoop(mlir::Block& loopBody, NLStmtContainer* body);
     void translateEdgeLoop(const IteratorConfig& config,
-                           mlir::Block* loopBody,
-                           std::vector<NLFunctionDescriptor>& body);
-    void translateOutput(mlir::nl::Output output, std::vector<NLFunctionDescriptor>& body);
+                           mlir::Block& loopBody,
+                           NLStmtContainer* body);
+    void translateOutput(const mlir::nl::Output& output, NLStmtContainer* body);
 
-    Column* resolveChunkSlot(mlir::Value chunkValue);
-    static NLChunkKind chunkKindOf(mlir::Type chunkType);
+    Column* allocColumn(mlir::Value chunkValue);
+    Column* getColumn(mlir::Value chunkValue) const;
+    static NLChunkKind getChunkKind(mlir::Type chunkType);
 };
 
 }

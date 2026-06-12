@@ -2,35 +2,53 @@
 
 #include <stddef.h>
 
-#include "views/GraphView.h"
-
 #include "NLProgram.h"
 
 namespace db {
 
+class GraphView;
 class NLOutputSink;
 
-// Everything a handler needs besides its own payload, passed down the call
-// chain by reference.
-struct NLExecutionContext {
-    GraphView _view;
+class NLExecutionContext {
+public:
+    NLExecutionContext(const GraphView* view,
+                       NLOutputSink* sink,
+                       size_t chunkSize)
+        : _view(view),
+        _sink(sink),
+        _chunkSize(chunkSize)
+    {
+    }
+
+    const GraphView* getView() const { return _view; }
+    NLOutputSink* getSink() const { return _sink; }
+    size_t getChunkSize() const { return _chunkSize; }
+
+private:
+    const GraphView* _view {nullptr};
     NLOutputSink* _sink {nullptr};
     size_t _chunkSize {0};
 };
 
-// Executes a translated NLProgram against a graph view. Handlers are exposed
-// as statics so NLTranslator can bind them into descriptors; they are not
-// meant to be called directly.
+// Executes a translated NLProgram against a graph view
 class NLInterpreter {
 public:
-    static void run(const GraphView& view, NLProgram& program, NLOutputSink& sink);
+    NLInterpreter(const GraphView* view,
+                  const NLProgram* prog,
+                  NLOutputSink* sink);
+    ~NLInterpreter();
 
-    static void runScanNodesLoop(NLExecutionContext& context, NLFunctionData* data);
-    static void runGetOutEdgesLoop(NLExecutionContext& context, NLFunctionData* data);
-    static void runGetInEdgesLoop(NLExecutionContext& context, NLFunctionData* data);
-    static void runOutput(NLExecutionContext& context, NLFunctionData* data);
+    void run();
 
+    static void runScanNodesLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runOutput(NLExecutionContext* context, NLFunctionData* data);
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
+
+private:
+    NLExecutionContext _ctxt;
+    const NLProgram* _prog {nullptr};
 };
 
 }
