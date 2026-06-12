@@ -77,23 +77,41 @@ static void inspectVarDepGraph(CypherAST* ast) {
         fmt::print("\n");
     };
 
-    VariableDependencyGraph::Cycle cyc;
-    for (;;) {
-        cyc = vdg.getCycle();
-        if (cyc.empty()) {
-            break;
+    [[maybe_unused]] const auto iterative = [&]() {
+        VariableDependencyGraph::Cycle cyc;
+        for (;;) {
+            cyc = vdg.getCycle();
+            if (cyc.empty()) {
+                break;
+            }
+            printCycle(cyc);
+            vdg.detachCycle(cyc);
+            IRDumper::dumpMermaid(vdg, std::cout);
         }
-        printCycle(cyc);
-        vdg.detachCycle(cyc);
-        IRDumper::dumpMermaid(vdg, std::cout);
-    }
+    };
 
-    // auto cyc = vdg.getCycle();
-    // printCycle(cyc);
-    // vdg.detachCycle(cyc);
-    // IRDumper::dumpMermaid(vdg, std::cout);
-    // cyc = vdg.getCycle();
-    // printCycle(cyc);
+    [[maybe_unused]] const auto basis = [&]() {
+        auto cycs = vdg.cycleBasis();
+        for (auto& c : cycs) {
+            printCycle(c);
+            auto cr = c;
+            const auto sink = std::ranges::max_element(
+                cr, [](const VariableDependency* v, const VariableDependency* u) {
+                    return v->incoming().size() < u->incoming().size();
+                });
+
+            if (sink != end(cr)) {
+                std::ranges::rotate(cr, sink);
+                spdlog::warn("ROTATED:");
+                printCycle(cr);
+                fmt::println("");
+            };
+            vdg.detachCycle(cr);
+        }
+    };
+
+    // iterative();
+    basis();
     IRDumper::dumpMermaid(vdg, std::cout);
 }
 
