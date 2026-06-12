@@ -24,10 +24,8 @@
 
 #include "IRException.h"
 #include "NLDialect.h"
-#include "NLExecutor.h"
+#include "NLInterpreter.h"
 #include "NLOutputSink.h"
-#include "NLProgram.h"
-#include "NLTranslator.h"
 
 #include "TuringTest.h"
 
@@ -82,7 +80,7 @@ private:
 
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
-func.func @scan() {
+func.func @main() {
   %nodes = nl.scan_nodes()
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
     nl.output(%a) : !nl.chunk<!nl.node_id>
@@ -94,7 +92,7 @@ func.func @scan() {
 // One hop along out-edges, outputting (source, target) pairs. The source
 // column exercises the gather-by-indices reconstruction.
 constexpr const char* oneHopOutProgram = R"mlir(
-func.func @one_hop_out() {
+func.func @main() {
   %nodes = nl.scan_nodes()
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
     %edges = nl.get_out_edges(%a, {})
@@ -109,7 +107,7 @@ func.func @one_hop_out() {
 // One hop along in-edges: the writer fills the source side and the target
 // side is gathered from the input, so the output pairs are the same edge set
 constexpr const char* oneHopInProgram = R"mlir(
-func.func @one_hop_in() {
+func.func @main() {
   %nodes = nl.scan_nodes()
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
     %edges = nl.get_in_edges(%a, {})
@@ -123,7 +121,7 @@ func.func @one_hop_in() {
 
 // Two hops a->b->c carrying a through the second hop, outputting (a, c) pairs
 constexpr const char* twoHopProgram = R"mlir(
-func.func @two_hop() {
+func.func @main() {
   %nodes = nl.scan_nodes()
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
     %edges = nl.get_out_edges(%a, {})
@@ -141,7 +139,7 @@ func.func @two_hop() {
 // Verifier-legal but rejected by the translator: outputs an outer loop
 // variable from the inner loop instead of carrying it through the carry set
 constexpr const char* crossLoopOutputProgram = R"mlir(
-func.func @cross_loop_output() {
+func.func @main() {
   %nodes = nl.scan_nodes()
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
     %edges = nl.get_out_edges(%a, {})
@@ -156,7 +154,7 @@ func.func @cross_loop_output() {
 // Verifier-legal but rejected by the translator: carries a chunk bound by a
 // different loop than the one binding the input chunk
 constexpr const char* crossLoopCarryProgram = R"mlir(
-func.func @cross_loop_carry() {
+func.func @main() {
   %nodes = nl.scan_nodes()
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
     %edges = nl.get_out_edges(%a, {})
@@ -242,17 +240,8 @@ protected:
         mlir::OwningOpRef<mlir::ModuleOp> module = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
         ASSERT_TRUE(module);
 
-        auto functions = module->getOps<mlir::func::FuncOp>();
-        ASSERT_TRUE(functions.begin() != functions.end());
-
-        NLProgram program;
-        program.setChunkSize(chunkSize);
-
-        NLTranslator translator(&program);
-        translator.translate(*functions.begin());
-
-        NLExecutor executor(&view, &program, &sink);
-        executor.run();
+        NLInterpreter interpreter(*module, &view, &sink, chunkSize);
+        interpreter.run();
     }
 
     // Parses a program that MLIR accepts but the translator must reject
@@ -265,12 +254,10 @@ protected:
         mlir::OwningOpRef<mlir::ModuleOp> module = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
         ASSERT_TRUE(module);
 
-        auto functions = module->getOps<mlir::func::FuncOp>();
-        ASSERT_TRUE(functions.begin() != functions.end());
-
-        NLProgram program;
-        NLTranslator translator(&program);
-        EXPECT_THROW(translator.translate(*functions.begin()), IRException);
+        // run() reaches the translator before touching the graph view or sink,
+        // so a rejected program surfaces its IRException with neither supplied
+        NLInterpreter interpreter(*module, nullptr, nullptr);
+        EXPECT_THROW(interpreter.run(), IRException);
     }
 
     std::unique_ptr<JobSystem> _jobSystem;
