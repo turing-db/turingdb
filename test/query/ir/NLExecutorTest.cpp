@@ -23,6 +23,7 @@
 #include "writers/MetadataBuilder.h"
 
 #include "IRException.h"
+#include "LocalMemory.h"
 #include "NLDialect.h"
 #include "NLInterpreter.h"
 #include "NLOutputSink.h"
@@ -240,7 +241,8 @@ protected:
         mlir::OwningOpRef<mlir::ModuleOp> module = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
         ASSERT_TRUE(module);
 
-        NLInterpreter interpreter(*module, &view, &sink, chunkSize);
+        LocalMemory memory;
+        NLInterpreter interpreter(*module, &view, &sink, &memory, chunkSize);
         interpreter.run();
     }
 
@@ -256,7 +258,8 @@ protected:
 
         // run() reaches the translator before touching the graph view or sink,
         // so a rejected program surfaces its IRException with neither supplied
-        NLInterpreter interpreter(*module, nullptr, nullptr);
+        LocalMemory memory;
+        NLInterpreter interpreter(*module, nullptr, nullptr, &memory);
         EXPECT_THROW(interpreter.run(), IRException);
     }
 
