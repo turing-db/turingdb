@@ -70,6 +70,17 @@ jobs:
     - name: Disk usage (initial)
       run: df -h
 
+    # The GitHub-hosted ubuntu-*-arm runner images don't ship git-lfs, so the
+    # lfs: true checkout below fails with "Unable to locate executable file:
+    # git-lfs". Install it before checkout. The self-hosted ubuntu-*-turing and
+    # macos*-turing runners already have git-lfs, so scope this to the ARM labels.
+    - name: Install git-lfs (GitHub-hosted ARM)
+      if: contains(matrix.os, 'arm')
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git-lfs
+        git lfs install
+
     - uses: actions/checkout@v4
       with:
         persist-credentials: true
