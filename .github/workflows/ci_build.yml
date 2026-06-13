@@ -34,8 +34,13 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+    # Only the disk-constrained GitHub-hosted Linux runners (the -arm labels)
+    # need this. The self-hosted -turing containers have ample disk, none of the
+    # bloat this action strips, and their ~5TB shared filesystem makes the
+    # action's df|awk sum print in scientific notation, which its bash arithmetic
+    # can't parse ("invalid arithmetic operator") — so skip it there.
     - name: Free disk space
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && !contains(matrix.os, 'turing')
       uses: jlumbroso/free-disk-space@main
       with:
         tool-cache: false
