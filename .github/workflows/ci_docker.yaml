@@ -9,7 +9,7 @@ jobs:
   build-wheel:
     uses: ./.github/workflows/ci_build.yml
     with:
-      os_list: '["ubuntu-24.04", "ubuntu-24.04-arm"]'
+      os_list: '["ubuntu-24.04-turing", "ubuntu-24.04-arm"]'
       python_version_list: '["3.14"]'
     secrets: inherit
 
@@ -19,13 +19,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04
+          - os: ubuntu-24.04-turing
             arch: amd64
             platform: linux/amd64
           - os: ubuntu-24.04-arm
             arch: arm64
             platform: linux/arm64
-    runs-on: ${{ matrix.os == 'ubuntu-24.04' && format('{0}-turing', matrix.os) || startsWith(matrix.os, 'ubuntu') && fromJSON(format('{{"group":"turing-runners","labels":["{0}"]}}', matrix.os)) || matrix.os }}
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
