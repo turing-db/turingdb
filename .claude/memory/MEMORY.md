@@ -57,3 +57,4 @@
 
 ## Workflow Preferences
 - [Test-first: write failing test before fix](feedback_test_first.md)
+- [Explicit CI runner labels](feedback_explicit_ci_runner_labels.md) — put real runner labels in each workflow's os_list + `runs-on: ${{ matrix.os }}`, not a computed ternary / runner-group object

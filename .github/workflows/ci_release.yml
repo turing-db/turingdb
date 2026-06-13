@@ -81,7 +81,7 @@ jobs:
       matrix:
         os: ${{ fromJson(needs.setup.outputs.os_list) }}
         python_version: ${{ fromJson(needs.setup.outputs.python_version_list) }}
-    runs-on: ${{ (matrix.os == 'ubuntu-22.04' || matrix.os == 'ubuntu-24.04') && format('{0}-turing', matrix.os) || startsWith(matrix.os, 'ubuntu') && fromJSON(format('{{"group":"turing-runners","labels":["{0}"]}}', matrix.os)) || matrix.os }}
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Install uv
         uses: astral-sh/setup-uv@v3
