@@ -67,12 +67,16 @@ public:
         _db = &_env->getDB();
 
         {
-            _graph = _env->getSystemManager().createGraph(_graphName);
+            ChangeID changeId;
+            {
+                SystemAccessor system = _env->getSystemManager().accessUnique();
+                _graph = system.createGraph(_graphName);
 
-            auto changeResult = _env->getSystemManager().newChange(_graphName);
-            ASSERT_TRUE(changeResult.has_value());
-            Change* change = changeResult.value();
-            auto changeId = change->id();
+                auto changeResult = system.newChange(_graphName);
+                ASSERT_TRUE(changeResult.has_value());
+                Change* change = changeResult.value();
+                changeId = change->id();
+            }
 
             auto status = query(TEST_GRAPH_CYPHER, _graphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create graph: " << status.getError();
@@ -83,12 +87,16 @@ public:
         }
 
         {
-            _stargraph = _env->getSystemManager().createGraph(_starGraphName);
+            ChangeID changeId;
+            {
+                SystemAccessor system = _env->getSystemManager().accessUnique();
+                _stargraph = system.createGraph(_starGraphName);
 
-            auto changeResult = _env->getSystemManager().newChange(_starGraphName);
-            ASSERT_TRUE(changeResult.has_value());
-            Change* change = changeResult.value();
-            auto changeId = change->id();
+                auto changeResult = system.newChange(_starGraphName);
+                ASSERT_TRUE(changeResult.has_value());
+                Change* change = changeResult.value();
+                changeId = change->id();
+            }
 
             auto status = query(TEST_STAR_GRAPH_CYPHER, _starGraphName, [](const Dataframe*) {}, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create graph: " << status.getError();
