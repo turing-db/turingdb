@@ -27,7 +27,12 @@ if [[ "$(uname)" == "Darwin" ]]; then
 else
     # Linux - detect package manager
     if command -v apt-get &> /dev/null; then
-        sudo apt-get install -y cmake
+        # build-essential provides gcc/g++/make. The GitHub-hosted ubuntu ARM
+        # images ship a C compiler but no g++, which the C++ dependencies
+        # (Arrow, faiss, LLVM/MLIR) need; the Linux dep build uses gcc by default.
+        # lsb-release provides lsb_release, used by the Kitware and LLVM apt
+        # repo setup below to resolve the distro codename.
+        sudo apt-get install -y cmake build-essential lsb-release
 
         # Apache Arrow requires CMake >= 3.25, but Ubuntu 22.04 (jammy) ships
         # 3.22.x. When the distro's cmake is too old, pull a newer one from
