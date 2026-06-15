@@ -216,6 +216,25 @@ private:
     size_t _rowCount {0};
 };
 
+// Counts output rows without materializing or printing them. For benchmarking
+// traversal throughput, where per-row formatting would dominate the measured
+// execution time and flood the terminal on a large expansion.
+class CountingSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks) override {
+        if (chunks.empty()) {
+            return;
+        }
+
+        _rowCount += chunks.front()->size();
+    }
+
+    size_t getRowCount() const { return _rowCount; }
+
+private:
+    size_t _rowCount {0};
+};
+
 // Whether a query function is in the set-at-a-time db dialect or the
 // nested-loop nl dialect
 enum class QueryDialect {
@@ -252,8 +271,31 @@ QueryDialect classifyDialect(mlir::func::FuncOp function) {
     return *dialect;
 }
 
-// Loads the graph at graphDir and runs the module's main function against it
-void executeModule(mlir::ModuleOp& module, const std::string& graphDir) {
+// Runs the module's main function against the view, pushing output into sink.
+// A db-dialect "main" runs through DBDialectInterpreter, which lowers it to the
+// nl dialect first; an nl-dialect "main" runs straight through NLInterpreter.
+void runModuleMain(mlir::ModuleOp& module,
+                   const GraphView& view,
+                   LocalMemory& memory,
+                   NLOutputSink& sink) {
+    const mlir::func::FuncOp mainFunction = module.lookupSymbol<mlir::func::FuncOp>("main");
+    if (!mainFunction) {
+        throw std::runtime_error("-exec requires a 'main' function in the module");
+    }
+
+    if (classifyDialect(mainFunction) == QueryDialect::DB) {
+        DBDialectInterpreter interpreter(module, &view, &sink, &memory);
+        interpreter.run();
+    } else {
+        NLInterpreter interpreter(module, &view, &sink, &memory);
+        interpreter.run();
+    }
+}
+
+// Loads the graph at graphDir and runs the module's main function against it.
+// With quiet set, output rows are only counted, not printed - the mode for
+// benchmarking, where per-row formatting would dominate the timing.
+void executeModule(mlir::ModuleOp& module, const std::string& graphDir, bool quiet) {
     if (graphDir.empty()) {
         throw std::runtime_error("-exec requires a graph directory given with -graph");
     }
@@ -269,25 +311,19 @@ void executeModule(mlir::ModuleOp& module, const std::string& graphDir) {
     const GraphView& view = reader.getView();
 
     LocalMemory memory;
-    PrintingSink sink;
 
-    // A db-dialect "main" runs through DBDialectInterpreter, which lowers it to
-    // the nl dialect first; an nl-dialect "main" runs straight through
-    // NLInterpreter.
-    const mlir::func::FuncOp mainFunction = module.lookupSymbol<mlir::func::FuncOp>("main");
-    if (!mainFunction) {
-        throw std::runtime_error("-exec requires a 'main' function in the module");
-    }
-
-    if (classifyDialect(mainFunction) == QueryDialect::DB) {
-        DBDialectInterpreter interpreter(module, &view, &sink, &memory);
-        interpreter.run();
+    size_t rowCount = 0;
+    if (quiet) {
+        CountingSink sink;
+        runModuleMain(module, view, memory, sink);
+        rowCount = sink.getRowCount();
     } else {
-        NLInterpreter interpreter(module, &view, &sink, &memory);
-        interpreter.run();
+        PrintingSink sink;
+        runModuleMain(module, view, memory, sink);
+        rowCount = sink.getRowCount();
     }
 
-    std::cout << sink.getRowCount() << " rows\n";
+    std::cout << rowCount << " rows\n";
 }
 
 }
@@ -299,6 +335,7 @@ int main(int argc, char** argv) {
     std::vector<std::string> files;
     bool dumpCode = false;
     bool execute = false;
+    bool quiet = false;
     std::string graphDir;
 
     parser.add_argument("files")
@@ -319,6 +356,10 @@ int main(int argc, char** argv) {
         .metavar("path")
         .store_into(graphDir)
         .help("Graph directory to load and execute against (requires -exec)");
+
+    parser.add_argument("-quiet")
+        .store_into(quiet)
+        .help("Count output rows instead of printing them (for benchmarking)");
 
     try {
         parser.parse_args(argc, argv);
@@ -351,7 +392,7 @@ int main(int argc, char** argv) {
         }
 
         if (execute) {
-            executeModule(mainMod, graphDir);
+            executeModule(mainMod, graphDir, quiet);
         }
     } catch (const std::exception& e) {
         std::cerr << e.what() << "\n";
