@@ -28,6 +28,26 @@ else
     # Linux - detect package manager
     if command -v apt-get &> /dev/null; then
         sudo apt-get install -y cmake
+
+        # Apache Arrow requires CMake >= 3.25, but Ubuntu 22.04 (jammy) ships
+        # 3.22.x. When the distro's cmake is too old, pull a newer one from
+        # Kitware's official APT repo (same signed-by keyring pattern as the
+        # LLVM repo below). Newer distros already satisfy the requirement and
+        # are left on their distro package.
+        REQUIRED_CMAKE_VERSION=3.25
+        INSTALLED_CMAKE_VERSION=$(cmake --version | head -1 | awk '{print $3}')
+        OLDEST_CMAKE_VERSION=$(printf '%s\n%s\n' "$REQUIRED_CMAKE_VERSION" "$INSTALLED_CMAKE_VERSION" | sort -V | head -1)
+        if [ "$OLDEST_CMAKE_VERSION" != "$REQUIRED_CMAKE_VERSION" ]; then
+            echo "cmake ${INSTALLED_CMAKE_VERSION} is older than ${REQUIRED_CMAKE_VERSION}; installing a newer cmake from Kitware..."
+            KITWARE_KEYRING=/etc/apt/keyrings/kitware-archive.asc
+            sudo install -d -m 0755 /etc/apt/keyrings
+            wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc | sudo tee "${KITWARE_KEYRING}" >/dev/null
+            CODENAME=$(lsb_release -cs)
+            echo "deb [signed-by=${KITWARE_KEYRING}] https://apt.kitware.com/ubuntu/ ${CODENAME} main" \
+                | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
+            sudo apt-get update
+            sudo apt-get install -y cmake
+        fi
     elif command -v dnf &> /dev/null; then
         sudo dnf install -y cmake
     elif command -v yum &> /dev/null; then
