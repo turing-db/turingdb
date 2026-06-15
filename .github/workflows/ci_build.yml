@@ -137,7 +137,11 @@ jobs:
       with:
         base: /opt/actions-local-cache
         path: external/dependencies
-        key: ${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}
+        # The -v2 salt busts poisoned entries: fail-fast-cancelled jobs saved
+        # partial external/dependencies trees (e.g. missing curl) under this
+        # per-OS key, which later cache-hit jobs then restored and failed on at
+        # find_package. Bump the salt to discard them and re-save a clean tree.
+        key: ${{ matrix.os }}-dependencies-v2-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}
 
     # The macOS minis share one cache base across several runner instances, and
     # corca-ai/local-cache symlinks external/dependencies straight into that
