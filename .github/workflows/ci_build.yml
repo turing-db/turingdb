@@ -25,6 +25,11 @@ on:
 jobs:
   build:
     strategy:
+      # Don't cancel the whole matrix when one job fails: on the shared
+      # self-hosted runners a single transient flake would otherwise cancel the
+      # others mid-build, whose post-steps then save partial external/dependencies
+      # trees and poison the per-OS cache. Letting jobs finish keeps caches clean.
+      fail-fast: false
       matrix:
         os: ${{ fromJson(inputs.os_list || '["ubuntu-24.04-turing", "macos15-turing"]') }}
         python_version: ${{ fromJson(inputs.python_version_list || '["3.14"]') }}
@@ -137,11 +142,12 @@ jobs:
       with:
         base: /opt/actions-local-cache
         path: external/dependencies
-        # The -v2 salt busts poisoned entries: fail-fast-cancelled jobs saved
+        # The salt busts poisoned entries: fail-fast-cancelled jobs saved
         # partial external/dependencies trees (e.g. missing curl) under this
         # per-OS key, which later cache-hit jobs then restored and failed on at
-        # find_package. Bump the salt to discard them and re-save a clean tree.
-        key: ${{ matrix.os }}-dependencies-v2-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}
+        # find_package. Bump the salt to discard them and re-save a clean tree
+        # (with fail-fast disabled, jobs now run to completion so caches stay clean).
+        key: ${{ matrix.os }}-dependencies-v3-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}
 
     # The macOS minis share one cache base across several runner instances, and
     # corca-ai/local-cache symlinks external/dependencies straight into that
