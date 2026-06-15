@@ -129,6 +129,15 @@ else
         else
             echo "LLVM ${LLVM_MAJOR_VERSION} is already installed"
         fi
+
+        # On aarch64 the fully-static LLVM/MLIR tools (mlir-opt, ...) and the
+        # turingdb binary exceed the +/-128MB reach of AArch64 R_AARCH64_CALL26
+        # branch relocations, which GNU ld cannot resolve ("relocation truncated
+        # to fit"). lld inserts range-extension thunks, so make it the default
+        # linker on aarch64. x86_64 has a wider call range and is left on GNU ld.
+        if [[ "$(uname -m)" == "aarch64" ]] && command -v "ld.lld-${LLVM_MAJOR_VERSION}" &> /dev/null; then
+            sudo update-alternatives --install /usr/bin/ld ld "$(command -v ld.lld-${LLVM_MAJOR_VERSION})" 100
+        fi
     else
         echo "LLVM ${LLVM_MAJOR_VERSION} auto-install is only supported on apt-based distros."
         echo "Please install LLVM ${LLVM_MAJOR_VERSION} manually."
