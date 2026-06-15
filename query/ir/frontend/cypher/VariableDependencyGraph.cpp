@@ -16,9 +16,11 @@
 #include "IRDumper.h"
 #include "PatternElement.h"
 
-#include "BioAssert.h"
 #include "VariableDependency.h"
 #include "decl/VarDecl.h"
+
+#include "BioAssert.h"
+#include "FatalException.h"
 
 using namespace db;
 
@@ -34,8 +36,7 @@ static EdgeMetadata::EdgeType directionToType(EdgePattern::Direction dir) {
             return EdgeMetadata::EdgeType::OUTGOING;
         break;
     }
-    std::unreachable();
-    return EdgeMetadata::EdgeType::_SIZE;
+    throw FatalException("Invalid edge pattern direction");
 }
 
 const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* src,
@@ -118,14 +119,15 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
     return exists ? &*foundIt : newVariable(entity);
 }
 
-std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis() {
+void VariableDependencyGraph::cycleBasis(std::vector<Cycle>& cycles) {
     using VarSet = std::unordered_set<VariableDependency*>;
     using PredMap = std::unordered_map<VariableDependency*, VariableDependency*>;
     using VarToVarSet = std::unordered_map<VariableDependency*, VarSet>;
 
-    std::vector<Cycle> cycles;
+    cycles.clear();
+
     if (_vars.empty()) {
-        return cycles;
+        return;
     }
 
     // Persistent across iterations of outer loop
@@ -226,8 +228,6 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
             visited.insert(entry.first);
         }
     }
-
-    return cycles;
 }
 
 void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
