@@ -10,6 +10,9 @@
 
 namespace db {
 
+namespace rg = ranges;
+namespace rv = rg::views;
+
 class VariableDependencyGraph;
 
 /**
@@ -25,7 +28,7 @@ public:
     {
     }
 
-    auto edges() const { return ranges::views::concat(_incoming, _outgoing); }
+    auto edges() const { return rv::concat(_incoming, _outgoing); }
     const Edges& outgoing() const { return _outgoing; }
     const Edges& incoming() const { return _incoming; }
 
@@ -44,10 +47,10 @@ public:
 private:
     friend VariableDependencyGraph;
 
-    std::string _name;
-
     Edges _incoming;
     Edges _outgoing;
+
+    std::string _name;
 };
 
 }

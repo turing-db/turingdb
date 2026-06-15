@@ -1,8 +1,6 @@
 #include "VariableDependencyGraph.h"
 
 #include <algorithm>
-#include <cstddef>
-#include <iostream>
 #include <set>
 #include <string_view>
 #include <unordered_map>
@@ -399,4 +397,17 @@ void VariableDependencyGraph::canonicaliseCycle(Cycle& cyc) const {
         cyc, [inDegree](auto&& a, auto&& b) { return inDegree(a) < inDegree(b); });
 
     std::ranges::rotate(cyc, pivot);
+}
+
+void VariableDependencyGraph::eliminateCycles() {
+    std::vector<Cycle> cycles;
+    cycleBasis(cycles);
+    if (cycles.empty()) {
+        return;
+    }
+
+    for (Cycle& cycle : cycles) {
+        canonicaliseCycle(cycle);
+        detachCycle(cycle);
+    }
 }
