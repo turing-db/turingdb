@@ -16,42 +16,45 @@ void VariableDependencyGraphTraversal::getTraversal(const VariableDependencyGrap
 
     std::unordered_set<const VariableDependency*> visited;
 
-    const auto degree = [](const VariableDependency& a, const VariableDependency& b) {
-        return a.edges().size() < b.edges().size();
-    };
-    const auto maxIt = std::ranges::max_element(graph->vars(), degree);
-
-    const VariableDependency* root = &*maxIt;
-
     std::stack<const VariableDependency*> stack;
-    stack.push(root);
-
-    while (!stack.empty()) {
-        const VariableDependency* cur = stack.top();
-        stack.pop();
-
-        const bool alreadySeen = visited.contains(cur);
-
-        bool canTraverse = true;
-
-        for (const DependencyEdge* e : cur->incoming()) {
-            if (e->isMetaEdge() && !alreadySeen) {
-                canTraverse = false;
-                break;
-            }
-        }
-
-        if (!canTraverse) {
-            visited.insert(cur);
+    for (const VariableDependency& v : graph->vars()) {
+        if (visited.contains(&v)) {
             continue;
         }
 
-        for (const DependencyEdge* e : cur->outgoing()) {
-            const VariableDependency* tgt = e->tgt();
-            stack.push(tgt);
-        }
+        stack.push(&v);
 
-        visited.insert(cur);
-        traversal.push_back(cur);
+        while (!stack.empty()) {
+            const VariableDependency* cur = stack.top();
+            stack.pop();
+
+            const bool alreadySeen = visited.contains(cur);
+
+            if (alreadySeen) {
+                continue;
+            }
+
+            const auto seenMetaInputs = [&visited](const DependencyEdge* e) {
+                return !e->isMetaEdge() || visited.contains(e->src());
+            };
+
+            const bool canTraverse = std::ranges::all_of(cur->incoming(), seenMetaInputs);
+
+            if (!canTraverse) {
+                continue;
+            }
+
+            for (const DependencyEdge* e : cur->outgoing()) {
+                const VariableDependency* tgt = e->tgt();
+                stack.push(tgt);
+            }
+            for (const DependencyEdge* e : cur->incoming()) {
+                const VariableDependency* src = e->src();
+                stack.push(src);
+            }
+
+            visited.insert(cur);
+            traversal.push_back(cur);
+        }
     }
 }
