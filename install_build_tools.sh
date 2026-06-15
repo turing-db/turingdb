@@ -30,9 +30,11 @@ else
         # build-essential provides gcc/g++/make. The GitHub-hosted ubuntu ARM
         # images ship a C compiler but no g++, which the C++ dependencies
         # (Arrow, faiss, LLVM/MLIR) need; the Linux dep build uses gcc by default.
+        # m4 is required by bison's and flex's configure (and at runtime when
+        # they generate the parser/lexer during the main build).
         # lsb-release provides lsb_release, used by the Kitware and LLVM apt
         # repo setup below to resolve the distro codename.
-        sudo apt-get install -y cmake build-essential lsb-release
+        sudo apt-get install -y cmake build-essential m4 lsb-release
 
         # Apache Arrow requires CMake >= 3.25, but Ubuntu 22.04 (jammy) ships
         # 3.22.x. When the distro's cmake is too old, pull a newer one from
