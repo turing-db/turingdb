@@ -48,6 +48,10 @@ const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* s
     const auto same = [&newEdge](DependencyEdge* other) {
         return newEdge == *other;
     };
+
+    // If an edge between @ref src and @ref tgt with equivalent @ref data, return that
+    // edge, and do not add any edges. This canonicalises patterns such as
+    // `MATCH (n)-->(a), (n)-->(a)`, avoiding adding duplicate edges.
     const auto findIt = std::ranges::find_if(src->_outgoing, same);
     const bool exists = findIt != end(src->_outgoing);
     if (exists) {
@@ -115,7 +119,7 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
 }
 
 std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis() {
-    using NodeSet = std::set<VariableDependency*>;
+    using NodeSet = std::unordered_set<VariableDependency*>;
     using PredMap = std::unordered_map<VariableDependency*, VariableDependency*>;
     using UsedMap = std::unordered_map<VariableDependency*, NodeSet>;
 
@@ -124,12 +128,7 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
         return cycles;
     }
 
-    NodeSet gnodes;
-    for (VariableDependency& v : _vars) {
-        gnodes.insert(&v);
-    }
-
-    VariableDependency* root = *begin(gnodes);
+    NodeSet visited;
 
     // Records spanning tree from its key
     PredMap pred;
@@ -139,9 +138,10 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
     Cycle cycle;
 
     // Outer loop ensures all connected components are traversed
-    while (!gnodes.empty()) {
-        if (root == nullptr) {
-            root = *begin(gnodes);
+    for (VariableDependency& v : _vars) {
+        VariableDependency* root = &v;
+        if (visited.contains(root)) {
+            continue;
         }
 
         pred.clear();
@@ -210,9 +210,8 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
         }
 
         for (const auto& entry : pred) {
-            gnodes.erase(entry.first);
+            visited.insert(entry.first);
         }
-        root = nullptr;
     }
 
     return cycles;
