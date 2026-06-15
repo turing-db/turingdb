@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Bitmask.h"
+#include "DecodedColumnSchema.h"
 #include "TuringProtoHeaders.h"
 #include "list/ListBuffer.h"
 
@@ -28,22 +29,6 @@ class TuringProtoInBuf;
 
 class TuringProtoDecoder {
 public:
-    struct DfColumnState {
-        DynamicLargeBitMask<uint64_t> _bitMask {0};
-        WireSize _numRows {0};
-
-        void reset() {
-            _bitMask.resize(0);
-            _numRows = 0;
-        }
-    };
-
-    struct DecodedColumnSchema {
-        net::proto::ColumnWireHeader _header;
-        std::string _colName;
-        DfColumnState _colState;
-    };
-
     struct InterruptedBufferState {
         char* _start {nullptr};
         size_t _len {0};
@@ -85,14 +70,12 @@ public:
                        TuringProtoInBuf* inBuf,
                        ChunkedBuffer<float>* embeddingBuffer,
                        ChunkedBuffer<char>* stringBuffer,
-                       db::ListBuffer<>* listBuffer);
+                       db::ListBuffer<>* listBuffer,
+                       std::vector<DecodedColumnSchema>& colSchema);
 
-    void decodeIncomingChunkHeader(db::Dataframe* df,
-                                   std::vector<DecodedColumnSchema>& colSchemas);
-    void decodeIncomingChunk(db::Dataframe* df,
-                             std::vector<DecodedColumnSchema>& colSchemas);
-    void decodeIncomingData(db::Dataframe* df,
-                            std::vector<DecodedColumnSchema>& colSchemas);
+    void decodeIncomingChunkHeader(db::Dataframe* df);
+    void decodeIncomingChunk(db::Dataframe* df);
+    void decodeIncomingData(db::Dataframe* df);
 
     void reset();
 
@@ -111,7 +94,7 @@ public:
 private:
     db::LocalMemory* _localMem {nullptr};
     db::DataframeManager* _dfMan {nullptr};
+    std::vector<DecodedColumnSchema>& _colSchemas;
     DecodeContext _ctxt;
 };
-
 }

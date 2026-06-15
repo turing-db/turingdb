@@ -124,11 +124,11 @@ void decodeChunkPackets(const std::vector<FramedPacket>& packets,
                         db::ListBuffer<>* listBuffer,
                         db::DataframeManager* dfMan,
                         db::Dataframe* decoded,
-                        std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema>* schemas) {
+                        std::vector<net::proto::DecodedColumnSchema>* schemas) {
     const size_t maxPayloadSize =
         std::transform_reduce(packets.begin(), packets.end(), size_t {0}, [](size_t lhs, size_t rhs) { return std::max(lhs, rhs); }, [](const FramedPacket& packet) { return packet._bytes.size() - net::proto::ProtoHeader::wireSize(); });
     net::proto::TuringProtoInBuf inBuf(maxPayloadSize);
-    net::proto::TuringProtoDecoder decoder(localMem, dfMan, &inBuf, embeddingBuffer, stringBuffer, listBuffer);
+    net::proto::TuringProtoDecoder decoder(localMem, dfMan, &inBuf, embeddingBuffer, stringBuffer, listBuffer, *schemas);
     schemas->clear();
 
     for (const auto& packet : packets) {
@@ -143,10 +143,10 @@ void decodeChunkPackets(const std::vector<FramedPacket>& packets,
 
         switch (packet._type) {
             case net::proto::MessageTypes::CHUNK_HEADER:
-                decoder.decodeIncomingChunkHeader(decoded, *schemas);
+                decoder.decodeIncomingChunkHeader(decoded);
                 break;
             case net::proto::MessageTypes::CHUNK:
-                decoder.decodeIncomingChunk(decoded, *schemas);
+                decoder.decodeIncomingChunk(decoded);
                 break;
             case net::proto::MessageTypes::END_CHUNK:
                 EXPECT_EQ(protoHeader._dataLen, 0u);
@@ -212,7 +212,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsNumericColumnsAcrossChunkSizes) {
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::Dataframe decoded;
-        std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
         decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
@@ -271,7 +271,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalStringColumnsAcrossChunkSizes) 
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::Dataframe decoded;
-        std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
         decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
@@ -323,7 +323,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsHugeStringsAcrossMultipleBuffers) {
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::Dataframe decoded;
-        std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
         decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
@@ -368,7 +368,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsHugeEmbeddingsAcrossMultipleBuffers) {
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::Dataframe decoded;
-        std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
         decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
@@ -417,7 +417,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantColumns) {
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::Dataframe decoded;
-    std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
     decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 3u);
@@ -464,7 +464,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsConstantListColumns) {
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::Dataframe decoded;
-    std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
     decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
@@ -521,7 +521,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumns) {
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::Dataframe decoded;
-    std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
     decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
@@ -583,7 +583,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsNestedListColumns) {
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::Dataframe decoded;
-    std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
     decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
@@ -671,7 +671,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumnOfNestedLists) {
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::Dataframe decoded;
-    std::vector<net::proto::TuringProtoDecoder::DecodedColumnSchema> schemas;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
     decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);

@@ -1,5 +1,6 @@
 set (turing_proto_client_source
-	TuringClient.cpp)
+	TuringClient.cpp
+	TuringAsyncClient.cpp)
 
 add_library(turing_db_proto_client_s STATIC ${turing_proto_client_source})
 

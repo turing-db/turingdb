@@ -98,12 +98,24 @@ bool listen(ServerSocket s) {
 
 bool epollAdd(EpollInstance instance, Socket fd, EpollEvent& event) {
 #ifdef __APPLE__
-    struct kevent kev;
+    // kqueue uses one kevent per direction, so EVENT_IN|EVENT_OUT becomes two changes.
     uint16_t flags = EV_ADD;
-    if (event._events & EVENT_ET) flags |= EV_CLEAR;
-    if (event._events & EVENT_ONESHOT) flags |= EV_ONESHOT;
-    EV_SET(&kev, fd, EVFILT_READ, flags, 0, 0, event._data);
-    return kevent(instance, &kev, 1, nullptr, 0, nullptr) != -1;
+    if (event._events & EVENT_ET) {
+        flags |= EV_CLEAR;
+    }
+    if (event._events & EVENT_ONESHOT) {
+        flags |= EV_ONESHOT;
+    }
+
+    struct kevent kev[2];
+    int n = 0;
+    if (event._events & EVENT_IN) {
+        EV_SET(&kev[n++], fd, EVFILT_READ, flags, 0, 0, event._data);
+    }
+    if (event._events & EVENT_OUT) {
+        EV_SET(&kev[n++], fd, EVFILT_WRITE, flags, 0, 0, event._data);
+    }
+    return kevent(instance, kev, n, nullptr, 0, nullptr) != -1;
 #else
     epoll_event ev;
     memset(&ev, 0, sizeof(ev));
@@ -115,9 +127,14 @@ bool epollAdd(EpollInstance instance, Socket fd, EpollEvent& event) {
 
 bool epollMod(EpollInstance instance, Socket fd, EpollEvent& event) {
 #ifdef __APPLE__
-    struct kevent kev;
-    EV_SET(&kev, fd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
-    kevent(instance, &kev, 1, nullptr, 0, nullptr);
+    // Drop both filters (an absent one just returns ENOENT, which we ignore — issuing
+    // them separately keeps one failure from aborting the other) then re-add per the new
+    // mask, so a read->write transition doesn't leave the old filter armed.
+    struct kevent del;
+    EV_SET(&del, fd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
+    kevent(instance, &del, 1, nullptr, 0, nullptr);
+    EV_SET(&del, fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
+    kevent(instance, &del, 1, nullptr, 0, nullptr);
     return epollAdd(instance, fd, event);
 #else
     epoll_event ev;
@@ -131,9 +148,11 @@ bool epollMod(EpollInstance instance, Socket fd, EpollEvent& event) {
 bool epollDel(EpollInstance instance, Socket fd, EpollEvent& event) {
 #ifdef __APPLE__
     (void)event;
-    struct kevent kev;
-    EV_SET(&kev, fd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
-    kevent(instance, &kev, 1, nullptr, 0, nullptr);
+    struct kevent del;
+    EV_SET(&del, fd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
+    kevent(instance, &del, 1, nullptr, 0, nullptr);
+    EV_SET(&del, fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
+    kevent(instance, &del, 1, nullptr, 0, nullptr);
     return true;
 #else
     epoll_event ev;
@@ -152,9 +171,22 @@ EpollInstance createEventInstance() {
 #endif
 }
 
+EventInstance::EventInstance()
+    : _instance(createEventInstance())
+{
+}
+
+EventInstance::~EventInstance() {
+    if (_instance >= 0) {
+        ::close(_instance);
+    }
+}
+
 int eventWait(EpollInstance instance, EpollEvent* events, int maxEvents, int timeout) {
     constexpr int MAX_EVENTS = 64;
-    if (maxEvents > MAX_EVENTS) maxEvents = MAX_EVENTS;
+    if (maxEvents > MAX_EVENTS) {
+        maxEvents = MAX_EVENTS;
+    }
 
 #ifdef __APPLE__
     struct kevent kevents[MAX_EVENTS];
@@ -169,10 +201,15 @@ int eventWait(EpollInstance instance, EpollEvent* events, int maxEvents, int tim
     for (int i = 0; i < n; i++) {
         events[i]._events = 0;
         events[i]._data = kevents[i].udata;
-        if (kevents[i].filter == EVFILT_READ || kevents[i].filter == EVFILT_SIGNAL)
+        if (kevents[i].filter == EVFILT_READ || kevents[i].filter == EVFILT_SIGNAL) {
             events[i]._events |= EVENT_IN;
-        if (kevents[i].flags & EV_EOF)
+        }
+        if (kevents[i].filter == EVFILT_WRITE) {
+            events[i]._events |= EVENT_OUT;
+        }
+        if (kevents[i].flags & EV_EOF) {
             events[i]._events |= EVENT_RDHUP | EVENT_HUP;
+        }
     }
     return n;
 #else
