@@ -45,21 +45,21 @@ void NLTranslator::translate(const mlir::func::FuncOp& function) {
 
 void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
     for (mlir::Operation& operation : block) {
-        if (auto scanNodes = mlir::dyn_cast<nl::ScanNodes>(operation)) {
+        if (nl::ScanNodes scanNodes = mlir::dyn_cast<nl::ScanNodes>(operation)) {
             _iteratorConfigs[scanNodes.getResult()] = IteratorConfig {IteratorKind::ScanNodes, {}, {}};
-        } else if (auto getOutEdges = mlir::dyn_cast<nl::GetOutEdges>(operation)) {
+        } else if (nl::GetOutEdges getOutEdges = mlir::dyn_cast<nl::GetOutEdges>(operation)) {
             IteratorConfig config {IteratorKind::GetOutEdges, getOutEdges.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdges.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
             _iteratorConfigs[getOutEdges.getResult()] = config;
-        } else if (auto getInEdges = mlir::dyn_cast<nl::GetInEdges>(operation)) {
+        } else if (nl::GetInEdges getInEdges = mlir::dyn_cast<nl::GetInEdges>(operation)) {
             IteratorConfig config {IteratorKind::GetInEdges, getInEdges.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getInEdges.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
             _iteratorConfigs[getInEdges.getResult()] = config;
-        } else if (auto forLoop = mlir::dyn_cast<nl::For>(operation)) {
+        } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
-        } else if (auto output = mlir::dyn_cast<nl::Output>(operation)) {
+        } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
             // Structural terminators carry no behavior
