@@ -456,9 +456,9 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
     _listBuffer.clear();
     db::DataframeManager dfMan;
     db::QueryStatus res;
-    std::vector<TuringProtoDecoder::DecodedColumnSchema> colSchemas;
+    std::vector<DecodedColumnSchema> colSchemas;
     db::Dataframe df;
-    TuringProtoDecoder decoder(_localMem, &dfMan, &_inBuf, &_embeddingBuffer, &_stringBuffer, &_listBuffer);
+    TuringProtoDecoder decoder(_localMem, &dfMan, &_inBuf, &_embeddingBuffer, &_stringBuffer, &_listBuffer, colSchemas);
 
     bool callbackFired = false;
     bool sawTerminalPacket = false;
@@ -486,11 +486,11 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
 
         switch (responseHeader._type) {
             case MessageTypes::CHUNK_HEADER:
-                decoder.decodeIncomingChunkHeader(&df, colSchemas);
+                decoder.decodeIncomingChunkHeader(&df);
             break;
 
             case MessageTypes::CHUNK:
-                decoder.decodeIncomingChunk(&df, colSchemas);
+                decoder.decodeIncomingChunk(&df);
             break;
 
             case MessageTypes::END_CHUNK:
@@ -498,7 +498,7 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
                 callback(&df);
                 df.clear();
                 for (auto& schema : colSchemas) {
-                    schema._colState.reset();
+                    schema.getColState().reset();
                 }
                 decoder.reset();
             break;

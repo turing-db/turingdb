@@ -187,14 +187,14 @@ inline bool drainListStack(TuringProtoDecoder::DecodeContext* ctx,
 template <typename T>
 inline bool decodeVector(TuringProtoDecoder::DecodeContext* ctx,
                          db::ColumnVector<T>* typedCol,
-                         TuringProtoDecoder::DfColumnState* columnState) {
+                         DfColumnState* columnState) {
     static_assert(TrivialInternalTypes<T>, "Unsupported type for decodeVector");
 
     if (ctx->_rowIndex == 0) {
-        typedCol->resize(columnState->_numRows);
+        typedCol->resize(columnState->getNumRows());
     }
 
-    const size_t rowsRemaining = columnState->_numRows - ctx->_rowIndex;
+    const size_t rowsRemaining = columnState->getNumRows() - ctx->_rowIndex;
 
     if (rowsRemaining * sizeof(T) > ctx->_inBuf->readable()) {
         const size_t numRowsRead = ctx->_inBuf->readable() / sizeof(T);
@@ -210,12 +210,12 @@ inline bool decodeVector(TuringProtoDecoder::DecodeContext* ctx,
 template <>
 inline bool decodeVector<std::string>(TuringProtoDecoder::DecodeContext* ctx,
                                       db::ColumnVector<std::string>* typedCol,
-                                      TuringProtoDecoder::DfColumnState* columnState) {
+                                      DfColumnState* columnState) {
     if (ctx->_rowIndex == 0) {
-        typedCol->reserve(columnState->_numRows);
+        typedCol->reserve(columnState->getNumRows());
     }
 
-    for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
+    for (size_t i = 0; ctx->_rowIndex + i < columnState->getNumRows(); ++i) {
         if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             ctx->_rowIndex += i;
             return false;
@@ -246,14 +246,15 @@ inline bool decodeVector<std::string>(TuringProtoDecoder::DecodeContext* ctx,
 template <>
 inline bool decodeVector<db::ListView>(TuringProtoDecoder::DecodeContext* ctx,
                                        db::ColumnVector<db::ListView>* typedCol,
-                                       TuringProtoDecoder::DfColumnState* columnState) {
+                                       DfColumnState* columnState) {
+    size_t numRows = columnState->getNumRows();
     if (ctx->_rowIndex == 0 && typedCol->size() == 0) {
-        typedCol->reserve(columnState->_numRows);
+        typedCol->reserve(numRows);
     }
 
     auto& stack = ctx->_listStack;
 
-    while (ctx->_rowIndex < columnState->_numRows) {
+    while (ctx->_rowIndex < numRows) {
         // A list is "started" once we have read its header and emplaced its (initially
         // unfilled) ListView. col->size() vs _rowIndex tells us which: equal means the
         // current row's header is still to come.
@@ -290,7 +291,7 @@ inline bool decodeVector<db::ListView>(TuringProtoDecoder::DecodeContext* ctx,
 template <>
 inline bool decodeVector<db::ListElementView>(TuringProtoDecoder::DecodeContext* ctx,
                                               db::ColumnVector<db::ListElementView>* typedCol,
-                                              TuringProtoDecoder::DfColumnState* columnState) {
+                                              DfColumnState* columnState) {
     auto& stack = ctx->_listStack;
 
     // If the row index is 0 this indicates that we haven't read any values from
@@ -303,8 +304,8 @@ inline bool decodeVector<db::ListElementView>(TuringProtoDecoder::DecodeContext*
         WireSize listByteSize = 0;
         ctx->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
-        stack.emplace(ctx->_listBuffer->reserveList(columnState->_numRows, listByteSize));
-        typedCol->resize(columnState->_numRows);
+        stack.emplace(ctx->_listBuffer->reserveList(columnState->getNumRows(), listByteSize));
+        typedCol->resize(columnState->getNumRows());
         ctx->_rowIndex = 1;
     }
 
@@ -318,12 +319,12 @@ inline bool decodeVector<db::ListElementView>(TuringProtoDecoder::DecodeContext*
 template <>
 inline bool decodeVector<db::Path>(TuringProtoDecoder::DecodeContext* ctx,
                                    db::ColumnVector<db::Path>* typedCol,
-                                   TuringProtoDecoder::DfColumnState* columnState) {
+                                   DfColumnState* columnState) {
     if (ctx->_rowIndex == 0) {
-        typedCol->reserve(columnState->_numRows);
+        typedCol->reserve(columnState->getNumRows());
     }
 
-    for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
+    for (size_t i = 0; ctx->_rowIndex + i < columnState->getNumRows(); ++i) {
         if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             ctx->_rowIndex += i;
             return false;
@@ -355,12 +356,12 @@ inline bool decodeVector<db::Path>(TuringProtoDecoder::DecodeContext* ctx,
 template <>
 inline bool decodeVector<db::types::Embedding::Primitive>(TuringProtoDecoder::DecodeContext* ctx,
                                                           db::ColumnVector<db::types::Embedding::Primitive>* typedCol,
-                                                          TuringProtoDecoder::DfColumnState* columnState) {
+                                                          DfColumnState* columnState) {
     if (ctx->_rowIndex == 0) {
-        typedCol->reserve(columnState->_numRows);
+        typedCol->reserve(columnState->getNumRows());
     }
 
-    for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
+    for (size_t i = 0; ctx->_rowIndex + i < columnState->getNumRows(); ++i) {
         if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             ctx->_rowIndex += i;
             return false;
@@ -396,12 +397,12 @@ inline bool decodeVector<db::types::Embedding::Primitive>(TuringProtoDecoder::De
 template <>
 inline bool decodeVector<db::EntityList>(TuringProtoDecoder::DecodeContext* ctx,
                                          db::ColumnVector<db::EntityList>* typedCol,
-                                         TuringProtoDecoder::DfColumnState* columnState) {
+                                         DfColumnState* columnState) {
     if (ctx->_rowIndex == 0) {
-        typedCol->resize(columnState->_numRows);
+        typedCol->resize(columnState->getNumRows());
     }
 
-    for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
+    for (size_t i = 0; ctx->_rowIndex + i < columnState->getNumRows(); ++i) {
         auto& entityList = (*typedCol)[ctx->_rowIndex + i];
 
         if (entityList.size() == 0) {
@@ -439,10 +440,10 @@ inline bool decodeVector<db::EntityList>(TuringProtoDecoder::DecodeContext* ctx,
 template <typename T>
 inline bool decodeOptVector(TuringProtoDecoder::DecodeContext* ctx,
                             db::ColumnOptVector<T>* typedCol,
-                            TuringProtoDecoder::DfColumnState* columnState) {
+                            DfColumnState* columnState) {
     static_assert(TrivialInternalTypes<T>, "Unsupported type for decodeOptVector");
 
-    for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
+    for (size_t i = 0; ctx->_rowIndex + i < columnState->getNumRows(); ++i) {
         if (ctx->_inBuf->readable() < sizeof(T)) {
             ctx->_rowIndex += i;
             return false;
@@ -450,7 +451,7 @@ inline bool decodeOptVector(TuringProtoDecoder::DecodeContext* ctx,
 
         auto& entry = (*typedCol)[ctx->_rowIndex + i];
 
-        const bool hasValue = columnState->_bitMask.test(ctx->_rowIndex + i);
+        const bool hasValue = columnState->getBitMask().test(ctx->_rowIndex + i);
         if (!hasValue) {
             ctx->_inBuf->increaseReadOffset(sizeof(T));
             continue;
@@ -466,8 +467,8 @@ inline bool decodeOptVector(TuringProtoDecoder::DecodeContext* ctx,
 template <>
 inline bool decodeOptVector<std::string>(TuringProtoDecoder::DecodeContext* ctx,
                                          db::ColumnOptVector<std::string>* typedCol,
-                                         TuringProtoDecoder::DfColumnState* columnState) {
-    for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
+                                         DfColumnState* columnState) {
+    for (size_t i = 0; ctx->_rowIndex + i < columnState->getNumRows(); ++i) {
         if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             ctx->_rowIndex += i;
             return false;
@@ -475,7 +476,7 @@ inline bool decodeOptVector<std::string>(TuringProtoDecoder::DecodeContext* ctx,
 
         auto& entry = (*typedCol)[ctx->_rowIndex + i];
 
-        const bool hasValue = columnState->_bitMask.test(ctx->_rowIndex + i);
+        const bool hasValue = columnState->getBitMask().test(ctx->_rowIndex + i);
         if (!hasValue) {
             ctx->_inBuf->increaseReadOffset(sizeof(WireSize));
             continue;
@@ -506,8 +507,8 @@ inline bool decodeOptVector<std::string>(TuringProtoDecoder::DecodeContext* ctx,
 template <>
 inline bool decodeOptVector<db::types::Embedding::Primitive>(TuringProtoDecoder::DecodeContext* ctx,
                                                               db::ColumnOptVector<db::types::Embedding::Primitive>* typedCol,
-                                                              TuringProtoDecoder::DfColumnState* columnState) {
-    for (size_t i = 0; ctx->_rowIndex + i < columnState->_numRows; ++i) {
+                                                              DfColumnState* columnState) {
+    for (size_t i = 0; ctx->_rowIndex + i < columnState->getNumRows(); ++i) {
         if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             ctx->_rowIndex += i;
             return false;
@@ -515,7 +516,7 @@ inline bool decodeOptVector<db::types::Embedding::Primitive>(TuringProtoDecoder:
 
         auto& entry = (*typedCol)[ctx->_rowIndex + i];
 
-        const bool hasValue = columnState->_bitMask.test(ctx->_rowIndex + i);
+        const bool hasValue = columnState->getBitMask().test(ctx->_rowIndex + i);
         if (!hasValue) {
             ctx->_inBuf->increaseReadOffset(sizeof(WireSize));
             continue;

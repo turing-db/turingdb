@@ -122,7 +122,7 @@ struct MakeColumnFn {
 struct DecodeColumnFn {
     TuringProtoDecoder* _decoder {nullptr};
     db::Column* _column {nullptr};
-    TuringProtoDecoder::DfColumnState* _columnState {nullptr};
+    DfColumnState* _columnState {nullptr};
 
     template <typename T>
     bool operator()(net::proto::ColumnKind encoding) {
@@ -169,11 +169,13 @@ struct DecodeColumnFn {
 
 template <typename T>
 bool TuringProtoDecoder::decodeColumn(db::ColumnVector<T>* col, DfColumnState* colState) {
-    if (colState->_numRows == 0) {
-        if (_ctxt._inBuf->readable() < sizeof(colState->_numRows)) {
+    if (colState->getNumRows() == 0) {
+        if (_ctxt._inBuf->readable() < sizeof(WireSize)) {
             return false;
         }
-        _ctxt._inBuf->readData(&colState->_numRows, sizeof(colState->_numRows));
+        WireSize numRows = 0;
+        _ctxt._inBuf->readData(&numRows, sizeof(numRows));
+        colState->setNumRows(numRows);
     }
 
     return decodeVector(&_ctxt, col, colState);
@@ -181,26 +183,36 @@ bool TuringProtoDecoder::decodeColumn(db::ColumnVector<T>* col, DfColumnState* c
 
 template <typename T>
 bool TuringProtoDecoder::decodeColumn(db::ColumnVector<std::optional<T>>* col, DfColumnState* colState) {
-    if (colState->_numRows == 0) {
-        if (_ctxt._inBuf->readable() < sizeof(colState->_numRows)) {
+    //Check if this is the first row in the column we are decoding
+    if (colState->getNumRows() == 0) {
+        //if the wiresize length is not available in the input buffer continue later
+        if (_ctxt._inBuf->readable() < sizeof(WireSize)) {
             return false;
         }
-        _ctxt._inBuf->readData(&colState->_numRows, sizeof(colState->_numRows));
+        WireSize numRows = 0;
+        _ctxt._inBuf->readData(&numRows, sizeof(numRows));
+        colState->setNumRows(numRows);
     }
 
+    //Checking if we haven't read any rows of the column, to see if we should resize the
+    //column
     if (_ctxt._rowIndex == 0) {
-        col->resize(colState->_numRows);
+        col->resize(colState->getNumRows());
     }
 
-    if (colState->_bitMask.size() == 0) {
-        colState->_bitMask.resize(colState->_numRows);
+    //Check if we have read the bit mask size yet so we can resize our bit mask
+    if (colState->getBitMask().size() == 0) {
+        colState->getBitMask().resize(colState->getNumRows());
 
-        const size_t bytesToCopy = std::min(_ctxt._inBuf->readable(), colState->_bitMask.byteSize());
-        _ctxt._inBuf->readData(colState->_bitMask.data(), bytesToCopy);
+        const size_t bytesToCopy = std::min(_ctxt._inBuf->readable(), colState->getBitMask().byteSize());
+        _ctxt._inBuf->readData(colState->getBitMask().data(), bytesToCopy);
 
-        if (bytesToCopy != colState->_bitMask.byteSize()) {
-            _ctxt._bufferState._start = reinterpret_cast<char*>(colState->_bitMask.data());
-            _ctxt._bufferState._len = colState->_bitMask.byteSize();
+        //If the full bitmask is not available in the buffer (likely split across packets)
+        // we then save the appropriate data to the buffer state so we can coppy directly
+        // to the bitmask buffer as soon as the new packet comes in.
+        if (bytesToCopy != colState->getBitMask().byteSize()) {
+            _ctxt._bufferState._start = reinterpret_cast<char*>(colState->getBitMask().data());
+            _ctxt._bufferState._len = colState->getBitMask().byteSize();
             _ctxt._bufferState._offset = bytesToCopy;
             return false;
         }
@@ -224,9 +236,11 @@ TuringProtoDecoder::TuringProtoDecoder(db::LocalMemory* localMem,
                                        TuringProtoInBuf* inBuf,
                                        ChunkedBuffer<float>* embeddingBuffer,
                                        ChunkedBuffer<char>* stringBuffer,
-                                       db::ListBuffer<>* listBuffer)
+                                       db::ListBuffer<>* listBuffer,
+                                       std::vector<DecodedColumnSchema>& colSchemas)
     : _localMem(localMem),
-    _dfMan(dfMan)
+    _dfMan(dfMan),
+    _colSchemas(colSchemas)
 {
     _ctxt._inBuf = inBuf;
     _ctxt._embeddingBuffer = embeddingBuffer;
@@ -238,18 +252,17 @@ void TuringProtoDecoder::reset() {
     _ctxt.reset();
 }
 
-void TuringProtoDecoder::decodeIncomingData(db::Dataframe* df,
-                                            std::vector<DecodedColumnSchema>& colSchemas) {
-    bioassert(df->size() == colSchemas.size(), "Dataframe should have the same number of columns as we have read from the packet");
+void TuringProtoDecoder::decodeIncomingData(db::Dataframe* df) {
+    bioassert(df->size() == _colSchemas.size(), "Dataframe should have the same number of columns as we have read from the packet");
 
     while (_ctxt._colIndex < df->size()) {
-        auto& schema = colSchemas[_ctxt._colIndex];
+        auto& schema = _colSchemas[_ctxt._colIndex];
         auto* col = df->cols()[_ctxt._colIndex]->getColumn();
 
         const bool completed = dispatchColumnType(
-            net::proto::ColumnInternalKind(schema._header._typeCode),
-            net::proto::ColumnKind(schema._header._encoding),
-            DecodeColumnFn {this, col, &schema._colState});
+            net::proto::ColumnInternalKind(schema.getHeader()._typeCode),
+            net::proto::ColumnKind(schema.getHeader()._encoding),
+            DecodeColumnFn {this, col, &schema.getColState()});
 
         if (!completed) {
             break;
@@ -260,37 +273,35 @@ void TuringProtoDecoder::decodeIncomingData(db::Dataframe* df,
     }
 }
 
-void TuringProtoDecoder::decodeIncomingChunkHeader(db::Dataframe* df,
-                                                   std::vector<DecodedColumnSchema>& colSchemas) {
+void TuringProtoDecoder::decodeIncomingChunkHeader(db::Dataframe* df) {
     bioassert(df, "decodeIncomingChunkHeader called with null dataframe");
 
     WireSize columnCount = 0;
     _ctxt._inBuf->readData(&columnCount, sizeof(columnCount));
 
-    colSchemas.resize(columnCount);
+    _colSchemas.resize(columnCount);
 
     for (WireSize i = 0; i < columnCount; ++i) {
-        auto& schema = colSchemas[i];
-        _ctxt._inBuf->readHeader(&(schema._header));
+        auto& schema = _colSchemas[i];
+        _ctxt._inBuf->readHeader(&(schema.getHeader()));
 
-        _ctxt._inBuf->ensureReadable(schema._header._nameLen);
-        schema._colName = std::string(_ctxt._inBuf->readPtr(), schema._header._nameLen);
-        _ctxt._inBuf->increaseReadOffset(schema._header._nameLen);
+        _ctxt._inBuf->ensureReadable(schema.getHeader()._nameLen);
+        schema.setColName(std::string(_ctxt._inBuf->readPtr(), schema.getHeader()._nameLen));
+        _ctxt._inBuf->increaseReadOffset(schema.getHeader()._nameLen);
 
         auto* column = dispatchColumnType(
-            net::proto::ColumnInternalKind(schema._header._typeCode),
-            net::proto::ColumnKind(schema._header._encoding),
+            net::proto::ColumnInternalKind(schema.getHeader()._typeCode),
+            net::proto::ColumnKind(schema.getHeader()._encoding),
             MakeColumnFn {_localMem});
 
         db::NamedColumn* namedColumn = db::NamedColumn::create(_dfMan, column, _dfMan->allocTag());
 
-        namedColumn->rename(schema._colName);
+        namedColumn->rename(schema.getColName());
         df->addColumn(namedColumn);
     }
 }
 
-void TuringProtoDecoder::decodeIncomingChunk(db::Dataframe* df,
-                                             std::vector<DecodedColumnSchema>& colSchemas) {
+void TuringProtoDecoder::decodeIncomingChunk(db::Dataframe* df) {
     bioassert(df, "decodeIncomingChunk called with null dataframe");
 
     if (_ctxt._bufferState._start != nullptr) {
@@ -309,5 +320,5 @@ void TuringProtoDecoder::decodeIncomingChunk(db::Dataframe* df,
         return;
     }
 
-    decodeIncomingData(df, colSchemas);
+    decodeIncomingData(df);
 }

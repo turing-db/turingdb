@@ -1,5 +1,6 @@
 add_library(turing_db_proto_common_s STATIC
 	ChunkedBuffer.cpp
+	DecodedColumnSchema.cpp
         ProtocolException.cpp
 	TuringProtoDecoder.cpp
 	TuringProtoHeaders.cpp

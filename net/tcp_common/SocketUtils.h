@@ -30,12 +30,14 @@ struct EpollEvent {
 // Cross-platform event flags
 #ifdef __APPLE__
 inline constexpr uint32_t EVENT_IN      = (1 << 0);
-inline constexpr uint32_t EVENT_RDHUP   = (1 << 1);
-inline constexpr uint32_t EVENT_HUP     = (1 << 2);
-inline constexpr uint32_t EVENT_ET      = (1 << 3);
-inline constexpr uint32_t EVENT_ONESHOT = (1 << 4);
+inline constexpr uint32_t EVENT_OUT     = (1 << 1);
+inline constexpr uint32_t EVENT_RDHUP   = (1 << 2);
+inline constexpr uint32_t EVENT_HUP     = (1 << 3);
+inline constexpr uint32_t EVENT_ET      = (1 << 4);
+inline constexpr uint32_t EVENT_ONESHOT = (1 << 5);
 #else
 inline constexpr uint32_t EVENT_IN      = EPOLLIN;
+inline constexpr uint32_t EVENT_OUT     = EPOLLOUT;
 inline constexpr uint32_t EVENT_RDHUP   = EPOLLRDHUP;
 inline constexpr uint32_t EVENT_HUP     = EPOLLHUP;
 inline constexpr uint32_t EVENT_ET      = EPOLLET;
@@ -131,6 +133,24 @@ inline constexpr uint32_t EVENT_ONESHOT = EPOLLONESHOT;
 [[nodiscard]] EpollInstance createEventInstance();
 [[nodiscard]] int eventWait(EpollInstance, EpollEvent*, int maxEvents, int timeout);
 [[nodiscard]] EpollSignal createSignalFd(EpollInstance instance);
+
+// Owns an event-loop instance (an epoll fd on Linux, a kqueue fd on macOS) and
+// closes it on destruction, so callers don't leak the descriptor on early
+// returns or exceptions.
+class EventInstance {
+public:
+    EventInstance();
+    ~EventInstance();
+
+    EventInstance(const EventInstance&) = delete;
+    EventInstance& operator=(const EventInstance&) = delete;
+
+    EpollInstance getInstance() const { return _instance; }
+    bool isValid() const { return _instance >= 0; }
+
+private:
+    EpollInstance _instance {-1};
+};
 
 void logError(const char* title);
 }
