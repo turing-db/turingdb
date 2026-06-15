@@ -40,6 +40,8 @@ and causes the cycle basis algorithm to report 2 cycles.
 2. (x)-->(x), (x)<--(x)
 Verify the generated graph is correct
 
+3. (y)<--(e)<--(x)
+
 */
 
 using namespace db;

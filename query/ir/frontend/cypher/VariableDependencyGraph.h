@@ -33,8 +33,16 @@ public:
     const auto& vars() const { return _vars; }
     const auto& edges() const { return _edges; }
 
+    /**
+     * @brief Add a directed edge with provided metadata @param data between @param src
+     * and @param tgt, if it does not already exist, otherwise, is noop.
+     * @detail Appends to @ref src->_incoming and @ref tgt->_outgoing.
+     */
     const DependencyEdge* addDirected(VariableDependency* src, VariableDependency* tgt, const EdgeMetadata& data);
 
+    /**
+    * @brief Get the cycle basis of this graph.
+    */
     std::vector<Cycle> cycleBasis();
 
     void detachCycle(const Cycle& cyc);
