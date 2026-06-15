@@ -24,7 +24,6 @@ class PatternElement;
 class VariableDependencyGraph {
 public:
     using Cycle = std::vector<VariableDependency*>;
-    using CyclicPair = std::pair<VariableDependency*, VariableDependency*>;
 
     /// Given a pattern (e.g. (n)-[e]->(m)), inserts all vars into the dependency graph
     void registerPatternElement(const PatternElement* ptn);
@@ -45,8 +44,14 @@ public:
     */
     std::vector<Cycle> cycleBasis();
 
+    /**
+    */
     void detachCycle(const Cycle& cyc);
 
+    /**
+     * @brief Rotates provided @cyc such that the element with the highest in-degree is
+     * first.
+     */
     void canonicaliseCycle(Cycle& cyc) const;
 
 private:
@@ -54,8 +59,10 @@ private:
     std::deque<VariableDependency> _vars;
     std::deque<DependencyEdge> _edges;
 
+    // Tracks whether a node has been seen in a cycle
     std::unordered_set<VariableDependency*> _seenInCycle;
 
+    // Tracks how many times a variable has been anonimised
     std::unordered_map<VariableDependency*, int> _anonymised;
 
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
