@@ -19,7 +19,6 @@
 #include "BioAssert.h"
 #include "VariableDependency.h"
 #include "decl/VarDecl.h"
-#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -82,7 +81,8 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         VariableDependency* src {nullptr};
         VariableDependency* tgt {nullptr};
 
-        if (direction == EdgePattern::Direction::Forward) {
+        const bool forward = direction == EdgePattern::Direction::Forward;
+        if (forward) {
             src = prev;
             tgt = tgtVar;
         } else {
@@ -94,7 +94,7 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         addDirected(src, edgeVar, EdgeMetadata {type});
         addDirected(edgeVar, tgt, EdgeMetadata {type});
 
-        prev = tgt;
+        prev = forward ? tgt : src;
     }
 }
 
@@ -280,9 +280,7 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
         newHead = newVariable(getNextAnonymisation(head));
         newTail = newVariable(getNextAnonymisation(head));
 
-        spdlog::info("subdividing {}-{}->{}", u->getName(), newHead->getName(), head->getName());
         subdivideWithMerge(u, newHead, head);
-        spdlog::info("subdividing {}-{}->{}", v->getName(), newTail->getName(), head->getName());
         subdivideWithMerge(v, newTail, head);
 
         // Register that we have seen these nodes in a cycle
@@ -308,9 +306,7 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     VariableDependency* mergeParent = newVariable(getNextAnonymisation(head));
     {
         EdgeMetadata data(EdgeMetadata::EdgeType::MERGE);
-        spdlog::info("adding {}->{}", merged1->getName(), mergeParent->getName());
         addDirected(merged1, mergeParent, data);
-        spdlog::info("adding {}->{}", merged2->getName(), mergeParent->getName());
         addDirected(merged2, mergeParent, data);
     }
     VariableDependency* otherInput = newVariable(getNextAnonymisation(head));
@@ -322,10 +318,8 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     newTail = startIsMerged ? otherInput : mergeParent;
 
     // Parent of the previous two merges that were just cascaded, merged into current head
-    spdlog::info("adding merge {}->{}", newHead->getName(), head->getName());
     addDirected(newHead, head, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
     // Add a temporary between the tail (unmerged end of cycle) and current head
-    spdlog::info("subdividing {}-{}->{}", v->getName(), newTail->getName(), head->getName());
     subdivideWithMerge(v, newTail, head);
 
     _seenInCycle.insert(begin(cyc), end(cyc));
