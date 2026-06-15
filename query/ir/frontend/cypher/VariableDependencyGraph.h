@@ -71,6 +71,12 @@ private:
 
     std::string getNextAnonymisation(VariableDependency* v);
 
+    /**
+     * @brief For nodes @param s, @param t connected via an arbitrarily-directed edge, e,
+     * and an arbitrary node @param mid, replaces s-[e]->t with s-[e]->mid-[merge]->t
+     * @detail Original edge is removed from variable adjacency lists, and two new edges
+     * are created. Removed edges are not removed from @ref _edges.
+     */
     void subdivideWithMerge(VariableDependency* s, VariableDependency* mid, VariableDependency* t);
 
     void subdivideWithMergeOutImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);

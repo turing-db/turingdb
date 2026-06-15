@@ -251,7 +251,7 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     DependencyEdge* mergeToDelete2 = nullptr;
 
     // If the current head has any incoming merge edges, it must have 2.
-    // Find those two merge edges, delete them, but track the source nodes
+    // Find those two merge edges, delete them, but track their source nodes
     std::erase_if(head->_incoming, [&](DependencyEdge* e) {
         const bool meta = EdgeMetadata::isMetaEdge(e->data().type());
         if (!meta) {
@@ -273,7 +273,7 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     });
 
     // Ensure we exactly 0 or 2 merge sources
-    bioassert(!((bool)merged1 ^ (bool)merged2), "Invalid merge state");
+    bioassert((merged1 && merged2) || (!merged1 && !merged2), "Invalid merge state");
 
     // If not cascading a merge, just merge the two nodes as normal
     if (!merged1 || !merged2) {
@@ -372,7 +372,6 @@ void VariableDependencyGraph::subdivideWithMerge(VariableDependency* s,
         }
     }
 
-    IRDumper::dumpMermaid(*this, std::cout);
     bioassert(false,
               "Attempted to subdivideWithMerge on two nodes that were not connected: {} and {}.",
               s->getName(), t->getName());
