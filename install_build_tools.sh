@@ -34,7 +34,9 @@ else
         # they generate the parser/lexer during the main build).
         # lsb-release provides lsb_release, used by the Kitware and LLVM apt
         # repo setup below to resolve the distro codename.
-        sudo apt-get install -y cmake build-essential m4 lsb-release
+        # patchelf is required by auditwheel repair (build.sh) to rewrite the
+        # wheel's ELF rpaths when bundling the Linux wheel.
+        sudo apt-get install -y cmake build-essential m4 lsb-release patchelf
 
         # Apache Arrow requires CMake >= 3.25, but Ubuntu 22.04 (jammy) ships
         # 3.22.x. When the distro's cmake is too old, pull a newer one from
