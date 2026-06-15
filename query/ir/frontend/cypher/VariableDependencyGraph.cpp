@@ -119,20 +119,27 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
 }
 
 std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis() {
-    using NodeSet = std::unordered_set<VariableDependency*>;
+    using VarSet = std::unordered_set<VariableDependency*>;
     using PredMap = std::unordered_map<VariableDependency*, VariableDependency*>;
-    using UsedMap = std::unordered_map<VariableDependency*, NodeSet>;
+    using VarToVarSet = std::unordered_map<VariableDependency*, VarSet>;
 
     std::vector<Cycle> cycles;
     if (_vars.empty()) {
         return cycles;
     }
 
-    NodeSet visited;
+    // Persistent across iterations of outer loop
+    VarSet visited;
 
-    // Records spanning tree from its key
-    PredMap pred;
-    UsedMap used;
+    // @ref {pred, discovered, stack} are unique to each outer iteration
+
+    PredMap pred; // Records spanning tree from its key
+    // If v is present in this map, then v is discovered.
+    // For a pair [v, set] in this map, the set used as value contains 2 types of vars:
+    // 1. The variable that "discovered" v
+    // 2. For a cycle v, ..., w, the set contains the other end of the
+    // cycle, w, stored to prevent reporting the same cycle twice at both ends
+    VarToVarSet discovered;
     std::vector<VariableDependency*> stack;
 
     Cycle cycle;
@@ -145,11 +152,13 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
         }
 
         pred.clear();
-        used.clear();
+        discovered.clear();
         stack.clear();
 
+        // Register this node as the root of the spanning tree
         pred[root] = root;
-        used[root] = {};
+        // Register this node as being discovered, but by nothing since it is root
+        discovered[root] = {};
 
         stack.push_back(root);
 
@@ -158,54 +167,58 @@ std::vector<VariableDependencyGraph::Cycle> VariableDependencyGraph::cycleBasis(
             VariableDependency* u = stack.back();
             stack.pop_back();
 
-            NodeSet& usedThisTraversal = used[u];
-
             for (DependencyEdge* edge : u->edges()) {
-                VariableDependency* neighbour = edge->_src == u ? edge->_tgt : edge->_src;
-                bioassert(neighbour != u, "Invalid self loop.");
+                VariableDependency* adj = edge->_src == u ? edge->_tgt : edge->_src;
+                bioassert(adj != u, "Invalid self loop.");
 
-                const bool encountered = used.contains(neighbour);
+                const bool encountered = discovered.contains(adj);
                 if (!encountered) {
-                    stack.push_back(neighbour);
-                    pred[neighbour] = u;
-                    used[neighbour] = {u};
+                    stack.push_back(adj);
+                    pred[adj] = u;
+                    discovered[adj] = {u};
                     continue;
                 }
 
                 // Otherwise, already encountered: found a cycle.
 
-                const bool cycleAlreadyLogged = usedThisTraversal.contains(neighbour);
+                const bool cycleAlreadyLogged = discovered[u].contains(adj);
                 if (cycleAlreadyLogged) {
                     continue;
                 }
 
-                // TODO: Remove, we should have a simple graph?
-                // XXX: Consider (x)-->(x)
-                // Parallel edge: u is neighbour's direct tree-parent, so pred walk would
-                // start above u and never descend to neighbour. Emit 2-cycle directly.
-                const bool isParallelEdge = pred.contains(neighbour) && pred[neighbour] == u;
-                if (isParallelEdge) {
-                    cycles.push_back({u, neighbour});
-                    usedThisTraversal.insert(neighbour);
+                // Check for edge case for 2-element cycle, e.g. in (x)-->(x)
+                const bool parallelEdge = pred[adj] == u && pred.contains(adj);
+                if (parallelEdge) {
+                    cycles.push_back({u, adj});
+                    discovered[u].insert(adj);
                     continue;
                 }
 
-                // Back-edge to ancestor: walk pred from u until hitting neighbour's parent.
-                const NodeSet& pn = used[neighbour];
                 cycle.clear();
-                cycle.push_back(neighbour);
+
+                // We have an edge (u, adj) such that adj was already
+                // discovered. discovered[adj] contains the node which first
+                // discovered adj.
+                const VarSet& adjDiscoverers = discovered[adj];
+                cycle.push_back(adj);
                 cycle.push_back(u);
 
+                // Trace back the predecessors in the spanning tree from the parent of u.
+                // Any node not in adjDiscoverers is part of the cycle. First node
+                // encountered in adjDiscoverers is the end of the cycle, as it is a
+                // node which leads to adj, just as u does.
                 VariableDependency* p = pred[u];
-                while (!pn.contains(p)) {
-                    cycle.push_back(p);
+                while (!adjDiscoverers.contains(p)) {
+                    cycle.push_back(p); // Element in the cycle
                     p = pred[p];
                 }
-
+                // Add the element included in adjDiscoverers, the end of the cycle
                 cycle.push_back(p);
 
                 cycles.push_back(cycle);
-                used[neighbour].insert(u);
+                // Record u as the cycle partner of adj to prevent reporting this
+                // cycle again
+                discovered[adj].insert(u);
             }
         }
 
