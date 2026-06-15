@@ -2,6 +2,7 @@ set (SOURCES
   VariableDependency.cpp
   VariableDependencyGraph.cpp
   VariableDependencyGraphDumper.cpp
+  VariableDependencyGraphTraversal.cpp
 )
 
 add_library(turing_db_frontend_cypher_s STATIC ${SOURCES})

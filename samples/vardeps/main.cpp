@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <string>
 
@@ -16,6 +17,7 @@
 #include "SystemManager.h"
 #include "TuringConfig.h"
 #include "VariableDependency.h"
+#include "VariableDependencyGraphTraversal.h"
 #include "versioning/Transaction.h"
 
 #include "VariableDependencyGraph.h"
