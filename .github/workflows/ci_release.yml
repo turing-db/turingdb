@@ -33,7 +33,12 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build-release
-    runs-on: ubuntu-24.04-turing
+    # GitHub-hosted, not the self-hosted ubuntu-*-turing runners: pypa/gh-action-pypi-publish
+    # is a Docker action, and on the containerized turing runners its nested
+    # `docker run -v <workspace>:/github/workspace` mounts a path the host daemon
+    # can't see, so wheel/ is empty inside the container ("Cannot find file 'wheel/*'").
+    # This job only downloads artifacts and uploads, so it needs no self-hosted resources.
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get-version.outputs.version }}
     environment:
@@ -72,6 +77,8 @@ jobs:
         with:
           packages-dir: wheel/
           verbose: true
+          # Tolerate files already on PyPI so a partial upload can be safely re-run.
+          skip-existing: true
 
   test-published-wheel:
     name: Test published wheel 
