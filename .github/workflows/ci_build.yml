@@ -240,6 +240,16 @@ jobs:
     - name: Disk usage (before regress)
       run: df -h
 
+    # The json_escape_properties regress test shells out to `node`, which the
+    # GitHub-hosted ubuntu ARM images don't ship (the x86/turing runners do).
+    # Installed here (not in install_build_tools.sh) to keep node out of the
+    # dependency cache key, since it is only a regress-runtime dependency.
+    - name: Install Node.js (GitHub-hosted ARM)
+      if: contains(matrix.os, 'arm')
+      uses: actions/setup-node@v4
+      with:
+        node-version: 'lts/*'
+
     # The regress suite assumes exclusive use of the host (fixed port 6666 and a
     # host-wide `pkill -9 turingdb`), but several self-hosted runner instances share
     # one physical machine. Serialize regress per host with a kernel flock that the OS
