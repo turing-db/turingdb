@@ -33,6 +33,15 @@ jobs:
     # and macos*-turing labels are self-hosted runners; ubuntu-*-arm are GitHub-hosted.
     runs-on: ${{ matrix.os }}
 
+    # Cap build parallelism at 4 across every step. The shared self-hosted runners
+    # share host memory across instances, so -j nproc on the heavy LLVM/MLIR (and
+    # wheel) compiles trips the OOM killer ("Killed signal terminated program
+    # cc1plus"). BUILD_JOBS feeds dependencies.sh; CMAKE_BUILD_PARALLEL_LEVEL caps
+    # the scikit-build-core wheel build.
+    env:
+      BUILD_JOBS: 4
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+
     steps:
     # Only the disk-constrained GitHub-hosted Linux runners (the -arm labels)
     # need this. The self-hosted -turing containers have ample disk, none of the

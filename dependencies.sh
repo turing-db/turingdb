@@ -1,8 +1,13 @@
 #!/bin/bash
 set -e
 
-# Restrict number of jobs to 4 on macOS to avoid freeze
-if [[ "$(uname)" == "Darwin" ]]; then
+# Number of parallel build jobs. BUILD_JOBS overrides everything (CI sets it to
+# 4: the shared runners share host memory across instances, and -j nproc on the
+# heavy LLVM/MLIR build trips the OOM killer). macOS is capped at 4 to avoid
+# freezing the shared minis; everywhere else defaults to nproc.
+if [[ -n "${BUILD_JOBS:-}" ]]; then
+    NUM_JOBS=${BUILD_JOBS}
+elif [[ "$(uname)" == "Darwin" ]]; then
     NUM_JOBS=4
 else
     NUM_JOBS=$(nproc)
@@ -537,37 +542,9 @@ fi
 
 cmake "${LLVM_CMAKE_ARGS[@]}" $LLVM_CMAKE_DIR
 
-# The heaviest MLIR translation units (e.g. LLVMDialect.cpp) can each consume
-# several GB in cc1plus at -O3. Building with -j nproc on a high-core,
-# memory-limited runner trips the OOM killer ("Killed signal terminated program
-# cc1plus"). Cap the LLVM/MLIR build at roughly one job per 2GB of available
-# memory (the cgroup limit on containers, else MemTotal), never above NUM_JOBS
-# and never below 1. The other dependencies are small and stay at -j NUM_JOBS.
-LLVM_JOBS=$NUM_JOBS
-if [[ "$(uname)" == "Linux" ]]; then
-    if [[ -r /sys/fs/cgroup/memory.max ]] && [[ "$(cat /sys/fs/cgroup/memory.max)" != "max" ]]; then
-        MEM_BYTES=$(cat /sys/fs/cgroup/memory.max)
-    elif [[ -r /sys/fs/cgroup/memory/memory.limit_in_bytes ]]; then
-        MEM_BYTES=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
-    else
-        MEM_BYTES=0
-    fi
-
-    # Treat an unset/unlimited cgroup value (> 1TB) as "no limit" and fall back
-    # to the host's MemTotal.
-    if [[ "$MEM_BYTES" -le 0 ]] || [[ "$MEM_BYTES" -gt 1099511627776 ]]; then
-        MEM_BYTES=$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) * 1024 ))
-    fi
-
-    MEM_JOBS=$(( MEM_BYTES / 2147483648 ))
-    if [[ "$MEM_JOBS" -lt "$LLVM_JOBS" ]]; then
-        LLVM_JOBS=$MEM_JOBS
-    fi
-    if [[ "$LLVM_JOBS" -lt 1 ]]; then
-        LLVM_JOBS=1
-    fi
-fi
-
-echo "Building LLVM/MLIR with -j ${LLVM_JOBS} (NUM_JOBS=${NUM_JOBS})"
-cmake --build $LLVM_BUILD_DIR -j $LLVM_JOBS -t mlir-opt mlir-translate mlir-transform-opt mlir-runner
-cmake --build $LLVM_BUILD_DIR -j $LLVM_JOBS -t install
+# The heaviest MLIR translation units (e.g. LLVMDialect.cpp) use several GB each
+# in cc1plus at -O3, so on the shared CI runners NUM_JOBS is capped (via
+# BUILD_JOBS) to keep -j from tripping the OOM killer ("Killed signal terminated
+# program cc1plus").
+cmake --build $LLVM_BUILD_DIR -j $NUM_JOBS -t mlir-opt mlir-translate mlir-transform-opt mlir-runner
+cmake --build $LLVM_BUILD_DIR -j $NUM_JOBS -t install
