@@ -47,18 +47,12 @@ public:
 
     void detachCycle(const Cycle& cyc);
 
-    Cycle getCycle();
-    Cycle dfs(VariableDependency* cur, VariableDependency* prev, bool fromMeta = false);
     void canonicaliseCycle(Cycle& cyc) const;
 
 private:
     /// Variables whose dependencies are tracked by this class
     std::deque<VariableDependency> _vars;
     std::deque<DependencyEdge> _edges;
-
-    std::unordered_set<const VariableDependency*> _dfsVisited;
-    std::vector<VariableDependency*> _dfsPath;
-    std::unordered_set<VariableDependency*> _dfsPathSet;
 
     std::unordered_set<VariableDependency*> _seenInCycle;
 

@@ -78,20 +78,7 @@ static void inspectVarDepGraph(CypherAST* ast) {
         fmt::print("\n");
     };
 
-    [[maybe_unused]] const auto iterative = [&]() {
-        VariableDependencyGraph::Cycle cyc;
-        for (;;) {
-            cyc = vdg.getCycle();
-            if (cyc.empty()) {
-                break;
-            }
-            printCycle(cyc);
-            vdg.detachCycle(cyc);
-            IRDumper::dumpMermaid(vdg, std::cout);
-        }
-    };
-
-    [[maybe_unused]] const auto basis = [&]() {
+    const auto basis = [&]() {
         auto cycs = vdg.cycleBasis();
         for (auto& c : cycs) {
             printCycle(c);
@@ -104,7 +91,6 @@ static void inspectVarDepGraph(CypherAST* ast) {
         }
     };
 
-    // iterative();
     basis();
     IRDumper::dumpMermaid(vdg, std::cout);
 }
