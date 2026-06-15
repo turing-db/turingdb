@@ -19,9 +19,11 @@ class PatternElement;
  * @brief Graph representation of the dependencies among variables, generated from
  * an analyzed AST.
  *
- * @detail The graph holds the following invariant:
+ * @detail The graph holds the following invariants:
  * - for nodes u and v such that u::_outgoing contains an edge, e,  with @ref
  *   DependencyEdge::_tgt = v, then v::_incoming contains e
+ * - any node has precisely zero or two incoming meta edges
+ *   (see: DependencyEdge::isMetaEdge)
  *
  * A @ref DependencyEdge, e, in @ref _edges may become disconnected in the sense that no
  * @ref VariableDependency, v, in @ref _vars may have e in v::_incoming or v::_outgoing.
@@ -41,28 +43,10 @@ public:
     const auto& edges() const { return _edges; }
 
     /**
-     * @brief Add a directed edge with provided metadata @param data between @param src
-     * and @param tgt, if it does not already exist, otherwise, is noop.
-     * @detail Appends to @ref src->_incoming and @ref tgt->_outgoing.
+     * @brief Removes all cycles in this graph by replacing the cyclic edges with meta
+     * edges.
      */
-    const DependencyEdge* addDirected(VariableDependency* src, VariableDependency* tgt, const EdgeMetadata& data);
-
-    /**
-    * @brief Get the cycle basis of this graph.
-    */
-    void cycleBasis(std::vector<Cycle>& cycles);
-
-    /**
-     * @brief Removes a non-meta cycle by detaching the cycle and replacing the critical
-     * edges via meta edges.
-     */
-    void detachCycle(const Cycle& cyc);
-
-    /**
-     * @brief Rotates provided @cyc such that the element with the highest in-degree is
-     * first.
-     */
-    void canonicaliseCycle(Cycle& cyc) const;
+    void eliminateCycles();
 
 private:
     /// Variables whose dependencies are tracked by this class
@@ -82,6 +66,13 @@ private:
     std::string getNextAnonymisation(VariableDependency* v);
 
     /**
+     * @brief Add a directed edge with provided metadata @param data between @param src
+     * and @param tgt, if it does not already exist, otherwise, is noop.
+     * @detail Appends to @ref src->_incoming and @ref tgt->_outgoing.
+     */
+    const DependencyEdge* addDirected(VariableDependency* src, VariableDependency* tgt, const EdgeMetadata& data);
+
+    /**
      * @brief For nodes @param s, @param t connected via an arbitrarily-directed edge, e,
      * and an arbitrary node @param mid, replaces s-[e]->t with s-[e]->mid-[merge]->t
      * @detail Original edge is removed from variable adjacency lists, and two new edges
@@ -91,6 +82,23 @@ private:
 
     void subdivideWithMergeOutImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
     void subdivideWithMergeIncImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
+
+    /**
+    * @brief Get the cycle basis of this graph.
+    */
+    void cycleBasis(std::vector<Cycle>& cycles);
+
+    /**
+     * @brief Removes a non-meta cycle by detaching the cycle and replacing the critical
+     * edges via meta edges.
+     */
+    void detachCycle(const Cycle& cyc);
+
+    /**
+     * @brief Rotates provided @cyc such that the element with the highest in-degree is
+     * first.
+     */
+    void canonicaliseCycle(Cycle& cyc) const;
 };
 
 }

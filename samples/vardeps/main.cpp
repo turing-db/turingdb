@@ -71,28 +71,14 @@ static void inspectVarDepGraph(CypherAST* ast) {
     }
     IRDumper::dumpMermaid(vdg, std::cout);
 
-    const auto printCycle = [](auto& c) {
+    [[maybe_unused]] const auto printCycle = [](auto& c) {
         for (auto* v : c) {
             fmt::print("{} ", v->getName());
         }
         fmt::print("\n");
     };
 
-    std::vector<VariableDependencyGraph::Cycle> cycs;
-    const auto basis = [&]() {
-        vdg.cycleBasis(cycs);
-        for (auto& c : cycs) {
-            printCycle(c);
-            vdg.canonicaliseCycle(c);
-            spdlog::warn("CANONICALISED:");
-            printCycle(c);
-            fmt::println("");
-            vdg.detachCycle(c);
-            IRDumper::dumpMermaid(vdg, std::cout);
-        }
-    };
-
-    basis();
+    vdg.eliminateCycles();
     IRDumper::dumpMermaid(vdg, std::cout);
 }
 
