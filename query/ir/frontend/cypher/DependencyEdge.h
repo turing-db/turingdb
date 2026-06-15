@@ -29,8 +29,8 @@ public:
 private:
     friend VariableDependencyGraph;
 
-    VariableDependency* _src;
-    VariableDependency* _tgt;
+    VariableDependency* _src {nullptr};
+    VariableDependency* _tgt {nullptr};
     EdgeMetadata _data;
 };
 

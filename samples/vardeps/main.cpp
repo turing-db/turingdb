@@ -78,8 +78,9 @@ static void inspectVarDepGraph(CypherAST* ast) {
         fmt::print("\n");
     };
 
+    std::vector<VariableDependencyGraph::Cycle> cycs;
     const auto basis = [&]() {
-        auto cycs = vdg.cycleBasis();
+        vdg.cycleBasis(cycs);
         for (auto& c : cycs) {
             printCycle(c);
             vdg.canonicaliseCycle(c);

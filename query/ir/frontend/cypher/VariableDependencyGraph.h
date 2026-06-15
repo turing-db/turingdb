@@ -18,6 +18,14 @@ class PatternElement;
 /**
  * @brief Graph representation of the dependencies among variables, generated from
  * an analyzed AST.
+ *
+ * @detail The graph holds the following invariant:
+ * - for nodes u and v such that u::_outgoing contains an edge, e,  with @ref
+ *   DependencyEdge::_tgt = v, then v::_incoming contains e
+ *
+ * A @ref DependencyEdge, e, in @ref _edges may become disconnected in the sense that no
+ * @ref VariableDependency, v, in @ref _vars may have e in v::_incoming or v::_outgoing.
+ *
  * @warn Ensure any AST elements passed to this class have been appropriately analysed, to
  * populate @ref VarDecl s.
  */
@@ -42,10 +50,12 @@ public:
     /**
     * @brief Get the cycle basis of this graph.
     */
-    std::vector<Cycle> cycleBasis();
+    void cycleBasis(std::vector<Cycle>& cycles);
 
     /**
-    */
+     * @brief Removes a non-meta cycle by detaching the cycle and replacing the critical
+     * edges via meta edges.
+     */
     void detachCycle(const Cycle& cyc);
 
     /**
