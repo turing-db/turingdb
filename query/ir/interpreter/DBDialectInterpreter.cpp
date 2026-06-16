@@ -30,9 +30,7 @@ DBDialectInterpreter::~DBDialectInterpreter() {
 }
 
 DBDialectInterpreter::Status DBDialectInterpreter::run() {
-    // The module holds the query as a db-dialect "main" func.func; lower it into
-    // an nl-dialect "main" collected in a fresh module, then run that through
-    // the same translate-and-execute pipeline as NLInterpreter.
+    // Get main function
     const mlir::func::FuncOp dbFunction = _module.lookupSymbol<mlir::func::FuncOp>("main");
     if (!dbFunction) {
         throw IRException("db module has no 'main' function to interpret");
@@ -45,30 +43,39 @@ DBDialectInterpreter::Status DBDialectInterpreter::run() {
     double translateMilliseconds {0.0};
     double executeMilliseconds {0.0};
 
+    // Lowering db to nl
     mlir::func::FuncOp nlFunction;
     {
         const TimePoint start = Clock::now();
+
         DBLowering lowering(context);
         nlFunction = lowering.lower(dbFunction, *nlModule);
+
         const TimePoint end = Clock::now();
         lowerMilliseconds = duration<Milliseconds>(start, end);
     }
 
+    // Translation to NLProgram
     NLProgram program;
     program.setChunkSize(_chunkSize);
 
     {
         const TimePoint start = Clock::now();
+
         NLTranslator translator(&program, _memory);
         translator.translate(nlFunction);
+
         const TimePoint end = Clock::now();
         translateMilliseconds = duration<Milliseconds>(start, end);
     }
 
+    // NL program execution
     {
         const TimePoint start = Clock::now();
+
         NLExecutor executor(_view, &program, _sink);
         executor.run();
+
         const TimePoint end = Clock::now();
         executeMilliseconds = duration<Milliseconds>(start, end);
     }

@@ -21,12 +21,14 @@ public:
     void translate(const mlir::func::FuncOp& function);
 
 private:
+    // Kind of iterators passed to each for loop
     enum class IteratorKind {
         ScanNodes,
         GetOutEdges,
         GetInEdges,
     };
 
+    // Settings of the iterators passed to each for loop
     struct IteratorConfig {
         IteratorKind _kind {IteratorKind::ScanNodes};
         mlir::Value _inputNodes;
