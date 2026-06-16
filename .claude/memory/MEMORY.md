@@ -55,6 +55,9 @@
 - [Friend placement](feedback_friend_placement.md) — `friend` declarations at top of `public:`, no `class` keyword
 - [ObjectMap reserve/publish](feedback_objectmap_reserve_publish.md) — reserve name before the load, publish after, work in between
 
+## Distributed / Replication Design
+- [Distribution design docs + unified identity model](reference_distribution_design_docs.md) — REPLICATE.md / GRAPHHUB.md / hub-spec live in sibling clones ($HOME); unified identity model in docs/IDENTITY_MODEL.md
+
 ## Workflow Preferences
 - [Test-first: write failing test before fix](feedback_test_first.md)
 - [Explicit CI runner labels](feedback_explicit_ci_runner_labels.md) — put real runner labels in each workflow's os_list + `runs-on: ${{ matrix.os }}`, not a computed ternary / runner-group object
