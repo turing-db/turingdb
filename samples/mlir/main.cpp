@@ -285,7 +285,10 @@ void runModuleMain(mlir::ModuleOp& module,
 
     if (classifyDialect(mainFunction) == QueryDialect::DB) {
         DBDialectInterpreter interpreter(module, &view, &sink, &memory);
-        interpreter.run();
+        const DBDialectInterpreter::Status status = interpreter.run();
+        std::cout << "[DBDialectInterpreter] lowering: " << status.getLowerMilliseconds() << " ms, "
+                  << "translation: " << status.getTranslateMilliseconds() << " ms, "
+                  << "execution: " << status.getExecuteMilliseconds() << " ms\n";
     } else {
         NLInterpreter interpreter(module, &view, &sink, &memory);
         interpreter.run();
