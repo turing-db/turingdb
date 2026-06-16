@@ -22,6 +22,7 @@
 #include "HTTP.h"
 #include "HTTPResponseWriter.h"
 #include "TCPConnection.h"
+#include "AuthGate.h"
 
 using namespace db;
 
@@ -43,6 +44,11 @@ void DBServerProcessor::process(net::AbstractThreadContext* abstractContext) {
     const auto& httpInfo = parser.getHttpInfo();
     if (httpInfo._method != net::HTTP::Method::POST) {
         _writer.writeHttpError(net::HTTP::Status::METHOD_NOT_ALLOWED);
+        return;
+    }
+
+    if (!isRequestAuthorized(_db.getAuthenticator(), httpInfo)) {
+        _writer.writeHttpError(net::HTTP::Status::UNAUTHORIZED);
         return;
     }
 

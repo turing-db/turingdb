@@ -45,6 +45,7 @@ struct Info {
     Payload _payload;
     EndpointIndex _endpoint {-1};
     Params _params;
+    std::string_view _authorization;
 
     void reset() {
         _method = HTTP::Method::UNKNOWN;
@@ -52,6 +53,7 @@ struct Info {
         _path = "";
         _payload = "";
         _endpoint = -1;
+        _authorization = "";
 
         for (auto& p : _params) {
             p = "";

@@ -39,6 +39,7 @@ class TuringDB:
         host=_UNSET,
         data_dir=_UNSET,
         port: Optional[Union[int, str]] = None,
+        token: Optional[str] = None,
     ):
         resolved_type = type if type is not None else _default_type()
 
@@ -46,6 +47,10 @@ class TuringDB:
             if host is not _UNSET:
                 raise TuringDBException(
                     "host is not valid for type='embedded'; pass data_dir instead"
+                )
+            if token is not None:
+                raise TuringDBException(
+                    "token is not valid for type='embedded'; embedded access is in-process and unauthenticated"
                 )
             resolved_data_dir = None if data_dir is _UNSET else data_dir
             self._impl: Union[HTTPClient, BinaryClient, EmbeddedClient] = EmbeddedClient(
@@ -57,7 +62,7 @@ class TuringDB:
                     "data_dir is not valid for type='json'; pass host instead"
                 )
             resolved_host = "http://localhost:6666" if host is _UNSET else host
-            self._impl = HTTPClient(host=resolved_host)
+            self._impl = HTTPClient(host=resolved_host, token=token)
         elif resolved_type == "native":
             if data_dir is not _UNSET:
                 raise TuringDBException(
@@ -65,7 +70,7 @@ class TuringDB:
                 )
             resolved_host = "http://localhost:6666" if host is _UNSET else host
             binary_host, binary_port = _split_host_port(resolved_host, port)
-            self._impl = BinaryClient(host=binary_host, port=binary_port)
+            self._impl = BinaryClient(host=binary_host, port=binary_port, token=token)
         else:
             raise TuringDBException(
                 f"Unknown type: {resolved_type!r} (expected 'json', 'native', or 'embedded')"

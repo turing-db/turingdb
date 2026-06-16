@@ -1,6 +1,7 @@
 #include "TuringClient.h"
 
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <netdb.h>
 #include <sys/socket.h>
@@ -82,6 +83,13 @@ TuringClient::TuringClient(const std::string& remoteAddress,
     _localMem(localMem),
     _inBuf(bufferCapacity)
 {
+    // Default the auth token from the environment so C++ consumers (shell,
+    // tools) authenticate automatically against an -auth-on server. An explicit
+    // setAuthToken() overrides this.
+    const char* envToken = getenv("TURINGDB_AUTH_TOKEN");
+    if (envToken != nullptr && *envToken != '\0') {
+        _authToken = envToken;
+    }
 }
 
 TuringClient::~TuringClient() {
@@ -177,6 +185,13 @@ void TuringClient::sendRequest(const std::string& query) {
     headers += "Content-Length: ";
     headers += std::to_string(query.size());
     headers += "\r\n";
+
+    if (!_authToken.empty()) {
+        headers += "Authorization: Bearer ";
+        headers += _authToken;
+        headers += "\r\n";
+    }
+
     headers += "Connection: Keep-Alive\r\n";
     headers += "\r\n";
 

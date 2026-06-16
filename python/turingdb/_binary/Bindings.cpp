@@ -24,6 +24,7 @@ NB_MODULE(_turingproto, m) {
         .def("set_remote_address", &PyTuringClient::setRemoteAddress, nb::arg("address"))
         .def("set_remote_port", &PyTuringClient::setRemotePort, nb::arg("port"))
         .def("set_graph_name", &PyTuringClient::setGraphName, nb::arg("name"))
+        .def("set_auth_token", &PyTuringClient::setAuthToken, nb::arg("token"))
         .def("set_change_id", &PyTuringClient::setChangeID, nb::arg("change_id"))
         .def("clear_change_id", &PyTuringClient::clearChangeID)
         .def("set_commit_hash", &PyTuringClient::setCommitHash, nb::arg("commit_hash"))

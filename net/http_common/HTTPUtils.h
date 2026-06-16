@@ -10,6 +10,31 @@
 
 namespace net::http {
 
+// ---- ASCII case-insensitive matching ---------------------------------------
+
+// Locale-independent ASCII lowercase: folds 'A'-'Z' to 'a'-'z' and leaves every
+// other byte untouched. Unlike <ctype.h> tolower this never consults the
+// process C locale, so header-name matching stays stable regardless of
+// LC_CTYPE (e.g. the Turkish dotless-i fold can never break a match).
+inline constexpr char asciiToLower(char c) {
+    return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+// Case-insensitive (ASCII) equality against an already-lowercase needle.
+inline bool equalsIgnoreCaseAscii(std::string_view value, std::string_view lowercase) {
+    if (value.size() != lowercase.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < value.size(); i++) {
+        if (asciiToLower(value[i]) != lowercase[i]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // Reusable HTTP/1.1 write-path helpers. Each `write*` function memcpy's its
 // bytes into a caller-provided char* dst and returns the number of bytes
 // written. The caller passes the remaining capacity at dst as dstSize; the
