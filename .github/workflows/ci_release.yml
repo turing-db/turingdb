@@ -98,7 +98,10 @@ jobs:
 
       - name: Install turingdb from PyPI
         run: |
-          uv venv .venv --python ${{ matrix.python_version }}
+          # --clear: the self-hosted runners reuse their workspace between jobs,
+          # so a stale .venv from a previous run makes `uv venv` error out
+          # ("A virtual environment already exists"). Recreate it cleanly.
+          uv venv .venv --clear --python ${{ matrix.python_version }}
           sleep 120
           for i in 1 2 3 4 5; do
             uv pip install turingdb==${{ needs.publish.outputs.version }} --prerelease allow --refresh --python .venv/bin/python && break
