@@ -14,11 +14,11 @@ class LocalMemory;
 
 class DBDialectInterpreter {
 public:
-    // Wall-clock timing of one run, broken down by the three stages run()
-    // performs: db->nl lowering, nl translation and execution, in milliseconds.
+    // Statistics of an interpreter run
     class Status {
     public:
         Status() = default;
+
         Status(double lowerMilliseconds, double translateMilliseconds, double executeMilliseconds)
             : _lowerMilliseconds(lowerMilliseconds),
             _translateMilliseconds(translateMilliseconds),
@@ -41,6 +41,7 @@ public:
                          NLOutputSink* sink,
                          LocalMemory* memory,
                          size_t chunkSize = ChunkConfig::CHUNK_SIZE);
+
     ~DBDialectInterpreter();
 
     Status run();

@@ -25,16 +25,11 @@ NLTranslator::~NLTranslator() {
 }
 
 void NLTranslator::translate(const mlir::func::FuncOp& function) {
-    // The op verifiers carry the type guarantees the column casts below rely
-    // on. The const handle converts to Operation* through its const
-    // conversion operator.
+    // Check MLIR verifier on the function
     if (mlir::failed(mlir::verify(function))) {
         throw IRException("nl function failed MLIR verification");
     }
 
-    // The generated accessors are non-const, so the const handle is read
-    // through its const operator-> into the generic Operation API: region 0
-    // of a func.func is its body
     mlir::Region& bodyRegion = function->getRegion(0);
     if (!bodyRegion.hasOneBlock()) {
         throw IRException("NLTranslator expects a function with a single block");
@@ -71,8 +66,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
 }
 
 void NLTranslator::translateFor(const nl::For& forLoop, NLStmtContainer* body) {
-    // The iterator is the only operand of nl.for and the loop body is the
-    // single block of its only region, both read through the const operator->
+    // Fetch the iterator associated to this loop
     const auto configIt = _iteratorConfigs.find(forLoop->getOperand(0));
     if (configIt == _iteratorConfigs.end()) {
         throw IRException("nl.for iterator must be produced by an nl source operation");
@@ -81,6 +75,7 @@ void NLTranslator::translateFor(const nl::For& forLoop, NLStmtContainer* body) {
     const IteratorConfig& config = configIt->second;
     mlir::Block& loopBody = forLoop->getRegion(0).front();
 
+    // Translate the loop differently depending on the kind of iterator associated
     if (config._kind == IteratorKind::ScanNodes) {
         translateScanLoop(loopBody, body);
     } else {
@@ -119,12 +114,10 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
                                                                            edgeTypes,
                                                                            targets);
 
-    // The scratch indices column gets the same up-front reservation as the
-    // other columns, keeping execution allocation-free
+    // Reserve scratch indices column
     loopData->getIndices()->reserve(_program->getChunkSize());
 
-    // One carried chunk per columns_to_filter entry, bound as trailing loop
-    // variables after the four fixed chunks
+    // Allocate carried columns in the carried set
     const auto inputArgument = mlir::dyn_cast<mlir::BlockArgument>(config._inputNodes);
     const size_t carriedCount = config._carriedColumns.size();
     for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
@@ -160,8 +153,6 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
 }
 
 void NLTranslator::translateOutput(const nl::Output& output, NLStmtContainer* body) {
-    // The columns are the only operands of nl.output, read through the const
-    // operator-> since the generated accessors are non-const
     const mlir::OperandRange columns = output->getOperands();
     if (columns.empty()) {
         throw IRException("nl.output requires at least one column");
@@ -171,12 +162,7 @@ void NLTranslator::translateOutput(const nl::Output& output, NLStmtContainer* bo
         throw IRException("nl.output must appear inside an nl.for body");
     }
 
-    // The output chunks are zipped into rows, so they must all describe the
-    // same loop step: block arguments of the innermost enclosing nl.for. An
-    // outer loop variable has no per-row correspondence to the current step -
-    // it must be carried through columns_to_filter to reach this depth. The
-    // op constrains only types, so a cross-loop operand passes MLIR
-    // verification and has to be rejected here.
+    // Check that the columns passed to output are all variables of the innermost loop
     mlir::Block* outputBlock = output->getBlock();
 
     NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
@@ -234,8 +220,7 @@ Column* NLTranslator::allocColumnForKind(NLChunkKind kind) {
 }
 
 Column* NLTranslator::getColumn(mlir::Value chunkValue) const {
-    // Chunk SSA values only exist as nl.for block arguments, each of which
-    // was registered when its loop was translated
+    // Get allocated column for a given MLIR Value
     const auto slotIt = _valueSlots.find(chunkValue);
     if (slotIt == _valueSlots.end()) {
         throw IRException("Chunk value must be a loop variable of an enclosing nl.for");

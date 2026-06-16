@@ -1,7 +1,5 @@
 #include "NLInterpreter.h"
 
-#include <iostream>
-
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/SymbolTable.h"
 
@@ -30,9 +28,8 @@ NLInterpreter::NLInterpreter(const mlir::ModuleOp& module,
 NLInterpreter::~NLInterpreter() {
 }
 
-void NLInterpreter::run() {
-    // The module holds the nl program as its "main" func.func; the translator
-    // lowers that function's body into the NLProgram's statement tree
+NLInterpreter::Status NLInterpreter::run() {
+    // Get main function
     const mlir::func::FuncOp function = _module.lookupSymbol<mlir::func::FuncOp>("main");
     if (!function) {
         throw IRException("nl module has no 'main' function to interpret");
@@ -41,25 +38,30 @@ void NLInterpreter::run() {
     NLProgram program;
     program.setChunkSize(_chunkSize);
 
-    float translateMilliseconds {0.0f};
-    float executeMilliseconds {0.0f};
+    double translateMilliseconds {0.0};
+    double executeMilliseconds {0.0};
 
+    // Translation to an NLProgram (the thing that will be executed)
     {
         const TimePoint start = Clock::now();
+
         NLTranslator translator(&program, _memory);
         translator.translate(function);
+
         const TimePoint end = Clock::now();
         translateMilliseconds = duration<Milliseconds>(start, end);
     }
 
+    // Execute nl program
     {
         const TimePoint start = Clock::now();
+
         NLExecutor executor(_view, &program, _sink);
         executor.run();
+
         const TimePoint end = Clock::now();
         executeMilliseconds = duration<Milliseconds>(start, end);
     }
 
-    std::cout << "[NLInterpreter] translation: " << translateMilliseconds << " ms, "
-              << "execution: " << executeMilliseconds << " ms\n";
+    return Status(translateMilliseconds, executeMilliseconds);
 }
