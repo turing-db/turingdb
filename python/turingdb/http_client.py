@@ -14,7 +14,10 @@ class HTTPClient:
     def __init__(
         self,
         host: str = "http://localhost:6666",
+        token: Optional[str] = None,
     ):
+        import os
+
         import httpx
 
         self.host = host
@@ -33,7 +36,15 @@ class HTTPClient:
             "graph": "default",
         }
 
-        self._headers = HTTPClient.DEFAULT_HEADERS
+        # Copy the class default so per-instance auth headers don't leak into
+        # the shared dict. Token: an explicit argument wins (including an empty
+        # string, which deliberately suppresses auth), else the
+        # TURINGDB_AUTH_TOKEN environment variable; sent as a bearer token on
+        # every request.
+        self._headers = dict(HTTPClient.DEFAULT_HEADERS)
+        token = token if token is not None else os.environ.get("TURINGDB_AUTH_TOKEN")
+        if token:
+            self._headers["Authorization"] = f"Bearer {token}"
 
     def reconnect(self) -> None:
         """No-op for HTTP: httpx opens a fresh TCP connection per request.

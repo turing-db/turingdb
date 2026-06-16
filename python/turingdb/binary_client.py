@@ -21,13 +21,30 @@ class BinaryClient(CypherHelpersMixin):
     on the C++ side and returned as a dict of numpy arrays / lists.
     """
 
-    def __init__(self, host: str = "localhost", port: int | str = 6666):
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int | str = 6666,
+        token: Optional[str] = None,
+    ):
         # Deferred import: the compiled .so may be absent on systems that
         # only use the HTTP transport, in which case the facade should still
         # load.
+        import os
+
         from ._binary import TuringProtoClient as _Client
 
         self._inner = _Client(host, str(port))
+
+        # Authentication token: an explicit argument wins (including an empty
+        # string, which deliberately suppresses auth), else the
+        # TURINGDB_AUTH_TOKEN environment variable. Sent as a bearer token in
+        # the Authorization header on every request. Left unset when neither is
+        # present (the server then only accepts it when launched without
+        # -auth-on).
+        token = token if token is not None else os.environ.get("TURINGDB_AUTH_TOKEN")
+        if token:
+            self._inner.set_auth_token(token)
         self._graph: str = "default"
         self._change: Optional[str] = None
         self._commit: Optional[str] = None

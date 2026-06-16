@@ -13,6 +13,7 @@ target_link_libraries(turingdb PUBLIC
     turing_db_s
     turing_db_storage_s
     turing_db_server_s
+    turing_db_auth_s
     turing_db_memory_s
     turing_db_proto_client_s
     argparse

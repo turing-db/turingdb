@@ -5,6 +5,7 @@
 #include "UriParser.h"
 #include "NetBuffer.h"
 #include "HTTPWriter.h"
+#include "HTTPUtils.h"
 
 namespace net {
 
@@ -81,6 +82,7 @@ public:
         _payloadSize = 0;
         _payloadBegin = nullptr;
         _parsedHeader = false;
+        _contentLengthSeen = false;
     }
 
 private:
@@ -90,6 +92,7 @@ private:
     char* _payloadBegin {nullptr};
     uint64_t _payloadSize {0};
     bool _parsedHeader {false};
+    bool _contentLengthSeen {false};
 
     [[nodiscard]] HTTP::Result<Finished> analyzeHTTP() {
         if (getSize() == 0) {
@@ -105,7 +108,7 @@ private:
                 return res.get_unexpected();
             }
 
-            if (auto res = parseContentLengthAndJump(); !res) {
+            if (auto res = parseHeaders(); !res) {
                 return res.get_unexpected();
             }
 
@@ -219,91 +222,113 @@ private:
         return URIParserT::parseURI(_info, uri);
     }
 
-    [[nodiscard]] HTTP::Result<void> parseContentLengthAndJump() {
-        const char* endPtr = getEndPtr();
-        const std::string_view key = "content-length:";
-        std::string_view window;
+    // Walks the header block exactly once. For each header line it parses the
+    // name and value, folds content-length into _payloadSize, captures the
+    // Authorization header into Info, and leaves _currentPtr at the start of
+    // the payload. The full header block must be present in the buffer (it is
+    // received in one chunk); a missing terminating blank line is reported as
+    // HEADER_INCOMPLETE.
+    [[nodiscard]] HTTP::Result<void> parseHeaders() {
+        const char* const endPtr = getEndPtr();
 
-        for (; _currentPtr != endPtr; _currentPtr++) {
-            if (getSize() < key.size()) {
-                return jumpToPayload();
-            }
-
-            window = {_currentPtr, _currentPtr + key.size()};
-
-            if (std::equal(key.begin(), key.end(),
-                           window.begin(), window.end(),
-                           [](char a, char b) {
-                               return a == tolower(b);
-                           })) {
-                break;
-            }
-
-            const bool isEmptyLine = (_currentPtr[0] == '\r'
-                                      && _currentPtr[1] == '\n'
-                                      && _currentPtr[2] == '\r'
-                                      && _currentPtr[3] == '\n');
-            if (isEmptyLine) {
-                return jumpToPayload();
-            }
-        }
-
-        _currentPtr += key.size();
-
-        // Skip optional whitespace after "content-length:"
-        while (_currentPtr != endPtr) {
-            const char c = *_currentPtr;
-            if (c != ' ' && c != '\t') {
-                break;
-            }
+        // Skip the remainder of the request line, up to and including its CRLF.
+        while (_currentPtr < endPtr && *_currentPtr != '\n') {
             _currentPtr++;
         }
 
-        // Parse digits with bounds checking (no strtoull — buffer is not null-terminated)
-        _payloadSize = 0;
-        while (_currentPtr != endPtr) {
-            const char c = *_currentPtr;
-            if (!isdigit(c)) {
-                break;
-            }
-
-            // Uses Horner's rule for decimal number parsing
-            // (if you don't know what it is please read about it)
-            //
-            // Arithmetic overflow: we first check that _payloadSize will not exceed BUFFER_SIZE
-            // if multiplied by 10 and therefore will not overflow as BUFFER_SIZE is way smaller
-            // than the bound
-            if (_payloadSize > NetBuffer::BUFFER_SIZE / 10) {
-                return BadResult(HTTP::Error::REQUEST_TOO_BIG);
-            }
-
-            // We know that c is a digit between '0' and '9' here
-            // because we checked isdigit earlier
-            _payloadSize = _payloadSize * 10 + (c - '0');
-
+        if (_currentPtr < endPtr) {
             _currentPtr++;
         }
 
-        return jumpToPayload();
-    }
-
-    [[nodiscard]] HTTP::Result<void> jumpToPayload() {
-        const char* endPtr = getEndPtr();
-
-        while (endPtr - _currentPtr >= 4) {
-            const bool isEmptyLine = (_currentPtr[0] == '\r'
-                                      && _currentPtr[1] == '\n'
-                                      && _currentPtr[2] == '\r'
-                                      && _currentPtr[3] == '\n');
-            if (isEmptyLine) {
-                _currentPtr += 4;
+        while (_currentPtr < endPtr) {
+            // A blank line (CRLF at a line start) terminates the header block;
+            // the payload begins immediately after it.
+            const bool isBlankLine = (endPtr - _currentPtr) >= 2
+                                     && _currentPtr[0] == '\r'
+                                     && _currentPtr[1] == '\n';
+            if (isBlankLine) {
+                _currentPtr += 2;
                 return {};
             }
 
+            // Header name: up to the ':'.
+            const char* nameBegin = _currentPtr;
+            while (_currentPtr < endPtr && *_currentPtr != ':' && *_currentPtr != '\r' && *_currentPtr != '\n') {
+                _currentPtr++;
+            }
+
+            if (_currentPtr >= endPtr || *_currentPtr != ':') {
+                return BadResult(HTTP::Error::HEADER_INCOMPLETE);
+            }
+
+            const std::string_view name(nameBegin, _currentPtr - nameBegin);
             _currentPtr++;
+
+            // Skip optional whitespace, then read the value to the end of line.
+            while (_currentPtr < endPtr && (*_currentPtr == ' ' || *_currentPtr == '\t')) {
+                _currentPtr++;
+            }
+
+            const char* valueBegin = _currentPtr;
+            while (_currentPtr < endPtr && *_currentPtr != '\r' && *_currentPtr != '\n') {
+                _currentPtr++;
+            }
+
+            const std::string_view value(valueBegin, _currentPtr - valueBegin);
+
+            if (auto res = captureHeader(name, value); !res) {
+                return res.get_unexpected();
+            }
+
+            // Advance to the start of the next line.
+            while (_currentPtr < endPtr && *_currentPtr != '\n') {
+                _currentPtr++;
+            }
+
+            if (_currentPtr < endPtr) {
+                _currentPtr++;
+            }
         }
 
         return BadResult(HTTP::Error::HEADER_INCOMPLETE);
+    }
+
+    [[nodiscard]] HTTP::Result<void> captureHeader(std::string_view name, std::string_view value) {
+        if (net::http::equalsIgnoreCaseAscii(name, "content-length")) {
+            // First Content-Length wins. A conforming request carries at most
+            // one; ignoring any later duplicate keeps a malformed request (e.g.
+            // two differing lengths) from overwriting _payloadSize with a value
+            // larger than the body, which would otherwise leave the parser
+            // blocked waiting for bytes that never arrive.
+            if (_contentLengthSeen) {
+                return {};
+            }
+
+            _contentLengthSeen = true;
+
+            // Parse digits with bounds checking (no strtoull — buffer is not
+            // null-terminated). Horner's rule; the overflow guard keeps
+            // _payloadSize * 10 well below the size_t bound because BUFFER_SIZE
+            // is far smaller.
+            _payloadSize = 0;
+            for (const char c : value) {
+                if (!isdigit(static_cast<unsigned char>(c))) {
+                    break;
+                }
+
+                if (_payloadSize > NetBuffer::BUFFER_SIZE / 10) {
+                    return BadResult(HTTP::Error::REQUEST_TOO_BIG);
+                }
+
+                _payloadSize = _payloadSize * 10 + (c - '0');
+            }
+
+            return {};
+        } else if (net::http::equalsIgnoreCaseAscii(name, "authorization")) {
+            _info._authorization = value;
+        }
+
+        return {};
     }
 
     static bool isBlank(char c) {

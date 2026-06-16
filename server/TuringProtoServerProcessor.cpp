@@ -12,6 +12,7 @@
 #include "TCPConnection.h"
 #include "TuringDB.h"
 #include "TuringProtoWriter.h"
+#include "AuthGate.h"
 #include "dataframe/Dataframe.h"
 
 using namespace db;
@@ -42,6 +43,10 @@ void TuringProtoServerProcessor::process(net::AbstractThreadContext* threadConte
 
         if (httpInfo._method != net::HTTP::Method::POST) {
             throw ProtocolException("Only POST is supported by the binary protocol");
+        }
+
+        if (!isRequestAuthorized(_db.getAuthenticator(), httpInfo)) {
+            throw ProtocolException("Unauthorized: missing or invalid authentication token");
         }
 
         switch (static_cast<Endpoint>(httpInfo._endpoint)) {

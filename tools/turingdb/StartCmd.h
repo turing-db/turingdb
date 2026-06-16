@@ -31,6 +31,7 @@ private:
     bool _inMemory {false};
     bool _resetDefault {false};
     bool _launchUI {false};
+    bool _authOn {false};
     unsigned _port {6666};
     unsigned _uiPort {8080};
     size_t _startTimeout {500};

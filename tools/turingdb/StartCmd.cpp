@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <limits.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <chrono>
 #include <thread>
@@ -18,6 +19,7 @@
 #include "TuringServer.h"
 #include "VisualizerProxy.h"
 #include "DBServerConfig.h"
+#include "Authenticator.h"
 #include "Demonology.h"
 #include "LogSetup.h"
 #include "SystemEventHandler.h"
@@ -217,6 +219,15 @@ int StartCmd::execute() {
     }
 
     try {
+        // Authentication is opt-in via -auth-on. When enabled, the API key is
+        // read from the TURINGDB_AUTH_TOKEN environment variable; clients
+        // present it directly in the Authorization header. The Authenticator
+        // must outlive the server, so it is declared before it: locals are
+        // destroyed in reverse declaration order, so on any path (including an
+        // exception that skips the explicit server->reset() below) the server
+        // is torn down before the Authenticator it dereferences.
+        std::unique_ptr<Authenticator> authenticator;
+
         std::unique_ptr<TuringServer> server;
         std::unique_ptr<TuringShell> shell;
         std::unique_ptr<VisualizerProxy> proxy;
@@ -224,6 +235,18 @@ int StartCmd::execute() {
         // Run TuringDB
         LocalMemory mem;
         TuringDB turingDB(&config);
+
+        if (_authOn) {
+            const char* envKey = getenv("TURINGDB_AUTH_TOKEN");
+            if (envKey == nullptr || *envKey == '\0') {
+                spdlog::error("-auth-on requires the TURINGDB_AUTH_TOKEN environment variable to be set");
+                return EXIT_FAILURE;
+            }
+
+            authenticator = std::make_unique<Authenticator>(envKey);
+            turingDB.setAuthenticator(authenticator.get());
+            spdlog::info("Authentication enabled (API key from TURINGDB_AUTH_TOKEN)");
+        }
 
         config.setOnStopRequest([&] {
             if (shell) {
@@ -352,6 +375,10 @@ void StartCmd::initialize() {
     _argParser.add_argument("-ui")
         .help("Launch visualizer proxy")
         .store_into(_launchUI);
+    _argParser.add_argument("-auth-on")
+        .help("Enable authentication; the API key is read from the TURINGDB_AUTH_TOKEN "
+              "environment variable and clients present it as a bearer token")
+        .store_into(_authOn);
     _argParser.add_argument("-ui-port")
         .metavar("port")
         .help("Visualizer proxy port (default: 8080)")

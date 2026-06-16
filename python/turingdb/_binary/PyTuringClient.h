@@ -28,6 +28,7 @@ public:
     void setRemoteAddress(const std::string& address) { _client->setRemoteAddress(address); }
     void setRemotePort(const std::string& port) { _client->setRemotePort(port); }
     void setGraphName(const std::string& name) { _client->setGraphName(name); }
+    void setAuthToken(const std::string& token) { _client->setAuthToken(token); }
 
     void setChangeID(uint64_t value) { _client->setChangeID(db::ChangeID(value)); }
     void clearChangeID() { _client->setChangeID(db::ChangeID::head()); }
