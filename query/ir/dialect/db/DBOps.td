@@ -57,10 +57,7 @@ def GetOutEdges : TuringOp<"get_out_edges", [Pure]> {
 def Output : TuringOp<"output"> {
   let summary = "Project a set of columns as the query result";
   let description = [{
-    The result projection of the set-at-a-time form and the db counterpart of
-    nl.output: it names the columns the query returns, in order, and is the one
-    op the lowering turns into nl.output - placed inside the innermost loop that
-    binds those columns.
+      Sends a number of columns to output.
 
       db.output(%a, %b, %c) : !db.column<a>, !db.column<b>, !db.column<c>
 
