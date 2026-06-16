@@ -20,9 +20,7 @@ DBLowering::~DBLowering() {
 }
 
 mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::ModuleOp module) {
-    // The verifier guarantees the operand and result shapes the lowering reads
-    // below: every get_out_edges has its four fixed columns, every column a
-    // db.column type.
+    // Check that we didn't failed MLIR verifier
     if (mlir::failed(mlir::verify(dbFunction))) {
         throw IRException("db function failed MLIR verification");
     }
@@ -35,27 +33,23 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     mlir::MLIRContext* context = _builder.getContext();
     const mlir::Location loc = _builder.getUnknownLoc();
 
-    // The nl form streams its result through nl.output and so takes and returns
-    // nothing: a () -> () function mirroring the db function's name.
+    // Create nl target function
     _builder.setInsertionPointToEnd(module.getBody());
     const auto functionType = mlir::FunctionType::get(context, {}, {});
     auto nlFunction = _builder.create<mlir::func::FuncOp>(loc, dbFunction.getSymName(), functionType);
     _entryBlock = nlFunction.addEntryBlock();
 
-    // Give the entry block its func.return up front. Loop bodies are born with
-    // an implicit nl.yield, so once the entry block has its terminator too,
-    // every lowered op can be inserted uniformly just before the terminator of
-    // its home block.
+    // Create the ReturnOp of the target function right away
     _builder.setInsertionPointToStart(_entryBlock);
     _builder.create<mlir::func::ReturnOp>(loc);
 
+    // Lower each operation of the db function
     _valueMap.clear();
     for (mlir::Operation& operation : dbBody.front()) {
         lowerOperation(operation);
     }
 
-    // The lowering builds nested regions and block arguments by hand; verify
-    // the result so a structural mistake surfaces here, not deep in execution.
+    // Run MLIR verifier on the nlFunction
     if (mlir::failed(mlir::verify(nlFunction))) {
         throw IRException("DBLowering produced an invalid nl function");
     }
@@ -64,15 +58,14 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
 }
 
 void DBLowering::lowerOperation(mlir::Operation& operation) {
-    if (auto scanNodes = mlir::dyn_cast<mlir::db::ScanNodes>(operation)) {
+    if (mlir::db::ScanNodes scanNodes = mlir::dyn_cast<mlir::db::ScanNodes>(operation)) {
         lowerScanNodes(scanNodes);
-    } else if (auto getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
+    } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
         lowerGetOutEdges(getOutEdges);
-    } else if (auto output = mlir::dyn_cast<mlir::db::Output>(operation)) {
+    } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
-        // The nl function is created with its own func.return; the db
-        // terminator carries nothing to lower.
+        // We already added a ReturnOp to the nl function
     } else {
         throw IRException("DBLowering cannot lower operation '"
                           + operation.getName().getStringRef().str() + "'");
@@ -83,7 +76,7 @@ void DBLowering::lowerScanNodes(mlir::db::ScanNodes scanNodes) {
     // A scan reads no column, so its loop sits at the top of the function body.
     setInsertionInto(_entryBlock);
 
-    auto nodes = _builder.create<nl::ScanNodes>(_builder.getUnknownLoc());
+    nl::ScanNodes nodes = _builder.create<nl::ScanNodes>(_builder.getUnknownLoc());
     buildLoopForSource(nodes.getResult(), scanNodes.getOperation());
 }
 
@@ -101,7 +94,7 @@ void DBLowering::lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges) {
 
     // The result iterator type - the four fixed edge chunks plus one per
     // carried chunk - is inferred from the operands.
-    auto edges = _builder.create<nl::GetOutEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks);
+    nl::GetOutEdges edges = _builder.create<nl::GetOutEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks);
     buildLoopForSource(edges.getResult(), getOutEdges.getOperation());
 }
 
@@ -122,7 +115,7 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
 }
 
 void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp) {
-    auto forLoop = _builder.create<nl::For>(_builder.getUnknownLoc(), iterator);
+    nl::For forLoop = _builder.create<nl::For>(_builder.getUnknownLoc(), iterator);
 
     // The loop binds one variable per chunk the iterator produces, in the same
     // order as the db op's result columns: a scan binds its single node chunk;
@@ -155,7 +148,7 @@ mlir::Value DBLowering::mapValue(mlir::Value dbValue) const {
 mlir::Block* DBLowering::ownerBlock(mlir::Value chunkValue) {
     // Every lowered chunk is an nl.for loop variable, i.e. a block argument; the
     // block owning it is the loop body a consumer must nest into.
-    const auto blockArgument = mlir::dyn_cast<mlir::BlockArgument>(chunkValue);
+    const mlir::BlockArgument blockArgument = mlir::dyn_cast<mlir::BlockArgument>(chunkValue);
     if (!blockArgument) {
         throw IRException("Lowered chunk must be an nl.for loop variable");
     }
