@@ -1,7 +1,5 @@
 #include "DBDialectInterpreter.h"
 
-#include <iostream>
-
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/SymbolTable.h"
 
@@ -31,7 +29,7 @@ DBDialectInterpreter::DBDialectInterpreter(const mlir::ModuleOp& module,
 DBDialectInterpreter::~DBDialectInterpreter() {
 }
 
-void DBDialectInterpreter::run() {
+DBDialectInterpreter::Status DBDialectInterpreter::run() {
     // The module holds the query as a db-dialect "main" func.func; lower it into
     // an nl-dialect "main" collected in a fresh module, then run that through
     // the same translate-and-execute pipeline as NLInterpreter.
@@ -43,9 +41,9 @@ void DBDialectInterpreter::run() {
     mlir::MLIRContext* context = _module.getContext();
     mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(context));
 
-    float lowerMilliseconds {0.0f};
-    float translateMilliseconds {0.0f};
-    float executeMilliseconds {0.0f};
+    double lowerMilliseconds {0.0};
+    double translateMilliseconds {0.0};
+    double executeMilliseconds {0.0};
 
     mlir::func::FuncOp nlFunction;
     {
@@ -75,7 +73,5 @@ void DBDialectInterpreter::run() {
         executeMilliseconds = duration<Milliseconds>(start, end);
     }
 
-    std::cout << "[DBDialectInterpreter] lowering: " << lowerMilliseconds << " ms, "
-              << "translation: " << translateMilliseconds << " ms, "
-              << "execution: " << executeMilliseconds << " ms\n";
+    return Status(lowerMilliseconds, translateMilliseconds, executeMilliseconds);
 }
