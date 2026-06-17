@@ -242,12 +242,9 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     VariableDependency* u = *next(begin(cyc));
     VariableDependency* v = *prev(end(cyc));
 
-    // If not cascading a merge, just merge the two nodes as normal
+    // Break the cycle by subdividing with a merge edge
     subdivideWithMerge(u, head);
     subdivideWithMerge(v, head);
-
-    // Register that we have seen these nodes in a cycle
-    _seenInCycle.insert(begin(cyc), end(cyc));
 }
 
 void VariableDependencyGraph::subdivideWithMergeOutImpl(VariableDependency* s,

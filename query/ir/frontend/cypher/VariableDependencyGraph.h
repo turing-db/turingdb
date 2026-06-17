@@ -53,9 +53,6 @@ private:
     std::deque<VariableDependency> _vars;
     std::deque<DependencyEdge> _edges;
 
-    // Tracks whether a node has been seen in a cycle
-    std::unordered_set<VariableDependency*> _seenInCycle;
-
     // Tracks how many times a variable has been anonimised
     std::unordered_map<VariableDependency*, int> _anonymised;
 
@@ -100,6 +97,7 @@ private:
     /**
      * @brief Rotates provided @cyc such that the element with the highest in-degree is
      * first.
+     * @detail Tends to make the resultant graph more human-readeable
      */
     static void canonicaliseCycle(Cycle& cyc);
 
