@@ -16,11 +16,11 @@ public:
     {
     }
 
-    const VariableDependency* src() const { return _src; }
-    const VariableDependency* tgt() const { return _tgt; }
+    VariableDependency* src() const { return _src; }
+    VariableDependency* tgt() const { return _tgt; }
     EdgeMetadata data() const { return _data; }
 
-    bool isMetaEdge() const { return EdgeMetadata::isMetaEdge(_data.type()); }
+    bool isMetaEdge() const { return _data.isMetaEdge(); }
 
     bool operator==(const DependencyEdge& other) const {
         return _src == other.src() && _tgt == other.tgt() && _data == other.data();
