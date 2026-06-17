@@ -115,7 +115,7 @@ int main(int argc, const char** argv) {
         trav.edgeTraversal(&vdg, path);
 
         std::ranges::for_each(path, [](auto&& e) {
-            std::cout << e->src()->getName() << " -> " << e->tgt()->getName();
+            std::cout << e->src()->getName() << " -> " << e->tgt()->getName() << ", ";
         });
         std::cout << '\n';
     }
