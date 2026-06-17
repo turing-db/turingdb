@@ -63,7 +63,7 @@ private:
     VariableDependency* newVariable(const EntityPattern* entity);
     VariableDependency* newVariable(std::string_view name);
 
-    std::string getNextAnonymisation(VariableDependency* v);
+    void getNextAnonymisation(VariableDependency* v, std::string& buf);
 
     /**
      * @brief Add a directed edge with provided metadata @param data between @param src
@@ -73,12 +73,15 @@ private:
     const DependencyEdge* addDirected(VariableDependency* src, VariableDependency* tgt, const EdgeMetadata& data);
 
     /**
-     * @brief For nodes @param s, @param t connected via an arbitrarily-directed edge, e,
-     * and an arbitrary node @param mid, replaces s-[e]->t with s-[e]->mid-[merge]->t
+     * @brief For nodes @param s, @param t possibly connected via an arbitrarily-directed
+     * edge, e, replaces s-[e]-t with s-[e]-mid-[merge]->t if s and t are connected, and
+     * otherwise is a no op.
      * @detail Original edge is removed from variable adjacency lists, and two new edges
      * are created. Removed edges are not removed from @ref _edges.
+     * @returns The newly created midpoint node between s and t, or nullptr if s and t are
+     * not connected
      */
-    void subdivideWithMerge(VariableDependency* s, VariableDependency* mid, VariableDependency* t);
+    VariableDependency* subdivideWithMerge(VariableDependency* s, VariableDependency* t);
 
     void subdivideWithMergeOutImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
     void subdivideWithMergeIncImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
@@ -98,7 +101,16 @@ private:
      * @brief Rotates provided @cyc such that the element with the highest in-degree is
      * first.
      */
-    void canonicaliseCycle(Cycle& cyc) const;
+    static void canonicaliseCycle(Cycle& cyc);
+
+    /**
+     * @brief Ensures that no node in the graph has more than 2 incoming meta edges
+     * @detail For each v in @ref _vars such that v has more than 2 incoming meta edges,
+     * moves pairs of those meta edges to point to a newly created intermediary node, v',
+     * and a meta edge from v' to v, repeating until v contains at most 2 incoming meta
+     * edges
+     */
+    void cascadeMerges();
 };
 
 }
