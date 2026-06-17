@@ -9,13 +9,6 @@ namespace db {
 
 class EdgeMetadata {
 public:
-    enum class EdgeType : uint8_t;
-
-    explicit EdgeMetadata(EdgeType type)
-        : _type(type)
-    {
-    }
-
     enum class EdgeType : uint8_t {
         OUTGOING,
         INCOMING,
@@ -25,9 +18,14 @@ public:
         _SIZE
     };
 
+    explicit EdgeMetadata(EdgeType type)
+        : _type(type)
+    {
+    }
+
     EdgeType type() const { return _type; }
 
-    static bool isMetaEdge(EdgeType et) { return et == EdgeType::MERGE; }
+    bool isMetaEdge() const { return _type == EdgeType::MERGE; }
 
     bool operator==(const EdgeMetadata& other) const {
         return _type == other._type;
