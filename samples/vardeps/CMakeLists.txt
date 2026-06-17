@@ -5,7 +5,7 @@ set(SOURCES
 
 turing_sample(${SAMPLE_NAME} ${SOURCES})
 
-foreach(f run.sh shell.nix asciimermaid.py package.json)
+foreach(f run.sh)
     configure_file(${f} ${CMAKE_CURRENT_BINARY_DIR}/${f} COPYONLY)
 endforeach()
 
