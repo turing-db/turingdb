@@ -15,6 +15,7 @@
 #include "SinglePartQuery.h"
 #include "SystemManager.h"
 #include "TuringConfig.h"
+#include "VariableDependency.h"
 #include "versioning/Transaction.h"
 
 #include "VariableDependencyGraph.h"
@@ -46,9 +47,8 @@ Verify the generated graph is correct
 
 using namespace db;
 
-static void inspectVarDepGraph(CypherAST* ast) {
+static VariableDependencyGraph getVDG(CypherAST* ast) {
     bioassert(ast->queries().size() == 1, "Single queries only.");
-
     const QueryCommand* q = ast->queries().front();
     const auto* spq = dynamic_cast<const SinglePartQuery*>(q);
 
@@ -69,17 +69,8 @@ static void inspectVarDepGraph(CypherAST* ast) {
             vdg.registerPatternElement(ele);
         }
     }
-    IRDumper::dumpMermaid(vdg, std::cout);
 
-    [[maybe_unused]] const auto printCycle = [](auto& c) {
-        for (auto* v : c) {
-            fmt::print("{} ", v->getName());
-        }
-        fmt::print("\n");
-    };
-
-    vdg.eliminateCycles();
-    IRDumper::dumpMermaid(vdg, std::cout);
+    return vdg;
 }
 
 int main(int argc, const char** argv) {
@@ -119,5 +110,9 @@ int main(int argc, const char** argv) {
         analyzer.analyze();
     }
 
-    inspectVarDepGraph(&ast);
+    VariableDependencyGraph vdg = getVDG(&ast);
+    IRDumper::dumpMermaid(vdg, std::cout);
+
+    vdg.eliminateCycles();
+    IRDumper::dumpMermaid(vdg, std::cout);
 }

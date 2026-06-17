@@ -1,6 +1,7 @@
 #include "VariableDependencyGraph.h"
 
 #include <algorithm>
+#include <ranges>
 #include <set>
 #include <string_view>
 #include <unordered_map>
@@ -19,6 +20,7 @@
 
 #include "BioAssert.h"
 #include "FatalException.h"
+#include "spdlog/fmt/bundled/base.h"
 
 using namespace db;
 
@@ -240,86 +242,11 @@ void VariableDependencyGraph::detachCycle(const Cycle& cyc) {
     VariableDependency* u = *next(begin(cyc));
     VariableDependency* v = *prev(end(cyc));
 
-    VariableDependency* newHead = nullptr;
-    VariableDependency* newTail = nullptr;
-
-    VariableDependency* merged1 = nullptr;
-    VariableDependency* merged2 = nullptr;
-    DependencyEdge* mergeToDelete1 = nullptr;
-    DependencyEdge* mergeToDelete2 = nullptr;
-
-    // If the current head has any incoming merge edges, it must have 2.
-    // Find those two merge edges, delete them, but track their source nodes
-    std::erase_if(head->_incoming, [&](DependencyEdge* e) {
-        const bool meta = EdgeMetadata::isMetaEdge(e->data().type());
-        if (!meta) {
-            return false;
-        }
-
-        if (!merged1) {
-            merged1 = e->_src;
-            mergeToDelete1 = e;
-            return true;
-        }
-        if (!merged2) {
-            merged2 = e->_src;
-            mergeToDelete2 = e;
-            return true;
-        }
-
-        return false;
-    });
-
-    // Ensure we exactly 0 or 2 merge sources
-    bioassert((merged1 && merged2) || (!merged1 && !merged2), "Invalid merge state");
-
     // If not cascading a merge, just merge the two nodes as normal
-    if (!merged1 || !merged2) {
-        newHead = newVariable(getNextAnonymisation(head));
-        newTail = newVariable(getNextAnonymisation(head));
+    subdivideWithMerge(u, head);
+    subdivideWithMerge(v, head);
 
-        subdivideWithMerge(u, newHead, head);
-        subdivideWithMerge(v, newTail, head);
-
-        // Register that we have seen these nodes in a cycle
-        _seenInCycle.insert(begin(cyc), end(cyc));
-        return;
-    }
-
-    // Otherwise, @ref head has already been a merge target, and we need to cascade the
-    // merge by combining the existing two merge sources into a third, which is then
-    // merged with the tail of the current cycle, into @ref head. This is to ensure that
-    // any given merge has arity of at most 2 (to ensure it can be executed by a join).
-
-    { // Erase the merge edges from the merge sources as well
-        std::erase_if(merged1->_outgoing, [mergeToDelete1](DependencyEdge* e) {
-            return e == mergeToDelete1;
-        });
-        std::erase_if(merged2->_outgoing, [mergeToDelete2](DependencyEdge* e) {
-            return e == mergeToDelete2;
-        });
-    }
-
-    // Create a parent of those two merge edges to cascade
-    VariableDependency* mergeParent = newVariable(getNextAnonymisation(head));
-    {
-        EdgeMetadata data(EdgeMetadata::EdgeType::MERGE);
-        addDirected(merged1, mergeParent, data);
-        addDirected(merged2, mergeParent, data);
-    }
-    VariableDependency* otherInput = newVariable(getNextAnonymisation(head));
-
-    // Only one of the ends of the cycle should be merged (property of cycle basis)
-    // Employ a convention: make whatever side is already merged the "newHead"
-    const bool startIsMerged = _seenInCycle.contains(u);
-    newHead = startIsMerged ? mergeParent : otherInput;
-    newTail = startIsMerged ? otherInput : mergeParent;
-
-    // Parent of the previous two merges that were just cascaded, merged into current head
-    addDirected(newHead, head, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
-    // Add a temporary between the tail (unmerged end of cycle) and current head
-    subdivideWithMerge(v, newTail, head);
-
+    // Register that we have seen these nodes in a cycle
     _seenInCycle.insert(begin(cyc), end(cyc));
 }
 
@@ -343,53 +270,53 @@ void VariableDependencyGraph::subdivideWithMergeIncImpl(VariableDependency* s,
     std::erase_if(t->_outgoing, [e](DependencyEdge* f) { return f == e; });
 
     const EdgeMetadata& data = e->data();
-    addDirected(s, mid, data);
+    addDirected(mid, s, data);
     addDirected(mid, t, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
 }
 
-void VariableDependencyGraph::subdivideWithMerge(VariableDependency* s,
-                                                 VariableDependency* mid,
-                                                 VariableDependency* t) {
-    {
+VariableDependency* VariableDependencyGraph::subdivideWithMerge(VariableDependency* s,
+                                                                VariableDependency* t) {
+    std::string buf;
+    { // Search out edges of @param s for an edge to @param t
         const auto findOut = std::ranges::find_if(
             s->_outgoing, [t](DependencyEdge* e) { return e->_tgt == t; });
-        // Case where the existing edge between s and t is outgoing s->t
         if (findOut != end(s->_outgoing)) {
+            getNextAnonymisation(t, buf);
+            VariableDependency* mid = newVariable(buf);
             subdivideWithMergeOutImpl(s, mid, t, *findOut);
-            return;
+            return mid;
         }
     }
 
-    {
+    { // Search in edges of @param s for an edge from @param t
         const auto findIn = std::ranges::find_if(
             s->_incoming, [t](DependencyEdge* e) { return e->_src == t; });
-        // Case where the existing edge between s and t is incoming s<-t
         if (findIn != end(s->_incoming)) {
+            getNextAnonymisation(t, buf);
+            VariableDependency* mid = newVariable(buf);
             subdivideWithMergeIncImpl(s, mid, t, *findIn);
-            return;
+            return mid;
         }
     }
 
-    bioassert(false,
-              "Attempted to subdivideWithMerge on two nodes that were not connected: {} and {}.",
-              s->getName(), t->getName());
+    // @param s and @param t are not connected, nothing to do
+
+    return nullptr;
 }
 
-std::string VariableDependencyGraph::getNextAnonymisation(VariableDependency* v) {
+void VariableDependencyGraph::getNextAnonymisation(VariableDependency* v, std::string& buf) {
     const std::string_view name = v->getName();
     const int count = _anonymised[v];
 
     _anonymised[v]++;
 
-    std::string out;
-    out += name;
-    out += '\'';
-    out += std::to_string(count);
-
-    return out;
+    buf.clear();
+    buf += name;
+    buf += '\'';
+    buf += std::to_string(count);
 }
 
-void VariableDependencyGraph::canonicaliseCycle(Cycle& cyc) const {
+void VariableDependencyGraph::canonicaliseCycle(Cycle& cyc) {
     const auto inDegree = [](const VariableDependency* v) {
         return v->incoming().size();
     };
@@ -406,8 +333,58 @@ void VariableDependencyGraph::eliminateCycles() {
         return;
     }
 
-    for (Cycle& cycle : cycles) {
-        canonicaliseCycle(cycle);
-        detachCycle(cycle);
+    std::ranges::for_each(cycles, [](auto& c) { canonicaliseCycle(c); });
+    std::ranges::for_each(cycles, [this](auto& c) { detachCycle(c); });
+
+    cascadeMerges();
+}
+
+void VariableDependencyGraph::cascadeMerges() {
+    DependencyEdge* meta1 = nullptr;
+    DependencyEdge* meta2 = nullptr;
+    const auto getMetaPair = [&](DependencyEdge* e) {
+        if (!e->isMetaEdge()) {
+            return false;
+        }
+
+        if (!meta1) {
+            meta1 = e;
+            return true;
+        }
+
+        if (!meta2) {
+            meta2 = e;
+            return true;
+        }
+        return false;
+    };
+
+    const auto eraseFromSrc = [](DependencyEdge* toDel) {
+        VariableDependency* src = toDel->_src;
+        std::erase_if(src->_outgoing, [toDel](DependencyEdge* e) { return e == toDel; });
+    };
+
+    const auto isMeta = [](const DependencyEdge* e) { return e->isMetaEdge(); };
+
+    std::string nameBuf;
+    for (VariableDependency& v : _vars) {
+        while (std::ranges::count_if(v._incoming, isMeta) > 2) {
+            meta1= nullptr;
+            meta2 = nullptr;
+            std::erase_if(v._incoming, getMetaPair);
+            bioassert(meta1 && meta2, "Failed to get meta edges.");
+            eraseFromSrc(meta1);
+            eraseFromSrc(meta2);
+
+            VariableDependency* src1 = meta1->_src;
+            VariableDependency* src2 = meta2->_src;
+            getNextAnonymisation(&v, nameBuf);
+            VariableDependency* parent = newVariable(nameBuf);
+
+            EdgeMetadata data(EdgeMetadata::EdgeType::MERGE);
+            addDirected(src1, parent, data);
+            addDirected(src2, parent, data);
+            addDirected(parent, &v, data);
+        }
     }
 }
