@@ -1,4 +1,4 @@
-#include "IRDumper.h"
+#include "VariableDependencyGraphDumper.h"
 
 #include <algorithm>
 #include <cctype>
@@ -10,7 +10,7 @@
 
 using namespace db;
 
-void IRDumper::dumpMermaid(const VariableDependencyGraph& graph, std::ostream& out) {
+void VariableDependencyGraphDumper::dumpMermaid(const VariableDependencyGraph& graph, std::ostream& out) {
     out << "%%{init: {\"flowchart\": {\"nodeSpacing\": 40, \"rankSpacing\": 80, \"curve\": \"basis\"}}}%%\n";
     out << "flowchart LR\n";
 

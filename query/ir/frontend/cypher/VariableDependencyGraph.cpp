@@ -12,7 +12,7 @@
 #include "EdgeMetadata.h"
 #include "EdgePattern.h"
 #include "EntityPattern.h"
-#include "IRDumper.h"
+#include "VariableDependencyGraphDumper.h"
 #include "PatternElement.h"
 
 #include "VariableDependency.h"
@@ -119,7 +119,7 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
     return exists ? &*foundIt : newVariable(entity);
 }
 
-void VariableDependencyGraph::cycleBasis(std::vector<Cycle>& cycles) {
+void VariableDependencyGraph::computeCycleBasis(std::vector<Cycle>& cycles) {
     using VarSet = std::unordered_set<VariableDependency*>;
     using PredMap = std::unordered_map<VariableDependency*, VariableDependency*>;
     using VarToVarSet = std::unordered_map<VariableDependency*, VarSet>;
@@ -325,7 +325,7 @@ void VariableDependencyGraph::canonicaliseCycle(Cycle& cyc) {
 
 void VariableDependencyGraph::eliminateCycles() {
     std::vector<Cycle> cycles;
-    cycleBasis(cycles);
+    computeCycleBasis(cycles);
     if (cycles.empty()) {
         return;
     }

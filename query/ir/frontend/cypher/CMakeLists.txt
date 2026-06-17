@@ -1,7 +1,7 @@
 set (SOURCES
-  IRDumper.cpp
   VariableDependency.cpp
   VariableDependencyGraph.cpp
+  VariableDependencyGraphDumper.cpp
 )
 
 add_library(turing_db_frontend_cypher_s STATIC ${SOURCES})
