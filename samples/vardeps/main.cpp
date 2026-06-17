@@ -20,7 +20,7 @@
 
 #include "VariableDependencyGraph.h"
 
-#include "IRDumper.h"
+#include "VariableDependencyGraphDumper.h"
 
 
 #include "stmt/MatchStmt.h"
@@ -111,8 +111,8 @@ int main(int argc, const char** argv) {
     }
 
     VariableDependencyGraph vdg = getVDG(&ast);
-    IRDumper::dumpMermaid(vdg, std::cout);
+    VariableDependencyGraphDumper::dumpMermaid(vdg, std::cout);
 
     vdg.eliminateCycles();
-    IRDumper::dumpMermaid(vdg, std::cout);
+    VariableDependencyGraphDumper::dumpMermaid(vdg, std::cout);
 }

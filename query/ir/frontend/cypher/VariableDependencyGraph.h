@@ -86,7 +86,7 @@ private:
     /**
     * @brief Get the cycle basis of this graph.
     */
-    void cycleBasis(std::vector<Cycle>& cycles);
+    void computeCycleBasis(std::vector<Cycle>& cycles);
 
     /**
      * @brief Removes a non-meta cycle by detaching the cycle and replacing the critical
