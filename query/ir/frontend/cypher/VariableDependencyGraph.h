@@ -35,6 +35,9 @@ class VariableDependencyGraph {
 public:
     using Cycle = std::vector<VariableDependency*>;
 
+    VariableDependencyGraph();
+    ~VariableDependencyGraph();
+
     /// Given a pattern (e.g. (n)-[e]->(m)), inserts all vars into the dependency graph
     void registerPatternElement(const PatternElement* ptn);
 

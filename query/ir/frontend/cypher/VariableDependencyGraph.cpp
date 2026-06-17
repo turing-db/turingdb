@@ -39,6 +39,13 @@ static EdgeMetadata::EdgeType directionToType(EdgePattern::Direction dir) {
     throw FatalException("Invalid edge pattern direction");
 }
 
+VariableDependencyGraph::VariableDependencyGraph()
+{
+}
+
+VariableDependencyGraph::~VariableDependencyGraph() {
+}
+
 const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* src,
                                                            VariableDependency* tgt,
                                                            const EdgeMetadata& data) {
