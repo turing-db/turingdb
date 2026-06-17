@@ -2,11 +2,11 @@
 
 #include <algorithm>
 #include <stack>
+#include <unordered_set>
 
 #include "DependencyEdge.h"
 #include "VariableDependency.h"
 #include "VariableDependencyGraph.h"
-
 
 using namespace db;
 
@@ -55,6 +55,58 @@ void VariableDependencyGraphTraversal::getTraversal(const VariableDependencyGrap
 
             visited.insert(cur);
             traversal.push_back(cur);
+        }
+    }
+}
+
+void VariableDependencyGraphTraversal::edgeTraversal(const VariableDependencyGraph* graph,
+                                                     std::vector<const DependencyEdge*>& traversal) {
+    traversal.clear();
+
+    std::unordered_set<const VariableDependency*> visited;
+
+    std::stack<const DependencyEdge*> stack;
+
+    const auto expandNode = [&](const VariableDependency* v) ->void {
+        if (visited.contains(v)) {
+            return;
+        }
+
+        for (const DependencyEdge* e : v->edges()) {
+            const VariableDependency* other = e->src() == v ? e->tgt() : e->src();
+
+            if (visited.contains(other)) {
+                continue;
+            }
+
+            const auto seenMetaInputs = [&](const DependencyEdge* e) {
+                return !e->isMetaEdge() or visited.contains(v);
+            };
+            const bool canTraverse = std::ranges::all_of(other->incoming(), seenMetaInputs);
+            if (!canTraverse) {
+                continue;
+            }
+
+            traversal.push_back(e);
+            for (const DependencyEdge* f : other->edges()) {
+                stack.push(f);
+            }
+        }
+    };
+
+    for (const VariableDependency& v : graph->vars()) {
+        if (visited.contains(&v)) {
+            continue;
+        }
+
+        expandNode(&v);
+
+        while (!stack.empty()) {
+            const DependencyEdge* e = stack.top();
+            stack.pop();
+
+            expandNode(e->src());
+            expandNode(e->tgt());
         }
     }
 }

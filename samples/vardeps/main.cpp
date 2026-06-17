@@ -101,4 +101,22 @@ int main(int argc, const char** argv) {
 
     vdg.eliminateCycles();
     VariableDependencyGraphDumper::dumpMermaid(vdg, std::cout);
+
+    VariableDependencyGraphTraversal trav;
+    {
+        std::vector<const VariableDependency*> path;
+        trav.getTraversal(&vdg, path);
+
+        std::ranges::for_each(path, [](auto&& v) { std::cout << v->getName() << " "; });
+        std::cout << '\n';
+    }
+    {
+        std::vector<const DependencyEdge*> path;
+        trav.edgeTraversal(&vdg, path);
+
+        std::ranges::for_each(path, [](auto&& e) {
+            std::cout << e->src()->getName() << " -> " << e->tgt()->getName();
+        });
+        std::cout << '\n';
+    }
 }
