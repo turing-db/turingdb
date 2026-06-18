@@ -79,13 +79,6 @@ int main(int argc, const char** argv) {
 
     VariableDependencyGraphTraversal trav;
     {
-        std::vector<const VariableDependency*> path;
-        trav.getTraversal(&vdg, path);
-
-        std::ranges::for_each(path, [](auto&& v) { std::cout << v->getName() << " "; });
-        std::cout << '\n';
-    }
-    {
         std::vector<VariableDependencyGraphTraversal::Visit> path;
         trav.computeTraversal(&vdg, path);
 

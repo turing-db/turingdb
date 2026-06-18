@@ -29,13 +29,8 @@ public:
         Generator _gen {Generator::_SIZE};
     };
 
-    void getTraversal(const VariableDependencyGraph* graph,
-                      std::vector<const VariableDependency*>& traversal);
-
     void computeTraversal(const VariableDependencyGraph* graph,
                           std::vector<Visit>& traversal);
-
-private:
 };
 
 }

@@ -18,6 +18,9 @@
 
 #include "DBOps.h"
 
+#include "BioAssert.h"
+#include "FatalException.h"
+
 using namespace db;
 
 mlir::db::ColumnType DBProgramGenerator::createColumnFor(const VariableDependency* var) {
@@ -51,17 +54,48 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     VariableDependencyGraphTraversal vdgTrav;
     vdgTrav.computeTraversal(&vdg, trav);
 
-    /*
-    for (const DependencyEdge* e : trav) {
-        const VariableDependency* src = e->src();
-        // const VariableDependency* tgt = e->tgt();
+    for (const auto& node : trav) {
+        const VariableDependency* var = node._var;
 
-        if (!_varMap.contains(src)) {
-            const mlir::db::ColumnType col = createColumnFor(src);
+        if (!node._fstProducer) { // Assumes ScanNodes for now
+            bioassert(!_varMap.contains(var), "Visited node without producer");
+
+            const mlir::db::ColumnType col = createColumnFor(var);
             builder.create<mlir::db::ScanNodes>(loc, col);
         }
 
-        // const EdgeMetadata::EdgeType type = e->data().type();
+        const auto generatedBy =  node._gen;
+
+        switch (generatedBy) {
+            case VariableDependencyGraphTraversal::Generator::SCAN_NODES: {
+                bioassert(!_varMap.contains(var), "Visited node without producer");
+                const mlir::db::ColumnType col = createColumnFor(var);
+                builder.create<mlir::db::ScanNodes>(loc, col);
+            }
+            break;
+
+            case VariableDependencyGraphTraversal::Generator::GET_OUT_EDGES:
+                throw FatalException("GET_OUT_EDGES not supported.");
+                bioassert(_varMap.contains(var), "Missing source.");
+                // const mlir::db::ColumnType col = createColumnFor(var);
+            break;
+
+            case VariableDependencyGraphTraversal::Generator::GET_IN_EDGES:
+                throw FatalException("GET_IN_EDGES not supported.");
+            break;
+
+            case VariableDependencyGraphTraversal::Generator::GET_EDGES:
+                throw FatalException("GET_EDGES not supported.");
+            break;
+
+            case VariableDependencyGraphTraversal::Generator::MERGE:
+                throw FatalException("MERGE not supported.");
+            break;
+
+            case VariableDependencyGraphTraversal::Generator::_SIZE:
+                throw FatalException("Invalid traversal type.");
+            break;
+
+        }
     }
-    */
 }
