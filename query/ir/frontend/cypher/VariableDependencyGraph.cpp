@@ -8,19 +8,27 @@
 #include <unordered_set>
 #include <utility>
 
-#include "DependencyEdge.h"
-#include "EdgeMetadata.h"
+#include <spdlog/spdlog.h>
+
 #include "EdgePattern.h"
 #include "EntityPattern.h"
 #include "VariableDependencyGraphDumper.h"
+#include "CypherAST.h"
+#include "SinglePartQuery.h"
+#include "Pattern.h"
 #include "PatternElement.h"
-
-#include "VariableDependency.h"
+#include "stmt/MatchStmt.h"
+#include "stmt/StmtContainer.h"
 #include "decl/VarDecl.h"
+
+#include "DependencyEdge.h"
+#include "EdgeMetadata.h"
+#include "VariableDependency.h"
+
+#include "IRDumper.h"
 
 #include "BioAssert.h"
 #include "FatalException.h"
-#include "spdlog/fmt/bundled/base.h"
 
 using namespace db;
 
@@ -45,6 +53,28 @@ VariableDependencyGraph::VariableDependencyGraph()
 
 VariableDependencyGraph::~VariableDependencyGraph() {
 }
+
+void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
+    bioassert(ast->queries().size() == 1, "Single queries only.");
+    const QueryCommand* q = ast->queries().front();
+    const auto* spq = dynamic_cast<const SinglePartQuery*>(q);
+
+    const StmtContainer* stmtsContainer = spq->getReadStmts();
+    const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
+
+    for (Stmt* s : stmts) {
+        const auto* rd = dynamic_cast<const MatchStmt*>(s);
+        if (!rd) {
+            spdlog::warn("Non-match statement: skipped");
+            continue;
+        }
+
+        const Pattern* ptn = rd->getPattern();
+        const Pattern::PatternElements& eles = ptn->elements();
+        for (const PatternElement* ele : eles) {
+            registerPatternElement(ele);
+        }
+    }
 
 const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* src,
                                                            VariableDependency* tgt,

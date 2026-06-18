@@ -4,7 +4,6 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "DependencyEdge.h"
@@ -12,6 +11,7 @@
 
 namespace db {
 
+class CypherAST;
 class EntityPattern;
 class PatternElement;
 
@@ -37,6 +37,8 @@ public:
 
     VariableDependencyGraph();
     ~VariableDependencyGraph();
+
+    void buildFromAST(const CypherAST* ast);
 
     /// Given a pattern (e.g. (n)-[e]->(m)), inserts all vars into the dependency graph
     void registerPatternElement(const PatternElement* ptn);

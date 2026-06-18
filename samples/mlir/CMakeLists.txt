@@ -12,6 +12,7 @@ target_link_libraries(${SAMPLE_NAME}
     turing_db_ir_dbdialect_s
     turing_db_ir_nldialect_s
     turing_db_ir_interpreter_s
+    turing_db_ir_codegen_s
     turing_db_storage_s
     turing_db_io_fs_s
     turing_common_s

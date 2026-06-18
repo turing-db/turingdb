@@ -33,32 +33,6 @@
 
 using namespace db;
 
-static VariableDependencyGraph getVDG(CypherAST* ast) {
-    bioassert(ast->queries().size() == 1, "Single queries only.");
-    const QueryCommand* q = ast->queries().front();
-    const auto* spq = dynamic_cast<const SinglePartQuery*>(q);
-
-    const StmtContainer* stmtsContainer = spq->getReadStmts();
-    const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
-
-    VariableDependencyGraph vdg;
-    for (Stmt* s : stmts) {
-        const auto* rd = dynamic_cast<const MatchStmt*>(s);
-        if (!rd) {
-            spdlog::warn("Non-match statement: skipped");
-            continue;
-        }
-
-        const Pattern* ptn = rd->getPattern();
-        const Pattern::PatternElements& eles = ptn->elements();
-        for (const PatternElement* ele : eles) {
-            vdg.registerPatternElement(ele);
-        }
-    }
-
-    return vdg;
-}
-
 int main(int argc, const char** argv) {
     ToolInit toolInit("ir");
     toolInit.disableOutputDir();
@@ -96,8 +70,8 @@ int main(int argc, const char** argv) {
         analyzer.analyze();
     }
 
-    VariableDependencyGraph vdg = getVDG(&ast);
-    VariableDependencyGraphDumper::dumpMermaid(vdg, std::cout);
+    VariableDependencyGraph vdg;
+    vdg.buildFromAST(&ast);
 
     vdg.eliminateCycles();
     VariableDependencyGraphDumper::dumpMermaid(vdg, std::cout);
