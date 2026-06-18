@@ -389,7 +389,12 @@ void executeModule(mlir::ModuleOp& module, const std::string& graphDir, bool qui
 // dumps it - the loop nest the set-at-a-time db dataflow lowers to - without
 // executing anything. The lowered module is built and dumped here, then
 // discarded.
-void dumpLoweredModule(mlir::ModuleOp& module) {
+//
+// A graph is only needed if 'main' fetches properties: lowering resolves each
+// property name to its value type against the schema. When graphDir is empty
+// the view is null, which is fine for scan/edge-only modules; a property fetch
+// then throws a clear error asking for -graph.
+void dumpLoweredModule(mlir::ModuleOp& module, const std::string& graphDir) {
     const mlir::func::FuncOp mainFunction = module.lookupSymbol<mlir::func::FuncOp>("main");
     if (!mainFunction) {
         throw std::runtime_error("-dump-lowered requires a 'main' function in the module");
@@ -399,10 +404,26 @@ void dumpLoweredModule(mlir::ModuleOp& module) {
         throw std::runtime_error("-dump-lowered requires a db-dialect 'main' function to lower");
     }
 
+    auto graph = Graph::create();
+    std::optional<FrozenCommitTx> transaction;
+    std::optional<GraphReader> reader;
+    const GraphView* view = nullptr;
+
+    if (!graphDir.empty()) {
+        const auto loadResult = GraphLoader::load(graph.get(), fs::Path(graphDir));
+        if (!loadResult) {
+            throw std::runtime_error(loadResult.error().fmtMessage());
+        }
+
+        transaction.emplace(graph->openTransaction());
+        reader.emplace(transaction->readGraph());
+        view = &reader->getView();
+    }
+
     mlir::MLIRContext* context = module.getContext();
     mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(context));
 
-    DBLowering lowering(context);
+    DBLowering lowering(context, view);
     lowering.lower(mainFunction, *nlModule);
 
     mlir::ModuleOp loweredModule = nlModule.get();
@@ -481,7 +502,7 @@ int main(int argc, char** argv) {
         }
 
         if (dumpLowered) {
-            dumpLoweredModule(mainMod);
+            dumpLoweredModule(mainMod, graphDir);
         }
 
         if (execute) {

@@ -205,6 +205,10 @@ mlir::Value DBLowering::getOrCreatePropertyTypeHandle(llvm::StringRef propertyNa
 }
 
 mlir::Type DBLowering::propertyValueChunkType(llvm::StringRef propertyName) {
+    if (!_view) {
+        throw IRException("Lowering a property fetch needs a graph to resolve the type of '" + propertyName.str() + "'");
+    }
+
     const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(propertyName);
     if (!propertyType) {
         throw IRException("Unknown property '" + propertyName.str() + "'");
