@@ -26,6 +26,24 @@ def NLEdgeTypeID : NLType<"EdgeTypeID", "edge_type_id"> {
     let description = "The element type of a chunk holding edge type IDs";
 }
 
+def NLString : NLType<"String", "string"> {
+    let summary = "A string property value";
+    let description = [{
+        The element type a string property's nullable value chunk wraps. Strings
+        have no MLIR builtin type, so the dialect names one; the characters live
+        in storage (a string_view per row), this is only the IR placeholder.
+    }];
+}
+
+def NLEmbedding : NLType<"Embedding", "embedding"> {
+    let summary = "An embedding property value";
+    let description = [{
+        The element type an embedding property's nullable value chunk wraps. The
+        vector (a span of floats per row) lives in storage; the dimension is part
+        of the schema, not spelled here, so this is a plain placeholder type.
+    }];
+}
+
 def NLNullable : NLType<"Nullable", "nullable"> {
     let summary = "A nullable property value";
     let description = [{

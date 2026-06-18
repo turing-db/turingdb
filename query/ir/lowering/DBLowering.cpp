@@ -40,8 +40,11 @@ mlir::Type valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueType)
         break;
 
         case ValueType::String:
+            return mlir::nl::StringType::get(builder.getContext());
+        break;
+
         case ValueType::Embedding:
-            throw IRException("Property value type not yet supported by lowering");
+            return mlir::nl::EmbeddingType::get(builder.getContext());
         break;
 
         case ValueType::Invalid:

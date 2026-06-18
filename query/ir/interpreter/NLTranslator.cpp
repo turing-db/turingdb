@@ -51,8 +51,13 @@ NLHandlerFunction selectPropertyFetchHandler(bool isNode, ValueType valueType) {
         break;
 
         case ValueType::String:
+            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::String>
+                          : &NLExecutor::runPropertyFetch<EdgeID, types::String>;
+        break;
+
         case ValueType::Embedding:
-            throw IRException("Property value type not yet supported by execution");
+            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::Embedding>
+                          : &NLExecutor::runPropertyFetch<EdgeID, types::Embedding>;
         break;
 
         case ValueType::Invalid:
@@ -361,9 +366,18 @@ Column* NLTranslator::allocOptColumnForValueType(ValueType valueType) {
         }
         break;
 
-        case ValueType::String:
-        case ValueType::Embedding:
-            throw IRException("Property value type not yet supported");
+        case ValueType::String: {
+            ColumnOptVector<types::String::Primitive>* column = _memory->alloc<ColumnOptVector<types::String::Primitive>>();
+            column->reserve(chunkSize);
+            return column;
+        }
+        break;
+
+        case ValueType::Embedding: {
+            ColumnOptVector<types::Embedding::Primitive>* column = _memory->alloc<ColumnOptVector<types::Embedding::Primitive>>();
+            column->reserve(chunkSize);
+            return column;
+        }
         break;
 
         case ValueType::Invalid:
