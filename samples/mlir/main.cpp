@@ -347,7 +347,8 @@ void executeModule(mlir::ModuleOp& module, const std::string& graphDir, bool qui
         throw std::runtime_error("-exec requires a graph directory given with -graph");
     }
 
-    auto graph = Graph::create();
+    std::unique_ptr<Graph> graph = Graph::create();
+    SimpleGraph::createSimpleGraph(graph.get());
     const auto loadResult = GraphLoader::load(graph.get(), fs::Path(graphDir));
     if (!loadResult) {
         throw std::runtime_error(loadResult.error().fmtMessage());
