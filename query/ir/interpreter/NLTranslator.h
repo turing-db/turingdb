@@ -4,6 +4,8 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "metadata/PropertyType.h"
+
 #include "NLOps.h"
 
 #include "NLProgram.h"
@@ -11,11 +13,12 @@
 namespace db {
 
 class LocalMemory;
+class GraphView;
 
 // Translates an MLIR func.func in the nl dialect into an NLProgram
 class NLTranslator {
 public:
-    NLTranslator(NLProgram* program, LocalMemory* memory);
+    NLTranslator(NLProgram* program, LocalMemory* memory, const GraphView* view);
     ~NLTranslator();
 
     void translate(const mlir::func::FuncOp& function);
@@ -37,6 +40,7 @@ private:
 
     NLProgram* _program {nullptr};
     LocalMemory* _memory {nullptr};
+    const GraphView* _view {nullptr};
     llvm::DenseMap<mlir::Value, Column*> _valueSlots;
     llvm::DenseMap<mlir::Value, IteratorConfig> _iteratorConfigs;
 
@@ -46,10 +50,21 @@ private:
     void translateEdgeLoop(const IteratorConfig& config,
                            mlir::Block& loopBody,
                            NLStmtContainer* body);
+
+    // Translate an nl.get_node_properties / nl.get_edge_properties: resolve the
+    // property name (carried by the nl.get_property_type that produced the
+    // handle) to a PropertyTypeID and value type, allocate the nullable value
+    // column, and record the with-null fetch statement in body
+    void translatePropertyFetch(mlir::Value inputValue,
+                                mlir::Value propertyTypeValue,
+                                mlir::Value resultValue,
+                                bool isNode,
+                                NLStmtContainer* body);
     void translateOutput(const mlir::nl::Output& output, NLStmtContainer* body);
 
     Column* allocColumn(mlir::Value chunkValue);
     Column* allocColumnForKind(NLChunkKind kind);
+    Column* allocOptColumnForValueType(ValueType valueType);
     Column* getColumn(mlir::Value chunkValue) const;
     static NLChunkKind getChunkKind(mlir::Type chunkType);
 };

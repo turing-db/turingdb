@@ -4,7 +4,10 @@
 
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
+#include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/ScanNodesIterator.h"
+#include "columns/ColumnOptVector.h"
+#include "metadata/PropertyType.h"
 
 #include "NLProgram.h"
 #include "NLOutputSink.h"
@@ -169,3 +172,33 @@ NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
     bioassert(false, "Unknown NLChunkKind");
     return nullptr;
 }
+
+// Read one property of the current input chunk into a nullable value column.
+// The with-null writer emits one value per input row (null where the row lacks
+// it), so no row is dropped and the value column lines up with the input chunk.
+// The PropertyTypeID was resolved from the name during translation.
+template <typename ID, typename T>
+void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* data) {
+    NLPropertyFetchData* fetchData = static_cast<NLPropertyFetchData*>(data);
+
+    const GraphView& view = *context->getView();
+    const PropertyTypeID propertyTypeID = fetchData->getPropertyTypeID();
+    const auto* inputIDs = static_cast<const ColumnVector<ID>*>(fetchData->getInput());
+    auto* output = static_cast<ColumnOptVector<typename T::Primitive>*>(fetchData->getOutput());
+
+    GetPropertiesWithNullChunkWriter<ID, T> writer(view, propertyTypeID, inputIDs);
+    writer.setOutput(output);
+    writer.fill(inputIDs->size());
+}
+
+// The translator selects among these by the value type the property resolves
+// to, on the node or edge side; only these (ID, T) pairs are available as
+// handlers. String and Embedding are not lowered yet.
+template void NLExecutor::runPropertyFetch<NodeID, types::Int64>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<NodeID, types::UInt64>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<NodeID, types::Double>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<NodeID, types::Bool>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<EdgeID, types::Int64>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<EdgeID, types::UInt64>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<EdgeID, types::Double>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<EdgeID, types::Bool>(NLExecutionContext*, NLFunctionData*);

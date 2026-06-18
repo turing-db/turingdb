@@ -48,7 +48,7 @@ DBDialectInterpreter::Status DBDialectInterpreter::run() {
     {
         const TimePoint start = Clock::now();
 
-        DBLowering lowering(context);
+        DBLowering lowering(context, _view);
         nlFunction = lowering.lower(dbFunction, *nlModule);
 
         const TimePoint end = Clock::now();
@@ -62,7 +62,7 @@ DBDialectInterpreter::Status DBDialectInterpreter::run() {
     {
         const TimePoint start = Clock::now();
 
-        NLTranslator translator(&program, _memory);
+        NLTranslator translator(&program, _memory, _view);
         translator.translate(nlFunction);
 
         const TimePoint end = Clock::now();

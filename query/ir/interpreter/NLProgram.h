@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 
+#include "ID.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
@@ -167,6 +168,30 @@ private:
 
     // Scratch for the writer's row-to-input-row map, which drives the gathers
     ColumnVector<size_t> _indices;
+};
+
+// nl.get_node_properties / nl.get_edge_properties data: a with-null property
+// read that maps the input ID column to a nullable value column, one value per
+// input row (missing values are null, no row dropped). The node-vs-edge ID type
+// and the value type are baked into the chosen handler; the PropertyTypeID was
+// resolved from the name against the schema during translation.
+class NLPropertyFetchData : public NLFunctionData {
+public:
+    NLPropertyFetchData(const Column* input, Column* output, PropertyTypeID propertyTypeID)
+        : _input(input),
+        _output(output),
+        _propertyTypeID(propertyTypeID)
+    {
+    }
+
+    const Column* getInput() const { return _input; }
+    Column* getOutput() const { return _output; }
+    PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
+
+private:
+    const Column* _input {nullptr};
+    Column* _output {nullptr};
+    PropertyTypeID _propertyTypeID {0};
 };
 
 // nl.output data

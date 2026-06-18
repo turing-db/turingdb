@@ -1,9 +1,14 @@
 #include "DBLowering.h"
 
+#include <optional>
+
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Verifier.h"
 
 #include "NLOps.h"
+
+#include "views/GraphView.h"
+#include "metadata/PropertyType.h"
 
 #include "IRException.h"
 
@@ -11,8 +16,48 @@ using namespace db;
 
 namespace nl = mlir::nl;
 
-DBLowering::DBLowering(mlir::MLIRContext* context)
-    : _builder(context)
+namespace {
+
+// Map a stored property value type to the MLIR element type baked into the
+// nullable value chunk. The element only has to round-trip back to this value
+// type during translation, so each kind takes a distinct builtin.
+mlir::Type valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return builder.getIntegerType(64);
+        break;
+
+        case ValueType::UInt64:
+            return builder.getIntegerType(64, /*isSigned=*/false);
+        break;
+
+        case ValueType::Double:
+            return builder.getF64Type();
+        break;
+
+        case ValueType::Bool:
+            return builder.getI1Type();
+        break;
+
+        case ValueType::String:
+        case ValueType::Embedding:
+            throw IRException("Property value type not yet supported by lowering");
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("Invalid property value type");
+        break;
+    }
+
+    throw IRException("Unhandled property value type");
+}
+
+}
+
+DBLowering::DBLowering(mlir::MLIRContext* context, const GraphView* view)
+    : _builder(context),
+    _view(view)
 {
 }
 
@@ -45,6 +90,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
 
     // Lower each operation of the db function
     _valueMap.clear();
+    _propertyTypes.clear();
     for (mlir::Operation& operation : dbBody.front()) {
         lowerOperation(operation);
     }
@@ -62,6 +108,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerScanNodes(scanNodes);
     } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
         lowerGetOutEdges(getOutEdges);
+    } else if (mlir::db::GetNodeProperties getNodeProperties = mlir::dyn_cast<mlir::db::GetNodeProperties>(operation)) {
+        lowerGetNodeProperties(getNodeProperties);
+    } else if (mlir::db::GetEdgeProperties getEdgeProperties = mlir::dyn_cast<mlir::db::GetEdgeProperties>(operation)) {
+        lowerGetEdgeProperties(getEdgeProperties);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -96,6 +146,71 @@ void DBLowering::lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges) {
     // carried chunk - is inferred from the operands.
     nl::GetOutEdges edges = _builder.create<nl::GetOutEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks);
     buildLoopForSource(edges.getResult(), getOutEdges.getOperation());
+}
+
+void DBLowering::lowerGetNodeProperties(mlir::db::GetNodeProperties getNodeProperties) {
+    const mlir::Value inputChunk = mapValue(getNodeProperties.getInputNodes());
+    const llvm::StringRef property = getNodeProperties.getProperty();
+
+    // Resolve the name once, hoisted above the loops, and bake the value type.
+    const mlir::Value handle = getOrCreatePropertyTypeHandle(property);
+    const mlir::Type valueChunkType = propertyValueChunkType(property);
+
+    // A property read maps the input chunk in place, one value per node, so the
+    // fetch nests in the loop that binds that chunk - it opens no loop of its own.
+    setInsertionInto(ownerBlock(inputChunk));
+
+    nl::GetNodeProperties fetch = _builder.create<nl::GetNodeProperties>(_builder.getUnknownLoc(),
+                                                                         valueChunkType,
+                                                                         inputChunk,
+                                                                         handle);
+    _valueMap[getNodeProperties.getResult()] = fetch.getValues();
+}
+
+void DBLowering::lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgeProperties) {
+    const mlir::Value inputChunk = mapValue(getEdgeProperties.getInputEdges());
+    const llvm::StringRef property = getEdgeProperties.getProperty();
+
+    const mlir::Value handle = getOrCreatePropertyTypeHandle(property);
+    const mlir::Type valueChunkType = propertyValueChunkType(property);
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    nl::GetEdgeProperties fetch = _builder.create<nl::GetEdgeProperties>(_builder.getUnknownLoc(),
+                                                                         valueChunkType,
+                                                                         inputChunk,
+                                                                         handle);
+    _valueMap[getEdgeProperties.getResult()] = fetch.getValues();
+}
+
+mlir::Value DBLowering::getOrCreatePropertyTypeHandle(llvm::StringRef propertyName) {
+    const auto existing = _propertyTypes.find(propertyName);
+    if (existing != _propertyTypes.end()) {
+        return existing->second;
+    }
+
+    // The handle reads no chunk, so it sits at the very top of the entry block,
+    // above every loop, where it dominates all the fetches that use it.
+    _builder.setInsertionPointToStart(_entryBlock);
+
+    nl::GetPropertyType handleOp = _builder.create<nl::GetPropertyType>(_builder.getUnknownLoc(),
+                                                                        _builder.getStringAttr(propertyName));
+    const mlir::Value handle = handleOp.getResult();
+    _propertyTypes[propertyName] = handle;
+
+    return handle;
+}
+
+mlir::Type DBLowering::propertyValueChunkType(llvm::StringRef propertyName) {
+    const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(propertyName);
+    if (!propertyType) {
+        throw IRException("Unknown property '" + propertyName.str() + "'");
+    }
+
+    const mlir::Type elementType = valueTypeToElementType(_builder, propertyType->_valueType);
+    nl::NullableType nullableType = nl::NullableType::get(_builder.getContext(), elementType);
+
+    return nl::ChunkType::get(_builder.getContext(), nullableType);
 }
 
 void DBLowering::lowerOutput(mlir::db::Output output) {
@@ -146,12 +261,12 @@ mlir::Value DBLowering::mapValue(mlir::Value dbValue) const {
 }
 
 mlir::Block* DBLowering::ownerBlock(mlir::Value chunkValue) {
-    // Every lowered chunk is an nl.for loop variable, i.e. a block argument; the
-    // block owning it is the loop body a consumer must nest into.
-    const mlir::BlockArgument blockArgument = mlir::dyn_cast<mlir::BlockArgument>(chunkValue);
-    if (!blockArgument) {
-        throw IRException("Lowered chunk must be an nl.for loop variable");
+    // A lowered chunk is either an nl.for loop variable (a block argument) or a
+    // chunk produced in place by a property fetch (an op result); either way the
+    // block that holds it is the loop body a consumer must nest into.
+    if (const mlir::BlockArgument blockArgument = mlir::dyn_cast<mlir::BlockArgument>(chunkValue)) {
+        return blockArgument.getOwner();
     }
 
-    return blockArgument.getOwner();
+    return chunkValue.getDefiningOp()->getBlock();
 }

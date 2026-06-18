@@ -28,6 +28,7 @@
 #include "versioning/Transaction.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnEdgeTypes.h"
+#include "columns/ColumnOptVector.h"
 
 #include "LocalMemory.h"
 
@@ -201,7 +202,8 @@ public:
     size_t getRowCount() const { return _rowCount; }
 
 private:
-    // The translator only ever emits node ID, edge ID and edge type ID chunks
+    // Output chunks are node ID, edge ID and edge type ID chunks from traversals,
+    // or nullable value chunks (ColumnOptVector) from a property read
     static void printCell(const Column* column, size_t row) {
         if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
             std::cout << (*nodeIDs)[row].getValue();
@@ -209,9 +211,32 @@ private:
             std::cout << (*edgeIDs)[row].getValue();
         } else if (const auto* edgeTypes = dynamic_cast<const ColumnEdgeTypes*>(column)) {
             std::cout << (*edgeTypes)[row].getValue();
+        } else if (printValueCell<int64_t>(column, row)
+                   || printValueCell<uint64_t>(column, row)
+                   || printValueCell<double>(column, row)) {
+            // Printed by the helper for whichever nullable value type matched
         } else {
             std::cout << "?";
         }
+    }
+
+    // Print one cell of a nullable value column if it has element type T, "null"
+    // for an absent value; returns whether the column matched T
+    template <typename T>
+    static bool printValueCell(const Column* column, size_t row) {
+        const auto* values = dynamic_cast<const ColumnOptVector<T>*>(column);
+        if (!values) {
+            return false;
+        }
+
+        const std::optional<T> value = (*values)[row];
+        if (value) {
+            std::cout << *value;
+        } else {
+            std::cout << "null";
+        }
+
+        return true;
     }
 
     size_t _rowCount {0};

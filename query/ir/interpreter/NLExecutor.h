@@ -46,6 +46,13 @@ public:
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
+    // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
+    // value type (types::Double, ...). The translator picks the specialization
+    // from the resolved property and stores it as the statement's handler; only
+    // the explicitly instantiated (ID, T) pairs in NLExecutor.cpp are available.
+    template <typename ID, typename T>
+    static void runPropertyFetch(NLExecutionContext* context, NLFunctionData* data);
+
 private:
     NLExecutionContext _ctxt;
     const NLProgram* _prog {nullptr};

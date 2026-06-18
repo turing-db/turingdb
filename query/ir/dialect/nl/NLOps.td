@@ -92,6 +92,86 @@ def GetInEdges : NLOp<"get_in_edges", [Pure, InferTypeOpAdaptor]> {
 }
 
 /**
+* GetPropertyType
+*/
+def GetPropertyType : NLOp<"get_property_type", [Pure]> {
+  let summary = "Resolve a property name to a property type handle, once, ahead of the loops";
+  let description = [{
+    Looks the property name up in the graph schema and yields a
+    !nl.property_type handle for its storage PropertyTypeID. It takes no chunk,
+    so it sits at function scope above the loop nest: a query resolves each name
+    once here and feeds the handle to every get_node_properties /
+    get_edge_properties step, instead of resolving the name per chunk.
+
+      %weight = nl.get_property_type("weight")
+
+    The result is always !nl.property_type. That type is parameterless and so
+    buildable, so the assembly omits it and the parser builds it from the
+    recipe - no InferTypeOpAdaptor needed. Pure, so it can be hoisted and shared
+    across the loops below it.
+  }];
+
+  // The property name, the same `name`/`weight` spelled in the query.
+  let arguments = (ins StrAttr:$name);
+  let results   = (outs NLPropertyType:$result);
+
+  // No operands and a constant result type, so nothing is printed after the name.
+  let assemblyFormat = "`(` $name `)` attr-dict";
+}
+
+/**
+* GetNodeProperties
+*/
+def GetNodeProperties : NLOp<"get_node_properties", [Pure]> {
+  let summary = "Read one property of a chunk of nodes, as a nullable value chunk";
+  let description = [{
+    Imperative counterpart of db.get_node_properties. The property is named once
+    by nl.get_property_type and passed in as a %property_type handle. It opens no
+    loop: it maps the input node chunk to one value per node, in order, straight
+    into the current nl.for body.
+
+    A node may not have the property, so the result is a nullable value chunk -
+    !nl.chunk<!nl.nullable<...>>, storage's ColumnOptVector. Missing values come
+    back null; no row is dropped. The wrapped type is the concrete primitive the
+    property resolved to during lowering.
+
+      %weight = nl.get_property_type("weight")
+      nl.for %nodes in %scan {
+        %values = nl.get_node_properties(%nodes, %weight) : !nl.chunk<!nl.nullable<f64>>
+        nl.output(%nodes, %values) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.nullable<f64>>
+      }
+  }];
+
+  // The node chunk and the property handle are both buildable, so their types
+  // are omitted; only the nullable value chunk type is spelled, after the colon.
+  let arguments = (ins NLNodeIDChunk:$input_nodes, NLPropertyTypeHandle:$property_type);
+  let results   = (outs NLChunk:$values);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $property_type `)` attr-dict `:` qualified(type($values))
+  }];
+}
+
+/**
+* GetEdgeProperties
+*/
+def GetEdgeProperties : NLOp<"get_edge_properties", [Pure]> {
+  let summary = "Read one property of a chunk of edges, as a nullable value chunk";
+  let description = [{
+    The edge counterpart of get_node_properties: same shape, but the input is a
+    chunk of edge IDs and the property is read from the edge side of the graph.
+    It opens no loop and yields a nullable value chunk, one value per input edge.
+  }];
+
+  let arguments = (ins NLEdgeIDChunk:$input_edges, NLPropertyTypeHandle:$property_type);
+  let results   = (outs NLChunk:$values);
+
+  let assemblyFormat = [{
+    `(` $input_edges `,` $property_type `)` attr-dict `:` qualified(type($values))
+  }];
+}
+
+/**
 * For
 */
 def For : NLOp<"for", [SingleBlockImplicitTerminator<"Yield">]> {
