@@ -1,9 +1,16 @@
 #include "NLTranslator.h"
 
+#include <optional>
+
 #include <spdlog/fmt/bundled/format.h>
 
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Verifier.h"
+
+#include "columns/ColumnOptVector.h"
+#include "metadata/GraphMetadata.h"
+#include "metadata/PropertyType.h"
+#include "views/GraphView.h"
 
 #include "NLExecutor.h"
 
@@ -15,9 +22,54 @@ using namespace db;
 
 namespace nl = mlir::nl;
 
-NLTranslator::NLTranslator(NLProgram* program, LocalMemory* memory)
+namespace {
+
+// The with-null fetch handler for a property's value type, on the node side
+// when isNode is true and the edge side otherwise. Selecting it here keeps the
+// value-type dispatch with the rest of translation; the handler bodies live in
+// NLExecutor. String and Embedding are not lowered yet.
+NLHandlerFunction selectPropertyFetchHandler(bool isNode, ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::Int64>
+                          : &NLExecutor::runPropertyFetch<EdgeID, types::Int64>;
+        break;
+
+        case ValueType::UInt64:
+            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::UInt64>
+                          : &NLExecutor::runPropertyFetch<EdgeID, types::UInt64>;
+        break;
+
+        case ValueType::Double:
+            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::Double>
+                          : &NLExecutor::runPropertyFetch<EdgeID, types::Double>;
+        break;
+
+        case ValueType::Bool:
+            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::Bool>
+                          : &NLExecutor::runPropertyFetch<EdgeID, types::Bool>;
+        break;
+
+        case ValueType::String:
+        case ValueType::Embedding:
+            throw IRException("Property value type not yet supported by execution");
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("Invalid property value type");
+        break;
+    }
+
+    throw IRException("Unhandled property value type");
+}
+
+}
+
+NLTranslator::NLTranslator(NLProgram* program, LocalMemory* memory, const GraphView* view)
     : _program(program),
-    _memory(memory)
+    _memory(memory),
+    _view(view)
 {
 }
 
@@ -54,6 +106,20 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[getInEdges.getResult()] = config;
         } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
+        } else if (mlir::isa<nl::GetPropertyType>(operation)) {
+            // The handle carries only a name; a fetch resolves it on consumption
+        } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
+            translatePropertyFetch(getNodeProperties.getInputNodes(),
+                                   getNodeProperties.getPropertyType(),
+                                   getNodeProperties.getValues(),
+                                   /*isNode=*/true,
+                                   body);
+        } else if (nl::GetEdgeProperties getEdgeProperties = mlir::dyn_cast<nl::GetEdgeProperties>(operation)) {
+            translatePropertyFetch(getEdgeProperties.getInputEdges(),
+                                   getEdgeProperties.getPropertyType(),
+                                   getEdgeProperties.getValues(),
+                                   /*isNode=*/false,
+                                   body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -152,6 +218,40 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
     translateBlock(loopBody, loopData->getStmts());
 }
 
+void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
+                                          mlir::Value propertyTypeValue,
+                                          mlir::Value resultValue,
+                                          bool isNode,
+                                          NLStmtContainer* body) {
+    // The property name lives on the nl.get_property_type that produced the handle
+    nl::GetPropertyType handleOp = propertyTypeValue.getDefiningOp<nl::GetPropertyType>();
+    if (!handleOp) {
+        throw IRException("property_type operand must come from nl.get_property_type");
+    }
+
+    const llvm::StringRef name = handleOp.getName();
+
+    // Resolve the name against the schema once, here, so execution works from a
+    // PropertyTypeID and value type and never sees the name again
+    const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(std::string_view(name.data(), name.size()));
+    if (!propertyType) {
+        throw IRException("Unknown property '" + name.str() + "'");
+    }
+
+    const ValueType valueType = propertyType->_valueType;
+
+    const Column* input = getColumn(inputValue);
+    Column* output = allocOptColumnForValueType(valueType);
+    _valueSlots[resultValue] = output;
+
+    NLPropertyFetchData* fetchData = _program->allocFunctionData<NLPropertyFetchData>(input,
+                                                                                      output,
+                                                                                      propertyType->_id);
+
+    const NLHandlerFunction handler = selectPropertyFetchHandler(isNode, valueType);
+    body->addStmt(NLFunctionDescriptor {handler, fetchData});
+}
+
 void NLTranslator::translateOutput(const nl::Output& output, NLStmtContainer* body) {
     const mlir::OperandRange columns = output->getOperands();
     if (columns.empty()) {
@@ -169,8 +269,14 @@ void NLTranslator::translateOutput(const nl::Output& output, NLStmtContainer* bo
     for (const mlir::Value column : columns) {
         const auto columnArgument = mlir::dyn_cast<mlir::BlockArgument>(column);
         const bool isInnermostLoopVariable = columnArgument && columnArgument.getOwner() == outputBlock;
-        if (!isInnermostLoopVariable) {
-            throw IRException("nl.output columns must be loop variables of the innermost enclosing nl.for");
+
+        // A property fetch result is not a loop variable but an op result
+        // produced in this same loop body; it is equally available to output.
+        mlir::Operation* definingOp = column.getDefiningOp();
+        const bool isProducedInThisBlock = definingOp && definingOp->getBlock() == outputBlock;
+
+        if (!isInnermostLoopVariable && !isProducedInThisBlock) {
+            throw IRException("nl.output columns must belong to the innermost enclosing nl.for body");
         }
 
         outputData->addOutputColumn(getColumn(column));
@@ -216,6 +322,57 @@ Column* NLTranslator::allocColumnForKind(NLChunkKind kind) {
     }
 
     bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
+}
+
+// Pool-allocate a nullable value column (ColumnOptVector) of the right primitive
+// for a property's value type, reserving a full chunk so execution stays
+// allocation-free. The value type was baked into the chunk during lowering and
+// re-resolved from the schema here.
+Column* NLTranslator::allocOptColumnForValueType(ValueType valueType) {
+    const size_t chunkSize = _program->getChunkSize();
+
+    switch (valueType) {
+        case ValueType::Int64: {
+            ColumnOptVector<types::Int64::Primitive>* column = _memory->alloc<ColumnOptVector<types::Int64::Primitive>>();
+            column->reserve(chunkSize);
+            return column;
+        }
+        break;
+
+        case ValueType::UInt64: {
+            ColumnOptVector<types::UInt64::Primitive>* column = _memory->alloc<ColumnOptVector<types::UInt64::Primitive>>();
+            column->reserve(chunkSize);
+            return column;
+        }
+        break;
+
+        case ValueType::Double: {
+            ColumnOptVector<types::Double::Primitive>* column = _memory->alloc<ColumnOptVector<types::Double::Primitive>>();
+            column->reserve(chunkSize);
+            return column;
+        }
+        break;
+
+        case ValueType::Bool: {
+            ColumnOptVector<types::Bool::Primitive>* column = _memory->alloc<ColumnOptVector<types::Bool::Primitive>>();
+            column->reserve(chunkSize);
+            return column;
+        }
+        break;
+
+        case ValueType::String:
+        case ValueType::Embedding:
+            throw IRException("Property value type not yet supported");
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("Invalid property value type");
+        break;
+    }
+
+    bioassert(false, "Unhandled property value type");
     return nullptr;
 }
 

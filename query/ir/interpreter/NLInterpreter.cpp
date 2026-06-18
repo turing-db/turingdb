@@ -45,7 +45,7 @@ NLInterpreter::Status NLInterpreter::run() {
     {
         const TimePoint start = Clock::now();
 
-        NLTranslator translator(&program, _memory);
+        NLTranslator translator(&program, _memory, _view);
         translator.translate(function);
 
         const TimePoint end = Clock::now();

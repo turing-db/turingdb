@@ -55,50 +55,34 @@ def GetOutEdges : TuringOp<"get_out_edges", [Pure]> {
 * GetNodeProperties
 */
 def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
-  let summary = "Read one named property of each node, filtering carried columns alongside";
+  let summary = "Read one named property of each node as a column of values";
 
   let description = [{
     In `MATCH (a) RETURN a.name` the node column produced by a scan or a
-    traversal carries only node IDs; the value behind `a.name` is fetched
-    separately. This op takes such a node column and a property name and
-    produces a column of that property's values, one per surviving node:
+    traversal carries only node IDs; this op fetches the value behind `a.name`,
+    one per node, into a new column:
 
       %a    = db.scan_nodes() : !db.column<"a">
-      %name = db.get_node_properties(%a, "name", {}) : (!db.column<"a">) -> !db.column<"a.name">
+      %name = db.get_node_properties(%a, "name") : (!db.column<"a">) -> !db.column<"a.name">
 
-    Not every node has every property, so reading one implicitly filters the
-    input down to the nodes that do. Like get_out_edges, that makes the op a
-    filtering hop: `columns_to_filter` is the carry set of columns from earlier
-    hops, each handed back in `filtered_columns` reduced to the surviving rows.
-    To keep the node IDs themselves, carry the input column:
-
-      %name, %a2 = db.get_node_properties(%a, "name", {%a})   // %a2: nodes that have "name"
-
-    One op reads one property; `RETURN a.name, a.age` is several
-    get_node_properties ops. Reading a property is a deterministic read of the
-    graph, so the op is Pure.
+    A node may not have the property, so missing values come back null and no
+    node is dropped - the lowering uses the with-null property fetch. One op
+    reads one property; `RETURN a.name, a.age` is two ops sharing %a. Reading a
+    property is a deterministic read of the graph, so the op is Pure.
   }];
 
-  // `property` is a plain string attribute - the symbolic property name, the
-  // same `name`/`age` spelled in the query. Being an attribute and not an SSA
-  // value, it is absent from `operands` in the assembly format below. Resolving
-  // the name to a storage PropertyTypeID happens later, when the op is lowered.
-  //
-  // `columns_to_filter`: the variadic carry set, after the fixed input_nodes;
-  // `property` sits between them as the attribute.
-  let arguments = (ins Column:$input_nodes, StrAttr:$property, Variadic<Column>:$columns_to_filter);
+  // `property` is the symbolic property name, the same `name`/`age` spelled in
+  // the query. Being an attribute and not an SSA value, it is absent from
+  // `operands` below; lowering resolves it to a storage PropertyTypeID.
+  let arguments = (ins Column:$input_nodes, StrAttr:$property);
+  let results   = (outs Column:$result);
 
-  // `result` is the property value column; `filtered_columns` is one per
-  // carried column, mirroring get_out_edges.
-  let results   = (outs Column:$result, Variadic<Column>:$filtered_columns);
-
-  // Brace-wrap the carry set so it reads like the get_out_edges form. With the
-  // variadic operand and result both present, functional-type(operands, results)
-  // prints the full `(...) -> (...)` list; the string attribute prints inside
-  // the parens, ahead of the colon, and MLIR elides it from attr-dict because
-  // the format already names it.
+  // One operand and one result, so functional-type(operands, results) prints the
+  // `(!db.column<...>) -> !db.column<...>` form, as get_out_edges does; the
+  // string attribute prints inside the parens, ahead of the colon, and MLIR
+  // elides it from attr-dict because the format already names it.
   let assemblyFormat = [{
-    `(` $input_nodes `,` $property `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` $property `)` attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -107,28 +91,26 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
 * GetEdgeProperties
 */
 def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
-  let summary = "Read one named property of each edge, filtering carried columns alongside";
+  let summary = "Read one named property of each edge as a column of values";
 
   let description = [{
     The edge counterpart of get_node_properties. In
-    `MATCH (a)-[e]->(b) RETURN e.weight` the edge column produced by
-    get_out_edges carries only edge IDs; this op fetches the value behind
-    `e.weight`, one per surviving edge, filtering the carry set down to the
-    edges that have the property:
+    `MATCH (a)-[e]->(b) RETURN e.weight` the edge column carries only edge IDs;
+    this op fetches the value behind `e.weight`, one per edge, with missing
+    values null:
 
-      %srcs, %eids, %etypes, %b = db.get_out_edges(%a, {}) : ...
-      %weight, %srcs2, %b2 = db.get_edge_properties(%eids, "weight", {%srcs, %b})
+      %weight = db.get_edge_properties(%eids, "weight") : (!db.column<"eids">) -> !db.column<"e.weight">
 
     A db.column is just a named column at this level, so node and edge columns
-    are indistinguishable in the type; the op chosen - node vs edge - is what
-    selects which side of the graph the property is read from.
+    are indistinguishable in the type; the op chosen - node vs edge - selects
+    which side of the graph the property is read from.
   }];
 
-  let arguments = (ins Column:$input_edges, StrAttr:$property, Variadic<Column>:$columns_to_filter);
-  let results   = (outs Column:$result, Variadic<Column>:$filtered_columns);
+  let arguments = (ins Column:$input_edges, StrAttr:$property);
+  let results   = (outs Column:$result);
 
   let assemblyFormat = [{
-    `(` $input_edges `,` $property `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_edges `,` $property `)` attr-dict `:`
     functional-type(operands, results)
   }];
 }
