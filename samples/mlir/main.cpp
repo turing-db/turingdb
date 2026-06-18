@@ -17,6 +17,7 @@
 #include "NLOps.h"
 #include "NLInterpreter.h"
 #include "DBDialectInterpreter.h"
+#include "DBLowering.h"
 #include "NLOutputSink.h"
 #include "IRAssembler.h"
 #include "IRModuleInspector.h"
@@ -331,6 +332,31 @@ void executeModule(mlir::ModuleOp& module, const std::string& graphDir, bool qui
     std::cout << rowCount << " rows\n";
 }
 
+// Lowers the module's db-dialect 'main' to the nl dialect with DBLowering and
+// dumps it - the loop nest the set-at-a-time db dataflow lowers to - without
+// executing anything. The lowered module is built and dumped here, then
+// discarded.
+void dumpLoweredModule(mlir::ModuleOp& module) {
+    const mlir::func::FuncOp mainFunction = module.lookupSymbol<mlir::func::FuncOp>("main");
+    if (!mainFunction) {
+        throw std::runtime_error("-dump-lowered requires a 'main' function in the module");
+    }
+
+    if (classifyDialect(mainFunction) != QueryDialect::DB) {
+        throw std::runtime_error("-dump-lowered requires a db-dialect 'main' function to lower");
+    }
+
+    mlir::MLIRContext* context = module.getContext();
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(context));
+
+    DBLowering lowering(context);
+    lowering.lower(mainFunction, *nlModule);
+
+    mlir::ModuleOp loweredModule = nlModule.get();
+    IRModuleInspector inspector(&loweredModule);
+    inspector.dumpFunctions(std::cout);
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -339,6 +365,7 @@ int main(int argc, char** argv) {
 
     std::vector<std::string> files;
     bool dumpCode = false;
+    bool dumpLowered = false;
     bool execute = false;
     bool quiet = false;
     std::string graphDir;
@@ -352,6 +379,10 @@ int main(int argc, char** argv) {
     parser.add_argument("-d", "--dump")
         .store_into(dumpCode)
         .help("Dump the full MLIR code of every function in the module");
+
+    parser.add_argument("-dump-lowered")
+        .store_into(dumpLowered)
+        .help("Lower the db-dialect 'main' to the nl dialect and dump it (no execution)");
 
     parser.add_argument("-exec")
         .store_into(execute)
@@ -394,6 +425,10 @@ int main(int argc, char** argv) {
             inspector.dumpFunctions(std::cout);
         } else {
             inspector.dumpFunctionTypes(std::cout);
+        }
+
+        if (dumpLowered) {
+            dumpLoweredModule(mainMod);
         }
 
         if (execute) {
