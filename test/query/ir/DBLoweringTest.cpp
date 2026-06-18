@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -112,6 +113,73 @@ private:
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> _rows;
 };
 
+// Collects (node ID, nullable string property) rows. The value column is a
+// !nl.nullable<!nl.string> chunk, storage's ColumnOptVector<string_view>.
+class CollectingNodeStringPropSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
+        const auto* values = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[1]);
+        ASSERT_NE(nodeIDs, nullptr);
+        ASSERT_NE(values, nullptr);
+        ASSERT_EQ(nodeIDs->size(), values->size());
+
+        const auto& idRaw = nodeIDs->getRaw();
+        const auto& valueRaw = values->getRaw();
+        for (size_t rowIndex = 0; rowIndex < nodeIDs->size(); rowIndex++) {
+            std::optional<std::string> value;
+            if (valueRaw[rowIndex]) {
+                value = std::string(*valueRaw[rowIndex]);
+            }
+            _rows.push_back({idRaw[rowIndex].getValue(), value});
+        }
+    }
+
+    void sortedRows(std::vector<std::pair<uint64_t, std::optional<std::string>>>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<std::pair<uint64_t, std::optional<std::string>>> _rows;
+};
+
+// Collects (node ID, nullable embedding property) rows. The value column is a
+// !nl.nullable<!nl.embedding> chunk, storage's ColumnOptVector<span<float>>;
+// each span is copied out since it points into the live graph storage.
+class CollectingNodeEmbeddingPropSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
+        const auto* values = dynamic_cast<const ColumnOptVector<std::span<const float>>*>(chunks[1]);
+        ASSERT_NE(nodeIDs, nullptr);
+        ASSERT_NE(values, nullptr);
+        ASSERT_EQ(nodeIDs->size(), values->size());
+
+        const auto& idRaw = nodeIDs->getRaw();
+        const auto& valueRaw = values->getRaw();
+        for (size_t rowIndex = 0; rowIndex < nodeIDs->size(); rowIndex++) {
+            std::optional<std::vector<float>> value;
+            if (valueRaw[rowIndex]) {
+                value = std::vector<float>(valueRaw[rowIndex]->begin(), valueRaw[rowIndex]->end());
+            }
+            _rows.push_back({idRaw[rowIndex].getValue(), value});
+        }
+    }
+
+    void sortedRows(std::vector<std::pair<uint64_t, std::optional<std::vector<float>>>>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<std::pair<uint64_t, std::optional<std::vector<float>>>> _rows;
+};
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -149,6 +217,26 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<"a">
   %score = db.get_node_properties(%a, "score") : (!db.column<"a">) -> !db.column<"a.score">
   db.output(%a, %score) : !db.column<"a">, !db.column<"a.score">
+  return
+}
+)mlir";
+
+// Read the string "name" property of each node
+constexpr const char* nodeNameProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<"a">
+  %name = db.get_node_properties(%a, "name") : (!db.column<"a">) -> !db.column<"a.name">
+  db.output(%a, %name) : !db.column<"a">, !db.column<"a.name">
+  return
+}
+)mlir";
+
+// Read the embedding "vec" property of each node
+constexpr const char* nodeVecProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<"a">
+  %vec = db.get_node_properties(%a, "vec") : (!db.column<"a">) -> !db.column<"a.vec">
+  db.output(%a, %vec) : !db.column<"a">, !db.column<"a.vec">
   return
 }
 )mlir";
@@ -195,9 +283,10 @@ protected:
         return graph;
     }
 
-    // A line graph 0 -> 1 -> 2 where nodes 0 and 1 carry a "score" Int64
-    // property (100, 200) and node 2 has none, so a property read yields null
-    std::unique_ptr<Graph> buildScoredGraph() {
+    // A line graph 0 -> 1 -> 2 where nodes 0 and 1 carry "score" (Int64),
+    // "name" (String) and "vec" (Embedding) properties and node 2 carries none,
+    // so a read of any of them returns null for node 2
+    std::unique_ptr<Graph> buildPropertyGraph() {
         auto graph = Graph::create();
 
         auto change = graph->newChange();
@@ -207,8 +296,9 @@ protected:
 
         metadata.getOrCreateLabel("0");
         metadata.getOrCreateEdgeType("0");
-        const PropertyType scoreType = metadata.getOrCreatePropertyType("score", ValueType::Int64);
-        const PropertyTypeID scoreID = scoreType._id;
+        const PropertyTypeID scoreID = metadata.getOrCreatePropertyType("score", ValueType::Int64)._id;
+        const PropertyTypeID nameID = metadata.getOrCreatePropertyType("name", ValueType::String)._id;
+        const PropertyTypeID vecID = metadata.getOrCreatePropertyType("vec", ValueType::Embedding)._id;
 
         const LabelSet labelset = LabelSet::fromList({0});
         const NodeID nodeA = builder.addNode(labelset);
@@ -220,7 +310,16 @@ protected:
 
         builder.addNodeProperty<types::Int64>(nodeA, scoreID, 100);
         builder.addNodeProperty<types::Int64>(nodeB, scoreID, 200);
-        // nodeC has no "score" property, so a property read returns null for it
+
+        builder.addNodeProperty<types::String>(nodeA, nameID, "alice");
+        builder.addNodeProperty<types::String>(nodeB, nameID, "bob");
+
+        const std::vector<float> vecA {1.0f, 2.0f};
+        const std::vector<float> vecB {3.0f, 4.0f};
+        builder.addNodeProperty<types::Embedding>(nodeA, vecID, vecA);
+        builder.addNodeProperty<types::Embedding>(nodeB, vecID, vecB);
+
+        // nodeC carries no property, so every property read returns null for it
 
         const auto submitResult = change->access().submit(*_jobSystem);
         EXPECT_TRUE(submitResult);
@@ -302,7 +401,7 @@ TEST_F(DBLoweringTest, lowersTwoHopWithCarriedColumn) {
 }
 
 TEST_F(DBLoweringTest, lowersGetNodeProperties) {
-    auto graph = buildScoredGraph();
+    auto graph = buildPropertyGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
@@ -314,6 +413,38 @@ TEST_F(DBLoweringTest, lowersGetNodeProperties) {
         {0, 100}, {1, 200}, {2, std::nullopt}
     };
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, lowersGetNodeStringProperty) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeStringPropSink sink;
+    runLoweredProgram(nodeNameProgram, reader.getView(), sink);
+
+    const std::vector<std::pair<uint64_t, std::optional<std::string>>> expected {
+        {0, std::string("alice")}, {1, std::string("bob")}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<std::string>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, lowersGetNodeEmbeddingProperty) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeEmbeddingPropSink sink;
+    runLoweredProgram(nodeVecProgram, reader.getView(), sink);
+
+    const std::vector<std::pair<uint64_t, std::optional<std::vector<float>>>> expected {
+        {0, std::vector<float>{1.0f, 2.0f}}, {1, std::vector<float>{3.0f, 4.0f}}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<std::vector<float>>>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
 }

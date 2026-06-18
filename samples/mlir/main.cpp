@@ -213,7 +213,9 @@ private:
             std::cout << (*edgeTypes)[row].getValue();
         } else if (printValueCell<int64_t>(column, row)
                    || printValueCell<uint64_t>(column, row)
-                   || printValueCell<double>(column, row)) {
+                   || printValueCell<double>(column, row)
+                   || printValueCell<std::string_view>(column, row)
+                   || printEmbeddingCell(column, row)) {
             // Printed by the helper for whichever nullable value type matched
         } else {
             std::cout << "?";
@@ -235,6 +237,32 @@ private:
         } else {
             std::cout << "null";
         }
+
+        return true;
+    }
+
+    // An embedding cell needs its own printer: the value is a span of floats,
+    // which has no operator<<, so render it as [a, b, c]
+    static bool printEmbeddingCell(const Column* column, size_t row) {
+        const auto* values = dynamic_cast<const ColumnOptVector<std::span<const float>>*>(column);
+        if (!values) {
+            return false;
+        }
+
+        const std::optional<std::span<const float>> value = (*values)[row];
+        if (!value) {
+            std::cout << "null";
+            return true;
+        }
+
+        std::cout << "[";
+        for (size_t component = 0; component < value->size(); component++) {
+            if (component > 0) {
+                std::cout << ", ";
+            }
+            std::cout << (*value)[component];
+        }
+        std::cout << "]";
 
         return true;
     }
