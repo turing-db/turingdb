@@ -4,6 +4,7 @@
 
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
+#include <utility>
 
 #include "SimpleGraph.h"
 #include "CypherAST.h"
@@ -85,11 +86,12 @@ int main(int argc, const char** argv) {
         std::cout << '\n';
     }
     {
-        std::vector<const DependencyEdge*> path;
-        trav.edgeTraversal(&vdg, path);
+        std::vector<VariableDependencyGraphTraversal::Visit> path;
+        trav.computeTraversal(&vdg, path);
 
-        std::ranges::for_each(path, [](auto&& e) {
-            std::cout << e->src()->getName() << " -> " << e->tgt()->getName() << ", ";
+        std::ranges::for_each(path, [](VariableDependencyGraphTraversal::Visit& v) {
+            const std::string_view prodName = v._fstProducer ? v._fstProducer->getName() : "none";
+            fmt::println("{} (discovered by {}, by means of {})", v._var->getName(), prodName, std::to_underlying(v._gen));
         });
         std::cout << '\n';
     }
