@@ -372,9 +372,13 @@ void VariableDependencyGraph::cascadeMerges() {
 
     std::string nameBuf;
     for (VariableDependency& v : _vars) {
+        // For a variable which has more than 2 meta-edges, merge pairs into intermediate
+        // nodes until every node has at exactly 0 or 2 incoming merge edges.
         while (std::ranges::count_if(v._incoming, isMeta) > 2) {
-            meta1= nullptr;
+            meta1 = nullptr;
             meta2 = nullptr;
+            // Sets @ref meta1/2 with the meta edges to merge, and removes them from
+            // @ref v._incoming
             std::erase_if(v._incoming, getMetaPair);
             bioassert(meta1 && meta2, "Failed to get meta edges.");
             eraseFromSrc(meta1);
@@ -383,11 +387,14 @@ void VariableDependencyGraph::cascadeMerges() {
             VariableDependency* src1 = meta1->_src;
             VariableDependency* src2 = meta2->_src;
             getNextAnonymisation(&v, nameBuf);
+            // The sources of these two merge edges will now each have a merge edge into
+            // @ref parent instead of @ref v
             VariableDependency* parent = newVariable(nameBuf);
 
             EdgeMetadata data(EdgeMetadata::EdgeType::MERGE);
             addDirected(src1, parent, data);
             addDirected(src2, parent, data);
+            // Final edge from cascaded merge into origin
             addDirected(parent, &v, data);
         }
     }
