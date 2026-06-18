@@ -4,8 +4,8 @@
 
 #include "DBTypes.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/Value.h"
 
 namespace db {
 
@@ -17,15 +17,17 @@ public:
     using VariableIdentities = std::vector<mlir::db::ColumnType>;
     using VariableIdentityMap = std::unordered_map<const VariableDependency*, VariableIdentities>;
 
-    DBProgramGenerator()
-        : _builder(&_mlirCtxt)
+    DBProgramGenerator(mlir::MLIRContext* ctxt, mlir::Builder* bld)
+        : _mlirCtxt(ctxt),
+        _builder(bld)
     {
     }
 
-    void generate(const CypherAST* ast);
+    void generate(const CypherAST* ast, mlir::ModuleOp* module);
+
 private:
-    mlir::MLIRContext _mlirCtxt;
-    mlir::Builder _builder;
+    mlir::MLIRContext* _mlirCtxt {nullptr};
+    mlir::Builder* _builder {nullptr};
 
     VariableIdentityMap _varMap;
 

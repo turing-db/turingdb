@@ -26,22 +26,20 @@ using namespace db;
 mlir::db::ColumnType DBProgramGenerator::createColumnFor(const VariableDependency* var) {
     const auto& existingVars = _varMap[var];
     const std::string colName = std::string(var->getName()) + std::to_string(existingVars.size());
-    const mlir::db::ColumnType col = mlir::db::ColumnType::get(&_mlirCtxt, colName);
+    const mlir::db::ColumnType col = mlir::db::ColumnType::get(_mlirCtxt, colName);
     _varMap[var].emplace_back(col);
 
     return col;
 }
 
-void DBProgramGenerator::generate(const CypherAST* ast) {
-    // MLIR setup
-    _mlirCtxt.loadDialect<mlir::db::DB>();
-    mlir::OpBuilder builder(&_mlirCtxt);
-    mlir::Location loc = builder.getUnknownLoc();
-    auto mainMod = mlir::ModuleOp::create(loc);
+void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) {
+    _mlirCtxt->loadDialect<mlir::db::DB>();
+    mlir::OpBuilder builder(_mlirCtxt);
+    const mlir::Location loc = builder.getUnknownLoc();
 
     { // Create main
-        builder.setInsertionPointToEnd(mainMod.getBody());
-        const mlir::FunctionType funcType = mlir::FunctionType::get(&_mlirCtxt, {}, {});
+        builder.setInsertionPointToEnd(module->getBody());
+        const mlir::FunctionType funcType = mlir::FunctionType::get(_mlirCtxt, {}, {});
         auto func = builder.create<mlir::func::FuncOp>(loc, "main", funcType);
         mlir::Block& block = *func.addEntryBlock();
         builder.setInsertionPointToStart(&block);
@@ -56,14 +54,6 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
 
     for (const auto& node : trav) {
         const VariableDependency* var = node._var;
-
-        if (!node._fstProducer) { // Assumes ScanNodes for now
-            bioassert(!_varMap.contains(var), "Visited node without producer");
-
-            const mlir::db::ColumnType col = createColumnFor(var);
-            builder.create<mlir::db::ScanNodes>(loc, col);
-        }
-
         const auto generatedBy =  node._gen;
 
         switch (generatedBy) {
@@ -98,4 +88,5 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
 
         }
     }
+    builder.create<mlir::func::ReturnOp>(loc);
 }

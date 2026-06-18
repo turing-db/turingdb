@@ -7,6 +7,7 @@
 
 #include <argparse.hpp>
 
+#include "DBProgramGenerator.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -22,8 +23,18 @@
 #include "IRAssembler.h"
 #include "IRModuleInspector.h"
 
+#include "VariableDependencyGraph.h"
+#include "VariableDependencyGraphTraversal.h"
+
+#include "CypherAST.h"
+#include "CypherAnalyzer.h"
+#include "CypherParser.h"
 #include "Graph.h"
+#include "SimpleGraph.h"
+#include "SystemManager.h"
+#include "TuringConfig.h"
 #include "dump/GraphLoader.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "columns/ColumnIDs.h"
@@ -161,6 +172,36 @@ void helloModule(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
 
     addDBFunction(builder, module);
     addNestedLoopFunction(builder, module);
+}
+
+void progGen(std::string_view query,
+             mlir::MLIRContext* ctxt,
+             mlir::Builder* bld,
+             mlir::ModuleOp* module) {
+    TuringConfig config;
+    config.setSyncedOnDisk(false);
+
+    SystemManager sysman(&config);
+    sysman.init();
+
+    SystemAccessor acc = sysman.accessUnique();
+
+    Graph* graph = acc.createGraph("simpledb");
+    SimpleGraph::createSimpleGraph(graph);
+
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    CypherAST ast(acc.getProcedures(), query);
+
+    CypherParser parser(&ast);
+    parser.parse(query);
+
+    CypherAnalyzer analyzer(&ast, view);
+    analyzer.analyze();
+
+    DBProgramGenerator progGen(ctxt, bld);
+    progGen.generate(&ast, module);
 }
 
 void assembleFiles(mlir::MLIRContext& ctxt, mlir::ModuleOp& module, const std::vector<std::string>& files) {
@@ -369,8 +410,9 @@ int main(int argc, char** argv) {
     bool execute = false;
     bool quiet = false;
     std::string graphDir;
+    std::string query;
 
-    parser.add_argument("files")
+    parser.add_argument("-f", "--files")
         .metavar("mlir.txt")
         .nargs(argparse::nargs_pattern::any)
         .store_into(files)
@@ -384,11 +426,11 @@ int main(int argc, char** argv) {
         .store_into(dumpLowered)
         .help("Lower the db-dialect 'main' to the nl dialect and dump it (no execution)");
 
-    parser.add_argument("-exec")
+    parser.add_argument("-e", "--exec")
         .store_into(execute)
         .help("Execute the module's main function with the NLInterpreter");
 
-    parser.add_argument("-graph")
+    parser.add_argument("-g", "--graph")
         .metavar("path")
         .store_into(graphDir)
         .help("Graph directory to load and execute against (requires -exec)");
@@ -396,6 +438,10 @@ int main(int argc, char** argv) {
     parser.add_argument("-quiet")
         .store_into(quiet)
         .help("Count output rows instead of printing them (for benchmarking)");
+    parser.add_argument("-q", "--query")
+        .metavar("query")
+        .store_into(query)
+        .help("CYPHER query to translate to MLIR and execute");
 
     try {
         parser.parse_args(argc, argv);
@@ -414,7 +460,9 @@ int main(int argc, char** argv) {
         mlir::OpBuilder builder(&ctxt);
         auto mainMod = mlir::ModuleOp::create(builder.getUnknownLoc());
 
-        if (files.empty()) {
+        if (!query.empty()) {
+            progGen(query, &ctxt, &builder, &mainMod);
+        } else if (files.empty()) {
             helloModule(builder, mainMod);
         } else {
             assembleFiles(ctxt, mainMod, files);
