@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <chrono>
 #include <iostream>
 #include <optional>
 #include <span>
@@ -194,14 +195,27 @@ void progGen(std::string_view query,
 
     CypherAST ast(acc.getProcedures(), query);
 
+    using Clock = std::chrono::steady_clock;
+    using Ms = std::chrono::duration<double, std::milli>;
+
+    const auto parsStart = Clock::now();
     CypherParser parser(&ast);
     parser.parse(query);
+    const double parseMs = Ms(Clock::now() - parsStart).count();
 
+    const auto analyzeStart = Clock::now();
     CypherAnalyzer analyzer(&ast, view);
     analyzer.analyze();
+    const double analyzeMs = Ms(Clock::now() - analyzeStart).count();
 
-    DBProgramGenerator progGen(ctxt, bld);
-    progGen.generate(&ast, module);
+    const auto codegenStart = Clock::now();
+    DBProgramGenerator generator(ctxt, bld);
+    generator.generate(&ast, module);
+    const double codegenMs = Ms(Clock::now() - codegenStart).count();
+
+    std::cout << "[progGen] parse: " << parseMs << " ms, "
+              << "analyze: " << analyzeMs << " ms, "
+              << "codegen: " << codegenMs << " ms\n";
 }
 
 void assembleFiles(mlir::MLIRContext& ctxt, mlir::ModuleOp& module, const std::vector<std::string>& files) {
