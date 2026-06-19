@@ -9,7 +9,6 @@
 
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
-#include "TypeUtils.h"
 
 #include "PipelineException.h"
 
@@ -80,14 +79,14 @@ public:
     ~Averager() = default;
 
     // e.g. AVG(n.score) where score is a nullable double: accumulate non-null values
-    template <TypeConcepts::OptionalType T>
-    void operator()(const ColumnVector<T>* typed) {
+    template <typename T>
+    void operator()(const ColumnOptVector<T>* typed) {
         // TODO @cyrus: Decide how to extract the numeric primitive from optional types.
         // For optional<Double>, item.value() gives the double. For optional<Integer>,
         // item.value() gives an int64 that we cast to double. The cast is implicit here
         // but it should be made explicit once the type trait for "numeric primitive" is
         // established (see also the accumulator type decision in AvgProcessor.h).
-        for (const T& item : *typed) {
+        for (const std::optional<T>& item : *typed) {
             if (item.has_value()) {
                 _sum += static_cast<AvgProcessor::AvgType>(item.value());
                 _count++;
@@ -110,7 +109,25 @@ public:
     }
 
     // e.g. AVG(NULL): no values to accumulate
-    constexpr void operator()(const ColumnConst<PropertyNull>*  /*unused*/) {
+    constexpr void operator()(const ColumnConst<PropertyNull>*) {}
+
+    template <typename T>
+    void operator()(const ColumnConst<T>* typed) {
+        const T& val = typed->getRaw();
+        _sum += static_cast<AvgProcessor::AvgType>(val);
+        _count++;
+    }
+
+    template <typename T>
+    void operator()(const ColumnConst<std::optional<T>>* typed) {
+        const std::optional<T>& maybe = typed->getRaw();
+        if (!maybe.has_value()) {
+            return;
+        }
+
+        const T& val = maybe.value();
+        _sum += static_cast<AvgProcessor::AvgType>(val);
+        _count++;
     }
 
 private:
@@ -122,14 +139,14 @@ void AvgProcessor::execute() {
     PipelineInputPort* inputPort = _input.getPort();
     inputPort->consume();
 
-    const Dataframe* inputDf = _input.getDataframe();
+    // const Dataframe* inputDf = _input.getDataframe();
 
     // _col is always valid for avg (avg(*) is rejected in prepare())
     AvgProcessor::AvgType localSum = 0.0;
     size_t localCount = 0;
 
     Averager averager(localSum, localCount);
-    using Types = OutputtedTypes;
+    using Types = NumericallyAggregatedTypes;
     using AvgDispatch =
         ColumnSingleDispatcher<Types::Allowed, Averager, Types::Excluded>;
 
