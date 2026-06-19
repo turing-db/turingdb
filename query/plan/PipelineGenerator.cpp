@@ -249,7 +249,6 @@ void translateCount(const FunctionInvocationExpr* func,
 void translateAvg(const FunctionInvocationExpr* func,
                   const ExprChain* args,
                   PipelineBuilder& builder,
-                  LocalMemory* mem,
                   std::unordered_map<const VarDecl*, ColumnTag>& declToColumn) {
     const VarDecl* exprDecl = func->getExprVarDecl();
 
@@ -258,28 +257,8 @@ void translateAvg(const FunctionInvocationExpr* func,
     }
 
     const bool hasInput = builder.getPendingOutputInterface() != nullptr;
-
-    // TODO @cyrus: Decide what avg() should return when there is no input (e.g.
-    // `RETURN avg(n.score)` with no MATCH). count() returns 0 for this case, but
-    // OpenCypher specifies that avg() over an empty set returns null. Returning 0.0
-    // here would be incorrect. This requires the output column type to be able to
-    // represent null (see the corresponding TODO in AvgProcessor.cpp).
-    if (!hasInput) {
-        using AvgType = AvgProcessor::AvgType;
-        builder.addLambdaSource(
-            [](Dataframe*, bool& isFinished, LambdaSourceProcessor::Operation op) {
-                if (op == LambdaSourceProcessor::Operation::EXECUTE) {
-                    isFinished = true;
-                }
-            });
-
-        auto* zeroCol = mem->alloc<ColumnConst<AvgType>>();
-        zeroCol->set(0.0); // TODO @cyrus: should be null, not 0.0 (see above)
-        NamedColumn* avgColumn = builder.addColumnToOutput(zeroCol);
-
-        declToColumn[exprDecl] = avgColumn->getTag();
-        return;
-    }
+    // Unlike count(), RETURN avg(*) is not valid, so there should always be an input
+    bioassert(hasInput, "avg() had no input");
 
     if (args->size() != 1) {
         throw PlannerException("avg() requires exactly one argument");
@@ -288,10 +267,8 @@ void translateAvg(const FunctionInvocationExpr* func,
     const Expr* arg = args->front();
     const VarDecl* argDecl = arg->getExprVarDecl();
 
-    // Invalid: caught in parser, but check here to sure
-    if (arg->getType() == EvaluatedType::Wildcard) {
-        throw PlannerException("avg(*) is not supported");
-    }
+    // avg(*) invalid: caught in parser, but check here to sure
+    bioassert(arg->getType() != EvaluatedType::Wildcard, "avg(*) is invalid");
 
     const auto findIt = declToColumn.find(argDecl);
     bioassert(findIt != end(declToColumn), "Failed to get column for variable {}.",
@@ -1214,7 +1191,7 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
 
     const auto& funcs = node->getFuncs();
 
-    if (funcs.empty()) [[unlikely]] {
+    if (funcs.empty()) {
         throw PlannerException("AggregateEvalNode does not have any functions");
     }
 
@@ -1223,26 +1200,26 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
         const ExprChain* args = invocation->getArguments();
         const FunctionSignature* signature = invocation->getSignature();
 
-        if (!invocation) [[unlikely]] {
+        if (!invocation) {
             throw PlannerException("FunctionInvocationExpr does not have a FunctionInvocation");
         }
 
-        if (!args) [[unlikely]] {
+        if (!args) {
             throw PlannerException("FunctionInvocation does not have arguments");
         }
 
-        if (!signature) [[unlikely]] {
+        if (!signature) {
             throw PlannerException("FunctionInvocation does not have a FunctionSignature");
         }
 
-        if (!signature->isAggregate()) [[unlikely]] {
+        if (!signature->isAggregate()) {
             throw PlannerException("FunctionInvocation is not an aggregate function");
         }
 
         if (signature->getFullName() == "count") {
             translateCount(func, args, _builder, _mem, _declToColumn);
         } else if (signature->getFullName() == "avg") {
-            translateAvg(func, args, _builder, _mem, _declToColumn);
+            translateAvg(func, args, _builder, _declToColumn);
         } else {
             throw PlannerException(fmt::format("Aggregate function '{}' is not implemented yet", signature->getFullName()));
         }
