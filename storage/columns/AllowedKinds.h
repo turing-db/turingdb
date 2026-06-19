@@ -616,16 +616,12 @@ struct NumericallyAggregatedTypes {
     using Allowed = GenerateKindList<std::tuple<
         // All property types and their optional variants
         types::Int64::Primitive,
-        // types::UInt64::Primitive,
-        // types::Double::Primitive,
-        // types::String::Primitive,
-        // types::Bool::Primitive,
+        types::UInt64::Primitive,
+        types::Double::Primitive,
 
-        std::optional<types::Int64::Primitive>
-        // std::optional<types::UInt64::Primitive>,
-        // std::optional<types::Double::Primitive>,
-        // std::optional<types::String::Primitive>,
-        // std::optional<types::Bool::Primitive>,
+        std::optional<types::Int64::Primitive>,
+        std::optional<types::UInt64::Primitive>,
+        std::optional<types::Double::Primitive>
     >>;
 
     using Excluded = ExcludedContainers<
