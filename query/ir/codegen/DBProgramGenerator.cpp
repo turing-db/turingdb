@@ -4,7 +4,6 @@
 
 #include "DBTypes.h"
 #include "DependencyEdge.h"
-#include "EdgeMetadata.h"
 #include "VariableDependency.h"
 #include "VariableDependencyGraph.h"
 #include "VariableDependencyGraphTraversal.h"
@@ -15,6 +14,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/ValueRange.h"
 
 #include "DBOps.h"
 
@@ -52,6 +52,8 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
     VariableDependencyGraphTraversal vdgTrav;
     vdgTrav.computeTraversal(&vdg, trav);
 
+    std::vector<mlir::db::ScanNodes> out;
+
     for (const auto& node : trav) {
         const VariableDependency* var = node._var;
         const auto generatedBy =  node._gen;
@@ -60,7 +62,8 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             case VariableDependencyGraphTraversal::Generator::SCAN_NODES: {
                 bioassert(!_varMap.contains(var), "Visited node without producer");
                 const mlir::db::ColumnType col = createColumnFor(var);
-                builder.create<mlir::db::ScanNodes>(loc, col);
+                auto x = builder.create<mlir::db::ScanNodes>(loc, col);
+                out.push_back(x);
             }
             break;
 
@@ -88,5 +91,8 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
 
         }
     }
+    bioassert(!out.empty(), "nothing to output");
+
+    builder.create<mlir::db::Output>(loc, mlir::ValueRange{out.front().getResult()});
     builder.create<mlir::func::ReturnOp>(loc);
 }

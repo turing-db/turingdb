@@ -25,8 +25,6 @@
 #include "EdgeMetadata.h"
 #include "VariableDependency.h"
 
-#include "IRDumper.h"
-
 #include "BioAssert.h"
 #include "FatalException.h"
 
@@ -75,6 +73,7 @@ void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
             registerPatternElement(ele);
         }
     }
+}
 
 const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* src,
                                                            VariableDependency* tgt,
