@@ -155,6 +155,7 @@ public:
     PipelineBlockOutputInterface& addSkip(size_t count);
     PipelineBlockOutputInterface& addLimit(size_t count);
     PipelineValueOutputInterface& addCount(ColumnTag colTag = ColumnTag {});
+    PipelineValueOutputInterface& addAvg(ColumnTag colTag);
     PipelineBlockOutputInterface& addProjection(std::span<ProjectionItem> items);
     PipelineBlockOutputInterface& addOrderBy(std::span<const OrderByProcessor::OrderByKey> keys);
 
