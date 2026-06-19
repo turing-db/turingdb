@@ -50,6 +50,7 @@ public:
         return _value;
     }
 
+    bool empty() const { return _empty; }
     size_t size() const override { return _empty ? 0 : 1; }
     void clear() override { _empty = true; }
 
