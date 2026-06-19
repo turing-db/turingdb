@@ -42,7 +42,7 @@ AvgProcessor* AvgProcessor::create(PipelineV2* pipeline, ColumnTag colTag) {
 
 void AvgProcessor::prepare(ExecutionContext* ctxt) {
     auto* avgColumn = dynamic_cast<ColumnConst<AvgType>*>(_output.getValue()->getColumn());
-    bioassert(!avgColumn, "Invalid avg column.");
+    bioassert(avgColumn, "Invalid avg column.");
 
     _avgColumn = avgColumn;
 

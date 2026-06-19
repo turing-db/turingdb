@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "unwind [333, 1000, 200] as rg return avg(rg)",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __UNWIND__\n        [333, 1000, 200] AS rg\n    `\"]\n    1[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: avg\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1\n    1-->2",
+    "result": "avg(rg)\n511",
+    "resultJson": "{\"header\":{\"column_names\":[\"avg(rg)\"],\"column_types\":[\"Double\"]},\"data\":[[[511.000000]]]}"
+  },
+  "tags": [
+    "aggregate",
+    "avg",
+    "unwind"
+  ],
+  "write-required": false
+}
