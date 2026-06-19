@@ -2,6 +2,7 @@
 
 #include <stack>
 #include <string_view>
+#include <unordered_map>
 
 #include <range/v3/view/zip.hpp>
 #include <spdlog/fmt/fmt.h>
@@ -173,6 +174,133 @@ void fillList(const ListLiteral* list,
         const Column* itemConst = exprGen->generateExpr(item);
         AddItem::dispatch(itemConst, listBuilder);
     }
+}
+
+void translateCount(const FunctionInvocationExpr* func,
+                    const ExprChain* args,
+                    PipelineBuilder& builder,
+                    LocalMemory* mem,
+                    std::unordered_map<const VarDecl*, ColumnTag>& declToColumn) {
+    const VarDecl* exprDecl = func->getExprVarDecl();
+
+    if (!exprDecl) {
+        throw PlannerException("count() expression does not have an expression variable declaration");
+    }
+
+    const bool hasInput = builder.getPendingOutputInterface() != nullptr;
+
+    // Standalone COUNT (e.g. `RETURN COUNT(*)`) has no input rows.
+    // Produce a lambda source that emits a single ColumnConst<UInt64>
+    // with value 0, since count over zero rows is always zero.
+    if (!hasInput) {
+        using CountType = CountProcessor::CountType;
+        builder.addLambdaSource(
+            [](Dataframe*, bool& isFinished, LambdaSourceProcessor::Operation op) {
+                if (op == LambdaSourceProcessor::Operation::EXECUTE) {
+                    isFinished = true;
+                }
+            });
+
+        auto* zeroCol = mem->alloc<ColumnConst<CountType>>();
+        zeroCol->set(0);
+        NamedColumn* countColumn = builder.addColumnToOutput(zeroCol);
+
+        declToColumn[exprDecl] = countColumn->getTag();
+        return;
+    }
+
+    PipelineValueOutputInterface* output = nullptr;
+    if (args->size() > 1) {
+        // Already checked in the planner
+        throw PlannerException("Invalid arguments for count()");
+    }
+
+    if (args->empty()) {
+        // e.g. count()
+        output = &builder.addCount();
+        declToColumn[exprDecl] = output->getValue()->getTag();
+        return;
+    }
+
+    // args->size() == 1
+
+    // e.g. count(expr)
+    const Expr* arg = args->front();
+    const VarDecl* argDecl = arg->getExprVarDecl();
+
+    if (arg->getType() == EvaluatedType::Wildcard) {
+        // count(*)
+        output = &builder.addCount();
+        declToColumn[exprDecl] = output->getValue()->getTag();
+        return;
+    }
+
+    // count(<some var>)
+    const auto findIt = declToColumn.find(argDecl);
+    bioassert(findIt != end(declToColumn), "Failed to get column for variable {}.",
+              argDecl->getName());
+
+    const ColumnTag argTag = findIt->second;
+    output = &builder.addCount(argTag);
+
+    declToColumn[exprDecl] = output->getValue()->getTag();
+}
+
+void translateAvg(const FunctionInvocationExpr* func,
+                  const ExprChain* args,
+                  PipelineBuilder& builder,
+                  LocalMemory* mem,
+                  std::unordered_map<const VarDecl*, ColumnTag>& declToColumn) {
+    const VarDecl* exprDecl = func->getExprVarDecl();
+
+    if (!exprDecl) {
+        throw PlannerException("avg() expression does not have an expression variable declaration");
+    }
+
+    const bool hasInput = builder.getPendingOutputInterface() != nullptr;
+
+    // TODO @cyrus: Decide what avg() should return when there is no input (e.g.
+    // `RETURN avg(n.score)` with no MATCH). count() returns 0 for this case, but
+    // OpenCypher specifies that avg() over an empty set returns null. Returning 0.0
+    // here would be incorrect. This requires the output column type to be able to
+    // represent null (see the corresponding TODO in AvgProcessor.cpp).
+    if (!hasInput) {
+        using AvgType = AvgProcessor::AvgType;
+        builder.addLambdaSource(
+            [](Dataframe*, bool& isFinished, LambdaSourceProcessor::Operation op) {
+                if (op == LambdaSourceProcessor::Operation::EXECUTE) {
+                    isFinished = true;
+                }
+            });
+
+        auto* zeroCol = mem->alloc<ColumnConst<AvgType>>();
+        zeroCol->set(0.0); // TODO @cyrus: should be null, not 0.0 (see above)
+        NamedColumn* avgColumn = builder.addColumnToOutput(zeroCol);
+
+        declToColumn[exprDecl] = avgColumn->getTag();
+        return;
+    }
+
+    if (args->size() != 1) {
+        throw PlannerException("avg() requires exactly one argument");
+    }
+
+    const Expr* arg = args->front();
+    const VarDecl* argDecl = arg->getExprVarDecl();
+
+    // Invalid: caught in parser, but check here to sure
+    if (arg->getType() == EvaluatedType::Wildcard) {
+        throw PlannerException("avg(*) is not supported");
+    }
+
+    const auto findIt = declToColumn.find(argDecl);
+    bioassert(findIt != end(declToColumn), "Failed to get column for variable {}.",
+              argDecl->getName());
+
+    const ColumnTag argTag = findIt->second;
+    PipelineValueOutputInterface& output = builder.addAvg(argTag);
+
+    declToColumn[exprDecl] = output.getValue()->getTag();
 }
 
 }
@@ -1112,119 +1240,9 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
         }
 
         if (signature->getFullName() == "count") {
-            const VarDecl* exprDecl = func->getExprVarDecl();
-
-            if (!exprDecl) [[unlikely]] {
-                throw PlannerException("Count() expression does not have an expression variable declaration");
-            }
-
-            const bool hasInput = _builder.getPendingOutputInterface() != nullptr;
-
-            // Standalone COUNT (e.g. `RETURN COUNT(*)`) has no input rows.
-            // Produce a lambda source that emits a single ColumnConst<UInt64>
-            // with value 0, since count over zero rows is always zero.
-            if (!hasInput) {
-                using CountType = CountProcessor::CountType;
-                _builder.addLambdaSource(
-                    [](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation op) {
-                        if (op == LambdaSourceProcessor::Operation::EXECUTE) {
-                            isFinished = true;
-                        }
-                    });
-
-                auto* zeroCol = _mem->alloc<ColumnConst<CountType>>();
-                zeroCol->set(0);
-                NamedColumn* countColumn = _builder.addColumnToOutput(zeroCol);
-
-                _declToColumn[exprDecl] = countColumn->getTag();
-
-            } else {
-                PipelineValueOutputInterface* output = nullptr;
-                if (args->empty()) {
-                    // e.g. count()
-                    output = &_builder.addCount();
-
-                } else if (args->size() == 1) {
-                    // e.g. count(expr)
-                    const Expr* arg = args->front();
-                    const VarDecl* argDecl = arg->getExprVarDecl();
-                    if (arg->getType() == EvaluatedType::Wildcard) {
-                        // count(*)
-                        output = &_builder.addCount();
-                    } else {
-                        // count(<some var>)
-                        const auto findIt = _declToColumn.find(argDecl);
-                        if (findIt == _declToColumn.end()) {
-                            throw FatalException(fmt::format(
-                                "Failed to get column for variable {}.", argDecl->getName()));
-                        }
-                        const ColumnTag argTag = findIt->second;
-                        output = &_builder.addCount(argTag);
-                    }
-
-                } else [[unlikely]] {
-                    // Already checked in the planner
-                    throw PlannerException("Invalid arguments for count()");
-                }
-
-                _declToColumn[exprDecl] = output->getValue()->getTag();
-            }
+            translateCount(func, args, _builder, _mem, _declToColumn);
         } else if (signature->getFullName() == "avg") {
-            const VarDecl* exprDecl = func->getExprVarDecl();
-
-            if (!exprDecl) [[unlikely]] {
-                throw PlannerException("avg() expression does not have an expression variable declaration");
-            }
-
-            const bool hasInput = _builder.getPendingOutputInterface() != nullptr;
-
-            // TODO @cyrus: Decide what avg() should return when there is no input (e.g.
-            // `RETURN avg(n.score)` with no MATCH). count() returns 0 for this case, but
-            // OpenCypher specifies that avg() over an empty set returns null. Returning 0.0
-            // here would be incorrect. This requires the output column type to be able to
-            // represent null (see the corresponding TODO in AvgProcessor.cpp).
-            if (!hasInput) {
-                using AvgType = AvgProcessor::AvgType;
-                _builder.addLambdaSource(
-                    [](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation op) {
-                        if (op == LambdaSourceProcessor::Operation::EXECUTE) {
-                            isFinished = true;
-                        }
-                    });
-
-                auto* zeroCol = _mem->alloc<ColumnConst<AvgType>>();
-                zeroCol->set(0.0); // TODO @cyrus: should be null, not 0.0 (see above)
-                NamedColumn* avgColumn = _builder.addColumnToOutput(zeroCol);
-
-                _declToColumn[exprDecl] = avgColumn->getTag();
-
-            } else {
-                PipelineValueOutputInterface* output = nullptr;
-                if (args->empty() || args->size() != 1) [[unlikely]] {
-                    throw PlannerException("avg() requires exactly one argument");
-                }
-
-                const Expr* arg = args->front();
-                const VarDecl* argDecl = arg->getExprVarDecl();
-
-                // TODO @cyrus: Decide whether avg(*) should be a parse/analysis error or
-                // a pipeline error. It does not have a sensible semantic in OpenCypher
-                // (unlike count(*)), so rejecting it in the analyzer would give a better
-                // user-facing error message. For now it is caught here as a runtime error.
-                if (arg->getType() == EvaluatedType::Wildcard) {
-                    throw PlannerException("avg(*) is not supported");
-                }
-
-                const auto findIt = _declToColumn.find(argDecl);
-                if (findIt == _declToColumn.end()) {
-                    throw FatalException(fmt::format(
-                        "Failed to get column for variable {}.", argDecl->getName()));
-                }
-                const ColumnTag argTag = findIt->second;
-                output = &_builder.addAvg(argTag);
-
-                _declToColumn[exprDecl] = output->getValue()->getTag();
-            }
+            translateAvg(func, args, _builder, _mem, _declToColumn);
         } else {
             throw PlannerException(fmt::format("Aggregate function '{}' is not implemented yet", signature->getFullName()));
         }
