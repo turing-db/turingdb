@@ -30,6 +30,7 @@ set(processors_sources
     processors/SkipProcessor.cpp
     processors/LimitProcessor.cpp
     processors/CountProcessor.cpp
+    processors/AvgProcessor.cpp
     processors/ProjectionProcessor.cpp
     processors/LambdaSourceProcessor.cpp
     processors/LambdaTransformProcessor.cpp

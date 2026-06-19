@@ -34,6 +34,7 @@
 #include "processors/SkipProcessor.h"
 #include "processors/LimitProcessor.h"
 #include "processors/CountProcessor.h"
+#include "processors/AvgProcessor.h"
 #include "processors/UnwindProcessor.h"
 #include "processors/WriteProcessor.h"
 #include "processors/ListGraphProcessor.h"
@@ -531,6 +532,30 @@ PipelineValueOutputInterface& PipelineBuilder::addCount(ColumnTag colTag) {
     _pendingOutput.updateInterface(&count->output());
     _lastProc = count;
     return count->output();
+}
+
+PipelineValueOutputInterface& PipelineBuilder::addAvg(ColumnTag colTag) {
+    if (!_pendingOutput.getInterface()) {
+        throw FatalException("AVG had no input.");
+    }
+
+    AvgProcessor* avg = AvgProcessor::create(_pipeline, colTag);
+
+    PipelineBlockInputInterface avgIn = avg->input();
+    PipelineValueOutputInterface avgOut = avg->output();
+    Dataframe* avgOutDf = avgOut.getDataframe();
+
+    _pendingOutput.connectTo(avgIn);
+
+    avgIn.propagateColumns(avgOut);
+
+    NamedColumn* avgColumn =
+        allocColumn<ColumnConst<AvgProcessor::AvgType>>(avgOutDf);
+    avg->output().setValue(avgColumn);
+
+    _pendingOutput.updateInterface(&avg->output());
+    _lastProc = avg;
+    return avg->output();
 }
 
 PipelineBlockOutputInterface& PipelineBuilder::addProjection(std::span<ProjectionItem> items) {

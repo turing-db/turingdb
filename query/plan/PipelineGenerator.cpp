@@ -44,6 +44,7 @@
 
 #include "processors/MaterializeProcessor.h"
 #include "processors/CountProcessor.h"
+#include "processors/AvgProcessor.h"
 #include "processors/LambdaSourceProcessor.h"
 #include "columns/ColumnConst.h"
 
@@ -1165,6 +1166,62 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
                     // Already checked in the planner
                     throw PlannerException("Invalid arguments for count()");
                 }
+
+                _declToColumn[exprDecl] = output->getValue()->getTag();
+            }
+        } else if (signature->getFullName() == "avg") {
+            const VarDecl* exprDecl = func->getExprVarDecl();
+
+            if (!exprDecl) [[unlikely]] {
+                throw PlannerException("avg() expression does not have an expression variable declaration");
+            }
+
+            const bool hasInput = _builder.getPendingOutputInterface() != nullptr;
+
+            // TODO @cyrus: Decide what avg() should return when there is no input (e.g.
+            // `RETURN avg(n.score)` with no MATCH). count() returns 0 for this case, but
+            // OpenCypher specifies that avg() over an empty set returns null. Returning 0.0
+            // here would be incorrect. This requires the output column type to be able to
+            // represent null (see the corresponding TODO in AvgProcessor.cpp).
+            if (!hasInput) {
+                using AvgType = AvgProcessor::AvgType;
+                _builder.addLambdaSource(
+                    [](Dataframe* df, bool& isFinished, LambdaSourceProcessor::Operation op) {
+                        if (op == LambdaSourceProcessor::Operation::EXECUTE) {
+                            isFinished = true;
+                        }
+                    });
+
+                auto* zeroCol = _mem->alloc<ColumnConst<AvgType>>();
+                zeroCol->set(0.0); // TODO @cyrus: should be null, not 0.0 (see above)
+                NamedColumn* avgColumn = _builder.addColumnToOutput(zeroCol);
+
+                _declToColumn[exprDecl] = avgColumn->getTag();
+
+            } else {
+                PipelineValueOutputInterface* output = nullptr;
+                if (args->empty() || args->size() != 1) [[unlikely]] {
+                    throw PlannerException("avg() requires exactly one argument");
+                }
+
+                const Expr* arg = args->front();
+                const VarDecl* argDecl = arg->getExprVarDecl();
+
+                // TODO @cyrus: Decide whether avg(*) should be a parse/analysis error or
+                // a pipeline error. It does not have a sensible semantic in OpenCypher
+                // (unlike count(*)), so rejecting it in the analyzer would give a better
+                // user-facing error message. For now it is caught here as a runtime error.
+                if (arg->getType() == EvaluatedType::Wildcard) {
+                    throw PlannerException("avg(*) is not supported");
+                }
+
+                const auto findIt = _declToColumn.find(argDecl);
+                if (findIt == _declToColumn.end()) {
+                    throw FatalException(fmt::format(
+                        "Failed to get column for variable {}.", argDecl->getName()));
+                }
+                const ColumnTag argTag = findIt->second;
+                output = &_builder.addAvg(argTag);
 
                 _declToColumn[exprDecl] = output->getValue()->getTag();
             }
