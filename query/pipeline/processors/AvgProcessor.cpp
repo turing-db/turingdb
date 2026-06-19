@@ -42,19 +42,17 @@ AvgProcessor* AvgProcessor::create(PipelineV2* pipeline, ColumnTag colTag) {
 
 void AvgProcessor::prepare(ExecutionContext* ctxt) {
     auto* avgColumn = dynamic_cast<ColumnConst<AvgType>*>(_output.getValue()->getColumn());
-    if (!avgColumn) {
-        throw PipelineException("AvgProcessor: avg column is not a ColumnConst<Double>");
-    }
+    bioassert(!avgColumn, "Invalid avg column.");
 
     _avgColumn = avgColumn;
 
     if (!_colTag.isValid()) {
-        throw PipelineException("AvgProcessor: column tag must be valid (avg(*) is not supported)");
+        throw PipelineException("AvgProcessor: column tag must be valid.");
     }
 
     const NamedColumn* inputCol = _input.getDataframe()->getColumn(_colTag);
-    if (!inputCol) [[unlikely]] {
-        throw PipelineException("AvgProcessor: input column does not exist");
+    if (!inputCol) {
+        throw PipelineException("AvgProcessor: input column does not exist.");
     }
 
     _col = inputCol->getColumn();
@@ -63,6 +61,8 @@ void AvgProcessor::prepare(ExecutionContext* ctxt) {
 }
 
 void AvgProcessor::reset() {
+    _sum = 0;
+    _count = 0;
     markAsReset();
 }
 
