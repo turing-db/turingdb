@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN avg(42)",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v0\n    `\"]\n    1[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: avg\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1\n    1-->2",
+    "result": "avg(42)\n42",
+    "resultJson": "{\"header\":{\"column_names\":[\"avg(42)\"],\"column_types\":[\"Double\"]},\"data\":[[[42.000000]]]}"
+  },
+  "tags": [
+    "avg",
+    "aggregate",
+    "return",
+    "literal",
+    "standalone-return"
+  ],
+  "write-required": false
+}
