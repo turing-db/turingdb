@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH ()-[e]->() RETURN avg(e.duration)",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: v0\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __GET_OUT_EDGES__\n    `\"]\n    4[\"`\n        __VAR__\n        __name__: e\n    `\"]\n    5[\"`\n        __FILTER_EDGE__\n    `\"]\n    6[\"`\n        __GET_EDGE_TARGET__\n    `\"]\n    7[\"`\n        __VAR__\n        __name__: v1\n    `\"]\n    8[\"`\n        __FILTER_NODE__\n    `\"]\n    9[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: avg\n    `\"]\n    10[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ e\n        __prop__ duration\n    `\"]\n    11[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->5\n    4-->6\n    5-->4\n    6-->8\n    7-->10\n    8-->7\n    9-->11\n    10-->9",
+    "result": "avg(e.duration)\n40.625",
+    "resultJson": "{\"header\":{\"column_names\":[\"avg(e.duration)\"],\"column_types\":[\"Double\"]},\"data\":[[[40.625000]]]}"
+  },
+  "tags": [
+    "avg",
+    "aggregate",
+    "return",
+    "property",
+    "edge"
+  ],
+  "write-required": false
+}

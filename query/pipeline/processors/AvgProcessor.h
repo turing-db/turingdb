@@ -29,12 +29,9 @@ private:
     PipelineBlockInputInterface _input;
     PipelineValueOutputInterface _output;
 
-    // TODO @cyrus: For integer inputs, accumulating as double avoids the need to track a
-    // separate int64 sum, but introduces floating-point precision loss for very large integer
-    // values. Decide whether to use a separate int64 accumulator for integer-typed columns
-    // and only convert to double at division time.
-    AvgType _sumRunning {0.0};
-    size_t _countRunning {0};
+    // NOTE: Double by default, do we care about overflows?
+    AvgType _sum {0.0};
+    size_t _count {0};
 
     /// Column tag and pointer for the column being averaged
     ColumnTag _colTag;

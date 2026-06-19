@@ -2,7 +2,6 @@
 
 #include <spdlog/fmt/fmt.h>
 
-#include "metadata/PropertyType.h"
 #include "dataframe/Dataframe.h"
 #include "columns/ColumnConst.h"
 #include "dataframe/NamedColumn.h"
@@ -144,24 +143,12 @@ void AvgProcessor::execute() {
 
     Dispatcher::dispatch(_col, averager);
 
-    _sumRunning += localSum;
-    _countRunning += localCount;
+    _sum += localSum;
+    _count += localCount;
 
     inputPort->consume();
     if (inputPort->isClosed()) {
-        // TODO @cyrus: Decide the result when _countRunning == 0 (i.e. all inputs were null
-        // or no rows were processed). OpenCypher specifies that avg() over an empty or
-        // all-null set returns null. The current ColumnConst<Double> output type cannot
-        // represent null. Options:
-        //   (a) Change the output column to ColumnConst<std::optional<Double>>, which can
-        //       encode null — but requires all downstream consumers to handle optional.
-        //   (b) Return a sentinel value such as NaN or 0.0 and document it.
-        //   (c) Add a separate null-flag column that the result serialiser checks.
-        // Until this is resolved, the processor divides by zero and produces NaN when
-        // _countRunning == 0, which is incorrect.
-        const AvgType result = _countRunning > 0
-            ? _sumRunning / static_cast<AvgType>(_countRunning)
-            : 0.0; // TODO @cyrus: replace with proper null handling (see above)
+        const AvgType result = _count == 0 ? 0 : _sum / _count;
 
         _avgColumn->set(result);
         _output.getPort()->writeData();
