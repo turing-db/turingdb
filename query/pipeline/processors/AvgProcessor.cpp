@@ -81,11 +81,6 @@ public:
     // e.g. AVG(n.score) where score is a nullable double: accumulate non-null values
     template <typename T>
     void operator()(const ColumnOptVector<T>* typed) {
-        // TODO @cyrus: Decide how to extract the numeric primitive from optional types.
-        // For optional<Double>, item.value() gives the double. For optional<Integer>,
-        // item.value() gives an int64 that we cast to double. The cast is implicit here
-        // but it should be made explicit once the type trait for "numeric primitive" is
-        // established (see also the accumulator type decision in AvgProcessor.h).
         for (const std::optional<T>& item : *typed) {
             if (item.has_value()) {
                 _sum += static_cast<AvgProcessor::AvgType>(item.value());
@@ -97,22 +92,20 @@ public:
     // e.g. AVG(n.score) where score is a non-nullable numeric column: accumulate all values
     template <typename T>
     void operator()(const ColumnVector<T>* typed) {
-        // TODO @cyrus: Decide which non-optional column types are valid inputs for avg().
-        // Currently the function declarations only register Integer and Double overloads,
-        // so the analyzer will reject non-numeric arguments before we reach here. But this
-        // dispatch path is still reached for those types; confirm whether a runtime guard
-        // is needed or whether the analyzer guarantee is sufficient.
         for (const T& item : *typed) {
             _sum += static_cast<AvgProcessor::AvgType>(item);
             _count++;
         }
     }
 
-    // e.g. AVG(NULL): no values to accumulate
     constexpr void operator()(const ColumnConst<PropertyNull>*) {}
 
     template <typename T>
     void operator()(const ColumnConst<T>* typed) {
+        if (typed->empty()) {
+            return;
+        }
+
         const T& val = typed->getRaw();
         _sum += static_cast<AvgProcessor::AvgType>(val);
         _count++;
@@ -120,6 +113,10 @@ public:
 
     template <typename T>
     void operator()(const ColumnConst<std::optional<T>>* typed) {
+        if (typed->empty()) {
+            return;
+        }
+
         const std::optional<T>& maybe = typed->getRaw();
         if (!maybe.has_value()) {
             return;
@@ -137,24 +134,20 @@ private:
 
 void AvgProcessor::execute() {
     PipelineInputPort* inputPort = _input.getPort();
-    inputPort->consume();
 
-    // const Dataframe* inputDf = _input.getDataframe();
-
-    // _col is always valid for avg (avg(*) is rejected in prepare())
     AvgProcessor::AvgType localSum = 0.0;
     size_t localCount = 0;
 
     Averager averager(localSum, localCount);
     using Types = NumericallyAggregatedTypes;
-    using AvgDispatch =
-        ColumnSingleDispatcher<Types::Allowed, Averager, Types::Excluded>;
+    using Dispatcher = ColumnSingleDispatcher<Types::Allowed, Averager, Types::Excluded>;
 
-    AvgDispatch::dispatch(_col, averager);
+    Dispatcher::dispatch(_col, averager);
 
     _sumRunning += localSum;
     _countRunning += localCount;
 
+    inputPort->consume();
     if (inputPort->isClosed()) {
         // TODO @cyrus: Decide the result when _countRunning == 0 (i.e. all inputs were null
         // or no rows were processed). OpenCypher specifies that avg() over an empty or
