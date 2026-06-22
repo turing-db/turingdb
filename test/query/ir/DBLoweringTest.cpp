@@ -285,6 +285,74 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a), (b) RETURN a, b: two disconnected scans crossed, |nodes|^2 rows
+constexpr const char* crossProductScansProgram = R"mlir(
+func.func @main() {
+  %0:2 = db.cross_product factor {
+    %a = db.scan_nodes() : !db.column<"a">
+    db.yield %a : !db.column<"a">
+  } factor {
+    %b = db.scan_nodes() : !db.column<"b">
+    db.yield %b : !db.column<"b">
+  }
+  db.output(%0#0, %0#1) : !db.column<"a">, !db.column<"b">
+  return
+}
+)mlir";
+
+// MATCH (a)->(b), (c)->(d) RETURN a, b, c, d: each factor walks one hop and
+// yields the (source, target) of its edge; the product crosses every edge of
+// one factor with every edge of the other, |edges|^2 rows
+constexpr const char* crossProductHopsProgram = R"mlir(
+func.func @main() {
+  %0:4 = db.cross_product factor {
+    %a = db.scan_nodes() : !db.column<"a">
+    %asrc, %ae, %aet, %b = db.get_out_edges(%a, {}) : (!db.column<"a">) -> (!db.column<"asrc">, !db.column<"ae">, !db.column<"aet">, !db.column<"b">)
+    db.yield %asrc, %b : !db.column<"asrc">, !db.column<"b">
+  } factor {
+    %c = db.scan_nodes() : !db.column<"c">
+    %csrc, %ce, %cet, %d = db.get_out_edges(%c, {}) : (!db.column<"c">) -> (!db.column<"csrc">, !db.column<"ce">, !db.column<"cet">, !db.column<"d">)
+    db.yield %csrc, %d : !db.column<"csrc">, !db.column<"d">
+  }
+  db.output(%0#0, %0#1, %0#2, %0#3) : !db.column<"asrc">, !db.column<"b">, !db.column<"csrc">, !db.column<"d">
+  return
+}
+)mlir";
+
+// MATCH (a), (b) RETURN a, b.score: the inner factor fetches a node property
+// inside the factor, so the crossed value column is a nullable value chunk -
+// the outer node IDs are block-repeated and the inner scores tiled together
+constexpr const char* crossProductNodePropertyProgram = R"mlir(
+func.func @main() {
+  %0:3 = db.cross_product factor {
+    %a = db.scan_nodes() : !db.column<"a">
+    db.yield %a : !db.column<"a">
+  } factor {
+    %b = db.scan_nodes() : !db.column<"b">
+    %score = db.get_node_properties(%b, "score") : (!db.column<"b">) -> !db.column<"b.score">
+    db.yield %b, %score : !db.column<"b">, !db.column<"b.score">
+  }
+  db.output(%0#0, %0#2) : !db.column<"a">, !db.column<"b.score">
+  return
+}
+)mlir";
+
+// A cross product whose right factor yields no column: lowering does not yet
+// support it (the empty side has no column to measure its row count from)
+constexpr const char* crossProductZeroYieldProgram = R"mlir(
+func.func @main() {
+  %0 = db.cross_product factor {
+    %a = db.scan_nodes() : !db.column<"a">
+    db.yield %a : !db.column<"a">
+  } factor {
+    %b = db.scan_nodes() : !db.column<"b">
+    db.yield
+  }
+  db.output(%0) : !db.column<"a">
+  return
+}
+)mlir";
+
 }
 
 class DBLoweringTest : public TuringTest {
@@ -380,10 +448,12 @@ protected:
     }
 
     // Parses a db-dialect program, lowers it to nl with DBLowering, and runs
-    // the lowered nl function against the graph view
+    // the lowered nl function against the graph view. The chunk size is exposed
+    // so a test can force a product to span chunk boundaries.
     void runLoweredProgram(const char* programText,
                            const GraphView& view,
-                           NLOutputSink& sink) {
+                           NLOutputSink& sink,
+                           size_t chunkSize = ChunkConfig::CHUNK_SIZE) {
         mlir::MLIRContext context;
         context.getOrLoadDialect<mlir::func::FuncDialect>();
         context.getOrLoadDialect<mlir::db::DB>();
@@ -402,7 +472,7 @@ protected:
         lowering.lower(dbFunction, *nlModule);
 
         LocalMemory memory;
-        NLInterpreter interpreter(*nlModule, &view, &sink, &memory);
+        NLInterpreter interpreter(*nlModule, &view, &sink, &memory, chunkSize);
         interpreter.run();
     }
 
@@ -517,6 +587,110 @@ TEST_F(DBLoweringTest, lowersGetEdgeProperties) {
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesCrossProductOfScans) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(crossProductScansProgram, reader.getView(), sink);
+
+    // Every node crossed with every node: the 16 (a, b) pairs over four nodes
+    std::vector<std::vector<uint64_t>> expected;
+    for (uint64_t a = 0; a < 4; a++) {
+        for (uint64_t b = 0; b < 4; b++) {
+            expected.push_back({a, b});
+        }
+    }
+    std::sort(expected.begin(), expected.end());
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesCrossProductSpanningChunks) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // A chunk of three over four nodes splits each scan into two chunks, so the
+    // product must cross rows that land in different chunks - still all 16 pairs
+    CollectingNodeSink sink;
+    runLoweredProgram(crossProductScansProgram, reader.getView(), sink, /*chunkSize=*/3);
+
+    std::vector<std::vector<uint64_t>> expected;
+    for (uint64_t a = 0; a < 4; a++) {
+        for (uint64_t b = 0; b < 4; b++) {
+            expected.push_back({a, b});
+        }
+    }
+    std::sort(expected.begin(), expected.end());
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesCrossProductOfHops) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(crossProductHopsProgram, reader.getView(), sink);
+
+    // Every edge crossed with every edge: each row is (outer src, outer tgt,
+    // inner src, inner tgt) for the four diamond edges, so 16 rows
+    const std::vector<std::pair<uint64_t, uint64_t>> edges {{0, 1}, {0, 2}, {1, 3}, {2, 3}};
+    std::vector<std::vector<uint64_t>> expected;
+    for (const std::pair<uint64_t, uint64_t>& outer : edges) {
+        for (const std::pair<uint64_t, uint64_t>& inner : edges) {
+            expected.push_back({outer.first, outer.second, inner.first, inner.second});
+        }
+    }
+    std::sort(expected.begin(), expected.end());
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesCrossProductOfNodeProperty) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // A node ID crossed with a nullable property column: node 2 has no score,
+    // so its value comes back null and is broadcast like any other value
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(crossProductNodePropertyProgram, reader.getView(), sink);
+
+    const std::vector<std::optional<int64_t>> scores {100, 200, std::nullopt};
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected;
+    for (uint64_t a = 0; a < 3; a++) {
+        for (const std::optional<int64_t>& score : scores) {
+            expected.push_back({a, score});
+        }
+    }
+    std::sort(expected.begin(), expected.end());
+
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, crossProductZeroYieldFactorNotLowered) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The right factor yields no column, so lowering cannot size that side and
+    // rejects the product rather than producing a wrong row count
+    CollectingNodeSink sink;
+    EXPECT_THROW(runLoweredProgram(crossProductZeroYieldProgram, reader.getView(), sink), IRException);
 }
 
 int main(int argc, char** argv) {

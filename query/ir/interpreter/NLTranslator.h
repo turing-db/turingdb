@@ -62,6 +62,19 @@ private:
                                 NLStmtContainer* body);
     void translateOutput(const mlir::nl::Output& output, NLStmtContainer* body);
 
+    // Translate an nl.cross_product: allocate an output column per crossed
+    // column, map each to the matching op result, and record the broadcast
+    // statement (outer columns block-repeated, inner columns tiled)
+    void translateCrossProduct(mlir::nl::CrossProduct cross, NLStmtContainer* body);
+
+    // Allocate the output column for one crossed column, map the op result to
+    // it, and append it (with its block-repeat/tile broadcast) to the outer or
+    // inner list of data
+    void addCrossColumn(mlir::Value inputValue,
+                        mlir::Value resultValue,
+                        bool isOuter,
+                        NLCrossProductData* data);
+
     Column* allocColumn(mlir::Value chunkValue);
     Column* allocColumnForKind(NLChunkKind kind);
     Column* allocOptColumnForValueType(ValueType valueType);

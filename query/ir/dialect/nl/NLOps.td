@@ -208,6 +208,49 @@ def Yield : NLOp<"yield", [Pure, Terminator, HasParent<"For">]> {
 }
 
 /**
+* CrossProduct
+*/
+def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOperandSegments]> {
+  let summary = "Cross every row of one loop's chunks with every row of another";
+
+  let description = [{
+    Given an outer chunk of N rows and an inner chunk of M rows it produces N*M
+    rows: each outer column is block-repeated x M (outer row i becomes M
+    consecutive rows) and each inner column is tiled x N (the whole inner chunk
+    repeated N times), so result row k pairs outer row k/M with inner row k%M -
+    every outer row against every inner row.
+
+      %a, %b = nl.cross_product {%a} {%b}
+                 : {!nl.chunk<!nl.node_id>} {!nl.chunk<!nl.node_id>}
+
+    The two brace groups are the columns each factor contributes, in db.yield
+    order; the op's results are the outer columns followed by the inner, each
+    result chunk keeping its input's element type - only the row count changes.
+    N and M are read from the first column of each group, so each group must be
+    non-empty.
+  }];
+
+  // The outer and inner column groups to cross. Two variadic groups of
+  // independent size need AttrSizedOperandSegments to record each group's size.
+  let arguments = (ins Variadic<NLChunk>:$outer_columns,
+                       Variadic<NLChunk>:$inner_columns);
+
+  // One result per crossed column, outer group then inner group; inferred from
+  // the operands since the broadcast keeps each chunk's element type.
+  let results = (outs Variadic<NLChunk>:$results);
+
+  // The two SSA brace groups mirror the two factors. The result types are
+  // inferred, so only the operand chunk types are spelled - the same two
+  // groups, each in braces, after the colon (as nl.output spells its chunk
+  // types). The operandSegmentSizes attribute is populated and elided
+  // automatically by the generated parser/printer.
+  let assemblyFormat = [{
+    `{` $outer_columns `}` `{` $inner_columns `}` attr-dict `:`
+    `{` qualified(type($outer_columns)) `}` `{` qualified(type($inner_columns)) `}`
+  }];
+}
+
+/**
 * Output
 */
 def Output : NLOp<"output"> {

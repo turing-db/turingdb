@@ -194,6 +194,62 @@ private:
     PropertyTypeID _propertyTypeID;
 };
 
+// Broadcasts one input chunk into an output chunk by a runtime factor. The two
+// sides of a cross product broadcast differently - an outer column is
+// block-repeated (each row repeated `factor` times), an inner column is tiled
+// (the whole chunk repeated `factor` times) - but share this signature, so a
+// cross column stores whichever broadcast fits its side.
+using NLBroadcastFunction = void (*)(const Column* input, size_t factor, Column* output);
+
+// One column crossed by nl.cross_product: its input chunk (a loop variable of
+// an enclosing nl.for, stable while the inner loop iterates), the output chunk
+// the broadcast fills, and the broadcast that fills it (block-repeat for an
+// outer column, tile for an inner one).
+class NLCrossColumn {
+public:
+    NLCrossColumn(const Column* input,
+                  Column* output,
+                  NLBroadcastFunction broadcast)
+        : _input(input),
+        _output(output),
+        _broadcast(broadcast)
+    {
+    }
+
+    const Column* getInput() const { return _input; }
+    Column* getOutput() const { return _output; }
+    NLBroadcastFunction getBroadcast() const { return _broadcast; }
+
+private:
+    const Column* _input {nullptr};
+    Column* _output {nullptr};
+    NLBroadcastFunction _broadcast {nullptr};
+};
+
+// nl.cross_product data: the outer and inner columns of a cartesian product. N
+// (outer rows) and M (inner rows) are read at run time from the first column of
+// each group; each outer column is then block-repeated x M and each inner
+// column tiled x N, so the product has N*M rows.
+class NLCrossProductData : public NLFunctionData {
+public:
+    using Columns = std::vector<NLCrossColumn>;
+
+    const Columns& outerColumns() const { return _outerColumns; }
+    const Columns& innerColumns() const { return _innerColumns; }
+
+    void addOuterColumn(const NLCrossColumn& column) {
+        _outerColumns.push_back(column);
+    }
+
+    void addInnerColumn(const NLCrossColumn& column) {
+        _innerColumns.push_back(column);
+    }
+
+private:
+    Columns _outerColumns;
+    Columns _innerColumns;
+};
+
 // nl.output data
 class NLOutputData : public NLFunctionData {
 public:
