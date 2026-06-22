@@ -49,13 +49,16 @@ public:
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
-    // The broadcast for one crossed column, picked by the translator from the
-    // column's element type and its side of the product. Outer columns are
-    // block-repeated, inner columns tiled; ID chunks dispatch on their chunk
-    // kind, nullable value chunks on their property value type.
+    // Block-repeat for an ID chunk of this kind (outer column).
     static NLBroadcastFunction selectBlockRepeatFunction(NLChunkKind kind);
+
+    // Tile for an ID chunk of this kind (inner column).
     static NLBroadcastFunction selectTileFunction(NLChunkKind kind);
+
+    // Block-repeat for a nullable value chunk of this value type (outer column).
     static NLBroadcastFunction selectOptBlockRepeatFunction(ValueType valueType);
+
+    // Tile for a nullable value chunk of this value type (inner column).
     static NLBroadcastFunction selectOptTileFunction(ValueType valueType);
 
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
