@@ -77,7 +77,6 @@ public:
 
     ~Averager() = default;
 
-    // e.g. AVG(n.score) where score is a nullable double: accumulate non-null values
     template <typename T>
     void operator()(const ColumnOptVector<T>* typed) {
         for (const std::optional<T>& item : *typed) {
@@ -88,7 +87,6 @@ public:
         }
     }
 
-    // e.g. AVG(n.score) where score is a non-nullable numeric column: accumulate all values
     template <typename T>
     void operator()(const ColumnVector<T>* typed) {
         for (const T& item : *typed) {
