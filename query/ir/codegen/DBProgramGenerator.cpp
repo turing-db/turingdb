@@ -14,22 +14,30 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/Types.h"
+#include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 
 #include "DBOps.h"
 
 #include "BioAssert.h"
 #include "FatalException.h"
+#include "llvm/ADT/SmallVector.h"
 
 using namespace db;
 
-mlir::db::ColumnType DBProgramGenerator::createColumnFor(const VariableDependency* var) {
-    const auto& existingVars = _varMap[var];
-    const std::string colName = std::string(var->getName()) + std::to_string(existingVars.size());
-    const mlir::db::ColumnType col = mlir::db::ColumnType::get(_mlirCtxt, colName);
-    _varMap[var].emplace_back(col);
+mlir::db::ColumnType DBProgramGenerator::allocColumnType(const VariableDependency* var) {
+    const std::string colName = std::string(var->getName()) + std::to_string(_varMap[var].size());
+    return mlir::db::ColumnType::get(_mlirCtxt, colName);
+}
 
-    return col;
+void DBProgramGenerator::registerValue(const VariableDependency* var, mlir::TypedValue<mlir::db::ColumnType> val) {
+    _varMap[var].emplace_back(val);
+}
+
+mlir::TypedValue<mlir::db::ColumnType> DBProgramGenerator::getMostRecentColumnFor(const VariableDependency* var) {
+    bioassert(_varMap.contains(var), "Tried to get column for unregistered variable.");
+    return _varMap[var].back();
 }
 
 void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) {
@@ -51,25 +59,30 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
     VariableDependencyGraphTraversal vdgTrav;
     vdgTrav.computeTraversal(&vdg, trav);
 
-    std::vector<mlir::db::ScanNodes> out;
+    llvm::SmallVector<mlir::TypedValue<mlir::db::ColumnType>, 10> out;
 
     for (const auto& node : trav) {
         const VariableDependency* var = node._var;
-        const auto generatedBy =  node._gen;
+        const VariableDependencyGraphTraversal::Generator generatedBy = node._gen;
+        const VariableDependency* fstProd = node._fstProducer;
 
         switch (generatedBy) {
             case VariableDependencyGraphTraversal::Generator::SCAN_NODES: {
                 bioassert(!_varMap.contains(var), "Visited node without producer");
-                const mlir::db::ColumnType col = createColumnFor(var);
-                auto x = _builder->create<mlir::db::ScanNodes>(loc, col);
-                out.push_back(x);
+
+                const mlir::db::ColumnType col = allocColumnType(var);
+                auto scan = _builder->create<mlir::db::ScanNodes>(loc, col);
+
+                registerValue(var, scan.getResult());
+                out.push_back(scan.getResult());
             }
             break;
 
-            case VariableDependencyGraphTraversal::Generator::GET_OUT_EDGES:
-                throw FatalException("GET_OUT_EDGES not supported.");
-                bioassert(_varMap.contains(var), "Missing source.");
-                // const mlir::db::ColumnType col = createColumnFor(var);
+            case VariableDependencyGraphTraversal::Generator::GET_OUT_EDGES: {
+                bioassert(_varMap.contains(fstProd), "Missing source.");
+                // Placeholder — the actual op is emitted in GET_EDGE_TGT once both
+                // the edge variable and target variable are known.
+            }
             break;
 
             case VariableDependencyGraphTraversal::Generator::GET_IN_EDGES:
@@ -80,9 +93,34 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                 throw FatalException("GET_EDGES not supported.");
             break;
 
+            case VariableDependencyGraphTraversal::Generator::GET_EDGE_TGT: {
+                const mlir::TypedValue<mlir::db::ColumnType> srcValue = getMostRecentColumnFor(fstProd);
+
+                const mlir::db::ColumnType newSrcColType = allocColumnType(fstProd);
+                const mlir::db::ColumnType tgtColType = allocColumnType(var);
+                const mlir::db::ColumnType edgeIDCol = mlir::db::ColumnType::get(_mlirCtxt, "temp");
+                const mlir::db::ColumnType edgeTypeCol = mlir::db::ColumnType::get(_mlirCtxt, "tempET");
+
+                auto edges = _builder->create<mlir::db::GetOutEdges>(
+                    loc,
+                    mlir::TypeRange {newSrcColType, edgeIDCol, edgeTypeCol, tgtColType},
+                    mlir::ValueRange {srcValue});
+
+                registerValue(fstProd, edges.getSrcids());
+                registerValue(var, edges.getTgtids());
+
+                for (auto& outVal : out) {
+                    if (outVal == srcValue) {
+                        outVal = edges.getSrcids();
+                        break;
+                    }
+                }
+                out.push_back(edges.getTgtids());
+            }
+            break;
+
             case VariableDependencyGraphTraversal::Generator::GET_EDGE_SRC:
-            case VariableDependencyGraphTraversal::Generator::GET_EDGE_TGT:
-                throw FatalException("GET_EDGE_X not supported.");
+                throw FatalException("GET_EDGE_SRC not supported.");
             break;
 
             case VariableDependencyGraphTraversal::Generator::MERGE:
@@ -96,6 +134,7 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
     }
     bioassert(!out.empty(), "nothing to output");
 
-    _builder->create<mlir::db::Output>(loc, mlir::ValueRange{out.front().getResult()});
+    _builder->create<mlir::db::Output>(
+        loc, mlir::ValueRange {out.begin(), std::distance(out.begin(), out.end())});
     _builder->create<mlir::func::ReturnOp>(loc);
 }

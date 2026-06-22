@@ -14,7 +14,7 @@ class VariableDependency;
 
 class DBProgramGenerator {
 public:
-    using VariableIdentities = std::vector<mlir::db::ColumnType>;
+    using VariableIdentities = std::vector<mlir::TypedValue<mlir::db::ColumnType>>;
     using VariableIdentityMap = std::unordered_map<const VariableDependency*, VariableIdentities>;
 
     DBProgramGenerator(mlir::MLIRContext* ctxt, mlir::OpBuilder* bld)
@@ -31,7 +31,9 @@ private:
 
     VariableIdentityMap _varMap;
 
-    mlir::db::ColumnType createColumnFor(const VariableDependency* var);
+    mlir::db::ColumnType allocColumnType(const VariableDependency* var);
+    void registerValue(const VariableDependency* var, mlir::TypedValue<mlir::db::ColumnType> val);
+    mlir::TypedValue<mlir::db::ColumnType> getMostRecentColumnFor(const VariableDependency* var);
 };
     
 }
