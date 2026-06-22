@@ -27,7 +27,7 @@ namespace {
 // The with-null fetch handler for a property's value type, on the node side
 // when isNode is true and the edge side otherwise. Selecting it here keeps the
 // value-type dispatch with the rest of translation; the handler bodies live in
-// NLExecutor. String and Embedding are not lowered yet.
+// NLExecutor.
 NLHandlerFunction selectPropertyFetchHandler(bool isNode, ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:
