@@ -34,6 +34,7 @@
 #include "LocalMemory.h"
 #include "NLDialect.h"
 #include "NLInterpreter.h"
+#include "NLOps.h"
 #include "NLOutputSink.h"
 
 #include "TuringTest.h"
@@ -691,6 +692,65 @@ TEST_F(DBLoweringTest, crossProductZeroYieldFactorNotLowered) {
     // rejects the product rather than producing a wrong row count
     CollectingNodeSink sink;
     EXPECT_THROW(runLoweredProgram(crossProductZeroYieldProgram, reader.getView(), sink), IRException);
+}
+
+TEST_F(DBLoweringTest, lowersCrossProductToNestedLoops) {
+    // DBLowering takes a view, but the scans program reads no property, so the
+    // lowered structure does not depend on the graph contents.
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(crossProductScansProgram, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    // The product becomes a loop nest, not two sibling loops: exactly one
+    // nl.cross_product and exactly two nl.for loops (one scan per factor).
+    size_t crossProductCount = 0;
+    size_t forCount = 0;
+    mlir::nl::CrossProduct cross;
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::nl::CrossProduct found = mlir::dyn_cast<mlir::nl::CrossProduct>(operation)) {
+            cross = found;
+            crossProductCount++;
+        } else if (mlir::isa<mlir::nl::For>(operation)) {
+            forCount++;
+        }
+    });
+
+    EXPECT_EQ(crossProductCount, 1u);
+    EXPECT_EQ(forCount, 2u);
+    ASSERT_TRUE(cross);
+
+    // One column contributed by each factor, two results (outer ++ inner).
+    EXPECT_EQ(cross.getOuterColumns().size(), 1u);
+    EXPECT_EQ(cross.getInnerColumns().size(), 1u);
+    EXPECT_EQ(cross.getResults().size(), 2u);
+
+    // The cross sits in the inner loop body, itself nested in the outer loop
+    // body - so the inner factor re-runs once per outer chunk.
+    auto innerFor = mlir::dyn_cast<mlir::nl::For>(cross->getParentOp());
+    ASSERT_TRUE(innerFor);
+    auto outerFor = mlir::dyn_cast<mlir::nl::For>(innerFor->getParentOp());
+    ASSERT_TRUE(outerFor);
+
+    // The crossed columns are exactly those two loops' chunk variables: the
+    // outer column is the outer loop's chunk, the inner column the inner's.
+    EXPECT_EQ(cross.getOuterColumns()[0], outerFor.getBody()->getArgument(0));
+    EXPECT_EQ(cross.getInnerColumns()[0], innerFor.getBody()->getArgument(0));
 }
 
 int main(int argc, char** argv) {
