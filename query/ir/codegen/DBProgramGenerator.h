@@ -17,7 +17,7 @@ public:
     using VariableIdentities = std::vector<mlir::db::ColumnType>;
     using VariableIdentityMap = std::unordered_map<const VariableDependency*, VariableIdentities>;
 
-    DBProgramGenerator(mlir::MLIRContext* ctxt, mlir::Builder* bld)
+    DBProgramGenerator(mlir::MLIRContext* ctxt, mlir::OpBuilder* bld)
         : _mlirCtxt(ctxt),
         _builder(bld)
     {
@@ -27,7 +27,7 @@ public:
 
 private:
     mlir::MLIRContext* _mlirCtxt {nullptr};
-    mlir::Builder* _builder {nullptr};
+    mlir::OpBuilder* _builder {nullptr};
 
     VariableIdentityMap _varMap;
 

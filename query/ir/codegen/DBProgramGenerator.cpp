@@ -34,15 +34,14 @@ mlir::db::ColumnType DBProgramGenerator::createColumnFor(const VariableDependenc
 
 void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) {
     _mlirCtxt->loadDialect<mlir::db::DB>();
-    mlir::OpBuilder builder(_mlirCtxt);
-    const mlir::Location loc = builder.getUnknownLoc();
+    const mlir::Location loc = _builder->getUnknownLoc();
 
     { // Create main
-        builder.setInsertionPointToEnd(module->getBody());
+        _builder->setInsertionPointToEnd(module->getBody());
         const mlir::FunctionType funcType = mlir::FunctionType::get(_mlirCtxt, {}, {});
-        auto func = builder.create<mlir::func::FuncOp>(loc, "main", funcType);
+        auto func = _builder->create<mlir::func::FuncOp>(loc, "main", funcType);
         mlir::Block& block = *func.addEntryBlock();
-        builder.setInsertionPointToStart(&block);
+        _builder->setInsertionPointToStart(&block);
     }
 
     VariableDependencyGraph vdg;
@@ -62,7 +61,7 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             case VariableDependencyGraphTraversal::Generator::SCAN_NODES: {
                 bioassert(!_varMap.contains(var), "Visited node without producer");
                 const mlir::db::ColumnType col = createColumnFor(var);
-                auto x = builder.create<mlir::db::ScanNodes>(loc, col);
+                auto x = _builder->create<mlir::db::ScanNodes>(loc, col);
                 out.push_back(x);
             }
             break;
@@ -93,6 +92,6 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
     }
     bioassert(!out.empty(), "nothing to output");
 
-    builder.create<mlir::db::Output>(loc, mlir::ValueRange{out.front().getResult()});
-    builder.create<mlir::func::ReturnOp>(loc);
+    _builder->create<mlir::db::Output>(loc, mlir::ValueRange{out.front().getResult()});
+    _builder->create<mlir::func::ReturnOp>(loc);
 }

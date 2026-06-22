@@ -177,7 +177,7 @@ void helloModule(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
 
 void progGen(std::string_view query,
              mlir::MLIRContext* ctxt,
-             mlir::Builder* bld,
+             mlir::OpBuilder* bld,
              mlir::ModuleOp* module) {
     TuringConfig config;
     config.setSyncedOnDisk(false);
