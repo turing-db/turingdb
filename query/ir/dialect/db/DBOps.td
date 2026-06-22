@@ -116,6 +116,83 @@ def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
 }
 
 /**
+* CrossProduct
+*/
+def CrossProduct : TuringOp<"cross_product", [Pure]> {
+  let summary = "Cross every row of one column dataflow with every row of another";
+
+  let description = [{
+    Models a Cypher disconnected pattern, e.g. `MATCH (a)-->(b), (c)-->(d)`: two
+    column dataflows that share no variable, whose result is the cartesian
+    product of their rows. Each side is a self-contained db dataflow held in its
+    own region - `leftFactor` and `rightFactor` - with no operands and no block
+    arguments, so the two factors share no SSA value.
+
+      %a, %b = db.cross_product factor {
+        %x = db.scan_nodes() : !db.column<"a">
+        db.yield %x : !db.column<"a">
+      } factor {
+        %y = db.scan_nodes() : !db.column<"b">
+        db.yield %y : !db.column<"b">
+      }
+
+    Because the factors are disconnected, which columns end up in the result
+    cannot be read off a data dependency (unlike get_out_edges' carry set within
+    a connected traversal) - it must be stated. Each region ends with a db.yield
+    naming exactly the columns that factor contributes, and the op's results are
+    the left factor's yielded columns followed by the right factor's. An empty
+    db.yield is allowed: `MATCH (a),(b) RETURN a` multiplies cardinality by |b|
+    while surfacing no `b` column.
+
+    The result types are not spelled after the regions; the parser recovers them
+    from the two yields and the verifier checks they line up. Reading the graph
+    is deterministic, so the op is Pure.
+  }];
+
+  // The results are the concatenation of the two factors' yielded columns; the
+  // count and types are recovered from the yields, never spelled out.
+  let results = (outs Variadic<Column>:$results);
+
+  // Each factor is exactly one block: a self-contained dataflow ending in a
+  // db.yield, with no operands and no block arguments.
+  let regions = (region SizedRegion<1>:$leftFactor, SizedRegion<1>:$rightFactor);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  // The only builder takes the result types and creates the two empty factor
+  // blocks; the caller fills each region and terminates it with a db.yield
+  // whose operands match the result types contributed by that factor.
+  let skipDefaultBuilders = 1;
+  let builders = [
+      OpBuilder<(ins "::mlir::TypeRange":$resultTypes)>
+  ];
+}
+
+/**
+* Yield
+*/
+def Yield : TuringOp<"yield", [Pure, Terminator, HasParent<"CrossProduct">]> {
+  let summary = "Name the columns a cross_product factor contributes to the result";
+
+  let description = [{
+    Terminates a db.cross_product factor region, naming the columns that factor
+    contributes to the product. The cross_product's results are the left
+    factor's yielded columns followed by the right factor's. An empty yield is
+    allowed - a factor can multiply the result cardinality while surfacing no
+    column of its own.
+  }];
+
+  let arguments = (ins Variadic<Column>:$columns);
+
+  // The yielded column types vary from query to query and cannot be built from
+  // a recipe, so - when present - they are spelled after the colon, as in
+  // db.output. The optional group, anchored on the operands, prints nothing for
+  // an empty yield (`db.yield`).
+  let assemblyFormat = "( $columns^ `:` qualified(type($columns)) )? attr-dict";
+}
+
+/**
 * Output
 */
 def Output : TuringOp<"output"> {
