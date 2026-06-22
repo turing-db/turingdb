@@ -203,11 +203,13 @@ void NLExecutor::runCrossProduct(NLExecutionContext* context, NLFunctionData* da
     const size_t innerRowCount = innerColumns.front().getInput()->size();
 
     for (const NLCrossColumn& column : outerColumns) {
-        column.getBroadcast()(column.getInput(), innerRowCount, column.getOutput());
+        const NLBroadcastFunction broadcast = column.getBroadcast();
+        broadcast(column.getInput(), innerRowCount, column.getOutput());
     }
 
     for (const NLCrossColumn& column : innerColumns) {
-        column.getBroadcast()(column.getInput(), outerRowCount, column.getOutput());
+        const NLBroadcastFunction broadcast = column.getBroadcast();
+        broadcast(column.getInput(), outerRowCount, column.getOutput());
     }
 }
 

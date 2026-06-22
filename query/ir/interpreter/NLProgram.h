@@ -194,17 +194,18 @@ private:
     PropertyTypeID _propertyTypeID;
 };
 
-// Broadcasts one input chunk into an output chunk by a runtime factor. The two
-// sides of a cross product broadcast differently - an outer column is
-// block-repeated (each row repeated `factor` times), an inner column is tiled
-// (the whole chunk repeated `factor` times) - but share this signature, so a
-// cross column stores whichever broadcast fits its side.
+// A cross product emits N*M rows (every outer row paired with every inner row),
+// but an input column holds only its N or M values, so its values must be
+// repeated to fill an N*M-row output column. That repetition is the broadcast.
+// With outer [a0,a1] (N=2) and inner [b0,b1,b2] (M=3) the result is:
+//   outer -> [a0,a0,a0, a1,a1,a1]   each outer row repeated M times (block-repeat)
+//   inner -> [b0,b1,b2, b0,b1,b2]   whole inner chunk repeated N times (tile)
+// so row k across all columns is one (outer, inner) pair. `factor` is M for an
+// outer column, N for an inner one; both directions share this signature.
 using NLBroadcastFunction = void (*)(const Column* input, size_t factor, Column* output);
 
-// One column crossed by nl.cross_product: its input chunk (a loop variable of
-// an enclosing nl.for, stable while the inner loop iterates), the output chunk
-// the broadcast fills, and the broadcast that fills it (block-repeat for an
-// outer column, tile for an inner one).
+// One column used as operand of nl.cross_product: its input chunk, the output
+// chunk to fill, and the broadcast that fills one from the other.
 class NLCrossColumn {
 public:
     NLCrossColumn(const Column* input,
