@@ -66,6 +66,9 @@ Page-table figures below are the delta variant; consolidated is marginally faste
 
 | Commits | Current read | Page-table read | Read speedup | Total index mem (current → delta) |
 |---|---|---|---|---|
+| 1 | ~308 ns | ~217 ns | ~1.4× | 31 MB → 124 MB |
+| 2 | ~403 ns | ~217 ns | ~1.9× | 31 MB → 126 MB |
+| 4 | ~593 ns | ~217 ns | ~2.7× | 31 MB → 129 MB |
 | 50 | ~5.0 µs | ~221 ns | ~23× | 32 MB → 196 MB |
 | 100 | ~9.7 µs | ~224 ns | ~43× | 34 MB → 270 MB |
 | 200 | ~19 µs | ~232 ns | ~83× | 38 MB → 417 MB |
