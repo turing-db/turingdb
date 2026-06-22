@@ -227,10 +227,10 @@ private:
     NLBroadcastFunction _broadcast {nullptr};
 };
 
-// nl.cross_product data: the outer and inner columns of a cartesian product. N
-// (outer rows) and M (inner rows) are read at run time from the first column of
-// each group; each outer column is then block-repeated x M and each inner
-// column tiled x N, so the product has N*M rows.
+// nl.cross_product data: the outer and inner columns of a cartesian product.
+// N (outer rows) and M (inner rows) are read at run time from the first column
+// of each group. Each outer column is block-repeated x M and each inner column
+// is tiled x N, so the product has N*M rows.
 class NLCrossProductData : public NLFunctionData {
 public:
     using Columns = std::vector<NLCrossColumn>;
