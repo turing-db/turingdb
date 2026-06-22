@@ -114,9 +114,13 @@ int main(int argc, char** argv) {
     parser.add_argument("--edges-per-commit")
         .store_into(workload._avgEdgesPerCommit)
         .help("Edges added by each mutation commit (default: 500)");
+    parser.add_argument("--patch-fraction")
+        .store_into(workload._patchFraction)
+        .help("Fraction of commits that patch existing nodes; the rest are append-only "
+              "with empty patch maps (default: 1.0; realistic append-heavy: ~0.05-0.2)");
     parser.add_argument("--skew")
         .store_into(workload._skew)
-        .help("Edge endpoint skew; >1 concentrates on hub nodes (default: 1.6)");
+        .help("Edge endpoint skew; >1 concentrates on hub nodes / categories (default: 1.6)");
     parser.add_argument("--read-samples")
         .store_into(workload._readSamples)
         .help("Neighborhood reads sampled per mix (default: 100000)");
@@ -159,6 +163,10 @@ int main(int argc, char** argv) {
         fprintf(stderr, "--page-bits must be at least 1\n");
         return EXIT_FAILURE;
     }
+    if (workload._patchFraction < 0.0 || workload._patchFraction > 1.0) {
+        fprintf(stderr, "--patch-fraction must be between 0 and 1\n");
+        return EXIT_FAILURE;
+    }
 
     pageTable.compute(workload._numNodes, model);
 
@@ -181,6 +189,8 @@ int main(int argc, char** argv) {
     formatCount((double)workload._mutationCommits, buf, sizeof(buf));
     formatCount((double)workload._avgEdgesPerCommit, buf2, sizeof(buf2));
     printf("  mutation commits ...... %s  x  %s edges/commit\n", buf, buf2);
+    printf("  patch fraction ........ %.2f  (rest are append-only, empty patch maps)\n",
+           workload._patchFraction);
     printf("  edge skew ............. %.2f\n", workload._skew);
     formatCount((double)workload._readSamples, buf, sizeof(buf));
     printf("  read samples .......... %s per mix\n", buf);
@@ -208,6 +218,9 @@ int main(int argc, char** argv) {
            model._allocNs);
 
     printf("Simulated graph\n");
+    formatCount((double)results._patchingCommits, buf, sizeof(buf));
+    formatCount((double)workload._mutationCommits, buf2, sizeof(buf2));
+    printf("  patching commits ...... %s of %s  (rest append-only)\n", buf, buf2);
     formatCount((double)results._totalEdges, buf, sizeof(buf));
     printf("  total edges ........... %s\n", buf);
     formatCount((double)results._maxDegree, buf, sizeof(buf));
@@ -239,7 +252,7 @@ int main(int argc, char** argv) {
            hotConsSpeedup,
            uniformConsSpeedup);
 
-    printf("--- WRITE: cost of committing one mutation commit ---\n");
+    printf("--- WRITE: cost of committing one patching commit ---\n");
     printf("  %-27s %12s %12s %12s %14s\n", "design", "mean", "max", "pages", "index bytes");
     printWriteRow("current", results._currentWrite, false);
     printWriteRow("page-table (delta)", results._pageTableDeltaWrite, true);

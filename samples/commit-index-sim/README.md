@@ -80,6 +80,10 @@ Useful experiments:
 
 # Heavier hub skew and bigger commits
 ./commit-index-sim --skew 2.2 --edges-per-commit 5000
+
+# Realistic append-heavy history: only a small fraction of commits patch
+# existing nodes; the rest add new nodes and are skipped cheaply on reads
+./commit-index-sim --patch-fraction 0.1
 ```
 
 ## Caveats
@@ -88,5 +92,10 @@ The latencies are coarse, order-of-magnitude constants (overridable via
 `--dram-ns`, `--hash-hit-ns`, `--hash-miss-ns`, `--bandwidth`); the value is in
 the *relative* comparison and the *scaling*, not absolute predictions. The
 current-design read cost assumes no datapart merging — set `--commits` to the
-expected post-compaction reachable-datapart count to model a merged history. The
-model counts out-edges only; in-edges are structurally symmetric.
+expected post-compaction reachable-datapart count to model a merged history.
+`--patch-fraction` models append-heavy histories: append-only commits hold an
+empty patch map, so reading an existing node skips them at ~`_emptyHashProbeNs`
+each — near-free per datapart, but still an O(D) walk over the whole history,
+which is why the page-table keeps a large edge even as the fraction drops. Write
+and memory figures are reported per *patching* commit. The model counts
+out-edges only; in-edges are structurally symmetric.

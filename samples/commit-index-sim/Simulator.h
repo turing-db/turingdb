@@ -17,7 +17,8 @@ struct LatencyModel {
     double _dramNs {90.0};              // cold load that misses all caches
 
     double _hashProbeHitNs {160.0};     // populated unordered_map probe (~2 misses)
-    double _hashProbeMissNs {95.0};     // probe that misses (~1 miss)
+    double _hashProbeMissNs {95.0};     // probe that misses a populated map (~1 miss)
+    double _emptyHashProbeNs {4.0};     // probe of an empty patch map (hot single bucket)
     double _boundsCheckNs {2.0};        // hot in-range / out-of-range branch
 
     double _bandwidthBytesPerNs {12.0}; // sequential read bandwidth, single core
@@ -46,7 +47,8 @@ struct Workload {
     size_t _avgInitialDegree {8};       // out-edges per node from the bulk load
     size_t _loadDataparts {1};          // dataparts produced by the bulk load
     size_t _mutationCommits {2000};     // small commits appended afterwards
-    size_t _avgEdgesPerCommit {500};    // edges added by each mutation commit
+    size_t _avgEdgesPerCommit {500};    // edges added by each patching commit
+    double _patchFraction {1.0};        // fraction of commits that patch existing nodes
     double _skew {1.6};                 // >1 concentrates edges on hub nodes
     size_t _readSamples {100000};
     uint64_t _seed {42};
@@ -91,6 +93,7 @@ enum class ReadMix : size_t {
 
 struct SimResults {
     size_t _totalEdges {0};
+    size_t _patchingCommits {0};        // mutation commits that patched existing nodes
     size_t _maxDegree {0};
     double _avgDegree {0.0};
     size_t _maxTouchCount {0};

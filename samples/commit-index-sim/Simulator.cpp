@@ -180,12 +180,26 @@ void CommitIndexSimulator::simulateMutations(uint64_t& rngState) {
     double sumDeltaBytes = 0.0;
     double sumConsolidatedBytes = 0.0;
     double sumCurrentIndexBytes = 0.0;
+    size_t patchingCommitCount = 0;
 
     const double logEdges = log2((double)(edgesPerCommit < 2 ? 2 : edgesPerCommit));
     const double buildNs = (double)edgesPerCommit * _model._edgePlaceNs
                          + (double)edgesPerCommit * logEdges * _model._compareNs;
 
     for (size_t commit = 0; commit < mutationCommits; commit++) {
+        // Spread the patching commits evenly across the history. The rest are
+        // append-only: they add new nodes but patch no existing node, so their
+        // patch map is empty and a read of an existing node skips them cheaply
+        // (modelled in currentReadNs). New dense nodes are not materialised here.
+        const size_t patchedBefore = (size_t)((double)commit * _workload._patchFraction);
+        const size_t patchedAfter = (size_t)((double)(commit + 1) * _workload._patchFraction);
+        const bool isPatchingCommit = patchedAfter > patchedBefore;
+        if (!isPatchingCommit) {
+            continue;
+        }
+
+        patchingCommitCount += 1;
+
         touchedNodes.clear();
         touchedPreDegree.clear();
         for (size_t depth = 0; depth < levels; depth++) {
@@ -268,9 +282,12 @@ void CommitIndexSimulator::simulateMutations(uint64_t& rngState) {
             (double)distinctNodes * (double)(_model._hashEntryBytes + _model._nodeEdgeDataBytes);
     }
 
-    _results._totalEdges += mutationCommits * edgesPerCommit;
+    _results._totalEdges += patchingCommitCount * edgesPerCommit;
+    _results._patchingCommits = patchingCommitCount;
 
-    const double commits = mutationCommits == 0 ? 1.0 : (double)mutationCommits;
+    // Write and memory figures are per patching commit; append-only commits add
+    // cheap dense nodes and are near design-neutral, so they are excluded here.
+    const double commits = patchingCommitCount == 0 ? 1.0 : (double)patchingCommitCount;
 
     _results._currentWrite._meanNsPerCommit = sumCurrentNs / commits;
     _results._currentWrite._maxNsPerCommit = maxCurrentNs;
@@ -374,8 +391,10 @@ void CommitIndexSimulator::computeIndexSpace() {
 
 double CommitIndexSimulator::currentReadNs(size_t touchCount, size_t degree, bool hasCoreEdges) const {
     const size_t mutations = _workload._mutationCommits;
-    const size_t hits = touchCount > mutations ? mutations : touchCount;
-    const size_t misses = mutations - hits;
+    const size_t patchingParts = _results._patchingCommits;
+    const size_t appendOnlyParts = mutations - patchingParts;
+    const size_t hits = touchCount > patchingParts ? patchingParts : touchCount;
+    const size_t misses = patchingParts - hits;
 
     // The owning load datapart resolves the node by direct array index (one
     // NodeEdgeData read); any other load dataparts are cheap out-of-range checks.
@@ -384,7 +403,9 @@ double CommitIndexSimulator::currentReadNs(size_t touchCount, size_t degree, boo
         ns += (double)(_workload._loadDataparts - 1) * _model._boundsCheckNs;
     }
 
-    // Every mutation datapart is probed once, whether or not it holds a patch.
+    // Every mutation datapart is still visited. Append-only ones hold an empty
+    // patch map (near-free probe); patching ones cost a hit or a populated miss.
+    ns += (double)appendOnlyParts * _model._emptyHashProbeNs;
     ns += (double)hits * _model._hashProbeHitNs;
     ns += (double)misses * _model._hashProbeMissNs;
 
@@ -409,8 +430,8 @@ double CommitIndexSimulator::pageTableReadNs(bool consolidated,
                                              size_t touchCount,
                                              size_t degree,
                                              bool hasCoreEdges) const {
-    const size_t mutations = _workload._mutationCommits;
-    const size_t hits = touchCount > mutations ? mutations : touchCount;
+    const size_t patchingParts = _results._patchingCommits;
+    const size_t hits = touchCount > patchingParts ? patchingParts : touchCount;
 
     double ns = pageTableWalkNs();
 
