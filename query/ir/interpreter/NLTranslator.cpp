@@ -324,9 +324,9 @@ void NLTranslator::translateCrossProduct(nl::CrossProduct cross, NLStmtContainer
     const mlir::OperandRange outerColumns = cross.getOuterColumns();
     const mlir::OperandRange innerColumns = cross.getInnerColumns();
 
-    // The product reads each side's row count from its first column, so each
-    // side must contribute at least one. The lowering enforces this (it rejects
-    // a factor that yields no column), but a hand-written nl module might not.
+    // At run time runCrossProduct takes N from the first outer column and M from
+    // the first inner column, so a side with no column cannot be sized. Reject
+    // that here: DBLowering never emits it, but the nl IR may come from elsewhere.
     if (outerColumns.empty() || innerColumns.empty()) {
         throw IRException("nl.cross_product needs at least one column on each side");
     }
