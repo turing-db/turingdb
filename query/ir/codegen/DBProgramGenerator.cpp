@@ -59,8 +59,6 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
     VariableDependencyGraphTraversal vdgTrav;
     vdgTrav.computeTraversal(&vdg, trav);
 
-    llvm::SmallVector<mlir::TypedValue<mlir::db::ColumnType>, 10> out;
-
     for (const auto& node : trav) {
         const VariableDependency* var = node._var;
         const VariableDependencyGraphTraversal::Generator generatedBy = node._gen;
@@ -74,14 +72,11 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                 auto scan = _builder->create<mlir::db::ScanNodes>(loc, col);
 
                 registerValue(var, scan.getResult());
-                out.push_back(scan.getResult());
             }
             break;
 
             case VariableDependencyGraphTraversal::Generator::GET_OUT_EDGES: {
-                bioassert(_varMap.contains(fstProd), "Missing source.");
-                // Placeholder — the actual op is emitted in GET_EDGE_TGT once both
-                // the edge variable and target variable are known.
+                throw FatalException("GET_OUT_EDGES not supported.");
             }
             break;
 
@@ -108,14 +103,6 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
 
                 registerValue(fstProd, edges.getSrcids());
                 registerValue(var, edges.getTgtids());
-
-                for (auto& outVal : out) {
-                    if (outVal == srcValue) {
-                        outVal = edges.getSrcids();
-                        break;
-                    }
-                }
-                out.push_back(edges.getTgtids());
             }
             break;
 
@@ -132,9 +119,6 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             break;
         }
     }
-    bioassert(!out.empty(), "nothing to output");
 
-    _builder->create<mlir::db::Output>(
-        loc, mlir::ValueRange {out.begin(), std::distance(out.begin(), out.end())});
     _builder->create<mlir::func::ReturnOp>(loc);
 }
