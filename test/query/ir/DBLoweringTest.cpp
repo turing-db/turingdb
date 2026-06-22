@@ -320,6 +320,28 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a)->(b)->(c), (d) RETURN a, b, c, d: an asymmetric product. The left
+// factor is a two-hop traversal carrying `a` through the second hop (a 3-deep
+// loop nest yielding three row-aligned columns), the right factor a bare scan
+// (1-deep). The cross sits at the deepest point of the left nest, so this
+// exercises rooting a shallow factor inside a deep one and crossing a carried
+// column. Result: every two-hop path (a, b, c) crossed with every node d.
+constexpr const char* crossProductTwoHopAndScanProgram = R"mlir(
+func.func @main() {
+  %0:4 = db.cross_product factor {
+    %a = db.scan_nodes() : !db.column<"a">
+    %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<"a">) -> (!db.column<"a1">, !db.column<"e0">, !db.column<"et0">, !db.column<"b">)
+    %b2, %e1, %et1, %c, %a2 = db.get_out_edges(%b, {%a1}) : (!db.column<"b">, !db.column<"a1">) -> (!db.column<"b2">, !db.column<"e1">, !db.column<"et1">, !db.column<"c">, !db.column<"a2">)
+    db.yield %a2, %b2, %c : !db.column<"a2">, !db.column<"b2">, !db.column<"c">
+  } factor {
+    %d = db.scan_nodes() : !db.column<"d">
+    db.yield %d : !db.column<"d">
+  }
+  db.output(%0#0, %0#1, %0#2, %0#3) : !db.column<"a2">, !db.column<"b2">, !db.column<"c">, !db.column<"d">
+  return
+}
+)mlir";
+
 // MATCH (a), (b) RETURN a, b.score: the inner factor fetches a node property
 // inside the factor, so the crossed value column is a nullable value chunk -
 // the outer node IDs are block-repeated and the inner scores tiled together
@@ -650,6 +672,30 @@ TEST_F(DBLoweringTest, executesCrossProductOfHops) {
     for (const std::pair<uint64_t, uint64_t>& outer : edges) {
         for (const std::pair<uint64_t, uint64_t>& inner : edges) {
             expected.push_back({outer.first, outer.second, inner.first, inner.second});
+        }
+    }
+    std::sort(expected.begin(), expected.end());
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesCrossProductOfTwoHopAndScan) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(crossProductTwoHopAndScanProgram, reader.getView(), sink);
+
+    // The diamond's two-hop paths (a, b, c) are 0->1->3 and 0->2->3; cross each
+    // with every node d in {0, 1, 2, 3}, so 2 * 4 = 8 rows of (a, b, c, d)
+    const std::vector<std::vector<uint64_t>> twoHopPaths {{0, 1, 3}, {0, 2, 3}};
+    std::vector<std::vector<uint64_t>> expected;
+    for (const std::vector<uint64_t>& path : twoHopPaths) {
+        for (uint64_t d = 0; d < 4; d++) {
+            expected.push_back({path[0], path[1], path[2], d});
         }
     }
     std::sort(expected.begin(), expected.end());
