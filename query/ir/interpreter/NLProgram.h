@@ -191,7 +191,7 @@ public:
 private:
     const Column* _input {nullptr};
     Column* _output {nullptr};
-    PropertyTypeID _propertyTypeID {0};
+    PropertyTypeID _propertyTypeID;
 };
 
 // nl.output data
