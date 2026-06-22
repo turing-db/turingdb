@@ -12,6 +12,7 @@
 #include "NLProgram.h"
 #include "NLOutputSink.h"
 
+#include "IRException.h"
 #include "BioAssert.h"
 
 using namespace db;
@@ -42,6 +43,47 @@ void gatherColumn(const Column* input,
 
     for (const size_t index : indicesRaw) {
         typedOutput->push_back(typedInputRaw[index]);
+    }
+}
+
+// Block-repeat: each input row is emitted `factor` times in a row, so an input
+// of N rows becomes N*factor rows with input row i at output indices
+// [i*factor, (i+1)*factor). This lays out an outer column of a cross product,
+// where each outer row pairs with the whole inner chunk.
+template <typename ElementType>
+void blockRepeatColumn(const Column* input, size_t factor, Column* output) {
+    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
+    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
+
+    typedOutput->clear();
+    typedOutput->reserve(typedInput->size() * factor);
+
+    auto& outputRaw = typedOutput->getRaw();
+    for (const ElementType& value : typedInput->getRaw()) {
+        for (size_t repeat = 0; repeat < factor; repeat++) {
+            outputRaw.push_back(value);
+        }
+    }
+}
+
+// Tile: the whole input chunk is emitted `factor` times back to back, so an
+// input of M rows becomes M*factor rows with input row j at output indices
+// j, j+M, j+2M, ... This lays out an inner column of a cross product, where the
+// inner chunk repeats once per outer row.
+template <typename ElementType>
+void tileColumn(const Column* input, size_t factor, Column* output) {
+    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
+    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
+
+    typedOutput->clear();
+    typedOutput->reserve(typedInput->size() * factor);
+
+    auto& outputRaw = typedOutput->getRaw();
+    const auto& inputRaw = typedInput->getRaw();
+    for (size_t repeat = 0; repeat < factor; repeat++) {
+        for (const ElementType& value : inputRaw) {
+            outputRaw.push_back(value);
+        }
     }
 }
 
@@ -145,6 +187,30 @@ void NLExecutor::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* 
     runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getTargets());
 }
 
+void NLExecutor::runCrossProduct(NLExecutionContext* context, NLFunctionData* data) {
+    NLCrossProductData* cross = static_cast<NLCrossProductData*>(data);
+
+    const NLCrossProductData::Columns& outerColumns = cross->outerColumns();
+    const NLCrossProductData::Columns& innerColumns = cross->innerColumns();
+    bioassert(!outerColumns.empty() && !innerColumns.empty(),
+              "nl.cross_product needs a column on each side to size the product");
+
+    // N outer rows crossed with M inner rows: each outer column is
+    // block-repeated x M and each inner column tiled x N, so every outer row
+    // pairs with every inner row. The counts come from the first column of each
+    // side; all columns of a side are row-aligned, so any one measures it.
+    const size_t outerRowCount = outerColumns.front().getInput()->size();
+    const size_t innerRowCount = innerColumns.front().getInput()->size();
+
+    for (const NLCrossColumn& column : outerColumns) {
+        column.getBroadcast()(column.getInput(), innerRowCount, column.getOutput());
+    }
+
+    for (const NLCrossColumn& column : innerColumns) {
+        column.getBroadcast()(column.getInput(), outerRowCount, column.getOutput());
+    }
+}
+
 void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     const NLOutputData* output = static_cast<NLOutputData*>(data);
     const auto& cols = output->outputs();
@@ -171,6 +237,117 @@ NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
 
     bioassert(false, "Unknown NLChunkKind");
     return nullptr;
+}
+
+NLBroadcastFunction NLExecutor::selectBlockRepeatFunction(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &blockRepeatColumn<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &blockRepeatColumn<EdgeID>;
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return &blockRepeatColumn<EdgeTypeID>;
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
+}
+
+NLBroadcastFunction NLExecutor::selectTileFunction(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &tileColumn<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &tileColumn<EdgeID>;
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return &tileColumn<EdgeTypeID>;
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
+}
+
+// A nullable value chunk is a ColumnOptVector<Primitive> - that is,
+// ColumnVector<std::optional<Primitive>> - so the same broadcast templates,
+// instantiated on std::optional<Primitive>, carry value and null together.
+NLBroadcastFunction NLExecutor::selectOptBlockRepeatFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &blockRepeatColumn<std::optional<types::Int64::Primitive>>;
+        break;
+
+        case ValueType::UInt64:
+            return &blockRepeatColumn<std::optional<types::UInt64::Primitive>>;
+        break;
+
+        case ValueType::Double:
+            return &blockRepeatColumn<std::optional<types::Double::Primitive>>;
+        break;
+
+        case ValueType::Bool:
+            return &blockRepeatColumn<std::optional<types::Bool::Primitive>>;
+        break;
+
+        case ValueType::String:
+            return &blockRepeatColumn<std::optional<types::String::Primitive>>;
+        break;
+
+        case ValueType::Embedding:
+            return &blockRepeatColumn<std::optional<types::Embedding::Primitive>>;
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("Invalid property value type");
+        break;
+    }
+
+    throw IRException("Unhandled property value type");
+}
+
+NLBroadcastFunction NLExecutor::selectOptTileFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &tileColumn<std::optional<types::Int64::Primitive>>;
+        break;
+
+        case ValueType::UInt64:
+            return &tileColumn<std::optional<types::UInt64::Primitive>>;
+        break;
+
+        case ValueType::Double:
+            return &tileColumn<std::optional<types::Double::Primitive>>;
+        break;
+
+        case ValueType::Bool:
+            return &tileColumn<std::optional<types::Bool::Primitive>>;
+        break;
+
+        case ValueType::String:
+            return &tileColumn<std::optional<types::String::Primitive>>;
+        break;
+
+        case ValueType::Embedding:
+            return &tileColumn<std::optional<types::Embedding::Primitive>>;
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("Invalid property value type");
+        break;
+    }
+
+    throw IRException("Unhandled property value type");
 }
 
 // Read one property of the current input chunk into a nullable value column.

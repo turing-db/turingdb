@@ -73,6 +73,24 @@ LogicalResult GetInEdges::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// A cross product yields one chunk per crossed column - the outer columns
+// followed by the inner - each keeping its input chunk's element type, since
+// the broadcast only changes the row count, not the element kind.
+LogicalResult CrossProduct::inferReturnTypes(MLIRContext* context,
+                                             std::optional<Location> location,
+                                             CrossProduct::Adaptor adaptor,
+                                             SmallVectorImpl<Type>& inferredReturnTypes) {
+    for (const Type columnType : adaptor.getOuterColumns().getTypes()) {
+        inferredReturnTypes.push_back(columnType);
+    }
+
+    for (const Type columnType : adaptor.getInnerColumns().getTypes()) {
+        inferredReturnTypes.push_back(columnType);
+    }
+
+    return success();
+}
+
 // Build a loop from just the iterator value: its iterator type carries the
 // chunk types, which become the loop variables (the body block arguments).
 // The body is created with its implicit nl.yield terminator, ready for the

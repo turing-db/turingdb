@@ -91,9 +91,12 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _builder.setInsertionPointToStart(_entryBlock);
     _builder.create<mlir::func::ReturnOp>(loc);
 
-    // Lower each operation of the db function
+    // Lower each operation of the db function. Top-level scans root their loop
+    // in the entry block; a cross product retargets the root per factor.
     _valueMap.clear();
     _propertyTypes.clear();
+    _rootBlock = _entryBlock;
+    _innermostLoopBody = nullptr;
     for (mlir::Operation& operation : dbBody.front()) {
         lowerOperation(operation);
     }
@@ -115,6 +118,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerGetNodeProperties(getNodeProperties);
     } else if (mlir::db::GetEdgeProperties getEdgeProperties = mlir::dyn_cast<mlir::db::GetEdgeProperties>(operation)) {
         lowerGetEdgeProperties(getEdgeProperties);
+    } else if (mlir::db::CrossProduct crossProduct = mlir::dyn_cast<mlir::db::CrossProduct>(operation)) {
+        lowerCrossProduct(crossProduct);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -126,8 +131,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
 }
 
 void DBLowering::lowerScanNodes(mlir::db::ScanNodes scanNodes) {
-    // A scan reads no column, so its loop sits at the top of the function body.
-    setInsertionInto(_entryBlock);
+    // A scan reads no column, so its loop sits at the top of the current root
+    // block: the function entry at top level, or - inside a cross product - the
+    // outer factor's innermost loop body, so the inner factor nests under it.
+    setInsertionInto(_rootBlock);
 
     nl::ScanNodes nodes = _builder.create<nl::ScanNodes>(_builder.getUnknownLoc());
     buildLoopForSource(nodes.getResult(), scanNodes.getOperation());
@@ -184,6 +191,78 @@ void DBLowering::lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgePrope
                                                                          inputChunk,
                                                                          handle);
     _valueMap[getEdgeProperties.getResult()] = fetch.getValues();
+}
+
+void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
+    // The outer factor roots where this op would have - the entry block at top
+    // level. The inner factor roots inside the outer factor's innermost loop
+    // body, so its loops nest under the outer loop: a nested-loop join where the
+    // inner factor re-runs once per outer chunk.
+    mlir::Block* const rootBlock = _rootBlock;
+
+    llvm::SmallVector<mlir::Value, 4> outerColumns;
+    mlir::Block* const outerBody = lowerFactor(product.getLeftFactor(), rootBlock, outerColumns);
+
+    llvm::SmallVector<mlir::Value, 4> innerColumns;
+    mlir::Block* const innerBody = lowerFactor(product.getRightFactor(), outerBody, innerColumns);
+
+    // The cross sits at the deepest point - the inner factor's innermost loop
+    // body, where both factors have a chunk bound - just before whatever
+    // consumes the product (the lowered db.output).
+    setInsertionInto(innerBody);
+
+    nl::CrossProduct cross = _builder.create<nl::CrossProduct>(_builder.getUnknownLoc(),
+                                                               outerColumns,
+                                                               innerColumns);
+
+    // The product's results are the outer factor's yielded columns followed by
+    // the inner's, the same order nl.cross_product lays out its results.
+    const mlir::ResultRange dbResults = product.getResults();
+    const mlir::ResultRange crossResults = cross.getResults();
+    for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
+        _valueMap[dbResults[resultIndex]] = crossResults[resultIndex];
+    }
+}
+
+mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
+                                     mlir::Block* rootBlock,
+                                     llvm::SmallVectorImpl<mlir::Value>& yieldedChunks) {
+    // Root this factor's scans at rootBlock and track its own innermost loop;
+    // save and restore the caller's so nested or sibling products are unaffected.
+    mlir::Block* const previousRoot = _rootBlock;
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    _rootBlock = rootBlock;
+    _innermostLoopBody = nullptr;
+
+    // A factor is one self-contained block ending in a db.yield. Lower each op
+    // as at top level; the yield names the columns this factor contributes, so
+    // map its operands to the nl chunks they lowered to rather than lowering it.
+    for (mlir::Operation& operation : factor.front()) {
+        if (mlir::db::Yield yield = mlir::dyn_cast<mlir::db::Yield>(operation)) {
+            for (const mlir::Value column : yield.getColumns()) {
+                yieldedChunks.push_back(mapValue(column));
+            }
+        } else {
+            lowerOperation(operation);
+        }
+    }
+
+    if (!_innermostLoopBody) {
+        throw IRException("cross_product factor opened no loop to iterate");
+    }
+
+    // A factor that yields no column still multiplies cardinality, but the cross
+    // product reads each side's row count from its first column, so an empty
+    // factor has no row count to read - not yet supported by lowering.
+    if (yieldedChunks.empty()) {
+        throw IRException("cross_product lowering does not support a factor that yields no column");
+    }
+
+    mlir::Block* const innermostBody = _innermostLoopBody;
+    _rootBlock = previousRoot;
+    _innermostLoopBody = previousInnermostLoopBody;
+
+    return innermostBody;
 }
 
 mlir::Value DBLowering::getOrCreatePropertyTypeHandle(llvm::StringRef propertyName) {
@@ -245,6 +324,11 @@ void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp)
     // filtered chunk per carried column. Recording db result -> loop variable
     // lets a later op find the chunk each column lowered to.
     mlir::Block* loopBody = forLoop.getBody();
+
+    // This is the innermost loop opened so far in the current factor (loops
+    // nest in dataflow order), so a cross product nests at this body.
+    _innermostLoopBody = loopBody;
+
     const mlir::ResultRange dbResults = dbOp->getResults();
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
         _valueMap[dbResults[resultIndex]] = loopBody->getArgument(static_cast<unsigned>(resultIndex));

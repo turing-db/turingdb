@@ -33,6 +33,12 @@ class GraphView;
 // one nl.get_property_type above the loops, and the concrete value type is baked
 // into the nullable value chunk the fetch produces inside the binding loop.
 //
+// db.cross_product lowers to two nested factor loop nests - the inner factor's
+// loops nested inside the outer factor's innermost loop body, so the inner
+// factor re-runs once per outer chunk (a nested-loop join, bounded memory) -
+// bridged at the deepest point by an nl.cross_product that crosses the two
+// factors' yielded chunks just before db.output consumes them.
+//
 class DBLowering {
 public:
     DBLowering(mlir::MLIRContext* context, const GraphView* view);
@@ -57,12 +63,35 @@ private:
     // Entry block of the nl function being built
     mlir::Block* _entryBlock {nullptr};
 
+    // The block a root scan opens its loop in. It is the entry block at top
+    // level, but a db.cross_product lowers its inner factor with the outer
+    // factor's innermost loop body as the root, so the inner factor's scans
+    // nest inside the outer loop (the nested-loop join).
+    mlir::Block* _rootBlock {nullptr};
+
+    // The body of the most recent loop buildLoopForSource opened. A factor's
+    // dataflow is linear and each loop nests inside the previous, so the last
+    // loop opened is the factor's innermost one; lowerFactor reads this once the
+    // factor is lowered to root the inner factor there and to place the cross
+    // product at that deepest point. Not an insertion cursor - the builder is
+    // not left in the loop body - just a record of which block is innermost.
+    mlir::Block* _innermostLoopBody {nullptr};
+
     void lowerOperation(mlir::Operation& operation);
     void lowerScanNodes(mlir::db::ScanNodes scanNodes);
     void lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges);
     void lowerGetNodeProperties(mlir::db::GetNodeProperties getNodeProperties);
     void lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgeProperties);
+    void lowerCrossProduct(mlir::db::CrossProduct product);
     void lowerOutput(mlir::db::Output output);
+
+    // Lower one factor region of a db.cross_product into a loop nest rooted at
+    // rootBlock, collecting its db.yield columns (mapped to their nl chunks) in
+    // yieldedChunks and returning the factor's innermost loop body - where the
+    // cross product, or a deeper factor, nests.
+    mlir::Block* lowerFactor(mlir::Region& factor,
+                             mlir::Block* rootBlock,
+                             llvm::SmallVectorImpl<mlir::Value>& yieldedChunks);
 
     // Wrap an nl source op's iterator in an nl.for and bind each db result
     // column to the matching loop variable

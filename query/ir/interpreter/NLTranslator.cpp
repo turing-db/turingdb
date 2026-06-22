@@ -5,6 +5,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "mlir/IR/Block.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Verifier.h"
 
 #include "columns/ColumnOptVector.h"
@@ -69,6 +70,33 @@ NLHandlerFunction selectPropertyFetchHandler(bool isNode, ValueType valueType) {
     throw IRException("Unhandled property value type");
 }
 
+// Reverse of DBLowering's valueTypeToElementType: recover the storage value
+// type baked into a nullable value chunk's element type. A cross product result
+// keeps its input chunk's element type, so a crossed property column carries the
+// same !nl.nullable<...> the fetch produced, and this maps it back to allocate
+// the matching nullable value column and pick the broadcast.
+ValueType valueTypeFromElementType(mlir::Type elementType) {
+    if (mlir::isa<nl::StringType>(elementType)) {
+        return ValueType::String;
+    } else if (mlir::isa<nl::EmbeddingType>(elementType)) {
+        return ValueType::Embedding;
+    } else if (mlir::isa<mlir::Float64Type>(elementType)) {
+        return ValueType::Double;
+    } else if (const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType)) {
+        const bool isBool = intType.getWidth() == 1;
+        const bool isUnsigned = intType.isUnsigned();
+        if (isBool) {
+            return ValueType::Bool;
+        } else if (isUnsigned) {
+            return ValueType::UInt64;
+        } else {
+            return ValueType::Int64;
+        }
+    }
+
+    throw IRException("Unsupported nullable value chunk element type");
+}
+
 }
 
 NLTranslator::NLTranslator(NLProgram* program, LocalMemory* memory, const GraphView* view)
@@ -125,6 +153,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
                                    getEdgeProperties.getValues(),
                                    /*isNode=*/false,
                                    body);
+        } else if (nl::CrossProduct crossProduct = mlir::dyn_cast<nl::CrossProduct>(operation)) {
+            translateCrossProduct(crossProduct, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -288,6 +318,74 @@ void NLTranslator::translateOutput(const nl::Output& output, NLStmtContainer* bo
     }
 
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runOutput, outputData});
+}
+
+void NLTranslator::translateCrossProduct(nl::CrossProduct cross, NLStmtContainer* body) {
+    const mlir::OperandRange outerColumns = cross.getOuterColumns();
+    const mlir::OperandRange innerColumns = cross.getInnerColumns();
+
+    // The product reads each side's row count from its first column, so each
+    // side must contribute at least one. The lowering enforces this (it rejects
+    // a factor that yields no column), but a hand-written nl module might not.
+    if (outerColumns.empty() || innerColumns.empty()) {
+        throw IRException("nl.cross_product needs at least one column on each side");
+    }
+
+    NLCrossProductData* data = _program->allocFunctionData<NLCrossProductData>();
+
+    // The results are the outer columns followed by the inner, the order
+    // inferReturnTypes lays them out, so walk the result list in step.
+    const mlir::ResultRange results = cross.getResults();
+    size_t resultIndex = 0;
+
+    for (const mlir::Value column : outerColumns) {
+        addCrossColumn(column, results[resultIndex], /*isOuter=*/true, data);
+        resultIndex++;
+    }
+
+    for (const mlir::Value column : innerColumns) {
+        addCrossColumn(column, results[resultIndex], /*isOuter=*/false, data);
+        resultIndex++;
+    }
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runCrossProduct, data});
+}
+
+void NLTranslator::addCrossColumn(mlir::Value inputValue,
+                                  mlir::Value resultValue,
+                                  bool isOuter,
+                                  NLCrossProductData* data) {
+    const Column* input = getColumn(inputValue);
+
+    const auto chunkType = mlir::cast<nl::ChunkType>(inputValue.getType());
+    const mlir::Type elementType = chunkType.getElementType();
+
+    // The output keeps the input's element type, only the row count changes. A
+    // nullable value chunk allocates a ColumnOptVector and broadcasts on its
+    // value type; an ID chunk allocates on its chunk kind.
+    Column* output = nullptr;
+    NLBroadcastFunction broadcast = nullptr;
+
+    if (const auto nullableType = mlir::dyn_cast<nl::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        output = allocOptColumnForValueType(valueType);
+        broadcast = isOuter ? NLExecutor::selectOptBlockRepeatFunction(valueType)
+                            : NLExecutor::selectOptTileFunction(valueType);
+    } else {
+        const NLChunkKind kind = getChunkKind(chunkType);
+        output = allocColumnForKind(kind);
+        broadcast = isOuter ? NLExecutor::selectBlockRepeatFunction(kind)
+                            : NLExecutor::selectTileFunction(kind);
+    }
+
+    _valueSlots[resultValue] = output;
+
+    const NLCrossColumn crossColumn(input, output, broadcast);
+    if (isOuter) {
+        data->addOuterColumn(crossColumn);
+    } else {
+        data->addInnerColumn(crossColumn);
+    }
 }
 
 Column* NLTranslator::allocColumn(mlir::Value chunkValue) {
