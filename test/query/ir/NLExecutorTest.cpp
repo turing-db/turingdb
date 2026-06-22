@@ -389,6 +389,25 @@ TEST_F(NLExecutorTest, getNodeProperties) {
     EXPECT_EQ(rows, expected);
 }
 
+TEST_F(NLExecutorTest, getNodePropertiesSmallChunks) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // A chunk size smaller than the node count forces the property fetch to
+    // refill its value column over several chunks, with the null-valued node in
+    // a later chunk; the result must not depend on the chunking
+    CollectingNodeIntPropSink sink;
+    runProgram(nodePropertiesProgram, reader.getView(), 2, sink);
+
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 100}, {1, 200}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
 TEST_F(NLExecutorTest, oneHopOutEdges) {
     auto graph = buildDiamondGraph();
     const FrozenCommitTx transaction = graph->openTransaction();

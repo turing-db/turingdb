@@ -17,6 +17,7 @@
 #include "JobSystem.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
+#include "datapart/EdgeRecord.h"
 #include "iterators/ChunkConfig.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
@@ -180,6 +181,35 @@ private:
     std::vector<std::pair<uint64_t, std::optional<std::vector<float>>>> _rows;
 };
 
+// Collects (edge ID, nullable int64 property) rows. Programs that read an Int64
+// edge property emit an edge ID chunk and a !nl.nullable<i64> value chunk.
+class CollectingEdgeIntPropSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* edgeIDs = dynamic_cast<const ColumnEdgeIDs*>(chunks[0]);
+        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[1]);
+        ASSERT_NE(edgeIDs, nullptr);
+        ASSERT_NE(values, nullptr);
+        ASSERT_EQ(edgeIDs->size(), values->size());
+
+        const auto& idRaw = edgeIDs->getRaw();
+        const auto& valueRaw = values->getRaw();
+        for (size_t rowIndex = 0; rowIndex < edgeIDs->size(); rowIndex++) {
+            _rows.push_back({idRaw[rowIndex].getValue(), valueRaw[rowIndex]});
+        }
+    }
+
+    void sortedRows(std::vector<std::pair<uint64_t, std::optional<int64_t>>>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> _rows;
+};
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -241,6 +271,20 @@ func.func @main() {
 }
 )mlir";
 
+// Walk every out-edge and read its "weight" property, which some edges lack
+// (those come back null). Exercises the edge side of the property fetch end to
+// end: the db op, its lowering, the edge branch of translation and the EdgeID
+// executor handler.
+constexpr const char* edgePropertiesProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<"a">
+  %srcs, %eids, %etypes, %b = db.get_out_edges(%a, {}) : (!db.column<"a">) -> (!db.column<"srcs">, !db.column<"eids">, !db.column<"etypes">, !db.column<"b">)
+  %weight = db.get_edge_properties(%eids, "weight") : (!db.column<"eids">) -> !db.column<"e.weight">
+  db.output(%eids, %weight) : !db.column<"eids">, !db.column<"e.weight">
+  return
+}
+)mlir";
+
 }
 
 class DBLoweringTest : public TuringTest {
@@ -285,7 +329,9 @@ protected:
 
     // A line graph 0 -> 1 -> 2 where nodes 0 and 1 carry "score" (Int64),
     // "name" (String) and "vec" (Embedding) properties and node 2 carries none,
-    // so a read of any of them returns null for node 2
+    // so a read of any of them returns null for node 2. The edge 0 -> 1 carries
+    // a "weight" (Int64) property and the edge 1 -> 2 carries none, so reading
+    // the edge property returns null for that second edge.
     std::unique_ptr<Graph> buildPropertyGraph() {
         auto graph = Graph::create();
 
@@ -299,13 +345,19 @@ protected:
         const PropertyTypeID scoreID = metadata.getOrCreatePropertyType("score", ValueType::Int64)._id;
         const PropertyTypeID nameID = metadata.getOrCreatePropertyType("name", ValueType::String)._id;
         const PropertyTypeID vecID = metadata.getOrCreatePropertyType("vec", ValueType::Embedding)._id;
+        const PropertyTypeID weightID = metadata.getOrCreatePropertyType("weight", ValueType::Int64)._id;
 
         const LabelSet labelset = LabelSet::fromList({0});
         const NodeID nodeA = builder.addNode(labelset);
         const NodeID nodeB = builder.addNode(labelset);
         const NodeID nodeC = builder.addNode(labelset);
 
-        builder.addEdge(0, nodeA, nodeB);
+        // The reference returned by addEdge points into the builder's edge
+        // vector, so attach the property before the next addEdge can move it
+        const EdgeRecord& edgeAB = builder.addEdge(0, nodeA, nodeB);
+        builder.addEdgeProperty<types::Int64>(edgeAB, weightID, 10);
+
+        // The edge 1 -> 2 carries no weight, so an edge property read is null for it
         builder.addEdge(0, nodeB, nodeC);
 
         builder.addNodeProperty<types::Int64>(nodeA, scoreID, 100);
@@ -445,6 +497,24 @@ TEST_F(DBLoweringTest, lowersGetNodeEmbeddingProperty) {
         {0, std::vector<float>{1.0f, 2.0f}}, {1, std::vector<float>{3.0f, 4.0f}}, {2, std::nullopt}
     };
     std::vector<std::pair<uint64_t, std::optional<std::vector<float>>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, lowersGetEdgeProperties) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingEdgeIntPropSink sink;
+    runLoweredProgram(edgePropertiesProgram, reader.getView(), sink);
+
+    // Each out-edge appears with its weight, or null where the edge has none:
+    // the edge 0 -> 1 (id 0) carries weight 10, the edge 1 -> 2 (id 1) carries none
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 10}, {1, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
 }
