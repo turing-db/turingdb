@@ -78,6 +78,33 @@ Write cost doesn't move with depth: current ~72 µs, delta ~158 µs (2.2×), con
 
 Memory is also far gentler when histories stay shallow: ~5–11× the current index at 50–200 commits, versus ~30× at 2000.
 
+## Append-heavy histories (patch fraction)
+
+So far every commit patches an existing node. Realistically, most commits in an append-heavy history only add new nodes — attached to a handful of hub, category, and constant nodes — and patch nothing else.
+
+Those append-only commits hold an empty patch map, so a read of an existing node skips them in a few ns instead of paying a ~95 ns probe. `--patch-fraction` sets how many commits patch existing nodes.
+
+At 2000 commits:
+
+| Patch fraction | Patching commits | Current read | Read speedup |
+|---|---|---|---|
+| 1.0 | 2000 | ~190 µs | ~530× |
+| 0.2 | 400 | ~45 µs | ~180× |
+| 0.1 | 200 | ~26 µs | ~114× |
+| 0.05 | 100 | ~17 µs | ~77× |
+
+The same realistic patch fraction of 0.1, across the shallower histories a compacting engine actually keeps:
+
+| Commits | Patching commits | Current read | Read speedup |
+|---|---|---|---|
+| 50 | 5 | ~0.9 µs | ~4× |
+| 100 | 10 | ~1.5 µs | ~7× |
+| 200 | 20 | ~2.8 µs | ~13× |
+
+The page-table read stays flat at ~210 ns throughout, and its write and memory overhead scale down with the patch fraction too (fewer patching commits, fewer path-copies).
+
+But even at a patch fraction of zero the current read still floors at ~8 µs at 2000 commits (2000 dataparts × ~4 ns), because it walks the whole history regardless. The page-table's real win is never visiting it — so the gap shrinks with fewer patches but never closes at depth.
+
 ## Conclusion
 
 Reads get ~500–900× faster with 2000 commits, because the walk cost is fixed while today's probe cost grows with every commit. 
