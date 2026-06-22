@@ -157,11 +157,49 @@ void addNestedLoopFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     builder.create<mlir::nl::Output>(loc, mlir::ValueRange {filteredA, bFiltered, cChunk});
 }
 
+// A disconnected pattern in the set-at-a-time db dialect: MATCH (a), (b)
+// RETURN a, b crosses every node with every node. The two scans share no
+// variable, so each lives in its own factor region of a db.cross_product and
+// names, via db.yield, the single column it contributes. The op's results are
+// the left factor's yielded columns followed by the right factor's.
+void addCrossProductFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
+    startFunction(builder, module, "cross_product");
+
+    mlir::MLIRContext* ctxt = builder.getContext();
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    const mlir::Type colA = mlir::db::ColumnType::get(ctxt, "a");
+    const mlir::Type colB = mlir::db::ColumnType::get(ctxt, "b");
+
+    // Build the op with its two empty factor blocks; the result types are the
+    // columns the factors will yield - here one column each, `a` then `b`.
+    auto product = builder.create<mlir::db::CrossProduct>(loc, mlir::TypeRange {colA, colB});
+
+    // Left factor: scan `a` and yield it as this factor's contribution.
+    mlir::Block* leftFactor = &product.getLeftFactor().front();
+    builder.setInsertionPointToStart(leftFactor);
+    auto scanA = builder.create<mlir::db::ScanNodes>(loc, colA);
+    builder.create<mlir::db::Yield>(loc, mlir::ValueRange {scanA.getResult()});
+
+    // Right factor: scan `b` and yield it.
+    mlir::Block* rightFactor = &product.getRightFactor().front();
+    builder.setInsertionPointToStart(rightFactor);
+    auto scanB = builder.create<mlir::db::ScanNodes>(loc, colB);
+    builder.create<mlir::db::Yield>(loc, mlir::ValueRange {scanB.getResult()});
+
+    // Back in the function body, project the crossed (a, b) pair.
+    builder.setInsertionPointAfter(product);
+    builder.create<mlir::db::Output>(loc, product.getResults());
+
+    builder.create<mlir::func::ReturnOp>(loc);
+}
+
 void helloModule(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     std::cout << "hello from mlir" << '\n';
 
     addDBFunction(builder, module);
     addNestedLoopFunction(builder, module);
+    addCrossProductFunction(builder, module);
 }
 
 void assembleFiles(mlir::MLIRContext& ctxt, mlir::ModuleOp& module, const std::vector<std::string>& files) {
