@@ -253,15 +253,20 @@ int main(int argc, char** argv) {
            deltaWriteOverhead,
            consWriteOverhead);
 
-    printf("Index space (page-table directory; substructure shared across commits)\n");
-    formatBytes(results._initialIndexBytes, buf, sizeof(buf));
-    printf("  initial directory ..... %s  (one-time)\n", buf);
+    printf("--- MEMORY: index structure (excludes raw edges, identical for all) ---\n");
+    printf("  %-27s %14s %16s\n", "design", "per commit", "total (retained)");
+    formatBytes(results._currentWrite._meanBytesPerCommit, buf, sizeof(buf));
+    formatBytes(results._currentIndexBytes, buf2, sizeof(buf2));
+    printf("  %-27s %14s %16s\n", "current", buf, buf2);
     formatBytes(results._pageTableDeltaWrite._meanBytesPerCommit, buf, sizeof(buf));
-    formatBytes(results._projectedDeltaGrowthBytes, buf2, sizeof(buf2));
-    printf("  delta growth .......... %s/commit  ->  %s over %zu commits\n\n",
-           buf,
-           buf2,
-           workload._mutationCommits);
+    formatBytes(results._pageTableDeltaIndexBytes, buf2, sizeof(buf2));
+    printf("  %-27s %14s %16s\n", "page-table (delta)", buf, buf2);
+    formatBytes(results._pageTableConsolidatedWrite._meanBytesPerCommit, buf, sizeof(buf));
+    formatBytes(results._pageTableConsolidatedIndexBytes, buf2, sizeof(buf2));
+    printf("  %-27s %14s %16s\n", "page-table (consolidated)", buf, buf2);
+    formatBytes(results._initialIndexBytes, buf, sizeof(buf));
+    printf("  (page-table also shares a %s root/inner tree once, retained across commits)\n\n",
+           buf);
 
     // Dynamic, parameter-derived summary so the report stands on its own.
     const double readFloorNs = (double)workload._mutationCommits * model._hashProbeMissNs;

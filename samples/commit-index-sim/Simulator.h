@@ -27,6 +27,8 @@ struct LatencyModel {
     double _compareNs {2.0};            // one comparison in the build-time sort
 
     size_t _edgeRecordBytes {32};       // EdgeID + NodeID + NodeID + EdgeTypeID
+    size_t _nodeEdgeDataBytes {32};     // out/in edge ranges per node in a datapart
+    size_t _hashEntryBytes {48};        // one patch-node entry in an unordered_map
     size_t _pointerBytes {8};
     size_t _l1Bytes {32 * 1024};
     size_t _l2Bytes {1024 * 1024};
@@ -104,6 +106,11 @@ struct SimResults {
 
     double _initialIndexBytes {0.0};
     double _projectedDeltaGrowthBytes {0.0};
+
+    // Total index-structure memory once the whole commit history is retained.
+    double _currentIndexBytes {0.0};
+    double _pageTableDeltaIndexBytes {0.0};
+    double _pageTableConsolidatedIndexBytes {0.0};
 };
 
 // Estimates the per-operation cost of the current "probe every reachable

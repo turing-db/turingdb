@@ -179,6 +179,7 @@ void CommitIndexSimulator::simulateMutations(uint64_t& rngState) {
     double sumRewrittenPages = 0.0;
     double sumDeltaBytes = 0.0;
     double sumConsolidatedBytes = 0.0;
+    double sumCurrentIndexBytes = 0.0;
 
     const double logEdges = log2((double)(edgesPerCommit < 2 ? 2 : edgesPerCommit));
     const double buildNs = (double)edgesPerCommit * _model._edgePlaceNs
@@ -260,6 +261,11 @@ void CommitIndexSimulator::simulateMutations(uint64_t& rngState) {
         sumRewrittenPages += (double)rewrittenPages;
         sumDeltaBytes += directoryBytes;
         sumConsolidatedBytes += directoryBytes + recopyEdges * (double)_model._edgeRecordBytes;
+
+        // Current design retains, per mutation datapart, a patch-node hash map
+        // plus a NodeEdgeData entry for each patched node.
+        sumCurrentIndexBytes +=
+            (double)distinctNodes * (double)(_model._hashEntryBytes + _model._nodeEdgeDataBytes);
     }
 
     _results._totalEdges += mutationCommits * edgesPerCommit;
@@ -278,6 +284,12 @@ void CommitIndexSimulator::simulateMutations(uint64_t& rngState) {
     _results._pageTableConsolidatedWrite._maxNsPerCommit = maxConsolidatedNs;
     _results._pageTableConsolidatedWrite._meanRewrittenPages = sumRewrittenPages / commits;
     _results._pageTableConsolidatedWrite._meanBytesPerCommit = sumConsolidatedBytes / commits;
+
+    // Patch structures retained across the whole mutation history; the load
+    // datapart's core index is added in computeIndexSpace().
+    _results._currentIndexBytes = sumCurrentIndexBytes;
+    _results._currentWrite._meanBytesPerCommit = sumCurrentIndexBytes / commits;
+    _results._pageTableConsolidatedIndexBytes = sumConsolidatedBytes;
 }
 
 void CommitIndexSimulator::computeGraphStats() {
@@ -350,6 +362,14 @@ void CommitIndexSimulator::computeIndexSpace() {
     _results._initialIndexBytes = initialBytes;
     _results._projectedDeltaGrowthBytes =
         _results._pageTableDeltaWrite._meanBytesPerCommit * (double)_workload._mutationCommits;
+
+    // Total index memory once the full commit history is retained. The current
+    // design adds the load datapart's core NodeEdgeData array on top of the
+    // accumulated patch structures; the page-table totals add the shared root
+    // and inner pages of the initial tree to the path-copied growth.
+    _results._currentIndexBytes += (double)numNodes * (double)_model._nodeEdgeDataBytes;
+    _results._pageTableDeltaIndexBytes = initialBytes + _results._projectedDeltaGrowthBytes;
+    _results._pageTableConsolidatedIndexBytes += initialBytes;
 }
 
 double CommitIndexSimulator::currentReadNs(size_t touchCount, size_t degree, bool hasCoreEdges) const {
