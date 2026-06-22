@@ -92,6 +92,7 @@ At 2000 commits:
 | 0.2 | 400 | ~45 µs | ~180× |
 | 0.1 | 200 | ~26 µs | ~114× |
 | 0.05 | 100 | ~17 µs | ~77× |
+| 0 | 0 | ~8 µs | ~38× |
 
 The same realistic patch fraction of 0.1, across the shallower histories a compacting engine actually keeps:
 
