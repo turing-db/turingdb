@@ -12,38 +12,29 @@ We want to evaluate an idea: keep a per-commit **page-table directory** (a radix
 flowchart TD
     classDef shared fill:#eaf2ff,stroke:#4a7fe0,color:#10243e
     classDef new fill:#ffefe0,stroke:#e07b2a,color:#4a2606
-    classDef bits fill:#f3f0ff,stroke:#8a6fd4,color:#2c1f54
-
-    subgraph nid["NodeID (high bits to low bits)"]
-      direction LR
-      hi["level-1 bits"]:::bits --- mid["page bits"]:::bits --- lo["page bits"]:::bits
-    end
 
     rN["root (commit N)"]:::shared
     rN1["root (commit N+1)"]:::new
+
     A["inner page A"]:::shared
     B["inner page B"]:::shared
     Bn["inner page B (copy)"]:::new
+
     la["leaf"]:::shared
     lb["leaf"]:::shared
-    lc["leaf (old)"]:::shared
-    lcn["leaf (new)"]:::new
-    nbr["changed node's neighborhood"]:::new
+    lc["leaf: changed node (old)"]:::shared
+    lcn["leaf: changed node (new)"]:::new
 
     rN --> A
     rN --> B
     A --> la
     B --> lb
     B --> lc
+
     rN1 --> A
     rN1 --> Bn
     Bn --> lb
     Bn --> lcn
-    lcn --> nbr
-
-    hi -. "picks inner page" .-> Bn
-    mid -. "picks leaf" .-> lcn
-    lo -. "picks neighborhood" .-> nbr
 ```
 
 The tree is shared across commits. A new commit only rewrites the pages on the path from each changed node up to a fresh root. We want to know what gain it gives us on reads and what it costs on writes.
