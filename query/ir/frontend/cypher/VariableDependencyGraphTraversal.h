@@ -17,6 +17,8 @@ public:
         GET_OUT_EDGES,
         GET_IN_EDGES,
         GET_EDGES,
+        GET_EDGE_SRC,
+        GET_EDGE_TGT,
         MERGE,
 
         _SIZE

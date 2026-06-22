@@ -80,6 +80,11 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                 throw FatalException("GET_EDGES not supported.");
             break;
 
+            case VariableDependencyGraphTraversal::Generator::GET_EDGE_SRC:
+            case VariableDependencyGraphTraversal::Generator::GET_EDGE_TGT:
+                throw FatalException("GET_EDGE_X not supported.");
+            break;
+
             case VariableDependencyGraphTraversal::Generator::MERGE:
                 throw FatalException("MERGE not supported.");
             break;
@@ -87,7 +92,6 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             case VariableDependencyGraphTraversal::Generator::_SIZE:
                 throw FatalException("Invalid traversal type.");
             break;
-
         }
     }
     bioassert(!out.empty(), "nothing to output");

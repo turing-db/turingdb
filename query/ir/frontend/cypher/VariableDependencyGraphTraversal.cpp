@@ -22,17 +22,25 @@ static VariableDependencyGraphTraversal::Generator edgeTypeToGenerator(EdgeMetad
     const bool isSrc = discovered == discoverer->src();
 
     switch (type) {
-        case EdgeMetadata::EdgeType::OUTGOING:
-        case EdgeMetadata::EdgeType::INCOMING:
+        case EdgeMetadata::EdgeType::GET_OUT_EDGES:
+        case EdgeMetadata::EdgeType::GET_IN_EDGES:
             return isSrc ? Gen::GET_OUT_EDGES : Gen::GET_IN_EDGES;
         break;
 
-        case EdgeMetadata::EdgeType::BIDIRECTIONAL:
+        case EdgeMetadata::EdgeType::GET_EDGES:
             return Gen::GET_EDGES;
         break;
 
         case EdgeMetadata::EdgeType::MERGE:
             return Gen::MERGE;
+        break;
+
+        case EdgeMetadata::EdgeType::GET_EDGE_TGT:
+            return Gen::GET_EDGE_TGT;
+        break;
+
+        case EdgeMetadata::EdgeType::GET_EDGE_SRC:
+            return Gen::GET_EDGE_SRC;
         break;
 
         case EdgeMetadata::EdgeType::_SIZE:
@@ -44,7 +52,7 @@ static VariableDependencyGraphTraversal::Generator edgeTypeToGenerator(EdgeMetad
 }
 
 void VariableDependencyGraphTraversal::computeTraversal(const VariableDependencyGraph* graph,
-                                                     std::vector<Visit>& traversal) {
+                                                        std::vector<Visit>& traversal) {
     traversal.clear();
 
     std::unordered_set<const VariableDependency*> visited;

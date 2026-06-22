@@ -33,16 +33,27 @@ using namespace db;
 static EdgeMetadata::EdgeType directionToType(EdgePattern::Direction dir) {
     switch (dir) {
         case EdgePattern::Direction::Undirected:
-            return EdgeMetadata::EdgeType::BIDIRECTIONAL;
+            return EdgeMetadata::EdgeType::GET_EDGES;
         break;
         case EdgePattern::Direction::Backward:
-            return EdgeMetadata::EdgeType::INCOMING;
+            return EdgeMetadata::EdgeType::GET_IN_EDGES;
         break;
         case EdgePattern::Direction::Forward:
-            return EdgeMetadata::EdgeType::OUTGOING;
+            return EdgeMetadata::EdgeType::GET_OUT_EDGES;
         break;
     }
     throw FatalException("Invalid edge pattern direction");
+}
+
+static EdgeMetadata::EdgeType edgeTypeToNodeType(EdgeMetadata::EdgeType t) {
+    if (t == EdgeMetadata::EdgeType::GET_OUT_EDGES) {
+        return EdgeMetadata::EdgeType::GET_EDGE_TGT;
+    }
+    if (t == EdgeMetadata::EdgeType::GET_IN_EDGES) {
+        return EdgeMetadata::EdgeType::GET_EDGE_SRC;
+    }
+    throw FatalException(
+        fmt::format("Unsure how to get node type for {}", EdgeTypeName::value(t)));
 }
 
 VariableDependencyGraph::VariableDependencyGraph()
@@ -113,7 +124,8 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         VariableDependency* tgtVar = getOrCreateVariable(tgtPtn);
 
         const EdgePattern::Direction direction = edge->getDirection();
-        const EdgeMetadata::EdgeType type = directionToType(direction);
+        const EdgeMetadata::EdgeType edgeType = directionToType(direction);
+        const EdgeMetadata::EdgeType otherType = edgeTypeToNodeType(edgeType);
 
         VariableDependency* src {nullptr};
         VariableDependency* tgt {nullptr};
@@ -128,8 +140,8 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         }
 
         VariableDependency* edgeVar = getOrCreateVariable(edge);
-        addDirected(src, edgeVar, EdgeMetadata {type});
-        addDirected(edgeVar, tgt, EdgeMetadata {type});
+        addDirected(src, edgeVar, EdgeMetadata {edgeType});
+        addDirected(edgeVar, tgt, EdgeMetadata {otherType});
 
         prev = forward ? tgt : src;
     }

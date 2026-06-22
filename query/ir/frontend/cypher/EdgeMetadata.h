@@ -10,9 +10,11 @@ namespace db {
 class EdgeMetadata {
 public:
     enum class EdgeType : uint8_t {
-        OUTGOING,
-        INCOMING,
-        BIDIRECTIONAL,
+        GET_OUT_EDGES,
+        GET_IN_EDGES,
+        GET_EDGES,
+        GET_EDGE_TGT,
+        GET_EDGE_SRC,
         MERGE,
 
         _SIZE
@@ -38,9 +40,11 @@ private:
 static_assert(std::is_trivially_copyable_v<EdgeMetadata>);
 
 using EdgeTypeName = EnumToString<EdgeMetadata::EdgeType>::Create<
-    EnumStringPair<EdgeMetadata::EdgeType::OUTGOING, "getout">,
-    EnumStringPair<EdgeMetadata::EdgeType::INCOMING, "getin">,
-    EnumStringPair<EdgeMetadata::EdgeType::BIDIRECTIONAL, "bidir">,
+    EnumStringPair<EdgeMetadata::EdgeType::GET_OUT_EDGES, "getout">,
+    EnumStringPair<EdgeMetadata::EdgeType::GET_IN_EDGES, "getin">,
+    EnumStringPair<EdgeMetadata::EdgeType::GET_EDGES, "bidir">,
+    EnumStringPair<EdgeMetadata::EdgeType::GET_EDGE_TGT, "edge_tgt">,
+    EnumStringPair<EdgeMetadata::EdgeType::GET_EDGE_SRC, "edge_src">,
     EnumStringPair<EdgeMetadata::EdgeType::MERGE, "merge">
 >;
 
