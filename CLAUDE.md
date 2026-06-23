@@ -155,6 +155,7 @@ Key points:
 - Prefer `size_t` for indices and counts in new code (row groups, columns, rows, batch sizes). Narrow with `static_cast<int>(...)` at third-party API boundaries inside the `.cpp`.
 - Don't wrap unused parameter names in `/*comments*/` — just name them normally. `-Wunused-parameter` isn't enabled in this codebase, so there's no warning to silence.
 - Don't add `(void)param;` lines in function bodies to mark a parameter as used. Same reason: no warning to silence; it's pure noise.
+- **Fill columns with `std::fill`/`std::fill_n`/`std::copy`, not `reserve` + `push_back` loops.** A `push_back` loop does not vectorise; `std::fill_n` (repeated value) and `std::copy` (range, commonly lowered to `memcpy`) do. When laying out a column whose size is known up front, `resize` the output's `getRaw()` to the final size, then write ranges through an iterator with these algorithms — see `CartesianProductProcessor` and the `blockRepeatColumn`/`tileColumn` helpers in `NLExecutor.cpp`.
 
 ## Design Conventions
 
