@@ -13,6 +13,8 @@ class FileMetaData;
 
 namespace db {
 
+class ChangeAccessor;
+
 class ParquetNeo4jVisitor final : public ParquetSaxVisitor {
 public:
     ParquetNeo4jVisitor(ParquetNeo4jDumpLoader* loader)
@@ -20,10 +22,14 @@ public:
     {
     }
 
+    /**
+     * @brief Inspects the file schema, populating column index members of @ref _loader
+     */
     bool onFileStart(const parquet::FileMetaData& metadata) final;
 
 private:
     ParquetNeo4jDumpLoader* _loader {nullptr};
+    ChangeAccessor* _change {nullptr};
 
     static constexpr std::string_view NEO4J_NODE_COL_NAME = "__id";
     static constexpr std::string_view NEO4J_LBLS_COL_NAME = "__labels";
