@@ -144,6 +144,7 @@ using Token = db::YCypherParser::token;
 "NEW" { KEYWORD(NEW) }
 "CSV" { KEYWORD(CSV) }
 "GML" { KEYWORD(GML) }
+"PARQUET" { KEYWORD(PARQUET) }
 "ANY" { KEYWORD(ANY) }
 "SET" { KEYWORD(SET) }
 "ALL" { KEYWORD(ALL) }

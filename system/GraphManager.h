@@ -74,8 +74,16 @@ private:
                        JobSystem* jobSystem,
                        const EmbeddingsSpec& embeddingSpecs);
 
-    Graph* loadGmlDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);
-    Graph* loadBinaryDB(std::string_view graphName, const fs::Path& dbPath, JobSystem* jobSystem);
-};
+    Graph* loadGmlDB(std::string_view graphName,
+                     const fs::Path& dbPath,
+                     JobSystem* jobSystem);
 
+    Graph* loadBinaryDB(std::string_view graphName,
+                        const fs::Path& dbPath,
+                        JobSystem* jobSystem);
+
+    Graph* loadParquetDB(std::string_view graphName,
+                         const fs::Path& dbPath,
+                         JobSystem* jobSystem);
+};
 }

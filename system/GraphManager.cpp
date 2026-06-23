@@ -8,12 +8,14 @@
 #include "EmbeddingsSpec.h"
 #include "Graph.h"
 
+#include "ParquetReader.h"
 #include "dump/GraphDumper.h"
 #include "dump/GraphLoader.h"
 #include "versioning/ChangeAccessor.h"
 
 #include "GMLImporter.h"
 #include "JsonlParser.h"
+#include "Neo4jParquetImporter.h"
 
 #include "TuringConfig.h"
 #include "JobSystem.h"
@@ -22,6 +24,7 @@
 #include "FileUtils.h"
 #include "FatalException.h"
 #include "TuringException.h"
+#include "versioning/CommitBuilder.h"
 
 using namespace db;
 
@@ -158,7 +161,8 @@ Graph* GraphManager::importGraph(std::string_view graphName,
         case GraphFileType::UNKNOWN:
             // If we can not determine the file type, assume it is a JSONL graph
             // to be changed in the future
-            return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs);
+            // XXX: CHANGED FOR TESTING, REVERT TO JSONL
+            return loadParquetDB(graphName, absolute, jobSystem);
         break;
         case GraphFileType::_SIZE:
             throw TuringException("Unsupported graph type");
@@ -321,6 +325,66 @@ Graph* GraphManager::loadGmlDB(std::string_view graphName,
     if (_config->isSyncedOnDisk()) {
         if (!GraphDumper::dump(graph.get(), graphPath)) {
             _graphLoadStatus.removeLoadingGraph(graphName);
+            return nullptr;
+        }
+    }
+
+    _graphLoadStatus.removeLoadingGraph(graphName);
+
+    reservation.publish(std::move(graph));
+
+    return graphPtr;
+}
+
+Graph* GraphManager::loadParquetDB(std::string_view graphName,
+                                   const fs::Path& dbPath,
+                                   JobSystem* jobSystem) {
+    const fs::Path graphPath = _config->getGraphsDir() / graphName;
+    if (graphPath == dbPath) {
+        return nullptr;
+    }
+
+    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
+        return nullptr;
+    }
+
+    ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(graphName);
+    if (!reservation.isValid()) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return nullptr;
+    }
+
+    auto graph = Graph::create(std::string(graphName), graphPath);
+    Graph* graphPtr = graph.get();
+
+    std::ifstream file(dbPath.get());
+    if (!file) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        return nullptr;
+    }
+
+    Change* change = _changes.createChange(graph.get(), CommitHash::head());
+    ChangeAccessor changeAccessor = change->access();
+    CommitBuilder* commitBuilder = changeAccessor.pendingCommits().back().get();
+
+    // Load Parquet Here
+    Neo4jParquetImporter importer(dbPath, commitBuilder);
+    importer.import();
+
+    const auto submitRes = _changes.submitChange(changeAccessor, *jobSystem);
+
+    if (!submitRes) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        spdlog::error(submitRes.error().fmtMessage());
+        return nullptr;
+    }
+
+    if (_config->isSyncedOnDisk()) {
+        const auto dumpRes = GraphDumper::dump(graph.get(), graphPath);
+
+        if (!dumpRes) {
+            _graphLoadStatus.removeLoadingGraph(graphName);
+            spdlog::error(dumpRes.error().fmtMessage());
             return nullptr;
         }
     }
