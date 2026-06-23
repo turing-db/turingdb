@@ -208,6 +208,7 @@
 %token<std::string_view> FAIL
 %token<std::string_view> CSV
 %token<std::string_view> GML
+%token<std::string_view> PARQUET
 %token<std::string_view> ANY
 %token<std::string_view> SET
 %token<std::string_view> ALL
@@ -346,6 +347,7 @@
 %type<db::QueryCommand*> query
 %type<db::LoadGraphQuery*> loadGraph
 %type<db::LoadGMLQuery*> loadGML
+%type<db::LoadGMLQuery*> loadParquet
 %type<db::LoadJsonlQuery*> loadJsonl
 %type<db::LoadCommitQuery*> loadCommitQuery
 %type<db::Stmt*> readingStatement
@@ -414,6 +416,7 @@ singleQuery
     | listGraphQuery { $$ = $1; }
     | createGraphQuery { $$ = $1; }
     | loadGML { $$ = $1; }
+    | loadParquet { $$ = $1; }
     | loadJsonl { $$ = $1; }
     | loadCommitQuery { $$ = $1; }
     | s3ConnectQuery { $$ = $1; }
@@ -576,6 +579,19 @@ loadGML
         LOC($$, @$);
       }
     | LOAD GML STRING_LITERAL {
+        $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3)));
+        LOC($$, @$);
+      }
+    ;
+
+loadParquet
+    // FIXME : Create LoadParquet query, rather than LoadGMLQuery
+    : LOAD PARQUET STRING_LITERAL AS ID {
+        $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3)));
+        $$->setGraphName($5);
+        LOC($$, @$);
+      }
+    | LOAD PARQUET STRING_LITERAL {
         $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3)));
         LOC($$, @$);
       }

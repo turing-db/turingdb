@@ -1,27 +1,34 @@
 #pragma once
 
-#include <limits>
-#include <vector>
-
 #include <stddef.h>
+
+#include "ParquetNeo4jVisitor.h"
+
+#include "Path.h"
 
 namespace db {
 
+class ParquetReader;
+class CommitBuilder;
+
 class Neo4jParquetImporter {
 public:
+
+    explicit Neo4jParquetImporter(fs::Path path, CommitBuilder* builder)
+        : _path(std::move(path)),
+        _visitor(builder),
+        _reader(_path, _visitor)
+    {
+    }
+
+    ParquetNeo4jVisitor& visitor() { return _visitor; };
+
+    void import();
+
 private:
-    friend class ParquetNeo4jVisitor;
-
-    static constexpr size_t INVALID_COL_IDX = std::numeric_limits<size_t>::max();
-
-    size_t _nodeColIdx {INVALID_COL_IDX};
-    size_t _lblColIdx {INVALID_COL_IDX};
-
-    size_t _srcColIdx {INVALID_COL_IDX};
-    size_t _tgtColIdx {INVALID_COL_IDX};
-    size_t _edgetypeColIdx {INVALID_COL_IDX};
-
-    std::vector<size_t> _propCols;
+    fs::Path _path;
+    ParquetNeo4jVisitor _visitor;
+    ParquetReader _reader;
 };
 
 }

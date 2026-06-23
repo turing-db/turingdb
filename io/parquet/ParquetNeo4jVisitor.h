@@ -1,9 +1,10 @@
 #pragma once
 
-#include <parquet/types.h>
+#include <limits>
 #include <string_view>
+#include <vector>
 
-#include "ParquetNeo4jDumpLoader.h"
+#include <parquet/types.h>
 
 #include "ParquetReader.h"
 
@@ -14,11 +15,13 @@ class FileMetaData;
 namespace db {
 
 class ChangeAccessor;
+class CommitBuilder;
 
 class ParquetNeo4jVisitor final : public ParquetSaxVisitor {
 public:
-    ParquetNeo4jVisitor(ParquetNeo4jDumpLoader* loader)
-    : _loader(loader)
+
+    ParquetNeo4jVisitor(CommitBuilder* builder)
+        : _builder(builder)
     {
     }
 
@@ -27,9 +30,23 @@ public:
      */
     bool onFileStart(const parquet::FileMetaData& metadata) final;
 
+    bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) final;
+
 private:
-    ParquetNeo4jDumpLoader* _loader {nullptr};
-    ChangeAccessor* _change {nullptr};
+    friend class Neo4jParquetImporter;
+
+    static constexpr size_t INVALID_COL_IDX = std::numeric_limits<size_t>::max();
+
+    CommitBuilder* _builder;
+
+    size_t _nodeColIdx {INVALID_COL_IDX};
+    size_t _lblColIdx {INVALID_COL_IDX};
+
+    size_t _srcColIdx {INVALID_COL_IDX};
+    size_t _tgtColIdx {INVALID_COL_IDX};
+    size_t _edgetypeColIdx {INVALID_COL_IDX};
+
+    std::vector<size_t> _propCols;
 
     static constexpr std::string_view NEO4J_NODE_COL_NAME = "__id";
     static constexpr std::string_view NEO4J_LBLS_COL_NAME = "__labels";

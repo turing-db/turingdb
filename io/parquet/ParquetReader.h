@@ -137,6 +137,8 @@ public:
     // Throws TuringException on I/O or decode failure.
     bool nextChunk(size_t maxRows = DEFAULT_CHUNK_SIZE);
 
+    bool ensureFileOpen();
+
 private:
     fs::Path _path;
     ParquetSaxVisitor& _visitor;
@@ -163,7 +165,6 @@ private:
     // DEFAULT_CHUNK_SIZE values of the widest type (parquet::ByteArray).
     std::vector<std::vector<uint8_t>> _scratch;
 
-    bool ensureFileOpen();
     bool openRowGroup();
     void closeRowGroup();
     bool readColumnSlice(size_t projectionIndex, size_t columnIndex, size_t batchRows);

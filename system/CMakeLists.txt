@@ -18,6 +18,7 @@ target_link_libraries(turing_db_system_s PUBLIC
     turing_db_jobs_s
     turing_db_import_gml_s
     turing_db_import_jsonl_s
+    turing_db_import_parquet_s
     turing_db_import_common_s
     turing_db_io_s3_s
     turing_vector_s
