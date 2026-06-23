@@ -60,8 +60,6 @@ void blockRepeatColumn(const Column* input, size_t factor, Column* output) {
     auto& outputRaw = typedOutput->getRaw();
     outputRaw.resize(inputRaw.size() * factor);
 
-    // fill_n each input value into its `factor`-wide run; vectorises where the
-    // push_back loop would not.
     auto outputIt = outputRaw.begin();
     for (const ElementType& value : inputRaw) {
         std::fill_n(outputIt, factor, value);
@@ -82,8 +80,6 @@ void tileColumn(const Column* input, size_t factor, Column* output) {
     auto& outputRaw = typedOutput->getRaw();
     outputRaw.resize(inputRaw.size() * factor);
 
-    // Copy the whole input chunk into each `factor` repeat; copy commonly lowers
-    // to a memcpy whereas the push_back loop would not.
     auto outputIt = outputRaw.begin();
     for (size_t repeat = 0; repeat < factor; repeat++) {
         outputIt = std::copy(inputRaw.begin(), inputRaw.end(), outputIt);
