@@ -283,73 +283,23 @@ NLBroadcastFunction NLExecutor::selectTileFunction(NLChunkKind kind) {
 // ColumnVector<std::optional<Primitive>> - so the same broadcast templates,
 // instantiated on std::optional<Primitive>, carry value and null together.
 NLBroadcastFunction NLExecutor::selectOptBlockRepeatFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &blockRepeatColumn<std::optional<types::Int64::Primitive>>;
-        break;
+    NLBroadcastFunction broadcast = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        broadcast = &blockRepeatColumn<std::optional<typename T::Primitive>>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
 
-        case ValueType::UInt64:
-            return &blockRepeatColumn<std::optional<types::UInt64::Primitive>>;
-        break;
-
-        case ValueType::Double:
-            return &blockRepeatColumn<std::optional<types::Double::Primitive>>;
-        break;
-
-        case ValueType::Bool:
-            return &blockRepeatColumn<std::optional<types::Bool::Primitive>>;
-        break;
-
-        case ValueType::String:
-            return &blockRepeatColumn<std::optional<types::String::Primitive>>;
-        break;
-
-        case ValueType::Embedding:
-            return &blockRepeatColumn<std::optional<types::Embedding::Primitive>>;
-        break;
-
-        case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw IRException("Invalid property value type");
-        break;
-    }
-
-    throw IRException("Unhandled property value type");
+    return broadcast;
 }
 
 NLBroadcastFunction NLExecutor::selectOptTileFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &tileColumn<std::optional<types::Int64::Primitive>>;
-        break;
+    NLBroadcastFunction broadcast = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        broadcast = &tileColumn<std::optional<typename T::Primitive>>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
 
-        case ValueType::UInt64:
-            return &tileColumn<std::optional<types::UInt64::Primitive>>;
-        break;
-
-        case ValueType::Double:
-            return &tileColumn<std::optional<types::Double::Primitive>>;
-        break;
-
-        case ValueType::Bool:
-            return &tileColumn<std::optional<types::Bool::Primitive>>;
-        break;
-
-        case ValueType::String:
-            return &tileColumn<std::optional<types::String::Primitive>>;
-        break;
-
-        case ValueType::Embedding:
-            return &tileColumn<std::optional<types::Embedding::Primitive>>;
-        break;
-
-        case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw IRException("Invalid property value type");
-        break;
-    }
-
-    throw IRException("Unhandled property value type");
+    return broadcast;
 }
 
 // Read one property of the current input chunk into a nullable value column.
