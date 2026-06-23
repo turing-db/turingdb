@@ -30,7 +30,6 @@
 
 #include "DBDialect.h"
 #include "DBLowering.h"
-#include "IRException.h"
 #include "LocalMemory.h"
 #include "NLDialect.h"
 #include "NLInterpreter.h"
@@ -356,22 +355,6 @@ func.func @main() {
     db.yield %b, %score : !db.column<"b">, !db.column<"b.score">
   }
   db.output(%0#0, %0#2) : !db.column<"a">, !db.column<"b.score">
-  return
-}
-)mlir";
-
-// A cross product whose right factor yields no column: lowering does not yet
-// support it (the empty side has no column to measure its row count from)
-constexpr const char* crossProductZeroYieldProgram = R"mlir(
-func.func @main() {
-  %0 = db.cross_product factor {
-    %a = db.scan_nodes() : !db.column<"a">
-    db.yield %a : !db.column<"a">
-  } factor {
-    %b = db.scan_nodes() : !db.column<"b">
-    db.yield
-  }
-  db.output(%0) : !db.column<"a">
   return
 }
 )mlir";
@@ -727,17 +710,6 @@ TEST_F(DBLoweringTest, executesCrossProductOfNodeProperty) {
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
-}
-
-TEST_F(DBLoweringTest, crossProductZeroYieldFactorNotLowered) {
-    auto graph = buildDiamondGraph();
-    const FrozenCommitTx transaction = graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
-
-    // The right factor yields no column, so lowering cannot size that side and
-    // rejects the product rather than producing a wrong row count
-    CollectingNodeSink sink;
-    EXPECT_THROW(runLoweredProgram(crossProductZeroYieldProgram, reader.getView(), sink), IRException);
 }
 
 TEST_F(DBLoweringTest, lowersCrossProductToNestedLoops) {

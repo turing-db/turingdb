@@ -251,11 +251,12 @@ mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
         throw IRException("cross_product factor opened no loop to iterate");
     }
 
-    // A factor that yields no column still multiplies cardinality, but the cross
-    // product reads each side's row count from its first column, so an empty
-    // factor has no row count to read - not yet supported by lowering.
+    // A factor's row count is read from its first yielded column, so a factor
+    // that yields none cannot size its side of the product. The db.cross_product
+    // verifier rejects this, so reaching it here means unverified IR - a
+    // defensive backstop.
     if (yieldedChunks.empty()) {
-        throw IRException("cross_product lowering does not support a factor that yields no column");
+        throw IRException("cross_product factor yields no column");
     }
 
     mlir::Block* const innermostBody = _innermostLoopBody;

@@ -64,8 +64,9 @@ func.func @main() {
 }
 )mlir";
 
-// MATCH (a), (b) RETURN a: the right factor multiplies cardinality but surfaces
-// no column, so its db.yield is empty and the product has a single result.
+// MATCH (a), (b) RETURN a: the right factor surfaces no column, so its db.yield
+// is empty - which the verifier rejects, since a side's row count is read from
+// its first yielded column.
 const char* const zeroYieldProgram = R"mlir(
 func.func @main() {
   %0 = db.cross_product factor {
@@ -127,16 +128,11 @@ TEST_F(DBDialectTest, roundTripsThroughTextualForm) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
-TEST_F(DBDialectTest, parsesZeroYieldFactor) {
+TEST_F(DBDialectTest, rejectsZeroYieldFactor) {
+    // An empty db.yield surfaces no column, so the factor cannot be sized; the
+    // verifier rejects it and the module fails to verify during parsing.
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(zeroYieldProgram);
-    ASSERT_TRUE(module);
-
-    mlir::db::CrossProduct product = findCrossProduct(*module);
-    ASSERT_TRUE(product);
-
-    // An empty right yield surfaces no column, so the product has one result.
-    EXPECT_EQ(product.getResults().size(), 1u);
-    EXPECT_EQ(product.getRightFactor().front().getTerminator()->getNumOperands(), 0u);
+    EXPECT_FALSE(module);
 }
 
 TEST_F(DBDialectTest, rejectsFactorWithoutYield) {
@@ -160,9 +156,9 @@ TEST_F(DBDialectTest, verifierRejectsResultsNotMatchingYields) {
     const mlir::Type colA = mlir::db::ColumnType::get(&_context, "a");
     const mlir::Type colB = mlir::db::ColumnType::get(&_context, "b");
 
-    // Declare two results but make the factors yield only one column in total:
-    // the left yields `a`, the right yields nothing.
-    auto product = builder.create<mlir::db::CrossProduct>(loc, mlir::TypeRange {colA, colB});
+    // Declare a single result but make the factors yield two columns in total:
+    // the left yields `a` and the right yields `b`, so the result count is wrong.
+    auto product = builder.create<mlir::db::CrossProduct>(loc, mlir::TypeRange {colA});
 
     mlir::Block* leftFactor = &product.getLeftFactor().front();
     builder.setInsertionPointToStart(leftFactor);
@@ -171,7 +167,8 @@ TEST_F(DBDialectTest, verifierRejectsResultsNotMatchingYields) {
 
     mlir::Block* rightFactor = &product.getRightFactor().front();
     builder.setInsertionPointToStart(rightFactor);
-    builder.create<mlir::db::Yield>(loc, mlir::ValueRange {});
+    auto scanB = builder.create<mlir::db::ScanNodes>(loc, colB);
+    builder.create<mlir::db::Yield>(loc, mlir::ValueRange {scanB.getResult()});
 
     const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
         return mlir::success();
