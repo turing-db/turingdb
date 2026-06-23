@@ -140,9 +140,10 @@ def CrossProduct : TuringOp<"cross_product", [Pure]> {
     cannot be read off a data dependency (unlike get_out_edges' carry set within
     a connected traversal) - it must be stated. Each region ends with a db.yield
     naming exactly the columns that factor contributes, and the op's results are
-    the left factor's yielded columns followed by the right factor's. An empty
-    db.yield is allowed: `MATCH (a),(b) RETURN a` multiplies cardinality by |b|
-    while surfacing no `b` column.
+    the left factor's yielded columns followed by the right factor's. Each factor
+    must yield at least one column: a side's row count is read from its first
+    yielded column, so a factor that surfaces none cannot be sized and the
+    verifier rejects an empty db.yield.
 
     The result types are not spelled after the regions; the parser recovers them
     from the two yields and the verifier checks they line up. Reading the graph
@@ -178,17 +179,18 @@ def Yield : TuringOp<"yield", [Pure, Terminator, HasParent<"CrossProduct">]> {
   let description = [{
     Terminates a db.cross_product factor region, naming the columns that factor
     contributes to the product. The cross_product's results are the left
-    factor's yielded columns followed by the right factor's. An empty yield is
-    allowed - a factor can multiply the result cardinality while surfacing no
-    column of its own.
+    factor's yielded columns followed by the right factor's. A factor must yield
+    at least one column - the cross_product verifier rejects an empty yield,
+    since a side's row count is read from its first yielded column.
   }];
 
   let arguments = (ins Variadic<Column>:$columns);
 
   // The yielded column types vary from query to query and cannot be built from
   // a recipe, so - when present - they are spelled after the colon, as in
-  // db.output. The optional group, anchored on the operands, prints nothing for
-  // an empty yield (`db.yield`).
+  // db.output. The optional group, anchored on the operands, keeps the syntax
+  // total: an empty yield (`db.yield`) still parses, then the cross_product
+  // verifier rejects it with a clear db-level diagnostic.
   let assemblyFormat = "( $columns^ `:` qualified(type($columns)) )? attr-dict";
 }
 

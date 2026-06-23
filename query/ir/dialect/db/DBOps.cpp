@@ -126,6 +126,13 @@ LogicalResult CrossProduct::verify() {
         return emitOpError("each factor region must end with a db.yield");
     }
 
+    // Each factor must contribute at least one column. A side's row count is read
+    // from its first yielded column during lowering, so a factor that surfaces no
+    // column (an empty db.yield) cannot be sized - reject it here at the db level.
+    if (leftYield.getColumns().empty() || rightYield.getColumns().empty()) {
+        return emitOpError("each factor must yield at least one column");
+    }
+
     llvm::SmallVector<Type> expectedResultTypes;
     for (const Type columnType : leftYield.getColumns().getTypes()) {
         expectedResultTypes.push_back(columnType);
