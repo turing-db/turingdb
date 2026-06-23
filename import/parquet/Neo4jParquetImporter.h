@@ -7,7 +7,7 @@
 
 namespace db {
 
-class ParquetNeo4jDumpLoader {
+class Neo4jParquetImporter {
 public:
 private:
     friend class ParquetNeo4jVisitor;

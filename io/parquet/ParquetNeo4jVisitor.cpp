@@ -1,10 +1,10 @@
 #include "ParquetNeo4jVisitor.h"
 
-#include <parquet/types.h>
 #include <string_view>
 
 #include <parquet/metadata.h>
 #include <parquet/schema.h>
+#include <parquet/types.h>
 
 #include "BioAssert.h"
 
@@ -58,5 +58,6 @@ bool ParquetNeo4jVisitor::onFileStart(const parquet::FileMetaData& metadata) {
         // TODO: Get property type and register it here?
         _loader->_propCols.push_back(colIdx);
     }
+
     return true;
 }
