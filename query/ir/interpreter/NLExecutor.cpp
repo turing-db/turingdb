@@ -1,5 +1,6 @@
 #include "NLExecutor.h"
 
+#include <algorithm>
 #include <type_traits>
 
 #include "iterators/GetInEdgesIterator.h"
@@ -55,14 +56,16 @@ void blockRepeatColumn(const Column* input, size_t factor, Column* output) {
     const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
     ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
-    typedOutput->clear();
-    typedOutput->reserve(typedInput->size() * factor);
-
+    const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
-    for (const ElementType& value : typedInput->getRaw()) {
-        for (size_t repeat = 0; repeat < factor; repeat++) {
-            outputRaw.push_back(value);
-        }
+    outputRaw.resize(inputRaw.size() * factor);
+
+    // fill_n each input value into its `factor`-wide run; vectorises where the
+    // push_back loop would not.
+    auto outputIt = outputRaw.begin();
+    for (const ElementType& value : inputRaw) {
+        std::fill_n(outputIt, factor, value);
+        outputIt += factor;
     }
 }
 
@@ -75,15 +78,15 @@ void tileColumn(const Column* input, size_t factor, Column* output) {
     const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
     ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
-    typedOutput->clear();
-    typedOutput->reserve(typedInput->size() * factor);
-
-    auto& outputRaw = typedOutput->getRaw();
     const auto& inputRaw = typedInput->getRaw();
+    auto& outputRaw = typedOutput->getRaw();
+    outputRaw.resize(inputRaw.size() * factor);
+
+    // Copy the whole input chunk into each `factor` repeat; copy commonly lowers
+    // to a memcpy whereas the push_back loop would not.
+    auto outputIt = outputRaw.begin();
     for (size_t repeat = 0; repeat < factor; repeat++) {
-        for (const ElementType& value : inputRaw) {
-            outputRaw.push_back(value);
-        }
+        outputIt = std::copy(inputRaw.begin(), inputRaw.end(), outputIt);
     }
 }
 
