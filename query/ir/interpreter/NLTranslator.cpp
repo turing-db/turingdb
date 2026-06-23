@@ -30,44 +30,18 @@ namespace {
 // value-type dispatch with the rest of translation; the handler bodies live in
 // NLExecutor.
 NLHandlerFunction selectPropertyFetchHandler(bool isNode, ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::Int64>
-                          : &NLExecutor::runPropertyFetch<EdgeID, types::Int64>;
-        break;
+    // The handler is the runPropertyFetch instantiation for the node or edge ID
+    // type and the property's value type; ValueTypeDispatcher maps the runtime
+    // value type to that compile-time type, so the per-type fan-out lives in one
+    // shared place rather than a switch repeated across the lowering.
+    NLHandlerFunction handler = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        handler = isNode ? &NLExecutor::runPropertyFetch<NodeID, T>
+                         : &NLExecutor::runPropertyFetch<EdgeID, T>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
 
-        case ValueType::UInt64:
-            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::UInt64>
-                          : &NLExecutor::runPropertyFetch<EdgeID, types::UInt64>;
-        break;
-
-        case ValueType::Double:
-            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::Double>
-                          : &NLExecutor::runPropertyFetch<EdgeID, types::Double>;
-        break;
-
-        case ValueType::Bool:
-            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::Bool>
-                          : &NLExecutor::runPropertyFetch<EdgeID, types::Bool>;
-        break;
-
-        case ValueType::String:
-            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::String>
-                          : &NLExecutor::runPropertyFetch<EdgeID, types::String>;
-        break;
-
-        case ValueType::Embedding:
-            return isNode ? &NLExecutor::runPropertyFetch<NodeID, types::Embedding>
-                          : &NLExecutor::runPropertyFetch<EdgeID, types::Embedding>;
-        break;
-
-        case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw IRException("Invalid property value type");
-        break;
-    }
-
-    throw IRException("Unhandled property value type");
+    return handler;
 }
 
 // Reverse of DBLowering's valueTypeToElementType: recover the storage value
@@ -435,57 +409,18 @@ Column* NLTranslator::allocColumnForKind(NLChunkKind kind) {
 Column* NLTranslator::allocOptColumnForValueType(ValueType valueType) {
     const size_t chunkSize = _program->getChunkSize();
 
-    switch (valueType) {
-        case ValueType::Int64: {
-            ColumnOptVector<types::Int64::Primitive>* column = _memory->alloc<ColumnOptVector<types::Int64::Primitive>>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
+    // Allocate a ColumnOptVector for the value type's primitive, reserving a
+    // full chunk so execution stays allocation-free; ValueTypeDispatcher maps
+    // the runtime value type to that compile-time primitive.
+    Column* column = nullptr;
+    const auto allocate = [&]<SupportedType T>() {
+        ColumnOptVector<typename T::Primitive>* typed = _memory->alloc<ColumnOptVector<typename T::Primitive>>();
+        typed->reserve(chunkSize);
+        column = typed;
+    };
+    ValueTypeDispatcher(valueType).execute(allocate);
 
-        case ValueType::UInt64: {
-            ColumnOptVector<types::UInt64::Primitive>* column = _memory->alloc<ColumnOptVector<types::UInt64::Primitive>>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
-
-        case ValueType::Double: {
-            ColumnOptVector<types::Double::Primitive>* column = _memory->alloc<ColumnOptVector<types::Double::Primitive>>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
-
-        case ValueType::Bool: {
-            ColumnOptVector<types::Bool::Primitive>* column = _memory->alloc<ColumnOptVector<types::Bool::Primitive>>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
-
-        case ValueType::String: {
-            ColumnOptVector<types::String::Primitive>* column = _memory->alloc<ColumnOptVector<types::String::Primitive>>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
-
-        case ValueType::Embedding: {
-            ColumnOptVector<types::Embedding::Primitive>* column = _memory->alloc<ColumnOptVector<types::Embedding::Primitive>>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
-
-        case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw IRException("Invalid property value type");
-        break;
-    }
-
-    bioassert(false, "Unhandled property value type");
-    return nullptr;
+    return column;
 }
 
 Column* NLTranslator::getColumn(mlir::Value chunkValue) const {
