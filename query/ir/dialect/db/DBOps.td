@@ -525,4 +525,12 @@ def Min : AggregateOp<"min">;
 def Max : AggregateOp<"max">;
 def Avg : AggregateOp<"avg">;
 
+def AndOp : BinaryOp<"logical_and", [Pure]> {
+  let summary = "Performs row-wise logical AND on its two input columns";
+}
+
+def OrOp : BinaryOp<"logical_or", [Pure]> {
+  let summary = "Performs row-wise logical OR on its two input columns";
+}
+
 #endif //TURINGDB_OPS
