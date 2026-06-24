@@ -244,7 +244,7 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
     non-empty.
 
     An optional `limit` operand carries an !nl.limit_state handle. When present,
-    the product is built only up to limit.remaining() rows: rows are laid out in
+    the product is built only up to limit.getRemaining() rows: rows are laid out in
     (outer, inner) order, so the product's prefix is exactly the prefix the
     following nl.limit_update/nl.output can emit this step, and building the rest
     would be wasted work. Absent, the whole N*M product is built.
@@ -296,7 +296,7 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
     survive dead-code elimination even though it has no results.
 
     An optional `limit` operand carries an !nl.limit_state handle. When present,
-    output emits only a prefix of length limit.emitThisStep() (set by the
+    output emits only a prefix of length limit.getEmitThisStep() (set by the
     preceding nl.limit_update); absent, it emits the whole chunk. It never
     mutates the budget - it only reads how many rows to emit:
 

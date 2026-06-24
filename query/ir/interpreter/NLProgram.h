@@ -64,8 +64,8 @@ public:
         _emitThisStep = 0;
     }
 
-    size_t remaining() const { return _remaining; }
-    size_t emitThisStep() const { return _emitThisStep; }
+    size_t getRemaining() const { return _remaining; }
+    size_t getEmitThisStep() const { return _emitThisStep; }
 
     // Called once per innermost step by nl.limit_update, before nl.output: emit
     // min(rowsAvailable, remaining) this step and charge it against the budget.
@@ -294,7 +294,7 @@ public:
     }
 
     // The governing limit counter, or null for an unbounded product. When set,
-    // the product is built only up to remaining() rows; it never mutates the
+    // the product is built only up to getRemaining() rows; it never mutates the
     // counter (the following nl.limit_update does).
     NLLimitState* getLimit() const { return _limit; }
     void setLimit(NLLimitState* limit) { _limit = limit; }
@@ -354,7 +354,7 @@ public:
     }
 
     // The governing limit counter, or null for an unbounded output. When set,
-    // output emits only its emitThisStep() prefix; it never mutates the counter.
+    // output emits only its getEmitThisStep() prefix; it never mutates the counter.
     NLLimitState* getLimit() const { return _limit; }
     void setLimit(NLLimitState* limit) { _limit = limit; }
 
