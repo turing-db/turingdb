@@ -91,14 +91,27 @@ LogicalResult CrossProduct::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
-// Build a loop from just the iterator value: its iterator type carries the
-// chunk types, which become the loop variables (the body block arguments).
-// The body is created with its implicit nl.yield terminator, ready for the
-// caller to set the insertion point into it.
+// Build an unbounded loop from just the iterator value, the form most callers
+// want; delegates to the limit-carrying builder with a null handle.
 void For::build(OpBuilder& builder, OperationState& state, Value iterator) {
+    For::build(builder, state, iterator, Value());
+}
+
+// Build a loop from the iterator value and an optional limit handle: the
+// iterator type carries the chunk types, which become the loop variables (the
+// body block arguments); a non-null limit handle is added as the second
+// operand, so the loop early-exits once that budget is spent. The body is
+// created with its implicit nl.yield terminator, ready for the caller to set
+// the insertion point into it.
+void For::build(OpBuilder& builder, OperationState& state, Value iterator, Value limit) {
     const OpBuilder::InsertionGuard guard(builder);
 
     state.addOperands(iterator);
+
+    // The limit handle is optional; a null value leaves the loop unbounded.
+    if (limit) {
+        state.addOperands(limit);
+    }
 
     const auto iteratorType = cast<IteratorType>(iterator.getType());
     const ArrayRef<Type> chunkTypes = iteratorType.getChunkTypes();
@@ -120,12 +133,23 @@ ParseResult For::parse(OpAsmParser& parser, OperationState& result) {
     llvm::SmallVector<OpAsmParser::Argument, 4> chunkArguments;
     OpAsmParser::UnresolvedOperand iterator;
 
-    // Loop variables, `in` keyword, iterator operand, `:` of the iterator type
+    // Loop variables, `in` keyword, iterator operand
     const bool headerFailed = parser.parseArgumentList(chunkArguments)
                               || parser.parseKeyword("in")
-                              || parser.parseOperand(iterator)
-                              || parser.parseColon();
+                              || parser.parseOperand(iterator);
     if (headerFailed) {
+        return failure();
+    }
+
+    // Optional `limit %handle` between the iterator and its type, naming the
+    // loop's row-limit counter so it stops once the budget is spent
+    OpAsmParser::UnresolvedOperand limit;
+    const bool hasLimit = succeeded(parser.parseOptionalKeyword("limit"));
+    if (hasLimit && parser.parseOperand(limit)) {
+        return failure();
+    }
+
+    if (parser.parseColon()) {
         return failure();
     }
 
@@ -154,6 +178,15 @@ ParseResult For::parse(OpAsmParser& parser, OperationState& result) {
         return failure();
     }
 
+    // Resolve the optional limit operand after the iterator, so it lands at
+    // operand index 1; its type is the buildable !nl.limit_state handle.
+    if (hasLimit) {
+        const Type limitType = LimitStateType::get(parser.getContext());
+        if (parser.resolveOperand(limit, limitType, result.operands)) {
+            return failure();
+        }
+    }
+
     // The body region, with the loop variables as entry block arguments
     Region* bodyRegion = result.addRegion();
     if (parser.parseRegion(*bodyRegion, chunkArguments)) {
@@ -175,7 +208,16 @@ void For::print(OpAsmPrinter& printer) {
         printer << chunkArgument;
     });
 
-    printer << " in " << getIterator() << " : " << getIterator().getType() << " ";
+    const Value iterator = getIterator();
+    printer << " in " << iterator;
+
+    // The optional limit handle prints between the iterator and its type,
+    // mirroring the parse order: `%vars in %iter limit %h : !nl.iter<...>`.
+    if (const Value limit = getLimit()) {
+        printer << " limit " << limit;
+    }
+
+    printer << " : " << iterator.getType() << " ";
 
     // The loop variables are already printed in the loop header, and the
     // implicit nl.yield terminator carries nothing: elide both.

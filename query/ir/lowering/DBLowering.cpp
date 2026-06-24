@@ -97,6 +97,27 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _propertyTypes.clear();
     _rootBlock = _entryBlock;
     _innermostLoopBody = nullptr;
+    _limitActive = false;
+    _limitCount = 0;
+    _limitHandle = mlir::Value();
+
+    // Pre-scan for a db.limit before any loop is built: nl.for's limit operand
+    // is fixed at build time, so the handle has to exist first to be threaded in.
+    dbFunction.walk([&](mlir::db::Limit limit) {
+        if (_limitActive) {
+            throw IRException("DBLowering supports at most one db.limit per function");
+        }
+        _limitActive = true;
+        _limitCount = limit.getCount();
+    });
+
+    // Hoist the handle above every loop, at the top of the entry block, where it
+    // dominates all the loops, the update and the output that read it.
+    if (_limitActive) {
+        _builder.setInsertionPointToStart(_entryBlock);
+        _limitHandle = _builder.create<nl::Limit>(loc, _limitCount).getState();
+    }
+
     for (mlir::Operation& operation : dbBody.front()) {
         lowerOperation(operation);
     }
@@ -120,6 +141,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerGetEdgeProperties(getEdgeProperties);
     } else if (mlir::db::CrossProduct crossProduct = mlir::dyn_cast<mlir::db::CrossProduct>(operation)) {
         lowerCrossProduct(crossProduct);
+    } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
+        lowerLimit(limit);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -300,6 +323,32 @@ mlir::Type DBLowering::propertyValueChunkType(llvm::StringRef propertyName) {
     return nl::ChunkType::get(_builder.getContext(), nullableType);
 }
 
+void DBLowering::lowerLimit(mlir::db::Limit limit) {
+    // Pass the columns straight through: db.output consumes db.limit's results,
+    // so its lowering must find the same nl chunks.
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    for (const mlir::Value column : limit.getColumns()) {
+        chunks.push_back(mapValue(column));
+    }
+
+    if (chunks.empty()) {
+        throw IRException("db.limit requires at least one column");
+    }
+
+    const mlir::ResultRange dbResults = limit.getResults();
+    for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
+        _valueMap[dbResults[resultIndex]] = chunks[resultIndex];
+    }
+
+    // The representative is the first output column, in the innermost loop body
+    // (post-cross-product if there is one), so its row count is exactly what
+    // nl.output emits this step.
+    const mlir::Value representative = chunks.front();
+
+    setInsertionInto(ownerBlock(representative));
+    _builder.create<nl::LimitUpdate>(_builder.getUnknownLoc(), _limitHandle, representative);
+}
+
 void DBLowering::lowerOutput(mlir::db::Output output) {
     llvm::SmallVector<mlir::Value, 4> columns;
     for (const mlir::Value column : output.getColumns()) {
@@ -311,13 +360,18 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
     }
 
     // The output columns are loop variables of one innermost loop; nl.output
-    // streams them from that loop's body.
+    // streams them from that loop's body. _limitHandle is null when no limit is
+    // active (output emits the whole chunk); when active, output emits the prefix
+    // nl.limit_update sized this step.
     setInsertionInto(ownerBlock(columns.front()));
-    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns);
+    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns, _limitHandle);
 }
 
 void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp) {
-    nl::For forLoop = _builder.create<nl::For>(_builder.getUnknownLoc(), iterator);
+    // _limitHandle is null when no db.limit is active, giving the iterator-only
+    // builder's unbounded loop (today's behavior); when active, every loop in
+    // the nest carries the same handle so the break unwinds the whole nest.
+    nl::For forLoop = _builder.create<nl::For>(_builder.getUnknownLoc(), iterator, _limitHandle);
 
     // The loop binds one variable per chunk the iterator produces, in the same
     // order as the db op's result columns: a scan binds its single node chunk;

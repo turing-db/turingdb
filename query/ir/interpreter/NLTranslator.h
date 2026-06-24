@@ -44,12 +44,30 @@ private:
     llvm::DenseMap<mlir::Value, Column*> _valueSlots;
     llvm::DenseMap<mlir::Value, IteratorConfig> _iteratorConfigs;
 
+    // nl.limit handle SSA value -> the runtime counter it produces, so the loops,
+    // nl.limit_update and nl.output that name the handle find the same counter
+    llvm::DenseMap<mlir::Value, NLLimitState*> _limitStates;
+
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
-    void translateFor(const mlir::nl::For& forLoop, NLStmtContainer* body);
-    void translateScanLoop(mlir::Block& loopBody, NLStmtContainer* body);
+    void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
+    void translateScanLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
     void translateEdgeLoop(const IteratorConfig& config,
                            mlir::Block& loopBody,
+                           NLLimitState* limit,
                            NLStmtContainer* body);
+
+    // Translate an nl.limit: allocate its runtime counter, map the handle to it,
+    // and record the reset statement (run each time the enclosing block runs)
+    void translateLimit(mlir::nl::Limit limit, NLStmtContainer* body);
+
+    // Translate an nl.limit_update: look up the counter the handle names and
+    // record the charge against the representative chunk's row count
+    void translateLimitUpdate(mlir::nl::LimitUpdate update, NLStmtContainer* body);
+
+    // The runtime counter an optional limit handle names: null for a null handle
+    // (an unbounded loop or output), the mapped counter otherwise. Throws if the
+    // handle was not produced by an nl.limit translated earlier.
+    NLLimitState* limitStateFor(mlir::Value handle) const;
 
     // Translate an nl.get_node_properties / nl.get_edge_properties: resolve the
     // property name (carried by the nl.get_property_type that produced the
@@ -60,7 +78,7 @@ private:
                                 mlir::Value resultValue,
                                 bool isNode,
                                 NLStmtContainer* body);
-    void translateOutput(const mlir::nl::Output& output, NLStmtContainer* body);
+    void translateOutput(mlir::nl::Output output, NLStmtContainer* body);
 
     // Translate an nl.cross_product: allocate an output column per crossed
     // column, map each to the matching op result, and record the broadcast

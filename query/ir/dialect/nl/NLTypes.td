@@ -57,6 +57,17 @@ def NLNullable : NLType<"Nullable", "nullable"> {
     let assemblyFormat = "`<` $valueType `>`";
 }
 
+def NLLimitState : NLType<"LimitState", "limit_state"> {
+    let summary = "A row-limit counter handle";
+    let description = [{
+        Stands for one LIMIT's remaining-row budget. Produced by nl.limit, read by
+        the nl.for loops it governs and by nl.output, and decremented by
+        nl.limit_update. It is a handle, not a chunk: it holds a count, not values.
+        Modeled on !nl.property_type, but mutable - the budget changes as rows are
+        emitted.
+    }];
+}
+
 def NLChunk : NLType<"Chunk", "chunk"> {
     let summary = "A bounded batch of values";
     let description = "One column chunk filled by a single database iterator step";
@@ -126,5 +137,15 @@ def NLPropertyTypeHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::PropertyTypeType>($_self)">,
         "property type handle", "::mlir::nl::PropertyTypeType">,
     BuildableType<"::mlir::nl::PropertyTypeType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.limit_state handle, the same way
+// NLPropertyTypeHandle constrains the property handle. The single concrete type
+// - there is only ever !nl.limit_state - is what lets the loops, nl.limit_update
+// and nl.output omit the handle's type in their assembly, building it from this
+// recipe instead.
+def NLLimitStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::LimitStateType>($_self)">,
+        "limit state handle", "::mlir::nl::LimitStateType">,
+    BuildableType<"::mlir::nl::LimitStateType::get($_builder.getContext())">;
 
 #endif // TURINGDB_NL_TYPES

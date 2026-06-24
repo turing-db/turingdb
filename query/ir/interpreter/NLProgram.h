@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -49,6 +50,33 @@ private:
 class NLFunctionData {
 public:
     virtual ~NLFunctionData() = default;
+};
+
+// Runtime state of one LIMIT: the remaining row budget and how many rows the
+// current innermost step should emit. nl.limit resets it, nl.limit_update is the
+// sole mutator (called once per innermost step before nl.output), and the loops
+// and nl.output only read it. emitThisStep is what output emits; remaining is
+// what the loops test to early-exit.
+class NLLimitState {
+public:
+    void reset(size_t budget) {
+        _remaining = budget;
+        _emitThisStep = 0;
+    }
+
+    size_t remaining() const { return _remaining; }
+    size_t emitThisStep() const { return _emitThisStep; }
+
+    // Called once per innermost step by nl.limit_update, before nl.output: emit
+    // min(rowsAvailable, remaining) this step and charge it against the budget.
+    void update(size_t rowsAvailable) {
+        _emitThisStep = std::min(rowsAvailable, _remaining);
+        _remaining -= _emitThisStep;
+    }
+
+private:
+    size_t _remaining {0};
+    size_t _emitThisStep {0};
 };
 
 // Holds the translated statements of a program or loop body
@@ -109,11 +137,17 @@ public:
 
     ColumnNodeIDs* getNodeIDs() const { return _nodeIDs; }
 
+    // The governing limit counter, or null for an unbounded loop. The loop
+    // driver stops once it reaches zero.
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
 private:
     ColumnNodeIDs* _nodeIDs {nullptr};
+    NLLimitState* _limit {nullptr};
     NLStmtContainer _stmts;
 };
 
@@ -147,6 +181,11 @@ public:
 
     const CarriedColumns& carriedColumns() const { return _carriedColumns; }
 
+    // The governing limit counter, or null for an unbounded loop. The loop
+    // driver stops once it reaches zero.
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -156,6 +195,7 @@ public:
 
 private:
     const ColumnNodeIDs* _inputNodeIDs {nullptr};
+    NLLimitState* _limit {nullptr};
 
     // The four fixed chunks of an edge iterator step, in loop-variable order
     ColumnNodeIDs* _sources {nullptr};
@@ -251,6 +291,43 @@ private:
     Columns _innerColumns;
 };
 
+// nl.limit data: resets a counter to its budget each time the block it lives in
+// runs - once at function scope for a top-level LIMIT, or per enclosing step for
+// a nested one.
+class NLLimitInitData : public NLFunctionData {
+public:
+    NLLimitInitData(NLLimitState* state, size_t count)
+        : _state(state),
+        _count(count)
+    {
+    }
+
+    NLLimitState* getState() const { return _state; }
+    size_t getCount() const { return _count; }
+
+private:
+    NLLimitState* _state {nullptr};
+    size_t _count {0};
+};
+
+// nl.limit_update data: the counter to charge and the representative column
+// whose row count is charged against it (the same column nl.output emits).
+class NLLimitUpdateData : public NLFunctionData {
+public:
+    NLLimitUpdateData(NLLimitState* state, const Column* rows)
+        : _state(state),
+        _rows(rows)
+    {
+    }
+
+    NLLimitState* getState() const { return _state; }
+    const Column* getRows() const { return _rows; }
+
+private:
+    NLLimitState* _state {nullptr};
+    const Column* _rows {nullptr};
+};
+
 // nl.output data
 class NLOutputData : public NLFunctionData {
 public:
@@ -262,8 +339,14 @@ public:
         _columns.push_back(col);
     }
 
+    // The governing limit counter, or null for an unbounded output. When set,
+    // output emits only its emitThisStep() prefix; it never mutates the counter.
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
 private:
     std::vector<const Column*> _columns;
+    NLLimitState* _limit {nullptr};
 };
 
 class NLProgram {
@@ -282,6 +365,15 @@ public:
         return dataPtr;
     }
 
+    // Allocate one LIMIT's runtime counter, owned by the program; the
+    // statements that reset, charge and read it hold a borrowed pointer.
+    NLLimitState* allocLimitState() {
+        auto state = std::make_unique<NLLimitState>();
+        NLLimitState* statePtr = state.get();
+        _limitStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -291,6 +383,7 @@ public:
 private:
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
     std::vector<std::unique_ptr<NLFunctionData>> _functionData;
+    std::vector<std::unique_ptr<NLLimitState>> _limitStates;
     NLStmtContainer _stmts;
 };
 

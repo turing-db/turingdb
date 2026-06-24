@@ -129,6 +129,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
                                    body);
         } else if (nl::CrossProduct crossProduct = mlir::dyn_cast<nl::CrossProduct>(operation)) {
             translateCrossProduct(crossProduct, body);
+        } else if (nl::Limit limit = mlir::dyn_cast<nl::Limit>(operation)) {
+            translateLimit(limit, body);
+        } else if (nl::LimitUpdate update = mlir::dyn_cast<nl::LimitUpdate>(operation)) {
+            translateLimitUpdate(update, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -140,7 +144,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
     }
 }
 
-void NLTranslator::translateFor(const nl::For& forLoop, NLStmtContainer* body) {
+void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
     // Fetch the iterator associated to this loop
     const auto configIt = _iteratorConfigs.find(forLoop->getOperand(0));
     if (configIt == _iteratorConfigs.end()) {
@@ -150,20 +154,26 @@ void NLTranslator::translateFor(const nl::For& forLoop, NLStmtContainer* body) {
     const IteratorConfig& config = configIt->second;
     mlir::Block& loopBody = forLoop->getRegion(0).front();
 
+    // A loop that names a limit handle stops once that counter is spent; the
+    // handle was produced by an nl.limit translated earlier, so its counter is
+    // already mapped.
+    NLLimitState* limit = limitStateFor(forLoop.getLimit());
+
     // Translate the loop differently depending on the kind of iterator associated
     if (config._kind == IteratorKind::ScanNodes) {
-        translateScanLoop(loopBody, body);
+        translateScanLoop(loopBody, limit, body);
     } else {
-        translateEdgeLoop(config, loopBody, body);
+        translateEdgeLoop(config, loopBody, limit, body);
     }
 }
 
-void NLTranslator::translateScanLoop(mlir::Block& loopBody, NLStmtContainer* body) {
+void NLTranslator::translateScanLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body) {
     // For::verify guarantees one block argument per iterator chunk, and a
     // node scan iterator has exactly one chunk of node IDs
     ColumnNodeIDs* nodeIDs = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(0)));
 
     NLScanLoopData* loopData = _program->allocFunctionData<NLScanLoopData>(nodeIDs);
+    loopData->setLimit(limit);
 
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanNodesLoop, loopData});
 
@@ -172,6 +182,7 @@ void NLTranslator::translateScanLoop(mlir::Block& loopBody, NLStmtContainer* bod
 
 void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
                                      mlir::Block& loopBody,
+                                     NLLimitState* limit,
                                      NLStmtContainer* body) {
     // The four fixed chunks of an edge iterator step, in the block-argument
     // order established by getEdgeIteratorType: sources, edge IDs, edge type
@@ -188,6 +199,7 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
                                                                            edgeIDs,
                                                                            edgeTypes,
                                                                            targets);
+    loopData->setLimit(limit);
 
     // Reserve scratch indices column
     loopData->getIndices()->reserve(_program->getChunkSize());
@@ -261,8 +273,10 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
     body->addStmt(NLFunctionDescriptor {handler, fetchData});
 }
 
-void NLTranslator::translateOutput(const nl::Output& output, NLStmtContainer* body) {
-    const mlir::OperandRange columns = output->getOperands();
+void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
+    // The optional limit handle is a separate operand, so read just the columns;
+    // including it in this list would treat the handle as a chunk.
+    const mlir::OperandRange columns = output.getColumns();
     if (columns.empty()) {
         throw IRException("nl.output requires at least one column");
     }
@@ -275,6 +289,7 @@ void NLTranslator::translateOutput(const nl::Output& output, NLStmtContainer* bo
     mlir::Block* outputBlock = output->getBlock();
 
     NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
+    outputData->setLimit(limitStateFor(output.getLimit()));
     for (const mlir::Value column : columns) {
         const auto columnArgument = mlir::dyn_cast<mlir::BlockArgument>(column);
         const bool isInnermostLoopVariable = columnArgument && columnArgument.getOwner() == outputBlock;
@@ -292,6 +307,44 @@ void NLTranslator::translateOutput(const nl::Output& output, NLStmtContainer* bo
     }
 
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runOutput, outputData});
+}
+
+void NLTranslator::translateLimit(nl::Limit limit, NLStmtContainer* body) {
+    // Allocate the runtime counter and map the handle to it, so the loops, the
+    // update and the output that name the handle all find the same counter.
+    NLLimitState* state = _program->allocLimitState();
+    _limitStates[limit.getState()] = state;
+
+    // The reset runs each time the block holding this nl.limit runs: once at
+    // function scope for a top-level LIMIT, per enclosing step for a nested one.
+    const size_t count = limit.getCount();
+    NLLimitInitData* initData = _program->allocFunctionData<NLLimitInitData>(state, count);
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runLimitInit, initData});
+}
+
+void NLTranslator::translateLimitUpdate(nl::LimitUpdate update, NLStmtContainer* body) {
+    // The handle is a required operand, so limitStateFor returns its counter or
+    // throws if it was not produced by an nl.limit.
+    NLLimitState* state = limitStateFor(update.getState());
+
+    const Column* representative = getColumn(update.getRows());
+    NLLimitUpdateData* updateData = _program->allocFunctionData<NLLimitUpdateData>(state, representative);
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runLimitUpdate, updateData});
+}
+
+NLLimitState* NLTranslator::limitStateFor(mlir::Value handle) const {
+    if (!handle) {
+        return nullptr;
+    }
+
+    const auto stateIt = _limitStates.find(handle);
+    if (stateIt == _limitStates.end()) {
+        throw IRException("limit handle must be produced by an nl.limit");
+    }
+
+    return stateIt->second;
 }
 
 void NLTranslator::translateCrossProduct(nl::CrossProduct cross, NLStmtContainer* body) {
