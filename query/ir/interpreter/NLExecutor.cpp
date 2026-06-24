@@ -113,7 +113,7 @@ void runEdgeLoopSteps(NLExecutionContext* context,
     // loop carrying the same handle.
     const NLLimitState* limit = loopData->getLimit();
 
-    while (chunkWriter->isValid() && (!limit || limit->remaining() > 0)) {
+    while (chunkWriter->isValid() && (!limit || limit->getRemaining() > 0)) {
         chunkWriter->fill(context->getChunkSize());
 
         const ColumnVector<size_t>* indices = loopData->getIndices();
@@ -167,7 +167,7 @@ void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* d
     ScanNodesChunkWriter chunkWriter(*context->getView());
     chunkWriter.setNodeIDs(nodeIDs);
 
-    while (chunkWriter.isValid() && (!limit || limit->remaining() > 0)) {
+    while (chunkWriter.isValid() && (!limit || limit->getRemaining() > 0)) {
         chunkWriter.fill(chunkSize);
 
         if (nodeIDs->empty()) {
@@ -227,14 +227,14 @@ void NLExecutor::runCrossProduct(NLExecutionContext* context, NLFunctionData* da
     const size_t outerRowCount = outerColumns.front().getInput()->size();
     const size_t innerRowCount = innerColumns.front().getInput()->size();
 
-    // The product is N*M rows, but under a limit only its first remaining() rows
+    // The product is N*M rows, but under a limit only its first getRemaining() rows
     // can ever be emitted this step: rows are laid out in (outer, inner) order, so
     // the product's prefix is exactly what the following nl.limit_update/nl.output
     // emit. Build just that prefix - a LIMIT 1 over two full chunks would
     // otherwise materialise CHUNK_SIZE*CHUNK_SIZE rows to emit one.
     const NLLimitState* limit = cross->getLimit();
     const size_t productRowCount = outerRowCount * innerRowCount;
-    const size_t outputRowCount = limit ? std::min(productRowCount, limit->remaining()) : productRowCount;
+    const size_t outputRowCount = limit ? std::min(productRowCount, limit->getRemaining()) : productRowCount;
 
     for (const NLCrossColumn& column : outerColumns) {
         const NLBroadcastFunction broadcast = column.getBroadcast();
@@ -266,7 +266,7 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     // emitThisStep, not remaining, so the decrement already done does not affect
     // the count); without one, emit the whole chunk. Either way no row is copied.
     const NLLimitState* limit = output->getLimit();
-    const size_t rowCount = limit ? limit->emitThisStep() : cols.front()->size();
+    const size_t rowCount = limit ? limit->getEmitThisStep() : cols.front()->size();
 
     context->getSink()->appendChunks(cols, rowCount);
 }

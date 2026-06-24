@@ -272,6 +272,31 @@ std::string nlLimitNestedLoopProgram(uint64_t count) {
              "}\n";
 }
 
+// The same one-hop nest, but only the OUTER scan loop carries the limit - the
+// inner edge loop is deliberately unbounded. Output still charges and reads the
+// handle, so once the budget is spent the inner loop keeps running and emits a
+// zero-row prefix per step. This makes outer over-driving observable: if the
+// outer loop failed to halt when the budget hit zero, it would advance to the
+// remaining nodes and the unbounded inner loop would call output again (with zero
+// rows), pushing the call count past one. With the outer loop halting correctly,
+// output is called exactly once.
+std::string nlLimitOuterLoopOnlyProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %h = nl.limit(")
+           + std::to_string(count)
+           + ")\n"
+             "  %nodes = nl.scan_nodes()\n"
+             "  nl.for %a in %nodes limit %h : !nl.iter<!nl.chunk<!nl.node_id>> {\n"
+             "    %edges = nl.get_out_edges(%a, {})\n"
+             "    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>> {\n"
+             "      nl.limit_update %h, %b : !nl.chunk<!nl.node_id>\n"
+             "      nl.output(%b) limit %h : !nl.chunk<!nl.node_id>\n"
+             "    }\n"
+             "  }\n"
+             "  func.return\n"
+             "}\n";
+}
+
 }
 
 class NLExecutorTest : public TuringTest {
@@ -603,11 +628,33 @@ TEST_F(NLExecutorTest, limitUnwindsLoopNest) {
     const GraphReader reader = transaction.readGraph();
 
     // The diamond has four out-edges; LIMIT 1 on both loops of the nest stops
-    // after one row, the inner break unwinding the outer scan loop too.
+    // after one row, the inner break unwinding the outer scan loop too. Both
+    // loops carry the handle, so the budget is spent in one inner step: exactly
+    // one output call of one row. (This asserts correct streaming across the
+    // nest; limitHaltsOuterLoopWhenBudgetSpent proves the outer loop halts.)
     CountingSink sink;
     const std::string program = nlLimitNestedLoopProgram(1);
     runProgram(program.c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
+    EXPECT_EQ(sink.getCalls(), 1u);
+    EXPECT_EQ(sink.getTotalRows(), 1u);
+}
+
+TEST_F(NLExecutorTest, limitHaltsOuterLoopWhenBudgetSpent) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Line graph 0 -> 1 -> 2 with chunkSize 1, so each node is its own outer
+    // chunk and only the outer loop carries the limit. LIMIT 1: node 0's single
+    // edge spends the budget, so the outer loop must halt - one call, one row.
+    // Were the outer loop to keep driving, node 1's edge would add a second
+    // (zero-row) output call, so getCalls() == 1 is what proves the halt.
+    CountingSink sink;
+    const std::string program = nlLimitOuterLoopOnlyProgram(1);
+    runProgram(program.c_str(), reader.getView(), 1, sink);
+
+    EXPECT_EQ(sink.getCalls(), 1u);
     EXPECT_EQ(sink.getTotalRows(), 1u);
 }
 
