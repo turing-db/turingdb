@@ -91,8 +91,6 @@ LogicalResult CrossProduct::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
-// Build an unbounded loop from just the iterator value, the form most callers
-// want; delegates to the limit-carrying builder with a null handle.
 void For::build(OpBuilder& builder, OperationState& state, Value iterator) {
     For::build(builder, state, iterator, Value());
 }
