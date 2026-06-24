@@ -335,6 +335,8 @@ void DBLowering::lowerLimit(mlir::db::Limit limit) {
         chunks.push_back(mapValue(column));
     }
 
+    // Limit::verify rejects an empty db.limit, so reaching it here means
+    // unverified IR - a defensive backstop, as in lowerFactor for cross products.
     if (chunks.empty()) {
         throw IRException("db.limit requires at least one column");
     }
@@ -355,8 +357,20 @@ void DBLowering::lowerLimit(mlir::db::Limit limit) {
 
 void DBLowering::lowerOutput(mlir::db::Output output) {
     llvm::SmallVector<mlir::Value, 4> columns;
+
+    // The limit governs this output only if it consumes a db.limit result. A
+    // db.limit passes its columns straight through, so a consumed result is a
+    // column whose defining op is the db.limit. A second db.output that does not
+    // consume it (a disconnected projection) stays unbounded and emits in full,
+    // rather than being clamped to an unrelated limit's count.
+    bool consumesLimit = false;
     for (const mlir::Value column : output.getColumns()) {
         columns.push_back(mapValue(column));
+
+        mlir::Operation* definingOp = column.getDefiningOp();
+        if (definingOp && mlir::isa<mlir::db::Limit>(definingOp)) {
+            consumesLimit = true;
+        }
     }
 
     if (columns.empty()) {
@@ -364,11 +378,12 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
     }
 
     // The output columns are loop variables of one innermost loop; nl.output
-    // streams them from that loop's body. _limitHandle is null when no limit is
-    // active (output emits the whole chunk); when active, output emits the prefix
-    // nl.limit_update sized this step.
+    // streams them from that loop's body. With a governing limit it emits the
+    // prefix nl.limit_update sized this step; otherwise it emits the whole chunk.
+    const mlir::Value limitHandle = consumesLimit ? _limitHandle : mlir::Value();
+
     setInsertionInto(ownerBlock(columns.front()));
-    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns, _limitHandle);
+    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns, limitHandle);
 }
 
 void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp) {
