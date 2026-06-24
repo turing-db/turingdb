@@ -47,7 +47,8 @@ TEST_F(NLDialectTest, verifierRejectsLimitedOutputWithoutUpdate) {
 
     mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
     mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
-    const mlir::Value chunk = function.getBody().front().getArgument(0);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value chunk = entryBlock.getArgument(0);
 
     const mlir::Value handle = builder.create<mlir::nl::Limit>(loc, /*count=*/3u).getState();
     builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, handle);
@@ -67,7 +68,8 @@ TEST_F(NLDialectTest, verifierAcceptsLimitedOutputAfterUpdate) {
 
     mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
     mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
-    const mlir::Value chunk = function.getBody().front().getArgument(0);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value chunk = entryBlock.getArgument(0);
 
     const mlir::Value handle = builder.create<mlir::nl::Limit>(loc, /*count=*/3u).getState();
     builder.create<mlir::nl::LimitUpdate>(loc, handle, chunk);
@@ -84,7 +86,8 @@ TEST_F(NLDialectTest, verifierAcceptsUnlimitedOutput) {
 
     mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
     mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
-    const mlir::Value chunk = function.getBody().front().getArgument(0);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value chunk = entryBlock.getArgument(0);
 
     builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);

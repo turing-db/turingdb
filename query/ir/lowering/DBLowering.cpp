@@ -115,7 +115,8 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     // dominates all the loops, the update and the output that read it.
     if (_limitActive) {
         _builder.setInsertionPointToStart(_entryBlock);
-        _limitHandle = _builder.create<nl::Limit>(loc, _limitCount).getState();
+        nl::Limit limitOp = _builder.create<nl::Limit>(loc, _limitCount);
+        _limitHandle = limitOp.getState();
     }
 
     for (mlir::Operation& operation : dbBody.front()) {
@@ -367,7 +368,7 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
     for (const mlir::Value column : output.getColumns()) {
         columns.push_back(mapValue(column));
 
-        mlir::Operation* definingOp = column.getDefiningOp();
+        mlir::Operation* const definingOp = column.getDefiningOp();
         if (definingOp && mlir::isa<mlir::db::Limit>(definingOp)) {
             consumesLimit = true;
         }
