@@ -266,4 +266,57 @@ TEST_F(DBDialectTest, verifierRejectsLimitArityMismatch) {
     EXPECT_TRUE(mlir::failed(mlir::verify(limit.getOperation())));
 }
 
+// Builds a db.limit with no columns. Its row count is read from the first column
+// during lowering, so the verifier rejects it here rather than leaving the empty
+// case to the lowering pass.
+TEST_F(DBDialectTest, verifierRejectsLimitWithoutColumns) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    // No input columns and no results: nothing to limit.
+    auto limit = builder.create<mlir::db::Limit>(loc,
+                                                 mlir::TypeRange {},
+                                                 mlir::ValueRange {},
+                                                 /*count=*/3u);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(limit.getOperation())));
+}
+
+// Builds a db.limit whose single result type differs from its single input
+// column: same arity, wrong type. This exercises the per-column type check the
+// arity-mismatch test never reaches.
+TEST_F(DBDialectTest, verifierRejectsLimitColumnTypeMismatch) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context, "a");
+    const mlir::Type colB = mlir::db::ColumnType::get(&_context, "b");
+
+    auto scanA = builder.create<mlir::db::ScanNodes>(loc, colA);
+
+    // One input column and one result, but the result type does not match it.
+    auto limit = builder.create<mlir::db::Limit>(loc,
+                                                 mlir::TypeRange {colB},
+                                                 mlir::ValueRange {scanA.getResult()},
+                                                 /*count=*/3u);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(limit.getOperation())));
+}
+
 }

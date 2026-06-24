@@ -245,3 +245,26 @@ LogicalResult For::verify() {
 
     return success();
 }
+
+LogicalResult Output::verify() {
+    const Value limit = getLimit();
+    if (!limit) {
+        return success();
+    }
+
+    // A limited output emits the prefix nl.limit_update sized this step: it reads
+    // emitThisStep off the handle and never measures its own columns. That update
+    // must therefore run in this same block, before this output, and charge the
+    // same handle - otherwise the output reads a stale count from an earlier step
+    // or the reset value zero. DBLowering always emits the pair; this guards
+    // hand-written or non-DBLowering nl IR that names a handle without one.
+    for (Operation* previous = getOperation()->getPrevNode(); previous; previous = previous->getPrevNode()) {
+        if (LimitUpdate update = dyn_cast<LimitUpdate>(previous)) {
+            if (update.getState() == limit) {
+                return success();
+            }
+        }
+    }
+
+    return emitOpError("with a limit must be preceded in its block by an nl.limit_update for the same handle");
+}

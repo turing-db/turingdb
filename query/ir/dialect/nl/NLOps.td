@@ -319,6 +319,10 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
   let assemblyFormat = [{
     `(` $columns `)` (`limit` $limit^)? attr-dict `:` qualified(type($columns))
   }];
+
+  // A limited output reads emitThisStep from its handle; the verifier checks a
+  // matching nl.limit_update set it in this block before the output.
+  let hasVerifier = 1;
 }
 
 /**
