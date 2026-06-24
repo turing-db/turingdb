@@ -46,6 +46,14 @@ public:
     static void runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runCrossProduct(NLExecutionContext* context, NLFunctionData* data);
+
+    // Reset a limit counter to its budget; runs each time its block runs.
+    static void runLimitInit(NLExecutionContext* context, NLFunctionData* data);
+
+    // Charge the representative chunk's rows against a limit counter, recording
+    // how many rows nl.output should emit this step. The sole counter mutator.
+    static void runLimitUpdate(NLExecutionContext* context, NLFunctionData* data);
+
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 

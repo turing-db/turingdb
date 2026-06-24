@@ -43,7 +43,7 @@ namespace {
 // All test programs output node ID chunks only.
 class CollectingNodeSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
         if (_columns.empty()) {
             _columns.resize(chunks.size());
         }
@@ -54,8 +54,10 @@ public:
             const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[columnIndex]);
             ASSERT_NE(nodeIDs, nullptr);
 
-            for (const NodeID nodeID : *nodeIDs) {
-                _columns[columnIndex].push_back(nodeID.getValue());
+            // Only the first rowCount rows are part of the result; the rest are
+            // the tail the limit clamped off.
+            for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+                _columns[columnIndex].push_back((*nodeIDs)[rowIndex].getValue());
             }
         }
     }
@@ -87,7 +89,7 @@ private:
 // Int64 property: a node ID chunk and a !nl.nullable<i64> value chunk.
 class CollectingNodeIntPropSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
@@ -98,7 +100,7 @@ public:
 
         const auto& idRaw = nodeIDs->getRaw();
         const auto& valueRaw = values->getRaw();
-        for (size_t rowIndex = 0; rowIndex < nodeIDs->size(); rowIndex++) {
+        for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
             _rows.push_back({idRaw[rowIndex].getValue(), valueRaw[rowIndex]});
         }
     }
@@ -217,6 +219,58 @@ func.func @main() {
   func.return
 }
 )mlir";
+
+// Counts appendChunks calls and the total rows emitted, to prove a limited run
+// emits a clamped prefix (a partial final chunk) and stops the loop early.
+class CountingSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+        _calls++;
+        _totalRows += rowCount;
+    }
+
+    size_t getCalls() const { return _calls; }
+    size_t getTotalRows() const { return _totalRows; }
+
+private:
+    size_t _calls {0};
+    size_t _totalRows {0};
+};
+
+// Scan all nodes and output them, capped by a top-level nl.limit. The handle is
+// hoisted, threaded onto the loop and onto output, and charged by limit_update.
+std::string nlLimitScanProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %h = nl.limit(")
+           + std::to_string(count)
+           + ")\n"
+             "  %nodes = nl.scan_nodes()\n"
+             "  nl.for %a in %nodes limit %h : !nl.iter<!nl.chunk<!nl.node_id>> {\n"
+             "    nl.limit_update %h, %a : !nl.chunk<!nl.node_id>\n"
+             "    nl.output(%a) limit %h : !nl.chunk<!nl.node_id>\n"
+             "  }\n"
+             "  func.return\n"
+             "}\n";
+}
+
+// One hop over out-edges, capped by an nl.limit on both loops, so the inner
+// break unwinds the outer scan loop too.
+std::string nlLimitNestedLoopProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %h = nl.limit(")
+           + std::to_string(count)
+           + ")\n"
+             "  %nodes = nl.scan_nodes()\n"
+             "  nl.for %a in %nodes limit %h : !nl.iter<!nl.chunk<!nl.node_id>> {\n"
+             "    %edges = nl.get_out_edges(%a, {})\n"
+             "    nl.for %srcs, %eids, %etypes, %b in %edges limit %h : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>> {\n"
+             "      nl.limit_update %h, %b : !nl.chunk<!nl.node_id>\n"
+             "      nl.output(%b) limit %h : !nl.chunk<!nl.node_id>\n"
+             "    }\n"
+             "  }\n"
+             "  func.return\n"
+             "}\n";
+}
 
 }
 
@@ -467,6 +521,94 @@ TEST_F(NLExecutorTest, oneHopSmallChunksTwoParts) {
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, limitScanEmitsLimitRows) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    const std::string program = nlLimitScanProgram(3);
+    runProgram(program.c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // Four nodes, LIMIT 3: exactly three rows.
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows.size(), 3u);
+}
+
+TEST_F(NLExecutorTest, limitZeroScansNothing) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // LIMIT 0: the loop guard is false on entry, so the body never runs.
+    CountingSink sink;
+    const std::string program = nlLimitScanProgram(0);
+    runProgram(program.c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    EXPECT_EQ(sink.getCalls(), 0u);
+    EXPECT_EQ(sink.getTotalRows(), 0u);
+}
+
+TEST_F(NLExecutorTest, limitEmitsPrefixAcrossChunks) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 2 over four nodes, LIMIT 3: the first chunk emits two rows, the
+    // second a one-row prefix, then the loop breaks - two calls, three rows.
+    CountingSink sink;
+    const std::string program = nlLimitScanProgram(3);
+    runProgram(program.c_str(), reader.getView(), 2, sink);
+
+    EXPECT_EQ(sink.getCalls(), 2u);
+    EXPECT_EQ(sink.getTotalRows(), 3u);
+}
+
+TEST_F(NLExecutorTest, limitTerminatesLoopEarly) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // LIMIT 2, chunkSize 2: the budget is spent after the first chunk, so the
+    // loop breaks without filling the second - one call, two rows.
+    CountingSink sink;
+    const std::string program = nlLimitScanProgram(2);
+    runProgram(program.c_str(), reader.getView(), 2, sink);
+
+    EXPECT_EQ(sink.getCalls(), 1u);
+    EXPECT_EQ(sink.getTotalRows(), 2u);
+}
+
+TEST_F(NLExecutorTest, limitExceedingCountSpansMultipleChunks) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // LIMIT 10 over four nodes in chunks of two: the budget never runs out, so
+    // the loop emits both full chunks across the boundary and runs to exhaustion.
+    CountingSink sink;
+    const std::string program = nlLimitScanProgram(10);
+    runProgram(program.c_str(), reader.getView(), 2, sink);
+
+    EXPECT_EQ(sink.getCalls(), 2u);
+    EXPECT_EQ(sink.getTotalRows(), 4u);
+}
+
+TEST_F(NLExecutorTest, limitUnwindsLoopNest) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The diamond has four out-edges; LIMIT 1 on both loops of the nest stops
+    // after one row, the inner break unwinding the outer scan loop too.
+    CountingSink sink;
+    const std::string program = nlLimitNestedLoopProgram(1);
+    runProgram(program.c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    EXPECT_EQ(sink.getTotalRows(), 1u);
 }
 
 TEST_F(NLExecutorTest, rejectsCrossLoopOutputColumns) {

@@ -27,6 +27,10 @@ class GraphView;
 //
 //   db.scan_nodes / db.get_out_edges  ->  nl source op + nl.for over its chunks
 //   db.output                          ->  nl.output inside the binding loop
+//   db.limit                           ->  a hoisted nl.limit handle, threaded as
+//                                          a `limit` operand into every nl.for and
+//                                          onto nl.output, plus an nl.limit_update
+//                                          in the innermost loop body
 //
 // db.get_node_properties / db.get_edge_properties resolve their property name
 // against the graph schema here (hence the GraphView): the name is hoisted into
@@ -77,12 +81,22 @@ private:
     // not left in the loop body - just a record of which block is innermost.
     mlir::Block* _innermostLoopBody {nullptr};
 
+    // At most one db.limit per function. A pre-scan in lower() finds it before
+    // any loop is built, so the handle can be hoisted above every loop and
+    // threaded into each as it is created. The count is unsigned end to end
+    // (UI64Attr accessor -> stored uint64_t -> NLLimitState's size_t), so there
+    // is no signed round-trip and no cast.
+    bool _limitActive {false};
+    uint64_t _limitCount {0};
+    mlir::Value _limitHandle;   // the nl.limit result, null when !_limitActive
+
     void lowerOperation(mlir::Operation& operation);
     void lowerScanNodes(mlir::db::ScanNodes scanNodes);
     void lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges);
     void lowerGetNodeProperties(mlir::db::GetNodeProperties getNodeProperties);
     void lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgeProperties);
     void lowerCrossProduct(mlir::db::CrossProduct product);
+    void lowerLimit(mlir::db::Limit limit);
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at

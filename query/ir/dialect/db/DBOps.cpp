@@ -157,3 +157,26 @@ LogicalResult CrossProduct::verify() {
 
     return success();
 }
+
+// db.limit passes its columns straight through, so the results must be exactly
+// the input columns - same count, same types and in the same order.
+LogicalResult Limit::verify() {
+    const OperandRange columns = getColumns();
+    const Operation::result_range results = getResults();
+
+    if (columns.size() != results.size()) {
+        return emitOpError("expects ") << columns.size()
+                                       << " results, one per input column, but has "
+                                       << results.size();
+    }
+
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        if (columns[columnIndex].getType() != results[columnIndex].getType()) {
+            return emitOpError("result ") << columnIndex
+                                          << " must have the same type as input column "
+                                          << columnIndex;
+        }
+    }
+
+    return success();
+}

@@ -94,7 +94,12 @@ void runEdgeLoopSteps(NLExecutionContext* context,
                       ColumnNodeIDs* gatheredNodeIDs) {
     const NLStmtContainer* loopBody = loopData->getStmts();
 
-    while (chunkWriter->isValid()) {
+    // Same early-exit as the scan loop: a null limit is unbounded, otherwise the
+    // loop stops once the budget is spent, and the break unwinds any enclosing
+    // loop carrying the same handle.
+    const NLLimitState* limit = loopData->getLimit();
+
+    while (chunkWriter->isValid() && (!limit || limit->remaining() > 0)) {
         chunkWriter->fill(context->getChunkSize());
 
         const ColumnVector<size_t>* indices = loopData->getIndices();
@@ -138,10 +143,17 @@ void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* d
     ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
     const size_t chunkSize = context->getChunkSize();
 
+    // A null limit leaves the loop unbounded; otherwise it stops once the budget
+    // is spent. nl.limit_update inside runBody mutates remaining, so the next
+    // test breaks here, and an enclosing loop carrying the same handle breaks on
+    // its next test too - unwinding the whole nest. LIMIT 0 fails the guard on
+    // entry, so nothing is scanned.
+    const NLLimitState* limit = loopData->getLimit();
+
     ScanNodesChunkWriter chunkWriter(*context->getView());
     chunkWriter.setNodeIDs(nodeIDs);
 
-    while (chunkWriter.isValid()) {
+    while (chunkWriter.isValid() && (!limit || limit->remaining() > 0)) {
         chunkWriter.fill(chunkSize);
 
         if (nodeIDs->empty()) {
@@ -212,13 +224,28 @@ void NLExecutor::runCrossProduct(NLExecutionContext* context, NLFunctionData* da
     }
 }
 
+void NLExecutor::runLimitInit(NLExecutionContext* context, NLFunctionData* data) {
+    const NLLimitInitData* init = static_cast<NLLimitInitData*>(data);
+    init->getState()->reset(init->getCount());
+}
+
+void NLExecutor::runLimitUpdate(NLExecutionContext* context, NLFunctionData* data) {
+    const NLLimitUpdateData* update = static_cast<NLLimitUpdateData*>(data);
+    update->getState()->update(update->getRows()->size());
+}
+
 void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     const NLOutputData* output = static_cast<NLOutputData*>(data);
     const auto& cols = output->outputs();
     bioassert(!cols.empty(), "nl.output requires at least one column");
 
-    NLOutputSink* sink = context->getSink();
-    sink->appendChunks(cols);
+    // With a limit, emit the prefix nl.limit_update sized this step (reading
+    // emitThisStep, not remaining, so the decrement already done does not affect
+    // the count); without one, emit the whole chunk. Either way no row is copied.
+    const NLLimitState* limit = output->getLimit();
+    const size_t rowCount = limit ? limit->emitThisStep() : cols.front()->size();
+
+    context->getSink()->appendChunks(cols, rowCount);
 }
 
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {

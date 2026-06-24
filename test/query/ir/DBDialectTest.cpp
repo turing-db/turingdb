@@ -95,6 +95,26 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) RETURN a LIMIT 3: a scan capped by db.limit, one pass-through column.
+const char* const limitProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<"a">
+  %la = db.limit(%a) count 3 : (!db.column<"a">) -> !db.column<"a">
+  db.output(%la) : !db.column<"a">
+  return
+}
+)mlir";
+
+// db.limit's count is a ui64 attribute, so a negative literal cannot parse.
+const char* const negativeLimitProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<"a">
+  %la = db.limit(%a) count -1 : (!db.column<"a">) -> !db.column<"a">
+  db.output(%la) : !db.column<"a">
+  return
+}
+)mlir";
+
 TEST_F(DBDialectTest, parsesCrossProductOfTwoScans) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(crossProductProgram);
     ASSERT_TRUE(module);
@@ -174,6 +194,76 @@ TEST_F(DBDialectTest, verifierRejectsResultsNotMatchingYields) {
         return mlir::success();
     });
     EXPECT_TRUE(mlir::failed(mlir::verify(product.getOperation())));
+}
+
+TEST_F(DBDialectTest, parsesLimit) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(limitProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::Limit limit;
+    module.get().walk([&](mlir::db::Limit op) {
+        limit = op;
+    });
+    ASSERT_TRUE(limit);
+
+    // The count is the parsed ui64, and the single column passes through as the
+    // single result, same type.
+    EXPECT_EQ(limit.getCount(), 3u);
+    ASSERT_EQ(limit.getColumns().size(), 1u);
+    ASSERT_EQ(limit.getResults().size(), 1u);
+    EXPECT_EQ(limit.getColumns()[0].getType(), mlir::db::ColumnType::get(&_context, "a"));
+    EXPECT_EQ(limit.getResults()[0].getType(), mlir::db::ColumnType::get(&_context, "a"));
+}
+
+TEST_F(DBDialectTest, limitRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(limitProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the
+    // db.limit printer and parser are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, rejectsNegativeLimitCount) {
+    // count is a ui64 attribute, so a negative literal fails to parse and the
+    // module is null.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(negativeLimitProgram);
+    EXPECT_FALSE(module);
+}
+
+// Builds a db.limit whose result count does not match its columns, exercising
+// the verifier's pass-through arity check on the programmatic builder path (the
+// parser path always derives the results from the printed functional type).
+TEST_F(DBDialectTest, verifierRejectsLimitArityMismatch) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context, "a");
+    const mlir::Type colB = mlir::db::ColumnType::get(&_context, "b");
+
+    auto scanA = builder.create<mlir::db::ScanNodes>(loc, colA);
+
+    // One input column but two declared results: the pass-through arity is wrong.
+    auto limit = builder.create<mlir::db::Limit>(loc,
+                                                 mlir::TypeRange {colA, colB},
+                                                 mlir::ValueRange {scanA.getResult()},
+                                                 /*count=*/3u);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(limit.getOperation())));
 }
 
 }

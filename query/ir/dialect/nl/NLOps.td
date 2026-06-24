@@ -184,18 +184,32 @@ def For : NLOp<"for", [SingleBlockImplicitTerminator<"Yield">]> {
     nl.for %chunk in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
         ...
     }
+
+    An optional `limit` operand carries an !nl.limit_state handle. A loop that
+    names one stops driving its iterator as soon as the budget is exhausted, so
+    every nl.for in a LIMIT's nest carries the same handle and the break unwinds
+    the whole nest:
+
+    nl.for %chunk in %nodes limit %h : !nl.iter<!nl.chunk<!nl.node_id>> {
+        ...
+    }
   }];
-  let arguments = (ins NLIterator:$iterator);
+
+  // The optional limit handle is the only variable-length operand, so MLIR can
+  // tell it apart from the iterator without operand-segment sizes.
+  let arguments = (ins NLIterator:$iterator, Optional<NLLimitStateHandle>:$limit);
   let regions = (region SizedRegion<1>:$bodyRegion);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 
-  // The only builder takes just the iterator value: the loop variables are
-  // created by looking up the chunk types on the iterator type, so C++ users
-  // never spell any type
+  // The builders take the iterator value - the loop variables are created by
+  // looking up the chunk types on the iterator type, so C++ users never spell
+  // any type - plus an optional limit handle (null for an unbounded loop). The
+  // iterator-only overload is the unbounded form most callers want.
   let skipDefaultBuilders = 1;
   let builders = [
-      OpBuilder<(ins "::mlir::Value":$iterator)>
+      OpBuilder<(ins "::mlir::Value":$iterator)>,
+      OpBuilder<(ins "::mlir::Value":$iterator, "::mlir::Value":$limit)>
   ];
 }
 
@@ -253,7 +267,7 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
 /**
 * Output
 */
-def Output : NLOp<"output"> {
+def Output : NLOp<"output", [AttrSizedOperandSegments]> {
   let summary = "Send a row of chunks out as columns of the query result";
   let description = [{
     The sink of the nested loop, mirroring a result builder (LingoDB's
@@ -267,8 +281,19 @@ def Output : NLOp<"output"> {
     Variadic<NLChunk> accepts any number of chunks of any element type. The op
     is deliberately not Pure: emitting output is its whole point, so it must
     survive dead-code elimination even though it has no results.
+
+    An optional `limit` operand carries an !nl.limit_state handle. When present,
+    output emits only a prefix of length limit.emitThisStep() (set by the
+    preceding nl.limit_update); absent, it emits the whole chunk. It never
+    mutates the budget - it only reads how many rows to emit:
+
+    nl.output(%targets) limit %h : !nl.chunk<!nl.node_id>
   }];
-  let arguments = (ins Variadic<NLChunk>:$columns);
+
+  // Two variable-length operand groups - the columns and the optional limit -
+  // so the op carries operand-segment sizes to tell them apart, the same as
+  // nl.cross_product's two column groups.
+  let arguments = (ins Variadic<NLChunk>:$columns, Optional<NLLimitStateHandle>:$limit);
 
   // The chunk element types vary from call to call and - unlike the source
   // ops - cannot be inferred, so they are spelled after the colon. This keeps
@@ -276,7 +301,50 @@ def Output : NLOp<"output"> {
   // printed list rather than looking it up on the defining nl.for (which MLIR
   // cannot do during a parse), the same reason nl.for keeps its : !nl.iter<...>
   // annotation. qualified(...) forces the leading !nl. on every printed type.
-  let assemblyFormat = "`(` $columns `)` attr-dict `:` qualified(type($columns))";
+  // The optional limit handle, when present, prints after a `limit` keyword; its
+  // type is buildable and so omitted.
+  let assemblyFormat = [{
+    `(` $columns `)` (`limit` $limit^)? attr-dict `:` qualified(type($columns))
+  }];
+}
+
+/**
+* Limit
+*/
+// NOT Pure: each nl.limit is a distinct counter, so two must never be CSE'd into
+// one, and an unread one must not be DCE'd - its reset is a side effect.
+def Limit : NLOp<"limit", []> {
+  let summary = "Create (and reset) a row-limit counter, initialized to N rows";
+  let description = [{
+    Sits at the top of the scope it governs - function scope for a top-level
+    LIMIT, or an enclosing nl.for body for a nested one, where it re-initializes
+    once per enclosing step. Produces the !nl.limit_state handle the loops,
+    nl.limit_update and nl.output read. The result type is buildable and omitted.
+  }];
+
+  // Unsigned: a row budget is never negative.
+  let arguments = (ins UI64Attr:$count);
+  let results   = (outs NLLimitState:$state);
+  let assemblyFormat = "`(` $count `)` attr-dict";
+}
+
+/**
+* LimitUpdate
+*/
+// NOT Pure: it mutates the handle, so it must run exactly where it sits and must
+// not be eliminated.
+def LimitUpdate : NLOp<"limit_update", []> {
+  let summary = "Charge this step's rows against a limit counter";
+  let description = [{
+    Runs in the innermost loop body just before nl.output. Reads the row count of
+    the representative chunk (the same column nl.output will emit, so the count
+    matches after any cross product), records min(rows, remaining) as the count
+    nl.output should emit this step, and subtracts it from the budget. The sole
+    mutator of the counter.
+  }];
+
+  let arguments = (ins NLLimitStateHandle:$state, NLChunk:$rows);
+  let assemblyFormat = "$state `,` $rows attr-dict `:` qualified(type($rows))";
 }
 
 #endif //TURINGDB_NL_OPS

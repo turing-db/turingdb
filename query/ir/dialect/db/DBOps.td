@@ -216,4 +216,41 @@ def Output : TuringOp<"output"> {
   let assemblyFormat = "`(` $columns `)` attr-dict `:` qualified(type($columns))";
 }
 
+/**
+* Limit
+*/
+def Limit : TuringOp<"limit", [Pure]> {
+  let summary = "Take the first N rows of a column dataflow";
+  let description = [{
+    The declarative counterpart of a Cypher RETURN ... LIMIT N. Caps the result
+    to the first N rows of the columns flowing into db.output, passing them
+    through unchanged:
+
+      %a  = db.scan_nodes() : !db.column<"a">
+      %la = db.limit(%a) count 3 : (!db.column<"a">) -> !db.column<"a">
+      db.output(%la) : !db.column<"a">
+
+    It lowers to a hoisted nl.limit handle, an nl.limit_update in the innermost
+    loop body, a `limit` operand on every nl.for in the nest, and a `limit`
+    operand on nl.output. Reading a prefix of the graph is deterministic, so the
+    op is Pure.
+  }];
+
+  // The columns flow through unchanged; count is unsigned - a row budget is
+  // never negative, so a negative literal fails to parse rather than reaching
+  // the verifier.
+  let arguments = (ins Variadic<Column>:$columns, UI64Attr:$count);
+  let results   = (outs Variadic<Column>:$results);
+
+  // One result per input column, same types; functional-type prints the
+  // `(operandTypes) -> resultTypes` form and the named count attribute prints
+  // ahead of the colon, elided from attr-dict.
+  let assemblyFormat = [{
+    `(` $columns `)` `count` $count attr-dict `:` functional-type(operands, results)
+  }];
+
+  // results arity and types must equal the columns.
+  let hasVerifier = 1;
+}
+
 #endif //TURINGDB_OPS
