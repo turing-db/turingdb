@@ -234,7 +234,8 @@ void NLExecutor::runCrossProduct(NLExecutionContext* context, NLFunctionData* da
     // otherwise materialise CHUNK_SIZE*CHUNK_SIZE rows to emit one.
     const NLLimitState* limit = cross->getLimit();
     const size_t productRowCount = outerRowCount * innerRowCount;
-    const size_t outputRowCount = limit ? std::min(productRowCount, limit->getRemaining()) : productRowCount;
+    const size_t remaining = limit ? limit->getRemaining() : productRowCount;
+    const size_t outputRowCount = std::min(productRowCount, remaining);
 
     for (const NLCrossColumn& column : outerColumns) {
         const NLBroadcastFunction broadcast = column.getBroadcast();
