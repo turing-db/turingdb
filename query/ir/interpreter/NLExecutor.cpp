@@ -47,42 +47,56 @@ void gatherColumn(const Column* input,
     }
 }
 
-// Block-repeat: each input row is emitted `factor` times in a row, so an input
-// of N rows becomes N*factor rows with input row i at output indices
-// [i*factor, (i+1)*factor). This lays out an outer column of a cross product,
-// where each outer row pairs with the whole inner chunk.
+// Block-repeat: each input row is emitted `factor` times in a row, so input row
+// i lands at output indices [i*factor, (i+1)*factor). This lays out an outer
+// column of a cross product, where each outer row pairs with the whole inner
+// chunk. The fill stops at `outputRowCount` rows (min(N*factor, remaining) under
+// a limit), so the last block may be partial and later input rows are skipped.
 template <typename ElementType>
-void blockRepeatColumn(const Column* input, size_t factor, Column* output) {
+void blockRepeatColumn(const Column* input, size_t factor, size_t outputRowCount, Column* output) {
     const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
     ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
-    outputRaw.resize(inputRaw.size() * factor);
+    outputRaw.resize(outputRowCount);
 
     auto outputIt = outputRaw.begin();
+    size_t rowsLeft = outputRowCount;
     for (const ElementType& value : inputRaw) {
-        std::fill_n(outputIt, factor, value);
-        outputIt += factor;
+        if (rowsLeft == 0) {
+            break;
+        }
+
+        const size_t count = std::min(factor, rowsLeft);
+        std::fill_n(outputIt, count, value);
+        outputIt += count;
+        rowsLeft -= count;
     }
 }
 
-// Tile: the whole input chunk is emitted `factor` times back to back, so an
-// input of M rows becomes M*factor rows with input row j at output indices
-// j, j+M, j+2M, ... This lays out an inner column of a cross product, where the
-// inner chunk repeats once per outer row.
+// Tile: the whole input chunk is emitted back to back, so input row j lands at
+// output indices j, j+M, j+2M, ... This lays out an inner column of a cross
+// product, where the inner chunk repeats once per outer row. The fill stops at
+// `outputRowCount` rows (min(M*N, remaining) under a limit), which alone bounds
+// the repeats, so the row count drives it rather than the `factor` (N) the outer
+// side uses. The last tile may be partial.
 template <typename ElementType>
-void tileColumn(const Column* input, size_t factor, Column* output) {
+void tileColumn(const Column* input, size_t factor, size_t outputRowCount, Column* output) {
     const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
     ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
-    outputRaw.resize(inputRaw.size() * factor);
+    outputRaw.resize(outputRowCount);
 
+    const size_t tileLength = inputRaw.size();
     auto outputIt = outputRaw.begin();
-    for (size_t repeat = 0; repeat < factor; repeat++) {
-        outputIt = std::copy(inputRaw.begin(), inputRaw.end(), outputIt);
+    size_t rowsLeft = outputRowCount;
+    while (rowsLeft > 0) {
+        const size_t count = std::min(tileLength, rowsLeft);
+        outputIt = std::copy(inputRaw.begin(), inputRaw.begin() + count, outputIt);
+        rowsLeft -= count;
     }
 }
 
@@ -213,14 +227,23 @@ void NLExecutor::runCrossProduct(NLExecutionContext* context, NLFunctionData* da
     const size_t outerRowCount = outerColumns.front().getInput()->size();
     const size_t innerRowCount = innerColumns.front().getInput()->size();
 
+    // The product is N*M rows, but under a limit only its first remaining() rows
+    // can ever be emitted this step: rows are laid out in (outer, inner) order, so
+    // the product's prefix is exactly what the following nl.limit_update/nl.output
+    // emit. Build just that prefix - a LIMIT 1 over two full chunks would
+    // otherwise materialise CHUNK_SIZE*CHUNK_SIZE rows to emit one.
+    const NLLimitState* limit = cross->getLimit();
+    const size_t productRowCount = outerRowCount * innerRowCount;
+    const size_t outputRowCount = limit ? std::min(productRowCount, limit->remaining()) : productRowCount;
+
     for (const NLCrossColumn& column : outerColumns) {
         const NLBroadcastFunction broadcast = column.getBroadcast();
-        broadcast(column.getInput(), innerRowCount, column.getOutput());
+        broadcast(column.getInput(), innerRowCount, outputRowCount, column.getOutput());
     }
 
     for (const NLCrossColumn& column : innerColumns) {
         const NLBroadcastFunction broadcast = column.getBroadcast();
-        broadcast(column.getInput(), outerRowCount, column.getOutput());
+        broadcast(column.getInput(), outerRowCount, outputRowCount, column.getOutput());
     }
 }
 

@@ -360,6 +360,10 @@ void NLTranslator::translateCrossProduct(nl::CrossProduct cross, NLStmtContainer
 
     NLCrossProductData* data = _program->allocFunctionData<NLCrossProductData>();
 
+    // The optional limit handle is a separate operand group, so it never appears
+    // among the columns; null leaves the product unbounded.
+    data->setLimit(limitStateFor(cross.getLimit()));
+
     // The results are the outer columns followed by the inner, the order
     // inferReturnTypes lays them out, so walk the result list in step.
     const mlir::ResultRange results = cross.getResults();

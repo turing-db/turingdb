@@ -242,12 +242,23 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
     result chunk keeping its input's element type - only the row count changes.
     N and M are read from the first column of each group, so each group must be
     non-empty.
+
+    An optional `limit` operand carries an !nl.limit_state handle. When present,
+    the product is built only up to limit.remaining() rows: rows are laid out in
+    (outer, inner) order, so the product's prefix is exactly the prefix the
+    following nl.limit_update/nl.output can emit this step, and building the rest
+    would be wasted work. Absent, the whole N*M product is built.
+
+      %a, %b = nl.cross_product {%a} {%b} limit %h
+                 : {!nl.chunk<!nl.node_id>} {!nl.chunk<!nl.node_id>}
   }];
 
-  // The outer and inner column groups to cross. Two variadic groups of
-  // independent size need AttrSizedOperandSegments to record each group's size.
+  // The outer and inner column groups to cross, plus the optional limit handle.
+  // Three operand groups of independent size need AttrSizedOperandSegments to
+  // record each group's size.
   let arguments = (ins Variadic<NLChunk>:$outer_columns,
-                       Variadic<NLChunk>:$inner_columns);
+                       Variadic<NLChunk>:$inner_columns,
+                       Optional<NLLimitStateHandle>:$limit);
 
   // One result per crossed column, outer group then inner group; inferred from
   // the operands since the broadcast keeps each chunk's element type.
@@ -256,10 +267,12 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
   // The two SSA brace groups mirror the two factors. The result types are
   // inferred, so only the operand chunk types are spelled - the same two
   // groups, each in braces, after the colon (as nl.output spells its chunk
-  // types). The operandSegmentSizes attribute is populated and elided
-  // automatically by the generated parser/printer.
+  // types). The optional limit handle, when present, prints after a `limit`
+  // keyword (its type is buildable and so omitted, as on nl.output). The
+  // operandSegmentSizes attribute is populated and elided automatically by the
+  // generated parser/printer.
   let assemblyFormat = [{
-    `{` $outer_columns `}` `{` $inner_columns `}` attr-dict `:`
+    `{` $outer_columns `}` `{` $inner_columns `}` (`limit` $limit^)? attr-dict `:`
     `{` qualified(type($outer_columns)) `}` `{` qualified(type($inner_columns)) `}`
   }];
 }

@@ -234,9 +234,13 @@ void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
     // consumes the product (the lowered db.output).
     setInsertionInto(innerBody);
 
+    // _limitHandle is null when no db.limit is active (the product is built in
+    // full); when active, the cross carries the same handle every loop in the
+    // nest does, so it builds only the prefix the limit can emit this step.
     nl::CrossProduct cross = _builder.create<nl::CrossProduct>(_builder.getUnknownLoc(),
                                                                outerColumns,
-                                                               innerColumns);
+                                                               innerColumns,
+                                                               _limitHandle);
 
     // The product's results are the outer factor's yielded columns followed by
     // the inner's, the same order nl.cross_product lays out its results.

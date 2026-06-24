@@ -242,7 +242,14 @@ private:
 //   inner -> [b0,b1,b2, b0,b1,b2]   whole inner chunk repeated N times (tile)
 // so row k across all columns is one (outer, inner) pair. `factor` is M for an
 // outer column, N for an inner one; both directions share this signature.
-using NLBroadcastFunction = void (*)(const Column* input, size_t factor, Column* output);
+// `outputRowCount` caps the fill: it is min(N*M, remaining) under a limit, so the
+// broadcast lays out only the product's first outputRowCount rows (its last block
+// or tile may be partial) and skips the rest the limit could never emit. Without
+// a limit it is the full N*M.
+using NLBroadcastFunction = void (*)(const Column* input,
+                                     size_t factor,
+                                     size_t outputRowCount,
+                                     Column* output);
 
 // One column used as operand of nl.cross_product: its input chunk, the output
 // chunk to fill, and the broadcast that fills one from the other.
@@ -286,9 +293,16 @@ public:
         _innerColumns.push_back(column);
     }
 
+    // The governing limit counter, or null for an unbounded product. When set,
+    // the product is built only up to remaining() rows; it never mutates the
+    // counter (the following nl.limit_update does).
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
 private:
     Columns _outerColumns;
     Columns _innerColumns;
+    NLLimitState* _limit {nullptr};
 };
 
 // nl.limit data: resets a counter to its budget each time the block it lives in
