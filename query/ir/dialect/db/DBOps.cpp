@@ -165,8 +165,7 @@ LogicalResult Limit::verify() {
     const Operation::result_range results = getResults();
 
     // A limit's row count is read from its first column during lowering, so a
-    // limit over no column cannot be sized. Reject it here at the db level rather
-    // than deep in lowering, mirroring db.cross_product's empty-factor check.
+    // limit over no column cannot be sized. Reject it here at the db level.
     if (columns.empty()) {
         return emitOpError("requires at least one column");
     }

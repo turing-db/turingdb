@@ -110,15 +110,16 @@ void runEdgeLoopSteps(NLExecutionContext* context,
 
     // Same early-exit as the scan loop: a null limit is unbounded, otherwise the
     // loop stops once the budget is spent, and the break unwinds any enclosing
-    // loop carrying the same handle.
+    // loop carrying the same handle. The limit is fixed for the whole loop, so
+    // the null check is hoisted out of the per-iteration condition.
     const NLLimitState* limit = loopData->getLimit();
 
-    while (chunkWriter->isValid() && (!limit || limit->getRemaining() > 0)) {
+    const auto runIteration = [&]() {
         chunkWriter->fill(context->getChunkSize());
 
         const ColumnVector<size_t>* indices = loopData->getIndices();
         if (indices->empty()) {
-            continue;
+            return;
         }
 
         // Gather either source or target if we are get_out or get_in (the source side)
@@ -131,6 +132,16 @@ void runEdgeLoopSteps(NLExecutionContext* context,
         }
 
         runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (chunkWriter->isValid() && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (chunkWriter->isValid()) {
+            runIteration();
+        }
     }
 }
 
@@ -161,20 +172,31 @@ void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* d
     // is spent. nl.limit_update inside runBody mutates remaining, so the next
     // test breaks here, and an enclosing loop carrying the same handle breaks on
     // its next test too - unwinding the whole nest. LIMIT 0 fails the guard on
-    // entry, so nothing is scanned.
+    // entry, so nothing is scanned. The limit is fixed for the whole loop, so
+    // the null check is hoisted out of the per-iteration condition.
     const NLLimitState* limit = loopData->getLimit();
 
     ScanNodesChunkWriter chunkWriter(*context->getView());
     chunkWriter.setNodeIDs(nodeIDs);
 
-    while (chunkWriter.isValid() && (!limit || limit->getRemaining() > 0)) {
+    const auto runIteration = [&]() {
         chunkWriter.fill(chunkSize);
 
         if (nodeIDs->empty()) {
-            continue;
+            return;
         }
 
         runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (chunkWriter.isValid()) {
+            runIteration();
+        }
     }
 }
 
@@ -227,11 +249,6 @@ void NLExecutor::runCrossProduct(NLExecutionContext* context, NLFunctionData* da
     const size_t outerRowCount = outerColumns.front().getInput()->size();
     const size_t innerRowCount = innerColumns.front().getInput()->size();
 
-    // The product is N*M rows, but under a limit only its first getRemaining() rows
-    // can ever be emitted this step: rows are laid out in (outer, inner) order, so
-    // the product's prefix is exactly what the following nl.limit_update/nl.output
-    // emit. Build just that prefix - a LIMIT 1 over two full chunks would
-    // otherwise materialise CHUNK_SIZE*CHUNK_SIZE rows to emit one.
     const NLLimitState* limit = cross->getLimit();
     const size_t productRowCount = outerRowCount * innerRowCount;
     const size_t remaining = limit ? limit->getRemaining() : productRowCount;
