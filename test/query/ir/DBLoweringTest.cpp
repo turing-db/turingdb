@@ -363,20 +363,28 @@ func.func @main() {
 
 // Counts appendChunks calls and the total rows emitted, without materializing
 // them. Used to prove a limited run emits a clamped prefix (a partial final
-// chunk) and stops early - fewer calls than the unlimited run.
+// chunk) and stops early - fewer calls than the unlimited run. Also tracks the
+// widest chunk handed over - the materialized column size before the rowCount
+// clamp - to prove a limited cross product caps the product it builds.
 class CountingSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
         _calls++;
         _totalRows += rowCount;
+
+        if (!chunks.empty()) {
+            _widestChunk = std::max(_widestChunk, chunks.front()->size());
+        }
     }
 
     size_t getCalls() const { return _calls; }
     size_t getTotalRows() const { return _totalRows; }
+    size_t getWidestChunk() const { return _widestChunk; }
 
 private:
     size_t _calls {0};
     size_t _totalRows {0};
+    size_t _widestChunk {0};
 };
 
 // MATCH (a) RETURN a LIMIT count: a scan capped by db.limit.
@@ -994,6 +1002,25 @@ TEST_F(DBLoweringTest, limitsCrossProduct) {
     runLoweredProgram(program.c_str(), reader.getView(), sink);
 
     EXPECT_EQ(sink.getTotalRows(), 5u);
+}
+
+TEST_F(DBLoweringTest, limitedCrossProductBuildsOnlyTheBudgetPrefix) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Four nodes crossed with four is sixteen pairs; both scans fit in one chunk,
+    // so the product is one cross product. Without the cap it would broadcast all
+    // sixteen rows into its output columns and let nl.output emit only the first
+    // five; with the cap it builds just the five-row prefix the limit can emit.
+    // The widest chunk handed to the sink is the materialized column size, so it
+    // is five (the budget), not sixteen (the full product).
+    CountingSink sink;
+    const std::string program = limitCrossProductProgram(5);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    EXPECT_EQ(sink.getTotalRows(), 5u);
+    EXPECT_EQ(sink.getWidestChunk(), 5u);
 }
 
 TEST_F(DBLoweringTest, lowersLimitToHandleUpdateAndLoopOperands) {
