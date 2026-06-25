@@ -39,30 +39,9 @@ protected:
     mlir::MLIRContext _context;
 };
 
-// An nl.output that names a limit handle but has no preceding nl.limit_update in
-// its block would read a stale or zero count, so the verifier rejects it.
-TEST_F(NLDialectTest, verifierRejectsLimitedOutputWithoutUpdate) {
-    mlir::OpBuilder builder(&_context);
-    const mlir::Location loc = builder.getUnknownLoc();
-
-    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
-    mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
-    mlir::Block& entryBlock = function.getBody().front();
-    const mlir::Value chunk = entryBlock.getArgument(0);
-
-    const mlir::Value handle = builder.create<mlir::nl::Limit>(loc, /*count=*/3u).getState();
-    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, handle);
-    builder.create<mlir::func::ReturnOp>(loc);
-
-    const mlir::ScopedDiagnosticHandler diagnostics(&_context, [](mlir::Diagnostic&) {
-        return mlir::success();
-    });
-    EXPECT_TRUE(mlir::failed(mlir::verify(function)));
-}
-
-// The same output verifies once an nl.limit_update for the same handle runs
-// before it in the block - the pairing DBLowering always emits.
-TEST_F(NLDialectTest, verifierAcceptsLimitedOutputAfterUpdate) {
+// An nl.limit_truncate passes its column types through unchanged - results mirror
+// the operand chunk types - and verifies in a limit/update/truncate/output chain.
+TEST_F(NLDialectTest, verifierAcceptsLimitTruncate) {
     mlir::OpBuilder builder(&_context);
     const mlir::Location loc = builder.getUnknownLoc();
 
@@ -73,14 +52,16 @@ TEST_F(NLDialectTest, verifierAcceptsLimitedOutputAfterUpdate) {
 
     const mlir::Value handle = builder.create<mlir::nl::Limit>(loc, /*count=*/3u).getState();
     builder.create<mlir::nl::LimitUpdate>(loc, handle, chunk);
-    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, handle);
+    mlir::nl::LimitTruncate truncate = builder.create<mlir::nl::LimitTruncate>(loc, handle, mlir::ValueRange {chunk});
+    builder.create<mlir::nl::Output>(loc, truncate.getResults());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_EQ(truncate.getResult(0).getType(), chunk.getType());
 }
 
-// An nl.output with no limit handle is unbounded and needs no update before it.
-TEST_F(NLDialectTest, verifierAcceptsUnlimitedOutput) {
+// nl.output is limit-oblivious: it carries no limit operand and verifies on its own.
+TEST_F(NLDialectTest, verifierAcceptsOutput) {
     mlir::OpBuilder builder(&_context);
     const mlir::Location loc = builder.getUnknownLoc();
 
@@ -89,7 +70,7 @@ TEST_F(NLDialectTest, verifierAcceptsUnlimitedOutput) {
     mlir::Block& entryBlock = function.getBody().front();
     const mlir::Value chunk = entryBlock.getArgument(0);
 
-    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, mlir::Value());
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk});
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));

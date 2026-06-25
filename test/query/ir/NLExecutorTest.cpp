@@ -238,7 +238,8 @@ private:
 };
 
 // Scan all nodes and output them, capped by a top-level nl.limit. The handle is
-// hoisted, threaded onto the loop and onto output, and charged by limit_update.
+// hoisted, threaded onto the loop, charged by limit_update, and the truncate cuts
+// each chunk to the prefix the budget allows before the plain output.
 std::string nlLimitScanProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
                        "  %h = nl.limit(")
@@ -247,7 +248,8 @@ std::string nlLimitScanProgram(uint64_t count) {
              "  %nodes = nl.scan_nodes()\n"
              "  nl.for %a in %nodes limit %h : !nl.iter<!nl.chunk<!nl.node_id>> {\n"
              "    nl.limit_update %h, %a : !nl.chunk<!nl.node_id>\n"
-             "    nl.output(%a) limit %h : !nl.chunk<!nl.node_id>\n"
+             "    %la = nl.limit_truncate %h, (%a) : !nl.chunk<!nl.node_id>\n"
+             "    nl.output(%la) : !nl.chunk<!nl.node_id>\n"
              "  }\n"
              "  func.return\n"
              "}\n";
@@ -265,7 +267,8 @@ std::string nlLimitNestedLoopProgram(uint64_t count) {
              "    %edges = nl.get_out_edges(%a, {})\n"
              "    nl.for %srcs, %eids, %etypes, %b in %edges limit %h : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>> {\n"
              "      nl.limit_update %h, %b : !nl.chunk<!nl.node_id>\n"
-             "      nl.output(%b) limit %h : !nl.chunk<!nl.node_id>\n"
+             "      %lb = nl.limit_truncate %h, (%b) : !nl.chunk<!nl.node_id>\n"
+             "      nl.output(%lb) : !nl.chunk<!nl.node_id>\n"
              "    }\n"
              "  }\n"
              "  func.return\n"
@@ -273,13 +276,13 @@ std::string nlLimitNestedLoopProgram(uint64_t count) {
 }
 
 // The same one-hop nest, but only the OUTER scan loop carries the limit - the
-// inner edge loop is deliberately unbounded. Output still charges and reads the
-// handle, so once the budget is spent the inner loop keeps running and emits a
-// zero-row prefix per step. This makes outer over-driving observable: if the
-// outer loop failed to halt when the budget hit zero, it would advance to the
-// remaining nodes and the unbounded inner loop would call output again (with zero
-// rows), pushing the call count past one. With the outer loop halting correctly,
-// output is called exactly once.
+// inner edge loop is deliberately unbounded. limit_update still charges and the
+// truncate copies a zero-row prefix once the budget is spent, so the inner loop
+// keeps calling output (with zero rows) if the outer loop fails to halt. This
+// makes outer over-driving observable: if the outer loop failed to halt when the
+// budget hit zero, it would advance to the remaining nodes and the unbounded inner
+// loop would call output again (with zero rows), pushing the call count past one.
+// With the outer loop halting correctly, output is called exactly once.
 std::string nlLimitOuterLoopOnlyProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
                        "  %h = nl.limit(")
@@ -290,7 +293,8 @@ std::string nlLimitOuterLoopOnlyProgram(uint64_t count) {
              "    %edges = nl.get_out_edges(%a, {})\n"
              "    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>> {\n"
              "      nl.limit_update %h, %b : !nl.chunk<!nl.node_id>\n"
-             "      nl.output(%b) limit %h : !nl.chunk<!nl.node_id>\n"
+             "      %lb = nl.limit_truncate %h, (%b) : !nl.chunk<!nl.node_id>\n"
+             "      nl.output(%lb) : !nl.chunk<!nl.node_id>\n"
              "    }\n"
              "  }\n"
              "  func.return\n"

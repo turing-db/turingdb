@@ -27,10 +27,12 @@ class GraphView;
 //
 //   db.scan_nodes / db.get_out_edges  ->  nl source op + nl.for over its chunks
 //   db.output                          ->  nl.output inside the binding loop
-//   db.limit                           ->  a hoisted nl.limit handle, threaded as
-//                                          a `limit` operand into every nl.for and
-//                                          onto nl.output, plus an nl.limit_update
-//                                          in the innermost loop body
+//   db.limit                           ->  a hoisted nl.limit handle, a `limit`
+//                                          operand on the loops that produce its
+//                                          columns, an nl.limit_update, and an
+//                                          nl.limit_truncate that copies the prefix
+//                                          just before the consumer (nl.output when
+//                                          unchained, the inner query when chained)
 //
 // db.get_node_properties / db.get_edge_properties resolve their property name
 // against the graph schema here (hence the GraphView): the name is hoisted into
@@ -81,14 +83,18 @@ private:
     // not left in the loop body - just a record of which block is innermost.
     mlir::Block* _innermostLoopBody {nullptr};
 
-    // At most one db.limit per function. A pre-scan in lower() finds it before
-    // any loop is built, so the handle can be hoisted above every loop and
-    // threaded into each as it is created. The count is unsigned end to end
-    // (UI64Attr accessor -> stored uint64_t -> NLLimitState's size_t), so there
-    // is no signed round-trip and no cast.
-    bool _limitActive {false};
-    uint64_t _limitCount {0};
-    mlir::Value _limitHandle;   // the nl.limit result, null when !_limitActive
+    // Each db.limit gets its own hoisted nl.limit handle - N independent budgets.
+    // A pre-scan in lower() finds every db.limit before any loop is built, so the
+    // handles exist first to be threaded into the loops as they are created. The
+    // count is unsigned end to end (UI64Attr accessor -> NLLimitState's size_t),
+    // so there is no signed round-trip and no cast.
+    llvm::DenseMap<mlir::Operation*, mlir::Value> _limitHandles;     // db.limit -> nl.limit handle
+
+    // The handle a loop-opening or cross-product op carries, if it lies in some
+    // limit's producing nest. Built by the pre-scan; the first (outermost,
+    // program-order) limit to claim a shared producer wins, so a loop never needs
+    // two handles. Absent (null on lookup) for a consumer loop, which fans out.
+    llvm::DenseMap<mlir::Operation*, mlir::Value> _loopLimitHandle;  // db producer -> handle
 
     void lowerOperation(mlir::Operation& operation);
     void lowerScanNodes(mlir::db::ScanNodes scanNodes);
@@ -110,6 +116,14 @@ private:
     // Wrap an nl source op's iterator in an nl.for and bind each db result
     // column to the matching loop variable
     void buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp);
+
+    // Walk the db dataflow backward from a limited column, recording in
+    // _loopLimitHandle that each loop-opening op (scan / get_out_edges) and cross
+    // product it depends on carries this limit's handle.
+    // A cross product's factors are regions, so it recurses through their
+    // db.yield operands; a property fetch opens no loop but is traversed to reach
+    // its input chunk's loop. The first limit to claim a producer keeps it.
+    void assignProducerLoops(mlir::Value column, mlir::Value handle);
 
     // The nl.get_property_type handle for a property name, inserted once at the
     // top of the entry block (above every loop) and reused on later lookups

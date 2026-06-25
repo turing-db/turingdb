@@ -97,26 +97,38 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _propertyTypes.clear();
     _rootBlock = _entryBlock;
     _innermostLoopBody = nullptr;
-    _limitActive = false;
-    _limitCount = 0;
-    _limitHandle = mlir::Value();
+    _limitHandles.clear();
+    _loopLimitHandle.clear();
 
-    // Pre-scan for a db.limit before any loop is built: nl.for's limit operand
-    // is fixed at build time, so the handle has to exist first to be threaded in.
+    // Pre-scan for db.limits before any loop is built: nl.for's limit operand is
+    // fixed at build time, so each handle must exist first to be threaded in, and
+    // which loops a handle attaches to must be known up front.
+    llvm::SmallVector<mlir::db::Limit, 2> limits;
     dbFunction.walk([&](mlir::db::Limit limit) {
-        if (_limitActive) {
-            throw IRException("DBLowering supports at most one db.limit per function");
-        }
-        _limitActive = true;
-        _limitCount = limit.getCount();
+        limits.push_back(limit);
     });
 
-    // Hoist the handle above every loop, at the top of the entry block, where it
-    // dominates all the loops, the update and the output that read it.
-    if (_limitActive) {
+    // Hoist one nl.limit handle per db.limit to the top of the entry block, where
+    // each dominates the loops, the update and the truncate that read it. The
+    // reset scope is function scope (uncorrelated); a correlated limit would hoist
+    // into its enclosing loop body instead - future work.
+    if (!limits.empty()) {
         _builder.setInsertionPointToStart(_entryBlock);
-        nl::Limit limitOp = _builder.create<nl::Limit>(loc, _limitCount);
-        _limitHandle = limitOp.getState();
+        for (mlir::db::Limit limit : limits) {
+            nl::Limit limitOp = _builder.create<nl::Limit>(loc, limit.getCount());
+            _limitHandles[limit.getOperation()] = limitOp.getState();
+        }
+    }
+
+    // Assign each limit's handle to the loops that produce its columns and their
+    // enclosing nest, so only those loops early-exit (consumer loops downstream of
+    // the truncate fan out freely). The first limit, in program order, to claim a
+    // shared producer wins, so a loop never needs to carry two handles.
+    for (mlir::db::Limit limit : limits) {
+        const mlir::Value handle = _limitHandles[limit.getOperation()];
+        for (const mlir::Value column : limit.getColumns()) {
+            assignProducerLoops(column, handle);
+        }
     }
 
     for (mlir::Operation& operation : dbBody.front()) {
@@ -235,13 +247,14 @@ void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
     // consumes the product (the lowered db.output).
     setInsertionInto(innerBody);
 
-    // _limitHandle is null when no db.limit is active (the product is built in
-    // full); when active, the cross carries the same handle every loop in the
-    // nest does, so it builds only the prefix the limit can emit this step.
+    // Null when no limit governs this product (built in full); otherwise the
+    // handle whose budget caps the build, so the cross lays out only the prefix
+    // the limit can emit this step.
+    const mlir::Value limitHandle = _loopLimitHandle.lookup(product.getOperation());
     nl::CrossProduct cross = _builder.create<nl::CrossProduct>(_builder.getUnknownLoc(),
                                                                outerColumns,
                                                                innerColumns,
-                                                               _limitHandle);
+                                                               limitHandle);
 
     // The product's results are the outer factor's yielded columns followed by
     // the inner's, the same order nl.cross_product lays out its results.
@@ -329,8 +342,8 @@ mlir::Type DBLowering::propertyValueChunkType(llvm::StringRef propertyName) {
 }
 
 void DBLowering::lowerLimit(mlir::db::Limit limit) {
-    // Pass the columns straight through: db.output consumes db.limit's results,
-    // so its lowering must find the same nl chunks.
+    // The nl chunks the limited columns lowered to; these are what the truncate
+    // copies, and the consumer reads the cut copies.
     llvm::SmallVector<mlir::Value, 4> chunks;
     for (const mlir::Value column : limit.getColumns()) {
         chunks.push_back(mapValue(column));
@@ -342,56 +355,94 @@ void DBLowering::lowerLimit(mlir::db::Limit limit) {
         throw IRException("db.limit requires at least one column");
     }
 
+    const mlir::Location loc = _builder.getUnknownLoc();
+    const mlir::Value handle = _limitHandles.lookup(limit.getOperation());
+
+    // The representative is the first limited column, in the innermost producing
+    // loop body (post-cross-product if there is one), so its row count is what
+    // this step charges and the truncate copies.
+    const mlir::Value representative = chunks.front();
+    setInsertionInto(ownerBlock(representative));
+
+    // Charge this step's rows, then copy the first emitThisStep rows of every
+    // limited column into fresh chunks, just before the consumer (nl.output when
+    // unchained, the inner sub-pipeline when chained).
+    _builder.create<nl::LimitUpdate>(loc, handle, representative);
+    nl::LimitTruncate truncate = _builder.create<nl::LimitTruncate>(loc, handle, chunks);
+
+    // Map db.limit's results to the truncated chunks, so its consumer reads the
+    // cut copies rather than the full producer chunks.
     const mlir::ResultRange dbResults = limit.getResults();
+    const mlir::ResultRange truncatedChunks = truncate.getResults();
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
-        _valueMap[dbResults[resultIndex]] = chunks[resultIndex];
+        _valueMap[dbResults[resultIndex]] = truncatedChunks[resultIndex];
+    }
+}
+
+void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
+    mlir::Operation* const definingOp = column.getDefiningOp();
+    if (!definingOp) {
+        // A cross-product factor's loop variable is a block argument with no
+        // defining op; its producing loop is reached through the factor's yield
+        // in the cross-product branch below, not from here.
+        return;
     }
 
-    // The representative is the first output column, in the innermost loop body
-    // (post-cross-product if there is one), so its row count is exactly what
-    // nl.output emits this step.
-    const mlir::Value representative = chunks.front();
+    const bool opensLoop = mlir::isa<mlir::db::ScanNodes, mlir::db::GetOutEdges>(definingOp);
+    const bool isCrossProduct = mlir::isa<mlir::db::CrossProduct>(definingOp);
 
-    setInsertionInto(ownerBlock(representative));
-    _builder.create<nl::LimitUpdate>(_builder.getUnknownLoc(), _limitHandle, representative);
+    // The first limit, in program order, to claim a producer wins, so a loop
+    // shared by two limits' nests carries the outer one and never two handles.
+    if ((opensLoop || isCrossProduct) && !_loopLimitHandle.count(definingOp)) {
+        _loopLimitHandle[definingOp] = handle;
+    }
+
+    if (isCrossProduct) {
+        // A cross product takes no column operands - its factors are regions - so
+        // recurse through each factor's db.yield operands to reach the factor
+        // scans/edge loops that produce the crossed columns.
+        mlir::db::CrossProduct cross = mlir::cast<mlir::db::CrossProduct>(definingOp);
+        mlir::Region* const factors[] = {&cross.getLeftFactor(), &cross.getRightFactor()};
+        for (mlir::Region* const factor : factors) {
+            mlir::Operation* const yield = factor->front().getTerminator();
+            for (const mlir::Value yielded : yield->getOperands()) {
+                assignProducerLoops(yielded, handle);
+            }
+        }
+    } else {
+        // A non-loop producer (a property fetch) is traversed but not assigned -
+        // it opens no loop - so its input chunk's loop is still reached.
+        for (const mlir::Value operand : definingOp->getOperands()) {
+            assignProducerLoops(operand, handle);
+        }
+    }
 }
 
 void DBLowering::lowerOutput(mlir::db::Output output) {
     llvm::SmallVector<mlir::Value, 4> columns;
-
-    // The limit governs this output only if it consumes a db.limit result. A
-    // db.limit passes its columns straight through, so a consumed result is a
-    // column whose defining op is the db.limit. A second db.output that does not
-    // consume it (a disconnected projection) stays unbounded and emits in full,
-    // rather than being clamped to an unrelated limit's count.
-    bool consumesLimit = false;
     for (const mlir::Value column : output.getColumns()) {
         columns.push_back(mapValue(column));
-
-        mlir::Operation* const definingOp = column.getDefiningOp();
-        if (definingOp && mlir::isa<mlir::db::Limit>(definingOp)) {
-            consumesLimit = true;
-        }
     }
 
     if (columns.empty()) {
         throw IRException("db.output requires at least one column");
     }
 
-    // The output columns are loop variables of one innermost loop; nl.output
-    // streams them from that loop's body. With a governing limit it emits the
-    // prefix nl.limit_update sized this step; otherwise it emits the whole chunk.
-    const mlir::Value limitHandle = consumesLimit ? _limitHandle : mlir::Value();
-
+    // nl.output is limit-oblivious: it emits the whole chunk it receives. When a
+    // db.limit governs these columns, the columns mapped here are already the
+    // truncated chunks (lowerLimit remapped db.limit's results to the truncate's),
+    // so the chunk's own row count is the budget-capped count.
     setInsertionInto(ownerBlock(columns.front()));
-    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns, limitHandle);
+    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns);
 }
 
 void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp) {
-    // _limitHandle is null when no db.limit is active, giving the iterator-only
-    // builder's unbounded loop (today's behavior); when active, every loop in
-    // the nest carries the same handle so the break unwinds the whole nest.
-    nl::For forLoop = _builder.create<nl::For>(_builder.getUnknownLoc(), iterator, _limitHandle);
+    // The handle this loop carries, or null when it produces no limited column -
+    // giving the iterator-only builder's unbounded loop. A producing loop carries
+    // its limit's handle so the break unwinds the producing nest; a consumer loop
+    // (lowered after the limit) is never in the map and stays unbounded.
+    const mlir::Value limitHandle = _loopLimitHandle.lookup(dbOp);
+    nl::For forLoop = _builder.create<nl::For>(_builder.getUnknownLoc(), iterator, limitHandle);
 
     // The loop binds one variable per chunk the iterator produces, in the same
     // order as the db op's result columns: a scan binds its single node chunk;

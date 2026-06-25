@@ -280,7 +280,7 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
 /**
 * Output
 */
-def Output : NLOp<"output", [AttrSizedOperandSegments]> {
+def Output : NLOp<"output"> {
   let summary = "Send a row of chunks out as columns of the query result";
   let description = [{
     The sink of the nested loop, mirroring a result builder (LingoDB's
@@ -295,18 +295,12 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
     is deliberately not Pure: emitting output is its whole point, so it must
     survive dead-code elimination even though it has no results.
 
-    An optional `limit` operand carries an !nl.limit_state handle. When present,
-    output emits only a prefix of length limit.getEmitThisStep() (set by the
-    preceding nl.limit_update); absent, it emits the whole chunk. It never
-    mutates the budget - it only reads how many rows to emit:
-
-    nl.output(%targets) limit %h : !nl.chunk<!nl.node_id>
+    Output is limit-oblivious: it emits the whole chunk it receives. When a LIMIT
+    governs its columns, the preceding nl.limit_truncate has already cut them to
+    the budget, so output needs no limit operand or policy of its own.
   }];
 
-  // Two variable-length operand groups - the columns and the optional limit -
-  // so the op carries operand-segment sizes to tell them apart, the same as
-  // nl.cross_product's two column groups.
-  let arguments = (ins Variadic<NLChunk>:$columns, Optional<NLLimitStateHandle>:$limit);
+  let arguments = (ins Variadic<NLChunk>:$columns);
 
   // The chunk element types vary from call to call and - unlike the source
   // ops - cannot be inferred, so they are spelled after the colon. This keeps
@@ -314,15 +308,9 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
   // printed list rather than looking it up on the defining nl.for (which MLIR
   // cannot do during a parse), the same reason nl.for keeps its : !nl.iter<...>
   // annotation. qualified(...) forces the leading !nl. on every printed type.
-  // The optional limit handle, when present, prints after a `limit` keyword; its
-  // type is buildable and so omitted.
   let assemblyFormat = [{
-    `(` $columns `)` (`limit` $limit^)? attr-dict `:` qualified(type($columns))
+    `(` $columns `)` attr-dict `:` qualified(type($columns))
   }];
-
-  // A limited output reads emitThisStep from its handle; the verifier checks a
-  // matching nl.limit_update set it in this block before the output.
-  let hasVerifier = 1;
 }
 
 /**
@@ -362,6 +350,40 @@ def LimitUpdate : NLOp<"limit_update", []> {
 
   let arguments = (ins NLLimitStateHandle:$state, NLChunk:$rows);
   let assemblyFormat = "$state `,` $rows attr-dict `:` qualified(type($rows))";
+}
+
+/**
+* LimitTruncate
+*/
+// NOT Pure: it reads the handle's mutable emitThisStep (set by the preceding
+// nl.limit_update), so it must run exactly where it sits and must not be hoisted,
+// CSE'd or reordered past the update. InferTypeOpAdaptor: the results mirror the
+// column operand types, copied across by inferReturnTypes, as on nl.cross_product.
+def LimitTruncate : NLOp<"limit_truncate", [InferTypeOpAdaptor]> {
+  let summary = "Copy the first emitThisStep rows of each column into fresh chunks";
+  let description = [{
+    Sits in the producing loop body, just after nl.limit_update and just before the
+    limited columns' consumer - nl.output when the query is not chained, the inner
+    sub-pipeline when it is. Copies the prefix [0, emitThisStep) of each input chunk
+    (the count nl.limit_update recorded this step) into a fresh, independently-owned
+    chunk, so a downstream op reads a genuinely truncated chunk and needs no limit
+    awareness of its own. The columns pass through unchanged in type; only the row
+    count is cut.
+
+      %a' = nl.limit_truncate %h, (%a) : !nl.chunk<!nl.node_id>
+  }];
+
+  // The limit handle whose emitThisStep sizes the copy, then the columns to cut.
+  let arguments = (ins NLLimitStateHandle:$state, Variadic<NLChunk>:$columns);
+
+  // One result per input column, same type. The results are inferred from the
+  // column operands, so only the column chunk types are spelled, after the colon;
+  // the handle type is buildable and omitted.
+  let results = (outs Variadic<NLChunk>:$results);
+
+  let assemblyFormat = [{
+    $state `,` `(` $columns `)` attr-dict `:` qualified(type($columns))
+  }];
 }
 
 #endif //TURINGDB_NL_OPS
