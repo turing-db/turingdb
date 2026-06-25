@@ -21,7 +21,7 @@ def Column : TuringType<"Column", "column"> {
     // Add default constructor with unspecified type
     let extraClassDeclaration = [{
         static ColumnType get(::mlir::MLIRContext* ctx) {
-            return get(ctx, ::mlir::Type());
+            return get(ctx, ::mlir::NoneType::get(ctx));
         }
     }];
 }
