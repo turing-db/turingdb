@@ -11,7 +11,7 @@ include "DBTypes.td"
 */
 def ScanNodes : TuringOp<"scan_nodes", [Pure]> {
   let summary = "Produce all nodes in the graph";
-  let results   = (outs Column:$result);
+  let results   = (outs ColumnNodeIDs:$result);
   // `qualified(...)` keeps the full `!db.column<...>` mnemonic on the result type
   // rather than the stripped `<...>` form, matching how get_out_edges prints.
   let assemblyFormat = "`(`operands`)` attr-dict `:` qualified(type($result))";

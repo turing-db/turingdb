@@ -19,6 +19,7 @@ def Column : TuringType<"Column", "column"> {
     let assemblyFormat = "`<` $type`>`";
 
     // Add default constructor with unspecified type
+    // FIXME: Remove this
     let extraClassDeclaration = [{
         static ColumnType get(::mlir::MLIRContext* ctx) {
             return get(ctx, ::mlir::NoneType::get(ctx));
@@ -33,5 +34,16 @@ def NodeID : TuringType<"NodeID", "nodeid"> {
 def EdgeID : TuringType<"EdgeID", "edgeid"> {
     let summary = "TuringDB EdgeID";
 }
+
+// Helper macro to define a strictly typed column
+//             type name       display name
+class ColumnOf<string cppType, string mnemonic> : Type<
+      CPred<"llvm::isa<::mlir::db::ColumnType>($_self) && "
+            "llvm::isa<" # cppType # ">("
+            "  llvm::cast<::mlir::db::ColumnType>($_self).getType())">,
+      "column<" # mnemonic # ">">;
+
+def ColumnNodeIDs : ColumnOf<"::mlir::db::NodeIDType", "nodeid">;
+def ColumnEdgeIDs : ColumnOf<"::mlir::db::EdgeIDType", "edgeid">;
 
 #endif // TURINGDB_TYPES
