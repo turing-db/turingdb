@@ -605,6 +605,14 @@ def Min : AggregateOp<"min">;
 def Max : AggregateOp<"max">;
 def Avg : AggregateOp<"avg">;
 
+def ConstantOp : TuringOp<"constant", [Pure]> {
+  let summary = "Produces a constant value in a column";
+
+  // FIXME: AnyType probably incorrect here
+  let arguments = (ins AnyType : $value);
+  let results = (outs Column : $result);
+}
+
 def AndOp : BinaryOp<"logical_and", [Pure]> {
   let summary = "Performs row-wise logical AND on its two input columns";
 }
