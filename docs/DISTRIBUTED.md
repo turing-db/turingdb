@@ -375,13 +375,29 @@ added a **small consensus layer for metadata** because pure-gossip schema/topolo
 
 ### 10.3 Chosen control plane: gossip + a tiny CP metadata sliver
 
-- **Gossip (AP), sharing the data anti-entropy transport:** liveness, failure suspicion,
-  member list, each node's frontier VV, load hints. SWIM-style.
+- **Membership gossip (SWIM, AP):** liveness, failure suspicion, member list, each node's
+  frontier VV, load hints. Runs node-to-node on its **own transport** (typically UDP probes +
+  TCP state sync), *not* over the HTTP API. "Shares the anti-entropy substrate" means it
+  reuses the same gossip *cadence and peer-selection* as the data anti-entropy and piggybacks
+  membership deltas on those messages — it does **not** ride the `/cluster/*` endpoints.
 - **Tiny CP store (embedded Raft or etcd) for what must agree:**
   - **The writer roster** — this *is* the version-vector dimension set; adding/retiring a
     writer changes the VV space and needs a uniquely-allocated ID. Prime CP datum.
   - **Schema + per-type merge-policy registry** — a wrong policy silently breaks convergence.
   - **The METIS partition map** (once partitioning lands) + rebalancing decisions.
+
+**Three planes, three transports — don't conflate them:**
+
+| Plane | Who talks | Transport | Cadence | Role |
+|---|---|---|---|---|
+| **SWIM membership** | node ↔ node | own listener: UDP probes + TCP state sync | continuous, tiny | source of truth for liveness / membership |
+| **Data anti-entropy** | node ↔ node | TCP (bulk part pulls) | periodic | exchange part-hash digests, pull missing parts |
+| **`/cluster/*` HTTP** | operator / CLI ↔ a node | the existing 6666 REST listener | on-demand, request/response | *observe and command* the cluster |
+
+The HTTP `/cluster/*` endpoints sit **on top of** SWIM: `status`/`members` *read* the
+membership table SWIM maintains; `join`/`drain` are *admin triggers* (hand a node its seeds and
+kick off its SWIM join — the join gossip then flows over SWIM's own transport). They are
+neither the membership protocol nor the data gossip.
 
 Two things our architecture makes *easy*: **bootstrap** (a new node learns members via gossip,
 then catch-up = "pull missing content-addressed hashes" from peers / the backup bucket — no
@@ -403,17 +419,67 @@ routing is locality/load, never correctness, unlike Neo4j's leader routing).
 
 ### 10.5 Starting tool (phased)
 
+The `/cluster/*` HTTP endpoints are the **operator/CLI control surface** (on the 6666
+listener) — a *stable façade* over a membership backend that evolves underneath. They are
+distinct from the SWIM transport (§10.3); building them first does **not** mean HTTP is doing
+membership.
+
+`turingctl` is a **local control tool**: it talks only to the **co-located** turingdb server on
+that host (e.g. `POST localhost:6666/cluster/join`). It does **not** reach into other nodes — it
+commands the *local* node, which then performs the actual join (SWIM gossip with the seeds,
+CP-metadata read, writer-ID allocation, anti-entropy catch-up). This mirrors `cockroach` /
+`nodetool` / `etcdctl`, where the CLI drives the node it sits next to.
+
 1. Add `/cluster/{join,members,status}` endpoints to the existing HTTP server
-   (`server/DBServerProcessor`, `server/Endpoints.h`) — dump the gossip view + frontier VVs.
-   No new transport.
+   (`server/DBServerProcessor`, `server/Endpoints.h`) — they **read out** the membership view
+   + frontier VVs and **trigger** lifecycle actions. On the existing 6666 listener; no new
+   transport *for the API*.
 2. Thin `turingctl` CLI driving them (`cluster init`, `node add --join`, `cluster status`,
-   `node drain`). Test with Docker Compose / multi-process local.
-3. SWIM/memberlist-style gossip membership on the anti-entropy substrate.
+   `node drain`). Test with Docker Compose / multi-process local. *MVP membership backend:*
+   static config (configured peers + naive reachability), so `/cluster/status` returns
+   something real before SWIM exists.
+3. **SWIM/memberlist-style gossip membership** on its **own transport** (UDP probes + TCP
+   state sync), sharing the data anti-entropy *cadence* (not the HTTP API). It replaces the
+   static-config backend behind the *same* `/cluster/*` endpoints — the API is unchanged.
 4. **Static config first** for CP metadata (writer roster + schema + policies in a file);
    add the embedded Raft/etcd store only when dynamic membership / online schema change /
    partitioning forces it.
 5. Defer the K8s operator until the protocol is proven (the operator just encodes
    `turingctl`'s operations).
+
+#### The `/cluster/join` handshake
+
+`turingctl node add --join seedA,seedB` POSTs to the **local** server's `/cluster/join`. That
+server runs the join and returns a small **bootstrap bundle** (control plane) — the DataParts
+are **not** in the response; they stream in afterward via anti-entropy (data plane).
+
+The bundle (assembled from the seed's SWIM state-sync + a read of the CP metadata store):
+
+- **Membership view** — full member list (IDs, addresses, liveness, each node's frontier VV).
+- **CP metadata snapshot** — writer roster, schema version, per-type merge-policy registry,
+  partition map (null pre-METIS). The node must agree on these before it can fold correctly.
+- **A freshly-allocated `writerId`** — *only if joining as a writer.* This is **the single
+  consensus round** in the whole join (it allocates a new VV dimension); read-only replicas
+  skip it.
+- **A target frontier VV** — "current head," so the node knows what to catch up to.
+
+```json
+POST localhost:6666/cluster/join   { "seeds": ["seedA:7900"], "role": "writer" }
+→ {
+    "nodeId": "…", "writerId": "w4",                    // w4 allocated via the CP store
+    "members":  [ { "id": "…", "addr": "…", "status": "alive", "frontierVV": {…} }, … ],
+    "metadata": { "schemaVersion": 37,
+                  "writerRoster": ["w1","w2","w3","w4"],
+                  "mergePolicies": { … }, "partitionMap": null },
+    "targetFrontier": { "w1":9, "w2":6, "w3":12, "w4":0 },
+    "catchup": { "mode": "anti-entropy", "sources": ["seedA", "s3://bucket"] }
+  }
+```
+
+After the handshake the node pulls missing parts by hash over anti-entropy (whole graph
+pre-METIS; only its vnode arcs once placement is active). It can **accept writes immediately**
+(AP — local + gossip-propagated, validated against its last-known metadata); it serves **reads**
+only once caught up to a consistent cut, then announces ready.
 
 Phase 1 stays replicated-everywhere (new node pulls the whole graph), so rebalancing is a
 non-issue until METIS arrives.
