@@ -51,8 +51,13 @@ public:
     static void runLimitInit(NLExecutionContext* context, NLFunctionData* data);
 
     // Charge the representative chunk's rows against a limit counter, recording
-    // how many rows nl.output should emit this step. The sole counter mutator.
+    // how many rows the truncate should copy this step. The sole counter mutator.
     static void runLimitUpdate(NLExecutionContext* context, NLFunctionData* data);
+
+    // Copy the first emitThisStep rows of each column into a fresh chunk, so a
+    // downstream consumer reads a genuinely truncated chunk. Reads the counter,
+    // never mutates it.
+    static void runLimitTruncate(NLExecutionContext* context, NLFunctionData* data);
 
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);

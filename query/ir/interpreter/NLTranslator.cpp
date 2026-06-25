@@ -133,6 +133,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateLimit(limit, body);
         } else if (nl::LimitUpdate update = mlir::dyn_cast<nl::LimitUpdate>(operation)) {
             translateLimitUpdate(update, body);
+        } else if (nl::LimitTruncate truncate = mlir::dyn_cast<nl::LimitTruncate>(operation)) {
+            translateLimitTruncate(truncate, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -274,8 +276,6 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
 }
 
 void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
-    // The optional limit handle is a separate operand, so read just the columns;
-    // including it in this list would treat the handle as a chunk.
     const mlir::OperandRange columns = output.getColumns();
     if (columns.empty()) {
         throw IRException("nl.output requires at least one column");
@@ -289,7 +289,6 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
     mlir::Block* outputBlock = output->getBlock();
 
     NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
-    outputData->setLimit(limitStateFor(output.getLimit()));
     for (const mlir::Value column : columns) {
         const auto columnArgument = mlir::dyn_cast<mlir::BlockArgument>(column);
         const bool isInnermostLoopVariable = columnArgument && columnArgument.getOwner() == outputBlock;
@@ -332,6 +331,56 @@ void NLTranslator::translateLimitUpdate(nl::LimitUpdate update, NLStmtContainer*
     NLLimitUpdateData* updateData = _program->allocFunctionData<NLLimitUpdateData>(state, representative);
 
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runLimitUpdate, updateData});
+}
+
+void NLTranslator::translateLimitTruncate(nl::LimitTruncate truncate, NLStmtContainer* body) {
+    // The handle is a required operand, so limitStateFor returns its counter or
+    // throws if it was not produced by an nl.limit.
+    NLLimitState* state = limitStateFor(truncate.getState());
+
+    NLLimitTruncateData* data = _program->allocFunctionData<NLLimitTruncateData>(state);
+
+    // One fresh output column per input, walked in step with the results the
+    // downstream consumers are mapped to.
+    const mlir::OperandRange columns = truncate.getColumns();
+    const mlir::ResultRange results = truncate.getResults();
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        addTruncateColumn(columns[columnIndex], results[columnIndex], data);
+    }
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runLimitTruncate, data});
+}
+
+void NLTranslator::addTruncateColumn(mlir::Value inputValue,
+                                     mlir::Value resultValue,
+                                     NLLimitTruncateData* data) {
+    const Column* input = getColumn(inputValue);
+
+    const auto chunkType = mlir::cast<nl::ChunkType>(inputValue.getType());
+    const mlir::Type elementType = chunkType.getElementType();
+
+    // The output keeps the input's element type; only the row count is cut. The
+    // copy is a block-repeat with factor 1 (each input row once, stopping at
+    // emitThisStep), so it reuses the block-repeat broadcast families the cross
+    // product uses - by value type for a nullable value chunk, by chunk kind for
+    // an ID chunk.
+    Column* output = nullptr;
+    NLBroadcastFunction copyPrefix = nullptr;
+
+    if (const auto nullableType = mlir::dyn_cast<nl::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        output = allocOptColumnForValueType(valueType);
+        copyPrefix = NLExecutor::selectOptBlockRepeatFunction(valueType);
+    } else {
+        const NLChunkKind kind = getChunkKind(chunkType);
+        output = allocColumnForKind(kind);
+        copyPrefix = NLExecutor::selectBlockRepeatFunction(kind);
+    }
+
+    _valueSlots[resultValue] = output;
+
+    const NLCrossColumn truncateColumn(input, output, copyPrefix);
+    data->addColumn(truncateColumn);
 }
 
 NLLimitState* NLTranslator::limitStateFor(mlir::Value handle) const {

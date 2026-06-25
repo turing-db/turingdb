@@ -342,6 +342,31 @@ private:
     const Column* _rows {nullptr};
 };
 
+// nl.limit_truncate data: the counter whose emitThisStep sizes the copy and the
+// columns to cut. Each NLCrossColumn pairs an input chunk with its fresh output
+// chunk and the broadcast that fills one from the other - a block-repeat with
+// factor 1, which copies each input row once and stops at emitThisStep, i.e. the
+// prefix [0, emitThisStep). It never mutates the counter (nl.limit_update does).
+class NLLimitTruncateData : public NLFunctionData {
+public:
+    NLLimitTruncateData(NLLimitState* state)
+        : _state(state)
+    {
+    }
+
+    NLLimitState* getState() const { return _state; }
+
+    const std::vector<NLCrossColumn>& columns() const { return _columns; }
+
+    void addColumn(const NLCrossColumn& column) {
+        _columns.push_back(column);
+    }
+
+private:
+    NLLimitState* _state {nullptr};
+    std::vector<NLCrossColumn> _columns;
+};
+
 // nl.output data
 class NLOutputData : public NLFunctionData {
 public:
@@ -353,14 +378,8 @@ public:
         _columns.push_back(col);
     }
 
-    // The governing limit counter, or null for an unbounded output. When set,
-    // output emits only its getEmitThisStep() prefix; it never mutates the counter.
-    NLLimitState* getLimit() const { return _limit; }
-    void setLimit(NLLimitState* limit) { _limit = limit; }
-
 private:
     std::vector<const Column*> _columns;
-    NLLimitState* _limit {nullptr};
 };
 
 class NLProgram {

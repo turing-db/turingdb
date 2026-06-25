@@ -275,18 +275,29 @@ void NLExecutor::runLimitUpdate(NLExecutionContext* context, NLFunctionData* dat
     update->getState()->update(update->getRows()->size());
 }
 
+void NLExecutor::runLimitTruncate(NLExecutionContext* context, NLFunctionData* data) {
+    const NLLimitTruncateData* truncate = static_cast<NLLimitTruncateData*>(data);
+    const size_t emitThisStep = truncate->getState()->getEmitThisStep();
+
+    // Block-repeat with factor 1 emits each input row once and stops at
+    // emitThisStep, so it copies exactly the prefix [0, emitThisStep) into the
+    // fresh output chunk. Reads emitThisStep (set by the preceding
+    // nl.limit_update); never mutates the counter.
+    for (const NLCrossColumn& column : truncate->columns()) {
+        const NLBroadcastFunction copyPrefix = column.getBroadcast();
+        copyPrefix(column.getInput(), 1, emitThisStep, column.getOutput());
+    }
+}
+
 void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     const NLOutputData* output = static_cast<NLOutputData*>(data);
     const auto& cols = output->outputs();
     bioassert(!cols.empty(), "nl.output requires at least one column");
 
-    // With a limit, emit the prefix nl.limit_update sized this step (reading
-    // emitThisStep, not remaining, so the decrement already done does not affect
-    // the count); without one, emit the whole chunk. Either way no row is copied.
-    const NLLimitState* limit = output->getLimit();
-    const size_t rowCount = limit ? limit->getEmitThisStep() : cols.front()->size();
-
-    context->getSink()->appendChunks(cols, rowCount);
+    // Output is limit-oblivious: it emits the whole chunk it receives. When a
+    // limit governs these columns, nl.limit_truncate has already cut them to the
+    // budget, so the chunk's own row count is what to emit.
+    context->getSink()->appendChunks(cols, cols.front()->size());
 }
 
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {

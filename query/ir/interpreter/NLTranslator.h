@@ -64,6 +64,11 @@ private:
     // record the charge against the representative chunk's row count
     void translateLimitUpdate(mlir::nl::LimitUpdate update, NLStmtContainer* body);
 
+    // Translate an nl.limit_truncate: allocate one fresh output column per input,
+    // map each result to its output, and record the prefix-copy statement (each
+    // column block-repeated with factor 1 up to the counter's emitThisStep)
+    void translateLimitTruncate(mlir::nl::LimitTruncate truncate, NLStmtContainer* body);
+
     // The runtime counter an optional limit handle names: null for a null handle
     // (an unbounded loop or output), the mapped counter otherwise. Throws if the
     // handle was not produced by an nl.limit translated earlier.
@@ -92,6 +97,12 @@ private:
                         mlir::Value resultValue,
                         bool isOuter,
                         NLCrossProductData* data);
+
+    // Allocate the fresh output column for one truncated column, map the op
+    // result to it, and append it (with its block-repeat prefix-copy) to data
+    void addTruncateColumn(mlir::Value inputValue,
+                           mlir::Value resultValue,
+                           NLLimitTruncateData* data);
 
     Column* allocColumn(mlir::Value chunkValue);
     Column* allocColumnForKind(NLChunkKind kind);

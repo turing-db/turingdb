@@ -463,6 +463,40 @@ std::string limitCrossProductProgram(uint64_t count) {
              "}\n";
 }
 
+// MATCH (a) WITH a LIMIT count MATCH (a)-->(b) RETURN b: a mid-query (chained)
+// limit. db.limit feeds db.get_out_edges, not db.output, so the limit bounds the
+// intermediate `a` cardinality while `b` fans out unbounded. Only the scan (a's
+// producer) carries the handle; the edge loop is a consumer.
+std::string chainedLimitProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %la = db.limit(%a) count ")
+           + std::to_string(count)
+           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
+             "  %a1, %e0, %et0, %b = db.get_out_edges(%la, {}) : (!db.column<\"a\">) -> (!db.column<\"a1\">, !db.column<\"e0\">, !db.column<\"et0\">, !db.column<\"b\">)\n"
+             "  db.output(%b) : !db.column<\"b\">\n"
+             "  return\n"
+             "}\n";
+}
+
+// MATCH (a) WITH a LIMIT outer MATCH (a)-->(b) WITH b LIMIT inner RETURN b: two
+// independent limits. The first bounds the scan, the second bounds the expansion;
+// each gets its own handle, and the shared scan loop is claimed by the outer one.
+std::string twoLimitProgram(uint64_t outerCount, uint64_t innerCount) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %la = db.limit(%a) count ")
+           + std::to_string(outerCount)
+           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
+             "  %a1, %e0, %et0, %b = db.get_out_edges(%la, {}) : (!db.column<\"a\">) -> (!db.column<\"a1\">, !db.column<\"e0\">, !db.column<\"et0\">, !db.column<\"b\">)\n"
+             "  %lb = db.limit(%b) count "
+           + std::to_string(innerCount)
+           + " : (!db.column<\"b\">) -> !db.column<\"b\">\n"
+             "  db.output(%lb) : !db.column<\"b\">\n"
+             "  return\n"
+             "}\n";
+}
+
 }
 
 class DBLoweringTest : public TuringTest {
@@ -550,6 +584,42 @@ protected:
         builder.addNodeProperty<types::Embedding>(nodeB, vecID, vecB);
 
         // nodeC carries no property, so every property read returns null for it
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        EXPECT_TRUE(submitResult);
+
+        return graph;
+    }
+
+    // Four nodes, each with out-degree exactly two, so a chained LIMIT k on the
+    // scan keeps k nodes whose expansion is exactly 2*k edges regardless of which
+    // k the scan order happens to pick - a count that is order-independent, unlike
+    // the diamond's uneven out-degrees.
+    std::unique_ptr<Graph> buildRegularOutGraph() {
+        auto graph = Graph::create();
+
+        auto change = graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        metadata.getOrCreateLabel("0");
+        metadata.getOrCreateEdgeType("0");
+
+        const LabelSet labelset = LabelSet::fromList({0});
+        const NodeID node0 = builder.addNode(labelset);
+        const NodeID node1 = builder.addNode(labelset);
+        const NodeID node2 = builder.addNode(labelset);
+        const NodeID node3 = builder.addNode(labelset);
+
+        builder.addEdge(0, node0, node1);
+        builder.addEdge(0, node0, node2);
+        builder.addEdge(0, node1, node2);
+        builder.addEdge(0, node1, node3);
+        builder.addEdge(0, node2, node3);
+        builder.addEdge(0, node2, node0);
+        builder.addEdge(0, node3, node0);
+        builder.addEdge(0, node3, node1);
 
         const auto submitResult = change->access().submit(*_jobSystem);
         EXPECT_TRUE(submitResult);
@@ -1045,14 +1115,17 @@ TEST_F(DBLoweringTest, lowersLimitToHandleUpdateAndLoopOperands) {
     DBLowering lowering(&context, &reader.getView());
     lowering.lower(dbFunction, *nlModule);
 
-    // Exactly one hoisted nl.limit handle, one nl.limit_update, and a three-deep
-    // loop nest (scan + two hops) all carrying the handle.
+    // Exactly one hoisted nl.limit handle, one nl.limit_update, one
+    // nl.limit_truncate, and a three-deep loop nest (scan + two hops) all carrying
+    // the handle - the whole nest produces the limited column, so every loop does.
     size_t limitCount = 0;
     size_t forCount = 0;
     size_t forsWithLimit = 0;
     size_t updateCount = 0;
+    size_t truncateCount = 0;
     mlir::nl::Limit limitOp;
     mlir::nl::LimitUpdate updateOp;
+    mlir::nl::LimitTruncate truncateOp;
     mlir::nl::Output outputOp;
 
     nlModule->walk([&](mlir::Operation* operation) {
@@ -1067,6 +1140,9 @@ TEST_F(DBLoweringTest, lowersLimitToHandleUpdateAndLoopOperands) {
         } else if (mlir::nl::LimitUpdate found = mlir::dyn_cast<mlir::nl::LimitUpdate>(operation)) {
             updateOp = found;
             updateCount++;
+        } else if (mlir::nl::LimitTruncate found = mlir::dyn_cast<mlir::nl::LimitTruncate>(operation)) {
+            truncateOp = found;
+            truncateCount++;
         } else if (mlir::nl::Output found = mlir::dyn_cast<mlir::nl::Output>(operation)) {
             outputOp = found;
         }
@@ -1076,22 +1152,184 @@ TEST_F(DBLoweringTest, lowersLimitToHandleUpdateAndLoopOperands) {
     EXPECT_EQ(forCount, 3u);
     EXPECT_EQ(forsWithLimit, 3u);
     EXPECT_EQ(updateCount, 1u);
+    EXPECT_EQ(truncateCount, 1u);
     ASSERT_TRUE(limitOp);
     ASSERT_TRUE(updateOp);
+    ASSERT_TRUE(truncateOp);
     ASSERT_TRUE(outputOp);
 
-    // Every for, the update and the output name the one hoisted handle.
+    // Every for, the update and the truncate name the one hoisted handle; the
+    // output is limit-oblivious and consumes the truncate's result instead.
     const mlir::Value handle = limitOp.getState();
     nlModule->walk([&](mlir::nl::For forOp) {
         EXPECT_EQ(forOp.getLimit(), handle);
     });
     EXPECT_EQ(updateOp.getState(), handle);
-    EXPECT_EQ(outputOp.getLimit(), handle);
+    EXPECT_EQ(truncateOp.getState(), handle);
+    EXPECT_EQ(outputOp.getColumns()[0], truncateOp.getResult(0));
 
-    // The update sits in the innermost loop body, the same block as the output
-    // it precedes.
+    // The update and the truncate sit in the innermost loop body, the same block
+    // as the output they precede.
     EXPECT_EQ(updateOp->getBlock(), outputOp->getBlock());
+    EXPECT_EQ(truncateOp->getBlock(), outputOp->getBlock());
     EXPECT_TRUE(mlir::isa<mlir::nl::For>(updateOp->getParentOp()));
+}
+
+TEST_F(DBLoweringTest, limitsChainedMidQueryFansOutBeyondBudget) {
+    auto graph = buildRegularOutGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // WITH a LIMIT 2 caps the scan to two nodes; each has out-degree two, so the
+    // expansion emits four b rows. The downstream fan-out is NOT clamped to the
+    // budget - four rows from a LIMIT of two proves the limit bounds the
+    // intermediate `a`, not the final output.
+    CountingSink sink;
+    const std::string program = chainedLimitProgram(2);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    EXPECT_EQ(sink.getTotalRows(), 4u);
+}
+
+TEST_F(DBLoweringTest, lowersChainedLimitToProducerLoopOnly) {
+    auto graph = buildRegularOutGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    const std::string programText = chainedLimitProgram(2);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    // One handle, one update, one truncate, two loops (scan + edges), but only the
+    // scan - the producer of the limited `a` - carries the handle. The edge loop
+    // is a consumer and must fan out freely, so it carries none.
+    size_t limitCount = 0;
+    size_t updateCount = 0;
+    size_t truncateCount = 0;
+    size_t forCount = 0;
+    size_t forsWithLimit = 0;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::isa<mlir::nl::Limit>(operation)) {
+            limitCount++;
+        } else if (mlir::isa<mlir::nl::LimitUpdate>(operation)) {
+            updateCount++;
+        } else if (mlir::isa<mlir::nl::LimitTruncate>(operation)) {
+            truncateCount++;
+        } else if (mlir::nl::For forOp = mlir::dyn_cast<mlir::nl::For>(operation)) {
+            forCount++;
+            if (forOp.getLimit()) {
+                forsWithLimit++;
+            }
+        }
+    });
+
+    EXPECT_EQ(limitCount, 1u);
+    EXPECT_EQ(updateCount, 1u);
+    EXPECT_EQ(truncateCount, 1u);
+    EXPECT_EQ(forCount, 2u);
+    EXPECT_EQ(forsWithLimit, 1u);
+
+    // The producing (scan) loop carries the handle; the consuming (edge) loop does
+    // not, distinguished by the source op its iterator comes from.
+    nlModule->walk([&](mlir::nl::For forOp) {
+        mlir::Operation* const iteratorDef = forOp.getIterator().getDefiningOp();
+        if (mlir::isa<mlir::nl::ScanNodes>(iteratorDef)) {
+            EXPECT_TRUE(forOp.getLimit());
+        } else {
+            EXPECT_FALSE(forOp.getLimit());
+        }
+    });
+}
+
+TEST_F(DBLoweringTest, limitsTwoIndependentLimits) {
+    auto graph = buildRegularOutGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // WITH a LIMIT 2 caps the scan to two nodes (four out-edges between them), then
+    // WITH b LIMIT 3 caps the expansion to three. Each budget is independent, so
+    // the final output is three rows: min(2*2, 3).
+    CountingSink sink;
+    const std::string program = twoLimitProgram(2, 3);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    EXPECT_EQ(sink.getTotalRows(), 3u);
+}
+
+TEST_F(DBLoweringTest, lowersTwoLimitsToTwoHandles) {
+    auto graph = buildRegularOutGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    const std::string programText = twoLimitProgram(2, 3);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    // Two db.limits, so two handles, two updates, two truncates. Each loop carries
+    // a handle: the scan carries the outer (a) limit, the edge loop the inner (b)
+    // one - and they are distinct handles.
+    size_t limitCount = 0;
+    size_t updateCount = 0;
+    size_t truncateCount = 0;
+    size_t forsWithLimit = 0;
+    mlir::Value scanHandle;
+    mlir::Value edgeHandle;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::isa<mlir::nl::Limit>(operation)) {
+            limitCount++;
+        } else if (mlir::isa<mlir::nl::LimitUpdate>(operation)) {
+            updateCount++;
+        } else if (mlir::isa<mlir::nl::LimitTruncate>(operation)) {
+            truncateCount++;
+        } else if (mlir::nl::For forOp = mlir::dyn_cast<mlir::nl::For>(operation)) {
+            if (forOp.getLimit()) {
+                forsWithLimit++;
+            }
+
+            mlir::Operation* const iteratorDef = forOp.getIterator().getDefiningOp();
+            if (mlir::isa<mlir::nl::ScanNodes>(iteratorDef)) {
+                scanHandle = forOp.getLimit();
+            } else {
+                edgeHandle = forOp.getLimit();
+            }
+        }
+    });
+
+    EXPECT_EQ(limitCount, 2u);
+    EXPECT_EQ(updateCount, 2u);
+    EXPECT_EQ(truncateCount, 2u);
+    EXPECT_EQ(forsWithLimit, 2u);
+    ASSERT_TRUE(scanHandle);
+    ASSERT_TRUE(edgeHandle);
+    EXPECT_NE(scanHandle, edgeHandle);
 }
 
 TEST_F(DBLoweringTest, limitsNodePropertyOutput) {
