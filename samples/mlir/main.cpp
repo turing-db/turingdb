@@ -15,6 +15,7 @@
 
 #include "DBOps.h"
 #include "NLOps.h"
+#include "DBTypes.h"
 #include "NLInterpreter.h"
 #include "DBDialectInterpreter.h"
 #include "DBLowering.h"
@@ -60,16 +61,16 @@ void addDBFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
 
     // MATCH (a)->(b)->(c): scan `a`, then two get_out_edges hops. The second hop
     // carries the filtered `a` column so it ends up filtered to the `a` that reach a `c`.
-    const mlir::Type colA   = mlir::db::ColumnType::get(ctxt, "a");
-    const mlir::Type colA1  = mlir::db::ColumnType::get(ctxt, "a1");
-    const mlir::Type colE0  = mlir::db::ColumnType::get(ctxt, "e0");
-    const mlir::Type colEt0 = mlir::db::ColumnType::get(ctxt, "et0");
-    const mlir::Type colB   = mlir::db::ColumnType::get(ctxt, "b");
-    const mlir::Type colB2  = mlir::db::ColumnType::get(ctxt, "b2");
-    const mlir::Type colE1  = mlir::db::ColumnType::get(ctxt, "e1");
-    const mlir::Type colEt1 = mlir::db::ColumnType::get(ctxt, "et1");
-    const mlir::Type colC   = mlir::db::ColumnType::get(ctxt, "c");
-    const mlir::Type colA2  = mlir::db::ColumnType::get(ctxt, "a2");
+    const mlir::Type colA   = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colA1  = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colE0  = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colEt0 = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colB   = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colB2  = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colE1  = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colEt1 = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colC   = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colA2  = mlir::db::ColumnType::get(ctxt);
 
     auto scan = builder.create<mlir::db::ScanNodes>(loc, colA);
 
@@ -168,8 +169,8 @@ void addCrossProductFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     mlir::MLIRContext* ctxt = builder.getContext();
     const mlir::Location loc = builder.getUnknownLoc();
 
-    const mlir::Type colA = mlir::db::ColumnType::get(ctxt, "a");
-    const mlir::Type colB = mlir::db::ColumnType::get(ctxt, "b");
+    const mlir::Type colA = mlir::db::ColumnType::get(ctxt, mlir::Type());
+    const mlir::Type colB = mlir::db::ColumnType::get(ctxt, mlir::Type());
 
     // Build the op with its two empty factor blocks; the result types are the
     // columns the factors will yield - here one column each, `a` then `b`.

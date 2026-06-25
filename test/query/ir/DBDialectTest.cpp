@@ -125,8 +125,8 @@ TEST_F(DBDialectTest, parsesCrossProductOfTwoScans) {
     // The results are the left factor's yielded column followed by the right's.
     const mlir::Operation::result_range results = product.getResults();
     ASSERT_EQ(results.size(), 2u);
-    EXPECT_EQ(results[0].getType(), mlir::db::ColumnType::get(&_context, "a"));
-    EXPECT_EQ(results[1].getType(), mlir::db::ColumnType::get(&_context, "b"));
+    EXPECT_EQ(results[0].getType(), mlir::db::ColumnType::get(&_context));
+    EXPECT_EQ(results[1].getType(), mlir::db::ColumnType::get(&_context));
 
     // Each factor is one self-contained block ending in a db.yield.
     EXPECT_TRUE(mlir::isa<mlir::db::Yield>(product.getLeftFactor().front().getTerminator()));
@@ -173,8 +173,8 @@ TEST_F(DBDialectTest, verifierRejectsResultsNotMatchingYields) {
     auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
     builder.setInsertionPointToStart(function.addEntryBlock());
 
-    const mlir::Type colA = mlir::db::ColumnType::get(&_context, "a");
-    const mlir::Type colB = mlir::db::ColumnType::get(&_context, "b");
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context);
+    const mlir::Type colB = mlir::db::ColumnType::get(&_context);
 
     // Declare a single result but make the factors yield two columns in total:
     // the left yields `a` and the right yields `b`, so the result count is wrong.
