@@ -257,7 +257,7 @@ LogicalResult Output::verify() {
     // or the reset value zero. DBLowering always emits the pair; this guards
     // hand-written or non-DBLowering nl IR that names a handle without one.
     for (Operation* previous = getOperation()->getPrevNode(); previous; previous = previous->getPrevNode()) {
-        if (const LimitUpdate update = dyn_cast<LimitUpdate>(previous)) {
+        if (LimitUpdate update = dyn_cast<LimitUpdate>(previous)) {
             if (update.getState() == limit) {
                 return success();
             }
