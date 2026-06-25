@@ -7,11 +7,11 @@ module {
     // "name" must be a property that exists in the loaded graph (-graph): the
     // db -> nl lowering resolves the name against the schema and bakes its value
     // type into the result chunk. Swap it for a property your graph actually has.
-    %a = db.scan_nodes() : !db.column<"a">
+    %a = db.scan_nodes() : !db.column<none>
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<"a">) -> !db.column<"a.name">
+    %name = db.get_node_properties(%a, "name") : (!db.column<none>) -> !db.column<none>
 
-    db.output(%a, %name) : !db.column<"a">, !db.column<"a.name">
+    db.output(%a, %name) : !db.column<none>, !db.column<none>
 
     return
   }
