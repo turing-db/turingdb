@@ -15,4 +15,9 @@ void Neo4jParquetImporter::import() {
               "failed to populate node column");
 
     _reader.nextChunk();
+
+    const auto nodeIDs = _visitor.nodes();
+    const auto labels = _visitor.labels();
+
+    bioassert(nodeIDs.size() == labels.size(), "Mismatched labels and nodes ({}, {})", nodeIDs.size(), labels.size());
 }

@@ -19,11 +19,15 @@ class CommitBuilder;
 
 class ParquetNeo4jVisitor final : public ParquetSaxVisitor {
 public:
+    using NodeIDs = std::span<const int64_t>;
+    using Labels = std::span<const parquet::ByteArray>;
 
     ParquetNeo4jVisitor(CommitBuilder* builder)
         : _builder(builder)
     {
     }
+
+    bool onRowGroupStart(size_t rowGroupIndex, const parquet::RowGroupMetaData& metadata) final;
 
     /**
      * @brief Inspects the file schema, populating column index members of @ref _loader
@@ -31,6 +35,11 @@ public:
     bool onFileStart(const parquet::FileMetaData& metadata) final;
 
     bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) final;
+
+    bool onByteArrayValues(size_t columnIndex, std::span<const parquet::ByteArray> values) final;
+
+    NodeIDs nodes() const { return _chunkNodeIds; }
+    Labels labels() const { return _chunkLabels; }
 
 private:
     friend class Neo4jParquetImporter;
@@ -48,11 +57,15 @@ private:
 
     std::vector<size_t> _propCols;
 
-    static constexpr std::string_view NEO4J_NODE_COL_NAME = "__id";
-    static constexpr std::string_view NEO4J_LBLS_COL_NAME = "__labels";
-    static constexpr std::string_view NEO4J_ETYPE_COL_NAME = "__type";
-    static constexpr std::string_view NEO4J_SRC_COL_NAME = "__source_id";
-    static constexpr std::string_view NEO4J_TGT_COL_NAME = "__target_id";
+    // Per chunk reference stores
+    NodeIDs _chunkNodeIds;
+    Labels _chunkLabels;
+
+    static constexpr std::string_view NEO4J_NODE_COL_PATH = "__id";
+    static constexpr std::string_view NEO4J_LBLS_COL_PATH = "__labels.list.element";
+    static constexpr std::string_view NEO4J_ETYPE_COL_PATH = "__type";
+    static constexpr std::string_view NEO4J_SRC_COL_PATH = "__source_id";
+    static constexpr std::string_view NEO4J_TGT_COL_PATH = "__target_id";
 
     static constexpr parquet::Type::type NEO4J_NODE_COL_TYPE = parquet::Type::INT64;
     static constexpr parquet::Type::type NEO4J_LBLS_COL_TYPE = parquet::Type::BYTE_ARRAY;
