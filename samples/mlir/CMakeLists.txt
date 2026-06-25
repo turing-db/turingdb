@@ -20,3 +20,8 @@ target_link_libraries(${SAMPLE_NAME}
 )
 
 target_include_directories(${SAMPLE_NAME} PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+
+file(GLOB MLIR_FILES "*.mlir")
+foreach(MLIR_FILE ${MLIR_FILES})
+    configure_file(${MLIR_FILE} ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
+endforeach()
