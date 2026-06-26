@@ -42,3 +42,12 @@ add_storage_tests(test_storage_dump_embedding_graph dump/EmbeddingGraphDumpLoadT
 add_storage_tests(test_storage_columns_dispatcher ColumnDispatcherTest.cpp)
 add_storage_tests(test_storage_objectmap ObjectMapTest.cpp)
 
+# Microbenchmark (Google Benchmark): AdaptiveRadixTree vs std::unordered_map.
+# Not a unit test, so not registered with ctest. Build and run it directly:
+#   make bench_storage_adaptiveradixtree && ./test/storage/bench_storage_adaptiveradixtree
+add_executable(bench_storage_adaptiveradixtree AdaptiveRadixTreeBenchmark.cpp)
+target_link_libraries(bench_storage_adaptiveradixtree PRIVATE
+        benchmark::benchmark
+        turing_db_storage_s
+        turing_common_s)
+
