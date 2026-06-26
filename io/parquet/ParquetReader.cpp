@@ -134,22 +134,73 @@ bool ParquetReader::readSlice(parquet::ColumnReader* columnReader,
                               size_t byteWidth) {
     using T = typename DType::c_type;
     auto* typed = static_cast<parquet::TypedColumnReader<DType>*>(columnReader);
-    T* buffer = reinterpret_cast<T*>(scratch.data());
 
-    // For nested types (e.g. dynamic byte arrays), we need to record the levels of
-    // nesting to extract, e.g. lists of strings
-    int16_t* repLevels = nullptr;
-    int16_t* defLevels = nullptr;
     const bool hasRepLevels = typed->descr()->max_repetition_level() > 0;
+
     if (hasRepLevels) {
-        if (_repLevelScratch.size() < batchRows) {
-            _repLevelScratch.resize(batchRows);
+        // For repeated columns, batchRows is the flat row count — not the level
+        // count. Each row can contribute multiple levels, so we drain the column
+        // with HasNext() rather than counting by batchRows. The scratch buffers
+        // are sized to DEFAULT_CHUNK_SIZE per sub-batch.
+        const size_t subBatchSize = DEFAULT_CHUNK_SIZE;
+        if (_repLevelScratch.size() < subBatchSize) {
+            _repLevelScratch.resize(subBatchSize);
         }
-        if (_defLevelScratch.size() < batchRows) {
-            _defLevelScratch.resize(batchRows);
+        if (_defLevelScratch.size() < subBatchSize) {
+            _defLevelScratch.resize(subBatchSize);
         }
-        repLevels = _repLevelScratch.data();
-        defLevels = _defLevelScratch.data();
+        const size_t neededValueBytes = subBatchSize * sizeof(T);
+        if (scratch.size() < neededValueBytes) {
+            scratch.resize(neededValueBytes);
+        }
+        T* repeatedBuffer = reinterpret_cast<T*>(scratch.data());
+
+        while (typed->HasNext()) {
+            int64_t valuesRead = 0;
+            const int64_t levelsRead = typed->ReadBatch(
+                static_cast<int64_t>(subBatchSize),
+                _defLevelScratch.data(), _repLevelScratch.data(),
+                repeatedBuffer, &valuesRead);
+            if (levelsRead <= 0) {
+                break;
+            }
+
+            const std::span<const int16_t> repSpan(_repLevelScratch.data(), static_cast<size_t>(levelsRead));
+            const std::span<const int16_t> defSpan(_defLevelScratch.data(), static_cast<size_t>(levelsRead));
+            if (!_visitor.onLevels(columnIndex, repSpan, defSpan)) {
+                _aborted = true;
+                return false;
+            }
+
+            const std::span<const T> values(repeatedBuffer, static_cast<size_t>(valuesRead));
+
+            bool visitorOk = true;
+            if constexpr (std::is_same_v<DType, parquet::Int32Type>) {
+                visitorOk = _visitor.onInt32Values(columnIndex, values);
+            } else if constexpr (std::is_same_v<DType, parquet::Int64Type>) {
+                visitorOk = _visitor.onInt64Values(columnIndex, values);
+            } else if constexpr (std::is_same_v<DType, parquet::FloatType>) {
+                visitorOk = _visitor.onFloatValues(columnIndex, values);
+            } else if constexpr (std::is_same_v<DType, parquet::DoubleType>) {
+                visitorOk = _visitor.onDoubleValues(columnIndex, values);
+            } else if constexpr (std::is_same_v<DType, parquet::BooleanType>) {
+                visitorOk = _visitor.onBoolValues(columnIndex, values);
+            } else if constexpr (std::is_same_v<DType, parquet::ByteArrayType>) {
+                visitorOk = _visitor.onByteArrayValues(columnIndex, values);
+            } else if constexpr (std::is_same_v<DType, parquet::Int96Type>) {
+                visitorOk = _visitor.onInt96Values(columnIndex, values);
+            } else if constexpr (std::is_same_v<DType, parquet::FLBAType>) {
+                visitorOk = _visitor.onFixedLenByteArrayValues(columnIndex, values, byteWidth);
+            } else {
+                static_assert(sizeof(DType) == 0, "Unsupported DType in readSlice");
+            }
+
+            if (!visitorOk) {
+                _aborted = true;
+                return false;
+            }
+        }
+        return true;
     }
 
     // ReadBatch is allowed to stop at page boundaries and return fewer
@@ -159,24 +210,16 @@ bool ParquetReader::readSlice(parquet::ColumnReader* columnReader,
     // sub-batch's values: parquet::ByteArray::ptr points into a page-owned
     // buffer that is invalidated by the next ReadBatch call, so the visitor
     // must consume each sub-batch before we read the next page.
+    T* buffer = reinterpret_cast<T*>(scratch.data());
     size_t totalRead = 0;
     while (totalRead < batchRows) {
         int64_t valuesRead = 0;
         const int64_t levelsRead = typed->ReadBatch(
             static_cast<int64_t>(batchRows - totalRead),
-            defLevels, repLevels,
+            nullptr, nullptr,
             buffer, &valuesRead);
         if (levelsRead <= 0) {
             break;
-        }
-
-        if (hasRepLevels) {
-            const std::span<const int16_t> repSpan(repLevels, static_cast<size_t>(levelsRead));
-            const std::span<const int16_t> defSpan(defLevels, static_cast<size_t>(levelsRead));
-            if (!_visitor.onLevels(columnIndex, repSpan, defSpan)) {
-                _aborted = true;
-                return false;
-            }
         }
 
         const std::span<const T> values(buffer, static_cast<size_t>(valuesRead));

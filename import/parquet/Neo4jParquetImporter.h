@@ -38,7 +38,6 @@ private:
 
     CommitBuilder* _builder {nullptr};
 
-    void addNodes();
 };
 
 }
