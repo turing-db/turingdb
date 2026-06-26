@@ -11,6 +11,7 @@
 
 #include "BioAssert.h"
 
+#include "ID.h"
 #include "versioning/CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
@@ -23,16 +24,34 @@ void ParquetNeo4jVisitor::fillLabels(std::span<const parquet::ByteArray> labels)
     bioassert(labels.size() == _chunkLabelRepLevels.size(),
               "Labels with invalid rep levels");
 
+    MetadataBuilder& metadataBuilder = _builder->metadata();
+
     for (size_t i = 0; i < labels.size(); ++i) {
-        const bool newNode = _chunkLabelRepLevels[i] == 0;
-        if (newNode) {
+        const bool nextNode = _chunkLabelRepLevels[i] == 0;
+        if (nextNode) {
             _chunkNodeLabels.emplace_back();
         }
-        const parquet::ByteArray& labelString = labels[i];
 
-        const char* start = reinterpret_cast<const char*>(labelString.ptr);
-        const size_t len = labelString.len;
-        _chunkNodeLabels.back().emplace_back(start, len);
+        const parquet::ByteArray& bytes = labels[i];
+        const char* start = reinterpret_cast<const char*>(bytes.ptr);
+        const size_t len = bytes.len;
+        const std::string_view labelName {start, len};
+        const LabelID labelID = metadataBuilder.getOrCreateLabel(labelName);
+
+        _chunkNodeLabels.back().push_back(labelID);
+    }
+}
+
+void ParquetNeo4jVisitor::fillEdgeTypes(std::span<const parquet::ByteArray> types) {
+    MetadataBuilder& metadataBuilder = _builder->metadata();
+
+    for (const parquet::ByteArray& bytes : types) {
+        const char* start = reinterpret_cast<const char*>(bytes.ptr);
+        const size_t len = bytes.len;
+        const std::string_view typeName {start, len};
+        const EdgeTypeID typeID = metadataBuilder.getOrCreateEdgeType(typeName);
+
+        _chunkEdgeTypes.push_back(typeID);
     }
 }
 
@@ -91,7 +110,6 @@ bool ParquetNeo4jVisitor::onFileStart(const parquet::FileMetaData& metadata) {
 
 bool ParquetNeo4jVisitor::onRowGroupStart(size_t, const parquet::RowGroupMetaData&) {
     _chunkNodeIds = {};
-    _chunkLabels = {};
     _chunkNodeLabels.clear();
     return true;
 }
@@ -123,24 +141,35 @@ bool ParquetNeo4jVisitor::onByteArrayValues(size_t columnIndex,
         fillLabels(values);
     }
 
+    if (columnIndex == _edgetypeColIdx) {
+        fillEdgeTypes(values);
+    }
+
     return true;
 }
 
 bool ParquetNeo4jVisitor::onChunkEnd(size_t, size_t, size_t) {
     DataPartBuilder& dpBuilder = _builder->getCurrentBuilder();
-    MetadataBuilder& metadataBuilder = _builder->metadata();
 
-    for (auto [id, labels] : rv::zip(_chunkNodeIds, _chunkNodeLabels)) {
+    bioassert(_chunkNodeIds.size() == _chunkNodeLabels.size(), "NodeID, Label mismatch");
+    for (auto [id, labelIDs] : rv::zip(_chunkNodeIds, _chunkNodeLabels)) {
         LabelSet labelSet;
-
-        for (const std::string_view label : labels) {
-            const LabelID labelID = metadataBuilder.getOrCreateLabel(label);
+        for (const LabelID labelID : labelIDs) {
             labelSet.set(labelID);
         }
-
         _nodeIDs[id] = dpBuilder.addNode(labelSet);
     }
-
     _chunkNodeLabels.clear();
+    _chunkNodeIds = {};
+
+    bioassert((_chunkSrcIds.size() == _chunkTgtIds.size())
+                  && (_chunkSrcIds.size() == _chunkEdgeTypes.size()),
+              "Edge, Type mismatch");
+    for (auto [src, tgt, typeID] : rv::zip(_chunkSrcIds, _chunkTgtIds, _chunkEdgeTypes)) {
+        bioassert(_nodeIDs.contains(src), "Missing source Node {}", src);
+        bioassert(_nodeIDs.contains(tgt), "Missing target Node {}", tgt);
+        dpBuilder.addEdge(typeID, _nodeIDs[src], _nodeIDs[tgt]);
+    }
+
     return true;
 }
