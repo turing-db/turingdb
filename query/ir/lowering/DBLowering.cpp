@@ -431,8 +431,11 @@ void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
     nlFunction.walk([&](nl::LimitTruncate truncate) {
         const mlir::ResultRange results = truncate.getResults();
 
-        // Every truncated column must have exactly one use, and all of them the
-        // same op - so erasing the truncate leaves nothing dangling.
+        // Foldable only if a single nl.output is the sole consumer of every
+        // truncated column. Read the direction as "one shared output user => the
+        // copy can be dropped", not the reverse: the loop tests that precondition,
+        // gathering the shared user, and bails if any result has more than one use
+        // or a different user - so erasing the truncate would leave nothing dangling.
         nl::Output output;
         for (const mlir::Value result : results) {
             if (!result.hasOneUse()) {
@@ -450,10 +453,13 @@ void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
             return;
         }
 
-        // The output must consume exactly these results, in order: the terminal
-        // LIMIT shape, where the truncate's only purpose is to size what output
-        // emits. A chained limit (truncate feeding a traversal) or a mixed output
-        // fails this and keeps its copy.
+        // The output must consume exactly the truncate's results - all of them, in
+        // the same order, and nothing else. The fold rebuilds the output over the
+        // truncate's *input* columns in the truncate's order, so that swap only
+        // preserves what the output emits when the two lists line up one-for-one:
+        //   truncate (%a,%b)->(%ta,%tb) ; output(%ta,%tb)  folds to  output(%a,%b) limit %h
+        //   output(%ta, %unrelated)  does not fold: %unrelated is no truncate result, it would be dropped
+        //   output(%tb, %ta)         does not fold: rebuilt as output(%a,%b), it would swap the projection
         const mlir::OperandRange outputColumns = output.getColumns();
         if (outputColumns.size() != results.size()) {
             return;
