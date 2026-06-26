@@ -294,10 +294,15 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     const auto& cols = output->outputs();
     bioassert(!cols.empty(), "nl.output requires at least one column");
 
-    // Output is limit-oblivious: it emits the whole chunk it receives. When a
-    // limit governs these columns, nl.limit_truncate has already cut them to the
-    // budget, so the chunk's own row count is what to emit.
-    context->getSink()->appendChunks(cols, cols.front()->size());
+    // With a limit (the folded terminal-LIMIT form), emit the prefix
+    // nl.limit_update sized this step - reading emitThisStep, not remaining, so
+    // the decrement already done does not affect the count. Without one, emit the
+    // whole chunk (already cut by an nl.limit_truncate when a limit governs it).
+    // Either way no row is copied here.
+    const NLLimitState* limit = output->getLimit();
+    const size_t rowCount = limit ? limit->getEmitThisStep() : cols.front()->size();
+
+    context->getSink()->appendChunks(cols, rowCount);
 }
 
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {

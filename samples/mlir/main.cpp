@@ -120,7 +120,7 @@ void addNestedLoopFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     auto outLoop = builder.create<mlir::nl::For>(loc, outEdges.getResult());
     mlir::Block* outLoopBody = outLoop.getBody();
     builder.setInsertionPointToStart(outLoopBody);
-    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {outLoopBody->getArgument(3)});
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {outLoopBody->getArgument(3)}, mlir::Value());
 
     // In-edges of the same node chunk: send the source (predecessor) node IDs.
     // Same chunk order, so argument 0 is the sources column.
@@ -129,7 +129,7 @@ void addNestedLoopFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     auto inLoop = builder.create<mlir::nl::For>(loc, inEdges.getResult());
     mlir::Block* inLoopBody = inLoop.getBody();
     builder.setInsertionPointToStart(inLoopBody);
-    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {inLoopBody->getArgument(0)});
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {inLoopBody->getArgument(0)}, mlir::Value());
 
     // MATCH (a)->(b)->(c): two out-edge hops where the second carries the `a`
     // of the current step. First hop a->b with an empty carry set; its loop
@@ -154,7 +154,7 @@ void addNestedLoopFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     const mlir::Value bFiltered = secondHopLoopBody->getArgument(0);
     const mlir::Value cChunk = secondHopLoopBody->getArgument(3);
     const mlir::Value filteredA = secondHopLoopBody->getArgument(4);
-    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {filteredA, bFiltered, cChunk});
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {filteredA, bFiltered, cChunk}, mlir::Value());
 }
 
 // A disconnected pattern in the set-at-a-time db dialect: MATCH (a), (b)

@@ -135,6 +135,12 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
         lowerOperation(operation);
     }
 
+    // Peephole: a terminal LIMIT lowers to an nl.limit_truncate whose only
+    // consumer is the nl.output right after it. Fold that pair into a single
+    // limit-bearing nl.output, which emits the budgeted prefix off the handle
+    // instead of copying it - the copy-free path for a LIMIT that feeds the sink.
+    foldTruncatesIntoOutputs(nlFunction);
+
     // Run MLIR verifier on the nlFunction
     if (mlir::failed(mlir::verify(nlFunction))) {
         throw IRException("DBLowering produced an invalid nl function");
@@ -418,6 +424,65 @@ void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
     }
 }
 
+void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
+    // Collect the foldable truncates first; erasing ops mid-walk is unsafe.
+    llvm::SmallVector<nl::LimitTruncate, 4> foldable;
+
+    nlFunction.walk([&](nl::LimitTruncate truncate) {
+        const mlir::ResultRange results = truncate.getResults();
+
+        // Every truncated column must have exactly one use, and all of them the
+        // same op - so erasing the truncate leaves nothing dangling.
+        nl::Output output;
+        for (const mlir::Value result : results) {
+            if (!result.hasOneUse()) {
+                return;
+            }
+
+            nl::Output user = mlir::dyn_cast<nl::Output>(*result.user_begin());
+            if (!user || (output && output != user)) {
+                return;
+            }
+            output = user;
+        }
+
+        if (!output || output.getLimit()) {
+            return;
+        }
+
+        // The output must consume exactly these results, in order: the terminal
+        // LIMIT shape, where the truncate's only purpose is to size what output
+        // emits. A chained limit (truncate feeding a traversal) or a mixed output
+        // fails this and keeps its copy.
+        const mlir::OperandRange outputColumns = output.getColumns();
+        if (outputColumns.size() != results.size()) {
+            return;
+        }
+
+        for (size_t columnIndex = 0; columnIndex < results.size(); columnIndex++) {
+            if (outputColumns[columnIndex] != results[columnIndex]) {
+                return;
+            }
+        }
+
+        foldable.push_back(truncate);
+    });
+
+    for (nl::LimitTruncate truncate : foldable) {
+        nl::Output output = mlir::cast<nl::Output>(*truncate.getResult(0).user_begin());
+
+        // Re-emit the output over the untruncated inputs, carrying the handle, so
+        // it streams the emitThisStep prefix off the counter instead of a copy.
+        // The preceding nl.limit_update still sets that count. Drop the old output
+        // and the now-unused truncate.
+        _builder.setInsertionPoint(output);
+        _builder.create<nl::Output>(output.getLoc(), truncate.getColumns(), truncate.getState());
+
+        output.erase();
+        truncate.erase();
+    }
+}
+
 void DBLowering::lowerOutput(mlir::db::Output output) {
     llvm::SmallVector<mlir::Value, 4> columns;
     for (const mlir::Value column : output.getColumns()) {
@@ -428,12 +493,14 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
         throw IRException("db.output requires at least one column");
     }
 
-    // nl.output is limit-oblivious: it emits the whole chunk it receives. When a
-    // db.limit governs these columns, the columns mapped here are already the
-    // truncated chunks (lowerLimit remapped db.limit's results to the truncate's),
-    // so the chunk's own row count is the budget-capped count.
+    // nl.output is emitted limit-oblivious: when a db.limit governs these columns,
+    // the columns mapped here are the truncated chunks (lowerLimit remapped
+    // db.limit's results to the truncate's), so the chunk's own row count is the
+    // budget-capped count. foldTruncatesIntoOutputs later rewrites the terminal
+    // case - where the truncate feeds only this output - into nl.output ... limit,
+    // dropping the copy.
     setInsertionInto(ownerBlock(columns.front()));
-    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns);
+    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns, mlir::Value());
 }
 
 void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp) {

@@ -53,14 +53,14 @@ TEST_F(NLDialectTest, verifierAcceptsLimitTruncate) {
     const mlir::Value handle = builder.create<mlir::nl::Limit>(loc, /*count=*/3u).getState();
     builder.create<mlir::nl::LimitUpdate>(loc, handle, chunk);
     mlir::nl::LimitTruncate truncate = builder.create<mlir::nl::LimitTruncate>(loc, handle, mlir::ValueRange {chunk});
-    builder.create<mlir::nl::Output>(loc, truncate.getResults());
+    builder.create<mlir::nl::Output>(loc, truncate.getResults(), mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
     EXPECT_EQ(truncate.getResult(0).getType(), chunk.getType());
 }
 
-// nl.output is limit-oblivious: it carries no limit operand and verifies on its own.
+// nl.output with no limit handle is unbounded and verifies on its own.
 TEST_F(NLDialectTest, verifierAcceptsOutput) {
     mlir::OpBuilder builder(&_context);
     const mlir::Location loc = builder.getUnknownLoc();
@@ -70,10 +70,30 @@ TEST_F(NLDialectTest, verifierAcceptsOutput) {
     mlir::Block& entryBlock = function.getBody().front();
     const mlir::Value chunk = entryBlock.getArgument(0);
 
-    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk});
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+}
+
+// nl.output may carry an optional limit handle (the folded terminal-LIMIT form),
+// emitting the prefix the preceding nl.limit_update sized.
+TEST_F(NLDialectTest, verifierAcceptsOutputWithLimit) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value chunk = entryBlock.getArgument(0);
+
+    const mlir::Value handle = builder.create<mlir::nl::Limit>(loc, /*count=*/3u).getState();
+    builder.create<mlir::nl::LimitUpdate>(loc, handle, chunk);
+    mlir::nl::Output output = builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, handle);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_EQ(output.getLimit(), handle);
 }
 
 }

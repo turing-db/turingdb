@@ -280,7 +280,7 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
 /**
 * Output
 */
-def Output : NLOp<"output"> {
+def Output : NLOp<"output", [AttrSizedOperandSegments]> {
   let summary = "Send a row of chunks out as columns of the query result";
   let description = [{
     The sink of the nested loop, mirroring a result builder (LingoDB's
@@ -295,12 +295,21 @@ def Output : NLOp<"output"> {
     is deliberately not Pure: emitting output is its whole point, so it must
     survive dead-code elimination even though it has no results.
 
-    Output is limit-oblivious: it emits the whole chunk it receives. When a LIMIT
-    governs its columns, the preceding nl.limit_truncate has already cut them to
-    the budget, so output needs no limit operand or policy of its own.
+    An optional `limit` operand carries an !nl.limit_state handle. When present,
+    output emits only the prefix of length limit.getEmitThisStep() set by the
+    preceding nl.limit_update; absent, it emits the whole chunk and is fully
+    limit-oblivious. The limit form is the fold of an adjacent nl.limit_truncate
+    whose only consumer was this output: when a LIMIT feeds the sink directly,
+    output can read the budgeted prefix off the handle instead of copying it. It
+    never mutates the budget - it only reads how many rows to emit:
+
+    nl.output(%targets) limit %h : !nl.chunk<!nl.node_id>
   }];
 
-  let arguments = (ins Variadic<NLChunk>:$columns);
+  // Two variable-length operand groups - the columns and the optional limit -
+  // so the op carries operand-segment sizes to tell them apart, the same as
+  // nl.cross_product's two column groups.
+  let arguments = (ins Variadic<NLChunk>:$columns, Optional<NLLimitStateHandle>:$limit);
 
   // The chunk element types vary from call to call and - unlike the source
   // ops - cannot be inferred, so they are spelled after the colon. This keeps
@@ -308,8 +317,10 @@ def Output : NLOp<"output"> {
   // printed list rather than looking it up on the defining nl.for (which MLIR
   // cannot do during a parse), the same reason nl.for keeps its : !nl.iter<...>
   // annotation. qualified(...) forces the leading !nl. on every printed type.
+  // The optional limit handle, when present, prints after a `limit` keyword; its
+  // type is buildable and so omitted.
   let assemblyFormat = [{
-    `(` $columns `)` attr-dict `:` qualified(type($columns))
+    `(` $columns `)` (`limit` $limit^)? attr-dict `:` qualified(type($columns))
   }];
 }
 
