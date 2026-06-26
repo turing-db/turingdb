@@ -1786,6 +1786,7 @@ TEST_F(DBLoweringTest, lowersCrossProductToNestedLoops) {
     context.getOrLoadDialect<mlir::storage::Storage>();
     context.getOrLoadDialect<mlir::db::DB>();
     context.getOrLoadDialect<mlir::nl::NL>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
 
     const mlir::ParserConfig parserConfig(&context);
     mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(crossProductScansProgram, parserConfig);
