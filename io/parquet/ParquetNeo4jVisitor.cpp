@@ -19,6 +19,23 @@
 using namespace db;
 namespace rv = ranges::views;
 
+void ParquetNeo4jVisitor::fillLabels(std::span<const parquet::ByteArray> labels) {
+    bioassert(labels.size() == _chunkLabelRepLevels.size(),
+              "Labels with invalid rep levels");
+
+    for (size_t i = 0; i < labels.size(); ++i) {
+        const bool newNode = _chunkLabelRepLevels[i] == 0;
+        if (newNode) {
+            _chunkNodeLabels.emplace_back();
+        }
+        const parquet::ByteArray& labelString = labels[i];
+
+        const char* start = reinterpret_cast<const char*>(labelString.ptr);
+        const size_t len = labelString.len;
+        _chunkNodeLabels.back().emplace_back(start, len);
+    }
+}
+
 bool ParquetNeo4jVisitor::onFileStart(const parquet::FileMetaData& metadata) {
     const parquet::SchemaDescriptor* sch = metadata.schema();
     const int numCols = metadata.num_columns();
@@ -102,20 +119,8 @@ bool ParquetNeo4jVisitor::onInt64Values(size_t columnIndex, std::span<const int6
 
 bool ParquetNeo4jVisitor::onByteArrayValues(size_t columnIndex,
                                             std::span<const parquet::ByteArray> values) {
-    if (columnIndex != _lblColIdx) {
-        return true;
-    }
-
-    for (size_t i = 0; i < values.size(); ++i) {
-        const bool newNode = _chunkLabelRepLevels[i] == 0;
-        if (newNode) {
-            _chunkNodeLabels.emplace_back();
-        }
-        const parquet::ByteArray& labelString = values[i];
-
-        const char* start = reinterpret_cast<const char*>(labelString.ptr);
-        const size_t len = labelString.len;
-        _chunkNodeLabels.back().emplace_back(start, len);
+    if (columnIndex == _lblColIdx) {
+        fillLabels(values);
     }
 
     return true;
