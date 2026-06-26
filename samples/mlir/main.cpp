@@ -7,7 +7,6 @@
 
 #include <argparse.hpp>
 
-#include "StorageDialect.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -23,6 +22,8 @@
 #include "NLOutputSink.h"
 #include "IRAssembler.h"
 #include "IRModuleInspector.h"
+#include "StorageDialect.h"
+#include "StorageTypes.h"
 
 #include "Graph.h"
 #include "dump/GraphLoader.h"
@@ -62,16 +63,24 @@ void addDBFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
 
     // MATCH (a)->(b)->(c): scan `a`, then two get_out_edges hops. The second hop
     // carries the filtered `a` column so it ends up filtered to the `a` that reach a `c`.
-    const mlir::Type colA   = mlir::db::ColumnType::get(ctxt);
-    const mlir::Type colA1  = mlir::db::ColumnType::get(ctxt);
-    const mlir::Type colE0  = mlir::db::ColumnType::get(ctxt);
-    const mlir::Type colEt0 = mlir::db::ColumnType::get(ctxt);
-    const mlir::Type colB   = mlir::db::ColumnType::get(ctxt);
-    const mlir::Type colB2  = mlir::db::ColumnType::get(ctxt);
-    const mlir::Type colE1  = mlir::db::ColumnType::get(ctxt);
-    const mlir::Type colEt1 = mlir::db::ColumnType::get(ctxt);
-    const mlir::Type colC   = mlir::db::ColumnType::get(ctxt);
-    const mlir::Type colA2  = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type nodeIDType    = mlir::storage::NodeIDType::get(ctxt);
+    const mlir::Type edgeIDType    = mlir::storage::EdgeIDType::get(ctxt);
+    const mlir::Type edgeTypeIDType = mlir::storage::EdgeTypeIDType::get(ctxt);
+
+    const mlir::Type colNodeID    = mlir::db::ColumnType::get(ctxt, nodeIDType);
+    const mlir::Type colEdgeID    = mlir::db::ColumnType::get(ctxt, edgeIDType);
+    const mlir::Type colEdgeTypeID = mlir::db::ColumnType::get(ctxt, edgeTypeIDType);
+
+    const mlir::Type colA   = colNodeID;
+    const mlir::Type colA1  = colNodeID;
+    const mlir::Type colE0  = colEdgeID;
+    const mlir::Type colEt0 = colEdgeTypeID;
+    const mlir::Type colB   = colNodeID;
+    const mlir::Type colB2  = colNodeID;
+    const mlir::Type colE1  = colEdgeID;
+    const mlir::Type colEt1 = colEdgeTypeID;
+    const mlir::Type colC   = colNodeID;
+    const mlir::Type colA2  = colNodeID;
 
     auto scan = builder.create<mlir::db::ScanNodes>(loc, colA);
 
@@ -170,8 +179,9 @@ void addCrossProductFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     mlir::MLIRContext* ctxt = builder.getContext();
     const mlir::Location loc = builder.getUnknownLoc();
 
-    const mlir::Type colA = mlir::db::ColumnType::get(ctxt, mlir::Type());
-    const mlir::Type colB = mlir::db::ColumnType::get(ctxt, mlir::Type());
+    const mlir::Type nodeIDType = mlir::storage::NodeIDType::get(ctxt);
+    const mlir::Type colA = mlir::db::ColumnType::get(ctxt, nodeIDType);
+    const mlir::Type colB = mlir::db::ColumnType::get(ctxt, nodeIDType);
 
     // Build the op with its two empty factor blocks; the result types are the
     // columns the factors will yield - here one column each, `a` then `b`.
