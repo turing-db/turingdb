@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Improving the HAMT for strings — index-sim follow-up</title>
+<style>
+  :root {
+    --ground: #f1f4f4;
+    --surface: #ffffff;
+    --surface-2: #e9eeed;
+    --ink: #14201d;
+    --ink-soft: #46544f;
+    --ink-faint: #7d8b86;
+    --line: #d8e0de;
+    --line-soft: #e7ecea;
+    --trie: #0e7c64;
+    --trie-deep: #0a5042;
+    --trie-wash: #e2f0ec;
+    --hash: #bd6f33;
+    --hash-wash: #f4e9dd;
+    --critical: #a3372e;
+    --critical-wash: #f6e7e4;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+    --maxprose: 43rem;
+    --maxwide: 66rem;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ---- layout scaffold ---- */
+  .wrap { max-width: var(--maxwide); margin: 0 auto; padding: 0 24px; }
+  .col { max-width: var(--maxprose); margin-left: auto; margin-right: auto; }
+  main > section { padding: 30px 0; border-top: 1px solid var(--line-soft); }
+  main > section:first-of-type { border-top: none; }
+
+  /* ---- type ---- */
+  h1, h2, h3 { line-height: 1.16; text-wrap: balance; font-weight: 680; letter-spacing: -0.015em; }
+  h2 { font-size: 1.62rem; margin: 0 0 4px; }
+  h3 { font-size: 1.12rem; margin: 0 0 8px; letter-spacing: -0.005em; }
+  p { margin: 0 0 14px; }
+  .col > p:last-child, .col > ul:last-child { margin-bottom: 0; }
+  a { color: var(--trie-deep); text-decoration-color: color-mix(in srgb, var(--trie) 40%, transparent); text-underline-offset: 2px; }
+  strong { font-weight: 660; }
+  code, .mono { font-family: var(--mono); }
+  code {
+    font-size: 0.82em; background: var(--surface-2); padding: 0.1em 0.38em;
+    border-radius: 4px; color: var(--trie-deep);
+  }
+  .eyebrow {
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--ink-faint); font-weight: 600;
+    display: block; margin: 0 0 10px;
+  }
+  .lede { font-size: 1.16rem; color: var(--ink-soft); line-height: 1.55; }
+  .kicker { color: var(--trie-deep); font-weight: 640; }
+
+  /* ---- header ---- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar .wrap {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; height: 50px;
+  }
+  .topbar .tag { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.06em; color: var(--ink-soft); }
+  .topbar .tag b { color: var(--trie-deep); font-weight: 680; }
+  .topbar .repro { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-faint); }
+  @media (max-width: 640px) { .topbar .repro { display: none; } }
+
+  /* ---- hero ---- */
+  .hero { padding-top: 46px; padding-bottom: 36px; }
+  .hero h1 { font-size: clamp(2rem, 5.2vw, 3.05rem); margin: 0 0 18px; max-width: 18ch; }
+  .hero .lede { max-width: 40rem; }
+  .hero .lede .trie { color: var(--trie-deep); font-weight: 640; }
+  .hero .lede .hash { color: var(--hash); font-weight: 620; }
+
+  .stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line);
+    border-radius: 12px; overflow: hidden; margin-top: 30px;
+  }
+  @media (max-width: 720px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: var(--surface); padding: 18px 18px 16px; }
+  .stat .n { font-family: var(--mono); font-size: 1.6rem; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--trie-deep); line-height: 1.1; }
+  .stat .n.warn { color: var(--hash); }
+  .stat .l { font-size: 0.82rem; color: var(--ink-soft); margin-top: 6px; line-height: 1.4; }
+  .stat .l b { color: var(--ink); font-weight: 620; }
+
+  /* ---- tables ---- */
+  .tablewrap { overflow-x: auto; margin: 6px 0 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+  th, td { text-align: right; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 600; border-bottom: 1px solid var(--line);
+  }
+  tbody td { font-variant-numeric: tabular-nums; }
+  tbody tr:hover { background: var(--surface-2); }
+  td.win { color: var(--trie-deep); font-weight: 660; }
+  td.lose { color: var(--hash); }
+  .t-note { font-size: 0.82rem; color: var(--ink-faint); margin-top: 8px; }
+  .data-table { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .data-table table { font-family: var(--sans); }
+  .data-table th, .data-table td { padding: 9px 16px; }
+
+  /* ---- improvement cards ---- */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 20px 18px; display: flex; flex-direction: column;
+  }
+  .card .num { font-family: var(--mono); font-size: 0.78rem; color: var(--trie); font-weight: 640; letter-spacing: 0.04em; }
+  .card h3 { margin-top: 6px; }
+  .card p { font-size: 0.95rem; color: var(--ink-soft); margin-bottom: 10px; }
+  .card .verdict { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line-soft); font-size: 0.88rem; }
+  .card .verdict .good { color: var(--trie-deep); font-weight: 640; }
+  .card .verdict .caveat { color: var(--hash); font-weight: 600; }
+
+  /* ---- chart ---- */
+  figure { margin: 0; }
+  .chart-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px 16px; }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .chart-head .title { font-weight: 640; font-size: 1rem; }
+  .chart-head .sub { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-faint); letter-spacing: 0.03em; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 10px 0 2px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 0.74rem; color: var(--ink-soft); }
+  .legend i { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+  .legend i.dash { background: none !important; border-top: 2px dashed currentColor; height: 0; }
+  svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
+  svg.chart text { font-family: var(--mono); fill: var(--ink-faint); font-size: 11px; }
+  svg.chart .axlabel { fill: var(--ink-soft); font-size: 11px; }
+  svg.chart .ptlabel { fill: var(--ink); font-size: 10.5px; font-weight: 600; }
+  .series-line { fill: none; stroke-width: 2.25; stroke-linejoin: round; stroke-linecap: round; }
+  .series-dot { stroke: var(--surface); stroke-width: 1.5; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .series-line { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: draw 1.05s ease-out forwards; }
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+  }
+
+  /* ---- callouts (weaknesses) ---- */
+  .weak { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .weak { grid-template-columns: 1fr; } }
+  .flaw {
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--critical); border-radius: 0 12px 12px 0;
+    padding: 16px 18px;
+  }
+  .flaw .h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  .flaw .h .n { font-family: var(--mono); font-size: 1.15rem; font-weight: 660; color: var(--critical); font-variant-numeric: tabular-nums; }
+  .flaw .h .t { font-weight: 640; font-size: 1rem; }
+  .flaw p { font-size: 0.9rem; color: var(--ink-soft); margin: 0; }
+  .flaw .metric { font-family: var(--mono); color: var(--critical); font-weight: 600; }
+
+  /* ---- recommendation ---- */
+  .recs { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; counter-reset: rec; }
+  .recs li { position: relative; padding-left: 44px; }
+  .recs li::before {
+    counter-increment: rec; content: counter(rec);
+    position: absolute; left: 0; top: 1px;
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--trie-wash); color: var(--trie-deep);
+    font-family: var(--mono); font-weight: 660; font-size: 0.9rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .recs li b { color: var(--ink); }
+
+  .pull {
+    margin: 4px 0 0; padding: 20px 24px; background: var(--trie-deep); color: #eef6f3;
+    border-radius: 14px; font-size: 1.08rem; line-height: 1.5;
+  }
+  .pull b { color: #ffffff; }
+
+  /* ---- footer ---- */
+  footer { border-top: 1px solid var(--line); margin-top: 8px; padding: 26px 0 48px; }
+  footer .col { font-size: 0.86rem; color: var(--ink-faint); }
+  footer h3 { font-size: 0.8rem; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); margin-bottom: 10px; }
+  footer ul { margin: 0; padding-left: 18px; }
+  footer li { margin-bottom: 6px; }
+  .cmd { font-family: var(--mono); font-size: 0.8rem; background: var(--ink); color: #d7e2de; padding: 12px 14px; border-radius: 8px; overflow-x: auto; white-space: pre; }
+
+  ul.tight { margin: 0 0 14px; padding-left: 20px; }
+  ul.tight li { margin-bottom: 7px; }
+  .col > h3 { margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <span class="tag">turingdb / index-sim · <b>HAMT follow-up</b></span>
+    <span class="repro">cost model — shapes, not wall-clock</span>
+  </div>
+</div>
+
+<header class="wrap hero col">
+  <span class="eyebrow">Versioned string-property index · follow-up to the five-design study</span>
+  <h1>Improving the HAMT for strings</h1>
+  <p class="lede">The prior study found the <span class="hash">lock-free multiversion hash</span> wins HEAD reads and the <span class="trie">HAMT</span> wins time-travel. This one asks: for <strong>string keys</strong>, how far can the HAMT's read / submit / memory gap be closed — without surrendering the structural wins that make a persistent structure the right fit for a git-like commit model? The answer is to stop hashing.</p>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="n">−hash</div>
+      <div class="l">persistent <b>ART</b> reads at the hash's latency <b>minus the hashing cost</b> — 169 vs 180 ns, and the lead grows with key length</div>
+    </div>
+    <div class="stat">
+      <div class="n">1.9 MiB</div>
+      <div class="l">ART retained memory at 2,000 commits — <b>smallest of every design</b></div>
+    </div>
+    <div class="stat">
+      <div class="n">~85 ns</div>
+      <div class="l">trie time-travel read, <b>flat</b> — the hash pays <span style="color:var(--hash)">164 µs</span></div>
+    </div>
+    <div class="stat">
+      <div class="n warn">4</div>
+      <div class="l">losses of the hash that <b>no tuning fixes</b> — all central to full retention</div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <section class="wrap">
+    <div class="col">
+      <span class="eyebrow">The premise</span>
+      <h2>What “for strings” changes</h2>
+      <p>The earlier model charged a flat <code>hash = 5 ns</code> and <code>compare = 2 ns</code>. For real string keys both are <strong>O(length)</strong> — and <em>where the bytes live</em> drives both memory and the concurrency story.</p>
+      <ul class="tight">
+        <li>A <strong>hash trie</strong> hashes the key <em>once</em> per lookup; the <strong>multiversion hash</strong> hashes on every slot probe, and a dictionary hashes again to assign a code.</li>
+        <li>A <strong>radix trie hashes nothing</strong> — it descends by the key's bytes, so the structure <em>is</em> the comparison. That is the structural reason ART pulls ahead as keys grow.</li>
+        <li><strong>Interning</strong> to dense codes makes compares cheap and dedups bytes — but assigning a code to a <em>new</em> string needs a concurrent dictionary, a write-side bottleneck that hits the lock-free hash hardest.</li>
+      </ul>
+      <p>With a cache-miss hop at 80 ns, per-byte string costs only rival a hop for long keys — so for short keys <strong>tree depth dominates</strong>, and for long keys <strong>the hashing itself</strong> becomes first-order. ART avoids the latter entirely.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="col">
+      <span class="eyebrow">Four tunings</span>
+      <h2>Improving the hash trie itself</h2>
+      <p>Three of these shrink the gap; the fourth is a correction — dictionary coding is <em>not</em> the read win it's assumed to be.</p>
+    </div>
+    <div class="col" style="margin-top:18px;">
+      <div class="cards">
+        <div class="card">
+          <span class="num">01 — submit / memory</span>
+          <h3>Fold the commit</h3>
+          <p>Apply the whole write-set to one edit-tagged private copy (Clojure transients), then freeze with a single root publish. A node shared by several writes is copied <strong>once</strong>, not per write.</p>
+          <div class="verdict"><span class="good">−34% submit</span> at 32 writes/commit, <span class="good">−59%</span> at bulk; cuts memory the same way. Literature: 1.5–4× faster bulk builds.</div>
+        </div>
+        <div class="card">
+          <span class="num">02 — read ⇄ write</span>
+          <h3>Widen the fan-out</h3>
+          <p>Depth drives read hops; width drives copy volume on write. Branch 32 sits below the read-optimal for 100k keys — <strong>64-way dominates it on both axes</strong> (depth 4→3).</p>
+          <div class="verdict"><span class="good">342 ns read, 11.9 µs submit</span> at branch 64. Reaching hash read-parity needs branch ≈ 512, where submit balloons.</div>
+        </div>
+        <div class="card">
+          <span class="num">03 — memory</span>
+          <h3>Compact the nodes (CHAMP)</h3>
+          <p>Two bitmaps split data from sub-nodes into one dense, hole-free array. Same hop count, smaller nodes — and <strong>sub-linear structural equality</strong>, which makes diffing two commits' indexes cheap.</p>
+          <div class="verdict"><span class="good">−38% memory</span> in the model (paper reports up to −64% on the JVM). Ships in Scala 2.13.</div>
+        </div>
+        <div class="card">
+          <span class="num">04 — a correction</span>
+          <h3>Dictionary-code the keys</h3>
+          <p>Tempting to read as a speed win. It is not: coding adds an ~80 ns intern hop, and a HAMT does only <em>one</em> compare per lookup — so it trades a 9 ns string compare for that hop.</p>
+          <div class="verdict"><span class="caveat">A net loss on point reads.</span> Code for memory, ordering, and B-tree/collision compares — not for the trie lookup.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="col">
+      <span class="eyebrow">The fan-out frontier</span>
+      <h2>Depth buys reads; width costs writes</h2>
+      <p>Each point is a branching factor. Moving right-to-left, wider nodes shrink the tree and cut read latency — but past the knee at <strong>64</strong>, copying ever-wider nodes drives submit back up. There is a real Pareto frontier, and the default 32 is not on it.</p>
+    </div>
+    <div class="col" style="margin-top:16px;">
+      <figure class="chart-card">
+        <div class="chart-head">
+          <span class="title">Read vs. submit, by branching factor</span>
+          <span class="sub">100k keys · 32 writes/commit</span>
+        </div>
+        <svg id="pareto" class="chart" viewBox="0 0 720 360" role="img" aria-label="Scatter of read latency versus submit latency for branch factors 16 to 1024; the knee is at branch 64."></svg>
+        <p class="t-note">Branch 64 is the knee — lowest submit among the low-read options. Branch 512 reaches multiversion-hash read parity (262 ns) but pays a wide-node-copy penalty on every write.</p>
+      </figure>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="col">
+      <span class="eyebrow">The decisive move</span>
+      <h2>For strings, a persistent radix tree (ART)</h2>
+      <p>ART (Leis et al., ICDE 2013) is a byte-wise radix tree with adaptive nodes (Node4/16/48/256), path compression, and lazy expansion. For string keys it is structurally better than a hash trie: it <strong>hashes nothing</strong>, is shallower (256-way → depth 2–3), is <strong>ordered</strong> (free range and prefix scans — exactly what TuringDB's <code>StringIndex</code> already wants), and shares prefixes for the smallest memory here. Version-retention copy-on-write ARTs already ship — PART (UC Berkeley), VART (SurrealDB), PermART (SIGMOD 2026).</p>
+    </div>
+    <div class="col" style="margin-top:16px;">
+      <figure class="chart-card">
+        <div class="chart-head">
+          <span class="title">HEAD read vs. key length</span>
+          <span class="sub">100k keys · lower is better</span>
+        </div>
+        <div class="legend" id="leg-len"></div>
+        <svg id="chart-len" class="chart" viewBox="0 0 720 320" role="img" aria-label="Read latency versus key length; ART stays lowest and its lead widens as keys lengthen."></svg>
+        <p class="t-note">ART reads at the hash's latency <strong>minus the hashing cost</strong>; the lead <strong>widens with key length</strong> because the hash digests every byte while ART never does. (One caveat: the short-key win holds while ART is depth-2, ≤ 65k distinct; past that the hash's O(1) reclaims up to one hop for short keys — the long-key lead and every structural axis stand regardless.)</p>
+      </figure>
+    </div>
+
+    <div class="col" style="margin-top:18px;">
+      <div class="cards">
+        <figure class="chart-card">
+          <div class="chart-head"><span class="title">Submit latency</span><span class="sub">per commit, vs parts</span></div>
+          <div class="legend" id="leg-submit"></div>
+          <svg id="chart-submit" class="chart" viewBox="0 0 480 300" role="img" aria-label="Submit latency versus number of parts for naive HAMT, folded HAMT, ART, and the multiversion hash."></svg>
+        </figure>
+        <figure class="chart-card">
+          <div class="chart-head"><span class="title">Retained memory</span><span class="sub">MiB, vs parts</span></div>
+          <div class="legend" id="leg-mem"></div>
+          <svg id="chart-mem" class="chart" viewBox="0 0 480 300" role="img" aria-label="Retained memory versus number of parts for folded HAMT, CHAMP, and ART."></svg>
+        </figure>
+      </div>
+      <p class="t-note" style="margin-top:12px;">ART's weakest axis is submit (11 µs at 100k keys — dense upper nodes promote to Node256 and cost like a wide HAMT node), still 2–3× the hash. But at bulk loads even that inverts: at 1,000 writes/commit ART's folded submit (99 µs) <strong>beats</strong> the hash (140 µs).</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="col">
+      <span class="eyebrow">Head to head</span>
+      <h2>Improved persistent trie vs. lock-free multiversion hash</h2>
+      <p>The hash's only durable advantage is uncontended submit latency. Every other axis either favors the trie outright or is a HEAD-read lead the tunings erase.</p>
+    </div>
+    <div class="col" style="margin-top:14px;">
+      <div class="data-table tablewrap">
+        <table>
+          <thead>
+            <tr><th>Axis</th><th>multiversion hash</th><th>persistent trie (ART)</th><th>winner</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>HEAD read, short keys</td><td>180 ns</td><td class="win">169 ns</td><td class="win">trie †</td></tr>
+            <tr><td>read, 256-byte keys</td><td>256 ns</td><td class="win">203 ns</td><td class="win">trie</td></tr>
+            <tr><td>submit (32 writes)</td><td class="lose">4.5 µs</td><td>11–15 µs</td><td>hash</td></tr>
+            <tr><td>submit (bulk, 1000)</td><td>140 µs</td><td class="win">99 µs</td><td class="win">trie</td></tr>
+            <tr><td>retained memory</td><td>2.7 MiB</td><td class="win">1.9 MiB</td><td class="win">trie</td></tr>
+            <tr><td>time-travel (as-of N back)</td><td class="lose">164 µs</td><td class="win">~85 ns flat</td><td class="win">trie</td></tr>
+            <tr><td>write concurrency</td><td>lock-free CAS + retry storms</td><td class="win">one root-publish CAS</td><td class="win">trie</td></tr>
+            <tr><td>reader / writer contention</td><td>wait-free only if lock-free</td><td class="win">always wait-free</td><td class="win">trie</td></tr>
+            <tr><td>version reclamation</td><td class="lose">fights full retention</td><td class="win">immutable shared roots</td><td class="win">trie</td></tr>
+            <tr><td>new-string interning</td><td class="lose">concurrent dictionary</td><td class="win">inside single-writer commit</td><td class="win">trie</td></tr>
+            <tr><td>range / prefix scans</td><td class="lose">no (unordered)</td><td class="win">yes (ordered)</td><td class="win">trie</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="t-note">† Short-key point read is the one regime-dependent row — the trie wins while ART is depth-2 (≤ 65k distinct) or for any long key, but the hash's O(1) reclaims up to one hop for short keys once ART deepens. Every other row holds regardless of cardinality. The hash's only durable advantage is uncontended submit latency.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="col">
+      <span class="eyebrow">Inherent, not tunable</span>
+      <h2>The four losses full retention makes central</h2>
+      <p>These are not constants you retune — they follow from in-place mutation plus keeping every version forever.</p>
+    </div>
+    <div class="col" style="margin-top:16px;">
+      <div class="weak">
+        <div class="flaw">
+          <div class="h"><span class="n">1</span><span class="t">Time-travel degrades by construction</span></div>
+          <p>HEAD reads stay O(1), but an as-of read N commits back walks past every newer version — unbounded for a churned key. The MVCC field keeps chains short <em>on purpose</em> (<span class="metric">Wu &amp; Pavlo, VLDB 2017</span>: 2.4–3.4× from ordering alone); full retention forfeits that lever.</p>
+        </div>
+        <div class="flaw">
+          <div class="h"><span class="n">2</span><span class="t">Reclamation fights retention</span></div>
+          <p>Hazard pointers / EBR / RCU free a node once no in-flight reader needs it. Full time-travel pins that watermark at t₀ <strong>forever</strong>, so memory grows <span class="metric">Θ(total writes)</span> — Böttcher et al.'s “vicious cycle of garbage” that here never resolves.</p>
+        </div>
+        <div class="flaw">
+          <div class="h"><span class="n">3</span><span class="t">Lock-free resize is genuinely hard</span></div>
+          <p>Open addressing moves every element on grow; you can't move N items under one CAS. growt's cluster theorem trims it to <span class="metric">~10%</span> but can't remove it. The one design that dissolves resize — split-ordered lists — does it by never moving items: the trie's own idea.</p>
+        </div>
+        <div class="flaw">
+          <div class="h"><span class="n">4</span><span class="t">The string-interning bottleneck</span></div>
+          <p>Assigning a code to a never-seen string is a serializing handoff. JVM <code>String.intern</code> degrades <span class="metric">~7,000,000×</span> (to ~650 ms/op) at 1M distinct strings. Column stores sidestep it with delta dictionaries; a single-writer commit just pays it once, locally.</p>
+        </div>
+      </div>
+      <p style="margin-top:18px;">And the trie need not even <em>concede</em> concurrency: <strong>Ctrie</strong> (Prokopec et al.) is a lock-free concurrent HAMT with single-word CAS and O(1) atomic snapshots — wait-free reads, lock-free writes, and constant-time versioning together.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="col">
+      <span class="eyebrow">For TuringDB</span>
+      <h2>Recommendation</h2>
+      <p>Grounded in the code: TuringDB has <strong>no dictionary for string property values</strong> (only <code>LabelMap</code> for ~128 labels), and its string index today <em>is</em> the per-DataPart prefix trie collected across all parts — the O(parts) fan-out the prior report flagged.</p>
+      <ol class="recs" style="margin-top:18px;">
+        <li><b>A persistent trie fits the commit model exactly.</b> Each commit's publish becomes one atomic root swap — wait-free reads, free as-of queries, and no version-reclamation problem (old roots are just shared structure old commits hold).</li>
+        <li><b>Prefer a radix trie (ART) over a hash trie for strings.</b> No hashing, shallower, smallest memory, and ordered — matching the prefix matching <code>StringIndex</code> already provides. Apply the transferable HAMT tunings: fold each commit, a 64-way default, CHAMP-compact nodes, hash memoization for long keys.</li>
+        <li><b>Reserve the lock-free hash for its narrow win:</b> low-cardinality, stable, HEAD-read-only properties where as-of reads are rare. Even there it wants a concurrent dictionary and a reclaimer that full retention can never let finish.</li>
+        <li><b>Dictionary-code for memory and ordering, not point reads.</b> Interning dedups bytes and unlocks ordered range scans; it does not speed a trie lookup, and its code-assignment is a write-side cost — cheap in a single-writer commit, expensive in a lock-free table.</li>
+        <li><b>Think in two index levels — they compose.</b> A persistent ART as the cross-part <em>global</em> map kills the O(parts) fan-out; per-DataPart indexes are static once built — the ideal case for a <strong>succinct trie</strong> (SuRF/FST, ~10 bits/key), a range-capable replacement for the per-part Bloom/zone-map prune.</li>
+      </ol>
+      <p class="pull" style="margin-top:22px;">The best way to “improve the HAMT for strings” is to <b>fold + widen + compact</b> it — and then to recognize that for byte-structured keys the persistent <b>radix</b> trie is the better member of the same family. It closes the hash's HEAD-read lead while keeping the time-travel, wait-free, retention-friendly properties that make a persistent structure the right backbone for a versioned store.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  <div class="col">
+    <h3>Method &amp; caveats</h3>
+    <ul class="tight" style="font-size:0.86rem;">
+      <li>A <strong>cost model</strong>, not a benchmark — operation counts come from executing the workload; latencies from fixed per-op constants. The shapes are the message; retune the constants for your hardware.</li>
+      <li>Node-copy is <strong>width-aware</strong> (<code>hop + alloc + width·copySlot</code>); folding uses a balls-in-bins expectation under uniform churn (skewed write-sets share more). ART depth is the conservative 256-way bound.</li>
+      <li>Multiversion as-of/reclamation figures are the churned-key worst case; a stable low-cardinality key stays flat — which is why that slice remains the hash's niche.</li>
+    </ul>
+    <h3 style="margin-top:22px;">Reproduce</h3>
+    <div class="cmd">g++ -std=c++23 -O2 -o index_sim index_sim.cpp
+./index_sim                 # the variant / fan-out / string-frontend study
+./index_sim --key-len 100   # long string keys
+./index_sim --writes 1000   # bulk commits — folding win grows</div>
+    <p style="margin-top:14px;">Full prose with citations in <code>report_hamt.md</code>; the original five-design study in <code>report.md</code> / <code>report.html</code>. Curves: <code>results_hamt_variants.csv</code>, <code>results_fanout.csv</code>, <code>results_string_frontend.csv</code>.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var C = {
+    trie: getComputedStyle(document.documentElement).getPropertyValue("--trie").trim() || "#0e7c64",
+    trieDeep: "#0a5042",
+    hash: "#bd6f33",
+    ink: "#46544f",
+    faint: "#7d8b86",
+    line: "#e7ecea"
+  };
+
+  function el(name, attrs, parent) {
+    var n = document.createElementNS(SVGNS, name);
+    for (var k in attrs) { n.setAttribute(k, attrs[k]); }
+    if (parent) { parent.appendChild(n); }
+    return n;
+  }
+  function txt(parent, x, y, s, cls, anchor) {
+    var t = el("text", { x: x, y: y, "text-anchor": anchor || "middle" }, parent);
+    if (cls) { t.setAttribute("class", cls); }
+    t.textContent = s;
+    return t;
+  }
+
+  // Generic multi-series line chart. cfg: {svg, W, H, xs(labels), series:[{name,color,data,dash}],
+  //   yMax, yTicks, xText, fmtY, logX(bool, xs are numeric)}
+  function lineChart(cfg) {
+    var svg = cfg.svg, W = cfg.W, H = cfg.H;
+    var padL = 52, padR = 14, padT = 14, padB = 38;
+    var iw = W - padL - padR, ih = H - padT - padB;
+    var n = cfg.xs.length;
+    var xpos = [];
+    if (cfg.logX) {
+      var lx = cfg.xs.map(function (v) { return Math.log(v); });
+      var lo = lx[0], hi = lx[n - 1];
+      xpos = lx.map(function (v) { return padL + (v - lo) / (hi - lo) * iw; });
+    } else {
+      xpos = cfg.xs.map(function (_, i) { return padL + (n === 1 ? 0 : i / (n - 1) * iw); });
+    }
+    var yOf = function (v) { return padT + ih - (v / cfg.yMax) * ih; };
+
+    // y grid + labels
+    var ticks = cfg.yTicks || 4;
+    for (var t = 0; t <= ticks; t++) {
+      var v = cfg.yMax * t / ticks;
+      var y = yOf(v);
+      el("line", { x1: padL, y1: y, x2: padL + iw, y2: y, stroke: C.line, "stroke-width": 1 }, svg);
+      txt(svg, padL - 8, y + 3.5, cfg.fmtY ? cfg.fmtY(v) : v, null, "end");
+    }
+    // x labels
+    cfg.xs.forEach(function (lab, i) {
+      txt(svg, xpos[i], padT + ih + 18, String(lab), null, "middle");
+    });
+    if (cfg.xText) { txt(svg, padL + iw, padT + ih + 33, cfg.xText, "axlabel", "end"); }
+
+    cfg.series.forEach(function (s) {
+      var d = s.data.map(function (v, i) { return (i === 0 ? "M" : "L") + xpos[i].toFixed(1) + " " + yOf(v).toFixed(1); }).join(" ");
+      var path = el("path", { d: d, class: "series-line", stroke: s.color }, svg);
+      if (s.dash) { path.setAttribute("stroke-dasharray", s.dash); path.style.setProperty("--len", "0"); }
+      else {
+        try { var L = path.getTotalLength(); path.style.setProperty("--len", L.toFixed(0)); } catch (e) {}
+      }
+      // endpoint emphasis
+      var li = s.data.length - 1;
+      el("circle", { cx: xpos[li], cy: yOf(s.data[li]), r: 3.6, fill: s.color, class: "series-dot" }, svg);
+    });
+  }
+
+  function legend(id, items) {
+    var box = document.getElementById(id);
+    if (!box) { return; }
+    items.forEach(function (it) {
+      var s = document.createElement("span");
+      var i = document.createElement("i");
+      if (it.dash) { i.className = "dash"; i.style.color = it.color; }
+      else { i.style.background = it.color; }
+      s.appendChild(i);
+      s.appendChild(document.createTextNode(it.name));
+      box.appendChild(s);
+    });
+  }
+
+  // ---- data ----
+  var PARTS = [1, 10, 100, 400, 800, 1200, 1600, 2000];
+
+  // String front-end: read vs key length
+  var LEN = [4, 8, 16, 32, 64, 128, 256];
+  legend("leg-len", [
+    { name: "ART", color: C.trie },
+    { name: "HAMT (string)", color: C.hash },
+    { name: "HAMT (coded)", color: C.faint }
+  ]);
+  lineChart({
+    svg: document.getElementById("chart-len"), W: 720, H: 320, xs: LEN, logX: true,
+    yMax: 700, yTicks: 7, xText: "key length (bytes)", fmtY: function (v) { return v + ""; },
+    series: [
+      { name: "ART", color: C.trie, data: [245, 246, 249, 256, 269, 294, 345] },
+      { name: "HAMT (string)", color: C.hash, data: [330, 333, 340, 355, 384, 441, 556] },
+      { name: "HAMT (coded)", color: C.faint, data: [412, 415, 422, 437, 466, 523, 638] }
+    ]
+  });
+
+  // Submit vs parts
+  legend("leg-submit", [
+    { name: "ART", color: C.trie },
+    { name: "HAMT folded", color: C.hash },
+    { name: "HAMT naive", color: C.faint },
+    { name: "hash", color: C.trieDeep, dash: true }
+  ]);
+  lineChart({
+    svg: document.getElementById("chart-submit"), W: 480, H: 300, xs: PARTS, logX: true,
+    yMax: 24, yTicks: 4, xText: "parts", fmtY: function (v) { return v + "µs"; },
+    series: [
+      { name: "hash", color: C.trieDeep, dash: "4 4", data: PARTS.map(function () { return 4.48; }) },
+      { name: "ART", color: C.trie, data: [0.19, 4.94, 6.15, 7.8, 9.08, 9.95, 10.64, 11.17] },
+      { name: "HAMT folded", color: C.hash, data: [0.19, 3.7, 9.13, 9.13, 9.13, 9.13, 14.63, 14.63] },
+      { name: "HAMT naive", color: C.faint, data: [5.52, 11.03, 16.53, 16.53, 16.53, 16.53, 22.04, 22.04] }
+    ]
+  });
+
+  // Memory vs parts
+  legend("leg-mem", [
+    { name: "ART", color: C.trie },
+    { name: "CHAMP folded", color: C.hash },
+    { name: "HAMT folded", color: C.faint }
+  ]);
+  lineChart({
+    svg: document.getElementById("chart-mem"), W: 480, H: 300, xs: PARTS, logX: true,
+    yMax: 8, yTicks: 4, xText: "parts", fmtY: function (v) { return v + ""; },
+    series: [
+      { name: "HAMT folded", color: C.faint, data: [0, 0, 0.3, 1.2, 2.5, 3.8, 5.8, 7.9] },
+      { name: "CHAMP folded", color: C.hash, data: [0, 0, 0.2, 0.8, 1.6, 2.4, 3.6, 4.9] },
+      { name: "ART", color: C.trie, data: [0, 0, 0.1, 0.4, 0.8, 1.1, 1.5, 1.9] }
+    ]
+  });
+
+  // ---- Pareto scatter: read (x) vs submit (y), by branch ----
+  (function () {
+    var svg = document.getElementById("pareto");
+    var W = 720, H = 360, padL = 56, padR = 60, padT = 18, padB = 46;
+    var iw = W - padL - padR, ih = H - padT - padB;
+    var pts = [
+      { b: 16, read: 502, sub: 17.0 },
+      { b: 32, read: 422, sub: 14.6 },
+      { b: 64, read: 342, sub: 11.9 },
+      { b: 128, read: 342, sub: 16.5 },
+      { b: 256, read: 342, sub: 25.0 },
+      { b: 512, read: 262, sub: 20.9 },
+      { b: 1024, read: 262, sub: 37.9 }
+    ];
+    var xMin = 230, xMax = 520, yMax = 40;
+    var xOf = function (v) { return padL + (v - xMin) / (xMax - xMin) * iw; };
+    var yOf = function (v) { return padT + ih - (v / yMax) * ih; };
+
+    // grid
+    for (var gy = 0; gy <= 4; gy++) {
+      var yv = yMax * gy / 4, y = yOf(yv);
+      el("line", { x1: padL, y1: y, x2: padL + iw, y2: y, stroke: C.line, "stroke-width": 1 }, svg);
+      txt(svg, padL - 8, y + 3.5, yv + "µs", null, "end");
+    }
+    for (var gx = 250; gx <= 500; gx += 50) {
+      var x = xOf(gx);
+      el("line", { x1: x, y1: padT, x2: x, y2: padT + ih, stroke: C.line, "stroke-width": 1 }, svg);
+      txt(svg, x, padT + ih + 18, gx + "ns", null, "middle");
+    }
+    txt(svg, padL + iw / 2, padT + ih + 38, "HEAD read latency  →  better to the left", "axlabel", "middle");
+    var yl = el("text", { x: 14, y: padT + ih / 2, "text-anchor": "middle", class: "axlabel", transform: "rotate(-90 14 " + (padT + ih / 2) + ")" }, svg);
+    yl.textContent = "submit  →  better lower";
+
+    // hash read-parity reference line
+    var px = xOf(265);
+    el("line", { x1: px, y1: padT, x2: px, y2: padT + ih, stroke: C.trieDeep, "stroke-width": 1.2, "stroke-dasharray": "3 4", opacity: 0.55 }, svg);
+    txt(svg, px + 4, padT + 12, "hash read 265ns", null, "start").setAttribute("fill", C.trieDeep);
+
+    // connecting path in branch order
+    var dPath = pts.map(function (p, i) { return (i === 0 ? "M" : "L") + xOf(p.read).toFixed(1) + " " + yOf(p.sub).toFixed(1); }).join(" ");
+    el("path", { d: dPath, fill: "none", stroke: C.faint, "stroke-width": 1.4, "stroke-dasharray": "2 3", opacity: 0.7 }, svg);
+
+    pts.forEach(function (p) {
+      var knee = p.b === 64, parity = p.b === 512;
+      var col = knee ? C.trie : (parity ? C.hash : C.ink);
+      var r = knee ? 7 : 5;
+      el("circle", { cx: xOf(p.read), cy: yOf(p.sub), r: r, fill: knee ? C.trie : "#fff", stroke: col, "stroke-width": 2 }, svg);
+      var lbl = "b=" + p.b + (knee ? "  ← knee" : (parity ? "  ← read parity" : ""));
+      var anchor = (p.read > 420) ? "end" : "start";
+      var dx = anchor === "end" ? -10 : 11;
+      txt(svg, xOf(p.read) + dx, yOf(p.sub) + (knee ? -12 : 4), lbl, "ptlabel", anchor);
+    });
+  })();
+})();
+</script>
+
+</body>
+</html>

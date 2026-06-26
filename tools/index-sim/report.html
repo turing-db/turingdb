@@ -1,0 +1,776 @@
+<title>Indexing a versioned graph — five designs under 2,000 commits</title>
+<style>
+  :root {
+    --ground: #E9EDF2;
+    --surface: #FBFCFE;
+    --sunken: #EFF2F7;
+    --ink: #18202D;
+    --muted: #56616F;
+    --faint: #8A95A4;
+    --grid: #DCE2EA;
+    --hairline: #CDD6E0;
+
+    --blue: #3B5BDB;    /* HAMT */
+    --teal: #0E9384;    /* COW B-tree */
+    --amber: #C9760A;   /* Multiversion hash */
+    --red: #DC3C42;     /* COW layers */
+    --violet: #7B61D6;  /* Per-DataPart */
+
+    --good: #1F9D55;    /* lock-free */
+    --warn: #D98B0B;    /* striped */
+    --crit: #DC3C42;    /* global mutex */
+
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    --maxw: 1080px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .page {
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: clamp(20px, 4vw, 56px) clamp(16px, 4vw, 40px) 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- header ---------- */
+  .head { display: flex; flex-direction: column; gap: 14px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .title {
+    font-size: clamp(1.7rem, 4.2vw, 2.55rem);
+    font-weight: 760;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    margin: 0;
+    max-width: 20ch;
+  }
+
+  .thesis {
+    margin: 0;
+    color: var(--muted);
+    font-size: 1.02rem;
+    max-width: 66ch;
+  }
+  .thesis strong { color: var(--ink); font-weight: 640; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .chip {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.74rem;
+    color: var(--muted);
+    background: var(--sunken);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 4px 9px;
+  }
+  .chip b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- summary cards ---------- */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(218px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 16px 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .card-name { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 0.98rem; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .card-tags { display: flex; flex-direction: column; gap: 5px; }
+  .tagline { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .tagline .k { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint); }
+  .tagline .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 0.82rem; color: var(--ink); text-align: right; }
+  .v.flat { color: var(--good); }
+  .v.grow { color: var(--crit); }
+  .verdict { font-size: 0.85rem; color: var(--muted); line-height: 1.5; margin-top: 2px; }
+
+  /* ---------- chart panels ---------- */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    padding: clamp(16px, 2.5vw, 24px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .panel.focus { border-color: var(--violet); box-shadow: 0 0 0 1px var(--violet) inset; }
+  .panel-head { display: flex; flex-direction: column; gap: 5px; }
+  .panel-head .kicker { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--violet); }
+  .panel-head h3 { margin: 0; font-size: 1.16rem; font-weight: 680; letter-spacing: -0.01em; }
+  .panel-head .sub { margin: 0; color: var(--muted); font-size: 0.9rem; max-width: 72ch; }
+  .subh { margin: 8px 0 0; font-size: 0.96rem; font-weight: 660; letter-spacing: -0.01em; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--muted); }
+  .legend i { width: 16px; height: 3px; border-radius: 2px; flex: none; }
+  .legend i.dash { background-color: transparent; background-image: repeating-linear-gradient(90deg, var(--violet) 0 5px, transparent 5px 9px); border-radius: 0; }
+  .legend i.dash.amber { background-image: repeating-linear-gradient(90deg, var(--amber) 0 5px, transparent 5px 9px); }
+
+  .chartwrap { overflow-x: auto; }
+  canvas.chart { display: block; width: 100%; height: 320px; }
+
+  .readout {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.78rem;
+    color: var(--muted);
+    border-top: 1px dashed var(--hairline);
+    padding-top: 10px;
+    min-height: 1.4em;
+    line-height: 1.7;
+  }
+  .readout b { color: var(--ink); font-weight: 600; }
+  .reading { font-size: 0.88rem; color: var(--muted); margin: 0; max-width: 80ch; }
+  .reading b { color: var(--ink); font-weight: 620; }
+
+  /* ---------- memory ---------- */
+  .bars { display: flex; flex-direction: column; gap: 11px; }
+  .bar-row { display: grid; grid-template-columns: 132px 1fr 88px; align-items: center; gap: 12px; }
+  .bar-label { font-size: 0.86rem; color: var(--ink); }
+  .bar-track { background: var(--sunken); border-radius: 5px; height: 16px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 5px; }
+  .bar-fill.hatch {
+    background-image: repeating-linear-gradient(45deg, var(--red) 0 6px, #e98a8e 6px 12px);
+    opacity: 0.85;
+  }
+  .bar-val { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 0.82rem; text-align: right; color: var(--ink); }
+
+  /* ---------- conclusions ---------- */
+  .tablewrap { overflow-x: auto; }
+  .matrix { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  .matrix th, .matrix td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  .matrix th { font-family: var(--mono); font-size: 0.69rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  .matrix td:first-child { font-weight: 620; white-space: nowrap; }
+  .matrix tr:last-child td { border-bottom: none; }
+  .matrix .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 8px; vertical-align: middle; }
+  .laws { display: grid; grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)); gap: 14px; }
+  .law { background: var(--sunken); border: 1px solid var(--hairline); border-radius: 10px; padding: 14px 15px; font-size: 0.86rem; color: var(--muted); line-height: 1.5; }
+  .law b { color: var(--ink); font-weight: 640; }
+  .rec { background: var(--ink); border-radius: 12px; padding: clamp(18px, 2.6vw, 28px); }
+  .rec h3 { color: #fff; margin: 0 0 12px; font-size: 1.12rem; font-weight: 680; letter-spacing: -0.01em; text-wrap: balance; }
+  .rec p { margin: 0; font-size: 0.9rem; color: #C3CCD8; max-width: 82ch; }
+  .rec ul { margin: 0 0 12px; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .rec li { font-size: 0.9rem; color: #C3CCD8; line-height: 1.5; }
+  .rec strong { color: #fff; font-weight: 620; }
+
+  /* ---------- method / footer ---------- */
+  .method { background: var(--sunken); border: 1px solid var(--hairline); border-radius: 12px; padding: clamp(16px,2.5vw,24px); }
+  .method h3 { margin: 0 0 8px; font-size: 0.95rem; font-weight: 680; }
+  .method p { margin: 0 0 10px; font-size: 0.88rem; color: var(--muted); max-width: 80ch; }
+  .method p:last-child { margin-bottom: 0; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+  .foot { font-size: 0.78rem; color: var(--faint); text-align: center; }
+
+  a { color: var(--blue); }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 3px; }
+
+  @media (max-width: 520px) {
+    .bar-row { grid-template-columns: 100px 1fr 74px; gap: 8px; }
+    canvas.chart { height: 260px; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="head">
+    <div class="eyebrow">TuringDB · storage · index cost model</div>
+    <h1 class="title">Indexing a versioned graph, five ways</h1>
+    <p class="thesis">Each design keeps a string-property index across an immutable, git-like commit history. As parts accumulate <strong>1 → 2,000</strong>, read and submit latency pull apart sharply — the designs with the <strong>cheapest writes pay the most expensive reads</strong>, because every commit's parts must be collected and merged at read time. No structure wins on every axis; the <strong>verdict</strong> at the end routes the choice by workload.</p>
+    <div class="chips">
+      <span class="chip"><b>100k</b> keys</span>
+      <span class="chip"><b>32</b> writes/commit</span>
+      <span class="chip"><b>1→2000</b> parts</span>
+      <span class="chip">hop <b>80ns</b></span>
+      <span class="chip">alloc <b>60ns</b></span>
+      <span class="chip">CAS <b>20ns</b></span>
+      <span class="chip">lock <b>25ns</b></span>
+    </div>
+  </header>
+
+  <section class="summary" aria-label="Summary of the five approaches">
+    <div class="card">
+      <div class="card-name"><span class="swatch" style="background:var(--blue)"></span>HAMT per commit</div>
+      <div class="card-tags">
+        <div class="tagline"><span class="k">read</span><span class="v flat">flat · O(log₃₂)</span></div>
+        <div class="tagline"><span class="k">submit</span><span class="v">moderate</span></div>
+        <div class="tagline"><span class="k">memory</span><span class="v">13 MiB</span></div>
+      </div>
+      <p class="verdict">Balanced. A new root per commit shares untouched subtries; reads and writes are both logarithmic and independent of history.</p>
+    </div>
+    <div class="card">
+      <div class="card-name"><span class="swatch" style="background:var(--teal)"></span>COW B-tree</div>
+      <div class="card-tags">
+        <div class="tagline"><span class="k">read</span><span class="v flat">flat · O(log₃₂)</span></div>
+        <div class="tagline"><span class="k">submit</span><span class="v">moderate</span></div>
+        <div class="tagline"><span class="k">memory</span><span class="v">79 MiB</span></div>
+      </div>
+      <p class="verdict">Like the HAMT, plus ordered access — dictionary codes are ints, so range scans come free. Widest nodes, so the largest footprint.</p>
+    </div>
+    <div class="card">
+      <div class="card-name"><span class="swatch" style="background:var(--amber)"></span>Multiversion hash</div>
+      <div class="card-tags">
+        <div class="tagline"><span class="k">read</span><span class="v flat">flat · O(1)</span></div>
+        <div class="tagline"><span class="k">submit</span><span class="v">cheap*</span></div>
+        <div class="tagline"><span class="k">memory</span><span class="v">3 MiB</span></div>
+      </div>
+      <p class="verdict">Fastest and smallest — one slot probe — but only at HEAD under lock-free reads. Version filtering (stale snapshots) and lock-based reader contention add real cost; it's the only shared structure, so writes lock or go lock-free. See the reads panel.</p>
+    </div>
+    <div class="card">
+      <div class="card-name"><span class="swatch" style="background:var(--red)"></span>COW hash layers</div>
+      <div class="card-tags">
+        <div class="tagline"><span class="k">read</span><span class="v grow">grows · O(parts)</span></div>
+        <div class="tagline"><span class="k">submit</span><span class="v">cheapest</span></div>
+        <div class="tagline"><span class="k">memory</span><span class="v">2 MiB</span></div>
+      </div>
+      <p class="verdict">A layer per commit, walked newest-first until the key is found. Cheapest writes — but an unindexed read walks the stack.</p>
+    </div>
+    <div class="card">
+      <div class="card-name"><span class="swatch" style="background:var(--violet)"></span>Per-DataPart index</div>
+      <div class="card-tags">
+        <div class="tagline"><span class="k">read</span><span class="v grow">grows · O(parts)</span></div>
+        <div class="tagline"><span class="k">submit</span><span class="v">cheapest</span></div>
+        <div class="tagline"><span class="k">memory</span><span class="v">2 MiB</span></div>
+      </div>
+      <p class="verdict">A local index per part, <b>collected and merged at read time</b> — reads probe <em>every</em> part (TuringDB's per-DataPart model, and ClickHouse's). Compaction bounds it to O(K), trading read fan-out for write amplification.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Read latency as history grows</h3>
+      <p class="sub">Point lookup at HEAD, log–log axes. Three designs hold flat; the two per-commit-local strategies climb with the number of parts.</p>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--blue)"></i>HAMT</span>
+      <span><i style="background:var(--teal)"></i>COW B-tree</span>
+      <span><i style="background:var(--amber)"></i>Multiversion hash</span>
+      <span><i style="background:var(--red)"></i>COW layers</span>
+      <span><i style="background:var(--violet)"></i>Per-DataPart (collect)</span>
+    </div>
+    <div class="chartwrap"><canvas class="chart" id="readChart"></canvas></div>
+    <div class="readout" id="readReadout"></div>
+    <p class="reading">The flat trio is independent of history: the multiversion table reads in <b>165 ns</b>, the HAMT and B-tree step up only as the tree deepens (32 → 32² → 32³ keys). The two local strategies rise with parts — walking the COW-layer stack reaches <b>~79 µs</b> at 2,000 parts; a per-DataPart index that collects across <b>every</b> part is the steepest line, <b>~170 µs</b>. Both sit 100–1000× above the global structure — and compaction bounds the per-DataPart line, dissected next.</p>
+  </section>
+
+  <section class="panel focus">
+    <div class="panel-head">
+      <div class="kicker">the requested design, in detail</div>
+      <h3>Per-DataPart index: the cost of collecting at read time</h3>
+      <p class="sub">Each immutable part carries a local index built once over its own write-set. A read fans out across all parts and merges the hits — O(parts), unconditionally. A per-part Bloom/zone-map filter lowers the constant; compaction (bounding live parts to K) changes the slope.</p>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--violet)"></i>collect all parts</span>
+      <span><i class="dash"></i>collect + per-part prune</span>
+      <span><i style="background:var(--good)"></i>compacted to K=64 parts</span>
+      <span><i style="background:var(--amber)"></i>multiversion (reference)</span>
+    </div>
+    <div class="chartwrap"><canvas class="chart" id="perpartChart"></canvas></div>
+    <div class="readout" id="perpartReadout"></div>
+    <p class="reading">A per-DataPart index is exactly what TuringDB builds for edges and string properties, and the model ClickHouse uses. Pruning the misses (Bloom/zone-map) lowers the constant — <b>~60 µs</b> vs <b>~170 µs</b> at 2,000 parts — but the slope stays O(parts). <b>Compaction</b> is what flattens it: bounding live parts to K=64 holds reads at <b>~5.5 µs</b> however long history grows. It isn't free — merging rewrites each entry repeatedly, so submit climbs from <b>2.1 µs</b> to <b>~12.8 µs</b> (write amplification). That read-for-write trade is why ClickHouse leans on aggressive background merges — and why a version-preserving store, which can't simply discard old parts, still leans toward the <b>global</b> multiversion structure (flat 165 ns, no merging).</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Submit latency as history grows</h3>
+      <p class="sub">Time to apply one commit of 32 writes. Linear y-axis — all four are flat in part count.</p>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--blue)"></i>HAMT</span>
+      <span><i style="background:var(--teal)"></i>COW B-tree</span>
+      <span><i style="background:var(--amber)"></i>Multiversion hash</span>
+      <span><i style="background:var(--red)"></i>COW layers</span>
+    </div>
+    <div class="chartwrap"><canvas class="chart" id="submitChart"></canvas></div>
+    <div class="readout" id="submitReadout"></div>
+    <p class="reading">The COW trees pay <b>path-copy allocation</b> on every write and step up as the tree deepens; the layer stack just appends a small map (<b>cheapest</b>), and the multiversion table prepends one version node — shown here <b>uncontended</b>. The per-DataPart index builds the same per-commit local map, so its submit is identical to COW layers. Concurrency changes the multiversion line ↓.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>The multiversion table under concurrent writers</h3>
+      <p class="sub">It is the only <em>global</em> structure, so commits contend on it. Submit latency vs writer count, by concurrency-control policy — wait time derived from the cost constants, not measured.</p>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--crit)"></i>global mutex</span>
+      <span><i style="background:var(--warn)"></i>striped ×256</span>
+      <span><i style="background:var(--good)"></i>lock-free CAS</span>
+    </div>
+    <div class="chartwrap"><canvas class="chart" id="concChart"></canvas></div>
+    <div class="readout" id="concReadout"></div>
+    <p class="reading">A single mutex <b>serializes</b> — latency grows linearly with writers (<b>166 µs</b> at 64). Striping by 256 nearly erases contention. Lock-free CAS stays flat at <b>2.6 µs</b> — until a hot key (<code>--hot</code>) turns every write into a retry storm.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div class="kicker">reads, across all five designs</div>
+      <h3>Reading under writers, and reading into the past</h3>
+      <p class="sub">The earlier panels read at HEAD, single-threaded. Two things change that — concurrent writers, and time-travel (as-of) reads — and each ranks the designs completely differently.</p>
+    </div>
+
+    <h4 class="subh">Reader latency vs concurrent writers — every design</h4>
+    <div class="legend">
+      <span><i style="background:var(--blue)"></i>HAMT</span>
+      <span><i style="background:var(--teal)"></i>COW B-tree</span>
+      <span><i style="background:var(--red)"></i>COW layers</span>
+      <span><i style="background:var(--violet)"></i>Per-DataPart</span>
+      <span><i style="background:var(--amber)"></i>MV lock-free</span>
+      <span><i class="dash amber"></i>MV global mutex</span>
+    </div>
+    <div class="chartwrap"><canvas class="chart" id="readerChart"></canvas></div>
+    <div class="readout" id="readerReadout"></div>
+    <p class="reading">Every copy-on-write and persistent design publishes a new version with a single atomic root/manifest swap, so <b>reads are wait-free</b> — flat against any number of writers, each at its own base cost. Only the multiversion table mutates shared state on write: <b>lock-free</b> keeps its reads flat (165 ns), but a <b>global mutex</b> drags them to <b>164 µs</b> at 64 writers — as slow as the per-part fan-out. Reader/writer contention is a property of in-place mutation, not of versioning.</p>
+
+    <h4 class="subh">As-of read — latency vs commits behind HEAD (time-travel)</h4>
+    <div class="legend">
+      <span><i style="background:var(--blue)"></i>HAMT</span>
+      <span><i style="background:var(--teal)"></i>COW B-tree</span>
+      <span><i style="background:var(--amber)"></i>Multiversion</span>
+      <span><i style="background:var(--red)"></i>COW layers</span>
+      <span><i style="background:var(--violet)"></i>Per-DataPart</span>
+    </div>
+    <div class="chartwrap"><canvas class="chart" id="filterChart"></canvas></div>
+    <div class="readout" id="filterReadout"></div>
+    <p class="reading">Time-travel <b>reverses the ranking</b>. Persistent trees jump straight to a retained root, so any version reads in <b>~O(log N)</b> — flat (a touch cheaper deep in history, when the tree was smaller). Per-part and layer reads get <b>cheaper</b> the further back you look: only the parts live at that snapshot are touched. But the multiversion table gets <b>worse</b> — resolving an old snapshot means filtering past every newer version, climbing from <b>165 ns</b> at HEAD to <b>~164 µs</b> 2,000 commits back (shown for a key updated each commit; a stable key stays flat). The design that wins the present loses the past.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Retained memory after 2,000 parts</h3>
+      <p class="sub">Estimated bytes held to keep every version queryable. Log scale.</p>
+    </div>
+    <div class="bars" id="memBars"></div>
+    <p class="reading">Structural sharing is the whole game: a <b>naive full copy per commit</b> would cost <b>~2.1 GiB</b>; every sharing design stays in the low tens of MiB. The per-DataPart and COW-layer storage is the leanest (they store only each commit's write-set); the B-tree's wide nodes make it the heaviest.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div class="kicker">global conclusions</div>
+      <h3>No single winner — indexing is a routing decision</h3>
+      <p class="sub">Across read latency, write latency, read and write concurrency, and memory, no design dominates. The choice turns on two properties of each indexed column: how its reads arrive — HEAD vs historical, point vs range — and how it churns — cardinality × update rate.</p>
+    </div>
+
+    <div class="tablewrap">
+      <table class="matrix">
+        <thead>
+          <tr><th>Design</th><th>Strongest at</th><th>Falls over when</th><th>Reach for it when</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="dot" style="background:var(--amber)"></span>Multiversion hash</td>
+            <td>O(1) HEAD reads; smallest memory</td>
+            <td>historical / as-of reads (version filtering), hot keys, coarse write locks</td>
+            <td>low-cardinality, stable, HEAD-read properties — with lock-free or striped writes</td>
+          </tr>
+          <tr>
+            <td><span class="dot" style="background:var(--teal)"></span>COW B-tree</td>
+            <td>balanced read + write; free range scans on dict codes</td>
+            <td>per-write allocation; heaviest memory</td>
+            <td>ordered or range queries</td>
+          </tr>
+          <tr>
+            <td><span class="dot" style="background:var(--blue)"></span>HAMT</td>
+            <td>balanced; flat in history; as-of as cheap as HEAD</td>
+            <td>per-write allocation cost</td>
+            <td>the safe default when the workload is unknown</td>
+          </tr>
+          <tr>
+            <td><span class="dot" style="background:var(--violet)"></span>Per-DataPart, compacted</td>
+            <td>cheapest writes; tiny memory; cheap historical reads</td>
+            <td>reads O(parts) without compaction; compaction adds write amplification</td>
+            <td>write-heavy, scan-tolerant columns — TuringDB's existing per-part model</td>
+          </tr>
+          <tr>
+            <td><span class="dot" style="background:var(--red)"></span>COW layers</td>
+            <td>cheapest writes</td>
+            <td>reads walk the whole stack, O(parts)</td>
+            <td>append-mostly data, paired with Bloom filters</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="laws">
+      <div class="law"><b>Global structures buy flat reads.</b> One shared index reads in O(1)/O(log) regardless of history — but the only mutable global one, the multiversion hash, pays for it in write contention unless it goes lock-free.</div>
+      <div class="law"><b>Local structures buy cheap writes.</b> Per-part indexes let every commit write independently with minimal memory — but a read fans out across all parts, O(parts).</div>
+      <div class="law"><b>Compaction is the only slope-killer.</b> It bounds read fan-out to O(K), but trades it for write amplification — and a version-preserving store can't discard old parts the way ClickHouse does, so it buys less here.</div>
+      <div class="law"><b>Time-travel inverts the ranking.</b> Read into the past and the order flips: persistent trees stay flat (any version is a retained root), per-part/layer reads get cheaper (fewer parts existed then), the multiversion table gets costlier (more versions to filter). What wins HEAD loses history.</div>
+      <div class="law"><b>Wait-free reads come from copy-on-write, not versioning.</b> Every design that publishes a version with one atomic swap gives readers wait-free access; only the in-place-mutable multiversion table must go lock-free to avoid reader/writer contention.</div>
+    </div>
+
+    <div class="rec">
+      <h3>For TuringDB: one structure shouldn't index every property — route by cardinality × churn</h3>
+      <ul>
+        <li><strong>Low-cardinality, stable string properties</strong> (status, type, label — the "identical mostly everywhere" case) → a <strong>multiversion structure keyed by dictionary code</strong>, lock-free or striped. Flat 165 ns HEAD reads and ~MiB memory from shared, rarely-rewritten posting lists; version filtering bites only on the rare as-of read.</li>
+        <li><strong>High-cardinality or high-churn properties</strong> → <strong>per-DataPart local indexes</strong> (what TuringDB already builds) plus <strong>version-preserving compaction</strong> to bound fan-out and <strong>zone-map / Bloom pruning</strong> to cut the constant.</li>
+        <li><strong>Range or ordered access</strong> → a <strong>COW B-tree</strong> per commit; dictionary codes are ints, so range scans come free.</li>
+        <li><strong>Unknown or mixed workload</strong> → the <strong>persistent trees</strong> (HAMT / COW B-tree) are the conservative default — logarithmic and flat on both reads and writes, with history free to query.</li>
+      </ul>
+      <p>Compaction is the universal lever, but it must be <strong>version-preserving</strong> — which is exactly why the global multiversion structure stays attractive for the stable, low-cardinality slice, and why per-part fan-out is a harder problem here than in a store that can merge history away.</p>
+    </div>
+  </section>
+
+  <section class="method">
+    <h3>How this is computed</h3>
+    <p><code>index_sim</code> <b>executes</b> the read/write workload so operation counts — tree depth, layers walked, parts collected, version-chain length — reflect the real access distribution. It then charges each operation a <b>fixed estimated cost</b>: a cache-miss pointer chase (80 ns), a node allocation (60 ns), a CAS (20 ns), a mutex lock (25 ns), a Bloom probe (30 ns). Concurrency wait time is <b>derived</b> from those constants and a writer count — no threads are spawned.</p>
+    <p>Retune any constant and rerun: <code>./index_sim --hop 120 --threads 16 --hot 0.05</code>. The shapes are the message; the absolute nanoseconds are only as good as the constants you feed it.</p>
+  </section>
+
+  <p class="foot mono">tools/index-sim · cost-model simulator · curves from results_sweep.csv &amp; results_concurrency.csv</p>
+
+</div>
+
+<script>
+  const DATA = {
+    sweep: [{"p":1,"rh":82.0,"rb":90.0,"rm":165.0,"rl":85.0,"rp":95.0,"rpp":125.0,"rpc":95.0,"sh":4564.0,"sb":4820.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":2,"rh":164.0,"rb":180.0,"rm":165.0,"rl":127.5,"rp":180.0,"rpp":155.0,"rpc":180.0,"sh":9108.0,"sb":9620.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":3,"rh":164.0,"rb":180.0,"rm":165.0,"rl":169.2,"rp":265.0,"rpp":185.0,"rpc":265.0,"sh":9108.0,"sb":9620.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":4,"rh":164.0,"rb":180.0,"rm":165.0,"rl":215.6,"rp":350.0,"rpp":215.0,"rpc":350.0,"sh":9108.0,"sb":9620.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":5,"rh":164.0,"rb":180.0,"rm":165.0,"rl":249.4,"rp":435.0,"rpp":245.0,"rpc":435.0,"sh":9108.0,"sb":9620.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":6,"rh":164.0,"rb":180.0,"rm":165.0,"rl":296.6,"rp":520.0,"rpp":275.1,"rpc":520.0,"sh":9108.0,"sb":9620.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":8,"rh":164.0,"rb":180.0,"rm":165.0,"rl":387.9,"rp":690.1,"rpp":335.8,"rpc":690.1,"sh":9108.0,"sb":9620.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":10,"rh":164.0,"rb":180.0,"rm":165.0,"rl":458.1,"rp":860.1,"rpp":395.8,"rpc":860.1,"sh":9108.0,"sb":9620.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":13,"rh":164.0,"rb":180.0,"rm":165.0,"rl":595.0,"rp":1115.1,"rpp":485.7,"rpc":1115.1,"sh":9108.0,"sb":9620.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":16,"rh":164.0,"rb":180.0,"rm":165.0,"rl":711.0,"rp":1370.1,"rpp":575.6,"rpc":1370.1,"sh":9108.0,"sb":9620.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":21,"rh":164.0,"rb":180.0,"rm":165.0,"rl":915.4,"rp":1795.0,"rpp":725.4,"rpc":1795.0,"sh":9108.0,"sb":9620.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":27,"rh":164.0,"rb":180.0,"rm":165.0,"rl":1196.6,"rp":2305.1,"rpp":905.5,"rpc":2305.1,"sh":9108.0,"sb":9620.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":35,"rh":246.0,"rb":270.0,"rm":165.0,"rl":1526.6,"rp":2985.1,"rpp":1145.5,"rpc":2985.1,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":45,"rh":246.0,"rb":270.0,"rm":165.0,"rl":2002.3,"rp":3835.1,"rpp":1445.7,"rpc":3835.1,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":58,"rh":246.0,"rb":270.0,"rm":165.0,"rl":2533.1,"rp":4940.1,"rpp":1836.2,"rpc":4940.1,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2140.0},{"p":74,"rh":246.0,"rb":270.0,"rm":165.0,"rl":3153.5,"rp":6300.1,"rpp":2316.2,"rpc":5450.1,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":2588.2},{"p":96,"rh":246.0,"rb":270.0,"rm":165.0,"rl":4129.0,"rp":8170.1,"rpp":2976.1,"rpc":5450.1,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":3391.8},{"p":123,"rh":246.0,"rb":270.0,"rm":165.0,"rl":5191.7,"rp":10465.2,"rpp":3786.7,"rpc":5450.2,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":4157.0},{"p":159,"rh":246.0,"rb":270.0,"rm":165.0,"rl":6689.0,"rp":13525.2,"rpp":4866.8,"rpc":5450.2,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":4949.6},{"p":205,"rh":246.0,"rb":270.0,"rm":165.0,"rl":8746.0,"rp":17435.3,"rpp":6247.9,"rpc":5450.3,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":5734.1},{"p":263,"rh":246.0,"rb":270.0,"rm":165.0,"rl":10992.8,"rp":22365.4,"rpp":7989.1,"rpc":5450.4,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":6503.3},{"p":339,"rh":246.0,"rb":270.0,"rm":165.0,"rl":14237.3,"rp":28825.6,"rpp":10270.7,"rpc":5450.6,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":7287.0},{"p":437,"rh":246.0,"rb":270.0,"rm":165.0,"rl":17567.6,"rp":37155.7,"rpp":13211.6,"rpc":5450.7,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":8071.0},{"p":563,"rh":246.0,"rb":270.0,"rm":165.0,"rl":23498.6,"rp":47865.9,"rpp":16993.5,"rpc":5450.9,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":8853.2},{"p":726,"rh":246.0,"rb":270.0,"rm":165.0,"rl":29565.6,"rp":61721.2,"rpp":21886.9,"rpc":5451.2,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":9638.2},{"p":935,"rh":246.0,"rb":270.0,"rm":165.0,"rl":37513.1,"rp":79486.7,"rpp":28161.0,"rpc":5451.7,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":10419.3},{"p":1205,"rh":246.0,"rb":270.0,"rm":165.0,"rl":47369.4,"rp":102437.0,"rpp":36265.4,"rpc":5452.1,"sh":13652.0,"sb":14420.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":11202.5},{"p":1552,"rh":328.0,"rb":360.0,"rm":165.0,"rl":61060.0,"rp":131933.0,"rpp":46683.7,"rpc":5453.0,"sh":18196.0,"sb":19220.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":11983.8},{"p":2000,"rh":328.0,"rb":360.0,"rm":165.0,"rl":78993.9,"rp":170014.0,"rpp":60128.6,"rpc":5453.5,"sh":18196.0,"sb":19220.0,"sm":4480.0,"sl":2160.0,"sp":2140.0,"spc":12766.8}],
+    conc: [{"t":1,"g":4505,"s":5280,"l":2560},{"t":2,"g":7065,"s":5290,"l":2560},{"t":4,"g":12185,"s":5310,"l":2560},{"t":8,"g":22425,"s":5350,"l":2560},{"t":16,"g":42905,"s":5430,"l":2560},{"t":32,"g":83865,"s":5590,"l":2560},{"t":64,"g":165785,"s":5910,"l":2560}],
+    mvccReads: [{"t":1,"g":2750,"s":200,"l":165},{"t":2,"g":5310,"s":210,"l":165},{"t":4,"g":10430,"s":230,"l":165},{"t":8,"g":20670,"s":270,"l":165},{"t":16,"g":41150,"s":350,"l":165},{"t":32,"g":82110,"s":510,"l":165},{"t":64,"g":164030,"s":830,"l":165}],
+    mem: {"HAMT":13.1,"COW B-tree":78.8,"Multiversion hash":2.7,"COW layers":1.6,"Per-DataPart":1.6,"naive full copy":2161.2}
+  };
+
+  const C = { blue:"#3B5BDB", teal:"#0E9384", amber:"#C9760A", red:"#DC3C42", violet:"#7B61D6",
+              good:"#1F9D55", warn:"#D98B0B", crit:"#DC3C42",
+              grid:"#DCE2EA", axis:"#8A95A4", ink:"#18202D", faint:"#8A95A4" };
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function fmtNs(v) {
+    if (v < 1000) { return Math.round(v) + " ns"; }
+    const u = v / 1000;
+    return (u < 10 ? u.toFixed(1) : Math.round(u)) + " µs";
+  }
+
+  class LineChart {
+    constructor(canvasId, cfg) {
+      this.canvas = document.getElementById(canvasId);
+      this.ctx = this.canvas.getContext("2d");
+      this.cfg = cfg;
+      this.progress = reduceMotion ? 1 : 0;
+      this.hover = null;
+      this.pad = { l: 58, r: 16, t: 16, b: 34 };
+      this.canvas.addEventListener("mousemove", (e) => this.onMove(e));
+      this.canvas.addEventListener("mouseleave", () => { this.hover = null; this.draw(); this.cfg.onHover(null); });
+      this.resize();
+    }
+    resize() {
+      const dpr = window.devicePixelRatio || 1;
+      const w = this.canvas.clientWidth;
+      const h = this.canvas.clientHeight;
+      this.w = w; this.h = h;
+      this.canvas.width = Math.round(w * dpr);
+      this.canvas.height = Math.round(h * dpr);
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.draw();
+    }
+    plot() {
+      return { x: this.pad.l, y: this.pad.t, w: this.w - this.pad.l - this.pad.r, h: this.h - this.pad.t - this.pad.b };
+    }
+    tx(v) {
+      const p = this.plot();
+      if (this.cfg.xScale === "lin") {
+        const lo = this.cfg.xDomain[0], hi = this.cfg.xDomain[1];
+        return p.x + (v - lo) / (hi - lo) * p.w;
+      }
+      const lo = Math.log10(this.cfg.xDomain[0]), hi = Math.log10(this.cfg.xDomain[1]);
+      return p.x + (Math.log10(v) - lo) / (hi - lo) * p.w;
+    }
+    ty(v) {
+      const p = this.plot();
+      if (this.cfg.yScale === "log") {
+        const lo = Math.log10(this.cfg.yDomain[0]), hi = Math.log10(this.cfg.yDomain[1]);
+        return p.y + p.h - (Math.log10(v) - lo) / (hi - lo) * p.h;
+      }
+      const lo = this.cfg.yDomain[0], hi = this.cfg.yDomain[1];
+      return p.y + p.h - (v - lo) / (hi - lo) * p.h;
+    }
+    onMove(e) {
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      let best = 0, bestD = Infinity;
+      this.cfg.xs.forEach((xv, i) => {
+        const d = Math.abs(this.tx(xv) - mx);
+        if (d < bestD) { bestD = d; best = i; }
+      });
+      this.hover = best;
+      this.draw();
+      this.cfg.onHover(best);
+    }
+    draw() {
+      const ctx = this.ctx, p = this.plot();
+      ctx.clearRect(0, 0, this.w, this.h);
+
+      ctx.font = "11px ui-monospace, Menlo, Consolas, monospace";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 1;
+      this.cfg.yTicks.forEach((t) => {
+        const y = Math.round(this.ty(t)) + 0.5;
+        ctx.strokeStyle = C.grid;
+        ctx.beginPath(); ctx.moveTo(p.x, y); ctx.lineTo(p.x + p.w, y); ctx.stroke();
+        ctx.fillStyle = C.axis; ctx.textAlign = "right";
+        ctx.fillText(this.cfg.fmtY(t), p.x - 8, y);
+      });
+      ctx.textBaseline = "top"; ctx.textAlign = "center";
+      this.cfg.xTicks.forEach((t) => {
+        const x = this.tx(t);
+        ctx.strokeStyle = C.grid;
+        ctx.beginPath(); ctx.moveTo(x, p.y); ctx.lineTo(x, p.y + p.h); ctx.stroke();
+        ctx.fillStyle = C.axis;
+        ctx.fillText(this.cfg.fmtX(t), x, p.y + p.h + 9);
+      });
+
+      const cut = p.x + p.w * this.progress;
+      this.cfg.series.forEach((s) => {
+        const pts = this.cfg.xs.map((xv, i) => [this.tx(xv), this.ty(this.cfg.rows[i][s.key])]);
+        ctx.save();
+        ctx.beginPath(); ctx.rect(p.x, p.y - 4, Math.max(0, cut - p.x), p.h + 8); ctx.clip();
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = s.emphasize ? 2.6 : 1.8;
+        ctx.lineJoin = "round"; ctx.lineCap = "round";
+        ctx.setLineDash(s.dash || []);
+        ctx.beginPath();
+        pts.forEach((pt, i) => i ? ctx.lineTo(pt[0], pt[1]) : ctx.moveTo(pt[0], pt[1]));
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+        if (this.progress >= 1) {
+          const last = pts[pts.length - 1];
+          ctx.fillStyle = s.color;
+          ctx.beginPath(); ctx.arc(last[0], last[1], s.emphasize ? 4 : 3, 0, Math.PI * 2); ctx.fill();
+        }
+      });
+
+      if (this.hover !== null && this.progress >= 1) {
+        const hx = this.tx(this.cfg.xs[this.hover]);
+        ctx.strokeStyle = "#9aa6b5"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(hx, p.y); ctx.lineTo(hx, p.y + p.h); ctx.stroke();
+        ctx.setLineDash([]);
+        this.cfg.series.forEach((s) => {
+          const y = this.ty(this.cfg.rows[this.hover][s.key]);
+          ctx.fillStyle = "#fff"; ctx.strokeStyle = s.color; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(hx, y, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        });
+      }
+    }
+    animate() {
+      if (reduceMotion) { this.progress = 1; this.draw(); return; }
+      const dur = 750, start = performance.now();
+      const step = (now) => {
+        this.progress = Math.min(1, (now - start) / dur);
+        this.draw();
+        if (this.progress < 1) { requestAnimationFrame(step); }
+      };
+      requestAnimationFrame(step);
+    }
+  }
+
+  const partTicks = [1, 10, 100, 1000];
+  const fmtParts = (v) => v >= 1000 ? (v / 1000) + "k" : "" + v;
+  const sweepXs = DATA.sweep.map((d) => d.p);
+
+  const readChart = new LineChart("readChart", {
+    xs: sweepXs, rows: DATA.sweep,
+    xDomain: [1, 2000], yDomain: [60, 200000], yScale: "log",
+    xTicks: partTicks, yTicks: [100, 1000, 10000, 100000],
+    fmtX: fmtParts, fmtY: fmtNs,
+    series: [
+      { key: "rh", color: C.blue }, { key: "rb", color: C.teal },
+      { key: "rm", color: C.amber }, { key: "rl", color: C.red },
+      { key: "rp", color: C.violet, emphasize: true }
+    ],
+    onHover: (i) => writeReadout("readReadout", i, [["HAMT","rh"],["B-tree","rb"],["MV","rm"],["Layers","rl"],["Per-Part","rp"]], "parts")
+  });
+
+  const perpartChart = new LineChart("perpartChart", {
+    xs: sweepXs, rows: DATA.sweep,
+    xDomain: [1, 2000], yDomain: [80, 200000], yScale: "log",
+    xTicks: partTicks, yTicks: [100, 1000, 10000, 100000],
+    fmtX: fmtParts, fmtY: fmtNs,
+    series: [
+      { key: "rp", color: C.violet },
+      { key: "rpp", color: C.violet, dash: [6, 4] },
+      { key: "rpc", color: C.good, emphasize: true },
+      { key: "rm", color: C.amber }
+    ],
+    onHover: (i) => writeReadout("perpartReadout", i, [["collect","rp"],["+prune","rpp"],["compact","rpc"],["MV ref","rm"]], "parts")
+  });
+
+  const submitChart = new LineChart("submitChart", {
+    xs: sweepXs, rows: DATA.sweep,
+    xDomain: [1, 2000], yDomain: [0, 21000], yScale: "lin",
+    xTicks: partTicks, yTicks: [0, 5000, 10000, 15000, 20000],
+    fmtX: fmtParts, fmtY: fmtNs,
+    series: [
+      { key: "sh", color: C.blue }, { key: "sb", color: C.teal },
+      { key: "sm", color: C.amber }, { key: "sl", color: C.red }
+    ],
+    onHover: (i) => writeReadout("submitReadout", i, [["HAMT","sh"],["B-tree","sb"],["MV","sm"],["Layers","sl"]], "parts")
+  });
+
+  const concChart = new LineChart("concChart", {
+    xs: DATA.conc.map((d) => d.t), rows: DATA.conc,
+    xDomain: [1, 64], yDomain: [2000, 200000], yScale: "log",
+    xTicks: [1, 2, 4, 8, 16, 32, 64], yTicks: [10000, 100000],
+    fmtX: (v) => "" + v, fmtY: fmtNs,
+    series: [
+      { key: "g", color: C.crit, emphasize: true },
+      { key: "s", color: C.warn }, { key: "l", color: C.good }
+    ],
+    onHover: (i) => writeReadout("concReadout", i, [["global","g"],["striped","s"],["lock-free","l"]], "threads")
+  });
+
+  const headRow = DATA.sweep[DATA.sweep.length - 1];
+
+  // Reads under concurrent writers, every design. Copy-on-write / persistent structures publish
+  // each new version by a single atomic root/manifest swap, so readers are wait-free — flat in
+  // writer count at their base HEAD read cost. Only the multiversion table mutates shared state,
+  // so a lock-based policy makes reads contend; lock-free keeps them flat.
+  const readerAllData = DATA.mvccReads.map((d) => ({
+    t: d.t, hamt: headRow.rh, btree: headRow.rb, layers: headRow.rl, perpart: headRow.rp,
+    mvFree: d.l, mvMutex: d.g
+  }));
+  const readerFields = [["HAMT","hamt"],["B-tree","btree"],["layers","layers"],["per-part","perpart"],["MV lock-free","mvFree"],["MV mutex","mvMutex"]];
+  const readerChart = new LineChart("readerChart", {
+    xs: readerAllData.map((d) => d.t), rows: readerAllData,
+    xDomain: [1, 64], yDomain: [120, 220000], yScale: "log",
+    xTicks: [1, 2, 4, 8, 16, 32, 64], yTicks: [200, 1000, 10000, 100000],
+    fmtX: (v) => "" + v, fmtY: fmtNs,
+    series: [
+      { key: "perpart", color: C.violet }, { key: "layers", color: C.red },
+      { key: "mvMutex", color: C.amber, dash: [6, 4], emphasize: true },
+      { key: "btree", color: C.teal }, { key: "hamt", color: C.blue },
+      { key: "mvFree", color: C.amber, emphasize: true }
+    ],
+    onHover: (i) => writeReadout("readerReadout", i, readerFields, "writers", readerAllData, "t")
+  });
+
+  // As-of read: latency to read a value N commits behind HEAD. Persistent trees read that
+  // version's retained root (O(log N), shrinking with the smaller old tree); per-part / layers
+  // touch only the parts live at that snapshot, so the cost is the sweep value at that part
+  // count; the multiversion table filters past every newer version of the key (rises — worst
+  // case shown is a key updated each commit).
+  function sweepNear(parts) {
+    let best = DATA.sweep[0], bestD = Infinity;
+    for (const r of DATA.sweep) { const d = Math.abs(r.p - parts); if (d < bestD) { bestD = d; best = r; } }
+    return best;
+  }
+  const headParts = headRow.p;
+  const asofData = [0, 25, 50, 100, 200, 350, 500, 700, 900, 1100, 1300, 1500, 1700, 1850, 1950, 1999]
+    .map((x) => {
+      const r = sweepNear(headParts - x);
+      return { x: x, hamt: r.rh, btree: r.rb, layers: r.rl, perpart: r.rp, mvcc: 165 + x * 82 };
+    });
+  const asofFields = [["HAMT","hamt"],["B-tree","btree"],["MV","mvcc"],["layers","layers"],["per-part","perpart"]];
+  const filterChart = new LineChart("filterChart", {
+    xs: asofData.map((d) => d.x), rows: asofData,
+    xScale: "lin", xDomain: [0, 2000], yDomain: [60, 220000], yScale: "log",
+    xTicks: [0, 500, 1000, 1500, 2000], yTicks: [100, 1000, 10000, 100000],
+    fmtX: (v) => "" + v, fmtY: fmtNs,
+    series: [
+      { key: "mvcc", color: C.amber, emphasize: true },
+      { key: "perpart", color: C.violet }, { key: "layers", color: C.red },
+      { key: "btree", color: C.teal }, { key: "hamt", color: C.blue }
+    ],
+    onHover: (i) => writeReadout("filterReadout", i, asofFields, "behind HEAD", asofData, "x")
+  });
+
+  function writeReadout(elId, idx, fields, xlabel, dataArr, xKey) {
+    const el = document.getElementById(elId);
+    const arr = dataArr || (elId === "concReadout" ? DATA.conc : DATA.sweep);
+    const key = xKey || (arr === DATA.conc ? "t" : "p");
+    const i = idx === null ? arr.length - 1 : idx;
+    const row = arr[i];
+    const xv = row[key];
+    const prefix = idx === null ? "at " + xv + " " + xlabel : xlabel + " " + xv;
+    const parts = fields.map((f) => `${f[0]} <b>${fmtNs(row[f[1]])}</b>`).join("&nbsp;·&nbsp;");
+    el.innerHTML = `<span style="color:var(--faint)">${prefix}</span>&nbsp;&nbsp;${parts}`;
+  }
+
+  const memColors = { "HAMT": C.blue, "COW B-tree": C.teal, "Multiversion hash": C.amber, "COW layers": C.red, "Per-DataPart": C.violet };
+  const memEl = document.getElementById("memBars");
+  const memMax = Math.log10(2200), memMin = Math.log10(1);
+  Object.entries(DATA.mem).forEach(([name, val]) => {
+    const isNaive = name === "naive full copy";
+    const pct = (Math.log10(val) - memMin) / (memMax - memMin) * 100;
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    row.innerHTML =
+      `<span class="bar-label">${name}</span>` +
+      `<span class="bar-track"><span class="bar-fill ${isNaive ? "hatch" : ""}" style="width:${reduceMotion ? pct : 0}%;${isNaive ? "" : "background:" + memColors[name]}"></span></span>` +
+      `<span class="bar-val">${val >= 1000 ? (val / 1024).toFixed(2) + " GiB" : val.toFixed(1) + " MiB"}</span>`;
+    memEl.appendChild(row);
+    if (!reduceMotion) {
+      const fill = row.querySelector(".bar-fill");
+      requestAnimationFrame(() => { fill.style.transition = "width .8s cubic-bezier(.2,.7,.2,1)"; fill.style.width = pct + "%"; });
+    }
+  });
+
+  writeReadout("readReadout", null, [["HAMT","rh"],["B-tree","rb"],["MV","rm"],["Layers","rl"],["Per-Part","rp"]], "parts");
+  writeReadout("perpartReadout", null, [["collect","rp"],["+prune","rpp"],["compact","rpc"],["MV ref","rm"]], "parts");
+  writeReadout("submitReadout", null, [["HAMT","sh"],["B-tree","sb"],["MV","sm"],["Layers","sl"]], "parts");
+  writeReadout("concReadout", null, [["global","g"],["striped","s"],["lock-free","l"]], "threads");
+  writeReadout("readerReadout", null, readerFields, "writers", readerAllData, "t");
+  writeReadout("filterReadout", null, asofFields, "behind HEAD", asofData, "x");
+
+  const charts = [readChart, perpartChart, submitChart, concChart, readerChart, filterChart];
+  if ("IntersectionObserver" in window && !reduceMotion) {
+    const seen = new Set();
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((en) => {
+        if (en.isIntersecting && !seen.has(en.target.id)) {
+          seen.add(en.target.id);
+          const c = charts.find((ch) => ch.canvas.id === en.target.id);
+          if (c) { c.animate(); }
+        }
+      });
+    }, { threshold: 0.35 });
+    charts.forEach((c) => io.observe(c.canvas));
+  } else {
+    charts.forEach((c) => { c.progress = 1; c.draw(); });
+  }
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => charts.forEach((c) => c.resize()), 120);
+  });
+</script>
