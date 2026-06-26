@@ -8,12 +8,12 @@ mlir_tablegen(NLDialect.h.inc    -gen-dialect-decls -dialect nl  EXTRA_INCLUDES 
 mlir_tablegen(NLDialect.cpp.inc  -gen-dialect-defs  -dialect nl  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
 
 set(LLVM_TARGET_DEFINITIONS NLOps.td)
-mlir_tablegen(NLOps.h.inc        -gen-op-decls      -dialect nl  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
-mlir_tablegen(NLOps.cpp.inc      -gen-op-defs       -dialect nl  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+mlir_tablegen(NLOps.h.inc        -gen-op-decls      -dialect nl  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
+mlir_tablegen(NLOps.cpp.inc      -gen-op-defs       -dialect nl  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
 
 set(LLVM_TARGET_DEFINITIONS NLTypes.td)
-mlir_tablegen(NLTypes.h.inc      -gen-typedef-decls     -dialect nl EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
-mlir_tablegen(NLTypes.cpp.inc    -gen-typedef-defs      -dialect nl EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+mlir_tablegen(NLTypes.h.inc      -gen-typedef-decls     -dialect nl --typedefs-dialect nl EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
+mlir_tablegen(NLTypes.cpp.inc    -gen-typedef-defs      -dialect nl --typedefs-dialect nl EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
 
 # Creates CMAKE target with all included .inc files, the lib depends on this
 add_public_tablegen_target(NLDialectIncGen)
@@ -40,12 +40,14 @@ add_mlir_library(turing_db_ir_nldialect_s
   MLIRFuncDialect
   MLIRInferTypeOpInterface
   MLIRBuiltinToLLVMIRTranslation
+  turing_db_ir_storagedialect_s
 )
 
 # Ensure we have MLIR and LLVM includes, as well as the headers in current dir
 target_include_directories(turing_db_ir_nldialect_s PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_BINARY_DIR}
+  ${STORAGE_DIALECT_BINARY_DIR}
   ${MLIR_INCLUDE_DIRS}
   ${LLVM_INCLUDE_DIRS}
 )
