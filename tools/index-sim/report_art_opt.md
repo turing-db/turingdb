@@ -172,6 +172,49 @@ should be revisited: the hash's remaining edge is its *write* simplicity and loc
 latency. For long/structured keys, path compression (44 → 6 loads) is mandatory and the hash's per-byte
 digest loses outright (cf. the key-length crossover in `report_art.md`).
 
+## Production follow-up (2026-06-26): arena kept, height reduction discarded
+
+These optimizations were folded into the production `db::AdaptiveRadixTree` (SIMD Node16, leaf fingerprint,
+full-leaf verify, AMAC `findBatch`, path compression). Two further ideas were then tried against it on this
+box (Google Benchmark, high-cardinality 16-byte keys; the ART measured is the absent-safe SIMD + fingerprint
++ verify variant), aimed at the one cell where it still trailed the multiversion hash: the **serial
+single-key hit at 1M keys** (DRAM-bound).
+
+**Arena allocation — kept.** Nodes and leaves now bump-allocate from a per-tree `BumpPtrAllocator` instead of
+individual `new`, co-locating a tree's memory. Build dropped ~5.7× at 1M (no per-node malloc/free), batched
+probes overtook the hash, and serial hits improved in the cache-resident range (e.g. 128K). It did **not**
+move the 1M serial hit — that cell is bound by dependent-miss *count*, which locality does not change.
+
+**Height reduction — discarded.** To attack the miss *count* we prototyped this report's stride trie against
+the production arena ART (a Google Benchmark stride sweep linking `db::AdaptiveRadixTree`), sweeping the
+stride to isolate the height effect (allocation scheme held constant). Serial HIT, M lookups/s
+(g++/libstdc++ prototype, directional — compare within the table):
+
+| structure | hops | 128K | 1M |
+|-----------|-----:|-----:|---:|
+| arena ART (1-byte, SIMD) | ~3–4 | 16.2 | 5.4 |
+| stride trie S=2 | 2.0 | 10.7 | 6.2 |
+| **stride trie S=4** | **1.0** | **18.8** | **8.8** |
+| stride trie S=8 | 1.0 | 15.8 | 7.6 |
+| multiversion hash | — | 10.6 | 5.6 |
+
+This *confirms* the cell is miss-count-bound — but the fix is not an ART. Cutting 3→2 hops barely moved 1M
+(5.4 → 6.2); the ~1.6× win arrives only at **1 hop** (S=4), and a 1-hop stride trie over 1M keys *is* a
+single ~1M-entry node keyed on the first 4 bytes — a **hash on the key prefix**, not a radix tree. It
+forfeits exactly what justifies the trie over the hash (ordered/range/prefix scans, adaptive node sizing;
+the root becomes one ~32 MB node), and S=8 is already worse than S=4 (fatter, colder node). So the earlier
+"optimum stride ≈ 4" knob, read at the production level, is the *degenerate* (hash) end of the spectrum:
+there is no useful **moderate** height reduction here — you either stay a real ART (and accept the
+serial-single-key-at-1M deficit) or become a hash, at which point the multiversion hash is the simpler
+structure the design already routes point-read/write-dominated slices to.
+
+**Verdict: discard height reduction as a production ART optimization.** After the arena the ART wins build,
+batched probes (the recommended columnar path), misses, and warm hits, trailing only on the discouraged
+serial-single-key path at deep-DRAM scale; closing that one cell is not worth degenerating the structure.
+For a point-read-only-at-scale column, route it to the hash rather than widening the ART's stride. (The
+hash-front + radix-tail *hybrid* of `report_art.md` idea #1 is a distinct structure — it keeps a radix tail
+with ordered properties — and was not what this prototype tested.)
+
 ## Files
 - `index_opt.cpp` — implements and measures all six techniques (`--keys N --parts P`).
 - `report_art.md` / `index_decompose.cpp` — the decomposition this builds on.

@@ -202,6 +202,13 @@ column's key-length × cardinality, not a fixed design — the index is a *spect
 keylen) and pure radix (k = 0), and the optimum is data-dependent. Attacks factor 1 (load count) without
 the negative-result's cache penalty.
 
+> **Follow-up (2026-06-26):** the *pure* stride form of this — widen *every* level, no radix tail — was
+> later prototyped against the production ART and **discarded** (`report_art_opt.md`): for 16-byte keys the
+> only stride that wins (S=4) drives k to the hash end of the spectrum, so the whole structure becomes a
+> prefix-hash and loses the trie's ordered/range/adaptive properties. The hash-front + radix-tail **hybrid
+> described here is distinct** — it keeps a radix tail — and remains untested; it would matter only where k
+> disambiguates the dense prefix while leaving a meaningful tail (longer keys / lower cardinality).
+
 **2. Versioning-aware split: a shared, mutable, non-versioned hash front-end over persistent-radix tails.**
 This is idea 1 specialized to TuringDB's MVCC and it pays off *twice*. The upper levels of the trie (the
 dense first 2–3 bytes) are structurally **stable** — adding keys almost never reshapes them — so they do

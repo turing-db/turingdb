@@ -280,6 +280,14 @@ high-cardinality, 16-byte keys, warm (L2/L3-resident) working set, on an Intel C
   range scans dominate over point reads.
 - **Verify-free full-key-consuming trie** — consuming the whole key removes the need to verify (absent-safe
   without a leaf compare), but deepens the tree; the prototype did not beat plain verify and is not adopted.
+- **Height reduction (multi-byte stride / HOT-family wide nodes) as a production optimization** — consume
+  several key bytes per level to cut descent height, and the dependent-load count that bounds the deep-DRAM
+  serial point read. **Rejected as an ART change** (prototyped against the production arena-backed ART;
+  `tools/index-sim/report_art_opt.md`, 2026-06-26 follow-up): the only stride that helps (S=4, ~1.6× at 1M)
+  collapses the upper tree into a single ~1M-entry node keyed on the key prefix — a hash, not a radix tree —
+  forfeiting the ordered/range/prefix scans and adaptive node sizing the ART exists for; a *moderate* stride
+  (S=2) gives almost nothing and S=8 is worse than S=4. Route point-read-only-at-scale slices to the
+  multiversion hash (§2) instead of widening the ART's stride.
 
 ## 9. Implementation requirements
 
