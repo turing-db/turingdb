@@ -73,6 +73,18 @@ public:
         return true;
     }
 
+    // Fires before the values callback for any sub-batch on a column where
+    // max_repetition_level > 0. rep_levels[i] == 0 marks the start of a new
+    // top-level row; rep_levels[i] > 0 is a continuation element within the
+    // same list. def_levels[i] == max_definition_level means the value is
+    // present; lower values indicate nulls at some nesting depth.
+    // Both spans are parallel to the values span that follows.
+    virtual bool onLevels(size_t columnIndex,
+                          std::span<const int16_t> repLevels,
+                          std::span<const int16_t> defLevels) {
+        return true;
+    }
+
     virtual bool onByteArrayValues(size_t columnIndex,
                                    std::span<const parquet::ByteArray> values) {
         return true;
@@ -164,6 +176,9 @@ private:
     // One scratch buffer per projected column, sized to hold
     // DEFAULT_CHUNK_SIZE values of the widest type (parquet::ByteArray).
     std::vector<std::vector<uint8_t>> _scratch;
+
+    std::vector<int16_t> _repLevelScratch;
+    std::vector<int16_t> _defLevelScratch;
 
     bool openRowGroup();
     void closeRowGroup();

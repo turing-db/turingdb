@@ -11,6 +11,7 @@
 #include <parquet/types.h>
 
 #include "BioAssert.h"
+#include "spdlog/spdlog.h"
 
 using namespace db;
 
@@ -73,6 +74,19 @@ bool ParquetNeo4jVisitor::onRowGroupStart(size_t, const parquet::RowGroupMetaDat
     return true;
 }
 
+bool ParquetNeo4jVisitor::onLevels(size_t columnIndex,
+                                   std::span<const int16_t> repLevels,
+                                   std::span<const int16_t> defLevels) {
+    // if (columnIndex == _lblColIdx) {
+        _chunkLabelRepLevels = repLevels;
+        for (auto i : repLevels) {
+            spdlog::info("Rep level: {}", i);
+        }
+        spdlog::info("rep levels done \n");
+    // }
+    return true;
+}
+
 bool ParquetNeo4jVisitor::onInt64Values(size_t columnIndex, std::span<const int64_t> values) {
     // FIXME: Skips non-node column
     if (columnIndex != _nodeColIdx) {
@@ -84,6 +98,8 @@ bool ParquetNeo4jVisitor::onInt64Values(size_t columnIndex, std::span<const int6
     return true;
 }
 
+// XXX: Problem: A byte array containing the labels of a node can span a chunk, meaning
+// the ID is in chunk X, whilst the the labels are split across chunk X and X+1
 bool ParquetNeo4jVisitor::onByteArrayValues(size_t columnIndex,
                                             std::span<const parquet::ByteArray> values) {
     // FIXME: Skips non-labels column

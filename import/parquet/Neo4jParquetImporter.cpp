@@ -36,9 +36,9 @@ void Neo4jParquetImporter::addNodes() {
     bioassert(labels.data(), "Failed to get nodes");
     bioassert(nodeIDs.size() == labels.size(), "Node, label mismatch");
 
-    DataPartBuilder& bld = _builder->getCurrentBuilder();
+    // DataPartBuilder& bld = _builder->getCurrentBuilder();
 
-    std::vector<std::string> labelBuffer;
-    for (auto [id, lbls] : rv::zip(nodeIDs, labels)) {
-    }
+    // std::vector<std::string> labelBuffer;
+    // for (auto [id, lbls] : rv::zip(nodeIDs, labels)) {
+    // }
 }

@@ -136,6 +136,22 @@ bool ParquetReader::readSlice(parquet::ColumnReader* columnReader,
     auto* typed = static_cast<parquet::TypedColumnReader<DType>*>(columnReader);
     T* buffer = reinterpret_cast<T*>(scratch.data());
 
+    // For nested types (e.g. dynamic byte arrays), we need to record the levels of
+    // nesting to extract, e.g. lists of strings
+    int16_t* repLevels = nullptr;
+    int16_t* defLevels = nullptr;
+    const bool hasRepLevels = typed->descr()->max_repetition_level() > 0;
+    if (hasRepLevels) {
+        if (_repLevelScratch.size() < batchRows) {
+            _repLevelScratch.resize(batchRows);
+        }
+        if (_defLevelScratch.size() < batchRows) {
+            _defLevelScratch.resize(batchRows);
+        }
+        repLevels = _repLevelScratch.data();
+        defLevels = _defLevelScratch.data();
+    }
+
     // ReadBatch is allowed to stop at page boundaries and return fewer
     // values than requested, especially on BYTE_ARRAY columns with large
     // variable-length values. Loop until we've delivered batchRows values
@@ -146,12 +162,23 @@ bool ParquetReader::readSlice(parquet::ColumnReader* columnReader,
     size_t totalRead = 0;
     while (totalRead < batchRows) {
         int64_t valuesRead = 0;
-        typed->ReadBatch(static_cast<int64_t>(batchRows - totalRead),
-                         nullptr, nullptr,
-                         buffer, &valuesRead);
-        if (valuesRead <= 0) {
+        const int64_t levelsRead = typed->ReadBatch(
+            static_cast<int64_t>(batchRows - totalRead),
+            defLevels, repLevels,
+            buffer, &valuesRead);
+        if (levelsRead <= 0) {
             break;
         }
+
+        if (hasRepLevels) {
+            const std::span<const int16_t> repSpan(repLevels, static_cast<size_t>(levelsRead));
+            const std::span<const int16_t> defSpan(defLevels, static_cast<size_t>(levelsRead));
+            if (!_visitor.onLevels(columnIndex, repSpan, defSpan)) {
+                _aborted = true;
+                return false;
+            }
+        }
+
         const std::span<const T> values(buffer, static_cast<size_t>(valuesRead));
 
         bool visitorOk = true;
@@ -180,7 +207,7 @@ bool ParquetReader::readSlice(parquet::ColumnReader* columnReader,
             return false;
         }
 
-        totalRead += static_cast<size_t>(valuesRead);
+        totalRead += static_cast<size_t>(levelsRead);
     }
     return true;
 }

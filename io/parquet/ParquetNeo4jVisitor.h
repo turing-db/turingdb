@@ -34,6 +34,10 @@ public:
      */
     bool onFileStart(const parquet::FileMetaData& metadata) final;
 
+    bool onLevels(size_t columnIndex,
+                  std::span<const int16_t> repLevels,
+                  std::span<const int16_t> defLevels) final;
+
     bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) final;
 
     bool onByteArrayValues(size_t columnIndex, std::span<const parquet::ByteArray> values) final;
@@ -60,6 +64,7 @@ private:
     // Per chunk reference stores
     NodeIDs _chunkNodeIds;
     Labels _chunkLabels;
+    std::span<const int16_t> _chunkLabelRepLevels;
 
     static constexpr std::string_view NEO4J_NODE_COL_PATH = "__id";
     static constexpr std::string_view NEO4J_LBLS_COL_PATH = "__labels.list.element";
