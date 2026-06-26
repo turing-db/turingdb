@@ -38,10 +38,10 @@ def GetOutEdges : TuringOp<"get_out_edges", [Pure]> {
   let arguments = (ins Column:$input_nodes, Variadic<Column>:$columns_to_filter);
 
   // `filtered_columns`: one per carried column, after the four fixed results.
-  let results   = (outs Column:$srcids,
-                        Column:$eids,
-                        Column:$etypes,
-                        Column:$tgtids,
+  let results   = (outs ColumnNodeIDs:$srcids,
+                        ColumnEdgeIDs:$eids,
+                        ColumnEdgeTypes:$etypes,
+                        ColumnNodeIDs:$tgtids,
                         Variadic<Column>:$filtered_columns);
 
   // Brace-wrap the carry set so it reads like `get_out_edges(%b, {%a})`.
