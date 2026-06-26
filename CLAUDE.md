@@ -153,6 +153,7 @@ Key points:
 - No move semantics/RVO; pass by pointer or reference
 - Prefer `enum class` with trailing comma
 - Prefer `size_t` for indices and counts in new code (row groups, columns, rows, batch sizes). Narrow with `static_cast<int>(...)` at third-party API boundaries inside the `.cpp`.
+- For count/budget values that are never negative (LIMIT counts, row budgets), keep them unsigned end to end: `UI64Attr` in MLIR ops → `uint64_t` accessor → `size_t` in the interpreter. Never use `I64Attr`/`int64_t` and cast — a negative literal should fail to parse, not reach a verifier.
 - Don't wrap unused parameter names in `/*comments*/` — just name them normally. `-Wunused-parameter` isn't enabled in this codebase, so there's no warning to silence.
 - Don't add `(void)param;` lines in function bodies to mark a parameter as used. Same reason: no warning to silence; it's pure noise.
 - **Fill columns with `std::fill`/`std::fill_n`/`std::copy`, not `reserve` + `push_back` loops.** A `push_back` loop does not vectorise; `std::fill_n` (repeated value) and `std::copy` (range, commonly lowered to `memcpy`) do. When laying out a column whose size is known up front, `resize` the output's `getRaw()` to the final size, then write ranges through an iterator with these algorithms — see `CartesianProductProcessor` and the `blockRepeatColumn`/`tileColumn` helpers in `NLExecutor.cpp`.
@@ -167,6 +168,7 @@ Key points:
 
 - During multi-turn iteration on a change (style feedback, API shape, refactors), **don't build after each edit**. Just write the edits and stop. Builds are slow and noisy; running them every micro-revision burns time. Only build when the user explicitly asks ("build" / "compile" / "run it") or signals the design is settled.
 - Don't preface `make` with `cmake ..`. `make` already re-runs cmake when any tracked `CMakeLists.txt` has changed. Only run `cmake ..` after editing `CMakeLists.txt` / `dependencies.sh`, or when resetting the build directory.
+- **Make minimal, targeted edits — fix exactly what's asked.** When the request is narrow (a comment, a wording, one line), change only that and leave surrounding working code alone. Don't refactor an adjacent loop or rename things just because you're nearby (e.g. asked to fix a confusing comment over a loop, rewrite the comment — don't also convert the loop to `all_of`). It keeps diffs small and reviewable and respects the existing structure. If a larger refactor seems worthwhile, propose it separately and let the user decide rather than bundling it in.
 
 ## Project context
 
@@ -182,6 +184,8 @@ Key points:
 ## Commit style
 
 Do not include Claude as a co-author in the commits.
+
+Commit messages are one short area-prefixed line, no body — e.g. `MLIR: implement limit`. The area prefix names the subsystem touched.
 
 ## PR style
 
