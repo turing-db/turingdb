@@ -17,3 +17,4 @@ void Storage::registerTypes() {
 #include "StorageTypes.cpp.inc"
     >();
 }
+

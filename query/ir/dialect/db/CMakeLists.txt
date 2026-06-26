@@ -6,14 +6,14 @@ set(LLVM_TARGET_DEFINITIONS DBDialect.td)
 #             Generated file     File type          Current dialect  Add needed mlir headers
 mlir_tablegen(DBDialect.h.inc    -gen-dialect-decls -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
 mlir_tablegen(DBDialect.cpp.inc  -gen-dialect-defs  -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
- 
+
 set(LLVM_TARGET_DEFINITIONS DBOps.td)
-mlir_tablegen(DBOps.h.inc        -gen-op-decls      -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
-mlir_tablegen(DBOps.cpp.inc      -gen-op-defs       -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+mlir_tablegen(DBOps.h.inc        -gen-op-decls      -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../storage)
+mlir_tablegen(DBOps.cpp.inc      -gen-op-defs       -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../storage)
 
 set(LLVM_TARGET_DEFINITIONS DBTypes.td)
-mlir_tablegen(DBTypes.h.inc      -gen-typedef-decls     -dialect db EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
-mlir_tablegen(DBTypes.cpp.inc    -gen-typedef-defs      -dialect db EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+mlir_tablegen(DBTypes.h.inc      -gen-typedef-decls     -dialect db --typedefs-dialect db EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../storage)
+mlir_tablegen(DBTypes.cpp.inc    -gen-typedef-defs      -dialect db --typedefs-dialect db EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../storage)
 
 # Creates CMAKE target with all included .inc files, the lib depends on this
 add_public_tablegen_target(DBDialectIncGen)
@@ -39,12 +39,14 @@ add_mlir_library(turing_db_ir_dbdialect_s
   MLIRSupport
   MLIRFuncDialect
   MLIRBuiltinToLLVMIRTranslation
+  turing_db_ir_storagedialect_s
 )
 
 # Ensure we have MLIR and LLVM includes, as well as the headers in current dir
 target_include_directories(turing_db_ir_dbdialect_s PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_BINARY_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}/../storage
   ${MLIR_INCLUDE_DIRS}
   ${LLVM_INCLUDE_DIRS}
 )
