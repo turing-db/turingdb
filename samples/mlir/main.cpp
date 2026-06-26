@@ -7,6 +7,7 @@
 
 #include <argparse.hpp>
 
+#include "StorageDialect.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -517,6 +518,7 @@ int main(int argc, char** argv) {
         mlir::MLIRContext ctxt;
         ctxt.loadDialect<mlir::db::DB>();
         ctxt.loadDialect<mlir::nl::NL>();
+        ctxt.loadDialect<mlir::storage::Storage>();
         ctxt.loadDialect<mlir::func::FuncDialect>();
 
         mlir::OpBuilder builder(&ctxt);

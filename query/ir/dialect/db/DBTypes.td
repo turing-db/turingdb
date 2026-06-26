@@ -4,6 +4,7 @@
 include "mlir/IR/AttrTypeBase.td"
 
 include "DBDialect.td"
+include "../storage/StorageTypes.td"
 
 // Base type. All turingdb dialect types derived from this.
 class TuringType<string name, string typeMnemonic, list<Trait> traits = []>
@@ -27,14 +28,6 @@ def Column : TuringType<"Column", "column"> {
     }];
 }
 
-def NodeID : TuringType<"NodeID", "nodeid"> {
-    let summary = "TuringDB NodeID";
-}
-
-def EdgeID : TuringType<"EdgeID", "edgeid"> {
-    let summary = "TuringDB EdgeID";
-}
-
 // Helper macro to define a strictly typed column
 //             type name       display name
 class ColumnOf<string cppType, string mnemonic> : Type<
@@ -43,7 +36,7 @@ class ColumnOf<string cppType, string mnemonic> : Type<
             "  llvm::cast<::mlir::db::ColumnType>($_self).getType())">,
       "column<" # mnemonic # ">">;
 
-def ColumnNodeIDs : ColumnOf<"::mlir::db::NodeIDType", "nodeid">;
-def ColumnEdgeIDs : ColumnOf<"::mlir::db::EdgeIDType", "edgeid">;
+def ColumnNodeIDs : ColumnOf<"::mlir::storage::NodeIDType", "nodeid">;
+def ColumnEdgeIDs : ColumnOf<"::mlir::storage::EdgeIDType", "edgeid">;
 
 #endif // TURINGDB_TYPES
