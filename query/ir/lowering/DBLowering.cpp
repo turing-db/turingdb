@@ -15,6 +15,7 @@
 using namespace db;
 
 namespace nl = mlir::nl;
+namespace storage = mlir::storage;
 
 namespace {
 
@@ -40,11 +41,11 @@ mlir::Type valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueType)
         break;
 
         case ValueType::String:
-            return mlir::nl::StringType::get(builder.getContext());
+            return storage::StringType::get(builder.getContext());
         break;
 
         case ValueType::Embedding:
-            return mlir::nl::EmbeddingType::get(builder.getContext());
+            return storage::EmbeddingType::get(builder.getContext());
         break;
 
         case ValueType::Invalid:
@@ -342,7 +343,7 @@ mlir::Type DBLowering::propertyValueChunkType(llvm::StringRef propertyName) {
     }
 
     const mlir::Type elementType = valueTypeToElementType(_builder, propertyType->_valueType);
-    nl::NullableType nullableType = nl::NullableType::get(_builder.getContext(), elementType);
+    storage::NullableType nullableType = storage::NullableType::get(_builder.getContext(), elementType);
 
     return nl::ChunkType::get(_builder.getContext(), nullableType);
 }

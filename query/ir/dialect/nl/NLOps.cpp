@@ -7,21 +7,23 @@
 using namespace mlir;
 using namespace mlir::nl;
 
+namespace storage = mlir::storage;
+
 #define GET_OP_CLASSES
 #include "NLOps.cpp.inc"
 
 namespace {
 
 Type getNodeIDChunkType(MLIRContext* context) {
-    return ChunkType::get(context, NodeIDType::get(context));
+    return ChunkType::get(context, storage::NodeIDType::get(context));
 }
 
 Type getEdgeIDChunkType(MLIRContext* context) {
-    return ChunkType::get(context, EdgeIDType::get(context));
+    return ChunkType::get(context, storage::EdgeIDType::get(context));
 }
 
 Type getEdgeTypeIDChunkType(MLIRContext* context) {
-    return ChunkType::get(context, EdgeTypeIDType::get(context));
+    return ChunkType::get(context, storage::EdgeTypeIDType::get(context));
 }
 
 // Out- and in-edge fetches expose the same row of chunks - source node IDs,

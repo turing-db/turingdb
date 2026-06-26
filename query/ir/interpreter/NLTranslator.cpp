@@ -22,6 +22,7 @@
 using namespace db;
 
 namespace nl = mlir::nl;
+namespace storage = mlir::storage;
 
 namespace {
 
@@ -50,9 +51,9 @@ NLHandlerFunction selectPropertyFetchHandler(bool isNode, ValueType valueType) {
 // same !nl.nullable<...> the fetch produced, and this maps it back to allocate
 // the matching nullable value column and pick the broadcast.
 ValueType valueTypeFromElementType(mlir::Type elementType) {
-    if (mlir::isa<nl::StringType>(elementType)) {
+    if (mlir::isa<storage::StringType>(elementType)) {
         return ValueType::String;
-    } else if (mlir::isa<nl::EmbeddingType>(elementType)) {
+    } else if (mlir::isa<storage::EmbeddingType>(elementType)) {
         return ValueType::Embedding;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {
         return ValueType::Double;
@@ -449,7 +450,7 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
     Column* output = nullptr;
     NLBroadcastFunction broadcast = nullptr;
 
-    if (const auto nullableType = mlir::dyn_cast<nl::NullableType>(elementType)) {
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         output = allocOptColumnForValueType(valueType);
         broadcast = isOuter ? NLExecutor::selectOptBlockRepeatFunction(valueType)
@@ -549,11 +550,11 @@ NLChunkKind NLTranslator::getChunkKind(mlir::Type chunkType) {
     }
 
     const mlir::Type elementType = chunk.getElementType();
-    if (mlir::isa<nl::NodeIDType>(elementType)) {
+    if (mlir::isa<storage::NodeIDType>(elementType)) {
         return NLChunkKind::NodeID;
-    } else if (mlir::isa<nl::EdgeIDType>(elementType)) {
+    } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
         return NLChunkKind::EdgeID;
-    } else if (mlir::isa<nl::EdgeTypeIDType>(elementType)) {
+    } else if (mlir::isa<storage::EdgeTypeIDType>(elementType)) {
         return NLChunkKind::EdgeTypeID;
     }
 
