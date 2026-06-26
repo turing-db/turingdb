@@ -21,6 +21,8 @@ class ParquetNeo4jVisitor final : public ParquetSaxVisitor {
 public:
     using NodeIDs = std::span<const int64_t>;
     using Labels = std::span<const parquet::ByteArray>;
+    using NodeLabels = std::vector<std::vector<std::string_view>>;
+    using NodeLabelsView = std::span<const std::vector<std::string_view>>;
 
     ParquetNeo4jVisitor(CommitBuilder* builder)
         : _builder(builder)
@@ -42,8 +44,11 @@ public:
 
     bool onByteArrayValues(size_t columnIndex, std::span<const parquet::ByteArray> values) final;
 
+    bool onChunkEnd(size_t rowGroupIndex, size_t firstRowInRowGroup, size_t rows) final;
+
     NodeIDs nodes() const { return _chunkNodeIds; }
-    Labels labels() const { return _chunkLabels; }
+    NodeLabelsView labels() const { return _chunkNodeLabels; }
+
 
 private:
     friend class Neo4jParquetImporter;
@@ -64,6 +69,8 @@ private:
     // Per chunk reference stores
     NodeIDs _chunkNodeIds;
     Labels _chunkLabels;
+    NodeLabels _chunkNodeLabels;
+
     std::span<const int16_t> _chunkLabelRepLevels;
 
     static constexpr std::string_view NEO4J_NODE_COL_PATH = "__id";

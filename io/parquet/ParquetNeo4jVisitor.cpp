@@ -1,19 +1,23 @@
 #include "ParquetNeo4jVisitor.h"
 
 #include <cstdint>
-#include <iostream>
 #include <string_view>
 
-#include <range/v3/action/sort.hpp>
+#include <range/v3/view/zip.hpp>
 
 #include <parquet/metadata.h>
 #include <parquet/schema.h>
 #include <parquet/types.h>
 
 #include "BioAssert.h"
-#include "spdlog/spdlog.h"
+
+#include "versioning/CommitBuilder.h"
+#include "writers/DataPartBuilder.h"
+#include "writers/MetadataBuilder.h"
+#include "metadata/LabelSet.h"
 
 using namespace db;
+namespace rv = ranges::views;
 
 bool ParquetNeo4jVisitor::onFileStart(const parquet::FileMetaData& metadata) {
     const parquet::SchemaDescriptor* sch = metadata.schema();
@@ -71,19 +75,16 @@ bool ParquetNeo4jVisitor::onFileStart(const parquet::FileMetaData& metadata) {
 bool ParquetNeo4jVisitor::onRowGroupStart(size_t, const parquet::RowGroupMetaData&) {
     _chunkNodeIds = {};
     _chunkLabels = {};
+    _chunkNodeLabels.clear();
     return true;
 }
 
 bool ParquetNeo4jVisitor::onLevels(size_t columnIndex,
                                    std::span<const int16_t> repLevels,
-                                   std::span<const int16_t> defLevels) {
-    // if (columnIndex == _lblColIdx) {
+                                   std::span<const int16_t>) {
+    if (columnIndex == _lblColIdx) {
         _chunkLabelRepLevels = repLevels;
-        for (auto i : repLevels) {
-            spdlog::info("Rep level: {}", i);
-        }
-        spdlog::info("rep levels done \n");
-    // }
+    }
     return true;
 }
 
@@ -98,16 +99,42 @@ bool ParquetNeo4jVisitor::onInt64Values(size_t columnIndex, std::span<const int6
     return true;
 }
 
-// XXX: Problem: A byte array containing the labels of a node can span a chunk, meaning
-// the ID is in chunk X, whilst the the labels are split across chunk X and X+1
 bool ParquetNeo4jVisitor::onByteArrayValues(size_t columnIndex,
                                             std::span<const parquet::ByteArray> values) {
-    // FIXME: Skips non-labels column
     if (columnIndex != _lblColIdx) {
         return true;
     }
 
-    _chunkLabels = values;
+    for (size_t i = 0; i < values.size(); ++i) {
+        const bool newNode = _chunkLabelRepLevels[i] == 0;
+        if (newNode) {
+            _chunkNodeLabels.emplace_back();
+        }
+        const parquet::ByteArray& labelString = values[i];
 
+        const char* start = reinterpret_cast<const char*>(labelString.ptr);
+        const size_t len = labelString.len;
+        _chunkNodeLabels.back().emplace_back(start, len);
+    }
+
+    return true;
+}
+
+bool ParquetNeo4jVisitor::onChunkEnd(size_t, size_t, size_t) {
+    DataPartBuilder& dpBuilder = _builder->getCurrentBuilder();
+    MetadataBuilder& metadataBuilder = _builder->metadata();
+
+    for (auto [id, labels] : rv::zip(_chunkNodeIds, _chunkNodeLabels)) {
+        LabelSet labelSet;
+
+        for (const std::string_view label : labels) {
+            const LabelID labelID = metadataBuilder.getOrCreateLabel(label);
+            labelSet.set(labelID);
+        }
+
+        dpBuilder.addNode(labelSet);
+    }
+
+    _chunkNodeLabels.clear();
     return true;
 }
