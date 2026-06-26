@@ -2,7 +2,7 @@
 
 #include "mlir/IR/BuiltinTypes.h"
 
-#include "../storage/StorageTypes.h"
+#include "StorageTypes.h"
 
 #define GET_TYPEDEF_CLASSES
 #include "DBTypes.h.inc"
