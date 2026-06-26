@@ -4,7 +4,7 @@
 include "mlir/IR/AttrTypeBase.td"
 
 include "DBDialect.td"
-include "../storage/StorageTypes.td"
+include "StorageTypes.td"
 
 // Base type. All turingdb dialect types derived from this.
 class TuringType<string name, string typeMnemonic, list<Trait> traits = []>
