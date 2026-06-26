@@ -1,15 +1,18 @@
-// Microbenchmark comparing db::AdaptiveRadixTree<uint64_t> against std::unordered_map for the
-// string-property index read path described in docs/ART.md. Both structures are keyed by byte strings
-// and map to a 64-bit value (an entity/row reference). The unordered_map uses a transparent hash so it
-// can be probed by std::string_view without allocating, making the comparison fair.
+// Microbenchmark comparing db::AdaptiveRadixTree<uint64_t> against two hash-table baselines for the
+// string-property index read path described in docs/ART.md:
+//   - std::unordered_map (with a transparent hash, probed by string_view without allocating).
+//   - the multiversion ("MVCC") hash reproduced from the tools/index-sim prototype -- the structure
+//     docs/ART.md weighs the ART against. It hashes the whole key (FNV-1a) on every probe, the
+//     per-lookup cost the ART avoids.
+// Keys are byte strings mapping to a 64-bit value (an entity/row reference).
 //
 // Benchmarks (each over 1K / 128K / 1M high-cardinality 16-byte keys):
 //   Build      - construct the structure from scratch (insert + teardown).
 //   FindHit    - serial point lookups of present keys.
-//   FindMiss   - serial point lookups of absent, prefix-colliding keys (the case the leaf fingerprint
-//                targets: they descend to a present leaf and are rejected at the leaf edge).
-//   FindBatch  - throughput of a batch of present-key probes; the ART uses its AMAC-pipelined
-//                findBatch, the map loops find() (it has no batched API).
+//   FindMiss   - serial point lookups of absent, prefix-colliding keys (the case the ART's leaf
+//                fingerprint targets; a hash short-circuits at an empty/mismatched slot).
+//   FindBatch  - batched-probe throughput: the ART uses its AMAC-pipelined findBatch, the MVCC hash
+//                an equivalent 8-way AMAC probe, and std::unordered_map a plain find() loop.
 //
 // Run with: ./test/storage/bench_storage_adaptiveradixtree
 
@@ -46,6 +49,193 @@ struct StringViewEqual {
 };
 
 using StringMap = std::unordered_map<std::string, uint64_t, StringViewHash, StringViewEqual>;
+
+// ---------------------------------------------------------------------------------------------
+// Multiversion ("MVCC") hash baseline, reproduced from the tools/index-sim prototype -- the structure
+// docs/ART.md weighs the ART against. Open-addressed with linear probing; each slot heads a version
+// chain, so a write is a push-front of a VersionNode and a HEAD read is the front of the chain. Every
+// lookup hashes the whole query key with FNV-1a -- the per-probe cost the ART exists to avoid. One
+// version per key here, matching the single value the ART stores.
+uint64_t fnv1a(std::string_view key) {
+    uint64_t hash = 1469598103934665603ull;
+    for (const char byte : key) {
+        hash ^= static_cast<uint8_t>(byte);
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
+struct MvccVersion {
+    uint64_t value {0};
+    uint32_t version {0};
+    MvccVersion* older {nullptr};
+};
+
+struct MvccSlot {
+    std::string_view key;
+    uint64_t hash {0};
+    MvccVersion* head {nullptr};
+    bool used {false};
+};
+
+class MvccHash {
+public:
+    explicit MvccHash(size_t expectedKeys);
+    ~MvccHash();
+
+    MvccHash(const MvccHash&) = delete;
+    MvccHash& operator=(const MvccHash&) = delete;
+
+    void insert(std::string_view key, uint64_t value);
+    bool lookupHead(std::string_view key, uint64_t& value) const;
+
+    // 8-way AMAC-pipelined batch probe (hash computed inside, to match a real probe site).
+    void lookupBatch(const std::vector<std::string_view>& keys,
+                     std::vector<uint8_t>& found,
+                     std::vector<uint64_t>& values) const;
+
+private:
+    size_t locate(std::string_view key, uint64_t hash) const;
+    void grow();
+
+    std::vector<MvccSlot> _slots;
+    size_t _mask {0};
+    size_t _count {0};
+};
+
+MvccHash::MvccHash(size_t expectedKeys) {
+    size_t capacity = 16;
+    while (capacity < expectedKeys * 2) {
+        capacity <<= 1;
+    }
+    _slots.assign(capacity, MvccSlot{});
+    _mask = capacity - 1;
+}
+
+MvccHash::~MvccHash() {
+    for (const MvccSlot& slot : _slots) {
+        MvccVersion* node = slot.head;
+        while (node != nullptr) {
+            MvccVersion* older = node->older;
+            delete node;
+            node = older;
+        }
+    }
+}
+
+size_t MvccHash::locate(std::string_view key, uint64_t hash) const {
+    size_t i = hash & _mask;
+    while (_slots[i].used && !(_slots[i].hash == hash && _slots[i].key == key)) {
+        i = (i + 1) & _mask;
+    }
+    return i;
+}
+
+void MvccHash::grow() {
+    std::vector<MvccSlot> old;
+    old.swap(_slots);
+    _slots.assign(old.size() * 2, MvccSlot{});
+    _mask = _slots.size() - 1;
+
+    for (const MvccSlot& slot : old) {
+        if (slot.used) {
+            size_t i = slot.hash & _mask;
+            while (_slots[i].used) {
+                i = (i + 1) & _mask;
+            }
+            _slots[i] = slot;
+        }
+    }
+}
+
+void MvccHash::insert(std::string_view key, uint64_t value) {
+    const bool tooFull = (_count + 1) * 10 >= _slots.size() * 7;   // grow past ~70% load factor
+    if (tooFull) {
+        grow();
+    }
+
+    const uint64_t hash = fnv1a(key);
+    MvccSlot& slot = _slots[locate(key, hash)];
+    if (!slot.used) {
+        slot.used = true;
+        slot.key = key;
+        slot.hash = hash;
+        ++_count;
+    }
+    slot.head = new MvccVersion{value, 0, slot.head};
+}
+
+bool MvccHash::lookupHead(std::string_view key, uint64_t& value) const {
+    const MvccSlot& slot = _slots[locate(key, fnv1a(key))];
+    if (!slot.used || slot.head == nullptr) {
+        return false;
+    }
+    value = slot.head->value;
+    return true;
+}
+
+void MvccHash::lookupBatch(const std::vector<std::string_view>& keys,
+                           std::vector<uint8_t>& found,
+                           std::vector<uint64_t>& values) const {
+    constexpr int Width = 8;
+    const size_t count = keys.size();
+    found.resize(count);
+    values.resize(count);
+
+    const MvccSlot* slots = _slots.data();
+    size_t index[Width];
+    uint64_t hash[Width];
+    std::string_view key[Width];
+    bool matched[Width];   // false: still probing for the slot; true: slot found, read its head
+    bool done[Width];
+
+    for (size_t base = 0; base < count; base += Width) {
+        const int lanes = static_cast<int>(std::min<size_t>(Width, count - base));
+        int remaining = lanes;
+
+        for (int j = 0; j < lanes; ++j) {
+            key[j] = keys[base + j];
+            hash[j] = fnv1a(key[j]);
+            index[j] = hash[j] & _mask;
+            matched[j] = false;
+            done[j] = false;
+            found[base + j] = 0;
+            __builtin_prefetch(&slots[index[j]]);
+        }
+
+        while (remaining > 0) {
+            for (int j = 0; j < lanes; ++j) {
+                if (done[j]) {
+                    continue;
+                }
+
+                const MvccSlot& slot = slots[index[j]];
+                if (!matched[j]) {
+                    if (!slot.used) {
+                        done[j] = true;
+                        --remaining;
+                        continue;
+                    }
+                    if (slot.hash == hash[j] && slot.key == key[j]) {
+                        __builtin_prefetch(slot.head);
+                        matched[j] = true;
+                        continue;
+                    }
+                    index[j] = (index[j] + 1) & _mask;
+                    __builtin_prefetch(&slots[index[j]]);
+                    continue;
+                }
+
+                if (slot.head != nullptr) {
+                    values[base + j] = slot.head->value;
+                    found[base + j] = 1;
+                }
+                done[j] = true;
+                --remaining;
+            }
+        }
+    }
+}
 
 struct Dataset {
     std::vector<std::string> keys;
@@ -120,6 +310,12 @@ void fillMap(StringMap& map, const Dataset& data) {
     }
 }
 
+void fillMvcc(MvccHash& hash, const Dataset& data) {
+    for (size_t i = 0; i < data.keys.size(); ++i) {
+        hash.insert(data.keys[i], i);
+    }
+}
+
 void BM_ART_Build(benchmark::State& state) {
     const Dataset& data = dataset(static_cast<size_t>(state.range(0)));
     for (auto _ : state) {
@@ -137,6 +333,17 @@ void BM_Map_Build(benchmark::State& state) {
         StringMap map;
         fillMap(map, data);
         benchmark::DoNotOptimize(map.size());
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(data.keys.size()));
+}
+
+void BM_Mvcc_Build(benchmark::State& state) {
+    const Dataset& data = dataset(static_cast<size_t>(state.range(0)));
+    for (auto _ : state) {
+        MvccHash hash(data.keys.size());
+        fillMvcc(hash, data);
+        benchmark::DoNotOptimize(&hash);
         benchmark::ClobberMemory();
     }
     state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(data.keys.size()));
@@ -180,6 +387,24 @@ void BM_Map_FindHit(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations());
 }
 
+void BM_Mvcc_FindHit(benchmark::State& state) {
+    const Dataset& data = dataset(static_cast<size_t>(state.range(0)));
+    MvccHash hash(data.keys.size());
+    fillMvcc(hash, data);
+
+    size_t probe = 0;
+    for (auto _ : state) {
+        uint64_t value = 0;
+        const bool found = hash.lookupHead(data.keys[data.hitOrder[probe]], value);
+        benchmark::DoNotOptimize(found);
+        benchmark::DoNotOptimize(value);
+        if (++probe == data.hitOrder.size()) {
+            probe = 0;
+        }
+    }
+    state.SetItemsProcessed(state.iterations());
+}
+
 void BM_ART_FindMiss(benchmark::State& state) {
     const Dataset& data = dataset(static_cast<size_t>(state.range(0)));
     AdaptiveRadixTree<uint64_t> tree;
@@ -206,6 +431,23 @@ void BM_Map_FindMiss(benchmark::State& state) {
     for (auto _ : state) {
         const auto it = map.find(std::string_view(data.missKeys[data.missOrder[probe]]));
         const bool found = it != map.end();
+        benchmark::DoNotOptimize(found);
+        if (++probe == data.missOrder.size()) {
+            probe = 0;
+        }
+    }
+    state.SetItemsProcessed(state.iterations());
+}
+
+void BM_Mvcc_FindMiss(benchmark::State& state) {
+    const Dataset& data = dataset(static_cast<size_t>(state.range(0)));
+    MvccHash hash(data.keys.size());
+    fillMvcc(hash, data);
+
+    size_t probe = 0;
+    for (auto _ : state) {
+        uint64_t value = 0;
+        const bool found = hash.lookupHead(data.missKeys[data.missOrder[probe]], value);
         benchmark::DoNotOptimize(found);
         if (++probe == data.missOrder.size()) {
             probe = 0;
@@ -257,15 +499,41 @@ void BM_Map_FindBatch(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(batchSize));
 }
 
+void BM_Mvcc_FindBatch(benchmark::State& state) {
+    const Dataset& data = dataset(static_cast<size_t>(state.range(0)));
+    MvccHash hash(data.keys.size());
+    fillMvcc(hash, data);
+
+    const size_t batchSize = std::min(MaxBatchSize, data.keys.size());
+    std::vector<std::string_view> probe;
+    probe.reserve(batchSize);
+    for (size_t i = 0; i < batchSize; ++i) {
+        probe.push_back(data.keys[data.hitOrder[i]]);
+    }
+
+    std::vector<uint8_t> found;
+    std::vector<uint64_t> values;
+    for (auto _ : state) {
+        hash.lookupBatch(probe, found, values);
+        benchmark::DoNotOptimize(found.data());
+        benchmark::DoNotOptimize(values.data());
+    }
+    state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(batchSize));
+}
+
 }
 
 BENCHMARK(BM_ART_Build)->Arg(1000)->Arg(131072)->Arg(1000000);
 BENCHMARK(BM_Map_Build)->Arg(1000)->Arg(131072)->Arg(1000000);
+BENCHMARK(BM_Mvcc_Build)->Arg(1000)->Arg(131072)->Arg(1000000);
 BENCHMARK(BM_ART_FindHit)->Arg(1000)->Arg(131072)->Arg(1000000);
 BENCHMARK(BM_Map_FindHit)->Arg(1000)->Arg(131072)->Arg(1000000);
+BENCHMARK(BM_Mvcc_FindHit)->Arg(1000)->Arg(131072)->Arg(1000000);
 BENCHMARK(BM_ART_FindMiss)->Arg(1000)->Arg(131072)->Arg(1000000);
 BENCHMARK(BM_Map_FindMiss)->Arg(1000)->Arg(131072)->Arg(1000000);
+BENCHMARK(BM_Mvcc_FindMiss)->Arg(1000)->Arg(131072)->Arg(1000000);
 BENCHMARK(BM_ART_FindBatch)->Arg(1000)->Arg(131072)->Arg(1000000);
 BENCHMARK(BM_Map_FindBatch)->Arg(1000)->Arg(131072)->Arg(1000000);
+BENCHMARK(BM_Mvcc_FindBatch)->Arg(1000)->Arg(131072)->Arg(1000000);
 
 BENCHMARK_MAIN();
