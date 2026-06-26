@@ -83,6 +83,8 @@ private:
 
     std::span<const int16_t> _chunkLabelRepLevels;
 
+    void fillLabels(std::span<const parquet::ByteArray> labels);
+
     static constexpr std::string_view NEO4J_NODE_COL_PATH = "__id";
     static constexpr std::string_view NEO4J_LBLS_COL_PATH = "__labels.list.element";
     static constexpr std::string_view NEO4J_ETYPE_COL_PATH = "__type";
