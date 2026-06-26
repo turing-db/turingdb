@@ -1115,9 +1115,10 @@ TEST_F(DBLoweringTest, lowersLimitToHandleUpdateAndLoopOperands) {
     DBLowering lowering(&context, &reader.getView());
     lowering.lower(dbFunction, *nlModule);
 
-    // Exactly one hoisted nl.limit handle, one nl.limit_update, one
-    // nl.limit_truncate, and a three-deep loop nest (scan + two hops) all carrying
-    // the handle - the whole nest produces the limited column, so every loop does.
+    // A terminal LIMIT: the limit feeds db.output directly, so foldTruncatesIntoOutputs
+    // folds the truncate into a limit-bearing output. Result: one hoisted nl.limit,
+    // one nl.limit_update, NO nl.limit_truncate (folded away), a three-deep loop
+    // nest all carrying the handle, and an nl.output that carries it too.
     size_t limitCount = 0;
     size_t forCount = 0;
     size_t forsWithLimit = 0;
@@ -1125,7 +1126,6 @@ TEST_F(DBLoweringTest, lowersLimitToHandleUpdateAndLoopOperands) {
     size_t truncateCount = 0;
     mlir::nl::Limit limitOp;
     mlir::nl::LimitUpdate updateOp;
-    mlir::nl::LimitTruncate truncateOp;
     mlir::nl::Output outputOp;
 
     nlModule->walk([&](mlir::Operation* operation) {
@@ -1140,8 +1140,7 @@ TEST_F(DBLoweringTest, lowersLimitToHandleUpdateAndLoopOperands) {
         } else if (mlir::nl::LimitUpdate found = mlir::dyn_cast<mlir::nl::LimitUpdate>(operation)) {
             updateOp = found;
             updateCount++;
-        } else if (mlir::nl::LimitTruncate found = mlir::dyn_cast<mlir::nl::LimitTruncate>(operation)) {
-            truncateOp = found;
+        } else if (mlir::isa<mlir::nl::LimitTruncate>(operation)) {
             truncateCount++;
         } else if (mlir::nl::Output found = mlir::dyn_cast<mlir::nl::Output>(operation)) {
             outputOp = found;
@@ -1152,26 +1151,21 @@ TEST_F(DBLoweringTest, lowersLimitToHandleUpdateAndLoopOperands) {
     EXPECT_EQ(forCount, 3u);
     EXPECT_EQ(forsWithLimit, 3u);
     EXPECT_EQ(updateCount, 1u);
-    EXPECT_EQ(truncateCount, 1u);
+    EXPECT_EQ(truncateCount, 0u);
     ASSERT_TRUE(limitOp);
     ASSERT_TRUE(updateOp);
-    ASSERT_TRUE(truncateOp);
     ASSERT_TRUE(outputOp);
 
-    // Every for, the update and the truncate name the one hoisted handle; the
-    // output is limit-oblivious and consumes the truncate's result instead.
+    // Every for, the update and the folded output all name the one hoisted handle.
     const mlir::Value handle = limitOp.getState();
     nlModule->walk([&](mlir::nl::For forOp) {
         EXPECT_EQ(forOp.getLimit(), handle);
     });
     EXPECT_EQ(updateOp.getState(), handle);
-    EXPECT_EQ(truncateOp.getState(), handle);
-    EXPECT_EQ(outputOp.getColumns()[0], truncateOp.getResult(0));
+    EXPECT_EQ(outputOp.getLimit(), handle);
 
-    // The update and the truncate sit in the innermost loop body, the same block
-    // as the output they precede.
+    // The update sits in the innermost loop body, the same block as the output.
     EXPECT_EQ(updateOp->getBlock(), outputOp->getBlock());
-    EXPECT_EQ(truncateOp->getBlock(), outputOp->getBlock());
     EXPECT_TRUE(mlir::isa<mlir::nl::For>(updateOp->getParentOp()));
 }
 
@@ -1292,15 +1286,18 @@ TEST_F(DBLoweringTest, lowersTwoLimitsToTwoHandles) {
     DBLowering lowering(&context, &reader.getView());
     lowering.lower(dbFunction, *nlModule);
 
-    // Two db.limits, so two handles, two updates, two truncates. Each loop carries
-    // a handle: the scan carries the outer (a) limit, the edge loop the inner (b)
-    // one - and they are distinct handles.
+    // Two db.limits, so two handles and two updates. Each loop carries a handle:
+    // the scan carries the outer (a) limit, the edge loop the inner (b) one - and
+    // they are distinct. The inner limit feeds db.output, so its truncate folds
+    // into a limit-bearing output; the outer limit feeds the expansion, so its
+    // truncate stays. One truncate remains, and the output carries the inner handle.
     size_t limitCount = 0;
     size_t updateCount = 0;
     size_t truncateCount = 0;
     size_t forsWithLimit = 0;
     mlir::Value scanHandle;
     mlir::Value edgeHandle;
+    mlir::nl::Output outputOp;
 
     nlModule->walk([&](mlir::Operation* operation) {
         if (mlir::isa<mlir::nl::Limit>(operation)) {
@@ -1309,6 +1306,8 @@ TEST_F(DBLoweringTest, lowersTwoLimitsToTwoHandles) {
             updateCount++;
         } else if (mlir::isa<mlir::nl::LimitTruncate>(operation)) {
             truncateCount++;
+        } else if (mlir::nl::Output found = mlir::dyn_cast<mlir::nl::Output>(operation)) {
+            outputOp = found;
         } else if (mlir::nl::For forOp = mlir::dyn_cast<mlir::nl::For>(operation)) {
             if (forOp.getLimit()) {
                 forsWithLimit++;
@@ -1325,11 +1324,15 @@ TEST_F(DBLoweringTest, lowersTwoLimitsToTwoHandles) {
 
     EXPECT_EQ(limitCount, 2u);
     EXPECT_EQ(updateCount, 2u);
-    EXPECT_EQ(truncateCount, 2u);
+    EXPECT_EQ(truncateCount, 1u);
     EXPECT_EQ(forsWithLimit, 2u);
     ASSERT_TRUE(scanHandle);
     ASSERT_TRUE(edgeHandle);
     EXPECT_NE(scanHandle, edgeHandle);
+
+    // The folded output carries the inner (edge-loop) limit handle.
+    ASSERT_TRUE(outputOp);
+    EXPECT_EQ(outputOp.getLimit(), edgeHandle);
 }
 
 TEST_F(DBLoweringTest, limitsNodePropertyOutput) {

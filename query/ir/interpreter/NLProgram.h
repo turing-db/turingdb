@@ -378,8 +378,15 @@ public:
         _columns.push_back(col);
     }
 
+    // The governing limit counter, or null for a limit-oblivious output. When
+    // set (the folded terminal-LIMIT form), output emits only its
+    // getEmitThisStep() prefix; it never mutates the counter.
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
 private:
     std::vector<const Column*> _columns;
+    NLLimitState* _limit {nullptr};
 };
 
 class NLProgram {

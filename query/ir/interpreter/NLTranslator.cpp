@@ -276,6 +276,8 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
 }
 
 void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
+    // The optional limit handle is a separate operand, so read just the columns;
+    // including it in this list would treat the handle as a chunk.
     const mlir::OperandRange columns = output.getColumns();
     if (columns.empty()) {
         throw IRException("nl.output requires at least one column");
@@ -289,6 +291,7 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
     mlir::Block* outputBlock = output->getBlock();
 
     NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
+    outputData->setLimit(limitStateFor(output.getLimit()));
     for (const mlir::Value column : columns) {
         const auto columnArgument = mlir::dyn_cast<mlir::BlockArgument>(column);
         const bool isInnermostLoopVariable = columnArgument && columnArgument.getOwner() == outputBlock;

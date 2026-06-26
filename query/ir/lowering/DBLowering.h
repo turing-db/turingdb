@@ -125,6 +125,13 @@ private:
     // its input chunk's loop. The first limit to claim a producer keeps it.
     void assignProducerLoops(mlir::Value column, mlir::Value handle);
 
+    // Peephole over the lowered nl function: where an nl.limit_truncate's results
+    // are consumed exactly by one adjacent nl.output (the terminal-LIMIT shape),
+    // fold the pair into a single nl.output that carries the limit handle and
+    // emits the budgeted prefix directly, dropping the truncate's copy. Chained
+    // and mixed cases do not match and keep their truncate.
+    void foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction);
+
     // The nl.get_property_type handle for a property name, inserted once at the
     // top of the entry block (above every loop) and reused on later lookups
     mlir::Value getOrCreatePropertyTypeHandle(llvm::StringRef propertyName);
