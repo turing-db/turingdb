@@ -38,5 +38,6 @@ class ColumnOf<string cppType, string mnemonic> : Type<
 
 def ColumnNodeIDs : ColumnOf<"::mlir::storage::NodeIDType", "nodeid">;
 def ColumnEdgeIDs : ColumnOf<"::mlir::storage::EdgeIDType", "edgeid">;
+def ColumnEdgeTypes : ColumnOf<"::mlir::storage::EdgeTypeIDType", "edge_type_id">;
 
 #endif // TURINGDB_TYPES
