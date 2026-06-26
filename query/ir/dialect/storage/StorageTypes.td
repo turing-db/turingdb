@@ -10,17 +10,17 @@ class StorageType<string name, string typeMnemonic, list<Trait> traits = []>
   let mnemonic = typeMnemonic;
 }
 
-def NodeID : StorageType<"NodeID", "nodeid"> {
+def NodeID : StorageType<"NodeID", "node_id"> {
     let summary = "A node identifier";
     let description = "The element type of a chunk holding node IDs";
 }
 
-def EdgeID : StorageType<"EdgeID", "edgeid"> {
+def EdgeID : StorageType<"EdgeID", "edge_id"> {
     let summary = "An edge identifier";
     let description = "The element type of a chunk holding edge IDs";
 }
 
-def EdgeTypeID : StorageType<"EdgeTypeID", "edgetypeid"> {
+def EdgeTypeID : StorageType<"EdgeTypeID", "edge_type_id"> {
     let summary = "An edge type identifier";
     let description = "The element type of a chunk holding edge type IDs";
 }

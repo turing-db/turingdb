@@ -32,6 +32,7 @@
 #include "DBLowering.h"
 #include "LocalMemory.h"
 #include "NLDialect.h"
+#include "StorageDialect.h"
 #include "NLInterpreter.h"
 #include "NLOps.h"
 #include "NLOutputSink.h"
@@ -88,7 +89,7 @@ private:
 };
 
 // Collects (node ID, nullable int64 property) rows. Output programs that read
-// an Int64 property emit a node ID chunk and a !nl.nullable<i64> value chunk.
+// an Int64 property emit a node ID chunk and a !storage.nullable<i64> value chunk.
 class CollectingNodeIntPropSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
@@ -117,7 +118,7 @@ private:
 };
 
 // Collects (node ID, nullable string property) rows. The value column is a
-// !nl.nullable<!nl.string> chunk, storage's ColumnOptVector<string_view>.
+// !storage.nullable<!storage.string> chunk, storage's ColumnOptVector<string_view>.
 class CollectingNodeStringPropSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
@@ -150,7 +151,7 @@ private:
 };
 
 // Collects (node ID, nullable embedding property) rows. The value column is a
-// !nl.nullable<!nl.embedding> chunk, storage's ColumnOptVector<span<float>>;
+// !storage.nullable<!storage.embedding> chunk, storage's ColumnOptVector<span<float>>;
 // each span is copied out since it points into the live graph storage.
 class CollectingNodeEmbeddingPropSink : public NLOutputSink {
 public:
@@ -184,7 +185,7 @@ private:
 };
 
 // Collects (edge ID, nullable int64 property) rows. Programs that read an Int64
-// edge property emit an edge ID chunk and a !nl.nullable<i64> value chunk.
+// edge property emit an edge ID chunk and a !storage.nullable<i64> value chunk.
 class CollectingEdgeIntPropSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
@@ -215,8 +216,8 @@ private:
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
-  %a = db.scan_nodes() : !db.column<"a">
-  db.output(%a) : !db.column<"a">
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -224,9 +225,9 @@ func.func @main() {
 // One hop along out-edges, outputting (source, target) pairs
 constexpr const char* oneHopOutProgram = R"mlir(
 func.func @main() {
-  %a = db.scan_nodes() : !db.column<"a">
-  %srcs, %eids, %etypes, %b = db.get_out_edges(%a, {}) : (!db.column<"a">) -> (!db.column<"srcs">, !db.column<"eids">, !db.column<"etypes">, !db.column<"b">)
-  db.output(%srcs, %b) : !db.column<"srcs">, !db.column<"b">
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -234,10 +235,10 @@ func.func @main() {
 // Two hops a->b->c carrying a through the second hop, outputting (a, c) pairs
 constexpr const char* twoHopProgram = R"mlir(
 func.func @main() {
-  %a = db.scan_nodes() : !db.column<"a">
-  %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<"a">) -> (!db.column<"a1">, !db.column<"e0">, !db.column<"et0">, !db.column<"b">)
-  %b2, %e1, %et1, %c, %a2 = db.get_out_edges(%b, {%a1}) : (!db.column<"b">, !db.column<"a1">) -> (!db.column<"b2">, !db.column<"e1">, !db.column<"et1">, !db.column<"c">, !db.column<"a2">)
-  db.output(%a2, %c) : !db.column<"a2">, !db.column<"c">
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %b2, %e1, %et1, %c, %a2 = db.get_out_edges(%b, {%a1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%a2, %c) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -246,9 +247,9 @@ func.func @main() {
 // nodes lack (those come back null, none are dropped)
 constexpr const char* nodePropertiesProgram = R"mlir(
 func.func @main() {
-  %a = db.scan_nodes() : !db.column<"a">
-  %score = db.get_node_properties(%a, "score") : (!db.column<"a">) -> !db.column<"a.score">
-  db.output(%a, %score) : !db.column<"a">, !db.column<"a.score">
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  db.output(%a, %score) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
 )mlir";
@@ -256,9 +257,9 @@ func.func @main() {
 // Read the string "name" property of each node
 constexpr const char* nodeNameProgram = R"mlir(
 func.func @main() {
-  %a = db.scan_nodes() : !db.column<"a">
-  %name = db.get_node_properties(%a, "name") : (!db.column<"a">) -> !db.column<"a.name">
-  db.output(%a, %name) : !db.column<"a">, !db.column<"a.name">
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  db.output(%a, %name) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
 )mlir";
@@ -266,9 +267,9 @@ func.func @main() {
 // Read the embedding "vec" property of each node
 constexpr const char* nodeVecProgram = R"mlir(
 func.func @main() {
-  %a = db.scan_nodes() : !db.column<"a">
-  %vec = db.get_node_properties(%a, "vec") : (!db.column<"a">) -> !db.column<"a.vec">
-  db.output(%a, %vec) : !db.column<"a">, !db.column<"a.vec">
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %vec = db.get_node_properties(%a, "vec") : (!db.column<!storage.node_id>) -> !db.column<none>
+  db.output(%a, %vec) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
 )mlir";
@@ -279,10 +280,10 @@ func.func @main() {
 // executor handler.
 constexpr const char* edgePropertiesProgram = R"mlir(
 func.func @main() {
-  %a = db.scan_nodes() : !db.column<"a">
-  %srcs, %eids, %etypes, %b = db.get_out_edges(%a, {}) : (!db.column<"a">) -> (!db.column<"srcs">, !db.column<"eids">, !db.column<"etypes">, !db.column<"b">)
-  %weight = db.get_edge_properties(%eids, "weight") : (!db.column<"eids">) -> !db.column<"e.weight">
-  db.output(%eids, %weight) : !db.column<"eids">, !db.column<"e.weight">
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %weight = db.get_edge_properties(%eids, "weight") : (!db.column<!storage.edge_id>) -> !db.column<none>
+  db.output(%eids, %weight) : !db.column<!storage.edge_id>, !db.column<none>
   return
 }
 )mlir";
@@ -291,13 +292,13 @@ func.func @main() {
 constexpr const char* crossProductScansProgram = R"mlir(
 func.func @main() {
   %0:2 = db.cross_product factor {
-    %a = db.scan_nodes() : !db.column<"a">
-    db.yield %a : !db.column<"a">
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
   } factor {
-    %b = db.scan_nodes() : !db.column<"b">
-    db.yield %b : !db.column<"b">
+    %b = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %b : !db.column<!storage.node_id>
   }
-  db.output(%0#0, %0#1) : !db.column<"a">, !db.column<"b">
+  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -308,15 +309,15 @@ func.func @main() {
 constexpr const char* crossProductHopsProgram = R"mlir(
 func.func @main() {
   %0:4 = db.cross_product factor {
-    %a = db.scan_nodes() : !db.column<"a">
-    %asrc, %ae, %aet, %b = db.get_out_edges(%a, {}) : (!db.column<"a">) -> (!db.column<"asrc">, !db.column<"ae">, !db.column<"aet">, !db.column<"b">)
-    db.yield %asrc, %b : !db.column<"asrc">, !db.column<"b">
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    %asrc, %ae, %aet, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+    db.yield %asrc, %b : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   } factor {
-    %c = db.scan_nodes() : !db.column<"c">
-    %csrc, %ce, %cet, %d = db.get_out_edges(%c, {}) : (!db.column<"c">) -> (!db.column<"csrc">, !db.column<"ce">, !db.column<"cet">, !db.column<"d">)
-    db.yield %csrc, %d : !db.column<"csrc">, !db.column<"d">
+    %c = db.scan_nodes() : !db.column<!storage.node_id>
+    %csrc, %ce, %cet, %d = db.get_out_edges(%c, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+    db.yield %csrc, %d : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   }
-  db.output(%0#0, %0#1, %0#2, %0#3) : !db.column<"asrc">, !db.column<"b">, !db.column<"csrc">, !db.column<"d">
+  db.output(%0#0, %0#1, %0#2, %0#3) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -330,15 +331,15 @@ func.func @main() {
 constexpr const char* crossProductTwoHopAndScanProgram = R"mlir(
 func.func @main() {
   %0:4 = db.cross_product factor {
-    %a = db.scan_nodes() : !db.column<"a">
-    %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<"a">) -> (!db.column<"a1">, !db.column<"e0">, !db.column<"et0">, !db.column<"b">)
-    %b2, %e1, %et1, %c, %a2 = db.get_out_edges(%b, {%a1}) : (!db.column<"b">, !db.column<"a1">) -> (!db.column<"b2">, !db.column<"e1">, !db.column<"et1">, !db.column<"c">, !db.column<"a2">)
-    db.yield %a2, %b2, %c : !db.column<"a2">, !db.column<"b2">, !db.column<"c">
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+    %b2, %e1, %et1, %c, %a2 = db.get_out_edges(%b, {%a1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+    db.yield %a2, %b2, %c : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   } factor {
-    %d = db.scan_nodes() : !db.column<"d">
-    db.yield %d : !db.column<"d">
+    %d = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %d : !db.column<!storage.node_id>
   }
-  db.output(%0#0, %0#1, %0#2, %0#3) : !db.column<"a2">, !db.column<"b2">, !db.column<"c">, !db.column<"d">
+  db.output(%0#0, %0#1, %0#2, %0#3) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -349,14 +350,14 @@ func.func @main() {
 constexpr const char* crossProductNodePropertyProgram = R"mlir(
 func.func @main() {
   %0:3 = db.cross_product factor {
-    %a = db.scan_nodes() : !db.column<"a">
-    db.yield %a : !db.column<"a">
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
   } factor {
-    %b = db.scan_nodes() : !db.column<"b">
-    %score = db.get_node_properties(%b, "score") : (!db.column<"b">) -> !db.column<"b.score">
-    db.yield %b, %score : !db.column<"b">, !db.column<"b.score">
+    %b = db.scan_nodes() : !db.column<!storage.node_id>
+    %score = db.get_node_properties(%b, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+    db.yield %b, %score : !db.column<!storage.node_id>, !db.column<none>
   }
-  db.output(%0#0, %0#2) : !db.column<"a">, !db.column<"b.score">
+  db.output(%0#0, %0#2) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
 )mlir";
@@ -636,6 +637,7 @@ protected:
                            size_t chunkSize = ChunkConfig::CHUNK_SIZE) {
         mlir::MLIRContext context;
         context.getOrLoadDialect<mlir::func::FuncDialect>();
+        context.getOrLoadDialect<mlir::storage::Storage>();
         context.getOrLoadDialect<mlir::db::DB>();
         context.getOrLoadDialect<mlir::nl::NL>();
 
@@ -897,6 +899,7 @@ TEST_F(DBLoweringTest, lowersCrossProductToNestedLoops) {
     context.getOrLoadDialect<mlir::func::FuncDialect>();
     context.getOrLoadDialect<mlir::db::DB>();
     context.getOrLoadDialect<mlir::nl::NL>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
 
     const mlir::ParserConfig parserConfig(&context);
     mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(crossProductScansProgram, parserConfig);

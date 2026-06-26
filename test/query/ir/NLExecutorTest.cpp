@@ -31,6 +31,7 @@
 #include "NLDialect.h"
 #include "NLInterpreter.h"
 #include "NLOutputSink.h"
+#include "StorageDialect.h"
 
 #include "TuringTest.h"
 
@@ -86,7 +87,7 @@ private:
 };
 
 // Collects (node ID, nullable int64 property) rows, for programs that read an
-// Int64 property: a node ID chunk and a !nl.nullable<i64> value chunk.
+// Int64 property: a node ID chunk and a !storage.nullable<i64> value chunk.
 class CollectingNodeIntPropSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
@@ -118,8 +119,8 @@ private:
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
   %nodes = nl.scan_nodes()
-  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
-    nl.output(%a) : !nl.chunk<!nl.node_id>
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.output(%a) : !nl.chunk<!storage.node_id>
   }
   func.return
 }
@@ -130,10 +131,10 @@ func.func @main() {
 constexpr const char* oneHopOutProgram = R"mlir(
 func.func @main() {
   %nodes = nl.scan_nodes()
-  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
     %edges = nl.get_out_edges(%a, {})
-    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>> {
-      nl.output(%srcs, %b) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.node_id>
+    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+      nl.output(%srcs, %b) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
     }
   }
   func.return
@@ -145,10 +146,10 @@ func.func @main() {
 constexpr const char* oneHopInProgram = R"mlir(
 func.func @main() {
   %nodes = nl.scan_nodes()
-  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
     %edges = nl.get_in_edges(%a, {})
-    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>> {
-      nl.output(%srcs, %b) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.node_id>
+    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+      nl.output(%srcs, %b) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
     }
   }
   func.return
@@ -159,12 +160,12 @@ func.func @main() {
 constexpr const char* twoHopProgram = R"mlir(
 func.func @main() {
   %nodes = nl.scan_nodes()
-  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
     %edges = nl.get_out_edges(%a, {})
-    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>> {
-      %hop = nl.get_out_edges(%b, {%srcs}) : !nl.chunk<!nl.node_id>
-      nl.for %srcs2, %eids2, %etypes2, %c, %aCarried in %hop : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>, !nl.chunk<!nl.node_id>> {
-        nl.output(%aCarried, %c) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.node_id>
+    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+      %hop = nl.get_out_edges(%b, {%srcs}) : !nl.chunk<!storage.node_id>
+      nl.for %srcs2, %eids2, %etypes2, %c, %aCarried in %hop : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
+        nl.output(%aCarried, %c) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
       }
     }
   }
@@ -177,10 +178,10 @@ func.func @main() {
 constexpr const char* crossLoopOutputProgram = R"mlir(
 func.func @main() {
   %nodes = nl.scan_nodes()
-  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
     %edges = nl.get_out_edges(%a, {})
-    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>> {
-      nl.output(%a, %b) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.node_id>
+    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+      nl.output(%a, %b) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
     }
   }
   func.return
@@ -192,12 +193,12 @@ func.func @main() {
 constexpr const char* crossLoopCarryProgram = R"mlir(
 func.func @main() {
   %nodes = nl.scan_nodes()
-  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
     %edges = nl.get_out_edges(%a, {})
-    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>> {
-      %hop = nl.get_out_edges(%b, {%a}) : !nl.chunk<!nl.node_id>
-      nl.for %srcs2, %eids2, %etypes2, %c, %aCarried in %hop : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>, !nl.chunk<!nl.node_id>> {
-        nl.output(%aCarried, %c) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.node_id>
+    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+      %hop = nl.get_out_edges(%b, {%a}) : !nl.chunk<!storage.node_id>
+      nl.for %srcs2, %eids2, %etypes2, %c, %aCarried in %hop : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
+        nl.output(%aCarried, %c) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
       }
     }
   }
@@ -212,9 +213,9 @@ constexpr const char* nodePropertiesProgram = R"mlir(
 func.func @main() {
   %score = nl.get_property_type("score")
   %nodes = nl.scan_nodes()
-  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
-    %values = nl.get_node_properties(%a, %score) : !nl.chunk<!nl.nullable<i64>>
-    nl.output(%a, %values) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.nullable<i64>>
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %values = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    nl.output(%a, %values) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>
   }
   func.return
 }
@@ -399,6 +400,7 @@ protected:
                     NLOutputSink& sink) {
         mlir::MLIRContext context;
         context.getOrLoadDialect<mlir::func::FuncDialect>();
+        context.getOrLoadDialect<mlir::storage::Storage>();
         context.getOrLoadDialect<mlir::nl::NL>();
 
         const mlir::ParserConfig parserConfig(&context);
@@ -414,6 +416,7 @@ protected:
     void expectTranslationFailure(const char* programText) {
         mlir::MLIRContext context;
         context.getOrLoadDialect<mlir::func::FuncDialect>();
+        context.getOrLoadDialect<mlir::storage::Storage>();
         context.getOrLoadDialect<mlir::nl::NL>();
 
         const mlir::ParserConfig parserConfig(&context);

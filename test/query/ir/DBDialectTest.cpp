@@ -12,6 +12,8 @@
 
 #include "DBDialect.h"
 #include "DBOps.h"
+#include "StorageDialect.h"
+#include "StorageTypes.h"
 
 namespace {
 
@@ -21,6 +23,7 @@ class DBDialectTest : public ::testing::Test {
 protected:
     DBDialectTest() {
         _context.getOrLoadDialect<mlir::func::FuncDialect>();
+        _context.getOrLoadDialect<mlir::storage::Storage>();
         _context.getOrLoadDialect<mlir::db::DB>();
     }
 
@@ -53,13 +56,13 @@ protected:
 const char* const crossProductProgram = R"mlir(
 func.func @main() {
   %0:2 = db.cross_product factor {
-    %a = db.scan_nodes() : !db.column<"a">
-    db.yield %a : !db.column<"a">
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
   } factor {
-    %b = db.scan_nodes() : !db.column<"b">
-    db.yield %b : !db.column<"b">
+    %b = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %b : !db.column<!storage.node_id>
   }
-  db.output(%0#0, %0#1) : !db.column<"a">, !db.column<"b">
+  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -70,13 +73,13 @@ func.func @main() {
 const char* const zeroYieldProgram = R"mlir(
 func.func @main() {
   %0 = db.cross_product factor {
-    %a = db.scan_nodes() : !db.column<"a">
-    db.yield %a : !db.column<"a">
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
   } factor {
-    %b = db.scan_nodes() : !db.column<"b">
+    %b = db.scan_nodes() : !db.column<!storage.node_id>
     db.yield
   }
-  db.output(%0) : !db.column<"a">
+  db.output(%0) : !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -86,10 +89,10 @@ func.func @main() {
 const char* const missingYieldProgram = R"mlir(
 func.func @main() {
   %0 = db.cross_product factor {
-    %a = db.scan_nodes() : !db.column<"a">
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
   } factor {
-    %b = db.scan_nodes() : !db.column<"b">
-    db.yield %b : !db.column<"b">
+    %b = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %b : !db.column<!storage.node_id>
   }
   return
 }
@@ -125,8 +128,9 @@ TEST_F(DBDialectTest, parsesCrossProductOfTwoScans) {
     // The results are the left factor's yielded column followed by the right's.
     const mlir::Operation::result_range results = product.getResults();
     ASSERT_EQ(results.size(), 2u);
-    EXPECT_EQ(results[0].getType(), mlir::db::ColumnType::get(&_context));
-    EXPECT_EQ(results[1].getType(), mlir::db::ColumnType::get(&_context));
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    EXPECT_EQ(results[0].getType(), nodeIDColumnType);
+    EXPECT_EQ(results[1].getType(), nodeIDColumnType);
 
     // Each factor is one self-contained block ending in a db.yield.
     EXPECT_TRUE(mlir::isa<mlir::db::Yield>(product.getLeftFactor().front().getTerminator()));
@@ -173,8 +177,9 @@ TEST_F(DBDialectTest, verifierRejectsResultsNotMatchingYields) {
     auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
     builder.setInsertionPointToStart(function.addEntryBlock());
 
-    const mlir::Type colA = mlir::db::ColumnType::get(&_context);
-    const mlir::Type colB = mlir::db::ColumnType::get(&_context);
+    const mlir::Type nodeIDType = mlir::storage::NodeIDType::get(&_context);
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context, nodeIDType);
+    const mlir::Type colB = mlir::db::ColumnType::get(&_context, nodeIDType);
 
     // Declare a single result but make the factors yield two columns in total:
     // the left yields `a` and the right yields `b`, so the result count is wrong.
