@@ -1,0 +1,92 @@
+#include "DBProgramGenerator.h"
+
+#include <algorithm>
+#include <unordered_set>
+
+
+#include "mlir/IR/Builders.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
+
+#include "DBTypes.h"
+#include "DBOps.h"
+
+#include "VariableDependency.h"
+#include "VariableDependencyGraph.h"
+#include "EdgeMetadata.h"
+
+#include "BioAssert.h"
+
+using namespace db;
+
+mlir::db::ColumnType DBProgramGenerator::allocColumnType(const VariableDependency* var) {
+    // TODO Remove in favour of typed columns
+    const std::string colName =
+        std::string(var->getName()) + std::to_string(_varMap[var].size());
+    return mlir::db::ColumnType::get(_mlirCtxt, colName);
+}
+
+void DBProgramGenerator::registerValue(const VariableDependency* var, mlir::TypedValue<mlir::db::ColumnType> val) {
+    _varMap[var].emplace_back(val);
+}
+
+void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
+    bioassert(!_varMap.contains(var), "ScanNodes for registered variable");
+
+    const mlir::db::ColumnType col = allocColumnType(var);
+    auto scan = _opBuilder->create<mlir::db::ScanNodes>(_opBuilder->getUnknownLoc(), col);
+
+    registerValue(var, scan.getResult());
+}
+
+void DBProgramGenerator::addGetOutEdges(const VariableDependency* src, const VariableDependency* edge, const VariableDependency* tgt) {
+    bioassert(_varMap.contains(src), "GetOutEdges without source");
+}
+
+void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) {
+    VariableDependencyGraph vdg;
+    vdg.buildFromAST(ast);
+
+    if (vdg.empty()) {
+        return;
+    }
+
+    std::unordered_set<const VariableDependency*> visited;
+
+    for (const VariableDependency& v : vdg.vars()) {
+        if (visited.contains(&v)) {
+            continue;
+        }
+
+        { // FIXME: Temporary guard to prevent starting from meta nodes
+            const bool isMeta = std::ranges::any_of(
+                v.incoming(), [](const DependencyEdge* e) { return e->isMetaEdge(); });
+            bioassert(!isMeta, "Cannot start with meta node");
+        }
+
+        { // FIXME: Temporary guard to prevent starting from edges
+            const bool isEdge =
+                std::ranges::any_of(v.incoming(), [](const DependencyEdge* e) {
+                    EdgeMetadata::EdgeType type = e->data().type();
+                    return type == EdgeMetadata::EdgeType::GET_OUT_EDGES
+                        || type == EdgeMetadata::EdgeType::GET_IN_EDGES;
+                });
+            bioassert(!isEdge, "Cannot start with edge");
+        }
+
+        const auto seenOrMeta = [&visited](const DependencyEdge* e) {
+            return !e->isMetaEdge() || visited.contains(e->src());
+        };
+
+        const bool canTraverse = std::ranges::all_of(v.incoming(), seenOrMeta);
+
+        if (!canTraverse) {
+            continue;
+        }
+
+        addScanNodes(&v);
+
+        // The idea is that we explore the edges of v. if we have a getXedges, we try and
+        // create a triple. if we have a getedge{src/tgt} then just translate that with an
+        // anonymous edge var
+    }
+}

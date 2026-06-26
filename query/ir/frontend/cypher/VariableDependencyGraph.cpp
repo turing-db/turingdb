@@ -8,35 +8,52 @@
 #include <unordered_set>
 #include <utility>
 
-#include "DependencyEdge.h"
-#include "EdgeMetadata.h"
+#include <spdlog/spdlog.h>
+
 #include "EdgePattern.h"
 #include "EntityPattern.h"
 #include "VariableDependencyGraphDumper.h"
+#include "CypherAST.h"
+#include "SinglePartQuery.h"
+#include "Pattern.h"
 #include "PatternElement.h"
-
-#include "VariableDependency.h"
+#include "stmt/MatchStmt.h"
+#include "stmt/StmtContainer.h"
 #include "decl/VarDecl.h"
+
+#include "DependencyEdge.h"
+#include "EdgeMetadata.h"
+#include "VariableDependency.h"
 
 #include "BioAssert.h"
 #include "FatalException.h"
-#include "spdlog/fmt/bundled/base.h"
 
 using namespace db;
 
 static EdgeMetadata::EdgeType directionToType(EdgePattern::Direction dir) {
     switch (dir) {
         case EdgePattern::Direction::Undirected:
-            return EdgeMetadata::EdgeType::BIDIRECTIONAL;
+            return EdgeMetadata::EdgeType::GET_EDGES;
         break;
         case EdgePattern::Direction::Backward:
-            return EdgeMetadata::EdgeType::INCOMING;
+            return EdgeMetadata::EdgeType::GET_IN_EDGES;
         break;
         case EdgePattern::Direction::Forward:
-            return EdgeMetadata::EdgeType::OUTGOING;
+            return EdgeMetadata::EdgeType::GET_OUT_EDGES;
         break;
     }
     throw FatalException("Invalid edge pattern direction");
+}
+
+static EdgeMetadata::EdgeType edgeTypeToNodeType(EdgeMetadata::EdgeType t) {
+    if (t == EdgeMetadata::EdgeType::GET_OUT_EDGES) {
+        return EdgeMetadata::EdgeType::GET_EDGE_TGT;
+    }
+    if (t == EdgeMetadata::EdgeType::GET_IN_EDGES) {
+        return EdgeMetadata::EdgeType::GET_EDGE_SRC;
+    }
+    throw FatalException(
+        fmt::format("Unsure how to get node type for {}", EdgeTypeName::value(t)));
 }
 
 VariableDependencyGraph::VariableDependencyGraph()
@@ -44,6 +61,29 @@ VariableDependencyGraph::VariableDependencyGraph()
 }
 
 VariableDependencyGraph::~VariableDependencyGraph() {
+}
+
+void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
+    bioassert(ast->queries().size() == 1, "Single queries only.");
+    const QueryCommand* q = ast->queries().front();
+    const auto* spq = dynamic_cast<const SinglePartQuery*>(q);
+
+    const StmtContainer* stmtsContainer = spq->getReadStmts();
+    const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
+
+    for (Stmt* s : stmts) {
+        const auto* rd = dynamic_cast<const MatchStmt*>(s);
+        if (!rd) {
+            spdlog::warn("Non-match statement: skipped");
+            continue;
+        }
+
+        const Pattern* ptn = rd->getPattern();
+        const Pattern::PatternElements& eles = ptn->elements();
+        for (const PatternElement* ele : eles) {
+            registerPatternElement(ele);
+        }
+    }
 }
 
 const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* src,
@@ -84,7 +124,8 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         VariableDependency* tgtVar = getOrCreateVariable(tgtPtn);
 
         const EdgePattern::Direction direction = edge->getDirection();
-        const EdgeMetadata::EdgeType type = directionToType(direction);
+        const EdgeMetadata::EdgeType edgeType = directionToType(direction);
+        const EdgeMetadata::EdgeType otherType = edgeTypeToNodeType(edgeType);
 
         VariableDependency* src {nullptr};
         VariableDependency* tgt {nullptr};
@@ -98,9 +139,15 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
             tgt = prev;
         }
 
+        if (edge->getDecl()->isUnnamed()) {
+            addDirected(src, tgt, EdgeMetadata {otherType});
+            prev = forward ? tgt : src;
+            continue;
+        }
+
         VariableDependency* edgeVar = getOrCreateVariable(edge);
-        addDirected(src, edgeVar, EdgeMetadata {type});
-        addDirected(edgeVar, tgt, EdgeMetadata {type});
+        addDirected(src, edgeVar, EdgeMetadata {edgeType});
+        addDirected(edgeVar, tgt, EdgeMetadata {otherType});
 
         prev = forward ? tgt : src;
     }

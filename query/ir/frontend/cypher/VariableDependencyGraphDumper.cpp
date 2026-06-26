@@ -54,7 +54,7 @@ void VariableDependencyGraphDumper::dumpMermaid(const VariableDependencyGraph& g
         for (const DependencyEdge* edge : var.outgoing()) {
             const EdgeMetadata::EdgeType etype = edge->data().type();
             const std::string_view typeName = EdgeTypeName::value(etype);
-            const bool directed = (etype != EdgeMetadata::EdgeType::BIDIRECTIONAL);
+            const bool directed = (etype != EdgeMetadata::EdgeType::GET_EDGES);
             const std::string_view arrow = directed ? "--->" : "----";
             out << "    " << nodeDef(edge->src()) << " " << arrow << "|" << typeName << "| "
                 << nodeDef(edge->tgt()) << "\n";

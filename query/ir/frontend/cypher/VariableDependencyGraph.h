@@ -4,7 +4,6 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "DependencyEdge.h"
@@ -12,6 +11,7 @@
 
 namespace db {
 
+class CypherAST;
 class EntityPattern;
 class PatternElement;
 
@@ -38,12 +38,16 @@ public:
     VariableDependencyGraph();
     ~VariableDependencyGraph();
 
+    void buildFromAST(const CypherAST* ast);
+
     /// Given a pattern (e.g. (n)-[e]->(m)), inserts all vars into the dependency graph
     void registerPatternElement(const PatternElement* ptn);
 
     /// Iteration order has no semantic meaning
     const auto& vars() const { return _vars; }
     const auto& edges() const { return _edges; }
+
+    bool empty() const { return _vars.empty() && _edges.empty(); }
 
     /**
      * @brief Removes all cycles in this graph by replacing the cyclic edges with meta
