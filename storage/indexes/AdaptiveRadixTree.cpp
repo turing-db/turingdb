@@ -14,6 +14,7 @@
 #endif
 
 #include "BioAssert.h"
+#include "BumpPtrAllocator.h"
 
 using namespace db;
 
@@ -24,6 +25,13 @@ namespace {
 // Folded into the parent's inline prefix[] by path compression; a longer shared run is carried by a
 // chain of prefix nodes (§3.3).
 constexpr size_t ART_MAX_PREFIX = 16;
+
+// Nodes and leaves are bump-allocated from a per-tree arena (this slab size) so that a tree's memory is
+// co-located rather than scattered across individual heap allocations -- this cuts the cache/TLB misses
+// that dominate the descent once the index spills the last-level cache. The arena never frees individual
+// objects, so node growth (N4->N16->...) leaves the outgrown node as dead arena space; that is bounded
+// (a node grows at most three times) and reclaimed wholesale when the tree is destroyed.
+constexpr size_t ART_ARENA_SLAB_SIZE = 1 << 20;
 
 // Reserved end-of-key byte. Appending it logically to every key keeps the key set prefix-free so that
 // e.g. "foo" and "foobar" can coexist; real keys must therefore not contain a 0x00 byte.
@@ -153,27 +161,27 @@ ARTLeaf* leafOf(const ARTNode* node) {
     return reinterpret_cast<ARTLeaf*>(reinterpret_cast<uintptr_t>(node) & ART_POINTER_MASK);
 }
 
-ARTNode4* newNode4() {
-    ARTNode4* node = new ARTNode4();
+ARTNode4* newNode4(BumpPtrAllocator& arena) {
+    ARTNode4* node = arena.create<ARTNode4>();
     node->type = ARTNodeType::Node4;
     return node;
 }
 
-ARTNode16* newNode16() {
-    ARTNode16* node = new ARTNode16();
+ARTNode16* newNode16(BumpPtrAllocator& arena) {
+    ARTNode16* node = arena.create<ARTNode16>();
     node->type = ARTNodeType::Node16;
     return node;
 }
 
-ARTNode48* newNode48() {
-    ARTNode48* node = new ARTNode48();
+ARTNode48* newNode48(BumpPtrAllocator& arena) {
+    ARTNode48* node = arena.create<ARTNode48>();
     node->type = ARTNodeType::Node48;
     memset(node->childIndex, 0, sizeof(node->childIndex));
     return node;
 }
 
-ARTNode256* newNode256() {
-    ARTNode256* node = new ARTNode256();
+ARTNode256* newNode256(BumpPtrAllocator& arena) {
+    ARTNode256* node = arena.create<ARTNode256>();
     node->type = ARTNodeType::Node256;
     memset(node->children, 0, sizeof(node->children));
     return node;
@@ -255,9 +263,10 @@ ARTNode** findChild(ARTNode* node, uint8_t byte) {
 }
 
 // Adds `byte -> child` to `node`, growing it to the next node type when full. Returns the node to
-// install in the parent slot: the same node if it had room, or the grown replacement (the old node is
-// freed). `child` and the existing children are never touched.
-ARTNode* addChild(ARTNode* node, uint8_t byte, ARTNode* child) {
+// install in the parent slot: the same node if it had room, or the grown replacement (the outgrown node
+// is left as dead arena space, reclaimed when the tree is destroyed). `child` and the existing children
+// are never touched.
+ARTNode* addChild(BumpPtrAllocator& arena, ARTNode* node, uint8_t byte, ARTNode* child) {
     switch (node->type) {
         case ARTNodeType::Node4: {
             ARTNode4* typed = static_cast<ARTNode4*>(node);
@@ -267,7 +276,7 @@ ARTNode* addChild(ARTNode* node, uint8_t byte, ARTNode* child) {
                 ++typed->numChildren;
                 return typed;
             }
-            ARTNode16* grown = newNode16();
+            ARTNode16* grown = newNode16(arena);
             copyHeader(grown, typed);
             for (size_t i = 0; i < 4; ++i) {
                 grown->keys[i] = typed->keys[i];
@@ -276,7 +285,6 @@ ARTNode* addChild(ARTNode* node, uint8_t byte, ARTNode* child) {
             grown->keys[4] = byte;
             grown->children[4] = child;
             grown->numChildren = 5;
-            delete typed;
             return grown;
         }
         break;
@@ -288,7 +296,7 @@ ARTNode* addChild(ARTNode* node, uint8_t byte, ARTNode* child) {
                 ++typed->numChildren;
                 return typed;
             }
-            ARTNode48* grown = newNode48();
+            ARTNode48* grown = newNode48(arena);
             copyHeader(grown, typed);
             for (size_t i = 0; i < 16; ++i) {
                 grown->children[i] = typed->children[i];
@@ -297,7 +305,6 @@ ARTNode* addChild(ARTNode* node, uint8_t byte, ARTNode* child) {
             grown->children[16] = child;
             grown->childIndex[byte] = 17;
             grown->numChildren = 17;
-            delete typed;
             return grown;
         }
         break;
@@ -310,7 +317,7 @@ ARTNode* addChild(ARTNode* node, uint8_t byte, ARTNode* child) {
                 ++typed->numChildren;
                 return typed;
             }
-            ARTNode256* grown = newNode256();
+            ARTNode256* grown = newNode256(arena);
             copyHeader(grown, typed);
             for (size_t b = 0; b < 256; ++b) {
                 const uint8_t slot = typed->childIndex[b];
@@ -320,7 +327,6 @@ ARTNode* addChild(ARTNode* node, uint8_t byte, ARTNode* child) {
             }
             grown->children[byte] = child;
             grown->numChildren = 49;
-            delete typed;
             return grown;
         }
         break;
@@ -335,12 +341,16 @@ ARTNode* addChild(ARTNode* node, uint8_t byte, ARTNode* child) {
     return node;
 }
 
-ARTLeaf* allocLeaf(std::string_view key, const void* value, size_t valueSize, size_t valueAlignment) {
+ARTLeaf* allocLeaf(BumpPtrAllocator& arena,
+                   std::string_view key,
+                   const void* value,
+                   size_t valueSize,
+                   size_t valueAlignment) {
     const size_t valueOffset = alignUp(sizeof(ARTLeaf) + key.size(), valueAlignment);
     const size_t totalSize = valueOffset + valueSize;
     const size_t blockAlignment = std::max(alignof(ARTLeaf), valueAlignment);
 
-    void* memory = ::operator new(totalSize, std::align_val_t(blockAlignment));
+    void* memory = arena.allocate(totalSize, blockAlignment);
     ARTLeaf* leaf = new (memory) ARTLeaf();
     leaf->keyLength = static_cast<uint32_t>(key.size());
 
@@ -350,9 +360,10 @@ ARTLeaf* allocLeaf(std::string_view key, const void* value, size_t valueSize, si
     return leaf;
 }
 
-// The tree engine, parameterised only by the opaque value layout. Cheap to construct (two size_t), so
-// AdaptiveRadixTreeBase makes one per call rather than storing it.
+// The tree engine: the arena that owns every node/leaf plus the opaque value layout. Cheap to construct
+// (a pointer and two size_t), so AdaptiveRadixTreeBase makes one per call rather than storing it.
 struct ARTOps {
+    BumpPtrAllocator* arena {nullptr};
     size_t valueSize {0};
     size_t valueAlignment {0};
 
@@ -376,8 +387,6 @@ struct ARTOps {
                    size_t count,
                    uint8_t* found,
                    void* values) const;
-    void destroy(ARTNode* node) const;
-    void freeLeaf(ARTLeaf* leaf) const;
 };
 
 void* ARTOps::valueAddress(ARTLeaf* leaf) const {
@@ -386,14 +395,8 @@ void* ARTOps::valueAddress(ARTLeaf* leaf) const {
 }
 
 ARTNode* ARTOps::makeLeaf(std::string_view key, const void* value) const {
-    ARTLeaf* leaf = allocLeaf(key, value, valueSize, valueAlignment);
+    ARTLeaf* leaf = allocLeaf(*arena, key, value, valueSize, valueAlignment);
     return tagLeaf(leaf, fingerprintOfKey(key));
-}
-
-void ARTOps::freeLeaf(ARTLeaf* leaf) const {
-    const size_t blockAlignment = std::max(alignof(ARTLeaf), valueAlignment);
-    leaf->~ARTLeaf();
-    ::operator delete(static_cast<void*>(leaf), std::align_val_t(blockAlignment));
 }
 
 // Replaces a single leaf with a Node4 (chain) that branches the existing leaf and the new key at their
@@ -405,7 +408,7 @@ ARTNode* ARTOps::splitLeaves(ARTLeaf* leaf,
                              const void* value,
                              size_t depth,
                              size_t difference) const {
-    ARTNode4* head = newNode4();
+    ARTNode4* head = newNode4(*arena);
     ARTNode* current = head;
     size_t start = depth;
 
@@ -413,8 +416,8 @@ ARTNode* ARTOps::splitLeaves(ARTLeaf* leaf,
         current->prefixLength = static_cast<uint8_t>(ART_MAX_PREFIX);
         memcpy(current->prefix, key.data() + start, ART_MAX_PREFIX);
 
-        ARTNode4* next = newNode4();
-        addChild(current, logicalByteAt(key, start + ART_MAX_PREFIX), next);
+        ARTNode4* next = newNode4(*arena);
+        addChild(*arena, current, logicalByteAt(key, start + ART_MAX_PREFIX), next);
         current = next;
         start += ART_MAX_PREFIX + 1;
     }
@@ -423,8 +426,8 @@ ARTNode* ARTOps::splitLeaves(ARTLeaf* leaf,
     memcpy(current->prefix, key.data() + start, difference - start);
 
     ARTNode* existingEdge = tagLeaf(leaf, fingerprintOfKey(leaf->key()));
-    current = addChild(current, logicalByteAt(leaf->key(), difference), existingEdge);
-    current = addChild(current, logicalByteAt(key, difference), makeLeaf(key, value));
+    current = addChild(*arena, current, logicalByteAt(leaf->key(), difference), existingEdge);
+    current = addChild(*arena, current, logicalByteAt(key, difference), makeLeaf(key, value));
     return head;
 }
 
@@ -463,7 +466,7 @@ ARTNode* ARTOps::insert(ARTNode* slot,
         if (shared != node->prefixLength) {
             // The key leaves the compressed prefix early: branch the existing subtree and the new leaf
             // at `shared`, keeping the unmatched tail of the prefix on the existing node.
-            ARTNode4* branch = newNode4();
+            ARTNode4* branch = newNode4(*arena);
             branch->prefixLength = static_cast<uint8_t>(shared);
             memcpy(branch->prefix, node->prefix, shared);
 
@@ -471,8 +474,8 @@ ARTNode* ARTOps::insert(ARTNode* slot,
             node->prefixLength = static_cast<uint8_t>(node->prefixLength - shared - 1);
             memmove(node->prefix, node->prefix + shared + 1, node->prefixLength);
 
-            ARTNode* parent = addChild(branch, existingByte, node);
-            parent = addChild(parent, logicalByteAt(key, depth + shared), makeLeaf(key, value));
+            ARTNode* parent = addChild(*arena, branch, existingByte, node);
+            parent = addChild(*arena, parent, logicalByteAt(key, depth + shared), makeLeaf(key, value));
             inserted = true;
             return parent;
         }
@@ -488,7 +491,7 @@ ARTNode* ARTOps::insert(ARTNode* slot,
     }
 
     inserted = true;
-    return addChild(node, branchByte, makeLeaf(key, value));
+    return addChild(*arena, node, branchByte, makeLeaf(key, value));
 }
 
 // Serial descent (§4.1): match compressed prefixes, find the child by its discriminating byte, reject
@@ -655,70 +658,24 @@ void ARTOps::findBatch(ARTNode* root,
     }
 }
 
-void ARTOps::destroy(ARTNode* node) const {
-    if (node == nullptr) {
-        return;
-    } else if (isLeaf(node)) {
-        freeLeaf(leafOf(node));
-        return;
-    }
-
-    switch (node->type) {
-        case ARTNodeType::Node4: {
-            ARTNode4* typed = static_cast<ARTNode4*>(node);
-            for (size_t i = 0; i < typed->numChildren; ++i) {
-                destroy(typed->children[i]);
-            }
-            delete typed;
-        }
-        break;
-        case ARTNodeType::Node16: {
-            ARTNode16* typed = static_cast<ARTNode16*>(node);
-            for (size_t i = 0; i < typed->numChildren; ++i) {
-                destroy(typed->children[i]);
-            }
-            delete typed;
-        }
-        break;
-        case ARTNodeType::Node48: {
-            ARTNode48* typed = static_cast<ARTNode48*>(node);
-            for (size_t i = 0; i < typed->numChildren; ++i) {
-                destroy(typed->children[i]);
-            }
-            delete typed;
-        }
-        break;
-        case ARTNodeType::Node256: {
-            ARTNode256* typed = static_cast<ARTNode256*>(node);
-            for (size_t i = 0; i < 256; ++i) {
-                if (typed->children[i] != nullptr) {
-                    destroy(typed->children[i]);
-                }
-            }
-            delete typed;
-        }
-        break;
-    }
-}
-
 }
 
 AdaptiveRadixTreeBase::AdaptiveRadixTreeBase(size_t valueSize, size_t valueAlignment)
-    : _valueSize(valueSize),
+    : _arena(new BumpPtrAllocator(ART_ARENA_SLAB_SIZE)),
+      _valueSize(valueSize),
       _valueAlignment(valueAlignment)
 {
 }
 
 AdaptiveRadixTreeBase::~AdaptiveRadixTreeBase() {
-    const ARTOps ops {_valueSize, _valueAlignment};
-    ops.destroy(static_cast<ARTNode*>(_root));
+    delete static_cast<BumpPtrAllocator*>(_arena);   // frees every node and leaf at once
 }
 
 bool AdaptiveRadixTreeBase::insert(std::string_view key, const void* value) {
     bioassert(key.find('\0') == std::string_view::npos,
               "AdaptiveRadixTree keys must not contain a 0x00 byte (reserved as the end-of-key marker)");
 
-    const ARTOps ops {_valueSize, _valueAlignment};
+    const ARTOps ops {static_cast<BumpPtrAllocator*>(_arena), _valueSize, _valueAlignment};
     bool inserted = false;
     _root = ops.insert(static_cast<ARTNode*>(_root), key, value, 0, inserted);
     if (inserted) {
@@ -728,12 +685,12 @@ bool AdaptiveRadixTreeBase::insert(std::string_view key, const void* value) {
 }
 
 bool AdaptiveRadixTreeBase::find(std::string_view key, void* value) const {
-    const ARTOps ops {_valueSize, _valueAlignment};
+    const ARTOps ops {static_cast<BumpPtrAllocator*>(_arena), _valueSize, _valueAlignment};
     return ops.find(static_cast<ARTNode*>(_root), key, value);
 }
 
 bool AdaptiveRadixTreeBase::contains(std::string_view key) const {
-    const ARTOps ops {_valueSize, _valueAlignment};
+    const ARTOps ops {static_cast<BumpPtrAllocator*>(_arena), _valueSize, _valueAlignment};
     return ops.contains(static_cast<ARTNode*>(_root), key);
 }
 
@@ -741,6 +698,6 @@ void AdaptiveRadixTreeBase::findBatch(const std::string_view* keys,
                                       size_t count,
                                       uint8_t* found,
                                       void* values) const {
-    const ARTOps ops {_valueSize, _valueAlignment};
+    const ARTOps ops {static_cast<BumpPtrAllocator*>(_arena), _valueSize, _valueAlignment};
     ops.findBatch(static_cast<ARTNode*>(_root), keys, count, found, values);
 }

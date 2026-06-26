@@ -44,6 +44,7 @@ public:
 
 private:
     void* _root {nullptr};
+    void* _arena {nullptr};   // owns every node and leaf; an opaque BumpPtrAllocator (see the .cpp)
     size_t _size {0};
     size_t _valueSize {0};
     size_t _valueAlignment {0};
