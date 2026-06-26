@@ -2,11 +2,14 @@
 
 #include <limits>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <parquet/types.h>
 
 #include "ParquetReader.h"
+
+#include "ID.h"
 
 namespace parquet {
 class FileMetaData;
@@ -52,6 +55,7 @@ public:
 
 private:
     friend class Neo4jParquetImporter;
+    using IDMap = std::unordered_map<int64_t, NodeID>;
 
     static constexpr size_t INVALID_COL_IDX = std::numeric_limits<size_t>::max();
 
@@ -66,10 +70,16 @@ private:
 
     std::vector<size_t> _propCols;
 
+    // Mapping Neo4j IDs to TuringDB IDs as defined by the DataPartBuilder
+    IDMap _nodeIDs;
+
     // Per chunk reference stores
     NodeIDs _chunkNodeIds;
     Labels _chunkLabels;
     NodeLabels _chunkNodeLabels;
+
+    NodeIDs _chunkSrcIds;
+    NodeIDs _chunkTgtIds;
 
     std::span<const int16_t> _chunkLabelRepLevels;
 

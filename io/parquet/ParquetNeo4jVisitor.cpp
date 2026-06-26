@@ -89,12 +89,13 @@ bool ParquetNeo4jVisitor::onLevels(size_t columnIndex,
 }
 
 bool ParquetNeo4jVisitor::onInt64Values(size_t columnIndex, std::span<const int64_t> values) {
-    // FIXME: Skips non-node column
-    if (columnIndex != _nodeColIdx) {
-        return true;
+    if (columnIndex == _nodeColIdx) {
+        _chunkNodeIds = values;
+    } else if (columnIndex == _srcColIdx) {
+        _chunkSrcIds = values;
+    } else if (columnIndex == _tgtColIdx) {
+        _chunkTgtIds = values;
     }
-
-    _chunkNodeIds = values;
 
     return true;
 }
@@ -132,7 +133,7 @@ bool ParquetNeo4jVisitor::onChunkEnd(size_t, size_t, size_t) {
             labelSet.set(labelID);
         }
 
-        dpBuilder.addNode(labelSet);
+        _nodeIDs[id] = dpBuilder.addNode(labelSet);
     }
 
     _chunkNodeLabels.clear();
