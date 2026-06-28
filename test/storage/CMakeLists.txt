@@ -51,3 +51,12 @@ target_link_libraries(bench_storage_adaptiveradixtree PRIVATE
         turing_db_storage_s
         turing_common_s)
 
+# Versioned "read as of a commit" benchmark: a single ART (per-commit roots) vs a CommitHash-tagged
+# multiversion hash over a dozen committed versions. Build and run it directly:
+#   make bench_storage_adaptiveradixtree_versioned && ./test/storage/bench_storage_adaptiveradixtree_versioned
+add_executable(bench_storage_adaptiveradixtree_versioned AdaptiveRadixTreeVersionedBenchmark.cpp)
+target_link_libraries(bench_storage_adaptiveradixtree_versioned PRIVATE
+        benchmark::benchmark
+        turing_db_storage_s
+        turing_common_s)
+
