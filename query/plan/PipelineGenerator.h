@@ -44,6 +44,7 @@ class LoadGraphNode;
 class LoadJsonlNode;
 class ChangeNode;
 class ListGraphNode;
+class ListAvailableGraphsNode;
 class CreateGraphNode;
 class LoadGMLNode;
 class LoadParquetNode;
@@ -156,6 +157,7 @@ private:
     PipelineOutputInterface* translateChangeNode(ChangeNode* node);
     PipelineOutputInterface* translateCommitNode(CommitNode* node);
     PipelineOutputInterface* translateListGraphNode(ListGraphNode* node);
+    PipelineOutputInterface* translateListAvailableGraphsNode(ListAvailableGraphsNode* node);
     PipelineOutputInterface* translateCreateGraphNode(CreateGraphNode* node);
     PipelineOutputInterface* translateLoadGML(LoadGMLNode* node);
     PipelineOutputInterface* translateLoadParquet(LoadParquetNode* node);

@@ -8,63 +8,15 @@
 
 #include "SimpleGraph.h"
 
-#include "TuringTestEnv.h"
-#include "TuringTest.h"
-#include "dataframe/Dataframe.h"
-#include "reader/GraphReader.h"
-#include "versioning/Change.h"
-#include "versioning/ChangeID.h"
-#include "versioning/CommitHash.h"
-#include "versioning/Transaction.h"
+#include "GraphQueryTest.h"
 
 using namespace turing::test;
 
-class DeleteQueriesTest : public TuringTest {
-public:
-    void initialize() override {
-        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        SystemAccessor system = _env->getSystemManager().accessUnique();
-        _graph = system.createGraph(_graphName);
-        SimpleGraph::createSimpleGraph(_graph);
-        _db = &_env->getDB();
-    }
-
-protected:
-    const std::string _graphName = "simpledb";
-    std::unique_ptr<TuringTestEnv> _env;
-    TuringDB* _db {nullptr};
-    Graph* _graph {nullptr};
-    QueryConfig _queryConfig;
-    ChangeID _currentChange {ChangeID::head()};
-
-    GraphReader read() { return _graph->openTransaction().readGraph(); }
-
-    void newChange() {
-        SystemAccessor system = _env->getSystemManager().accessUnique();
-        auto res = system.newChange(_graphName);
-        ASSERT_TRUE(res);
-
-        Change* change = res.value();
-        _currentChange = change->id();
-    }
-
-    auto query(std::string_view query, auto callback) {
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData(callback);
-        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), _currentChange);
-        return _db->query(query, state);
-    }
-
-    void submitCurrentChange() {
-        auto res = query("change submit", [](const Dataframe*) {});
-        ASSERT_TRUE(res);
-        _currentChange = ChangeID::head();
-    }
-};
+class DeleteQueriesTest : public GraphQueryTest {};
 
 TEST_F(DeleteQueriesTest, matchNDeleteN) {
     using Rows = LineContainer<NodeID>;
-    
+
     constexpr std::string_view deleteQuery = "MATCH (n) DELETE n";
     constexpr std::string_view matchQuery = "MATCH (n) RETURN n";
 

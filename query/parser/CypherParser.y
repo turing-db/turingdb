@@ -50,6 +50,7 @@
     #include "ChangeQuery.h"
     #include "CommitQuery.h"
     #include "ListGraphQuery.h"
+    #include "ListAvailableGraphsQuery.h"
     #include "CreateGraphQuery.h"
     #include "S3ConnectQuery.h"
     #include "S3TransferQuery.h"
@@ -181,6 +182,8 @@
 %token<std::string_view> FALSE
 %token<std::string_view> COUNT
 %token<std::string_view> GRAPH
+%token<std::string_view> GRAPHS
+%token<std::string_view> AVAILABLE
 %token<std::string_view> HEADERS
 %token<std::string_view> EMBEDDINGS
 %token<std::string_view> JSONL
@@ -325,6 +328,7 @@
 %type<db::CommitQuery*> commitQuery
 %type<db::MergeDataPartsQuery*> mergeDataPartsQuery
 %type<db::ListGraphQuery*> listGraphQuery
+%type<db::ListAvailableGraphsQuery*> listAvailableGraphsQuery
 %type<db::CreateGraphQuery*> createGraphQuery
 %type<db::InstallExtensionQuery*> installExtensionQuery
 %type<db::S3ConnectQuery*> s3ConnectQuery
@@ -415,6 +419,7 @@ singleQuery
     | changeQuery { $$ = $1; }
     | commitQuery { $$ = $1; }
     | listGraphQuery { $$ = $1; }
+    | listAvailableGraphsQuery { $$ = $1; }
     | createGraphQuery { $$ = $1; }
     | loadGML { $$ = $1; }
     | loadParquet { $$ = $1; }
@@ -481,6 +486,10 @@ embeddingSpec
 
 listGraphQuery
     : LIST GRAPH { $$ = ListGraphQuery::create(ast); LOC($$, @$); }
+    ;
+
+listAvailableGraphsQuery
+    : LIST AVAILABLE GRAPHS { $$ = ListAvailableGraphsQuery::create(ast); LOC($$, @$); }
     ;
 
 showProceduresQuery
@@ -1572,6 +1581,8 @@ reservedWord
     | FAIL { $$ = Symbol::create(ast, $1); }
     | ERROR_ { $$ = Symbol::create(ast, $1); }
     | LIST { $$ = Symbol::create(ast, $1); }
+    | GRAPHS { $$ = Symbol::create(ast, $1); }
+    | AVAILABLE { $$ = Symbol::create(ast, $1); }
     | DESC { $$ = Symbol::create(ast, $1); }
     | CALL { $$ = Symbol::create(ast, $1); }
     | NULL_ { $$ = Symbol::create(ast, $1); }

@@ -51,6 +51,7 @@ set(ast_sources
     ChangeQuery.cpp
     CommitQuery.cpp
     ListGraphQuery.cpp
+    ListAvailableGraphsQuery.cpp
     CreateGraphQuery.cpp
     LoadGMLQuery.cpp
     LoadParquetQuery.cpp

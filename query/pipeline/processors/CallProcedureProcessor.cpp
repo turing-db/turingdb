@@ -108,6 +108,12 @@ void CallProcedureProcessor::allocReturnValues(LocalMemory* mem,
     PipelineBlockOutputInterface& output = _output;
     Dataframe* outDf = output.getDataframe();
 
+    // Hand procedures the request-scoped list buffer so they can populate
+    // LIST-typed return columns (ColumnVector<ListView>). It shares `mem`'s
+    // lifetime with the columns themselves, so the views never outlive their
+    // backing storage.
+    _procedureContext.setListBuffer(&mem->listBuffer());
+
     data.resizeReturnColumns(_procedure->returnValues().size());
 
     for (auto& item : yieldItems) {
@@ -169,6 +175,10 @@ void CallProcedureProcessor::allocReturnValues(LocalMemory* mem,
             } break;
             case ProcedureType::STRING: {
                 col = mem->alloc<ColumnVector<std::string>>();
+                data.setReturnColumn(colIndex, col);
+            } break;
+            case ProcedureType::LIST: {
+                col = mem->alloc<ColumnVector<ListView>>();
                 data.setReturnColumn(colIndex, col);
             } break;
             case ProcedureType::_SIZE: {

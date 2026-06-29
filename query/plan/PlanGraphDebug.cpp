@@ -570,6 +570,7 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             case PlanGraphOpcode::LIMIT:
             case PlanGraphOpcode::PRODUCE_RESULTS:
             case PlanGraphOpcode::LIST_GRAPH:
+            case PlanGraphOpcode::LIST_AVAILABLE_GRAPHS:
             case PlanGraphOpcode::COMMIT:
             case PlanGraphOpcode::S3_CONNECT:
             case PlanGraphOpcode::S3_TRANSFER:

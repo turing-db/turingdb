@@ -10,34 +10,11 @@
 #include "QueryStatus.h"
 #include "dataframe/Dataframe.h"
 
-#include "TuringTestEnv.h"
-#include "TuringTest.h"
+#include "GraphQueryTest.h"
 
 using namespace turing::test;
 
-class IncorrectQueryTest : public TuringTest {
-public:
-    void initialize() override {
-        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        SystemAccessor system = _env->getSystemManager().accessUnique();
-        _graph = system.createGraph(_graphName);
-        SimpleGraph::createSimpleGraph(_graph);
-        _db = &_env->getDB();
-    }
-
-protected:
-    const std::string _graphName = "testdb";
-    std::unique_ptr<TuringTestEnv> _env;
-    TuringDB* _db {nullptr};
-    QueryConfig _queryConfig;
-    Graph* _graph {nullptr};
-
-    QueryStatus query(std::string_view q) {
-        QueryCallbacks callbacks;
-        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &callbacks);
-        return _db->query(q, state);
-    }
-};
+class IncorrectQueryTest : public GraphQueryTest {};
 
 TEST_F(IncorrectQueryTest, missingClosingParenthesis) {
     auto result = query("MATCH (n RETURN n");

@@ -41,6 +41,7 @@ enum class PlanGraphOpcode {
     LOAD_JSONL,
     LOAD_PARQUET,
     LIST_GRAPH,
+    LIST_AVAILABLE_GRAPHS,
     CHANGE,
     COMMIT,
     S3_CONNECT,
@@ -104,6 +105,7 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::CHANGE, "CHANGE">,
     EnumStringPair<PlanGraphOpcode::COMMIT, "COMMIT">,
     EnumStringPair<PlanGraphOpcode::LIST_GRAPH, "LIST_GRAPH">,
+    EnumStringPair<PlanGraphOpcode::LIST_AVAILABLE_GRAPHS, "LIST_AVAILABLE_GRAPHS">,
     EnumStringPair<PlanGraphOpcode::S3_CONNECT, "S3_CONNECT">,
     EnumStringPair<PlanGraphOpcode::S3_TRANSFER, "S3_TRANSFER">,
     EnumStringPair<PlanGraphOpcode::SHOW_PROCEDURES, "SHOW_PROCEDURES">,
@@ -125,8 +127,7 @@ using PlanGraphOpcodeDescription = EnumToString<PlanGraphOpcode>::Create<
     EnumStringPair<PlanGraphOpcode::INDEX_LOOKUP, "INDEX_LOOKUP">,
     EnumStringPair<PlanGraphOpcode::DROP_INDEX, "DROP_INDEX">,
     EnumStringPair<PlanGraphOpcode::MERGE_DATAPARTS, "MERGE_DATAPARTS">,
-    EnumStringPair<PlanGraphOpcode::UNWIND, "UNWIND">
->;
+    EnumStringPair<PlanGraphOpcode::UNWIND, "UNWIND">>;
 
 class PlanGraphNode {
 public:

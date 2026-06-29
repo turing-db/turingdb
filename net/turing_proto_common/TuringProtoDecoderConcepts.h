@@ -43,8 +43,8 @@ concept SupportedColumnVectorTypes = std::is_same_v<T, db::types::UInt64::Primit
 || std::is_same_v<T, db::Path>
 || std::is_same_v<T, db::EntityList>
 || std::is_same_v<T, db::ListElementView>
+|| std::is_same_v<T, db::ListView>
 || std::is_same_v<T, std::string>;
-//|| std::is_same_v<T, db::ListView> - no way to test this for now
 
 template <typename T>
 concept SupportedColumnOptVectorTypes = std::is_same_v<T, db::types::UInt64::Primitive>

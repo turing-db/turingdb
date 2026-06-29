@@ -21,6 +21,7 @@ class ReturnStmt;
 class ShortestPathStmt;
 class LoadGraphQuery;
 class ListGraphQuery;
+class ListAvailableGraphsQuery;
 class CreateGraphQuery;
 class LoadGMLQuery;
 class LoadParquetQuery;
@@ -67,6 +68,7 @@ private:
     PlanGraphNode* generateReturnNone(PlanGraphNode* prevNode);
     void generateLoadGraphQuery(const LoadGraphQuery* query);
     void generateListGraphQuery(const ListGraphQuery* query);
+    void generateListAvailableGraphsQuery(const ListAvailableGraphsQuery* query);
     void generateCreateGraphQuery(const CreateGraphQuery* query);
     void generateLoadGMLQuery(const LoadGMLQuery* query);
     void generateLoadParquetQuery(const LoadParquetQuery* query);

@@ -73,6 +73,7 @@ class EdgePatternData;
 class CypherParserState;
 class YCypherParser;
 class ListGraphQuery;
+class ListAvailableGraphsQuery;
 class CreateGraphQuery;
 class FunctionDecls;
 class ProcedureLookup;
@@ -161,6 +162,7 @@ public:
     friend EdgePatternData;
     friend LoadGraphQuery;
     friend ListGraphQuery;
+    friend ListAvailableGraphsQuery;
     friend CreateGraphQuery;
     friend LoadGMLQuery;
     friend LoadParquetQuery;

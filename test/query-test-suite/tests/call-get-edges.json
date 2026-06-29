@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.getEdges([0, 1, 2]) YIELD id, src, tgt, edgeTypeID, properties RETURN id, src, tgt, edgeTypeID, properties",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.getEdges\n        __yield__\n        __yield_item__: id\n        __yield_item__: src\n        __yield_item__: tgt\n        __yield_item__: edgeTypeID\n        __yield_item__: properties\n        __args__\n        __arg__: unnamed\n    `\"]\n    1[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v3\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->0",
+    "result": "id,src,tgt,edgeTypeID,properties\n0,0,1,0,\"{\"\"duration\"\":20,\"\"name\"\":\"\"Remy -> Adam\"\"}\"\n1,0,6,1,\"{\"\"duration\"\":20,\"\"name\"\":\"\"Remy -> Ghosts\"\",\"\"proficiency\"\":\"\"expert\"\"}\"\n2,0,2,1,\"{\"\"name\"\":\"\"Remy -> Computers\"\",\"\"proficiency\"\":\"\"expert\"\"}\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"id\",\"src\",\"tgt\",\"edgeTypeID\",\"properties\"],\"column_types\":[\"UInt64\",\"UInt64\",\"UInt64\",\"UInt64\",\"String\"]},\"data\":[[[0,1,2],[0,0,0],[1,6,2],[0,1,1],[\"{\\\"duration\\\":20,\\\"name\\\":\\\"Remy -> Adam\\\"}\",\"{\\\"duration\\\":20,\\\"name\\\":\\\"Remy -> Ghosts\\\",\\\"proficiency\\\":\\\"expert\\\"}\",\"{\\\"name\\\":\\\"Remy -> Computers\\\",\\\"proficiency\\\":\\\"expert\\\"}\"]]]}"
+  },
+  "tags": [
+    "call",
+    "get-edges",
+    "procedure",
+    "edges"
+  ],
+  "write-required": false
+}

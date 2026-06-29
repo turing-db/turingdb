@@ -18,37 +18,13 @@
 
 #include "LineContainer.h"
 #include "TuringException.h"
-#include "TuringTestEnv.h"
 #include "TuringTest.h"
+#include "GraphQueryTest.h"
 
 using namespace turing::test;
 
-class FilterPredicatesTest : public TuringTest {
-public:
-    void initialize() override {
-        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        SystemAccessor system = _env->getSystemManager().accessUnique();
-        _graph = system.createGraph(_graphName);
-        SimpleGraph::createSimpleGraph(_graph);
-        _db = &_env->getDB();
-    }
-
+class FilterPredicatesTest : public GraphQueryTest {
 protected:
-    const std::string _graphName = "simpledb";
-    std::unique_ptr<TuringTestEnv> _env;
-    TuringDB* _db {nullptr};
-    Graph* _graph {nullptr};
-    QueryConfig _queryConfig;
-
-    GraphReader read() { return _graph->openTransaction().readGraph(); }
-
-    auto query(std::string_view query, auto callback) {
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData(callback);
-        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &callbacks);
-        return _db->query(query, state);
-    }
-
     static NamedColumn* findColumn(const Dataframe* df, std::string_view name) {
         for (auto* col : df->cols()) {
             if (col->getName() == name) {

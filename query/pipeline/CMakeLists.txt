@@ -1,4 +1,3 @@
-
 set(pipeline_sources
     PipelineV2.cpp
     Processor.cpp
@@ -43,6 +42,7 @@ set(processors_sources
     processors/GetEdgeTypeIDProcessor.cpp
     processors/LoadGraphProcessor.cpp
     processors/ListGraphProcessor.cpp
+    processors/ListAvailableGraphsProcessor.cpp
     processors/CreateGraphProcessor.cpp
     processors/LoadGMLProcessor.cpp
     processors/LoadParquetProcessor.cpp

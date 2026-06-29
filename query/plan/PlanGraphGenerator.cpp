@@ -45,6 +45,7 @@
 #include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/LoadGraphNode.h"
 #include "nodes/ListGraphNode.h"
+#include "nodes/ListAvailableGraphsNode.h"
 #include "nodes/CreateGraphNode.h"
 #include "nodes/LoadGMLNode.h"
 #include "nodes/LoadParquetNode.h"
@@ -70,6 +71,7 @@
 #include "ChangeQuery.h"
 #include "CommitQuery.h"
 #include "ListGraphQuery.h"
+#include "ListAvailableGraphsQuery.h"
 #include "CreateGraphQuery.h"
 #include "S3ConnectQuery.h"
 #include "S3TransferQuery.h"
@@ -145,6 +147,10 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
         
         case QueryCommand::Kind::LIST_GRAPH_QUERY:
             generateListGraphQuery(static_cast<const ListGraphQuery*> (query));
+        break;
+
+        case QueryCommand::Kind::LIST_AVAILABLE_GRAPHS_QUERY:
+            generateListAvailableGraphsQuery(static_cast<const ListAvailableGraphsQuery*> (query));
         break;
 
         case QueryCommand::Kind::LOAD_JSONL_QUERY:
@@ -319,6 +325,11 @@ void PlanGraphGenerator::generateLoadGraphQuery(const LoadGraphQuery* query) {
 void PlanGraphGenerator::generateListGraphQuery(const ListGraphQuery* query) {
     ListGraphNode* listGraphNode = _tree.create<ListGraphNode>();
     _tree.newOut<ProduceResultsNode>(listGraphNode);
+}
+
+void PlanGraphGenerator::generateListAvailableGraphsQuery(const ListAvailableGraphsQuery* query) {
+    ListAvailableGraphsNode* node = _tree.create<ListAvailableGraphsNode>();
+    _tree.newOut<ProduceResultsNode>(node);
 }
 
 void PlanGraphGenerator::generateCreateGraphQuery(const CreateGraphQuery* query) {

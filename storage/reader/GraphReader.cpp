@@ -7,6 +7,7 @@
 #include "datapart/NodeContainer.h"
 #include "datapart/EdgeContainer.h"
 #include "indexers/EdgeIndexer.h"
+#include "indexers/LabelSetIndexer.h"
 #include "views/EdgeView.h"
 #include "properties/PropertyManager.h"
 
@@ -69,18 +70,30 @@ const EdgeRecord* GraphReader::getEdge(EdgeID edgeID) const {
 }
 
 size_t GraphReader::getNodeCountMatchingLabelset(const LabelSetHandle& labelset) const {
+    // Iterate each data part exactly once, summing the node counts of that
+    // part's own labelsets that match `labelset`. Every node is counted once,
+    // in the part that owns it.
     size_t count = 0;
 
-    auto it = matchLabelSets(labelset);
-    for (; it.isValid(); it.next()) {
-        for (const auto& part : _view.dataparts()) {
-            const auto& nodes = part->nodes();
-            const LabelSetHandle& current = it.get();
-            if (!nodes.hasLabelSet(current)) {
-                continue;
+    auto filteredNodeCount = [](NodeRange range, const Tombstones* tombstones) {
+        size_t count = range._count;
+        if (tombstones->hasNodes()) {
+            for (const auto id : range) {
+                if (tombstones->containsNode(id)) {
+                    count -= 1;
+                }
             }
+        }
 
-            count += part->nodes().getRange(current)._count;
+        return count;
+    };
+
+    const auto* tombstones = &_view.tombstones();
+    for (const auto& part : _view.dataparts()) {
+        const NodeContainer& nodes = part->nodes();
+        const LabelSetIndexer<NodeRange>& indexer = nodes.getLabelSetIndexer();
+        for (auto it = indexer.matchIterate(labelset); it.isValid(); it.next()) {
+            count += filteredNodeCount(it.getValue(), tombstones);
         }
     }
 

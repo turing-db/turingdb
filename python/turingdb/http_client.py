@@ -71,15 +71,36 @@ class HTTPClient:
             self._client.timeout = prev
 
     def list_available_graphs(self) -> list[str]:
-        return self._send_request("list_avail_graphs")["data"]
+        # Derived from the graphless LIST AVAILABLE GRAPHS statement rather than
+        # the dedicated /list_avail_graphs endpoint. Sent without a graph param
+        # (the old endpoint was graphless too) so it works regardless of the
+        # configured graph's load state.
+        json = self._send_request("query", data="LIST AVAILABLE GRAPHS")
+        if not isinstance(json, dict):
+            raise TuringDBException("Invalid response from the server")
+        df = self._parse_chunks(json)
+        if df.empty:
+            return []
+        return df["graphName"].tolist()
 
     def list_loaded_graphs(self) -> list[str]:
-        return self._send_request("list_loaded_graphs")["data"][0][0]
+        # Derived from the graphless LIST GRAPH statement (like CypherHelpersMixin)
+        # rather than the /list_loaded_graphs endpoint. Sent without a graph param
+        # so it works regardless of the configured graph's load state —
+        # is_graph_loaded() relies on this for graphs that aren't loaded.
+        json = self._send_request("query", data="LIST GRAPH")
+        if not isinstance(json, dict):
+            raise TuringDBException("Invalid response from the server")
+        df = self._parse_chunks(json)
+        if df.empty:
+            return []
+        return df["graphName"].tolist()
 
     def is_graph_loaded(self) -> bool:
-        return self._send_request(
-            "is_graph_loaded", params={"graph": self.get_graph()}
-        )["data"]
+        # Derived from LIST GRAPH (via list_loaded_graphs) rather than the
+        # dedicated /is_graph_loaded endpoint — matches CypherHelpersMixin so the
+        # endpoint can be retired server-side.
+        return self.current_graph in self.list_loaded_graphs()
 
     def load_graph(self, graph_name: str, raise_if_loaded: bool = True):
         try:

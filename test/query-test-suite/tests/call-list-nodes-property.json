@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.listNodes([], ['name'], ['remy'], 0, 1000) YIELD id, labels, properties RETURN id, labels, properties",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.listNodes\n        __yield__\n        __yield_item__: id\n        __yield_item__: labels\n        __yield_item__: properties\n        __args__\n        __arg__: unnamed\n        __arg__: unnamed\n        __arg__: unnamed\n        __arg__: unnamed\n        __arg__: unnamed\n    `\"]\n    1[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v0\n__expr__ (LITERAL): v2\n__expr__ (LITERAL): v4\n__expr__ (LITERAL): v5\n__expr__ (LITERAL): v6\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->0",
+    "result": "id,labels,properties\n0,\"[Person, SoftwareEngineering, Founder]\",\"{\"\"age\"\":32,\"\"dob\"\":\"\"18/01\"\",\"\"hasPhD\"\":true,\"\"isFrench\"\":true,\"\"name\"\":\"\"Remy\"\"}\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"id\",\"labels\",\"properties\"],\"column_types\":[\"UInt64\",\"List\",\"String\"]},\"data\":[[[0],[[\"Person\", \"SoftwareEngineering\", \"Founder\"]],[\"{\\\"age\\\":32,\\\"dob\\\":\\\"18/01\\\",\\\"hasPhD\\\":true,\\\"isFrench\\\":true,\\\"name\\\":\\\"Remy\\\"}\"]]]}"
+  },
+  "tags": [
+    "call",
+    "list-nodes",
+    "procedure",
+    "properties"
+  ],
+  "write-required": false
+}
