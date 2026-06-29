@@ -27,7 +27,7 @@ protected:
     // start of that block, ready to append the ops under test.
     mlir::func::FuncOp buildOneChunkFunction(mlir::OpBuilder& builder, mlir::ModuleOp module) {
         const mlir::Location loc = builder.getUnknownLoc();
-        const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, mlir::nl::NodeIDType::get(&_context));
+        const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::NodeIDType::get(&_context));
 
         builder.setInsertionPointToEnd(module.getBody());
         auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {chunkType}, {}));
