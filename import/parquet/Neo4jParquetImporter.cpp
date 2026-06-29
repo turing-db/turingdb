@@ -15,6 +15,5 @@ void Neo4jParquetImporter::import() {
     bioassert(_visitor._nodeColIdx != ParquetNeo4jVisitor::INVALID_COL_IDX,
               "failed to populate node column");
 
-    while (_reader.nextChunk()) {
-    }
+    while (_reader.nextChunk()) { }
 }
