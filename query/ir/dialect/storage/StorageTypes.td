@@ -35,6 +35,10 @@ def String : StorageType<"String", "string"> {
     }];
 }
 
+def Bool : StorageType<"Bool", "bool"> {
+    let summary = "TuringDB Boolean type";
+}
+
 def Embedding : StorageType<"Embedding", "embedding"> {
     let summary = "An embedding property value";
     let description = [{
