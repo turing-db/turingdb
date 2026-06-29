@@ -367,7 +367,6 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
     ChangeAccessor changeAccessor = change->access();
     CommitBuilder* commitBuilder = changeAccessor.pendingCommits().back().get();
 
-    // Load Parquet Here
     Neo4jParquetImporter importer(dbPath, commitBuilder);
     importer.import();
 
