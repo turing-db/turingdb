@@ -224,12 +224,22 @@ int main(int argc, char** argv) {
         if (!test._enabled || (doRunAllRemote && !test._remoteEnabled)) {
             continue;
         }
-        const QueryTestResult result =
-            doRunAllRemote
-                ? remoteRunner.runTest(
-                      test, fs::Path {"query_test_suite_cli_remote"} / test._name)
-                : runner.runTest(test,
-                                 fs::Path {"query_test_suite_cli"} / test._name);
+        QueryTestResult result;
+        try {
+            result =
+                doRunAllRemote
+                    ? remoteRunner.runTest(
+                          test, fs::Path {"query_test_suite_cli_remote"} / test._name)
+                    : runner.runTest(test,
+                                     fs::Path {"query_test_suite_cli"} / test._name);
+        } catch (const std::exception& e) {
+            // A single failing test — e.g. an unsupported column type over the
+            // remote protocol — must not abort the whole run. Record it as a
+            // failed result and keep going with the remaining tests.
+            result._name = test._name;
+            result._resultOutput = fmt::format("ERROR: {}", e.what());
+        }
+
         if (!first) {
             fmt::print(",");
         }

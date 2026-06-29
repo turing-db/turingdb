@@ -39,6 +39,7 @@ class VarDecl;
 class FunctionInvocationExpr;
 class LoadGraphQuery;
 class ListGraphQuery;
+class ListAvailableGraphsQuery;
 class MergeDataPartsQuery;
 class CreateGraphQuery;
 class LoadGMLQuery;
@@ -77,6 +78,7 @@ private:
     void dump(std::ostream& out, const CommitQuery* query);
     void dump(std::ostream& out, const MergeDataPartsQuery* query);
     void dump(std::ostream& out, const ListGraphQuery* query);
+    void dump(std::ostream& out, const ListAvailableGraphsQuery* query);
     void dump(std::ostream& out, const CreateGraphQuery* query);
     void dump(std::ostream& out, const LoadGMLQuery* query);
     void dump(std::ostream& out, const LoadParquetQuery* query);

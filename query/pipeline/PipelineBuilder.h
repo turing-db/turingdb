@@ -198,6 +198,9 @@ public:
     // List Graph
     PipelineValueOutputInterface& addListGraph();
 
+    // List Available Graphs
+    PipelineBlockOutputInterface& addListAvailableGraphs();
+
     // Create Graph
     PipelineValueOutputInterface& addCreateGraph(std::string_view graphName);
 

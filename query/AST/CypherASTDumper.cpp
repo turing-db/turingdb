@@ -29,6 +29,7 @@
 #include "FunctionInvocation.h"
 #include "LoadGraphQuery.h"
 #include "ListGraphQuery.h"
+#include "ListAvailableGraphsQuery.h"
 #include "CreateGraphQuery.h"
 #include "LoadGMLQuery.h"
 #include "LoadParquetQuery.h"
@@ -113,6 +114,10 @@ void CypherASTDumper::dump(std::ostream& out) {
 
             case QueryCommand::Kind::LIST_GRAPH_QUERY:
                 dump(out, static_cast<const ListGraphQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::LIST_AVAILABLE_GRAPHS_QUERY:
+                dump(out, static_cast<const ListAvailableGraphsQuery*>(query));
             break;
 
             case QueryCommand::Kind::CREATE_GRAPH_QUERY:
@@ -363,6 +368,13 @@ void CypherASTDumper::dump(std::ostream& out, const ListGraphQuery* query) {
     out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
     out << "    _" << std::hex << query << " {\n";
     out << "        ASTType ListGraphQuery\n";
+    out << "    }\n";
+}
+
+void CypherASTDumper::dump(std::ostream& out, const ListAvailableGraphsQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType ListAvailableGraphsQuery\n";
     out << "    }\n";
 }
 

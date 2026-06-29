@@ -38,6 +38,7 @@
 #include "processors/UnwindProcessor.h"
 #include "processors/WriteProcessor.h"
 #include "processors/ListGraphProcessor.h"
+#include "processors/ListAvailableGraphsProcessor.h"
 #include "processors/ShowProceduresProcessor.h"
 #include "processors/ShowExtensionsProcessor.h"
 #include "processors/WriteProcessorTypes.h"
@@ -1227,6 +1228,30 @@ PipelineValueOutputInterface& PipelineBuilder::addListGraph() {
     _pendingOutput.setInterface(&output);
 
     _lastProc = loadGraph;
+    return output;
+}
+
+PipelineBlockOutputInterface& PipelineBuilder::addListAvailableGraphs() {
+    ListAvailableGraphsProcessor* proc = ListAvailableGraphsProcessor::create(_pipeline);
+
+    PipelineBlockOutputInterface& output = proc->output();
+    Dataframe* df = output.getDataframe();
+
+    NamedColumn* nameCol = allocColumn<ColumnVector<std::string>>(df);
+    nameCol->rename("graphName");
+    proc->setNameColumn(nameCol);
+
+    NamedColumn* loadedCol = allocColumn<ColumnVector<types::Bool::Primitive>>(df);
+    loadedCol->rename("isLoaded");
+    proc->setIsLoadedColumn(loadedCol);
+
+    NamedColumn* loadingCol = allocColumn<ColumnVector<types::Bool::Primitive>>(df);
+    loadingCol->rename("isLoading");
+    proc->setIsLoadingColumn(loadingCol);
+
+    _pendingOutput.setInterface(&output);
+
+    _lastProc = proc;
     return output;
 }
 

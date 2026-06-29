@@ -72,6 +72,7 @@
 #include "nodes/ScanNodesByLabelNode.h"
 #include "nodes/LoadGraphNode.h"
 #include "nodes/ListGraphNode.h"
+#include "nodes/ListAvailableGraphsNode.h"
 #include "nodes/CreateGraphNode.h"
 #include "nodes/LoadGMLNode.h"
 #include "nodes/LoadParquetNode.h"
@@ -503,6 +504,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::LIST_GRAPH:
             return translateListGraphNode(static_cast<ListGraphNode*>(node));
+        break;
+
+        case PlanGraphOpcode::LIST_AVAILABLE_GRAPHS:
+            return translateListAvailableGraphsNode(static_cast<ListAvailableGraphsNode*>(node));
         break;
 
         case PlanGraphOpcode::LOAD_GML:
@@ -1289,9 +1294,10 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         const VarDecl* argDecl = argExpr->getExprVarDecl();
 
         if (!argDecl) {
-            if (argExpr->getKind() != Expr::Kind::LITERAL && argExpr->getKind() != Expr::Kind::SYMBOL) {
+            if (argExpr->getKind() != Expr::Kind::LITERAL && argExpr->getKind() != Expr::Kind::SYMBOL
+                && argExpr->getKind() != Expr::Kind::LIST) {
                 // TODO: replace this with an expression evaluation processor
-                throw PlannerException("Procedure arguments must be literals or symbols");
+                throw PlannerException("Procedure arguments must be literals, lists or symbols");
             }
 
             ExprProgram* exprProg = ExprProgram::create(_pipeline);
@@ -1616,6 +1622,11 @@ PipelineOutputInterface* PipelineGenerator::translateLoadParquet(LoadParquetNode
 
 PipelineOutputInterface* PipelineGenerator::translateListGraphNode(ListGraphNode* node) {
     _builder.addListGraph();
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateListAvailableGraphsNode(ListAvailableGraphsNode* node) {
+    _builder.addListAvailableGraphs();
     return _builder.getPendingOutputInterface();
 }
 

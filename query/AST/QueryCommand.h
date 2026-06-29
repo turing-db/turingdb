@@ -16,6 +16,7 @@ public:
         CHANGE_QUERY,
         COMMIT_QUERY,
         LIST_GRAPH_QUERY,
+        LIST_AVAILABLE_GRAPHS_QUERY,
         CREATE_GRAPH_QUERY,
         LOAD_GML_QUERY,
         LOAD_PARQUET_QUERY,

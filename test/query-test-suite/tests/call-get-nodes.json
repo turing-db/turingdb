@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.getNodes([0, 1, 2]) YIELD id, labels, inEdgeCount, outEdgeCount, properties RETURN id, labels, inEdgeCount, outEdgeCount, properties",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.getNodes\n        __yield__\n        __yield_item__: id\n        __yield_item__: labels\n        __yield_item__: inEdgeCount\n        __yield_item__: outEdgeCount\n        __yield_item__: properties\n        __args__\n        __arg__: unnamed\n    `\"]\n    1[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v3\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->0",
+    "result": "id,labels,inEdgeCount,outEdgeCount,properties\n0,\"[Person, SoftwareEngineering, Founder]\",2,4,\"{\"\"age\"\":32,\"\"dob\"\":\"\"18/01\"\",\"\"hasPhD\"\":true,\"\"isFrench\"\":true,\"\"name\"\":\"\"Remy\"\"}\"\n1,\"[Person, Founder, Bioinformatics]\",1,3,\"{\"\"age\"\":32,\"\"dob\"\":\"\"18/08\"\",\"\"hasPhD\"\":true,\"\"isFrench\"\":true,\"\"name\"\":\"\"Adam\"\"}\"\n2,\"[SoftwareEngineering, Interest]\",2,0,\"{\"\"isReal\"\":true,\"\"name\"\":\"\"Computers\"\"}\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"id\",\"labels\",\"inEdgeCount\",\"outEdgeCount\",\"properties\"],\"column_types\":[\"UInt64\",\"List\",\"UInt64\",\"UInt64\",\"String\"]},\"data\":[[[0,1,2],[[\"Person\", \"SoftwareEngineering\", \"Founder\"],[\"Person\", \"Founder\", \"Bioinformatics\"],[\"SoftwareEngineering\", \"Interest\"]],[2,1,2],[4,3,0],[\"{\\\"age\\\":32,\\\"dob\\\":\\\"18/01\\\",\\\"hasPhD\\\":true,\\\"isFrench\\\":true,\\\"name\\\":\\\"Remy\\\"}\",\"{\\\"age\\\":32,\\\"dob\\\":\\\"18/08\\\",\\\"hasPhD\\\":true,\\\"isFrench\\\":true,\\\"name\\\":\\\"Adam\\\"}\",\"{\\\"isReal\\\":true,\\\"name\\\":\\\"Computers\\\"}\"]]]}"
+  },
+  "tags": [
+    "call",
+    "get-nodes",
+    "procedure",
+    "nodes"
+  ],
+  "write-required": false
+}

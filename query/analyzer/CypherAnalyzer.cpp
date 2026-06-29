@@ -144,6 +144,7 @@ void CypherAnalyzer::analyze() {
             case QueryCommand::Kind::CHANGE_QUERY:
             case QueryCommand::Kind::COMMIT_QUERY:
             case QueryCommand::Kind::LIST_GRAPH_QUERY:
+            case QueryCommand::Kind::LIST_AVAILABLE_GRAPHS_QUERY:
             case QueryCommand::Kind::SHOW_PROCEDURES_QUERY:
             case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
             case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:

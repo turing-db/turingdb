@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.getEdges([99999]) YIELD id, src, tgt, edgeTypeID, properties RETURN id",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.getEdges\n        __yield__\n        __yield_item__: id\n        __yield_item__: src\n        __yield_item__: tgt\n        __yield_item__: edgeTypeID\n        __yield_item__: properties\n        __args__\n        __arg__: unnamed\n    `\"]\n    1[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v1\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->0",
+    "result": "EXEC ERROR\nInvalid edge ID: 99999",
+    "resultJson": "{\"header\":{\"column_names\":[\"id\"],\"column_types\":[\"UInt64\"]},\"data\":[],\"error\":\"EXEC_ERROR\",\"error_details\":\"Invalid edge ID: 99999\"}"
+  },
+  "tags": [
+    "call",
+    "get-edges",
+    "procedure",
+    "edges"
+  ],
+  "write-required": false
+}

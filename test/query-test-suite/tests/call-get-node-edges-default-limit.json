@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.getNodeEdges([0], 1, [], [], [], [], false) YIELD id, outgoingEdges, incomingEdges, outEdgeCounts, inEdgeCounts RETURN id, outgoingEdges, incomingEdges, outEdgeCounts, inEdgeCounts",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.getNodeEdges\n        __yield__\n        __yield_item__: id\n        __yield_item__: outgoingEdges\n        __yield_item__: incomingEdges\n        __yield_item__: outEdgeCounts\n        __yield_item__: inEdgeCounts\n        __args__\n        __arg__: unnamed\n        __arg__: unnamed\n        __arg__: unnamed\n        __arg__: unnamed\n        __arg__: unnamed\n        __arg__: unnamed\n        __arg__: unnamed\n    `\"]\n    1[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v1\n__expr__ (LITERAL): v2\n__expr__ (LITERAL): v3\n__expr__ (LITERAL): v4\n__expr__ (LITERAL): v5\n__expr__ (LITERAL): v6\n__expr__ (LITERAL): v7\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->0",
+    "result": "id,outgoingEdges,incomingEdges,outEdgeCounts,inEdgeCounts\n0,\"[[0, 0, 1, 0], [1, 0, 6, 1]]\",\"[[4, 1, 0, 0]]\",\"{\"\"0\"\":1,\"\"1\"\":3}\",\"{\"\"0\"\":2}\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"id\",\"outgoingEdges\",\"incomingEdges\",\"outEdgeCounts\",\"inEdgeCounts\"],\"column_types\":[\"UInt64\",\"List\",\"List\",\"String\",\"String\"]},\"data\":[[[0],[[[0, 0, 1, 0], [1, 0, 6, 1]]],[[[4, 1, 0, 0]]],[\"{\\\"0\\\":1,\\\"1\\\":3}\"],[\"{\\\"0\\\":2}\"]]]}"
+  },
+  "tags": [
+    "call",
+    "get-node-edges",
+    "procedure",
+    "node-edges"
+  ],
+  "write-required": false
+}

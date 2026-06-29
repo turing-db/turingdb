@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CALL db.hierarchicalLabelCounts([]) YIELD label, nodeCount RETURN label, nodeCount",
+  "expect": {
+    "plan": "flowchart TD\n    0[\"`\n        __PROCEDURE_EVAL__\n        __func__ db.hierarchicalLabelCounts\n        __yield__\n        __yield_item__: label\n        __yield_item__: nodeCount\n        __args__\n        __arg__: unnamed\n    `\"]\n    1[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v0\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->0",
+    "result": "label,nodeCount\nPerson,8\nSoftwareEngineering,5\nFounder,2\nBioinformatics,3\nInterest,10\nExotic,2\nSupernatural,1\nSleepDisturber,2\nSales,1",
+    "resultJson": "{\"header\":{\"column_names\":[\"label\",\"nodeCount\"],\"column_types\":[\"String\",\"UInt64\"]},\"data\":[[[\"Person\",\"SoftwareEngineering\",\"Founder\",\"Bioinformatics\",\"Interest\",\"Exotic\",\"Supernatural\",\"SleepDisturber\",\"Sales\"],[8,5,2,3,10,2,1,2,1]]]}"
+  },
+  "tags": [
+    "call",
+    "labels",
+    "procedure",
+    "hierarchical-label-counts"
+  ],
+  "write-required": false
+}
