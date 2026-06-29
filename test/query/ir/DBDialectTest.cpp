@@ -216,8 +216,8 @@ TEST_F(DBDialectTest, parsesLimit) {
     EXPECT_EQ(limit.getCount(), 3u);
     ASSERT_EQ(limit.getColumns().size(), 1u);
     ASSERT_EQ(limit.getResults().size(), 1u);
-    EXPECT_EQ(limit.getColumns()[0].getType(), mlir::db::ColumnType::get(&_context, "a"));
-    EXPECT_EQ(limit.getResults()[0].getType(), mlir::db::ColumnType::get(&_context, "a"));
+    EXPECT_EQ(limit.getColumns()[0].getType(), mlir::db::ColumnType::get(&_context));
+    EXPECT_EQ(limit.getResults()[0].getType(), mlir::db::ColumnType::get(&_context));
 }
 
 TEST_F(DBDialectTest, limitRoundTripsThroughTextualForm) {
@@ -254,8 +254,8 @@ TEST_F(DBDialectTest, verifierRejectsLimitArityMismatch) {
     auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
     builder.setInsertionPointToStart(function.addEntryBlock());
 
-    const mlir::Type colA = mlir::db::ColumnType::get(&_context, "a");
-    const mlir::Type colB = mlir::db::ColumnType::get(&_context, "b");
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context);
+    const mlir::Type colB = mlir::db::ColumnType::get(&_context);
 
     auto scanA = builder.create<mlir::db::ScanNodes>(loc, colA);
 
@@ -307,8 +307,8 @@ TEST_F(DBDialectTest, verifierRejectsLimitColumnTypeMismatch) {
     auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
     builder.setInsertionPointToStart(function.addEntryBlock());
 
-    const mlir::Type colA = mlir::db::ColumnType::get(&_context, "a");
-    const mlir::Type colB = mlir::db::ColumnType::get(&_context, "b");
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context);
+    const mlir::Type colB = mlir::db::ColumnType::get(&_context);
 
     auto scanA = builder.create<mlir::db::ScanNodes>(loc, colA);
 
