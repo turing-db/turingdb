@@ -36,8 +36,12 @@ class ColumnOf<string cppType, string mnemonic> : Type<
             "  llvm::cast<::mlir::db::ColumnType>($_self).getType())">,
       "column<" # mnemonic # ">">;
 
+// ID Columns
 def ColumnNodeIDs : ColumnOf<"::mlir::storage::NodeIDType", "nodeid">;
 def ColumnEdgeIDs : ColumnOf<"::mlir::storage::EdgeIDType", "edgeid">;
 def ColumnEdgeTypes : ColumnOf<"::mlir::storage::EdgeTypeIDType", "edge_type_id">;
+
+// Property types
+def ColumnBools : ColumnOf<"::mlir::storage::BoolType", "bool">;
 
 #endif // TURINGDB_TYPES
