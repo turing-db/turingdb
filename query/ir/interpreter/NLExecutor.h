@@ -59,6 +59,19 @@ public:
     // never mutates it.
     static void runLimitTruncate(NLExecutionContext* context, NLFunctionData* data);
 
+    // Reset a skip counter to its rows-to-drop; runs each time its block runs.
+    static void runSkipInit(NLExecutionContext* context, NLFunctionData* data);
+
+    // Charge the representative chunk's rows against a skip counter, recording how
+    // many rows the truncate should drop off the front this step and how many
+    // survive. The sole skip-counter mutator.
+    static void runSkipUpdate(NLExecutionContext* context, NLFunctionData* data);
+
+    // Copy the surviving suffix of each column into a fresh, front-aligned chunk,
+    // so a downstream consumer reads a genuinely skipped chunk. Reads the counter,
+    // never mutates it.
+    static void runSkipTruncate(NLExecutionContext* context, NLFunctionData* data);
+
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
@@ -73,6 +86,12 @@ public:
 
     // Tile for a nullable value chunk of this value type (inner column).
     static NLBroadcastFunction selectOptTileFunction(ValueType valueType);
+
+    // Range copy for an ID chunk of this kind (skip suffix copy).
+    static NLCopyFunction selectCopyFunction(NLChunkKind kind);
+
+    // Range copy for a nullable value chunk of this value type (skip suffix copy).
+    static NLCopyFunction selectOptCopyFunction(ValueType valueType);
 
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
     // value type (types::Double, ...). The translator picks the specialization

@@ -165,6 +165,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerCrossProduct(crossProduct);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
         lowerLimit(limit);
+    } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(operation)) {
+        lowerSkip(skip);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -401,6 +403,53 @@ void DBLowering::lowerLimit(mlir::db::Limit limit) {
     // Map db.limit's results to the truncated chunks, so its consumer reads the
     // cut copies rather than the full producer chunks.
     const mlir::ResultRange dbResults = limit.getResults();
+    const mlir::ResultRange truncatedChunks = truncate.getResults();
+    for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
+        _valueMap[dbResults[resultIndex]] = truncatedChunks[resultIndex];
+    }
+}
+
+void DBLowering::lowerSkip(mlir::db::Skip skip) {
+    // The nl chunks the skipped columns lowered to; these are what the truncate
+    // copies, and the consumer reads the cut copies.
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    for (const mlir::Value column : skip.getColumns()) {
+        chunks.push_back(mapValue(column));
+    }
+
+    // Skip::verify rejects an empty db.skip, so reaching it here means unverified
+    // IR - a defensive backstop, as in lowerLimit.
+    if (chunks.empty()) {
+        throw IRException("db.skip requires at least one column");
+    }
+
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    // Hoist the skip handle to the top of the entry block, above every loop, so it
+    // dominates the update and the truncate placed in the producing loop body.
+    // Unlike a limit, a skip threads no operand onto the loops (it cannot
+    // early-exit - every row past the dropped prefix must still be produced), so it
+    // needs no up-front pre-scan: the handle is created here, in program order,
+    // once the producing loops already exist.
+    _builder.setInsertionPointToStart(_entryBlock);
+    const mlir::Value handle = _builder.create<nl::Skip>(loc, skip.getCount()).getState();
+
+    // The representative is the first skipped column, in the innermost producing
+    // loop body (post-cross-product if there is one), so its row count is what this
+    // step charges and the truncate's suffix is cut from.
+    const mlir::Value representative = chunks.front();
+    setInsertionInto(ownerBlock(representative));
+
+    // Charge this step's rows, then lift the surviving suffix of every skipped
+    // column into fresh chunks, just before the consumer (nl.output when unchained,
+    // the inner sub-pipeline when chained). There is no fold into nl.output: the
+    // sink emits from row zero, so the suffix is always copied to the front.
+    _builder.create<nl::SkipUpdate>(loc, handle, representative);
+    nl::SkipTruncate truncate = _builder.create<nl::SkipTruncate>(loc, handle, chunks);
+
+    // Map db.skip's results to the truncated chunks, so its consumer reads the cut
+    // copies rather than the full producer chunks.
+    const mlir::ResultRange dbResults = skip.getResults();
     const mlir::ResultRange truncatedChunks = truncate.getResults();
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
         _valueMap[dbResults[resultIndex]] = truncatedChunks[resultIndex];

@@ -292,4 +292,42 @@ def Limit : TuringOp<"limit", [Pure]> {
   let hasVerifier = 1;
 }
 
+/**
+* Skip
+*/
+def Skip : TuringOp<"skip", [Pure]> {
+  let summary = "Drop the first M rows of a column dataflow";
+  let description = [{
+    The declarative counterpart of a Cypher RETURN ... SKIP M. Drops the first M
+    rows of the columns flowing through it, passing the rest through unchanged:
+
+      %a  = db.scan_nodes() : !db.column<"a">
+      %sa = db.skip(%a) count 3 : (!db.column<"a">) -> !db.column<"a">
+      db.output(%sa) : !db.column<"a">
+
+    It lowers to a hoisted nl.skip handle, an nl.skip_update in the innermost loop
+    body, and an nl.skip_truncate that lifts each step's surviving suffix into a
+    fresh chunk just before the consumer. Unlike db.limit it threads no operand onto
+    the loops (a skip cannot early-exit) and does not fold into nl.output (the suffix
+    must be copied to the front). Reading past a prefix of the graph is
+    deterministic, so the op is Pure.
+  }];
+
+  // The columns flow through unchanged; count is unsigned - a count of rows to
+  // drop is never negative, so a negative literal fails to parse rather than
+  // reaching the verifier.
+  let arguments = (ins Variadic<Column>:$columns, UI64Attr:$count);
+  let results   = (outs Variadic<Column>:$results);
+
+  // One result per input column, same types; functional-type prints the
+  // `(operandTypes) -> resultTypes` form and the named count attribute prints
+  // ahead of the colon, elided from attr-dict.
+  let assemblyFormat = [{
+    `(` $columns `)` `count` $count attr-dict `:` functional-type(operands, results)
+  }];
+
+  // results arity and types must equal the columns.
+  let hasVerifier = 1;
+}
+
 #endif //TURINGDB_OPS

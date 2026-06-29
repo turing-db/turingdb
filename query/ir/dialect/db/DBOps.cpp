@@ -60,6 +60,35 @@ ParseResult parseFactorRegion(OpAsmParser& parser, OperationState& result) {
     return parser.parseRegion(*factor, {});
 }
 
+// db.limit and db.skip both pass their columns straight through, so the results
+// must be exactly the input columns - same count, same types and in the same
+// order. Their row count is read from the first column during lowering, so a
+// pass-through over no column cannot be sized and is rejected here at the db
+// level. Shared by both verifiers.
+LogicalResult verifyPassThrough(Operation* op,
+                                OperandRange columns,
+                                Operation::result_range results) {
+    if (columns.empty()) {
+        return op->emitOpError("requires at least one column");
+    }
+
+    if (columns.size() != results.size()) {
+        return op->emitOpError("expects ") << columns.size()
+                                           << " results, one per input column, but has "
+                                           << results.size();
+    }
+
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        if (columns[columnIndex].getType() != results[columnIndex].getType()) {
+            return op->emitOpError("result ") << columnIndex
+                                              << " must have the same type as input column "
+                                              << columnIndex;
+        }
+    }
+
+    return success();
+}
+
 }
 
 // Builds the op from just the result types - the left factor's yielded columns
@@ -161,28 +190,10 @@ LogicalResult CrossProduct::verify() {
 // db.limit passes its columns straight through, so the results must be exactly
 // the input columns - same count, same types and in the same order.
 LogicalResult Limit::verify() {
-    const OperandRange columns = getColumns();
-    const Operation::result_range results = getResults();
+    return verifyPassThrough(getOperation(), getColumns(), getResults());
+}
 
-    // A limit's row count is read from its first column during lowering, so a
-    // limit over no column cannot be sized. Reject it here at the db level.
-    if (columns.empty()) {
-        return emitOpError("requires at least one column");
-    }
-
-    if (columns.size() != results.size()) {
-        return emitOpError("expects ") << columns.size()
-                                       << " results, one per input column, but has "
-                                       << results.size();
-    }
-
-    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
-        if (columns[columnIndex].getType() != results[columnIndex].getType()) {
-            return emitOpError("result ") << columnIndex
-                                          << " must have the same type as input column "
-                                          << columnIndex;
-        }
-    }
-
-    return success();
+// db.skip passes its columns straight through, the same as db.limit.
+LogicalResult Skip::verify() {
+    return verifyPassThrough(getOperation(), getColumns(), getResults());
 }

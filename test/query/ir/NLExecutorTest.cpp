@@ -323,6 +323,25 @@ std::string nlLimitOuterLoopOnlyProgram(uint64_t count) {
              "}\n";
 }
 
+// Scan all nodes and output them, with a top-level nl.skip dropping the first
+// `count` rows. The handle is hoisted, charged by skip_update, and the truncate
+// lifts each step's surviving suffix to the front before the plain output. Unlike
+// a limit, the loop carries NO handle: a skip runs the scan to exhaustion.
+std::string nlSkipScanProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %h = nl.skip(")
+           + std::to_string(count)
+           + ")\n"
+             "  %nodes = nl.scan_nodes()\n"
+             "  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {\n"
+             "    nl.skip_update %h, %a : !nl.chunk<!nl.node_id>\n"
+             "    %sa = nl.skip_truncate %h, (%a) : !nl.chunk<!nl.node_id>\n"
+             "    nl.output(%sa) : !nl.chunk<!nl.node_id>\n"
+             "  }\n"
+             "  func.return\n"
+             "}\n";
+}
+
 }
 
 class NLExecutorTest : public TuringTest {
@@ -700,6 +719,67 @@ TEST_F(NLExecutorTest, limitHaltsOuterLoopWhenBudgetSpent) {
 
     EXPECT_EQ(sink.getCalls(), 1u);
     EXPECT_EQ(sink.getTotalRows(), 1u);
+}
+
+TEST_F(NLExecutorTest, skipScanDropsPrefix) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    const std::string program = nlSkipScanProgram(1);
+    runProgram(program.c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // Four nodes, SKIP 1: three rows survive (the first scanned node is dropped).
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows.size(), 3u);
+}
+
+TEST_F(NLExecutorTest, skipZeroEmitsAll) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // SKIP 0: nothing is dropped, so every node survives.
+    CollectingNodeSink sink;
+    const std::string program = nlSkipScanProgram(0);
+    runProgram(program.c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{0}, {1}, {2}, {3}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, skipExceedingCountEmitsNothing) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // SKIP 10 over four nodes: the whole scan is dropped, so no row is emitted.
+    CountingSink sink;
+    const std::string program = nlSkipScanProgram(10);
+    runProgram(program.c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    EXPECT_EQ(sink.getTotalRows(), 0u);
+}
+
+TEST_F(NLExecutorTest, skipEmitsSuffixAcrossChunks) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 2 over four nodes, SKIP 1: the first chunk drops one of its two
+    // rows and emits the one-row suffix, the second chunk drops none and emits
+    // both. The scan runs to exhaustion (a skip never early-exits) - two calls,
+    // three rows.
+    CountingSink sink;
+    const std::string program = nlSkipScanProgram(1);
+    runProgram(program.c_str(), reader.getView(), 2, sink);
+
+    EXPECT_EQ(sink.getCalls(), 2u);
+    EXPECT_EQ(sink.getTotalRows(), 3u);
 }
 
 TEST_F(NLExecutorTest, rejectsCrossLoopOutputColumns) {

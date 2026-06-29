@@ -118,6 +118,27 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) RETURN a SKIP 3: a scan whose first three rows are dropped by db.skip,
+// one pass-through column.
+const char* const skipProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<"a">
+  %sa = db.skip(%a) count 3 : (!db.column<"a">) -> !db.column<"a">
+  db.output(%sa) : !db.column<"a">
+  return
+}
+)mlir";
+
+// db.skip's count is a ui64 attribute, so a negative literal cannot parse.
+const char* const negativeSkipProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<"a">
+  %sa = db.skip(%a) count -1 : (!db.column<"a">) -> !db.column<"a">
+  db.output(%sa) : !db.column<"a">
+  return
+}
+)mlir";
+
 TEST_F(DBDialectTest, parsesCrossProductOfTwoScans) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(crossProductProgram);
     ASSERT_TRUE(module);
@@ -324,6 +345,129 @@ TEST_F(DBDialectTest, verifierRejectsLimitColumnTypeMismatch) {
         return mlir::success();
     });
     EXPECT_TRUE(mlir::failed(mlir::verify(limit.getOperation())));
+}
+
+TEST_F(DBDialectTest, parsesSkip) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(skipProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::Skip skip;
+    module.get().walk([&](mlir::db::Skip op) {
+        skip = op;
+    });
+    ASSERT_TRUE(skip);
+
+    // The count is the parsed ui64, and the single column passes through as the
+    // single result, same type.
+    EXPECT_EQ(skip.getCount(), 3u);
+    ASSERT_EQ(skip.getColumns().size(), 1u);
+    ASSERT_EQ(skip.getResults().size(), 1u);
+    EXPECT_EQ(skip.getColumns()[0].getType(), mlir::db::ColumnType::get(&_context, "a"));
+    EXPECT_EQ(skip.getResults()[0].getType(), mlir::db::ColumnType::get(&_context, "a"));
+}
+
+TEST_F(DBDialectTest, skipRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(skipProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the
+    // db.skip printer and parser are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, rejectsNegativeSkipCount) {
+    // count is a ui64 attribute, so a negative literal fails to parse and the
+    // module is null.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(negativeSkipProgram);
+    EXPECT_FALSE(module);
+}
+
+// Builds a db.skip whose result count does not match its columns, exercising the
+// verifier's pass-through arity check on the programmatic builder path (the parser
+// path always derives the results from the printed functional type).
+TEST_F(DBDialectTest, verifierRejectsSkipArityMismatch) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context, "a");
+    const mlir::Type colB = mlir::db::ColumnType::get(&_context, "b");
+
+    auto scanA = builder.create<mlir::db::ScanNodes>(loc, colA);
+
+    // One input column but two declared results: the pass-through arity is wrong.
+    auto skip = builder.create<mlir::db::Skip>(loc,
+                                               mlir::TypeRange {colA, colB},
+                                               mlir::ValueRange {scanA.getResult()},
+                                               /*count=*/3u);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(skip.getOperation())));
+}
+
+// Builds a db.skip with no columns. Its row count is read from the first column
+// during lowering, so the verifier rejects it here rather than leaving the empty
+// case to the lowering pass.
+TEST_F(DBDialectTest, verifierRejectsSkipWithoutColumns) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    // No input columns and no results: nothing to skip.
+    auto skip = builder.create<mlir::db::Skip>(loc,
+                                               mlir::TypeRange {},
+                                               mlir::ValueRange {},
+                                               /*count=*/3u);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(skip.getOperation())));
+}
+
+// Builds a db.skip whose single result type differs from its single input column:
+// same arity, wrong type. This exercises the per-column type check the
+// arity-mismatch test never reaches.
+TEST_F(DBDialectTest, verifierRejectsSkipColumnTypeMismatch) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context, "a");
+    const mlir::Type colB = mlir::db::ColumnType::get(&_context, "b");
+
+    auto scanA = builder.create<mlir::db::ScanNodes>(loc, colA);
+
+    // One input column and one result, but the result type does not match it.
+    auto skip = builder.create<mlir::db::Skip>(loc,
+                                               mlir::TypeRange {colB},
+                                               mlir::ValueRange {scanA.getResult()},
+                                               /*count=*/3u);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(skip.getOperation())));
 }
 
 }

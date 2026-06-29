@@ -176,8 +176,26 @@ public:
     }
 
     void sortedRows(std::vector<std::pair<uint64_t, std::optional<std::vector<float>>>>& rows) const {
-        rows = _rows;
-        std::sort(rows.begin(), rows.end());
+        // Sort a size_t permutation rather than std::sort-ing the rows directly:
+        // GCC 13's __insertion_sort emits a spurious -Wmaybe-uninitialized when it
+        // moves a std::pair holding an std::optional<std::vector<float>>, and that
+        // middle-end warning cannot be silenced by a diagnostic pragma (its location
+        // is inside the std header). Ordering an index permutation never moves the
+        // heavy element, sidestepping the false positive; the result is identical.
+        std::vector<size_t> order(_rows.size());
+        for (size_t index = 0; index < order.size(); index++) {
+            order[index] = index;
+        }
+
+        std::sort(order.begin(), order.end(), [this](size_t left, size_t right) {
+            return _rows[left] < _rows[right];
+        });
+
+        rows.clear();
+        rows.reserve(_rows.size());
+        for (const size_t index : order) {
+            rows.push_back(_rows[index]);
+        }
     }
 
 private:
@@ -520,6 +538,87 @@ std::string twoLimitProgram(uint64_t outerCount, uint64_t innerCount) {
            + std::to_string(innerCount)
            + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
              "  db.output(%lb) : !db.column<!storage.node_id>\n"
+             "  return\n"
+             "}\n";
+}
+
+// MATCH (a) RETURN a SKIP count: a scan whose first `count` rows are dropped.
+std::string skipScanProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %sa = db.skip(%a) count ")
+           + std::to_string(count)
+           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
+             "  db.output(%sa) : !db.column<\"a\">\n"
+             "  return\n"
+             "}\n";
+}
+
+// MATCH (a)->(b)->(c) RETURN c SKIP count: a two-hop traversal (a three-deep loop
+// nest) whose first `count` result rows are dropped. The skip sits in the
+// innermost body and never gates a loop, so the whole nest runs to exhaustion.
+std::string skipTwoHopProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<\"a\">) -> (!db.column<\"a1\">, !db.column<\"e0\">, !db.column<\"et0\">, !db.column<\"b\">)\n"
+                       "  %b2, %e1, %et1, %c, %a2 = db.get_out_edges(%b, {%a1}) : (!db.column<\"b\">, !db.column<\"a1\">) -> (!db.column<\"b2\">, !db.column<\"e1\">, !db.column<\"et1\">, !db.column<\"c\">, !db.column<\"a2\">)\n"
+                       "  %sc = db.skip(%c) count ")
+           + std::to_string(count)
+           + " : (!db.column<\"c\">) -> !db.column<\"c\">\n"
+             "  db.output(%sc) : !db.column<\"c\">\n"
+             "  return\n"
+             "}\n";
+}
+
+// MATCH (a) RETURN a, a.score SKIP count: a property fetch result is a trailing
+// output column, so the suffix copy must lift the node IDs and the nullable value
+// column together. The representative is the first column, the node IDs.
+std::string skipNodePropertyProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<\"a\">) -> !db.column<\"a.score\">\n"
+                       "  %sa, %sscore = db.skip(%a, %score) count ")
+           + std::to_string(count)
+           + " : (!db.column<\"a\">, !db.column<\"a.score\">) -> (!db.column<\"a\">, !db.column<\"a.score\">)\n"
+             "  db.output(%sa, %sscore) : !db.column<\"a\">, !db.column<\"a.score\">\n"
+             "  return\n"
+             "}\n";
+}
+
+// MATCH (a) RETURN a SKIP skipCount LIMIT limitCount: a skip stacked under a limit,
+// the page of a paginated scan. db.skip drops the first skipCount rows and db.limit
+// then keeps the next limitCount. The limit governs the scan's early-exit (it claims
+// the producing loop); the skip drops the prefix in front of it.
+std::string skipThenLimitProgram(uint64_t skipCount, uint64_t limitCount) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %sa = db.skip(%a) count ")
+           + std::to_string(skipCount)
+           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
+             "  %la = db.limit(%sa) count "
+           + std::to_string(limitCount)
+           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
+             "  db.output(%la) : !db.column<\"a\">\n"
+             "  return\n"
+             "}\n";
+}
+
+// MATCH (a), (b) RETURN a, b SKIP count: a cross product whose first `count` pairs
+// are dropped. The representative is the post-cross-product column, so the count
+// is right; the cross product is built in full (a skip cannot cap the build).
+std::string skipCrossProductProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %0:2 = db.cross_product factor {\n"
+                       "    %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "    db.yield %a : !db.column<\"a\">\n"
+                       "  } factor {\n"
+                       "    %b = db.scan_nodes() : !db.column<\"b\">\n"
+                       "    db.yield %b : !db.column<\"b\">\n"
+                       "  }\n"
+                       "  %sa, %sb = db.skip(%0#0, %0#1) count ")
+           + std::to_string(count)
+           + " : (!db.column<\"a\">, !db.column<\"b\">) -> (!db.column<\"a\">, !db.column<\"b\">)\n"
+             "  db.output(%sa, %sb) : !db.column<\"a\">, !db.column<\"b\">\n"
              "  return\n"
              "}\n";
 }
@@ -1456,6 +1555,271 @@ TEST_F(DBLoweringTest, limitsWhenPropertyFetchIsRepresentative) {
     runLoweredProgram(program.c_str(), reader.getView(), sink);
 
     EXPECT_EQ(sink.getTotalRows(), 2u);
+}
+
+TEST_F(DBLoweringTest, skipsScanByDroppingPrefix) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    const std::string program = skipScanProgram(3);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    // Four nodes, SKIP 3: one row survives (the first three scanned are dropped).
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows.size(), 1u);
+}
+
+TEST_F(DBLoweringTest, skipZeroEmitsAllRows) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    const std::string program = skipScanProgram(0);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    // SKIP 0 drops nothing, so every node is emitted.
+    const std::vector<std::vector<uint64_t>> expected {{0}, {1}, {2}, {3}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, skipExceedingNodeCountEmitsNothing) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // SKIP 10 over four nodes: the whole scan is dropped, so nothing is emitted.
+    // The scan still runs to exhaustion (a skip never early-exits), but every step
+    // emits a zero-row suffix.
+    CountingSink sink;
+    const std::string program = skipScanProgram(10);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    EXPECT_EQ(sink.getTotalRows(), 0u);
+}
+
+TEST_F(DBLoweringTest, skipEmitsSuffixAcrossChunkBoundary) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Four nodes in chunks of two, SKIP 1: the first chunk drops one of its two
+    // rows and emits a one-row suffix, the second drops none and emits both - three
+    // rows over two appendChunks calls. Unlike a limit, the scan runs to
+    // exhaustion: a skip never terminates the loop early.
+    CountingSink sink;
+    const std::string program = skipScanProgram(1);
+    runLoweredProgram(program.c_str(), reader.getView(), sink, /*chunkSize=*/2);
+
+    EXPECT_EQ(sink.getCalls(), 2u);
+    EXPECT_EQ(sink.getTotalRows(), 3u);
+}
+
+TEST_F(DBLoweringTest, skipsTwoHopTraversal) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The diamond has two two-hop paths, both ending at node 3. SKIP 1 drops one,
+    // leaving a single (c) row, which is node 3 either way - order-independent.
+    CollectingNodeSink sink;
+    const std::string program = skipTwoHopProgram(1);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{3}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, skipsCrossProduct) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Four nodes crossed with four is sixteen pairs; SKIP 5 drops the first five,
+    // leaving eleven. The representative is the post-cross-product column, so the
+    // count is right.
+    CountingSink sink;
+    const std::string program = skipCrossProductProgram(5);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    EXPECT_EQ(sink.getTotalRows(), 11u);
+}
+
+TEST_F(DBLoweringTest, skipsNodePropertyOutput) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Three nodes carry (or lack) a score; SKIP 1 drops one, leaving two
+    // (node, score) rows, the node ID column and the nullable value column lifted
+    // together. Each surviving row pairs a node with its own score, so every
+    // emitted pair belongs to the known result set - proving the value column was
+    // copied in step with the node IDs, not misaligned.
+    CollectingNodeIntPropSink sink;
+    const std::string program = skipNodePropertyProgram(1);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    ASSERT_EQ(rows.size(), 2u);
+
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> all {
+        {0, 100}, {1, 200}, {2, std::nullopt}
+    };
+    for (const std::pair<uint64_t, std::optional<int64_t>>& row : rows) {
+        EXPECT_NE(std::find(all.begin(), all.end(), row), all.end());
+    }
+}
+
+TEST_F(DBLoweringTest, skipsNodePropertyOutputEmitsAllWhenZero) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // SKIP 0 drops nothing, so every (node, score) row survives, with node 2's
+    // missing score still null - the skip path does not disturb the property values.
+    CollectingNodeIntPropSink sink;
+    const std::string program = skipNodePropertyProgram(0);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 100}, {1, 200}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, lowersSkipToHandleUpdateAndTruncate) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    const std::string programText = skipTwoHopProgram(3);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    // A skip never folds into nl.output (the surviving suffix must be copied to the
+    // front) and never gates a loop. Result: one hoisted nl.skip, one nl.skip_update
+    // and one nl.skip_truncate, a three-deep loop nest where NO nl.for carries a
+    // handle, and a plain nl.output with no limit handle.
+    size_t skipCount = 0;
+    size_t forCount = 0;
+    size_t forsWithLimit = 0;
+    size_t updateCount = 0;
+    size_t truncateCount = 0;
+    mlir::nl::Skip skipOp;
+    mlir::nl::SkipUpdate updateOp;
+    mlir::nl::SkipTruncate truncateOp;
+    mlir::nl::Output outputOp;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::nl::Skip found = mlir::dyn_cast<mlir::nl::Skip>(operation)) {
+            skipOp = found;
+            skipCount++;
+        } else if (mlir::nl::For forOp = mlir::dyn_cast<mlir::nl::For>(operation)) {
+            forCount++;
+            if (forOp.getLimit()) {
+                forsWithLimit++;
+            }
+        } else if (mlir::nl::SkipUpdate found = mlir::dyn_cast<mlir::nl::SkipUpdate>(operation)) {
+            updateOp = found;
+            updateCount++;
+        } else if (mlir::nl::SkipTruncate found = mlir::dyn_cast<mlir::nl::SkipTruncate>(operation)) {
+            truncateOp = found;
+            truncateCount++;
+        } else if (mlir::nl::Output found = mlir::dyn_cast<mlir::nl::Output>(operation)) {
+            outputOp = found;
+        }
+    });
+
+    EXPECT_EQ(skipCount, 1u);
+    EXPECT_EQ(forCount, 3u);
+    EXPECT_EQ(forsWithLimit, 0u);
+    EXPECT_EQ(updateCount, 1u);
+    EXPECT_EQ(truncateCount, 1u);
+    ASSERT_TRUE(skipOp);
+    ASSERT_TRUE(updateOp);
+    ASSERT_TRUE(truncateOp);
+    ASSERT_TRUE(outputOp);
+
+    // The update and the truncate both name the one hoisted handle; the output
+    // carries no limit handle (a skip never folds into it).
+    const mlir::Value handle = skipOp.getState();
+    EXPECT_EQ(updateOp.getState(), handle);
+    EXPECT_EQ(truncateOp.getState(), handle);
+    EXPECT_FALSE(outputOp.getLimit());
+
+    // The update and the truncate sit in the innermost loop body, the same block as
+    // the output that consumes the truncated columns.
+    EXPECT_EQ(updateOp->getBlock(), truncateOp->getBlock());
+    EXPECT_EQ(truncateOp->getBlock(), outputOp->getBlock());
+    EXPECT_TRUE(mlir::isa<mlir::nl::For>(updateOp->getParentOp()));
+}
+
+TEST_F(DBLoweringTest, skipThenLimitPagesTheScan) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Four nodes, SKIP 1 LIMIT 2: drop the first row, then keep the next two -
+    // min(4 - 1, 2) = 2 rows. This exercises the two ops stacked, the skip's suffix
+    // copy feeding the limit's representative inside the same loop body.
+    CountingSink sink;
+    const std::string program = skipThenLimitProgram(1, 2);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    EXPECT_EQ(sink.getTotalRows(), 2u);
+}
+
+TEST_F(DBLoweringTest, skipThenLimitStableAcrossChunkSizes) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // SKIP 1 LIMIT 2 over four nodes is the page [position 1, position 3) of the
+    // scan. Chunking only batches the scan, never reorders it, so the page must be
+    // the same two rows whatever the chunk size - even when the skip's drop and the
+    // limit's cut straddle a chunk boundary (chunkSize 1: drop in chunk 0, then one
+    // kept row each in chunks 1 and 2; chunkSize 2: drop one of chunk 0's two rows,
+    // emit its suffix, then a one-row prefix of chunk 1). The reference is the
+    // result at a chunk size that holds the whole scan in one chunk.
+    const std::string program = skipThenLimitProgram(1, 2);
+
+    CollectingNodeSink wholeScanSink;
+    runLoweredProgram(program.c_str(), reader.getView(), wholeScanSink, /*chunkSize=*/4);
+    std::vector<std::vector<uint64_t>> expected;
+    wholeScanSink.sortedRows(expected);
+    ASSERT_EQ(expected.size(), 2u);
+
+    for (size_t chunkSize = 1; chunkSize <= 5; chunkSize++) {
+        CollectingNodeSink sink;
+        runLoweredProgram(program.c_str(), reader.getView(), sink, chunkSize);
+
+        std::vector<std::vector<uint64_t>> rows;
+        sink.sortedRows(rows);
+        EXPECT_EQ(rows, expected) << "page differs at chunkSize " << chunkSize;
+    }
 }
 
 int main(int argc, char** argv) {

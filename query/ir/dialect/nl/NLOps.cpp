@@ -106,6 +106,20 @@ LogicalResult LimitTruncate::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// A skip truncate, like a limit truncate, passes its columns through unchanged -
+// only the dropped prefix is removed - so each result keeps its input column's
+// chunk type.
+LogicalResult SkipTruncate::inferReturnTypes(MLIRContext* context,
+                                             std::optional<Location> location,
+                                             SkipTruncate::Adaptor adaptor,
+                                             SmallVectorImpl<Type>& inferredReturnTypes) {
+    for (const Type columnType : adaptor.getColumns().getTypes()) {
+        inferredReturnTypes.push_back(columnType);
+    }
+
+    return success();
+}
+
 void For::build(OpBuilder& builder, OperationState& state, Value iterator) {
     For::build(builder, state, iterator, Value());
 }
