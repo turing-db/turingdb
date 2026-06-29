@@ -623,6 +623,23 @@ std::string skipCrossProductProgram(uint64_t count) {
              "}\n";
 }
 
+// MATCH (a) WITH a SKIP count MATCH (a)-->(b) RETURN b: a mid-query (chained) skip.
+// db.skip feeds db.get_out_edges, not db.output, so the skip drops the first `count`
+// intermediate `a`s and each surviving `a` then fans out all its out-edges. The scan
+// (a's producer) holds the skip; the edge loop is a consumer, built after the
+// truncate and limit/skip-oblivious.
+std::string chainedSkipProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %sa = db.skip(%a) count ")
+           + std::to_string(count)
+           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
+             "  %a1, %e0, %et0, %b = db.get_out_edges(%sa, {}) : (!db.column<\"a\">) -> (!db.column<\"a1\">, !db.column<\"e0\">, !db.column<\"et0\">, !db.column<\"b\">)\n"
+             "  db.output(%b) : !db.column<\"b\">\n"
+             "  return\n"
+             "}\n";
+}
+
 }
 
 class DBLoweringTest : public TuringTest {
@@ -1820,6 +1837,88 @@ TEST_F(DBLoweringTest, skipThenLimitStableAcrossChunkSizes) {
         sink.sortedRows(rows);
         EXPECT_EQ(rows, expected) << "page differs at chunkSize " << chunkSize;
     }
+}
+
+TEST_F(DBLoweringTest, skipsChainedMidQueryFansOutFromSurvivors) {
+    auto graph = buildRegularOutGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // WITH a SKIP 1 drops one of the four nodes; the three survivors each have
+    // out-degree two, so the expansion emits six b rows. The downstream fan-out is
+    // NOT itself skipped - six rows from a SKIP of one proves the skip bounds the
+    // intermediate `a`, with the edge loop a limit/skip-oblivious consumer.
+    CountingSink sink;
+    const std::string program = chainedSkipProgram(1);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    EXPECT_EQ(sink.getTotalRows(), 6u);
+}
+
+TEST_F(DBLoweringTest, lowersChainedSkipWithConsumerEdgeLoop) {
+    auto graph = buildRegularOutGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    const std::string programText = chainedSkipProgram(1);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    // One skip, one update, one truncate, two loops (scan + edges) - and NO loop
+    // carries a handle (a skip never gates a loop). The truncate stays (no fold for
+    // skip), and the edge loop is built inside the scan body, after the truncate,
+    // consuming the cut chunk - so it fans out freely.
+    size_t skipCount = 0;
+    size_t updateCount = 0;
+    size_t truncateCount = 0;
+    size_t forsWithLimit = 0;
+    mlir::nl::SkipTruncate truncateOp;
+    mlir::nl::For edgeLoop;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::isa<mlir::nl::Skip>(operation)) {
+            skipCount++;
+        } else if (mlir::isa<mlir::nl::SkipUpdate>(operation)) {
+            updateCount++;
+        } else if (mlir::nl::SkipTruncate found = mlir::dyn_cast<mlir::nl::SkipTruncate>(operation)) {
+            truncateOp = found;
+            truncateCount++;
+        } else if (mlir::nl::For forOp = mlir::dyn_cast<mlir::nl::For>(operation)) {
+            if (forOp.getLimit()) {
+                forsWithLimit++;
+            }
+
+            mlir::Operation* const iteratorDef = forOp.getIterator().getDefiningOp();
+            if (mlir::isa<mlir::nl::GetOutEdges>(iteratorDef)) {
+                edgeLoop = forOp;
+            }
+        }
+    });
+
+    EXPECT_EQ(skipCount, 1u);
+    EXPECT_EQ(updateCount, 1u);
+    EXPECT_EQ(truncateCount, 1u);
+    EXPECT_EQ(forsWithLimit, 0u);
+    ASSERT_TRUE(truncateOp);
+    ASSERT_TRUE(edgeLoop);
+
+    // The consuming edge loop is nested in the scan body, downstream of the truncate
+    // that feeds it - the chained shape, where the cut chunk drives the fan-out.
+    EXPECT_EQ(edgeLoop->getBlock(), truncateOp->getBlock());
+    EXPECT_TRUE(edgeLoop.getIterator().getDefiningOp<mlir::nl::GetOutEdges>());
 }
 
 int main(int argc, char** argv) {
