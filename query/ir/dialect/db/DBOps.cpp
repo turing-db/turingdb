@@ -281,3 +281,17 @@ LogicalResult Sort::verify() {
 LogicalResult RemoveDuplicates::verify() {
     return verifyPassThrough(getOperation(), getColumns(), getResults());
 }
+
+// Allows inline declaration of a constant type
+LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
+                                           std::optional<Location> location,
+                                           ValueRange operands, DictionaryAttr attributes,
+                                           PropertyRef properties,
+                                           RegionRange regions,
+                                           SmallVectorImpl<Type>& inferredReturnTypes) {
+    ConstantOpGenericAdaptor adaptor(operands, attributes, properties, regions);
+    const mlir::TypedAttr typedValue = mlir::cast<mlir::TypedAttr>(adaptor.getValue());
+    inferredReturnTypes.emplace_back(
+        mlir::db::ColumnType::get(context, typedValue.getType()));
+    return mlir::success();
+}
