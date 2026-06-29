@@ -3,6 +3,8 @@
 
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 include "DBDialect.td"
 include "DBTypes.td"
@@ -605,12 +607,13 @@ def Min : AggregateOp<"min">;
 def Max : AggregateOp<"max">;
 def Avg : AggregateOp<"avg">;
 
-def ConstantOp : TuringOp<"constant", [Pure]> {
+def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
   let summary = "Produces a constant value in a column";
 
-  // FIXME: AnyType probably incorrect here
-  let arguments = (ins AnyType : $value);
+  let arguments = (ins TypedAttrInterface: $value);
   let results = (outs Column : $result);
+
+  let assemblyFormat = "`(` $value `)` attr-dict";
 }
 
 def AndOp : BinaryOp<"logical_and", [Pure]> {
