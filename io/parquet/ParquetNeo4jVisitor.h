@@ -78,7 +78,9 @@ private:
     NodeIDs _chunkTgtIds;
     EdgeTypes _chunkEdgeTypes;
 
+    int16_t _lblMaxDefLevel {0};
     std::span<const int16_t> _chunkLabelRepLevels;
+    std::span<const int16_t> _chunkLabelDefLevels;
 
     void fillLabels(std::span<const parquet::ByteArray> labels);
     void fillEdgeTypes(std::span<const parquet::ByteArray> types);

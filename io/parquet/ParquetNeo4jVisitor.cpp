@@ -21,25 +21,33 @@ using namespace db;
 namespace rv = ranges::views;
 
 void ParquetNeo4jVisitor::fillLabels(std::span<const parquet::ByteArray> labels) {
-    bioassert(labels.size() == _chunkLabelRepLevels.size(),
-              "Labels with invalid rep levels");
+    bioassert(_chunkLabelRepLevels.size() == _chunkLabelDefLevels.size(),
+              "Labels: rep and def level counts differ");
 
     MetadataBuilder& metadataBuilder = _builder->metadata();
+    size_t valueIndex = 0;
 
-    for (size_t i = 0; i < labels.size(); ++i) {
+    for (size_t i = 0; i < _chunkLabelRepLevels.size(); ++i) {
+        const bool hasValue = _chunkLabelDefLevels[i] == _lblMaxDefLevel;
+
+        if (!hasValue) {
+            continue;
+        }
+
         const bool nextNode = _chunkLabelRepLevels[i] == 0;
         if (nextNode) {
             _chunkNodeLabels.emplace_back();
         }
 
-        const parquet::ByteArray& bytes = labels[i];
+        const parquet::ByteArray& bytes = labels[valueIndex++];
         const char* start = reinterpret_cast<const char*>(bytes.ptr);
         const size_t len = bytes.len;
         const std::string_view labelName {start, len};
         const LabelID labelID = metadataBuilder.getOrCreateLabel(labelName);
-
         _chunkNodeLabels.back().push_back(labelID);
     }
+
+    bioassert(valueIndex == labels.size(), "Labels: not all values were consumed");
 }
 
 void ParquetNeo4jVisitor::fillEdgeTypes(std::span<const parquet::ByteArray> types) {
@@ -76,6 +84,7 @@ bool ParquetNeo4jVisitor::onFileStart(const parquet::FileMetaData& metadata) {
             const bool isLists = type == NEO4J_LBLS_COL_TYPE;
             bioassert(isLists, "Neo4j labels column was not a byte array.");
             _lblColIdx = colIdx;
+            _lblMaxDefLevel = desc->max_definition_level();
             continue;
         }
 
@@ -116,9 +125,10 @@ bool ParquetNeo4jVisitor::onRowGroupStart(size_t, const parquet::RowGroupMetaDat
 
 bool ParquetNeo4jVisitor::onLevels(size_t columnIndex,
                                    std::span<const int16_t> repLevels,
-                                   std::span<const int16_t>) {
+                                   std::span<const int16_t> defLevels) {
     if (columnIndex == _lblColIdx) {
         _chunkLabelRepLevels = repLevels;
+        _chunkLabelDefLevels = defLevels;
     }
     return true;
 }
@@ -152,6 +162,7 @@ bool ParquetNeo4jVisitor::onChunkEnd(size_t, size_t, size_t) {
     DataPartBuilder& dpBuilder = _builder->getCurrentBuilder();
 
     bioassert(_chunkNodeIds.size() == _chunkNodeLabels.size(), "NodeID, Label mismatch");
+
     for (auto [id, labelIDs] : rv::zip(_chunkNodeIds, _chunkNodeLabels)) {
         LabelSet labelSet;
         for (const LabelID labelID : labelIDs) {
@@ -162,13 +173,19 @@ bool ParquetNeo4jVisitor::onChunkEnd(size_t, size_t, size_t) {
     _chunkNodeLabels.clear();
     _chunkNodeIds = {};
 
-    bioassert((_chunkSrcIds.size() == _chunkTgtIds.size())
-                  && (_chunkSrcIds.size() == _chunkEdgeTypes.size()),
-              "Edge, Type mismatch");
+    bioassert(_chunkSrcIds.size() == _chunkTgtIds.size(), "Edge source/target mismatch");
+    bioassert(_chunkSrcIds.size() == _chunkEdgeTypes.size(), "Edge, Type mismatch");
+
     for (auto [src, tgt, typeID] : rv::zip(_chunkSrcIds, _chunkTgtIds, _chunkEdgeTypes)) {
-        bioassert(_nodeIDs.contains(src), "Missing source Node {}", src);
-        bioassert(_nodeIDs.contains(tgt), "Missing target Node {}", tgt);
-        dpBuilder.addEdge(typeID, _nodeIDs[src], _nodeIDs[tgt]);
+        const auto srcIt = _nodeIDs.find(src);
+        bioassert(srcIt != end(_nodeIDs), "Missing source Node {}", src);
+
+        const auto tgtIt = _nodeIDs.find(tgt);
+        bioassert(tgtIt != end(_nodeIDs), "Missing target node {}", tgt);
+
+        const NodeID srcID = srcIt->second;
+        const NodeID tgtID = tgtIt->second;
+        dpBuilder.addEdge(typeID, srcID, tgtID);
     }
 
     return true;

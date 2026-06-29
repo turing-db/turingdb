@@ -210,13 +210,21 @@ bool ParquetReader::readSlice(parquet::ColumnReader* columnReader,
     // sub-batch's values: parquet::ByteArray::ptr points into a page-owned
     // buffer that is invalidated by the next ReadBatch call, so the visitor
     // must consume each sub-batch before we read the next page.
+    // For a null row (e.g. nan), this nullity is signalled via the deflevels
+    // buffer. Always some non-nullptr deflevel buffer to detect null rows.
+    const bool hasDefLevels = typed->descr()->max_definition_level() > 0;
+    if (hasDefLevels && _defLevelScratch.size() < batchRows) {
+        _defLevelScratch.resize(batchRows);
+    }
+
     T* buffer = reinterpret_cast<T*>(scratch.data());
     size_t totalRead = 0;
     while (totalRead < batchRows) {
         int64_t valuesRead = 0;
+        int16_t* const defBuf = hasDefLevels ? _defLevelScratch.data() : nullptr;
         const int64_t levelsRead = typed->ReadBatch(
             static_cast<int64_t>(batchRows - totalRead),
-            nullptr, nullptr,
+            defBuf, nullptr,
             buffer, &valuesRead);
         if (levelsRead <= 0) {
             break;
