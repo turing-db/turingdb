@@ -100,6 +100,23 @@ void tileColumn(const Column* input, size_t factor, size_t outputRowCount, Colum
     }
 }
 
+// Range copy: rows [inputOffset, inputOffset + rowCount) of the input land at
+// output indices [0, rowCount). This lifts a skip's surviving suffix to the front
+// of a fresh chunk - nl.skip_truncate passes inputOffset = skipThisStep and
+// rowCount = emitThisStep. std::copy of a contiguous range is lowered to memcpy.
+template <typename ElementType>
+void copyRangeColumn(const Column* input, size_t inputOffset, size_t rowCount, Column* output) {
+    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
+    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
+
+    const auto& inputRaw = typedInput->getRaw();
+    auto& outputRaw = typedOutput->getRaw();
+    outputRaw.resize(rowCount);
+
+    const auto first = inputRaw.begin() + inputOffset;
+    std::copy(first, first + rowCount, outputRaw.begin());
+}
+
 // Execute a get_out_edges/get_in_edges loop
 template <typename ChunkWriterType>
 void runEdgeLoopSteps(NLExecutionContext* context,
@@ -289,6 +306,31 @@ void NLExecutor::runLimitTruncate(NLExecutionContext* context, NLFunctionData* d
     }
 }
 
+void NLExecutor::runSkipInit(NLExecutionContext* context, NLFunctionData* data) {
+    const NLSkipInitData* init = static_cast<NLSkipInitData*>(data);
+    init->getState()->reset(init->getCount());
+}
+
+void NLExecutor::runSkipUpdate(NLExecutionContext* context, NLFunctionData* data) {
+    const NLSkipUpdateData* update = static_cast<NLSkipUpdateData*>(data);
+    update->getState()->update(update->getRows()->size());
+}
+
+void NLExecutor::runSkipTruncate(NLExecutionContext* context, NLFunctionData* data) {
+    const NLSkipTruncateData* truncate = static_cast<NLSkipTruncateData*>(data);
+    const NLSkipState* state = truncate->getState();
+
+    // Copy the surviving suffix [skipThisStep, skipThisStep + emitThisStep) of each
+    // column into the fresh front-aligned output chunk. Reads the offset and count
+    // (set by the preceding nl.skip_update); never mutates the counter.
+    const size_t offset = state->getSkipThisStep();
+    const size_t rowCount = state->getEmitThisStep();
+    for (const NLSkipColumn& column : truncate->columns()) {
+        const NLCopyFunction copySuffix = column.getCopy();
+        copySuffix(column.getInput(), offset, rowCount, column.getOutput());
+    }
+}
+
 void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     const NLOutputData* output = static_cast<NLOutputData*>(data);
     const auto& cols = output->outputs();
@@ -383,6 +425,38 @@ NLBroadcastFunction NLExecutor::selectOptTileFunction(ValueType valueType) {
     ValueTypeDispatcher(valueType).execute(select);
 
     return broadcast;
+}
+
+NLCopyFunction NLExecutor::selectCopyFunction(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &copyRangeColumn<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &copyRangeColumn<EdgeID>;
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return &copyRangeColumn<EdgeTypeID>;
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
+}
+
+// A nullable value chunk is a ColumnOptVector<Primitive> - that is,
+// ColumnVector<std::optional<Primitive>> - so the range copy template,
+// instantiated on std::optional<Primitive>, carries value and null together.
+NLCopyFunction NLExecutor::selectOptCopyFunction(ValueType valueType) {
+    NLCopyFunction copy = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        copy = &copyRangeColumn<std::optional<typename T::Primitive>>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return copy;
 }
 
 // Read one property of the current input chunk into a nullable value column.

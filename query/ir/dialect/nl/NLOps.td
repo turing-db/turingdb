@@ -397,4 +397,84 @@ def LimitTruncate : NLOp<"limit_truncate", [InferTypeOpAdaptor]> {
   }];
 }
 
+/**
+* Skip
+*/
+// NOT Pure: each nl.skip is a distinct counter, so two must never be CSE'd into
+// one, and an unread one must not be DCE'd - its reset is a side effect. The skip
+// sibling of nl.limit.
+def Skip : NLOp<"skip", []> {
+  let summary = "Create (and reset) a row-skip counter, initialized to M rows to drop";
+  let description = [{
+    Sits at the top of the scope it governs - function scope for a top-level SKIP
+    - and re-initializes once per execution of that block. Produces the
+    !nl.skip_state handle nl.skip_update and nl.skip_truncate read. Unlike nl.limit
+    it never appears on an nl.for: a skip drives no loop early-exit, since every row
+    past the dropped prefix must still be produced. The result type is buildable and
+    omitted.
+  }];
+
+  // Unsigned: a count of rows to drop is never negative.
+  let arguments = (ins UI64Attr:$count);
+  let results   = (outs NLSkipState:$state);
+  let assemblyFormat = "`(` $count `)` attr-dict";
+}
+
+/**
+* SkipUpdate
+*/
+// NOT Pure: it mutates the handle, so it must run exactly where it sits and must
+// not be eliminated. The skip sibling of nl.limit_update.
+def SkipUpdate : NLOp<"skip_update", []> {
+  let summary = "Charge this step's rows against a skip counter";
+  let description = [{
+    Runs in the innermost loop body just before nl.skip_truncate. Reads the row
+    count of the representative chunk (the same column the consumer will read),
+    drops min(rows, remaining) of them from the front of this step, records that
+    offset and the emitted-row count nl.skip_truncate should copy, and subtracts the
+    dropped count from the budget. The sole mutator of the counter.
+  }];
+
+  let arguments = (ins NLSkipStateHandle:$state, NLChunk:$rows);
+  let assemblyFormat = "$state `,` $rows attr-dict `:` qualified(type($rows))";
+}
+
+/**
+* SkipTruncate
+*/
+// NOT Pure: it reads the handle's mutable skipThisStep/emitThisStep (set by the
+// preceding nl.skip_update), so it must run exactly where it sits and must not be
+// hoisted, CSE'd or reordered past the update. InferTypeOpAdaptor: the results
+// mirror the column operand types, copied across by inferReturnTypes, as on
+// nl.limit_truncate.
+def SkipTruncate : NLOp<"skip_truncate", [InferTypeOpAdaptor]> {
+  let summary = "Copy the surviving suffix of each column into fresh chunks";
+  let description = [{
+    The skip sibling of nl.limit_truncate. Sits in the producing loop body, just
+    after nl.skip_update and just before the columns' consumer - nl.output when the
+    query is not chained, the inner sub-pipeline when it is. Copies the suffix
+    [skipThisStep, skipThisStep + emitThisStep) of each input chunk (the offset and
+    count nl.skip_update recorded this step) into a fresh, independently-owned,
+    front-aligned chunk, so a downstream op reads a genuinely skipped chunk and
+    needs no skip awareness of its own. The columns pass through unchanged in type;
+    only the dropped prefix is removed. Unlike a limit there is no copy-free fold
+    into nl.output: the sink emits from row zero, so the surviving suffix must be
+    lifted to the front of a fresh chunk.
+
+      %a' = nl.skip_truncate %h, (%a) : !nl.chunk<!nl.node_id>
+  }];
+
+  // The skip handle whose offset/count size the copy, then the columns to cut.
+  let arguments = (ins NLSkipStateHandle:$state, Variadic<NLChunk>:$columns);
+
+  // One result per input column, same type. The results are inferred from the
+  // column operands, so only the column chunk types are spelled, after the colon;
+  // the handle type is buildable and omitted.
+  let results = (outs Variadic<NLChunk>:$results);
+
+  let assemblyFormat = [{
+    $state `,` `(` $columns `)` attr-dict `:` qualified(type($columns))
+  }];
+}
+
 #endif //TURINGDB_NL_OPS

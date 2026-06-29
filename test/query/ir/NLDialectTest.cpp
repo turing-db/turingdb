@@ -62,6 +62,27 @@ TEST_F(NLDialectTest, verifierAcceptsLimitTruncate) {
     EXPECT_EQ(truncate.getResult(0).getType(), chunk.getType());
 }
 
+// An nl.skip_truncate passes its column types through unchanged - results mirror
+// the operand chunk types - and verifies in a skip/update/truncate/output chain.
+TEST_F(NLDialectTest, verifierAcceptsSkipTruncate) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value chunk = entryBlock.getArgument(0);
+
+    const mlir::Value handle = builder.create<mlir::nl::Skip>(loc, /*count=*/3u).getState();
+    builder.create<mlir::nl::SkipUpdate>(loc, handle, chunk);
+    mlir::nl::SkipTruncate truncate = builder.create<mlir::nl::SkipTruncate>(loc, handle, mlir::ValueRange {chunk});
+    builder.create<mlir::nl::Output>(loc, truncate.getResults(), mlir::Value());
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_EQ(truncate.getResult(0).getType(), chunk.getType());
+}
+
 // nl.output with no limit handle is unbounded and verifies on its own.
 TEST_F(NLDialectTest, verifierAcceptsOutput) {
     mlir::OpBuilder builder(&_context);

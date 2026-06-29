@@ -23,6 +23,17 @@ def NLLimitState : NLType<"LimitState", "limit_state"> {
     }];
 }
 
+def NLSkipState : NLType<"SkipState", "skip_state"> {
+    let summary = "A row-skip counter handle";
+    let description = [{
+        Stands for one SKIP's remaining rows-to-drop. Produced by nl.skip, read by
+        nl.skip_truncate, and decremented by nl.skip_update. The skip sibling of
+        !nl.limit_state: a handle, not a chunk - it holds a count, not values, and
+        is mutable as rows are dropped. Unlike a limit it drives no loop early-exit
+        (every row past the skip must still be produced), so no nl.for names it.
+    }];
+}
+
 def NLChunk : NLType<"Chunk", "chunk"> {
     let summary = "A bounded batch of values";
     let description = "One column chunk filled by a single database iterator step";
@@ -102,5 +113,15 @@ def NLLimitStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::LimitStateType>($_self)">,
         "limit state handle", "::mlir::nl::LimitStateType">,
     BuildableType<"::mlir::nl::LimitStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.skip_state handle, the same way
+// NLLimitStateHandle constrains the limit handle. The single concrete type
+// - there is only ever !nl.skip_state - is what lets nl.skip_update and
+// nl.skip_truncate omit the handle's type in their assembly, building it from
+// this recipe instead.
+def NLSkipStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::SkipStateType>($_self)">,
+        "skip state handle", "::mlir::nl::SkipStateType">,
+    BuildableType<"::mlir::nl::SkipStateType::get($_builder.getContext())">;
 
 #endif // TURINGDB_NL_TYPES

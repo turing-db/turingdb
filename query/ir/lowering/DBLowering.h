@@ -33,6 +33,12 @@ class GraphView;
 //                                          nl.limit_truncate that copies the prefix
 //                                          just before the consumer (nl.output when
 //                                          unchained, the inner query when chained)
+//   db.skip                            ->  a hoisted nl.skip handle, an
+//                                          nl.skip_update, and an nl.skip_truncate
+//                                          that lifts the surviving suffix just
+//                                          before the consumer. No loop operand (a
+//                                          skip cannot early-exit) and no fold into
+//                                          nl.output (the suffix must be copied)
 //
 // db.get_node_properties / db.get_edge_properties resolve their property name
 // against the graph schema here (hence the GraphView): the name is hoisted into
@@ -104,6 +110,7 @@ private:
     void lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgeProperties);
     void lowerCrossProduct(mlir::db::CrossProduct product);
     void lowerLimit(mlir::db::Limit limit);
+    void lowerSkip(mlir::db::Skip skip);
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at

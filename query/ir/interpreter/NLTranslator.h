@@ -48,6 +48,10 @@ private:
     // nl.limit_update and nl.output that name the handle find the same counter
     llvm::DenseMap<mlir::Value, NLLimitState*> _limitStates;
 
+    // nl.skip handle SSA value -> the runtime counter it produces, so nl.skip_update
+    // and nl.skip_truncate that name the handle find the same counter
+    llvm::DenseMap<mlir::Value, NLSkipState*> _skipStates;
+
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
     void translateScanLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
@@ -73,6 +77,23 @@ private:
     // (an unbounded loop or output), the mapped counter otherwise. Throws if the
     // handle was not produced by an nl.limit translated earlier.
     NLLimitState* limitStateFor(mlir::Value handle) const;
+
+    // Translate an nl.skip: allocate its runtime counter, map the handle to it,
+    // and record the reset statement (run each time the enclosing block runs)
+    void translateSkip(mlir::nl::Skip skip, NLStmtContainer* body);
+
+    // Translate an nl.skip_update: look up the counter the handle names and record
+    // the charge against the representative chunk's row count
+    void translateSkipUpdate(mlir::nl::SkipUpdate update, NLStmtContainer* body);
+
+    // Translate an nl.skip_truncate: allocate one fresh output column per input,
+    // map each result to its output, and record the suffix-copy statement (each
+    // column's surviving suffix copied to the front of the output)
+    void translateSkipTruncate(mlir::nl::SkipTruncate truncate, NLStmtContainer* body);
+
+    // The runtime counter a skip handle names. The handle is a required operand of
+    // its consumers, so this throws if it was not produced by an nl.skip.
+    NLSkipState* skipStateFor(mlir::Value handle) const;
 
     // Translate an nl.get_node_properties / nl.get_edge_properties: resolve the
     // property name (carried by the nl.get_property_type that produced the
@@ -103,6 +124,12 @@ private:
     void addTruncateColumn(mlir::Value inputValue,
                            mlir::Value resultValue,
                            NLLimitTruncateData* data);
+
+    // Allocate the fresh output column for one skipped column, map the op result
+    // to it, and append it (with its range suffix-copy) to data
+    void addSkipColumn(mlir::Value inputValue,
+                       mlir::Value resultValue,
+                       NLSkipTruncateData* data);
 
     Column* allocColumn(mlir::Value chunkValue);
     Column* allocColumnForKind(NLChunkKind kind);

@@ -79,6 +79,39 @@ private:
     size_t _emitThisStep {0};
 };
 
+// Runtime state of one SKIP: the remaining rows still to drop, and - for the
+// current innermost step - how many of its rows to drop off the front
+// (skipThisStep, the offset into the chunk) and how many survive (emitThisStep).
+// nl.skip resets it, nl.skip_update is the sole mutator (called once per innermost
+// step before the truncate), and nl.skip_truncate only reads it. The skip sibling
+// of NLLimitState - but it never gates a loop, since every row past the dropped
+// prefix must still be produced.
+class NLSkipState {
+public:
+    void reset(size_t toSkip) {
+        _remaining = toSkip;
+        _skipThisStep = 0;
+        _emitThisStep = 0;
+    }
+
+    size_t getSkipThisStep() const { return _skipThisStep; }
+    size_t getEmitThisStep() const { return _emitThisStep; }
+
+    // Called once per innermost step by nl.skip_update, before nl.skip_truncate:
+    // drop min(rowsAvailable, remaining) rows off the front of this step, emit the
+    // rest, and charge the dropped count against the budget.
+    void update(size_t rowsAvailable) {
+        _skipThisStep = std::min(rowsAvailable, _remaining);
+        _remaining -= _skipThisStep;
+        _emitThisStep = rowsAvailable - _skipThisStep;
+    }
+
+private:
+    size_t _remaining {0};
+    size_t _skipThisStep {0};
+    size_t _emitThisStep {0};
+};
+
 // Holds the translated statements of a program or loop body
 class NLStmtContainer {
 public:
@@ -367,6 +400,105 @@ private:
     std::vector<NLCrossColumn> _columns;
 };
 
+// Copies rows [inputOffset, inputOffset + rowCount) of an input chunk into a
+// fresh, front-aligned output chunk. The skip suffix copy: nl.skip_truncate sets
+// inputOffset = skipThisStep and rowCount = emitThisStep, lifting the surviving
+// suffix to the front of the output. The block-repeat/tile broadcasts copy from
+// row zero and so cannot express the offset; this family does. Cleared and
+// resized to rowCount, the copy is a plain range copy (lowered to memcpy).
+using NLCopyFunction = void (*)(const Column* input,
+                                size_t inputOffset,
+                                size_t rowCount,
+                                Column* output);
+
+// One column used as operand of nl.skip_truncate: its input chunk, the fresh
+// output chunk to fill, and the range copy that lifts the surviving suffix from
+// one into the other. The skip sibling of NLCrossColumn - it pairs the same input
+// and output, but its copy takes an offset rather than a broadcast factor.
+class NLSkipColumn {
+public:
+    NLSkipColumn(const Column* input,
+                 Column* output,
+                 NLCopyFunction copy)
+        : _input(input),
+        _output(output),
+        _copy(copy)
+    {
+    }
+
+    const Column* getInput() const { return _input; }
+    Column* getOutput() const { return _output; }
+    NLCopyFunction getCopy() const { return _copy; }
+
+private:
+    const Column* _input {nullptr};
+    Column* _output {nullptr};
+    NLCopyFunction _copy {nullptr};
+};
+
+// nl.skip data: resets a counter to the number of rows to drop each time the
+// block it lives in runs - once at function scope for a top-level SKIP. The skip
+// sibling of NLLimitInitData.
+class NLSkipInitData : public NLFunctionData {
+public:
+    NLSkipInitData(NLSkipState* state, size_t count)
+        : _state(state),
+        _count(count)
+    {
+    }
+
+    NLSkipState* getState() const { return _state; }
+    size_t getCount() const { return _count; }
+
+private:
+    NLSkipState* _state {nullptr};
+    size_t _count {0};
+};
+
+// nl.skip_update data: the counter to charge and the representative column whose
+// row count is charged against it (the same column the consumer reads). The skip
+// sibling of NLLimitUpdateData.
+class NLSkipUpdateData : public NLFunctionData {
+public:
+    NLSkipUpdateData(NLSkipState* state, const Column* rows)
+        : _state(state),
+        _rows(rows)
+    {
+    }
+
+    NLSkipState* getState() const { return _state; }
+    const Column* getRows() const { return _rows; }
+
+private:
+    NLSkipState* _state {nullptr};
+    const Column* _rows {nullptr};
+};
+
+// nl.skip_truncate data: the counter whose skipThisStep/emitThisStep size the copy
+// and the columns to cut. Each NLSkipColumn pairs an input chunk with its fresh
+// output chunk and the range copy that lifts the surviving suffix
+// [skipThisStep, skipThisStep + emitThisStep) into it. It never mutates the counter
+// (nl.skip_update does). The skip sibling of NLLimitTruncateData.
+class NLSkipTruncateData : public NLFunctionData {
+public:
+    NLSkipTruncateData(NLSkipState* state)
+        : _state(state)
+    {
+    }
+
+    NLSkipState* getState() const { return _state; }
+
+    const std::vector<NLSkipColumn>& columns() const { return _columns; }
+
+    void addColumn(const NLSkipColumn& column) {
+        _columns.push_back(column);
+    }
+
+private:
+    NLSkipState* _state {nullptr};
+    std::vector<NLSkipColumn> _columns;
+};
+
 // nl.output data
 class NLOutputData : public NLFunctionData {
 public:
@@ -414,6 +546,16 @@ public:
         return statePtr;
     }
 
+    // Allocate one SKIP's runtime counter, owned by the program; the statements
+    // that reset, charge and read it hold a borrowed pointer. The skip sibling
+    // of allocLimitState.
+    NLSkipState* allocSkipState() {
+        auto state = std::make_unique<NLSkipState>();
+        NLSkipState* statePtr = state.get();
+        _skipStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -424,6 +566,7 @@ private:
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
     std::vector<std::unique_ptr<NLFunctionData>> _functionData;
     std::vector<std::unique_ptr<NLLimitState>> _limitStates;
+    std::vector<std::unique_ptr<NLSkipState>> _skipStates;
     NLStmtContainer _stmts;
 };
 

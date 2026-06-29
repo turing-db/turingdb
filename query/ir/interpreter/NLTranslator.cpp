@@ -136,6 +136,12 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateLimitUpdate(update, body);
         } else if (nl::LimitTruncate truncate = mlir::dyn_cast<nl::LimitTruncate>(operation)) {
             translateLimitTruncate(truncate, body);
+        } else if (nl::Skip skip = mlir::dyn_cast<nl::Skip>(operation)) {
+            translateSkip(skip, body);
+        } else if (nl::SkipUpdate update = mlir::dyn_cast<nl::SkipUpdate>(operation)) {
+            translateSkipUpdate(update, body);
+        } else if (nl::SkipTruncate truncate = mlir::dyn_cast<nl::SkipTruncate>(operation)) {
+            translateSkipTruncate(truncate, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -395,6 +401,93 @@ NLLimitState* NLTranslator::limitStateFor(mlir::Value handle) const {
     const auto stateIt = _limitStates.find(handle);
     if (stateIt == _limitStates.end()) {
         throw IRException("limit handle must be produced by an nl.limit");
+    }
+
+    return stateIt->second;
+}
+
+void NLTranslator::translateSkip(nl::Skip skip, NLStmtContainer* body) {
+    // Allocate the runtime counter and map the handle to it, so the update and the
+    // truncate that name the handle both find the same counter.
+    NLSkipState* state = _program->allocSkipState();
+    _skipStates[skip.getState()] = state;
+
+    // The reset runs each time the block holding this nl.skip runs: once at
+    // function scope for a top-level SKIP.
+    const size_t count = skip.getCount();
+    NLSkipInitData* initData = _program->allocFunctionData<NLSkipInitData>(state, count);
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSkipInit, initData});
+}
+
+void NLTranslator::translateSkipUpdate(nl::SkipUpdate update, NLStmtContainer* body) {
+    // The handle is a required operand, so skipStateFor returns its counter or
+    // throws if it was not produced by an nl.skip.
+    NLSkipState* state = skipStateFor(update.getState());
+
+    const Column* representative = getColumn(update.getRows());
+    NLSkipUpdateData* updateData = _program->allocFunctionData<NLSkipUpdateData>(state, representative);
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSkipUpdate, updateData});
+}
+
+void NLTranslator::translateSkipTruncate(nl::SkipTruncate truncate, NLStmtContainer* body) {
+    // The handle is a required operand, so skipStateFor returns its counter or
+    // throws if it was not produced by an nl.skip.
+    NLSkipState* state = skipStateFor(truncate.getState());
+
+    NLSkipTruncateData* data = _program->allocFunctionData<NLSkipTruncateData>(state);
+
+    // One fresh output column per input, walked in step with the results the
+    // downstream consumers are mapped to.
+    const mlir::OperandRange columns = truncate.getColumns();
+    const mlir::ResultRange results = truncate.getResults();
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        addSkipColumn(columns[columnIndex], results[columnIndex], data);
+    }
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSkipTruncate, data});
+}
+
+void NLTranslator::addSkipColumn(mlir::Value inputValue,
+                                 mlir::Value resultValue,
+                                 NLSkipTruncateData* data) {
+    const Column* input = getColumn(inputValue);
+
+    const auto chunkType = mlir::cast<nl::ChunkType>(inputValue.getType());
+    const mlir::Type elementType = chunkType.getElementType();
+
+    // The output keeps the input's element type; only the dropped prefix is
+    // removed. The copy is a range copy of the surviving suffix to the front of a
+    // fresh chunk, so it uses the copy families - by value type for a nullable
+    // value chunk, by chunk kind for an ID chunk.
+    Column* output = nullptr;
+    NLCopyFunction copySuffix = nullptr;
+
+    if (const auto nullableType = mlir::dyn_cast<nl::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        output = allocOptColumnForValueType(valueType);
+        copySuffix = NLExecutor::selectOptCopyFunction(valueType);
+    } else {
+        const NLChunkKind kind = getChunkKind(chunkType);
+        output = allocColumnForKind(kind);
+        copySuffix = NLExecutor::selectCopyFunction(kind);
+    }
+
+    _valueSlots[resultValue] = output;
+
+    const NLSkipColumn skipColumn(input, output, copySuffix);
+    data->addColumn(skipColumn);
+}
+
+NLSkipState* NLTranslator::skipStateFor(mlir::Value handle) const {
+    if (!handle) {
+        return nullptr;
+    }
+
+    const auto stateIt = _skipStates.find(handle);
+    if (stateIt == _skipStates.end()) {
+        throw IRException("skip handle must be produced by an nl.skip");
     }
 
     return stateIt->second;
