@@ -155,6 +155,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerScanNodes(scanNodes);
     } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
         lowerGetOutEdges(getOutEdges);
+    } else if (mlir::db::GetInEdges getInEdges = mlir::dyn_cast<mlir::db::GetInEdges>(operation)) {
+        lowerGetInEdges(getInEdges);
     } else if (mlir::db::GetNodeProperties getNodeProperties = mlir::dyn_cast<mlir::db::GetNodeProperties>(operation)) {
         lowerGetNodeProperties(getNodeProperties);
     } else if (mlir::db::GetEdgeProperties getEdgeProperties = mlir::dyn_cast<mlir::db::GetEdgeProperties>(operation)) {
@@ -199,6 +201,25 @@ void DBLowering::lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges) {
     // carried chunk - is inferred from the operands.
     nl::GetOutEdges edges = _builder.create<nl::GetOutEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks);
     buildLoopForSource(edges.getResult(), getOutEdges.getOperation());
+}
+
+void DBLowering::lowerGetInEdges(mlir::db::GetInEdges getInEdges) {
+    // The predecessor counterpart of lowerGetOutEdges: same shape, reverse
+    // direction. Map the input node column and the carry set to the nl chunks
+    // they lowered to. The fetch nests in the loop that binds its input chunk.
+    const mlir::Value inputChunk = mapValue(getInEdges.getInputNodes());
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : getInEdges.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    // The result iterator type - the four fixed edge chunks plus one per
+    // carried chunk - is inferred from the operands.
+    nl::GetInEdges edges = _builder.create<nl::GetInEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks);
+    buildLoopForSource(edges.getResult(), getInEdges.getOperation());
 }
 
 void DBLowering::lowerGetNodeProperties(mlir::db::GetNodeProperties getNodeProperties) {
@@ -395,7 +416,7 @@ void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
         return;
     }
 
-    const bool opensLoop = mlir::isa<mlir::db::ScanNodes, mlir::db::GetOutEdges>(definingOp);
+    const bool opensLoop = mlir::isa<mlir::db::ScanNodes, mlir::db::GetOutEdges, mlir::db::GetInEdges>(definingOp);
     const bool isCrossProduct = mlir::isa<mlir::db::CrossProduct>(definingOp);
 
     // The first limit, in program order, to claim a producer wins, so a loop
