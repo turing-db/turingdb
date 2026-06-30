@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <unordered_set>
 
+#include "StorageTypes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -20,9 +21,9 @@
 
 using namespace db;
 
-mlir::db::ColumnType DBProgramGenerator::allocColumnType(const VariableDependency*) {
-    // TODO Remove in favour of typed columns
-    return mlir::db::ColumnType::get(_mlirCtxt);
+mlir::db::ColumnType DBProgramGenerator::allocColumnType(const VariableDependency*,
+                                                         mlir::Type type) {
+    return mlir::db::ColumnType::get(_mlirCtxt, type);
 }
 
 void DBProgramGenerator::registerValue(const VariableDependency* var, mlir::TypedValue<mlir::Type> val) {
@@ -32,7 +33,7 @@ void DBProgramGenerator::registerValue(const VariableDependency* var, mlir::Type
 void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     bioassert(!_varMap.contains(var), "ScanNodes for registered variable");
 
-    const mlir::db::ColumnType col = allocColumnType(var);
+    const auto col = allocColumnType(var, mlir::storage::NodeIDType::get(_mlirCtxt));
     auto scan = _opBuilder->create<mlir::db::ScanNodes>(_opBuilder->getUnknownLoc(), col);
 
     registerValue(var, scan.getResult());
