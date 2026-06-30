@@ -12,6 +12,7 @@
 #include "BioAssert.h"
 
 #include "ID.h"
+#include "spdlog/spdlog.h"
 #include "versioning/CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
@@ -106,6 +107,12 @@ bool ParquetNeo4jVisitor::onFileStart(const parquet::FileMetaData& metadata) {
             const bool isString = type == NEO4J_ETYPE_COL_TYPE;
             bioassert(isString, "Neo4j edge type column was not string.");
             _edgetypeColIdx = colIdx;
+            continue;
+        }
+
+        if (path == "age") {
+            spdlog::info("Found age column");
+            _ageColIdx = colIdx;
             continue;
         }
 
