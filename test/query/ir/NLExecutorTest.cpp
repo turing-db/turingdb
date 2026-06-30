@@ -173,6 +173,27 @@ func.func @main() {
 }
 )mlir";
 
+// The in-edges mirror of twoHopProgram: two predecessor hops a<-b<-c carrying a
+// through the second hop, outputting (a, c) pairs. Each hop's discovered
+// predecessor (%srcs, the source side) feeds the next hop, while the input side
+// (a, then the carried a) is gathered along, exercising the carry set through
+// in-edges execution.
+constexpr const char* twoHopInProgram = R"mlir(
+func.func @main() {
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %edges = nl.get_in_edges(%a, {})
+    nl.for %srcs, %eids, %etypes, %aIn in %edges : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+      %hop = nl.get_in_edges(%srcs, {%aIn}) : !nl.chunk<!storage.node_id>
+      nl.for %srcs2, %eids2, %etypes2, %bIn, %aCarried in %hop : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
+        nl.output(%aCarried, %srcs2) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+      }
+    }
+  }
+  func.return
+}
+)mlir";
+
 // Verifier-legal but rejected by the translator: outputs an outer loop
 // variable from the inner loop instead of carrying it through the carry set
 constexpr const char* crossLoopOutputProgram = R"mlir(
@@ -532,6 +553,22 @@ TEST_F(NLExecutorTest, twoHopWithCarriedColumn) {
 
     // Both two-hop paths go from 0 to 3, one through 1 and one through 2
     const std::vector<std::vector<uint64_t>> expected {{0, 3}, {0, 3}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, twoHopInWithCarriedColumn) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runProgram(twoHopInProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // Both two-hop predecessor chains end at 3 and trace back to 0, one through
+    // 1 and one through 2, so each emits (a, c) = (3, 0)
+    const std::vector<std::vector<uint64_t>> expected {{3, 0}, {3, 0}};
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
