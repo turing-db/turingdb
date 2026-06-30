@@ -23,8 +23,7 @@
 
 using namespace db;
 
-mlir::db::ColumnType DBProgramGenerator::allocColumnType(const VariableDependency*,
-                                                         mlir::Type type) {
+mlir::db::ColumnType DBProgramGenerator::allocColumnType(mlir::Type type) {
     return mlir::db::ColumnType::get(_mlirCtxt, type);
 }
 
@@ -35,19 +34,22 @@ void DBProgramGenerator::registerValue(const VariableDependency* var, mlir::Type
 void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     bioassert(!_varMap.contains(var), "ScanNodes for registered variable");
 
-    const auto col = allocColumnType(var, mlir::storage::NodeIDType::get(_mlirCtxt));
+    const auto col = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
     auto scan = _opBuilder->create<mlir::db::ScanNodes>(_opBuilder->getUnknownLoc(), col);
 
     registerValue(var, scan.getResult());
 }
 
 void DBProgramGenerator::addGetOutEdges(const VariableDependency* src, const VariableDependency* edge, const VariableDependency* tgt) {
+    bioassert(src, "Null source");
+    bioassert(tgt, "Null target");
+
     bioassert(_varMap.contains(src), "GetOutEdges without source");
 
-    const auto srcs = allocColumnType(tgt, mlir::storage::NodeIDType::get(_mlirCtxt));
-    const auto etype = allocColumnType(nullptr, mlir::storage::EdgeTypeIDType::get(_mlirCtxt));
-    const auto tgts = allocColumnType(tgt, mlir::storage::NodeIDType::get(_mlirCtxt));
-    const auto edges = allocColumnType(edge, mlir::storage::EdgeIDType::get(_mlirCtxt));
+    const auto srcs = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
+    const auto etype = allocColumnType(mlir::storage::EdgeTypeIDType::get(_mlirCtxt));
+    const auto tgts = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
+    const auto edges = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
 
     const auto input = _varMap[src].back();
 
@@ -58,7 +60,9 @@ void DBProgramGenerator::addGetOutEdges(const VariableDependency* src, const Var
     const mlir::Value newSrcs = goe.getResult(0);
     registerValue(src, newSrcs);
     const mlir::Value newEIDs = goe.getResult(1);
-    registerValue(edge, newEIDs);
+    if (edge) {
+        registerValue(edge, newEIDs);
+    }
     [[maybe_unused]] const mlir::Value newETypes = goe.getResult(2);
     // FIXME: How do we register the edge types?
     const mlir::Value newTgts = goe.getResult(3);
@@ -123,6 +127,7 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
         // This variable is already defined, do not create a scan for it
         if (!defined.contains(&v)) {
             addScanNodes(&v);
+            defined.insert(&v);
         }
 
         // dfs from this root
@@ -134,32 +139,49 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             const DependencyEdge* e = dq.back();
             dq.pop_back();
 
-            // get out edges -> look for subsequent targets of the out edge
+            const VariableDependency* other = e->src() == &v ? e->tgt() : e->src();
+            if (defined.contains(other)) {
+                continue;
+            }
+
+            // get out edges -> look ahead 1 edge for subsequent targets of the out edge
             if (e->data().type() == EdgeMetadata::EdgeType::GET_OUT_EDGES) {
-                // @ref other is the edge variable
-                const VariableDependency* other = e->src() == &v ? e->tgt() : e->src();
+                const VariableDependency* edgeVar = e->src() == &v ? e->tgt() : e->src();
 
                 // if we already defined this edge, nothing to do
-                if (defined.contains(other)) {
+                if (defined.contains(edgeVar)) {
                     continue;
                 }
 
-                bioassert(other->outgoing().size() == 1,
+                bioassert(edgeVar->outgoing().size() == 1,
                           "Edge variable had multiple outgoing edges");
 
-                const DependencyEdge* outgoing = other->outgoing().front();
+                const DependencyEdge* outgoing = edgeVar->outgoing().front();
 
                 if (outgoing->data().type() == EdgeMetadata::EdgeType::GET_EDGE_TGT) {
                     const VariableDependency* tgt = outgoing->tgt();
-                    addGetOutEdges(&v, other, tgt);
+                    addGetOutEdges(&v, edgeVar, tgt);
                     defined.insert(tgt);
                 }
 
-                defined.insert(other);
+                defined.insert(edgeVar);
+            }
+
+            // get edge target -> edge var must be anonymous, just get src and tgts
+            if (e->data().type() == EdgeMetadata::EdgeType::GET_EDGE_TGT) {
+                // Neither variable is already defined: either src or tgt == v, which
+                // was defined this cycle, other var is checked and skipped by
+                // `defined.contains(other)` on queue loop entry.
+                const VariableDependency* src = e->src();
+                const VariableDependency* tgt = e->tgt();
+
+                const VariableDependency* edge = nullptr; // Edge variable is unused
+
+                addGetOutEdges(src, edge, tgt);
+                defined.insert(src); // @ref v is either @ref src or @ref tgt, so
+                defined.insert(tgt); // will be reinserted to defined, but idempotently
             }
         }
-
-        defined.insert(&v);
 
         // The idea is that we explore the edges of v. if we have a getXedges, we try and
         // create a triple. if we have a getedge{src/tgt} then just translate that with an
