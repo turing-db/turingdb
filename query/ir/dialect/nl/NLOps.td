@@ -525,14 +525,26 @@ def SortBuffer : NLOp<"sort_buffer", []> {
     buildable and omitted.
 
       %state = nl.sort_buffer keys [1] ascending [true]
+
+    An optional `limit` count turns the accumulator into a bounded top-K: it keeps
+    only the `limit` best rows seen so far rather than every row, so the memory is
+    O(limit) instead of O(rows) and the sort is O(rows log limit). It is the fused
+    form of an ORDER BY ... LIMIT k - a constant bound, distinct from the mutable
+    !nl.limit_state handle the streaming limits carry, since the bound is private
+    to the sort and never decremented:
+
+      %state = nl.sort_buffer keys [1] ascending [true] limit 10
   }];
 
   // keyColumns are indices into the collected column set, most significant first;
-  // keyAscending gives one direction per key. The two arrays are parallel.
-  let arguments = (ins DenseI64ArrayAttr:$keyColumns, DenseBoolArrayAttr:$keyAscending);
+  // keyAscending gives one direction per key. The two arrays are parallel. The
+  // optional topK count, when present, bounds the accumulator to its best rows.
+  let arguments = (ins DenseI64ArrayAttr:$keyColumns,
+                       DenseBoolArrayAttr:$keyAscending,
+                       OptionalAttr<UI64Attr>:$topK);
   let results   = (outs NLSortState:$state);
 
-  let assemblyFormat = "`keys` $keyColumns `ascending` $keyAscending attr-dict";
+  let assemblyFormat = "`keys` $keyColumns `ascending` $keyAscending (`limit` $topK^)? attr-dict";
   let hasVerifier = 1;
 }
 

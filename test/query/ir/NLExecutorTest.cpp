@@ -261,6 +261,24 @@ func.func @main() {
 }
 )mlir";
 
+// The same, but the accumulator is bounded to the best 2 rows (a fused top-K):
+// nl.sort_buffer carries `limit 2`, so sort_collect keeps only the top 2 by the
+// descending node ID and the emit loop yields just those.
+constexpr const char* nlTopKDescProgram = R"mlir(
+func.func @main() {
+  %state = nl.sort_buffer keys [0] ascending [false] limit 2
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.sort_collect %state, (%a) : !nl.chunk<!storage.node_id>
+  }
+  %sorted = nl.sort(%state) : !nl.iter<!nl.chunk<!storage.node_id>>
+  nl.for %sa in %sorted : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.output(%sa) : !nl.chunk<!storage.node_id>
+  }
+  func.return
+}
+)mlir";
+
 // Counts appendChunks calls and the total rows emitted, to prove a limited run
 // emits a clamped prefix (a partial final chunk) and stops the loop early.
 class CountingSink : public NLOutputSink {
@@ -896,6 +914,35 @@ TEST_F(NLExecutorTest, sortsScannedNodesDescendingAcrossChunks) {
 
     ASSERT_EQ(sink.getColumns().size(), 1u);
     const std::vector<uint64_t> expected {3, 2, 1, 0};
+    EXPECT_EQ(sink.getColumns()[0], expected);
+}
+
+TEST_F(NLExecutorTest, topKBoundedAccumulatorKeepsBest) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Four nodes, top-2 descending: the bounded accumulator emits exactly 3, 2.
+    CollectingNodeSink sink;
+    runProgram(nlTopKDescProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    ASSERT_EQ(sink.getColumns().size(), 1u);
+    const std::vector<uint64_t> expected {3, 2};
+    EXPECT_EQ(sink.getColumns()[0], expected);
+}
+
+TEST_F(NLExecutorTest, topKBoundedAccumulatorTrimsAcrossChunks) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 1 feeds the accumulator one row at a time, so it trims repeatedly
+    // as it overflows the bound; the surviving top-2 are still 3, 2.
+    CollectingNodeSink sink;
+    runProgram(nlTopKDescProgram, reader.getView(), 1, sink);
+
+    ASSERT_EQ(sink.getColumns().size(), 1u);
+    const std::vector<uint64_t> expected {3, 2};
     EXPECT_EQ(sink.getColumns()[0], expected);
 }
 

@@ -4,6 +4,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 
@@ -105,6 +106,14 @@ private:
     // two handles. Absent (null on lookup) for a consumer loop, which fans out.
     llvm::DenseMap<mlir::Operation*, mlir::Value> _loopLimitHandle;  // db producer -> handle
 
+    // A db.sort whose result is capped by an adjacent terminal db.limit fuses into
+    // a bounded top-K: the count is baked into the nl.sort_buffer and the db.limit
+    // becomes a pass-through. _sortTopK maps the fused db.sort to its bound;
+    // _fusedLimits is the set of db.limits absorbed this way, so the limit pre-scan
+    // and lowering skip them.
+    llvm::DenseMap<mlir::Operation*, uint64_t> _sortTopK;   // db.sort -> top-K bound
+    llvm::DenseSet<mlir::Operation*> _fusedLimits;          // db.limits fused into a sort
+
     void lowerOperation(mlir::Operation& operation);
     void lowerScanNodes(mlir::db::ScanNodes scanNodes);
     void lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges);
@@ -114,6 +123,14 @@ private:
     void lowerCrossProduct(mlir::db::CrossProduct product);
     void lowerLimit(mlir::db::Limit limit);
     void lowerSkip(mlir::db::Skip skip);
+
+    // Find db.sort results capped by an adjacent terminal db.limit (the
+    // ORDER BY ... LIMIT k shape) and record the fusion: the sort is the limit's
+    // sole consumer and every limit column comes from it. Fills _sortTopK and
+    // _fusedLimits so the limit pre-scan skips the fused limit (no nl.limit
+    // handle, no producing-loop early-exit - top-K must scan every row), lowerSort
+    // bakes the count into the nl.sort_buffer, and lowerLimit passes through.
+    void detectTopKFusion(mlir::func::FuncOp dbFunction);
 
     // Lower a db.sort: hoist an nl.sort_buffer accumulator (carrying the key
     // spec) to the top of the entry block, place an nl.sort_collect in the

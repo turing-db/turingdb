@@ -129,13 +129,23 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _innermostLoopBody = nullptr;
     _limitHandles.clear();
     _loopLimitHandle.clear();
+    _sortTopK.clear();
+    _fusedLimits.clear();
+
+    // Find ORDER BY ... LIMIT k: a db.limit capping a db.sort's result fuses into
+    // a bounded top-K, so the limit gets no streaming handle and the sort carries
+    // the bound. Detect before the limit pre-scan so the fused ones are skipped.
+    detectTopKFusion(dbFunction);
 
     // Pre-scan for db.limits before any loop is built: nl.for's limit operand is
     // fixed at build time, so each handle must exist first to be threaded in, and
-    // which loops a handle attaches to must be known up front.
+    // which loops a handle attaches to must be known up front. A limit fused into
+    // a sort's top-K carries no streaming handle, so it is left out here.
     llvm::SmallVector<mlir::db::Limit, 2> limits;
     dbFunction.walk([&](mlir::db::Limit limit) {
-        limits.push_back(limit);
+        if (!_fusedLimits.count(limit.getOperation())) {
+            limits.push_back(limit);
+        }
     });
 
     // Hoist one nl.limit handle per db.limit to the top of the entry block, where
@@ -408,6 +418,20 @@ mlir::Type DBLowering::propertyValueChunkType(llvm::StringRef propertyName) {
 }
 
 void DBLowering::lowerLimit(mlir::db::Limit limit) {
+    // A limit fused into a sort's top-K does no work of its own: the sort already
+    // emits at most k sorted rows, so the limit forwards each input chunk straight
+    // to its matching result. The db.output that follows then reads the sort's
+    // emit-loop variables, exactly as if the limit were not there.
+    if (_fusedLimits.count(limit.getOperation())) {
+        const mlir::ResultRange results = limit.getResults();
+        const mlir::OperandRange columns = limit.getColumns();
+        for (size_t columnIndex = 0; columnIndex < results.size(); columnIndex++) {
+            _valueMap[results[columnIndex]] = mapValue(columns[columnIndex]);
+        }
+
+        return;
+    }
+
     // The nl chunks the limited columns lowered to; these are what the truncate
     // copies, and the consumer reads the cut copies.
     llvm::SmallVector<mlir::Value, 4> chunks;
@@ -494,6 +518,44 @@ void DBLowering::lowerSkip(mlir::db::Skip skip) {
     }
 }
 
+void DBLowering::detectTopKFusion(mlir::func::FuncOp dbFunction) {
+    dbFunction.walk([&](mlir::db::Limit limit) {
+        const mlir::OperandRange columns = limit.getColumns();
+        if (columns.empty()) {
+            return;
+        }
+
+        // Every column the limit caps must come from one db.sort - otherwise the
+        // limit is not a terminal ORDER BY ... LIMIT and the streaming limit path
+        // handles it.
+        mlir::db::Sort sort;
+        for (const mlir::Value column : columns) {
+            mlir::db::Sort definingSort = column.getDefiningOp<mlir::db::Sort>();
+            if (!definingSort || (sort && sort != definingSort)) {
+                return;
+            }
+
+            sort = definingSort;
+        }
+
+        // Capping the sort to top-K must not starve another consumer, so the limit
+        // must be the sole user of every result the sort produces.
+        for (const mlir::Value result : sort.getResults()) {
+            for (mlir::Operation* const user : result.getUsers()) {
+                if (user != limit.getOperation()) {
+                    return;
+                }
+            }
+        }
+
+        // First limit (program order) to claim a sort wins; record the fusion.
+        if (!_sortTopK.count(sort.getOperation())) {
+            _sortTopK[sort.getOperation()] = limit.getCount();
+            _fusedLimits.insert(limit.getOperation());
+        }
+    });
+}
+
 void DBLowering::lowerSort(mlir::db::Sort sort) {
     // The nl chunks the sorted columns lowered to; these are what sort_collect
     // appends to the buffers, and the emit loop yields back sorted.
@@ -512,11 +574,21 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
 
     // The accumulator and its sort spec are hoisted to the top of the entry
     // block, above every loop, so the buffers exist before the producing loop
-    // fills them and the handle dominates the collect and the emit loop.
+    // fills them and the handle dominates the collect and the emit loop. A sort
+    // fused with a terminal db.limit carries that count as its top-K bound, so the
+    // accumulator keeps only the best k rows; an unfused sort keeps every row.
     _builder.setInsertionPointToStart(_entryBlock);
+
+    const auto topK = _sortTopK.find(sort.getOperation());
+    mlir::IntegerAttr topKAttr;
+    if (topK != _sortTopK.end()) {
+        topKAttr = _builder.getIntegerAttr(_builder.getIntegerType(64, /*isSigned=*/false), topK->second);
+    }
+
     nl::SortBuffer bufferOp = _builder.create<nl::SortBuffer>(loc,
                                                               sort.getKeyColumnsAttr(),
-                                                              sort.getKeyAscendingAttr());
+                                                              sort.getKeyAscendingAttr(),
+                                                              topKAttr);
     const mlir::Value state = bufferOp.getState();
 
     // The collect appends each step's chunk of every column to the buffers. It
