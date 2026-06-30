@@ -7,6 +7,8 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/TypeRange.h"
+#include "mlir/IR/ValueRange.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 
 #include "DBTypes.h"
@@ -41,6 +43,26 @@ void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
 
 void DBProgramGenerator::addGetOutEdges(const VariableDependency* src, const VariableDependency* edge, const VariableDependency* tgt) {
     bioassert(_varMap.contains(src), "GetOutEdges without source");
+
+    const auto srcs = allocColumnType(tgt, mlir::storage::NodeIDType::get(_mlirCtxt));
+    const auto etype = allocColumnType(nullptr, mlir::storage::EdgeTypeIDType::get(_mlirCtxt));
+    const auto tgts = allocColumnType(tgt, mlir::storage::NodeIDType::get(_mlirCtxt));
+    const auto edges = allocColumnType(edge, mlir::storage::EdgeIDType::get(_mlirCtxt));
+
+    const auto input = _varMap[src].back();
+
+    const auto loc = _opBuilder->getUnknownLoc();
+    auto goe = _opBuilder->create<mlir::db::GetOutEdges>(
+        loc, mlir::TypeRange {srcs, edges, etype, tgts}, mlir::ValueRange {input});
+
+    const mlir::Value newSrcs = goe.getResult(0);
+    registerValue(src, newSrcs);
+    const mlir::Value newEIDs = goe.getResult(1);
+    registerValue(edge, newEIDs);
+    [[maybe_unused]] const mlir::Value newETypes = goe.getResult(2);
+    // FIXME: How do we register the edge types?
+    const mlir::Value newTgts = goe.getResult(3);
+    registerValue(tgt, newTgts);
 }
 
 void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) {
