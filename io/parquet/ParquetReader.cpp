@@ -230,6 +230,14 @@ bool ParquetReader::readSlice(parquet::ColumnReader* columnReader,
             break;
         }
 
+        if (hasDefLevels) {
+            const std::span<const int16_t> defSpan(_defLevelScratch.data(), static_cast<size_t>(levelsRead));
+            if (!_visitor.onLevels(columnIndex, {}, defSpan)) {
+                _aborted = true;
+                return false;
+            }
+        }
+
         const std::span<const T> values(buffer, static_cast<size_t>(valuesRead));
 
         bool visitorOk = true;

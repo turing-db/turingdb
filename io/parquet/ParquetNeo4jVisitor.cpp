@@ -113,6 +113,7 @@ bool ParquetNeo4jVisitor::onFileStart(const parquet::FileMetaData& metadata) {
         if (path == "age") {
             spdlog::info("Found age column");
             _ageColIdx = colIdx;
+            _ageMaxDefLevel = desc->max_definition_level();
             continue;
         }
 
@@ -127,6 +128,7 @@ bool ParquetNeo4jVisitor::onFileStart(const parquet::FileMetaData& metadata) {
 bool ParquetNeo4jVisitor::onRowGroupStart(size_t, const parquet::RowGroupMetaData&) {
     _chunkNodeIds = {};
     _chunkNodeLabels.clear();
+    _chunkAgeDefLevels.clear();
     return true;
 }
 
@@ -136,6 +138,8 @@ bool ParquetNeo4jVisitor::onLevels(size_t columnIndex,
     if (columnIndex == _lblColIdx) {
         _chunkLabelRepLevels = repLevels;
         _chunkLabelDefLevels = defLevels;
+    } else if (columnIndex == _ageColIdx) {
+        _chunkAgeDefLevels.insert(end(_chunkAgeDefLevels), begin(defLevels), end(defLevels));
     }
     return true;
 }
@@ -147,6 +151,8 @@ bool ParquetNeo4jVisitor::onInt64Values(size_t columnIndex, std::span<const int6
         _chunkSrcIds = values;
     } else if (columnIndex == _tgtColIdx) {
         _chunkTgtIds = values;
+    } else if (columnIndex == _ageColIdx) {
+        _chunkAgeVals = values;
     }
 
     return true;
@@ -177,6 +183,22 @@ bool ParquetNeo4jVisitor::onChunkEnd(size_t, size_t, size_t) {
         }
         _nodeIDs[id] = dpBuilder.addNode(labelSet);
     }
+
+    if (_ageColIdx != INVALID_COL_IDX && !_chunkAgeDefLevels.empty()) {
+        MetadataBuilder& metadataBuilder = _builder->metadata();
+        const PropertyType agePropType = metadataBuilder.getOrCreatePropertyType("age", ValueType::Int64);
+
+        size_t valueIndex = 0;
+        for (size_t rowIndex = 0; rowIndex < _chunkNodeIds.size(); ++rowIndex) {
+            const bool hasValue = _chunkAgeDefLevels[rowIndex] == _ageMaxDefLevel;
+            if (!hasValue) {
+                continue;
+            }
+            const NodeID nodeID = _nodeIDs.at(_chunkNodeIds[rowIndex]);
+            dpBuilder.addNodeProperty<types::Int64>(nodeID, agePropType._id, _chunkAgeVals[valueIndex++]);
+        }
+    }
+
     _chunkNodeLabels.clear();
     _chunkNodeIds = {};
 
