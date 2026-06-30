@@ -6,7 +6,7 @@ target_link_libraries(turing_db_ir_codegen_s
   PRIVATE
   turing_db_ir_dbdialect_s
   turing_db_ir_common_s
-  turing_db_common_s
+  turing_common_s
   turing_db_frontend_cypher_s
   turing_db_ast_s
 )
