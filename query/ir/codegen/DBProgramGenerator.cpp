@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <unordered_set>
 
-
-#include "DependencyEdge.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 
 #include "DBTypes.h"
@@ -14,19 +14,18 @@
 #include "VariableDependency.h"
 #include "VariableDependencyGraph.h"
 #include "EdgeMetadata.h"
+#include "DependencyEdge.h"
 
 #include "BioAssert.h"
 
 using namespace db;
 
-mlir::db::ColumnType DBProgramGenerator::allocColumnType(const VariableDependency* var) {
+mlir::db::ColumnType DBProgramGenerator::allocColumnType(const VariableDependency*) {
     // TODO Remove in favour of typed columns
-    const std::string colName =
-        std::string(var->getName()) + std::to_string(_varMap[var].size());
-    return mlir::db::ColumnType::get(_mlirCtxt, colName);
+    return mlir::db::ColumnType::get(_mlirCtxt);
 }
 
-void DBProgramGenerator::registerValue(const VariableDependency* var, mlir::TypedValue<mlir::db::ColumnType> val) {
+void DBProgramGenerator::registerValue(const VariableDependency* var, mlir::TypedValue<mlir::Type> val) {
     _varMap[var].emplace_back(val);
 }
 
@@ -44,11 +43,28 @@ void DBProgramGenerator::addGetOutEdges(const VariableDependency* src, const Var
 }
 
 void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) {
+    _mlirCtxt = module->getContext();
+    bioassert(_mlirCtxt, "Null context");
+
+    mlir::OpBuilder builder(module->getBodyRegion());
+    _opBuilder = &builder;
+
+    _mlirCtxt->loadDialect<mlir::db::DB>();
+    const mlir::Location loc = _opBuilder->getUnknownLoc();
+
     VariableDependencyGraph vdg;
     vdg.buildFromAST(ast);
 
     if (vdg.empty()) {
         return;
+    }
+
+    { // Create main
+        _opBuilder->setInsertionPointToEnd(module->getBody());
+        const mlir::FunctionType funcType = mlir::FunctionType::get(_mlirCtxt, {}, {});
+        auto func = _opBuilder->create<mlir::func::FuncOp>(loc, "main", funcType);
+        mlir::Block& block = *func.addEntryBlock();
+        _opBuilder->setInsertionPointToStart(&block);
     }
 
     std::unordered_set<const VariableDependency*> visited;

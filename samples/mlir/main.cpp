@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <chrono>
 #include <iostream>
 #include <optional>
 #include <span>
@@ -6,6 +7,7 @@
 #include <vector>
 
 #include <argparse.hpp>
+
 
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Builders.h"
@@ -15,23 +17,31 @@
 
 #include "DBOps.h"
 #include "NLOps.h"
-#include "DBTypes.h"
 #include "NLInterpreter.h"
 #include "DBDialectInterpreter.h"
 #include "DBLowering.h"
 #include "NLOutputSink.h"
 #include "IRAssembler.h"
 #include "IRModuleInspector.h"
-#include "StorageDialect.h"
-#include "StorageTypes.h"
 
+#include "VariableDependencyGraph.h"
+
+#include "CypherAST.h"
+#include "CypherAnalyzer.h"
+#include "CypherParser.h"
 #include "Graph.h"
+#include "SimpleGraph.h"
+#include "SystemManager.h"
+#include "TuringConfig.h"
 #include "dump/GraphLoader.h"
+#include "mlir/IR/Value.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnEdgeTypes.h"
-#include "columns/ColumnOptVector.h"
+
+#include "DBProgramGenerator.h"
+#include "StorageDialect.h"
 
 #include "LocalMemory.h"
 
@@ -63,24 +73,16 @@ void addDBFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
 
     // MATCH (a)->(b)->(c): scan `a`, then two get_out_edges hops. The second hop
     // carries the filtered `a` column so it ends up filtered to the `a` that reach a `c`.
-    const mlir::Type nodeIDType    = mlir::storage::NodeIDType::get(ctxt);
-    const mlir::Type edgeIDType    = mlir::storage::EdgeIDType::get(ctxt);
-    const mlir::Type edgeTypeIDType = mlir::storage::EdgeTypeIDType::get(ctxt);
-
-    const mlir::Type colNodeID    = mlir::db::ColumnType::get(ctxt, nodeIDType);
-    const mlir::Type colEdgeID    = mlir::db::ColumnType::get(ctxt, edgeIDType);
-    const mlir::Type colEdgeTypeID = mlir::db::ColumnType::get(ctxt, edgeTypeIDType);
-
-    const mlir::Type colA   = colNodeID;
-    const mlir::Type colA1  = colNodeID;
-    const mlir::Type colE0  = colEdgeID;
-    const mlir::Type colEt0 = colEdgeTypeID;
-    const mlir::Type colB   = colNodeID;
-    const mlir::Type colB2  = colNodeID;
-    const mlir::Type colE1  = colEdgeID;
-    const mlir::Type colEt1 = colEdgeTypeID;
-    const mlir::Type colC   = colNodeID;
-    const mlir::Type colA2  = colNodeID;
+    const mlir::Type colA   = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colA1  = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colE0  = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colEt0 = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colB   = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colB2  = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colE1  = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colEt1 = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colC   = mlir::db::ColumnType::get(ctxt);
+    const mlir::Type colA2  = mlir::db::ColumnType::get(ctxt);
 
     auto scan = builder.create<mlir::db::ScanNodes>(loc, colA);
 
@@ -211,7 +213,49 @@ void helloModule(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
 
     addDBFunction(builder, module);
     addNestedLoopFunction(builder, module);
-    addCrossProductFunction(builder, module);
+}
+
+void progGen(std::string_view query,
+             mlir::MLIRContext* ctxt,
+             mlir::OpBuilder* bld,
+             mlir::ModuleOp* module) {
+    TuringConfig config;
+    config.setSyncedOnDisk(false);
+
+    SystemManager sysman(&config);
+    sysman.init();
+
+    SystemAccessor acc = sysman.accessUnique();
+
+    Graph* graph = acc.createGraph("simpledb");
+    SimpleGraph::createSimpleGraph(graph);
+
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    CypherAST ast(acc.getProcedures(), query);
+
+    using Clock = std::chrono::steady_clock;
+    using Ms = std::chrono::duration<double, std::milli>;
+
+    const auto parsStart = Clock::now();
+    CypherParser parser(&ast);
+    parser.parse(query);
+    const double parseMs = Ms(Clock::now() - parsStart).count();
+
+    const auto analyzeStart = Clock::now();
+    CypherAnalyzer analyzer(&ast, view);
+    analyzer.analyze();
+    const double analyzeMs = Ms(Clock::now() - analyzeStart).count();
+
+    const auto codegenStart = Clock::now();
+    DBProgramGenerator generator;
+    generator.generate(&ast, module);
+    const double codegenMs = Ms(Clock::now() - codegenStart).count();
+
+    std::cout << "[progGen] parse: " << parseMs << " ms, "
+              << "analyze: " << analyzeMs << " ms, "
+              << "codegen: " << codegenMs << " ms\n";
 }
 
 void assembleFiles(mlir::MLIRContext& ctxt, mlir::ModuleOp& module, const std::vector<std::string>& files) {
@@ -493,8 +537,9 @@ int main(int argc, char** argv) {
     bool execute = false;
     bool quiet = false;
     std::string graphDir;
+    std::string query;
 
-    parser.add_argument("files")
+    parser.add_argument("-f", "--files")
         .metavar("mlir.txt")
         .nargs(argparse::nargs_pattern::any)
         .store_into(files)
@@ -508,11 +553,11 @@ int main(int argc, char** argv) {
         .store_into(dumpLowered)
         .help("Lower the db-dialect 'main' to the nl dialect and dump it (no execution)");
 
-    parser.add_argument("-exec")
+    parser.add_argument("-e", "--exec")
         .store_into(execute)
         .help("Execute the module's main function with the NLInterpreter");
 
-    parser.add_argument("-graph")
+    parser.add_argument("-g", "--graph")
         .metavar("path")
         .store_into(graphDir)
         .help("Graph directory to load and execute against (requires -exec)");
@@ -520,6 +565,11 @@ int main(int argc, char** argv) {
     parser.add_argument("-quiet")
         .store_into(quiet)
         .help("Count output rows instead of printing them (for benchmarking)");
+
+    parser.add_argument("-q", "--query")
+        .metavar("query")
+        .store_into(query)
+        .help("CYPHER query to translate to MLIR and execute");
 
     try {
         parser.parse_args(argc, argv);
@@ -539,7 +589,9 @@ int main(int argc, char** argv) {
         mlir::OpBuilder builder(&ctxt);
         auto mainMod = mlir::ModuleOp::create(builder.getUnknownLoc());
 
-        if (files.empty()) {
+        if (!query.empty()) {
+            progGen(query, &ctxt, &builder, &mainMod);
+        } else if (files.empty()) {
             helloModule(builder, mainMod);
         } else {
             assembleFiles(ctxt, mainMod, files);
