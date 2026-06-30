@@ -228,12 +228,14 @@ void assembleFiles(mlir::MLIRContext& ctxt, mlir::ModuleOp& module, const std::v
 // The interpreter pushes one chunk per output column, all of the same length.
 class PrintingSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         if (chunks.empty()) {
             return;
         }
 
-        for (size_t row = 0; row < rowCount; row++) {
+        // Emit rows [offset, offset + rowCount): offset is non-zero only for a
+        // folded SKIP, whose surviving suffix starts past the dropped prefix.
+        for (size_t row = offset; row < offset + rowCount; row++) {
             std::cout << "(";
             for (size_t column = 0; column < chunks.size(); column++) {
                 if (column > 0) {
@@ -324,7 +326,7 @@ private:
 // execution time and flood the terminal on a large expansion.
 class CountingSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         _rowCount += rowCount;
     }
 

@@ -299,6 +299,7 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
 
     NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
     outputData->setLimit(limitStateFor(output.getLimit()));
+    outputData->setSkip(skipStateFor(output.getSkip()));
     for (const mlir::Value column : columns) {
         const auto columnArgument = mlir::dyn_cast<mlir::BlockArgument>(column);
         const bool isInnermostLoopVariable = columnArgument && columnArgument.getOwner() == outputBlock;

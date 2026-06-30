@@ -304,12 +304,27 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
     never mutates the budget - it only reads how many rows to emit:
 
     nl.output(%targets) limit %h : !nl.chunk<!nl.node_id>
+
+    An optional `skip` operand carries an !nl.skip_state handle and is the skip
+    sibling of the limit form: when present, output emits the surviving suffix
+    [skip.getSkipThisStep(), skip.getSkipThisStep() + skip.getEmitThisStep()) set
+    by the preceding nl.skip_update - it reads the dropped-row count as a starting
+    offset rather than copying the suffix to the front. It is the fold of an
+    adjacent nl.skip_truncate whose only consumer was this output (the copy-free
+    path the suffix could not take through the sink before output learned an
+    offset). Like the limit form it never mutates the counter:
+
+    nl.output(%targets) skip %h : !nl.chunk<!nl.node_id>
   }];
 
-  // Two variable-length operand groups - the columns and the optional limit -
-  // so the op carries operand-segment sizes to tell them apart, the same as
-  // nl.cross_product's two column groups.
-  let arguments = (ins Variadic<NLChunk>:$columns, Optional<NLLimitStateHandle>:$limit);
+  // Three variable-length operand groups - the columns, the optional limit and
+  // the optional skip - so the op carries operand-segment sizes to tell them
+  // apart, the same as nl.cross_product's column groups. A folded output carries
+  // at most one of limit/skip (the truncate adjacent to it); the two are not
+  // produced together (see DBLowering::foldSkipTruncatesIntoOutputs).
+  let arguments = (ins Variadic<NLChunk>:$columns,
+                       Optional<NLLimitStateHandle>:$limit,
+                       Optional<NLSkipStateHandle>:$skip);
 
   // The chunk element types vary from call to call and - unlike the source
   // ops - cannot be inferred, so they are spelled after the colon. This keeps
@@ -317,10 +332,11 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
   // printed list rather than looking it up on the defining nl.for (which MLIR
   // cannot do during a parse), the same reason nl.for keeps its : !nl.iter<...>
   // annotation. qualified(...) forces the leading !nl. on every printed type.
-  // The optional limit handle, when present, prints after a `limit` keyword; its
-  // type is buildable and so omitted.
+  // The optional limit and skip handles, when present, print after a `limit` or
+  // `skip` keyword; both types are buildable and so omitted. Each optional group
+  // has its own literal anchor, so the declarative parser tells them apart.
   let assemblyFormat = [{
-    `(` $columns `)` (`limit` $limit^)? attr-dict `:` qualified(type($columns))
+    `(` $columns `)` (`limit` $limit^)? (`skip` $skip^)? attr-dict `:` qualified(type($columns))
   }];
 }
 
@@ -457,9 +473,14 @@ def SkipTruncate : NLOp<"skip_truncate", [InferTypeOpAdaptor]> {
     count nl.skip_update recorded this step) into a fresh, independently-owned,
     front-aligned chunk, so a downstream op reads a genuinely skipped chunk and
     needs no skip awareness of its own. The columns pass through unchanged in type;
-    only the dropped prefix is removed. Unlike a limit there is no copy-free fold
-    into nl.output: the sink emits from row zero, so the surviving suffix must be
-    lifted to the front of a fresh chunk.
+    only the dropped prefix is removed.
+
+    When the sole consumer is the query sink, DBLowering folds this op away: an
+    nl.output gained an optional skip handle and emits the surviving suffix in
+    place at an offset (see foldSkipTruncatesIntoOutputs), the copy-free path the
+    suffix could not take while the sink only read from row zero. The copy here
+    survives only when the suffix feeds an inner sub-pipeline (a chained query)
+    that reads from row zero and so needs the rows lifted to the front.
 
       %a' = nl.skip_truncate %h, (%a) : !nl.chunk<!nl.node_id>
   }];

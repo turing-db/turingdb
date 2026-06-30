@@ -7,8 +7,7 @@ module {
     %1 = nl.scan_nodes()
     nl.for %arg0 in %1 : !nl.iter<!nl.chunk<!nl.node_id>> {
       nl.skip_update %0, %arg0 : !nl.chunk<!nl.node_id>
-      %2 = nl.skip_truncate %0, (%arg0) : !nl.chunk<!nl.node_id>
-      nl.output(%2) : !nl.chunk<!nl.node_id>
+      nl.output(%arg0) skip %0 : !nl.chunk<!nl.node_id>
     }
     return
   }

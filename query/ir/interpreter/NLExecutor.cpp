@@ -336,15 +336,31 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     const auto& cols = output->outputs();
     bioassert(!cols.empty(), "nl.output requires at least one column");
 
-    // With a limit (the folded terminal-LIMIT form), emit the prefix
-    // nl.limit_update sized this step - reading emitThisStep, not remaining, so
-    // the decrement already done does not affect the count. Without one, emit the
-    // whole chunk (already cut by an nl.limit_truncate when a limit governs it).
-    // Either way no row is copied here.
+    // Compute the [offset, offset + rowCount) window to emit, copy-free:
+    //  - skip (the folded terminal-SKIP form): emit the surviving suffix at offset
+    //    getSkipThisStep() for getEmitThisStep() rows, both sized by the preceding
+    //    nl.skip_update. Reading them, not remaining, so the decrement already done
+    //    does not affect the window.
+    //  - limit (the folded terminal-LIMIT form): emit the getEmitThisStep() prefix
+    //    nl.limit_update sized this step, from offset zero.
+    //  - neither: emit the whole chunk (already cut by a truncate when one governs
+    //    it).
+    // A folded output carries at most one of limit/skip, so the two never combine.
     const NLLimitState* limit = output->getLimit();
-    const size_t rowCount = limit ? limit->getEmitThisStep() : cols.front()->size();
+    const NLSkipState* skip = output->getSkip();
 
-    context->getSink()->appendChunks(cols, rowCount);
+    size_t offset = 0;
+    size_t rowCount = 0;
+    if (skip) {
+        offset = skip->getSkipThisStep();
+        rowCount = skip->getEmitThisStep();
+    } else if (limit) {
+        rowCount = limit->getEmitThisStep();
+    } else {
+        rowCount = cols.front()->size();
+    }
+
+    context->getSink()->appendChunks(cols, offset, rowCount);
 }
 
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
