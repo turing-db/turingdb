@@ -20,6 +20,62 @@ void NLSortState::reset() {
     _sorted = false;
 }
 
+bool NLSortState::rowLess(size_t leftRow, size_t rightRow) const {
+    // The first key that breaks the tie decides, most significant first; its
+    // direction flips the comparator's sign.
+    for (const Key& key : _keys) {
+        int comparison = key._compare(key._buffer, leftRow, rightRow);
+        if (!key._ascending) {
+            comparison = -comparison;
+        }
+
+        if (comparison != 0) {
+            return comparison < 0;
+        }
+    }
+
+    return false;
+}
+
+void NLSortState::trimIfNeeded() {
+    if (!_bounded || _buffers.empty()) {
+        return;
+    }
+
+    // Trim only once the buffers have grown well past the bound, so the cost is
+    // amortized: the buffers hold at most ~2 * topK rows (plus the chunk just
+    // appended) between trims, never the full input.
+    const size_t rowCount = _buffers.front()->size();
+    if (rowCount <= 2 * _topK) {
+        return;
+    }
+
+    trimToTopK(rowCount);
+}
+
+void NLSortState::trimToTopK(size_t rowCount) {
+    // Select the best topK rows: nth_element partitions the index permutation so
+    // its first topK entries are the smallest by the sort order (ties at the
+    // boundary broken arbitrarily, as LIMIT allows), then we keep that prefix.
+    std::vector<size_t>& kept = _keptIndices.getRaw();
+    kept.resize(rowCount);
+    std::iota(kept.begin(), kept.end(), size_t {0});
+
+    if (_topK < rowCount) {
+        const auto less = [this](size_t leftRow, size_t rightRow) { return rowLess(leftRow, rightRow); };
+        std::nth_element(kept.begin(), kept.begin() + _topK, kept.end(), less);
+        kept.resize(_topK);
+    }
+
+    // Compact every buffer to the kept rows: gather the survivors into the scratch
+    // column, then copy them back. Each column is independent and reads its own
+    // buffer before overwriting it, so the shared kept-index list stays valid.
+    for (size_t columnIndex = 0; columnIndex < _buffers.size(); columnIndex++) {
+        _gathers[columnIndex](_buffers[columnIndex], &_keptIndices, _tempBuffers[columnIndex]);
+        _buffers[columnIndex]->assign(_tempBuffers[columnIndex]);
+    }
+}
+
 void NLSortState::sort() {
     // The first emit step sorts; a later call (there is only one emit loop today)
     // finds the order already computed and returns.
@@ -27,32 +83,26 @@ void NLSortState::sort() {
         return;
     }
 
-    // Every buffer is row-aligned, so any one gives the accumulated row count.
+    // Every buffer is row-aligned, so any one gives the accumulated row count. For
+    // a bounded accumulator this is at most ~2 * topK (the residual the last trim
+    // left), not the full input.
     const size_t rowCount = _buffers.empty() ? 0 : _buffers.front()->size();
 
     std::vector<size_t>& permutation = _permutation.getRaw();
     permutation.resize(rowCount);
     std::iota(permutation.begin(), permutation.end(), size_t {0});
 
-    // Order rows by the keys, most significant first; the first key that breaks
-    // the tie decides, and its direction flips the comparator's sign. stable_sort
-    // keeps rows that tie on every key in their collected order, so the result is
-    // deterministic regardless of how the producing loop chunked them.
-    const std::vector<Key>& keys = _keys;
-    std::stable_sort(permutation.begin(), permutation.end(), [&keys](size_t leftRow, size_t rightRow) {
-        for (const Key& key : keys) {
-            int comparison = key._compare(key._buffer, leftRow, rightRow);
-            if (!key._ascending) {
-                comparison = -comparison;
-            }
+    // Order rows by the keys; stable_sort keeps rows that tie on every key in
+    // their collected order, so the result is deterministic regardless of how the
+    // producing loop chunked them.
+    const auto less = [this](size_t leftRow, size_t rightRow) { return rowLess(leftRow, rightRow); };
+    std::stable_sort(permutation.begin(), permutation.end(), less);
 
-            if (comparison != 0) {
-                return comparison < 0;
-            }
-        }
-
-        return false;
-    });
+    // A bounded accumulator emits only its best topK rows: cap the permutation
+    // after the sort, dropping the residual the amortized trim left in the buffer.
+    if (_bounded && permutation.size() > _topK) {
+        permutation.resize(_topK);
+    }
 
     _sorted = true;
 }

@@ -157,7 +157,8 @@ TEST_F(NLDialectTest, verifierAcceptsSortChain) {
 
     const mlir::Value handle = builder.create<mlir::nl::SortBuffer>(loc,
                                                                     builder.getDenseI64ArrayAttr({0}),
-                                                                    builder.getDenseBoolArrayAttr({false})).getState();
+                                                                    builder.getDenseBoolArrayAttr({false}),
+                                                                    /*topK=*/mlir::IntegerAttr()).getState();
     builder.create<mlir::nl::SortCollect>(loc, handle, mlir::ValueRange {chunk});
 
     const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {chunk.getType()});
@@ -205,12 +206,33 @@ TEST_F(NLDialectTest, verifierRejectsSortBufferMismatchedKeys) {
 
     auto buffer = builder.create<mlir::nl::SortBuffer>(loc,
                                                        builder.getDenseI64ArrayAttr({0, 1}),
-                                                       builder.getDenseBoolArrayAttr({true}));
+                                                       builder.getDenseBoolArrayAttr({true}),
+                                                       /*topK=*/mlir::IntegerAttr());
 
     const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
         return mlir::success();
     });
     EXPECT_TRUE(mlir::failed(mlir::verify(buffer.getOperation())));
+}
+
+// nl.sort_buffer may carry an optional top-K bound (the fused ORDER BY ... LIMIT
+// form); the accessor reports it and the op still verifies.
+TEST_F(NLDialectTest, verifierAcceptsBoundedSortBuffer) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    buildOneChunkFunction(builder, *module);
+
+    const mlir::IntegerAttr topK = builder.getIntegerAttr(builder.getIntegerType(64, /*isSigned=*/false), 5);
+    mlir::nl::SortBuffer buffer = builder.create<mlir::nl::SortBuffer>(loc,
+                                                                      builder.getDenseI64ArrayAttr({0}),
+                                                                      builder.getDenseBoolArrayAttr({true}),
+                                                                      topK);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(buffer.getOperation())));
+    ASSERT_TRUE(buffer.getTopK().has_value());
+    EXPECT_EQ(*buffer.getTopK(), 5u);
 }
 
 }

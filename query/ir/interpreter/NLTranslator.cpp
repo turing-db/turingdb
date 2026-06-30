@@ -510,6 +510,12 @@ void NLTranslator::translateSortBuffer(nl::SortBuffer buffer, NLStmtContainer* b
     NLSortState* state = _program->allocSortState();
     _sortStates[buffer.getState()] = state;
 
+    // A fused ORDER BY ... LIMIT carries the bound as the top-K count, so the
+    // accumulator keeps only the best k rows. Absent, it keeps every row.
+    if (const std::optional<uint64_t> topK = buffer.getTopK()) {
+        state->setTopK(*topK);
+    }
+
     // The reset empties the buffers each time the block holding this nl.sort_buffer
     // runs: once at function scope for a top-level ORDER BY.
     NLSortResetData* resetData = _program->allocFunctionData<NLSortResetData>(state);
@@ -535,11 +541,17 @@ void NLTranslator::translateSortCollect(nl::SortCollect collect, NLStmtContainer
     NLSortCollectData* data = _program->allocFunctionData<NLSortCollectData>(state);
 
     // One growing buffer per collected column, row-aligned. The buffer keeps the
-    // column's element type; the append copies a chunk's rows onto its tail.
+    // column's element type; the append copies a chunk's rows onto its tail. A
+    // bounded accumulator also gets a compaction scratch column and the gather
+    // that fills it, so the trim can drop all but the best k rows.
+    const bool bounded = state->isBounded();
     const mlir::OperandRange columns = collect.getColumns();
     for (const mlir::Value column : columns) {
         Column* bufferColumn = allocColumnForChunkType(column.getType());
-        state->addBuffer(bufferColumn);
+
+        Column* tempColumn = bounded ? allocColumnForChunkType(column.getType()) : nullptr;
+        const NLGatherFunction gather = bounded ? selectGatherForChunkType(column.getType()) : nullptr;
+        state->addColumnBuffer(bufferColumn, tempColumn, gather);
 
         const NLSortCollectData::Append append {getColumn(column),
                                                 bufferColumn,

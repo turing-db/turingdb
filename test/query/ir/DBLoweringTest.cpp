@@ -702,6 +702,35 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) RETURN a ORDER BY a DESC LIMIT count: the db.limit caps the db.sort's
+// result, so lowering fuses them into a bounded top-K (no separate nl.limit).
+std::string topKNodesDescProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %sa = db.sort(%a) keys [0] ascending [false] : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+                       "  %la = db.limit(%sa) count ")
+           + std::to_string(count)
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  db.output(%la) : !db.column<!storage.node_id>\n"
+             "  return\n"
+             "}\n";
+}
+
+// MATCH (a) RETURN a, a.score ORDER BY a.score ASC LIMIT count: top-K over a
+// (node, score) projection, sorted by the nullable score ascending.
+std::string topKByScoreAscProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [true] : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)\n"
+                       "  %la, %lscore = db.limit(%sa, %sscore) count ")
+           + std::to_string(count)
+           + " : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)\n"
+             "  db.output(%la, %lscore) : !db.column<!storage.node_id>, !db.column<none>\n"
+             "  return\n"
+             "}\n";
+}
+
 }
 
 class DBLoweringTest : public TuringTest {
@@ -2242,6 +2271,173 @@ TEST_F(DBLoweringTest, lowersSortToBufferCollectAndEmitLoop) {
     EXPECT_TRUE(mlir::isa<mlir::nl::For>(collectOp->getParentOp()));
     EXPECT_TRUE(sortOp.getResult().hasOneUse());
     EXPECT_TRUE(mlir::isa<mlir::nl::For>(*sortOp.getResult().user_begin()));
+}
+
+TEST_F(DBLoweringTest, topKNodesByIdDescending) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Four nodes, ORDER BY a DESC LIMIT 2: the two largest IDs, in order: 3, 2.
+    CollectingNodeSink sink;
+    const std::string program = topKNodesDescProgram(2);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{3}, {2}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, topKTrimsAcrossChunkBoundaries) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 1 over four nodes: the accumulator is fed one row at a time and
+    // trims as it overflows the bound, so the top-2 must survive the trimming and
+    // still come out 3, 2.
+    CollectingNodeSink sink;
+    const std::string program = topKNodesDescProgram(2);
+    runLoweredProgram(program.c_str(), reader.getView(), sink, /*chunkSize=*/1);
+
+    const std::vector<std::vector<uint64_t>> expected {{3}, {2}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, topKExceedingInputSortsAll) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // LIMIT 10 over four nodes: the bound exceeds the input, so every node is
+    // kept and the result is the full descending sort.
+    CollectingNodeSink sink;
+    const std::string program = topKNodesDescProgram(10);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{3}, {2}, {1}, {0}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, topKByPropertyAscendingDropsNulls) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Scores 100 (node 0), 200 (node 1), null (node 2). ASC LIMIT 2 keeps the two
+    // smallest - 100 then 200 - so the null-scored node falls outside the bound.
+    CollectingNodeIntPropSink sink;
+    const std::string program = topKByScoreAscProgram(2);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 100}, {1, 200}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, topKByPropertyAscendingAcrossChunks) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 1 forces per-row collection and trimming; the top-2 by ascending
+    // score must be the same regardless of chunking.
+    CollectingNodeIntPropSink sink;
+    const std::string program = topKByScoreAscProgram(2);
+    runLoweredProgram(program.c_str(), reader.getView(), sink, /*chunkSize=*/1);
+
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 100}, {1, 200}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, topKZeroEmitsNothing) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // LIMIT 0 fused into the sort: the bounded accumulator keeps no rows, so the
+    // emit loop runs zero times.
+    CountingSink sink;
+    const std::string program = topKNodesDescProgram(0);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    EXPECT_EQ(sink.getCalls(), 0u);
+    EXPECT_EQ(sink.getTotalRows(), 0u);
+}
+
+TEST_F(DBLoweringTest, lowersTopKToBoundedSortBufferWithoutLimitOps) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    const std::string programText = topKNodesDescProgram(2);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    // The terminal db.limit fuses into the sort: the bound lives on nl.sort_buffer
+    // and the streaming limit ops vanish entirely. No nl.limit, no nl.limit_update,
+    // no nl.limit_truncate; one bounded nl.sort_buffer; and the scan loop carries
+    // no limit handle, since top-K must still scan every row.
+    size_t bufferCount = 0;
+    size_t limitCount = 0;
+    size_t updateCount = 0;
+    size_t truncateCount = 0;
+    size_t forsWithLimit = 0;
+    mlir::nl::SortBuffer bufferOp;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::nl::SortBuffer found = mlir::dyn_cast<mlir::nl::SortBuffer>(operation)) {
+            bufferOp = found;
+            bufferCount++;
+        } else if (mlir::isa<mlir::nl::Limit>(operation)) {
+            limitCount++;
+        } else if (mlir::isa<mlir::nl::LimitUpdate>(operation)) {
+            updateCount++;
+        } else if (mlir::isa<mlir::nl::LimitTruncate>(operation)) {
+            truncateCount++;
+        } else if (mlir::nl::For forOp = mlir::dyn_cast<mlir::nl::For>(operation)) {
+            if (forOp.getLimit()) {
+                forsWithLimit++;
+            }
+        }
+    });
+
+    EXPECT_EQ(bufferCount, 1u);
+    EXPECT_EQ(limitCount, 0u);
+    EXPECT_EQ(updateCount, 0u);
+    EXPECT_EQ(truncateCount, 0u);
+    EXPECT_EQ(forsWithLimit, 0u);
+
+    // The accumulator carries the fused bound as its top-K count.
+    ASSERT_TRUE(bufferOp);
+    ASSERT_TRUE(bufferOp.getTopK().has_value());
+    EXPECT_EQ(*bufferOp.getTopK(), 2u);
 }
 
 int main(int argc, char** argv) {

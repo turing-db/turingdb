@@ -519,6 +519,11 @@ using NLCompareFunction = int (*)(const Column* column, size_t a, size_t b);
 // over nl.sort sorts it (once) and reads the rows in permutation order. The
 // buffer columns are borrowed: the translator pool-allocates them in the same
 // arena as the loop columns; the state only records the pointers.
+//
+// A bounded accumulator (the fused ORDER BY ... LIMIT k) keeps only the best k
+// rows: nl.sort_collect appends a chunk then calls trimIfNeeded, which selects
+// the best k and reclaims the rest, so memory stays O(k) and the final sort runs
+// over O(k) rows rather than every row.
 class NLSortState {
 public:
     // One sort key: the buffer column it orders by, its direction (true =
@@ -529,7 +534,24 @@ public:
         NLCompareFunction _compare {nullptr};
     };
 
-    void addBuffer(Column* buffer) { _buffers.push_back(buffer); }
+    // Bound the accumulator to the best topK rows (the fused top-K form). Left
+    // unbounded, it keeps every collected row.
+    void setTopK(size_t topK) {
+        _topK = topK;
+        _bounded = true;
+    }
+
+    bool isBounded() const { return _bounded; }
+
+    // Record one column: its buffer, the scratch the trim gathers the survivors
+    // into (null when unbounded - no trimming happens), and the gather that fills
+    // one from the other. Kept parallel, one entry per collected column.
+    void addColumnBuffer(Column* buffer, Column* temp, NLGatherFunction gather) {
+        _buffers.push_back(buffer);
+        _tempBuffers.push_back(temp);
+        _gathers.push_back(gather);
+    }
+
     const std::vector<Column*>& buffers() const { return _buffers; }
     Column* buffer(size_t index) const { return _buffers[index]; }
 
@@ -539,22 +561,47 @@ public:
     // again. Runs each time nl.sort_buffer's block runs (once at function scope).
     void reset();
 
+    // For a bounded accumulator, once the buffers have grown well past the bound,
+    // drop all but the best topK rows so memory stays O(topK). A no-op when
+    // unbounded or still within the bound.
+    void trimIfNeeded();
+
     // Compute the row permutation that orders the buffers by the keys, stable so
-    // rows equal on every key keep their collected order. Idempotent: the first
-    // emit step sorts, later calls are no-ops.
+    // rows equal on every key keep their collected order; for a bounded
+    // accumulator the permutation is then capped to the best topK. Idempotent:
+    // the first emit step sorts, later calls are no-ops.
     void sort();
 
     const ColumnVector<size_t>& permutation() const { return _permutation; }
 
 private:
+    // Strict-weak-ordering row comparison by the keys, most significant first;
+    // each key's direction flips the sign. Shared by sort() and the trim.
+    bool rowLess(size_t leftRow, size_t rightRow) const;
+
+    // Select the best topK rows into _keptIndices and compact every buffer to
+    // them, reclaiming the rest. Called by trimIfNeeded once the buffers overflow.
+    void trimToTopK(size_t rowCount);
+
     // One buffer per collected column, row-aligned, grown by nl.sort_collect.
     std::vector<Column*> _buffers;
+
+    // Per-buffer compaction scratch and gather, used only by a bounded trim.
+    std::vector<Column*> _tempBuffers;
+    std::vector<NLGatherFunction> _gathers;
 
     // The sort keys, most significant first.
     std::vector<Key> _keys;
 
     // Row order computed by sort(); read by the emit loop in chunk-sized slices.
     ColumnVector<size_t> _permutation;
+
+    // The kept-row indices a trim selects, fed to the per-buffer gather.
+    ColumnVector<size_t> _keptIndices;
+
+    // The top-K bound (valid only when _bounded); 0 with _bounded means keep none.
+    size_t _topK {0};
+    bool _bounded {false};
 
     bool _sorted {false};
 };

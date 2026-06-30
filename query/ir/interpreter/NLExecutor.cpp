@@ -436,6 +436,11 @@ void NLExecutor::runSortCollect(NLExecutionContext* context, NLFunctionData* dat
     for (const NLSortCollectData::Append& append : collect->appends()) {
         append._append(append._input, append._buffer);
     }
+
+    // For a bounded (top-K) accumulator, drop all but the best k once the buffers
+    // have grown past the bound, so memory stays O(k) rather than O(rows). A
+    // no-op for an unbounded sort.
+    collect->getState()->trimIfNeeded();
 }
 
 void NLExecutor::runSortLoop(NLExecutionContext* context, NLFunctionData* data) {
