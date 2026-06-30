@@ -232,6 +232,18 @@ func.func @main() {
 }
 )mlir";
 
+// One hop along in-edges, outputting (source, target) pairs. The writer fills
+// the source side and the target side is gathered from the input, so the
+// output pairs are the same edge set as the out-edges hop
+constexpr const char* oneHopInProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %b = db.get_in_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // Two hops a->b->c carrying a through the second hop, outputting (a, c) pairs
 constexpr const char* twoHopProgram = R"mlir(
 func.func @main() {
@@ -682,6 +694,20 @@ TEST_F(DBLoweringTest, lowersOneHopOutEdges) {
 
     CollectingNodeSink sink;
     runLoweredProgram(oneHopOutProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{0, 1}, {0, 2}, {1, 3}, {2, 3}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, lowersOneHopInEdges) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(oneHopInProgram, reader.getView(), sink);
 
     const std::vector<std::vector<uint64_t>> expected {{0, 1}, {0, 2}, {1, 3}, {2, 3}};
     std::vector<std::vector<uint64_t>> rows;

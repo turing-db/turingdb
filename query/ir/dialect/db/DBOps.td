@@ -52,6 +52,45 @@ def GetOutEdges : TuringOp<"get_out_edges", [Pure]> {
 }
 
 /**
+* GetInEdges
+*/
+def GetInEdges : TuringOp<"get_in_edges", [Pure]> {
+  let summary = "Fetch node and edge predecessors of input, filtering carried columns alongside";
+
+  let description = [{
+    The reverse-direction sibling of get_out_edges: where that walks each node's
+    successors, this walks its predecessors. In `MATCH (a)<-(b)<-(c)` the `a` we
+    return are not the raw scan but the nodes with a predecessor `b` that itself
+    has a predecessor `c`, so each hop must filter the columns carried from
+    earlier hops.
+
+    `columns_to_filter` is that carry set; each one comes back in `filtered_columns`:
+
+      %b = get_in_edges(%a, {})
+      %c, %b2, %a2 = get_in_edges(%b, {%a})   // eids/etypes omitted
+
+    The result chunk shape - srcids, eids, etypes, tgtids - matches
+    get_out_edges, so the two are interchangeable in a hop.
+  }];
+
+  // `columns_to_filter`: the only variadic operand, after the fixed `input_nodes`.
+  let arguments = (ins Column:$input_nodes, Variadic<Column>:$columns_to_filter);
+
+  // `filtered_columns`: one per carried column, after the four fixed results.
+  let results   = (outs ColumnNodeIDs:$srcids,
+                        ColumnEdgeIDs:$eids,
+                        ColumnEdgeTypes:$etypes,
+                        ColumnNodeIDs:$tgtids,
+                        Variadic<Column>:$filtered_columns);
+
+  // Brace-wrap the carry set so it reads like `get_in_edges(%b, {%a})`.
+  let assemblyFormat = [{
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
 * GetNodeProperties
 */
 def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
