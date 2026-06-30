@@ -90,14 +90,10 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
         _opBuilder->setInsertionPointToStart(&block);
     }
 
-    std::unordered_set<const VariableDependency*> visited;
+    std::unordered_set<const VariableDependency*> defined;
     std::deque<const DependencyEdge*> dq;
 
     for (const VariableDependency& v : vdg.vars()) {
-        if (visited.contains(&v)) {
-            continue;
-        }
-
         { // FIXME: Temporary guard to prevent starting from meta nodes
             const bool isMeta = std::ranges::any_of(
                 v.incoming(), [](const DependencyEdge* e) { return e->isMetaEdge(); });
@@ -105,17 +101,17 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
         }
 
         { // FIXME: Temporary guard to prevent starting from edges
-            const bool isEdge =
+            [[maybe_unused]] const bool isEdge =
                 std::ranges::any_of(v.incoming(), [](const DependencyEdge* e) {
                     EdgeMetadata::EdgeType type = e->data().type();
                     return type == EdgeMetadata::EdgeType::GET_OUT_EDGES
                         || type == EdgeMetadata::EdgeType::GET_IN_EDGES;
                 });
-            bioassert(!isEdge, "Cannot start with edge");
+            // bioassert(!isEdge, "Cannot start with edge");
         }
 
-        const auto seenOrMeta = [&visited](const DependencyEdge* e) {
-            return !e->isMetaEdge() || visited.contains(e->src());
+        const auto seenOrMeta = [&defined](const DependencyEdge* e) {
+            return !e->isMetaEdge() || defined.contains(e->src());
         };
 
         const bool canTraverse = std::ranges::all_of(v.incoming(), seenOrMeta);
@@ -124,7 +120,10 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             continue;
         }
 
-        addScanNodes(&v);
+        // This variable is already defined, do not create a scan for it
+        if (!defined.contains(&v)) {
+            addScanNodes(&v);
+        }
 
         // dfs from this root
         for (const DependencyEdge* e : v.edges()) {
@@ -140,19 +139,30 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                 // @ref other is the edge variable
                 const VariableDependency* other = e->src() == &v ? e->tgt() : e->src();
 
-                // TODO: remove this
-                bioassert(!visited.contains(other), "Invalid traversal.");
-
-                for (const DependencyEdge* f : other->outgoing()) {
-                    if (f->data().type() == EdgeMetadata::EdgeType::GET_EDGE_TGT) {
-                        addGetOutEdges(&v, other, f->tgt());
-                    }
+                // if we already defined this edge, nothing to do
+                if (defined.contains(other)) {
+                    continue;
                 }
+
+                bioassert(other->outgoing().size() == 1,
+                          "Edge variable had multiple outgoing edges");
+
+                const DependencyEdge* outgoing = other->outgoing().front();
+
+                if (outgoing->data().type() == EdgeMetadata::EdgeType::GET_EDGE_TGT) {
+                    const VariableDependency* tgt = outgoing->tgt();
+                    addGetOutEdges(&v, other, tgt);
+                    defined.insert(tgt);
+                }
+
+                defined.insert(other);
             }
         }
 
+        defined.insert(&v);
+
         // The idea is that we explore the edges of v. if we have a getXedges, we try and
         // create a triple. if we have a getedge{src/tgt} then just translate that with an
-        // anonymous edge var
+        // anonymous edge var. It amounts to a DFS with 1-lookahead
     }
 }
