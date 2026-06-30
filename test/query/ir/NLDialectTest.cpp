@@ -10,6 +10,7 @@
 #include "NLDialect.h"
 #include "NLOps.h"
 #include "NLTypes.h"
+#include "StorageDialect.h"
 
 namespace {
 
@@ -19,6 +20,7 @@ class NLDialectTest : public ::testing::Test {
 protected:
     NLDialectTest() {
         _context.getOrLoadDialect<mlir::func::FuncDialect>();
+        _context.getOrLoadDialect<mlir::storage::Storage>();
         _context.getOrLoadDialect<mlir::nl::NL>();
     }
 
