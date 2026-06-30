@@ -120,6 +120,36 @@ LogicalResult SkipTruncate::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// An nl.sort_buffer needs at least one key, and one direction per key: the two
+// arrays describe the same list of sort keys. The buffers' column count is not
+// known here (the types live on the feeding nl.sort_collect), so key indices are
+// range-checked during translation rather than at the buffer op.
+LogicalResult SortBuffer::verify() {
+    const ArrayRef<int64_t> keyColumns = getKeyColumns();
+    const ArrayRef<bool> keyAscending = getKeyAscending();
+
+    if (keyColumns.empty()) {
+        return emitOpError("requires at least one sort key");
+    }
+
+    if (keyColumns.size() != keyAscending.size()) {
+        return emitOpError("expects one ascending flag per key, but has ")
+               << keyColumns.size() << " keys and " << keyAscending.size() << " flags";
+    }
+
+    return success();
+}
+
+// An nl.sort_collect must append at least one column - an empty append could not
+// size the accumulated row set and there would be nothing to sort.
+LogicalResult SortCollect::verify() {
+    if (getColumns().empty()) {
+        return emitOpError("requires at least one column to collect");
+    }
+
+    return success();
+}
+
 void For::build(OpBuilder& builder, OperationState& state, Value iterator) {
     For::build(builder, state, iterator, Value());
 }

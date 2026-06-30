@@ -501,6 +501,140 @@ private:
     SkipColumns _columns;
 };
 
+// Type of handle that appends one input chunk's rows to a growing sort buffer of
+// the same element type. One per column kind / value type, selected during
+// translation, the same way the gather and broadcast families are.
+using NLAppendFunction = void (*)(const Column* input, Column* buffer);
+
+// Type of handle that 3-way compares two rows of one sort key column: negative
+// if row a sorts before row b, positive if after, zero if they tie on this key.
+// Direction (ascending vs descending) is applied by the caller, so the function
+// itself is direction-free; it is selected per key from the column's element type.
+using NLCompareFunction = int (*)(const Column* column, size_t a, size_t b);
+
+// Runtime state of one ORDER BY: the growing per-column row buffers, the sort
+// keys (each a buffer column, a direction and a 3-way comparator), and the row
+// permutation computed once when the emit loop first steps. nl.sort_buffer
+// resets it, nl.sort_collect appends one chunk to every buffer, and the nl.for
+// over nl.sort sorts it (once) and reads the rows in permutation order. The
+// buffer columns are borrowed: the translator pool-allocates them in the same
+// arena as the loop columns; the state only records the pointers.
+class NLSortState {
+public:
+    // One sort key: the buffer column it orders by, its direction (true =
+    // ascending), and the 3-way comparator for that column's element type.
+    struct Key {
+        const Column* _buffer {nullptr};
+        bool _ascending {true};
+        NLCompareFunction _compare {nullptr};
+    };
+
+    void addBuffer(Column* buffer) { _buffers.push_back(buffer); }
+    const std::vector<Column*>& buffers() const { return _buffers; }
+    Column* buffer(size_t index) const { return _buffers[index]; }
+
+    void addKey(const Key& key) { _keys.push_back(key); }
+
+    // Clear every buffer and drop the computed order, so the accumulator is empty
+    // again. Runs each time nl.sort_buffer's block runs (once at function scope).
+    void reset();
+
+    // Compute the row permutation that orders the buffers by the keys, stable so
+    // rows equal on every key keep their collected order. Idempotent: the first
+    // emit step sorts, later calls are no-ops.
+    void sort();
+
+    const ColumnVector<size_t>& permutation() const { return _permutation; }
+
+private:
+    // One buffer per collected column, row-aligned, grown by nl.sort_collect.
+    std::vector<Column*> _buffers;
+
+    // The sort keys, most significant first.
+    std::vector<Key> _keys;
+
+    // Row order computed by sort(); read by the emit loop in chunk-sized slices.
+    ColumnVector<size_t> _permutation;
+
+    bool _sorted {false};
+};
+
+// nl.sort_buffer data: resets an accumulator to empty each time the block it
+// lives in runs - once at function scope for a top-level ORDER BY.
+class NLSortResetData : public NLFunctionData {
+public:
+    NLSortResetData(NLSortState* state)
+        : _state(state)
+    {
+    }
+
+    NLSortState* getState() const { return _state; }
+
+private:
+    NLSortState* _state {nullptr};
+};
+
+// nl.sort_collect data: appends the current chunk of every column to the matching
+// buffer of the accumulator. Each entry pairs the loop's input chunk with the
+// buffer it grows and the append that copies one into the other.
+class NLSortCollectData : public NLFunctionData {
+public:
+    struct Append {
+        const Column* _input {nullptr};
+        Column* _buffer {nullptr};
+        NLAppendFunction _append {nullptr};
+    };
+
+    NLSortCollectData(NLSortState* state)
+        : _state(state)
+    {
+    }
+
+    NLSortState* getState() const { return _state; }
+
+    const std::vector<Append>& appends() const { return _appends; }
+
+    void addAppend(const Append& append) {
+        _appends.push_back(append);
+    }
+
+private:
+    NLSortState* _state {nullptr};
+    std::vector<Append> _appends;
+};
+
+// nl.for over nl.sort data: the emit phase of an ORDER BY. Holds the accumulator
+// (sorted on the first step), and per column the buffer to read, the loop
+// variable to fill and the gather that copies a chunk of rows by index - reusing
+// the same NLCarriedColumn (input, output, gather) shape the edge loops use. The
+// indices scratch holds the permutation slice of the current emit step.
+class NLSortLoopData : public NLFunctionData {
+public:
+    NLSortLoopData(NLSortState* state)
+        : _state(state)
+    {
+    }
+
+    NLSortState* getState() const { return _state; }
+
+    const std::vector<NLCarriedColumn>& columns() const { return _columns; }
+
+    void addColumn(const NLCarriedColumn& column) {
+        _columns.push_back(column);
+    }
+
+    ColumnVector<size_t>* getIndices() { return &_indices; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    NLSortState* _state {nullptr};
+    std::vector<NLCarriedColumn> _columns;
+    ColumnVector<size_t> _indices;
+    NLStmtContainer _stmts;
+};
+
 // nl.output data
 class NLOutputData : public NLFunctionData {
 public:
@@ -566,6 +700,15 @@ public:
         return statePtr;
     }
 
+    // Allocate one ORDER BY's runtime accumulator, owned by the program; the
+    // collect, reset and emit statements that share it hold a borrowed pointer.
+    NLSortState* allocSortState() {
+        auto state = std::make_unique<NLSortState>();
+        NLSortState* statePtr = state.get();
+        _sortStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -577,6 +720,7 @@ private:
     std::vector<std::unique_ptr<NLFunctionData>> _functionData;
     std::vector<std::unique_ptr<NLLimitState>> _limitStates;
     std::vector<std::unique_ptr<NLSkipState>> _skipStates;
+    std::vector<std::unique_ptr<NLSortState>> _sortStates;
     NLStmtContainer _stmts;
 };
 

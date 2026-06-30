@@ -29,6 +29,7 @@ private:
         ScanNodes,
         GetOutEdges,
         GetInEdges,
+        Sort,
     };
 
     // Settings of the iterators passed to each for loop
@@ -36,6 +37,9 @@ private:
         IteratorKind _kind {IteratorKind::ScanNodes};
         mlir::Value _inputNodes;
         llvm::SmallVector<mlir::Value, 4> _carriedColumns;
+
+        // The accumulator a Sort iterator drains; null for the other kinds.
+        NLSortState* _sortState {nullptr};
     };
 
     NLProgram* _program {nullptr};
@@ -51,6 +55,10 @@ private:
     // nl.skip handle SSA value -> the runtime counter it produces, so nl.skip_update
     // and nl.skip_truncate that name the handle find the same counter
     llvm::DenseMap<mlir::Value, NLSkipState*> _skipStates;
+
+    // nl.sort_buffer handle SSA value -> the runtime accumulator it produces, so
+    // nl.sort_collect and the nl.for over nl.sort find the same buffers
+    llvm::DenseMap<mlir::Value, NLSortState*> _sortStates;
 
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
@@ -94,6 +102,35 @@ private:
     // The runtime counter a skip handle names. The handle is a required operand of
     // its consumers, so this throws if it was not produced by an nl.skip.
     NLSkipState* skipStateFor(mlir::Value handle) const;
+
+    // Translate an nl.sort_buffer: allocate its runtime accumulator, map the
+    // handle to it, and record the reset statement (run each time the block runs)
+    void translateSortBuffer(mlir::nl::SortBuffer buffer, NLStmtContainer* body);
+
+    // Translate an nl.sort_collect: allocate one growing buffer per collected
+    // column (mapped into the accumulator), build the key comparators from the
+    // nl.sort_buffer spec, and record the per-step append statement
+    void translateSortCollect(mlir::nl::SortCollect collect, NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.sort iterator: allocate one loop variable
+    // per buffer, set up the gather that fills it from the buffer in permutation
+    // order, and record the emit-loop statement (sort once, then re-chunk)
+    void translateSortLoop(const IteratorConfig& config,
+                           mlir::Block& loopBody,
+                           NLStmtContainer* body);
+
+    // The runtime accumulator a sort handle names. Throws if the handle was not
+    // produced by an nl.sort_buffer translated earlier.
+    NLSortState* sortStateFor(mlir::Value handle) const;
+
+    // Pool-allocate a buffer/loop column matching a chunk type - an ID column for
+    // an ID chunk, a nullable value column for a !nl.nullable<...> chunk - and the
+    // append/gather/compare handler for that element type. The compare selector
+    // throws for chunk types that have no order (an embedding key).
+    Column* allocColumnForChunkType(mlir::Type chunkType);
+    static NLAppendFunction selectAppendForChunkType(mlir::Type chunkType);
+    static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
+    static NLCompareFunction selectCompareForChunkType(mlir::Type chunkType);
 
     // Translate an nl.get_node_properties / nl.get_edge_properties: resolve the
     // property name (carried by the nl.get_property_type that produced the

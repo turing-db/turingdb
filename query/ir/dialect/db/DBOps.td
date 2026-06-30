@@ -323,4 +323,56 @@ def Skip : TuringOp<"skip", [Pure]> {
   let hasVerifier = 1;
 }
 
+/**
+* Sort
+*/
+def Sort : TuringOp<"sort", [Pure]> {
+  let summary = "Reorder the rows of a column set by one or more key columns";
+  let description = [{
+    The declarative counterpart of a Cypher RETURN ... ORDER BY. Takes the whole
+    set of columns flowing into db.output and emits them with their rows reordered
+    so that the key columns are sorted; every column moves as one row, so the
+    projection stays row-aligned:
+
+      %a     = db.scan_nodes() : !db.column<"a">
+      %score = db.get_node_properties(%a, "score") : (!db.column<"a">) -> !db.column<"a.score">
+      %sa, %sscore = db.sort(%a, %score) keys [1] ascending [true]
+                       : (!db.column<"a">, !db.column<"a.score">) -> (!db.column<"a">, !db.column<"a.score">)
+      db.output(%sa, %sscore) : !db.column<"a">, !db.column<"a.score">
+
+    A row is sorted across several columns: `keys` is the list of column indices
+    to sort by, most significant first (so `keys [1, 0]` sorts by column 1, ties
+    broken by column 0), and `ascending` gives the direction of each key. The
+    columns pass through unchanged in count and type - only the row order changes.
+
+    Sort is a pipeline breaker: it must see every row before it can emit any, so
+    it lowers to an nl.sort_buffer accumulator hoisted above the loops, an
+    nl.sort_collect in the producing loop body that appends each chunk, and an
+    nl.sort source iterator after the loop whose nl.for emits the sorted rows.
+    Reordering a deterministic read of the graph is itself deterministic, so the
+    op is Pure.
+  }];
+
+  // The columns flow through unchanged. keyColumns are indices into $columns,
+  // most significant first; keyAscending gives one direction per key (true =
+  // ascending). The two arrays are parallel and the verifier checks they line up.
+  let arguments = (ins Variadic<Column>:$columns,
+                       DenseI64ArrayAttr:$keyColumns,
+                       DenseBoolArrayAttr:$keyAscending);
+  let results   = (outs Variadic<Column>:$results);
+
+  // One result per input column, same types; functional-type prints the
+  // `(operandTypes) -> resultTypes` form. The two key arrays print after their
+  // keywords (`keys array<i64: ...>`, `ascending array<i1: ...>`) ahead of the
+  // colon, elided from attr-dict because the format already names them.
+  let assemblyFormat = [{
+    `(` $columns `)` `keys` $keyColumns `ascending` $keyAscending attr-dict `:`
+    functional-type(operands, results)
+  }];
+
+  // results arity and types must equal the columns, and the key arrays must be
+  // parallel and reference columns in range.
+  let hasVerifier = 1;
+}
+
 #endif //TURINGDB_OPS

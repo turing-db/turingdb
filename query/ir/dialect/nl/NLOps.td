@@ -504,4 +504,98 @@ def SkipTruncate : NLOp<"skip_truncate", [InferTypeOpAdaptor]> {
   }];
 }
 
+/**
+* SortBuffer
+*/
+// NOT Pure: each nl.sort_buffer is a distinct accumulator, so two must never be
+// CSE'd into one, and an unread one must not be DCE'd - resetting its buffers is
+// a side effect (like nl.limit).
+def SortBuffer : NLOp<"sort_buffer", []> {
+  let summary = "Create (and reset) a row accumulator for one ORDER BY";
+  let description = [{
+    Sits at the top of the scope it governs - function scope for a top-level
+    ORDER BY - where it re-initializes the per-column buffers once per enclosing
+    step. Produces the !nl.sort_state handle that nl.sort_collect appends to and
+    the nl.for over nl.sort drains.
+
+    `keys` is the list of column indices to sort by, most significant first;
+    `ascending` gives the direction of each key (true = ascending). The buffers'
+    column types are not spelled here - they are recovered from the nl.sort_collect
+    that feeds the same handle - so only the sort spec appears. The result type is
+    buildable and omitted.
+
+      %state = nl.sort_buffer keys [1] ascending [true]
+  }];
+
+  // keyColumns are indices into the collected column set, most significant first;
+  // keyAscending gives one direction per key. The two arrays are parallel.
+  let arguments = (ins DenseI64ArrayAttr:$keyColumns, DenseBoolArrayAttr:$keyAscending);
+  let results   = (outs NLSortState:$state);
+
+  let assemblyFormat = "`keys` $keyColumns `ascending` $keyAscending attr-dict";
+  let hasVerifier = 1;
+}
+
+/**
+* SortCollect
+*/
+// NOT Pure: it appends the current chunk's rows to the handle's buffers, so it
+// must run exactly where it sits, once per producing-loop step, and must not be
+// hoisted, CSE'd or eliminated.
+def SortCollect : NLOp<"sort_collect", []> {
+  let summary = "Append this step's chunk of every column to a sort accumulator";
+  let description = [{
+    Runs in the producing loop body, once per step. Appends the current chunk of
+    each column - the whole row set of this step - to the matching buffer of the
+    handle, so that by the time the producing loop is exhausted the buffers hold
+    every row. The columns are taken together so the buffers stay row-aligned.
+
+      nl.sort_collect %state, (%a, %score) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.nullable<i64>>
+  }];
+
+  // The accumulator handle, then the columns to append. The column chunk types
+  // are spelled after the colon (as nl.output does), since the buffers' element
+  // types are recovered from them.
+  let arguments = (ins NLSortStateHandle:$state, Variadic<NLChunk>:$columns);
+
+  let assemblyFormat = [{
+    $state `,` `(` $columns `)` attr-dict `:` qualified(type($columns))
+  }];
+  let hasVerifier = 1;
+}
+
+/**
+* Sort
+*/
+// Pure: given a filled accumulator it deterministically yields the same sorted
+// iterator, and it produces no side effect of its own - the sort and the
+// chunk-by-chunk emission happen in the driving nl.for. Mirrors nl.scan_nodes:
+// a source op whose nl.for does the work.
+def Sort : NLOp<"sort", [Pure]> {
+  let summary = "Create a database iterator over the sorted rows of an accumulator";
+  let description = [{
+    The source op for the emit phase of an ORDER BY, the sorted counterpart of
+    nl.scan_nodes. It consumes a filled nl.sort_state and produces an iterator
+    whose steps yield the accumulated rows sorted by the handle's keys, one chunk
+    per column per step - the same chunk shape the buffers were collected with, so
+    an enclosing nl.for binds one loop variable per column:
+
+      %sorted = nl.sort(%state) : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.nullable<i64>>>
+      nl.for %a, %score in %sorted : !nl.iter<...> {
+        nl.output(%a, %score) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.nullable<i64>>
+      }
+
+    The iterator chunk types match the collected columns, but cannot be inferred
+    from the parameterless state handle, so they are spelled after the colon (as
+    the nl.for iterator type is). The sort itself runs once when the driving loop
+    first steps; placing nl.sort after the producing loop guarantees the buffers
+    are full by then.
+  }];
+
+  let arguments = (ins NLSortStateHandle:$state);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
+}
+
 #endif //TURINGDB_NL_OPS

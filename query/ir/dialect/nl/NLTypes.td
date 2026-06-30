@@ -34,6 +34,19 @@ def NLSkipState : NLType<"SkipState", "skip_state"> {
     }];
 }
 
+def NLSortState : NLType<"SortState", "sort_state"> {
+    let summary = "A sort accumulator handle";
+    let description = [{
+        Stands for one ORDER BY's row accumulator. Produced by nl.sort_buffer,
+        appended to by nl.sort_collect once per producing-loop step, and drained by
+        the nl.for over the nl.sort source iterator, which sorts the accumulated
+        rows by the keys and yields them chunk by chunk. It is a handle, not a
+        chunk: it owns the growing per-column buffers and the sort spec, not a
+        single chunk of values. Modeled on !nl.limit_state, but it accumulates
+        rows rather than counting them.
+    }];
+}
+
 def NLChunk : NLType<"Chunk", "chunk"> {
     let summary = "A bounded batch of values";
     let description = "One column chunk filled by a single database iterator step";
@@ -123,5 +136,14 @@ def NLSkipStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::SkipStateType>($_self)">,
         "skip state handle", "::mlir::nl::SkipStateType">,
     BuildableType<"::mlir::nl::SkipStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.sort_state handle, the same way
+// NLLimitStateHandle constrains the limit handle. The single concrete type -
+// there is only ever !nl.sort_state - is what lets nl.sort_collect and nl.sort
+// omit the handle's type in their assembly, building it from this recipe instead.
+def NLSortStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::SortStateType>($_self)">,
+        "sort state handle", "::mlir::nl::SortStateType">,
+    BuildableType<"::mlir::nl::SortStateType::get($_builder.getContext())">;
 
 #endif // TURINGDB_NL_TYPES

@@ -114,6 +114,15 @@ private:
     void lowerCrossProduct(mlir::db::CrossProduct product);
     void lowerLimit(mlir::db::Limit limit);
     void lowerSkip(mlir::db::Skip skip);
+
+    // Lower a db.sort: hoist an nl.sort_buffer accumulator (carrying the key
+    // spec) to the top of the entry block, place an nl.sort_collect in the
+    // innermost producing loop body to append each chunk, then - after the
+    // producing loop - emit an nl.sort source iterator and an nl.for over it that
+    // yields the sorted rows. db.sort's results map to that emit loop's
+    // variables, so the db.output that follows lowers into the emit loop body.
+    void lowerSort(mlir::db::Sort sort);
+
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at

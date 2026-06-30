@@ -129,11 +129,43 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) RETURN a, a.score ORDER BY a.score DESC: two columns passed through,
+// sorted by the second one (the score), descending.
+const char* const sortProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [false] : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
+  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
+// A sort key indexing a column that does not exist: only one column, key 5.
+const char* const sortKeyOutOfRangeProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %sa = db.sort(%a) keys [5] ascending [true] : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%sa) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // db.skip's count is a ui64 attribute, so a negative literal cannot parse.
 const char* const negativeSkipProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %sa = db.skip(%a) count -1 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%sa) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// Two keys but one direction: the parallel key arrays disagree on length.
+const char* const sortMismatchedKeysProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %sa = db.sort(%a) keys [0, 0] ascending [true] : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%sa) : !db.column<!storage.node_id>
   return
 }
@@ -382,6 +414,45 @@ TEST_F(DBDialectTest, skipRoundTripsThroughTextualForm) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
+TEST_F(DBDialectTest, parsesSort) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(sortProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::Sort sort;
+    module.get().walk([&](mlir::db::Sort op) {
+        sort = op;
+    });
+    ASSERT_TRUE(sort);
+
+    // Two columns pass through as two results of the same types.
+    ASSERT_EQ(sort.getColumns().size(), 2u);
+    ASSERT_EQ(sort.getResults().size(), 2u);
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    EXPECT_EQ(sort.getColumns()[0].getType(), nodeIDColumnType);
+    EXPECT_EQ(sort.getResults()[0].getType(), nodeIDColumnType);
+
+    // The single key is column 1 (the score), descending.
+    ASSERT_EQ(sort.getKeyColumns().size(), 1u);
+    EXPECT_EQ(sort.getKeyColumns()[0], 1);
+    ASSERT_EQ(sort.getKeyAscending().size(), 1u);
+    EXPECT_FALSE(sort.getKeyAscending()[0]);
+}
+
+TEST_F(DBDialectTest, sortRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(sortProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the
+    // db.sort printer and parser are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
 TEST_F(DBDialectTest, rejectsNegativeSkipCount) {
     // count is a ui64 attribute, so a negative literal fails to parse and the
     // module is null.
@@ -470,6 +541,45 @@ TEST_F(DBDialectTest, verifierRejectsSkipColumnTypeMismatch) {
         return mlir::success();
     });
     EXPECT_TRUE(mlir::failed(mlir::verify(skip.getOperation())));
+}
+
+TEST_F(DBDialectTest, rejectsSortKeyOutOfRange) {
+    // The verifier runs during parsing, so a key that indexes no column makes the
+    // module fail to parse.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(sortKeyOutOfRangeProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, rejectsSortMismatchedKeyArrays) {
+    // Two key indices but one direction: the parallel arrays disagree, so the
+    // verifier rejects it during parsing.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(sortMismatchedKeysProgram);
+    EXPECT_FALSE(module);
+}
+
+// Builds a db.sort with no columns and no keys. Its row order is read from its
+// columns during lowering, so the verifier rejects the empty case here rather
+// than leaving it to the lowering pass.
+TEST_F(DBDialectTest, verifierRejectsSortWithoutColumns) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    // No columns, no results, no keys: nothing to sort.
+    auto sort = builder.create<mlir::db::Sort>(loc,
+                                               mlir::TypeRange {},
+                                               mlir::ValueRange {},
+                                               builder.getDenseI64ArrayAttr({}),
+                                               builder.getDenseBoolArrayAttr({}));
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(sort.getOperation())));
 }
 
 }
