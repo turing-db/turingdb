@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 
 #include "DBTypes.h"
@@ -32,7 +33,7 @@ private:
     void addScanNodes(const VariableDependency* var);
     void addGetOutEdges(const VariableDependency* src, const VariableDependency* edge, const VariableDependency* tgt);
 
-    mlir::db::ColumnType allocColumnType(const VariableDependency* var);
+    mlir::db::ColumnType allocColumnType(const VariableDependency* var, mlir::Type type);
     void registerValue(const VariableDependency* var, mlir::TypedValue<mlir::Type> val);
 };
 
