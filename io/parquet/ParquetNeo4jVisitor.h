@@ -80,9 +80,8 @@ private:
     EdgeTypes _chunkEdgeTypes;
 
     int16_t _ageMaxDefLevel {0};
-    std::span<int64_t> _chunkAgeVals;
-    std::span<const int16_t> _chunkAgeRepLevels;
-    std::span<const int16_t> _chunkAgeDefLevels;
+    std::span<const int64_t> _chunkAgeVals;
+    std::vector<int16_t> _chunkAgeDefLevels;
 
     size_t _ageColIdx {INVALID_COL_IDX};
     int16_t _lblMaxDefLevel {0};
