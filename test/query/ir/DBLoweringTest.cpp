@@ -255,6 +255,20 @@ func.func @main() {
 }
 )mlir";
 
+// The in-edges mirror of twoHopProgram: two predecessor hops a<-b<-c carrying a
+// through the second hop, outputting (a, c) pairs. Each hop's source side (the
+// predecessor it discovers) feeds the next hop, while the input side (b, then
+// the carried a) is gathered along, exercising the carry set through in-edges.
+constexpr const char* twoHopInProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %b, %e0, %et0, %a1 = db.get_in_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %c, %e1, %et1, %b2, %a2 = db.get_in_edges(%b, {%a1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%a2, %c) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // Scan all nodes and output each node with its "score" property, which some
 // nodes lack (those come back null, none are dropped)
 constexpr const char* nodePropertiesProgram = R"mlir(
@@ -710,6 +724,22 @@ TEST_F(DBLoweringTest, lowersOneHopInEdges) {
     runLoweredProgram(oneHopInProgram, reader.getView(), sink);
 
     const std::vector<std::vector<uint64_t>> expected {{0, 1}, {0, 2}, {1, 3}, {2, 3}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, lowersTwoHopInEdgesWithCarriedColumn) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(twoHopInProgram, reader.getView(), sink);
+
+    // Both two-hop predecessor chains end at 3 and trace back to 0, one through
+    // 1 and one through 2, so each emits (a, c) = (3, 0)
+    const std::vector<std::vector<uint64_t>> expected {{3, 0}, {3, 0}};
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
