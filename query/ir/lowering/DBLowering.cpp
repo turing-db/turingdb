@@ -201,6 +201,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerLimit(limit);
     } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(operation)) {
         lowerSkip(skip);
+    } else if (mlir::db::Sort sort = mlir::dyn_cast<mlir::db::Sort>(operation)) {
+        lowerSort(sort);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -490,6 +492,61 @@ void DBLowering::lowerSkip(mlir::db::Skip skip) {
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
         _valueMap[dbResults[resultIndex]] = truncatedChunks[resultIndex];
     }
+}
+
+void DBLowering::lowerSort(mlir::db::Sort sort) {
+    // The nl chunks the sorted columns lowered to; these are what sort_collect
+    // appends to the buffers, and the emit loop yields back sorted.
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    for (const mlir::Value column : sort.getColumns()) {
+        chunks.push_back(mapValue(column));
+    }
+
+    // Sort::verify rejects an empty db.sort, so reaching it here means unverified
+    // IR - a defensive backstop, as in lowerFactor and lowerLimit.
+    if (chunks.empty()) {
+        throw IRException("db.sort requires at least one column");
+    }
+
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    // The accumulator and its sort spec are hoisted to the top of the entry
+    // block, above every loop, so the buffers exist before the producing loop
+    // fills them and the handle dominates the collect and the emit loop.
+    _builder.setInsertionPointToStart(_entryBlock);
+    nl::SortBuffer bufferOp = _builder.create<nl::SortBuffer>(loc,
+                                                              sort.getKeyColumnsAttr(),
+                                                              sort.getKeyAscendingAttr());
+    const mlir::Value state = bufferOp.getState();
+
+    // The collect appends each step's chunk of every column to the buffers. It
+    // sits in the innermost producing loop body, where all sorted columns are
+    // bound together (the same block db.output would emit from), so the buffers
+    // stay row-aligned.
+    const mlir::Value representative = chunks.front();
+    setInsertionInto(ownerBlock(representative));
+    _builder.create<nl::SortCollect>(loc, state, chunks);
+
+    // The emit phase is an nl.sort source iterator plus its nl.for, placed after
+    // the producing loop (before the func.return) so the buffers are full when
+    // the loop first steps. The iterator yields one chunk per collected column,
+    // so its chunk types are exactly the collected chunk types.
+    llvm::SmallVector<mlir::Type, 4> chunkTypes;
+    for (const mlir::Value chunk : chunks) {
+        chunkTypes.push_back(chunk.getType());
+    }
+
+    const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
+
+    setInsertionInto(_entryBlock);
+    nl::Sort sortOp = _builder.create<nl::Sort>(loc, iteratorType, state);
+
+    // The emit loop binds one variable per sorted column and is never bounded by
+    // a limit (sort must see every row), so the iterator-only loop builder is
+    // used. buildLoopForSource maps db.sort's results to the loop variables, so
+    // the db.output that follows lowers into the emit loop body reading the
+    // sorted chunks.
+    buildLoopForSource(sortOp.getResult(), sort.getOperation());
 }
 
 void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {

@@ -112,6 +112,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             const mlir::OperandRange carriedColumns = getInEdges.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
             _iteratorConfigs[getInEdges.getResult()] = config;
+        } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
+            _iteratorConfigs[sort.getResult()] = IteratorConfig {IteratorKind::Sort, {}, {}, sortStateFor(sort.getState())};
         } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
         } else if (mlir::isa<nl::GetPropertyType>(operation)) {
@@ -142,6 +144,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateSkipUpdate(update, body);
         } else if (nl::SkipTruncate truncate = mlir::dyn_cast<nl::SkipTruncate>(operation)) {
             translateSkipTruncate(truncate, body);
+        } else if (nl::SortBuffer sortBuffer = mlir::dyn_cast<nl::SortBuffer>(operation)) {
+            translateSortBuffer(sortBuffer, body);
+        } else if (nl::SortCollect sortCollect = mlir::dyn_cast<nl::SortCollect>(operation)) {
+            translateSortCollect(sortCollect, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -171,6 +177,9 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
     // Translate the loop differently depending on the kind of iterator associated
     if (config._kind == IteratorKind::ScanNodes) {
         translateScanLoop(loopBody, limit, body);
+    } else if (config._kind == IteratorKind::Sort) {
+        // A sort emit loop is never limit-bounded: ORDER BY must see every row.
+        translateSortLoop(config, loopBody, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -492,6 +501,175 @@ NLSkipState* NLTranslator::skipStateFor(mlir::Value handle) const {
     }
 
     return stateIt->second;
+}
+
+void NLTranslator::translateSortBuffer(nl::SortBuffer buffer, NLStmtContainer* body) {
+    // Allocate the runtime accumulator and map the handle to it, so the collect
+    // and the emit loop that name the handle share the same buffers. The buffer
+    // columns themselves are allocated by the collect, which knows their types.
+    NLSortState* state = _program->allocSortState();
+    _sortStates[buffer.getState()] = state;
+
+    // The reset empties the buffers each time the block holding this nl.sort_buffer
+    // runs: once at function scope for a top-level ORDER BY.
+    NLSortResetData* resetData = _program->allocFunctionData<NLSortResetData>(state);
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSortReset, resetData});
+}
+
+void NLTranslator::translateSortCollect(nl::SortCollect collect, NLStmtContainer* body) {
+    NLSortState* state = sortStateFor(collect.getState());
+
+    // The sort spec lives on the nl.sort_buffer that produced the handle.
+    nl::SortBuffer buffer = collect.getState().getDefiningOp<nl::SortBuffer>();
+    if (!buffer) {
+        throw IRException("sort_collect state must come from nl.sort_buffer");
+    }
+
+    // The buffers are allocated once, by the single collect feeding a buffer.
+    // Generated IR has exactly one collect per accumulator; a second would append
+    // to the same buffers and double the rows, so it is rejected here.
+    if (!state->buffers().empty()) {
+        throw IRException("an nl.sort_buffer must be fed by a single nl.sort_collect");
+    }
+
+    NLSortCollectData* data = _program->allocFunctionData<NLSortCollectData>(state);
+
+    // One growing buffer per collected column, row-aligned. The buffer keeps the
+    // column's element type; the append copies a chunk's rows onto its tail.
+    const mlir::OperandRange columns = collect.getColumns();
+    for (const mlir::Value column : columns) {
+        Column* bufferColumn = allocColumnForChunkType(column.getType());
+        state->addBuffer(bufferColumn);
+
+        const NLSortCollectData::Append append {getColumn(column),
+                                                bufferColumn,
+                                                selectAppendForChunkType(column.getType())};
+        data->addAppend(append);
+    }
+
+    // Build the comparators from the spec, most significant key first. Each key
+    // indexes a collected column, so the index must be in range, and the column's
+    // element type must have an order (an embedding key is rejected by the
+    // selector). The buffer column is the one the comparator reads at run time.
+    const llvm::ArrayRef<int64_t> keyColumns = buffer.getKeyColumns();
+    const llvm::ArrayRef<bool> keyAscending = buffer.getKeyAscending();
+    for (size_t keyIndex = 0; keyIndex < keyColumns.size(); keyIndex++) {
+        const int64_t keyColumn = keyColumns[keyIndex];
+        const bool inRange = keyColumn >= 0 && static_cast<size_t>(keyColumn) < columns.size();
+        if (!inRange) {
+            throw IRException("sort key column index is out of range");
+        }
+
+        const mlir::Type keyType = columns[static_cast<size_t>(keyColumn)].getType();
+        const NLSortState::Key key {state->buffer(static_cast<size_t>(keyColumn)),
+                                    keyAscending[keyIndex],
+                                    selectCompareForChunkType(keyType)};
+        state->addKey(key);
+    }
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSortCollect, data});
+}
+
+void NLTranslator::translateSortLoop(const IteratorConfig& config,
+                                     mlir::Block& loopBody,
+                                     NLStmtContainer* body) {
+    NLSortState* state = config._sortState;
+    if (!state) {
+        throw IRException("nl.sort iterator must carry a sort accumulator");
+    }
+
+    // For::verify binds one loop variable per iterator chunk, and the sort
+    // iterator's chunk types are the collected column types, so the loop must
+    // take exactly one variable per buffer.
+    const size_t bufferCount = state->buffers().size();
+    if (loopBody.getNumArguments() != bufferCount) {
+        throw IRException("nl.sort loop must bind one variable per collected column");
+    }
+
+    NLSortLoopData* loopData = _program->allocFunctionData<NLSortLoopData>(state);
+
+    // Reserve the permutation-slice scratch so the per-step gather stays
+    // allocation-free, the same as the edge loop's indices column.
+    loopData->getIndices()->reserve(_program->getChunkSize());
+
+    // Each loop variable is filled from its buffer by gathering the rows the
+    // current emit step covers, in permutation order. The buffer is the read
+    // side, the loop variable the write side - the NLCarriedColumn (input,
+    // output, gather) shape the edge loops already use.
+    for (size_t columnIndex = 0; columnIndex < bufferCount; columnIndex++) {
+        const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(columnIndex));
+
+        Column* output = allocColumnForChunkType(loopVariable.getType());
+        _valueSlots[loopVariable] = output;
+
+        const NLCarriedColumn column(state->buffer(columnIndex),
+                                     output,
+                                     selectGatherForChunkType(loopVariable.getType()));
+        loopData->addColumn(column);
+    }
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSortLoop, loopData});
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+NLSortState* NLTranslator::sortStateFor(mlir::Value handle) const {
+    const auto stateIt = _sortStates.find(handle);
+    if (stateIt == _sortStates.end()) {
+        throw IRException("sort handle must be produced by an nl.sort_buffer");
+    }
+
+    return stateIt->second;
+}
+
+// An ID chunk allocates an ID column on its kind; a !nl.nullable<...> chunk
+// allocates a ColumnOptVector on its value type. Mirrors addCrossColumn's split.
+Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        return allocOptColumnForValueType(valueType);
+    }
+
+    return allocColumnForKind(getChunkKind(chunkType));
+}
+
+NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        return NLExecutor::selectOptAppendFunction(valueType);
+    }
+
+    return NLExecutor::selectAppendFunction(getChunkKind(chunkType));
+}
+
+NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        return NLExecutor::selectOptGatherFunction(valueType);
+    }
+
+    return NLExecutor::selectGatherFunction(getChunkKind(chunkType));
+}
+
+NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        return NLExecutor::selectOptCompareFunction(valueType);
+    }
+
+    return NLExecutor::selectCompareFunction(getChunkKind(chunkType));
 }
 
 void NLTranslator::translateCrossProduct(nl::CrossProduct cross, NLStmtContainer* body) {

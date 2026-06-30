@@ -71,6 +71,13 @@ public:
     // Fills rows zipped from the columns and sorted: chunk order depends on
     // datapart-major iteration, so tests compare order-independently
     void sortedRows(std::vector<std::vector<uint64_t>>& rows) const {
+        orderedRows(rows);
+        std::sort(rows.begin(), rows.end());
+    }
+
+    // Fills rows zipped from the columns in emission order, unsorted: a sort test
+    // observes the order the program emitted, not a re-sorted copy.
+    void orderedRows(std::vector<std::vector<uint64_t>>& rows) const {
         rows.clear();
         const size_t rowCount = _columns.empty() ? 0 : _columns.front().size();
 
@@ -81,8 +88,6 @@ public:
             }
             rows.push_back(row);
         }
-
-        std::sort(rows.begin(), rows.end());
     }
 
 private:
@@ -112,6 +117,12 @@ public:
     void sortedRows(std::vector<std::pair<uint64_t, std::optional<int64_t>>>& rows) const {
         rows = _rows;
         std::sort(rows.begin(), rows.end());
+    }
+
+    // The rows in emission order, unsorted: a sort test observes the program's
+    // own order rather than a re-sorted copy.
+    void orderedRows(std::vector<std::pair<uint64_t, std::optional<int64_t>>>& rows) const {
+        rows = _rows;
     }
 
 private:
@@ -640,6 +651,56 @@ std::string chainedSkipProgram(uint64_t count) {
              "  return\n"
              "}\n";
 }
+
+// MATCH (a) RETURN a ORDER BY a DESC: scan every node, then sort the single node
+// ID column by itself, descending. The output order is fully determined by the
+// sort, independent of the scan's chunking.
+constexpr const char* sortNodesDescProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %sa = db.sort(%a) keys [0] ascending [false] : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%sa) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a, a.score ORDER BY a.score ASC: read each node's score, then
+// sort the (node, score) rows by score ascending. A node without a score sorts
+// last (null is greatest).
+constexpr const char* sortByScoreAscProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [true] : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
+  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
+// The same, descending: the null score now sorts first (null is greatest, so a
+// descending order puts it at the front).
+constexpr const char* sortByScoreDescProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [false] : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
+  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a)-->(b) RETURN a, b ORDER BY a ASC, b DESC: one hop, then sort the
+// (source, target) edge rows by source ascending and - within a source - target
+// descending. A two-key sort whose primary key has real ties.
+constexpr const char* sortEdgesMultiKeyProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %ssrc, %stgt = db.sort(%srcs, %b) keys [0, 1] ascending [true, false] : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%ssrc, %stgt) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
 
 }
 
@@ -1990,6 +2051,197 @@ TEST_F(DBLoweringTest, lowersChainedSkipWithConsumerEdgeLoop) {
     // that feeds it - the chained shape, where the cut chunk drives the fan-out.
     EXPECT_EQ(edgeLoop->getBlock(), truncateOp->getBlock());
     EXPECT_TRUE(edgeLoop.getIterator().getDefiningOp<mlir::nl::GetOutEdges>());
+}
+
+TEST_F(DBLoweringTest, sortsNodesByIdDescending) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(sortNodesDescProgram, reader.getView(), sink);
+
+    // Four nodes sorted descending: the emit order is exactly 3, 2, 1, 0,
+    // regardless of the order the scan produced them.
+    const std::vector<std::vector<uint64_t>> expected {{3}, {2}, {1}, {0}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, sortByIdDescendingAcrossChunkBoundaries) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // A chunk size of two over four nodes makes the scan collect two chunks and
+    // the emit re-chunk into two, so the result proves accumulation across chunks
+    // and the chunked emit both preserve the global sorted order.
+    CollectingNodeSink sink;
+    runLoweredProgram(sortNodesDescProgram, reader.getView(), sink, /*chunkSize=*/2);
+
+    const std::vector<std::vector<uint64_t>> expected {{3}, {2}, {1}, {0}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, sortsByPropertyAscendingNullsLast) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Scores are 100 (node 0), 200 (node 1) and absent (node 2). Ascending, the
+    // null sorts last: (0,100), (1,200), (2,null).
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(sortByScoreAscProgram, reader.getView(), sink);
+
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 100}, {1, 200}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, sortsByPropertyDescendingNullsFirst) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Descending, the null score (greatest) leads: (2,null), (1,200), (0,100).
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(sortByScoreDescProgram, reader.getView(), sink);
+
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {2, std::nullopt}, {1, 200}, {0, 100}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, sortsByPropertyAcrossChunkBoundaries) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 1 forces the null-scored node into its own chunk and refills the
+    // value buffer over three steps; the sorted result must not depend on it.
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(sortByScoreAscProgram, reader.getView(), sink, /*chunkSize=*/1);
+
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 100}, {1, 200}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, sortsByTwoKeys) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The diamond's edges are (0,1), (0,2), (1,3), (2,3). Sorting by source
+    // ascending then target descending groups by source and, within source 0,
+    // orders the targets 2 then 1: (0,2), (0,1), (1,3), (2,3).
+    CollectingNodeSink sink;
+    runLoweredProgram(sortEdgesMultiKeyProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{0, 2}, {0, 1}, {1, 3}, {2, 3}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, sortOfEmptyGraphEmitsNothing) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // No rows to accumulate: the emit loop runs zero times, so nothing is output.
+    CountingSink sink;
+    runLoweredProgram(sortNodesDescProgram, reader.getView(), sink);
+
+    EXPECT_EQ(sink.getCalls(), 0u);
+    EXPECT_EQ(sink.getTotalRows(), 0u);
+}
+
+TEST_F(DBLoweringTest, lowersSortToBufferCollectAndEmitLoop) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(sortNodesDescProgram, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    // db.sort lowers to one hoisted nl.sort_buffer, one nl.sort_collect in the
+    // producing (scan) loop, one nl.sort source op, and two nl.for loops: the
+    // producing scan loop and the emit loop over nl.sort.
+    size_t bufferCount = 0;
+    size_t collectCount = 0;
+    size_t sortCount = 0;
+    size_t forCount = 0;
+    mlir::nl::SortBuffer bufferOp;
+    mlir::nl::SortCollect collectOp;
+    mlir::nl::Sort sortOp;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::nl::SortBuffer found = mlir::dyn_cast<mlir::nl::SortBuffer>(operation)) {
+            bufferOp = found;
+            bufferCount++;
+        } else if (mlir::nl::SortCollect found = mlir::dyn_cast<mlir::nl::SortCollect>(operation)) {
+            collectOp = found;
+            collectCount++;
+        } else if (mlir::nl::Sort found = mlir::dyn_cast<mlir::nl::Sort>(operation)) {
+            sortOp = found;
+            sortCount++;
+        } else if (mlir::isa<mlir::nl::For>(operation)) {
+            forCount++;
+        }
+    });
+
+    EXPECT_EQ(bufferCount, 1u);
+    EXPECT_EQ(collectCount, 1u);
+    EXPECT_EQ(sortCount, 1u);
+    EXPECT_EQ(forCount, 2u);
+    ASSERT_TRUE(bufferOp);
+    ASSERT_TRUE(collectOp);
+    ASSERT_TRUE(sortOp);
+
+    // The collect, the sort source and the emit loop all name the one hoisted
+    // accumulator handle.
+    const mlir::Value handle = bufferOp.getState();
+    EXPECT_EQ(collectOp.getState(), handle);
+    EXPECT_EQ(sortOp.getState(), handle);
+
+    // The single sort key is column 0 (the node IDs), descending.
+    ASSERT_EQ(bufferOp.getKeyColumns().size(), 1u);
+    EXPECT_EQ(bufferOp.getKeyColumns()[0], 0);
+    ASSERT_EQ(bufferOp.getKeyAscending().size(), 1u);
+    EXPECT_FALSE(bufferOp.getKeyAscending()[0]);
+
+    // The collect runs inside an nl.for (the producing scan loop); the emit loop
+    // iterates the nl.sort iterator.
+    EXPECT_TRUE(mlir::isa<mlir::nl::For>(collectOp->getParentOp()));
+    EXPECT_TRUE(sortOp.getResult().hasOneUse());
+    EXPECT_TRUE(mlir::isa<mlir::nl::For>(*sortOp.getResult().user_begin()));
 }
 
 int main(int argc, char** argv) {

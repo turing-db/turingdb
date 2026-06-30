@@ -243,6 +243,24 @@ func.func @main() {
 }
 )mlir";
 
+// Scan all nodes, accumulate them into a sort buffer, then emit them sorted by
+// node ID descending. The sort_collect runs in the scan loop; the nl.sort source
+// drives the emit loop that outputs the sorted chunks.
+constexpr const char* nlSortDescProgram = R"mlir(
+func.func @main() {
+  %state = nl.sort_buffer keys [0] ascending [false]
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.sort_collect %state, (%a) : !nl.chunk<!storage.node_id>
+  }
+  %sorted = nl.sort(%state) : !nl.iter<!nl.chunk<!storage.node_id>>
+  nl.for %sa in %sorted : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.output(%sa) : !nl.chunk<!storage.node_id>
+  }
+  func.return
+}
+)mlir";
+
 // Counts appendChunks calls and the total rows emitted, to prove a limited run
 // emits a clamped prefix (a partial final chunk) and stops the loop early.
 class CountingSink : public NLOutputSink {
@@ -850,6 +868,35 @@ TEST_F(NLExecutorTest, rejectsCrossLoopOutputColumns) {
 
 TEST_F(NLExecutorTest, rejectsCrossLoopCarriedColumns) {
     expectTranslationFailure(crossLoopCarryProgram);
+}
+
+TEST_F(NLExecutorTest, sortsScannedNodesDescending) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runProgram(nlSortDescProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // Four nodes, sorted descending: emitted as exactly 3, 2, 1, 0.
+    ASSERT_EQ(sink.getColumns().size(), 1u);
+    const std::vector<uint64_t> expected {3, 2, 1, 0};
+    EXPECT_EQ(sink.getColumns()[0], expected);
+}
+
+TEST_F(NLExecutorTest, sortsScannedNodesDescendingAcrossChunks) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 2 makes the scan collect two chunks into the buffer and the emit
+    // re-chunk into two; the global descending order must still be 3, 2, 1, 0.
+    CollectingNodeSink sink;
+    runProgram(nlSortDescProgram, reader.getView(), 2, sink);
+
+    ASSERT_EQ(sink.getColumns().size(), 1u);
+    const std::vector<uint64_t> expected {3, 2, 1, 0};
+    EXPECT_EQ(sink.getColumns()[0], expected);
 }
 
 int main(int argc, char** argv) {

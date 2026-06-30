@@ -117,6 +117,66 @@ void copyRangeColumn(const Column* input, size_t inputOffset, size_t rowCount, C
     std::copy(first, first + rowCount, outputRaw.begin());
 }
 
+// Append every row of an input chunk onto the tail of a growing buffer of the
+// same element type. nl.sort_collect calls this once per producing-loop step, so
+// the buffer accumulates every row across all chunks, row-aligned with the other
+// buffers of the same accumulator.
+template <typename ElementType>
+void appendColumn(const Column* input, Column* buffer) {
+    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
+    ColumnVector<ElementType>* typedBuffer = static_cast<ColumnVector<ElementType>*>(buffer);
+
+    const auto& inputRaw = typedInput->getRaw();
+    auto& bufferRaw = typedBuffer->getRaw();
+
+    bufferRaw.insert(bufferRaw.end(), inputRaw.begin(), inputRaw.end());
+}
+
+// 3-way compare two rows of a non-null orderable column (an ID column): negative
+// if row a sorts before row b, positive if after, zero if they are equal.
+template <typename ElementType>
+int compareColumn(const Column* column, size_t a, size_t b) {
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+    const ElementType& valueA = raw[a];
+    const ElementType& valueB = raw[b];
+
+    if (valueA < valueB) {
+        return -1;
+    } else if (valueB < valueA) {
+        return 1;
+    }
+
+    return 0;
+}
+
+// 3-way compare two rows of a nullable value column. A null sorts after every
+// value, so an ascending order places nulls last (matching Cypher's ORDER BY),
+// and two nulls tie; non-null values compare by their natural order.
+template <typename Primitive>
+int compareOptColumn(const Column* column, size_t a, size_t b) {
+    const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
+    const std::optional<Primitive>& valueA = raw[a];
+    const std::optional<Primitive>& valueB = raw[b];
+
+    const bool aNull = !valueA.has_value();
+    const bool bNull = !valueB.has_value();
+    if (aNull || bNull) {
+        if (aNull && bNull) {
+            return 0;
+        }
+
+        return aNull ? 1 : -1;
+    }
+
+    if (*valueA < *valueB) {
+        return -1;
+    } else if (*valueB < *valueA) {
+        return 1;
+    }
+
+    return 0;
+}
+
 // Execute a get_out_edges/get_in_edges loop
 template <typename ChunkWriterType>
 void runEdgeLoopSteps(NLExecutionContext* context,
@@ -363,6 +423,53 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     context->getSink()->appendChunks(cols, offset, rowCount);
 }
 
+void NLExecutor::runSortReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLSortResetData* reset = static_cast<NLSortResetData*>(data);
+    reset->getState()->reset();
+}
+
+void NLExecutor::runSortCollect(NLExecutionContext* context, NLFunctionData* data) {
+    const NLSortCollectData* collect = static_cast<NLSortCollectData*>(data);
+
+    // Append this step's chunk of every column onto its buffer's tail; the
+    // columns are taken together so the buffers stay row-aligned.
+    for (const NLSortCollectData::Append& append : collect->appends()) {
+        append._append(append._input, append._buffer);
+    }
+}
+
+void NLExecutor::runSortLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLSortLoopData* loopData = static_cast<NLSortLoopData*>(data);
+    NLSortState* state = loopData->getState();
+
+    // Sort the accumulated rows once: the permutation is the global row order the
+    // emit chunks read in.
+    state->sort();
+    const std::vector<size_t>& permutation = state->permutation().getRaw();
+    const size_t totalRows = permutation.size();
+
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const size_t chunkSize = context->getChunkSize();
+    ColumnVector<size_t>* indices = loopData->getIndices();
+
+    // Re-chunk the sorted rows: each step gathers the next chunkSize rows, in
+    // permutation order, into the loop variables, then runs the body (nl.output).
+    // The last chunk may be partial; an empty result runs the body zero times.
+    for (size_t offset = 0; offset < totalRows; offset += chunkSize) {
+        const size_t stepRows = std::min(chunkSize, totalRows - offset);
+
+        std::vector<size_t>& indicesRaw = indices->getRaw();
+        indicesRaw.assign(permutation.begin() + offset, permutation.begin() + offset + stepRows);
+
+        for (const NLCarriedColumn& column : loopData->columns()) {
+            const NLGatherFunction gather = column.getGatherFunc();
+            gather(column.getInput(), indices, column.getOutput());
+        }
+
+        runBody(context, loopBody);
+    }
+}
+
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:
@@ -462,6 +569,37 @@ NLCopyFunction NLExecutor::selectCopyFunction(NLChunkKind kind) {
     return nullptr;
 }
 
+// A nullable value chunk gathers the same way an ID chunk does - copy the indexed
+// rows - on the ColumnOptVector<Primitive> instantiation of the gather template.
+NLGatherFunction NLExecutor::selectOptGatherFunction(ValueType valueType) {
+    NLGatherFunction gather = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        gather = &gatherColumn<std::optional<typename T::Primitive>>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return gather;
+}
+
+NLAppendFunction NLExecutor::selectAppendFunction(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &appendColumn<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &appendColumn<EdgeID>;
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return &appendColumn<EdgeTypeID>;
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
+}
+
 // A nullable value chunk is a ColumnOptVector<Primitive> - that is,
 // ColumnVector<std::optional<Primitive>> - so the range copy template,
 // instantiated on std::optional<Primitive>, carries value and null together.
@@ -473,6 +611,75 @@ NLCopyFunction NLExecutor::selectOptCopyFunction(ValueType valueType) {
     ValueTypeDispatcher(valueType).execute(select);
 
     return copy;
+}
+
+NLAppendFunction NLExecutor::selectOptAppendFunction(ValueType valueType) {
+    NLAppendFunction append = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        append = &appendColumn<std::optional<typename T::Primitive>>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return append;
+}
+
+NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &compareColumn<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &compareColumn<EdgeID>;
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return &compareColumn<EdgeTypeID>;
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
+}
+
+// Selected per key from its value type. A manual switch, not ValueTypeDispatcher,
+// because an embedding has no order: dispatching would instantiate the comparator
+// for std::span<const float>, which does not compile. The embedding case throws
+// instead, so that instantiation is never named.
+NLCompareFunction NLExecutor::selectOptCompareFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &compareOptColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &compareOptColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &compareOptColumn<types::Double::Primitive>;
+        break;
+
+        case ValueType::Bool:
+            return &compareOptColumn<types::Bool::Primitive>;
+        break;
+
+        case ValueType::String:
+            return &compareOptColumn<types::String::Primitive>;
+        break;
+
+        case ValueType::Embedding:
+            throw IRException("cannot sort by an embedding column");
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("invalid sort key value type");
+        break;
+    }
+
+    bioassert(false, "Unhandled value type");
+    return nullptr;
 }
 
 // Read one property of the current input chunk into a nullable value column.

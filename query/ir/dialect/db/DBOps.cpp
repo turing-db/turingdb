@@ -197,3 +197,56 @@ LogicalResult Limit::verify() {
 LogicalResult Skip::verify() {
     return verifyPassThrough(getOperation(), getColumns(), getResults());
 }
+
+// db.sort passes its columns straight through reordered, so the results must be
+// exactly the input columns - same count, same types, same order. The two key
+// arrays must be parallel and every key must index a column that exists.
+LogicalResult Sort::verify() {
+    const OperandRange columns = getColumns();
+    const Operation::result_range results = getResults();
+
+    // A sort with no column has nothing to reorder, and its row count would have
+    // no column to be read from during lowering. Reject it here at the db level.
+    if (columns.empty()) {
+        return emitOpError("requires at least one column");
+    }
+
+    if (columns.size() != results.size()) {
+        return emitOpError("expects ") << columns.size()
+                                       << " results, one per input column, but has "
+                                       << results.size();
+    }
+
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        if (columns[columnIndex].getType() != results[columnIndex].getType()) {
+            return emitOpError("result ") << columnIndex
+                                          << " must have the same type as input column "
+                                          << columnIndex;
+        }
+    }
+
+    const ArrayRef<int64_t> keyColumns = getKeyColumns();
+    const ArrayRef<bool> keyAscending = getKeyAscending();
+
+    // At least one key, and one direction per key: the two arrays describe the
+    // same list of sort keys, so a mismatch is malformed IR.
+    if (keyColumns.empty()) {
+        return emitOpError("requires at least one sort key");
+    }
+
+    if (keyColumns.size() != keyAscending.size()) {
+        return emitOpError("expects one ascending flag per key, but has ")
+               << keyColumns.size() << " keys and " << keyAscending.size() << " flags";
+    }
+
+    // Every key names a column to sort by, so it must index one of the columns.
+    for (const int64_t keyColumn : keyColumns) {
+        const bool inRange = keyColumn >= 0 && static_cast<size_t>(keyColumn) < columns.size();
+        if (!inRange) {
+            return emitOpError("sort key ") << keyColumn << " is out of range for "
+                                            << columns.size() << " columns";
+        }
+    }
+
+    return success();
+}

@@ -72,8 +72,34 @@ public:
     // never mutates it.
     static void runSkipTruncate(NLExecutionContext* context, NLFunctionData* data);
 
+    // Empty the buffers of a sort accumulator; runs each time its block runs.
+    static void runSortReset(NLExecutionContext* context, NLFunctionData* data);
+
+    // Append the current chunk of every column to its sort buffer. Runs once per
+    // producing-loop step, growing the buffers row-aligned.
+    static void runSortCollect(NLExecutionContext* context, NLFunctionData* data);
+
+    // The emit phase of an ORDER BY: sort the accumulator once, then re-chunk the
+    // sorted rows - gathering each chunk-sized permutation slice into the loop
+    // variables and running the body (the nl.output) per chunk.
+    static void runSortLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
+
+    // Gather for a nullable value chunk of this value type (sort emit re-chunk).
+    static NLGatherFunction selectOptGatherFunction(ValueType valueType);
+
+    // Append (onto a buffer tail) for an ID chunk of this kind / a nullable value
+    // chunk of this value type. Used by nl.sort_collect.
+    static NLAppendFunction selectAppendFunction(NLChunkKind kind);
+    static NLAppendFunction selectOptAppendFunction(ValueType valueType);
+
+    // The 3-way row comparator for an ID key column of this kind / a nullable
+    // value key column of this value type. The value-type selector throws for a
+    // value type with no order (an embedding), which cannot be a sort key.
+    static NLCompareFunction selectCompareFunction(NLChunkKind kind);
+    static NLCompareFunction selectOptCompareFunction(ValueType valueType);
 
     // Block-repeat for an ID chunk of this kind (outer column).
     static NLBroadcastFunction selectBlockRepeatFunction(NLChunkKind kind);

@@ -143,6 +143,32 @@ TEST_F(NLDialectTest, verifierAcceptsOutputWithSkip) {
     EXPECT_FALSE(output.getLimit());
 }
 
+// The sort chain verifies: an nl.sort_buffer carrying the key spec, an
+// nl.sort_collect appending the chunk, and an nl.sort yielding a sorted iterator
+// over that chunk type, all naming the one accumulator handle.
+TEST_F(NLDialectTest, verifierAcceptsSortChain) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value chunk = entryBlock.getArgument(0);
+
+    const mlir::Value handle = builder.create<mlir::nl::SortBuffer>(loc,
+                                                                    builder.getDenseI64ArrayAttr({0}),
+                                                                    builder.getDenseBoolArrayAttr({false})).getState();
+    builder.create<mlir::nl::SortCollect>(loc, handle, mlir::ValueRange {chunk});
+
+    const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {chunk.getType()});
+    mlir::nl::Sort sort = builder.create<mlir::nl::Sort>(loc, iteratorType, handle);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_EQ(sort.getState(), handle);
+    EXPECT_EQ(sort.getResult().getType(), iteratorType);
+}
+
 // A folded nl.output carries the single handle of the truncate adjacent to it,
 // never both: an output with both a limit and a skip handle fails verification.
 TEST_F(NLDialectTest, verifierRejectsOutputWithBothLimitAndSkip) {
@@ -163,6 +189,28 @@ TEST_F(NLDialectTest, verifierRejectsOutputWithBothLimitAndSkip) {
         return mlir::success();
     });
     EXPECT_TRUE(mlir::failed(mlir::verify(function)));
+}
+
+// nl.sort_buffer requires one direction per key: two key indices with one
+// direction is malformed and the verifier rejects it.
+TEST_F(NLDialectTest, verifierRejectsSortBufferMismatchedKeys) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+
+    // Position the builder inside a function body; the op under test is verified
+    // on its own, so the returned function handle is not needed.
+    buildOneChunkFunction(builder, *module);
+
+    auto buffer = builder.create<mlir::nl::SortBuffer>(loc,
+                                                       builder.getDenseI64ArrayAttr({0, 1}),
+                                                       builder.getDenseBoolArrayAttr({true}));
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(buffer.getOperation())));
 }
 
 }
