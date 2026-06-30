@@ -391,11 +391,11 @@ private:
 // MATCH (a) RETURN a LIMIT count: a scan capped by db.limit.
 std::string limitScanProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
-                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
                        "  %la = db.limit(%a) count ")
            + std::to_string(count)
            + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
-             "  db.output(%la) : !db.column<\"a\">\n"
+             "  db.output(%la) : !db.column<!storage.node_id>\n"
              "  return\n"
              "}\n";
 }
