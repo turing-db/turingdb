@@ -101,9 +101,9 @@ func.func @main() {
 // MATCH (a) RETURN a LIMIT 3: a scan capped by db.limit, one pass-through column.
 const char* const limitProgram = R"mlir(
 func.func @main() {
-  %a = db.scan_nodes() : !db.column<"a">
-  %la = db.limit(%a) count 3 : (!db.column<"a">) -> !db.column<"a">
-  db.output(%la) : !db.column<"a">
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %la = db.limit(%a) count 3 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%la) : !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -111,9 +111,9 @@ func.func @main() {
 // db.limit's count is a ui64 attribute, so a negative literal cannot parse.
 const char* const negativeLimitProgram = R"mlir(
 func.func @main() {
-  %a = db.scan_nodes() : !db.column<"a">
-  %la = db.limit(%a) count -1 : (!db.column<"a">) -> !db.column<"a">
-  db.output(%la) : !db.column<"a">
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %la = db.limit(%a) count -1 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%la) : !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -216,8 +216,9 @@ TEST_F(DBDialectTest, parsesLimit) {
     EXPECT_EQ(limit.getCount(), 3u);
     ASSERT_EQ(limit.getColumns().size(), 1u);
     ASSERT_EQ(limit.getResults().size(), 1u);
-    EXPECT_EQ(limit.getColumns()[0].getType(), mlir::db::ColumnType::get(&_context));
-    EXPECT_EQ(limit.getResults()[0].getType(), mlir::db::ColumnType::get(&_context));
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    EXPECT_EQ(limit.getColumns()[0].getType(), nodeIDColumnType);
+    EXPECT_EQ(limit.getResults()[0].getType(), nodeIDColumnType);
 }
 
 TEST_F(DBDialectTest, limitRoundTripsThroughTextualForm) {
@@ -307,7 +308,8 @@ TEST_F(DBDialectTest, verifierRejectsLimitColumnTypeMismatch) {
     auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
     builder.setInsertionPointToStart(function.addEntryBlock());
 
-    const mlir::Type colA = mlir::db::ColumnType::get(&_context);
+    const mlir::Type nodeIDType = mlir::storage::NodeIDType::get(&_context);
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context, nodeIDType);
     const mlir::Type colB = mlir::db::ColumnType::get(&_context);
 
     auto scanA = builder.create<mlir::db::ScanNodes>(loc, colA);

@@ -394,7 +394,7 @@ std::string limitScanProgram(uint64_t count) {
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
                        "  %la = db.limit(%a) count ")
            + std::to_string(count)
-           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
              "  db.output(%la) : !db.column<!storage.node_id>\n"
              "  return\n"
              "}\n";
@@ -404,13 +404,13 @@ std::string limitScanProgram(uint64_t count) {
 // loop nest) capped by db.limit, so the break must unwind the whole nest.
 std::string limitTwoHopProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
-                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
-                       "  %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<\"a\">) -> (!db.column<\"a1\">, !db.column<\"e0\">, !db.column<\"et0\">, !db.column<\"b\">)\n"
-                       "  %b2, %e1, %et1, %c, %a2 = db.get_out_edges(%b, {%a1}) : (!db.column<\"b\">, !db.column<\"a1\">) -> (!db.column<\"b2\">, !db.column<\"e1\">, !db.column<\"et1\">, !db.column<\"c\">, !db.column<\"a2\">)\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)\n"
+                       "  %b2, %e1, %et1, %c, %a2 = db.get_out_edges(%b, {%a1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)\n"
                        "  %lc = db.limit(%c) count ")
            + std::to_string(count)
-           + " : (!db.column<\"c\">) -> !db.column<\"c\">\n"
-             "  db.output(%lc) : !db.column<\"c\">\n"
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  db.output(%lc) : !db.column<!storage.node_id>\n"
              "  return\n"
              "}\n";
 }
@@ -420,12 +420,12 @@ std::string limitTwoHopProgram(uint64_t count) {
 // value column together. The representative is the first column, the node IDs.
 std::string limitNodePropertyProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
-                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
-                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<\"a\">) -> !db.column<\"a.score\">\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
                        "  %la, %lscore = db.limit(%a, %score) count ")
            + std::to_string(count)
-           + " : (!db.column<\"a\">, !db.column<\"a.score\">) -> (!db.column<\"a\">, !db.column<\"a.score\">)\n"
-             "  db.output(%la, %lscore) : !db.column<\"a\">, !db.column<\"a.score\">\n"
+           + " : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)\n"
+             "  db.output(%la, %lscore) : !db.column<!storage.node_id>, !db.column<none>\n"
              "  return\n"
              "}\n";
 }
@@ -435,12 +435,12 @@ std::string limitNodePropertyProgram(uint64_t count) {
 // in the loop body, not a loop variable, exercising that ownerBlock path.
 std::string limitOnlyPropertyProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
-                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
-                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<\"a\">) -> !db.column<\"a.score\">\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
                        "  %lscore = db.limit(%score) count ")
            + std::to_string(count)
-           + " : (!db.column<\"a.score\">) -> !db.column<\"a.score\">\n"
-             "  db.output(%lscore) : !db.column<\"a.score\">\n"
+           + " : (!db.column<none>) -> !db.column<none>\n"
+             "  db.output(%lscore) : !db.column<none>\n"
              "  return\n"
              "}\n";
 }
@@ -450,16 +450,16 @@ std::string limitOnlyPropertyProgram(uint64_t count) {
 std::string limitCrossProductProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
                        "  %0:2 = db.cross_product factor {\n"
-                       "    %a = db.scan_nodes() : !db.column<\"a\">\n"
-                       "    db.yield %a : !db.column<\"a\">\n"
+                       "    %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "    db.yield %a : !db.column<!storage.node_id>\n"
                        "  } factor {\n"
-                       "    %b = db.scan_nodes() : !db.column<\"b\">\n"
-                       "    db.yield %b : !db.column<\"b\">\n"
+                       "    %b = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "    db.yield %b : !db.column<!storage.node_id>\n"
                        "  }\n"
                        "  %la, %lb = db.limit(%0#0, %0#1) count ")
            + std::to_string(count)
-           + " : (!db.column<\"a\">, !db.column<\"b\">) -> (!db.column<\"a\">, !db.column<\"b\">)\n"
-             "  db.output(%la, %lb) : !db.column<\"a\">, !db.column<\"b\">\n"
+           + " : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)\n"
+             "  db.output(%la, %lb) : !db.column<!storage.node_id>, !db.column<!storage.node_id>\n"
              "  return\n"
              "}\n";
 }
@@ -470,12 +470,12 @@ std::string limitCrossProductProgram(uint64_t count) {
 // producer) carries the handle; the edge loop is a consumer.
 std::string chainedLimitProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
-                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
                        "  %la = db.limit(%a) count ")
            + std::to_string(count)
-           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
-             "  %a1, %e0, %et0, %b = db.get_out_edges(%la, {}) : (!db.column<\"a\">) -> (!db.column<\"a1\">, !db.column<\"e0\">, !db.column<\"et0\">, !db.column<\"b\">)\n"
-             "  db.output(%b) : !db.column<\"b\">\n"
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  %a1, %e0, %et0, %b = db.get_out_edges(%la, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)\n"
+             "  db.output(%b) : !db.column<!storage.node_id>\n"
              "  return\n"
              "}\n";
 }
@@ -485,15 +485,15 @@ std::string chainedLimitProgram(uint64_t count) {
 // each gets its own handle, and the shared scan loop is claimed by the outer one.
 std::string twoLimitProgram(uint64_t outerCount, uint64_t innerCount) {
     return std::string("func.func @main() {\n"
-                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
                        "  %la = db.limit(%a) count ")
            + std::to_string(outerCount)
-           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
-             "  %a1, %e0, %et0, %b = db.get_out_edges(%la, {}) : (!db.column<\"a\">) -> (!db.column<\"a1\">, !db.column<\"e0\">, !db.column<\"et0\">, !db.column<\"b\">)\n"
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  %a1, %e0, %et0, %b = db.get_out_edges(%la, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)\n"
              "  %lb = db.limit(%b) count "
            + std::to_string(innerCount)
-           + " : (!db.column<\"b\">) -> !db.column<\"b\">\n"
-             "  db.output(%lb) : !db.column<\"b\">\n"
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  db.output(%lb) : !db.column<!storage.node_id>\n"
              "  return\n"
              "}\n";
 }
@@ -1103,6 +1103,7 @@ TEST_F(DBLoweringTest, lowersLimitToHandleUpdateAndLoopOperands) {
 
     mlir::MLIRContext context;
     context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
     context.getOrLoadDialect<mlir::db::DB>();
     context.getOrLoadDialect<mlir::nl::NL>();
 
@@ -1195,6 +1196,7 @@ TEST_F(DBLoweringTest, lowersChainedLimitToProducerLoopOnly) {
 
     mlir::MLIRContext context;
     context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
     context.getOrLoadDialect<mlir::db::DB>();
     context.getOrLoadDialect<mlir::nl::NL>();
 
@@ -1274,6 +1276,7 @@ TEST_F(DBLoweringTest, lowersTwoLimitsToTwoHandles) {
 
     mlir::MLIRContext context;
     context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
     context.getOrLoadDialect<mlir::db::DB>();
     context.getOrLoadDialect<mlir::nl::NL>();
 
