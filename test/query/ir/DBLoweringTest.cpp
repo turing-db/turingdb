@@ -48,7 +48,7 @@ namespace {
 // All test programs output node ID chunks only.
 class CollectingNodeSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         if (_columns.empty()) {
             _columns.resize(chunks.size());
         }
@@ -61,7 +61,7 @@ public:
 
             // Only the first rowCount rows are part of the result; the rest are
             // the tail the limit clamped off.
-            for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+            for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
                 _columns[columnIndex].push_back((*nodeIDs)[rowIndex].getValue());
             }
         }
@@ -92,7 +92,7 @@ private:
 // an Int64 property emit a node ID chunk and a !storage.nullable<i64> value chunk.
 class CollectingNodeIntPropSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
@@ -103,7 +103,7 @@ public:
 
         const auto& idRaw = nodeIDs->getRaw();
         const auto& valueRaw = values->getRaw();
-        for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             _rows.push_back({idRaw[rowIndex].getValue(), valueRaw[rowIndex]});
         }
     }
@@ -121,7 +121,7 @@ private:
 // !storage.nullable<!storage.string> chunk, storage's ColumnOptVector<string_view>.
 class CollectingNodeStringPropSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
@@ -132,7 +132,7 @@ public:
 
         const auto& idRaw = nodeIDs->getRaw();
         const auto& valueRaw = values->getRaw();
-        for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             std::optional<std::string> value;
             if (valueRaw[rowIndex]) {
                 value = std::string(*valueRaw[rowIndex]);
@@ -155,7 +155,7 @@ private:
 // each span is copied out since it points into the live graph storage.
 class CollectingNodeEmbeddingPropSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
@@ -166,7 +166,7 @@ public:
 
         const auto& idRaw = nodeIDs->getRaw();
         const auto& valueRaw = values->getRaw();
-        for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             std::optional<std::vector<float>> value;
             if (valueRaw[rowIndex]) {
                 value = std::vector<float>(valueRaw[rowIndex]->begin(), valueRaw[rowIndex]->end());
@@ -206,7 +206,7 @@ private:
 // edge property emit an edge ID chunk and a !storage.nullable<i64> value chunk.
 class CollectingEdgeIntPropSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* edgeIDs = dynamic_cast<const ColumnEdgeIDs*>(chunks[0]);
@@ -217,7 +217,7 @@ public:
 
         const auto& idRaw = edgeIDs->getRaw();
         const auto& valueRaw = values->getRaw();
-        for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             _rows.push_back({idRaw[rowIndex].getValue(), valueRaw[rowIndex]});
         }
     }
@@ -413,7 +413,7 @@ func.func @main() {
 // clamp - to prove a limited cross product caps the product it builds.
 class CountingSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         _calls++;
         _totalRows += rowCount;
 
@@ -1714,7 +1714,7 @@ TEST_F(DBLoweringTest, skipsNodePropertyOutputEmitsAllWhenZero) {
     EXPECT_EQ(rows, expected);
 }
 
-TEST_F(DBLoweringTest, lowersSkipToHandleUpdateAndTruncate) {
+TEST_F(DBLoweringTest, lowersTerminalSkipToFoldedOutput) {
     auto graph = buildDiamondGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -1736,10 +1736,12 @@ TEST_F(DBLoweringTest, lowersSkipToHandleUpdateAndTruncate) {
     DBLowering lowering(&context, &reader.getView());
     lowering.lower(dbFunction, *nlModule);
 
-    // A skip never folds into nl.output (the surviving suffix must be copied to the
-    // front) and never gates a loop. Result: one hoisted nl.skip, one nl.skip_update
-    // and one nl.skip_truncate, a three-deep loop nest where NO nl.for carries a
-    // handle, and a plain nl.output with no limit handle.
+    // A terminal SKIP: the skip feeds db.output directly, so foldSkipTruncatesIntoOutputs
+    // folds the truncate into a skip-bearing output that emits the surviving suffix
+    // in place at an offset. Result: one hoisted nl.skip, one nl.skip_update, NO
+    // nl.skip_truncate (folded away), a three-deep loop nest where NO nl.for carries
+    // a handle (a skip never gates a loop), and an nl.output that carries the skip
+    // handle but no limit.
     size_t skipCount = 0;
     size_t forCount = 0;
     size_t forsWithLimit = 0;
@@ -1747,7 +1749,6 @@ TEST_F(DBLoweringTest, lowersSkipToHandleUpdateAndTruncate) {
     size_t truncateCount = 0;
     mlir::nl::Skip skipOp;
     mlir::nl::SkipUpdate updateOp;
-    mlir::nl::SkipTruncate truncateOp;
     mlir::nl::Output outputOp;
 
     nlModule->walk([&](mlir::Operation* operation) {
@@ -1762,8 +1763,7 @@ TEST_F(DBLoweringTest, lowersSkipToHandleUpdateAndTruncate) {
         } else if (mlir::nl::SkipUpdate found = mlir::dyn_cast<mlir::nl::SkipUpdate>(operation)) {
             updateOp = found;
             updateCount++;
-        } else if (mlir::nl::SkipTruncate found = mlir::dyn_cast<mlir::nl::SkipTruncate>(operation)) {
-            truncateOp = found;
+        } else if (mlir::isa<mlir::nl::SkipTruncate>(operation)) {
             truncateCount++;
         } else if (mlir::nl::Output found = mlir::dyn_cast<mlir::nl::Output>(operation)) {
             outputOp = found;
@@ -1774,23 +1774,20 @@ TEST_F(DBLoweringTest, lowersSkipToHandleUpdateAndTruncate) {
     EXPECT_EQ(forCount, 3u);
     EXPECT_EQ(forsWithLimit, 0u);
     EXPECT_EQ(updateCount, 1u);
-    EXPECT_EQ(truncateCount, 1u);
+    EXPECT_EQ(truncateCount, 0u);
     ASSERT_TRUE(skipOp);
     ASSERT_TRUE(updateOp);
-    ASSERT_TRUE(truncateOp);
     ASSERT_TRUE(outputOp);
 
-    // The update and the truncate both name the one hoisted handle; the output
-    // carries no limit handle (a skip never folds into it).
+    // The update and the folded output both name the one hoisted handle; the output
+    // carries the skip handle in its skip operand and no limit.
     const mlir::Value handle = skipOp.getState();
     EXPECT_EQ(updateOp.getState(), handle);
-    EXPECT_EQ(truncateOp.getState(), handle);
+    EXPECT_EQ(outputOp.getSkip(), handle);
     EXPECT_FALSE(outputOp.getLimit());
 
-    // The update and the truncate sit in the innermost loop body, the same block as
-    // the output that consumes the truncated columns.
-    EXPECT_EQ(updateOp->getBlock(), truncateOp->getBlock());
-    EXPECT_EQ(truncateOp->getBlock(), outputOp->getBlock());
+    // The update sits in the innermost loop body, the same block as the output.
+    EXPECT_EQ(updateOp->getBlock(), outputOp->getBlock());
     EXPECT_TRUE(mlir::isa<mlir::nl::For>(updateOp->getParentOp()));
 }
 
@@ -1837,6 +1834,76 @@ TEST_F(DBLoweringTest, skipThenLimitStableAcrossChunkSizes) {
         sink.sortedRows(rows);
         EXPECT_EQ(rows, expected) << "page differs at chunkSize " << chunkSize;
     }
+}
+
+TEST_F(DBLoweringTest, skipThenLimitFoldsLimitButKeepsSkipCopy) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    const std::string programText = skipThenLimitProgram(1, 2);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    // SKIP 1 LIMIT 2: the skip's nl.skip_truncate feeds nl.limit_update (and, after
+    // the limit folds, the output too) - two uses, never one nl.output - so the skip
+    // fold's hasOneUse test bails and the skip copy stays. The limit, adjacent to the
+    // output, folds. Result: one nl.skip + one surviving nl.skip_truncate, one
+    // nl.limit + NO nl.limit_truncate, and an nl.output that carries the limit handle
+    // but no skip. The scan loop carries the limit (its early-exit bounds the skip
+    // copy's cost).
+    size_t skipTruncateCount = 0;
+    size_t limitTruncateCount = 0;
+    size_t skipCount = 0;
+    size_t limitCount = 0;
+    size_t forsWithLimit = 0;
+    mlir::nl::Limit limitOp;
+    mlir::nl::Output outputOp;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::nl::Limit found = mlir::dyn_cast<mlir::nl::Limit>(operation)) {
+            limitOp = found;
+            limitCount++;
+        } else if (mlir::isa<mlir::nl::Skip>(operation)) {
+            skipCount++;
+        } else if (mlir::isa<mlir::nl::SkipTruncate>(operation)) {
+            skipTruncateCount++;
+        } else if (mlir::isa<mlir::nl::LimitTruncate>(operation)) {
+            limitTruncateCount++;
+        } else if (mlir::nl::For forOp = mlir::dyn_cast<mlir::nl::For>(operation)) {
+            if (forOp.getLimit()) {
+                forsWithLimit++;
+            }
+        } else if (mlir::nl::Output found = mlir::dyn_cast<mlir::nl::Output>(operation)) {
+            outputOp = found;
+        }
+    });
+
+    EXPECT_EQ(skipCount, 1u);
+    EXPECT_EQ(limitCount, 1u);
+    EXPECT_EQ(skipTruncateCount, 1u);
+    EXPECT_EQ(limitTruncateCount, 0u);
+    EXPECT_EQ(forsWithLimit, 1u);
+    ASSERT_TRUE(limitOp);
+    ASSERT_TRUE(outputOp);
+
+    // The output folded the limit (not the skip): it carries the limit handle and no
+    // skip. The skip copy survives upstream, feeding the limit's representative.
+    EXPECT_EQ(outputOp.getLimit(), limitOp.getState());
+    EXPECT_FALSE(outputOp.getSkip());
 }
 
 TEST_F(DBLoweringTest, skipsChainedMidQueryFansOutFromSurvivors) {

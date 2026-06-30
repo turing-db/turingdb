@@ -516,9 +516,17 @@ public:
     NLLimitState* getLimit() const { return _limit; }
     void setLimit(NLLimitState* limit) { _limit = limit; }
 
+    // The governing skip counter, or null for a skip-oblivious output. When set
+    // (the folded terminal-SKIP form), output emits the surviving suffix at
+    // offset getSkipThisStep() for getEmitThisStep() rows; it never mutates the
+    // counter. A folded output carries at most one of limit/skip.
+    NLSkipState* getSkip() const { return _skip; }
+    void setSkip(NLSkipState* skip) { _skip = skip; }
+
 private:
     std::vector<const Column*> _columns;
     NLLimitState* _limit {nullptr};
+    NLSkipState* _skip {nullptr};
 };
 
 class NLProgram {

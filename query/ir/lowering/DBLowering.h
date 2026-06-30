@@ -37,8 +37,11 @@ class GraphView;
 //                                          nl.skip_update, and an nl.skip_truncate
 //                                          that lifts the surviving suffix just
 //                                          before the consumer. No loop operand (a
-//                                          skip cannot early-exit) and no fold into
-//                                          nl.output (the suffix must be copied)
+//                                          skip cannot early-exit). When unchained,
+//                                          the truncate folds into a skip-bearing
+//                                          nl.output that emits the suffix in place
+//                                          at an offset; the copy survives only for
+//                                          a chained suffix (reads from row zero)
 //
 // db.get_node_properties / db.get_edge_properties resolve their property name
 // against the graph schema here (hence the GraphView): the name is hoisted into
@@ -139,6 +142,7 @@ private:
     // emits the budgeted prefix directly, dropping the truncate's copy. Chained
     // and mixed cases do not match and keep their truncate.
     void foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction);
+    void foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction);
 
     // The nl.get_property_type handle for a property name, inserted once at the
     // top of the entry block (above every loop) and reused on later lookups

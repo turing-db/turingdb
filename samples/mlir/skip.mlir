@@ -4,10 +4,12 @@ module {
     //
     // db.skip lowers to a hoisted nl.skip handle, an nl.skip_update that charges
     // each chunk against the remaining rows-to-drop, and an nl.skip_truncate that
-    // lifts the surviving suffix of each chunk into a fresh, front-aligned chunk
-    // before nl.output emits it. Unlike a limit it threads no operand onto the scan
-    // loop (a skip cannot early-exit) and does not fold into nl.output (the suffix
-    // must be copied to the front).
+    // would lift the surviving suffix of each chunk into a fresh, front-aligned
+    // chunk. Unlike a limit it threads no operand onto the scan loop (a skip cannot
+    // early-exit). Here the truncate's only consumer is nl.output, so the fold
+    // collapses it: nl.output carries the skip handle and emits the surviving
+    // suffix in place at an offset (skipThisStep), with no copy at all - see the
+    // generated lowering in skip.nl.mlir.
     %a = db.scan_nodes() : !db.column<"a">
 
     %sa = db.skip(%a) count 3 : (!db.column<"a">) -> !db.column<"a">

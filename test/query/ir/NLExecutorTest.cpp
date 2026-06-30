@@ -44,7 +44,7 @@ namespace {
 // All test programs output node ID chunks only.
 class CollectingNodeSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         if (_columns.empty()) {
             _columns.resize(chunks.size());
         }
@@ -55,9 +55,10 @@ public:
             const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[columnIndex]);
             ASSERT_NE(nodeIDs, nullptr);
 
-            // Only the first rowCount rows are part of the result; the rest are
-            // the tail the limit clamped off.
-            for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+            // Only rows [offset, offset + rowCount) are part of the result: the
+            // prefix before offset is what a SKIP dropped, the tail after is what
+            // a LIMIT clamped off.
+            for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
                 _columns[columnIndex].push_back((*nodeIDs)[rowIndex].getValue());
             }
         }
@@ -90,7 +91,7 @@ private:
 // Int64 property: a node ID chunk and a !storage.nullable<i64> value chunk.
 class CollectingNodeIntPropSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
@@ -101,7 +102,7 @@ public:
 
         const auto& idRaw = nodeIDs->getRaw();
         const auto& valueRaw = values->getRaw();
-        for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             _rows.push_back({idRaw[rowIndex].getValue(), valueRaw[rowIndex]});
         }
     }
@@ -246,7 +247,7 @@ func.func @main() {
 // emits a clamped prefix (a partial final chunk) and stops the loop early.
 class CountingSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t rowCount) override {
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         _calls++;
         _totalRows += rowCount;
     }
@@ -337,6 +338,24 @@ std::string nlSkipScanProgram(uint64_t count) {
              "    nl.skip_update %h, %a : !nl.chunk<!nl.node_id>\n"
              "    %sa = nl.skip_truncate %h, (%a) : !nl.chunk<!nl.node_id>\n"
              "    nl.output(%sa) : !nl.chunk<!nl.node_id>\n"
+             "  }\n"
+             "  func.return\n"
+             "}\n";
+}
+
+// The folded terminal-SKIP form that foldSkipTruncatesIntoOutputs produces: no
+// nl.skip_truncate, and the nl.output carries the skip handle so it emits the
+// surviving suffix in place at offset skipThisStep, with no copy. Same result as
+// nlSkipScanProgram - this exercises the copy-free output path.
+std::string nlSkipFoldedScanProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %h = nl.skip(")
+           + std::to_string(count)
+           + ")\n"
+             "  %nodes = nl.scan_nodes()\n"
+             "  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {\n"
+             "    nl.skip_update %h, %a : !nl.chunk<!nl.node_id>\n"
+             "    nl.output(%a) skip %h : !nl.chunk<!nl.node_id>\n"
              "  }\n"
              "  func.return\n"
              "}\n";
@@ -780,6 +799,49 @@ TEST_F(NLExecutorTest, skipEmitsSuffixAcrossChunks) {
 
     EXPECT_EQ(sink.getCalls(), 2u);
     EXPECT_EQ(sink.getTotalRows(), 3u);
+}
+
+TEST_F(NLExecutorTest, skipFoldedEmitsSuffixInPlace) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The folded form, chunkSize 2 over nodes {0,1,2,3}, SKIP 1. The first chunk
+    // [0,1] emits its suffix in place at offset 1 (node 1), the tail chunk [2,3]
+    // passes through whole at offset 0 (nodes 2, 3) - both with no copy. The
+    // surviving set is {1,2,3}; were the offset ignored, node 0 would survive and
+    // node 1 would be dropped, giving the wrong {0,2,3}.
+    CollectingNodeSink sink;
+    const std::string program = nlSkipFoldedScanProgram(1);
+    runProgram(program.c_str(), reader.getView(), 2, sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{1}, {2}, {3}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, skipFoldedMatchesTruncated) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The copy-free folded output must emit exactly what the nl.skip_truncate copy
+    // path does, for the same SKIP and chunkSize - the fold is a peephole, not a
+    // behaviour change.
+    CollectingNodeSink truncatedSink;
+    const std::string truncatedProgram = nlSkipScanProgram(1);
+    runProgram(truncatedProgram.c_str(), reader.getView(), 2, truncatedSink);
+
+    CollectingNodeSink foldedSink;
+    const std::string foldedProgram = nlSkipFoldedScanProgram(1);
+    runProgram(foldedProgram.c_str(), reader.getView(), 2, foldedSink);
+
+    std::vector<std::vector<uint64_t>> truncatedRows;
+    std::vector<std::vector<uint64_t>> foldedRows;
+    truncatedSink.sortedRows(truncatedRows);
+    foldedSink.sortedRows(foldedRows);
+    EXPECT_EQ(foldedRows, truncatedRows);
 }
 
 TEST_F(NLExecutorTest, rejectsCrossLoopOutputColumns) {

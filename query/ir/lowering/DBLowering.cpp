@@ -142,6 +142,11 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     // instead of copying it - the copy-free path for a LIMIT that feeds the sink.
     foldTruncatesIntoOutputs(nlFunction);
 
+    // The skip sibling: a terminal SKIP folds its nl.skip_truncate into a
+    // skip-bearing nl.output that emits the surviving suffix in place (at an
+    // offset) instead of copying it to the front - the copy-free post-skip tail.
+    foldSkipTruncatesIntoOutputs(nlFunction);
+
     // Run MLIR verifier on the nlFunction
     if (mlir::failed(mlir::verify(nlFunction))) {
         throw IRException("DBLowering produced an invalid nl function");
@@ -442,8 +447,10 @@ void DBLowering::lowerSkip(mlir::db::Skip skip) {
 
     // Charge this step's rows, then lift the surviving suffix of every skipped
     // column into fresh chunks, just before the consumer (nl.output when unchained,
-    // the inner sub-pipeline when chained). There is no fold into nl.output: the
-    // sink emits from row zero, so the suffix is always copied to the front.
+    // the inner sub-pipeline when chained). The unchained case is folded away by
+    // foldSkipTruncatesIntoOutputs - nl.output emits the suffix in place at an
+    // offset - so this copy survives only when the suffix feeds an inner
+    // sub-pipeline that reads from row zero.
     _builder.create<nl::SkipUpdate>(loc, handle, representative);
     nl::SkipTruncate truncate = _builder.create<nl::SkipTruncate>(loc, handle, chunks);
 
@@ -553,7 +560,78 @@ void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
         // The preceding nl.limit_update still sets that count. Drop the old output
         // and the now-unused truncate.
         _builder.setInsertionPoint(output);
-        _builder.create<nl::Output>(output.getLoc(), truncate.getColumns(), truncate.getState());
+        _builder.create<nl::Output>(output.getLoc(), truncate.getColumns(), truncate.getState(), mlir::Value());
+
+        output.erase();
+        truncate.erase();
+    }
+}
+
+void DBLowering::foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
+    // The skip sibling of foldTruncatesIntoOutputs: a terminal SKIP whose
+    // nl.skip_truncate feeds only an nl.output folds into a skip-bearing output
+    // that emits the surviving suffix in place (offset getSkipThisStep()) instead
+    // of copying it to the front. Collect first; erasing ops mid-walk is unsafe.
+    llvm::SmallVector<nl::SkipTruncate, 4> foldable;
+
+    nlFunction.walk([&](nl::SkipTruncate truncate) {
+        const mlir::ResultRange results = truncate.getResults();
+
+        // Foldable only if a single nl.output is the sole consumer of every
+        // truncated column. The single-use test also self-excludes the SKIP+LIMIT
+        // case: there an nl.limit sits between this skip and the output, so the
+        // truncate's result feeds nl.limit_update (and the limit's own consumer),
+        // never one nl.output - hasOneUse is false and the skip stays a copy,
+        // bounded by the limit's loop early-exit. As in the limit fold, read the
+        // direction as "one shared output user => the copy can be dropped".
+        nl::Output output;
+        for (const mlir::Value result : results) {
+            if (!result.hasOneUse()) {
+                return;
+            }
+
+            nl::Output user = mlir::dyn_cast<nl::Output>(*result.user_begin());
+            if (!user || (output && output != user)) {
+                return;
+            }
+            output = user;
+        }
+
+        // Bail if the output already carries a handle: a folded output carries at
+        // most one of limit/skip, and the rebuild below would drop a pre-existing
+        // one.
+        if (!output || output.getLimit() || output.getSkip()) {
+            return;
+        }
+
+        // The output must consume exactly the truncate's results - all of them, in
+        // the same order, and nothing else - so rebuilding it over the truncate's
+        // input columns preserves the projection. Same precondition as the limit
+        // fold.
+        const mlir::OperandRange outputColumns = output.getColumns();
+        if (outputColumns.size() != results.size()) {
+            return;
+        }
+
+        for (size_t columnIndex = 0; columnIndex < results.size(); columnIndex++) {
+            if (outputColumns[columnIndex] != results[columnIndex]) {
+                return;
+            }
+        }
+
+        foldable.push_back(truncate);
+    });
+
+    for (nl::SkipTruncate truncate : foldable) {
+        nl::Output output = mlir::cast<nl::Output>(*truncate.getResult(0).user_begin());
+
+        // Re-emit the output over the untruncated inputs, carrying the skip handle
+        // in the third operand, so it streams the surviving suffix off the counter
+        // (offset getSkipThisStep(), getEmitThisStep() rows) instead of a copy. The
+        // preceding nl.skip_update still sets that offset and count. Drop the old
+        // output and the now-unused truncate.
+        _builder.setInsertionPoint(output);
+        _builder.create<nl::Output>(output.getLoc(), truncate.getColumns(), mlir::Value(), truncate.getState());
 
         output.erase();
         truncate.erase();
@@ -577,7 +655,7 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
     // case - where the truncate feeds only this output - into nl.output ... limit,
     // dropping the copy.
     setInsertionInto(ownerBlock(columns.front()));
-    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns, mlir::Value());
+    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns, mlir::Value(), mlir::Value());
 }
 
 void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp) {

@@ -12,11 +12,14 @@ class NLOutputSink {
 public:
     virtual ~NLOutputSink();
 
-    // One call per chunk emission of the program. Only the first rowCount rows
-    // of each chunk are part of the result - the rest are a tail the limit
-    // clamped off, never truncated or copied - so an implementor reads
-    // [0, rowCount), not the column's full size.
-    virtual void appendChunks(std::span<const Column* const> chunks, size_t rowCount) = 0;
+    // One call per chunk emission of the program. Only rows
+    // [offset, offset + rowCount) of each chunk are part of the result - the rows
+    // before offset are a prefix a SKIP dropped, the rows after are a tail a LIMIT
+    // clamped off, and neither is ever copied - so an implementor reads that
+    // window, not the column's full size. offset is zero for a plain or
+    // limit-bounded emission; a folded SKIP emits its surviving suffix in place by
+    // setting offset to the dropped-row count.
+    virtual void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) = 0;
 };
 
 }
