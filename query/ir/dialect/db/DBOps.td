@@ -304,13 +304,6 @@ def Skip : TuringOp<"skip", [Pure]> {
       %a  = db.scan_nodes() : !db.column<"a">
       %sa = db.skip(%a) count 3 : (!db.column<"a">) -> !db.column<"a">
       db.output(%sa) : !db.column<"a">
-
-    It lowers to a hoisted nl.skip handle, an nl.skip_update in the innermost loop
-    body, and an nl.skip_truncate that lifts each step's surviving suffix into a
-    fresh chunk just before the consumer. Unlike db.limit it threads no operand onto
-    the loops (a skip cannot early-exit) and does not fold into nl.output (the suffix
-    must be copied to the front). Reading past a prefix of the graph is
-    deterministic, so the op is Pure.
   }];
 
   // The columns flow through unchanged; count is unsigned - a count of rows to
