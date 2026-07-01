@@ -13,6 +13,7 @@
 
 #include "FatalException.h"
 #include "ID.h"
+#include "datapart/DataPart.h"
 #include "metadata/PropertyType.h"
 #include "spdlog/spdlog.h"
 #include "versioning/CommitBuilder.h"
@@ -66,9 +67,38 @@ void ParquetNeo4jVisitor::fillEdgeTypes(std::span<const parquet::ByteArray> type
     }
 }
 
-void ParquetNeo4jVisitor::applyProperties() {
-    DataPartBuilder& dpBuilder = _builder->getCurrentBuilder();
+void ParquetNeo4jVisitor::createNodes(DataPartBuilder* builder) {
+    bioassert(_chunkNodeIds.size() == _chunkNodeLabels.size(), "NodeID, Label mismatch");
 
+    for (auto [id, labelIDs] : rv::zip(_chunkNodeIds, _chunkNodeLabels)) {
+        LabelSet labelSet;
+        for (const LabelID labelID : labelIDs) {
+            labelSet.set(labelID);
+        }
+        const NodeID assignedID = builder->addNode(labelSet);
+        _nodeIDs[id] = assignedID;
+    }
+    _chunkNodeLabels.clear();
+}
+
+void ParquetNeo4jVisitor::createEdges(DataPartBuilder* builder) {
+    bioassert(_chunkSrcIds.size() == _chunkTgtIds.size(), "Edge source/target mismatch");
+    bioassert(_chunkSrcIds.size() == _chunkEdgeTypes.size(), "Edge, Type mismatch");
+
+    for (auto [src, tgt, typeID] : rv::zip(_chunkSrcIds, _chunkTgtIds, _chunkEdgeTypes)) {
+        const auto srcIt = _nodeIDs.find(src);
+        bioassert(srcIt != end(_nodeIDs), "Missing source Node {}", src);
+
+        const auto tgtIt = _nodeIDs.find(tgt);
+        bioassert(tgtIt != end(_nodeIDs), "Missing target node {}", tgt);
+
+        const EdgeRecord edgeRecord =
+            builder->addEdge(typeID, srcIt->second, tgtIt->second);
+        _chunkEdgeRecords.push_back(edgeRecord);
+    }
+}
+
+void ParquetNeo4jVisitor::applyProperties(DataPartBuilder* builder) {
     // A row may contain a node or edge definition. A node row will have an entry in the
     // __id column, whilst an edge row will have an entry in the __src column. Determine
     // which rows are nodes, and which are edges, so that property columns are applied to
@@ -109,26 +139,26 @@ void ParquetNeo4jVisitor::applyProperties() {
                 switch (prop.valueType) {
                     case ValueType::Int64: {
                         const int64_t value = _propInt64Vals.at(colIdx)[valIdx];
-                        dpBuilder.addNodeProperty<types::Int64>(nodeID, prop.propertyTypeID, value);
+                        builder->addNodeProperty<types::Int64>(nodeID, prop.propertyTypeID, value);
                     }
                     break;
 
                     case ValueType::Double: {
                         const double value = _propDoubleVals.at(colIdx)[valIdx];
-                        dpBuilder.addNodeProperty<types::Double>(nodeID, prop.propertyTypeID, value);
+                        builder->addNodeProperty<types::Double>(nodeID, prop.propertyTypeID, value);
                     }
                     break;
 
                     case ValueType::Bool: {
                         const CustomBool value = _propBoolVals.at(colIdx)[valIdx];
-                        dpBuilder.addNodeProperty<types::Bool>(nodeID, prop.propertyTypeID, value);
+                        builder->addNodeProperty<types::Bool>(nodeID, prop.propertyTypeID, value);
                     }
                     break;
 
                     case ValueType::String: {
                         const parquet::ByteArray& bytes = _propByteArrayVals.at(colIdx)[valIdx];
                         const std::string_view value(reinterpret_cast<const char*>(bytes.ptr), bytes.len);
-                        dpBuilder.addNodeProperty<types::String>(nodeID, prop.propertyTypeID, value);
+                        builder->addNodeProperty<types::String>(nodeID, prop.propertyTypeID, value);
                     }
                     break;
 
@@ -147,26 +177,26 @@ void ParquetNeo4jVisitor::applyProperties() {
                 switch (prop.valueType) {
                     case ValueType::Int64: {
                         const int64_t value = _propInt64Vals.at(colIdx)[valIdx];
-                        dpBuilder.addEdgeProperty<types::Int64>(edgeRecord, prop.propertyTypeID, value);
+                        builder->addEdgeProperty<types::Int64>(edgeRecord, prop.propertyTypeID, value);
                     }
                     break;
 
                     case ValueType::Double: {
                         const double value = _propDoubleVals.at(colIdx)[valIdx];
-                        dpBuilder.addEdgeProperty<types::Double>(edgeRecord, prop.propertyTypeID, value);
+                        builder->addEdgeProperty<types::Double>(edgeRecord, prop.propertyTypeID, value);
                     }
                     break;
 
                     case ValueType::Bool: {
                         const CustomBool value = _propBoolVals.at(colIdx)[valIdx];
-                        dpBuilder.addEdgeProperty<types::Bool>(edgeRecord, prop.propertyTypeID, value);
+                        builder->addEdgeProperty<types::Bool>(edgeRecord, prop.propertyTypeID, value);
                     }
                     break;
 
                     case ValueType::String: {
                         const parquet::ByteArray& bytes = _propByteArrayVals.at(colIdx)[valIdx];
                         const std::string_view value(reinterpret_cast<const char*>(bytes.ptr), bytes.len);
-                        dpBuilder.addEdgeProperty<types::String>(edgeRecord, prop.propertyTypeID, value);
+                        builder->addEdgeProperty<types::String>(edgeRecord, prop.propertyTypeID, value);
                     }
                     break;
 
@@ -343,37 +373,7 @@ bool ParquetNeo4jVisitor::onByteArrayValues(size_t columnIndex,
     return true;
 }
 
-bool ParquetNeo4jVisitor::onChunkEnd(size_t, size_t, size_t) {
-    DataPartBuilder& dpBuilder = _builder->getCurrentBuilder();
-
-    // Build nodes
-    bioassert(_chunkNodeIds.size() == _chunkNodeLabels.size(), "NodeID, Label mismatch");
-    for (auto [id, labelIDs] : rv::zip(_chunkNodeIds, _chunkNodeLabels)) {
-        LabelSet labelSet;
-        for (const LabelID labelID : labelIDs) {
-            labelSet.set(labelID);
-        }
-        const NodeID assignedID = dpBuilder.addNode(labelSet);
-        _nodeIDs[id] = assignedID;
-    }
-    _chunkNodeLabels.clear();
-
-    // Build edges, saving each EdgeRecord for property application below
-    bioassert(_chunkSrcIds.size() == _chunkTgtIds.size(), "Edge source/target mismatch");
-    bioassert(_chunkSrcIds.size() == _chunkEdgeTypes.size(), "Edge, Type mismatch");
-    for (auto [src, tgt, typeID] : rv::zip(_chunkSrcIds, _chunkTgtIds, _chunkEdgeTypes)) {
-        const auto srcIt = _nodeIDs.find(src);
-        bioassert(srcIt != end(_nodeIDs), "Missing source Node {}", src);
-
-        const auto tgtIt = _nodeIDs.find(tgt);
-        bioassert(tgtIt != end(_nodeIDs), "Missing target node {}", tgt);
-
-        const EdgeRecord edgeRecord = dpBuilder.addEdge(typeID, srcIt->second, tgtIt->second);
-        _chunkEdgeRecords.push_back(edgeRecord);
-    }
-
-    applyProperties();
-
+void ParquetNeo4jVisitor::chunkReset() {
     _chunkNodeIds = {};
     _chunkNodeIdDefLevels.clear();
     _chunkSrcIdDefLevels.clear();
@@ -381,6 +381,17 @@ bool ParquetNeo4jVisitor::onChunkEnd(size_t, size_t, size_t) {
     for (auto& [colIdx, levels] : _propDefLevels) {
         levels.clear();
     }
+}
+
+bool ParquetNeo4jVisitor::onChunkEnd(size_t, size_t, size_t) {
+    DataPartBuilder& dpBuilder = _builder->getCurrentBuilder();
+
+    createNodes(&dpBuilder);
+    createEdges(&dpBuilder);
+
+    applyProperties(&dpBuilder);
+
+    chunkReset();
 
     return true;
 }
