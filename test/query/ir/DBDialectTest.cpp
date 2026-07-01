@@ -171,6 +171,19 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) RETURN DISTINCT a, a.score: two columns passed through, deduped on the
+// whole (node, score) row - no key attribute, since every column is part of the
+// dedup key.
+const char* const removeDuplicatesProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %da, %dscore = db.remove_duplicates(%a, %score) : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
+  db.output(%da, %dscore) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
 TEST_F(DBDialectTest, parsesCrossProductOfTwoScans) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(crossProductProgram);
     ASSERT_TRUE(module);
@@ -580,6 +593,91 @@ TEST_F(DBDialectTest, verifierRejectsSortWithoutColumns) {
         return mlir::success();
     });
     EXPECT_TRUE(mlir::failed(mlir::verify(sort.getOperation())));
+}
+
+TEST_F(DBDialectTest, parsesRemoveDuplicates) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(removeDuplicatesProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::RemoveDuplicates distinct;
+    module.get().walk([&](mlir::db::RemoveDuplicates op) {
+        distinct = op;
+    });
+    ASSERT_TRUE(distinct);
+
+    // Two columns pass through as two results of the same types; the whole row is
+    // the dedup key, so there is no key attribute to read.
+    ASSERT_EQ(distinct.getColumns().size(), 2u);
+    ASSERT_EQ(distinct.getResults().size(), 2u);
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    EXPECT_EQ(distinct.getColumns()[0].getType(), nodeIDColumnType);
+    EXPECT_EQ(distinct.getResults()[0].getType(), nodeIDColumnType);
+}
+
+TEST_F(DBDialectTest, removeDuplicatesRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(removeDuplicatesProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the
+    // db.remove_duplicates printer and parser are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+// Builds a db.remove_duplicates whose result count does not match its columns,
+// exercising the pass-through arity check on the programmatic builder path (the
+// parser path always derives the results from the printed functional type).
+TEST_F(DBDialectTest, verifierRejectsRemoveDuplicatesArityMismatch) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context);
+    const mlir::Type colB = mlir::db::ColumnType::get(&_context);
+
+    auto scanA = builder.create<mlir::db::ScanNodes>(loc, colA);
+
+    // One input column but two declared results: the pass-through arity is wrong.
+    auto distinct = builder.create<mlir::db::RemoveDuplicates>(loc,
+                                                               mlir::TypeRange {colA, colB},
+                                                               mlir::ValueRange {scanA.getResult()});
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(distinct.getOperation())));
+}
+
+// Builds a db.remove_duplicates with no columns. Its row set is read from the
+// first column during lowering, so the verifier rejects the empty case here rather
+// than leaving it to the lowering pass.
+TEST_F(DBDialectTest, verifierRejectsRemoveDuplicatesWithoutColumns) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    // No input columns and no results: nothing to deduplicate.
+    auto distinct = builder.create<mlir::db::RemoveDuplicates>(loc,
+                                                               mlir::TypeRange {},
+                                                               mlir::ValueRange {});
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(distinct.getOperation())));
 }
 
 }

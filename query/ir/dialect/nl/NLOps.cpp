@@ -150,6 +150,30 @@ LogicalResult SortCollect::verify() {
     return success();
 }
 
+// A distinct filter passes its columns through unchanged - only duplicate rows
+// are removed - so each result keeps its input column's chunk type, the same as
+// nl.limit_truncate.
+LogicalResult DistinctFilter::inferReturnTypes(MLIRContext* context,
+                                              std::optional<Location> location,
+                                              DistinctFilter::Adaptor adaptor,
+                                              SmallVectorImpl<Type>& inferredReturnTypes) {
+    for (const Type columnType : adaptor.getColumns().getTypes()) {
+        inferredReturnTypes.push_back(columnType);
+    }
+
+    return success();
+}
+
+// An nl.distinct_filter must filter at least one column - the columns together
+// are the dedup key, and an empty filter could not size the row set to dedup.
+LogicalResult DistinctFilter::verify() {
+    if (getColumns().empty()) {
+        return emitOpError("requires at least one column to filter");
+    }
+
+    return success();
+}
+
 void For::build(OpBuilder& builder, OperationState& state, Value iterator) {
     For::build(builder, state, iterator, Value());
 }

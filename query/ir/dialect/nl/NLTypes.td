@@ -47,6 +47,18 @@ def NLSortState : NLType<"SortState", "sort_state"> {
     }];
 }
 
+def NLDistinctState : NLType<"DistinctState", "distinct_state"> {
+    let summary = "A DISTINCT seen-set handle";
+    let description = [{
+        Stands for one DISTINCT's set of rows already emitted. Produced by
+        nl.distinct and read and mutated by nl.distinct_filter, which drops a row
+        whose key is already in the set and records a new one. It is a handle, not
+        a chunk: it owns the growing seen-set, not a chunk of values. The streaming
+        sibling of !nl.sort_state - it filters rows as they arrive rather than
+        accumulating and reordering them, so no nl.for drains it.
+    }];
+}
+
 def NLChunk : NLType<"Chunk", "chunk"> {
     let summary = "A bounded batch of values";
     let description = "One column chunk filled by a single database iterator step";
@@ -145,5 +157,14 @@ def NLSortStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::SortStateType>($_self)">,
         "sort state handle", "::mlir::nl::SortStateType">,
     BuildableType<"::mlir::nl::SortStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.distinct_state handle, the same way
+// NLSortStateHandle constrains the sort handle. The single concrete type - there
+// is only ever !nl.distinct_state - is what lets nl.distinct_filter omit the
+// handle's type in its assembly, building it from this recipe instead.
+def NLDistinctStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::DistinctStateType>($_self)">,
+        "distinct state handle", "::mlir::nl::DistinctStateType">,
+    BuildableType<"::mlir::nl::DistinctStateType::get($_builder.getContext())">;
 
 #endif // TURINGDB_NL_TYPES

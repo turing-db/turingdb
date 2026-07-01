@@ -60,6 +60,10 @@ private:
     // nl.sort_collect and the nl.for over nl.sort find the same buffers
     llvm::DenseMap<mlir::Value, NLSortState*> _sortStates;
 
+    // nl.distinct handle SSA value -> the runtime seen-set it produces, so the
+    // nl.distinct_filter that names the handle finds the same set
+    llvm::DenseMap<mlir::Value, NLDistinctState*> _distinctStates;
+
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
     void translateScanLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
@@ -123,6 +127,28 @@ private:
     // produced by an nl.sort_buffer translated earlier.
     NLSortState* sortStateFor(mlir::Value handle) const;
 
+    // Translate an nl.distinct: allocate its runtime seen-set, map the handle to
+    // it, and record the reset statement (run each time the block runs)
+    void translateDistinctState(mlir::nl::Distinct distinct, NLStmtContainer* body);
+
+    // Translate an nl.distinct_filter: look up the seen-set the handle names,
+    // allocate one fresh output column per input, map each result to its output,
+    // and record the filter statement (serialize each row's key across all
+    // columns, keep the not-yet-seen rows, gather them into the outputs)
+    void translateDistinctFilter(mlir::nl::DistinctFilter filter, NLStmtContainer* body);
+
+    // Allocate the fresh output column for one filtered column, map the op result
+    // to it, and append it (with its key-append serializer and its survivor
+    // gather) to data
+    void addDistinctColumn(mlir::Value inputValue,
+                           mlir::Value resultValue,
+                           NLDistinctFilterData* data);
+
+    // The runtime seen-set a distinct handle names. The handle is a required
+    // operand of nl.distinct_filter, so this throws if it was not produced by an
+    // nl.distinct.
+    NLDistinctState* distinctStateFor(mlir::Value handle) const;
+
     // Pool-allocate a buffer/loop column matching a chunk type - an ID column for
     // an ID chunk, a nullable value column for a !nl.nullable<...> chunk - and the
     // append/gather/compare handler for that element type. The compare selector
@@ -131,6 +157,7 @@ private:
     static NLAppendFunction selectAppendForChunkType(mlir::Type chunkType);
     static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
     static NLCompareFunction selectCompareForChunkType(mlir::Type chunkType);
+    static NLKeyAppendFunction selectKeyAppendForChunkType(mlir::Type chunkType);
 
     // Translate an nl.get_node_properties / nl.get_edge_properties: resolve the
     // property name (carried by the nl.get_property_type that produced the

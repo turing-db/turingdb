@@ -279,6 +279,25 @@ func.func @main() {
 }
 )mlir";
 
+// Scan all nodes, walk out-edges, and keep only the distinct targets. The seen-set
+// is created once at function scope by nl.distinct and the nl.distinct_filter runs
+// in the inner edge loop, so duplicate targets reached from different sources are
+// dropped globally, across chunk boundaries.
+constexpr const char* nlDistinctTargetsProgram = R"mlir(
+func.func @main() {
+  %set = nl.distinct
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %edges = nl.get_out_edges(%a, {})
+    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+      %db = nl.distinct_filter %set, (%b) : !nl.chunk<!storage.node_id>
+      nl.output(%db) : !nl.chunk<!storage.node_id>
+    }
+  }
+  func.return
+}
+)mlir";
+
 // Counts appendChunks calls and the total rows emitted, to prove a limited run
 // emits a clamped prefix (a partial final chunk) and stops the loop early.
 class CountingSink : public NLOutputSink {
@@ -950,6 +969,40 @@ TEST_F(NLExecutorTest, topKBoundedAccumulatorTrimsAcrossChunks) {
     ASSERT_EQ(sink.getColumns().size(), 1u);
     const std::vector<uint64_t> expected {5, 4};
     EXPECT_EQ(sink.getColumns()[0], expected);
+}
+
+TEST_F(NLExecutorTest, distinctFilterDropsDuplicateTargets) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The diamond's edges point at targets [1, 2, 3, 3] (node 3 from two sources);
+    // the filter keeps each target once, so the distinct set is {1, 2, 3}.
+    CollectingNodeSink sink;
+    runProgram(nlDistinctTargetsProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    ASSERT_EQ(sink.getColumns().size(), 1u);
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    const std::vector<std::vector<uint64_t>> expected {{1}, {2}, {3}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, distinctFilterDedupsAcrossChunks) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 1 feeds one target per step, so the two edges into node 3 arrive in
+    // separate steps; the seen-set persists across steps, so 3 is still emitted once.
+    CollectingNodeSink sink;
+    runProgram(nlDistinctTargetsProgram, reader.getView(), 1, sink);
+
+    ASSERT_EQ(sink.getColumns().size(), 1u);
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    const std::vector<std::vector<uint64_t>> expected {{1}, {2}, {3}};
+    EXPECT_EQ(rows, expected);
 }
 
 int main(int argc, char** argv) {

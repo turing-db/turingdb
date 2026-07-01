@@ -1,6 +1,8 @@
 #include "NLExecutor.h"
 
 #include <algorithm>
+#include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "iterators/GetInEdgesIterator.h"
@@ -175,6 +177,48 @@ int compareOptColumn(const Column* column, size_t a, size_t b) {
     }
 
     return 0;
+}
+
+// Append the raw bytes of a present property value to a row key. A
+// trivially-copyable primitive copies its object bytes; a string copies a length
+// prefix then its characters, so two rows never collide by concatenation (so
+// "a"+"b" and "ab"+"" get distinct keys).
+template <typename Primitive>
+void appendValueBytes(std::string& key, const Primitive& value) {
+    key.append(reinterpret_cast<const char*>(&value), sizeof(Primitive));
+}
+
+void appendValueBytes(std::string& key, std::string_view value) {
+    const size_t length = value.size();
+    key.append(reinterpret_cast<const char*>(&length), sizeof(length));
+    key.append(value.data(), value.size());
+}
+
+// Serialize one row of an ID column (node/edge/edge-type IDs) into the row key:
+// the ID's underlying integer value, byte for byte.
+template <typename ElementType>
+void keyAppendColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+    const auto value = raw[row].getValue();
+    appendValueBytes(key, value);
+}
+
+// Serialize one row of a nullable value column into the row key: a tag byte
+// telling null from present, then - when present - the value's bytes. A null
+// serializes to the tag alone, so all nulls share a key and DISTINCT dedups them
+// together, matching Cypher.
+template <typename Primitive>
+void keyAppendOptColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
+    const std::optional<Primitive>& value = raw[row];
+
+    if (!value.has_value()) {
+        key.push_back('\0');
+        return;
+    }
+
+    key.push_back('\1');
+    appendValueBytes(key, *value);
 }
 
 // Execute a get_out_edges/get_in_edges loop
@@ -475,6 +519,48 @@ void NLExecutor::runSortLoop(NLExecutionContext* context, NLFunctionData* data) 
     }
 }
 
+void NLExecutor::runDistinctReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLDistinctResetData* reset = static_cast<NLDistinctResetData*>(data);
+    reset->getState()->reset();
+}
+
+void NLExecutor::runDistinctFilter(NLExecutionContext* context, NLFunctionData* data) {
+    NLDistinctFilterData* filter = static_cast<NLDistinctFilterData*>(data);
+    NLDistinctState* state = filter->getState();
+
+    const std::vector<NLDistinctFilterData::FilterColumn>& columns = filter->columns();
+    bioassert(!columns.empty(), "nl.distinct_filter needs at least one column");
+
+    // Every column is row-aligned, so the first sizes this step's row set.
+    const size_t rowCount = columns.front()._input->size();
+
+    // Collect this step's surviving row indices: a row survives iff its key - the
+    // concatenation of every column's serialized value at that row - is new to the
+    // seen-set. insertIfNew both tests membership and records the new key, so a
+    // duplicate later in the same chunk is caught by an earlier row of it too.
+    ColumnVector<size_t>* indices = filter->getIndices();
+    std::vector<size_t>& survivingRaw = indices->getRaw();
+    survivingRaw.clear();
+
+    std::string* key = filter->getKeyScratch();
+    for (size_t row = 0; row < rowCount; row++) {
+        key->clear();
+        for (const NLDistinctFilterData::FilterColumn& column : columns) {
+            column._keyAppend(column._input, row, *key);
+        }
+
+        if (state->insertIfNew(*key)) {
+            survivingRaw.push_back(row);
+        }
+    }
+
+    // Gather the survivors into the fresh output chunks, in first-seen order, so a
+    // downstream consumer reads a genuinely deduped chunk.
+    for (const NLDistinctFilterData::FilterColumn& column : columns) {
+        column._gather(column._input, indices, column._output);
+    }
+}
+
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:
@@ -626,6 +712,66 @@ NLAppendFunction NLExecutor::selectOptAppendFunction(ValueType valueType) {
     ValueTypeDispatcher(valueType).execute(select);
 
     return append;
+}
+
+NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &keyAppendColumn<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &keyAppendColumn<EdgeID>;
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return &keyAppendColumn<EdgeTypeID>;
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
+}
+
+// Selected per column from its value type. A manual switch, not ValueTypeDispatcher,
+// because an embedding has no byte identity to key on: dispatching would instantiate
+// the serializer for std::span<const float> - a view, not owned bytes - which cannot
+// be a DISTINCT key. The embedding case throws instead, so that instantiation is
+// never named, the same shape as selectOptCompareFunction.
+NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &keyAppendOptColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &keyAppendOptColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &keyAppendOptColumn<types::Double::Primitive>;
+        break;
+
+        case ValueType::Bool:
+            return &keyAppendOptColumn<types::Bool::Primitive>;
+        break;
+
+        case ValueType::String:
+            return &keyAppendOptColumn<types::String::Primitive>;
+        break;
+
+        case ValueType::Embedding:
+            throw IRException("cannot remove duplicates on an embedding column");
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("invalid distinct key value type");
+        break;
+    }
+
+    bioassert(false, "Unhandled value type");
+    return nullptr;
 }
 
 NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {

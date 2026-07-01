@@ -84,6 +84,14 @@ public:
     // variables and running the body (the nl.output) per chunk.
     static void runSortLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // Empty the seen-set of a DISTINCT; runs each time its block runs.
+    static void runDistinctReset(NLExecutionContext* context, NLFunctionData* data);
+
+    // Keep only the rows of this step's chunk not seen before: serialize each row
+    // across all columns into a key, insert the new keys into the seen-set, and
+    // gather the surviving rows into fresh output chunks. The sole seen-set mutator.
+    static void runDistinctFilter(NLExecutionContext* context, NLFunctionData* data);
+
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
@@ -118,6 +126,13 @@ public:
 
     // Range copy for a nullable value chunk of this value type (skip suffix copy).
     static NLCopyFunction selectOptCopyFunction(ValueType valueType);
+
+    // Row-key serialization for an ID chunk of this kind / a nullable value chunk
+    // of this value type. Used by nl.distinct_filter to build each row's seen-set
+    // key. The value-type selector throws for a value type with no byte identity
+    // as a key (an embedding), which cannot be a DISTINCT key.
+    static NLKeyAppendFunction selectKeyAppendFunction(NLChunkKind kind);
+    static NLKeyAppendFunction selectOptKeyAppendFunction(ValueType valueType);
 
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
     // value type (types::Double, ...). The translator picks the specialization

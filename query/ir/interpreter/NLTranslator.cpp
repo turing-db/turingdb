@@ -148,6 +148,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateSortBuffer(sortBuffer, body);
         } else if (nl::SortCollect sortCollect = mlir::dyn_cast<nl::SortCollect>(operation)) {
             translateSortCollect(sortCollect, body);
+        } else if (nl::Distinct distinct = mlir::dyn_cast<nl::Distinct>(operation)) {
+            translateDistinctState(distinct, body);
+        } else if (nl::DistinctFilter distinctFilter = mlir::dyn_cast<nl::DistinctFilter>(operation)) {
+            translateDistinctFilter(distinctFilter, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -635,6 +639,68 @@ NLSortState* NLTranslator::sortStateFor(mlir::Value handle) const {
     return stateIt->second;
 }
 
+void NLTranslator::translateDistinctState(nl::Distinct distinct, NLStmtContainer* body) {
+    // Allocate the runtime seen-set and map the handle to it, so the filter that
+    // names the handle finds the same set.
+    NLDistinctState* state = _program->allocDistinctState();
+    _distinctStates[distinct.getState()] = state;
+
+    // The reset empties the set each time the block holding this nl.distinct runs:
+    // once at function scope for a top-level / mid-query DISTINCT.
+    NLDistinctResetData* resetData = _program->allocFunctionData<NLDistinctResetData>(state);
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runDistinctReset, resetData});
+}
+
+void NLTranslator::translateDistinctFilter(nl::DistinctFilter filter, NLStmtContainer* body) {
+    // The handle is a required operand, so distinctStateFor returns its set or
+    // throws if it was not produced by an nl.distinct.
+    NLDistinctState* state = distinctStateFor(filter.getState());
+
+    NLDistinctFilterData* data = _program->allocFunctionData<NLDistinctFilterData>(state);
+
+    // Reserve the surviving-indices scratch so the per-step gather stays
+    // allocation-free, the same as the edge and sort loops' indices column.
+    data->getIndices()->reserve(_program->getChunkSize());
+
+    // One fresh output column per input, walked in step with the results the
+    // downstream consumers are mapped to.
+    const mlir::OperandRange columns = filter.getColumns();
+    const mlir::ResultRange results = filter.getResults();
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        addDistinctColumn(columns[columnIndex], results[columnIndex], data);
+    }
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runDistinctFilter, data});
+}
+
+void NLTranslator::addDistinctColumn(mlir::Value inputValue,
+                                     mlir::Value resultValue,
+                                     NLDistinctFilterData* data) {
+    const Column* input = getColumn(inputValue);
+
+    // The output keeps the input's element type; only duplicate rows are removed.
+    // The key-append serializes one of its rows into the shared row key, and the
+    // gather copies the survivors into the fresh output - the same gather family
+    // the edge and sort loops use, selected by chunk type.
+    Column* output = allocColumnForChunkType(inputValue.getType());
+    _valueSlots[resultValue] = output;
+
+    const NLDistinctFilterData::FilterColumn column {input,
+                                                     output,
+                                                     selectKeyAppendForChunkType(inputValue.getType()),
+                                                     selectGatherForChunkType(inputValue.getType())};
+    data->addColumn(column);
+}
+
+NLDistinctState* NLTranslator::distinctStateFor(mlir::Value handle) const {
+    const auto stateIt = _distinctStates.find(handle);
+    if (stateIt == _distinctStates.end()) {
+        throw IRException("distinct handle must be produced by an nl.distinct");
+    }
+
+    return stateIt->second;
+}
+
 // An ID chunk allocates an ID column on its kind; a !nl.nullable<...> chunk
 // allocates a ColumnOptVector on its value type. Mirrors addCrossColumn's split.
 Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
@@ -683,6 +749,18 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
     }
 
     return NLExecutor::selectCompareFunction(chunkKindFromElementType(elementType));
+}
+
+NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        return NLExecutor::selectOptKeyAppendFunction(valueType);
+    }
+
+    return NLExecutor::selectKeyAppendFunction(chunkKindFromElementType(elementType));
 }
 
 void NLTranslator::translateCrossProduct(nl::CrossProduct cross, NLStmtContainer* body) {

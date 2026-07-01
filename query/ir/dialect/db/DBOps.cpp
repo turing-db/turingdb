@@ -250,3 +250,11 @@ LogicalResult Sort::verify() {
 
     return success();
 }
+
+// db.remove_duplicates passes its columns straight through (minus duplicate rows),
+// so the results must be exactly the input columns - same count, same types, same
+// order - the shared pass-through check db.limit and db.skip use. The dedup key is
+// the whole row, so - unlike db.sort - there are no key arrays to validate.
+LogicalResult RemoveDuplicates::verify() {
+    return verifyPassThrough(getOperation(), getColumns(), getResults());
+}

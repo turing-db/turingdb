@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <algorithm>
 #include <memory>
+#include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "ID.h"
@@ -682,6 +684,98 @@ private:
     NLStmtContainer _stmts;
 };
 
+// Type of handle that appends the raw bytes of one row of a column to a growing
+// row-key buffer. One per column kind / value type, selected during translation,
+// the same way the gather and append families are. The concatenated key of a row
+// (all its columns in order) is what nl.distinct_filter looks up in the seen-set:
+// bytewise key equality is row equality. A null serializes to a fixed tag byte, so
+// all nulls share a key and DISTINCT dedups them together, matching Cypher; a
+// string serializes as a length prefix then its characters, so two rows never
+// collide by concatenation (e.g. "a"+"b" versus "ab"+"").
+using NLKeyAppendFunction = void (*)(const Column* column, size_t row, std::string& key);
+
+// Runtime state of one DISTINCT: the set of serialized row keys already emitted.
+// nl.distinct resets it (once at function scope for a top-level or mid-query
+// DISTINCT), and nl.distinct_filter is the sole reader and mutator - it looks up
+// each incoming row's key and inserts the new ones. The streaming sibling of
+// NLSortState: it filters rows as they arrive rather than accumulating them, so it
+// holds only the keys, not the row values (a survivor is emitted from the incoming
+// chunk it appeared in, never rebuilt).
+class NLDistinctState {
+public:
+    // Empty the seen-set, so DISTINCT starts fresh. Runs each time nl.distinct's
+    // block runs (once at function scope for a top-level / mid-query DISTINCT).
+    void reset() { _seen.clear(); }
+
+    // Record a row's serialized key; returns true if the row is new (not seen
+    // before) and should survive, false if it duplicates an earlier row. The sole
+    // mutator of the set.
+    bool insertIfNew(const std::string& key) { return _seen.insert(key).second; }
+
+private:
+    // One serialized key per distinct row seen so far.
+    std::unordered_set<std::string> _seen;
+};
+
+// nl.distinct data: resets a seen-set to empty each time the block it lives in
+// runs - once at function scope for a top-level DISTINCT. The distinct sibling of
+// NLSortResetData.
+class NLDistinctResetData : public NLFunctionData {
+public:
+    NLDistinctResetData(NLDistinctState* state)
+        : _state(state)
+    {
+    }
+
+    NLDistinctState* getState() const { return _state; }
+
+private:
+    NLDistinctState* _state {nullptr};
+};
+
+// nl.distinct_filter data: the seen-set to look each row up in, and per column its
+// input chunk, the fresh output chunk to fill, the key-append that serializes one
+// of its rows into the row key, and the gather that copies the surviving rows into
+// the output. All columns together form each row's key; the surviving rows are
+// gathered from the incoming chunk (reusing the NLGatherFunction the edge loops
+// use), so no row values are stored. The indices scratch holds this step's
+// surviving row indices and the key scratch is reused per row.
+class NLDistinctFilterData : public NLFunctionData {
+public:
+    struct FilterColumn {
+        const Column* _input {nullptr};
+        Column* _output {nullptr};
+        NLKeyAppendFunction _keyAppend {nullptr};
+        NLGatherFunction _gather {nullptr};
+    };
+
+    NLDistinctFilterData(NLDistinctState* state)
+        : _state(state)
+    {
+    }
+
+    NLDistinctState* getState() const { return _state; }
+
+    const std::vector<FilterColumn>& columns() const { return _columns; }
+
+    void addColumn(const FilterColumn& column) {
+        _columns.push_back(column);
+    }
+
+    ColumnVector<size_t>* getIndices() { return &_indices; }
+    std::string* getKeyScratch() { return &_key; }
+
+private:
+    NLDistinctState* _state {nullptr};
+    std::vector<FilterColumn> _columns;
+
+    // Scratch for this step's surviving row indices, fed to the per-column gather
+    ColumnVector<size_t> _indices;
+
+    // Scratch reused to build each row's key, cleared once per row
+    std::string _key;
+};
+
 // nl.output data
 class NLOutputData : public NLFunctionData {
 public:
@@ -756,6 +850,16 @@ public:
         return statePtr;
     }
 
+    // Allocate one DISTINCT's runtime seen-set, owned by the program; the reset
+    // and filter statements that share it hold a borrowed pointer. The distinct
+    // sibling of allocSortState.
+    NLDistinctState* allocDistinctState() {
+        auto state = std::make_unique<NLDistinctState>();
+        NLDistinctState* statePtr = state.get();
+        _distinctStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -768,6 +872,7 @@ private:
     std::vector<std::unique_ptr<NLLimitState>> _limitStates;
     std::vector<std::unique_ptr<NLSkipState>> _skipStates;
     std::vector<std::unique_ptr<NLSortState>> _sortStates;
+    std::vector<std::unique_ptr<NLDistinctState>> _distinctStates;
     NLStmtContainer _stmts;
 };
 
