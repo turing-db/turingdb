@@ -75,6 +75,7 @@ private:
     size_t _tgtColIdx {INVALID_COL_IDX};
     size_t _edgetypeColIdx {INVALID_COL_IDX};
 
+    // For row X in column Y : deflevel(X) == maxdeflevel(Y) => row X is non-null.
     int16_t _nodeIdMaxDefLevel {0};
     int16_t _srcIdMaxDefLevel {0};
     int16_t _lblMaxDefLevel {0};
@@ -118,7 +119,10 @@ private:
 
     void createNodes(DataPartBuilder* builder);
     void createEdges(DataPartBuilder* builder);
-    void applyProperties(DataPartBuilder* builder);
+    void applyProperties();
+
+    void addNodeProperty(NodeID id, const PropertyColumn& prop, size_t colIdx, size_t valIdx);
+    void addEdgeProperty(const EdgeRecord& e, const PropertyColumn& prop, size_t colIdx, size_t valIdx);
 
     void chunkReset();
 
