@@ -546,11 +546,11 @@ std::string twoLimitProgram(uint64_t outerCount, uint64_t innerCount) {
 // MATCH (a) RETURN a SKIP count: a scan whose first `count` rows are dropped.
 std::string skipScanProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
-                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
                        "  %sa = db.skip(%a) count ")
            + std::to_string(count)
-           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
-             "  db.output(%sa) : !db.column<\"a\">\n"
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  db.output(%sa) : !db.column<!storage.node_id>\n"
              "  return\n"
              "}\n";
 }
@@ -560,13 +560,13 @@ std::string skipScanProgram(uint64_t count) {
 // innermost body and never gates a loop, so the whole nest runs to exhaustion.
 std::string skipTwoHopProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
-                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
-                       "  %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<\"a\">) -> (!db.column<\"a1\">, !db.column<\"e0\">, !db.column<\"et0\">, !db.column<\"b\">)\n"
-                       "  %b2, %e1, %et1, %c, %a2 = db.get_out_edges(%b, {%a1}) : (!db.column<\"b\">, !db.column<\"a1\">) -> (!db.column<\"b2\">, !db.column<\"e1\">, !db.column<\"et1\">, !db.column<\"c\">, !db.column<\"a2\">)\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)\n"
+                       "  %b2, %e1, %et1, %c, %a2 = db.get_out_edges(%b, {%a1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)\n"
                        "  %sc = db.skip(%c) count ")
            + std::to_string(count)
-           + " : (!db.column<\"c\">) -> !db.column<\"c\">\n"
-             "  db.output(%sc) : !db.column<\"c\">\n"
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  db.output(%sc) : !db.column<!storage.node_id>\n"
              "  return\n"
              "}\n";
 }
@@ -576,12 +576,12 @@ std::string skipTwoHopProgram(uint64_t count) {
 // column together. The representative is the first column, the node IDs.
 std::string skipNodePropertyProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
-                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
-                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<\"a\">) -> !db.column<\"a.score\">\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
                        "  %sa, %sscore = db.skip(%a, %score) count ")
            + std::to_string(count)
-           + " : (!db.column<\"a\">, !db.column<\"a.score\">) -> (!db.column<\"a\">, !db.column<\"a.score\">)\n"
-             "  db.output(%sa, %sscore) : !db.column<\"a\">, !db.column<\"a.score\">\n"
+           + " : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)\n"
+             "  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<none>\n"
              "  return\n"
              "}\n";
 }
@@ -592,14 +592,14 @@ std::string skipNodePropertyProgram(uint64_t count) {
 // the producing loop); the skip drops the prefix in front of it.
 std::string skipThenLimitProgram(uint64_t skipCount, uint64_t limitCount) {
     return std::string("func.func @main() {\n"
-                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
                        "  %sa = db.skip(%a) count ")
            + std::to_string(skipCount)
-           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
              "  %la = db.limit(%sa) count "
            + std::to_string(limitCount)
-           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
-             "  db.output(%la) : !db.column<\"a\">\n"
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  db.output(%la) : !db.column<!storage.node_id>\n"
              "  return\n"
              "}\n";
 }
@@ -610,16 +610,16 @@ std::string skipThenLimitProgram(uint64_t skipCount, uint64_t limitCount) {
 std::string skipCrossProductProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
                        "  %0:2 = db.cross_product factor {\n"
-                       "    %a = db.scan_nodes() : !db.column<\"a\">\n"
-                       "    db.yield %a : !db.column<\"a\">\n"
+                       "    %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "    db.yield %a : !db.column<!storage.node_id>\n"
                        "  } factor {\n"
-                       "    %b = db.scan_nodes() : !db.column<\"b\">\n"
-                       "    db.yield %b : !db.column<\"b\">\n"
+                       "    %b = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "    db.yield %b : !db.column<!storage.node_id>\n"
                        "  }\n"
                        "  %sa, %sb = db.skip(%0#0, %0#1) count ")
            + std::to_string(count)
-           + " : (!db.column<\"a\">, !db.column<\"b\">) -> (!db.column<\"a\">, !db.column<\"b\">)\n"
-             "  db.output(%sa, %sb) : !db.column<\"a\">, !db.column<\"b\">\n"
+           + " : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)\n"
+             "  db.output(%sa, %sb) : !db.column<!storage.node_id>, !db.column<!storage.node_id>\n"
              "  return\n"
              "}\n";
 }
@@ -631,12 +631,12 @@ std::string skipCrossProductProgram(uint64_t count) {
 // truncate and limit/skip-oblivious.
 std::string chainedSkipProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
-                       "  %a = db.scan_nodes() : !db.column<\"a\">\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
                        "  %sa = db.skip(%a) count ")
            + std::to_string(count)
-           + " : (!db.column<\"a\">) -> !db.column<\"a\">\n"
-             "  %a1, %e0, %et0, %b = db.get_out_edges(%sa, {}) : (!db.column<\"a\">) -> (!db.column<\"a1\">, !db.column<\"e0\">, !db.column<\"et0\">, !db.column<\"b\">)\n"
-             "  db.output(%b) : !db.column<\"b\">\n"
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  %a1, %e0, %et0, %b = db.get_out_edges(%sa, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)\n"
+             "  db.output(%b) : !db.column<!storage.node_id>\n"
              "  return\n"
              "}\n";
 }
@@ -1070,6 +1070,7 @@ TEST_F(DBLoweringTest, lowersCrossProductToNestedLoops) {
 
     mlir::MLIRContext context;
     context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
     context.getOrLoadDialect<mlir::db::DB>();
     context.getOrLoadDialect<mlir::nl::NL>();
 
@@ -1721,6 +1722,7 @@ TEST_F(DBLoweringTest, lowersTerminalSkipToFoldedOutput) {
 
     mlir::MLIRContext context;
     context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
     context.getOrLoadDialect<mlir::db::DB>();
     context.getOrLoadDialect<mlir::nl::NL>();
 
@@ -1843,6 +1845,7 @@ TEST_F(DBLoweringTest, skipThenLimitFoldsLimitButKeepsSkipCopy) {
 
     mlir::MLIRContext context;
     context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
     context.getOrLoadDialect<mlir::db::DB>();
     context.getOrLoadDialect<mlir::nl::NL>();
 
@@ -1929,6 +1932,7 @@ TEST_F(DBLoweringTest, lowersChainedSkipWithConsumerEdgeLoop) {
 
     mlir::MLIRContext context;
     context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
     context.getOrLoadDialect<mlir::db::DB>();
     context.getOrLoadDialect<mlir::nl::NL>();
 

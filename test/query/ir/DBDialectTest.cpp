@@ -122,9 +122,9 @@ func.func @main() {
 // one pass-through column.
 const char* const skipProgram = R"mlir(
 func.func @main() {
-  %a = db.scan_nodes() : !db.column<"a">
-  %sa = db.skip(%a) count 3 : (!db.column<"a">) -> !db.column<"a">
-  db.output(%sa) : !db.column<"a">
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %sa = db.skip(%a) count 3 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%sa) : !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -132,9 +132,9 @@ func.func @main() {
 // db.skip's count is a ui64 attribute, so a negative literal cannot parse.
 const char* const negativeSkipProgram = R"mlir(
 func.func @main() {
-  %a = db.scan_nodes() : !db.column<"a">
-  %sa = db.skip(%a) count -1 : (!db.column<"a">) -> !db.column<"a">
-  db.output(%sa) : !db.column<"a">
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %sa = db.skip(%a) count -1 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%sa) : !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -362,8 +362,9 @@ TEST_F(DBDialectTest, parsesSkip) {
     EXPECT_EQ(skip.getCount(), 3u);
     ASSERT_EQ(skip.getColumns().size(), 1u);
     ASSERT_EQ(skip.getResults().size(), 1u);
-    EXPECT_EQ(skip.getColumns()[0].getType(), mlir::db::ColumnType::get(&_context, "a"));
-    EXPECT_EQ(skip.getResults()[0].getType(), mlir::db::ColumnType::get(&_context, "a"));
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    EXPECT_EQ(skip.getColumns()[0].getType(), nodeIDColumnType);
+    EXPECT_EQ(skip.getResults()[0].getType(), nodeIDColumnType);
 }
 
 TEST_F(DBDialectTest, skipRoundTripsThroughTextualForm) {
@@ -400,8 +401,8 @@ TEST_F(DBDialectTest, verifierRejectsSkipArityMismatch) {
     auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
     builder.setInsertionPointToStart(function.addEntryBlock());
 
-    const mlir::Type colA = mlir::db::ColumnType::get(&_context, "a");
-    const mlir::Type colB = mlir::db::ColumnType::get(&_context, "b");
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context);
+    const mlir::Type colB = mlir::db::ColumnType::get(&_context);
 
     auto scanA = builder.create<mlir::db::ScanNodes>(loc, colA);
 
@@ -453,8 +454,9 @@ TEST_F(DBDialectTest, verifierRejectsSkipColumnTypeMismatch) {
     auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
     builder.setInsertionPointToStart(function.addEntryBlock());
 
-    const mlir::Type colA = mlir::db::ColumnType::get(&_context, "a");
-    const mlir::Type colB = mlir::db::ColumnType::get(&_context, "b");
+    const mlir::Type nodeIDType = mlir::storage::NodeIDType::get(&_context);
+    const mlir::Type colA = mlir::db::ColumnType::get(&_context, nodeIDType);
+    const mlir::Type colB = mlir::db::ColumnType::get(&_context);
 
     auto scanA = builder.create<mlir::db::ScanNodes>(loc, colA);
 

@@ -465,7 +465,7 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
     Column* output = nullptr;
     NLCopyFunction copySuffix = nullptr;
 
-    if (const auto nullableType = mlir::dyn_cast<nl::NullableType>(elementType)) {
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         output = allocOptColumnForValueType(valueType);
         copySuffix = NLExecutor::selectOptCopyFunction(valueType);
