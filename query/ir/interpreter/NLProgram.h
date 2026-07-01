@@ -481,6 +481,8 @@ private:
 // (nl.skip_update does). The skip sibling of NLLimitTruncateData.
 class NLSkipTruncateData : public NLFunctionData {
 public:
+    using SkipColumns = std::vector<NLSkipColumn>;
+
     NLSkipTruncateData(NLSkipState* state)
         : _state(state)
     {
@@ -488,7 +490,7 @@ public:
 
     NLSkipState* getState() const { return _state; }
 
-    const std::vector<NLSkipColumn>& columns() const { return _columns; }
+    const SkipColumns& columns() const { return _columns; }
 
     void addColumn(const NLSkipColumn& column) {
         _columns.push_back(column);
@@ -496,7 +498,7 @@ public:
 
 private:
     NLSkipState* _state {nullptr};
-    std::vector<NLSkipColumn> _columns;
+    SkipColumns _columns;
 };
 
 // nl.output data
