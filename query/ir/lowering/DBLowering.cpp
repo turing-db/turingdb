@@ -1,5 +1,6 @@
 #include "DBLowering.h"
 
+#include <algorithm>
 #include <optional>
 
 #include "mlir/IR/Block.h"
@@ -55,6 +56,34 @@ mlir::Type valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueType)
     }
 
     throw IRException("Unhandled property value type");
+}
+
+// The single nl.output that solely consumes every result in the range, or a null
+// op if any result has more than one use, a non-nl.output user, or a different
+// output than its siblings. Read the direction as "one shared output user => the
+// truncate's copy can be dropped": a terminal truncate folds into its output
+// exactly when this is non-null, and then erasing the truncate leaves nothing
+// dangling.
+nl::Output soleOutputConsumer(mlir::ResultRange results) {
+    // A result's one-and-only nl.output user, or a null op for any other shape
+    // (more than one use, or a lone use that is not an nl.output).
+    const auto soleOutputUser = [](const mlir::Value result) -> nl::Output {
+        if (!result.hasOneUse()) {
+            return nl::Output();
+        }
+        return mlir::dyn_cast<nl::Output>(*result.user_begin());
+    };
+
+    if (results.empty()) {
+        return nl::Output();
+    }
+
+    const nl::Output output = soleOutputUser(results.front());
+    const bool sharedByAllResults = output && std::all_of(results.begin(), results.end(), [&](const mlir::Value result) {
+        return soleOutputUser(result) == output;
+    });
+
+    return sharedByAllResults ? output : nl::Output();
 }
 
 }
@@ -509,24 +538,10 @@ void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
     nlFunction.walk([&](nl::LimitTruncate truncate) {
         const mlir::ResultRange results = truncate.getResults();
 
-        // Foldable only if a single nl.output is the sole consumer of every
-        // truncated column. Read the direction as "one shared output user => the
-        // copy can be dropped", not the reverse: the loop tests that precondition,
-        // gathering the shared user, and bails if any result has more than one use
-        // or a different user - so erasing the truncate would leave nothing dangling.
-        nl::Output output;
-        for (const mlir::Value result : results) {
-            if (!result.hasOneUse()) {
-                return;
-            }
-
-            nl::Output user = mlir::dyn_cast<nl::Output>(*result.user_begin());
-            if (!user || (output && output != user)) {
-                return;
-            }
-            output = user;
-        }
-
+        // Foldable only if a single nl.output solely consumes every truncated
+        // column; soleOutputConsumer returns that shared output (a null op if not).
+        // Not const: the nl.output accessors below are non-const, as MLIR generates.
+        nl::Output output = soleOutputConsumer(results);
         if (!output || output.getLimit()) {
             return;
         }
@@ -577,25 +592,15 @@ void DBLowering::foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
     nlFunction.walk([&](nl::SkipTruncate truncate) {
         const mlir::ResultRange results = truncate.getResults();
 
-        // Foldable only if a single nl.output is the sole consumer of every
-        // truncated column. The single-use test also self-excludes the SKIP+LIMIT
-        // case: there an nl.limit sits between this skip and the output, so the
-        // truncate's result feeds nl.limit_update (and the limit's own consumer),
-        // never one nl.output - hasOneUse is false and the skip stays a copy,
-        // bounded by the limit's loop early-exit. As in the limit fold, read the
-        // direction as "one shared output user => the copy can be dropped".
-        nl::Output output;
-        for (const mlir::Value result : results) {
-            if (!result.hasOneUse()) {
-                return;
-            }
-
-            nl::Output user = mlir::dyn_cast<nl::Output>(*result.user_begin());
-            if (!user || (output && output != user)) {
-                return;
-            }
-            output = user;
-        }
+        // Foldable only if a single nl.output solely consumes every truncated
+        // column; soleOutputConsumer returns that shared output (a null op if not).
+        // The single shared user also self-excludes the SKIP+LIMIT case: there an
+        // nl.limit sits between this skip and the output, so the truncate's result
+        // feeds nl.limit_update (and the limit's own consumer), never one nl.output
+        // - the shared-user test fails and the skip stays a copy, bounded by the
+        // limit's loop early-exit.
+        // Not const: the nl.output accessors below are non-const, as MLIR generates.
+        nl::Output output = soleOutputConsumer(results);
 
         // Bail if the output already carries a handle: a folded output carries at
         // most one of limit/skip, and the rebuild below would drop a pre-existing
