@@ -273,3 +273,15 @@ LogicalResult For::verify() {
     return success();
 }
 
+// A folded output reads the budgeted prefix (limit) or the surviving suffix
+// (skip) off a single handle - the truncate adjacent to it - so at most one may
+// be present. The interpreter reads them as an if(skip)/else if(limit) chain,
+// which would silently ignore the limit if both were set; reject that here.
+LogicalResult Output::verify() {
+    if (getLimit() && getSkip()) {
+        return emitOpError("carries both a limit and a skip handle; a folded output takes at most one");
+    }
+
+    return success();
+}
+
