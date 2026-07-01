@@ -59,8 +59,9 @@ public:
             const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[columnIndex]);
             ASSERT_NE(nodeIDs, nullptr);
 
-            // Only the first rowCount rows are part of the result; the rest are
-            // the tail the limit clamped off.
+            // Only rows [offset, offset + rowCount) are part of the result: the
+            // prefix before offset is what a SKIP dropped, the tail after is what
+            // a LIMIT clamped off.
             for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
                 _columns[columnIndex].push_back((*nodeIDs)[rowIndex].getValue());
             }
@@ -1071,7 +1072,6 @@ TEST_F(DBLoweringTest, lowersCrossProductToNestedLoops) {
     context.getOrLoadDialect<mlir::func::FuncDialect>();
     context.getOrLoadDialect<mlir::db::DB>();
     context.getOrLoadDialect<mlir::nl::NL>();
-    context.getOrLoadDialect<mlir::storage::Storage>();
 
     const mlir::ParserConfig parserConfig(&context);
     mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(crossProductScansProgram, parserConfig);

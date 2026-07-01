@@ -143,4 +143,26 @@ TEST_F(NLDialectTest, verifierAcceptsOutputWithSkip) {
     EXPECT_FALSE(output.getLimit());
 }
 
+// A folded nl.output carries the single handle of the truncate adjacent to it,
+// never both: an output with both a limit and a skip handle fails verification.
+TEST_F(NLDialectTest, verifierRejectsOutputWithBothLimitAndSkip) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value chunk = entryBlock.getArgument(0);
+
+    const mlir::Value limitHandle = builder.create<mlir::nl::Limit>(loc, /*count=*/3u).getState();
+    const mlir::Value skipHandle = builder.create<mlir::nl::Skip>(loc, /*count=*/3u).getState();
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, limitHandle, skipHandle);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(function)));
+}
+
 }

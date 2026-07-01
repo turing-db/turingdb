@@ -338,6 +338,12 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
   let assemblyFormat = [{
     `(` $columns `)` (`limit` $limit^)? (`skip` $skip^)? attr-dict `:` qualified(type($columns))
   }];
+
+  // Enforce the "at most one of limit/skip" invariant the description promises:
+  // a folded output carries the single handle of the truncate adjacent to it,
+  // never both. runOutput reads them as an if(skip)/else if(limit) chain, so a
+  // malformed both-handles op would silently drop the limit; reject it here.
+  let hasVerifier = 1;
 }
 
 /**
