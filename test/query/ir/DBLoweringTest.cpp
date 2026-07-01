@@ -773,6 +773,23 @@ protected:
         return graph;
     }
 
+    // A second datapart with nodes 4, 5 and the edge 4 -> 5, growing the node
+    // count past the top-K trim threshold in the trims-across-chunks test.
+    void addSecondPart(Graph& graph) {
+        auto change = graph.newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+
+        const LabelSet labelset = LabelSet::fromList({0});
+        const NodeID nodeE = builder.addNode(labelset);
+        const NodeID nodeF = builder.addNode(labelset);
+
+        builder.addEdge(0, nodeE, nodeF);
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        EXPECT_TRUE(submitResult);
+    }
+
     // A line graph 0 -> 1 -> 2 where nodes 0 and 1 carry "score" (Int64),
     // "name" (String) and "vec" (Embedding) properties and node 2 carries none,
     // so a read of any of them returns null for node 2. The edge 0 -> 1 carries
@@ -2290,18 +2307,23 @@ TEST_F(DBLoweringTest, topKNodesByIdDescending) {
 }
 
 TEST_F(DBLoweringTest, topKTrimsAcrossChunkBoundaries) {
+    // Six nodes (two dataparts) so the buffer grows past the 2 * topK = 4 trim
+    // threshold; the four-node diamond alone never crosses it, so trimToTopK would
+    // never run.
     auto graph = buildDiamondGraph();
+    addSecondPart(*graph);
+
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    // chunkSize 1 over four nodes: the accumulator is fed one row at a time and
-    // trims as it overflows the bound, so the top-2 must survive the trimming and
-    // still come out 3, 2.
+    // chunkSize 1 over six nodes: the accumulator is fed one row at a time and
+    // trims once it overflows the bound, so the top-2 must survive the trimming
+    // and still come out 5, 4.
     CollectingNodeSink sink;
     const std::string program = topKNodesDescProgram(2);
     runLoweredProgram(program.c_str(), reader.getView(), sink, /*chunkSize=*/1);
 
-    const std::vector<std::vector<uint64_t>> expected {{3}, {2}};
+    const std::vector<std::vector<uint64_t>> expected {{5}, {4}};
     std::vector<std::vector<uint64_t>> rows;
     sink.orderedRows(rows);
     EXPECT_EQ(rows, expected);

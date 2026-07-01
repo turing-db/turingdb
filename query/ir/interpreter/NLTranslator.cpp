@@ -523,10 +523,11 @@ void NLTranslator::translateSortBuffer(nl::SortBuffer buffer, NLStmtContainer* b
 }
 
 void NLTranslator::translateSortCollect(nl::SortCollect collect, NLStmtContainer* body) {
-    NLSortState* state = sortStateFor(collect.getState());
+    const mlir::Value collectState = collect.getState();
+    NLSortState* state = sortStateFor(collectState);
 
     // The sort spec lives on the nl.sort_buffer that produced the handle.
-    nl::SortBuffer buffer = collect.getState().getDefiningOp<nl::SortBuffer>();
+    nl::SortBuffer buffer = collectState.getDefiningOp<nl::SortBuffer>();
     if (!buffer) {
         throw IRException("sort_collect state must come from nl.sort_buffer");
     }
@@ -645,7 +646,7 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
         return allocOptColumnForValueType(valueType);
     }
 
-    return allocColumnForKind(getChunkKind(chunkType));
+    return allocColumnForKind(chunkKindFromElementType(elementType));
 }
 
 NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
@@ -657,7 +658,7 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectOptAppendFunction(valueType);
     }
 
-    return NLExecutor::selectAppendFunction(getChunkKind(chunkType));
+    return NLExecutor::selectAppendFunction(chunkKindFromElementType(elementType));
 }
 
 NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
@@ -669,7 +670,7 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectOptGatherFunction(valueType);
     }
 
-    return NLExecutor::selectGatherFunction(getChunkKind(chunkType));
+    return NLExecutor::selectGatherFunction(chunkKindFromElementType(elementType));
 }
 
 NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) {
@@ -681,7 +682,7 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
         return NLExecutor::selectOptCompareFunction(valueType);
     }
 
-    return NLExecutor::selectCompareFunction(getChunkKind(chunkType));
+    return NLExecutor::selectCompareFunction(chunkKindFromElementType(elementType));
 }
 
 void NLTranslator::translateCrossProduct(nl::CrossProduct cross, NLStmtContainer* body) {
@@ -833,7 +834,10 @@ NLChunkKind NLTranslator::getChunkKind(mlir::Type chunkType) {
         throw IRException("Expected an !nl.chunk type");
     }
 
-    const mlir::Type elementType = chunk.getElementType();
+    return chunkKindFromElementType(chunk.getElementType());
+}
+
+NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
     if (mlir::isa<storage::NodeIDType>(elementType)) {
         return NLChunkKind::NodeID;
     } else if (mlir::isa<storage::EdgeIDType>(elementType)) {

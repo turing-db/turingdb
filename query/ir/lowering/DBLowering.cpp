@@ -548,11 +548,10 @@ void DBLowering::detectTopKFusion(mlir::func::FuncOp dbFunction) {
             }
         }
 
-        // First limit (program order) to claim a sort wins; record the fusion.
-        if (!_sortTopK.count(sort.getOperation())) {
-            _sortTopK[sort.getOperation()] = limit.getCount();
-            _fusedLimits.insert(limit.getOperation());
-        }
+        // The sole-user check above guarantees this limit is the only consumer of
+        // the sort, so no other limit can claim it; record the fusion.
+        _sortTopK[sort.getOperation()] = limit.getCount();
+        _fusedLimits.insert(limit.getOperation());
     });
 }
 

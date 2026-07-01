@@ -173,6 +173,7 @@ private:
     Column* allocOptColumnForValueType(ValueType valueType);
     Column* getColumn(mlir::Value chunkValue) const;
     static NLChunkKind getChunkKind(mlir::Type chunkType);
+    static NLChunkKind chunkKindFromElementType(mlir::Type elementType);
 };
 
 }

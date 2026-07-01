@@ -1,6 +1,7 @@
 #include "NLProgram.h"
 
 #include <algorithm>
+#include <limits>
 #include <numeric>
 
 using namespace db;
@@ -44,9 +45,13 @@ void NLSortState::trimIfNeeded() {
 
     // Trim only once the buffers have grown well past the bound, so the cost is
     // amortized: the buffers hold at most ~2 * topK rows (plus the chunk just
-    // appended) between trims, never the full input.
+    // appended) between trims, never the full input. Saturate the doubled bound so
+    // a pathologically large topK (2 * topK overflowing size_t) never fires a trim
+    // rather than wrapping to a small threshold.
     const size_t rowCount = _buffers.front()->size();
-    if (rowCount <= 2 * _topK) {
+    const size_t maxSize = std::numeric_limits<size_t>::max();
+    const size_t trimThreshold = _topK > maxSize / 2 ? maxSize : 2 * _topK;
+    if (rowCount <= trimThreshold) {
         return;
     }
 
