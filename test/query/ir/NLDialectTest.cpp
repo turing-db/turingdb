@@ -170,6 +170,28 @@ TEST_F(NLDialectTest, verifierAcceptsSortChain) {
     EXPECT_EQ(sort.getResult().getType(), iteratorType);
 }
 
+// The distinct chain verifies: an nl.distinct producing the seen-set handle and an
+// nl.distinct_filter naming it, whose result mirrors the filtered column's chunk
+// type (results inferred, like nl.limit_truncate), feeding an nl.output.
+TEST_F(NLDialectTest, verifierAcceptsDistinctChain) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value chunk = entryBlock.getArgument(0);
+
+    const mlir::Value handle = builder.create<mlir::nl::Distinct>(loc).getState();
+    mlir::nl::DistinctFilter filter = builder.create<mlir::nl::DistinctFilter>(loc, handle, mlir::ValueRange {chunk});
+    builder.create<mlir::nl::Output>(loc, filter.getResults(), mlir::Value(), mlir::Value());
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_EQ(filter.getState(), handle);
+    EXPECT_EQ(filter.getResult(0).getType(), chunk.getType());
+}
+
 // A folded nl.output carries the single handle of the truncate adjacent to it,
 // never both: an output with both a limit and a skip handle fails verification.
 TEST_F(NLDialectTest, verifierRejectsOutputWithBothLimitAndSkip) {

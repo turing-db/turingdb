@@ -43,6 +43,17 @@ class GraphView;
 //                                          nl.output that emits the suffix in place
 //                                          at an offset; the copy survives only for
 //                                          a chained suffix (reads from row zero)
+//   db.remove_duplicates               ->  a hoisted nl.distinct seen-set handle
+//                                          and an nl.distinct_filter in the
+//                                          producing loop body that emits each
+//                                          step's not-yet-seen rows as fresh chunks.
+//                                          A streaming filter, not a pipeline
+//                                          breaker: it stays in the producing loop
+//                                          (no emit loop like db.sort), so a
+//                                          downstream LIMIT bounds the loop through
+//                                          the ordinary early-exit, and a chained
+//                                          WITH DISTINCT feeds the survivor chunks
+//                                          straight into the next traversal
 //
 // db.get_node_properties / db.get_edge_properties resolve their property name
 // against the graph schema here (hence the GraphView): the name is hoisted into
@@ -139,6 +150,17 @@ private:
     // yields the sorted rows. db.sort's results map to that emit loop's
     // variables, so the db.output that follows lowers into the emit loop body.
     void lowerSort(mlir::db::Sort sort);
+
+    // Lower a db.remove_duplicates: hoist an nl.distinct seen-set handle to the
+    // top of the entry block, then place an nl.distinct_filter in the innermost
+    // producing loop body that emits each step's not-yet-seen rows as fresh
+    // chunks. db.remove_duplicates' results map to those survivor chunks, so its
+    // consumer - nl.output, or a downstream traversal when chained - reads the
+    // deduped rows. It opens no loop of its own (a streaming filter, unlike the
+    // pipeline-breaking db.sort), so the limit machinery bounds it unchanged: a
+    // db.limit over its results reaches the real producing loops through
+    // assignProducerLoops' operand recursion and early-exits them.
+    void lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct);
 
     void lowerOutput(mlir::db::Output output);
 

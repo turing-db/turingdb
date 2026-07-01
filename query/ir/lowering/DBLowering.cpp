@@ -213,6 +213,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerSkip(skip);
     } else if (mlir::db::Sort sort = mlir::dyn_cast<mlir::db::Sort>(operation)) {
         lowerSort(sort);
+    } else if (mlir::db::RemoveDuplicates distinct = mlir::dyn_cast<mlir::db::RemoveDuplicates>(operation)) {
+        lowerRemoveDuplicates(distinct);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -618,6 +620,51 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
     // the db.output that follows lowers into the emit loop body reading the
     // sorted chunks.
     buildLoopForSource(sortOp.getResult(), sort.getOperation());
+}
+
+void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {
+    // The nl chunks the deduped columns lowered to; these are what the filter
+    // reads to build each row's key, and gathers the survivors from.
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    for (const mlir::Value column : distinct.getColumns()) {
+        chunks.push_back(mapValue(column));
+    }
+
+    // RemoveDuplicates::verify rejects an empty db.remove_duplicates, so reaching
+    // it here means unverified IR - a defensive backstop, as in lowerSort.
+    if (chunks.empty()) {
+        throw IRException("db.remove_duplicates requires at least one column");
+    }
+
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    // The seen-set handle is hoisted to the top of the entry block, above every
+    // loop, so it is reset once at function scope and dominates the filter placed
+    // in the producing loop body. A correlated DISTINCT (reset per enclosing step)
+    // would hoist into its enclosing loop body instead - future work, as for the
+    // streaming limit.
+    _builder.setInsertionPointToStart(_entryBlock);
+    const mlir::Value state = _builder.create<nl::Distinct>(loc).getState();
+
+    // The filter sits in the innermost producing loop body, where all deduped
+    // columns are bound together (the same block db.output would emit from), and
+    // emits each step's not-yet-seen rows as fresh survivor chunks. It opens no
+    // loop of its own: DISTINCT streams, so - unlike db.sort - the rows are
+    // filtered in place in the producing loop, not accumulated and re-emitted.
+    const mlir::Value representative = chunks.front();
+    setInsertionInto(ownerBlock(representative));
+    nl::DistinctFilter filter = _builder.create<nl::DistinctFilter>(loc, state, chunks);
+
+    // Map db.remove_duplicates' results to the survivor chunks, so its consumer
+    // reads the deduped rows: nl.output when the query ends here, or a downstream
+    // traversal when a WITH DISTINCT feeds a further MATCH (the chained case). The
+    // survivor chunk is a genuine cut chunk (like nl.limit_truncate's), so that
+    // consumer needs no DISTINCT awareness of its own.
+    const mlir::ResultRange dbResults = distinct.getResults();
+    const mlir::ResultRange filteredChunks = filter.getResults();
+    for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
+        _valueMap[dbResults[resultIndex]] = filteredChunks[resultIndex];
+    }
 }
 
 void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {

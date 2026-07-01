@@ -375,4 +375,48 @@ def Sort : TuringOp<"sort", [Pure]> {
   let hasVerifier = 1;
 }
 
+/**
+* RemoveDuplicates
+*/
+def RemoveDuplicates : TuringOp<"remove_duplicates", [Pure]> {
+  let summary = "Emit each distinct row of a column set once";
+  let description = [{
+    The declarative counterpart of a Cypher RETURN DISTINCT / WITH DISTINCT. Takes
+    the whole set of columns flowing through it and emits only the first occurrence
+    of each distinct row, dropping later duplicates. A row's identity is the tuple
+    across all its columns - so the whole projection is the dedup key - and two
+    nulls count as equal, as Cypher DISTINCT dedups nulls together. The columns
+    pass through unchanged in count and type; only duplicate rows are removed:
+
+      %a  = db.scan_nodes() : !db.column<"a">
+      %da = db.remove_duplicates(%a) : (!db.column<"a">) -> !db.column<"a">
+      db.output(%da) : !db.column<"a">
+
+    Unlike db.sort it is not a pipeline breaker: it emits a row the moment it first
+    sees it, keeping only a growing seen-set. It lowers to a hoisted nl.distinct
+    seen-set handle and an nl.distinct_filter in the producing loop body that emits
+    each step's not-yet-seen rows as fresh chunks - consumed by db.output when the
+    query ends here, or by a downstream traversal when a WITH DISTINCT feeds a
+    further MATCH. Because it streams and shrinks each chunk, a following db.limit
+    charges the deduped survivor count and bounds the producing loop through the
+    ordinary early-exit, so DISTINCT ... LIMIT k needs no special fusion - the scan
+    stops once k distinct rows are found. Deduplicating a deterministic read of the
+    graph is itself deterministic, so the op is Pure.
+  }];
+
+  // The columns flow through unchanged; every column is part of the dedup key, so
+  // - unlike db.sort's keys - no key attribute is needed.
+  let arguments = (ins Variadic<Column>:$columns);
+  let results   = (outs Variadic<Column>:$results);
+
+  // One result per input column, same types; functional-type prints the
+  // `(operandTypes) -> resultTypes` form, the same as db.limit and db.sort.
+  let assemblyFormat = [{
+    `(` $columns `)` attr-dict `:` functional-type(operands, results)
+  }];
+
+  // results arity and types must equal the columns (the shared pass-through check).
+  let hasVerifier = 1;
+}
+
 #endif //TURINGDB_OPS

@@ -731,6 +731,76 @@ std::string topKByScoreAscProgram(uint64_t count) {
              "}\n";
 }
 
+// MATCH (a)-[]->(b) RETURN DISTINCT b: one hop, then dedup the target column.
+// Several sources can point at the same target, so b has duplicates DISTINCT drops.
+const char* const removeDuplicatesTargetsProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %ub = db.remove_duplicates(%b) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%ub) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (a)-[]->()-[]->(c) RETURN DISTINCT a, c: a two-hop with the origin `a`
+// carried alongside, deduped on the whole (a, c) pair. The diamond's two paths
+// 0->1->3 and 0->2->3 both yield (0, 3), so DISTINCT collapses them to one row.
+const char* const removeDuplicatesTwoHopProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %b2, %e1, %et1, %c, %a2 = db.get_out_edges(%b, {%a1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %da, %dc = db.remove_duplicates(%a2, %c) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%da, %dc) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (a)-[]->(b) WITH DISTINCT a MATCH (a)-[]->(c) RETURN c: a mid-query
+// (chained) DISTINCT. The first hop's sources repeat once per out-edge; DISTINCT
+// collapses them to the unique sources, and the second hop fans out from each once
+// - fewer driver rows than the raw (duplicated) source column would give.
+const char* const removeDuplicatesChainedProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %da = db.remove_duplicates(%a1) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %a2, %e1, %et1, %c = db.get_out_edges(%da, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%c) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (a)-[]->(b) RETURN DISTINCT b LIMIT count: DISTINCT streams, so the LIMIT
+// bounds the producing loops through the ordinary early-exit - no top-K fusion.
+std::string removeDuplicatesLimitProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %a1, %e0, %et0, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)\n"
+                       "  %ub = db.remove_duplicates(%b) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+                       "  %lb = db.limit(%ub) count ")
+           + std::to_string(count)
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  db.output(%lb) : !db.column<!storage.node_id>\n"
+             "  return\n"
+             "}\n";
+}
+
+// MATCH (a) RETURN DISTINCT a, a.score: dedup on the (node, nullable score) pair,
+// exercising the nullable value column's key-append path (an int64 value or a null
+// tag) alongside the node ID. A node with no score serializes its null and still
+// round-trips.
+const char* const removeDuplicatesNodeScoreProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %da, %dscore = db.remove_duplicates(%a, %score) : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
+  db.output(%da, %dscore) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
 }
 
 class DBLoweringTest : public TuringTest {
@@ -2460,6 +2530,168 @@ TEST_F(DBLoweringTest, lowersTopKToBoundedSortBufferWithoutLimitOps) {
     ASSERT_TRUE(bufferOp);
     ASSERT_TRUE(bufferOp.getTopK().has_value());
     EXPECT_EQ(*bufferOp.getTopK(), 2u);
+}
+
+TEST_F(DBLoweringTest, removesDuplicateTargets) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The diamond's out-edges point at targets [1, 2, 3, 3] (node 3 twice); DISTINCT
+    // drops the repeat, leaving the three distinct targets.
+    CollectingNodeSink sink;
+    runLoweredProgram(removeDuplicatesTargetsProgram, reader.getView(), sink);
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    const std::vector<std::vector<uint64_t>> expected {{1}, {2}, {3}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, removesDuplicateTargetsAcrossChunks) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The two edges into node 3 land in different chunks at chunk size 2, so the
+    // dedup must span chunks - the seen-set is reset once at function scope, not
+    // per chunk.
+    CollectingNodeSink sink;
+    runLoweredProgram(removeDuplicatesTargetsProgram, reader.getView(), sink, /*chunkSize=*/2);
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    const std::vector<std::vector<uint64_t>> expected {{1}, {2}, {3}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, removesDuplicateTwoHopPairs) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Both two-hop paths 0->1->3 and 0->2->3 give the pair (0, 3), so DISTINCT over
+    // the carried origin and the two-hop target collapses them to a single row.
+    CollectingNodeSink sink;
+    runLoweredProgram(removeDuplicatesTwoHopProgram, reader.getView(), sink);
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    const std::vector<std::vector<uint64_t>> expected {{0, 3}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, removeDuplicatesChainedFansOutFromSurvivors) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The first hop's sources are [0, 0, 1, 2] (node 0 has out-degree two); DISTINCT
+    // collapses them to {0, 1, 2}, and the second hop fans out from those three:
+    // 0->1, 0->2, 1->3, 2->3 => c = [1, 2, 3, 3]. Without the dedup the duplicated 0
+    // would drive the second hop twice and emit six rows, so four rows proves the
+    // downstream traversal fans out from the deduped survivors.
+    CollectingNodeSink sink;
+    runLoweredProgram(removeDuplicatesChainedProgram, reader.getView(), sink);
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    const std::vector<std::vector<uint64_t>> expected {{1}, {2}, {3}, {3}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, removeDuplicatesLimitEmitsDistinctPrefix) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Three distinct targets exist ({1, 2, 3}); LIMIT 2 over the deduped stream
+    // emits exactly two, since the limit charges the deduped survivor count.
+    CountingSink sink;
+    const std::string program = removeDuplicatesLimitProgram(2);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    EXPECT_EQ(sink.getTotalRows(), 2u);
+}
+
+TEST_F(DBLoweringTest, removeDuplicatesOnNodeAndScore) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Three nodes with scores 100, 200 and null (node 2 carries none). The
+    // (node, score) rows are all distinct, so every row survives - but each row's
+    // key is built from the nullable score column too, so this exercises the opt
+    // key-append path and the null serializing to its tag.
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(removeDuplicatesNodeScoreProgram, reader.getView(), sink);
+
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 100}, {1, 200}, {2, std::nullopt}
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+// DISTINCT ... LIMIT lowers to the streaming path, not a fused top-K: the nl keeps
+// its nl.distinct + nl.distinct_filter and a real nl.limit / nl.limit_update, with
+// no nl.sort_buffer, and the producing loops carry the limit handle so they
+// early-exit once the budget of distinct rows is spent.
+TEST_F(DBLoweringTest, lowersRemoveDuplicatesLimitToStreamingFilter) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    const std::string programText = removeDuplicatesLimitProgram(2);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    size_t distinctCount = 0;
+    size_t filterCount = 0;
+    size_t limitCount = 0;
+    size_t updateCount = 0;
+    size_t sortBufferCount = 0;
+    size_t forsWithLimit = 0;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::isa<mlir::nl::Distinct>(operation)) {
+            distinctCount++;
+        } else if (mlir::isa<mlir::nl::DistinctFilter>(operation)) {
+            filterCount++;
+        } else if (mlir::isa<mlir::nl::Limit>(operation)) {
+            limitCount++;
+        } else if (mlir::isa<mlir::nl::LimitUpdate>(operation)) {
+            updateCount++;
+        } else if (mlir::isa<mlir::nl::SortBuffer>(operation)) {
+            sortBufferCount++;
+        } else if (mlir::nl::For forOp = mlir::dyn_cast<mlir::nl::For>(operation)) {
+            if (forOp.getLimit()) {
+                forsWithLimit++;
+            }
+        }
+    });
+
+    EXPECT_EQ(distinctCount, 1u);
+    EXPECT_EQ(filterCount, 1u);
+    EXPECT_EQ(limitCount, 1u);
+    EXPECT_EQ(updateCount, 1u);
+    EXPECT_EQ(sortBufferCount, 0u);
+    EXPECT_GE(forsWithLimit, 1u);
 }
 
 int main(int argc, char** argv) {
