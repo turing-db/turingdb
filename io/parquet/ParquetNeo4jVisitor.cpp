@@ -14,6 +14,7 @@
 #include "FatalException.h"
 #include "ID.h"
 #include "datapart/DataPart.h"
+#include "datapart/EdgeRecord.h"
 #include "metadata/PropertyType.h"
 #include "spdlog/spdlog.h"
 #include "versioning/CommitBuilder.h"
@@ -23,6 +24,94 @@
 
 using namespace db;
 namespace rv = ranges::views;
+
+void ParquetNeo4jVisitor::addNodeProperty(NodeID id,
+                                          const PropertyColumn& prop,
+                                          size_t colIdx,
+                                          size_t valIdx) {
+    DataPartBuilder& builder = _builder->getCurrentBuilder();
+
+    const ValueType valueType = prop.valueType;
+    switch (valueType) {
+        case ValueType::Int64: {
+            const int64_t value = _propInt64Vals.at(colIdx)[valIdx];
+            builder.addNodeProperty<types::Int64>(id, prop.propertyTypeID, value);
+        }
+        break;
+
+        case ValueType::Double: {
+            const double value = _propDoubleVals.at(colIdx)[valIdx];
+            builder.addNodeProperty<types::Double>(id, prop.propertyTypeID, value);
+        }
+        break;
+
+        case ValueType::Bool: {
+            const CustomBool value = _propBoolVals.at(colIdx)[valIdx];
+            builder.addNodeProperty<types::Bool>(id, prop.propertyTypeID, value);
+        }
+        break;
+
+        case ValueType::String: {
+            const parquet::ByteArray& bytes = _propByteArrayVals.at(colIdx)[valIdx];
+            const std::string_view value(reinterpret_cast<const char*>(bytes.ptr),
+                                         bytes.len);
+            builder.addNodeProperty<types::String>(id, prop.propertyTypeID, value);
+        }
+        break;
+
+        case ValueType::UInt64:
+        case ValueType::Embedding:
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw FatalException(
+                fmt::format("Unsupported type: {}.", ValueTypeName::value(valueType)));
+            break;
+    }
+}
+
+void ParquetNeo4jVisitor::addEdgeProperty(const EdgeRecord& e,
+                                          const PropertyColumn& prop,
+                                          size_t colIdx,
+                                          size_t valIdx) {
+    DataPartBuilder& builder = _builder->getCurrentBuilder();
+    const ValueType valueType = prop.valueType;
+
+    switch (valueType) {
+        case ValueType::Int64: {
+            const int64_t value = _propInt64Vals.at(colIdx)[valIdx];
+            builder.addEdgeProperty<types::Int64>(e, prop.propertyTypeID, value);
+        }
+        break;
+
+        case ValueType::Double: {
+            const double value = _propDoubleVals.at(colIdx)[valIdx];
+            builder.addEdgeProperty<types::Double>(e, prop.propertyTypeID, value);
+        }
+        break;
+
+        case ValueType::Bool: {
+            const CustomBool value = _propBoolVals.at(colIdx)[valIdx];
+            builder.addEdgeProperty<types::Bool>(e, prop.propertyTypeID, value);
+        }
+        break;
+
+        case ValueType::String: {
+            const parquet::ByteArray& bytes = _propByteArrayVals.at(colIdx)[valIdx];
+            const std::string_view value(reinterpret_cast<const char*>(bytes.ptr),
+                                         bytes.len);
+            builder.addEdgeProperty<types::String>(e, prop.propertyTypeID, value);
+        }
+        break;
+
+        case ValueType::UInt64:
+        case ValueType::Embedding:
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw FatalException(
+                fmt::format("Unsupported type: {}.", ValueTypeName::value(valueType)));
+        break;
+    }
+}
 
 void ParquetNeo4jVisitor::fillLabels(std::span<const parquet::ByteArray> labels) {
     bioassert(_chunkLabelRepLevels.size() == _chunkLabelDefLevels.size(),
@@ -98,18 +187,8 @@ void ParquetNeo4jVisitor::createEdges(DataPartBuilder* builder) {
     }
 }
 
-void ParquetNeo4jVisitor::applyProperties(DataPartBuilder* builder) {
-    // A row may contain a node or edge definition. A node row will have an entry in the
-    // __id column, whilst an edge row will have an entry in the __src column. Determine
-    // which rows are nodes, and which are edges, so that property columns are applied to
-    // the correct entities.
+void ParquetNeo4jVisitor::applyProperties() {
     const size_t numRows = _chunkNodeIdDefLevels.size();
-    std::vector<bool> isNodeRow(numRows, false);
-    std::vector<bool> isEdgeRow(numRows, false);
-    for (size_t row = 0; row < numRows; ++row) {
-        isNodeRow[row] = _chunkNodeIdDefLevels[row] == _nodeIdMaxDefLevel;
-        isEdgeRow[row] = _chunkSrcIdDefLevels[row] == _srcIdMaxDefLevel;
-    }
 
     for (const auto& [colIdx, prop] : _propertyColumns) {
         const auto defLevelsIt = _propDefLevels.find(colIdx);
@@ -124,93 +203,30 @@ void ParquetNeo4jVisitor::applyProperties(DataPartBuilder* builder) {
 
         for (size_t row = 0; row < numRows; ++row) {
             const bool hasVal = defLevels[row] == prop.maxDefLevel;
+            // A row may contain a node or edge definition. A node row will have an entry
+            // in the __id column, whilst an edge row will have an entry in the __src
+            // column.
+            const bool nodeRow = _chunkNodeIdDefLevels[row] == _nodeIdMaxDefLevel;
 
             if (!hasVal) {
-                if (isNodeRow[row]) {
-                    ++nodeIdx;
-                } else if (isEdgeRow[row]) {
-                    ++edgeIdx;
+                if (nodeRow) {
+                    nodeIdx++;
+                } else {
+                    edgeIdx++;
                 }
                 continue;
             }
-            if (isNodeRow[row]) {
+
+            if (nodeRow) {
                 const NodeID nodeID = _nodeIDs.at(_chunkNodeIds[nodeIdx]);
-
-                switch (prop.valueType) {
-                    case ValueType::Int64: {
-                        const int64_t value = _propInt64Vals.at(colIdx)[valIdx];
-                        builder->addNodeProperty<types::Int64>(nodeID, prop.propertyTypeID, value);
-                    }
-                    break;
-
-                    case ValueType::Double: {
-                        const double value = _propDoubleVals.at(colIdx)[valIdx];
-                        builder->addNodeProperty<types::Double>(nodeID, prop.propertyTypeID, value);
-                    }
-                    break;
-
-                    case ValueType::Bool: {
-                        const CustomBool value = _propBoolVals.at(colIdx)[valIdx];
-                        builder->addNodeProperty<types::Bool>(nodeID, prop.propertyTypeID, value);
-                    }
-                    break;
-
-                    case ValueType::String: {
-                        const parquet::ByteArray& bytes = _propByteArrayVals.at(colIdx)[valIdx];
-                        const std::string_view value(reinterpret_cast<const char*>(bytes.ptr), bytes.len);
-                        builder->addNodeProperty<types::String>(nodeID, prop.propertyTypeID, value);
-                    }
-                    break;
-
-                    case ValueType::UInt64:
-                    case ValueType::Embedding:
-                    case ValueType::Invalid:
-                    case ValueType::_SIZE:
-                        throw FatalException(fmt::format("Unsupported type: {}.",
-                            ValueTypeName::value(prop.valueType)));
-                    break;
-                }
-                ++nodeIdx;
-            } else if (isEdgeRow[row]) {
+                addNodeProperty(nodeID, prop, colIdx, valIdx);
+                nodeIdx++;
+            } else {
                 const EdgeRecord& edgeRecord = _chunkEdgeRecords[edgeIdx];
-
-                switch (prop.valueType) {
-                    case ValueType::Int64: {
-                        const int64_t value = _propInt64Vals.at(colIdx)[valIdx];
-                        builder->addEdgeProperty<types::Int64>(edgeRecord, prop.propertyTypeID, value);
-                    }
-                    break;
-
-                    case ValueType::Double: {
-                        const double value = _propDoubleVals.at(colIdx)[valIdx];
-                        builder->addEdgeProperty<types::Double>(edgeRecord, prop.propertyTypeID, value);
-                    }
-                    break;
-
-                    case ValueType::Bool: {
-                        const CustomBool value = _propBoolVals.at(colIdx)[valIdx];
-                        builder->addEdgeProperty<types::Bool>(edgeRecord, prop.propertyTypeID, value);
-                    }
-                    break;
-
-                    case ValueType::String: {
-                        const parquet::ByteArray& bytes = _propByteArrayVals.at(colIdx)[valIdx];
-                        const std::string_view value(reinterpret_cast<const char*>(bytes.ptr), bytes.len);
-                        builder->addEdgeProperty<types::String>(edgeRecord, prop.propertyTypeID, value);
-                    }
-                    break;
-
-                    case ValueType::UInt64:
-                    case ValueType::Embedding:
-                    case ValueType::Invalid:
-                    case ValueType::_SIZE:
-                        throw FatalException(fmt::format("Unsupported type: {}.",
-                            ValueTypeName::value(prop.valueType)));
-                    break;
-                }
-                ++edgeIdx;
+                addEdgeProperty(edgeRecord, prop, colIdx, valIdx);
+                edgeIdx++;
             }
-            ++valIdx;
+            valIdx++;
         }
     }
 }
@@ -378,7 +394,7 @@ void ParquetNeo4jVisitor::chunkReset() {
     _chunkNodeIdDefLevels.clear();
     _chunkSrcIdDefLevels.clear();
     _chunkEdgeRecords.clear();
-    for (auto& [colIdx, levels] : _propDefLevels) {
+    for (auto& [_, levels] : _propDefLevels) {
         levels.clear();
     }
 }
@@ -389,7 +405,7 @@ bool ParquetNeo4jVisitor::onChunkEnd(size_t, size_t, size_t) {
     createNodes(&dpBuilder);
     createEdges(&dpBuilder);
 
-    applyProperties(&dpBuilder);
+    applyProperties();
 
     chunkReset();
 
