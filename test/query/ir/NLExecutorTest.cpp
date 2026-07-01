@@ -334,10 +334,10 @@ std::string nlSkipScanProgram(uint64_t count) {
            + std::to_string(count)
            + ")\n"
              "  %nodes = nl.scan_nodes()\n"
-             "  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {\n"
-             "    nl.skip_update %h, %a : !nl.chunk<!nl.node_id>\n"
-             "    %sa = nl.skip_truncate %h, (%a) : !nl.chunk<!nl.node_id>\n"
-             "    nl.output(%sa) : !nl.chunk<!nl.node_id>\n"
+             "  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {\n"
+             "    nl.skip_update %h, %a : !nl.chunk<!storage.node_id>\n"
+             "    %sa = nl.skip_truncate %h, (%a) : !nl.chunk<!storage.node_id>\n"
+             "    nl.output(%sa) : !nl.chunk<!storage.node_id>\n"
              "  }\n"
              "  func.return\n"
              "}\n";
@@ -353,9 +353,9 @@ std::string nlSkipFoldedScanProgram(uint64_t count) {
            + std::to_string(count)
            + ")\n"
              "  %nodes = nl.scan_nodes()\n"
-             "  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {\n"
-             "    nl.skip_update %h, %a : !nl.chunk<!nl.node_id>\n"
-             "    nl.output(%a) skip %h : !nl.chunk<!nl.node_id>\n"
+             "  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {\n"
+             "    nl.skip_update %h, %a : !nl.chunk<!storage.node_id>\n"
+             "    nl.output(%a) skip %h : !nl.chunk<!storage.node_id>\n"
              "  }\n"
              "  func.return\n"
              "}\n";
