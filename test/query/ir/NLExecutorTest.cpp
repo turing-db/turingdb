@@ -932,17 +932,23 @@ TEST_F(NLExecutorTest, topKBoundedAccumulatorKeepsBest) {
 }
 
 TEST_F(NLExecutorTest, topKBoundedAccumulatorTrimsAcrossChunks) {
+    // Six nodes (two dataparts) so the buffer grows past the 2 * topK = 4 trim
+    // threshold; the four-node diamond alone never crosses it, so trimToTopK would
+    // never run.
     auto graph = buildDiamondGraph();
+    addSecondPart(*graph);
+
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    // chunkSize 1 feeds the accumulator one row at a time, so it trims repeatedly
-    // as it overflows the bound; the surviving top-2 are still 3, 2.
+    // chunkSize 1 feeds the accumulator one row at a time, so once the sixth row
+    // arrives it overflows the bound and trimToTopK runs; the surviving top-2 by
+    // descending node ID are 5, 4.
     CollectingNodeSink sink;
     runProgram(nlTopKDescProgram, reader.getView(), 1, sink);
 
     ASSERT_EQ(sink.getColumns().size(), 1u);
-    const std::vector<uint64_t> expected {3, 2};
+    const std::vector<uint64_t> expected {5, 4};
     EXPECT_EQ(sink.getColumns()[0], expected);
 }
 
