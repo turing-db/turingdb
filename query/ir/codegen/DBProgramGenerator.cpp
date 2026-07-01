@@ -95,8 +95,77 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
     }
 
     std::unordered_set<const VariableDependency*> defined;
-    std::deque<const DependencyEdge*> dq;
 
+    struct Frame {
+        const VariableDependency* _var {nullptr};
+        const DependencyEdge* _producedVia {nullptr};
+    };
+
+    std::vector<Frame> stack;
+
+    for (const VariableDependency& root : vdg.vars()) {
+        if (defined.contains(&root)) {
+            continue;
+        }
+
+        const auto isEdgeTgtEdgeVar = [](const DependencyEdge* e) -> bool {
+            return e->data().type() == EdgeMetadata::EdgeType::GET_OUT_EDGES
+                || e->data().type() == EdgeMetadata::EdgeType::GET_IN_EDGES;
+        };
+        const auto isEdgeTgtMetaVar = [](const DependencyEdge* e) -> bool {
+            return e->isMetaEdge();
+        };
+
+        // A valid root is a non-meta Cypher variable which is a node
+        const bool validRoot =
+            std::ranges::none_of(root.incoming(), [&](const DependencyEdge* e) {
+                return isEdgeTgtEdgeVar(e) || isEdgeTgtMetaVar(e);
+            });
+
+        if (!validRoot) {
+            continue;
+        }
+
+        addScanNodes(&root);
+        defined.insert(&root);
+
+        // DFS from this root
+        stack.emplace_back(&root, nullptr);
+        while (stack.empty()) {
+            const auto [var, via] = stack.back();
+            stack.pop_back();
+
+            const auto seenOrMeta = [&defined](const DependencyEdge* e) {
+                return !e->isMetaEdge() || defined.contains(e->src());
+            };
+            const bool canTraverse = std::ranges::all_of(var->incoming(), seenOrMeta);
+
+            // If we cannot traverse now, we will find another path to this node
+            if (!canTraverse) {
+                continue;
+            }
+
+            for (const DependencyEdge* e : var->edges()) {
+                const VariableDependency* other = e->src() == var ? e->tgt() : e->src();
+                if (defined.contains(other)) {
+                    continue;
+                }
+                stack.emplace_back(other, e);
+            }
+
+            // This node was a root, and was produced by scan nodes
+            if (!via) {
+                return;
+            }
+
+            const EdgeMetadata::EdgeType producedType = via->data().type();
+            const bool getOut = producedType == EdgeMetadata::EdgeType::GET_OUT_EDGES;
+            if (getOut) {
+            }
+        }
+    }
+
+    /*
     for (const VariableDependency& v : vdg.vars()) {
         { // FIXME: Temporary guard to prevent starting from meta nodes
             const bool isMeta = std::ranges::any_of(
@@ -105,12 +174,6 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
         }
 
         { // FIXME: Temporary guard to prevent starting from edges
-            [[maybe_unused]] const bool isEdge =
-                std::ranges::any_of(v.incoming(), [](const DependencyEdge* e) {
-                    EdgeMetadata::EdgeType type = e->data().type();
-                    return type == EdgeMetadata::EdgeType::GET_OUT_EDGES
-                        || type == EdgeMetadata::EdgeType::GET_IN_EDGES;
-                });
             // bioassert(!isEdge, "Cannot start with edge");
         }
 
@@ -124,7 +187,7 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             continue;
         }
 
-        // This variable is already defined, do not create a scan for it
+        // Variable not defined: create a scan (XXX: assumes var is node)
         if (!defined.contains(&v)) {
             addScanNodes(&v);
             defined.insert(&v);
@@ -132,12 +195,12 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
 
         // dfs from this root
         for (const DependencyEdge* e : v.edges()) {
-            dq.push_back(e);
+            stack.push_back(e);
         }
 
-        while (!dq.empty()) {
-            const DependencyEdge* e = dq.back();
-            dq.pop_back();
+        while (!stack.empty()) {
+            const DependencyEdge* e = stack.back();
+            stack.pop_back();
 
             const VariableDependency* other = e->src() == &v ? e->tgt() : e->src();
             if (defined.contains(other)) {
@@ -187,4 +250,5 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
         // create a triple. if we have a getedge{src/tgt} then just translate that with an
         // anonymous edge var. It amounts to a DFS with 1-lookahead
     }
+    */
 }
