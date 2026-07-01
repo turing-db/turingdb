@@ -89,7 +89,7 @@ void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
 const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* src,
                                                            VariableDependency* tgt,
                                                            const EdgeMetadata& data) {
-    DependencyEdge& newEdge = _edges.emplace_back(src, tgt, data);
+    DependencyEdge newEdge(src, tgt, data);
 
     // Exercises invariant that src outgoing and tgt incoming are synced
     const auto same = [&newEdge](DependencyEdge* other) {
@@ -102,14 +102,15 @@ const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* s
     const auto findIt = std::ranges::find_if(src->_outgoing, same);
     const bool exists = findIt != end(src->_outgoing);
     if (exists) {
-        _edges.pop_back();
         return *findIt;
     }
 
-    src->addOutgoing(&newEdge);
-    tgt->addIncoming(&newEdge);
+    DependencyEdge& placedEdge = _edges.emplace_back(std::move(newEdge));
 
-    return &newEdge;
+    src->addOutgoing(&placedEdge);
+    tgt->addIncoming(&placedEdge);
+
+    return &placedEdge;
 }
 
 void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) {
