@@ -15,6 +15,7 @@
 #include "ID.h"
 #include "datapart/EdgeRecord.h"
 #include "metadata/PropertyType.h"
+#include "writers/DataPartBuilder.h"
 
 namespace parquet {
 class FileMetaData;
@@ -112,8 +113,14 @@ private:
     std::unordered_map<size_t, std::vector<int16_t>> _propDefLevels;
 
     void fillLabels(std::span<const parquet::ByteArray> labels);
+
     void fillEdgeTypes(std::span<const parquet::ByteArray> types);
-    void applyProperties();
+
+    void createNodes(DataPartBuilder* builder);
+    void createEdges(DataPartBuilder* builder);
+    void applyProperties(DataPartBuilder* builder);
+
+    void chunkReset();
 
     static constexpr std::string_view NEO4J_NODE_COL_PATH = "__id";
     static constexpr std::string_view NEO4J_LBLS_COL_PATH = "__labels.list.element";
