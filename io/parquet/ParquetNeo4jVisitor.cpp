@@ -9,18 +9,17 @@
 #include <parquet/schema.h>
 #include <parquet/types.h>
 
-#include "BioAssert.h"
-
-#include "FatalException.h"
 #include "ID.h"
 #include "datapart/DataPart.h"
 #include "datapart/EdgeRecord.h"
+#include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
-#include "spdlog/spdlog.h"
 #include "versioning/CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
-#include "metadata/LabelSet.h"
+
+#include "BioAssert.h"
+#include "FatalException.h"
 
 using namespace db;
 namespace rv = ranges::views;
@@ -59,6 +58,7 @@ void ParquetNeo4jVisitor::addNodeProperty(NodeID id,
         }
         break;
 
+        // ValueTypes that aren't represented in Parquet
         case ValueType::UInt64:
         case ValueType::Embedding:
         case ValueType::Invalid:
@@ -103,6 +103,7 @@ void ParquetNeo4jVisitor::addEdgeProperty(const EdgeRecord& e,
         }
         break;
 
+        // ValueTypes that aren't represented in Parquet
         case ValueType::UInt64:
         case ValueType::Embedding:
         case ValueType::Invalid:
@@ -284,6 +285,7 @@ bool ParquetNeo4jVisitor::onFileStart(const parquet::FileMetaData& metadata) {
         // FIXME: Byte arrays always strings. Check for lists, etc.
         switch (type) {
             case parquet::Type::INT64:
+            case parquet::Type::INT32:
                 valueType = ValueType::Int64;
             break;
             case parquet::Type::BYTE_ARRAY:
@@ -292,14 +294,16 @@ bool ParquetNeo4jVisitor::onFileStart(const parquet::FileMetaData& metadata) {
             case parquet::Type::BOOLEAN:
                 valueType = ValueType::Bool;
             break;
+
             case parquet::Type::DOUBLE:
+            case parquet::Type::FLOAT:
                 valueType = ValueType::Double;
             break;
-            default:
-                spdlog::warn("Parquet property column '{}': unsupported physical type "
-                             "{}, skipping",
-                             path, static_cast<int>(type));
-                continue;
+
+            case parquet::Type::INT96:
+            case parquet::Type::FIXED_LEN_BYTE_ARRAY:
+            case parquet::Type::UNDEFINED:
+                throw FatalException("Unsupported column type.");
             break;
         }
 
