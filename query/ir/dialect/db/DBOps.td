@@ -2,6 +2,7 @@
 #define TURINGDB_OPS
 
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
 
 include "DBDialect.td"
 include "DBTypes.td"
@@ -20,7 +21,7 @@ def ScanNodes : TuringOp<"scan_nodes", [Pure]> {
 /**
 * GetOutEdges
 */
-def GetOutEdges : TuringOp<"get_out_edges", [Pure]> {
+def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Fetch node and edge successors of input, filtering carried columns alongside";
 
   let description = [{

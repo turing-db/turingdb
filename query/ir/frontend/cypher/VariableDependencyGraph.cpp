@@ -140,12 +140,6 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
             tgt = prev;
         }
 
-        if (edge->getDecl()->isUnnamed()) {
-            addDirected(src, tgt, EdgeMetadata {otherType});
-            prev = forward ? tgt : src;
-            continue;
-        }
-
         VariableDependency* edgeVar = getOrCreateVariable(edge);
         addDirected(src, edgeVar, EdgeMetadata {edgeType});
         addDirected(edgeVar, tgt, EdgeMetadata {otherType});

@@ -20,8 +20,35 @@
 #include "DependencyEdge.h"
 
 #include "BioAssert.h"
+#include "FatalException.h"
 
 using namespace db;
+
+namespace {
+
+struct Predecessors {
+    const VariableDependency* _source {nullptr};
+    const VariableDependency* _edge {nullptr};
+    const VariableDependency* _target {nullptr};
+};
+
+Predecessors getOrder(const VariableDependency* cur,
+                      const DependencyEdge* pred,
+                      const DependencyEdge* predPred) {
+    // cur(a) -[pred]- u -[predPred]- v: but edges can be any direction
+
+    bioassert(cur == pred->src() or cur == pred->tgt(), "Invalid triple.");
+
+    const VariableDependency* u = pred->src() == cur ? pred->tgt() : pred->src();
+
+    bioassert(u == predPred->src() or u == predPred->tgt(), "Invalid triple.");
+
+    const VariableDependency* v = u == predPred->src() ? predPred->tgt() : predPred->src();
+
+    return {._source = v, ._edge = u, ._target = cur};
+}
+
+}
 
 mlir::db::ColumnType DBProgramGenerator::allocColumnType(mlir::Type type) {
     return mlir::db::ColumnType::get(_mlirCtxt, type);
@@ -98,11 +125,13 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
 
     struct Frame {
         const VariableDependency* _var {nullptr};
-        const DependencyEdge* _producedVia {nullptr};
+        const DependencyEdge* _predEdge {nullptr};
+        const DependencyEdge* _predPredEdge {nullptr};
     };
 
     std::vector<Frame> stack;
 
+    // TODO: Use nodes at ends of diameter, find using dijkstra
     for (const VariableDependency& root : vdg.vars()) {
         if (defined.contains(&root)) {
             continue;
@@ -131,8 +160,8 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
 
         // DFS from this root
         stack.emplace_back(&root, nullptr);
-        while (stack.empty()) {
-            const auto [var, via] = stack.back();
+        while (!stack.empty()) {
+            const auto [var, pred, predPred] = stack.back();
             stack.pop_back();
 
             const auto seenOrMeta = [&defined](const DependencyEdge* e) {
@@ -150,105 +179,41 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                 if (defined.contains(other)) {
                     continue;
                 }
-                stack.emplace_back(other, e);
+
+                stack.emplace_back(other, e, pred);
             }
 
-            // This node was a root, and was produced by scan nodes
-            if (!via) {
-                return;
-            }
-
-            const EdgeMetadata::EdgeType producedType = via->data().type();
-            const bool getOut = producedType == EdgeMetadata::EdgeType::GET_OUT_EDGES;
-            if (getOut) {
-            }
-        }
-    }
-
-    /*
-    for (const VariableDependency& v : vdg.vars()) {
-        { // FIXME: Temporary guard to prevent starting from meta nodes
-            const bool isMeta = std::ranges::any_of(
-                v.incoming(), [](const DependencyEdge* e) { return e->isMetaEdge(); });
-            bioassert(!isMeta, "Cannot start with meta node");
-        }
-
-        { // FIXME: Temporary guard to prevent starting from edges
-            // bioassert(!isEdge, "Cannot start with edge");
-        }
-
-        const auto seenOrMeta = [&defined](const DependencyEdge* e) {
-            return !e->isMetaEdge() || defined.contains(e->src());
-        };
-
-        const bool canTraverse = std::ranges::all_of(v.incoming(), seenOrMeta);
-
-        if (!canTraverse) {
-            continue;
-        }
-
-        // Variable not defined: create a scan (XXX: assumes var is node)
-        if (!defined.contains(&v)) {
-            addScanNodes(&v);
-            defined.insert(&v);
-        }
-
-        // dfs from this root
-        for (const DependencyEdge* e : v.edges()) {
-            stack.push_back(e);
-        }
-
-        while (!stack.empty()) {
-            const DependencyEdge* e = stack.back();
-            stack.pop_back();
-
-            const VariableDependency* other = e->src() == &v ? e->tgt() : e->src();
-            if (defined.contains(other)) {
+            // Do not yet have an edge-triple
+            if (!pred || ! predPred) {
                 continue;
             }
 
-            // get out edges -> look ahead 1 edge for subsequent targets of the out edge
-            if (e->data().type() == EdgeMetadata::EdgeType::GET_OUT_EDGES) {
-                const VariableDependency* edgeVar = e->src() == &v ? e->tgt() : e->src();
-
-                // if we already defined this edge, nothing to do
-                if (defined.contains(edgeVar)) {
-                    continue;
-                }
-
-                bioassert(edgeVar->outgoing().size() == 1,
-                          "Edge variable had multiple outgoing edges");
-
-                const DependencyEdge* outgoing = edgeVar->outgoing().front();
-
-                if (outgoing->data().type() == EdgeMetadata::EdgeType::GET_EDGE_TGT) {
-                    const VariableDependency* tgt = outgoing->tgt();
-                    addGetOutEdges(&v, edgeVar, tgt);
-                    defined.insert(tgt);
-                }
-
-                defined.insert(edgeVar);
+            // After an edge source/target is translated
+            if (pred == predPred) {
+                continue;
             }
 
-            // get edge target -> edge var must be anonymous, just get src and tgts
-            if (e->data().type() == EdgeMetadata::EdgeType::GET_EDGE_TGT) {
-                // Neither variable is already defined: either src or tgt == v, which
-                // was defined this cycle, other var is checked and skipped by
-                // `defined.contains(other)` on queue loop entry.
-                const VariableDependency* src = e->src();
-                const VariableDependency* tgt = e->tgt();
-
-                const VariableDependency* edge = nullptr; // Edge variable is unused
-
-                addGetOutEdges(src, edge, tgt);
-                defined.insert(src); // @ref v is either @ref src or @ref tgt, so
-                defined.insert(tgt); // will be reinserted to defined, but idempotently
+            const EdgeMetadata::EdgeType producedType = pred->data().type();
+            const bool getOut = producedType == EdgeMetadata::EdgeType::GET_OUT_EDGES;
+            const bool getIn = producedType == EdgeMetadata::EdgeType::GET_IN_EDGES;
+            // GetOuts cannot be translated until their target is discovered
+            if (getOut || getIn) {
+                continue;
             }
+
+            const bool getTgt = producedType == EdgeMetadata::EdgeType::GET_EDGE_TGT;
+
+            if (!getTgt) {
+                // FIXME remove: just for testing
+                throw FatalException("Unsupported edge type.");
+            }
+
+            auto [src, edge, tgt] = getOrder(var, pred, predPred);
+            addGetOutEdges(src, edge, tgt);
+
+            defined.insert(src);
+            defined.insert(edge);
+            defined.insert(tgt);
         }
-
-        // The idea is that we explore the edges of v. if we have a getXedges, we try and
-        // create a triple. if we have a getedge{src/tgt} then just translate that with an
-        // anonymous edge var. It amounts to a DFS with 1-lookahead
     }
-    */
 }
