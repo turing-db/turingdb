@@ -23,18 +23,18 @@ namespace db {
 
 class CommitBuilder;
 
-// Base for the Neo4j-format parquet visitors. Owns the machinery shared between
+// Base for the split-Parquet import visitors. Owns the machinery shared between
 // node and edge parsing: property-column discovery, per-chunk value capture, and
-// the mapping from Neo4j IDs to the TuringDB NodeIDs assigned by the builder.
-// The concrete @ref ParquetNodeVisitor and @ref ParquetEdgeVisitor handle the
-// entity-specific columns (`__id`/`__labels` and `__source_id`/`__target_id`/
-// `__type` respectively).
-class ParquetNeo4jVisitor : public ParquetSaxVisitor {
+// the mapping from the source IDs in the file to the TuringDB NodeIDs assigned by
+// the builder. The concrete @ref ParquetNodeVisitor and @ref ParquetEdgeVisitor
+// handle the entity-specific columns (`__id`/`__labels` and
+// `__source`/`__target`/`__type` respectively).
+class ParquetImportVisitor : public ParquetSaxVisitor {
 public:
     using NodeIDs = std::span<const int64_t>;
     using IDMap = std::unordered_map<int64_t, NodeID>;
 
-    ParquetNeo4jVisitor(CommitBuilder* builder, IDMap& nodeIDs)
+    ParquetImportVisitor(CommitBuilder* builder, IDMap& nodeIDs)
         : _builder(builder),
         _nodeIDs(nodeIDs)
     {
@@ -57,15 +57,15 @@ protected:
 
     static constexpr size_t INVALID_COL_IDX = std::numeric_limits<size_t>::max();
 
-    static constexpr std::string_view NEO4J_NODE_COL_PATH = "__id";
-    static constexpr std::string_view NEO4J_LBLS_COL_PATH = "__labels.list.element";
-    static constexpr std::string_view NEO4J_ETYPE_COL_PATH = "__type";
-    static constexpr std::string_view NEO4J_SRC_COL_PATH = "__source";
-    static constexpr std::string_view NEO4J_TGT_COL_PATH = "__target";
+    static constexpr std::string_view NODE_COL_PATH = "__id";
+    static constexpr std::string_view LABELS_COL_PATH = "__labels.list.element";
+    static constexpr std::string_view EDGE_TYPE_COL_PATH = "__type";
+    static constexpr std::string_view SOURCE_COL_PATH = "__source";
+    static constexpr std::string_view TARGET_COL_PATH = "__target";
 
-    static constexpr parquet::Type::type NEO4J_NODE_COL_TYPE = parquet::Type::INT64;
-    static constexpr parquet::Type::type NEO4J_LBLS_COL_TYPE = parquet::Type::BYTE_ARRAY;
-    static constexpr parquet::Type::type NEO4J_ETYPE_COL_TYPE = parquet::Type::BYTE_ARRAY;
+    static constexpr parquet::Type::type NODE_COL_TYPE = parquet::Type::INT64;
+    static constexpr parquet::Type::type LABELS_COL_TYPE = parquet::Type::BYTE_ARRAY;
+    static constexpr parquet::Type::type EDGE_TYPE_COL_TYPE = parquet::Type::BYTE_ARRAY;
 
     // A column that is not an id/label/type column is treated as a property.
     // Infers its value type and registers the property type with the builder.
@@ -84,8 +84,9 @@ protected:
 
     CommitBuilder* _builder {nullptr};
 
-    // Mapping Neo4j IDs to TuringDB IDs as defined by the DataPartBuilder. Owned by
-    // the importer: filled by the node visitor, read by the edge visitor.
+    // Mapping the source IDs in the file to TuringDB IDs as defined by the
+    // DataPartBuilder. Owned by the importer: filled by the node visitor, read by
+    // the edge visitor.
     IDMap& _nodeIDs;
 
     std::unordered_map<size_t, PropertyColumn> _propertyColumns;

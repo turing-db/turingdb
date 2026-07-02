@@ -19,7 +19,7 @@
 using namespace db;
 using namespace turing::test;
 
-// Imports a two-file Neo4j split export carrying node and edge properties of every
+// Imports a two-file split-Parquet export carrying node and edge properties of every
 // supported type, and checks the result against an equivalent graph built by hand
 // with GraphWriter. The fixture column order (nodeInt, nodeDouble, nodeString,
 // nodeBool, then the edge columns) fixes the PropertyTypeID assignment, so the

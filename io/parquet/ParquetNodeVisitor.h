@@ -7,7 +7,7 @@
 
 #include <parquet/types.h>
 
-#include "ParquetNeo4jVisitor.h"
+#include "ParquetImportVisitor.h"
 
 #include "ID.h"
 
@@ -20,12 +20,12 @@ namespace db {
 
 class DataPartBuilder;
 
-// Imports the node file of a Neo4j split export: reads `__id` and
-// `__labels.list.element`, creates the nodes, and records the Neo4j-ID -> NodeID
+// Imports the node file of a split-Parquet export: reads `__id` and
+// `__labels.list.element`, creates the nodes, and records the source-ID -> NodeID
 // mapping that the edge visitor later consumes.
-class ParquetNodeVisitor final : public ParquetNeo4jVisitor {
+class ParquetNodeVisitor final : public ParquetImportVisitor {
 public:
-    using ParquetNeo4jVisitor::ParquetNeo4jVisitor;
+    using ParquetImportVisitor::ParquetImportVisitor;
 
     bool onFileStart(const parquet::FileMetaData& metadata) final;
 

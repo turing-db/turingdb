@@ -7,7 +7,7 @@
 
 #include <parquet/types.h>
 
-#include "ParquetNeo4jVisitor.h"
+#include "ParquetImportVisitor.h"
 
 #include "ID.h"
 #include "datapart/EdgeRecord.h"
@@ -21,12 +21,12 @@ namespace db {
 
 class DataPartBuilder;
 
-// Imports the edge file of a Neo4j split export: reads `__source_id`,
-// `__target_id` and `__type`, resolving each endpoint through the Neo4j-ID ->
-// NodeID mapping the node visitor populated.
-class ParquetEdgeVisitor final : public ParquetNeo4jVisitor {
+// Imports the edge file of a split-Parquet export: reads `__source`, `__target`
+// and `__type`, resolving each endpoint through the source-ID -> NodeID mapping
+// the node visitor populated.
+class ParquetEdgeVisitor final : public ParquetImportVisitor {
 public:
-    using ParquetNeo4jVisitor::ParquetNeo4jVisitor;
+    using ParquetImportVisitor::ParquetImportVisitor;
 
     bool onFileStart(const parquet::FileMetaData& metadata) final;
     bool onRowGroupStart(size_t rowGroupIndex, const parquet::RowGroupMetaData& metadata) final;

@@ -28,7 +28,7 @@
 using namespace db;
 
 namespace {
-// A Neo4j parquet export is a directory holding the nodes and the edges in two
+// A split-Parquet export is a directory holding the nodes and the edges in two
 // separate files with these fixed names.
 constexpr std::string_view PARQUET_NODES_FILE = "nodes.parquet";
 constexpr std::string_view PARQUET_EDGES_FILE = "edges.parquet";
@@ -370,7 +370,7 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
     auto graph = Graph::create(std::string(graphName), graphPath);
     Graph* graphPtr = graph.get();
 
-    // A Neo4j parquet export is a directory holding the nodes and the edges in
+    // A split-Parquet export is a directory holding the nodes and the edges in
     // two separate files.
     const fs::Path nodeFile = dbPath / PARQUET_NODES_FILE;
     const fs::Path edgeFile = dbPath / PARQUET_EDGES_FILE;

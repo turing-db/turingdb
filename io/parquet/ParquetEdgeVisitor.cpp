@@ -35,18 +35,18 @@ bool ParquetEdgeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
         const parquet::Type::type type = desc->physical_type();
         const int16_t maxDefLevel = desc->max_definition_level();
 
-        if (path == NEO4J_SRC_COL_PATH) {
-            const bool isInt64 = type == NEO4J_NODE_COL_TYPE;
-            bioassert(isInt64, "Neo4j edge source column was not integral.");
+        if (path == SOURCE_COL_PATH) {
+            const bool isInt64 = type == NODE_COL_TYPE;
+            bioassert(isInt64, "Edge source column was not integral.");
             _srcColIdx = columnIndex;
             _srcIdMaxDefLevel = maxDefLevel;
-        } else if (path == NEO4J_TGT_COL_PATH) {
-            const bool isInt64 = type == NEO4J_NODE_COL_TYPE;
-            bioassert(isInt64, "Neo4j edge target column was not integral.");
+        } else if (path == TARGET_COL_PATH) {
+            const bool isInt64 = type == NODE_COL_TYPE;
+            bioassert(isInt64, "Edge target column was not integral.");
             _tgtColIdx = columnIndex;
-        } else if (path == NEO4J_ETYPE_COL_PATH) {
-            const bool isString = type == NEO4J_ETYPE_COL_TYPE;
-            bioassert(isString, "Neo4j edge type column was not string.");
+        } else if (path == EDGE_TYPE_COL_PATH) {
+            const bool isString = type == EDGE_TYPE_COL_TYPE;
+            bioassert(isString, "Edge type column was not string.");
             _edgetypeColIdx = columnIndex;
         } else {
             discoverPropertyColumn(columnIndex, path, type, maxDefLevel);
@@ -55,17 +55,17 @@ bool ParquetEdgeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
 
     if (_srcColIdx == INVALID_COL_IDX) {
         throw TuringException(
-            fmt::format("Edge file missing {} column.", NEO4J_SRC_COL_PATH));
+            fmt::format("Edge file missing {} column.", SOURCE_COL_PATH));
     }
 
     if (_tgtColIdx == INVALID_COL_IDX) {
         throw TuringException(
-            fmt::format("Edge file missing {} column.", NEO4J_TGT_COL_PATH));
+            fmt::format("Edge file missing {} column.", TARGET_COL_PATH));
     }
 
     if (_edgetypeColIdx == INVALID_COL_IDX) {
-         throw TuringException(
-            fmt::format("Edge file missing {} column.", NEO4J_ETYPE_COL_PATH));       
+        throw TuringException(
+            fmt::format("Edge file missing {} column.", EDGE_TYPE_COL_PATH));
     }
 
     return true;

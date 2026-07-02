@@ -36,14 +36,14 @@ bool ParquetNodeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
         const parquet::Type::type type = desc->physical_type();
         const int16_t maxDefLevel = desc->max_definition_level();
 
-        if (path == NEO4J_NODE_COL_PATH) {
-            const bool isInt64 = type == NEO4J_NODE_COL_TYPE;
-            bioassert(isInt64, "Neo4j node column was not integral.");
+        if (path == NODE_COL_PATH) {
+            const bool isInt64 = type == NODE_COL_TYPE;
+            bioassert(isInt64, "Node column was not integral.");
             _nodeColIdx = columnIndex;
             _nodeIdMaxDefLevel = maxDefLevel;
-        } else if (path == NEO4J_LBLS_COL_PATH) {
-            const bool isLabels = type == NEO4J_LBLS_COL_TYPE;
-            bioassert(isLabels, "Neo4j labels column was not a byte array.");
+        } else if (path == LABELS_COL_PATH) {
+            const bool isLabels = type == LABELS_COL_TYPE;
+            bioassert(isLabels, "Labels column was not a byte array.");
             _lblColIdx = columnIndex;
             _lblMaxDefLevel = maxDefLevel;
         } else {
@@ -53,12 +53,12 @@ bool ParquetNodeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
 
     if (_nodeColIdx == INVALID_COL_IDX) {
         throw TuringException(
-            fmt::format("Node file missing {} column.", NEO4J_NODE_COL_PATH));
+            fmt::format("Node file missing {} column.", NODE_COL_PATH));
     }
 
     if (_lblColIdx == INVALID_COL_IDX) {
         throw TuringException(
-            fmt::format("Node file missing {} column.", NEO4J_LBLS_COL_PATH));
+            fmt::format("Node file missing {} column.", LABELS_COL_PATH));
     }
 
     return true;
