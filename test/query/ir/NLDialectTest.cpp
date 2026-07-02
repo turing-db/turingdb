@@ -192,6 +192,33 @@ TEST_F(NLDialectTest, verifierAcceptsDistinctChain) {
     EXPECT_EQ(filter.getResult(0).getType(), chunk.getType());
 }
 
+// The count chain verifies: an nl.count producing the tally handle, an
+// nl.count_update charging the chunk against it, and an nl.count_result yielding a
+// single-chunk iterator over the nullable-i64 tally row, all naming the one handle.
+TEST_F(NLDialectTest, verifierAcceptsCountChain) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value chunk = entryBlock.getArgument(0);
+
+    const mlir::Value handle = builder.create<mlir::nl::Count>(loc).getState();
+    builder.create<mlir::nl::CountUpdate>(loc, handle, chunk);
+
+    // The count result iterator yields one chunk: the tally as a nullable i64.
+    const mlir::Type countChunkType = mlir::nl::ChunkType::get(&_context,
+                                                               mlir::storage::NullableType::get(&_context, mlir::IntegerType::get(&_context, 64)));
+    const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {countChunkType});
+    mlir::nl::CountResult result = builder.create<mlir::nl::CountResult>(loc, iteratorType, handle);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_EQ(result.getState(), handle);
+    EXPECT_EQ(result.getResult().getType(), iteratorType);
+}
+
 // A folded nl.output carries the single handle of the truncate adjacent to it,
 // never both: an output with both a limit and a skip handle fails verification.
 TEST_F(NLDialectTest, verifierRejectsOutputWithBothLimitAndSkip) {

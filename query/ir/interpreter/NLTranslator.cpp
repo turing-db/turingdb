@@ -114,6 +114,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[getInEdges.getResult()] = config;
         } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
             _iteratorConfigs[sort.getResult()] = IteratorConfig {IteratorKind::Sort, {}, {}, sortStateFor(sort.getState())};
+        } else if (nl::CountResult countResult = mlir::dyn_cast<nl::CountResult>(operation)) {
+            _iteratorConfigs[countResult.getResult()] = IteratorConfig {IteratorKind::Count, {}, {}, nullptr, countStateFor(countResult.getState())};
         } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
         } else if (mlir::isa<nl::GetPropertyType>(operation)) {
@@ -152,6 +154,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateDistinctState(distinct, body);
         } else if (nl::DistinctFilter distinctFilter = mlir::dyn_cast<nl::DistinctFilter>(operation)) {
             translateDistinctFilter(distinctFilter, body);
+        } else if (nl::Count count = mlir::dyn_cast<nl::Count>(operation)) {
+            translateCountState(count, body);
+        } else if (nl::CountUpdate countUpdate = mlir::dyn_cast<nl::CountUpdate>(operation)) {
+            translateCountUpdate(countUpdate, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -184,6 +190,9 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
     } else if (config._kind == IteratorKind::Sort) {
         // A sort emit loop is never limit-bounded: ORDER BY must see every row.
         translateSortLoop(config, loopBody, body);
+    } else if (config._kind == IteratorKind::Count) {
+        // A count emit loop yields the single tally row; it is never limit-bounded.
+        translateCountLoop(config, loopBody, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -701,6 +710,68 @@ NLDistinctState* NLTranslator::distinctStateFor(mlir::Value handle) const {
     return stateIt->second;
 }
 
+void NLTranslator::translateCountState(nl::Count count, NLStmtContainer* body) {
+    // Allocate the runtime tally and map the handle to it, so the update and the
+    // emit loop that name the handle share the same counter.
+    NLCountState* state = _program->allocCountState();
+    _countStates[count.getState()] = state;
+
+    // The reset zeroes the tally each time the block holding this nl.count runs:
+    // once at function scope for a top-level / mid-query COUNT.
+    NLCountResetData* resetData = _program->allocFunctionData<NLCountResetData>(state);
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runCountReset, resetData});
+}
+
+void NLTranslator::translateCountUpdate(nl::CountUpdate update, NLStmtContainer* body) {
+    // The handle is a required operand, so countStateFor returns its tally or
+    // throws if it was not produced by an nl.count.
+    NLCountState* state = countStateFor(update.getState());
+
+    // Measure the chunk's non-null rows the way its type demands: all rows for an
+    // ID chunk, the present values for a nullable value chunk.
+    const mlir::Value rows = update.getRows();
+    const Column* input = getColumn(rows);
+    const NLCountFunction count = selectCountForChunkType(rows.getType());
+
+    NLCountUpdateData* data = _program->allocFunctionData<NLCountUpdateData>(state, input, count);
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runCountUpdate, data});
+}
+
+void NLTranslator::translateCountLoop(const IteratorConfig& config,
+                                      mlir::Block& loopBody,
+                                      NLStmtContainer* body) {
+    NLCountState* state = config._countState;
+    if (!state) {
+        throw IRException("nl.count_result iterator must carry a count tally");
+    }
+
+    // The count iterator yields a single chunk - the one-row tally - so For::verify
+    // binds exactly one loop variable to it.
+    if (loopBody.getNumArguments() != 1) {
+        throw IRException("nl.count_result loop must bind exactly one variable");
+    }
+
+    // The loop variable is the nullable i64 count chunk runCountLoop fills with the
+    // single tally row.
+    const mlir::Value loopVariable = loopBody.getArgument(0);
+    Column* output = allocColumnForChunkType(loopVariable.getType());
+    _valueSlots[loopVariable] = output;
+
+    NLCountLoopData* loopData = _program->allocFunctionData<NLCountLoopData>(state, output);
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runCountLoop, loopData});
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+NLCountState* NLTranslator::countStateFor(mlir::Value handle) const {
+    const auto stateIt = _countStates.find(handle);
+    if (stateIt == _countStates.end()) {
+        throw IRException("count handle must be produced by an nl.count");
+    }
+
+    return stateIt->second;
+}
+
 // An ID chunk allocates an ID column on its kind; a !nl.nullable<...> chunk
 // allocates a ColumnOptVector on its value type. Mirrors addCrossColumn's split.
 Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
@@ -761,6 +832,22 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     }
 
     return NLExecutor::selectKeyAppendFunction(chunkKindFromElementType(elementType));
+}
+
+NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        return NLExecutor::selectOptCountFunction(valueType);
+    }
+
+    // A non-nullable chunk must be an ID chunk (node/edge/edge-type IDs), which has
+    // no null rows, so every row counts. chunkKindFromElementType rejects any other
+    // element type, so its result is discarded - it validates, nothing more.
+    chunkKindFromElementType(elementType);
+    return &NLExecutor::countAllRows;
 }
 
 void NLTranslator::translateCrossProduct(nl::CrossProduct cross, NLStmtContainer* body) {

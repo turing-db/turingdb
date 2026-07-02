@@ -656,4 +656,86 @@ def DistinctFilter : NLOp<"distinct_filter", [InferTypeOpAdaptor]> {
   let hasVerifier = 1;
 }
 
+/**
+* Count
+*/
+// NOT Pure: each nl.count is a distinct counter, so two must never be CSE'd into
+// one, and an unread one must not be DCE'd - resetting the tally is a side effect
+// (like nl.limit / nl.sort_buffer).
+def Count : NLOp<"count", []> {
+  let summary = "Create (and reset) a row-count accumulator, initialized to zero";
+  let description = [{
+    Sits at the top of the scope it governs - function scope for a top-level or
+    mid-query COUNT - where it zeroes the tally once per execution of that block.
+    Produces the !nl.count_state handle nl.count_update increments and
+    nl.count_result reads. The result type is buildable and omitted.
+
+    Unlike nl.limit it never appears on an nl.for: a COUNT drives no loop
+    early-exit, since every row must be seen before the tally is final. But like
+    nl.sort_buffer it is a pipeline breaker - nl.count_result emits its row only
+    after the producing loop has filled the counter.
+
+      %c = nl.count
+  }];
+
+  let results = (outs NLCountState:$state);
+  let assemblyFormat = "attr-dict";
+}
+
+/**
+* CountUpdate
+*/
+// NOT Pure: it increments the handle, so it must run exactly where it sits, once
+// per producing-loop step, and must not be hoisted, CSE'd or eliminated. The count
+// sibling of nl.limit_update / nl.sort_collect.
+def CountUpdate : NLOp<"count_update", []> {
+  let summary = "Charge this step's non-null rows against a count accumulator";
+  let description = [{
+    Runs in the producing loop body, once per step. Adds the number of non-null
+    rows of the current chunk to the tally - all rows of an ID chunk (IDs are never
+    null), or the present values of a nullable value chunk (Cypher count(x) counts
+    the rows in which x is not null). The sole counter mutator.
+
+      nl.count_update %c, %a : !nl.chunk<!storage.node_id>
+  }];
+
+  // The accumulator handle, then the column whose non-null rows are charged. The
+  // handle type is buildable and omitted; the column chunk type is spelled.
+  let arguments = (ins NLCountStateHandle:$state, NLChunk:$rows);
+
+  let assemblyFormat = "$state `,` $rows attr-dict `:` qualified(type($rows))";
+}
+
+/**
+* CountResult
+*/
+// Pure: given a filled counter it deterministically yields the same one-row
+// iterator, and it produces no side effect of its own - materializing the tally
+// row happens in the driving nl.for. Mirrors nl.sort: a source op whose nl.for
+// does the work.
+def CountResult : NLOp<"count_result", [Pure]> {
+  let summary = "Create a database iterator over the single result row of a count";
+  let description = [{
+    The source op for the emit phase of a COUNT, the count counterpart of nl.sort.
+    It consumes a filled nl.count_state and produces an iterator whose one and only
+    step yields a single-row chunk: the tally, as a nullable (always-present) i64.
+    An enclosing nl.for binds that one chunk and emits it once:
+
+      %r = nl.count_result(%c) : !nl.iter<!nl.chunk<!storage.nullable<i64>>>
+      nl.for %n in %r : !nl.iter<!nl.chunk<!storage.nullable<i64>>> {
+        nl.output(%n) : !nl.chunk<!storage.nullable<i64>>
+      }
+
+    The result chunk type is fixed (a nullable i64) but cannot be inferred from the
+    parameterless state handle, so it is spelled after the colon, the same as
+    nl.sort's iterator type. Placing nl.count_result after the producing loop
+    guarantees the counter is final by the time the driving loop first steps.
+  }];
+
+  let arguments = (ins NLCountStateHandle:$state);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
+}
+
 #endif //TURINGDB_NL_OPS

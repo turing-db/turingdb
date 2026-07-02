@@ -419,4 +419,43 @@ def RemoveDuplicates : TuringOp<"remove_duplicates", [Pure]> {
   let hasVerifier = 1;
 }
 
+/**
+* Count
+*/
+def Count : TuringOp<"count", [Pure]> {
+  let summary = "Count the non-null rows of a column as a single-row result";
+  let description = [{
+    The declarative counterpart of a Cypher RETURN count(x). Consumes the whole
+    dataflow of one column and produces a single-row column holding how many of its
+    rows are non-null - matching Cypher, where count(x) counts the rows in which x
+    is not null. A never-null column (node IDs off a scan) counts every row, so
+    count(*) is expressed by counting such a column:
+
+      %a = db.scan_nodes() : !db.column<!storage.node_id>
+      %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<i64>
+      db.output(%n) : !db.column<i64>
+
+    Unlike the pass-through ops (db.limit, db.sort, db.remove_duplicates) it neither
+    keeps its input's arity nor its type: it takes one column and yields one integer
+    column, whatever the input column's type. Count is a pipeline breaker like
+    db.sort - the tally is known only once every row has been seen - so it lowers to
+    a hoisted nl.count counter, an nl.count_update in the producing loop body that
+    charges each chunk's non-null rows, and - after the loop - an nl.count_result
+    source iterator whose nl.for emits the single tally row. Counting a
+    deterministic read of the graph is itself deterministic, so the op is Pure.
+  }];
+
+  // One column in, one integer column out. The input and result types are
+  // unrelated (an integer count of any column), so - unlike the pass-through ops -
+  // there is nothing to cross-check and no verifier.
+  let arguments = (ins Column:$input);
+  let results   = (outs Column:$result);
+
+  // One operand and one result, so functional-type(operands, results) prints the
+  // `(!db.column<...>) -> !db.column<...>` form, the same as db.get_node_properties.
+  let assemblyFormat = [{
+    `(` $input `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 #endif //TURINGDB_OPS

@@ -184,6 +184,18 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) RETURN count(a): one column in, one integer column out. Unlike the
+// pass-through ops, count changes both arity (only ever one result) and type (an
+// integer, whatever the input column's type).
+const char* const countProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%n) : !db.column<i64>
+  return
+}
+)mlir";
+
 TEST_F(DBDialectTest, parsesCrossProductOfTwoScans) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(crossProductProgram);
     ASSERT_TRUE(module);
@@ -678,6 +690,39 @@ TEST_F(DBDialectTest, verifierRejectsRemoveDuplicatesWithoutColumns) {
         return mlir::success();
     });
     EXPECT_TRUE(mlir::failed(mlir::verify(distinct.getOperation())));
+}
+
+TEST_F(DBDialectTest, parsesCount) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(countProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::Count count;
+    module.get().walk([&](mlir::db::Count op) {
+        count = op;
+    });
+    ASSERT_TRUE(count);
+
+    // One column in, one integer column out - the input and result types are
+    // unrelated (a node ID column counted into an i64 column).
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    const mlir::Type intColumnType = mlir::db::ColumnType::get(&_context, mlir::IntegerType::get(&_context, 64));
+    EXPECT_EQ(count.getInput().getType(), nodeIDColumnType);
+    EXPECT_EQ(count.getResult().getType(), intColumnType);
+}
+
+TEST_F(DBDialectTest, countRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(countProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the db.count
+    // printer and parser are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
 }

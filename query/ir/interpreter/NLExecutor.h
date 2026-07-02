@@ -92,6 +92,17 @@ public:
     // gather the surviving rows into fresh output chunks. The sole seen-set mutator.
     static void runDistinctFilter(NLExecutionContext* context, NLFunctionData* data);
 
+    // Zero the tally of a COUNT; runs each time its block runs.
+    static void runCountReset(NLExecutionContext* context, NLFunctionData* data);
+
+    // Add this step's chunk's non-null row count to the tally. The sole tally
+    // mutator.
+    static void runCountUpdate(NLExecutionContext* context, NLFunctionData* data);
+
+    // The emit phase of a COUNT: materialize the final tally as a single present
+    // int64 row into the loop variable, then run the body (the nl.output) once.
+    static void runCountLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
@@ -133,6 +144,12 @@ public:
     // as a key (an embedding), which cannot be a DISTINCT key.
     static NLKeyAppendFunction selectKeyAppendFunction(NLChunkKind kind);
     static NLKeyAppendFunction selectOptKeyAppendFunction(ValueType valueType);
+
+    // Non-null row count for a COUNT. An ID chunk has no null rows, so countAllRows
+    // is its handle (the row count); a nullable value chunk of this value type
+    // counts only its present values. Used by nl.count_update.
+    static size_t countAllRows(const Column* column);
+    static NLCountFunction selectOptCountFunction(ValueType valueType);
 
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
     // value type (types::Double, ...). The translator picks the specialization
