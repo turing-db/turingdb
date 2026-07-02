@@ -610,24 +610,16 @@ def Sort : NLOp<"sort", [Pure]> {
   let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
 }
 
-/**
-* Distinct
-*/
-// NOT Pure: each nl.distinct is a distinct seen-set, so two must never be CSE'd
-// into one, and an unread one must not be DCE'd - resetting the set is a side
-// effect (like nl.limit / nl.sort_buffer).
+// NOT Pure: resetting the seen-set is a side effect, and two seen-sets must never
+// be CSE'd into one (like nl.limit / nl.sort_buffer).
 def Distinct : NLOp<"distinct", []> {
   let summary = "Create (and reset) a seen-set for one DISTINCT";
   let description = [{
-    Sits at the top of the scope it governs - function scope for a top-level or
-    mid-query DISTINCT - where it empties the seen-set once per execution of that
-    block. Produces the !nl.distinct_state handle nl.distinct_filter reads and
-    mutates.
-
-    Unlike nl.sort_buffer it is not a pipeline breaker: DISTINCT streams, emitting
-    each row the first time it is seen, so no nl.for names this handle - the filter
-    runs inside the producing loop, not after it. The result type is buildable and
-    omitted.
+    Hoisted to the top of the scope it governs (function scope for a top-level or
+    mid-query DISTINCT), where it empties the seen-set. Produces the
+    !nl.distinct_state handle nl.distinct_filter reads and mutates. DISTINCT streams
+    rather than breaking the pipeline, so no nl.for names this handle - the filter
+    runs inside the producing loop.
 
       %s = nl.distinct
   }];
@@ -636,44 +628,26 @@ def Distinct : NLOp<"distinct", []> {
   let assemblyFormat = "attr-dict";
 }
 
-/**
-* DistinctFilter
-*/
-// NOT Pure: it inserts the current chunk's rows into the seen-set, so it must run
-// exactly where it sits, once per producing-loop step, and must not be hoisted,
-// CSE'd or eliminated. InferTypeOpAdaptor: the results mirror the column operand
-// types, copied across by inferReturnTypes, as on nl.limit_truncate.
+// NOT Pure: it mutates the seen-set, so it must run where it sits and must not be
+// hoisted, CSE'd or eliminated. InferTypeOpAdaptor: results mirror the columns.
 def DistinctFilter : NLOp<"distinct_filter", [InferTypeOpAdaptor]> {
   let summary = "Keep only the rows of each column not seen before, as fresh chunks";
   let description = [{
-    Sits in the producing loop body, once per step, just before the deduped
-    columns' consumer. Reads the current chunk of every column together, treats
-    each row as the tuple across all columns (Cypher DISTINCT dedups on the whole
-    projection, and on nulls too), and for each row not yet in the seen-set copies
-    it into fresh, front-aligned output chunks while recording it in the set. A row
-    already in the set is dropped. The columns pass through unchanged in type; only
-    the duplicate rows are removed.
+    Runs in the producing loop body, once per step. Treats each row as the tuple
+    across all columns (Cypher DISTINCT dedups the whole projection, nulls included),
+    copies the rows not yet in the seen-set into fresh output chunks and records
+    them, and drops the duplicates. The columns pass through unchanged in type.
 
-    Because it produces genuinely cut chunks (like nl.limit_truncate), a downstream
-    op needs no DISTINCT awareness: nl.output emits the survivors when the query
-    ends here, or a downstream nl.get_out_edges fans out from them when a
-    WITH DISTINCT feeds a further traversal (the chained case). And because it
-    streams and shrinks each chunk, a following nl.limit_update charges the deduped
-    survivor count, so a downstream LIMIT bounds the producing loop through the
-    existing early-exit - DISTINCT ... LIMIT k scans only until k distinct rows are
-    found, and the seen-set never exceeds ~k entries.
+    It emits genuinely cut chunks like nl.limit_truncate, so a downstream consumer -
+    an nl.output, or a further nl.get_out_edges in the chained case - needs no
+    DISTINCT awareness. And because it shrinks each chunk, a following nl.limit_update
+    charges the deduped count, so a downstream LIMIT bounds the producing loop.
 
       %da = nl.distinct_filter %s, (%a) : !nl.chunk<!nl.node_id>
   }];
 
-  // The seen-set handle whose membership sizes the copy, then the columns to
-  // filter - all of them together form the dedup key.
   let arguments = (ins NLDistinctStateHandle:$state, Variadic<NLChunk>:$columns);
-
-  // One result per input column, same type. The results are inferred from the
-  // column operands, so only the column chunk types are spelled, after the colon;
-  // the handle type is buildable and omitted.
-  let results = (outs Variadic<NLChunk>:$results);
+  let results   = (outs Variadic<NLChunk>:$results);
 
   let assemblyFormat = [{
     $state `,` `(` $columns `)` attr-dict `:` qualified(type($columns))
