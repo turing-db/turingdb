@@ -179,36 +179,38 @@ int compareOptColumn(const Column* column, size_t a, size_t b) {
     return 0;
 }
 
-// Append the raw bytes of a present property value to a row key. A
-// trivially-copyable primitive copies its object bytes; a string copies a length
-// prefix then its characters, so two rows never collide by concatenation (so
-// "a"+"b" and "ab"+"" get distinct keys).
+// Append the raw bytes of a present property value to a distinct row key. The key
+// is a std::string used purely as a growable byte buffer - not text - so the value
+// is appended verbatim: a trivially-copyable primitive copies its object bytes; a
+// string copies a length prefix then its characters, so two rows never collide by
+// concatenation (so "a"+"b" and "ab"+"" get distinct keys).
 template <typename Primitive>
-void appendValueBytes(std::string& key, const Primitive& value) {
+void distinctAppendValueBytes(std::string& key, const Primitive& value) {
     key.append(reinterpret_cast<const char*>(&value), sizeof(Primitive));
 }
 
-void appendValueBytes(std::string& key, std::string_view value) {
+void distinctAppendValueBytes(std::string& key, std::string_view value) {
     const size_t length = value.size();
     key.append(reinterpret_cast<const char*>(&length), sizeof(length));
     key.append(value.data(), value.size());
 }
 
-// Serialize one row of an ID column (node/edge/edge-type IDs) into the row key:
-// the ID's underlying integer value, byte for byte.
+// Serialize one row of an ID column (node/edge/edge-type IDs) into the row key -
+// a std::string used as a byte buffer, not text - as the ID's underlying integer
+// value, byte for byte.
 template <typename ElementType>
-void keyAppendColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendColumn(const Column* column, size_t row, std::string& key) {
     const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
     const auto value = raw[row].getValue();
-    appendValueBytes(key, value);
+    distinctAppendValueBytes(key, value);
 }
 
-// Serialize one row of a nullable value column into the row key: a tag byte
-// telling null from present, then - when present - the value's bytes. A null
-// serializes to the tag alone, so all nulls share a key and DISTINCT dedups them
-// together, matching Cypher.
+// Serialize one row of a nullable value column into the row key - a std::string
+// used as a byte buffer, not text - as a tag byte telling null from present, then,
+// when present, the value's bytes. A null serializes to the tag alone, so all
+// nulls share a key and DISTINCT dedups them together, matching Cypher.
 template <typename Primitive>
-void keyAppendOptColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendOptColumn(const Column* column, size_t row, std::string& key) {
     const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
     const std::optional<Primitive>& value = raw[row];
 
@@ -218,7 +220,7 @@ void keyAppendOptColumn(const Column* column, size_t row, std::string& key) {
     }
 
     key.push_back('\1');
-    appendValueBytes(key, *value);
+    distinctAppendValueBytes(key, *value);
 }
 
 // Execute a get_out_edges/get_in_edges loop
@@ -717,15 +719,15 @@ NLAppendFunction NLExecutor::selectOptAppendFunction(ValueType valueType) {
 NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:
-            return &keyAppendColumn<NodeID>;
+            return &distinctKeyAppendColumn<NodeID>;
         break;
 
         case NLChunkKind::EdgeID:
-            return &keyAppendColumn<EdgeID>;
+            return &distinctKeyAppendColumn<EdgeID>;
         break;
 
         case NLChunkKind::EdgeTypeID:
-            return &keyAppendColumn<EdgeTypeID>;
+            return &distinctKeyAppendColumn<EdgeTypeID>;
         break;
     }
 
@@ -741,23 +743,23 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
 NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:
-            return &keyAppendOptColumn<types::Int64::Primitive>;
+            return &distinctKeyAppendOptColumn<types::Int64::Primitive>;
         break;
 
         case ValueType::UInt64:
-            return &keyAppendOptColumn<types::UInt64::Primitive>;
+            return &distinctKeyAppendOptColumn<types::UInt64::Primitive>;
         break;
 
         case ValueType::Double:
-            return &keyAppendOptColumn<types::Double::Primitive>;
+            return &distinctKeyAppendOptColumn<types::Double::Primitive>;
         break;
 
         case ValueType::Bool:
-            return &keyAppendOptColumn<types::Bool::Primitive>;
+            return &distinctKeyAppendOptColumn<types::Bool::Primitive>;
         break;
 
         case ValueType::String:
-            return &keyAppendOptColumn<types::String::Primitive>;
+            return &distinctKeyAppendOptColumn<types::String::Primitive>;
         break;
 
         case ValueType::Embedding:
