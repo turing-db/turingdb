@@ -11,16 +11,15 @@
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 
-#include "DBTypes.h"
 #include "DBOps.h"
+#include "DBTypes.h"
 
+#include "DependencyEdge.h"
+#include "EdgeMetadata.h"
 #include "VariableDependency.h"
 #include "VariableDependencyGraph.h"
-#include "EdgeMetadata.h"
-#include "DependencyEdge.h"
 
 #include "BioAssert.h"
-#include "FatalException.h"
 
 using namespace db;
 
@@ -218,6 +217,7 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
 
             // Do not yet have an edge-triple
             if (!pred || ! predPred) {
+                defined.insert(var); // Mark as defined to avoid retraversal
                 continue;
             }
 
@@ -231,6 +231,7 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             const bool getIn = producedType == EdgeMetadata::EdgeType::GET_IN_EDGES;
             // GetOuts cannot be translated until their target is discovered
             if (getOut || getIn) {
+                defined.insert(var); // Mark as defined to avoid retraversal
                 continue;
             }
 
