@@ -8,7 +8,6 @@
 
 #include <argparse.hpp>
 
-
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -175,7 +174,7 @@ void addNestedLoopFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
 // variable, so each lives in its own factor region of a db.cross_product and
 // names, via db.yield, the single column it contributes. The op's results are
 // the left factor's yielded columns followed by the right factor's.
-void addCrossProductFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
+[[maybe_unused]] void addCrossProductFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     startFunction(builder, module, "cross_product");
 
     mlir::MLIRContext* ctxt = builder.getContext();

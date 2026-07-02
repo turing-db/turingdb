@@ -38,7 +38,10 @@ private:
     EdgeProducerMap _edgeProdMap;
 
     void addScanNodes(const VariableDependency* var);
+
     void addGetOutEdges(const VariableDependency* src, const VariableDependency* edge, const VariableDependency* tgt);
+
+    void addGetInEdges(const VariableDependency* src, const VariableDependency* edge, const VariableDependency* tgt);
 
     mlir::db::ColumnType allocColumnType(mlir::Type type);
     void registerValue(const VariableDependency* var, mlir::TypedValue<mlir::Type> val);
