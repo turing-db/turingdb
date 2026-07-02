@@ -30,6 +30,7 @@ private:
         GetOutEdges,
         GetInEdges,
         Sort,
+        Count,
     };
 
     // Settings of the iterators passed to each for loop
@@ -40,6 +41,9 @@ private:
 
         // The accumulator a Sort iterator drains; null for the other kinds.
         NLSortState* _sortState {nullptr};
+
+        // The tally a Count iterator reads to emit its single row; null otherwise.
+        NLCountState* _countState {nullptr};
     };
 
     NLProgram* _program {nullptr};
@@ -63,6 +67,11 @@ private:
     // nl.distinct handle SSA value -> the runtime seen-set it produces, so the
     // nl.distinct_filter that names the handle finds the same set
     llvm::DenseMap<mlir::Value, NLDistinctState*> _distinctStates;
+
+    // nl.count handle SSA value -> the runtime tally it produces, so the
+    // nl.count_update and the nl.for over nl.count_result that name the handle find
+    // the same counter
+    llvm::DenseMap<mlir::Value, NLCountState*> _countStates;
 
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
@@ -149,6 +158,27 @@ private:
     // nl.distinct.
     NLDistinctState* distinctStateFor(mlir::Value handle) const;
 
+    // Translate an nl.count: allocate its runtime tally, map the handle to it, and
+    // record the reset statement (run each time the block runs)
+    void translateCountState(mlir::nl::Count count, NLStmtContainer* body);
+
+    // Translate an nl.count_update: look up the tally the handle names and record
+    // the charge of the chunk's non-null rows against it (all rows for an ID chunk,
+    // the present values for a nullable value chunk)
+    void translateCountUpdate(mlir::nl::CountUpdate update, NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.count_result iterator: allocate the single
+    // loop variable (a nullable i64 count chunk), map it, and record the emit-loop
+    // statement (materialize the tally as one present row, run the body once)
+    void translateCountLoop(const IteratorConfig& config,
+                            mlir::Block& loopBody,
+                            NLStmtContainer* body);
+
+    // The runtime tally a count handle names. The handle is a required operand of
+    // nl.count_update and nl.count_result, so this throws if it was not produced by
+    // an nl.count.
+    NLCountState* countStateFor(mlir::Value handle) const;
+
     // Pool-allocate a buffer/loop column matching a chunk type - an ID column for
     // an ID chunk, a nullable value column for a !nl.nullable<...> chunk - and the
     // append/gather/compare handler for that element type. The compare selector
@@ -158,6 +188,11 @@ private:
     static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
     static NLCompareFunction selectCompareForChunkType(mlir::Type chunkType);
     static NLKeyAppendFunction selectKeyAppendForChunkType(mlir::Type chunkType);
+
+    // The non-null row count handler for a chunk type - the all-rows count for an
+    // ID chunk, the present-value count for a !nl.nullable<...> chunk. Used by
+    // nl.count_update.
+    static NLCountFunction selectCountForChunkType(mlir::Type chunkType);
 
     // Translate an nl.get_node_properties / nl.get_edge_properties: resolve the
     // property name (carried by the nl.get_property_type that produced the

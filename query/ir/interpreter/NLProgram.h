@@ -776,6 +776,95 @@ private:
     std::string _key;
 };
 
+// Type of handle that returns how many rows of a column are non-null. One per
+// column kind / value type, selected during translation the same way the gather
+// and append families are. An ID column has no nulls, so its handle returns the
+// row count; a nullable value column's handle returns its present-value count.
+// This is what nl.count_update adds to the tally each step.
+using NLCountFunction = size_t (*)(const Column* column);
+
+// Runtime state of one COUNT: the running tally of non-null rows seen so far.
+// nl.count resets it (once at function scope for a top-level or mid-query COUNT),
+// nl.count_update is the sole incrementer, and nl.count_result reads the final
+// value to emit the single result row. The counting sibling of NLSortState: it
+// tallies rows as they arrive rather than accumulating them, so it holds only a
+// count, not the row values.
+class NLCountState {
+public:
+    // Zero the tally, so COUNT starts fresh. Runs each time nl.count's block runs
+    // (once at function scope for a top-level / mid-query COUNT).
+    void reset() { _count = 0; }
+
+    // Add this step's non-null row count to the tally. The sole mutator.
+    void add(size_t rows) { _count += rows; }
+
+    // The final tally, read once by nl.count_result after the producing loop.
+    size_t getCount() const { return _count; }
+
+private:
+    size_t _count {0};
+};
+
+// nl.count data: zeroes a tally each time the block it lives in runs - once at
+// function scope for a top-level COUNT. The count sibling of NLSortResetData.
+class NLCountResetData : public NLFunctionData {
+public:
+    NLCountResetData(NLCountState* state)
+        : _state(state)
+    {
+    }
+
+    NLCountState* getState() const { return _state; }
+
+private:
+    NLCountState* _state {nullptr};
+};
+
+// nl.count_update data: the tally to charge, the input chunk to measure, and the
+// count-of-non-null handle that measures it (all rows for an ID chunk, the present
+// values for a nullable value chunk). Runs once per producing-loop step.
+class NLCountUpdateData : public NLFunctionData {
+public:
+    NLCountUpdateData(NLCountState* state, const Column* rows, NLCountFunction count)
+        : _state(state),
+        _rows(rows),
+        _count(count)
+    {
+    }
+
+    NLCountState* getState() const { return _state; }
+    const Column* getRows() const { return _rows; }
+    NLCountFunction getCount() const { return _count; }
+
+private:
+    NLCountState* _state {nullptr};
+    const Column* _rows {nullptr};
+    NLCountFunction _count {nullptr};
+};
+
+// nl.for over nl.count_result data: the emit phase of a COUNT. Holds the tally and
+// the loop variable to fill with the single result row - a nullable (always-present)
+// i64 count column. Runs once, after the producing loop, so the tally is final.
+class NLCountLoopData : public NLFunctionData {
+public:
+    NLCountLoopData(NLCountState* state, Column* output)
+        : _state(state),
+        _output(output)
+    {
+    }
+
+    NLCountState* getState() const { return _state; }
+    Column* getOutput() const { return _output; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    NLCountState* _state {nullptr};
+    Column* _output {nullptr};
+    NLStmtContainer _stmts;
+};
+
 // nl.output data
 class NLOutputData : public NLFunctionData {
 public:
@@ -860,6 +949,16 @@ public:
         return statePtr;
     }
 
+    // Allocate one COUNT's runtime tally, owned by the program; the reset, update
+    // and emit statements that share it hold a borrowed pointer. The count sibling
+    // of allocSortState.
+    NLCountState* allocCountState() {
+        auto state = std::make_unique<NLCountState>();
+        NLCountState* statePtr = state.get();
+        _countStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -873,6 +972,7 @@ private:
     std::vector<std::unique_ptr<NLSkipState>> _skipStates;
     std::vector<std::unique_ptr<NLSortState>> _sortStates;
     std::vector<std::unique_ptr<NLDistinctState>> _distinctStates;
+    std::vector<std::unique_ptr<NLCountState>> _countStates;
     NLStmtContainer _stmts;
 };
 

@@ -215,6 +215,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerSort(sort);
     } else if (mlir::db::RemoveDuplicates distinct = mlir::dyn_cast<mlir::db::RemoveDuplicates>(operation)) {
         lowerRemoveDuplicates(distinct);
+    } else if (mlir::db::Count count = mlir::dyn_cast<mlir::db::Count>(operation)) {
+        lowerCount(count);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -665,6 +667,48 @@ void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
         _valueMap[dbResults[resultIndex]] = filteredChunks[resultIndex];
     }
+}
+
+void DBLowering::lowerCount(mlir::db::Count count) {
+    // The nl chunk the counted column lowered to; the update reads its per-step
+    // non-null row count.
+    const mlir::Value inputChunk = mapValue(count.getInput());
+
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    // The tally is hoisted to the top of the entry block, above every loop, so it
+    // is reset once at function scope and dominates the update placed in the
+    // producing loop body and the emit that reads it after the loop. A correlated
+    // COUNT (reset per enclosing step) would hoist into its enclosing loop body
+    // instead - future work, as for the streaming limit.
+    _builder.setInsertionPointToStart(_entryBlock);
+    const mlir::Value state = _builder.create<nl::Count>(loc).getState();
+
+    // The update sits in the innermost producing loop body, where the counted
+    // column is bound (the same block db.output would emit from), and charges each
+    // step's non-null rows against the tally.
+    setInsertionInto(ownerBlock(inputChunk));
+    _builder.create<nl::CountUpdate>(loc, state, inputChunk);
+
+    // COUNT is a pipeline breaker: the tally is final only once every row has been
+    // seen. So - like db.sort - the result is emitted after the producing loop, by
+    // an nl.count_result source iterator and its nl.for, placed before the
+    // func.return. The iterator yields exactly one chunk: the single-row count as a
+    // nullable (always-present) i64, so nl.output stays inside a loop as it must.
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type elementType = _builder.getIntegerType(64);
+    const storage::NullableType nullableType = storage::NullableType::get(context, elementType);
+    const nl::ChunkType countChunkType = nl::ChunkType::get(context, nullableType);
+    const nl::IteratorType iteratorType = nl::IteratorType::get(context, {countChunkType});
+
+    setInsertionInto(_entryBlock);
+    nl::CountResult result = _builder.create<nl::CountResult>(loc, iteratorType, state);
+
+    // db.count's single result maps to the emit loop's single variable, so the
+    // db.output that follows lowers into the emit loop body reading the one-row
+    // count chunk. The emit loop is never limit-bounded (count.getOperation() opens
+    // no producing loop, so assignProducerLoops never attaches a handle to it).
+    buildLoopForSource(result.getResult(), count.getOperation());
 }
 
 void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {

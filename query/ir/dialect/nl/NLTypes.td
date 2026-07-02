@@ -59,6 +59,19 @@ def NLDistinctState : NLType<"DistinctState", "distinct_state"> {
     }];
 }
 
+def NLCountState : NLType<"CountState", "count_state"> {
+    let summary = "A row-count accumulator handle";
+    let description = [{
+        Stands for one COUNT's running tally. Produced by nl.count, incremented by
+        nl.count_update once per producing-loop step, and read by nl.count_result to
+        emit the single result row once the loop is exhausted. It is a handle, not a
+        chunk: it holds a count, not values. Modeled on !nl.limit_state, but it
+        counts up as rows are seen rather than down as a budget is spent - so, unlike
+        a limit, no nl.for names it (COUNT drives no early-exit; every row must be
+        seen before the tally is final).
+    }];
+}
+
 def NLChunk : NLType<"Chunk", "chunk"> {
     let summary = "A bounded batch of values";
     let description = "One column chunk filled by a single database iterator step";
@@ -166,5 +179,14 @@ def NLDistinctStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::DistinctStateType>($_self)">,
         "distinct state handle", "::mlir::nl::DistinctStateType">,
     BuildableType<"::mlir::nl::DistinctStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.count_state handle, the same way
+// NLSortStateHandle constrains the sort handle. The single concrete type - there
+// is only ever !nl.count_state - is what lets nl.count_update omit the handle's
+// type in its assembly, building it from this recipe instead.
+def NLCountStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::CountStateType>($_self)">,
+        "count state handle", "::mlir::nl::CountStateType">,
+    BuildableType<"::mlir::nl::CountStateType::get($_builder.getContext())">;
 
 #endif // TURINGDB_NL_TYPES

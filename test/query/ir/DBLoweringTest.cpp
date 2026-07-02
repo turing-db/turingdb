@@ -129,6 +129,29 @@ private:
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> _rows;
 };
 
+// Collects the single-row nullable-int64 result a COUNT emits: one chunk with one
+// present value. Captures every value seen, so a test can assert both that exactly
+// one row came out and what its tally is.
+class CollectingCountSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        ASSERT_NE(values, nullptr);
+
+        const auto& raw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.push_back(raw[rowIndex]);
+        }
+    }
+
+    const std::vector<std::optional<int64_t>>& getValues() const { return _values; }
+
+private:
+    std::vector<std::optional<int64_t>> _values;
+};
+
 // Collects (node ID, nullable string property) rows. The value column is a
 // !storage.nullable<!storage.string> chunk, storage's ColumnOptVector<string_view>.
 class CollectingNodeStringPropSink : public NLOutputSink {
@@ -797,6 +820,30 @@ func.func @main() {
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
   %da, %dscore = db.remove_duplicates(%a, %score) : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
   db.output(%da, %dscore) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN count(a): scan every node and count them. Node IDs are never
+// null, so this is the total node count.
+const char* const countNodesProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%n) : !db.column<i64>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN count(a.score): count the non-null scores. A node without the
+// property reads null, and count(a.score) does not charge those - so the tally is
+// fewer than the node count.
+const char* const countScoresProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %n = db.count(%score) : (!db.column<none>) -> !db.column<i64>
+  db.output(%n) : !db.column<i64>
   return
 }
 )mlir";
@@ -2692,6 +2739,101 @@ TEST_F(DBLoweringTest, lowersRemoveDuplicatesLimitToStreamingFilter) {
     EXPECT_EQ(updateCount, 1u);
     EXPECT_EQ(sortBufferCount, 0u);
     EXPECT_GE(forsWithLimit, 1u);
+}
+
+TEST_F(DBLoweringTest, countsNodes) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The diamond has four nodes, so db.count over the scanned node column emits a
+    // single row holding 4.
+    CollectingCountSink sink;
+    runLoweredProgram(countNodesProgram, reader.getView(), sink);
+
+    const std::vector<std::optional<int64_t>> expected {4};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(DBLoweringTest, countsNodesAcrossChunks) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // At chunk size 2 the four nodes span two scan chunks; the tally is reset once
+    // at function scope, not per chunk, so it still totals 4.
+    CollectingCountSink sink;
+    runLoweredProgram(countNodesProgram, reader.getView(), sink, /*chunkSize=*/2);
+
+    const std::vector<std::optional<int64_t>> expected {4};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(DBLoweringTest, countsNonNullScores) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Three nodes carry scores 100, 200 and null (node 2 has none). count(a.score)
+    // charges only the present values, so the tally is 2, not 3 - the nullable
+    // value chunk's present-value count path.
+    CollectingCountSink sink;
+    runLoweredProgram(countScoresProgram, reader.getView(), sink);
+
+    const std::vector<std::optional<int64_t>> expected {2};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+// db.count lowers to the pipeline-breaker shape: a hoisted nl.count, a single
+// nl.count_update in the producing loop, and an nl.count_result emit loop after it -
+// two nl.for loops (the producing scan and the one-step emit), no nl.sort_buffer.
+TEST_F(DBLoweringTest, lowersCountToPipelineBreaker) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(countNodesProgram, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    size_t countCount = 0;
+    size_t updateCount = 0;
+    size_t resultCount = 0;
+    size_t forCount = 0;
+    size_t sortBufferCount = 0;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::isa<mlir::nl::Count>(operation)) {
+            countCount++;
+        } else if (mlir::isa<mlir::nl::CountUpdate>(operation)) {
+            updateCount++;
+        } else if (mlir::isa<mlir::nl::CountResult>(operation)) {
+            resultCount++;
+        } else if (mlir::isa<mlir::nl::For>(operation)) {
+            forCount++;
+        } else if (mlir::isa<mlir::nl::SortBuffer>(operation)) {
+            sortBufferCount++;
+        }
+    });
+
+    EXPECT_EQ(countCount, 1u);
+    EXPECT_EQ(updateCount, 1u);
+    EXPECT_EQ(resultCount, 1u);
+    EXPECT_EQ(forCount, 2u);
+    EXPECT_EQ(sortBufferCount, 0u);
 }
 
 int main(int argc, char** argv) {

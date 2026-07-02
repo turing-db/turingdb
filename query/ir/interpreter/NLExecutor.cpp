@@ -223,6 +223,17 @@ void distinctKeyAppendOptColumn(const Column* column, size_t row, std::string& k
     distinctAppendValueBytes(key, *value);
 }
 
+// Count the present (non-null) values of a nullable value column - a
+// ColumnVector<std::optional<Primitive>> - so Cypher count(x) charges only the
+// rows in which x is not null.
+template <typename OptType>
+size_t countPresentColumn(const Column* column) {
+    const auto& raw = static_cast<const ColumnVector<OptType>*>(column)->getRaw();
+    return std::count_if(raw.begin(), raw.end(), [](const OptType& value) {
+        return value.has_value();
+    });
+}
+
 // Execute a get_out_edges/get_in_edges loop
 template <typename ChunkWriterType>
 void runEdgeLoopSteps(NLExecutionContext* context,
@@ -563,6 +574,35 @@ void NLExecutor::runDistinctFilter(NLExecutionContext* context, NLFunctionData* 
     }
 }
 
+void NLExecutor::runCountReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLCountResetData* reset = static_cast<NLCountResetData*>(data);
+    reset->getState()->reset();
+}
+
+void NLExecutor::runCountUpdate(NLExecutionContext* context, NLFunctionData* data) {
+    const NLCountUpdateData* update = static_cast<NLCountUpdateData*>(data);
+
+    // Charge this step's non-null rows: the handle returns all rows for an ID
+    // chunk, the present values for a nullable value chunk.
+    const NLCountFunction count = update->getCount();
+    update->getState()->add(count(update->getRows()));
+}
+
+void NLExecutor::runCountLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLCountLoopData* loopData = static_cast<NLCountLoopData*>(data);
+
+    // The aggregate collapses every counted row to a single result row: write the
+    // final tally into the loop variable as one present (never-null) int64. Runs
+    // after the producing loop, so the counter holds the whole dataflow's count.
+    const size_t count = loopData->getState()->getCount();
+    ColumnOptVector<int64_t>* output = static_cast<ColumnOptVector<int64_t>*>(loopData->getOutput());
+    std::vector<std::optional<int64_t>>& raw = output->getRaw();
+    raw.assign(1, std::optional<int64_t>(static_cast<int64_t>(count)));
+
+    // Emit that one row once (the body is the nl.output).
+    runBody(context, loopData->getStmts());
+}
+
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:
@@ -774,6 +814,27 @@ NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) 
 
     bioassert(false, "Unhandled value type");
     return nullptr;
+}
+
+// An ID chunk (node/edge/edge-type IDs) has no null rows, so every row counts,
+// regardless of kind. The count sibling of selectKeyAppendFunction, but kind is
+// irrelevant here - the row count is just the column size.
+size_t NLExecutor::countAllRows(const Column* column) {
+    return column->size();
+}
+
+// Selected per column from its value type, so count(x) tallies only the rows in
+// which x is not null. Every value type has a present/absent flag, so - unlike
+// selectOptKeyAppendFunction - an embedding is fine: counting reads has_value(),
+// never the value's bytes.
+NLCountFunction NLExecutor::selectOptCountFunction(ValueType valueType) {
+    NLCountFunction count = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        count = &countPresentColumn<std::optional<typename T::Primitive>>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return count;
 }
 
 NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
