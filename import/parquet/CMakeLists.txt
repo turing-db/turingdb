@@ -1,5 +1,5 @@
-add_library(turing_db_import_parquet_s STATIC  
-    Neo4jParquetImporter.cpp
+add_library(turing_db_import_parquet_s STATIC
+    ParquetImporter.cpp
 )
 
 target_link_libraries(turing_db_import_parquet_s

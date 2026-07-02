@@ -13,9 +13,7 @@
 #include "ParquetReader.h"
 
 #include "ID.h"
-#include "datapart/EdgeRecord.h"
 #include "metadata/PropertyType.h"
-#include "writers/DataPartBuilder.h"
 
 namespace parquet {
 class FileMetaData;
@@ -23,41 +21,33 @@ class FileMetaData;
 
 namespace db {
 
-class ChangeAccessor;
 class CommitBuilder;
 
-class ParquetNeo4jVisitor final : public ParquetSaxVisitor {
+// Base for the Neo4j-format parquet visitors. Owns the machinery shared between
+// node and edge parsing: property-column discovery, per-chunk value capture, and
+// the mapping from Neo4j IDs to the TuringDB NodeIDs assigned by the builder.
+// The concrete @ref ParquetNodeVisitor and @ref ParquetEdgeVisitor handle the
+// entity-specific columns (`__id`/`__labels` and `__source_id`/`__target_id`/
+// `__type` respectively).
+class ParquetNeo4jVisitor : public ParquetSaxVisitor {
 public:
     using NodeIDs = std::span<const int64_t>;
-    using NodeLabels = std::vector<std::vector<LabelID>>;
-    using EdgeTypes = std::vector<EdgeTypeID>;
+    using IDMap = std::unordered_map<int64_t, NodeID>;
 
-    ParquetNeo4jVisitor(CommitBuilder* builder)
-        : _builder(builder)
+    ParquetNeo4jVisitor(CommitBuilder* builder, IDMap& nodeIDs)
+        : _builder(builder),
+        _nodeIDs(nodeIDs)
     {
     }
 
-    bool onRowGroupStart(size_t rowGroupIndex, const parquet::RowGroupMetaData& metadata) final;
-    bool onFileStart(const parquet::FileMetaData& metadata) final;
+    // Property columns produce doubles/bools/int32s that no entity column claims,
+    // so the base captures them directly. The derived visitors handle int64 and
+    // byte-array columns because those also carry the entity-specific columns.
+    bool onInt32Values(size_t columnIndex, std::span<const int32_t> values) override;
+    bool onDoubleValues(size_t columnIndex, std::span<const double> values) override;
+    bool onBoolValues(size_t columnIndex, std::span<const bool> values) override;
 
-    bool onLevels(size_t columnIndex,
-                  std::span<const int16_t> repLevels,
-                  std::span<const int16_t> defLevels) final;
-
-    bool onInt32Values(size_t columnIndex, std::span<const int32_t> values) final;
-    bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) final;
-    bool onDoubleValues(size_t columnIndex, std::span<const double> values) final;
-    bool onBoolValues(size_t columnIndex, std::span<const bool> values) final;
-    bool onByteArrayValues(size_t columnIndex, std::span<const parquet::ByteArray> values) final;
-
-    bool onChunkEnd(size_t rowGroupIndex, size_t firstRowInRowGroup, size_t rows) final;
-
-    NodeIDs nodes() const { return _chunkNodeIds; }
-
-private:
-    friend class Neo4jParquetImporter;
-    using IDMap = std::unordered_map<int64_t, NodeID>;
-
+protected:
     struct PropertyColumn {
         std::string name;
         ValueType valueType;
@@ -67,39 +57,36 @@ private:
 
     static constexpr size_t INVALID_COL_IDX = std::numeric_limits<size_t>::max();
 
-    CommitBuilder* _builder;
+    static constexpr std::string_view NEO4J_NODE_COL_PATH = "__id";
+    static constexpr std::string_view NEO4J_LBLS_COL_PATH = "__labels.list.element";
+    static constexpr std::string_view NEO4J_ETYPE_COL_PATH = "__type";
+    static constexpr std::string_view NEO4J_SRC_COL_PATH = "__source";
+    static constexpr std::string_view NEO4J_TGT_COL_PATH = "__target";
 
-    size_t _nodeColIdx {INVALID_COL_IDX};
-    size_t _lblColIdx {INVALID_COL_IDX};
-    size_t _srcColIdx {INVALID_COL_IDX};
-    size_t _tgtColIdx {INVALID_COL_IDX};
-    size_t _edgetypeColIdx {INVALID_COL_IDX};
+    static constexpr parquet::Type::type NEO4J_NODE_COL_TYPE = parquet::Type::INT64;
+    static constexpr parquet::Type::type NEO4J_LBLS_COL_TYPE = parquet::Type::BYTE_ARRAY;
+    static constexpr parquet::Type::type NEO4J_ETYPE_COL_TYPE = parquet::Type::BYTE_ARRAY;
 
-    // For row X in column Y : deflevel(X) == maxdeflevel(Y) => row X is non-null.
-    int16_t _nodeIdMaxDefLevel {0};
-    int16_t _srcIdMaxDefLevel {0};
-    int16_t _lblMaxDefLevel {0};
+    // A column that is not an id/label/type column is treated as a property.
+    // Infers its value type and registers the property type with the builder.
+    void discoverPropertyColumn(size_t columnIndex,
+                                const std::string& path,
+                                parquet::Type::type physicalType,
+                                int16_t maxDefLevel);
 
-    // Mapping Neo4j IDs to TuringDB IDs as defined by the DataPartBuilder
-    IDMap _nodeIDs;
+    // Capture helpers for property columns, called by the derived value callbacks
+    // once they have handled their entity-specific columns.
+    void capturePropertyLevels(size_t columnIndex, std::span<const int16_t> defLevels);
+    void capturePropertyInt64(size_t columnIndex, std::span<const int64_t> values);
+    void capturePropertyByteArray(size_t columnIndex, std::span<const parquet::ByteArray> values);
 
-    // Per-chunk stores for nodes
-    NodeIDs _chunkNodeIds;
-    NodeLabels _chunkNodeLabels;
+    void resetPropertyChunk();
 
-    // Per-chunk stores for edges
-    NodeIDs _chunkSrcIds;
-    NodeIDs _chunkTgtIds;
-    EdgeTypes _chunkEdgeTypes;
-    std::vector<EdgeRecord> _chunkEdgeRecords;
+    CommitBuilder* _builder {nullptr};
 
-    // Def levels for row-type classification, copied from shared scratch each sub-batch
-    std::vector<int16_t> _chunkNodeIdDefLevels;
-    std::vector<int16_t> _chunkSrcIdDefLevels;
-
-    // Representation/definition levels for label byte arrays
-    std::span<const int16_t> _chunkLabelRepLevels;
-    std::span<const int16_t> _chunkLabelDefLevels;
+    // Mapping Neo4j IDs to TuringDB IDs as defined by the DataPartBuilder. Owned by
+    // the importer: filled by the node visitor, read by the edge visitor.
+    IDMap& _nodeIDs;
 
     std::unordered_map<size_t, PropertyColumn> _propertyColumns;
 
@@ -109,32 +96,9 @@ private:
     std::unordered_map<size_t, std::span<const bool>> _propBoolVals;
     std::unordered_map<size_t, std::span<const parquet::ByteArray>> _propByteArrayVals;
 
-    // Maps a property column index => definition levels of that column
-    // Used to encode null/nans for simple types
+    // Maps a property column index => definition levels of that column.
+    // Used to encode null/nans for simple types.
     std::unordered_map<size_t, std::vector<int16_t>> _propDefLevels;
-
-    void fillLabels(std::span<const parquet::ByteArray> labels);
-
-    void fillEdgeTypes(std::span<const parquet::ByteArray> types);
-
-    void createNodes(DataPartBuilder* builder);
-    void createEdges(DataPartBuilder* builder);
-    void applyProperties();
-
-    void addNodeProperty(NodeID id, const PropertyColumn& prop, size_t colIdx, size_t valIdx);
-    void addEdgeProperty(const EdgeRecord& e, const PropertyColumn& prop, size_t colIdx, size_t valIdx);
-
-    void chunkReset();
-
-    static constexpr std::string_view NEO4J_NODE_COL_PATH = "__id";
-    static constexpr std::string_view NEO4J_LBLS_COL_PATH = "__labels.list.element";
-    static constexpr std::string_view NEO4J_ETYPE_COL_PATH = "__type";
-    static constexpr std::string_view NEO4J_SRC_COL_PATH = "__source_id";
-    static constexpr std::string_view NEO4J_TGT_COL_PATH = "__target_id";
-
-    static constexpr parquet::Type::type NEO4J_NODE_COL_TYPE = parquet::Type::INT64;
-    static constexpr parquet::Type::type NEO4J_LBLS_COL_TYPE = parquet::Type::BYTE_ARRAY;
-    static constexpr parquet::Type::type NEO4J_ETYPE_COL_TYPE = parquet::Type::BYTE_ARRAY;
 };
 
 }
