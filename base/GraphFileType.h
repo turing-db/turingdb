@@ -9,6 +9,7 @@ enum class GraphFileType {
     GML,
     JSONL,
     BINARY,
+    PARQUET,
     _SIZE
 };
 

@@ -8,14 +8,13 @@
 #include "EmbeddingsSpec.h"
 #include "Graph.h"
 
-#include "ParquetReader.h"
 #include "dump/GraphDumper.h"
 #include "dump/GraphLoader.h"
 #include "versioning/ChangeAccessor.h"
 
 #include "GMLImporter.h"
 #include "JsonlParser.h"
-#include "Neo4jParquetImporter.h"
+#include "ParquetImporter.h"
 
 #include "TuringConfig.h"
 #include "JobSystem.h"
@@ -357,8 +356,13 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
     auto graph = Graph::create(std::string(graphName), graphPath);
     Graph* graphPtr = graph.get();
 
-    std::ifstream file(dbPath.get());
-    if (!file) {
+    // A Neo4j parquet export is a directory holding the nodes and the edges in
+    // two separate files.
+    const fs::Path nodeFile = dbPath / "nodes.parquet";
+    const fs::Path edgeFile = dbPath / "edges.parquet";
+
+    if (!nodeFile.exists() || !edgeFile.exists()) {
+        spdlog::error("Parquet import expects {} and {}", nodeFile.get(), edgeFile.get());
         _graphLoadStatus.removeLoadingGraph(graphName);
         return nullptr;
     }
@@ -367,7 +371,7 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
     ChangeAccessor changeAccessor = change->access();
     CommitBuilder* commitBuilder = changeAccessor.pendingCommits().back().get();
 
-    Neo4jParquetImporter importer(dbPath, commitBuilder);
+    ParquetImporter importer(nodeFile, edgeFile, commitBuilder);
     importer.import();
 
     const auto submitRes = _changes.submitChange(changeAccessor, *jobSystem);
