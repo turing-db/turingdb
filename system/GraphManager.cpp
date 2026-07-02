@@ -27,6 +27,13 @@
 
 using namespace db;
 
+namespace {
+// A Neo4j parquet export is a directory holding the nodes and the edges in two
+// separate files with these fixed names.
+constexpr std::string_view PARQUET_NODES_FILE = "nodes.parquet";
+constexpr std::string_view PARQUET_EDGES_FILE = "edges.parquet";
+}
+
 GraphManager::GraphManager(const TuringConfig* config)
     : _config(config)
 {
@@ -157,11 +164,12 @@ Graph* GraphManager::importGraph(std::string_view graphName,
         case GraphFileType::BINARY:
             return loadBinaryDB(graphName, absolute, jobSystem);
         break;
-        case GraphFileType::UNKNOWN:
-            // If we can not determine the file type, assume it is a JSONL graph
-            // to be changed in the future
-            // XXX: CHANGED FOR TESTING, REVERT TO JSONL
+        case GraphFileType::PARQUET:
             return loadParquetDB(graphName, absolute, jobSystem);
+        break;
+        case GraphFileType::UNKNOWN:
+            // If we can not determine the file type, assume it is a JSONL graph.
+            return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs);
         break;
         case GraphFileType::_SIZE:
             throw TuringException("Unsupported graph type");
@@ -176,6 +184,12 @@ GraphFileType GraphManager::getGraphFileType(const fs::Path& graphPath) const {
         return GraphFileType::GML;
     } else if (graphPath.extension() == ".json" || graphPath.extension() == ".jsonl") {
         return GraphFileType::JSONL;
+    }
+
+    const bool hasNodesFile = (graphPath / PARQUET_NODES_FILE).exists();
+    const bool hasEdgesFile = (graphPath / PARQUET_EDGES_FILE).exists();
+    if (hasNodesFile && hasEdgesFile) {
+        return GraphFileType::PARQUET;
     }
 
     const auto typeFilePath = graphPath / "type";
@@ -358,8 +372,8 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
 
     // A Neo4j parquet export is a directory holding the nodes and the edges in
     // two separate files.
-    const fs::Path nodeFile = dbPath / "nodes.parquet";
-    const fs::Path edgeFile = dbPath / "edges.parquet";
+    const fs::Path nodeFile = dbPath / PARQUET_NODES_FILE;
+    const fs::Path edgeFile = dbPath / PARQUET_EDGES_FILE;
 
     if (!nodeFile.exists() || !edgeFile.exists()) {
         spdlog::error("Parquet import expects {} and {}", nodeFile.get(), edgeFile.get());
