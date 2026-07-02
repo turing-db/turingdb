@@ -141,10 +141,15 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         }
 
         VariableDependency* edgeVar = getOrCreateVariable(edge);
-        addDirected(src, edgeVar, EdgeMetadata {edgeType});
-        addDirected(edgeVar, tgt, EdgeMetadata {otherType});
+        if (forward) {
+            addDirected(src, edgeVar, EdgeMetadata {edgeType});
+            addDirected(edgeVar, tgt, EdgeMetadata {otherType});
+        } else {
+            addDirected(tgt, edgeVar, EdgeMetadata {edgeType});
+            addDirected(edgeVar, src, EdgeMetadata {otherType});
+        }
 
-        prev = forward ? tgt : src;
+        prev = tgt;
     }
 }
 
