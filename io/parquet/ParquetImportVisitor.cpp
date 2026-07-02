@@ -1,4 +1,4 @@
-#include "ParquetNeo4jVisitor.h"
+#include "ParquetImportVisitor.h"
 
 #include <string>
 
@@ -14,25 +14,25 @@
 
 using namespace db;
 
-bool ParquetNeo4jVisitor::onInt32Values(size_t columnIndex, std::span<const int32_t> values) {
+bool ParquetImportVisitor::onInt32Values(size_t columnIndex, std::span<const int32_t> values) {
     return true;
 }
 
-bool ParquetNeo4jVisitor::onDoubleValues(size_t columnIndex, std::span<const double> values) {
+bool ParquetImportVisitor::onDoubleValues(size_t columnIndex, std::span<const double> values) {
     if (_propertyColumns.contains(columnIndex)) {
         _propDoubleVals[columnIndex] = values;
     }
     return true;
 }
 
-bool ParquetNeo4jVisitor::onBoolValues(size_t columnIndex, std::span<const bool> values) {
+bool ParquetImportVisitor::onBoolValues(size_t columnIndex, std::span<const bool> values) {
     if (_propertyColumns.contains(columnIndex)) {
         _propBoolVals[columnIndex] = values;
     }
     return true;
 }
 
-void ParquetNeo4jVisitor::discoverPropertyColumn(size_t columnIndex,
+void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
                                                  const std::string& path,
                                                  parquet::Type::type physicalType,
                                                  int16_t maxDefLevel) {
@@ -76,7 +76,7 @@ void ParquetNeo4jVisitor::discoverPropertyColumn(size_t columnIndex,
     _propertyColumns[columnIndex] = std::move(col);
 }
 
-void ParquetNeo4jVisitor::capturePropertyLevels(size_t columnIndex,
+void ParquetImportVisitor::capturePropertyLevels(size_t columnIndex,
                                                 std::span<const int16_t> defLevels) {
     if (!_propertyColumns.contains(columnIndex)) {
         return;
@@ -86,21 +86,21 @@ void ParquetNeo4jVisitor::capturePropertyLevels(size_t columnIndex,
     levels.insert(end(levels), begin(defLevels), end(defLevels));
 }
 
-void ParquetNeo4jVisitor::capturePropertyInt64(size_t columnIndex,
+void ParquetImportVisitor::capturePropertyInt64(size_t columnIndex,
                                                std::span<const int64_t> values) {
     if (_propertyColumns.contains(columnIndex)) {
         _propInt64Vals[columnIndex] = values;
     }
 }
 
-void ParquetNeo4jVisitor::capturePropertyByteArray(size_t columnIndex,
+void ParquetImportVisitor::capturePropertyByteArray(size_t columnIndex,
                                                    std::span<const parquet::ByteArray> values) {
     if (_propertyColumns.contains(columnIndex)) {
         _propByteArrayVals[columnIndex] = values;
     }
 }
 
-void ParquetNeo4jVisitor::resetPropertyChunk() {
+void ParquetImportVisitor::resetPropertyChunk() {
     for (auto& [columnIndex, levels] : _propDefLevels) {
         levels.clear();
     }

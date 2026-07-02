@@ -1,7 +1,7 @@
 add_library(turing_db_io_parquet_s STATIC
     ParquetReader.cpp
     ParquetEmbeddingReader.cpp
-    ParquetNeo4jVisitor.cpp
+    ParquetImportVisitor.cpp
     ParquetNodeVisitor.cpp
     ParquetEdgeVisitor.cpp
 )
