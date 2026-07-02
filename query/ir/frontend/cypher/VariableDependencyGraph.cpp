@@ -84,6 +84,7 @@ void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
             registerPatternElement(ele);
         }
     }
+    eliminateCycles();
 }
 
 const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* src,
