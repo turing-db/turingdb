@@ -14,6 +14,8 @@
 #include "comparators/GraphComparator.h"
 #include "datapart/EdgeRecord.h"
 #include "metadata/PropertyType.h"
+#include "reader/GraphReader.h"
+#include "versioning/Transaction.h"
 #include "writers/GraphWriter.h"
 
 using namespace db;
@@ -38,19 +40,34 @@ protected:
         _env.reset();
     }
 
-    // Lays out nodes.parquet + edges.parquet inside the data directory and imports
-    // the containing directory.
-    Graph* importSplit(SystemAccessor& system, std::string_view graphName) {
+    // Lays out a nodes/edges fixture pair inside the data directory as
+    // nodes.parquet + edges.parquet and imports the containing directory.
+    Graph* importSplit(SystemAccessor& system,
+                       std::string_view graphName,
+                       std::string_view nodeFixture = "nodes.parquet",
+                       std::string_view edgeFixture = "edges.parquet") {
         const std::string importDirName {graphName};
         const FileUtils::Path dataDir {_env->getConfig().getDataDir().get()};
         const FileUtils::Path importDir = dataDir / importDirName;
         FileUtils::createDirectory(importDir);
 
         const FileUtils::Path testDataDir {PARQUET_TEST_DATA_DIR};
-        FileUtils::copy(testDataDir / "nodes.parquet", importDir / "nodes.parquet");
-        FileUtils::copy(testDataDir / "edges.parquet", importDir / "edges.parquet");
+        FileUtils::copy(testDataDir / std::string {nodeFixture}, importDir / "nodes.parquet");
+        FileUtils::copy(testDataDir / std::string {edgeFixture}, importDir / "edges.parquet");
 
         return system.importGraph(fs::Path {importDirName}, graphName);
+    }
+
+    size_t countNodes(Graph* graph) {
+        const GraphReader reader = graph->openTransaction().readGraph();
+        size_t nodeCount = 0;
+        bool allPresent = true;
+        for (const NodeID nodeID : reader.scanNodes()) {
+            allPresent = allPresent && reader.graphHasNode(nodeID);
+            ++nodeCount;
+        }
+        EXPECT_TRUE(allPresent);
+        return nodeCount;
     }
 
     // Reproduces, by hand, the graph the fixtures describe.
@@ -132,4 +149,32 @@ TEST_F(ParquetImporterTest, MatchesHandBuiltGraph) {
     ASSERT_NE(expected, nullptr);
 
     ASSERT_TRUE(GraphComparator::same(*imported, *expected));
+}
+
+// A flat scalar column (__id) split across many data pages within one row group
+// must stay aligned with the repeated __labels column. Every node has exactly one
+// label, so this isolates the flat multi-page path (no empty-label involvement).
+TEST_F(ParquetImporterTest, HandlesFlatColumnSplitAcrossPages) {
+    constexpr std::string_view graphName = "smallpage";
+    constexpr size_t expectedNodeCount = 3000;
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    Graph* imported =
+        importSplit(system, graphName, "smallpage_nodes.parquet", "smallpage_edges.parquet");
+    ASSERT_NE(imported, nullptr);
+
+    ASSERT_EQ(countNodes(imported), expectedNodeCount);
+}
+
+// A row group larger than the reader's chunk size must also import correctly.
+TEST_F(ParquetImporterTest, HandlesRowGroupLargerThanChunk) {
+    constexpr std::string_view graphName = "rowgroup";
+    constexpr size_t expectedNodeCount = 70000;
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    Graph* imported =
+        importSplit(system, graphName, "rowgroup_nodes.parquet", "rowgroup_edges.parquet");
+    ASSERT_NE(imported, nullptr);
+
+    ASSERT_EQ(countNodes(imported), expectedNodeCount);
 }

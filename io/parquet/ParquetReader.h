@@ -143,9 +143,11 @@ public:
     }
 
     // Produce one chunk and fire callbacks.
-    // Chunks are capped at the row-group boundary,
-    // so the actual row count is bounded by the rows
-    // remaining in the current row group.
+    // A chunk never crosses a row-group boundary. For files that contain a repeated
+    // (list) column, a chunk always spans a whole row group and maxRows is not
+    // subdivided, because repeated columns are decoded a full row group at a time
+    // and the flat columns must stay aligned with them; for other files the chunk
+    // is capped at maxRows.
     // Returns false once the file is exhausted or a callback returned false.
     // Throws TuringException on I/O or decode failure.
     bool nextChunk(size_t maxRows = DEFAULT_CHUNK_SIZE);
@@ -181,9 +183,20 @@ private:
     std::vector<int16_t> _repLevelScratch;
     std::vector<int16_t> _defLevelScratch;
 
+    // True when any projected column is repeated (a list). Repeated columns are
+    // decoded a whole row group at a time, so when one is present every chunk spans
+    // a full row group to keep flat and repeated columns aligned.
+    bool _hasRepeatedColumn {false};
+
     bool openRowGroup();
     void closeRowGroup();
     bool readColumnSlice(size_t projectionIndex, size_t columnIndex, size_t batchRows);
+
+    // Dispatch a values span to the matching visitor callback for DType.
+    template <typename DType>
+    bool emitValues(size_t columnIndex,
+                    std::span<const typename DType::c_type> values,
+                    size_t byteWidth);
 
     // Read a chunk for one column and dispatch to the matching visitor callback.
     // DType is one of parquet::{Int32,Int64,Float,Double,Boolean,ByteArray,Int96,FLBA}Type.
