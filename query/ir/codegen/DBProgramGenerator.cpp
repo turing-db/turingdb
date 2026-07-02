@@ -67,7 +67,9 @@ void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     registerValue(var, scan.getResult());
 }
 
-void DBProgramGenerator::addGetOutEdges(const VariableDependency* src, const VariableDependency* edge, const VariableDependency* tgt) {
+void DBProgramGenerator::addGetOutEdges(const VariableDependency* src,
+                                        const VariableDependency* edge,
+                                        const VariableDependency* tgt) {
     bioassert(src, "Null source");
     bioassert(tgt, "Null target");
 
@@ -93,6 +95,37 @@ void DBProgramGenerator::addGetOutEdges(const VariableDependency* src, const Var
     [[maybe_unused]] const mlir::Value newETypes = goe.getResult(2);
     // FIXME: How do we register the edge types?
     const mlir::Value newTgts = goe.getResult(3);
+    registerValue(tgt, newTgts);
+}
+
+void DBProgramGenerator::addGetInEdges(const VariableDependency* src,
+                                       const VariableDependency* edge,
+                                       const VariableDependency* tgt) {
+    bioassert(src, "Null source");
+    bioassert(tgt, "Null target");
+
+    bioassert(_varMap.contains(src), "GetInEdges without source");
+
+    const auto srcs = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
+    const auto etype = allocColumnType(mlir::storage::EdgeTypeIDType::get(_mlirCtxt));
+    const auto tgts = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
+    const auto edges = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
+
+    const auto input = _varMap[src].back();
+
+    const auto loc = _opBuilder->getUnknownLoc();
+    auto gie = _opBuilder->create<mlir::db::GetInEdges>(
+        loc, mlir::TypeRange {srcs, edges, etype, tgts}, mlir::ValueRange {input});
+
+    const mlir::Value newSrcs = gie.getResult(0);
+    registerValue(src, newSrcs);
+    const mlir::Value newEIDs = gie.getResult(1);
+    if (edge) {
+        registerValue(edge, newEIDs);
+    }
+    [[maybe_unused]] const mlir::Value newETypes = gie.getResult(2);
+    // FIXME: How do we register the edge types?
+    const mlir::Value newTgts = gie.getResult(3);
     registerValue(tgt, newTgts);
 }
 
@@ -202,14 +235,17 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             }
 
             const bool getTgt = producedType == EdgeMetadata::EdgeType::GET_EDGE_TGT;
+            const bool getSrc = producedType == EdgeMetadata::EdgeType::GET_EDGE_SRC;
 
-            if (!getTgt) {
-                // FIXME remove: just for testing
-                throw FatalException("Unsupported edge type.");
-            }
+            bioassert(getTgt or getSrc, "Unsupported edge type.");
 
             auto [src, edge, tgt] = getOrder(var, pred, predPred);
-            addGetOutEdges(src, edge, tgt);
+
+            if (getTgt) {
+                addGetOutEdges(src, edge, tgt);
+            } else if (getSrc) {
+                addGetInEdges(src, edge, tgt);
+            }
 
             defined.insert(src);
             defined.insert(edge);
