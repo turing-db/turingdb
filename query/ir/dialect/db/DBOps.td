@@ -94,7 +94,7 @@ def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpA
 /**
 * GetInEdges
 */
-def GetInEdges : TuringOp<"get_in_edges", [Pure]> {
+def GetInEdges : TuringOp<"get_in_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Fetch node and edge predecessors of input, filtering carried columns alongside";
 
   let description = [{
